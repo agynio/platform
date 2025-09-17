@@ -8,7 +8,7 @@ const agentService = new AgentService(configService);
 
 const agent = agentService.createAgent();
 
-const Instructions = fs.readFileSync(`${__dirname}/instructions.txt`, 'utf-8');
+const Instructions = fs.readFileSync(`${__dirname}/instructions.md`, 'utf-8');
 
 const response = await agent.invoke([Instructions, "Analyze code of all cloned repos and create documentation. Iterate until all repos are fully documented."]);
 

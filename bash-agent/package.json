@@ -4,7 +4,7 @@
   "main": "src/index.ts",
   "type": "module",
   "scripts": {
-    "start": "ts-node src/index.ts"
+    "start": "cd /workspaces/rowan_ellis/ && ts-node /workspaces/agents/bash-agent/src/index.ts"
   },
   "dependencies": {
     "@langchain/langgraph": "^0.4.9",
