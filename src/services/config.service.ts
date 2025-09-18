@@ -40,7 +40,7 @@ export class ConfigService implements Config {
       githubAppPrivateKey: process.env.GITHUB_APP_PRIVATE_KEY,
       githubInstallationId: process.env.GITHUB_INSTALLATION_ID,
       openaiApiKey: process.env.OPENAI_API_KEY,
-      githubToken: process.env.GITHUB_TOKEN,
+      githubToken: process.env.GH_TOKEN,
       // slackBotToken: process.env.SLACK_BOT_TOKEN,
     });
     return new ConfigService(parsed);

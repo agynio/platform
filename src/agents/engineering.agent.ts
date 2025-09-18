@@ -31,7 +31,7 @@ export class EngineeringAgent extends BaseAgent {
       apiKey: this.configService.openaiApiKey,
     });
 
-    const tools = [new WorkWithPrTool(this.loggerService, this.githubService)];
+    const tools = [new WorkWithPrTool(this.configService, this.loggerService, this.githubService)];
     const callModelNode = new CallModelNode(tools, llm);
     const toolsNode = new ToolsNode(tools);
 

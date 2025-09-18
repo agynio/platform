@@ -279,11 +279,8 @@ export class GithubService {
   }): Promise<{ path: string; stdout: string; stderr: string } > {
     const { owner, repo, branch, targetDir, shallow, singleBranchOnly = true } = params;
     let { username } = params;
-    if (!this.config.githubToken) {
-      throw new Error("githubToken missing in configuration");
-    }
 
-    // Resolve absolute path
+
     const absTarget = path.resolve(targetDir);
     // Basic pre-flight checks
     try {
@@ -310,7 +307,7 @@ export class GithubService {
 
     const token = this.config.githubToken;
     const remote = `https://${encodeURIComponent(username)}:${encodeURIComponent(token)}@github.com/${owner}/${repo}.git`;
-
+    
     const gitArgs = ["clone", "-b", branch];
     if (singleBranchOnly) gitArgs.push("--single-branch");
     if (shallow) gitArgs.push("--depth", "1");

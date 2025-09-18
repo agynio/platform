@@ -4,6 +4,11 @@ import { tool, DynamicStructuredTool } from "@langchain/core/tools";
 import { BaseTool } from "./base.tool";
 import { GithubService } from "../services/github.service";
 import { v4 as uuid } from "uuid";
+import { EngineerAgent } from "../agents/engineer.agent";
+import { ConfigService } from "../services/config.service";
+import { readFileSync } from "fs";
+import * as Prompts from "../prompts";
+import { BaseMessage, SystemMessage } from "@langchain/core/messages";
 
 const workWithPrSchema = z.object({
   owner: z.string().describe("Repo owner"),
@@ -14,6 +19,7 @@ const workWithPrSchema = z.object({
 
 export class WorkWithPrTool extends BaseTool {
   constructor(
+    private configService: ConfigService,
     private logger: LoggerService,
     private githubService: GithubService,
   ) {
@@ -34,11 +40,26 @@ export class WorkWithPrTool extends BaseTool {
           targetDir: `/tmp/${tmpId}`,
         });
 
-        console.log("Repo cloned to /tmp/" + tmpId);
-        console.log("Task: " + task);
+        let prInstructions = "";
+        try {
+          prInstructions = readFileSync(`/tmp/${tmpId}/.github/copilot-instructions.md`, "utf-8");
+        } catch {}
 
-        // Placeholder logic: implement PR operations here.
-        return "Job is done";
+        const engineerAgnet = new EngineerAgent(this.configService, this.logger);
+        const response = await engineerAgnet.create().invoke({
+          messages: [
+            new SystemMessage(Prompts.Engineer),
+            prInstructions ? new SystemMessage(prInstructions) : null,
+            new SystemMessage(
+              `
+              You are working with the ${owner}/${repo} repo, branch ${branch}. 
+              Working directory is /tmp/${tmpId}.
+              Your task is: ${task}`,
+            ),
+          ].filter(Boolean) as BaseMessage[],
+        });
+
+        return response.messages[response.messages.length - 1].content;
       },
       {
         name: "work_with_pr",
