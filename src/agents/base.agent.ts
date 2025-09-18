@@ -2,7 +2,7 @@ import { BaseMessage } from "@langchain/core/messages";
 import { Annotation, AnnotationRoot, Messages, messagesStateReducer } from "@langchain/langgraph";
 
 export abstract class BaseAgent {
-  state(): AnnotationRoot<{}> {
+  protected state(): AnnotationRoot<{}> {
     return Annotation.Root({
       messages: Annotation<BaseMessage[], Messages>({
         reducer: messagesStateReducer,
@@ -11,7 +11,7 @@ export abstract class BaseAgent {
     });
   }
 
-  configuration(): AnnotationRoot<{}> {
+  protected configuration(): AnnotationRoot<{}> {
     return Annotation.Root({
       // systemPrompt: Annotation<string>(),
     });

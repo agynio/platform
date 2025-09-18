@@ -1,37 +1,69 @@
-import { createReactAgent } from "@langchain/langgraph/prebuilt";
+import { AIMessage, BaseMessage } from "@langchain/core/messages";
+import { Annotation, END, START, StateGraph } from "@langchain/langgraph";
 import { ChatOpenAI } from "@langchain/openai";
-import { makeBashCommandTool } from "../tools/bash_command";
-import { makeFsReadFileTool } from "../tools/fs_read_file";
-import { makeFsWriteFileTool } from "../tools/fs_write_file";
-import { makeFsEditFileTool } from "../tools/fs_edit_file";
+import { last } from "lodash-es";
+import { CallModelNode } from "../nodes/callModel.node";
+import { ToolsNode } from "../nodes/tools.node.ts";
 import { ConfigService } from "../services/config.service";
 import { LoggerService } from "../services/logger.service";
-// Tools are created via factory functions with injected singleton logger
+import { BashCommandTool } from "../tools/bash_command";
+import { FsEditFileTool } from "../tools/fs_edit_file";
+import { FsReadFileTool } from "../tools/fs_read_file";
+import { FsWriteFileTool } from "../tools/fs_write_file";
+import { BaseAgent } from "./base.agent";
 
-export class AgentService {
-  private configService: ConfigService;
-  private logger: LoggerService;
-
-  constructor(configService: ConfigService) {
-    this.configService = configService;
-    this.logger = new LoggerService();
+// Refactored to follow BaseAgent pattern similar to MemoryAgent.
+// Exposes a create() method instead of createAgent() for consistency.
+export class ArchitectAgent extends BaseAgent {
+  constructor(
+    private configService: ConfigService,
+    private loggerService: LoggerService,
+  ) {
+    super();
   }
 
-  createAgent() {
-    const model = new ChatOpenAI({
+  protected state() {
+    return Annotation.Root({
+      messages: Annotation<BaseMessage[]>,
+    });
+  }
+
+  create() {
+    const llm = new ChatOpenAI({
       model: "gpt-5",
       apiKey: this.configService.openaiApiKey,
     });
-    // Define tools as objects compatible with createReactAgent
+
     const tools = [
-      makeBashCommandTool(this.logger),
-      makeFsReadFileTool(this.logger),
-      makeFsWriteFileTool(this.logger),
-      makeFsEditFileTool(this.logger),
+      new BashCommandTool(this.loggerService),
+      new FsReadFileTool(this.loggerService),
+      new FsWriteFileTool(this.loggerService),
+      new FsEditFileTool(this.loggerService),
     ];
-    return createReactAgent({
-      llm: model,
-      tools,
-    });
+    const callModelNode = new CallModelNode(tools, llm);
+    const toolsNode = new ToolsNode(tools);
+
+    const builder = new StateGraph(
+      {
+        stateSchema: this.state(),
+      },
+      this.configuration(),
+    )
+      .addNode("call_model", callModelNode.action.bind(callModelNode))
+      .addNode("tools", toolsNode.action.bind(toolsNode))
+      .addEdge(START, "call_model")
+      .addConditionalEdges(
+        "call_model",
+        (state) => (last(state.messages as AIMessage[])?.tool_calls?.length ? "tools" : END),
+        {
+          tools: "tools",
+          [END]: END,
+        },
+      )
+      .addEdge("tools", "call_model");
+
+    const graph = builder.compile();
+
+    return graph;
   }
 }

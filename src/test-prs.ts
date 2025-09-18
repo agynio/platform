@@ -1,4 +1,5 @@
 import { EngineeringAgent } from "./agents/engineering.agent";
+import { HumanMessage, SystemMessage } from "@langchain/core/messages";
 import { ConfigService } from "./services/config.service";
 import { GithubService } from "./services/github.service";
 import { LoggerService } from "./services/logger.service";
@@ -8,7 +9,7 @@ const configService = ConfigService.fromEnv();
 const logger = new LoggerService();
 const githubService = new GithubService(configService);
 const prService = new PRService(githubService);
-const engineeringAgent = new EngineeringAgent(configService);
+const engineeringAgent = new EngineeringAgent(configService, logger);
 
 const owner = "HautechAI";
 const repo = "liana";
@@ -27,14 +28,11 @@ You are Soren Wilde - Engineering Manager. You role is to review PRs, manage hig
 You submit tasks to engineers via work_with_pr tool.
 `;
 
-const response = await engineeringAgent.createAgent().invoke(
+const response = await engineeringAgent.create().invoke(
   {
     messages: [
-      { role: "system", content: Instructions },
-      {
-        role: "user",
-        content: "Here is the PR info:\n" + JSON.stringify(prInfo, null, 2),
-      },
+      new SystemMessage(Instructions),
+      new HumanMessage("Here is the PR info:\n" + JSON.stringify(prInfo, null, 2)),
     ],
   },
   { recursionLimit: 250 },

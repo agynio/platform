@@ -14,7 +14,7 @@ export class MemoryAgent extends BaseAgent {
   constructor(private configService: ConfigService) {
     super();
   }
-  state() {
+  protected state() {
     return Annotation.Root({
       messages: Annotation<BaseMessage[]>,
     });
@@ -51,7 +51,6 @@ export class MemoryAgent extends BaseAgent {
       .addEdge("tools", "call_model");
 
     const graph = builder.compile();
-    graph.name = "MemoryAgent";
 
     return graph;
   }

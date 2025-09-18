@@ -1,31 +1,39 @@
 import { exec } from "child_process";
 import { z } from "zod";
 import { LoggerService } from "../services/logger.service";
-import { tool } from "@langchain/core/tools";
+import { tool, DynamicStructuredTool } from "@langchain/core/tools";
+import { BaseTool } from "./base.tool";
 
-export function makeBashCommandTool(logger: LoggerService) {
-  const schema = z.object({
-    command: z.string().describe("The bash command to execute."),
-  });
-  return tool(
-    async (input) => {
-      const { command } = schema.parse(input);
-      logger.info("Tool called", "bash_command", { command });
-      return await new Promise((resolve, reject) => {
-        exec(command, (error, stdout, stderr) => {
-          if (error) {
-            logger.error("bash_command error", stderr || error.message);
-            return reject(stderr || error.message);
-          }
-          logger.info("bash_command result", stdout);
-          resolve(stdout);
+const bashCommandSchema = z.object({
+  command: z.string().describe("The bash command to execute."),
+});
+
+export class BashCommandTool extends BaseTool {
+  constructor(private logger: LoggerService) {
+    super();
+  }
+
+  init(): DynamicStructuredTool {
+    return tool(
+      async (input) => {
+        const { command } = bashCommandSchema.parse(input);
+        this.logger.info("Tool called", "bash_command", { command });
+        return await new Promise((resolve, reject) => {
+          exec(command, (error, stdout, stderr) => {
+            if (error) {
+              this.logger.error("bash_command error", stderr || error.message);
+              return reject(stderr || error.message);
+            }
+            this.logger.info("bash_command result", stdout);
+            resolve(stdout);
+          });
         });
-      });
-    },
-    {
-      name: "bash_command",
-      description: "Execute a bash command and return the output.",
-      schema,
-    },
-  );
+      },
+      {
+        name: "bash_command",
+        description: "Execute a bash command and return the output.",
+        schema: bashCommandSchema,
+      },
+    );
+  }
 }

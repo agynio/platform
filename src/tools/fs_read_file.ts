@@ -1,29 +1,37 @@
 import { readFileSync } from "fs";
 import { z } from "zod";
 import { LoggerService } from "../services/logger.service";
-import { tool } from "@langchain/core/tools";
+import { tool, DynamicStructuredTool } from "@langchain/core/tools";
+import { BaseTool } from "./base.tool";
 
-export function makeFsReadFileTool(logger: LoggerService) {
-  const schema = z.object({
-    path: z.string().describe("Path to the file to read."),
-  });
-  return tool(
-    async (input) => {
-      const { path } = schema.parse(input);
-      logger.info("Tool called", "fs_read_file", { path });
-      try {
-        const result = readFileSync(path, "utf-8");
-        logger.info("fs_read_file result", result);
-        return result;
-      } catch (err) {
-        logger.error("fs_read_file error", err);
-        throw err;
-      }
-    },
-    {
-      name: "fs_read_file",
-      description: "Read the contents of a file.",
-      schema,
-    },
-  );
+const fsReadFileSchema = z.object({
+  path: z.string().describe("Path to the file to read."),
+});
+
+export class FsReadFileTool extends BaseTool {
+  constructor(private logger: LoggerService) {
+    super();
+  }
+
+  init(): DynamicStructuredTool {
+    return tool(
+      async (input) => {
+        const { path } = fsReadFileSchema.parse(input);
+        this.logger.info("Tool called", "fs_read_file", { path });
+        try {
+          const result = readFileSync(path, "utf-8");
+          this.logger.info("fs_read_file result", result);
+          return result;
+        } catch (err) {
+          this.logger.error("fs_read_file error", err);
+          throw err;
+        }
+      },
+      {
+        name: "fs_read_file",
+        description: "Read the contents of a file.",
+        schema: fsReadFileSchema,
+      },
+    );
+  }
 }

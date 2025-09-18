@@ -1,8 +1,8 @@
 {
   "node_version": "20",
   "graphs": {
-    "agent": "./src/agents/memory_agent/graph.ts:graph",
-    "lg": "./src/lg/graph.ts:graph"
+    "architectAgent": "./src/graphs.ts:architectAgent",
+    "memoryAgent": "./src/graphs.ts:memoryAgent"
   },
   "env": ".env",
   "dependencies": ["."],

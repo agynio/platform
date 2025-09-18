@@ -1,24 +1,32 @@
 import { writeFileSync } from "fs";
 import { z } from "zod";
 import { LoggerService } from "../services/logger.service";
-import { tool } from "@langchain/core/tools";
+import { tool, DynamicStructuredTool } from "@langchain/core/tools";
+import { BaseTool } from "./base.tool";
 
-export function makeFsWriteFileTool(logger: LoggerService) {
-  const schema = z.object({
-    path: z.string().describe("Path to the file to write."),
-    content: z.string().describe("Content to write to the file."),
-  });
-  return tool(
-    async (input) => {
-      const { path, content } = schema.parse(input);
-      logger.info("Tool called", "fs_write_file", { path, content });
-      writeFileSync(path, content, "utf-8");
-      return `Wrote to file: ${path}`;
-    },
-    {
-      name: "fs_write_file",
-      description: "Write content to a file.",
-      schema,
-    },
-  );
+const fsWriteFileSchema = z.object({
+  path: z.string().describe("Path to the file to write."),
+  content: z.string().describe("Content to write to the file."),
+});
+
+export class FsWriteFileTool extends BaseTool {
+  constructor(private logger: LoggerService) {
+    super();
+  }
+
+  init(): DynamicStructuredTool {
+    return tool(
+      async (input) => {
+        const { path, content } = fsWriteFileSchema.parse(input);
+        this.logger.info("Tool called", "fs_write_file", { path, content });
+        writeFileSync(path, content, "utf-8");
+        return `Wrote to file: ${path}`;
+      },
+      {
+        name: "fs_write_file",
+        description: "Write content to a file.",
+        schema: fsWriteFileSchema,
+      },
+    );
+  }
 }
