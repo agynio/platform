@@ -1,13 +1,8 @@
-import * as fs from "fs";
-import { fileURLToPath } from "url";
-import { dirname } from "path";
-
 import { ConfigService } from "./services/config.service";
 import { ArchitectAgent } from "./agents/architect.agent";
 import { LoggerService } from "./services/logger.service";
 import { HumanMessage, SystemMessage } from "@langchain/core/messages";
-
-const __dirname = dirname(fileURLToPath(import.meta.url));
+import * as Prompts from "./prompts";
 
 const configService = ConfigService.fromEnv();
 const loggerService = new LoggerService();
@@ -15,12 +10,10 @@ const architectAgent = new ArchitectAgent(configService, loggerService);
 
 const agent = architectAgent.create();
 
-const Instructions = fs.readFileSync(`${__dirname}/instructions.md`, "utf-8");
-
 const response = await agent.invoke(
   {
     messages: [
-      new SystemMessage(Instructions),
+      new SystemMessage(Prompts.Architect),
       new HumanMessage(
         // "Analyze code of all cloned repos and create documentation. Check every file. Understand logic inside and reason why it was created. Understand and record internal logic of projects and relation between them. Iterate until all repos are fully documented.",
         // "Analyze code of core-api and find how operations are created from the pipeline",

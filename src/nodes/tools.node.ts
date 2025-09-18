@@ -13,12 +13,12 @@ export class ToolsNode extends BaseNode {
 
     const tools = this.tools.map((tool) => tool.init(config));
 
-    const savedMemories = await Promise.all(
+    const responses = await Promise.all(
       toolCalls.map(async (tc) => {
         return await tools.find((tool) => tool.name === tc.name)!.invoke(tc);
       }),
     );
 
-    return { messages: savedMemories };
+    return { messages: [...state.messages, ...responses] };
   }
 }

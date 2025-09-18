@@ -3,7 +3,7 @@ import { Annotation, END, START, StateGraph } from "@langchain/langgraph";
 import { ChatOpenAI } from "@langchain/openai";
 import { last } from "lodash-es";
 import { CallModelNode } from "../nodes/callModel.node";
-import { ToolsNode } from "../nodes/tools.node.ts";
+import { ToolsNode } from "../nodes/tools.node";
 import { ConfigService } from "../services/config.service";
 import { LoggerService } from "../services/logger.service";
 import { BashCommandTool } from "../tools/bash_command";

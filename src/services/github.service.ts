@@ -1,6 +1,9 @@
 import { Octokit } from "@octokit/rest";
 import { createAppAuth } from "@octokit/auth-app";
 import { ConfigService } from "./config.service";
+import { spawn } from "child_process";
+import { promises as fs } from "fs";
+import * as path from "path";
 
 export class GithubService {
   private octokit: Octokit;
@@ -253,5 +256,91 @@ export class GithubService {
       }
     }
     return out;
+  }
+
+  /**
+   * Clone a GitHub repository branch into a specified local directory using HTTPS + token authentication.
+   *
+   * Equivalent shell command pattern:
+   *   git clone -b <branch> https://<username>:<GH_TOKEN>@github.com/<owner>/<repo>.git <targetDir>
+   *
+   * Username strategy:
+   *   If `username` param is omitted we use the authenticated user login; if that fails we fallback to 'x-access-token'.
+   *   GitHub accepts either an actual username or 'x-access-token' for PAT-based auth.
+   */
+  async cloneRepo(params: {
+    owner: string;
+    repo: string;
+    branch: string;
+    targetDir: string; // absolute or relative path
+    username?: string;
+    shallow?: boolean; // if true performs a shallow clone (depth=1)
+    singleBranchOnly?: boolean; // default true
+  }): Promise<{ path: string; stdout: string; stderr: string } > {
+    const { owner, repo, branch, targetDir, shallow, singleBranchOnly = true } = params;
+    let { username } = params;
+    if (!this.config.githubToken) {
+      throw new Error("githubToken missing in configuration");
+    }
+
+    // Resolve absolute path
+    const absTarget = path.resolve(targetDir);
+    // Basic pre-flight checks
+    try {
+      const stat = await fs.stat(absTarget).catch(() => undefined);
+      if (stat) {
+        const entries = await fs.readdir(absTarget);
+        if (entries.length) {
+          throw new Error(`Target directory '${absTarget}' already exists and is not empty`);
+        }
+      } else {
+        await fs.mkdir(absTarget, { recursive: true });
+      }
+    } catch (e: any) {
+      throw new Error(`Failed to prepare target directory: ${e.message}`);
+    }
+
+    if (!username) {
+      try {
+        username = await this.getAuthenticatedUserLogin();
+      } catch {
+        username = "x-access-token"; // fallback that works with PATs
+      }
+    }
+
+    const token = this.config.githubToken;
+    const remote = `https://${encodeURIComponent(username)}:${encodeURIComponent(token)}@github.com/${owner}/${repo}.git`;
+
+    const gitArgs = ["clone", "-b", branch];
+    if (singleBranchOnly) gitArgs.push("--single-branch");
+    if (shallow) gitArgs.push("--depth", "1");
+    gitArgs.push(remote, absTarget);
+
+    const stdoutChunks: string[] = [];
+    const stderrChunks: string[] = [];
+
+    await new Promise<void>((resolve, reject) => {
+      const child = spawn("git", gitArgs, {
+        env: { ...process.env },
+        stdio: ["ignore", "pipe", "pipe"],
+      });
+      child.stdout.setEncoding("utf8");
+      child.stderr.setEncoding("utf8");
+      child.stdout.on("data", (d: string) => stdoutChunks.push(d));
+      child.stderr.on("data", (d: string) => stderrChunks.push(d));
+      child.on("error", (err) => reject(err));
+      child.on("close", (code) => {
+        if (code !== 0) {
+          return reject(
+            new Error(
+              `git clone failed (exit ${code}) for ${owner}/${repo}@${branch}\nSTDOUT:\n${stdoutChunks.join("")}\nSTDERR:\n${stderrChunks.join("")}`,
+            ),
+          );
+        }
+        resolve();
+      });
+    });
+
+    return { path: absTarget, stdout: stdoutChunks.join(""), stderr: stderrChunks.join("") };
   }
 }

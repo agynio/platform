@@ -7,7 +7,7 @@ import { LoggerService } from "../services/logger.service";
 import { CodespaceSSHService } from "../services/codespace-ssh.service";
 import { BaseAgent } from "./base.agent";
 import { CallModelNode } from "../nodes/callModel.node";
-import { ToolsNode } from "../nodes/tools.node.ts";
+import { ToolsNode } from "../nodes/tools.node";
 import { RemoteBashCommandTool } from "../tools/remote_bash_command";
 
 export class ConflictAgent extends BaseAgent {

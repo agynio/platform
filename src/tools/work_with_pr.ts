@@ -2,6 +2,8 @@ import { z } from "zod";
 import { LoggerService } from "../services/logger.service";
 import { tool, DynamicStructuredTool } from "@langchain/core/tools";
 import { BaseTool } from "./base.tool";
+import { GithubService } from "../services/github.service";
+import { v4 as uuid } from "uuid";
 
 const workWithPrSchema = z.object({
   owner: z.string().describe("Repo owner"),
@@ -11,7 +13,10 @@ const workWithPrSchema = z.object({
 });
 
 export class WorkWithPrTool extends BaseTool {
-  constructor(private logger: LoggerService) {
+  constructor(
+    private logger: LoggerService,
+    private githubService: GithubService,
+  ) {
     super();
   }
 
@@ -20,6 +25,18 @@ export class WorkWithPrTool extends BaseTool {
       async (input) => {
         const { owner, repo, branch, task } = workWithPrSchema.parse(input);
         this.logger.info("Tool called", "work_with_pr", { owner, repo, branch, task });
+
+        const tmpId = uuid();
+        this.githubService.cloneRepo({
+          owner,
+          repo,
+          branch,
+          targetDir: `/tmp/${tmpId}`,
+        });
+
+        console.log("Repo cloned to /tmp/" + tmpId);
+        console.log("Task: " + task);
+
         // Placeholder logic: implement PR operations here.
         return "Job is done";
       },

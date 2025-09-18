@@ -7,7 +7,7 @@ import { LoggerService } from "../services/logger.service";
 import { WorkWithPrTool } from "../tools/work_with_pr";
 import { BaseAgent } from "./base.agent";
 import { CallModelNode } from "../nodes/callModel.node";
-import { ToolsNode } from "../nodes/tools.node.ts";
+import { ToolsNode } from "../nodes/tools.node";
 
 export class EngineeringAgent extends BaseAgent {
   constructor(
@@ -26,7 +26,6 @@ export class EngineeringAgent extends BaseAgent {
   create() {
     const llm = new ChatOpenAI({
       model: "gpt-5",
-      temperature: 0,
       apiKey: this.configService.openaiApiKey,
     });
 
