@@ -9,7 +9,10 @@ const bashCommandSchema = z.object({
 });
 
 export class BashCommandTool extends BaseTool {
-  constructor(private logger: LoggerService) {
+  constructor(
+    private logger: LoggerService,
+    private cwd: string,
+  ) {
     super();
   }
 
@@ -19,10 +22,10 @@ export class BashCommandTool extends BaseTool {
         const { command } = bashCommandSchema.parse(input);
         this.logger.info("Tool called", "bash_command", { command });
         return await new Promise((resolve, reject) => {
-          exec(command, (error, stdout, stderr) => {
+          exec(command, { cwd: this.cwd }, (error, stdout, stderr) => {
             if (error) {
               this.logger.error("bash_command error", stderr || error.message);
-              return reject(stderr || error.message);
+              return resolve(stderr || error.message);
             }
             this.logger.info("bash_command result", stdout);
             resolve(stdout);

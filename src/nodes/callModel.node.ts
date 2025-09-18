@@ -23,6 +23,6 @@ export class CallModelNode extends BaseNode {
       recursionLimit: 250,
     });
 
-    return { messages: [result] };
+    return { messages: [...state.messages, result] };
   }
 }

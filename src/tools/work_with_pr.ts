@@ -8,7 +8,7 @@ import { EngineerAgent } from "../agents/engineer.agent";
 import { ConfigService } from "../services/config.service";
 import { readFileSync } from "fs";
 import * as Prompts from "../prompts";
-import { BaseMessage, SystemMessage } from "@langchain/core/messages";
+import { BaseMessage, HumanMessage, SystemMessage } from "@langchain/core/messages";
 
 const workWithPrSchema = z.object({
   owner: z.string().describe("Repo owner"),
@@ -33,7 +33,7 @@ export class WorkWithPrTool extends BaseTool {
         this.logger.info("Tool called", "work_with_pr", { owner, repo, branch, task });
 
         const tmpId = uuid();
-        this.githubService.cloneRepo({
+        await this.githubService.cloneRepo({
           owner,
           repo,
           branch,
@@ -45,12 +45,12 @@ export class WorkWithPrTool extends BaseTool {
           prInstructions = readFileSync(`/tmp/${tmpId}/.github/copilot-instructions.md`, "utf-8");
         } catch {}
 
-        const engineerAgnet = new EngineerAgent(this.configService, this.logger);
+        const engineerAgnet = new EngineerAgent(this.configService, this.logger, `/tmp/${tmpId}`);
         const response = await engineerAgnet.create().invoke({
           messages: [
             new SystemMessage(Prompts.Engineer),
             prInstructions ? new SystemMessage(prInstructions) : null,
-            new SystemMessage(
+            new HumanMessage(
               `
               You are working with the ${owner}/${repo} repo, branch ${branch}. 
               Working directory is /tmp/${tmpId}.
@@ -59,7 +59,11 @@ export class WorkWithPrTool extends BaseTool {
           ].filter(Boolean) as BaseMessage[],
         });
 
-        return response.messages[response.messages.length - 1].content;
+
+        const msg = response.messages[response.messages.length - 1].content;
+        console.log({ response: msg });
+
+        return msg;
       },
       {
         name: "work_with_pr",

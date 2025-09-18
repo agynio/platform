@@ -16,6 +16,7 @@ export class EngineerAgent extends BaseAgent {
   constructor(
     private configService: ConfigService,
     private loggerService: LoggerService,
+    private cwd: string,
   ) {
     super();
   }
@@ -33,7 +34,7 @@ export class EngineerAgent extends BaseAgent {
     });
 
     const tools = [
-      new BashCommandTool(this.loggerService),
+      new BashCommandTool(this.loggerService, this.cwd),
       new FsReadFileTool(this.loggerService),
       new FsWriteFileTool(this.loggerService),
       new FsEditFileTool(this.loggerService),
