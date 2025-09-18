@@ -1,0 +1,16 @@
+{
+  "name": "hautech-agents-monorepo",
+  "private": true,
+  "version": "0.0.1",
+  "description": "Monorepo for Hautech AI agents",
+  "workspaces": [
+    "agents",
+    "services"
+  ],
+  "scripts": {
+    "install:all": "pnpm install -r",
+    "build": "pnpm -r run build",
+    "lint": "pnpm -r run lint || echo 'No lint script'",
+    "start:bash-agent": "pnpm --filter bash-agent start"
+  }
+}

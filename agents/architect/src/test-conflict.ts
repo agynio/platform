@@ -2,7 +2,7 @@ import { ConfigService } from "./config.service";
 import { LoggerService } from "./logger.service";
 import { ConflictAgentService } from "./conflict-agent.service";
 
-const configService = new ConfigService();
+const configService = ConfigService.fromEnv();
 const logger = new LoggerService();
 const conflictAgentService = new ConflictAgentService(configService, logger);
 

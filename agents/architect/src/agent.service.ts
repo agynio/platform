@@ -20,7 +20,7 @@ export class AgentService {
   createAgent() {
     const model = new ChatOpenAI({
       model: "gpt-5",
-      apiKey: this.configService.getOpenAIKey(),
+      apiKey: this.configService.openaiApiKey,
     });
     // Define tools as objects compatible with createReactAgent
     const tools = [

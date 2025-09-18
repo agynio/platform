@@ -10,6 +10,8 @@
     "@langchain/core": "^0.3.73",
     "@langchain/langgraph": "^0.4.9",
     "@langchain/openai": "^0.4.9",
+    "@octokit/auth-app": "^8.1.0",
+    "@octokit/rest": "^22.0.0",
     "dotenv": "^17.2.2",
     "zod": "^3.23.8"
   },

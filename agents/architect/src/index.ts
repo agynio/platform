@@ -7,7 +7,7 @@ import { AgentService } from "./agent.service";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
-const configService = new ConfigService();
+const configService = ConfigService.fromEnv();
 const agentService = new AgentService(configService);
 
 const agent = agentService.createAgent();

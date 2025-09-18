@@ -25,7 +25,7 @@ export class CodespaceSSHService {
   ) {}
 
   connect(codespaceName: string) {
-    const token = this.config.getGitHubToken();
+    const token = this.config.githubToken;
     // Spawn a persistent shell session inside the codespace.
     // We request a bare bash without user rc files for predictable output.
     this.proc = spawn("gh", ["codespace", "ssh", "-c", codespaceName, "--", "bash", "--noprofile", "--norc"], {
