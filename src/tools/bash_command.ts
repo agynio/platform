@@ -3,6 +3,7 @@ import { z } from "zod";
 import { LoggerService } from "../services/logger.service";
 import { tool, DynamicStructuredTool } from "@langchain/core/tools";
 import { BaseTool } from "./base.tool";
+import { ContainerEntity } from "../services/container.service";
 
 const bashCommandSchema = z.object({
   command: z.string().describe("The bash command to execute."),
@@ -11,7 +12,7 @@ const bashCommandSchema = z.object({
 export class BashCommandTool extends BaseTool {
   constructor(
     private logger: LoggerService,
-    private cwd: string,
+    private container: ContainerEntity,
   ) {
     super();
   }
@@ -21,16 +22,11 @@ export class BashCommandTool extends BaseTool {
       async (input) => {
         const { command } = bashCommandSchema.parse(input);
         this.logger.info("Tool called", "bash_command", { command });
-        return await new Promise((resolve, reject) => {
-          exec(command, { cwd: this.cwd }, (error, stdout, stderr) => {
-            if (error) {
-              this.logger.error("bash_command error", stderr || error.message);
-              return resolve(stderr || error.message);
-            }
-            this.logger.info("bash_command result", stdout);
-            resolve(stdout);
-          });
-        });
+        const response = await this.container.exec(command);
+        if (response.exitCode !== 0) {
+          return `Error (exit code ${response.exitCode}):\n${response.stderr}`;
+        }
+        return response.stdout;
       },
       {
         name: "bash_command",

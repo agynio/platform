@@ -7,10 +7,9 @@ import { ToolsNode } from "../nodes/tools.node";
 import { ConfigService } from "../services/config.service";
 import { LoggerService } from "../services/logger.service";
 import { BashCommandTool } from "../tools/bash_command";
-import { FsEditFileTool } from "../tools/fs_edit_file";
-import { FsReadFileTool } from "../tools/fs_read_file";
-import { FsWriteFileTool } from "../tools/fs_write_file";
 import { BaseAgent } from "./base.agent";
+import { ContainerEntity } from "../services/container.service";
+import { GithubCloneRepoTool } from "../tools/github_clone_repo";
 
 export class ArchitectAgent extends BaseAgent {
   constructor(
@@ -26,17 +25,15 @@ export class ArchitectAgent extends BaseAgent {
     });
   }
 
-  create() {
+  create(container: ContainerEntity) {
     const llm = new ChatOpenAI({
       model: "gpt-5",
       apiKey: this.configService.openaiApiKey,
     });
 
     const tools = [
-      new BashCommandTool(this.loggerService),
-      new FsReadFileTool(this.loggerService),
-      new FsWriteFileTool(this.loggerService),
-      new FsEditFileTool(this.loggerService),
+      new BashCommandTool(this.loggerService, container),
+      new GithubCloneRepoTool(this.configService, this.loggerService, container),
     ];
     const callModelNode = new CallModelNode(tools, llm);
     const toolsNode = new ToolsNode(tools);
