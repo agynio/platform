@@ -19,8 +19,13 @@ export class FsWriteFileTool extends BaseTool {
       async (input) => {
         const { path, content } = fsWriteFileSchema.parse(input);
         this.logger.info("Tool called", "fs_write_file", { path, content });
-        writeFileSync(path, content, "utf-8");
-        return `Wrote to file: ${path}`;
+        try {
+          writeFileSync(path, content, "utf-8");
+          return `Wrote to file: ${path}`;
+        } catch (error) {
+          this.logger.error("fs_write_file error", (error as Error).message);
+          return `Error writing file: ${(error as Error).message}`;
+        }
       },
       {
         name: "fs_write_file",

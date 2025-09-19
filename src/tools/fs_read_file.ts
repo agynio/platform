@@ -24,7 +24,7 @@ export class FsReadFileTool extends BaseTool {
           return result;
         } catch (err) {
           this.logger.error("fs_read_file error", err);
-          throw err;
+          return `Error reading file: ${(err as Error).message}`;
         }
       },
       {

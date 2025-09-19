@@ -20,10 +20,15 @@ export class FsEditFileTool extends BaseTool {
       async (input) => {
         const { path, old_content, new_content } = fsEditFileSchema.parse(input);
         this.logger.info("Tool called", "fs_edit_file", { path, old_content, new_content });
-        const file = readFileSync(path, "utf-8");
-        const updated = file.replace(old_content, new_content);
-        writeFileSync(path, updated, "utf-8");
-        return `Edited file: ${path}`;
+        try {
+          const file = readFileSync(path, "utf-8");
+          const updated = file.replace(old_content, new_content);
+          writeFileSync(path, updated, "utf-8");
+          return `Edited file: ${path}`;
+        } catch (error) {
+          this.logger.error("fs_edit_file error", (error as Error).message);
+          return `Error editing file: ${(error as Error).message}`;
+        }
       },
       {
         name: "fs_edit_file",

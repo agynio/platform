@@ -45,8 +45,8 @@ export class WorkWithPrTool extends BaseTool {
           prInstructions = readFileSync(`/tmp/${tmpId}/.github/copilot-instructions.md`, "utf-8");
         } catch {}
 
-        const engineerAgnet = new EngineerAgent(this.configService, this.logger, `/tmp/${tmpId}`);
-        const response = await engineerAgnet.create().invoke({
+        const engineerAgnet = new EngineerAgent(this.configService, this.logger);
+        const response = await engineerAgnet.create({ cwd: `/tmp/${tmpId}` }).invoke({
           messages: [
             new SystemMessage(Prompts.Engineer),
             prInstructions ? new SystemMessage(prInstructions) : null,
@@ -58,7 +58,6 @@ export class WorkWithPrTool extends BaseTool {
             ),
           ].filter(Boolean) as BaseMessage[],
         });
-
 
         const msg = response.messages[response.messages.length - 1].content;
         console.log({ response: msg });

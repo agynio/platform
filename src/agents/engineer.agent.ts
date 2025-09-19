@@ -16,7 +16,6 @@ export class EngineerAgent extends BaseAgent {
   constructor(
     private configService: ConfigService,
     private loggerService: LoggerService,
-    private cwd: string,
   ) {
     super();
   }
@@ -27,14 +26,14 @@ export class EngineerAgent extends BaseAgent {
     });
   }
 
-  create() {
+  create(params: { cwd: string }) {
     const llm = new ChatOpenAI({
       model: "gpt-5",
       apiKey: this.configService.openaiApiKey,
     });
 
     const tools = [
-      new BashCommandTool(this.loggerService, this.cwd),
+      new BashCommandTool(this.loggerService, params.cwd),
       new FsReadFileTool(this.loggerService),
       new FsWriteFileTool(this.loggerService),
       new FsEditFileTool(this.loggerService),

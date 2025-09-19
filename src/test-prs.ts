@@ -17,7 +17,7 @@ const owner = "HautechAI";
 const repo = "liana";
 
 const myPrs = await githubService.listAssignedOpenPullRequestsForRepo(owner, repo);
-const prInfo = await prService.getPRInfo(owner, repo, myPrs[0].number);
+const prInfo = await prService.getPRInfo(owner, repo, 179);
 
 console.log("PR Info:", prInfo);
 
