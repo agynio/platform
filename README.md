@@ -43,30 +43,36 @@ A TypeScript agent using `@langchain/langgraph` to interact with bash and files.
    pnpm start
    ```
 
-5. (Optional) Enable Slack trigger (Socket Mode):
+5. (Optional) Enable Slack trigger (Socket Mode) and messaging:
 
    ```env
    SLACK_BOT_TOKEN=xoxb-your-bot-token
    SLACK_APP_TOKEN=xapp-your-app-level-token
    ```
 
-   Then you can instantiate and start the trigger:
+   Then you can instantiate and start the trigger and use the send_slack_message tool:
 
    ```ts
-   import { SlackTrigger } from "./src/triggers";
-   import { ConfigService } from "./src/services/config.service";
-   import { LoggerService } from "./src/services/logger.service";
+    import { SlackTrigger } from "./src/triggers";
+    import { ConfigService } from "./src/services/config.service";
+    import { LoggerService } from "./src/services/logger.service";
+    import { SlackService } from "./src/services/slack.service";
+    import { SendSlackMessageTool } from "./src/tools/send_slack_message.tool";
 
-   const config = ConfigService.fromEnv();
-   const logger = new LoggerService();
-   const trigger = new SlackTrigger(config, logger);
-   await trigger.start();
-   await trigger.subscribe(async (messages) => {
-     console.log("Slack messages:", messages);
-   });
+    const config = ConfigService.fromEnv();
+    const logger = new LoggerService();
+    const slackService = new SlackService(config, logger);
+    const trigger = new SlackTrigger(slackService, logger);
+    await trigger.start();
+    await trigger.subscribe(async (thread, messages) => {
+       console.log("Slack thread:", thread, messages);
+    });
+
+    const sendTool = new SendSlackMessageTool(slackService, logger).init();
+    await sendTool.invoke({ channel: "C12345678", text: "Hello from the agent" });
    ```
 
-   Any user messages (non-bot) the bot can see will be forwarded to subscribers.
+   Any user messages (non-bot) the bot can see will be forwarded to subscribers. Use the tool to send replies or new messages.
 
 ## Tools
 
