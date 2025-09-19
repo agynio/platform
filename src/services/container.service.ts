@@ -1,7 +1,21 @@
-import Docker, { Container, ContainerCreateOptions, Exec } from "dockerode";
+import Docker, { ContainerCreateOptions, Exec } from "dockerode";
+import { ContainerEntity } from "../entities/container.entity";
 import { LoggerService } from "./logger.service";
 
 const DEFAULT_IMAGE = "mcr.microsoft.com/vscode/devcontainers/base";
+
+export type ContainerOpts = {
+  image?: string;
+  name?: string;
+  cmd?: string[];
+  env?: Record<string, string> | string[];
+  workingDir?: string;
+  autoRemove?: boolean; // --rm behavior
+  binds?: string[]; // hostPath:containerPath[:ro]
+  networkMode?: string;
+  tty?: boolean;
+  labels?: Record<string, string>;
+};
 
 /**
  * ContainerService provides a thin wrapper around dockerode for:
@@ -65,18 +79,7 @@ export class ContainerService {
   /**
    * Start a new container and return a ContainerEntity representing it.
    */
-  async start(opts?: {
-    image?: string;
-    name?: string;
-    cmd?: string[];
-    env?: Record<string, string> | string[];
-    workingDir?: string;
-    autoRemove?: boolean; // --rm behavior
-    binds?: string[]; // hostPath:containerPath[:ro]
-    networkMode?: string;
-    tty?: boolean;
-    labels?: Record<string, string>;
-  }): Promise<ContainerEntity> {
+  async start(opts?: ContainerOpts): Promise<ContainerEntity> {
     const optsWithDefaults = { image: DEFAULT_IMAGE, autoRemove: true, ...(opts ?? {}) };
     await this.ensureImage(optsWithDefaults.image!);
 
@@ -109,9 +112,7 @@ export class ContainerService {
     const container = await this.docker.createContainer(createOptions);
     await container.start();
     const inspect = await container.inspect();
-    this.logger.info(
-      `Container started cid=${inspect.Id.substring(0, 12)} status=${inspect.State?.Status}`,
-    );
+    this.logger.info(`Container started cid=${inspect.Id.substring(0, 12)} status=${inspect.State?.Status}`);
     return new ContainerEntity(this, inspect.Id);
   }
 
@@ -258,26 +259,44 @@ export class ContainerService {
     await container.remove({ force });
   }
 
-  getDocker(): Docker { return this.docker; }
+  /**
+   * Find running (default) or all containers that match ALL provided labels.
+   * Returns an array of ContainerEntity instances (may be empty).
+   *
+   * @param labels Key/value label pairs to match (logical AND)
+   * @param options.all If true, include stopped containers as well
+   */
+  async findContainersByLabels(
+    labels: Record<string, string>,
+    options?: { all?: boolean },
+  ): Promise<ContainerEntity[]> {
+    const labelFilters = Object.entries(labels).map(([k, v]) => `${k}=${v}`);
+    this.logger.info(`Listing containers by labels all=${options?.all ?? false} filters=${labelFilters.join(",")}`);
+    const list = await this.docker.listContainers({
+      all: options?.all ?? false,
+      filters: { label: labelFilters },
+    });
+    return list.map((c) => new ContainerEntity(this, c.Id));
+  }
+
+  /**
+   * Convenience wrapper returning the first container that matches all labels (or undefined).
+   */
+  async findContainerByLabels(
+    labels: Record<string, string>,
+    options?: { all?: boolean },
+  ): Promise<ContainerEntity | undefined> {
+    const containers = await this.findContainersByLabels(labels, options);
+    return containers[0];
+  }
+
+  getDocker(): Docker {
+    return this.docker;
+  }
 }
 
 export interface ExecResult {
   stdout: string;
   stderr: string;
   exitCode: number;
-}
-
-/**
- * Lightweight entity wrapper representing a running (or created) container.
- * Provides convenience methods delegating to ContainerService while binding the docker id.
- */
-export class ContainerEntity {
-  constructor(private service: ContainerService, public readonly id: string) {}
-
-  exec(command: string[] | string, options?: { workdir?: string; env?: Record<string,string>|string[]; timeoutMs?: number; tty?: boolean }) {
-    return this.service.execContainer(this.id, command, options);
-  }
-
-  stop(timeoutSec = 10) { return this.service.stopContainer(this.id, timeoutSec); }
-  remove(force = false) { return this.service.removeContainer(this.id, force); }
 }

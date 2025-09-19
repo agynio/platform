@@ -1,9 +1,9 @@
+import { DynamicStructuredTool, tool } from "@langchain/core/tools";
 import { z } from "zod";
-import { LoggerService } from "../services/logger.service";
-import { tool, DynamicStructuredTool } from "@langchain/core/tools";
-import { BaseTool } from "./base.tool";
-import { ContainerEntity } from "../services/container.service";
+import { ContainerProviderEntity } from "../entities/containerProvider.entity";
 import { ConfigService } from "../services/config.service";
+import { LoggerService } from "../services/logger.service";
+import { BaseTool } from "./base.tool";
 
 // Schema for cloning a GitHub repository inside a running container
 const githubCloneSchema = z.object({
@@ -18,15 +18,20 @@ export class GithubCloneRepoTool extends BaseTool {
   constructor(
     private config: ConfigService,
     private logger: LoggerService,
-    private container: ContainerEntity,
+    private containerProvider: ContainerProviderEntity,
   ) {
     super();
   }
 
   init(): DynamicStructuredTool {
     return tool(
-      async (rawInput) => {
+      async (rawInput, config) => {
         const input = githubCloneSchema.parse(rawInput);
+        const { thread_id } = config.configurable;
+        if (!thread_id) throw new Error("thread_id is required in config.configurable");
+
+        const container = await this.containerProvider.provide(thread_id);
+
         const { owner, repo, path, branch, depth } = input;
         this.logger.info("Tool called", "github_clone_repo", { owner, repo, path, branch, depth });
 
@@ -59,7 +64,7 @@ export class GithubCloneRepoTool extends BaseTool {
         parts.push(cloneCmd);
 
         const fullCommand = parts.join(" && ");
-        const result = await this.container.exec(fullCommand, { timeoutMs: 5 * 60 * 1000 });
+        const result = await container.exec(fullCommand, { timeoutMs: 5 * 60 * 1000 });
 
         if (result.exitCode !== 0) {
           return {

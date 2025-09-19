@@ -1,5 +1,5 @@
 import { AIMessage, BaseMessage } from "@langchain/core/messages";
-import { Annotation, END, START, StateGraph } from "@langchain/langgraph";
+import { Annotation, END, MemorySaver, START, StateGraph } from "@langchain/langgraph";
 import { ChatOpenAI } from "@langchain/openai";
 import { last } from "lodash-es";
 import { CallModelNode } from "../nodes/callModel.node";
@@ -47,7 +47,7 @@ export class UniversalAgent extends BaseAgent {
       )
       .addEdge("tools", "call_model");
 
-    const graph = builder.compile();
+    const graph = builder.compile({ checkpointer: new MemorySaver() });
 
     return graph;
   }

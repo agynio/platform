@@ -38,11 +38,9 @@ export class SlackService {
     app.event("message", async ({ event }) => {
       if (!isMessageEvent(event)) return;
       try {
-        await Promise.all(
-          this.messageHandlers.map((handler) =>
-            handler(event as Bolt.types.GenericMessageEvent),
-          ),
-        );
+        for (const handler of this.messageHandlers) {
+          await handler(event as Bolt.types.GenericMessageEvent);
+        }
       } catch (err) {
         this.logger.error("SlackService message handler error", err);
       }

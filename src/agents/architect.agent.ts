@@ -1,22 +1,29 @@
 import { AIMessage, BaseMessage } from "@langchain/core/messages";
-import { Annotation, END, START, StateGraph } from "@langchain/langgraph";
+import { Annotation, CompiledStateGraph, END, START, StateGraph } from "@langchain/langgraph";
 import { ChatOpenAI } from "@langchain/openai";
 import { last } from "lodash-es";
+import { ContainerProviderEntity } from "../entities/containerProvider.entity";
 import { CallModelNode } from "../nodes/callModel.node";
 import { ToolsNode } from "../nodes/tools.node";
 import { ConfigService } from "../services/config.service";
 import { LoggerService } from "../services/logger.service";
 import { BashCommandTool } from "../tools/bash_command";
-import { BaseAgent } from "./base.agent";
-import { ContainerEntity } from "../services/container.service";
 import { GithubCloneRepoTool } from "../tools/github_clone_repo";
+import { BaseAgent } from "./base.agent";
+import { SendSlackMessageTool } from "../tools/send_slack_message.tool";
+import { SlackService } from "../services/slack.service";
+import * as Prompts from "../prompts";
+import { RunnableConfig } from "@langchain/core/runnables";
 
 export class ArchitectAgent extends BaseAgent {
   constructor(
     private configService: ConfigService,
     private loggerService: LoggerService,
+    private slackService: SlackService,
+    private containerProvider: ContainerProviderEntity,
   ) {
-    super();
+    super(loggerService);
+    this.init();
   }
 
   protected state() {
@@ -25,17 +32,20 @@ export class ArchitectAgent extends BaseAgent {
     });
   }
 
-  create(container: ContainerEntity) {
+  init(config: RunnableConfig = { recursionLimit: 250 }) {
+    this._config = config;
+
     const llm = new ChatOpenAI({
       model: "gpt-5",
       apiKey: this.configService.openaiApiKey,
     });
 
     const tools = [
-      new BashCommandTool(this.loggerService, container),
-      new GithubCloneRepoTool(this.configService, this.loggerService, container),
+      new BashCommandTool(this.loggerService, this.containerProvider),
+      new GithubCloneRepoTool(this.configService, this.loggerService, this.containerProvider),
+      new SendSlackMessageTool(this.slackService, this.loggerService),
     ];
-    const callModelNode = new CallModelNode(tools, llm);
+    const callModelNode = new CallModelNode(tools, llm).init({ systemPrompt: Prompts.Architect });
     const toolsNode = new ToolsNode(tools);
 
     const builder = new StateGraph(
@@ -57,8 +67,8 @@ export class ArchitectAgent extends BaseAgent {
       )
       .addEdge("tools", "call_model");
 
-    const graph = builder.compile();
+    this._graph = builder.compile() as CompiledStateGraph<unknown, unknown>;
 
-    return graph;
+    return this;
   }
 }
