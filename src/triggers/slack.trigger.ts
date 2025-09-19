@@ -1,4 +1,4 @@
-import { BaseTrigger } from "./base.trigger";
+import { BaseTrigger, BaseTriggerOptions } from "./base.trigger";
 import { LoggerService } from "../services/logger.service";
 import { SlackService } from "../services/slack.service";
 
@@ -10,8 +10,12 @@ import { SlackService } from "../services/slack.service";
  * (non-bot, non-thread broadcast) to subscribers via `notify([text])`.
  */
 export class SlackTrigger extends BaseTrigger {
-  constructor(private slack: SlackService, private logger: LoggerService) {
-    super();
+  constructor(
+    private slack: SlackService,
+    private logger: LoggerService,
+    options?: BaseTriggerOptions,
+  ) {
+    super(options);
     this.slack.onMessage(async (event) => {
       try {
         if (!event.text) return;
@@ -43,6 +47,6 @@ export class SlackTrigger extends BaseTrigger {
 }
 
 // Usage example:
-// const trigger = new SlackTrigger();
+// const trigger = new SlackTrigger(slackService, loggerService, { debounceMs: 500, waitForBusy: true });
 // await trigger.start();
-// await trigger.subscribe(async (messages) => { console.log("Incoming Slack messages", messages); });
+// await trigger.subscribe(async (thread, messages) => { console.log("Incoming Slack messages", thread, messages); });

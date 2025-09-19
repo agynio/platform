@@ -1,5 +1,5 @@
 import { AIMessage, BaseMessage } from "@langchain/core/messages";
-import { Annotation, CompiledStateGraph, END, START, StateGraph } from "@langchain/langgraph";
+import { Annotation, CompiledStateGraph, END, MemorySaver, START, StateGraph } from "@langchain/langgraph";
 import { ChatOpenAI } from "@langchain/openai";
 import { last } from "lodash-es";
 import { ContainerProviderEntity } from "../entities/containerProvider.entity";
@@ -15,6 +15,8 @@ import { SlackService } from "../services/slack.service";
 import * as Prompts from "../prompts";
 import { RunnableConfig } from "@langchain/core/runnables";
 
+const saver = new MemorySaver();
+
 export class ArchitectAgent extends BaseAgent {
   constructor(
     private configService: ConfigService,
@@ -28,7 +30,10 @@ export class ArchitectAgent extends BaseAgent {
 
   protected state() {
     return Annotation.Root({
-      messages: Annotation<BaseMessage[]>,
+      messages: Annotation<BaseMessage[]>({
+        default: () => [],
+        reducer: (current: BaseMessage[], update: BaseMessage[]) => [...current, ...update],
+      }),
     });
   }
 
@@ -66,8 +71,7 @@ export class ArchitectAgent extends BaseAgent {
         },
       )
       .addEdge("tools", "call_model");
-
-    this._graph = builder.compile() as CompiledStateGraph<unknown, unknown>;
+    this._graph = builder.compile({ checkpointer: saver }) as CompiledStateGraph<unknown, unknown>;
 
     return this;
   }

@@ -35,6 +35,7 @@ export class CallModelNode extends BaseNode {
       recursionLimit: 250,
     });
 
-    return { messages: [...state.messages, result] };
+    // Return only delta; reducer in state will append
+    return { messages: [result] };
   }
 }

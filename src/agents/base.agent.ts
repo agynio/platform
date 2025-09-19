@@ -42,10 +42,12 @@ export abstract class BaseAgent {
   listen(trigger: BaseTrigger) {
     trigger.subscribe(async (thread, messages) => {
       this.logger.info(`New trigger event in thread ${thread} with messages: ${JSON.stringify(messages)}`);
-      await this.graph.invoke(
+      const response = (await this.graph.invoke(
         { messages: messages.map((msg) => new HumanMessage(JSON.stringify(msg))) },
         { ...this.config, configurable: { ...this.config?.configurable, thread_id: thread } },
-      );
+      )) as { messages: BaseMessage[] };
+      const lastMessage = response.messages?.[response.messages.length - 1];
+      this.logger.info(`Agent response in thread ${thread}: ${lastMessage?.text}`);
     });
   }
 }
