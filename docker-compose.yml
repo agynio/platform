@@ -1,15 +1,33 @@
-version: "3.9"
 services:
-  mongo:
-    image: mongo
-    restart: always
+  mongo1:
+    image: mongo:latest
+    container_name: mongo1
+    restart: unless-stopped
     ports:
       - 27017:27017
-    environment:
-      MONGO_INITDB_ROOT_USERNAME: root
-      MONGO_INITDB_ROOT_PASSWORD: root
+    command: ["mongod", "--replSet", "rs0", "--bind_ip_all"]
     volumes:
-      - mongo_data:/data/db
+      - mongo1_data:/data/db
+
+  
+  mongo-setup:
+    image: mongo:latest
+    container_name: mongo-setup
+    depends_on:
+      - mongo1
+    entrypoint: [ "bash", "-c" ]
+    command: >
+      "
+      sleep 5 &&
+      mongosh --host mongo1:27017 --eval '
+        rs.initiate({
+          _id: \"rs0\",
+          members: [
+            { _id: 0, host: \"mongo1:27017\" }
+          ]
+        })
+      ' || true
+      "
 
   mongo-express:
     image: mongo-express
@@ -17,10 +35,10 @@ services:
     ports:
       - 9091:8081
     environment:
-      ME_CONFIG_MONGODB_URL: mongodb://root:root@mongo:27017/
+      ME_CONFIG_MONGODB_URL: mongodb://mongo1:27017/?replicaSet=rs0
       ME_CONFIG_BASICAUTH_ENABLED: true
-      ME_CONFIG_BASICAUTH_USERNAME: mongoexpressuser
-      ME_CONFIG_BASICAUTH_PASSWORD: mongoexpresspass
+      ME_CONFIG_BASICAUTH_USERNAME: root
+      ME_CONFIG_BASICAUTH_PASSWORD: root
 volumes:
-  mongo_data:
+  mongo1_data:
     driver: local

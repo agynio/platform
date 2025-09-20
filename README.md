@@ -4,16 +4,88 @@ A TypeScript agent using `@langchain/langgraph` to interact with bash and files.
 
 ## Features
 
-- Execute bash commands
-- Read files
-- Write files
-- Edit files (find and replace)
 
-## Setup
+# Agents Workspace
 
-1. Install dependencies:
-   ```bash
-   pnpm install
+## Realtime Checkpoint Writes Stream (WIP)
+
+The server now exposes a Socket.IO endpoint (default `http://localhost:3010`) that streams `checkpoint_writes` from MongoDB.
+
+Client must emit an `init` event before any data is sent:
+
+```ts
+socket.emit('init'); // currently no filters required – streams all new writes
+```
+
+Server -> Client events:
+- `initial`: `{ items: CheckpointWrite[] }` last 50 docs (chronological)
+- `append`: `CheckpointWrite` new inserts
+- `error`: `{ message: string }`
+
+`CheckpointWrite` structure:
+```ts
+{
+   id: string;
+   checkpointId: string;
+   threadId: string;
+   taskId: string;
+   channel: string;
+   type: string;
+   idx: number;
+   value: any;       // decoded from Binary if possible
+   createdAt: Date;  // derived from ObjectId timestamp
+}
+```
+
+### MongoDB Replica Set Requirement
+MongoDB change streams require the database to run as a replica set (even a single-node replica set). The included `docker-compose.yml` configures Mongo with `--replSet rs0` and an init script that runs `rs.initiate(...)` the first time the data directory is empty.
+
+If you previously started Mongo without a replica set, you must remove the old volume so the init script can run:
+```bash
+docker compose down -v
+# then start fresh
+docker compose up -d mongo
+```
+After first startup, you can verify:
+```bash
+docker compose exec mongo mongosh --eval 'rs.status().ok'
+```
+Should output `1`.
+
+Connection string examples (env `MONGODB_URL`):
+- Without auth: `mongodb://localhost:27017/?replicaSet=rs0`
+- With root auth (if you add it): `mongodb://root:root@localhost:27017/?authSource=admin&replicaSet=rs0`
+
+If the driver was connected prior to initiation you may need to restart the server process.
+
+### Environment
+
+Add to your `.env` (values required by existing config schema plus Mongo):
+```
+GITHUB_APP_ID=...
+GITHUB_APP_PRIVATE_KEY=...
+GITHUB_INSTALLATION_ID=...
+OPENAI_API_KEY=...
+GH_TOKEN=...
+SLACK_BOT_TOKEN=...
+SLACK_APP_TOKEN=...
+MONGODB_URL=mongodb://localhost:27017/?replicaSet=rs0
+```
+
+### Run Server
+```bash
+pnpm --filter bash-agent start
+```
+
+### Run UI
+```bash
+pnpm --filter ui dev
+```
+
+Then open the UI; it will automatically issue `init` and begin streaming.
+
+---
+More documentation pending (tests & advanced filtering).
    ```
 2. Set your OpenAI API key in `.env`:
    ```env
@@ -83,7 +155,7 @@ A TypeScript agent using `@langchain/langgraph` to interact with bash and files.
    # or (older docker): docker-compose up -d mongo
    ```
 
-   This launches a MongoDB 7 container with username `root` and password `example` bound to `localhost:27017`.
+   This launches a MongoDB 7 container with a single-node replica set `rs0` listening on `localhost:27017`.
 
    Copy `.env.example` to `.env` and ensure the connection string is present:
 
@@ -94,10 +166,10 @@ A TypeScript agent using `@langchain/langgraph` to interact with bash and files.
    Default connection string:
 
    ```env
-   MONGODB_URI=mongodb://root:example@localhost:27017/?authSource=admin
+   MONGODB_URL=mongodb://localhost:27017/?replicaSet=rs0
    ```
 
-   Healthcheck waits for Mongo to become ready. View logs:
+   View logs:
    ```bash
    docker compose logs -f mongo
    ```
@@ -171,5 +243,3 @@ await trigger.subscribe(async (thread, messages) => {
 
 await trigger.start();
 ```
-
-Message `info` includes: `mergeable`, `mergeableState`, `checks`, `lastEvent`, and `previous` snapshot (null on first emission).
