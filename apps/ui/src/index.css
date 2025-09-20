@@ -1,0 +1,2 @@
+body { margin: 0; font-family: system-ui, Arial, sans-serif; }
+#root { min-height: 100vh; display: flex; align-items: flex-start; justify-content: flex-start; }
