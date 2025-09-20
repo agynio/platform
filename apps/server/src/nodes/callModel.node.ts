@@ -1,26 +1,30 @@
-import { BaseMessage, SystemMessage } from "@langchain/core/messages";
-import { ChatOpenAI } from "@langchain/openai";
-import { BaseTool } from "../tools/base.tool";
-import { BaseNode } from "./base.node";
+import { BaseMessage, SystemMessage } from '@langchain/core/messages';
+import { ChatOpenAI } from '@langchain/openai';
+import { BaseTool } from '../tools/base.tool';
+import { BaseNode } from './base.node';
 
-type CallModelNodeOpts = { systemPrompt: string };
 export class CallModelNode extends BaseNode {
-  private _opts?: CallModelNodeOpts;
-  get opts() {
-    if (!this._opts) throw new Error("CallModelNode not initialized");
-    return this._opts;
-  }
+  private systemPrompt: string = '';
 
   constructor(
     private tools: BaseTool[],
     private llm: ChatOpenAI,
   ) {
     super();
+    // Copy to decouple from external array literal; we manage our own list.
+    this.tools = [...tools];
   }
 
-  init(opts: CallModelNodeOpts) {
-    this._opts = opts;
-    return this;
+  addTool(tool: BaseTool) {
+    if (!this.tools.includes(tool)) this.tools.push(tool);
+  }
+
+  removeTool(tool: BaseTool) {
+    this.tools = this.tools.filter((t) => t !== tool);
+  }
+
+  setSystemPrompt(systemPrompt: string) {
+    this.systemPrompt = systemPrompt;
   }
 
   async action(state: { messages: BaseMessage[] }, config: any): Promise<{ messages: any[] }> {
@@ -28,10 +32,10 @@ export class CallModelNode extends BaseNode {
 
     const boundLLM = this.llm.withConfig({
       tools: tools,
-      tool_choice: "auto",
+      tool_choice: 'auto',
     });
 
-    const result = await boundLLM.invoke([new SystemMessage(this.opts.systemPrompt), ...state.messages], {
+    const result = await boundLLM.invoke([new SystemMessage(this.systemPrompt), ...state.messages], {
       recursionLimit: 250,
     });
 

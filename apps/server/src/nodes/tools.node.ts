@@ -7,6 +7,15 @@ import { LangGraphRunnableConfig } from "@langchain/langgraph";
 export class ToolsNode extends BaseNode {
   constructor(private tools: BaseTool[]) {
     super();
+    this.tools = [...tools];
+  }
+
+  addTool(tool: BaseTool) {
+    if (!this.tools.includes(tool)) this.tools.push(tool);
+  }
+
+  removeTool(tool: BaseTool) {
+    this.tools = this.tools.filter((t) => t !== tool);
   }
 
   async action(state: { messages: BaseMessage[] }, config: LangGraphRunnableConfig): Promise<{ messages: any[] }> {

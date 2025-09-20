@@ -1,5 +1,9 @@
 export type TriggerMessage = { content: string; info: Record<string, unknown> };
 
+export interface TriggerListener {
+  invoke(thread: string, messages: TriggerMessage[]): Promise<any>;
+}
+
 /**
  * Behavior configuration for triggers.
  *
@@ -15,8 +19,6 @@ export interface BaseTriggerOptions {
   waitForBusy?: boolean;
 }
 
-type Listener = (thread: string, messages: TriggerMessage[]) => Promise<void>;
-
 interface ThreadState {
   buffer: TriggerMessage[]; // accumulated messages waiting to be flushed
   timer?: NodeJS.Timeout; // debounce timer
@@ -25,7 +27,7 @@ interface ThreadState {
 }
 
 export abstract class BaseTrigger {
-  private listeners: Listener[] = [];
+  private listeners: TriggerListener[] = [];
   private readonly debounceMs: number;
   private readonly waitForBusy: boolean;
   // Per-thread state
@@ -36,8 +38,12 @@ export abstract class BaseTrigger {
     this.waitForBusy = options?.waitForBusy ?? false;
   }
 
-  async subscribe(callback: Listener): Promise<void> {
-    this.listeners.push(callback);
+  async subscribe(listener: TriggerListener): Promise<void> {
+    this.listeners.push(listener);
+  }
+
+  async unsubscribe(listener: TriggerListener): Promise<void> {
+    this.listeners = this.listeners.filter((l) => l !== listener);
   }
 
   /**
@@ -99,11 +105,7 @@ export abstract class BaseTrigger {
     }
     state.busy = true;
     try {
-      await Promise.all(
-        this.listeners.map(async (listener) => {
-          await listener(thread, batch);
-        }),
-      );
+      await Promise.all(this.listeners.map(async (listener) => listener.invoke(thread, batch)));
     } finally {
       state.busy = false;
       // If additional messages arrived while busy, decide whether to flush now or debounce again
