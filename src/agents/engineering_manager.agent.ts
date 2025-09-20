@@ -13,6 +13,7 @@ import { SlackService } from "../services/slack.service";
 import { AskEngineerTool } from "../tools/ask_engineer";
 import { SendSlackMessageTool } from "../tools/send_slack_message.tool";
 import { BaseAgent } from "./base.agent";
+import { CheckpointerService } from "../services/checkpointer.service";
 
 const saver = new MemorySaver();
 
@@ -22,6 +23,7 @@ export class EngineeringManagerAgent extends BaseAgent {
     private loggerService: LoggerService,
     private slackService: SlackService,
     private containerProvider: ContainerProviderEntity,
+    private checkpointerService: CheckpointerService,
   ) {
     super(loggerService);
     this.init();
@@ -69,7 +71,10 @@ export class EngineeringManagerAgent extends BaseAgent {
         },
       )
       .addEdge("tools", "call_model");
-    this._graph = builder.compile({ checkpointer: saver }) as CompiledStateGraph<unknown, unknown>;
+    this._graph = builder.compile({ checkpointer: this.checkpointerService.getCheckpointer() }) as CompiledStateGraph<
+      unknown,
+      unknown
+    >;
 
     return this;
   }

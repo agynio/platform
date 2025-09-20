@@ -14,8 +14,7 @@ import { SendSlackMessageTool } from "../tools/send_slack_message.tool";
 import { SlackService } from "../services/slack.service";
 import * as Prompts from "../prompts";
 import { RunnableConfig } from "@langchain/core/runnables";
-
-const saver = new MemorySaver();
+import { CheckpointerService } from "../services/checkpointer.service";
 
 export class ArchitectAgent extends BaseAgent {
   constructor(
@@ -23,6 +22,7 @@ export class ArchitectAgent extends BaseAgent {
     private loggerService: LoggerService,
     private slackService: SlackService,
     private containerProvider: ContainerProviderEntity,
+    private checkpointerService: CheckpointerService,
   ) {
     super(loggerService);
     this.init();
@@ -71,7 +71,10 @@ export class ArchitectAgent extends BaseAgent {
         },
       )
       .addEdge("tools", "call_model");
-    this._graph = builder.compile({ checkpointer: saver }) as CompiledStateGraph<unknown, unknown>;
+    this._graph = builder.compile({ checkpointer: this.checkpointerService.getCheckpointer() }) as CompiledStateGraph<
+      unknown,
+      unknown
+    >;
 
     return this;
   }

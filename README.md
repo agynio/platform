@@ -74,6 +74,44 @@ A TypeScript agent using `@langchain/langgraph` to interact with bash and files.
 
    Any user messages (non-bot) the bot can see will be forwarded to subscribers. Use the tool to send replies or new messages.
 
+6. (Optional) Start local MongoDB using Docker Compose:
+
+   A `docker-compose.yml` is included to run MongoDB locally.
+
+   ```bash
+   docker compose up -d mongo
+   # or (older docker): docker-compose up -d mongo
+   ```
+
+   This launches a MongoDB 7 container with username `root` and password `example` bound to `localhost:27017`.
+
+   Copy `.env.example` to `.env` and ensure the connection string is present:
+
+   ```bash
+   cp .env.example .env
+   ```
+
+   Default connection string:
+
+   ```env
+   MONGODB_URI=mongodb://root:example@localhost:27017/?authSource=admin
+   ```
+
+   Healthcheck waits for Mongo to become ready. View logs:
+   ```bash
+   docker compose logs -f mongo
+   ```
+
+   Stop and remove container (data persists in named volume `agents_mongo_data`):
+   ```bash
+   docker compose down
+   ```
+
+   Remove volume as well (this deletes data):
+   ```bash
+   docker compose down -v
+   ```
+
 ## Tools
 
 - `bash_command(command: string)`
