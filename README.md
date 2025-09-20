@@ -1,3 +1,26 @@
+## Graph Runtime Ports
+
+The live graph runtime requires a declarative ports registry. All edges are reversible via `create`/`destroy` method pairs.
+
+Example definition:
+```
+NodeTemplateA: {
+  sourcePorts: {
+    outputItems: { kind: 'method', create: 'emitItem', destroy: 'unemitItem' },
+    self: { kind: 'instance' }
+  },
+  targetPorts: {
+    self: { kind: 'instance' },
+    items: { kind: 'method', create: 'addItem', destroy: 'removeItem' }
+  }
+}
+```
+
+Rules:
+- Exactly one side of an edge must reference a `method` port; the other side must be an `instance` port.
+- Every method port must declare both `create` and `destroy` (universal reversibility).
+- Reversal invokes `destroy` with the same argument (opposite node instance).
+- All graph participants (agents, triggers, tools) implement a `destroy()` lifecycle hook.
 # Bash Agent
 
 A TypeScript agent using `@langchain/langgraph` to interact with bash and files.
@@ -22,10 +45,6 @@ Server -> Client events:
 - `append`: `CheckpointWrite` new inserts
 - `error`: `{ message: string }`
 
-`CheckpointWrite` structure:
-```ts
-{
-   id: string;
    checkpointId: string;
    threadId: string;
    taskId: string;

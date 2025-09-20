@@ -128,4 +128,15 @@ export abstract class BaseTrigger {
       }
     }
   }
+
+  // Universal teardown method for runtime disposal
+  async destroy(): Promise<void> {
+    // default: unsubscribe all listeners by clearing the array
+    this.listeners = [];
+    // clear timers
+    for (const state of this.threads.values()) {
+      if (state.timer) clearTimeout(state.timer);
+    }
+    this.threads.clear();
+  }
 }

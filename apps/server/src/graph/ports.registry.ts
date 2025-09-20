@@ -1,0 +1,66 @@
+import { EdgeDef } from './types';
+import { TemplatePortsRegistry, ResolvedEdgePorts, PortResolutionError, PortConfig, MethodPortConfig } from './ports.types';
+
+export class PortsRegistry {
+  constructor(private readonly templates: TemplatePortsRegistry) {}
+
+  getTemplateConfig(template: string) {
+    return this.templates[template];
+  }
+
+  validateTemplateInstance(template: string, instance: any) { // eslint-disable-line @typescript-eslint/no-explicit-any
+    const cfg = this.templates[template];
+    if (!cfg) return; // no ports defined; legacy fallback elsewhere
+    const checkPorts = (ports?: Record<string, PortConfig>) => {
+      if (!ports) return;
+      for (const [handle, port] of Object.entries(ports)) {
+        if (port.kind === 'method') {
+          const m = port as MethodPortConfig;
+          for (const methodName of [m.create, m.destroy]) {
+            if (typeof instance[methodName] !== 'function') {
+              throw new Error(`Template ${template} port ${handle} expected method '${methodName}' on instance`);
+            }
+          }
+        }
+      }
+    };
+    checkPorts(cfg.sourcePorts);
+    checkPorts(cfg.targetPorts);
+  }
+
+  resolveEdge(edge: EdgeDef, sourceTemplate: string, targetTemplate: string, legacyFallback: (edge: EdgeDef) => ResolvedEdgePorts | undefined): ResolvedEdgePorts {
+    const sourceCfg = this.templates[sourceTemplate];
+    const targetCfg = this.templates[targetTemplate];
+    if (!sourceCfg || !targetCfg) {
+      // allow legacy fallback if either template not registered
+      const legacy = legacyFallback(edge);
+      if (!legacy) throw new PortResolutionError('Legacy handle resolution failed', edge);
+      return legacy;
+    }
+    const sourcePort = sourceCfg.sourcePorts?.[edge.sourceHandle];
+    const targetPort = targetCfg.targetPorts?.[edge.targetHandle];
+    if (!sourcePort) throw new PortResolutionError(`Unknown source handle '${edge.sourceHandle}' for template '${sourceTemplate}'`, edge);
+    if (!targetPort) throw new PortResolutionError(`Unknown target handle '${edge.targetHandle}' for template '${targetTemplate}'`, edge);
+
+    const bothMethod = sourcePort.kind === 'method' && targetPort.kind === 'method';
+    const neitherMethod = sourcePort.kind !== 'method' && targetPort.kind !== 'method';
+    if (bothMethod) throw new PortResolutionError('Both ports are method kind; exactly one must be method', edge);
+    if (neitherMethod) throw new PortResolutionError('Neither port is method kind; exactly one must be method', edge);
+
+    const callableSide = sourcePort.kind === 'method' ? 'source' : 'target';
+    const methodPort = (callableSide === 'source'
+      ? { role: 'source' as const, handle: edge.sourceHandle, config: sourcePort }
+      : { role: 'target' as const, handle: edge.targetHandle, config: targetPort });
+    const instancePort = (callableSide === 'source'
+      ? { role: 'target' as const, handle: edge.targetHandle, config: targetPort }
+      : { role: 'source' as const, handle: edge.sourceHandle, config: sourcePort });
+
+    return {
+  source: { role: 'source' as const, handle: edge.sourceHandle, config: sourcePort },
+  target: { role: 'target' as const, handle: edge.targetHandle, config: targetPort },
+      callableSide,
+      methodPort,
+      instancePort,
+    };
+  }
+}

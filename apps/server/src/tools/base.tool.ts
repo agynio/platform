@@ -3,4 +3,5 @@ import { LangGraphRunnableConfig } from "@langchain/langgraph";
 
 export abstract class BaseTool {
   abstract init(config?: LangGraphRunnableConfig): DynamicStructuredTool;
+  async destroy(): Promise<void> { /* default no-op */ }
 }

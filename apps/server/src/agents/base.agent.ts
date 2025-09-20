@@ -50,4 +50,9 @@ export abstract class BaseAgent implements TriggerListener {
     this.logger.info(`Agent response in thread ${thread}: ${lastMessage?.text}`);
     return lastMessage;
   }
+
+  // New universal teardown hook for graph runtime
+  async destroy(): Promise<void> {
+    // default no-op; subclasses can override
+  }
 }

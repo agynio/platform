@@ -3,3 +3,7 @@ export * from './errors';
 export * from './templateRegistry';
 export * from './handleRegistry';
 export * from './graphBuilder.service';
+export * from './liveGraph.types';
+export * from './liveGraph.manager';
+export * from './ports.types';
+export * from './ports.registry';

@@ -51,9 +51,9 @@ describe("PRTrigger", () => {
     );
 
     const received: Array<{ thread: string; messages: any[] }> = [];
-    await trigger.subscribe(async (thread, messages) => {
+    await trigger.subscribe({ invoke: async (thread, messages) => {
       received.push({ thread, messages });
-    });
+    }});
 
     // Run two manual polls
     // @ts-expect-error accessing private for test
