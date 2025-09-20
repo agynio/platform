@@ -28,15 +28,11 @@ export class PortsRegistry {
     checkPorts(cfg.targetPorts);
   }
 
-  resolveEdge(edge: EdgeDef, sourceTemplate: string, targetTemplate: string, legacyFallback: (edge: EdgeDef) => ResolvedEdgePorts | undefined): ResolvedEdgePorts {
+  resolveEdge(edge: EdgeDef, sourceTemplate: string, targetTemplate: string): ResolvedEdgePorts {
     const sourceCfg = this.templates[sourceTemplate];
     const targetCfg = this.templates[targetTemplate];
-    if (!sourceCfg || !targetCfg) {
-      // allow legacy fallback if either template not registered
-      const legacy = legacyFallback(edge);
-      if (!legacy) throw new PortResolutionError('Legacy handle resolution failed', edge);
-      return legacy;
-    }
+    if (!sourceCfg) throw new PortResolutionError(`No ports registered for source template '${sourceTemplate}'`, edge);
+    if (!targetCfg) throw new PortResolutionError(`No ports registered for target template '${targetTemplate}'`, edge);
     const sourcePort = sourceCfg.sourcePorts?.[edge.sourceHandle];
     const targetPort = targetCfg.targetPorts?.[edge.targetHandle];
     if (!sourcePort) throw new PortResolutionError(`Unknown source handle '${edge.sourceHandle}' for template '${sourceTemplate}'`, edge);

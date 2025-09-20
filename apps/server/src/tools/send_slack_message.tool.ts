@@ -51,4 +51,6 @@ export class SendSlackMessageTool extends BaseTool {
       },
     );
   }
+
+  async setConfig(_cfg: Record<string, unknown>): Promise<void> { /* no runtime config */ }
 }

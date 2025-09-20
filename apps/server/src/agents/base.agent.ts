@@ -55,4 +55,6 @@ export abstract class BaseAgent implements TriggerListener {
   async destroy(): Promise<void> {
     // default no-op; subclasses can override
   }
+
+  abstract setConfig(_cfg: Record<string, unknown>): void | Promise<void>;
 }

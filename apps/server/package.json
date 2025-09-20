@@ -1,5 +1,5 @@
 {
-  "name": "bash-agent",
+  "name": "server",
   "version": "1.0.0",
   "main": "src/index.ts",
   "type": "module",

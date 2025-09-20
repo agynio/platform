@@ -108,16 +108,16 @@ describe('BaseTrigger', () => {
     expect(batches.length).toBe(1);
     // Resolve first busy listener -> schedules second debounce (50ms)
     if (firstResolve) firstResolve();
+    // Allow promise resolution and scheduling of debounce timer
     await Promise.resolve();
     await Promise.resolve();
-    // Allow scheduling of second debounce timer (advance 0ms to process newly queued timer)
-    vi.advanceTimersByTime(0);
-    // Second debounce waiting
-    vi.advanceTimersByTime(49);
+    // Still only first batch
     expect(batches.length).toBe(1);
-    vi.advanceTimersByTime(1); // t=100ms total -> second flush
-    await Promise.resolve();
-    await Promise.resolve();
+    // Advance almost full debounce window - should not flush yet
+  await vi.advanceTimersByTimeAsync(49);
+    expect(batches.length).toBe(1);
+  // Advance remaining 1ms to trigger flush and await async timers
+  await vi.advanceTimersByTimeAsync(1);
     expect(batches.length).toBe(2);
     expect(batches[1]).toEqual(['b', 'c']);
     vi.useRealTimers();

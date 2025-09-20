@@ -57,4 +57,8 @@ export class BashCommandTool extends BaseTool {
       },
     );
   }
+
+  async setConfig(_cfg: Record<string, unknown>): Promise<void> {
+    /* tool currently has no configurable runtime settings */
+  }
 }

@@ -31,7 +31,12 @@ export interface FactoryContext {
   get: (id: string) => unknown; // access previously instantiated node (must exist already)
 }
 
-export type FactoryFn = (ctx: FactoryContext) => unknown | Promise<unknown>;
+// All factories must return a Configurable instance that implements setConfig
+export interface Configurable {
+  setConfig(cfg: Record<string, unknown>): void | Promise<void>;
+}
+
+export type FactoryFn = (ctx: FactoryContext) => Configurable | Promise<Configurable>;
 
 export interface TemplateRegistryLike {
   get(template: string): FactoryFn | undefined;
@@ -63,9 +68,6 @@ export interface SelfEndpoint extends EndpointBase {
 
 export type Endpoint = MethodEndpoint | PropertyEndpoint | SelfEndpoint;
 
-export interface HandleRegistryLike {
-  resolve(instance: unknown, template: string, handle: string): Endpoint | undefined;
-}
 
 export interface GraphBuilderOptions {
   continueOnError?: boolean; // if true collects errors and proceeds, else fail-fast

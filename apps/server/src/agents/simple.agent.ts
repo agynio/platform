@@ -89,9 +89,10 @@ export class SimpleAgent extends BaseAgent {
   /**
    * Dynamically set configuration values like the system prompt.
    */
-  setConfig(config: { systemPrompt?: string }) {
-    if (config.systemPrompt !== undefined) {
-      this.callModelNode.setSystemPrompt(config.systemPrompt);
+  setConfig(config: Record<string, unknown>): void {
+    const parsedConfig = config as { systemPrompt?: string }; // TODO: fix
+    if (parsedConfig.systemPrompt !== undefined) {
+      this.callModelNode.setSystemPrompt(parsedConfig.systemPrompt);
       this.loggerService.info('ArchitectAgent system prompt updated');
     }
   }

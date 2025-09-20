@@ -1,9 +1,9 @@
-import { GraphDefinition, GraphError, NodeDef, EdgeDef } from './types';
+import { Configurable, EdgeDef, GraphDefinition, GraphError, NodeDef } from './types';
 
 export interface LiveNode {
   id: string;
   template: string;
-  instance: any; // eslint-disable-line @typescript-eslint/no-explicit-any
+  instance: Configurable;
   config?: Record<string, unknown>;
 }
 
@@ -37,19 +37,6 @@ export interface EdgeBehavior {
 export type EdgeBehaviorKey = string; // e.g. `${template}.${handle}` (from callable side)
 
 export type EdgeBehaviorRegistry = Record<EdgeBehaviorKey, EdgeBehavior>;
-
-export interface LiveGraphOptions {
-  continueOnError?: boolean;
-  configUpdateMode?: 'diff' | 'always';
-  hashConfigs?: boolean; // future optimization
-  behaviors?: EdgeBehaviorRegistry;
-  logger?: { debug: (...a: any[]) => void; info?: (...a: any[]) => void; warn?: (...a: any[]) => void; error?: (...a: any[]) => void }; // eslint-disable-line @typescript-eslint/no-explicit-any
-  onNodeAdded?: (node: LiveNode) => void;
-  onNodeRemoved?: (nodeId: string) => void;
-  onEdgeExecuted?: (edge: ExecutedEdgeRecord) => void;
-  onEdgeRemoved?: (edge: ExecutedEdgeRecord) => void;
-  onConfigUpdated?: (node: LiveNode) => void;
-}
 
 export interface GraphDiffResult {
   addedNodes: string[];

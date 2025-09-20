@@ -1,6 +1,6 @@
-import { BaseTrigger, BaseTriggerOptions } from "./base.trigger";
-import { LoggerService } from "../services/logger.service";
-import { SlackService } from "../services/slack.service";
+import { BaseTrigger, BaseTriggerOptions } from './base.trigger';
+import { LoggerService } from '../services/logger.service';
+import { SlackService } from '../services/slack.service';
 
 // (Previously had SlackTriggerOptions with filter; removed for simplified constructor.)
 
@@ -32,7 +32,7 @@ export class SlackTrigger extends BaseTrigger {
           },
         ]);
       } catch (err) {
-        this.logger.error("SlackTrigger handler error", err);
+        this.logger.error('SlackTrigger handler error', err);
       }
     });
   }
@@ -43,6 +43,10 @@ export class SlackTrigger extends BaseTrigger {
 
   async stop(): Promise<void> {
     await this.slack.stop();
+  }
+
+  async setConfig(_cfg: Record<string, unknown>): Promise<void> {
+    /* trigger has no dynamic config yet */
   }
 }
 

@@ -88,4 +88,6 @@ export class GithubCloneRepoTool extends BaseTool {
       },
     );
   }
+
+  async setConfig(_cfg: Record<string, unknown>): Promise<void> { /* no dynamic config yet */ }
 }
