@@ -1,6 +1,5 @@
 # Development Style Guides (HautechAI/agents)
 
-This document adapts GitLab's Development Style Guides to our TypeScript/React monorepo.
 
 ## Editor/IDE settings
 We use EditorConfig and Prettier. Configure your editor to:
