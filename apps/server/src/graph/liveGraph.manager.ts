@@ -53,6 +53,12 @@ export class LiveGraphRuntime {
   private async _applyGraphInternal(next: GraphDefinition): Promise<GraphDiffResult> {
     const prev = this.state.lastGraph ?? ({ nodes: [], edges: [] } as GraphDefinition);
     const diff = this.computeDiff(prev, next);
+    this.logger.info(
+      'Applying graph diff: +%d nodes, -%d nodes, ~%d config updates, +%d edges, -%d edges',
+      diff.addedNodes.length,
+      diff.removedNodeIds.length,
+      diff.configUpdateNodeIds.length,
+    );
     const errors: GraphError[] = [];
     const logger = this.logger;
     const pushError = (err: GraphError) => {

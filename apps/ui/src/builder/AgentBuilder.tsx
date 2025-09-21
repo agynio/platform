@@ -120,13 +120,21 @@ export function AgentBuilder() {
     selectedNode,
     updateNodeData,
     deleteSelected,
+    templates,
+    loading,
+    saveState,
   } = useBuilderState();
   return (
     <DndProvider backend={HTML5Backend}>
       <ReactFlowProvider>
         <div className="h-svh w-svw flex overflow-hidden">
           <aside className="w-56 shrink-0 border-r bg-sidebar p-3">
-            <LeftPalette />
+            <div className="mb-2 flex items-center justify-between">
+              <span className="text-[10px] uppercase tracking-wide text-muted-foreground">Palette</span>
+              <span className="text-[10px] font-medium">{loading ? 'Loading' : templates.length}</span>
+            </div>
+            <LeftPalette templates={templates} />
+            <div className="mt-4 text-[10px] text-muted-foreground">Save: {saveState}</div>
           </aside>
           <CanvasArea
             nodes={nodes}

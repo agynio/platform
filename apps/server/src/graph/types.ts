@@ -107,3 +107,39 @@ export interface BuildResult {
   instances: Record<string, unknown>;
   errors: GraphError[];
 }
+
+// Introspection of TemplateRegistry for UI palette generation
+export interface TemplateNodeSchema {
+  name: string; // template name
+  sourcePorts: string[]; // names of source handles (emitters / publishers / tool collections)
+  targetPorts: string[]; // names of target handles (accept dependencies / tools / instances)
+}
+
+// Persistence layer graph representation (includes optimistic locking fields)
+export interface PersistedGraphNode {
+  id: string;
+  template: string;
+  config?: Record<string, unknown>;
+  position?: { x: number; y: number }; // UI hint, optional server side
+}
+export interface PersistedGraphEdge {
+  id?: string; // optional client-provided id (not used for runtime diff)
+  source: string;
+  sourceHandle: string;
+  target: string;
+  targetHandle: string;
+}
+export interface PersistedGraph {
+  name: string; // unique name (maps to _id in Mongo)
+  version: number; // optimistic lock version
+  updatedAt: string; // ISO timestamp
+  nodes: PersistedGraphNode[];
+  edges: PersistedGraphEdge[];
+}
+export interface PersistedGraphUpsertRequest {
+  name: string;
+  version?: number; // expected version (undefined => create)
+  nodes: PersistedGraphNode[];
+  edges: PersistedGraphEdge[];
+}
+export interface PersistedGraphUpsertResponse extends PersistedGraph {}

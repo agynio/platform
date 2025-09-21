@@ -1,92 +1,206 @@
-import { useCallback, useMemo, useState } from 'react';
-import { addEdge, applyNodeChanges, applyEdgeChanges, type NodeChange, type EdgeChange, type OnConnect, type Connection, type Edge } from 'reactflow';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import {
+  addEdge,
+  applyNodeChanges,
+  applyEdgeChanges,
+  type NodeChange,
+  type EdgeChange,
+  type OnConnect,
+  type Connection,
+  type Edge,
+  type Node,
+} from 'reactflow';
 import { v4 as uuid } from 'uuid';
-import { type BuilderNodeKind, DEFAULTS, type BuilderNode, type BuilderNodeData } from '../types';
+import type { TemplateNodeSchema, PersistedGraph } from 'shared';
+
+interface BuilderNodeData {
+  template: string;
+  name?: string;
+  config?: Record<string, unknown>;
+}
+export type BuilderNode = Node<BuilderNodeData>;
 
 interface UseBuilderStateResult {
   nodes: BuilderNode[];
   edges: Edge[];
+  templates: TemplateNodeSchema[];
   selectedNode: BuilderNode | null;
+  loading: boolean;
+  saveState: 'idle' | 'saving' | 'saved' | 'error' | 'conflict';
   onNodesChange: (changes: NodeChange[]) => void;
   onEdgesChange: (changes: EdgeChange[]) => void;
   onConnect: OnConnect;
-  addNode: (kind: BuilderNodeKind, position: { x: number; y: number }) => void;
+  addNode: (template: string, position: { x: number; y: number }) => void;
   updateNodeData: (id: string, data: Partial<BuilderNodeData>) => void;
   deleteSelected: () => void;
 }
 
-const VALID_MATRIX: Record<string, string[]> = {
-  'slack-trigger:trigger': ['agent:triggers'],
-  'agent:tools': ['send-slack-message:tool']
-};
-
-export function useBuilderState(): UseBuilderStateResult {
+export function useBuilderState(serverBase = 'http://localhost:3010'): UseBuilderStateResult {
   const [nodes, setNodes] = useState<BuilderNode[]>([]);
   const [edges, setEdges] = useState<Edge[]>([]);
-  // future: add fit trigger state if needed
+  const [templates, setTemplates] = useState<TemplateNodeSchema[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [saveState, setSaveState] = useState<UseBuilderStateResult['saveState']>('idle');
+  const versionRef = useRef<number>(0);
+  const debounceRef = useRef<number | null>(null);
 
-  const selectedNode = useMemo(() => nodes.find(n => n.selected) ?? null, [nodes]);
+  // Load templates + saved graph
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const [tplRes, graphRes] = await Promise.all([
+          fetch(`${serverBase}/api/templates`).then((r) => r.json()),
+          fetch(`${serverBase}/api/graph`).then((r) => r.json()),
+        ]);
+        if (cancelled) return;
+        setTemplates(tplRes as TemplateNodeSchema[]);
+        const graph = graphRes as PersistedGraph;
+        versionRef.current = graph.version || 0;
+        const rfNodes: BuilderNode[] = graph.nodes.map((n: PersistedGraph['nodes'][number]) => ({
+          id: n.id,
+          type: n.template, // reactflow node type equals template name for now
+          position: n.position || { x: Math.random() * 400, y: Math.random() * 300 },
+          data: { template: n.template, name: n.template, config: n.config },
+          dragHandle: '.drag-handle',
+        }));
+        const rfEdges: Edge[] = graph.edges.map((e: PersistedGraph['edges'][number]) => ({
+          id: `${e.source}-${e.sourceHandle}__${e.target}-${e.targetHandle}`,
+          source: e.source,
+          target: e.target,
+          sourceHandle: e.sourceHandle,
+          targetHandle: e.targetHandle,
+        }));
+        setNodes(rfNodes);
+        setEdges(rfEdges);
+      } catch (e) {
+        console.error('Failed to load builder data', e);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [serverBase]);
+
+  const selectedNode = useMemo(() => nodes.find((n) => n.selected) ?? null, [nodes]);
 
   const onNodesChange = useCallback((changes: NodeChange[]) => {
-    setNodes(nds => applyNodeChanges(changes, nds));
+    setNodes((nds) => applyNodeChanges(changes, nds));
   }, []);
 
   const onEdgesChange = useCallback((changes: EdgeChange[]) => {
-    setEdges(eds => applyEdgeChanges(changes, eds));
+    setEdges((eds) => applyEdgeChanges(changes, eds));
   }, []);
 
-  const isValidConnection = useCallback((connection: Connection) => {
-    if (!connection.source || !connection.target || !connection.sourceHandle || !connection.targetHandle) return false;
-    if (connection.source === connection.target) return false;
-    const sourceNode = nodes.find(n => n.id === connection.source);
-    const targetNode = nodes.find(n => n.id === connection.target);
-    if (!sourceNode || !targetNode) return false;
-    const sourceKey = `${sourceNode.type}:${connection.sourceHandle}`;
-    const targetKey = `${targetNode.type}:${connection.targetHandle}`;
-    return VALID_MATRIX[sourceKey]?.includes(targetKey) ?? false;
-  }, [nodes]);
+  const isValidConnection = useCallback(
+    (connection: Connection) => {
+      if (!connection.source || !connection.target || !connection.sourceHandle || !connection.targetHandle)
+        return false;
+      if (connection.source === connection.target) return false;
+      const sourceNode = nodes.find((n) => n.id === connection.source);
+      const targetNode = nodes.find((n) => n.id === connection.target);
+      if (!sourceNode || !targetNode) return false;
+      const sourceTpl = templates.find((t) => t.name === sourceNode.type);
+      const targetTpl = templates.find((t) => t.name === targetNode.type);
+      if (!sourceTpl || !targetTpl) return false;
+      return (
+        sourceTpl.sourcePorts.includes(connection.sourceHandle) &&
+        targetTpl.targetPorts.includes(connection.targetHandle)
+      );
+    },
+    [nodes, templates],
+  );
 
-  const onConnect: OnConnect = useCallback((connection) => {
-    if (!isValidConnection(connection)) return;
-    setEdges(eds => {
-      const edgeId = `${connection.source}-${connection.sourceHandle}__${connection.target}-${connection.targetHandle}`;
-      if (eds.some(e => e.id === edgeId)) return eds; // prevent duplicates
-      return addEdge({ ...connection, id: edgeId }, eds);
-    });
-  }, [isValidConnection]);
+  const onConnect: OnConnect = useCallback(
+    (connection) => {
+      if (!isValidConnection(connection)) return;
+      setEdges((eds) => {
+        const edgeId = `${connection.source}-${connection.sourceHandle}__${connection.target}-${connection.targetHandle}`;
+        if (eds.some((e) => e.id === edgeId)) return eds; // prevent duplicates
+        return addEdge({ ...connection, id: edgeId }, eds);
+      });
+    },
+    [isValidConnection],
+  );
 
-  const addNode = useCallback((kind: BuilderNodeKind, position: { x: number; y: number }) => {
+  const addNode = useCallback((template: string, position: { x: number; y: number }) => {
     const id = uuid();
-      let baseData: BuilderNodeData;
-      switch (kind) {
-        case 'slack-trigger':
-          baseData = { kind, ...DEFAULTS[kind] } as BuilderNodeData;
-          break;
-        case 'agent':
-          baseData = { kind, ...DEFAULTS[kind] } as BuilderNodeData;
-          break;
-        case 'send-slack-message':
-          baseData = { kind, ...DEFAULTS[kind] } as BuilderNodeData;
-          break;
-      }
     const node: BuilderNode = {
       id,
-      type: kind,
+      type: template,
       position,
-      data: baseData,
-      dragHandle: '.drag-handle'
+      data: { template, name: template, config: {} },
+      dragHandle: '.drag-handle',
     };
-    setNodes(nds => [...nds, node]);
+    setNodes((nds) => [...nds, node]);
   }, []);
 
   const updateNodeData = useCallback((id: string, data: Partial<BuilderNodeData>) => {
-    setNodes(nds => nds.map(n => n.id === id ? { ...n, data: { ...n.data, ...data } as BuilderNodeData } : n));
+    setNodes((nds) => nds.map((n) => (n.id === id ? { ...n, data: { ...n.data, ...data } } : n)));
   }, []);
 
   const deleteSelected = useCallback(() => {
-    setEdges(eds => eds.filter(e => !nodes.some(n => n.selected && (n.id === e.source || n.id === e.target))));
-    setNodes(nds => nds.filter(n => !n.selected));
+    setEdges((eds) => eds.filter((e) => !nodes.some((n) => n.selected && (n.id === e.source || n.id === e.target))));
+    setNodes((nds) => nds.filter((n) => !n.selected));
   }, [nodes]);
 
-  return { nodes, edges, selectedNode, onNodesChange, onEdgesChange, onConnect, addNode, updateNodeData, deleteSelected };
+  // Autosave (debounced)
+  const scheduleSave = useCallback(() => {
+    if (debounceRef.current) window.clearTimeout(debounceRef.current);
+    debounceRef.current = window.setTimeout(async () => {
+      try {
+        setSaveState('saving');
+        const payload = {
+          name: 'main',
+          version: versionRef.current,
+          nodes: nodes.map((n) => ({ id: n.id, template: n.type, config: n.data.config, position: n.position })),
+          edges: edges.map((e) => ({
+            source: e.source,
+            sourceHandle: e.sourceHandle!,
+            target: e.target,
+            targetHandle: e.targetHandle!,
+          })),
+        };
+        const res = await fetch(`${serverBase}/api/graph`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+        if (res.status === 409) {
+          setSaveState('conflict');
+          await res.json();
+          return;
+        }
+        if (!res.ok) throw new Error('Save failed');
+        const saved: PersistedGraph = await res.json();
+        versionRef.current = saved.version;
+        setSaveState('saved');
+        setTimeout(() => setSaveState('idle'), 1500);
+      } catch (e) {
+        console.error(e);
+        setSaveState('error');
+      }
+    }, 1000);
+  }, [nodes, edges, serverBase]);
+
+  useEffect(() => {
+    if (!loading) scheduleSave();
+  }, [nodes, edges, scheduleSave, loading]);
+
+  return {
+    nodes,
+    edges,
+    templates,
+    selectedNode,
+    loading,
+    saveState,
+    onNodesChange,
+    onEdgesChange,
+    onConnect,
+    addNode,
+    updateNodeData,
+    deleteSelected,
+  };
 }

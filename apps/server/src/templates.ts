@@ -29,9 +29,7 @@ export function buildTemplateRegistry(deps: TemplateRegistryDeps): TemplateRegis
         new ContainerProviderEntity(
           containerService,
           {
-            image: 'mcr.microsoft.com/vscode/devcontainers/typescript-node',
             cmd: ['sleep', 'infinity'],
-            env: {},
             workingDir: '/workspace',
           },
           (threadId) => ({ 'hautech.ai/thread_id': `architect_${threadId}` }),

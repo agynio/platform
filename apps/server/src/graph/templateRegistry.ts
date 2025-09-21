@@ -1,4 +1,4 @@
-import { FactoryFn } from './types';
+import { FactoryFn, TemplateNodeSchema } from './types';
 import { TemplatePortConfig, TemplatePortsRegistry } from './ports.types';
 
 export class TemplateRegistry {
@@ -22,5 +22,16 @@ export class TemplateRegistry {
     const out: TemplatePortsRegistry = {};
     for (const [k, v] of this.ports.entries()) out[k] = v;
     return out;
+  }
+
+  toSchema(): TemplateNodeSchema[] {
+    const schemas: TemplateNodeSchema[] = [];
+    for (const name of this.factories.keys()) {
+      const portCfg = this.ports.get(name);
+      const sourcePorts = portCfg?.sourcePorts ? Object.keys(portCfg.sourcePorts) : [];
+      const targetPorts = portCfg?.targetPorts ? Object.keys(portCfg.targetPorts) : [];
+      schemas.push({ name, sourcePorts, targetPorts });
+    }
+    return schemas.sort((a, b) => a.name.localeCompare(b.name));
   }
 }
