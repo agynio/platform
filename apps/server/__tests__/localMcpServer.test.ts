@@ -6,14 +6,10 @@ import { PassThrough } from 'node:stream';
 import { ContainerService } from '../src/services/container.service.js';
 
 /**
- * In-process mock MCP server (no subprocess) using two PassThrough streams:
- * client -> server (inbound), server -> client (outbound). We expose a pseudo-duplex stream to the
- * LocalMCPServer by implementing the minimal interface: write/end (stdin) + pipe/on (stdout).
+ * In-process mock MCP server (no subprocess) using PassThrough streams.
+ * Creates fresh streams for each exec call to simulate real docker behavior.
  */
 function createInProcessMock() {
-  const inbound = new PassThrough(); // what client writes to
-  const outbound = new PassThrough(); // what server writes to
-
   const tools = [
     {
       name: 'echo',
@@ -22,76 +18,83 @@ function createInProcessMock() {
     },
   ];
 
-  let buffer = '';
-  inbound.setEncoding('utf8');
-  inbound.on('data', (chunk) => {
-    buffer += chunk;
-    while (true) {
-      const idx = buffer.indexOf('\n');
-      if (idx === -1) break;
-      const line = buffer.slice(0, idx).trim();
-      buffer = buffer.slice(idx + 1);
-      if (!line) continue;
-      try {
-        const msg = JSON.parse(line);
-        handle(msg);
-      } catch {
-        /* ignore */
+  function createFreshStreamPair() {
+    const inbound = new PassThrough(); // what client writes to
+    const outbound = new PassThrough(); // what server writes to
+
+    let buffer = '';
+    inbound.setEncoding('utf8');
+    inbound.on('data', (chunk) => {
+      buffer += chunk;
+      while (true) {
+        const idx = buffer.indexOf('\n');
+        if (idx === -1) break;
+        const line = buffer.slice(0, idx).trim();
+        buffer = buffer.slice(idx + 1);
+        if (!line) continue;
+        try {
+          const msg = JSON.parse(line);
+          handle(msg);
+        } catch {
+          /* ignore */
+        }
       }
-    }
-  });
+    });
 
-  function send(obj: any) {
-    outbound.write(JSON.stringify(obj) + '\n');
-  }
+    function send(obj: any) {
+      outbound.write(JSON.stringify(obj) + '\n');
+    }
 
-  function handle(msg: any) {
-    if (msg.method === 'initialize') {
-      send({
-        jsonrpc: '2.0',
-        id: msg.id,
-        result: {
-          protocolVersion: '2025-06-18',
-          capabilities: { tools: {} },
-          serverInfo: { name: 'mock', version: '0.0.1' },
-        },
-      });
-      return;
-    }
-    if (msg.method === 'ping') {
-      send({ jsonrpc: '2.0', id: msg.id, result: {} });
-      return;
-    }
-    if (msg.method === 'tools/list') {
-      send({ jsonrpc: '2.0', id: msg.id, result: { tools } });
-      return;
-    }
-    if (msg.method === 'tools/call') {
-      const args = msg.params || {};
-      if (args.name === 'echo') {
-        const text = args.arguments?.text ?? '';
-        send({ jsonrpc: '2.0', id: msg.id, result: { content: [{ type: 'text', text: `echo:${text}` }] } });
+    function handle(msg: any) {
+      if (msg.method === 'initialize') {
+        send({
+          jsonrpc: '2.0',
+          id: msg.id,
+          result: {
+            protocolVersion: '2025-06-18',
+            capabilities: { tools: {} },
+            serverInfo: { name: 'mock', version: '0.0.1' },
+          },
+        });
         return;
       }
-      send({
-        jsonrpc: '2.0',
-        id: msg.id,
-        result: { isError: true, content: [{ type: 'text', text: `unknown tool ${args.name}` }] },
-      });
-      return;
+      if (msg.method === 'ping') {
+        send({ jsonrpc: '2.0', id: msg.id, result: {} });
+        return;
+      }
+      if (msg.method === 'tools/list') {
+        send({ jsonrpc: '2.0', id: msg.id, result: { tools } });
+        return;
+      }
+      if (msg.method === 'tools/call') {
+        const args = msg.params || {};
+        if (args.name === 'echo') {
+          const text = args.arguments?.text ?? '';
+          send({ jsonrpc: '2.0', id: msg.id, result: { content: [{ type: 'text', text: `echo:${text}` }] } });
+          return;
+        }
+        send({
+          jsonrpc: '2.0',
+          id: msg.id,
+          result: { isError: true, content: [{ type: 'text', text: `unknown tool ${args.name}` }] },
+        });
+        return;
+      }
+      send({ jsonrpc: '2.0', id: msg.id, error: { code: -32601, message: 'Method not found' } });
     }
-    send({ jsonrpc: '2.0', id: msg.id, error: { code: -32601, message: 'Method not found' } });
+
+    // Pseudo-duplex stream object used by DockerExecTransport (expects stream.pipe + write/end)
+    const stream: any = {
+      write: (...a: any[]) => (inbound as any).write(...a),
+      end: (...a: any[]) => (inbound as any).end(...a),
+      pipe: (dest: any) => outbound.pipe(dest),
+      on: (event: string, handler: any) => outbound.on(event, handler),
+    };
+
+    return { stream };
   }
 
-  // Pseudo-duplex stream object used by DockerExecTransport (expects stream.pipe + write/end)
-  const stream: any = {
-    write: (...a: any[]) => (inbound as any).write(...a),
-    end: (...a: any[]) => (inbound as any).end(...a),
-    pipe: (dest: any) => outbound.pipe(dest),
-    on: (event: string, handler: any) => outbound.on(event, handler),
-  };
-
-  return { stream };
+  return { createFreshStreamPair };
 }
 
 describe('LocalMCPServer (mock)', () => {
@@ -113,7 +116,9 @@ describe('LocalMCPServer (mock)', () => {
     docker.getContainer = () => ({
       exec: async () => ({
         start: (_opts: any, cb: any) => {
-          cb(undefined, mock.stream);
+          // Create fresh stream for each exec call
+          const { stream } = mock.createFreshStreamPair();
+          cb(undefined, stream);
         },
         inspect: async () => ({ ExitCode: 0 }),
       }),
