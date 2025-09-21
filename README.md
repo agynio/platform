@@ -281,8 +281,6 @@ Template: `mcpServer`
 - Target ports:
    - `$self` (instance)
    - `containerProvider` (method: `setContainerProvider`)
-- Source ports:
-   - `register` (instance) – connect this to an agent method port (`mcp`) to invoke `addMcpServer`.
 
 Template: `simpleAgent`
 - Source ports:

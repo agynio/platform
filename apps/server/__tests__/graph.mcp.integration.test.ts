@@ -32,7 +32,9 @@ describe('Graph MCP integration', () => {
       // simulate minimal client presence expected by downstream code if accessed
       this.client = {};
     };
-    (LocalMCPServer as any).prototype.listTools = async function mockedListTools() { return []; };
+    (LocalMCPServer as any).prototype.listTools = async function mockedListTools() {
+      return [];
+    };
     const logger = new LoggerService();
     const configService = ConfigService.fromEnv();
     const slackService = new SlackService(configService, logger);
@@ -63,7 +65,7 @@ describe('Graph MCP integration', () => {
       ],
       edges: [
         { source: 'container', sourceHandle: '$self', target: 'mcp', targetHandle: 'containerProvider' },
-        { source: 'agent', sourceHandle: 'mcp', target: 'mcp', targetHandle: 'register' },
+        { source: 'agent', sourceHandle: 'mcp', target: 'mcp', targetHandle: '$self' },
       ],
     };
 

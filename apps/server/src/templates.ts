@@ -23,68 +23,59 @@ export interface TemplateRegistryDeps {
 export function buildTemplateRegistry(deps: TemplateRegistryDeps): TemplateRegistry {
   const { logger, containerService, configService, slackService, checkpointerService } = deps;
 
-  return (
-    new TemplateRegistry()
-      .register(
-        'containerProvider',
-        () =>
-          new ContainerProviderEntity(
-            containerService,
-            {
-              cmd: ['sleep', 'infinity'],
-              workingDir: '/workspace',
-            },
-            (threadId) => ({ 'hautech.ai/thread_id': `architect_${threadId}` }),
-          ),
-        {
-          sourcePorts: { $self: { kind: 'instance' } },
-        },
-      )
-      .register('bashCommandTool', () => new BashCommandTool(logger), {
-        targetPorts: {
-          $self: { kind: 'instance' },
-          containerProvider: { kind: 'method', create: 'setContainerProvider' },
-        },
-      })
-      .register('githubCloneRepoTool', () => new GithubCloneRepoTool(configService, logger), {
-        targetPorts: {
-          $self: { kind: 'instance' },
-          containerProvider: { kind: 'method', create: 'setContainerProvider' },
-        },
-      })
-      .register('sendSlackMessageTool', () => new SendSlackMessageTool(slackService, logger), {
-        targetPorts: { $self: { kind: 'instance' } },
-      })
-      .register(
-        'slackTrigger',
-        () => {
-          const trigger = new SlackTrigger(slackService, logger);
-          void trigger.start();
-          return trigger;
-        },
-        {
-          sourcePorts: { subscribe: { kind: 'method', create: 'subscribe', destroy: 'unsubscribe' } },
-        },
-      )
-      .register('simpleAgent', () => new SimpleAgent(configService, logger, checkpointerService), {
-        sourcePorts: {
-          tools: { kind: 'method', create: 'addTool', destroy: 'removeTool' },
-          mcp: { kind: 'method', create: 'addMcpServer' },
-        },
-        targetPorts: { $self: { kind: 'instance' } },
-      })
-      // MCP server template: exposes $self for edges requiring the instance, and an mcpTools source port
-      // which uses the BaseAgent.addMcpServer method on target side (agent's 'tools' port represents addTool, so we directly
-      // connect mcpServer source 'register' to agent target '$self' using method 'addMcpServer'). For simplicity we expose
-      // a source port 'register' that calls addMcpServer when connected.
-      .register('mcpServer', () => new LocalMCPServer(containerService, logger), {
-        targetPorts: {
-          $self: { kind: 'instance' },
-          containerProvider: { kind: 'method', create: 'setContainerProvider' },
-        },
-        sourcePorts: {
-          register: { kind: 'instance' },
-        },
-      })
-  );
+  return new TemplateRegistry()
+    .register(
+      'containerProvider',
+      () =>
+        new ContainerProviderEntity(
+          containerService,
+          {
+            cmd: ['sleep', 'infinity'],
+            workingDir: '/workspace',
+          },
+          (threadId) => ({ 'hautech.ai/thread_id': `architect_${threadId}` }),
+        ),
+      {
+        sourcePorts: { $self: { kind: 'instance' } },
+      },
+    )
+    .register('bashCommandTool', () => new BashCommandTool(logger), {
+      targetPorts: {
+        $self: { kind: 'instance' },
+        containerProvider: { kind: 'method', create: 'setContainerProvider' },
+      },
+    })
+    .register('githubCloneRepoTool', () => new GithubCloneRepoTool(configService, logger), {
+      targetPorts: {
+        $self: { kind: 'instance' },
+        containerProvider: { kind: 'method', create: 'setContainerProvider' },
+      },
+    })
+    .register('sendSlackMessageTool', () => new SendSlackMessageTool(slackService, logger), {
+      targetPorts: { $self: { kind: 'instance' } },
+    })
+    .register(
+      'slackTrigger',
+      () => {
+        const trigger = new SlackTrigger(slackService, logger);
+        void trigger.start();
+        return trigger;
+      },
+      {
+        sourcePorts: { subscribe: { kind: 'method', create: 'subscribe', destroy: 'unsubscribe' } },
+      },
+    )
+    .register('simpleAgent', () => new SimpleAgent(configService, logger, checkpointerService), {
+      sourcePorts: {
+        tools: { kind: 'method', create: 'addTool', destroy: 'removeTool' },
+        mcp: { kind: 'method', create: 'addMcpServer' },
+      },
+      targetPorts: { $self: { kind: 'instance' } },
+    })
+    .register('mcpServer', () => new LocalMCPServer(containerService, logger), {
+      targetPorts: {
+        $self: { kind: 'instance' },
+        containerProvider: { kind: 'method', create: 'setContainerProvider' },
+      },
+    });
 }

@@ -14,6 +14,7 @@ import { LoggerService } from '../services/logger.service';
 import { BaseAgent } from './base.agent';
 import { BaseTool } from '../tools/base.tool';
 import { LangChainToolAdapter } from '../tools/langchainTool.adapter';
+import { BashCommandTool } from '../tools/bash_command';
 
 export class SimpleAgent extends BaseAgent {
   private callModelNode!: CallModelNode;
@@ -92,30 +93,46 @@ export class SimpleAgent extends BaseAgent {
    */
   async addMcpServer(server: McpServer): Promise<void> {
     const namespace = server.namespace;
-    await server.start();
-    const tools: McpTool[] = await server.listTools();
-    for (const t of tools) {
-      const schema = inferArgsSchema(t.inputSchema);
+    // Start server in background (non-blocking if dependencies missing)
+    void server.start();
 
-      const dynamic = lcTool(
-        async (raw, config) => {
-          this.loggerService.info(
-            `Calling MCP tool ${t.name} in namespace ${namespace} with input: ${JSON.stringify(raw)}`,
+    const registerTools = async () => {
+      try {
+        const tools: McpTool[] = await server.listTools();
+        for (const t of tools) {
+          const schema = inferArgsSchema(t.inputSchema);
+          const dynamic = lcTool(
+            async (raw, config) => {
+              this.loggerService.info(
+                `Calling MCP tool ${t.name} in namespace ${namespace} with input: ${JSON.stringify(raw)}`,
+              );
+              const threadId = config?.configurable?.thread_id;
+              const res = await server.callTool(t.name, raw, { threadId });
+              if (res.structuredContent) return JSON.stringify(res.structuredContent);
+              return res.content || '';
+            },
+            {
+              name: `${namespace}_${t.name}`,
+              description: t.description || `MCP tool ${t.name}`,
+              schema,
+            },
           );
-          const threadId = config?.configurable?.thread_id;
-          const res = await server.callTool(t.name, raw, { threadId });
-          if (res.structuredContent) return JSON.stringify(res.structuredContent);
-          return res.content || '';
-        },
-        {
-          name: `${namespace}_${t.name}`,
-          description: t.description || `MCP tool ${t.name}`,
-          schema,
-        },
-      );
-      // Wrap LangChain tool in adapter implementing BaseTool interface
-      const adapted = new LangChainToolAdapter(dynamic);
-      this.addTool(adapted);
+          const adapted = new LangChainToolAdapter(dynamic);
+          this.addTool(adapted);
+        }
+        this.loggerService.info(`Registered ${tools.length} MCP tools for namespace ${namespace}`);
+      } catch (e: any) {
+        this.loggerService.error(`Failed to register MCP tools for ${namespace}: ${e.message}`);
+      }
+    };
+
+    // Attempt immediate registration if already ready; otherwise wait for ready/error events
+    registerTools();
+    if ((server as any).on) {
+      (server as any).on('ready', () => registerTools());
+      (server as any).on('error', (err: any) => {
+        this.loggerService.error(`MCP server ${namespace} error before tool registration: ${err?.message || err}`);
+      });
     }
   }
 

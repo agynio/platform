@@ -1,4 +1,5 @@
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
+import { EventEmitter } from 'events';
 import { McpServer, McpServerConfig, McpTool, McpToolCallResult, DEFAULT_MCP_COMMAND, McpError } from './types.js';
 import { DockerExecTransport } from './dockerExecTransport.js';
 import { ContainerService } from '../services/container.service.js';
@@ -18,37 +19,44 @@ export class LocalMCPServer implements McpServer {
   private containerId?: string;
   private cfg?: McpServerConfig;
   private toolsDiscovered = false; // tracks if we've done initial tool discovery
+  // Resilient start state
+  private wantStart = false; // intent flag indicating someone requested start
+  private startWaiters: { resolve: () => void; reject: (e: any) => void }[] = [];
+  private startRetryTimer?: NodeJS.Timeout;
+  private dependencyTimeoutTimer?: NodeJS.Timeout;
+  private emitter = new EventEmitter();
 
   constructor(
     private containerService: ContainerService,
     private logger: LoggerService,
   ) {}
 
-  /** 
+  /**
    * Discover tools by starting temporary MCP server, fetching tools, then stopping the container.
    * This is called during agent registration to discover available tools.
    */
   async discoverTools(): Promise<McpTool[]> {
     if (!this.cfg) throw new Error('LocalMCPServer: config not yet set via setConfig');
     if (!this.containerProvider) throw new Error('LocalMCPServer: no containerProvider set; cannot discover tools');
-    
+    if (!this.cfg.command) throw new Error('LocalMCPServer: config.command is required for tool discovery');
+
     if (this.toolsDiscovered && this.toolsCache) {
       return this.toolsCache;
     }
 
     this.logger.info(`[MCP:${this.namespace}] Starting tool discovery`);
-    
+
     // Use temporary container for tool discovery
     const tempContainer = await this.containerProvider.provide('_discovery_temp');
     const tempContainerId = tempContainer.id;
-    
+
     const cfg = this.cfg!;
     const command = cfg.command ?? DEFAULT_MCP_COMMAND;
     const docker = this.containerService.getDocker();
-    
+
     let tempTransport: DockerExecTransport | undefined;
     let tempClient: Client | undefined;
-    
+
     try {
       // Create temporary transport and client for discovery
       tempTransport = new DockerExecTransport(
@@ -81,12 +89,12 @@ export class LocalMCPServer implements McpServer {
       );
 
       await tempTransport.start();
-      
+
       tempClient = new Client({ name: 'local-agent-discovery', version: '0.1.0' });
       this.logger.info(`[MCP:${this.namespace}] Connecting for tool discovery`);
       await tempClient.connect(tempTransport, { timeout: cfg.startupTimeoutMs ?? 15000 });
       this.logger.info(`[MCP:${this.namespace}] Tool discovery handshake complete`);
-      
+
       // Fetch tools
       const result = await tempClient.listTools({}, { timeout: cfg.requestTimeoutMs ?? 15000 });
       this.toolsCache = result.tools.map((t: any) => ({
@@ -95,10 +103,9 @@ export class LocalMCPServer implements McpServer {
         inputSchema: t.inputSchema,
         outputSchema: t.outputSchema,
       }));
-      
+
       this.logger.info(`[MCP:${this.namespace}] Discovered ${this.toolsCache.length} tools`);
       this.toolsDiscovered = true;
-      
     } finally {
       // Clean up temporary resources
       if (tempClient) {
@@ -115,7 +122,7 @@ export class LocalMCPServer implements McpServer {
           this.logger.error(`[MCP:${this.namespace}] Error closing temp transport: ${e}`);
         }
       }
-      // Stop the temporary container 
+      // Stop the temporary container
       try {
         await tempContainer.stop(5);
         await tempContainer.remove(true);
@@ -124,39 +131,30 @@ export class LocalMCPServer implements McpServer {
         this.logger.error(`[MCP:${this.namespace}] Error cleaning up temp container: ${e}`);
       }
     }
-    
+
     return this.toolsCache ?? [];
   }
 
   async start(): Promise<void> {
-    if (!this.cfg) throw new Error('LocalMCPServer: config not yet set via setConfig');
-    if (!this.containerProvider) throw new Error('LocalMCPServer: no containerProvider set; cannot start');
-
-    if (this.started) return; // already up
-    if (this.pendingStart) return this.pendingStart; // wait for existing in-flight start
-
-    this.pendingStart = (async () => {
-      this.logger.info(`[MCP:${this.namespace}] Starting MCP server (discovery mode)`);
-      
-      // Discover tools if not already done
-      if (!this.toolsDiscovered) {
-        await this.discoverTools();
-      }
-      
-      this.started = true;
-      this.logger.info(`[MCP:${this.namespace}] Started successfully with ${this.toolsCache?.length || 0} tools`);
-    })();
-
-    try {
-      await this.pendingStart;
-    } finally {
-      this.pendingStart = undefined;
+    // Idempotent: mark intent and attempt start. If dependencies missing, return immediately (non-blocking).
+    this.wantStart = true;
+    if (this.started) return;
+    if (!this.pendingStart) {
+      this.pendingStart = new Promise<void>((resolve, reject) => {
+        this.startWaiters.push({ resolve, reject });
+      });
     }
+    const hasAllDeps = !!(this.cfg && this.containerProvider && this.cfg.command);
+    this.maybeStart();
+    // Only await if we already have dependencies; otherwise allow caller to proceed.
+    if (hasAllDeps) return this.pendingStart;
+    return; // non-blocking early return while dependency polling happens in background
   }
 
   /** Inject a container provider (graph edge). If server already started with a different container, no action taken. */
   setContainerProvider(provider: ContainerProviderEntity | undefined): void {
     this.containerProvider = provider;
+    if (this.wantStart) this.maybeStart();
   }
 
   /** Update runtime configuration (only env/workdir/command currently applied to next restart). */
@@ -168,6 +166,7 @@ export class LocalMCPServer implements McpServer {
     const { containerId: _ignored, ...rest } = partial as any; // ignore containerId if provided
     // Merge with existing config so unspecified fields persist instead of being lost.
     this.cfg = { ...this.cfg, ...rest } as McpServerConfig;
+    if (this.wantStart) this.maybeStart();
   }
 
   private startHeartbeat() {
@@ -185,33 +184,49 @@ export class LocalMCPServer implements McpServer {
 
   async listTools(force = false): Promise<McpTool[]> {
     if (this.toolsCache && !force) return this.toolsCache;
-    
+
     // If tools haven't been discovered yet, trigger discovery
     if (!this.toolsDiscovered || force) {
-      return await this.discoverTools();
+      // If discovery wasn't yet requested via start, set intent and go through resilient path
+      if (!this.wantStart) {
+        this.wantStart = true;
+        this.maybeStart();
+      }
+      // Wait for discovery (either direct or via resilient start mechanism)
+      try {
+        await this.start(); // will be fast/no-op if already in progress
+      } catch (e) {
+        // Fallback: attempt direct discovery (maintains previous behavior if caller forces)
+        if (force) return await this.discoverTools();
+        throw e;
+      }
     }
-    
+
     return this.toolsCache ?? [];
   }
 
-  async callTool(name: string, args: any, options?: { timeoutMs?: number; threadId?: string }): Promise<McpToolCallResult> {
+  async callTool(
+    name: string,
+    args: any,
+    options?: { timeoutMs?: number; threadId?: string },
+  ): Promise<McpToolCallResult> {
     if (!this.cfg) throw new Error('LocalMCPServer: config not yet set via setConfig');
     if (!this.containerProvider) throw new Error('LocalMCPServer: no containerProvider set; cannot call tool');
-    
+
     const threadId = options?.threadId || 'default';
     this.logger.info(`[MCP:${this.namespace}] Calling tool ${name} for thread ${threadId}`);
-    
+
     // Get thread-specific container
     const container = await this.containerProvider.provide(threadId);
     const containerId = container.id;
-    
+
     const cfg = this.cfg!;
     const command = cfg.command ?? DEFAULT_MCP_COMMAND;
     const docker = this.containerService.getDocker();
-    
+
     let transport: DockerExecTransport | undefined;
     let client: Client | undefined;
-    
+
     try {
       // Create transport and client for this tool call
       transport = new DockerExecTransport(
@@ -244,15 +259,15 @@ export class LocalMCPServer implements McpServer {
       );
 
       await transport.start();
-      
+
       client = new Client({ name: `local-agent-${threadId}`, version: '0.1.0' });
       await client.connect(transport, { timeout: cfg.startupTimeoutMs ?? 15000 });
-      
+
       // Call the tool
       const result = await client.callTool({ name, arguments: args }, undefined, {
         timeout: options?.timeoutMs ?? cfg.requestTimeoutMs ?? 30000,
       });
-      
+
       const rawContent = (result as any).content;
       const contentArr = Array.isArray(rawContent) ? rawContent : [];
       const flattened = contentArr
@@ -294,12 +309,97 @@ export class LocalMCPServer implements McpServer {
 
   async stop(): Promise<void> {
     if (this.heartbeatTimer) clearInterval(this.heartbeatTimer);
+    if (this.startRetryTimer) clearTimeout(this.startRetryTimer);
+    if (this.dependencyTimeoutTimer) clearTimeout(this.dependencyTimeoutTimer);
     // No persistent client/transport to clean up in the new lifecycle
     this.started = false;
     this.logger.info(`[MCP:${this.namespace}] Stopped`);
   }
 
-  on(_event: 'ready' | 'exit' | 'error' | 'restarted', _handler: (...a: any[]) => void): this {
-    return this; // placeholder
+  on(event: 'ready' | 'exit' | 'error' | 'restarted', handler: (...a: any[]) => void): this {
+    this.emitter.on(event, handler);
+    return this;
+  }
+
+  // ----------------- Resilient start internals -----------------
+  private flushStartWaiters(err?: any) {
+    const waiters = this.startWaiters;
+    this.startWaiters = [];
+    for (const w of waiters) {
+      if (err) w.reject(err);
+      else w.resolve();
+    }
+    this.pendingStart = undefined;
+    if (err) this.emitter.emit('error', err);
+    else this.emitter.emit('ready');
+  }
+
+  private maybeStart() {
+    if (!this.wantStart || this.started) return;
+    // Avoid stacking multiple timers
+    if (this.startRetryTimer) return;
+    this.tryStartOnce();
+  }
+
+  private tryStartOnce() {
+    if (this.started) return;
+    const cfg = this.cfg;
+    if (!cfg || !this.containerProvider || !cfg.command) {
+      // Poll for dependencies until a timeout
+      const depTimeoutMs = 30000;
+      if (!this.dependencyTimeoutTimer) {
+        this.dependencyTimeoutTimer = setTimeout(() => {
+          if (!this.started) {
+            this.logger.error(
+              `[MCP:${this.namespace}] Dependency wait timeout (cfg=${!!this.cfg} provider=${!!this.containerProvider} command=${!!this.cfg?.command})`,
+            );
+            this.flushStartWaiters(new Error('MCP start dependency timeout'));
+          }
+        }, depTimeoutMs);
+      }
+      this.logger.debug(
+        `[MCP:${this.namespace}] Waiting for dependencies (cfg=${!!cfg} provider=${!!this.containerProvider} command=${!!cfg?.command})`,
+      );
+      this.startRetryTimer = setTimeout(() => {
+        this.startRetryTimer = undefined;
+        this.tryStartOnce();
+      }, 5000);
+      return;
+    }
+
+    // Dependencies available; clear dependency timeout
+    if (this.dependencyTimeoutTimer) {
+      clearTimeout(this.dependencyTimeoutTimer);
+      this.dependencyTimeoutTimer = undefined;
+    }
+
+    const restartCfg = cfg.restart || { maxAttempts: 5, backoffMs: 2000 };
+    const attempt = this.restartAttempts + 1;
+    this.logger.info(`[MCP:${this.namespace}] Start attempt ${attempt}/${restartCfg.maxAttempts}`);
+
+    (async () => {
+      try {
+        if (!this.toolsDiscovered) {
+          await this.discoverTools();
+        }
+        this.started = true;
+        this.logger.info(`[MCP:${this.namespace}] Started successfully with ${this.toolsCache?.length || 0} tools`);
+        this.flushStartWaiters();
+      } catch (e: any) {
+        this.logger.error(`[MCP:${this.namespace}] Start attempt failed: ${e.message}`);
+        this.restartAttempts++;
+        if (this.restartAttempts >= restartCfg.maxAttempts) {
+          this.flushStartWaiters(e);
+          return;
+        }
+        const backoff = restartCfg.backoffMs * Math.pow(2, this.restartAttempts - 1);
+        this.logger.info(`[MCP:${this.namespace}] Retrying in ${backoff}ms`);
+        this.startRetryTimer = setTimeout(() => {
+          this.startRetryTimer = undefined;
+          this.tryStartOnce();
+          this.emitter.emit('restarted', this.restartAttempts);
+        }, backoff);
+      }
+    })();
   }
 }
