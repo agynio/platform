@@ -1,4 +1,4 @@
-import { useCallback, useRef } from 'react';
+import { useCallback, useRef, useMemo } from 'react';
 import ReactFlow, {
   Background,
   Controls,
@@ -16,7 +16,9 @@ import 'reactflow/dist/style.css';
 import { DndProvider, useDrop } from 'react-dnd';
 import { HTML5Backend } from 'react-dnd-html5-backend';
 import { DND_ITEM_NODE } from './dnd';
-import { nodeTypes } from './nodeTypes';
+import { makeNodeTypes } from './nodeTypes';
+import { TemplatesProvider } from './TemplatesProvider';
+import type { NodeTypes } from 'reactflow';
 import { LeftPalette } from './panels/LeftPalette';
 import { RightPropertiesPanel } from './panels/RightPropertiesPanel';
 import { useBuilderState } from './hooks/useBuilderState';
@@ -30,17 +32,10 @@ interface CanvasAreaProps {
   onConnect: OnConnect;
   addNode: (kind: BuilderNodeKind, position: { x: number; y: number }) => void;
   deleteSelected: () => void;
+  nodeTypes: NodeTypes; // reactflow's NodeTypes value type
 }
 
-function CanvasArea({
-  nodes,
-  edges,
-  onNodesChange,
-  onEdgesChange,
-  onConnect,
-  addNode,
-  deleteSelected,
-}: CanvasAreaProps) {
+function CanvasArea({ nodes, edges, onNodesChange, onEdgesChange, onConnect, addNode, deleteSelected, nodeTypes }: CanvasAreaProps) {
   const flowWrapper = useRef<HTMLDivElement | null>(null);
   const reactFlow = useReactFlow();
 
@@ -110,20 +105,8 @@ function CanvasArea({
 }
 
 export function AgentBuilder() {
-  const {
-    nodes,
-    edges,
-    onNodesChange,
-    onEdgesChange,
-    onConnect,
-    addNode,
-    selectedNode,
-    updateNodeData,
-    deleteSelected,
-    templates,
-    loading,
-    saveState,
-  } = useBuilderState();
+  const { nodes, edges, onNodesChange, onEdgesChange, onConnect, addNode, selectedNode, updateNodeData, deleteSelected, templates, loading, saveState } = useBuilderState();
+  const nodeTypes = useMemo(() => makeNodeTypes(templates), [templates]);
   return (
     <DndProvider backend={HTML5Backend}>
       <ReactFlowProvider>
@@ -136,15 +119,18 @@ export function AgentBuilder() {
             <LeftPalette templates={templates} />
             <div className="mt-4 text-[10px] text-muted-foreground">Save: {saveState}</div>
           </aside>
-          <CanvasArea
-            nodes={nodes}
-            edges={edges}
-            onNodesChange={onNodesChange}
-            onEdgesChange={onEdgesChange}
-            onConnect={onConnect}
-            addNode={addNode}
-            deleteSelected={deleteSelected}
-          />
+          <TemplatesProvider templates={templates}>
+            <CanvasArea
+              nodes={nodes}
+              edges={edges}
+              onNodesChange={onNodesChange}
+              onEdgesChange={onEdgesChange}
+              onConnect={onConnect}
+              addNode={addNode}
+              deleteSelected={deleteSelected}
+              nodeTypes={nodeTypes}
+            />
+          </TemplatesProvider>
           <aside className="w-72 shrink-0 border-l bg-sidebar p-4 overflow-y-auto">
             <div className="sticky top-0">
               <h2 className="mb-3 text-sm font-semibold">Properties</h2>

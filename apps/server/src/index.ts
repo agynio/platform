@@ -9,11 +9,15 @@ import { buildTemplateRegistry } from './templates.js';
 import { LiveGraphRuntime } from './graph/liveGraph.manager.js';
 import { GraphService } from './services/graph.service.js';
 import { GraphDefinition, PersistedGraphUpsertRequest } from './graph/types.js';
+import { ContainerService } from './services/container.service.js';
+import { SlackService } from './services/slack.service.js';
 
 const logger = new LoggerService();
 const config = ConfigService.fromEnv();
 const mongo = new MongoService(config, logger);
 const checkpointer = new CheckpointerService(logger);
+const containerService = new ContainerService(logger);
+const slackService = new SlackService(config, logger);
 
 async function bootstrap() {
   await mongo.connect();
@@ -22,9 +26,9 @@ async function bootstrap() {
 
   const templateRegistry = buildTemplateRegistry({
     logger,
-    containerService: undefined as any, // TODO: Provide real dependencies if needed for runtime graph; placeholders for now
+    containerService: containerService,
     configService: config,
-    slackService: undefined as any,
+    slackService: slackService,
     checkpointerService: checkpointer,
   });
 

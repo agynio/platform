@@ -1,9 +1,11 @@
-import { SlackTriggerNode } from './SlackTriggerNode';
-import { AgentNode } from './AgentNode';
-import { SendSlackMessageNode } from './SendSlackMessageNode';
+// Generic template-driven node implementation
+import { TemplateNode } from './TemplateNode';
+import type { TemplateNodeSchema } from 'shared';
+import type { NodeTypes } from 'reactflow';
 
-export const nodeTypes = {
-  'slack-trigger': SlackTriggerNode,
-  'agent': AgentNode,
-  'send-slack-message': SendSlackMessageNode
-};
+export function makeNodeTypes(templates: TemplateNodeSchema[]): NodeTypes {
+  const map: NodeTypes = {};
+  for (const t of templates) map[t.name] = TemplateNode;
+  return map;
+}
+

@@ -58,6 +58,8 @@ export class LiveGraphRuntime {
       diff.addedNodes.length,
       diff.removedNodeIds.length,
       diff.configUpdateNodeIds.length,
+      diff.addedEdges.length,
+      diff.removedEdges.length,
     );
     const errors: GraphError[] = [];
     const logger = this.logger;
