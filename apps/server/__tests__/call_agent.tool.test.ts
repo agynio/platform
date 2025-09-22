@@ -6,20 +6,20 @@ import { BaseAgent } from '../src/agents/base.agent';
 import { DynamicStructuredTool } from '@langchain/core/tools';
 import { TemplateRegistry } from '../src/graph/templateRegistry';
 import { LiveGraphRuntime } from '../src/graph/liveGraph.manager';
-import { TemplatePortsRegistry } from '../src/graph/ports.types';
+
+type Msg = { content: string; info: Record<string, unknown> };
 
 class FakeAgent extends BaseAgent {
-  constructor(logger: LoggerService, private responder?: (thread: string, msgs: any[]) => Promise<any>) {
+  constructor(
+    logger: LoggerService,
+    private responder?: (thread: string, msgs: Msg[]) => Promise<AIMessage>,
+  ) {
     super(logger);
-    // minimal stubs to satisfy abstract base; not used in tests that call invoke directly
-    this._graph = {
-      invoke: vi.fn().mockResolvedValue({ messages: [new AIMessage('OK')] }),
-    } as any;
+    this._graph = { invoke: vi.fn() } as any;
     this._config = { configurable: {} } as any;
   }
   async setConfig(_: Record<string, unknown>): Promise<void> {}
-  // override invoke to allow custom behavior in tests
-  async invoke(thread: string, messages: any[]): Promise<any> {
+  async invoke(thread: string, messages: Msg[]): Promise<AIMessage> {
     if (this.responder) return this.responder(thread, messages);
     return new AIMessage('OK');
   }
@@ -80,9 +80,8 @@ describe('CallAgentTool graph wiring', () => {
     // Minimal TemplateRegistry with simpleAgent and callAgentTool
     const registry = new TemplateRegistry();
     class FakeAgentWithTools extends FakeAgent2 {
-      // minimal tool attach/detach to satisfy ports
-      addTool(_tool: any) {}
-      removeTool(_tool: any) {}
+      addTool(_tool: unknown) {}
+      removeTool(_tool: unknown) {}
     }
 
     registry
@@ -97,7 +96,7 @@ describe('CallAgentTool graph wiring', () => {
         sourcePorts: { agent: { kind: 'method', create: 'setAgent' } },
       });
 
-    const runtime = new LiveGraphRuntime(logger as any, registry);
+    const runtime = new LiveGraphRuntime(logger, registry);
 
     const graph = {
       nodes: [
@@ -115,7 +114,7 @@ describe('CallAgentTool graph wiring', () => {
 
     // Internal check: edge execution should have recorded connections
     const nodes = runtime.getNodes();
-    const toolNode = nodes.find((n: any) => n.id === 'T');
+    const toolNode = nodes.find((n) => (n as any).id === 'T') as any;
     const toolInst = toolNode?.instance as unknown as CallAgentTool;
 
     // @ts-expect-error accessing private for test
