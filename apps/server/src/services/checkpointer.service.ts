@@ -1,6 +1,6 @@
 import { Collection, ChangeStream, Document, Binary, ObjectId, Db, MongoClient } from 'mongodb';
 import { LoggerService } from './logger.service';
-import { MongoDBSaver } from '@langchain/langgraph-checkpoint-mongodb';
+import { MongoDBSaver } from '../checkpointer';
 
 // Raw document interface (previously in MongoService)
 export interface RawCheckpointWrite extends Document {
@@ -30,7 +30,10 @@ export interface CheckpointWriteNormalized {
 
 export class CheckpointerService {
   private collection?: Collection<RawCheckpointWrite>;
-  constructor(private logger: LoggerService, private mongoClient?: MongoClient) {}
+  constructor(
+    private logger: LoggerService,
+    private mongoClient?: MongoClient,
+  ) {}
 
   bindDb(db: Db) {
     this.collection = db.collection<RawCheckpointWrite>('checkpoint_writes');
@@ -82,12 +85,8 @@ export class CheckpointerService {
     this.ensureBound();
     const mongoFilter: Document = {};
     if (filter?.threadId) mongoFilter.thread_id = filter.threadId;
-    if (filter?.agentId) mongoFilter.checkpoint_ns = filter.agentId; // map agentId -> checkpoint_ns
-    const docs = await this.collection!
-      .find(mongoFilter)
-      .sort({ _id: -1 })
-      .limit(limit)
-      .toArray();
+    if (filter?.agentId) mongoFilter.agentId = filter.agentId;
+    const docs = await this.collection!.find(mongoFilter).sort({ _id: -1 }).limit(limit).toArray();
     docs.reverse();
     return docs.map((d) => this.normalize(d));
   }
@@ -96,14 +95,15 @@ export class CheckpointerService {
     this.ensureBound();
     const match: any = { operationType: 'insert' };
     if (filter?.threadId) match['fullDocument.thread_id'] = filter.threadId;
-    if (filter?.agentId) match['fullDocument.checkpoint_ns'] = filter.agentId; // map agentId -> checkpoint_ns
+    if (filter?.agentId) match['fullDocument.agentId'] = filter.agentId;
     return this.collection!.watch([{ $match: match }], { fullDocument: 'updateLookup' });
   }
 
-  getCheckpointer(agentId?: string) {
+  getCheckpointer(agentId: string) {
     if (!this.mongoClient) {
       throw new Error('MongoClient not attached to CheckpointerService');
     }
-    return new MongoDBSaver({ client: this.mongoClient, namespace: agentId });
+
+    return new MongoDBSaver({ client: this.mongoClient }, undefined, { agentId });
   }
 }

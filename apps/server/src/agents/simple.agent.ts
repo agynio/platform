@@ -42,6 +42,8 @@ export class SimpleAgent extends BaseAgent {
   }
 
   init(config: RunnableConfig = { recursionLimit: 250 }) {
+    if (!this.agentId) throw new Error('agentId is required to initialize SimpleAgent');
+
     this._config = config;
 
     const llm = new ChatOpenAI({
@@ -70,10 +72,11 @@ export class SimpleAgent extends BaseAgent {
         },
       )
       .addEdge('tools', 'call_model');
-    this._graph = builder.compile({ checkpointer: this.checkpointerService.getCheckpointer(this.agentId) }) as CompiledStateGraph<
-      unknown,
-      unknown
-    >;
+
+    // Compile with a plain MongoDBSaver; scoping is handled via configurable.checkpoint_ns
+    this._graph = builder.compile({
+      checkpointer: this.checkpointerService.getCheckpointer(this.agentId),
+    }) as CompiledStateGraph<unknown, unknown>;
 
     return this;
   }
