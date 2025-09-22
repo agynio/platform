@@ -12,7 +12,7 @@ const invocationSchema = z.object({
   context: z.any().optional().describe('Optional structured metadata; forwarded into TriggerMessage.info'),
 });
 
-const configSchema = z.object({ description: z.string().min(1).optional() });
+const configSchema = z.object({ description: z.string().min(1).optional() }); // TODO: make description non optional
 
 type WithThreadId = LangGraphRunnableConfig & { configurable?: { thread_id?: string } };
 

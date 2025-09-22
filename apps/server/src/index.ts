@@ -108,8 +108,8 @@ async function bootstrap() {
         const parsed: PersistedGraphUpsertRequest = JSON.parse(body);
         parsed.name = parsed.name || 'main';
         const saved = await graphService.upsert(parsed);
-        // Apply to runtime
         await runtime.apply(toRuntimeGraph(saved));
+        // Apply to runtime
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify(saved));
       } catch (e: any) {
