@@ -70,7 +70,7 @@ export function buildTemplateRegistry(deps: TemplateRegistryDeps): TemplateRegis
         sourcePorts: { subscribe: { kind: 'method', create: 'subscribe', destroy: 'unsubscribe' } },
       },
     )
-    .register('simpleAgent', () => new SimpleAgent(configService, logger, checkpointerService), {
+    .register('simpleAgent', (ctx) => new SimpleAgent(configService, logger, checkpointerService, ctx.nodeId), {
       sourcePorts: {
         tools: { kind: 'method', create: 'addTool', destroy: 'removeTool' },
         mcp: { kind: 'method', create: 'addMcpServer', destroy: 'removeMcpServer' },

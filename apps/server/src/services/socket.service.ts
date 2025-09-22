@@ -4,6 +4,7 @@ import { CheckpointerService } from './checkpointer.service';
 
 interface InitPayload {
   threadId?: string;
+  agentId?: string;
 }
 
 export class SocketService {

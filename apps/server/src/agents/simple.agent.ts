@@ -26,6 +26,7 @@ export class SimpleAgent extends BaseAgent {
     private configService: ConfigService,
     private loggerService: LoggerService,
     private checkpointerService: CheckpointerService,
+    private agentId?: string,
   ) {
     super(loggerService);
     this.init();
@@ -69,7 +70,7 @@ export class SimpleAgent extends BaseAgent {
         },
       )
       .addEdge('tools', 'call_model');
-    this._graph = builder.compile({ checkpointer: this.checkpointerService.getCheckpointer() }) as CompiledStateGraph<
+    this._graph = builder.compile({ checkpointer: this.checkpointerService.getCheckpointer(this.agentId) }) as CompiledStateGraph<
       unknown,
       unknown
     >;

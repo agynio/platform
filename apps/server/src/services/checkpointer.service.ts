@@ -25,6 +25,7 @@ export interface CheckpointWriteNormalized {
   idx: number;
   value: any;
   createdAt: Date;
+  checkpointNs?: string; // mapped from raw.checkpoint_ns
 }
 
 export class CheckpointerService {
@@ -70,34 +71,39 @@ export class CheckpointerService {
       idx: raw.idx,
       value: decoded,
       createdAt: raw._id.getTimestamp(),
+      checkpointNs: raw.checkpoint_ns,
     };
   }
 
-  async fetchLatestWrites(filter?: { threadId?: string }, limit = 50): Promise<CheckpointWriteNormalized[]> {
+  async fetchLatestWrites(
+    filter?: { threadId?: string; agentId?: string },
+    limit = 50,
+  ): Promise<CheckpointWriteNormalized[]> {
     this.ensureBound();
     const mongoFilter: Document = {};
     if (filter?.threadId) mongoFilter.thread_id = filter.threadId;
-  // checkpointId filtering removed – now returns all matching thread writes
+    if (filter?.agentId) mongoFilter.checkpoint_ns = filter.agentId; // map agentId -> checkpoint_ns
     const docs = await this.collection!
       .find(mongoFilter)
       .sort({ _id: -1 })
       .limit(limit)
       .toArray();
     docs.reverse();
-    return docs.map(d => this.normalize(d));
+    return docs.map((d) => this.normalize(d));
   }
 
-  watchInserts(filter?: { threadId?: string }): ChangeStream<RawCheckpointWrite> {
+  watchInserts(filter?: { threadId?: string; agentId?: string }): ChangeStream<RawCheckpointWrite> {
     this.ensureBound();
     const match: any = { operationType: 'insert' };
     if (filter?.threadId) match['fullDocument.thread_id'] = filter.threadId;
-    // no checkpointId constraint
+    if (filter?.agentId) match['fullDocument.checkpoint_ns'] = filter.agentId; // map agentId -> checkpoint_ns
     return this.collection!.watch([{ $match: match }], { fullDocument: 'updateLookup' });
   }
-  getCheckpointer() {
+
+  getCheckpointer(agentId?: string) {
     if (!this.mongoClient) {
       throw new Error('MongoClient not attached to CheckpointerService');
     }
-    return new MongoDBSaver({ client: this.mongoClient });
+    return new MongoDBSaver({ client: this.mongoClient, namespace: agentId });
   }
 }
