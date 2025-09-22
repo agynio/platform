@@ -10,6 +10,7 @@ import { SlackService } from './services/slack.service';
 import { BashCommandTool } from './tools/bash_command';
 import { GithubCloneRepoTool } from './tools/github_clone_repo';
 import { SendSlackMessageTool } from './tools/send_slack_message.tool';
+import { CallAgentTool } from './tools/call_agent.tool';
 import { SlackTrigger } from './triggers';
 
 export interface TemplateRegistryDeps {
@@ -53,6 +54,10 @@ export function buildTemplateRegistry(deps: TemplateRegistryDeps): TemplateRegis
     })
     .register('sendSlackMessageTool', () => new SendSlackMessageTool(slackService, logger), {
       targetPorts: { $self: { kind: 'instance' } },
+    })
+    .register('callAgentTool', () => new CallAgentTool(logger), {
+      targetPorts: { $self: { kind: 'instance' } },
+      sourcePorts: { agent: { kind: 'method', create: 'setAgent' } },
     })
     .register(
       'slackTrigger',

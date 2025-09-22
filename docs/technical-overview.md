@@ -66,6 +66,7 @@ flowchart LR
     BashTool[BashCommandTool]
     GHCloneTool[GithubCloneRepoTool]
     SlackMsgTool[SendSlackMessageTool]
+  CallAgentTool[CallAgentTool]
     MCP[LocalMCPServer]
   end
   GStore -->|load/apply| LGR
@@ -73,6 +74,7 @@ flowchart LR
   ToolsNode --> BashTool
   ToolsNode --> GHCloneTool
   ToolsNode --> SlackMsgTool
+  ToolsNode --> CallAgentTool
   ToolsNode --> MCP
 ```
 
@@ -81,7 +83,7 @@ Layers
 - Graph runtime (apps/server/src/graph/*): live diff/apply engine (LiveGraphRuntime) enforcing reversible edges via PortsRegistry and TemplateRegistry wiring.
 - Templates (apps/server/src/templates.ts): declarative registration of node factories and their ports.
 - Triggers (apps/server/src/triggers/*): external event sources (Slack, PR polling) that push messages into agents.
-- Nodes (apps/server/src/nodes/*): graph components like LLM invocation (CallModelNode, MemoryCallModelNode) and tool call dispatch (ToolsNode).
+- Nodes (apps/server/src/nodes/*): graph components like LLM invocation (CallModelNode, MemoryCallModelNode, ToolsNode).
 - Tools (apps/server/src/tools/*): actions callable by the LLM (bash, GitHub clone, Slack message) and adapters.
 - MCP (apps/server/src/mcp/*): LocalMCPServer and DockerExecTransport to expose MCP tools from a container as agent tools.
 - Services (apps/server/src/services/*): infra clients and helpers (config, docker container provision, Mongo, Slack, GitHub, checkpointer, sockets).
@@ -136,7 +138,7 @@ Live reversible graph via ports
 Graph diff algorithm (simplified)
 - Nodes:
   - Added: present in next not in prev -> instantiate via factory, then optional setConfig.
-  - Recreated: template changed -> dispose old (destroy + reverse edges), then instantiate fresh.
+  - Recreated: template changed -> dispose old (reverse edges, teardown lifecycle, purge maps), then instantiate fresh.
   - Config change: setConfig called on live instance.
   - Removed: dispose (reverse residual edges, teardown lifecycle, purge maps).
 - Edges:
