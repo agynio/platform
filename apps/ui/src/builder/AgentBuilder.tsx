@@ -169,7 +169,7 @@ export function AgentBuilder() {
               {rightTab === 'checkpoint' && isCheckpointEligible ? (
                 <div className="space-y-4">
                   <div className="text-[10px] uppercase text-muted-foreground">Checkpoint Stream</div>
-                  <CheckpointStreamPanel />
+                  <CheckpointStreamPanel agentId={selectedNode?.id} />
                 </div>
               ) : (
                 <RightPropertiesPanel node={selectedNode} onChange={updateNodeData} />

@@ -6,16 +6,18 @@ import { StatusChip } from './StatusChip';
 
 interface Props {
   defaultThreadId?: string;
+  agentId?: string;
   url?: string;
 }
 
-export function CheckpointStreamPanel({ defaultThreadId = '', url }: Props) {
+export function CheckpointStreamPanel({ defaultThreadId = '', agentId, url }: Props) {
   const [threadId, setThreadId] = useState(defaultThreadId);
   const [autoScroll, setAutoScroll] = useState(true);
 
   const { items, status, error, connected, isPaused, pause, resume, clear, retry, dropped } = useCheckpointStream({
     url,
     threadId: threadId || undefined,
+    agentId,
   });
 
   const listRef = useRef<HTMLDivElement | null>(null);
@@ -98,7 +100,7 @@ export function CheckpointStreamPanel({ defaultThreadId = '', url }: Props) {
           />
         ))}
       </div>
-      <p className="text-xs text-muted-foreground">Leave both inputs empty to stream all writes (capped live list).</p>
+      <p className="text-xs text-muted-foreground">Leave threadId empty to stream all writes (capped live list).</p>
     </div>
   );
 }
