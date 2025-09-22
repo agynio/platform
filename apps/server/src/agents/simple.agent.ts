@@ -42,7 +42,12 @@ export class SimpleAgent extends BaseAgent {
   }
 
   init(config: RunnableConfig = { recursionLimit: 250 }) {
-    this._config = config;
+    // Ensure each agent instance persists to its own checkpoint namespace by default
+    const mergedConfig: RunnableConfig = {
+      ...config,
+      configurable: { ...(config as any).configurable, checkpoint_ns: this.agentId },
+    } as RunnableConfig;
+    this._config = mergedConfig;
 
     const llm = new ChatOpenAI({
       model: 'gpt-5',
@@ -70,7 +75,9 @@ export class SimpleAgent extends BaseAgent {
         },
       )
       .addEdge('tools', 'call_model');
-    this._graph = builder.compile({ checkpointer: this.checkpointerService.getCheckpointer(this.agentId) }) as CompiledStateGraph<
+
+    // Compile with a plain MongoDBSaver; scoping is handled via configurable.checkpoint_ns
+    this._graph = builder.compile({ checkpointer: this.checkpointerService.getCheckpointer() }) as CompiledStateGraph<
       unknown,
       unknown
     >;

@@ -100,10 +100,11 @@ export class CheckpointerService {
     return this.collection!.watch([{ $match: match }], { fullDocument: 'updateLookup' });
   }
 
-  getCheckpointer(agentId?: string) {
+  getCheckpointer() {
     if (!this.mongoClient) {
       throw new Error('MongoClient not attached to CheckpointerService');
     }
-    return new MongoDBSaver({ client: this.mongoClient, namespace: agentId });
+    // No namespace here; scoping happens via RunnableConfig.configurable.checkpoint_ns
+    return new MongoDBSaver({ client: this.mongoClient });
   }
 }
