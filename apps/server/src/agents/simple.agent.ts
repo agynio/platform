@@ -100,12 +100,15 @@ export class SimpleAgent extends BaseAgent {
       return;
     }
     this.mcpServerTools.set(server, []);
-    // Start server in background (non-blocking if dependencies missing)
-    void server.start();
 
+    // Registration function now only invoked on explicit ready event to avoid triggering
+    // duplicate discovery flows (removes eager listTools() call which previously raced with start()).
     const registerTools = async () => {
       try {
         const tools: McpTool[] = await server.listTools();
+        if (!tools.length) {
+          this.loggerService.info(`No MCP tools discovered for namespace ${namespace}`);
+        }
         const registered: BaseTool[] = [];
         for (const t of tools) {
           const schema = inferArgsSchema(t.inputSchema);
@@ -130,7 +133,6 @@ export class SimpleAgent extends BaseAgent {
           registered.push(adapted);
         }
         this.loggerService.info(`Registered ${tools.length} MCP tools for namespace ${namespace}`);
-        // Store after successful registration
         const existing = this.mcpServerTools.get(server) || [];
         this.mcpServerTools.set(server, existing.concat(registered));
       } catch (e: any) {
@@ -138,14 +140,10 @@ export class SimpleAgent extends BaseAgent {
       }
     };
 
-    // Attempt immediate registration if already ready; otherwise wait for ready/error events
-    registerTools();
-    if ((server as any).on) {
-      (server as any).on('ready', () => registerTools());
-      (server as any).on('error', (err: any) => {
-        this.loggerService.error(`MCP server ${namespace} error before tool registration: ${err?.message || err}`);
-      });
-    }
+    server.on('ready', () => registerTools());
+    server.on('error', (err: any) => {
+      this.loggerService.error(`MCP server ${namespace} error before tool registration: ${err?.message || err}`);
+    });
   }
 
   /**

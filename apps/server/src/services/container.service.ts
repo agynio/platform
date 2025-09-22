@@ -1,13 +1,14 @@
-import Docker, { ContainerCreateOptions, Exec } from "dockerode";
-import { ContainerEntity } from "../entities/container.entity";
-import { LoggerService } from "./logger.service";
+import Docker, { ContainerCreateOptions, Exec } from 'dockerode';
+import { ContainerEntity } from '../entities/container.entity';
+import { LoggerService } from './logger.service';
 
-const DEFAULT_IMAGE = "mcr.microsoft.com/vscode/devcontainers/base";
+const DEFAULT_IMAGE = 'mcr.microsoft.com/vscode/devcontainers/base';
 
 export type ContainerOpts = {
   image?: string;
   name?: string;
   cmd?: string[];
+  entrypoint?: string;
   env?: Record<string, string> | string[];
   workingDir?: string;
   autoRemove?: boolean; // --rm behavior
@@ -56,7 +57,7 @@ export class ContainerService {
     await new Promise<void>((resolve, reject) => {
       this.docker.pull(image, (err: Error | undefined, stream: NodeJS.ReadableStream | undefined) => {
         if (err) return reject(err);
-        if (!stream) return reject(new Error("No pull stream returned"));
+        if (!stream) return reject(new Error('No pull stream returned'));
         this.docker.modem.followProgress(
           stream as NodeJS.ReadableStream,
           (doneErr: any) => {
@@ -107,7 +108,7 @@ export class ContainerService {
     };
 
     this.logger.info(
-      `Creating container from '${optsWithDefaults.image}'${optsWithDefaults.name ? ` name=${optsWithDefaults.name}` : ""}`,
+      `Creating container from '${optsWithDefaults.image}'${optsWithDefaults.name ? ` name=${optsWithDefaults.name}` : ''}`,
     );
     const container = await this.docker.createContainer(createOptions);
     await container.start();
@@ -128,14 +129,14 @@ export class ContainerService {
       throw new Error(`Container '${containerId}' is not running`);
     }
 
-    const Cmd = Array.isArray(command) ? command : ["/bin/sh", "-lc", command];
+    const Cmd = Array.isArray(command) ? command : ['/bin/sh', '-lc', command];
     const Env: string[] | undefined = Array.isArray(options?.env)
       ? options?.env
       : options?.env
         ? Object.entries(options.env).map(([k, v]) => `${k}=${v}`)
         : undefined;
 
-    this.logger.debug(`Exec in container cid=${inspectData.Id.substring(0, 12)}: ${Cmd.join(" ")}`);
+    this.logger.debug(`Exec in container cid=${inspectData.Id.substring(0, 12)}: ${Cmd.join(' ')}`);
     const exec: Exec = await container.exec({
       Cmd,
       AttachStdout: true,
@@ -173,7 +174,7 @@ export class ContainerService {
       throw new Error(`Container '${containerId}' is not running`);
     }
 
-    const Cmd = Array.isArray(command) ? command : ["/bin/sh", "-lc", command];
+    const Cmd = Array.isArray(command) ? command : ['/bin/sh', '-lc', command];
     const Env: string[] | undefined = Array.isArray(options?.env)
       ? options?.env
       : options?.env
@@ -183,7 +184,7 @@ export class ContainerService {
     const demux = options?.demuxStderr ?? true;
 
     this.logger.debug(
-      `Interactive exec in container cid=${inspectData.Id.substring(0, 12)} tty=${tty} demux=${demux}: ${Cmd.join(" ")}`,
+      `Interactive exec in container cid=${inspectData.Id.substring(0, 12)} tty=${tty} demux=${demux}: ${Cmd.join(' ')}`,
     );
 
     const exec: Exec = await container.exec({
@@ -196,13 +197,13 @@ export class ContainerService {
       Tty: tty,
     });
 
-    const stdoutStream = new (require("node:stream").PassThrough)();
-    const stderrStream = new (require("node:stream").PassThrough)();
+    const stdoutStream = new (require('node:stream').PassThrough)();
+    const stderrStream = new (require('node:stream').PassThrough)();
 
     const hijackStream: any = await new Promise((resolve, reject) => {
       exec.start({ hijack: true, stdin: true }, (err, stream) => {
         if (err) return reject(err);
-        if (!stream) return reject(new Error("No stream returned from exec.start"));
+        if (!stream) return reject(new Error('No stream returned from exec.start'));
         resolve(stream);
       });
     });
@@ -237,8 +238,8 @@ export class ContainerService {
     timeoutMs?: number,
   ): Promise<{ stdout: string; stderr: string; exitCode: number }> {
     return new Promise((resolve, reject) => {
-      let stdout = "";
-      let stderr = "";
+      let stdout = '';
+      let stderr = '';
       let finished = false;
       const timer = timeoutMs
         ? setTimeout(() => {
@@ -254,13 +255,13 @@ export class ContainerService {
         }
         if (!stream) {
           if (timer) clearTimeout(timer);
-          return reject(new Error("No stream returned from exec.start"));
+          return reject(new Error('No stream returned from exec.start'));
         }
 
         // If exec created without TTY, docker multiplexes stdout/stderr
         if (!exec.inspect) {
           // Very unlikely, but guard.
-          this.logger.error("Exec instance missing inspect method");
+          this.logger.error('Exec instance missing inspect method');
         }
 
         // Try to determine if we should demux. We'll inspect later.
@@ -269,7 +270,7 @@ export class ContainerService {
             const details = await exec.inspect();
             const tty = details.ProcessConfig?.tty;
             if (tty) {
-              stream.on("data", (chunk: Buffer | string) => {
+              stream.on('data', (chunk: Buffer | string) => {
                 stdout += chunk.toString();
               });
             } else {
@@ -289,11 +290,11 @@ export class ContainerService {
             }
           } catch (e) {
             // Fallback: treat as single combined stream
-            stream.on("data", (c: Buffer | string) => (stdout += c.toString()));
+            stream.on('data', (c: Buffer | string) => (stdout += c.toString()));
           }
         })();
 
-        stream.on("end", async () => {
+        stream.on('end', async () => {
           if (finished) return; // already timed out
           try {
             const inspectData = await exec.inspect();
@@ -306,7 +307,7 @@ export class ContainerService {
             reject(e);
           }
         });
-        stream.on("error", (e) => {
+        stream.on('error', (e) => {
           if (finished) return;
           if (timer) clearTimeout(timer);
           // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -351,7 +352,7 @@ export class ContainerService {
     options?: { all?: boolean },
   ): Promise<ContainerEntity[]> {
     const labelFilters = Object.entries(labels).map(([k, v]) => `${k}=${v}`);
-    this.logger.info(`Listing containers by labels all=${options?.all ?? false} filters=${labelFilters.join(",")}`);
+    this.logger.info(`Listing containers by labels all=${options?.all ?? false} filters=${labelFilters.join(',')}`);
     const list = await this.docker.listContainers({
       all: options?.all ?? false,
       filters: { label: labelFilters },

@@ -35,6 +35,9 @@ export class DockerExecTransport {
   private _stdout = new PassThrough();
   private _stderr = new PassThrough();
   private _closed = false;
+  private static _seq = 0;
+  private _id = ++DockerExecTransport._seq;
+  private _started = false;
 
   constructor(
     private docker: Docker,
@@ -49,6 +52,13 @@ export class DockerExecTransport {
   ) {}
 
   async start(): Promise<void> {
+    if (this._started) {
+      // Downgraded to debug-level semantic (still using console.debug for simplicity)
+      console.debug(`[DockerExecTransport#${this._id}] start() called more than once; ignoring.`);
+      return;
+    }
+    this._started = true;
+    console.info(`[DockerExecTransport#${this._id}] START initiating exec`);
     const started = await this.startExec();
     const { stream } = started;
     const stdin = started.stdin || stream;
@@ -61,14 +71,15 @@ export class DockerExecTransport {
       stdout.pipe(this._stdout);
       if (stderr) stderr.pipe(this._stderr);
     } else if (stream) {
-      if (this.options.demux && (this.docker as any).modem?.demuxStream) {
-        (this.docker as any).modem.demuxStream(stream, this._stdout, this._stderr);
+      if (this.options.demux) {
+        this.docker.modem.demuxStream(stream, this._stdout, this._stderr);
       } else {
         stream.pipe(this._stdout);
       }
     }
 
     this._stdout.on('data', (chunk) => {
+      console.log(`[DockerExecTransport#${this._id} stdout]`, chunk.toString().trim());
       this._readBuffer.append(chunk as Buffer);
       this.processReadBuffer();
     });
@@ -77,7 +88,7 @@ export class DockerExecTransport {
       // Provide minimal stderr visibility without overwhelming logs; only log first few lines until handshake.
       const text = chunk.toString();
       if (text.trim().length > 0) {
-        console.error('[DockerExecTransport stderr]', text.trim());
+        console.error(`[DockerExecTransport#${this._id} stderr]`, text.trim());
       }
     });
     const closer = stream || stdout || this._stdout;
@@ -114,12 +125,14 @@ export class DockerExecTransport {
     try {
       this._stdin.end();
     } catch {}
+    console.info(`[DockerExecTransport#${this._id}] CLOSED`);
     this.onclose?.();
   }
 
   private handleClose() {
     if (this._closed) return;
     this._closed = true;
+    console.info(`[DockerExecTransport#${this._id}] STREAM CLOSED`);
     this.onclose?.();
   }
 }

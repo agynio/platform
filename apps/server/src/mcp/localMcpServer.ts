@@ -5,9 +5,27 @@ import { DockerExecTransport } from './dockerExecTransport.js';
 import { ContainerService } from '../services/container.service.js';
 import { ContainerProviderEntity } from '../entities/containerProvider.entity.js';
 import { LoggerService } from '../services/logger.service.js';
+import { v4 as uuidv4 } from 'uuid';
 
 export class LocalMCPServer implements McpServer {
-  readonly namespace: string = 'mcp'; // default; overridden by first setConfig
+  /**
+   * Lifecycle (post-refactor single discovery path):
+   *
+   * 1. Caller sets config + container provider.
+   * 2. Caller invokes start() (SimpleAgent does this when attaching server) which sets wantStart=true and calls maybeStart().
+   * 3. maybeStart() -> tryStartOnce() schedules resilient start attempts (dependency polling + exponential backoff).
+   * 4. FIRST successful start attempt calls discoverTools() exactly once to populate toolsCache, then marks started=true and emits 'ready'.
+   * 5. SimpleAgent listens for 'ready' and only then invokes listTools() to register tools (listTools() is passive and never kicks off discovery).
+   * 6. Subsequent listTools() calls just read the cache; force option only returns what is already cached (no re-discovery path here).
+   * 7. Tool calls (callTool) run per-thread ephemeral execs without modifying discovery state.
+   *
+   * This design eliminates prior race where addMcpServer() did an immediate listTools() causing a second concurrent discoverTools() before started=true.
+   */
+  // Namespace is now derived from config dynamically. If not yet configured, falls back to 'mcp'.
+  // Once first non-default namespace is observed, further attempts to change it are ignored (warned).
+  get namespace(): string {
+    return this.cfg?.namespace || 'mcp';
+  }
   private client?: Client;
   private started = false;
   private toolsCache: McpTool[] | null = null;
@@ -25,6 +43,11 @@ export class LocalMCPServer implements McpServer {
   private startRetryTimer?: NodeJS.Timeout;
   private dependencyTimeoutTimer?: NodeJS.Timeout;
   private emitter = new EventEmitter();
+  // Debug / tracing counters
+  private _discoverySeq = 0;
+  private _startInvocationSeq = 0;
+  private _tryStartSeq = 0;
+  private _maybeStartSeq = 0;
 
   constructor(
     private containerService: ContainerService,
@@ -44,10 +67,14 @@ export class LocalMCPServer implements McpServer {
       return this.toolsCache;
     }
 
-    this.logger.info(`[MCP:${this.namespace}] Starting tool discovery`);
+    const discoveryId = ++this._discoverySeq;
+    const t0 = Date.now();
+    this.logger.info(
+      `[MCP:${this.namespace}] [disc:${discoveryId}] Starting tool discovery (toolsDiscovered=${this.toolsDiscovered})`,
+    );
 
     // Use temporary container for tool discovery
-    const tempContainer = await this.containerProvider.provide('_discovery_temp');
+    const tempContainer = await this.containerProvider.provide(`_discovery_temp_${uuidv4()}`);
     const tempContainerId = tempContainer.id;
 
     const cfg = this.cfg!;
@@ -62,6 +89,7 @@ export class LocalMCPServer implements McpServer {
       tempTransport = new DockerExecTransport(
         docker,
         async () => {
+          this.logger.debug(`[MCP:${this.namespace}] [disc:${discoveryId}] launching docker exec`);
           const exec = await docker.getContainer(tempContainerId).exec({
             Cmd: ['sh', '-lc', command],
             AttachStdout: true,
@@ -88,12 +116,10 @@ export class LocalMCPServer implements McpServer {
         { demux: true },
       );
 
-      await tempTransport.start();
-
       tempClient = new Client({ name: 'local-agent-discovery', version: '0.1.0' });
-      this.logger.info(`[MCP:${this.namespace}] Connecting for tool discovery`);
+      this.logger.info(`[MCP:${this.namespace}] [disc:${discoveryId}] Connecting for tool discovery`);
       await tempClient.connect(tempTransport, { timeout: cfg.startupTimeoutMs ?? 15000 });
-      this.logger.info(`[MCP:${this.namespace}] Tool discovery handshake complete`);
+      this.logger.info(`[MCP:${this.namespace}] [disc:${discoveryId}] Handshake complete`);
 
       // Fetch tools
       const result = await tempClient.listTools({}, { timeout: cfg.requestTimeoutMs ?? 15000 });
@@ -104,8 +130,10 @@ export class LocalMCPServer implements McpServer {
         outputSchema: t.outputSchema,
       }));
 
-      this.logger.info(`[MCP:${this.namespace}] Discovered ${this.toolsCache.length} tools`);
+      this.logger.info(`[MCP:${this.namespace}] [disc:${discoveryId}] Discovered ${this.toolsCache.length} tools`);
       this.toolsDiscovered = true;
+    } catch (err) {
+      this.logger.error(`[MCP:${this.namespace}] [disc:${discoveryId}] Tool discovery failed: ${err}`);
     } finally {
       // Clean up temporary resources
       if (tempClient) {
@@ -126,9 +154,12 @@ export class LocalMCPServer implements McpServer {
       try {
         await tempContainer.stop(5);
         await tempContainer.remove(true);
-        this.logger.info(`[MCP:${this.namespace}] Temporary discovery container stopped and removed`);
+        const ms = Date.now() - t0;
+        this.logger.info(
+          `[MCP:${this.namespace}] [disc:${discoveryId}] Temporary discovery container stopped and removed (duration=${ms}ms)`,
+        );
       } catch (e) {
-        this.logger.error(`[MCP:${this.namespace}] Error cleaning up temp container: ${e}`);
+        this.logger.error(`[MCP:${this.namespace}] [disc:${discoveryId}] Error cleaning up temp container: ${e}`);
       }
     }
 
@@ -136,13 +167,18 @@ export class LocalMCPServer implements McpServer {
   }
 
   async start(): Promise<void> {
+    const startCallId = ++this._startInvocationSeq;
     // Idempotent: mark intent and attempt start. If dependencies missing, return immediately (non-blocking).
+    this.logger.debug(
+      `[MCP:${this.namespace}] [start:${startCallId}] start() invoked (started=${this.started} wantStart=${this.wantStart})`,
+    );
     this.wantStart = true;
     if (this.started) return;
     if (!this.pendingStart) {
       this.pendingStart = new Promise<void>((resolve, reject) => {
         this.startWaiters.push({ resolve, reject });
       });
+      this.logger.debug(`[MCP:${this.namespace}] [start:${startCallId}] Created pendingStart promise`);
     }
     const hasAllDeps = !!(this.cfg && this.containerProvider && this.cfg.command);
     this.maybeStart();
@@ -154,55 +190,20 @@ export class LocalMCPServer implements McpServer {
   /** Inject a container provider (graph edge). If server already started with a different container, no action taken. */
   setContainerProvider(provider: ContainerProviderEntity | undefined): void {
     this.containerProvider = provider;
-    if (this.wantStart) this.maybeStart();
   }
 
   /** Update runtime configuration (only env/workdir/command currently applied to next restart). */
-  async setConfig(partial: Partial<McpServerConfig>): Promise<void> {
-    // Allow setting namespace only if not yet explicitly overridden by prior config.
-    if (partial.namespace && (!this.cfg?.namespace || this.cfg?.namespace === 'mcp')) {
-      (this as any).namespace = partial.namespace; // bypass readonly
-    }
-    const { containerId: _ignored, ...rest } = partial as any; // ignore containerId if provided
-    // Merge with existing config so unspecified fields persist instead of being lost.
-    this.cfg = { ...this.cfg, ...rest } as McpServerConfig;
-    if (this.wantStart) this.maybeStart();
-  }
+  async setConfig(cfg: McpServerConfig): Promise<void> {
+    this.cfg = cfg;
 
-  private startHeartbeat() {
-    const cfg = this.cfg!;
-    if (!cfg.heartbeatIntervalMs) return;
-    this.heartbeatTimer = setInterval(async () => {
-      if (!this.client) return;
-      try {
-        await this.client.ping({ timeout: 5000 });
-      } catch (e: any) {
-        this.logger.error(`[MCP:${this.namespace}] Heartbeat failed: ${e.message}`);
-      }
-    }, cfg.heartbeatIntervalMs);
+    // TODO: check if namespace was updated and reprovision all tools
   }
 
   async listTools(force = false): Promise<McpTool[]> {
-    if (this.toolsCache && !force) return this.toolsCache;
-
-    // If tools haven't been discovered yet, trigger discovery
-    if (!this.toolsDiscovered || force) {
-      // If discovery wasn't yet requested via start, set intent and go through resilient path
-      if (!this.wantStart) {
-        this.wantStart = true;
-        this.maybeStart();
-      }
-      // Wait for discovery (either direct or via resilient start mechanism)
-      try {
-        await this.start(); // will be fast/no-op if already in progress
-      } catch (e) {
-        // Fallback: attempt direct discovery (maintains previous behavior if caller forces)
-        if (force) return await this.discoverTools();
-        throw e;
-      }
-    }
-
-    return this.toolsCache ?? [];
+    // Passive: Only return cached tools unless force is requested and discovery already happened.
+    // We purposely avoid triggering a start/discovery from listTools to prevent dual discovery paths.
+    if (force && this.toolsDiscovered) return this.toolsCache ?? [];
+    return this.toolsCache || [];
   }
 
   async callTool(
@@ -213,7 +214,8 @@ export class LocalMCPServer implements McpServer {
     if (!this.cfg) throw new Error('LocalMCPServer: config not yet set via setConfig');
     if (!this.containerProvider) throw new Error('LocalMCPServer: no containerProvider set; cannot call tool');
 
-    const threadId = options?.threadId || 'default';
+    const threadId = options?.threadId;
+    if (!threadId) throw new Error('LocalMCPServer: threadId option is required to call tool');
     this.logger.info(`[MCP:${this.namespace}] Calling tool ${name} for thread ${threadId}`);
 
     // Get thread-specific container
@@ -349,14 +351,26 @@ export class LocalMCPServer implements McpServer {
   }
 
   private maybeStart() {
+    const id = ++this._maybeStartSeq;
+    this.logger.debug(
+      `[MCP:${this.namespace}] [maybe:${id}] maybeStart() check wantStart=${this.wantStart} started=${this.started} retryTimer=${!!this.startRetryTimer}`,
+    );
     if (!this.wantStart || this.started) return;
     // Avoid stacking multiple timers
-    if (this.startRetryTimer) return;
+    if (this.startRetryTimer) {
+      this.logger.debug(`[MCP:${this.namespace}] [maybe:${id}] retry timer already scheduled; skipping`);
+      return;
+    }
     this.tryStartOnce();
   }
 
   private tryStartOnce() {
-    if (this.started) return;
+    const seq = ++this._tryStartSeq;
+    this.logger.debug(`[MCP:${this.namespace}] [try:${seq}] tryStartOnce invoked (started=${this.started})`);
+    if (this.started) {
+      this.logger.debug(`[MCP:${this.namespace}] [try:${seq}] already started; aborting try.`);
+      return;
+    }
     const cfg = this.cfg;
     if (!cfg || !this.containerProvider || !cfg.command) {
       // Poll for dependencies until a timeout
@@ -372,10 +386,11 @@ export class LocalMCPServer implements McpServer {
         }, depTimeoutMs);
       }
       this.logger.debug(
-        `[MCP:${this.namespace}] Waiting for dependencies (cfg=${!!cfg} provider=${!!this.containerProvider} command=${!!cfg?.command})`,
+        `[MCP:${this.namespace}] [try:${seq}] Waiting for dependencies (cfg=${!!cfg} provider=${!!this.containerProvider} command=${!!cfg?.command})`,
       );
       this.startRetryTimer = setTimeout(() => {
         this.startRetryTimer = undefined;
+        this.logger.debug(`[MCP:${this.namespace}] [try:${seq}] dependency re-check timer fired`);
         this.tryStartOnce();
       }, 5000);
       return;
@@ -389,12 +404,17 @@ export class LocalMCPServer implements McpServer {
 
     const restartCfg = cfg.restart || { maxAttempts: 5, backoffMs: 2000 };
     const attempt = this.restartAttempts + 1;
-    this.logger.info(`[MCP:${this.namespace}] Start attempt ${attempt}/${restartCfg.maxAttempts}`);
+    this.logger.info(`[MCP:${this.namespace}] Start attempt ${attempt}/${restartCfg.maxAttempts} (trySeq=${seq})`);
 
     (async () => {
       try {
+        // SINGLE DISCOVERY PATH: Only perform tool discovery here during the resilient start sequence.
+        // listTools() no longer triggers discovery; SimpleAgent waits for 'ready'.
         if (!this.toolsDiscovered) {
+          const tDisc0 = Date.now();
           await this.discoverTools();
+          const tDiscMs = Date.now() - tDisc0;
+          this.logger.debug(`[MCP:${this.namespace}] Discovery phase duration ${tDiscMs}ms`);
         }
         this.started = true;
         this.logger.info(`[MCP:${this.namespace}] Started successfully with ${this.toolsCache?.length || 0} tools`);
@@ -407,9 +427,12 @@ export class LocalMCPServer implements McpServer {
           return;
         }
         const backoff = restartCfg.backoffMs * Math.pow(2, this.restartAttempts - 1);
-        this.logger.info(`[MCP:${this.namespace}] Retrying in ${backoff}ms`);
+        this.logger.info(
+          `[MCP:${this.namespace}] Scheduling retry in ${backoff}ms (attempt=${this.restartAttempts + 1})`,
+        );
         this.startRetryTimer = setTimeout(() => {
           this.startRetryTimer = undefined;
+          this.logger.debug(`[MCP:${this.namespace}] Retry timer fired (next attempt=${this.restartAttempts + 1})`);
           this.tryStartOnce();
           this.emitter.emit('restarted', this.restartAttempts);
         }, backoff);

@@ -1,16 +1,16 @@
-import { TemplateRegistry } from './graph';
+import { SimpleAgent } from './agents/simple.agent';
 import { ContainerProviderEntity } from './entities/containerProvider.entity';
+import { TemplateRegistry } from './graph';
+import { LocalMCPServer } from './mcp';
+import { CheckpointerService } from './services/checkpointer.service';
+import { ConfigService } from './services/config.service';
 import { ContainerService } from './services/container.service';
 import { LoggerService } from './services/logger.service';
+import { SlackService } from './services/slack.service';
 import { BashCommandTool } from './tools/bash_command';
 import { GithubCloneRepoTool } from './tools/github_clone_repo';
 import { SendSlackMessageTool } from './tools/send_slack_message.tool';
 import { SlackTrigger } from './triggers';
-import { SimpleAgent } from './agents/simple.agent';
-import { ConfigService } from './services/config.service';
-import { SlackService } from './services/slack.service';
-import { CheckpointerService } from './services/checkpointer.service';
-import { LocalMCPServer, McpServerConfig } from './mcp';
 
 export interface TemplateRegistryDeps {
   logger: LoggerService;
@@ -72,7 +72,11 @@ export function buildTemplateRegistry(deps: TemplateRegistryDeps): TemplateRegis
       },
       targetPorts: { $self: { kind: 'instance' } },
     })
-    .register('mcpServer', () => new LocalMCPServer(containerService, logger), {
+    .register('mcpServer', () => {
+      const server = new LocalMCPServer(containerService, logger);
+      void server.start();
+      return server;
+    }, {
       targetPorts: {
         $self: { kind: 'instance' },
         containerProvider: { kind: 'method', create: 'setContainerProvider' },
