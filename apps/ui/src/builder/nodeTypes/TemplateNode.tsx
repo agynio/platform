@@ -1,6 +1,7 @@
 import { memo, useMemo } from 'react';
 import { Handle, Position, type NodeProps } from 'reactflow';
 import { useTemplates } from '../useTemplates';
+import { getDisplayTitle, getKind, kindBadgeClasses, kindLabel } from '../lib/display';
 
 interface BuilderNodeData {
   template: string;
@@ -14,10 +15,16 @@ function TemplateNodeComponent({ data }: NodeProps<BuilderNodeData>) {
   const targetPorts = schema?.targetPorts || [];
   const sourcePorts = schema?.sourcePorts || [];
 
+  const displayTitle = getDisplayTitle(templates, data.template, data.config);
+  const kind = getKind(templates, data.template);
+
   return (
-    <div className="rounded-md border bg-card text-xs shadow-sm min-w-[200px]">
-      <div className="drag-handle cursor-move select-none rounded-t-md bg-muted px-2 py-1 font-medium">
-        {data.template}
+    <div className="rounded-md border bg-card text-xs shadow-sm min-w-[220px]">
+      <div className="drag-handle cursor-move select-none rounded-t-md bg-muted px-2 py-1 font-medium flex items-center gap-2">
+        <span className={`inline-block rounded px-1.5 py-0.5 text-[10px] leading-none ${kindBadgeClasses(kind)}`}>
+          {kindLabel(kind)}
+        </span>
+        <span>{displayTitle}</span>
       </div>
       <div className="px-2 py-2">
         <div className="flex items-stretch gap-3">
