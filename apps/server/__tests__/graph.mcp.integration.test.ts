@@ -7,7 +7,6 @@ import { ConfigService } from '../src/services/config.service';
 import { SlackService } from '../src/services/slack.service';
 import { CheckpointerService } from '../src/services/checkpointer.service';
 import { LiveGraphRuntime, GraphDefinition } from '../src/graph';
-import { MongoService } from '../src/services/mongo.service';
 
 // This test only validates that the graph can wire the mcpServer node without throwing.
 // It does not attempt to start a real filesystem MCP server (would require network/npm). Instead, we configure
@@ -22,7 +21,7 @@ function dockerAvailable() {
 describe('Graph MCP integration', () => {
   it('constructs graph with mcpServer template without error (deferred start)', async () => {
     if (!dockerAvailable()) {
-      return; // skip silently
+      return; // skip silently when Docker likely unavailable
     }
 
     // Stub MCP server start & listTools to avoid requiring a real MCP server process for this wiring test.
@@ -36,7 +35,19 @@ describe('Graph MCP integration', () => {
       return [];
     };
     const logger = new LoggerService();
-    const configService = ConfigService.fromEnv();
+
+    // Build a test ConfigService instance directly; no reliance on process.env
+    const configService = new ConfigService({
+      githubAppId: 'test',
+      githubAppPrivateKey: 'test',
+      githubInstallationId: 'test',
+      openaiApiKey: 'test',
+      githubToken: 'test',
+      slackBotToken: 'xoxb-test',
+      slackAppToken: 'xapp-test',
+      mongodbUrl: 'mongodb://localhost:27017/?replicaSet=rs0',
+    } as any);
+
     const slackService = new SlackService(configService, logger);
     const containerService = new ContainerService(logger);
     const checkpointerService = new CheckpointerService(logger);
@@ -45,9 +56,6 @@ describe('Graph MCP integration', () => {
       get: async () => undefined,
       put: async () => undefined,
     });
-    // minimal mongo stub (not connecting real db for test) - methods used in graph may be limited
-    const mongo = new MongoService(configService, logger);
-    // skip connect for integration-lite scenario
 
     const templateRegistry = buildTemplateRegistry({
       logger,

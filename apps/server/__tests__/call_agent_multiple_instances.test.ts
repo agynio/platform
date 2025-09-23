@@ -26,9 +26,9 @@ describe('CallAgentTool configurable name', () => {
     expect(dynDocs.name).toBe('call_agent_docs');
     expect(dynOps.name).toBe('call_agent_ops');
 
-    const out1 = await dynDocs.invoke({ input: 'x' }, { configurable: { thread_id: 'p' } } as any);
-    const out2 = await dynOps.invoke({ input: 'y' }, { configurable: { thread_id: 'p' } } as any);
-    expect(out1).toContain('ok-p');
-    expect(out2).toContain('ok-p');
+    const out1 = await dynDocs.invoke({ input: 'x', childThreadId: 'docs' }, { configurable: { thread_id: 'p' } } as any);
+    const out2 = await dynOps.invoke({ input: 'y', childThreadId: 'ops' }, { configurable: { thread_id: 'p' } } as any);
+    expect(out1).toContain('ok-p__docs');
+    expect(out2).toContain('ok-p__ops');
   });
 });
