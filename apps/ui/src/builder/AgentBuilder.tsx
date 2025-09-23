@@ -24,6 +24,7 @@ import { LeftPalette } from './panels/LeftPalette';
 import { RightPropertiesPanel } from './panels/RightPropertiesPanel';
 import { useBuilderState } from './hooks/useBuilderState';
 import type { BuilderNodeKind } from './types';
+import { getDisplayTitle } from './lib/display';
 
 interface CanvasAreaProps {
   nodes: RFNode[];
@@ -123,6 +124,10 @@ export function AgentBuilder() {
   }, [selectedNode, rightTab]);
 
   const isCheckpointEligible = selectedNode?.data.template === 'simpleAgent';
+  const selectedDisplayTitle = selectedNode
+    ? getDisplayTitle(templates, selectedNode.data.template, selectedNode.data.config)
+    : 'No Selection';
+
   return (
     <DndProvider backend={HTML5Backend}>
       <ReactFlowProvider>
@@ -149,7 +154,7 @@ export function AgentBuilder() {
           </TemplatesProvider>
           <aside className="w-96 shrink-0 border-l bg-sidebar p-0 flex flex-col overflow-hidden">
             <div className="border-b flex items-center gap-2 px-4 h-10">
-              <div className="text-xs font-semibold tracking-wide">{selectedNode ? selectedNode.data.template : 'No Selection'}</div>
+              <div className="text-xs font-semibold tracking-wide">{selectedDisplayTitle}</div>
               {isCheckpointEligible && (
                 <div className="ml-auto flex gap-1">
                   <button
