@@ -12,12 +12,20 @@ const invocationSchema = z.object({
   context: z.any().optional().describe('Optional structured metadata; forwarded into TriggerMessage.info'),
 });
 
-const configSchema = z.object({ description: z.string().min(1).optional() }); // TODO: make description non optional
+const configSchema = z.object({
+  description: z.string().min(1).optional(), // TODO: make description non optional
+  name: z
+    .string()
+    .regex(/^[a-z0-9_]{1,64}$/)
+    .optional()
+    .describe('Optional tool name (a-z, 0-9, underscore). Default: call_agent'),
+});
 
 type WithThreadId = LangGraphRunnableConfig & { configurable?: { thread_id?: string } };
 
 export class CallAgentTool extends BaseTool {
   private description = 'Call another agent with a message and optional context.';
+  private name: string | undefined;
   private targetAgent: BaseAgent | undefined;
 
   constructor(private logger: LoggerService) {
@@ -31,9 +39,10 @@ export class CallAgentTool extends BaseTool {
   async setConfig(cfg: Record<string, unknown>): Promise<void> {
     const parsed = configSchema.safeParse(cfg);
     if (!parsed.success) {
-      throw new Error('Invalid CallAgentTool config: description is required');
+      throw new Error('Invalid CallAgentTool config');
     }
-    this.description = parsed.data.description;
+    this.description = parsed.data.description ?? this.description;
+    this.name = parsed.data.name ?? this.name;
   }
 
   init(config?: LangGraphRunnableConfig): DynamicStructuredTool {
@@ -71,7 +80,7 @@ export class CallAgentTool extends BaseTool {
         }
       },
       {
-        name: 'call_agent',
+        name: this.name || 'call_agent',
         description: this.description,
         schema: invocationSchema,
       },
