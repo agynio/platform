@@ -3,6 +3,7 @@ import { RunnableConfig } from '@langchain/core/runnables';
 import { Annotation, AnnotationRoot, CompiledStateGraph, Messages, messagesStateReducer } from '@langchain/langgraph';
 import { LoggerService } from '../services/logger.service';
 import { TriggerListener, TriggerMessage } from '../triggers/base.trigger';
+import { NodeOutput } from '../types';
 
 export abstract class BaseAgent implements TriggerListener {
   protected _graph: CompiledStateGraph<unknown, unknown> | undefined;
@@ -26,9 +27,13 @@ export abstract class BaseAgent implements TriggerListener {
 
   protected state(): AnnotationRoot<{}> {
     return Annotation.Root({
-      messages: Annotation<BaseMessage[], Messages>({
-        reducer: messagesStateReducer,
+      messages: Annotation<BaseMessage[], NodeOutput['messages']>({
+        reducer: (left, right) => (!right ? left : right.method === 'append' ? [...left, ...right.items] : right.items),
         default: () => [],
+      }),
+      summary: Annotation<string, string>({
+        reducer: (left, right) => right ?? left,
+        default: () => '',
       }),
     });
   }
@@ -43,7 +48,9 @@ export abstract class BaseAgent implements TriggerListener {
     const batch = Array.isArray(messages) ? messages : [messages];
     this.logger.info(`New trigger event in thread ${thread} with messages: ${JSON.stringify(batch)}`);
     const response = (await this.graph.invoke(
-      { messages: batch.map((msg) => new HumanMessage(JSON.stringify(msg))) },
+      {
+        messages: { method: 'append', items: batch.map((msg) => new HumanMessage(JSON.stringify(msg))) },
+      },
       { ...this.config, configurable: { ...this.config?.configurable, thread_id: thread } },
     )) as { messages: BaseMessage[] };
     const lastMessage = response.messages?.[response.messages.length - 1];

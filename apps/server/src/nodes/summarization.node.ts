@@ -1,6 +1,6 @@
 import { AIMessage, BaseMessage, HumanMessage, SystemMessage } from '@langchain/core/messages';
-import { trimMessages } from '@langchain/core/messages';
 import { ChatOpenAI } from '@langchain/openai';
+import { NodeOutput } from '../types';
 
 export type ChatState = { messages: BaseMessage[]; summary?: string };
 
@@ -31,31 +31,11 @@ export async function countTokens(llm: ChatOpenAI, messagesOrText: BaseMessage[]
   return total;
 }
 
-function buildBaseContext(state: ChatState, opts: SummarizationOptions): BaseMessage[] {
-  const recent = opts.keepLast > 0 ? state.messages.slice(-opts.keepLast) : [];
-  const summaryText = state.summary && state.summary.trim().length > 0 ? state.summary.trim() : undefined;
-  const summarySystem = summaryText
-    ? new SystemMessage(`${opts.summarySystemNote ?? 'Conversation summary so far:'}\n${summaryText}`)
-    : undefined;
-  return summarySystem ? [summarySystem, ...recent] : [...recent];
-}
-
-export async function buildContextForModel(state: ChatState, opts: SummarizationOptions): Promise<BaseMessage[]> {
-  const base = buildBaseContext(state, opts);
-  const trimmed = await trimMessages(base, {
-    maxTokens: opts.maxTokens,
-    tokenCounter: opts.llm as any,
-    includeSystem: true,
-    strategy: 'last',
-  });
-  return trimmed;
-}
-
 export async function shouldSummarize(state: ChatState, opts: SummarizationOptions): Promise<boolean> {
   const hasTail = state.messages.length > (opts.keepLast ?? 0);
   if (!hasTail) return false; // nothing older than keepLast to fold
-  const base = buildBaseContext(state, opts);
-  const tokenCount = await countTokens(opts.llm, base);
+
+  const tokenCount = await countTokens(opts.llm, state.messages);
   return tokenCount > opts.maxTokens;
 }
 
@@ -70,7 +50,9 @@ export async function summarizationNode(state: ChatState, opts: SummarizationOpt
   );
 
   const foldLines = older
-    .map((m) => `${m._getType().toUpperCase()}: ${typeof m.content === 'string' ? m.content : JSON.stringify(m.content)}`)
+    .map(
+      (m) => `${m._getType().toUpperCase()}: ${typeof m.content === 'string' ? m.content : JSON.stringify(m.content)}`,
+    )
     .join('\n');
 
   const human = new HumanMessage(
@@ -89,7 +71,10 @@ export class SummarizationNode {
   private maxTokens?: number;
   private summarySystemNote?: string;
 
-  constructor(private llm: ChatOpenAI, opts: { keepLast: number; maxTokens: number; summarySystemNote?: string }) {
+  constructor(
+    private llm: ChatOpenAI,
+    opts: { keepLast: number; maxTokens: number; summarySystemNote?: string },
+  ) {
     this.keepLast = opts.keepLast;
     this.maxTokens = opts.maxTokens;
     this.summarySystemNote = opts.summarySystemNote;
@@ -101,7 +86,7 @@ export class SummarizationNode {
     if (opts.summarySystemNote !== undefined) this.summarySystemNote = opts.summarySystemNote;
   }
 
-  async action(state: ChatState): Promise<Partial<ChatState>> {
+  async action(state: ChatState): Promise<NodeOutput> {
     const keepLast = this.keepLast ?? 0;
     const maxTokens = this.maxTokens ?? 0;
     if (!(keepLast >= 0) || !(maxTokens > 0)) return { summary: state.summary ?? '' };
@@ -120,8 +105,6 @@ export class SummarizationNode {
       working = await summarizationNode(working, opts);
     }
 
-    // Always build trimmed context for the model and store into state.messages
-    const trimmed = await buildContextForModel(working, opts);
-    return { summary: working.summary ?? '', messages: trimmed };
+    return { summary: working.summary ?? '', messages: { method: 'replace', items: working.messages } };
   }
 }

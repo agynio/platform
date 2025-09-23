@@ -1,7 +1,15 @@
 import { AIMessage, BaseMessage } from '@langchain/core/messages';
 import { RunnableConfig } from '@langchain/core/runnables';
 import { tool as lcTool } from '@langchain/core/tools';
-import { Annotation, CompiledStateGraph, END, START, StateGraph, Messages, messagesStateReducer } from '@langchain/langgraph';
+import {
+  Annotation,
+  CompiledStateGraph,
+  END,
+  START,
+  StateGraph,
+  Messages,
+  messagesStateReducer,
+} from '@langchain/langgraph';
 import { ChatOpenAI } from '@langchain/openai';
 import { last } from 'lodash-es';
 import { McpServer, McpTool } from '../mcp';
@@ -16,6 +24,7 @@ import { BaseTool } from '../tools/base.tool';
 import { LangChainToolAdapter } from '../tools/langchainTool.adapter';
 import { BashCommandTool } from '../tools/bash_command';
 import { SummarizationNode } from '../nodes/summarization.node';
+import { NodeOutput } from '../types';
 
 export class SimpleAgent extends BaseAgent {
   private callModelNode!: CallModelNode;
@@ -39,11 +48,14 @@ export class SimpleAgent extends BaseAgent {
 
   protected state() {
     return Annotation.Root({
-      messages: Annotation<BaseMessage[], Messages>({
-        reducer: messagesStateReducer,
+      messages: Annotation<BaseMessage[], NodeOutput['messages']>({
+        reducer: (left, right) => (!right ? left : right.method === 'append' ? [...left, ...right.items] : right.items),
         default: () => [],
       }),
-      summary: Annotation<string>({ default: () => '' }),
+      summary: Annotation<string, string>({
+        reducer: (left, right) => right ?? left,
+        default: () => '',
+      }),
     });
   }
 
@@ -166,7 +178,11 @@ export class SimpleAgent extends BaseAgent {
    * Dynamically set configuration values like the system prompt.
    */
   setConfig(config: Record<string, unknown>): void {
-    const parsedConfig = config as { systemPrompt?: string; summarizationKeepLast?: number; summarizationMaxTokens?: number };
+    const parsedConfig = config as {
+      systemPrompt?: string;
+      summarizationKeepLast?: number;
+      summarizationMaxTokens?: number;
+    };
     if (parsedConfig.systemPrompt !== undefined) {
       this.callModelNode.setSystemPrompt(parsedConfig.systemPrompt);
       this.loggerService.info('SimpleAgent system prompt updated');

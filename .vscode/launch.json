@@ -5,18 +5,21 @@
   "version": "0.2.0",
   "configurations": [
     {
-      "name": "tsx",
+      "name": "server",
       "type": "node",
       "request": "launch",
 
       // Debug current file in VSCode
-      "program": "${file}",
+      "program": "src/index.ts",
 
       /*
        * Path to tsx binary
        * Assuming locally installed
        */
       "runtimeExecutable": "tsx",
+
+      // Set the working directory so relative paths / module resolution start from apps/server
+      "cwd": "${workspaceFolder}/apps/server",
 
       /*
        * Open terminal when debugging starts (Optional)

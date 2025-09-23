@@ -1,8 +1,9 @@
-import { AIMessage, BaseMessage, ToolMessage } from "@langchain/core/messages";
-import { BaseTool } from "../tools/base.tool";
-import { BaseNode } from "./base.node";
-import { ToolRunnableConfig } from "@langchain/core/tools";
-import { LangGraphRunnableConfig } from "@langchain/langgraph";
+import { AIMessage, BaseMessage, ToolMessage } from '@langchain/core/messages';
+import { BaseTool } from '../tools/base.tool';
+import { BaseNode } from './base.node';
+import { ToolRunnableConfig } from '@langchain/core/tools';
+import { LangGraphRunnableConfig } from '@langchain/langgraph';
+import { NodeOutput } from '../types';
 
 export class ToolsNode extends BaseNode {
   constructor(private tools: BaseTool[]) {
@@ -18,10 +19,10 @@ export class ToolsNode extends BaseNode {
     this.tools = this.tools.filter((t) => t !== tool);
   }
 
-  async action(state: { messages: BaseMessage[] }, config: LangGraphRunnableConfig): Promise<{ messages: any[] }> {
+  async action(state: { messages: BaseMessage[] }, config: LangGraphRunnableConfig): Promise<NodeOutput> {
     const lastMessage = state.messages[state.messages.length - 1] as AIMessage;
     const toolCalls = lastMessage.tool_calls || [];
-    if (!toolCalls.length) return { messages: [] }; // no delta
+    if (!toolCalls.length) return {};
 
     const tools = this.tools.map((tool) => tool.init(config));
 
@@ -45,7 +46,7 @@ export class ToolsNode extends BaseNode {
           new ToolMessage({
             tool_call_id: callId,
             name: tc.name,
-            content: typeof output === "string" ? output : JSON.stringify(output),
+            content: typeof output === 'string' ? output : JSON.stringify(output),
           }),
         );
       } catch (err: any) {
@@ -59,7 +60,6 @@ export class ToolsNode extends BaseNode {
       }
     }
 
-    // Return only the new tool messages; reducer will append
-    return { messages: toolMessages };
+    return { messages: { method: 'append', items: toolMessages } };
   }
 }

@@ -2,6 +2,7 @@ import { BaseMessage, SystemMessage } from '@langchain/core/messages';
 import { ChatOpenAI } from '@langchain/openai';
 import { BaseTool } from '../tools/base.tool';
 import { BaseNode } from './base.node';
+import { NodeOutput } from '../types';
 
 export class CallModelNode extends BaseNode {
   private systemPrompt: string = '';
@@ -27,7 +28,7 @@ export class CallModelNode extends BaseNode {
     this.systemPrompt = systemPrompt;
   }
 
-  async action(state: { messages: BaseMessage[]; summary?: string }, config: any): Promise<{ messages: any[] }> {
+  async action(state: { messages: BaseMessage[]; summary?: string }, config: any): Promise<NodeOutput> {
     const tools = this.tools.map((tool) => tool.init(config));
 
     const boundLLM = this.llm.withConfig({
@@ -42,6 +43,6 @@ export class CallModelNode extends BaseNode {
     });
 
     // Return only delta; reducer in state will append
-    return { messages: [result] };
+    return { messages: { method: 'append', items: [result] } };
   }
 }
