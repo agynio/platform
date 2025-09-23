@@ -27,7 +27,7 @@ export class CallModelNode extends BaseNode {
     this.systemPrompt = systemPrompt;
   }
 
-  async action(state: { messages: BaseMessage[] }, config: any): Promise<{ messages: any[] }> {
+  async action(state: { messages: BaseMessage[]; summary?: string }, config: any): Promise<{ messages: any[] }> {
     const tools = this.tools.map((tool) => tool.init(config));
 
     const boundLLM = this.llm.withConfig({
@@ -35,7 +35,9 @@ export class CallModelNode extends BaseNode {
       tool_choice: 'auto',
     });
 
-    const result = await boundLLM.invoke([new SystemMessage(this.systemPrompt), ...state.messages], {
+    const finalMessages: BaseMessage[] = [new SystemMessage(this.systemPrompt), ...(state.messages as BaseMessage[])];
+
+    const result = await boundLLM.invoke(finalMessages, {
       recursionLimit: 250,
     });
 

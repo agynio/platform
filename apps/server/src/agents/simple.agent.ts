@@ -1,7 +1,7 @@
 import { AIMessage, BaseMessage } from '@langchain/core/messages';
 import { RunnableConfig } from '@langchain/core/runnables';
 import { tool as lcTool } from '@langchain/core/tools';
-import { Annotation, CompiledStateGraph, END, START, StateGraph } from '@langchain/langgraph';
+import { Annotation, CompiledStateGraph, END, START, StateGraph, Messages, messagesStateReducer } from '@langchain/langgraph';
 import { ChatOpenAI } from '@langchain/openai';
 import { last } from 'lodash-es';
 import { McpServer, McpTool } from '../mcp';
@@ -15,12 +15,17 @@ import { BaseAgent } from './base.agent';
 import { BaseTool } from '../tools/base.tool';
 import { LangChainToolAdapter } from '../tools/langchainTool.adapter';
 import { BashCommandTool } from '../tools/bash_command';
+import { SummarizationNode } from '../nodes/summarization.node';
 
 export class SimpleAgent extends BaseAgent {
   private callModelNode!: CallModelNode;
   private toolsNode!: ToolsNode;
   // Track tools registered per MCP server so we can remove them on detachment
   private mcpServerTools: Map<McpServer, BaseTool[]> = new Map();
+
+  private summarizationKeepLast?: number;
+  private summarizationMaxTokens?: number;
+  private summarizeNode!: SummarizationNode;
 
   constructor(
     private configService: ConfigService,
@@ -34,10 +39,11 @@ export class SimpleAgent extends BaseAgent {
 
   protected state() {
     return Annotation.Root({
-      messages: Annotation<BaseMessage[]>({
+      messages: Annotation<BaseMessage[], Messages>({
+        reducer: messagesStateReducer,
         default: () => [],
-        reducer: (current: BaseMessage[], update: BaseMessage[]) => [...current, ...update],
       }),
+      summary: Annotation<string>({ default: () => '' }),
     });
   }
 
@@ -53,6 +59,10 @@ export class SimpleAgent extends BaseAgent {
 
     this.callModelNode = new CallModelNode([], llm);
     this.toolsNode = new ToolsNode([]);
+    this.summarizeNode = new SummarizationNode(llm, {
+      keepLast: this.summarizationKeepLast ?? 0,
+      maxTokens: this.summarizationMaxTokens ?? 0,
+    });
 
     const builder = new StateGraph(
       {
@@ -60,9 +70,12 @@ export class SimpleAgent extends BaseAgent {
       },
       this.configuration(),
     )
+      .addNode('summarize', this.summarizeNode.action.bind(this.summarizeNode))
       .addNode('call_model', this.callModelNode.action.bind(this.callModelNode))
       .addNode('tools', this.toolsNode.action.bind(this.toolsNode))
-      .addEdge(START, 'call_model')
+      .addEdge(START, 'summarize')
+      .addEdge('tools', 'summarize')
+      .addEdge('summarize', 'call_model')
       .addConditionalEdges(
         'call_model',
         (state) => (last(state.messages as AIMessage[])?.tool_calls?.length ? 'tools' : END),
@@ -70,8 +83,13 @@ export class SimpleAgent extends BaseAgent {
           tools: 'tools',
           [END]: END,
         },
-      )
-      .addEdge('tools', 'call_model');
+      );
+
+    // Propagate summarization options to call model node
+    this.callModelNode.setSummarizationOptions({
+      keepLast: this.summarizationKeepLast,
+      maxTokens: this.summarizationMaxTokens,
+    });
 
     // Compile with a plain MongoDBSaver; scoping is handled via configurable.checkpoint_ns
     this._graph = builder.compile({
@@ -154,10 +172,39 @@ export class SimpleAgent extends BaseAgent {
    * Dynamically set configuration values like the system prompt.
    */
   setConfig(config: Record<string, unknown>): void {
-    const parsedConfig = config as { systemPrompt?: string }; // TODO: fix
+    const parsedConfig = config as { systemPrompt?: string; summarizationKeepLast?: number; summarizationMaxTokens?: number };
     if (parsedConfig.systemPrompt !== undefined) {
       this.callModelNode.setSystemPrompt(parsedConfig.systemPrompt);
       this.loggerService.info('SimpleAgent system prompt updated');
+    }
+
+    // Extend to accept summarization options
+    const keepLastRaw = parsedConfig.summarizationKeepLast;
+    const maxTokensRaw = parsedConfig.summarizationMaxTokens;
+    const isInt = (v: unknown) => typeof v === 'number' && Number.isInteger(v);
+
+    const updates: { keepLast?: number; maxTokens?: number } = {};
+    if (keepLastRaw !== undefined) {
+      if (!(isInt(keepLastRaw) && keepLastRaw >= 0)) {
+        this.loggerService.error('summarizationKeepLast must be an integer >= 0');
+      } else {
+        this.summarizationKeepLast = keepLastRaw;
+        updates.keepLast = keepLastRaw;
+      }
+    }
+    if (maxTokensRaw !== undefined) {
+      if (!(isInt(maxTokensRaw) && maxTokensRaw > 0)) {
+        this.loggerService.error('summarizationMaxTokens must be an integer > 0');
+      } else {
+        this.summarizationMaxTokens = maxTokensRaw;
+        updates.maxTokens = maxTokensRaw;
+      }
+    }
+
+    if (updates.keepLast !== undefined || updates.maxTokens !== undefined) {
+      this.summarizeNode.setOptions(updates);
+      this.callModelNode.setSummarizationOptions(updates);
+      this.loggerService.info('SimpleAgent summarization options updated');
     }
   }
 
