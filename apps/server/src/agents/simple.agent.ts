@@ -85,12 +85,6 @@ export class SimpleAgent extends BaseAgent {
         },
       );
 
-    // Propagate summarization options to call model node
-    this.callModelNode.setSummarizationOptions({
-      keepLast: this.summarizationKeepLast,
-      maxTokens: this.summarizationMaxTokens,
-    });
-
     // Compile with a plain MongoDBSaver; scoping is handled via configurable.checkpoint_ns
     this._graph = builder.compile({
       checkpointer: this.checkpointerService.getCheckpointer(this.agentId),
@@ -203,7 +197,6 @@ export class SimpleAgent extends BaseAgent {
 
     if (updates.keepLast !== undefined || updates.maxTokens !== undefined) {
       this.summarizeNode.setOptions(updates);
-      this.callModelNode.setSummarizationOptions(updates);
       this.loggerService.info('SimpleAgent summarization options updated');
     }
   }

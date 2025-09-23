@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { AIMessage, BaseMessage, HumanMessage, SystemMessage } from '@langchain/core/messages';
+import { AIMessage, BaseMessage, HumanMessage } from '@langchain/core/messages';
 import { ChatOpenAI } from '@langchain/openai';
 import {
   buildContextForModel,
@@ -48,12 +48,12 @@ describe('summarization helpers', () => {
     expect(await shouldSummarize(state, opts)).toBe(true);
   });
 
-  it('shouldSummarize true when older history exists and no summary yet', async () => {
+  it('shouldSummarize false when older history exists but token budget not exceeded and no summary yet', async () => {
     const state: ChatState = {
       messages: [new HumanMessage('1'), new AIMessage('2'), new HumanMessage('3'), new AIMessage('4'), new HumanMessage('5')],
     };
     const opts: SummarizationOptions = { llm, keepLast: 2, maxTokens: 100 } as any;
-    expect(await shouldSummarize(state, opts)).toBe(true);
+    expect(await shouldSummarize(state, opts)).toBe(false);
   });
 
   it('summarizationNode returns non-empty summary and prunes messages to last K', async () => {
