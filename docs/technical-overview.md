@@ -11,6 +11,7 @@ Table of contents
 - Key Flows
 - Configuration & Dependencies
 - How to Develop & Test
+- Conversation summarization
 - How to Extend & Contribute
 - Security & Ops Notes
 - Glossary
@@ -246,6 +247,13 @@ Run UI
 
 Tests
 - Server tests: pnpm --filter server test
+
+Conversation summarization
+- Rolling summary keeps older history compressed and last K verbatim; controlled by summarizationKeepLast and summarizationMaxTokens.
+- SimpleAgent state includes summary (default '').
+- SummarizationNode runs before each model call and may update summary and prune messages.
+- CallModelNode uses buildContextForModel to create [System(systemPrompt), System(summary)?, ...last K] trimmed to maxTokens.
+- See docs/summarization.md for details and examples.
 
 Debugging tips
 - Set LoggerService to print debug logs; inspect global liveGraphRuntime from a debugger if needed.
