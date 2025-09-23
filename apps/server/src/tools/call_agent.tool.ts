@@ -9,13 +9,15 @@ import { BaseMessage } from '@langchain/core/messages';
 
 const invocationSchema = z.object({
   input: z.string().min(1).describe('The message to forward to the target agent.'),
-  context: z.any().optional().describe('Optional structured metadata; forwarded into TriggerMessage.info'),
+  context: z
+    .any()
+    .optional()
+    .describe('Optional structured metadata; forwarded into TriggerMessage.info'),
   childThreadId: z
     .string()
     .min(1)
-    .optional()
     .describe(
-      'Optional child thread identifier. If provided, the target agent will be invoked in `${parentThreadId}__${childThreadId}`.',
+      'Required child thread identifier used to maintain a persistent conversation with the child agent. Use the same value to continue the same conversation across multiple calls; use a new value to start a separate conversation. The effective child thread is computed as `${parentThreadId}__${childThreadId}`.',
     ),
 });
 
@@ -59,9 +61,7 @@ export class CallAgentTool extends BaseTool {
           throw new Error('thread_id is required');
         }
 
-        const targetThreadId = parsed.childThreadId
-          ? `${parentThreadId}__${parsed.childThreadId}`
-          : parentThreadId;
+        const targetThreadId = `${parentThreadId}__${parsed.childThreadId}`;
 
         const info =
           parsed.context && typeof parsed.context === 'object' && !Array.isArray(parsed.context)

@@ -30,7 +30,10 @@ describe('CallAgentTool unit', () => {
     const tool = new CallAgentTool(new LoggerService());
     await expect(tool.setConfig({ description: 'desc' })).resolves.toBeUndefined();
     const dynamic: DynamicStructuredTool = tool.init();
-    const out = await dynamic.invoke({ input: 'hi' }, { configurable: { thread_id: 't1' } } as any);
+    const out = await dynamic.invoke(
+      { input: 'hi', childThreadId: 'x' },
+      { configurable: { thread_id: 't1' } } as any,
+    );
     expect(out).toBe('Target agent is not connected');
   });
 
@@ -38,12 +41,15 @@ describe('CallAgentTool unit', () => {
     const tool = new CallAgentTool(new LoggerService());
     await tool.setConfig({ description: 'desc' });
     const agent = new FakeAgent(new LoggerService(), async (thread, _msgs) => {
-      expect(thread).toBe('t2');
+      expect(thread).toBe('t2__sub');
       return new AIMessage('OK');
     });
     tool.setAgent(agent);
     const dynamic = tool.init();
-    const out = await dynamic.invoke({ input: 'ping' }, { configurable: { thread_id: 't2' } } as any);
+    const out = await dynamic.invoke(
+      { input: 'ping', childThreadId: 'sub' },
+      { configurable: { thread_id: 't2' } } as any,
+    );
     expect(out).toBe('OK');
   });
 
@@ -56,7 +62,10 @@ describe('CallAgentTool unit', () => {
     });
     tool.setAgent(agent);
     const dynamic = tool.init();
-    const out = await dynamic.invoke({ input: 'x', context: { deep: 42 } }, { configurable: { thread_id: 't3' } } as any);
+    const out = await dynamic.invoke(
+      { input: 'x', context: { deep: 42 }, childThreadId: 'c' },
+      { configurable: { thread_id: 't3' } } as any,
+    );
     expect(out).toBe('OK');
   });
 
