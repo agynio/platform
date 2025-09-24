@@ -50,10 +50,6 @@ export class ShellTool extends BaseTool {
         if (response.exitCode !== 0) {
           return `Error (exit code ${response.exitCode}):\n${cleanedStderr}`;
         }
-        if (cleanedStdout.length > 50000) {
-          return `Error (output too long: ${cleanedStdout.length} characters).`;
-        }
-
         return cleanedStdout;
       },
       {
