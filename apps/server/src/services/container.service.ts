@@ -16,6 +16,7 @@ export type ContainerOpts = {
   networkMode?: string;
   tty?: boolean;
   labels?: Record<string, string>;
+  platform?: string; // e.g., 'linux/amd64' equivalent to docker run --platform
 };
 
 /**
@@ -43,7 +44,7 @@ export class ContainerService {
   }
 
   /** Pull an image if it's not already present locally. */
-  async ensureImage(image: string): Promise<void> {
+  async ensureImage(image: string, platform?: string): Promise<void> {
     this.logger.info(`Ensuring image '${image}' is available locally`);
     // Check if image exists
     try {
@@ -55,14 +56,14 @@ export class ContainerService {
     }
 
     await new Promise<void>((resolve, reject) => {
-      this.docker.pull(image, (err: Error | undefined, stream: NodeJS.ReadableStream | undefined) => {
+      const cb = (err: Error | undefined, stream: NodeJS.ReadableStream | undefined) => {
         if (err) return reject(err);
         if (!stream) return reject(new Error('No pull stream returned'));
         this.docker.modem.followProgress(
           stream as NodeJS.ReadableStream,
           (doneErr: any) => {
             if (doneErr) return reject(doneErr);
-            this.logger.info(`Finished pulling image '${image}'`);
+            this.logger.info(`Finished pulling image '${image}'${platform ? ` for platform ${platform}` : ''}`);
             resolve();
           },
           (event: any) => {
@@ -73,7 +74,13 @@ export class ContainerService {
             }
           },
         );
-      });
+      };
+      if (platform) {
+        // Pass platform to ensure correct architecture is pulled; use any to avoid type issues across dockerode versions
+        (this.docker as any).pull(image, { platform }, cb);
+      } else {
+        this.docker.pull(image, cb);
+      }
     });
   }
 
@@ -82,7 +89,7 @@ export class ContainerService {
    */
   async start(opts?: ContainerOpts): Promise<ContainerEntity> {
     const optsWithDefaults = { image: DEFAULT_IMAGE, autoRemove: true, ...(opts ?? {}) };
-    await this.ensureImage(optsWithDefaults.image!);
+    await this.ensureImage(optsWithDefaults.image!, optsWithDefaults.platform);
 
     const Env: string[] | undefined = Array.isArray(optsWithDefaults.env)
       ? optsWithDefaults.env
@@ -105,7 +112,12 @@ export class ContainerService {
       AttachStdout: true,
       AttachStderr: true,
       Labels: optsWithDefaults.labels,
-    };
+    } as any;
+
+    if (optsWithDefaults.platform) {
+      // Prefer platform at container creation time if provided
+      (createOptions as any).Platform = optsWithDefaults.platform;
+    }
 
     this.logger.info(
       `Creating container from '${optsWithDefaults.image}'${optsWithDefaults.name ? ` name=${optsWithDefaults.name}` : ''}`,
