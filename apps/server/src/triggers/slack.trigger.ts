@@ -37,13 +37,13 @@ export class SlackTrigger extends BaseTrigger {
     });
   }
 
-  async start(): Promise<void> {
-    await this.slack.start();
-  }
+  // Provision hooks delegate to SlackService
+  protected async doProvision(): Promise<void> { await this.slack.start(); }
+  protected async doDeprovision(): Promise<void> { await this.slack.stop(); }
 
-  async stop(): Promise<void> {
-    await this.slack.stop();
-  }
+  // Backward-compatible public API
+  async start(): Promise<void> { await this.provision(); }
+  async stop(): Promise<void> { await this.deprovision(); }
 
   async setConfig(_cfg: Record<string, unknown>): Promise<void> {
     /* trigger has no dynamic config yet */
