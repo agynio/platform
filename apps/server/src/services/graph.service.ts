@@ -1,5 +1,5 @@
 import { Collection, Db } from 'mongodb';
-import { LoggerService } from './logger.service';
+
 import { TemplateRegistry } from '../graph/templateRegistry';
 import {
   PersistedGraph,
@@ -9,6 +9,8 @@ import {
   PersistedGraphUpsertResponse,
   TemplateNodeSchema,
 } from '../graph/types';
+
+import { LoggerService } from './logger.service';
 
 interface GraphDocument {
   _id: string; // name

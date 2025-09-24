@@ -1,4 +1,5 @@
 import Bolt from "@slack/bolt";
+
 import { ConfigService } from "./config.service";
 import { LoggerService } from "./logger.service";
 
@@ -39,7 +40,7 @@ export class SlackService {
       if (!isMessageEvent(event)) return;
       try {
         for (const handler of this.messageHandlers) {
-          await handler(event as Bolt.types.GenericMessageEvent);
+          await handler(event);
         }
       } catch (err) {
         this.logger.error("SlackService message handler error", err);

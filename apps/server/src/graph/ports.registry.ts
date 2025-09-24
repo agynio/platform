@@ -1,5 +1,5 @@
+import { TemplatePortsRegistry, ResolvedEdgePorts, PortResolutionError, PortConfig } from './ports.types';
 import { EdgeDef } from './types';
-import { TemplatePortsRegistry, ResolvedEdgePorts, PortResolutionError, PortConfig, MethodPortConfig } from './ports.types';
 
 export class PortsRegistry {
   constructor(private readonly templates: TemplatePortsRegistry) {}
@@ -15,7 +15,7 @@ export class PortsRegistry {
       if (!ports) return;
       for (const [handle, port] of Object.entries(ports)) {
         if (port.kind === 'method') {
-          const m = port as MethodPortConfig;
+          const m = port;
             if (typeof instance[m.create] !== 'function') {
               throw new Error(`Template ${template} port ${handle} expected method '${m.create}' on instance`);
             }

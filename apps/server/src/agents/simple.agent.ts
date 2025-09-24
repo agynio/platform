@@ -12,19 +12,25 @@ import {
 } from '@langchain/langgraph';
 import { ChatOpenAI } from '@langchain/openai';
 import { last } from 'lodash-es';
+
 import { McpServer, McpTool } from '../mcp';
 import { inferArgsSchema } from '../mcp/jsonSchemaToZod';
 import { CallModelNode } from '../nodes/callModel.node';
+import { SummarizationNode } from '../nodes/summarization.node';
 import { ToolsNode } from '../nodes/tools.node';
 import { CheckpointerService } from '../services/checkpointer.service';
 import { ConfigService } from '../services/config.service';
 import { LoggerService } from '../services/logger.service';
-import { BaseAgent } from './base.agent';
 import { BaseTool } from '../tools/base.tool';
 import { LangChainToolAdapter } from '../tools/langchainTool.adapter';
+<<<<<<< HEAD
 import { BashCommandTool } from '../tools/bash_command';
 import { SummarizationNode } from '../nodes/summarization.node';
 import { NodeOutput } from '../types';
+=======
+
+import { BaseAgent } from './base.agent';
+>>>>>>> 207a5ac (fix(ci): resolve ESLint errors in UI, split non-component exports; add module type for ESLint v9; implement summarization options in CallModelNode; adjust shouldSummarize logic; remove duplicate TemplatesContext)
 
 export class SimpleAgent extends BaseAgent {
   private callModelNode!: CallModelNode;
@@ -224,7 +230,7 @@ export class SimpleAgent extends BaseAgent {
     const tools = this.mcpServerTools.get(server);
     if (tools && tools.length) {
       for (const tool of tools) {
-        this.removeTool(tool as BaseTool);
+        this.removeTool(tool);
       }
     }
     this.mcpServerTools.delete(server);

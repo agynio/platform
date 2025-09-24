@@ -1,11 +1,12 @@
 import { DynamicStructuredTool, tool } from "@langchain/core/tools";
 import { z } from "zod";
+
 // import { EngineerAgent } from "../agents/engineer.agent"; // TODO: This agent doesn't exist
 import { ContainerProviderEntity } from "../entities/containerProvider.entity";
 import { ConfigService } from "../services/config.service";
 import { LoggerService } from "../services/logger.service";
+
 import { BaseTool } from "./base.tool";
-import { BaseMessage, HumanMessage } from "@langchain/core/messages";
 
 const schema = z.object({
   owner: z.string().describe("Repo owner"),

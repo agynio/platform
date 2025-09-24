@@ -1,6 +1,8 @@
-import type { JSONRPCMessage } from './types.js';
-import type Docker from 'dockerode';
 import { PassThrough } from 'node:stream';
+
+import type Docker from 'dockerode';
+
+import type { JSONRPCMessage } from './types.js';
 
 class ReadBufferInline {
   private _buffer?: Buffer;
@@ -99,7 +101,7 @@ export class DockerExecTransport {
   private processReadBuffer() {
     while (true) {
       try {
-        const msg = this._readBuffer.readMessage() as JSONRPCMessage | null;
+        const msg = this._readBuffer.readMessage();
         if (msg === null) break;
         this.onmessage?.(msg);
       } catch (e) {

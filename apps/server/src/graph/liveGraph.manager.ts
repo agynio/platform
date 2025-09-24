@@ -1,3 +1,7 @@
+// Ports based reversible universal edges
+import { LoggerService } from '../services/logger.service';
+
+import { Errors } from './errors';
 import {
   ExecutedEdgeRecord,
   GraphDiffResult,
@@ -6,12 +10,9 @@ import {
   LiveNode,
   edgeKey,
 } from './liveGraph.types';
-import { EdgeDef, GraphDefinition, GraphError, NodeDef } from './types';
-// Ports based reversible universal edges
-import { LoggerService } from '../services/logger.service';
-import { Errors } from './errors';
 import { PortsRegistry } from './ports.registry';
 import { TemplateRegistry } from './templateRegistry';
+import { EdgeDef, GraphDefinition, GraphError, NodeDef } from './types';
 
 const configsEqual = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
 

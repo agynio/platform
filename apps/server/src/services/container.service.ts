@@ -1,5 +1,7 @@
 import Docker, { ContainerCreateOptions, Exec } from 'dockerode';
+
 import { ContainerEntity } from '../entities/container.entity';
+
 import { LoggerService } from './logger.service';
 
 const DEFAULT_IMAGE = 'mcr.microsoft.com/vscode/devcontainers/base';
@@ -59,7 +61,7 @@ export class ContainerService {
         if (err) return reject(err);
         if (!stream) return reject(new Error('No pull stream returned'));
         this.docker.modem.followProgress(
-          stream as NodeJS.ReadableStream,
+          stream,
           (doneErr: any) => {
             if (doneErr) return reject(doneErr);
             this.logger.info(`Finished pulling image '${image}'`);
@@ -82,7 +84,7 @@ export class ContainerService {
    */
   async start(opts?: ContainerOpts): Promise<ContainerEntity> {
     const optsWithDefaults = { image: DEFAULT_IMAGE, autoRemove: true, ...(opts ?? {}) };
-    await this.ensureImage(optsWithDefaults.image!);
+    await this.ensureImage(optsWithDefaults.image);
 
     const Env: string[] | undefined = Array.isArray(optsWithDefaults.env)
       ? optsWithDefaults.env
@@ -310,7 +312,7 @@ export class ContainerService {
         stream.on('error', (e) => {
           if (finished) return;
           if (timer) clearTimeout(timer);
-          // eslint-disable-next-line @typescript-eslint/no-unused-vars
+           
           finished = true;
           reject(e);
         });

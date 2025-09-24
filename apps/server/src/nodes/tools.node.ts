@@ -1,8 +1,17 @@
+<<<<<<< HEAD
 import { AIMessage, BaseMessage, ToolMessage } from '@langchain/core/messages';
 import { LangGraphRunnableConfig } from '@langchain/langgraph';
 import { BaseTool } from '../tools/base.tool';
 import { NodeOutput } from '../types';
 import { BaseNode } from './base.node';
+=======
+import { AIMessage, BaseMessage, ToolMessage } from "@langchain/core/messages";
+import { LangGraphRunnableConfig } from "@langchain/langgraph";
+>>>>>>> 207a5ac (fix(ci): resolve ESLint errors in UI, split non-component exports; add module type for ESLint v9; implement summarization options in CallModelNode; adjust shouldSummarize logic; remove duplicate TemplatesContext)
+
+import { BaseTool } from "../tools/base.tool";
+
+import { BaseNode } from "./base.node";
 
 export class ToolsNode extends BaseNode {
   constructor(private tools: BaseTool[]) {

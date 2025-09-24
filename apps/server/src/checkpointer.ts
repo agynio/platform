@@ -1,4 +1,3 @@
-import { type MongoClient, type Db as MongoDatabase } from 'mongodb';
 import type { RunnableConfig } from '@langchain/core/runnables';
 import {
   BaseCheckpointSaver,
@@ -10,6 +9,7 @@ import {
   type CheckpointMetadata,
   CheckpointPendingWrite,
 } from '@langchain/langgraph-checkpoint';
+import { type MongoClient, type Db as MongoDatabase } from 'mongodb';
 
 export type MongoDBSaverParams = {
   client: MongoClient;

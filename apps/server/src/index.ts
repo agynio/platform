@@ -1,16 +1,18 @@
 import http from 'http';
+
 import { Server } from 'socket.io';
+
+import { LiveGraphRuntime } from './graph/liveGraph.manager.js';
+import { GraphDefinition, PersistedGraphUpsertRequest } from './graph/types.js';
+import { CheckpointerService } from './services/checkpointer.service.js';
 import { ConfigService } from './services/config.service.js';
+import { ContainerService } from './services/container.service.js';
+import { GraphService } from './services/graph.service.js';
 import { LoggerService } from './services/logger.service.js';
 import { MongoService } from './services/mongo.service.js';
-import { CheckpointerService } from './services/checkpointer.service.js';
+import { SlackService } from './services/slack.service.js';
 import { SocketService } from './services/socket.service.js';
 import { buildTemplateRegistry } from './templates.js';
-import { LiveGraphRuntime } from './graph/liveGraph.manager.js';
-import { GraphService } from './services/graph.service.js';
-import { GraphDefinition, PersistedGraphUpsertRequest } from './graph/types.js';
-import { ContainerService } from './services/container.service.js';
-import { SlackService } from './services/slack.service.js';
 
 const logger = new LoggerService();
 const config = ConfigService.fromEnv();

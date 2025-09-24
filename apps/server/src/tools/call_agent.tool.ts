@@ -1,11 +1,14 @@
-import { DynamicStructuredTool, tool } from '@langchain/core/tools';
-import { z } from 'zod';
-import { LangGraphRunnableConfig } from '@langchain/langgraph';
-import { BaseTool } from './base.tool';
-import { LoggerService } from '../services/logger.service';
-import { BaseAgent } from '../agents/base.agent';
-import { TriggerMessage } from '../triggers/base.trigger';
 import { BaseMessage } from '@langchain/core/messages';
+import { DynamicStructuredTool, tool } from '@langchain/core/tools';
+import { LangGraphRunnableConfig } from '@langchain/langgraph';
+import { z } from 'zod';
+
+
+import { BaseAgent } from '../agents/base.agent';
+import { LoggerService } from '../services/logger.service';
+import { TriggerMessage } from '../triggers/base.trigger';
+
+import { BaseTool } from './base.tool';
 
 const invocationSchema = z.object({
   input: z.string().min(1).describe('The message to forward to the target agent.'),

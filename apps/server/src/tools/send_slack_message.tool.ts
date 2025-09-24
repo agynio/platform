@@ -1,8 +1,10 @@
 import { tool, DynamicStructuredTool } from "@langchain/core/tools";
 import { z } from "zod";
-import { BaseTool } from "./base.tool";
+
 import { LoggerService } from "../services/logger.service";
 import { SlackService } from "../services/slack.service";
+
+import { BaseTool } from "./base.tool";
 
 const sendSlackMessageSchema = z.object({
   channel: z.string().min(1).describe("Slack channel ID (e.g. C123..., D123... for DM)."),

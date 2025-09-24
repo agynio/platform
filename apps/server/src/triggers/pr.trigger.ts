@@ -1,8 +1,11 @@
-import { BaseTrigger, BaseTriggerOptions, TriggerMessage } from "./base.trigger";
+import md5 from "md5";
+
+import { GithubService } from "../services/github.service";
 import { LoggerService } from "../services/logger.service";
 import { PRService } from "../services/pr.service";
-import { GithubService } from "../services/github.service";
-import md5 from "md5";
+
+import { BaseTrigger, BaseTriggerOptions, TriggerMessage } from "./base.trigger";
+
 
 export interface PRTriggerOptions extends BaseTriggerOptions {
   /** Poll interval in ms (default 60000) */

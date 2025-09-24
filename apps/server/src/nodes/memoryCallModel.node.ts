@@ -1,9 +1,19 @@
+<<<<<<< HEAD
 import { BaseMessage } from '@langchain/core/messages';
 import { BaseStore, LangGraphRunnableConfig } from '@langchain/langgraph';
 import { ChatOpenAI } from '@langchain/openai';
 import { BaseTool } from '../tools/base.tool';
 import { BaseNode } from './base.node';
 import { NodeOutput } from '../types';
+=======
+import { BaseMessage } from "@langchain/core/messages";
+import { BaseStore, LangGraphRunnableConfig } from "@langchain/langgraph";
+import { ChatOpenAI } from "@langchain/openai";
+
+import { BaseTool } from "../tools/base.tool";
+
+import { BaseNode } from "./base.node";
+>>>>>>> 207a5ac (fix(ci): resolve ESLint errors in UI, split non-component exports; add module type for ESLint v9; implement summarization options in CallModelNode; adjust shouldSummarize logic; remove duplicate TemplatesContext)
 
 export const SYSTEM_PROMPT = `You are a helpful and friendly chatbot. Get to know the user! \
 Ask questions! Be spontaneous! 

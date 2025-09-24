@@ -1,11 +1,16 @@
-import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { EventEmitter } from 'events';
-import { McpServer, McpServerConfig, McpTool, McpToolCallResult, DEFAULT_MCP_COMMAND, McpError } from './types.js';
-import { DockerExecTransport } from './dockerExecTransport.js';
-import { ContainerService } from '../services/container.service.js';
-import { ContainerProviderEntity } from '../entities/containerProvider.entity.js';
-import { LoggerService } from '../services/logger.service.js';
+
+import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { v4 as uuidv4 } from 'uuid';
+
+import { ContainerProviderEntity } from '../entities/containerProvider.entity.js';
+import { ContainerService } from '../services/container.service.js';
+import { LoggerService } from '../services/logger.service.js';
+
+import { DockerExecTransport } from './dockerExecTransport.js';
+import { McpServer, McpServerConfig, McpTool, McpToolCallResult, DEFAULT_MCP_COMMAND, McpError } from './types.js';
+
+
 
 export class LocalMCPServer implements McpServer {
   /**
@@ -77,7 +82,7 @@ export class LocalMCPServer implements McpServer {
     const tempContainer = await this.containerProvider.provide(`_discovery_temp_${uuidv4()}`);
     const tempContainerId = tempContainer.id;
 
-    const cfg = this.cfg!;
+    const cfg = this.cfg;
     const command = cfg.command ?? DEFAULT_MCP_COMMAND;
     const docker = this.containerService.getDocker();
 
@@ -222,7 +227,7 @@ export class LocalMCPServer implements McpServer {
     const container = await this.containerProvider.provide(threadId);
     const containerId = container.id;
 
-    const cfg = this.cfg!;
+    const cfg = this.cfg;
     const command = cfg.command ?? DEFAULT_MCP_COMMAND;
     const docker = this.containerService.getDocker();
 

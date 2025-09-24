@@ -1,5 +1,9 @@
+<<<<<<< HEAD
 import { FactoryFn, TemplateKind, TemplateNodeSchema } from './types';
+=======
+>>>>>>> 207a5ac (fix(ci): resolve ESLint errors in UI, split non-component exports; add module type for ESLint v9; implement summarization options in CallModelNode; adjust shouldSummarize logic; remove duplicate TemplatesContext)
 import { TemplatePortConfig, TemplatePortsRegistry } from './ports.types';
+import { FactoryFn, TemplateNodeSchema } from './types';
 
 export interface TemplateMeta {
   title: string;

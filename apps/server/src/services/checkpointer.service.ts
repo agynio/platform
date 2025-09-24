@@ -1,6 +1,8 @@
 import { Collection, ChangeStream, Document, Binary, ObjectId, Db, MongoClient } from 'mongodb';
-import { LoggerService } from './logger.service';
+
 import { MongoDBSaver } from '../checkpointer';
+
+import { LoggerService } from './logger.service';
 
 // Raw document interface (previously in MongoService)
 export interface RawCheckpointWrite extends Document {
@@ -50,7 +52,7 @@ export class CheckpointerService {
   normalize(raw: RawCheckpointWrite): CheckpointWriteNormalized {
     let decoded: any = raw.value;
     try {
-      if (raw.value && (raw.value as any)._bsontype === 'Binary') {
+      if (raw.value && (raw.value)._bsontype === 'Binary') {
         const b = raw.value as Binary;
         const buf = (b as any).buffer; // underlying Buffer
         const text = Buffer.isBuffer(buf) ? buf.toString('utf8') : Buffer.from(buf).toString('utf8');

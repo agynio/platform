@@ -1,11 +1,15 @@
 import { BaseMessage, SystemMessage } from '@langchain/core/messages';
 import { ChatOpenAI } from '@langchain/openai';
+
 import { BaseTool } from '../tools/base.tool';
+
 import { BaseNode } from './base.node';
 import { NodeOutput } from '../types';
 
 export class CallModelNode extends BaseNode {
   private systemPrompt: string = '';
+  private summarizationKeepLast?: number;
+  private summarizationMaxTokens?: number;
 
   constructor(
     private tools: BaseTool[],
@@ -14,6 +18,11 @@ export class CallModelNode extends BaseNode {
     super();
     // Copy to decouple from external array literal; we manage our own list.
     this.tools = [...tools];
+  }
+
+  setSummarizationOptions(opts: { keepLast?: number; maxTokens?: number }) {
+    if (opts.keepLast !== undefined) this.summarizationKeepLast = opts.keepLast;
+    if (opts.maxTokens !== undefined) this.summarizationMaxTokens = opts.maxTokens;
   }
 
   addTool(tool: BaseTool) {
@@ -36,7 +45,22 @@ export class CallModelNode extends BaseNode {
       tool_choice: 'auto',
     });
 
-    const finalMessages: BaseMessage[] = [new SystemMessage(this.systemPrompt), ...(state.messages as BaseMessage[])];
+    // If summarization options configured, build context via helper
+    let finalMessages: BaseMessage[];
+    if (this.summarizationKeepLast !== undefined && this.summarizationMaxTokens !== undefined) {
+      const { buildContextForModel } = await import('./summarization.node');
+      finalMessages = await buildContextForModel(
+        { messages: state.messages, summary: state.summary },
+        {
+          llm: this.llm,
+          keepLast: this.summarizationKeepLast,
+          maxTokens: this.summarizationMaxTokens,
+        } as any,
+      );
+      if (this.systemPrompt) finalMessages.unshift(new SystemMessage(this.systemPrompt));
+    } else {
+      finalMessages = [new SystemMessage(this.systemPrompt), ...state.messages];
+    }
 
     const result = await boundLLM.invoke(finalMessages, {
       recursionLimit: 250,

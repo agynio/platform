@@ -1,6 +1,7 @@
-import { BaseTrigger, BaseTriggerOptions } from './base.trigger';
 import { LoggerService } from '../services/logger.service';
 import { SlackService } from '../services/slack.service';
+
+import { BaseTrigger, BaseTriggerOptions } from './base.trigger';
 
 // (Previously had SlackTriggerOptions with filter; removed for simplified constructor.)
 

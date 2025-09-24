@@ -1,9 +1,11 @@
-import { Octokit } from "@octokit/rest";
-import { createAppAuth } from "@octokit/auth-app";
-import { ConfigService } from "./config.service";
 import { spawn } from "child_process";
 import { promises as fs } from "fs";
 import * as path from "path";
+
+import { createAppAuth } from "@octokit/auth-app";
+import { Octokit } from "@octokit/rest";
+
+import { ConfigService } from "./config.service";
 
 export class GithubService {
   private octokit: Octokit;

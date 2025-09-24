@@ -7,10 +7,17 @@ import { ConfigService } from './services/config.service';
 import { ContainerService } from './services/container.service';
 import { LoggerService } from './services/logger.service';
 import { SlackService } from './services/slack.service';
+<<<<<<< HEAD
 import { CallAgentTool } from './tools/call_agent.tool';
 import { GithubCloneRepoTool } from './tools/github_clone_repo';
 import { SendSlackMessageTool } from './tools/send_slack_message.tool';
 import { ShellTool } from './tools/shell_command';
+=======
+import { BashCommandTool } from './tools/bash_command';
+import { CallAgentTool } from './tools/call_agent.tool';
+import { GithubCloneRepoTool } from './tools/github_clone_repo';
+import { SendSlackMessageTool } from './tools/send_slack_message.tool';
+>>>>>>> 207a5ac (fix(ci): resolve ESLint errors in UI, split non-component exports; add module type for ESLint v9; implement summarization options in CallModelNode; adjust shouldSummarize logic; remove duplicate TemplatesContext)
 import { SlackTrigger } from './triggers';
 
 export interface TemplateRegistryDeps {

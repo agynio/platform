@@ -32,10 +32,24 @@ export async function countTokens(llm: ChatOpenAI, messagesOrText: BaseMessage[]
 }
 
 export async function shouldSummarize(state: ChatState, opts: SummarizationOptions): Promise<boolean> {
+<<<<<<< HEAD
   const hasTail = state.messages.length > (opts.keepLast ?? 0);
   if (!hasTail) return false; // nothing older than keepLast to fold
 
   const tokenCount = await countTokens(opts.llm, state.messages);
+=======
+  const keepLast = opts.keepLast ?? 0;
+  const hasOlderThanTail = state.messages.length > keepLast;
+  if (!hasOlderThanTail) return false; // nothing older than keepLast to fold
+
+  // If no summary exists yet and there is older history, summarize to initialize summary
+  const hasSummary = !!(state.summary && state.summary.trim().length > 0);
+  if (!hasSummary) return true;
+
+  // Otherwise, summarize only if token budget exceeded
+  const base = buildBaseContext(state, opts);
+  const tokenCount = await countTokens(opts.llm, base);
+>>>>>>> 207a5ac (fix(ci): resolve ESLint errors in UI, split non-component exports; add module type for ESLint v9; implement summarization options in CallModelNode; adjust shouldSummarize logic; remove duplicate TemplatesContext)
   return tokenCount > opts.maxTokens;
 }
 

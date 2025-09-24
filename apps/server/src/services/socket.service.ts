@@ -1,6 +1,7 @@
 import { Server, Socket } from 'socket.io';
-import { LoggerService } from './logger.service';
+
 import { CheckpointerService } from './checkpointer.service';
+import { LoggerService } from './logger.service';
 
 interface InitPayload {
   threadId?: string;
