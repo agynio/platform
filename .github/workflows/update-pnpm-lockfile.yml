@@ -1,0 +1,41 @@
+name: Update pnpm lockfile
+
+on:
+  workflow_dispatch:
+
+jobs:
+  update-lockfile:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+          fetch-depth: 0
+      - name: Use Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Enable corepack
+        run: corepack enable
+      - name: Prepare pnpm
+        run: corepack prepare pnpm@10.5.0 --activate
+      - name: Show versions
+        run: |
+          node -v
+          pnpm -v
+      - name: Install workspace deps
+        run: pnpm -w install
+      - name: Frozen install
+        run: pnpm -w install --frozen-lockfile
+      - name: Commit lockfile changes
+        run: |
+          git config user.email "bot@hautech.ai"
+          git config user.name "HautechAI Bot"
+          if [[ -n "$(git status --porcelain pnpm-lock.yaml)" ]]; then
+            git add pnpm-lock.yaml
+            git commit -m "chore: update lockfile after capability runtime/API changes"
+            git push
+          else
+            echo "No lockfile changes to commit"
+          fi
