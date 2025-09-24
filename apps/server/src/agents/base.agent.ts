@@ -5,8 +5,10 @@ import { LoggerService } from '../services/logger.service';
 import { TriggerListener, TriggerMessage } from '../triggers/base.trigger';
 import { NodeOutput } from '../types';
 import { withAgent } from '@traceloop/node-server-sdk';
+import type { StaticConfigurable } from '../graph/capabilities';
+import type { JSONSchema } from 'schema-json';
 
-export abstract class BaseAgent implements TriggerListener {
+export abstract class BaseAgent implements TriggerListener, StaticConfigurable {
   protected _graph: CompiledStateGraph<unknown, unknown> | undefined;
   protected _config: RunnableConfig | undefined;
 
@@ -43,6 +45,18 @@ export abstract class BaseAgent implements TriggerListener {
     return Annotation.Root({
       // systemPrompt: Annotation<string>(),
     });
+  }
+
+  getConfigSchema(): JSONSchema {
+    return {
+      type: 'object',
+      properties: {
+        systemPrompt: { type: 'string' },
+        summarizationKeepLast: { type: 'integer', minimum: 0 },
+        summarizationMaxTokens: { type: 'integer', minimum: 1 },
+      },
+      additionalProperties: true,
+    } as JSONSchema;
   }
 
   async invoke(thread: string, messages: TriggerMessage[] | TriggerMessage): Promise<BaseMessage | undefined> {
