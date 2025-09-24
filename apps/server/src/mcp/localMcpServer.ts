@@ -6,8 +6,10 @@ import { ContainerService } from '../services/container.service.js';
 import { ContainerProviderEntity } from '../entities/containerProvider.entity.js';
 import { LoggerService } from '../services/logger.service.js';
 import { v4 as uuidv4 } from 'uuid';
+import type { ProvisionStatus, Provisionable, DynamicConfigurable } from '../graph/capabilities.js';
+import type { JSONSchema } from 'schema-json';
 
-export class LocalMCPServer implements McpServer {
+export class LocalMCPServer implements McpServer, Provisionable, DynamicConfigurable<Record<string, boolean>> {
   /**
    * Lifecycle (post-refactor single discovery path):
    *
@@ -48,6 +50,14 @@ export class LocalMCPServer implements McpServer {
   private _startInvocationSeq = 0;
   private _tryStartSeq = 0;
   private _maybeStartSeq = 0;
+
+  // Provisionable state
+  private _provStatus: ProvisionStatus = { state: 'not_ready' };
+  private _provListeners: Array<(s: ProvisionStatus) => void> = [];
+  private _provInFlight: Promise<void> | null = null;
+
+  // Dynamic config: enabled tools (if undefined => all enabled by default)
+  private _enabledTools: Set<string> | undefined;
 
   constructor(
     private containerService: ContainerService,
@@ -132,6 +142,8 @@ export class LocalMCPServer implements McpServer {
 
       this.logger.info(`[MCP:${this.namespace}] [disc:${discoveryId}] Discovered ${this.toolsCache.length} tools`);
       this.toolsDiscovered = true;
+      // Initialize dynamic enabled set to all tools by default
+      this._enabledTools = undefined; // undefined means "all enabled"
     } catch (err) {
       this.logger.error(`[MCP:${this.namespace}] [disc:${discoveryId}] Tool discovery failed: ${err}`);
     } finally {
@@ -167,24 +179,8 @@ export class LocalMCPServer implements McpServer {
   }
 
   async start(): Promise<void> {
-    const startCallId = ++this._startInvocationSeq;
-    // Idempotent: mark intent and attempt start. If dependencies missing, return immediately (non-blocking).
-    this.logger.debug(
-      `[MCP:${this.namespace}] [start:${startCallId}] start() invoked (started=${this.started} wantStart=${this.wantStart})`,
-    );
-    this.wantStart = true;
-    if (this.started) return;
-    if (!this.pendingStart) {
-      this.pendingStart = new Promise<void>((resolve, reject) => {
-        this.startWaiters.push({ resolve, reject });
-      });
-      this.logger.debug(`[MCP:${this.namespace}] [start:${startCallId}] Created pendingStart promise`);
-    }
-    const hasAllDeps = !!(this.cfg && this.containerProvider && this.cfg.command);
-    this.maybeStart();
-    // Only await if we already have dependencies; otherwise allow caller to proceed.
-    if (hasAllDeps) return this.pendingStart;
-    return; // non-blocking early return while dependency polling happens in background
+    // Backward-compat: delegate to provision()
+    return this.provision();
   }
 
   /** Inject a container provider (graph edge). If server already started with a different container, no action taken. */
@@ -202,8 +198,9 @@ export class LocalMCPServer implements McpServer {
   async listTools(force = false): Promise<McpTool[]> {
     // Passive: Only return cached tools unless force is requested and discovery already happened.
     // We purposely avoid triggering a start/discovery from listTools to prevent dual discovery paths.
-    if (force && this.toolsDiscovered) return this.toolsCache ?? [];
-    return this.toolsCache || [];
+    const all = (force && this.toolsDiscovered) ? (this.toolsCache ?? []) : (this.toolsCache || []);
+    if (!this._enabledTools) return all;
+    return all.filter(t => this._enabledTools!.has(t.name));
   }
 
   async callTool(
@@ -310,12 +307,8 @@ export class LocalMCPServer implements McpServer {
   }
 
   async stop(): Promise<void> {
-    if (this.heartbeatTimer) clearInterval(this.heartbeatTimer);
-    if (this.startRetryTimer) clearTimeout(this.startRetryTimer);
-    if (this.dependencyTimeoutTimer) clearTimeout(this.dependencyTimeoutTimer);
-    // No persistent client/transport to clean up in the new lifecycle
-    this.started = false;
-    this.logger.info(`[MCP:${this.namespace}] Stopped`);
+    // Backward-compat: delegate to deprovision()
+    return this.deprovision();
   }
 
   /**
@@ -335,6 +328,101 @@ export class LocalMCPServer implements McpServer {
   on(event: 'ready' | 'exit' | 'error' | 'restarted', handler: (...a: any[]) => void): this {
     this.emitter.on(event, handler);
     return this;
+  }
+
+  // -------- Provisionable implementation --------
+  getProvisionStatus(): ProvisionStatus {
+    return this._provStatus;
+  }
+
+  onProvisionStatusChange(listener: (s: ProvisionStatus) => void): () => void {
+    this._provListeners.push(listener);
+    return () => {
+      this._provListeners = this._provListeners.filter((l) => l !== listener);
+    };
+  }
+
+  private setProvisionStatus(s: ProvisionStatus) {
+    this._provStatus = s;
+    for (const l of this._provListeners) {
+      try { l(s); } catch {}
+    }
+  }
+
+  async provision(): Promise<void> {
+    if (this._provStatus.state === 'ready') return;
+    if (this._provInFlight) return this._provInFlight;
+    // mirror previous start() behavior but emit provision states
+    const startCallId = ++this._startInvocationSeq;
+    this.logger.debug(
+      `[MCP:${this.namespace}] [start:${startCallId}] provision() invoked (started=${this.started} wantStart=${this.wantStart})`,
+    );
+    this.wantStart = true;
+    if (this.started) {
+      this.setProvisionStatus({ state: 'ready' });
+      return;
+    }
+    if (!this.pendingStart) {
+      this.pendingStart = new Promise<void>((resolve, reject) => {
+        this.startWaiters.push({ resolve, reject });
+      });
+      this.logger.debug(`[MCP:${this.namespace}] [start:${startCallId}] Created pendingStart promise`);
+    }
+    const hasAllDeps = !!(this.cfg && this.containerProvider && this.cfg.command);
+    this.setProvisionStatus({ state: 'provisioning' });
+    this.maybeStart();
+    this._provInFlight = (async () => {
+      try {
+        if (hasAllDeps) await this.pendingStart;
+        else await this.pendingStart?.catch(() => {});
+        if (this.started) this.setProvisionStatus({ state: 'ready' });
+      } catch (err) {
+        this.setProvisionStatus({ state: 'error', details: err });
+      } finally {
+        this._provInFlight = null;
+      }
+    })();
+    return this._provInFlight;
+  }
+
+  async deprovision(): Promise<void> {
+    if (this._provStatus.state === 'not_ready') return;
+    this.setProvisionStatus({ state: 'deprovisioning' });
+    // Stop timers and clear state
+    if (this.heartbeatTimer) clearInterval(this.heartbeatTimer);
+    if (this.startRetryTimer) clearTimeout(this.startRetryTimer);
+    if (this.dependencyTimeoutTimer) clearTimeout(this.dependencyTimeoutTimer);
+    this.started = false;
+    this.wantStart = false;
+    this.toolsCache = null;
+    this.toolsDiscovered = false;
+    this.restartAttempts = 0;
+    this.pendingStart = undefined;
+    this._enabledTools = undefined;
+    this.setProvisionStatus({ state: 'not_ready' });
+  }
+
+  // -------- DynamicConfigurable implementation --------
+  isDynamicConfigReady(): boolean {
+    return this.toolsDiscovered;
+  }
+
+  getDynamicConfigSchema(): JSONSchema | undefined {
+    if (!this.toolsDiscovered || !this.toolsCache) return undefined;
+    const properties: Record<string, any> = {};
+    for (const t of this.toolsCache) properties[t.name] = { type: 'boolean', default: true };
+    return { type: 'object', properties } as JSONSchema;
+  }
+
+  setDynamicConfig(cfg: Record<string, boolean>): void {
+    if (!this.toolsDiscovered || !this.toolsCache) {
+      // accept config but will only apply once discovered
+    }
+    const enabled = new Set<string>();
+    for (const [name, on] of Object.entries(cfg || {})) {
+      if (on) enabled.add(name);
+    }
+    this._enabledTools = enabled;
   }
 
   // ----------------- Resilient start internals -----------------
