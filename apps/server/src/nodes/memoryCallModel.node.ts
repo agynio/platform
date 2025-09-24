@@ -4,6 +4,7 @@ import { ChatOpenAI } from '@langchain/openai';
 import { BaseTool } from '../tools/base.tool';
 import { BaseNode } from './base.node';
 import { NodeOutput } from '../types';
+import { withLLMCall } from '@traceloop/node-server-sdk';
 
 export const SYSTEM_PROMPT = `You are a helpful and friendly chatbot. Get to know the user! \
 Ask questions! Be spontaneous! 
@@ -70,9 +71,11 @@ export class MemoryCallModelNode extends BaseNode {
       tool_choice: 'auto',
     });
 
-    const result = await boundLLM.invoke([{ role: 'system', content: sys }, ...state.messages], {
-      configurable: this.splitModelAndProvider(configurable.model),
-    });
+    const result = await withLLMCall({ vendor: 'OpenAI', type: 'chat' }, async () =>
+      boundLLM.invoke([{ role: 'system', content: sys }, ...state.messages], {
+        configurable: this.splitModelAndProvider(configurable.model),
+      }),
+    );
 
     return { messages: { method: 'append', items: [result] } };
   }

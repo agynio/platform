@@ -4,6 +4,7 @@ import { Annotation, AnnotationRoot, CompiledStateGraph, Messages, messagesState
 import { LoggerService } from '../services/logger.service';
 import { TriggerListener, TriggerMessage } from '../triggers/base.trigger';
 import { NodeOutput } from '../types';
+import { withAgent } from '@traceloop/node-server-sdk';
 
 export abstract class BaseAgent implements TriggerListener {
   protected _graph: CompiledStateGraph<unknown, unknown> | undefined;
@@ -45,17 +46,19 @@ export abstract class BaseAgent implements TriggerListener {
   }
 
   async invoke(thread: string, messages: TriggerMessage[] | TriggerMessage): Promise<BaseMessage | undefined> {
-    const batch = Array.isArray(messages) ? messages : [messages];
-    this.logger.info(`New trigger event in thread ${thread} with messages: ${JSON.stringify(batch)}`);
-    const response = (await this.graph.invoke(
-      {
-        messages: { method: 'append', items: batch.map((msg) => new HumanMessage(JSON.stringify(msg))) },
-      },
-      { ...this.config, configurable: { ...this.config?.configurable, thread_id: thread } },
-    )) as { messages: BaseMessage[] };
-    const lastMessage = response.messages?.[response.messages.length - 1];
-    this.logger.info(`Agent response in thread ${thread}: ${lastMessage?.text}`);
-    return lastMessage;
+    return await withAgent({ name: 'agent.invoke' }, async () => {
+      const batch = Array.isArray(messages) ? messages : [messages];
+      this.logger.info(`New trigger event in thread ${thread} with messages: ${JSON.stringify(batch)}`);
+      const response = (await this.graph.invoke(
+        {
+          messages: { method: 'append', items: batch.map((msg) => new HumanMessage(JSON.stringify(msg))) },
+        },
+        { ...this.config, configurable: { ...this.config?.configurable, thread_id: thread } },
+      )) as { messages: BaseMessage[] };
+      const lastMessage = response.messages?.[response.messages.length - 1];
+      this.logger.info(`Agent response in thread ${thread}: ${lastMessage?.text}`);
+      return lastMessage;
+    });
   }
 
   // New universal teardown hook for graph runtime

@@ -1,5 +1,6 @@
 import { AIMessage, BaseMessage, HumanMessage, SystemMessage } from '@langchain/core/messages';
 import { ChatOpenAI } from '@langchain/openai';
+import { withTask } from '@traceloop/node-server-sdk';
 import { NodeOutput } from '../types';
 
 export type ChatState = { messages: BaseMessage[]; summary?: string };
@@ -59,7 +60,7 @@ export async function summarizationNode(state: ChatState, opts: SummarizationOpt
     `Previous summary:\n${state.summary ?? '(none)'}\n\nFold in the following messages:\n${foldLines}\n\nReturn only the updated summary.`,
   );
 
-  const res = (await llm.invoke([sys, human])) as AIMessage;
+  const res = (await withTask({ name: 'summarize' }, async () => await llm.invoke([sys, human]))) as AIMessage;
   const newSummary = typeof res.content === 'string' ? res.content : JSON.stringify(res.content);
 
   // Return updated summary and keep only recent K (older folded into summary)

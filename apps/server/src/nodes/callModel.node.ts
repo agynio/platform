@@ -3,6 +3,7 @@ import { ChatOpenAI } from '@langchain/openai';
 import { BaseTool } from '../tools/base.tool';
 import { BaseNode } from './base.node';
 import { NodeOutput } from '../types';
+import { withLLMCall } from '@traceloop/node-server-sdk';
 
 export class CallModelNode extends BaseNode {
   private systemPrompt: string = '';
@@ -38,8 +39,10 @@ export class CallModelNode extends BaseNode {
 
     const finalMessages: BaseMessage[] = [new SystemMessage(this.systemPrompt), ...(state.messages as BaseMessage[])];
 
-    const result = await boundLLM.invoke(finalMessages, {
-      recursionLimit: 250,
+    const result = await withLLMCall({ vendor: 'OpenAI', type: 'chat' }, async () => {
+      boundLLM.invoke(finalMessages, {
+        recursionLimit: 250,
+      });
     });
 
     // Return only delta; reducer in state will append

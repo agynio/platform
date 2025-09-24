@@ -1,5 +1,6 @@
 import { AIMessage, BaseMessage, ToolMessage } from '@langchain/core/messages';
 import { LangGraphRunnableConfig } from '@langchain/langgraph';
+import { withTool } from '@traceloop/node-server-sdk';
 import { BaseTool } from '../tools/base.tool';
 import { NodeOutput } from '../types';
 import { BaseNode } from './base.node';
@@ -27,29 +28,31 @@ export class ToolsNode extends BaseNode {
 
     const toolMessages: ToolMessage[] = await Promise.all(
       toolCalls.map(async (tc) => {
-        const callId = tc.id ?? `missing_id_${Math.random().toString(36).slice(2)}`;
-        const tool = tools.find((t) => t.name === tc.name);
-        const createMessage = (content: string) =>
-          new ToolMessage({
-            tool_call_id: callId,
-            name: tc.name,
-            content,
-          });
+        return await withTool({ name: tc.name }, async () => {
+          const callId = tc.id ?? `missing_id_${Math.random().toString(36).slice(2)}`;
+          const tool = tools.find((t) => t.name === tc.name);
+          const createMessage = (content: string) =>
+            new ToolMessage({
+              tool_call_id: callId,
+              name: tc.name,
+              content,
+            });
 
-        if (!tool) {
-          return createMessage(`Tool '${tc.name}' not found.`);
-        }
-        try {
-          const output = await tool.invoke(tc, { configurable: { thread_id: config?.configurable?.thread_id } });
-          const content = typeof output === 'string' ? output : JSON.stringify(output);
-          if (content.length > 50000) {
-            return createMessage(`Error (output too long: ${content.length} characters).`);
-          } else {
-            return createMessage(content);
+          if (!tool) {
+            return createMessage(`Tool '${tc.name}' not found.`);
           }
-        } catch (err: any) {
-          return createMessage(`Error executing tool '${tc.name}': ${err?.message || String(err)}`);
-        }
+          try {
+            const output = await tool.invoke(tc, { configurable: { thread_id: config?.configurable?.thread_id } });
+            const content = typeof output === 'string' ? output : JSON.stringify(output);
+            if (content.length > 50000) {
+              return createMessage(`Error (output too long: ${content.length} characters).`);
+            } else {
+              return createMessage(content);
+            }
+          } catch (err: any) {
+            return createMessage(`Error executing tool '${tc.name}': ${err?.message || String(err)}`);
+          }
+        });
       }),
     );
 
