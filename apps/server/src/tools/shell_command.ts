@@ -12,7 +12,11 @@ const ANSI_REGEX =
   /[\u001B\u009B][[\]()#;?]*(?:[0-9]{1,4}(?:;[0-9]{0,4})*)?[0-9A-ORZcf-nq-uy=><]/g;
 
 const bashCommandSchema = z.object({
-  command: z.string().describe('The bash command to execute.'),
+  command: z
+    .string()
+    .describe(
+      'The bash command to execute. It will be wrapped with /bin/sh -lc by the system. Do not open extra shells.',
+    ),
 });
 
 export class ShellTool extends BaseTool {
