@@ -1,0 +1,32 @@
+export type ProvisionState = 'not_ready' | 'provisioning' | 'ready' | 'error' | 'deprovisioning';
+
+export interface TemplateSchema {
+  name: string;
+  title: string;
+  kind: string;
+  sourcePorts: Record<string, unknown> | string[] | undefined;
+  targetPorts: Record<string, unknown> | string[] | undefined;
+  capabilities?: {
+    pausable?: boolean;
+    provisionable?: boolean;
+    dynamicConfigurable?: boolean;
+    staticConfigurable?: boolean;
+  };
+  staticConfigSchema?: unknown; // JSON Schema 7
+}
+
+export interface ProvisionStatus {
+  state: ProvisionState;
+  details?: unknown;
+}
+
+export interface NodeStatus {
+  isPaused?: boolean;
+  provisionStatus?: ProvisionStatus;
+  dynamicConfigReady?: boolean;
+}
+
+export interface NodeStatusEvent extends NodeStatus {
+  nodeId: string;
+  updatedAt?: string;
+}
