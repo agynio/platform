@@ -5,7 +5,12 @@ const BASE = '';
 async function http<T>(input: RequestInfo, init?: RequestInit): Promise<T> {
   const res = await fetch(input, { ...init, headers: { 'Content-Type': 'application/json', ...(init?.headers || {}) } });
   if (!res.ok) throw new Error(`HTTP ${res.status}: ${await res.text()}`);
-  return (await res.json()) as T;
+  if (res.status === 204) return undefined as unknown as T;
+  try {
+    return (await res.json()) as T;
+  } catch {
+    return undefined as unknown as T;
+  }
 }
 
 export const api = {
