@@ -7,6 +7,8 @@ import { NodeOutput } from '../types';
 import { withAgent } from '@traceloop/node-server-sdk';
 import type { StaticConfigurable } from '../graph/capabilities';
 import type { JSONSchema7 as JSONSchema } from 'json-schema';
+import { z } from 'zod';
+import { zodToJsonSchema } from 'zod-to-json-schema';
 
 export abstract class BaseAgent implements TriggerListener, StaticConfigurable {
   protected _graph: CompiledStateGraph<unknown, unknown> | undefined;
@@ -48,15 +50,15 @@ export abstract class BaseAgent implements TriggerListener, StaticConfigurable {
   }
 
   getConfigSchema(): JSONSchema {
-    return {
-      type: 'object',
-      properties: {
-        systemPrompt: { type: 'string' },
-        summarizationKeepLast: { type: 'integer', minimum: 0 },
-        summarizationMaxTokens: { type: 'integer', minimum: 1 },
-      },
-      additionalProperties: true,
-    } as JSONSchema;
+    const schema = z
+      .object({
+        systemPrompt: z.string().optional(),
+        summarizationKeepLast: z.number().int().min(0).optional(),
+        summarizationMaxTokens: z.number().int().min(1).optional(),
+      })
+      .passthrough();
+    const json = zodToJsonSchema(schema, { target: 'jsonSchema7' });
+    return json as JSONSchema;
   }
 
   async invoke(thread: string, messages: TriggerMessage[] | TriggerMessage): Promise<BaseMessage | undefined> {

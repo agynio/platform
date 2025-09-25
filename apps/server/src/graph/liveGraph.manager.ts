@@ -29,7 +29,7 @@ export class LiveGraphRuntime {
   // Track paused state for nodes that don't implement isPaused()
   private pausedFallback = new Set<string>();
 
-  private applying: Promise<any> = Promise.resolve(); // serialize updates
+  private applying: Promise<unknown> = Promise.resolve(); // serialize updates
   private portsRegistry: PortsRegistry;
 
   constructor(
@@ -60,34 +60,45 @@ export class LiveGraphRuntime {
   }
 
   // Runtime helpers for Pausable/Provisionable
+  private isPausable(o: unknown): o is Pausable {
+    return !!o && typeof (o as any).pause === 'function' && typeof (o as any).resume === 'function';
+  }
+  private isProvisionable(o: unknown): o is Provisionable {
+    return (
+      !!o && typeof (o as any).getProvisionStatus === 'function' && typeof (o as any).provision === 'function' && typeof (o as any).deprovision === 'function'
+    );
+  }
+  private isDynConfigurable(o: unknown): o is DynamicConfigurable {
+    return !!o && typeof (o as any).isDynamicConfigReady === 'function';
+  }
+
   async pauseNode(id: string): Promise<void> {
-    const inst: any = this.state.nodes.get(id)?.instance;
-    if (inst && typeof inst.pause === 'function') await inst.pause();
+    const inst = this.state.nodes.get(id)?.instance as unknown;
+    if (this.isPausable(inst)) await inst.pause();
     else this.pausedFallback.add(id);
   }
   async resumeNode(id: string): Promise<void> {
-    const inst: any = this.state.nodes.get(id)?.instance;
-    if (inst && typeof inst.resume === 'function') await inst.resume();
+    const inst = this.state.nodes.get(id)?.instance as unknown;
+    if (this.isPausable(inst)) await inst.resume();
     else this.pausedFallback.delete(id);
   }
   async provisionNode(id: string): Promise<void> {
-    const inst: any = this.state.nodes.get(id)?.instance;
-    if (inst && typeof inst.provision === 'function') await inst.provision();
+    const inst = this.state.nodes.get(id)?.instance as unknown;
+    if (this.isProvisionable(inst)) await inst.provision();
   }
   async deprovisionNode(id: string): Promise<void> {
-    const inst: any = this.state.nodes.get(id)?.instance;
-    if (inst && typeof inst.deprovision === 'function') await inst.deprovision();
+    const inst = this.state.nodes.get(id)?.instance as unknown;
+    if (this.isProvisionable(inst)) await inst.deprovision();
   }
   getNodeStatus(id: string): { isPaused?: boolean; provisionStatus?: ProvisionStatus; dynamicConfigReady?: boolean } {
-    const inst: any = this.state.nodes.get(id)?.instance;
+    const inst = this.state.nodes.get(id)?.instance as unknown;
     const out: { isPaused?: boolean; provisionStatus?: ProvisionStatus; dynamicConfigReady?: boolean } = {};
     if (inst) {
-      if (typeof inst.isPaused === 'function') out.isPaused = !!inst.isPaused();
+      if (this.isPausable(inst) && typeof (inst as any).isPaused === 'function') out.isPaused = !!(inst as any).isPaused();
       else out.isPaused = this.pausedFallback.has(id);
-      if (typeof inst.getProvisionStatus === 'function') out.provisionStatus = inst.getProvisionStatus();
-      if (typeof inst.isDynamicConfigReady === 'function') out.dynamicConfigReady = !!inst.isDynamicConfigReady();
+      if (this.isProvisionable(inst)) out.provisionStatus = (inst as any).getProvisionStatus();
+      if (this.isDynConfigurable(inst)) out.dynamicConfigReady = !!(inst as any).isDynamicConfigReady();
     } else {
-      // if instance missing, report paused=false by default
       out.isPaused = this.pausedFallback.has(id);
     }
     return out;
@@ -264,23 +275,21 @@ export class LiveGraphRuntime {
       }
     }
     // Call lifecycle teardown if present
-    const inst: any = live.instance;
+    const inst = live.instance as unknown;
     if (inst) {
-      if (typeof inst.destroy === 'function') {
+      const destroy = (inst as Record<string, unknown>)['destroy'];
+      if (typeof destroy === 'function') {
         try {
-          await inst.destroy();
-        } catch {
-          /* ignore */
-        }
+          await (destroy as Function).call(inst);
+        } catch {}
       } else {
         // fallback legacy
-        for (const method of ['dispose', 'close', 'stop']) {
-          if (typeof inst[method] === 'function') {
+        for (const method of ['dispose', 'close', 'stop'] as const) {
+          const fn = (inst as Record<string, unknown>)[method];
+          if (typeof fn === 'function') {
             try {
-              await inst[method]();
-            } catch {
-              /* ignore */
-            }
+              await (fn as Function).call(inst);
+            } catch {}
             break;
           }
         }
@@ -322,7 +331,10 @@ export class LiveGraphRuntime {
     const argValue = instanceSide.instance; // basic rule: pass the other instance
     const key = edgeKey(edge);
 
-    await (methodSide.instance as any)[methodCfg.create](argValue); // eslint-disable-line @typescript-eslint/no-explicit-any
+    {
+      const createFn = (methodSide.instance as Record<string, unknown>)[methodCfg.create];
+      if (typeof createFn === 'function') await (createFn as Function).call(methodSide.instance, argValue);
+    }
 
     const record: ExecutedEdgeRecord = {
       key,
@@ -334,10 +346,12 @@ export class LiveGraphRuntime {
       argumentSnapshot: argValue,
       reversal: async () => {
         if (methodCfg.destroy) {
-          await (methodSide.instance as any)[methodCfg.destroy](argValue); // eslint-disable-line @typescript-eslint/no-explicit-any
+          const destroyFn = (methodSide.instance as Record<string, unknown>)[methodCfg.destroy];
+          if (typeof destroyFn === 'function') await (destroyFn as Function).call(methodSide.instance, argValue);
         } else {
           // Fallback: call create with undefined to signal disconnection
-          await (methodSide.instance as any)[methodCfg.create](undefined); // eslint-disable-line @typescript-eslint/no-explicit-any
+          const createFn = (methodSide.instance as Record<string, unknown>)[methodCfg.create];
+          if (typeof createFn === 'function') await (createFn as Function).call(methodSide.instance, undefined);
         }
       },
     };

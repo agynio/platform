@@ -12,15 +12,11 @@ const makeAgent = () => new SimpleAgent(new MockConfigService() as any, new Mock
 describe('BaseAgent.getConfigSchema / SimpleAgent.setConfig', () => {
   it('returns expected JSON schema', () => {
     const a = makeAgent();
-    const schema = (a as unknown as BaseAgent).getConfigSchema();
-    expect(schema).toMatchObject({
-      type: 'object',
-      properties: {
-        systemPrompt: { type: 'string' },
-        summarizationKeepLast: { type: 'integer', minimum: 0 },
-        summarizationMaxTokens: { type: 'integer', minimum: 1 },
-      },
-    });
+    const schema = (a as unknown as BaseAgent).getConfigSchema() as any;
+    expect(schema.type).toBe('object');
+    expect(schema.properties.systemPrompt).toMatchObject({ type: 'string' });
+    expect(schema.properties.summarizationKeepLast).toMatchObject({ type: 'integer', minimum: 0 });
+    expect(schema.properties.summarizationMaxTokens).toMatchObject({ type: 'integer', minimum: 1 });
   });
 
   it('setConfig applies systemPrompt and summarization fields', () => {

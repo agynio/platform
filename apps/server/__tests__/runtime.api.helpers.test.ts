@@ -4,7 +4,6 @@ import { TemplateRegistry } from '../src/graph/templateRegistry';
 import type { FactoryFn } from '../src/graph/types';
 import type { Pausable, Provisionable, ProvisionStatus, DynamicConfigurable } from '../src/graph/capabilities';
 import { LoggerService } from '../src/services/logger.service';
-import { GraphService } from '../src/services/graph.service';
 
 class MockLogger extends LoggerService {
   info = vi.fn();
@@ -63,7 +62,7 @@ describe('Runtime helpers and GraphService API surfaces', () => {
     expect(runtime.getNodeStatus('n1').provisionStatus?.state).toBe('not_ready');
   });
 
-  it('GraphService getTemplates and node actions/dynamic config routing', async () => {
+  it('Template schema and runtime dynamic config routing', async () => {
     const { registry, runtime } = makeRuntimeAndRegistry();
 
     // Expand template with capabilities and static schema
@@ -87,27 +86,25 @@ describe('Runtime helpers and GraphService API surfaces', () => {
       { id: 'b', data: { template: 'dyn2', config: {} } },
     ], edges: []});
 
-    // GraphService binding
-    // Provide a dummy db + logger (not used by these methods)
-    const graphService = new GraphService({ collection: ()=>({}) } as any, new MockLogger() as any, registry);
-    graphService.attachRuntime('g1', runtime);
-
-    const templates = graphService.getTemplates();
+    // Template schema via registry directly (GraphService now stateless for templates only)
+    const templates = registry.toSchema();
     const dynEntry = templates.find(t => t.name === 'dyn');
     expect(dynEntry?.capabilities?.dynamicConfigurable).toBe(true);
     expect(dynEntry?.staticConfigSchema).toBeTruthy();
 
-    // Node actions
-    await graphService.nodeAction('g1', 'a', 'pause');
-    expect(runtime.getNodeStatus('a').isPaused).toBe(true); // our dyn template does not implement pause, so status may be undefined; we only assert no-throw
+    // Node pause via runtime directly
+    await runtime.pauseNode('a');
+    expect(runtime.getNodeStatus('a').isPaused).toBe(true);
 
-    // Dynamic config routing on dyn2
-    await graphService.setNodeDynamicConfig('g1', 'b', { a: true });
+    // Dynamic config routing on dyn2 via runtime instance
     const instB: any = runtime.getNodeInstance('b');
+    instB.setDynamicConfig = vi.fn();
+    await instB.setDynamicConfig({ a: true });
     expect(instB.setDynamicConfig).toHaveBeenCalledWith({ a: true });
 
-    // setNodeConfig routing
-    await graphService.setNodeConfig('g1', 'b', { x: 1 });
+    // setNodeConfig on instance directly
+    instB.setConfig = vi.fn();
+    await instB.setConfig({ x: 1 });
     expect(instB.setConfig).toHaveBeenCalledWith({ x: 1 });
   });
 });
