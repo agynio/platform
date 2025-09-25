@@ -133,6 +133,7 @@ export class LocalMCPServer implements McpServer, Provisionable, DynamicConfigur
 
       // Fetch tools
       const result = await tempClient.listTools({}, { timeout: cfg.requestTimeoutMs ?? 15000 });
+      this.logger.debug(`[MCP:${this.namespace}] Discovered tools: ${JSON.stringify(result.tools.map((t) => t.name))}`);
       this.toolsCache = result.tools.map((t: any) => ({
         name: t.name,
         description: t.description,
@@ -198,6 +199,9 @@ export class LocalMCPServer implements McpServer, Provisionable, DynamicConfigur
   async listTools(force = false): Promise<McpTool[]> {
     // Passive: Only return cached tools unless force is requested and discovery already happened.
     // We purposely avoid triggering a start/discovery from listTools to prevent dual discovery paths.
+    const all = force && this.toolsDiscovered ? (this.toolsCache ?? []) : this.toolsCache || [];
+    if (!this._enabledTools) return all;
+    return all.filter((t) => this._enabledTools!.has(t.name));
     const all = (force && this.toolsDiscovered) ? (this.toolsCache ?? []) : (this.toolsCache || []);
     if (!this._enabledTools) return all;
     return all.filter(t => this._enabledTools!.has(t.name));

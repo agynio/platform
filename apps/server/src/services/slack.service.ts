@@ -1,6 +1,6 @@
-import Bolt from "@slack/bolt";
-import { ConfigService } from "./config.service";
-import { LoggerService } from "./logger.service";
+import Bolt from '@slack/bolt';
+import { ConfigService } from './config.service';
+import { LoggerService } from './logger.service';
 
 export interface SlackMessagePayload {
   channel: string;
@@ -10,8 +10,8 @@ export interface SlackMessagePayload {
   ephemeral_user?: string; // if set -> ephemeral
 }
 
-const isMessageEvent = (event: Bolt.KnownEventFromType<"message">): event is Bolt.types.GenericMessageEvent => {
-  return event && event.type === "message";
+const isMessageEvent = (event: Bolt.KnownEventFromType<'message'>): event is Bolt.types.GenericMessageEvent => {
+  return event && event.type === 'message';
 };
 
 type MessageHandler = (event: Bolt.types.GenericMessageEvent) => Promise<void> | void;
@@ -35,14 +35,14 @@ export class SlackService {
       logLevel: Bolt.LogLevel ? Bolt.LogLevel.WARN : undefined,
     });
 
-    app.event("message", async ({ event }) => {
+    app.event('message', async ({ event }) => {
       if (!isMessageEvent(event)) return;
       try {
         for (const handler of this.messageHandlers) {
           await handler(event as Bolt.types.GenericMessageEvent);
         }
       } catch (err) {
-        this.logger.error("SlackService message handler error", err);
+        this.logger.error('SlackService message handler error', err);
       }
     });
 
@@ -53,10 +53,10 @@ export class SlackService {
   async start(): Promise<void> {
     if (this.started) return;
     const app = this.ensureApp();
-    this.logger.info("Starting SlackService (socket mode)...");
+    this.logger.info('Starting SlackService (socket mode)...');
     await app.start();
     this.started = true;
-    this.logger.info("SlackService started");
+    this.logger.info('SlackService started');
   }
 
   async stop(): Promise<void> {
@@ -64,10 +64,10 @@ export class SlackService {
     try {
       // @ts-ignore internal access fallback
       const sm = this.app.receiver?.client?.socketModeClient;
-      if (sm && typeof sm.disconnect === "function") await sm.disconnect();
-      this.logger.info("SlackService stopped");
+      if (sm && typeof sm.disconnect === 'function') await sm.disconnect();
+      this.logger.info('SlackService stopped');
     } catch (err) {
-      this.logger.error("Error stopping SlackService", err);
+      this.logger.error('Error stopping SlackService', err);
     } finally {
       this.started = false;
     }
@@ -93,7 +93,10 @@ export class SlackService {
       if (thread_ts) args.thread_ts = thread_ts;
       if (thread_ts && broadcast) args.reply_broadcast = true;
       const resp = await this.client.chat.postMessage(args);
-      if (!resp.ok) return { ok: false, error: resp.error };
+      if (!resp.ok) {
+        this.logger.error('Slack chat.postMessage error', resp.error);
+        return { ok: false, error: resp.error };
+      }
       return {
         ok: true,
         channel: resp.channel,
@@ -102,7 +105,7 @@ export class SlackService {
         broadcast: !!broadcast,
       };
     } catch (err: any) {
-      this.logger.error("Error sending Slack message", err);
+      this.logger.error('Error sending Slack message', err);
       return { ok: false, error: err.message || String(err) };
     }
   }

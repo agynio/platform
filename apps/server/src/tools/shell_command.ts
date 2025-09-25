@@ -52,7 +52,7 @@ export class ShellTool extends BaseTool {
         const cleanedStderr = this.stripAnsi(response.stderr);
 
         if (response.exitCode !== 0) {
-          return `Error (exit code ${response.exitCode}):\n${cleanedStderr}`;
+          return `Error (exit code ${response.exitCode}):\n${cleanedStdout}\n${cleanedStderr}`;
         }
         return cleanedStdout;
       },

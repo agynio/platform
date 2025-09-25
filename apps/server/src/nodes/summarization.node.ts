@@ -1,6 +1,7 @@
 import { AIMessage, BaseMessage, HumanMessage, SystemMessage, ToolMessage } from '@langchain/core/messages';
 import { ChatOpenAI } from '@langchain/openai';
 import { task, withTask } from '@traceloop/node-server-sdk';
+import { trimMessages } from '@langchain/core/messages';
 import { NodeOutput } from '../types';
 
 export type ChatState = { messages: BaseMessage[]; summary?: string };
@@ -45,14 +46,26 @@ export class SummarizationNode {
       summarySystemNote: this.summarySystemNote,
     };
 
-    let working: ChatState = { messages: state.messages.filter(Boolean), summary: state.summary };
+    let working: ChatState = { messages: state.messages, summary: state.summary };
 
     // Summarize only if base context tokens exceed budget and there is a tail (older groups)
     if (await this.shouldSummarize(working, opts)) {
       working = await this.summarize(working, opts);
     }
 
-    return { summary: working.summary ?? '', messages: { method: 'replace', items: working.messages } };
+    const toolCallIds = new Set(working.messages.filter((m) => m instanceof ToolMessage).map((m) => m.tool_call_id));
+    const omitAiWithoutToolCalls = working.messages.filter((m) => {
+      if (!(m instanceof AIMessage)) return true;
+      if (!m.tool_calls || m.tool_calls.length === 0) return true;
+
+      const keep = m.tool_calls.every((tc) => toolCallIds.has(tc.id ?? ''));
+      if (!keep) {
+        console.error(`Omitting AI message without matching ToolMessages: ${m.id}`);
+      }
+      return keep;
+    });
+
+    return { summary: working.summary ?? '', messages: { method: 'replace', items: omitAiWithoutToolCalls } };
   }
 
   async countTokens(llm: ChatOpenAI, messagesOrText: BaseMessage[] | string): Promise<number> {
@@ -123,6 +136,16 @@ export class SummarizationNode {
     const { keepTokens, llm } = opts;
     const groups = this.groupMessages(state.messages);
     if (!groups.length) return state;
+
+    // TODO: use trim instead of custom groups/token counting
+    // const trimmed = await trimMessages({
+    //   strategy: 'last',
+    //   tokenCounter: this.llm,
+    //   maxTokens: maxTokens,
+    //   startOn: ['human', 'ai'],
+    //   endOn: ['human', 'ai', 'tool'],
+    //   allowPartial: false,
+    // }).invoke(working.messages);
 
     // Calculate tail groups to keep verbatim within keepTokens budget (from end backwards)
     const tail: BaseMessage[][] = [];
