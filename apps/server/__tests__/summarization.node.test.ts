@@ -1,11 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { AIMessage, BaseMessage, HumanMessage, ToolMessage } from '@langchain/core/messages';
 import { ChatOpenAI } from '@langchain/openai';
-<<<<<<< HEAD
-import { countTokens, shouldSummarize, summarizationNode, SummarizationNode, type ChatState, type SummarizationOptions } from '../src/nodes/summarization.node';
-=======
 import {
-  buildContextForModel,
   countTokens,
   shouldSummarize,
   summarizationNode,
@@ -13,7 +9,6 @@ import {
   type ChatState,
   type SummarizationOptions,
 } from '../src/lgnodes/summarization.lgnode';
->>>>>>> da63971 (refactor(lg): move LG nodes to src/lgnodes and rename to .lgnode.ts)
 
 // Lightweight mock implementing needed surface (cast to ChatOpenAI)
 const llm = {
