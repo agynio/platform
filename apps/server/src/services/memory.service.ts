@@ -299,8 +299,54 @@ export class MemoryService {
     return { updated };
   }
 
-  async delete(_path: string): Promise<void> {
-    throw new NotImplementedError('delete');
+  async delete(path: string): Promise<{ deleted: number }> {
+    const prefix = this.normalizePath(path);
+    const { key, doc } = await this.getDoc();
+    const dataRoot = doc?.data ?? {};
+    if (prefix === '') throw new Error('Cannot delete root');
+
+    const current = this.getAt(dataRoot, prefix);
+    if (!current.found) return { deleted: 0 };
+
+    if (!this.isDirValue(current.value)) {
+      // file
+      const res = await this.coll().updateOne(
+        key,
+        { $unset: { [`data.${prefix}`]: '' }, $currentDate: { 'meta.updatedAt': true }, $setOnInsert: { 'meta.createdAt': new Date() } },
+        { upsert: true },
+      );
+      return { deleted: 1 };
+    }
+
+    // dir: gather nested keys to unset
+    const children = this.immediateChildren(current.value);
+    const unsetOps: Record<string, ''> = {} as any;
+    let count = 0;
+    const buildUnsets = (baseObj: any, basePath: string) => {
+      if (!this.isDirValue(baseObj)) {
+        unsetOps[`data.${basePath}`] = '' as any;
+        count++;
+        return;
+      }
+      for (const k of Object.keys(baseObj)) {
+        const next = basePath ? `${basePath}.${k}` : k;
+        buildUnsets(baseObj[k], next);
+      }
+    };
+    buildUnsets(current.value, prefix);
+
+    if (count === 0) {
+      // empty dir: just unset the object itself
+      unsetOps[`data.${prefix}`] = '' as any;
+    }
+
+    await this.coll().updateOne(
+      key,
+      { $unset: unsetOps, $currentDate: { 'meta.updatedAt': true }, $setOnInsert: { 'meta.createdAt': new Date() } },
+      { upsert: true },
+    );
+
+    return { deleted: count || 1 };
   }
 
   // Expose helpers for tests
