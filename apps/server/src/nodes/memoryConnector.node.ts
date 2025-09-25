@@ -6,10 +6,10 @@ import { MemoryService } from '../services/memory.service';
 export type MemoryPlacement = 'after_system' | 'last_message';
 export type MemoryContent = 'full' | 'tree';
 
-const SIZE_CAP = 20_000;
+const DEFAULT_SIZE_CAP = 20_000;
 
 export class MemoryConnectorNode {
-  private config: { placement: MemoryPlacement; content: MemoryContent } = {
+  private config: { placement: MemoryPlacement; content: MemoryContent; maxChars?: number } = {
     placement: 'after_system',
     content: 'full',
   };
@@ -17,7 +17,7 @@ export class MemoryConnectorNode {
 
   constructor(private logger: LoggerService) {}
 
-  setConfig(cfg: { placement: MemoryPlacement; content: MemoryContent }): void {
+  setConfig(cfg: { placement: MemoryPlacement; content: MemoryContent; maxChars?: number }): void {
     this.config = { ...this.config, ...cfg };
   }
 
@@ -29,7 +29,7 @@ export class MemoryConnectorNode {
     this.memoryService = undefined;
   }
 
-  getConfig(): { placement: MemoryPlacement; content: MemoryContent } {
+  getConfig(): { placement: MemoryPlacement; content: MemoryContent; maxChars?: number } {
     return this.config;
   }
 
@@ -75,7 +75,8 @@ export class MemoryConnectorNode {
       content = await this.buildTree('/');
     } else {
       content = await this.buildFull();
-      if (content.length > SIZE_CAP) {
+      const cap = this.config.maxChars ?? DEFAULT_SIZE_CAP;
+      if (content.length > cap) {
         const tree = await this.buildTree('/');
         content = `Memory content truncated; showing tree only\n${tree}`;
       }

@@ -29,24 +29,40 @@ export class MemoryService {
 
   private async ensureIndexes() {
     if (this.indexesEnsured) return;
-    await this.coll().createIndex({ nodeId: 1, scope: 1, threadId: 1 }, { unique: true, name: 'memories_unique_scope' });
+    // Unique index for perThread docs (threadId exists)
+    await this.coll().createIndex(
+      { nodeId: 1, scope: 1, threadId: 1 },
+      { unique: true, name: 'memories_unique_per_thread', partialFilterExpression: { threadId: { $exists: true } } },
+    );
+    // Unique index for global docs (no threadId)
+    await this.coll().createIndex(
+      { nodeId: 1, scope: 1 },
+      { unique: true, name: 'memories_unique_global', partialFilterExpression: { threadId: { $exists: false } } },
+    );
     this.indexesEnsured = true;
   }
 
   // Helpers
   private normalizePath(path: string): string {
-    if (path === undefined || path === null) throw new Error('Invalid path');
-    if (typeof path !== 'string') throw new Error('Invalid path');
-    const trimmed = path.trim();
+    if (path === undefined || path === null) throw new Error('Invalid path: undefined');
+    if (typeof path !== 'string') throw new Error('Invalid path: must be string');
+    let trimmed = path.trim();
     if (trimmed === '' || trimmed === '/') return '';
-    if (!trimmed.startsWith('/')) throw new Error('Path must start with /');
-    if (trimmed.includes('..')) throw new Error('Path cannot contain ..');
-    if (trimmed.includes('//')) throw new Error('Path cannot contain //');
+    if (!trimmed.startsWith('/')) throw new Error('Invalid path: must start with /');
+    if (trimmed.includes('..')) throw new Error('Invalid path: path cannot contain ..');
+    // collapse multiple slashes
+    trimmed = trimmed.replace(/\/+/, '/');
+    if (trimmed.includes('//')) throw new Error('Invalid path: path cannot contain //');
     const parts = trimmed
       .split('/')
       .filter(Boolean)
       .map((p) => p.trim())
       .filter((p) => p.length > 0);
+    const validSeg = /^[A-Za-z0-9_\- ]+$/;
+    for (const seg of parts) {
+      if (seg.includes('$')) throw new Error(`Invalid path segment '${seg}': contains $`);
+      if (!validSeg.test(seg)) throw new Error(`Invalid path segment '${seg}': only alphanum, space, _, - allowed`);
+    }
     return parts.join('.');
   }
 
@@ -94,7 +110,6 @@ export class MemoryService {
     const data = doc?.data ?? {};
 
     if (prefix === '') {
-      const hasAny = this.isDirValue(data) && Object.keys(data).length > 0;
       const exists = this.isDirValue(data);
       const type = exists ? 'dir' : undefined;
       return { exists, type, kind: exists ? 'dir' : 'missing' };
@@ -106,7 +121,6 @@ export class MemoryService {
       return { exists: true, type: 'file', kind: 'file' };
     }
 
-    // Not found exactly; because we store nested objects, absence means missing
     return { exists: false, kind: 'missing' };
   }
 
@@ -149,7 +163,6 @@ export class MemoryService {
     if (prefix === '') return; // root
 
     const parts = prefix.split('.');
-    // Check for collisions with non-object along the way
     const { key, doc } = await this.getDoc();
     const data = doc?.data ?? {};
     let cur: any = data;
@@ -162,7 +175,6 @@ export class MemoryService {
           }
           cur = v;
         } else {
-          // Will be created by $set
           cur = undefined as any;
         }
       } else if (cur === undefined) {
@@ -184,7 +196,6 @@ export class MemoryService {
     );
   }
 
-  // Mutating APIs to be implemented later
   async append(path: string, data: any): Promise<void> {
     const prefix = this.normalizePath(path);
     const { key, doc } = await this.getDoc();
@@ -192,20 +203,9 @@ export class MemoryService {
 
     if (prefix === '') throw new Error('Cannot append at root');
 
-    const parentPath = prefix.split('.').slice(0, -1).join('.');
-    const leaf = prefix.split('.').slice(-1)[0]!;
-    const parent = parentPath ? this.getAt(dataRoot, parentPath) : { found: true, value: dataRoot };
-
-    if (!parent.found) {
-      // create missing parents as objects via $set of entire path to object chain
-      // But we can directly $set leaf; Mongo will create ancestors implicitly
-    }
-
-    // Check current value
     const current = this.getAt(dataRoot, prefix);
 
     if (!current.found) {
-      // set to data
       await this.coll().updateOne(
         key,
         { $set: { [`data.${prefix}`]: data }, $setOnInsert: { 'meta.createdAt': new Date() }, $currentDate: { 'meta.updatedAt': true } },
@@ -223,22 +223,9 @@ export class MemoryService {
       else newVal = [...val, data];
     } else if (typeof val === 'string') {
       newVal = val.length ? `${val}\n${String(data)}` : String(data);
-    } else if (this.isDirValue(val)) {
-      // Already handled; just to satisfy TS
-      throw new Error('Cannot append to a directory');
     } else if (val !== null && typeof val === 'object') {
-      // unreachable due to isDirValue; keep for completeness
       newVal = { ...(val as any), ...(typeof data === 'object' && !Array.isArray(data) ? data : {}) };
-    } else if (typeof val === 'object' && !Array.isArray(val)) {
-      // shallow merge if both objects
-      if (typeof data === 'object' && data !== null && !Array.isArray(data)) newVal = Object.assign({}, val, data);
-      else newVal = [val, data];
-    } else if (typeof val === 'string') {
-      newVal = val + '\n' + String(data);
-    } else if (Array.isArray(val)) {
-      newVal = Array.isArray(data) ? [...val, ...data] : [...val, data];
     } else {
-      // primitive
       newVal = [val, data];
     }
 
@@ -309,8 +296,7 @@ export class MemoryService {
     if (!current.found) return { deleted: 0 };
 
     if (!this.isDirValue(current.value)) {
-      // file
-      const res = await this.coll().updateOne(
+      await this.coll().updateOne(
         key,
         { $unset: { [`data.${prefix}`]: '' }, $currentDate: { 'meta.updatedAt': true }, $setOnInsert: { 'meta.createdAt': new Date() } },
         { upsert: true },
@@ -318,8 +304,6 @@ export class MemoryService {
       return { deleted: 1 };
     }
 
-    // dir: gather nested keys to unset
-    const children = this.immediateChildren(current.value);
     const unsetOps: Record<string, ''> = {} as any;
     let count = 0;
     const buildUnsets = (baseObj: any, basePath: string) => {
@@ -336,7 +320,6 @@ export class MemoryService {
     buildUnsets(current.value, prefix);
 
     if (count === 0) {
-      // empty dir: just unset the object itself
       unsetOps[`data.${prefix}`] = '' as any;
     }
 
