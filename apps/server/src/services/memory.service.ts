@@ -1,4 +1,4 @@
-import type { Db } from 'mongodb';
+import type { Db, Collection, Document } from 'mongodb';
 import { LoggerService } from './logger.service';
 
 export type MemoryScope = 'global' | 'perThread';
@@ -10,23 +10,39 @@ export class NotImplementedError extends Error {
   }
 }
 
+type Key = { nodeId: string; scope: MemoryScope; threadId?: string };
+
+type Stat = { exists: boolean; type?: 'dir' | 'file'; kind?: 'dir' | 'file' | 'missing' };
+
 export class MemoryService {
+  private indexesEnsured = false;
+
   constructor(
     private db: Db,
     private logger: LoggerService,
     private opts: { nodeId: string; scope: MemoryScope; threadResolver: () => string | undefined },
   ) {}
 
-  // Helpers
-  private validatePath(path: string): void {
-    if (!path || typeof path !== 'string') throw new Error('Invalid path');
-    if (!path.startsWith('/')) throw new Error('Path must start with /');
-    if (path.includes('..')) throw new Error('Path cannot contain ..');
+  private coll(): Collection<Document> {
+    return this.db.collection('memories');
   }
 
+  private async ensureIndexes() {
+    if (this.indexesEnsured) return;
+    await this.coll().createIndex({ nodeId: 1, scope: 1, threadId: 1 }, { unique: true, name: 'memories_unique_scope' });
+    this.indexesEnsured = true;
+  }
+
+  // Helpers
   private normalizePath(path: string): string {
-    this.validatePath(path);
-    const parts = path
+    if (path === undefined || path === null) throw new Error('Invalid path');
+    if (typeof path !== 'string') throw new Error('Invalid path');
+    const trimmed = path.trim();
+    if (trimmed === '' || trimmed === '/') return '';
+    if (!trimmed.startsWith('/')) throw new Error('Path must start with /');
+    if (trimmed.includes('..')) throw new Error('Path cannot contain ..');
+    if (trimmed.includes('//')) throw new Error('Path cannot contain //');
+    const parts = trimmed
       .split('/')
       .filter(Boolean)
       .map((p) => p.trim())
@@ -34,7 +50,7 @@ export class MemoryService {
     return parts.join('.');
   }
 
-  private ensureDocKey(): { nodeId: string; scope: MemoryScope; threadId?: string } {
+  private ensureDocKey(): Key {
     const { nodeId, scope, threadResolver } = this.opts;
     if (scope === 'global') return { nodeId, scope };
     const threadId = threadResolver();
@@ -42,15 +58,133 @@ export class MemoryService {
     return { nodeId, scope, threadId };
   }
 
-  // API methods (to be implemented later)
-  async read(_path: string): Promise<any> {
-    throw new NotImplementedError('read');
+  private async getDoc(): Promise<{ key: Key; doc: any | null }> {
+    await this.ensureIndexes();
+    const key = this.ensureDocKey();
+    const doc = await this.coll().findOne(key);
+    return { key, doc };
   }
 
-  async list(_path: string): Promise<string[]> {
-    throw new NotImplementedError('list');
+  private getAt(obj: any, dot: string): { found: boolean; value?: any } {
+    if (!dot) return { found: true, value: obj };
+    const parts = dot.split('.');
+    let cur = obj;
+    for (const p of parts) {
+      if (cur && typeof cur === 'object' && !Array.isArray(cur) && p in cur) {
+        cur = (cur as any)[p];
+      } else {
+        return { found: false };
+      }
+    }
+    return { found: true, value: cur };
   }
 
+  private isDirValue(v: any): boolean {
+    return v !== null && typeof v === 'object' && !Array.isArray(v);
+  }
+
+  private immediateChildren(obj: any): { name: string; type: 'dir' | 'file' }[] {
+    if (!this.isDirValue(obj)) return [];
+    return Object.keys(obj).map((k) => ({ name: k, type: this.isDirValue(obj[k]) ? 'dir' : 'file' }));
+  }
+
+  async stat(path: string): Promise<Stat> {
+    const prefix = this.normalizePath(path);
+    const { doc } = await this.getDoc();
+    const data = doc?.data ?? {};
+
+    if (prefix === '') {
+      const hasAny = this.isDirValue(data) && Object.keys(data).length > 0;
+      const exists = this.isDirValue(data);
+      const type = exists ? 'dir' : undefined;
+      return { exists, type, kind: exists ? 'dir' : 'missing' };
+    }
+
+    const exact = this.getAt(data, prefix);
+    if (exact.found) {
+      if (this.isDirValue(exact.value)) return { exists: true, type: 'dir', kind: 'dir' };
+      return { exists: true, type: 'file', kind: 'file' };
+    }
+
+    // Not found exactly; because we store nested objects, absence means missing
+    return { exists: false, kind: 'missing' };
+  }
+
+  async read(path: string): Promise<any> {
+    const prefix = this.normalizePath(path);
+    const { doc } = await this.getDoc();
+    const data = doc?.data ?? {};
+
+    if (prefix === '') {
+      const children = this.immediateChildren(data);
+      const out: Record<string, { kind: 'dir' | 'file' }> = {};
+      for (const c of children) out[c.name] = { kind: c.type } as any;
+      return out;
+    }
+
+    const exact = this.getAt(data, prefix);
+    if (!exact.found) return undefined;
+    if (this.isDirValue(exact.value)) {
+      const children = this.immediateChildren(exact.value);
+      const out: Record<string, { kind: 'dir' | 'file' }> = {};
+      for (const c of children) out[c.name] = { kind: c.type } as any;
+      return out;
+    }
+    return exact.value;
+  }
+
+  async list(path: string = '/'): Promise<{ name: string; type: 'dir' | 'file' }[]> {
+    const prefix = this.normalizePath(path);
+    const { doc } = await this.getDoc();
+    const data = doc?.data ?? {};
+
+    if (prefix === '') return this.immediateChildren(data);
+    const exact = this.getAt(data, prefix);
+    if (!exact.found) return [];
+    return this.immediateChildren(exact.value);
+  }
+
+  async ensureDir(path: string): Promise<void> {
+    const prefix = this.normalizePath(path);
+    if (prefix === '') return; // root
+
+    const parts = prefix.split('.');
+    // Check for collisions with non-object along the way
+    const { key, doc } = await this.getDoc();
+    const data = doc?.data ?? {};
+    let cur: any = data;
+    for (const p of parts) {
+      if (cur && typeof cur === 'object' && !Array.isArray(cur)) {
+        if (p in cur) {
+          const v = cur[p];
+          if (!this.isDirValue(v)) {
+            throw new Error(`Cannot create directory at '${path}': file exists in the way`);
+          }
+          cur = v;
+        } else {
+          // Will be created by $set
+          cur = undefined as any;
+        }
+      } else if (cur === undefined) {
+        break;
+      } else {
+        throw new Error(`Cannot create directory at '${path}': invalid parent`);
+      }
+    }
+
+    const setField = `data.${prefix}`;
+    await this.coll().updateOne(
+      key,
+      {
+        $set: { [setField]: {} },
+        $setOnInsert: { 'meta.createdAt': new Date() },
+        $currentDate: { 'meta.updatedAt': true },
+      },
+      { upsert: true },
+    );
+  }
+
+  // Mutating APIs to be implemented later
   async append(_path: string, _data: any): Promise<void> {
     throw new NotImplementedError('append');
   }
@@ -61,14 +195,6 @@ export class MemoryService {
 
   async delete(_path: string): Promise<void> {
     throw new NotImplementedError('delete');
-  }
-
-  async stat(_path: string): Promise<{ exists: boolean; isDir: boolean } | null> {
-    throw new NotImplementedError('stat');
-  }
-
-  async ensureDir(_path: string): Promise<void> {
-    throw new NotImplementedError('ensureDir');
   }
 
   // Expose helpers for tests
