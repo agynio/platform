@@ -13,6 +13,13 @@ import { SendSlackMessageTool } from './tools/send_slack_message.tool';
 import { ShellTool } from './tools/shell_command';
 import { SlackTrigger } from './triggers';
 import type { Db } from 'mongodb';
+import { MemoryNode } from './nodes/memory.node';
+import { MemoryConnectorNode } from './nodes/memoryConnector.node';
+import { MemoryReadTool } from './tools/memory/memory_read.tool';
+import { MemoryListTool } from './tools/memory/memory_list.tool';
+import { MemoryAppendTool } from './tools/memory/memory_append.tool';
+import { MemoryUpdateTool } from './tools/memory/memory_update.tool';
+import { MemoryDeleteTool } from './tools/memory/memory_delete.tool';
 
 export interface TemplateRegistryDeps {
   logger: LoggerService;
@@ -109,7 +116,7 @@ export function buildTemplateRegistry(deps: TemplateRegistryDeps): TemplateRegis
     .register(
       'memoryNode',
       (ctx) => {
-        const node = new (require('./nodes/memory.node').MemoryNode)(logger, ctx.nodeId);
+        const node = new MemoryNode(logger, ctx.nodeId);
         node.setDb(db);
         return node;
       },
@@ -119,33 +126,33 @@ export function buildTemplateRegistry(deps: TemplateRegistryDeps): TemplateRegis
       { title: 'Memory', kind: 'tool' },
     )
     .register(
-    'memoryConnector',
-    () => new (require('./nodes/memoryConnector.node').MemoryConnectorNode)(logger),
-    {
-    sourcePorts: { $self: { kind: 'instance' } },
-    targetPorts: { memory: { kind: 'method', create: 'setMemoryService', destroy: 'clearMemoryService' } },
-    },
-    { title: 'Memory Connector', kind: 'tool' },
+      'memoryConnector',
+      () => new MemoryConnectorNode(logger),
+      {
+        sourcePorts: { $self: { kind: 'instance' } },
+        targetPorts: { memory: { kind: 'method', create: 'setMemoryService', destroy: 'clearMemoryService' } },
+      },
+      { title: 'Memory Connector', kind: 'tool' },
     )
     .register(
-     'memory_read',
-     () => new (require('./tools/memory/memory_read.tool').MemoryReadTool)(logger),
-    {
-     targetPorts: { $self: { kind: 'instance' }, memory: { kind: 'method', create: 'setMemoryService' } },
-    },
-    { title: 'Memory Read', kind: 'tool' },
+      'memory_read',
+      () => new MemoryReadTool(logger),
+      {
+        targetPorts: { $self: { kind: 'instance' }, memory: { kind: 'method', create: 'setMemoryService' } },
+      },
+      { title: 'Memory Read', kind: 'tool' },
     )
     .register(
-    'memory_list',
-    () => new (require('./tools/memory/memory_list.tool').MemoryListTool)(logger),
-    {
-      targetPorts: { $self: { kind: 'instance' }, memory: { kind: 'method', create: 'setMemoryService' } },
-    },
+      'memory_list',
+      () => new MemoryListTool(logger),
+      {
+        targetPorts: { $self: { kind: 'instance' }, memory: { kind: 'method', create: 'setMemoryService' } },
+      },
       { title: 'Memory List', kind: 'tool' },
     )
     .register(
       'memory_append',
-      () => new (require('./tools/memory/memory_append.tool').MemoryAppendTool)(logger),
+      () => new MemoryAppendTool(logger),
       {
         targetPorts: { $self: { kind: 'instance' }, memory: { kind: 'method', create: 'setMemoryService' } },
       },
@@ -153,7 +160,7 @@ export function buildTemplateRegistry(deps: TemplateRegistryDeps): TemplateRegis
     )
     .register(
       'memory_update',
-      () => new (require('./tools/memory/memory_update.tool').MemoryUpdateTool)(logger),
+      () => new MemoryUpdateTool(logger),
       {
         targetPorts: { $self: { kind: 'instance' }, memory: { kind: 'method', create: 'setMemoryService' } },
       },
@@ -161,7 +168,7 @@ export function buildTemplateRegistry(deps: TemplateRegistryDeps): TemplateRegis
     )
     .register(
       'memory_delete',
-      () => new (require('./tools/memory/memory_delete.tool').MemoryDeleteTool)(logger),
+      () => new MemoryDeleteTool(logger),
       {
         targetPorts: { $self: { kind: 'instance' }, memory: { kind: 'method', create: 'setMemoryService' } },
       },
