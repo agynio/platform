@@ -6,7 +6,7 @@ import { TriggerListener, TriggerMessage } from '../triggers/base.trigger';
 import { NodeOutput } from '../types';
 import { withAgent } from '@traceloop/node-server-sdk';
 import type { StaticConfigurable } from '../graph/capabilities';
-import type { JSONSchema } from 'schema-json';
+import type { JSONSchema7 as JSONSchema } from 'json-schema';
 
 export abstract class BaseAgent implements TriggerListener, StaticConfigurable {
   protected _graph: CompiledStateGraph<unknown, unknown> | undefined;

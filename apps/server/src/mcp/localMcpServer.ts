@@ -7,7 +7,7 @@ import { ContainerProviderEntity } from '../entities/containerProvider.entity.js
 import { LoggerService } from '../services/logger.service.js';
 import { v4 as uuidv4 } from 'uuid';
 import type { ProvisionStatus, Provisionable, DynamicConfigurable } from '../graph/capabilities.js';
-import type { JSONSchema } from 'schema-json';
+import type { JSONSchema7 as JSONSchema } from 'json-schema';
 
 export class LocalMCPServer implements McpServer, Provisionable, DynamicConfigurable<Record<string, boolean>> {
   /**

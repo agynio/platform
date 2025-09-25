@@ -5,7 +5,7 @@ export interface TemplateMeta {
   title: string;
   kind: TemplateKind;
   capabilities?: TemplateNodeSchema['capabilities'];
-  staticConfigSchema?: import('schema-json').JSONSchema;
+  staticConfigSchema?: import('json-schema').JSONSchema7;
 }
 
 export class TemplateRegistry {

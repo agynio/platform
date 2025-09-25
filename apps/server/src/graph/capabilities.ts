@@ -1,7 +1,7 @@
 // Capability interfaces for nodes (triggers, agents, mcp servers, tools)
-// IMPORTANT: Use JSON Schema types from @types/schema-json (no custom definitions)
+// IMPORTANT: Use JSON Schema types from @types/json-schema (no custom definitions)
 
-import type { JSONSchema } from 'schema-json';
+import type { JSONSchema7 as JSONSchema } from 'json-schema';
 
 export interface Pausable {
   pause(): Promise<void> | void;

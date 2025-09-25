@@ -123,7 +123,7 @@ export interface TemplateNodeSchema {
     dynamicConfigurable?: boolean;
     provisionable?: boolean;
   };
-  staticConfigSchema?: import('schema-json').JSONSchema;
+  staticConfigSchema?: import('json-schema').JSONSchema7;
 }
 
 // Persistence layer graph representation (includes optimistic locking fields)
