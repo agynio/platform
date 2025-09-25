@@ -178,7 +178,7 @@ export default function StaticConfigForm({
   };
   const uiSchema: UiSchema = useMemo(() => {
     const ui: UiSchema = { 'ui:submitButtonOptions': { norender: true } };
-    console.log({ schema });
+
     const props =
       (schema && typeof schema === 'object' && 'properties' in schema
         ? (schema as { properties?: Record<string, JsonSchemaObject & Record<string, unknown>> }).properties
