@@ -20,7 +20,8 @@ interface GraphDocument {
 
 export class GraphService {
   private collection?: Collection<GraphDocument>;
-  // Stateless service: persistence only and template exposure. Runtime control is handled by a single-graph runtime manager elsewhere.
+  // Stateless service: persistence only and template exposure.
+  // Single-graph endpoint shape expected at /graph/nodes/:nodeId for runtime actions (handled elsewhere).
 
   constructor(
     private readonly db: Db,

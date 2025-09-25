@@ -60,16 +60,17 @@ export class LiveGraphRuntime {
   }
 
   // Runtime helpers for Pausable/Provisionable
+  private hasMethod(o: unknown, name: string): boolean {
+    return !!o && typeof (o as Record<string, unknown>)[name] === 'function';
+  }
   private isPausable(o: unknown): o is Pausable {
-    return !!o && typeof (o as any).pause === 'function' && typeof (o as any).resume === 'function';
+    return this.hasMethod(o, 'pause') && this.hasMethod(o, 'resume');
   }
   private isProvisionable(o: unknown): o is Provisionable {
-    return (
-      !!o && typeof (o as any).getProvisionStatus === 'function' && typeof (o as any).provision === 'function' && typeof (o as any).deprovision === 'function'
-    );
+    return this.hasMethod(o, 'getProvisionStatus') && this.hasMethod(o, 'provision') && this.hasMethod(o, 'deprovision');
   }
   private isDynConfigurable(o: unknown): o is DynamicConfigurable {
-    return !!o && typeof (o as any).isDynamicConfigReady === 'function';
+    return this.hasMethod(o, 'isDynamicConfigReady');
   }
 
   async pauseNode(id: string): Promise<void> {
@@ -94,10 +95,20 @@ export class LiveGraphRuntime {
     const inst = this.state.nodes.get(id)?.instance as unknown;
     const out: { isPaused?: boolean; provisionStatus?: ProvisionStatus; dynamicConfigReady?: boolean } = {};
     if (inst) {
-      if (this.isPausable(inst) && typeof (inst as any).isPaused === 'function') out.isPaused = !!(inst as any).isPaused();
-      else out.isPaused = this.pausedFallback.has(id);
-      if (this.isProvisionable(inst)) out.provisionStatus = (inst as any).getProvisionStatus();
-      if (this.isDynConfigurable(inst)) out.dynamicConfigReady = !!(inst as any).isDynamicConfigReady();
+      if (this.hasMethod(inst, 'isPaused')) {
+        const fn = (inst as Record<string, unknown>)['isPaused'] as () => unknown;
+        out.isPaused = !!fn.call(inst);
+      } else {
+        out.isPaused = this.pausedFallback.has(id);
+      }
+      if (this.isProvisionable(inst)) {
+        const fn = (inst as Record<string, unknown>)['getProvisionStatus'] as () => unknown;
+        out.provisionStatus = fn.call(inst) as ProvisionStatus;
+      }
+      if (this.isDynConfigurable(inst)) {
+        const fn = (inst as Record<string, unknown>)['isDynamicConfigReady'] as () => unknown;
+        out.dynamicConfigReady = !!fn.call(inst);
+      }
     } else {
       out.isPaused = this.pausedFallback.has(id);
     }
@@ -147,7 +158,8 @@ export class LiveGraphRuntime {
       const live = this.state.nodes.get(nodeId);
       if (!live) continue;
       try {
-        await live.instance.setConfig(nodeDef.data.config || {});
+        const setter = (live.instance as Record<string, unknown>)['setConfig'];
+        if (typeof setter === 'function') await (setter as Function).call(live.instance, nodeDef.data.config || {});
         live.config = nodeDef.data.config || {};
       } catch (e) {
         logger?.error?.('Config update failed', nodeId, e);
@@ -250,7 +262,8 @@ export class LiveGraphRuntime {
     const live: LiveNode = { id: node.id, template: node.data.template, instance: created, config: node.data.config };
     this.state.nodes.set(node.id, live);
     if (node.data.config) {
-      await created.setConfig(node.data.config);
+      const setter = (created as Record<string, unknown>)['setConfig'];
+      if (typeof setter === 'function') await (setter as Function).call(created, node.data.config);
     }
   }
 
