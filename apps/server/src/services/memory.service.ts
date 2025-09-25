@@ -249,8 +249,54 @@ export class MemoryService {
     );
   }
 
-  async update(_path: string, _oldData: any, _newData: any): Promise<void> {
-    throw new NotImplementedError('update');
+  async update(path: string, oldData: any, newData: any): Promise<{ updated: number }> {
+    const prefix = this.normalizePath(path);
+    const { key, doc } = await this.getDoc();
+    const dataRoot = doc?.data ?? {};
+    if (prefix === '') throw new Error('Cannot update root');
+
+    const current = this.getAt(dataRoot, prefix);
+    if (!current.found) return { updated: 0 };
+    const val = current.value;
+    if (this.isDirValue(val)) throw new Error('Cannot update a directory');
+
+    let updated = 0;
+    let newVal: any = val;
+
+    if (Array.isArray(val)) {
+      newVal = (val as any[]).map((v) => (v === oldData ? (updated++, newData) : v));
+    } else if (typeof val === 'string') {
+      const src = String(oldData);
+      const dst = String(newData);
+      if (src.length === 0) return { updated: 0 };
+      const parts = String(val).split(src);
+      updated = parts.length - 1;
+      newVal = parts.join(dst);
+    } else if (val !== null && typeof val === 'object') {
+      const obj = { ...(val as Record<string, any>) };
+      for (const k of Object.keys(obj)) {
+        if (obj[k] === oldData) {
+          obj[k] = newData;
+          updated++;
+        }
+      }
+      newVal = obj;
+    } else {
+      if (val === oldData) {
+        newVal = newData;
+        updated = 1;
+      }
+    }
+
+    if (updated > 0) {
+      await this.coll().updateOne(
+        key,
+        { $set: { [`data.${prefix}`]: newVal }, $currentDate: { 'meta.updatedAt': true }, $setOnInsert: { 'meta.createdAt': new Date() } },
+        { upsert: true },
+      );
+    }
+
+    return { updated };
   }
 
   async delete(_path: string): Promise<void> {
