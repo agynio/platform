@@ -89,6 +89,10 @@ export function RightPropertiesPanel({ node, onChange }: Props) {
         <div className="space-y-2">
           <div className="text-[10px] uppercase text-muted-foreground">Static Configuration</div>
           <StaticConfigForm
+            // Key ensures the form remounts when switching between different nodes/templates
+            // preventing the previous node's in-memory form state from leaking and overwriting
+            // the newly selected node's config (which caused empty config saves).
+            key={node.id}
             templateName={data.template}
             initialConfig={cfg}
             onConfigChange={(next) => update({ config: next })}

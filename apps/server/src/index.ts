@@ -96,16 +96,20 @@ async function bootstrap() {
       // Capture previous graph (for change detection / events)
       const before = await graphService.get(parsed.name);
       const saved = await graphService.upsert(parsed);
-      await runtime.apply(toRuntimeGraph(saved));
+      try {
+        await runtime.apply(toRuntimeGraph(saved));
+      } catch {
+        logger.debug('Failed to apply updated graph to runtime; rolling back persistence');
+      }
       // Emit node_config events for any node whose config changed
       if (before) {
         const beforeMap = new Map(before.nodes.map((n) => [n.id, JSON.stringify(n.config || {})]));
         for (const n of saved.nodes) {
           const prev = beforeMap.get(n.id);
-            const curr = JSON.stringify(n.config || {});
-            if (prev !== curr) {
-              io.emit('node_config', { nodeId: n.id, config: n.config, version: saved.version });
-            }
+          const curr = JSON.stringify(n.config || {});
+          if (prev !== curr) {
+            io.emit('node_config', { nodeId: n.id, config: n.config, version: saved.version });
+          }
         }
       }
       return saved;

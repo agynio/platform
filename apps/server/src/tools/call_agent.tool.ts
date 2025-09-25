@@ -21,7 +21,7 @@ const invocationSchema = z.object({
     ),
 });
 
-const configSchema = z.object({
+export const CallAgentToolStaticConfigSchema = z.object({
   description: z.string().min(1).optional(), // TODO: make description non optional
   name: z
     .string()
@@ -46,7 +46,7 @@ export class CallAgentTool extends BaseTool {
   }
 
   async setConfig(cfg: Record<string, unknown>): Promise<void> {
-    const parsed = configSchema.safeParse(cfg);
+  const parsed = CallAgentToolStaticConfigSchema.safeParse(cfg);
     if (!parsed.success) {
       throw new Error('Invalid CallAgentTool config');
     }

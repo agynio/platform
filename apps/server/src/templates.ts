@@ -1,18 +1,20 @@
 import { toJSONSchema } from 'zod';
 import { SimpleAgent, SimpleAgentStaticConfigSchema } from './agents/simple.agent';
-import { ContainerProviderEntity } from './entities/containerProvider.entity';
+import { ContainerProviderEntity, ContainerProviderStaticConfigSchema } from './entities/containerProvider.entity';
 import { TemplateRegistry } from './graph';
-import { LocalMCPServer, McpServerConfig } from './mcp';
+import { LocalMCPServer } from './mcp';
 import { CheckpointerService } from './services/checkpointer.service';
 import { ConfigService } from './services/config.service';
 import { ContainerService } from './services/container.service';
 import { LoggerService } from './services/logger.service';
 import { SlackService } from './services/slack.service';
-import { CallAgentTool } from './tools/call_agent.tool';
-import { GithubCloneRepoTool } from './tools/github_clone_repo';
-import { SendSlackMessageTool } from './tools/send_slack_message.tool';
-import { ShellTool } from './tools/shell_command';
+import { CallAgentTool, CallAgentToolStaticConfigSchema } from './tools/call_agent.tool';
+import { GithubCloneRepoTool, GithubCloneRepoToolStaticConfigSchema } from './tools/github_clone_repo';
+import { SendSlackMessageTool, SendSlackMessageToolStaticConfigSchema } from './tools/send_slack_message.tool';
+import { ShellTool, ShellToolStaticConfigSchema } from './tools/shell_command';
 import { SlackTrigger } from './triggers';
+import { SlackTriggerStaticConfigSchema } from './triggers/slack.trigger';
+import { LocalMcpServerStaticConfigSchema } from './mcp/localMcpServer';
 
 export interface TemplateRegistryDeps {
   logger: LoggerService;
@@ -40,7 +42,12 @@ export function buildTemplateRegistry(deps: TemplateRegistryDeps): TemplateRegis
       {
         sourcePorts: { $self: { kind: 'instance' } },
       },
-      { title: 'Workspace', kind: 'tool' },
+      {
+        title: 'Workspace',
+        kind: 'tool',
+        capabilities: { staticConfigurable: true },
+        staticConfigSchema: toJSONSchema(ContainerProviderStaticConfigSchema),
+      },
     )
     .register(
       'shellTool',
@@ -51,7 +58,12 @@ export function buildTemplateRegistry(deps: TemplateRegistryDeps): TemplateRegis
           containerProvider: { kind: 'method', create: 'setContainerProvider' },
         },
       },
-      { title: 'Shell', kind: 'tool' },
+      {
+        title: 'Shell',
+        kind: 'tool',
+        capabilities: { staticConfigurable: true },
+        staticConfigSchema: toJSONSchema(ShellToolStaticConfigSchema),
+      },
     )
     .register(
       'githubCloneRepoTool',
@@ -62,7 +74,12 @@ export function buildTemplateRegistry(deps: TemplateRegistryDeps): TemplateRegis
           containerProvider: { kind: 'method', create: 'setContainerProvider' },
         },
       },
-      { title: 'Github clone', kind: 'tool' },
+      {
+        title: 'Github clone',
+        kind: 'tool',
+        capabilities: { staticConfigurable: true },
+        staticConfigSchema: toJSONSchema(GithubCloneRepoToolStaticConfigSchema),
+      },
     )
     .register(
       'sendSlackMessageTool',
@@ -70,7 +87,12 @@ export function buildTemplateRegistry(deps: TemplateRegistryDeps): TemplateRegis
       {
         targetPorts: { $self: { kind: 'instance' } },
       },
-      { title: 'Send Slack message', kind: 'tool' },
+      {
+        title: 'Send Slack message',
+        kind: 'tool',
+        capabilities: { staticConfigurable: true },
+        staticConfigSchema: toJSONSchema(SendSlackMessageToolStaticConfigSchema),
+      },
     )
     .register(
       'callAgentTool',
@@ -79,7 +101,12 @@ export function buildTemplateRegistry(deps: TemplateRegistryDeps): TemplateRegis
         targetPorts: { $self: { kind: 'instance' } },
         sourcePorts: { agent: { kind: 'method', create: 'setAgent' } },
       },
-      { title: 'Call agent', kind: 'tool' },
+      {
+        title: 'Call agent',
+        kind: 'tool',
+        capabilities: { staticConfigurable: true },
+        staticConfigSchema: toJSONSchema(CallAgentToolStaticConfigSchema),
+      },
     )
     .register(
       'slackTrigger',
@@ -91,7 +118,12 @@ export function buildTemplateRegistry(deps: TemplateRegistryDeps): TemplateRegis
       {
         sourcePorts: { subscribe: { kind: 'method', create: 'subscribe', destroy: 'unsubscribe' } },
       },
-      { title: 'Slack trigger', kind: 'trigger', capabilities: { provisionable: true, pausable: true } },
+      {
+        title: 'Slack trigger',
+        kind: 'trigger',
+        capabilities: { provisionable: true, pausable: true, staticConfigurable: true },
+        staticConfigSchema: toJSONSchema(SlackTriggerStaticConfigSchema),
+      },
     )
     .register(
       'simpleAgent',
@@ -107,7 +139,6 @@ export function buildTemplateRegistry(deps: TemplateRegistryDeps): TemplateRegis
         title: 'Agent',
         kind: 'agent',
         capabilities: { pausable: true, staticConfigurable: true },
-        // Raw Zod -> JSON Schema (UI is responsible for any draft normalization / root extraction)
         staticConfigSchema: toJSONSchema(SimpleAgentStaticConfigSchema),
       },
     )
@@ -124,6 +155,11 @@ export function buildTemplateRegistry(deps: TemplateRegistryDeps): TemplateRegis
           containerProvider: { kind: 'method', create: 'setContainerProvider' },
         },
       },
-      { title: 'MCP Server', kind: 'mcp', capabilities: { provisionable: true } },
+      {
+        title: 'MCP Server',
+        kind: 'mcp',
+        capabilities: { provisionable: true, dynamicConfigurable: true, staticConfigurable: true },
+        staticConfigSchema: toJSONSchema(LocalMcpServerStaticConfigSchema),
+      },
     );
 }

@@ -10,6 +10,98 @@ function coerceSchema(s: unknown): JsonSchemaObject | null {
   return s && typeof s === 'object' ? (s as JsonSchemaObject) : null;
 }
 
+// Custom field for record-like objects (arbitrary key/value string map)
+interface KeyValueFieldProps {
+  formData?: Record<string, unknown>;
+  onChange: (val: Record<string, unknown>) => void;
+  schema: any; // eslint-disable-line @typescript-eslint/no-explicit-any
+  disabled?: boolean;
+  readonly?: boolean;
+  required?: boolean;
+}
+const KeyValueField = ({ formData, onChange, disabled, readonly }: KeyValueFieldProps) => {
+  const entries = Object.entries(formData || {});
+  const [newKey, setNewKey] = useState('');
+  const [newValue, setNewValue] = useState('');
+
+  const update = (k: string, v: unknown) => {
+    const next = { ...(formData || {}) } as Record<string, unknown>;
+    next[k] = v;
+    onChange(next);
+  };
+  const remove = (k: string) => {
+    const next = { ...(formData || {}) } as Record<string, unknown>;
+    delete next[k];
+    onChange(next);
+  };
+  const add = () => {
+    if (!newKey.trim()) return;
+    if ((formData || {})[newKey]) return; // ignore duplicate
+    const next = { ...(formData || {}) } as Record<string, unknown>;
+    next[newKey] = newValue;
+    onChange(next);
+    setNewKey('');
+    setNewValue('');
+  };
+
+  return (
+    <div className="space-y-2">
+      <div className="space-y-1">
+        {entries.length === 0 && <div className="text-[10px] text-muted-foreground">No entries</div>}
+        {entries.map(([k, v]) => (
+          <div key={k} className="flex items-center gap-2">
+            <input
+              className="w-40 rounded border bg-background px-2 py-1 text-[11px] font-mono"
+              value={k}
+              disabled
+              readOnly
+            />
+            <input
+              className="flex-1 rounded border bg-background px-2 py-1 text-[11px] font-mono"
+              value={typeof v === 'string' || typeof v === 'number' ? String(v) : ''}
+              onChange={(e) => update(k, e.target.value)}
+              disabled={disabled || readonly}
+            />
+            <button
+              type="button"
+              className="text-xs px-2 py-1 rounded border hover:bg-destructive/10 text-destructive"
+              onClick={() => remove(k)}
+              disabled={disabled || readonly}
+              aria-label={`Remove ${k}`}
+            >
+              ×
+            </button>
+          </div>
+        ))}
+      </div>
+      <div className="flex items-center gap-2">
+        <input
+          className="w-40 rounded border bg-background px-2 py-1 text-[11px] font-mono"
+          placeholder="key"
+          value={newKey}
+          onChange={(e) => setNewKey(e.target.value)}
+          disabled={disabled || readonly}
+        />
+        <input
+          className="flex-1 rounded border bg-background px-2 py-1 text-[11px] font-mono"
+          placeholder="value"
+          value={newValue}
+          onChange={(e) => setNewValue(e.target.value)}
+          disabled={disabled || readonly}
+        />
+        <button
+          type="button"
+          className="text-xs px-2 py-1 rounded border hover:bg-accent/50"
+          onClick={add}
+          disabled={disabled || readonly || !newKey.trim()}
+        >
+          Add
+        </button>
+      </div>
+    </div>
+  );
+};
+
 export default function StaticConfigForm({
   templateName,
   initialConfig,
@@ -187,6 +279,13 @@ export default function StaticConfigForm({
       if (!val || typeof val !== 'object') continue;
       const widget = (val as Record<string, unknown>)['ui:widget'];
       const options = (val as Record<string, unknown>)['ui:options'];
+      // Detect record-like additionalProperties objects (env maps, etc.)
+      const valObj = val as Record<string, unknown>;
+      if (valObj.type === 'object' && 'additionalProperties' in valObj) {
+        // Using KeyValueField for arbitrary maps
+        ui[key] = { 'ui:field': 'KeyValueField' } as UiSchemaFieldOptions as unknown as UiSchemaFieldOptions;
+        continue;
+      }
       if (typeof widget === 'string' || options) {
         ui[key] = {
           ...(typeof widget === 'string' ? { 'ui:widget': widget } : {}),
@@ -201,6 +300,9 @@ export default function StaticConfigForm({
     return <div className="text-sm text-gray-600">No static config available</div>;
   }
 
+  // Fields registry
+  const fieldsRegistry = { KeyValueField } as Record<string, unknown>;
+
   return (
     <div className="space-y-2">
       <Form
@@ -209,6 +311,8 @@ export default function StaticConfigForm({
         validator={validator}
         uiSchema={uiSchema as unknown as Record<string, unknown>}
         templates={{ FieldTemplate, ObjectFieldTemplate } as unknown as Record<string, unknown>}
+        // @ts-expect-error generic mismatch acceptable
+        fields={fieldsRegistry}
         widgets={widgets}
         onChange={({ formData: next }) => {
           touched.current = true;

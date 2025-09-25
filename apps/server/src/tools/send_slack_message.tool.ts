@@ -20,6 +20,9 @@ const sendSlackMessageSchema = z.object({
     ),
 });
 
+// Static config schema placeholder (none yet)
+export const SendSlackMessageToolStaticConfigSchema = z.object({}).strict();
+
 export class SendSlackMessageTool extends BaseTool {
   constructor(
     private slack: SlackService,

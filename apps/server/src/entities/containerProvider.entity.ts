@@ -1,5 +1,18 @@
 import { ContainerOpts, ContainerService } from '../services/container.service';
 import { ContainerEntity } from './container.entity';
+import { z } from 'zod';
+
+// Static configuration schema for ContainerProviderEntity
+// Allows overriding the base image and supplying environment variables.
+export const ContainerProviderStaticConfigSchema = z
+  .object({
+    image: z.string().min(1).optional().describe('Optional container image override.'),
+    env: z
+      .record(z.string().min(1), z.string())
+      .optional()
+      .describe('Environment variables to inject into started containers.'),
+  })
+  .strict();
 
 export class ContainerProviderEntity {
   private cfg?: Pick<ContainerOpts, 'image' | 'env'>;
