@@ -23,8 +23,10 @@ describe('CallModelNode memory injection', () => {
     const node = new CallModelNode([], llm);
     node.setSystemPrompt('sys');
 
+    const { makeFakeDb } = await import('./helpers/fakeDb');
+    const { db } = makeFakeDb();
     const logger = new LoggerService();
-    const svc = new MemoryService((global as any).__mongoDb || undefined, logger, {
+    const svc = new MemoryService(db as any, logger, {
       nodeId: 'cm',
       scope: 'global',
       threadResolver: () => undefined,

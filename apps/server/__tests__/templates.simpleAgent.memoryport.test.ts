@@ -19,11 +19,12 @@ const mockDeps = {
 describe('templates - simpleAgent memory port', () => {
   it('includes memory target port', () => {
     const reg = buildTemplateRegistry(mockDeps);
-    const schema = reg.toSchema();
-    const simple = schema['simpleAgent'];
+    const schemaArr = reg.toSchema();
+    const simple = schemaArr.find((s) => s.name === 'simpleAgent');
     expect(simple).toBeTruthy();
-    expect(simple.targetPorts?.memory).toBeTruthy();
-    expect(simple.targetPorts?.memory.kind).toBe('method');
-    expect(simple.targetPorts?.memory.create).toBe('setMemoryConnector');
+    const ports = reg.getPortsMap();
+    expect(ports.simpleAgent?.targetPorts?.memory).toBeTruthy();
+    expect(ports.simpleAgent?.targetPorts?.memory.kind).toBe('method');
+    expect(ports.simpleAgent?.targetPorts?.memory.create).toBe('setMemoryConnector');
   });
 });

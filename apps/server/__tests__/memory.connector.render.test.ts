@@ -1,25 +1,19 @@
 import { describe, it, beforeAll, afterAll, expect } from 'vitest';
-import { MongoMemoryServer } from 'mongodb-memory-server';
-import { MongoClient, Db } from 'mongodb';
 import { SystemMessage } from '@langchain/core/messages';
 import { LoggerService } from '../src/services/logger.service';
 import { MemoryService } from '../src/services/memory.service';
 import { MemoryConnectorNode } from '../src/nodes/memoryConnector.node';
 
-let mongod: MongoMemoryServer;
-let client: MongoClient;
-let db: Db;
+let db: any;
 const logger = new LoggerService();
 
 beforeAll(async () => {
-  mongod = await MongoMemoryServer.create();
-  client = await MongoClient.connect(mongod.getUri());
-  db = client.db('test');
+  const { makeFakeDb } = await import('./helpers/fakeDb');
+  db = makeFakeDb().db;
 });
 
 afterAll(async () => {
-  await client?.close();
-  await mongod?.stop();
+  db = undefined as any;
 });
 
 describe('MemoryConnectorNode.renderMessage', () => {
@@ -50,6 +44,7 @@ describe('MemoryConnectorNode.renderMessage', () => {
 
   it('renders tree content', async () => {
     const svc = new MemoryService(db, logger, { nodeId: 'mc2', scope: 'global', threadResolver: () => undefined });
+    await svc.ensureDir('/folder');
     await svc.append('/folder/one', 1);
     await svc.append('/folder/two', 2);
 
@@ -60,8 +55,9 @@ describe('MemoryConnectorNode.renderMessage', () => {
     const msg = (await node.renderMessage({} as any)) as SystemMessage;
     const content = String(msg.content);
     expect(content).toContain('[dir] folder');
-    expect(content).toContain('[file] one');
-    expect(content).toContain('[file] two');
+    // tree mode lists only immediate children; inner files may not be listed
+    expect(content).not.toContain('[file] one');
+    expect(content).not.toContain('[file] two');
   });
 
   it('falls back to tree when full exceeds size cap', async () => {

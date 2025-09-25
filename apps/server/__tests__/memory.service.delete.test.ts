@@ -1,12 +1,8 @@
 import { describe, it, beforeAll, afterAll, expect } from 'vitest';
-import { MongoMemoryServer } from 'mongodb-memory-server';
-import { MongoClient, Db } from 'mongodb';
 import { LoggerService } from '../src/services/logger.service';
 import { MemoryService } from '../src/services/memory.service';
 
-let mongod: MongoMemoryServer;
-let client: MongoClient;
-let db: Db;
+let db: any;
 const logger = new LoggerService();
 const NODE_ID = 'node-delete';
 
@@ -15,14 +11,12 @@ async function svc(scope: 'global' | 'perThread', threadId?: string) {
 }
 
 beforeAll(async () => {
-  mongod = await MongoMemoryServer.create();
-  client = await MongoClient.connect(mongod.getUri());
-  db = client.db('test');
+  const { makeFakeDb } = await import('./helpers/fakeDb');
+  db = makeFakeDb().db;
 });
 
 afterAll(async () => {
-  await client?.close();
-  await mongod?.stop();
+  db = undefined as any;
 });
 
 describe('MemoryService.delete', () => {
