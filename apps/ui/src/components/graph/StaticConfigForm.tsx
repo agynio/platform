@@ -3,6 +3,7 @@ import Form from '@rjsf/core';
 import validator from '@rjsf/validator-ajv8';
 import type { ReactNode } from 'react';
 import { useEffect, useRef, useState, useMemo } from 'react';
+import { Switch } from '@/components/ui/switch';
 import { useTemplatesCache } from '../../lib/graph/templates.provider';
 
 type JsonSchemaObject = { [k: string]: unknown };
@@ -257,6 +258,18 @@ export default function StaticConfigForm({
         onChange={(e) => p.onChange(e.target.value === '' ? undefined : Number(e.target.value))}
         className="w-full rounded border bg-background px-2 py-1 text-xs"
       />
+    ),
+    // Override default boolean (checkbox) widget with a styled Switch
+    CheckboxWidget: (p) => (
+      <div className="flex items-center h-5">
+        <Switch
+          id={p.id}
+          checked={Boolean(p.value)}
+          // Radix Switch uses onCheckedChange returning boolean
+          onCheckedChange={(checked) => p.onChange(checked)}
+          disabled={p.disabled || p.readonly}
+        />
+      </div>
     ),
   } as const;
 
