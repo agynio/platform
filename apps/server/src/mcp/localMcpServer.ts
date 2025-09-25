@@ -434,8 +434,11 @@ export class LocalMCPServer implements McpServer, Provisionable, DynamicConfigur
       else w.resolve();
     }
     this.pendingStart = undefined;
-    if (err) this.emitter.emit('error', err);
-    else this.emitter.emit('ready');
+    if (err) {
+      // Only emit 'error' if there are registered listeners to avoid unhandled error events
+      if (this.emitter.listenerCount('error') > 0) this.emitter.emit('error', err);
+      else this.logger.error(`[MCP:${this.namespace}] Unhandled start error: ${err?.message || err}`);
+    } else this.emitter.emit('ready');
   }
 
   private maybeStart() {
@@ -510,8 +513,9 @@ export class LocalMCPServer implements McpServer, Provisionable, DynamicConfigur
       } catch (e: any) {
         this.logger.error(`[MCP:${this.namespace}] Start attempt failed: ${e.message}`);
         this.restartAttempts++;
+        // Immediately reject any pending starters so callers of provision() can observe the error
+        this.flushStartWaiters(e);
         if (this.restartAttempts >= restartCfg.maxAttempts) {
-          this.flushStartWaiters(e);
           return;
         }
         const backoff = restartCfg.backoffMs * Math.pow(2, this.restartAttempts - 1);

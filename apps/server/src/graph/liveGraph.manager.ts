@@ -26,6 +26,9 @@ export class LiveGraphRuntime {
     lastGraph: undefined,
   };
 
+  // Track paused state for nodes that don't implement isPaused()
+  private pausedFallback = new Set<string>();
+
   private applying: Promise<any> = Promise.resolve(); // serialize updates
   private portsRegistry: PortsRegistry;
 
@@ -60,10 +63,12 @@ export class LiveGraphRuntime {
   async pauseNode(id: string): Promise<void> {
     const inst: any = this.state.nodes.get(id)?.instance;
     if (inst && typeof inst.pause === 'function') await inst.pause();
+    else this.pausedFallback.add(id);
   }
   async resumeNode(id: string): Promise<void> {
     const inst: any = this.state.nodes.get(id)?.instance;
     if (inst && typeof inst.resume === 'function') await inst.resume();
+    else this.pausedFallback.delete(id);
   }
   async provisionNode(id: string): Promise<void> {
     const inst: any = this.state.nodes.get(id)?.instance;
@@ -78,8 +83,12 @@ export class LiveGraphRuntime {
     const out: { isPaused?: boolean; provisionStatus?: ProvisionStatus; dynamicConfigReady?: boolean } = {};
     if (inst) {
       if (typeof inst.isPaused === 'function') out.isPaused = !!inst.isPaused();
+      else out.isPaused = this.pausedFallback.has(id);
       if (typeof inst.getProvisionStatus === 'function') out.provisionStatus = inst.getProvisionStatus();
       if (typeof inst.isDynamicConfigReady === 'function') out.dynamicConfigReady = !!inst.isDynamicConfigReady();
+    } else {
+      // if instance missing, report paused=false by default
+      out.isPaused = this.pausedFallback.has(id);
     }
     return out;
   }
