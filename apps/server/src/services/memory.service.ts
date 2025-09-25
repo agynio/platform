@@ -185,8 +185,68 @@ export class MemoryService {
   }
 
   // Mutating APIs to be implemented later
-  async append(_path: string, _data: any): Promise<void> {
-    throw new NotImplementedError('append');
+  async append(path: string, data: any): Promise<void> {
+    const prefix = this.normalizePath(path);
+    const { key, doc } = await this.getDoc();
+    const dataRoot = doc?.data ?? {};
+
+    if (prefix === '') throw new Error('Cannot append at root');
+
+    const parentPath = prefix.split('.').slice(0, -1).join('.');
+    const leaf = prefix.split('.').slice(-1)[0]!;
+    const parent = parentPath ? this.getAt(dataRoot, parentPath) : { found: true, value: dataRoot };
+
+    if (!parent.found) {
+      // create missing parents as objects via $set of entire path to object chain
+      // But we can directly $set leaf; Mongo will create ancestors implicitly
+    }
+
+    // Check current value
+    const current = this.getAt(dataRoot, prefix);
+
+    if (!current.found) {
+      // set to data
+      await this.coll().updateOne(
+        key,
+        { $set: { [`data.${prefix}`]: data }, $setOnInsert: { 'meta.createdAt': new Date() }, $currentDate: { 'meta.updatedAt': true } },
+        { upsert: true },
+      );
+      return;
+    }
+
+    const val = current.value;
+    if (this.isDirValue(val)) throw new Error('Cannot append to a directory');
+
+    let newVal: any;
+    if (Array.isArray(val)) {
+      if (Array.isArray(data)) newVal = [...val, ...data];
+      else newVal = [...val, data];
+    } else if (typeof val === 'string') {
+      newVal = val.length ? `${val}\n${String(data)}` : String(data);
+    } else if (this.isDirValue(val)) {
+      // Already handled; just to satisfy TS
+      throw new Error('Cannot append to a directory');
+    } else if (val !== null && typeof val === 'object') {
+      // unreachable due to isDirValue; keep for completeness
+      newVal = { ...(val as any), ...(typeof data === 'object' && !Array.isArray(data) ? data : {}) };
+    } else if (typeof val === 'object' && !Array.isArray(val)) {
+      // shallow merge if both objects
+      if (typeof data === 'object' && data !== null && !Array.isArray(data)) newVal = Object.assign({}, val, data);
+      else newVal = [val, data];
+    } else if (typeof val === 'string') {
+      newVal = val + '\n' + String(data);
+    } else if (Array.isArray(val)) {
+      newVal = Array.isArray(data) ? [...val, ...data] : [...val, data];
+    } else {
+      // primitive
+      newVal = [val, data];
+    }
+
+    await this.coll().updateOne(
+      key,
+      { $set: { [`data.${prefix}`]: newVal }, $currentDate: { 'meta.updatedAt': true }, $setOnInsert: { 'meta.createdAt': new Date() } },
+      { upsert: true },
+    );
   }
 
   async update(_path: string, _oldData: any, _newData: any): Promise<void> {
