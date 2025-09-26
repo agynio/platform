@@ -1,0 +1,60 @@
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { SimpleAgent } from '../src/agents/simple.agent';
+import { LocalMCPServer } from '../src/mcp/localMcpServer';
+import { LoggerService } from '../src/services/logger.service';
+import { ConfigService } from '../src/services/config.service';
+import { CheckpointerService } from '../src/services/checkpointer.service';
+import type { McpTool, McpServerConfig } from '../src/mcp/types';
+
+// Mocks
+class MockLogger extends LoggerService { info=vi.fn(); debug=vi.fn(); error=vi.fn(); }
+class MockContainerService { getDocker(){ return {}; } }
+class MockConfigService extends ConfigService { constructor(){ super({ openaiApiKey: 'test' } as any); } }
+class MockCheckpointerService extends CheckpointerService { constructor(){ super(new MockLogger()); } getCheckpointer(){ return { get: async ()=>undefined, put: async ()=>undefined } as any; } }
+
+// Minimal mock provider
+const mockProvider = { provide: async (id: string) => ({ id: `c-${id}`, stop: async () => {}, remove: async () => {} }) };
+
+describe('MCP dynamic tool enable/disable sync', () => {
+  let server: LocalMCPServer;
+  let agent: SimpleAgent;
+  let logger: any;
+
+  beforeEach(async () => {
+    logger = new MockLogger();
+    server = new LocalMCPServer(new MockContainerService() as any, logger as any);
+    (server as any).setContainerProvider(mockProvider as any);
+  await server.setConfig({ namespace: 'ns', command: 'cmd' } as any);
+
+    // Stub discovery with two tools
+    (server as any).discoverTools = vi.fn(async () => {
+      (server as any).toolsCache = [ { name: 'a', description: 'A' }, { name: 'b', description: 'B' } ];
+      (server as any).toolsDiscovered = true;
+      return (server as any).toolsCache as McpTool[];
+    });
+
+    const configService = new MockConfigService();
+    const cps = new MockCheckpointerService();
+    agent = new SimpleAgent(configService as any, logger as any, cps as any, 'agent1');
+    await server.provision();
+    await agent.addMcpServer(server);
+    // Manually emit ready since we bypassed real start events
+    (server as any).emitter.emit('ready');
+  });
+
+  it('removes disabled tools and adds re-enabled tools', async () => {
+    // Initially both tools
+    let tools = await server.listTools();
+    expect(tools.map(t=>t.name).sort()).toEqual(['a','b']);
+
+    // Disable 'b'
+    server.setDynamicConfig({ a: true, b: false });
+    tools = await server.listTools();
+    expect(tools.map(t=>t.name)).toEqual(['a']);
+
+    // Re-enable 'b'
+    server.setDynamicConfig({ a: true, b: true });
+    tools = await server.listTools();
+    expect(tools.map(t=>t.name).sort()).toEqual(['a','b']);
+  });
+});

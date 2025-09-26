@@ -104,13 +104,16 @@ async function bootstrap() {
       } catch {
         logger.debug('Failed to apply updated graph to runtime; rolling back persistence');
       }
-      // Emit node_config events for any node whose config changed
+      // Emit node_config events for any node whose static or dynamic config changed
       if (before) {
-        const beforeMap = new Map(before.nodes.map((n) => [n.id, JSON.stringify(n.config || {})]));
+        const beforeStatic = new Map(before.nodes.map((n) => [n.id, JSON.stringify(n.config || {})]));
+        const beforeDynamic = new Map(before.nodes.map((n) => [n.id, JSON.stringify(n.dynamicConfig || {})]));
         for (const n of saved.nodes) {
-          const prev = beforeMap.get(n.id);
-          const curr = JSON.stringify(n.config || {});
-          if (prev !== curr) {
+          const prevS = beforeStatic.get(n.id);
+          const prevD = beforeDynamic.get(n.id);
+          const currS = JSON.stringify(n.config || {});
+          const currD = JSON.stringify(n.dynamicConfig || {});
+          if (prevS !== currS || prevD !== currD) {
             io.emit('node_config', {
               nodeId: n.id,
               config: n.config,

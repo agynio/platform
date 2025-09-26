@@ -80,6 +80,9 @@ export class LocalMCPServer implements McpServer, Provisionable, DynamicConfigur
   private _enabledTools: Set<string> | undefined;
   // Cached dynamic config zod schema (rebuilt after discovery)
   private _dynamicConfigZodSchema?: z.ZodTypeAny;
+  // Dynamic config change listeners (normalized config record)
+  private _dynCfgListeners: Array<(cfg: Record<string, boolean>) => void> = [];
+  private _lastEnabledSig?: string; // signature of last emitted enabled set for change detection
 
   constructor(
     private containerService: ContainerService,
@@ -165,9 +168,24 @@ export class LocalMCPServer implements McpServer, Provisionable, DynamicConfigur
 
       this.logger.info(`[MCP:${this.namespace}] [disc:${discoveryId}] Discovered ${this.toolsCache.length} tools`);
       this.toolsDiscovered = true;
-      // Initialize dynamic enabled set to all tools by default
-      this._enabledTools = undefined; // undefined means "all enabled"
-      this._dynamicConfigZodSchema = undefined; // invalidate dynamic schema cache
+      // Invalidate dynamic schema cache so it will be rebuilt including newly discovered tools
+      this._dynamicConfigZodSchema = undefined;
+      // If user supplied a dynamic config before discovery completed, we preserve it.
+      // Only default to "all enabled" when no prior config was set (i.e. _enabledTools is undefined).
+      // (Earlier implementation unconditionally reset _enabledTools which discarded early user config
+      // and prevented onDynamicConfigChanged from firing post-discovery.)
+      if (this._enabledTools === undefined) {
+        // Leave as undefined meaning "all enabled".
+      } else {
+        // We have a pre-existing enabled set provided earlier; emit change now that tools are known.
+        const sig = this.enabledSignature();
+        if (sig !== this._lastEnabledSig) {
+          this._lastEnabledSig = sig;
+          // Emit without logging verbose diff here (setDynamicConfig already logs when invoked) –
+          // this path only occurs for early configs applied pre-discovery.
+          this.emitDynamicConfigChanged();
+        }
+      }
     } catch (err) {
       this.logger.error(`[MCP:${this.namespace}] [disc:${discoveryId}] Tool discovery failed: ${err}`);
     } finally {
@@ -469,6 +487,25 @@ export class LocalMCPServer implements McpServer, Provisionable, DynamicConfigur
       if (on) enabled.add(name);
     }
     this._enabledTools = enabled;
+
+    // Emit change event if discovery done and enabled set actually changed
+    if (this.toolsDiscovered && this.toolsCache) {
+      const sig = this.enabledSignature();
+      if (sig !== this._lastEnabledSig) {
+        this._lastEnabledSig = sig;
+        const enabledList = this.currentNormalizedDynamicConfig();
+        const on = Object.entries(enabledList)
+          .filter(([, v]) => v)
+          .map(([k]) => k);
+        const off = Object.entries(enabledList)
+          .filter(([, v]) => !v)
+          .map(([k]) => k);
+        this.logger.info(
+          `[MCP:${this.namespace}] Dynamic config changed: enabled=[${on.join(', ')}] disabled=[${off.join(', ')}]`,
+        );
+        this.emitDynamicConfigChanged();
+      }
+    }
   }
 
   // Build zod schema representing dynamic config: flat shape { toolName?: boolean } (default true)
@@ -482,6 +519,48 @@ export class LocalMCPServer implements McpServer, Provisionable, DynamicConfigur
         .describe(t.description || '');
     }
     return z.object(shape).strict();
+  }
+
+  // Provide subscription for dynamic config changes (interface optional method)
+  onDynamicConfigChanged(listener: (cfg: Record<string, boolean>) => void): () => void {
+    this._dynCfgListeners.push(listener);
+    // If we already have discovery + an enabled signature, emit current immediately so listeners can sync
+    if (this.toolsDiscovered && this.toolsCache) {
+      const current = this.currentNormalizedDynamicConfig();
+      try {
+        listener(current);
+      } catch {}
+    }
+    return () => {
+      this._dynCfgListeners = this._dynCfgListeners.filter((l) => l !== listener);
+    };
+  }
+
+  private emitDynamicConfigChanged() {
+    const cfg = this.currentNormalizedDynamicConfig();
+    for (const l of this._dynCfgListeners) {
+      try {
+        l(cfg);
+      } catch (e) {
+        this.logger.error(`[MCP:${this.namespace}] dynamic config listener error: ${e}`);
+      }
+    }
+  }
+
+  private currentNormalizedDynamicConfig(): Record<string, boolean> {
+    const out: Record<string, boolean> = {};
+    for (const t of this.toolsCache || []) {
+      out[t.name] = this._enabledTools ? this._enabledTools.has(t.name) : true;
+    }
+    return out;
+  }
+
+  private enabledSignature(): string {
+    if (!this.toolsCache) return 'none';
+    return (this.toolsCache || [])
+      .map((t) => `${t.name}:${this._enabledTools ? (this._enabledTools.has(t.name) ? 1 : 0) : 1}`)
+      .sort()
+      .join('|');
   }
 
   // ----------------- Resilient start internals -----------------

@@ -73,12 +73,9 @@ export function useDynamicConfig(nodeId: string) {
     mutationFn: async (dynCfg: Record<string, unknown>) => {
       // Fetch current graph, update node config.dynamic (namespaced) and save full graph
       const graph = await (await fetch(`${location.protocol}//${location.hostname}:3010/api/graph`)).json();
-      const node = (graph.nodes as Array<{ id: string; config?: Record<string, unknown> }>).find(
-        (n) => n.id === nodeId,
-      );
+      const node = (graph.nodes as Array<{ id: string; config?: Record<string, unknown>; dynamicConfig?: Record<string, unknown> }>).find((n) => n.id === nodeId);
       if (node) {
-        const existing = (node.config || {}) as Record<string, unknown>;
-        node.config = { ...existing, dynamic: dynCfg };
+        node.dynamicConfig = { ...(dynCfg || {}) } as Record<string, unknown>;
       }
       await fetch(`${location.protocol}//${location.hostname}:3010/api/graph`, {
         method: 'POST',

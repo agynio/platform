@@ -43,6 +43,7 @@ export interface GraphDiffResult {
   removedNodes: string[];
   recreatedNodes: string[];
   updatedConfigNodes: string[];
+  updatedDynamicConfigNodes: string[]; // newly added dynamic config updates
   addedEdges: string[]; // edge keys
   removedEdges: string[]; // edge keys
   errors: GraphError[];
@@ -54,6 +55,7 @@ export interface InternalDiffComputation {
   removedNodeIds: string[];
   recreatedNodeIds: string[];
   configUpdateNodeIds: string[];
+  dynamicConfigUpdateNodeIds: string[]; // track dynamic config diffs separately
   addedEdges: EdgeDef[];
   removedEdges: EdgeDef[];
 }

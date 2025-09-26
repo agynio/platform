@@ -11,6 +11,7 @@ export interface NodeDef {
   data: {
     template: string; // template name registered in TemplateRegistry
     config?: Record<string, unknown>; // optional configuration passed via instance.setConfig
+    dynamicConfig?: Record<string, unknown>; // optional dynamic configuration passed via instance.setDynamicConfig
   };
 }
 

@@ -36,5 +36,12 @@ export interface DynamicConfigurable<Config = Record<string, unknown>> {
   isDynamicConfigReady(): boolean;
   getDynamicConfigSchema(): JSONSchema.BaseSchema | undefined;
   setDynamicConfig(cfg: Config): Promise<void> | void;
-  onDynamicConfigChanged?(listener: (cfg: Config) => void): () => void;
+  onDynamicConfigChanged(listener: (cfg: Config) => void): () => void;
+}
+
+// ---------- Type guards ----------
+export function isDynamicConfigurable<Config = Record<string, unknown>>(
+  obj: unknown,
+): obj is DynamicConfigurable<Config> {
+  return !!obj && typeof (obj as any).isDynamicConfigReady === 'function';
 }

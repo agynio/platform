@@ -13,6 +13,7 @@ import {
 import { ChatOpenAI } from '@langchain/openai';
 import { last } from 'lodash-es';
 import { McpServer, McpTool } from '../mcp';
+import { isDynamicConfigurable } from '../graph/capabilities';
 import { inferArgsSchema } from '../mcp/jsonSchemaToZod';
 import { CallModelNode } from '../nodes/callModel.node';
 import { ToolsNode } from '../nodes/tools.node';
@@ -200,6 +201,74 @@ export class SimpleAgent extends BaseAgent {
     server.on('error', (err: any) => {
       this.loggerService.error(`MCP server ${namespace} error before tool registration: ${err?.message || err}`);
     });
+
+    // Dynamic config synchronization: if server supports DynamicConfigurable, re-sync tool list
+    if (isDynamicConfigurable<Record<string, boolean>>(server)) {
+      server.onDynamicConfigChanged(async () => {
+        // Re-list tools (already filtered by server dynamic config) and diff against currently registered
+        try {
+          const tools: McpTool[] = await server.listTools();
+          const desiredNames = new Set(tools.map((t) => `${namespace}_${t.name}`));
+          const existing = this.mcpServerTools.get(server) || [];
+          const existingByName = new Map(existing.map((tool) => [tool.init().name, tool]));
+
+          const existingNames = new Set(existingByName.keys());
+          const removedNames: string[] = [];
+          const addedNames: string[] = [];
+          for (const name of existingNames) if (!desiredNames.has(name)) removedNames.push(name);
+          for (const name of desiredNames) if (!existingNames.has(name)) addedNames.push(name);
+          if (addedNames.length || removedNames.length) {
+            this.loggerService.info(
+              `Dynamic MCP tool sync (${namespace}) diff: +[${addedNames.join(', ')}] -[${removedNames.join(', ')}]`,
+            );
+          } else {
+            this.loggerService.debug?.(`Dynamic MCP tool sync (${namespace}) no changes`);
+          }
+
+          // Remove tools no longer enabled
+          for (const [name, tool] of existingByName.entries()) {
+            if (!desiredNames.has(name)) {
+              this.removeTool(tool as BaseTool);
+              this.mcpServerTools.set(
+                server,
+                (this.mcpServerTools.get(server) || []).filter((t) => t !== tool),
+              );
+            }
+          }
+          // Add newly enabled tools not present
+          for (const t of tools) {
+            const toolName = `${namespace}_${t.name}`;
+            if (!existingByName.has(toolName)) {
+              const schema = inferArgsSchema(t.inputSchema);
+              const dynamic = lcTool(
+                async (raw, config) => {
+                  this.loggerService.info(
+                    `Calling MCP tool ${t.name} in namespace ${namespace} with input: ${JSON.stringify(raw)}`,
+                  );
+                  const threadId = config?.configurable?.thread_id;
+                  const res = await server.callTool(t.name, raw, { threadId });
+                  if (res.structuredContent) return JSON.stringify(res.structuredContent);
+                  return res.content || '';
+                },
+                {
+                  name: toolName,
+                  description: t.description || `MCP tool ${t.name}`,
+                  schema,
+                },
+              );
+              const adapted = new LangChainToolAdapter(dynamic);
+              this.addTool(adapted);
+              const updated = this.mcpServerTools.get(server) || [];
+              updated.push(adapted);
+              this.mcpServerTools.set(server, updated);
+            }
+          }
+        } catch (e) {
+          const err = e as Error;
+          this.loggerService.error(`Failed dynamic MCP tool sync for ${namespace}: ${err.message}`);
+        }
+      });
+    }
   }
 
   /**

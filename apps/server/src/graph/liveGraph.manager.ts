@@ -14,7 +14,7 @@ import { PortsRegistry } from './ports.registry';
 import { TemplateRegistry } from './templateRegistry';
 import type { Pausable, ProvisionStatus, Provisionable, DynamicConfigurable } from './capabilities';
 
-const configsEqual = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
+const configsEqual = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b); // unchanged
 
 export class LiveGraphRuntime {
   private state: GraphRuntimeState = {
@@ -178,6 +178,18 @@ export class LiveGraphRuntime {
         // non-fatal
       }
     }
+    // 2b. Dynamic config updates
+    for (const nodeId of (diff as any).dynamicConfigUpdateNodeIds || []) {
+      const nodeDef = next.nodes.find((n) => n.id === nodeId)!;
+      const live = this.state.nodes.get(nodeId);
+      if (!live) continue;
+      try {
+        const dynSetter = (live.instance as any)['setDynamicConfig'];
+        if (typeof dynSetter === 'function') await (dynSetter as Function).call(live.instance, nodeDef.data.dynamicConfig || {});
+      } catch (e) {
+        logger?.error?.('Dynamic config update failed', nodeId, e);
+      }
+    }
 
     // 3. Remove edges (reverse if needed) BEFORE removing nodes
     for (const rem of diff.removedEdges) {
@@ -217,6 +229,7 @@ export class LiveGraphRuntime {
       removedNodes: diff.removedNodeIds,
       recreatedNodes: diff.recreatedNodeIds,
       updatedConfigNodes: diff.configUpdateNodeIds,
+      updatedDynamicConfigNodes: (diff as any).dynamicConfigUpdateNodeIds || [],
       addedEdges: diff.addedEdges.map(edgeKey),
       removedEdges: diff.removedEdges.map(edgeKey),
       errors,
@@ -228,10 +241,11 @@ export class LiveGraphRuntime {
   private computeDiff(prev: GraphDefinition, next: GraphDefinition): InternalDiffComputation {
     const prevNodes = new Map(prev.nodes.map((n) => [n.id, n]));
     const nextNodes = new Map(next.nodes.map((n) => [n.id, n]));
-    const addedNodes: NodeDef[] = [];
-    const removedNodeIds: string[] = [];
-    const recreatedNodeIds: string[] = [];
-    const configUpdateNodeIds: string[] = [];
+  const addedNodes: NodeDef[] = [];
+  const removedNodeIds: string[] = [];
+  const recreatedNodeIds: string[] = [];
+  const configUpdateNodeIds: string[] = [];
+  const dynamicConfigUpdateNodeIds: string[] = [];
 
     // Nodes
     for (const n of next.nodes) {
@@ -244,9 +258,10 @@ export class LiveGraphRuntime {
         } else {
           const prevCfg = prevNode.data.config || {};
           const nextCfg = n.data.config || {};
-          if (!configsEqual(prevCfg, nextCfg)) {
-            configUpdateNodeIds.push(n.id);
-          }
+          if (!configsEqual(prevCfg, nextCfg)) configUpdateNodeIds.push(n.id);
+          const prevDyn = (prevNode.data as any).dynamicConfig || {};
+          const nextDyn = (n.data as any).dynamicConfig || {};
+          if (!configsEqual(prevDyn, nextDyn)) dynamicConfigUpdateNodeIds.push(n.id);
         }
       }
     }
@@ -262,7 +277,7 @@ export class LiveGraphRuntime {
     for (const [k, e] of nextEdgeMap.entries()) if (!prevEdgeMap.has(k)) addedEdges.push(e);
     for (const [k, e] of prevEdgeMap.entries()) if (!nextEdgeMap.has(k)) removedEdges.push(e);
 
-    return { addedNodes, removedNodeIds, recreatedNodeIds, configUpdateNodeIds, addedEdges, removedEdges };
+    return { addedNodes, removedNodeIds, recreatedNodeIds, configUpdateNodeIds, dynamicConfigUpdateNodeIds, addedEdges, removedEdges } as any;
   }
 
   private async instantiateNode(node: NodeDef): Promise<void> {
@@ -280,6 +295,16 @@ export class LiveGraphRuntime {
     if (node.data.config) {
       const setter = (created as any)['setConfig'];
       if (typeof setter === 'function') await (setter as Function).call(created, node.data.config);
+    }
+    if (node.data.dynamicConfig) { // New block for dynamic config
+      const dynSetter = (created as any)['setDynamicConfig'];
+      if (typeof dynSetter === 'function') {
+        try {
+          await (dynSetter as Function).call(created, node.data.dynamicConfig);
+        } catch (e) {
+          this.logger.error('Initial dynamic config apply failed', node.id, e);
+        }
+      }
     }
   }
 
