@@ -23,7 +23,9 @@ export interface UseCheckpointStreamParams {
 
 type Status = 'idle' | 'connecting' | 'ready' | 'error';
 
-interface InitialPayload { items: any[] } // eslint-disable-line @typescript-eslint/no-explicit-any
+interface InitialPayload {
+  items: any[];
+} // eslint-disable-line @typescript-eslint/no-explicit-any
 
 export function useCheckpointStream({
   url = 'http://localhost:3010',
@@ -32,6 +34,8 @@ export function useCheckpointStream({
   maxItems = 500,
   autoStart = true,
 }: UseCheckpointStreamParams) {
+  // Channels we do not want to keep in the in-memory list (internal branch transitions, etc.)
+  const EXCLUDED_CHANNELS = useRef<Set<string>>(new Set(['branch:to:call_model', 'branch:to:summarize', 'summary']));
   const [items, setItems] = useState<CheckpointWriteClient[]>([]);
   const [status, setStatus] = useState<Status>('idle');
   const [error, setError] = useState<string | null>(null);
@@ -43,7 +47,11 @@ export function useCheckpointStream({
 
   const disconnect = useCallback(() => {
     if (socketRef.current) {
-      try { socketRef.current.disconnect(); } catch { /* ignore */ }
+      try {
+        socketRef.current.disconnect();
+      } catch {
+        /* ignore */
+      }
       socketRef.current = null;
     }
   }, []);
@@ -64,30 +72,36 @@ export function useCheckpointStream({
 
     socket.on('initial', (payload: InitialPayload) => {
       if (sessionRef.current !== sid) return; // stale
-      const normalized = payload.items.map((n: any) => ({ // eslint-disable-line @typescript-eslint/no-explicit-any
-        ...n,
-        createdAt: new Date(n.createdAt),
-      }));
+      const normalized = payload.items
+        .filter((n: any) => !EXCLUDED_CHANNELS.current.has(n.channel)) // eslint-disable-line @typescript-eslint/no-explicit-any
+        .map((n: any) => ({
+          // eslint-disable-line @typescript-eslint/no-explicit-any
+          ...n,
+          createdAt: new Date(n.createdAt),
+        }));
       setItems(normalized);
       setStatus('ready');
     });
 
-    socket.on('append', (doc: any) => { // eslint-disable-line @typescript-eslint/no-explicit-any
+    socket.on('append', (doc: any) => {
+      // eslint-disable-line @typescript-eslint/no-explicit-any
       if (sessionRef.current !== sid) return;
       if (isPaused) return;
-      setItems(prev => {
-        if (prev.some(p => p.id === doc.id)) return prev; // dedupe
+      if (EXCLUDED_CHANNELS.current.has(doc.channel)) return;
+      setItems((prev) => {
+        if (prev.some((p) => p.id === doc.id)) return prev; // dedupe
         const next = [...prev, { ...doc, createdAt: new Date(doc.createdAt) }];
         if (next.length > maxItems) {
           const overflow = next.length - maxItems;
-            setDropped(d => d + overflow);
-            return next.slice(overflow);
+          setDropped((d) => d + overflow);
+          return next.slice(overflow);
         }
         return next;
       });
     });
 
-    socket.on('error', (e: any) => { // eslint-disable-line @typescript-eslint/no-explicit-any
+    socket.on('error', (e: any) => {
+      // eslint-disable-line @typescript-eslint/no-explicit-any
       if (sessionRef.current !== sid) return;
       setError(e?.message || 'Unknown error');
       setStatus('error');

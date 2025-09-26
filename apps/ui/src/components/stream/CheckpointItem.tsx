@@ -6,11 +6,30 @@ import { ToolCheckpointItem } from './ToolCheckpointItem';
 import { CheckpointItemUI } from './CheckpointItemUI';
 import type { ParsedMessage, ParsedMessageType, ToolCall } from './parsedMessage';
 
+// The checkpoint write "value" can arrive in several shapes depending on LangGraph / LangChain
+// serialization versions we encounter:
+// 1. Legacy: value is an array of message objects: [ { id: [...], kwargs: { content: string | object, ... } } ]
+// 2. Newer (observed): value is an envelope { method: 'append' | 'replace', items: [ { lc, type, id: [...], kwargs: {...} } ] }
+// 3. Raw scalar / object: fall back to JSON display as unknown.
 function parseValue(value: unknown): ParsedMessage {
   try {
+    // Unwrap envelope format: { method, items: [...] }
+    if (
+      value &&
+      typeof value === 'object' &&
+      !Array.isArray(value) &&
+      'items' in (value as Record<string, unknown>) &&
+      Array.isArray((value as Record<string, unknown>).items)
+    ) {
+      const v = value as { items: unknown[] };
+      // For downstream logic we mimic legacy array form
+      return parseValue(v.items as unknown); // recursion will hit array branch below
+    }
+
     if (Array.isArray(value) && value.length > 0 && typeof value[0] === 'object' && value[0] !== null) {
-      const first = value[0] as { id?: string[]; kwargs?: Record<string, unknown> };
-      const ids: string[] | undefined = first.id;
+      const first = value[0] as { id?: unknown; kwargs?: Record<string, unknown> };
+      // In some versions id is already a string[]; in others it's like ['langchain_core','messages','AIMessage']
+      const ids: string[] | undefined = Array.isArray(first.id) ? (first.id as string[]) : undefined;
       const kwargs = (first.kwargs || {}) as Record<string, unknown> & {
         content?: unknown;
         tool_calls?: unknown;
@@ -18,19 +37,20 @@ function parseValue(value: unknown): ParsedMessage {
         additional_kwargs?: { tool_calls?: unknown };
       };
       let kind: ParsedMessageType = 'unknown';
-      if (ids?.includes('HumanMessage')) kind = 'human';
-      else if (ids?.includes('AIMessage')) kind = 'ai';
-      else if (ids?.includes('ToolMessage')) kind = 'tool';
+      if (ids?.some((i) => /HumanMessage$/.test(i))) kind = 'human';
+      else if (ids?.some((i) => /AIMessage$/.test(i))) kind = 'ai';
+      else if (ids?.some((i) => /ToolMessage$/.test(i))) kind = 'tool';
       let content: string | null = null;
       let info: Record<string, unknown> | null = null;
       const rawContent = kwargs.content ?? '';
       if (typeof rawContent === 'string') {
+        // Sometimes content itself is a JSON string with { content, info }
         try {
           const envelope = JSON.parse(rawContent);
           if (envelope && typeof envelope === 'object' && 'content' in envelope) {
             const envObj = envelope as { content?: unknown; info?: Record<string, unknown> };
-            content = String(envObj.content ?? '');
-            if (envObj.info) info = envObj.info;
+            content = envObj.content == null ? '' : String(envObj.content);
+            if (envObj.info && typeof envObj.info === 'object') info = envObj.info;
           } else {
             content = rawContent;
           }
@@ -81,7 +101,7 @@ export function CheckpointItem({ item, onFilterThread, currentThreadId }: Checkp
   const rawToggleBtn = (
     <button
       type="button"
-      onClick={() => setShowRaw(r => !r)}
+      onClick={() => setShowRaw((r) => !r)}
       className="rounded bg-muted px-1.5 py-0.5 text-[10px] font-medium hover:bg-muted/70"
     >
       {showRaw ? 'parsed' : 'raw'}
@@ -92,7 +112,11 @@ export function CheckpointItem({ item, onFilterThread, currentThreadId }: Checkp
     <button
       type="button"
       onClick={() => onFilterThread(item.threadId)}
-      className={`rounded px-1.5 py-0.5 text-[10px] font-medium hover:bg-muted/70 border ${currentThreadId === item.threadId ? 'bg-blue-500/20 text-blue-700 dark:text-blue-300 border-blue-400' : 'bg-muted border-transparent'}`}
+      className={`rounded px-1.5 py-0.5 text-[10px] font-medium hover:bg-muted/70 border ${
+        currentThreadId === item.threadId
+          ? 'bg-blue-500/20 text-blue-700 dark:text-blue-300 border-blue-400'
+          : 'bg-muted border-transparent'
+      }`}
       title={currentThreadId === item.threadId ? 'Currently filtered by this thread' : 'Filter by this thread'}
     >
       {currentThreadId === item.threadId ? 'thread ✓' : 'filter thread'}
@@ -107,22 +131,78 @@ export function CheckpointItem({ item, onFilterThread, currentThreadId }: Checkp
         kind={'unknown'}
         kindBadge={kindBadge as Record<'human' | 'ai' | 'tool' | 'unknown', string>}
         rawBlock={
-          <pre className="m-0 max-h-64 overflow-auto whitespace-pre-wrap break-words rounded bg-muted/40 p-2 font-mono text-[10px] leading-relaxed">
-            {typeof item.value === 'string' ? item.value : JSON.stringify(item.value, null, 2)}
-          </pre>
+          <>
+            channel: {item.channel} <br />
+            <pre className="m-0 max-h-64 overflow-auto whitespace-pre-wrap break-words rounded bg-muted/40 p-2 font-mono text-[10px] leading-relaxed">
+              {typeof item.value === 'string' ? item.value : JSON.stringify(item.value, null, 2)}
+            </pre>
+          </>
         }
-        rawToggleButton={<div className="flex gap-1">{rawToggleBtn}{threadFilterBtn}</div>}
+        rawToggleButton={
+          <div className="flex gap-1">
+            {rawToggleBtn}
+            {threadFilterBtn}
+          </div>
+        }
       />
     );
   }
   switch (parsed.kind) {
     case 'human':
-      return <HumanCheckpointItem item={item} parsed={parsed} kindBadge={kindBadge} rawToggleButton={<div className="flex gap-1">{rawToggleBtn}{threadFilterBtn}</div>} />;
+      return (
+        <HumanCheckpointItem
+          item={item}
+          parsed={parsed}
+          kindBadge={kindBadge}
+          rawToggleButton={
+            <div className="flex gap-1">
+              {rawToggleBtn}
+              {threadFilterBtn}
+            </div>
+          }
+        />
+      );
     case 'ai':
-      return <AICheckpointItem item={item} parsed={parsed} kindBadge={kindBadge} rawToggleButton={<div className="flex gap-1">{rawToggleBtn}{threadFilterBtn}</div>} />;
+      return (
+        <AICheckpointItem
+          item={item}
+          parsed={parsed}
+          kindBadge={kindBadge}
+          rawToggleButton={
+            <div className="flex gap-1">
+              {rawToggleBtn}
+              {threadFilterBtn}
+            </div>
+          }
+        />
+      );
     case 'tool':
-      return <ToolCheckpointItem item={item} parsed={parsed} kindBadge={kindBadge} rawToggleButton={<div className="flex gap-1">{rawToggleBtn}{threadFilterBtn}</div>} />;
+      return (
+        <ToolCheckpointItem
+          item={item}
+          parsed={parsed}
+          kindBadge={kindBadge}
+          rawToggleButton={
+            <div className="flex gap-1">
+              {rawToggleBtn}
+              {threadFilterBtn}
+            </div>
+          }
+        />
+      );
     default:
-      return <HumanCheckpointItem item={item} parsed={parsed} kindBadge={kindBadge} rawToggleButton={<div className="flex gap-1">{rawToggleBtn}{threadFilterBtn}</div>} />;
+      return (
+        <HumanCheckpointItem
+          item={item}
+          parsed={parsed}
+          kindBadge={kindBadge}
+          rawToggleButton={
+            <div className="flex gap-1">
+              {rawToggleBtn}
+              {threadFilterBtn}
+            </div>
+          }
+        />
+      );
   }
 }
