@@ -1,11 +1,12 @@
-import { FactoryFn, TemplateKind, TemplateNodeSchema } from './types';
+import { JSONSchema } from 'zod/v4/core';
 import { TemplatePortConfig, TemplatePortsRegistry } from './ports.types';
+import { FactoryFn, TemplateKind, TemplateNodeSchema } from './types';
 
 export interface TemplateMeta {
   title: string;
   kind: TemplateKind;
   capabilities?: TemplateNodeSchema['capabilities'];
-  staticConfigSchema?: import('json-schema').JSONSchema7;
+  staticConfigSchema?: JSONSchema.BaseSchema;
 }
 
 export class TemplateRegistry {

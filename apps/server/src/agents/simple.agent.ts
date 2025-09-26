@@ -22,10 +22,38 @@ import { LoggerService } from '../services/logger.service';
 import { BaseAgent } from './base.agent';
 import { BaseTool } from '../tools/base.tool';
 import { LangChainToolAdapter } from '../tools/langchainTool.adapter';
-import { BashCommandTool } from '../tools/bash_command';
 import { SummarizationNode } from '../nodes/summarization.node';
 import { NodeOutput } from '../types';
+import { z } from 'zod';
 
+/**
+ * Zod schema describing static configuration for SimpleAgent.
+ * Keep this colocated with the implementation so updates stay in sync.
+ */
+export const SimpleAgentStaticConfigSchema = z
+  .object({
+    title: z.string().optional(),
+    systemPrompt: z
+      .string()
+      .default('You are a helpful AI assistant.')
+      .describe('System prompt injected at the start of each conversation turn.')
+      .meta({ 'ui:widget': 'textarea', 'ui:options': { rows: 6 } }),
+    summarizationKeepTokens: z
+      .number()
+      .int()
+      .min(0)
+      .default(0)
+      .describe('Number of most-recent tokens to keep verbatim when summarizing context.'),
+    summarizationMaxTokens: z
+      .number()
+      .int()
+      .min(1)
+      .default(512)
+      .describe('Maximum token budget for generated summaries.'),
+  })
+  .strict();
+
+export type SimpleAgentStaticConfig = z.infer<typeof SimpleAgentStaticConfigSchema>;
 export class SimpleAgent extends BaseAgent {
   private callModelNode!: CallModelNode;
   private toolsNode!: ToolsNode;

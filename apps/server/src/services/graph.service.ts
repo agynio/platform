@@ -106,7 +106,8 @@ export class GraphService {
   }
 
   private stripInternalNode(n: PersistedGraphNode): PersistedGraphNode {
-    return { id: n.id, template: n.template, config: n.config, position: n.position };
+    // Preserve dynamicConfig so it round-trips through persistence.
+    return { id: n.id, template: n.template, config: n.config, dynamicConfig: n.dynamicConfig, position: n.position };
   }
   private stripInternalEdge(e: PersistedGraphEdge): PersistedGraphEdge {
     return { source: e.source, sourceHandle: e.sourceHandle, target: e.target, targetHandle: e.targetHandle, id: e.id };

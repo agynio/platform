@@ -49,6 +49,16 @@ export class LiveGraphRuntime {
     return Array.from(this.state.executedEdges.values());
   }
 
+  // Persist a config update into the stored graph definition so future GETs / reloads reflect it.
+  updateNodeConfig(id: string, cfg: Record<string, unknown>) {
+    const live = this.state.nodes.get(id);
+    if (live) live.config = cfg;
+    if (this.state.lastGraph) {
+      const node = this.state.lastGraph.nodes.find((n) => n.id === id);
+      if (node) node.data.config = cfg;
+    }
+  }
+
   // Return the live node instance (if present)
   getNodeInstance(id: string): unknown {
     return this.state.nodes.get(id)?.instance;
@@ -56,7 +66,7 @@ export class LiveGraphRuntime {
 
   async apply(graph: GraphDefinition): Promise<GraphDiffResult> {
     this.applying = this.applying.then(() => this._applyGraphInternal(graph));
-    return this.applying;
+    return this.applying as Promise<GraphDiffResult>;
   }
 
   // Runtime helpers for Pausable/Provisionable
@@ -67,7 +77,9 @@ export class LiveGraphRuntime {
     return this.hasMethod(o, 'pause') && this.hasMethod(o, 'resume');
   }
   private isProvisionable(o: unknown): o is Provisionable {
-    return this.hasMethod(o, 'getProvisionStatus') && this.hasMethod(o, 'provision') && this.hasMethod(o, 'deprovision');
+    return (
+      this.hasMethod(o, 'getProvisionStatus') && this.hasMethod(o, 'provision') && this.hasMethod(o, 'deprovision')
+    );
   }
   private isDynConfigurable(o: unknown): o is DynamicConfigurable {
     return this.hasMethod(o, 'isDynamicConfigReady');
@@ -96,17 +108,17 @@ export class LiveGraphRuntime {
     const out: { isPaused?: boolean; provisionStatus?: ProvisionStatus; dynamicConfigReady?: boolean } = {};
     if (inst) {
       if (this.hasMethod(inst, 'isPaused')) {
-        const fn = (inst as Record<string, unknown>)['isPaused'] as () => unknown;
+        const fn = (inst as any)['isPaused'] as () => unknown; // dynamic reflection
         out.isPaused = !!fn.call(inst);
       } else {
         out.isPaused = this.pausedFallback.has(id);
       }
       if (this.isProvisionable(inst)) {
-        const fn = (inst as Record<string, unknown>)['getProvisionStatus'] as () => unknown;
+        const fn = (inst as any)['getProvisionStatus'] as () => unknown;
         out.provisionStatus = fn.call(inst) as ProvisionStatus;
       }
       if (this.isDynConfigurable(inst)) {
-        const fn = (inst as Record<string, unknown>)['isDynamicConfigReady'] as () => unknown;
+        const fn = (inst as any)['isDynamicConfigReady'] as () => unknown;
         out.dynamicConfigReady = !!fn.call(inst);
       }
     } else {
@@ -158,7 +170,7 @@ export class LiveGraphRuntime {
       const live = this.state.nodes.get(nodeId);
       if (!live) continue;
       try {
-        const setter = (live.instance as Record<string, unknown>)['setConfig'];
+        const setter = (live.instance as any)['setConfig'];
         if (typeof setter === 'function') await (setter as Function).call(live.instance, nodeDef.data.config || {});
         live.config = nodeDef.data.config || {};
       } catch (e) {
@@ -257,12 +269,16 @@ export class LiveGraphRuntime {
     const factory = this.templateRegistry.get(node.data.template);
     if (!factory) throw Errors.unknownTemplate(node.data.template, node.id);
     // Factories receive a minimal context (deps deprecated -> empty object)
-    const created = await factory({ deps: {}, get: (id: string) => this.state.nodes.get(id)?.instance, nodeId: node.id });
+    const created = await factory({
+      deps: {},
+      get: (id: string) => this.state.nodes.get(id)?.instance,
+      nodeId: node.id,
+    });
     // NOTE: setGraphNodeId reflection removed; prefer factories to leverage ctx.nodeId directly.
     const live: LiveNode = { id: node.id, template: node.data.template, instance: created, config: node.data.config };
     this.state.nodes.set(node.id, live);
     if (node.data.config) {
-      const setter = (created as Record<string, unknown>)['setConfig'];
+      const setter = (created as any)['setConfig'];
       if (typeof setter === 'function') await (setter as Function).call(created, node.data.config);
     }
   }
@@ -345,7 +361,7 @@ export class LiveGraphRuntime {
     const key = edgeKey(edge);
 
     {
-      const createFn = (methodSide.instance as Record<string, unknown>)[methodCfg.create];
+      const createFn = (methodSide.instance as any)[methodCfg.create];
       if (typeof createFn === 'function') await (createFn as Function).call(methodSide.instance, argValue);
     }
 
@@ -359,11 +375,11 @@ export class LiveGraphRuntime {
       argumentSnapshot: argValue,
       reversal: async () => {
         if (methodCfg.destroy) {
-          const destroyFn = (methodSide.instance as Record<string, unknown>)[methodCfg.destroy];
+          const destroyFn = (methodSide.instance as any)[methodCfg.destroy];
           if (typeof destroyFn === 'function') await (destroyFn as Function).call(methodSide.instance, argValue);
         } else {
           // Fallback: call create with undefined to signal disconnection
-          const createFn = (methodSide.instance as Record<string, unknown>)[methodCfg.create];
+          const createFn = (methodSide.instance as any)[methodCfg.create];
           if (typeof createFn === 'function') await (createFn as Function).call(methodSide.instance, undefined);
         }
       },

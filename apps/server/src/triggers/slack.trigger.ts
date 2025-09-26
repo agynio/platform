@@ -1,6 +1,22 @@
 import { BaseTrigger, BaseTriggerOptions } from './base.trigger';
 import { LoggerService } from '../services/logger.service';
 import { SlackService } from '../services/slack.service';
+import { z } from 'zod';
+
+export const SlackTriggerStaticConfigSchema = z
+  .object({
+    debounceMs: z
+      .number()
+      .int()
+      .min(0)
+      .default(0)
+      .describe('Debounce window in milliseconds for coalescing rapid messages per thread.'),
+    waitForBusy: z
+      .boolean()
+      .default(false)
+      .describe('If true, buffers new messages while a previous batch is still being processed.'),
+  })
+  .strict();
 
 // (Previously had SlackTriggerOptions with filter; removed for simplified constructor.)
 

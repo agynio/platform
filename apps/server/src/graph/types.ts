@@ -1,5 +1,6 @@
-// Core type declarations for JSON-driven agent/tool/trigger graph construction
+import { JSONSchema } from 'zod/v4/core';
 
+// Core type declarations for JSON-driven agent/tool/trigger graph construction
 export interface GraphDefinition {
   nodes: NodeDef[];
   edges: EdgeDef[];
@@ -69,7 +70,6 @@ export interface SelfEndpoint extends EndpointBase {
 
 export type Endpoint = MethodEndpoint | PropertyEndpoint | SelfEndpoint;
 
-
 export interface GraphBuilderOptions {
   continueOnError?: boolean; // if true collects errors and proceeds, else fail-fast
   warnOnMissingSetConfig?: boolean; // log / collect a warning when config provided but setConfig missing
@@ -123,7 +123,7 @@ export interface TemplateNodeSchema {
     dynamicConfigurable?: boolean;
     provisionable?: boolean;
   };
-  staticConfigSchema?: import('json-schema').JSONSchema7;
+  staticConfigSchema?: JSONSchema.BaseSchema;
 }
 
 // Persistence layer graph representation (includes optimistic locking fields)
@@ -131,6 +131,7 @@ export interface PersistedGraphNode {
   id: string;
   template: string;
   config?: Record<string, unknown>;
+  dynamicConfig?: Record<string, unknown>;
   position?: { x: number; y: number }; // UI hint, optional server side
 }
 export interface PersistedGraphEdge {

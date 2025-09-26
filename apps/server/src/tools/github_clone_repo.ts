@@ -14,6 +14,9 @@ const githubCloneSchema = z.object({
   depth: z.number().int().positive().optional().describe('Shallow clone depth (omit for full clone).'),
 });
 
+// Static config schema placeholder (no options yet but enables uniform handling)
+export const GithubCloneRepoToolStaticConfigSchema = z.object({}).strict();
+
 export class GithubCloneRepoTool extends BaseTool {
   private containerProvider?: ContainerProviderEntity;
 

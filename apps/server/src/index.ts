@@ -3,7 +3,8 @@ traceloop.initialize({
   disableBatch: true,
 });
 
-import http from 'http';
+import Fastify from 'fastify';
+import cors from '@fastify/cors';
 import { Server } from 'socket.io';
 import { ConfigService } from './services/config.service.js';
 import { LoggerService } from './services/logger.service.js';
@@ -43,7 +44,10 @@ async function bootstrap() {
   // Helper to convert persisted graph to runtime GraphDefinition
   const toRuntimeGraph = (saved: { nodes: any[]; edges: any[] }) =>
     ({
-      nodes: saved.nodes.map((n) => ({ id: n.id, data: { template: n.template, config: n.config } })),
+      nodes: saved.nodes.map((n) => ({
+        id: n.id,
+        data: { template: n.template, config: n.config, dynamicConfig: n.dynamicConfig },
+      })),
       edges: saved.edges.map((e) => ({
         source: e.source,
         sourceHandle: e.sourceHandle,
@@ -73,77 +77,144 @@ async function bootstrap() {
   // Expose globally for diagnostics (optional)
   (globalThis as any).liveGraphRuntime = runtime; // eslint-disable-line @typescript-eslint/no-explicit-any
 
-  const server = http.createServer(async (req, res) => {
-    // Basic CORS headers
-    res.setHeader('Access-Control-Allow-Origin', '*');
-    res.setHeader('Access-Control-Allow-Methods', 'GET,POST,OPTIONS');
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-    if (req.method === 'OPTIONS') {
-      res.writeHead(200);
-      res.end();
-      return;
-    }
+  const fastify = Fastify({ logger: false });
+  await fastify.register(cors, { origin: true });
 
-    if (req.url === '/api/templates' && req.method === 'GET') {
-      const schema = templateRegistry.toSchema();
-      res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify(schema));
-      return;
+  // Existing endpoints (namespaced under /api)
+  fastify.get('/api/templates', async () => templateRegistry.toSchema());
+
+  fastify.get('/api/graph', async () => {
+    const name = 'main';
+    const graph = await graphService.get(name);
+    if (!graph) {
+      return { name, version: 0, updatedAt: new Date().toISOString(), nodes: [], edges: [] };
     }
-    if (req.url?.startsWith('/api/graph') && req.method === 'GET') {
-      const name = 'main'; // single graph for now
-      const graph = await graphService.get(name);
-      if (!graph) {
-        res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ name, version: 0, updatedAt: new Date().toISOString(), nodes: [], edges: [] }));
-        return;
-      }
-      res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify(graph));
-      return;
-    }
-    if (req.url === '/api/graph' && req.method === 'POST') {
-      try {
-        const body = await new Promise<string>((resolve, reject) => {
-          let data = '';
-          req.on('data', (c) => (data += c));
-          req.on('end', () => resolve(data));
-          req.on('error', reject);
-        });
-        const parsed: PersistedGraphUpsertRequest = JSON.parse(body);
-        parsed.name = parsed.name || 'main';
-        const saved = await graphService.upsert(parsed);
-        await runtime.apply(toRuntimeGraph(saved));
-        // Apply to runtime
-        res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify(saved));
-      } catch (e: any) {
-        if (e.code === 'VERSION_CONFLICT') {
-          res.writeHead(409, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ error: 'VERSION_CONFLICT', current: e.current }));
-          return;
-        }
-        res.writeHead(400, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ error: e.message || 'Bad Request' }));
-      }
-      return;
-    }
-    res.writeHead(404, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ error: 'Not Found' }));
+    return graph;
   });
-  const io = new Server(server, { cors: { origin: '*' } });
+
+  fastify.post('/api/graph', async (request, reply) => {
+    try {
+      const parsed = request.body as PersistedGraphUpsertRequest;
+      parsed.name = parsed.name || 'main';
+      // Capture previous graph (for change detection / events)
+      const before = await graphService.get(parsed.name);
+      const saved = await graphService.upsert(parsed);
+      try {
+        await runtime.apply(toRuntimeGraph(saved));
+      } catch {
+        logger.debug('Failed to apply updated graph to runtime; rolling back persistence');
+      }
+      // Emit node_config events for any node whose config changed
+      if (before) {
+        const beforeMap = new Map(before.nodes.map((n) => [n.id, JSON.stringify(n.config || {})]));
+        for (const n of saved.nodes) {
+          const prev = beforeMap.get(n.id);
+          const curr = JSON.stringify(n.config || {});
+          if (prev !== curr) {
+            io.emit('node_config', {
+              nodeId: n.id,
+              config: n.config,
+              dynamicConfig: n.dynamicConfig,
+              version: saved.version,
+            });
+          }
+        }
+      }
+      return saved;
+    } catch (e: any) {
+      // eslint-disable-line @typescript-eslint/no-explicit-any
+      if (e.code === 'VERSION_CONFLICT') {
+        reply.code(409);
+        return { error: 'VERSION_CONFLICT', current: e.current };
+      }
+      reply.code(400);
+      return { error: e.message || 'Bad Request' };
+    }
+  });
+
+  // Bridge runtime endpoints for UI (/graph/*)
+  fastify.get('/graph/templates', async () => templateRegistry.toSchema());
+
+  fastify.get('/graph/nodes/:nodeId/status', async (req) => {
+    const { nodeId } = req.params as { nodeId: string };
+    return runtime.getNodeStatus(nodeId);
+  });
+
+  fastify.post('/graph/nodes/:nodeId/actions', async (req, reply) => {
+    const { nodeId } = req.params as { nodeId: string };
+    const body = req.body as { action?: string };
+    try {
+      switch (body.action) {
+        case 'pause':
+          await runtime.pauseNode(nodeId);
+          break;
+        case 'resume':
+          await runtime.resumeNode(nodeId);
+          break;
+        case 'provision':
+          await runtime.provisionNode(nodeId);
+          break;
+        case 'deprovision':
+          await runtime.deprovisionNode(nodeId);
+          break;
+        default:
+          reply.code(400);
+          return { error: 'unknown_action' };
+      }
+      emitStatus(nodeId);
+      reply.code(204);
+      return null;
+    } catch (e: any) {
+      // eslint-disable-line @typescript-eslint/no-explicit-any
+      reply.code(500);
+      return { error: e.message || 'action_failed' };
+    }
+  });
+  // Removed per-node config & dynamic-config endpoints; config updates now flow through full /api/graph saves.
+  // New: dynamic config schema endpoint (read-only). Saving still uses full /api/graph mechanism.
+  fastify.get('/graph/nodes/:nodeId/dynamic-config/schema', async (req, reply) => {
+    const { nodeId } = req.params as { nodeId: string };
+    try {
+      const inst = (runtime as any).getNodeInstance?.(nodeId) || (runtime as any)['getNodeInstance']?.(nodeId);
+      if (!inst) {
+        reply.code(404);
+        return { error: 'node_not_found' };
+      }
+      const ready =
+        typeof (inst as any).isDynamicConfigReady === 'function' ? !!(inst as any).isDynamicConfigReady() : false;
+      const schema =
+        ready && typeof (inst as any).getDynamicConfigSchema === 'function'
+          ? (inst as any).getDynamicConfigSchema()
+          : undefined;
+      return { ready, schema };
+    } catch (e: any) {
+      // eslint-disable-line @typescript-eslint/no-explicit-any
+      reply.code(500);
+      return { error: e.message || 'dynamic_config_schema_error' };
+    }
+  });
+
+  // Start Fastify then attach Socket.io
+  const PORT = Number(process.env.PORT) || 3010;
+  await fastify.listen({ port: PORT, host: '0.0.0.0' });
+  logger.info(`HTTP server listening on :${PORT}`);
+
+  const io = new Server(fastify.server, { cors: { origin: '*' } });
   const socketService = new SocketService(io, logger, checkpointer);
   socketService.register();
 
-  const PORT = process.env.PORT || 3010;
-  server.listen(PORT, () => {
-    logger.info(`Socket server listening on :${PORT}`);
-  });
+  function emitStatus(nodeId: string) {
+    const status = runtime.getNodeStatus(nodeId);
+    io.emit('node_status', { nodeId, ...status, updatedAt: new Date().toISOString() });
+  }
 
   const shutdown = async () => {
     logger.info('Shutting down...');
     await mongo.close();
-    server.close(() => process.exit(0));
+    try {
+      await fastify.close();
+    } catch {}
+    process.exit(0);
   };
   process.on('SIGINT', shutdown);
   process.on('SIGTERM', shutdown);

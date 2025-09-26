@@ -4,9 +4,20 @@
 //   <CheckpointStreamPanel />
 
 import { AgentBuilder } from './builder/AgentBuilder';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+// Runtime graph templates provider (distinct from builder TemplatesProvider)
+import { TemplatesProvider as RuntimeTemplatesProvider } from './lib/graph/templates.provider';
+
+const queryClient = new QueryClient();
 
 function App() {
-  return <AgentBuilder />;
+  return (
+    <QueryClientProvider client={queryClient}>
+      <RuntimeTemplatesProvider>
+        <AgentBuilder />
+      </RuntimeTemplatesProvider>
+    </QueryClientProvider>
+  );
 }
 
 export default App;

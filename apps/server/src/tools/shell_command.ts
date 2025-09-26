@@ -19,6 +19,9 @@ const bashCommandSchema = z.object({
     ),
 });
 
+// Static config schema for ShellTool (currently no options, placeholder for future flags)
+export const ShellToolStaticConfigSchema = z.object({}).strict();
+
 export class ShellTool extends BaseTool {
   private containerProvider?: ContainerProviderEntity;
 

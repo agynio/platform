@@ -9,6 +9,7 @@
     "test:watch": "vitest"
   },
   "dependencies": {
+    "@fastify/cors": "^11.1.0",
     "@langchain/core": "^0.3.73",
     "@langchain/langgraph": "^0.4.9",
     "@langchain/langgraph-checkpoint": "^0.1.1",
@@ -22,6 +23,7 @@
     "@types/json-schema": "^7.0.15",
     "dockerode": "^4.0.8",
     "dotenv": "^17.2.2",
+    "fastify": "^5.6.1",
     "lodash-es": "^4.17.21",
     "md5": "^2.3.0",
     "mongodb": "^6.20.0",

@@ -1,4 +1,4 @@
-import { ContainerService } from "../services/container.service";
+import { ContainerService } from '../services/container.service';
 
 /**
  * Lightweight entity wrapper representing a running (or created) container.
