@@ -19,6 +19,10 @@ export class ToolsNode extends BaseNode {
     this.tools = this.tools.filter((t) => t !== tool);
   }
 
+  listTools() {
+    return this.tools;
+  }
+
   async action(state: { messages: BaseMessage[] }, config: LangGraphRunnableConfig): Promise<NodeOutput> {
     const lastMessage = state.messages[state.messages.length - 1] as AIMessage;
     const toolCalls = lastMessage.tool_calls || [];

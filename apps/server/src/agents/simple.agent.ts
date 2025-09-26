@@ -34,6 +34,7 @@ import { z } from 'zod';
 export const SimpleAgentStaticConfigSchema = z
   .object({
     title: z.string().optional(),
+    model: z.string().default('gpt-5').describe('LLM model identifier to use for this agent (provider-specific name).'),
     systemPrompt: z
       .string()
       .default('You are a helpful AI assistant.')
@@ -60,6 +61,8 @@ export class SimpleAgent extends BaseAgent {
   private toolsNode!: ToolsNode;
   // Track tools registered per MCP server so we can remove them on detachment
   private mcpServerTools: Map<McpServer, BaseTool[]> = new Map();
+  // Persist the underlying ChatOpenAI instance so we can update its model dynamically
+  private llm!: ChatOpenAI;
 
   private summarizationKeepTokens?: number; // token budget for verbatim tail
   private summarizationMaxTokens?: number;
@@ -93,14 +96,14 @@ export class SimpleAgent extends BaseAgent {
 
     this._config = config;
 
-    const llm = new ChatOpenAI({
+    this.llm = new ChatOpenAI({
       model: 'gpt-5',
       apiKey: this.configService.openaiApiKey,
     });
 
-    this.callModelNode = new CallModelNode([], llm);
+    this.callModelNode = new CallModelNode([], this.llm);
     this.toolsNode = new ToolsNode([]);
-    this.summarizeNode = new SummarizationNode(llm, {
+    this.summarizeNode = new SummarizationNode(this.llm, {
       keepTokens: this.summarizationKeepTokens ?? 0,
       maxTokens: this.summarizationMaxTokens ?? 0,
     });
@@ -157,6 +160,12 @@ export class SimpleAgent extends BaseAgent {
       return;
     }
     this.mcpServerTools.set(server, []);
+    // Track whether the initial (on 'ready') registration has completed. We ignore
+    // dynamic config change events until this finishes to avoid a race where both
+    // the initial registration and the dynamic sync attempt to add the same set
+    // of tools concurrently, producing duplicates. (Observed symptom: inflated
+    // Total tool count such as 111 when expecting 98 = 93 MCP + 5 static.)
+    let initialRegistrationDone = false;
 
     // Registration function now only invoked on explicit ready event to avoid triggering
     // duplicate discovery flows (removes eager listTools() call which previously raced with start()).
@@ -186,12 +195,23 @@ export class SimpleAgent extends BaseAgent {
             },
           );
           const adapted = new LangChainToolAdapter(dynamic);
-          this.addTool(adapted);
-          registered.push(adapted);
+          // Defensive: skip if already present (e.g. if a dynamic sync slipped through).
+          const existingNames = new Set(this.toolsNode.listTools().map((tool) => tool.init().name));
+          if (existingNames.has(dynamic.name)) {
+            this.loggerService.debug?.(
+              `Skipping duplicate MCP tool registration ${dynamic.name} (initial register phase)`,
+            );
+          } else {
+            this.addTool(adapted);
+            registered.push(adapted);
+          }
         }
-        this.loggerService.info(`Registered ${tools.length} MCP tools for namespace ${namespace}`);
+        this.loggerService.info(
+          `Registered ${tools.length} MCP tools for namespace ${namespace}. Total: ${this.toolsNode.listTools().length}`,
+        );
         const existing = this.mcpServerTools.get(server) || [];
         this.mcpServerTools.set(server, existing.concat(registered));
+        initialRegistrationDone = true;
       } catch (e: any) {
         this.loggerService.error(`Failed to register MCP tools for ${namespace}: ${e.message}`);
       }
@@ -205,6 +225,13 @@ export class SimpleAgent extends BaseAgent {
     // Dynamic config synchronization: if server supports DynamicConfigurable, re-sync tool list
     if (isDynamicConfigurable<Record<string, boolean>>(server)) {
       server.onDynamicConfigChanged(async () => {
+        // Ignore dynamic sync events until after initial registration to prevent duplicate adds.
+        if (!initialRegistrationDone) {
+          this.loggerService.debug?.(
+            `Dynamic config change for ${namespace} received before initial registration complete; ignoring (will be captured by initial listTools filter).`,
+          );
+          return;
+        }
         // Re-list tools (already filtered by server dynamic config) and diff against currently registered
         try {
           const tools: McpTool[] = await server.listTools();
@@ -275,24 +302,31 @@ export class SimpleAgent extends BaseAgent {
    * Dynamically set configuration values like the system prompt.
    */
   setConfig(config: Record<string, unknown>): void {
-    const parsedConfig = config as {
-      systemPrompt?: string;
-      summarizationKeepTokens?: number; // new
-      summarizationKeepLast?: number; // deprecated
-      summarizationMaxTokens?: number;
-    };
+    const parsedConfig = SimpleAgentStaticConfigSchema.partial().parse(
+      Object.fromEntries(
+        Object.entries(config).filter(([k]) =>
+          ['title', 'model', 'systemPrompt', 'summarizationKeepTokens', 'summarizationMaxTokens'].includes(k),
+        ),
+      ),
+    ) as Partial<SimpleAgentStaticConfig> & Record<string, any>;
     if (parsedConfig.systemPrompt !== undefined) {
       this.callModelNode.setSystemPrompt(parsedConfig.systemPrompt);
       this.loggerService.info('SimpleAgent system prompt updated');
     }
 
+    if (parsedConfig.model !== undefined) {
+      // Update model on stored llm instance (lightweight change similar to systemPrompt logic)
+      this.llm.model = parsedConfig.model;
+      this.loggerService.info(`SimpleAgent model updated to ${parsedConfig.model}`);
+    }
+
     // Extend to accept summarization options
     // Accept both new (summarizationKeepTokens) and legacy (summarizationKeepLast) keys.
     const keepTokensRaw =
-      (parsedConfig as any).summarizationKeepTokens !== undefined
-        ? (parsedConfig as any).summarizationKeepTokens
-        : parsedConfig.summarizationKeepLast; // fallback legacy
-    const maxTokensRaw = parsedConfig.summarizationMaxTokens;
+      (config as any).summarizationKeepTokens !== undefined
+        ? (config as any).summarizationKeepTokens
+        : (config as any).summarizationKeepLast; // legacy fallback
+    const maxTokensRaw = (config as any).summarizationMaxTokens;
     const isInt = (v: unknown) => typeof v === 'number' && Number.isInteger(v);
 
     const updates: { keepTokens?: number; maxTokens?: number } = {};

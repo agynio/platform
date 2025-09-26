@@ -15,7 +15,7 @@ describe('BaseAgent.getConfigSchema / SimpleAgent.setConfig', () => {
     const schema = (a as unknown as BaseAgent).getConfigSchema() as any;
     expect(schema.type).toBe('object');
     expect(schema.properties.systemPrompt).toMatchObject({ type: 'string' });
-    expect(schema.properties.summarizationKeepLast).toMatchObject({ type: 'integer', minimum: 0 });
+  // Legacy key summarizationKeepLast intentionally not present in schema anymore; we accept it leniently at runtime.
     expect(schema.properties.summarizationMaxTokens).toMatchObject({ type: 'integer', minimum: 1 });
   });
 
@@ -31,5 +31,16 @@ describe('BaseAgent.getConfigSchema / SimpleAgent.setConfig', () => {
 
     a.setConfig({ summarizationKeepLast: 5, summarizationMaxTokens: 100 });
     expect(anyA.summarizeNode.setOptions).toHaveBeenCalledWith({ keepTokens: 5, maxTokens: 100 });
+  });
+
+  it('supports model override via setConfig', () => {
+    const a = makeAgent();
+    const anyA: any = a as any;
+  const originalLLM = (anyA.llm);
+  a.setConfig({ model: 'override-model' });
+  // Expect underlying llm object mutated, not replaced with a new node
+  expect(anyA.llm).toBe(originalLLM);
+  expect((anyA.llm as any).model).toBe('override-model');
+  expect(anyA.loggerService.info).toHaveBeenCalledWith('SimpleAgent model updated to override-model');
   });
 });
