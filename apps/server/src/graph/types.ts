@@ -131,6 +131,7 @@ export interface PersistedGraphNode {
   id: string;
   template: string;
   config?: Record<string, unknown>;
+  dynamicConfig?: Record<string, unknown>;
   position?: { x: number; y: number }; // UI hint, optional server side
 }
 export interface PersistedGraphEdge {

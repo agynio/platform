@@ -37,7 +37,16 @@ interface CanvasAreaProps {
   nodeTypes: NodeTypes; // reactflow's NodeTypes value type
 }
 
-function CanvasArea({ nodes, edges, onNodesChange, onEdgesChange, onConnect, addNode, deleteSelected, nodeTypes }: CanvasAreaProps) {
+function CanvasArea({
+  nodes,
+  edges,
+  onNodesChange,
+  onEdgesChange,
+  onConnect,
+  addNode,
+  deleteSelected,
+  nodeTypes,
+}: CanvasAreaProps) {
   const flowWrapper = useRef<HTMLDivElement | null>(null);
   const reactFlow = useReactFlow();
 
@@ -107,7 +116,20 @@ function CanvasArea({ nodes, edges, onNodesChange, onEdgesChange, onConnect, add
 }
 
 export function AgentBuilder() {
-  const { nodes, edges, onNodesChange, onEdgesChange, onConnect, addNode, selectedNode, updateNodeData, deleteSelected, templates, loading, saveState } = useBuilderState();
+  const {
+    nodes,
+    edges,
+    onNodesChange,
+    onEdgesChange,
+    onConnect,
+    addNode,
+    selectedNode,
+    updateNodeData,
+    deleteSelected,
+    templates,
+    loading,
+    saveState,
+  } = useBuilderState();
   const nodeTypes = useMemo(() => makeNodeTypes(templates), [templates]);
   const [rightTab, setRightTab] = useState<'properties' | 'checkpoint'>('properties');
 
@@ -160,13 +182,21 @@ export function AgentBuilder() {
                   <button
                     type="button"
                     onClick={() => setRightTab('properties')}
-                    className={`px-2 py-1 text-[11px] rounded ${rightTab==='properties' ? 'bg-primary text-primary-foreground' : 'bg-muted text-foreground'}`}
-                  >Props</button>
+                    className={`px-2 py-1 text-[11px] rounded ${
+                      rightTab === 'properties' ? 'bg-primary text-primary-foreground' : 'bg-muted text-foreground'
+                    }`}
+                  >
+                    Props
+                  </button>
                   <button
                     type="button"
                     onClick={() => setRightTab('checkpoint')}
-                    className={`px-2 py-1 text-[11px] rounded ${rightTab==='checkpoint' ? 'bg-primary text-primary-foreground' : 'bg-muted text-foreground'}`}
-                  >Checkpoint</button>
+                    className={`px-2 py-1 text-[11px] rounded ${
+                      rightTab === 'checkpoint' ? 'bg-primary text-primary-foreground' : 'bg-muted text-foreground'
+                    }`}
+                  >
+                    Checkpoint
+                  </button>
                 </div>
               )}
             </div>

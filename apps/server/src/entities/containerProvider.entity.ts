@@ -13,9 +13,9 @@ export const ContainerProviderStaticConfigSchema = z
       .describe('Environment variables to inject into started containers.'),
     initialScript: z
       .string()
-      .min(1)
       .optional()
-      .describe('Shell script (executed with /bin/sh -lc) to run immediately after creating the container.'),
+      .describe('Shell script (executed with /bin/sh -lc) to run immediately after creating the container.')
+      .meta({ 'ui:widget': 'textarea', 'ui:options': { rows: 6 } }),
   })
   .strict();
 

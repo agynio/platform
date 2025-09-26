@@ -44,7 +44,10 @@ async function bootstrap() {
   // Helper to convert persisted graph to runtime GraphDefinition
   const toRuntimeGraph = (saved: { nodes: any[]; edges: any[] }) =>
     ({
-      nodes: saved.nodes.map((n) => ({ id: n.id, data: { template: n.template, config: n.config } })),
+      nodes: saved.nodes.map((n) => ({
+        id: n.id,
+        data: { template: n.template, config: n.config, dynamicConfig: n.dynamicConfig },
+      })),
       edges: saved.edges.map((e) => ({
         source: e.source,
         sourceHandle: e.sourceHandle,
@@ -108,7 +111,12 @@ async function bootstrap() {
           const prev = beforeMap.get(n.id);
           const curr = JSON.stringify(n.config || {});
           if (prev !== curr) {
-            io.emit('node_config', { nodeId: n.id, config: n.config, version: saved.version });
+            io.emit('node_config', {
+              nodeId: n.id,
+              config: n.config,
+              dynamicConfig: n.dynamicConfig,
+              version: saved.version,
+            });
           }
         }
       }
@@ -172,10 +180,15 @@ async function bootstrap() {
         reply.code(404);
         return { error: 'node_not_found' };
       }
-      const ready = typeof (inst as any).isDynamicConfigReady === 'function' ? !!(inst as any).isDynamicConfigReady() : false;
-      const schema = ready && typeof (inst as any).getDynamicConfigSchema === 'function' ? (inst as any).getDynamicConfigSchema() : undefined;
+      const ready =
+        typeof (inst as any).isDynamicConfigReady === 'function' ? !!(inst as any).isDynamicConfigReady() : false;
+      const schema =
+        ready && typeof (inst as any).getDynamicConfigSchema === 'function'
+          ? (inst as any).getDynamicConfigSchema()
+          : undefined;
       return { ready, schema };
-    } catch (e: any) { // eslint-disable-line @typescript-eslint/no-explicit-any
+    } catch (e: any) {
+      // eslint-disable-line @typescript-eslint/no-explicit-any
       reply.code(500);
       return { error: e.message || 'dynamic_config_schema_error' };
     }

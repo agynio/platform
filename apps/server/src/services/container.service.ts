@@ -81,7 +81,8 @@ export class ContainerService {
    * Start a new container and return a ContainerEntity representing it.
    */
   async start(opts?: ContainerOpts): Promise<ContainerEntity> {
-    const optsWithDefaults = { image: DEFAULT_IMAGE, autoRemove: true, ...(opts ?? {}) };
+    const { image, autoRemove, ...rest } = opts || {};
+    const optsWithDefaults = { image: image ?? DEFAULT_IMAGE, autoRemove: autoRemove ?? true, ...rest };
     await this.ensureImage(optsWithDefaults.image!);
 
     const Env: string[] | undefined = Array.isArray(optsWithDefaults.env)

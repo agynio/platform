@@ -17,6 +17,7 @@ interface BuilderNodeData {
   template: string;
   name?: string;
   config?: Record<string, unknown>;
+  dynamicConfig?: Record<string, unknown>;
 }
 export type BuilderNode = Node<BuilderNodeData>;
 
@@ -61,7 +62,7 @@ export function useBuilderState(serverBase = 'http://localhost:3010'): UseBuilde
           id: n.id,
           type: n.template, // reactflow node type equals template name for now
           position: n.position || { x: Math.random() * 400, y: Math.random() * 300 },
-          data: { template: n.template, name: n.template, config: n.config },
+          data: { template: n.template, name: n.template, config: n.config, dynamicConfig: n.dynamicConfig },
           dragHandle: '.drag-handle',
         }));
         const rfEdges: Edge[] = graph.edges.map((e: PersistedGraph['edges'][number]) => ({
@@ -155,7 +156,13 @@ export function useBuilderState(serverBase = 'http://localhost:3010'): UseBuilde
         const payload = {
           name: 'main',
           version: versionRef.current,
-          nodes: nodes.map((n) => ({ id: n.id, template: n.type, config: n.data.config, position: n.position })),
+          nodes: nodes.map((n) => ({
+            id: n.id,
+            template: n.type,
+            config: n.data.config,
+            dynamicConfig: n.data.dynamicConfig,
+            position: n.position,
+          })),
           edges: edges.map((e) => ({
             source: e.source,
             sourceHandle: e.sourceHandle!,
