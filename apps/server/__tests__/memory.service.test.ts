@@ -90,7 +90,49 @@ function unsetByPath(obj: any, path: string) {
 }
 
 describe('MemoryService', () => {
-  it('normalizes paths and forbids .. and , async () => {
+  it('normalizes paths and forbids .. and 
+  it('append/read/update/delete with string-only semantics', async () => {
+    const db = new FakeDb() as unknown as Db;
+    const svc = new MemoryService(db, 'n1', 'global');
+    await svc.ensureIndexes();
+
+    await svc.append('/notes/today', 'hello');
+    expect(await svc.read('/notes/today')).toBe('hello');
+
+    await svc.append('/notes/today', 'world');
+    expect(await svc.read('/notes/today')).toBe('hello\nworld');
+
+    const count = await svc.update('/notes/today', 'world', 'there');
+    expect(count).toBe(1);
+    expect(await svc.read('/notes/today')).toBe('hello\nthere');
+
+    const statFile = await svc.stat('/notes/today');
+    expect(statFile.kind).toBe('file');
+
+    const listRoot = await svc.list('/');
+    expect(listRoot.find((e) => e.name === 'notes')?.kind).toBe('dir');
+
+    const delRes = await svc.delete('/notes');
+    expect(delRes.files).toBe(1);
+    expect((await svc.stat('/notes')).kind).toBe('none');
+  });
+
+  it('perThread and global scoping', async () => {
+    const db = new FakeDb() as unknown as Db;
+    const g = new MemoryService(db, 'nodeA', 'global');
+    const t1 = new MemoryService(db, 'nodeA', 'perThread', 't1');
+    const t2 = new MemoryService(db, 'nodeA', 'perThread', 't2');
+
+    await g.append('/x', 'G');
+    await t1.append('/x', 'T1');
+    await t2.append('/x', 'T2');
+
+    expect(await g.read('/x')).toBe('G');
+    expect(await t1.read('/x')).toBe('T1');
+    expect(await t2.read('/x')).toBe('T2');
+  });
+});
+, async () => {
     const db = new FakeDb() as unknown as Db;
     const svc = new MemoryService(db, 'n1', 'global');
     expect(svc.normalizePath('a/b')).toBe('/a/b');
