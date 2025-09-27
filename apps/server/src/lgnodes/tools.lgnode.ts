@@ -3,7 +3,7 @@ import { LangGraphRunnableConfig } from '@langchain/langgraph';
 import { withTool } from '@traceloop/node-server-sdk';
 import { BaseTool } from '../tools/base.tool';
 import { NodeOutput } from '../types';
-import { BaseNode } from './base.node';
+import { BaseNode } from './base.lgnode';
 import { TerminateResponse } from '../tools/terminateResponse';
 
 // Narrowed view of a tool call extracted from AIMessage to avoid loose casting
