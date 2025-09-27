@@ -15,18 +15,18 @@ import { last } from 'lodash-es';
 import { McpServer, McpTool } from '../mcp';
 import { isDynamicConfigurable } from '../graph/capabilities';
 import { inferArgsSchema } from '../mcp/jsonSchemaToZod';
-import { CallModelNode } from '../nodes/callModel.node';
-import { ToolsNode } from '../nodes/tools.node';
+import { CallModelNode } from '../lgnodes/callModel.lgnode';
+import { ToolsNode } from '../lgnodes/tools.lgnode';
 import { CheckpointerService } from '../services/checkpointer.service';
 import { ConfigService } from '../services/config.service';
 import { LoggerService } from '../services/logger.service';
 import { BaseAgent } from './base.agent';
 import { BaseTool } from '../tools/base.tool';
 import { LangChainToolAdapter } from '../tools/langchainTool.adapter';
-import { SummarizationNode } from '../nodes/summarization.node';
+import { SummarizationNode } from '../lgnodes/summarization.lgnode';
 import { NodeOutput } from '../types';
 import { z } from 'zod';
-import { EnforceRestrictionNode } from '../nodes/enforceRestriction.node';
+import { EnforceRestrictionNode } from '../lgnodes/enforceRestriction.lgnode';
 
 /**
  * Zod schema describing static configuration for SimpleAgent.
