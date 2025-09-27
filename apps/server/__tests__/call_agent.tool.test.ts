@@ -7,6 +7,8 @@ import { DynamicStructuredTool } from '@langchain/core/tools';
 import { TemplateRegistry } from '../src/graph/templateRegistry';
 import { LiveGraphRuntime } from '../src/graph/liveGraph.manager';
 
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
 type Msg = { content: string; info: Record<string, unknown> };
 
 class FakeAgent extends BaseAgent {
@@ -22,6 +24,20 @@ class FakeAgent extends BaseAgent {
   async invoke(thread: string, messages: Msg[]): Promise<AIMessage> {
     if (this.responder) return this.responder(thread, messages);
     return new AIMessage('OK');
+  }
+}
+
+class FakeParentAgent extends BaseAgent {
+  public calls: Array<{ thread: string; messages: Msg[] }> = [];
+  constructor(logger: LoggerService) {
+    super(logger);
+    this._graph = { invoke: vi.fn() } as any;
+    this._config = { configurable: {} } as any;
+  }
+  async setConfig(_: Record<string, unknown>): Promise<void> {}
+  async invoke(thread: string, messages: Msg[]): Promise<AIMessage> {
+    this.calls.push({ thread, messages });
+    return new AIMessage('ACK');
   }
 }
 
@@ -91,6 +107,50 @@ describe('CallAgentTool unit', () => {
       { configurable: { thread_id: 'parent' } } as any,
     );
     expect(out).toBe('OK');
+  });
+
+  it('async mode returns sent immediately and later triggers parent with child result', async () => {
+    const tool = new CallAgentTool(new LoggerService());
+    await tool.setConfig({ description: 'desc', response: 'async' });
+    const child = new FakeAgent(new LoggerService(), async (thread, msgs) => {
+      expect(thread).toBe('p__c1');
+      expect(msgs[0]?.content).toBe('do work');
+      await sleep(5);
+      return new AIMessage('child-complete');
+    });
+    tool.setAgent(child);
+    const parent = new FakeParentAgent(new LoggerService());
+    const dynamic = tool.init();
+    const res = await dynamic.invoke(
+      { input: 'do work', childThreadId: 'c1' },
+      { configurable: { thread_id: 'p', caller_agent: parent } } as any,
+    );
+    expect(typeof res).toBe('object');
+    expect((res as any).status).toBe('sent');
+    await sleep(15);
+    expect(parent.calls.length).toBe(1);
+    expect(parent.calls[0]?.thread).toBe('p');
+    expect(parent.calls[0]?.messages?.[0]).toEqual({ content: 'child-complete', info: { from: 'agent', childThreadId: 'c1' } });
+  });
+
+  it('ignore mode returns sent and does not trigger parent', async () => {
+    const tool = new CallAgentTool(new LoggerService());
+    await tool.setConfig({ description: 'desc', response: 'ignore' });
+    const child = new FakeAgent(new LoggerService(), async () => {
+      await sleep(5);
+      return new AIMessage('ignored');
+    });
+    tool.setAgent(child);
+    const parent = new FakeParentAgent(new LoggerService());
+    const dynamic = tool.init();
+    const res = await dynamic.invoke(
+      { input: 'do work', childThreadId: 'c2' },
+      { configurable: { thread_id: 'p2', caller_agent: parent } } as any,
+    );
+    expect(typeof res).toBe('object');
+    expect((res as any).status).toBe('sent');
+    await sleep(15);
+    expect(parent.calls.length).toBe(0);
   });
 });
 

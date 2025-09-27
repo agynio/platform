@@ -67,7 +67,7 @@ export abstract class BaseAgent implements TriggerListener, StaticConfigurable {
         {
           messages: { method: 'append', items: batch.map((msg) => new HumanMessage(JSON.stringify(msg))) },
         },
-        { ...this.config, configurable: { ...this.config?.configurable, thread_id: thread } },
+        { ...this.config, configurable: { ...this.config?.configurable, thread_id: thread, caller_agent: this } },
       )) as { messages: BaseMessage[] };
       const lastMessage = response.messages?.[response.messages.length - 1];
       this.logger.info(`Agent response in thread ${thread}: ${lastMessage?.text}`);
