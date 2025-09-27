@@ -1,53 +1,56 @@
-# CallAgentTool
+# Tool Call Agent Extensions
 
-Purpose
-- Let one agent invoke another agent as a subtask.
+This document covers additional semantics around tool calls, termination, and output restriction enforcement.
 
-Configuration
-- description: string (required). Shown to the LLM as the tool description.
-- name: string (optional) Tool name override.
-- response: 'sync' | 'async' | 'ignore' (optional, default 'sync')
-  - sync: default. Wait for the child agent to complete and return its text.
-  - async: return {status: 'sent'} immediately; when the child completes, the parent (caller) is invoked with a TriggerMessage carrying the child output.
-  - ignore: return {status: 'sent'} immediately and do not callback.
+TerminateResponse
+- New type exported at apps/server/src/tools/terminateResponse.ts: `export class TerminateResponse { constructor(public message?: string) {} }`.
+- Any tool may return `new TerminateResponse(note?)` to explicitly signal the agent should end the current run.
+- ToolsNode inspects tool outputs. If a tool returns a TerminateResponse:
+  - It appends a ToolMessage with content = `note` if provided, else `"Finished"`.
+  - It returns NodeOutput with `done=true`. The SimpleAgent graph treats this as a terminal condition from the tools branch.
 
-Ports
-- targetPorts
-  - $self: instance
-- sourcePorts
-  - agent: method (create: setAgent)
+Finish tool
+- New tool at apps/server/src/tools/finish.tool.ts providing a standard way to end a task.
+  - Name: `finish`
+  - Description: "Signal the current task is complete. Call this before ending when output is restricted."
+  - Schema: `{ note?: string }`
+  - Behavior: returns `new TerminateResponse(note)`.
+- Registered in the template registry as `finishTool` with `targetPorts: { $self: { kind: 'instance' } }` and metadata `{ title: 'Finish', kind: 'tool', capabilities: { staticConfigurable: true } }`.
 
-Invocation schema (LLM arguments)
-- input: string (required). The message to forward.
-- context: any (optional). Passed through to TriggerMessage.info when calling the child.
-- childThreadId: string (required). Appended to the parent thread id as `${parentThreadId}__${childThreadId}` to form the child thread id.
+SimpleAgent configuration additions
+- Three static config fields were added to SimpleAgent (apps/server/src/agents/simple.agent.ts):
+  - `restrictOutput: boolean = false` (default false for backward compatibility)
+  - `restrictionMessage: string = "Do not produce a final answer directly. Before finishing, call a tool. If no tool is needed, call the 'finish' tool."`
+  - `restrictionMaxInjections: number = 0` (0 means unlimited per turn)
+- The base system prompt remains unchanged. We do not concatenate restrictionMessage into it.
 
-Behavior
-- If no target agent attached: returns exactly the string "Target agent is not connected".
-- Parent thread id comes from runtime config: configurable.thread_id.
-- Child thread id = `${parentThreadId}__${childThreadId}`.
-- Forwards TriggerMessage { content: input, info: context || {} } to BaseAgent.invoke(childThreadId, [message]).
-- sync: returns the child agent's last message text (empty string if undefined).
-- async: returns `{status: 'sent'}` immediately; when the child completes, invokes the caller agent with:
-  - thread: parentThreadId
-  - message: { content: <childText>, info: { from: 'agent', childThreadId: <childThreadId> } }
-- ignore: returns `{status: 'sent'}` immediately; no callback is made even if the child succeeds or fails.
-- Async errors are only logged; no error callback is sent to parent.
+Enforcement node
+- New node apps/server/src/nodes/enforceRestriction.node.ts injects a SystemMessage with `restrictionMessage` when the model attempts to finish without tool calls.
+- Behavior in `action(state)`, per turn:
+  - If `restrictOutput=false` -> `{}`
+  - If last AI message had tool_calls -> `{}`
+  - Else if `restrictionMaxInjections===0` -> append SystemMessage(restrictionMessage), increment `restrictionInjectionCount`, set `restrictionInjected=true`.
+  - Else if `restrictionInjectionCount < restrictionMaxInjections` -> inject as above.
+  - Else -> return `{ restrictionInjected: false }` (no message injection).
 
-Caller agent reference (runtime wiring)
-- Async callbacks require the caller agent instance to be available at runtime as `configurable.caller_agent`.
-- The BaseAgent passes `caller_agent: this` into the graph runtime, and ToolsNode forwards `configurable.caller_agent` into the tool invocation runtime config.
+State and NodeOutput additions
+- NodeOutput now includes optional `done`, `restrictionInjectionCount`, and `restrictionInjected` fields.
+- SimpleAgent state tracks the same keys with reducers `(right ?? left)` and defaults `(false/0/false)`.
+- SummarizationNode resets `restrictionInjectionCount` and `restrictionInjected` to per-turn defaults each time it runs.
 
-Graph wiring example
+Graph wiring (SimpleAgent)
+- Nodes: summarize, call_model, tools, enforce.
+- Edges:
+  - START → summarize
+  - summarize → call_model
+  - call_model → (tools if AI.tool_calls.length > 0 else enforce)
+  - enforce → (call_model if restrictionInjected===true else END)
+  - tools → (END if done===true else summarize)
 
-Nodes
-- A: { template: 'simpleAgent' }
-- B: { template: 'simpleAgent' }
-- T: { template: 'callAgentTool', config: { description: "Call B to evaluate something", response: 'async' } }
+Semantics and defaults
+- With `restrictOutput=false`, behavior is unchanged: if the model returns without tool_calls, the run ends.
+- With `restrictOutput=true`, the agent will inject the `restrictionMessage` and retry the model call up to `restrictionMaxInjections` times per turn. If `restrictionMaxInjections=0`, injections are unlimited per turn; the overall recursion is still bounded by `RunnableConfig.recursionLimit`.
+- The standard way to finish when restricted is to call the `finish` tool (optionally with a `note`), which returns `TerminateResponse`.
 
-Edges
-- { source: 'A', sourceHandle: 'tools', target: 'T', targetHandle: '$self' }
-- { source: 'T', sourceHandle: 'agent', target: 'B', targetHandle: '$self' }
-
-Notes
-- Logging: each invocation logs info with { targetAttached, hasContext, responseMode } and errors with message and stack.
+Testing
+- Vitest tests cover termination signaling, enforcement looping, summarization reset of counters, and preservation of system prompt.

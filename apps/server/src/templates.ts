@@ -15,6 +15,7 @@ import { ShellTool, ShellToolStaticConfigSchema } from './tools/shell_command';
 import { SlackTrigger } from './triggers';
 import { SlackTriggerStaticConfigSchema } from './triggers/slack.trigger';
 import { LocalMcpServerStaticConfigSchema } from './mcp/localMcpServer';
+import { FinishTool, FinishToolStaticConfigSchema } from './tools/finish.tool';
 
 export interface TemplateRegistryDeps {
   logger: LoggerService;
@@ -92,6 +93,19 @@ export function buildTemplateRegistry(deps: TemplateRegistryDeps): TemplateRegis
         kind: 'tool',
         capabilities: { staticConfigurable: true },
         staticConfigSchema: toJSONSchema(SendSlackMessageToolStaticConfigSchema),
+      },
+    )
+    .register(
+      'finishTool',
+      () => new FinishTool(),
+      {
+        targetPorts: { $self: { kind: 'instance' } },
+      },
+      {
+        title: 'Finish',
+        kind: 'tool',
+        capabilities: { staticConfigurable: true },
+        staticConfigSchema: toJSONSchema(FinishToolStaticConfigSchema),
       },
     )
     .register(

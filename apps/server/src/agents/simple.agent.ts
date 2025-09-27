@@ -26,6 +26,7 @@ import { LangChainToolAdapter } from '../tools/langchainTool.adapter';
 import { SummarizationNode } from '../nodes/summarization.node';
 import { NodeOutput } from '../types';
 import { z } from 'zod';
+import { EnforceRestrictionNode } from '../nodes/enforceRestriction.node';
 
 /**
  * Zod schema describing static configuration for SimpleAgent.
@@ -52,6 +53,17 @@ export const SimpleAgentStaticConfigSchema = z
       .min(1)
       .default(512)
       .describe('Maximum token budget for generated summaries.'),
+    restrictOutput: z.boolean().default(false),
+    restrictionMessage: z
+      .string()
+      .default(
+        "Do not produce a final answer directly. Before finishing, call a tool. If no tool is needed, call the 'finish' tool.",
+      ),
+    restrictionMaxInjections: z
+      .number()
+      .int()
+      .min(0)
+      .default(0), // 0 = unlimited per turn
   })
   .strict();
 
@@ -67,6 +79,13 @@ export class SimpleAgent extends BaseAgent {
   private summarizationKeepTokens?: number; // token budget for verbatim tail
   private summarizationMaxTokens?: number;
   private summarizeNode!: SummarizationNode;
+  private enforceNode!: EnforceRestrictionNode;
+
+  // Restriction config (static-config driven)
+  private restrictOutput: boolean = false;
+  private restrictionMessage: string =
+    "Do not produce a final answer directly. Before finishing, call a tool. If no tool is needed, call the 'finish' tool.";
+  private restrictionMaxInjections: number = 0; // 0 = unlimited per turn
 
   constructor(
     private configService: ConfigService,
@@ -88,6 +107,18 @@ export class SimpleAgent extends BaseAgent {
         reducer: (left, right) => right ?? left,
         default: () => '',
       }),
+      done: Annotation<boolean, boolean>({
+        reducer: (left, right) => right ?? left,
+        default: () => false,
+      }),
+      restrictionInjectionCount: Annotation<number, number>({
+        reducer: (left, right) => right ?? left,
+        default: () => 0,
+      }),
+      restrictionInjected: Annotation<boolean, boolean>({
+        reducer: (left, right) => right ?? left,
+        default: () => false,
+      }),
     });
   }
 
@@ -108,25 +139,56 @@ export class SimpleAgent extends BaseAgent {
       maxTokens: this.summarizationMaxTokens ?? 0,
     });
 
+    // Read restriction config from static config and store locally for closures
+    const cfgUnknown = this._staticConfig;
+    const cfg = (cfgUnknown && typeof cfgUnknown === 'object'
+      ? (cfgUnknown as Partial<SimpleAgentStaticConfig>)
+      : undefined);
+    this.restrictOutput = !!cfg?.restrictOutput;
+    this.restrictionMessage =
+      cfg?.restrictionMessage ||
+      "Do not produce a final answer directly. Before finishing, call a tool. If no tool is needed, call the 'finish' tool.";
+    this.restrictionMaxInjections = cfg?.restrictionMaxInjections ?? 0;
+
+    this.enforceNode = new EnforceRestrictionNode(
+      () => this.restrictOutput,
+      () => this.restrictionMessage,
+      () => this.restrictionMaxInjections,
+    );
+
     const builder = new StateGraph(
       {
         stateSchema: this.state(),
       },
       this.configuration(),
     )
-      .addNode('summarize', this.summarizeNode.action.bind(this.summarizeNode))
+      .addNode('summarize', async (state: any) => {
+        const res = await this.summarizeNode.action(state);
+        // Reset restriction counters per new turn
+        return { ...res, restrictionInjectionCount: 0, restrictionInjected: false };
+      })
       .addNode('call_model', this.callModelNode.action.bind(this.callModelNode))
       .addNode('tools', this.toolsNode.action.bind(this.toolsNode))
+      .addNode('enforce', this.enforceNode.action.bind(this.enforceNode))
       .addEdge(START, 'summarize')
-      .addEdge('tools', 'summarize')
       .addEdge('summarize', 'call_model')
       .addConditionalEdges(
         'call_model',
-        (state) => (last(state.messages as AIMessage[])?.tool_calls?.length ? 'tools' : END),
+        (state) => (last(state.messages as AIMessage[])?.tool_calls?.length ? 'tools' : 'enforce'),
         {
           tools: 'tools',
-          [END]: END,
+          enforce: 'enforce',
         },
+      )
+      .addConditionalEdges(
+        'enforce',
+        (state) => (state.restrictionInjected === true ? 'call_model' : END),
+        { call_model: 'call_model', [END]: END },
+      )
+      .addConditionalEdges(
+        'tools',
+        (state) => (state.done === true ? END : 'summarize'),
+        { [END]: END, summarize: 'summarize' },
       );
 
     // Compile with a plain MongoDBSaver; scoping is handled via configurable.checkpoint_ns
@@ -305,7 +367,16 @@ export class SimpleAgent extends BaseAgent {
     const parsedConfig = SimpleAgentStaticConfigSchema.partial().parse(
       Object.fromEntries(
         Object.entries(config).filter(([k]) =>
-          ['title', 'model', 'systemPrompt', 'summarizationKeepTokens', 'summarizationMaxTokens'].includes(k),
+          [
+            'title',
+            'model',
+            'systemPrompt',
+            'summarizationKeepTokens',
+            'summarizationMaxTokens',
+            'restrictOutput',
+            'restrictionMessage',
+            'restrictionMaxInjections',
+          ].includes(k),
         ),
       ),
     ) as Partial<SimpleAgentStaticConfig> & Record<string, any>;
@@ -351,6 +422,12 @@ export class SimpleAgent extends BaseAgent {
       this.summarizeNode.setOptions(updates);
       this.loggerService.info('SimpleAgent summarization options updated');
     }
+
+    // Apply restriction-related config without altering system prompt
+    if (parsedConfig.restrictOutput !== undefined) this.restrictOutput = !!parsedConfig.restrictOutput;
+    if (parsedConfig.restrictionMessage !== undefined) this.restrictionMessage = parsedConfig.restrictionMessage;
+    if (parsedConfig.restrictionMaxInjections !== undefined)
+      this.restrictionMaxInjections = parsedConfig.restrictionMaxInjections;
   }
 
   /**

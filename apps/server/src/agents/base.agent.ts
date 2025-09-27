@@ -1,6 +1,6 @@
 import { BaseMessage, HumanMessage } from '@langchain/core/messages';
 import { RunnableConfig } from '@langchain/core/runnables';
-import { Annotation, AnnotationRoot, CompiledStateGraph, Messages, messagesStateReducer } from '@langchain/langgraph';
+import { Annotation, AnnotationRoot, CompiledStateGraph } from '@langchain/langgraph';
 import { LoggerService } from '../services/logger.service';
 import { TriggerListener, TriggerMessage } from '../triggers/base.trigger';
 import { NodeOutput } from '../types';
@@ -12,6 +12,8 @@ import { JSONSchema } from 'zod/v4/core';
 export abstract class BaseAgent implements TriggerListener, StaticConfigurable {
   protected _graph: CompiledStateGraph<unknown, unknown> | undefined;
   protected _config: RunnableConfig | undefined;
+  // Optional static config injected by the runtime; typed loosely on purpose.
+  protected _staticConfig: Record<string, unknown> | undefined;
 
   get graph() {
     if (!this._graph) {
