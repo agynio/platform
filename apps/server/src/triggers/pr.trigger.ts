@@ -1,4 +1,4 @@
-import { BaseTrigger, TriggerMessage } from "./base.trigger";
+import { BaseTrigger, TriggerMessage } from './base.trigger';
 import { LoggerService } from "../services/logger.service";
 import { PRService } from "../services/pr.service";
 import { GithubService } from "../services/github.service";
