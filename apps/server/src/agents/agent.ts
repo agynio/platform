@@ -21,6 +21,22 @@ import { NodeOutput } from '../types';
 import { tool as lcTool } from '@langchain/core/tools';
 import { z } from 'zod';
 
+// Public static configuration schema for Agent templates
+export const AgentStaticConfigSchema = z
+  .object({
+    title: z.string().optional(),
+    model: z.string(),
+    systemPrompt: z.string(),
+    summarizationKeepTokens: z.number().int().min(0).optional(),
+    summarizationMaxTokens: z.number().int().min(1).optional(),
+    restrictOutput: z.boolean().optional(),
+    restrictionMessage: z.string().optional(),
+    restrictionMaxInjections: z.number().int().min(0).optional(),
+  })
+  .strict();
+
+export type AgentStaticConfig = z.infer<typeof AgentStaticConfigSchema>;
+
 /**
  * Unified Agent class (merges BaseAgent and SimpleAgent).
  * Does not read static config in constructor; use setConfig() to update runtime settings.

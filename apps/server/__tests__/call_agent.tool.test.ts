@@ -2,7 +2,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { AIMessage } from '@langchain/core/messages';
 import { CallAgentTool } from '../src/tools/call_agent.tool';
 import { LoggerService } from '../src/services/logger.service';
-import { BaseAgent } from '../src/agents/base.agent';
+import { Agent } from '../src/agents/agent';
 import { DynamicStructuredTool } from '@langchain/core/tools';
 import { TemplateRegistry } from '../src/graph/templateRegistry';
 import { LiveGraphRuntime } from '../src/graph/liveGraph.manager';
@@ -11,12 +11,16 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 type Msg = { content: string; info: Record<string, unknown> };
 
-class FakeAgent extends BaseAgent {
+class MockConfigService { openaiApiKey = 'sk-abc'; }
+class MockCheckpointerService { getCheckpointer = vi.fn(() => ({} as any)); }
+
+class FakeAgent extends Agent {
   constructor(
     logger: LoggerService,
     private responder?: (thread: string, msgs: Msg[]) => Promise<AIMessage>,
   ) {
-    super(logger);
+    super(new MockConfigService() as any, logger, new MockCheckpointerService() as any, 'agent-x');
+    // override internal graph/config for unit simplicity
     this._graph = { invoke: vi.fn() } as any;
     this._config = { configurable: {} } as any;
   }
@@ -27,10 +31,10 @@ class FakeAgent extends BaseAgent {
   }
 }
 
-class FakeParentAgent extends BaseAgent {
+class FakeParentAgent extends Agent {
   public calls: Array<{ thread: string; messages: Msg[] }> = [];
   constructor(logger: LoggerService) {
-    super(logger);
+    super(new MockConfigService() as any, logger, new MockCheckpointerService() as any, 'agent-parent');
     this._graph = { invoke: vi.fn() } as any;
     this._config = { configurable: {} } as any;
   }

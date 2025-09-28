@@ -5,3 +5,4 @@ export * from './liveGraph.types';
 export * from './liveGraph.manager';
 export * from './ports.types';
 export * from './ports.registry';
+export * from './ports.contracts';

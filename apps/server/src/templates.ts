@@ -1,5 +1,5 @@
 import { toJSONSchema } from 'zod';
-import { Agent, SimpleAgent } from './agents/agent';
+import { Agent, SimpleAgent, AgentStaticConfigSchema } from './agents/agent';
 import { ContainerProviderEntity, ContainerProviderStaticConfigSchema } from './entities/containerProvider.entity';
 import { TemplateRegistry } from './graph';
 import { LocalMCPServer } from './mcp';
@@ -153,6 +153,7 @@ export function buildTemplateRegistry(deps: TemplateRegistryDeps): TemplateRegis
         title: 'Agent',
         kind: 'agent',
         capabilities: { pausable: true, staticConfigurable: true },
+        staticConfigSchema: toJSONSchema(AgentStaticConfigSchema),
       },
     )
     .register(
