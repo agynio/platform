@@ -2,6 +2,10 @@ import { JSONSchema } from 'zod/v4/core';
 import { TemplatePortConfig, TemplatePortsRegistry } from './ports.types';
 import { FactoryFn, TemplateKind, TemplateNodeSchema } from './types';
 
+export type DetailedPortSchema = {
+  handles: Record<string, { role: 'source' | 'target'; kind: 'instance' | 'method'; create?: string; destroy?: string }>;
+};
+
 export interface TemplateMeta {
   title: string;
   kind: TemplateKind;
@@ -52,5 +56,35 @@ export class TemplateRegistry {
       });
     }
     return schemas.sort((a, b) => a.name.localeCompare(b.name));
+  }
+
+  toDetailedSchema(): Array<TemplateNodeSchema & DetailedPortSchema> {
+    const out: Array<TemplateNodeSchema & DetailedPortSchema> = [];
+    for (const name of this.factories.keys()) {
+      const portCfg = this.ports.get(name);
+      const sourcePorts = portCfg?.sourcePorts ? Object.keys(portCfg.sourcePorts) : [];
+      const targetPorts = portCfg?.targetPorts ? Object.keys(portCfg.targetPorts) : [];
+      const meta = this.meta.get(name) ?? { title: name, kind: 'tool' as TemplateKind };
+      const handles: DetailedPortSchema['handles'] = {};
+      for (const [h, cfg] of Object.entries(portCfg?.sourcePorts || {})) {
+        if (cfg.kind === 'method') handles[h] = { role: 'source', kind: 'method', create: (cfg as any).create, destroy: (cfg as any).destroy };
+        else handles[h] = { role: 'source', kind: 'instance' };
+      }
+      for (const [h, cfg] of Object.entries(portCfg?.targetPorts || {})) {
+        if (cfg.kind === 'method') handles[h] = { role: 'target', kind: 'method', create: (cfg as any).create, destroy: (cfg as any).destroy };
+        else handles[h] = { role: 'target', kind: 'instance' };
+      }
+      out.push({
+        name,
+        title: meta.title,
+        kind: meta.kind,
+        sourcePorts,
+        targetPorts,
+        capabilities: meta.capabilities,
+        staticConfigSchema: meta.staticConfigSchema,
+        handles,
+      });
+    }
+    return out.sort((a, b) => a.name.localeCompare(b.name));
   }
 }
