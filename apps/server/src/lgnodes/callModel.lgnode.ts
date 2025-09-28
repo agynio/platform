@@ -3,11 +3,17 @@ import { ChatOpenAI } from '@langchain/openai';
 import { BaseTool } from '../tools/base.tool';
 import { BaseNode } from './base.lgnode';
 import { NodeOutput } from '../types';
-import { task, withAgent, withLLMCall, withTask, withTool } from '@traceloop/node-server-sdk';
+import { withTask } from '@traceloop/node-server-sdk';
+
+// Minimal connector contract used by CallModelNode for memory injection
+export interface MemoryConnector {
+  renderMessage: (opts: { threadId?: string; path?: string }) => Promise<SystemMessage | null>;
+  getPlacement: () => 'after_system' | 'last_message';
+}
 
 export class CallModelNode extends BaseNode {
   private systemPrompt: string = '';
-  private memoryConnector?: { renderMessage: (opts: { threadId?: string; path?: string }) => Promise<SystemMessage | null>; getPlacement: () => 'after_system' | 'last_message' };
+  private memoryConnector?: MemoryConnector;
 
   constructor(
     private tools: BaseTool[],
@@ -31,7 +37,7 @@ export class CallModelNode extends BaseNode {
   }
 
   // Inject/clear memory connector at runtime via ports wiring
-  setMemoryConnector(connector?: { renderMessage: (opts: { threadId?: string; path?: string }) => Promise<SystemMessage | null>; getPlacement: () => 'after_system' | 'last_message' }) {
+  setMemoryConnector(connector?: MemoryConnector) {
     this.memoryConnector = connector;
   }
 

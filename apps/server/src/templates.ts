@@ -27,7 +27,7 @@ export interface TemplateRegistryDeps {
   configService: ConfigService;
   slackService: SlackService;
   checkpointerService: CheckpointerService;
-  mongoService?: MongoService; // optional; memory nodes require it
+  mongoService: MongoService; // required for memory nodes
 }
 
 export function buildTemplateRegistry(deps: TemplateRegistryDeps): TemplateRegistry {
@@ -47,10 +47,6 @@ export function buildTemplateRegistry(deps: TemplateRegistryDeps): TemplateRegis
         ),
       {
         sourcePorts: { $self: { kind: 'instance' } },
-        targetPorts: {
-          // Allow wiring memory connector into CallModel at runtime
-          callModel: { kind: 'method', create: 'setMemoryConnector' },
-        },
       },
       {
         title: 'Workspace',
@@ -155,7 +151,8 @@ export function buildTemplateRegistry(deps: TemplateRegistryDeps): TemplateRegis
         sourcePorts: {
           tools: { kind: 'method', create: 'addTool', destroy: 'removeTool' },
           mcp: { kind: 'method', create: 'addMcpServer', destroy: 'removeMcpServer' },
-          memory: { kind: 'method', create: 'addTool', destroy: 'removeTool' },
+          // Attach/detach memory connector explicitly
+          memory: { kind: 'method', create: 'setMemoryConnector', destroy: 'clearMemoryConnector' },
         },
         targetPorts: { $self: { kind: 'instance' } },
       },
@@ -186,36 +183,29 @@ export function buildTemplateRegistry(deps: TemplateRegistryDeps): TemplateRegis
         staticConfigSchema: toJSONSchema(LocalMcpServerStaticConfigSchema),
       },
     )
-    // Memory node: provides memory tools and connector
+    // Memory node: thin factory; complex logic lives in dedicated classes
     .register(
       'memoryNode',
       (ctx) => {
-        if (!mongoService) throw new Error('MongoService not provided for memoryNode');
         const db = mongoService.getDb();
         const memNode = new MemoryNode(db, ctx.nodeId, { scope: 'global' });
-        const instance = {
-          // Adapter tools set for SimpleAgent consumption
-          get memoryTools() {
-            const factory = (opts: { threadId?: string }) => memNode.getMemoryService({ threadId: opts.threadId });
-            return buildMemoryToolAdapters(factory);
-          },
-          // Provide connector factory and cached current connector for wiring
-          _connector: undefined as undefined | MemoryConnectorNode,
+        return {
+          // Return connector per requested config
           createConnector(config?: { placement?: 'after_system' | 'last_message'; content?: 'full' | 'tree'; maxChars?: number }) {
             const factory = (opts: { threadId?: string }) => memNode.getMemoryService({ threadId: opts.threadId });
-            instance._connector = new MemoryConnectorNode(factory, {
+            return new MemoryConnectorNode(factory, {
               placement: config?.placement || 'after_system',
               content: config?.content || 'tree',
               maxChars: config?.maxChars ?? 4000,
             });
-            return instance._connector;
           },
-          getConnector() { return instance._connector; },
-          setConfig(cfg: any) {
-            memNode.setConfig(cfg);
+          // Memory tool adapters for agent
+          get memoryTools() {
+            const factory = (opts: { threadId?: string }) => memNode.getMemoryService({ threadId: opts.threadId });
+            return buildMemoryToolAdapters(factory);
           },
-        } as any;
-        return instance;
+          setConfig(cfg: Record<string, unknown>) { memNode.setConfig(cfg as any); },
+        };
       },
       {
         sourcePorts: { $self: { kind: 'instance' } },

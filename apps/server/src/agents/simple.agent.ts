@@ -15,7 +15,7 @@ import { last } from 'lodash-es';
 import { McpServer, McpTool } from '../mcp';
 import { isDynamicConfigurable } from '../graph/capabilities';
 import { inferArgsSchema } from '../mcp/jsonSchemaToZod';
-import { CallModelNode } from '../lgnodes/callModel.lgnode';
+import { CallModelNode, type MemoryConnector } from '../lgnodes/callModel.lgnode';
 import { ToolsNode } from '../lgnodes/tools.lgnode';
 import { CheckpointerService } from '../services/checkpointer.service';
 import { ConfigService } from '../services/config.service';
@@ -200,18 +200,22 @@ export class SimpleAgent extends BaseAgent {
   }
 
   // Inject/clear a memory connector into the underlying CallModel
-  setMemoryConnector(mem: any) { // eslint-disable-line @typescript-eslint/no-explicit-any
-    // Accept either a connector-like object or a memory node exposing getConnector/createConnector
-    let connector = mem;
-    if (mem && typeof mem.getConnector === 'function') {
-      connector = mem.getConnector?.();
-      if (!connector && typeof mem.createConnector === 'function') connector = mem.createConnector();
+  setMemoryConnector(mem: MemoryConnector | { getConnector?: () => MemoryConnector | undefined; createConnector?: () => MemoryConnector } ) {
+    // Accept either a connector-like object or a provider exposing getConnector/createConnector
+    let connector: MemoryConnector | undefined = undefined;
+    if (mem && typeof (mem as MemoryConnector).renderMessage === 'function') {
+      connector = mem as MemoryConnector;
+    } else if (mem && typeof (mem as any).getConnector === 'function') {
+      connector = (mem as { getConnector: () => MemoryConnector | undefined }).getConnector?.();
+      if (!connector && typeof (mem as any).createConnector === 'function') {
+        connector = (mem as { createConnector: () => MemoryConnector }).createConnector();
+      }
     }
     this.callModelNode.setMemoryConnector(connector);
     this.loggerService.info('SimpleAgent memory connector updated');
   }
   clearMemoryConnector() {
-    this.callModelNode.setMemoryConnector(undefined as any);
+    this.callModelNode.setMemoryConnector(undefined);
     this.loggerService.info('SimpleAgent memory connector cleared');
   }
 
