@@ -1,0 +1,4 @@
+# Prevent npm lockfiles in this package (pnpm only)
+package-lock.json
+**/package-lock.json
+*/package-lock.json
