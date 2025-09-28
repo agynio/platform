@@ -19,7 +19,7 @@ import { FinishTool, FinishToolStaticConfigSchema } from './tools/finish.tool';
 import { MongoService } from './services/mongo.service';
 import { MemoryNode } from './lgnodes/memory.lgnode';
 import { MemoryConnectorNode } from './lgnodes/memory.connector.lgnode';
-import { buildMemoryTools } from './tools/memory.tools';
+import { buildMemoryToolAdapters } from './tools/memory.adapters';
 
 export interface TemplateRegistryDeps {
   logger: LoggerService;
@@ -193,10 +193,8 @@ export function buildTemplateRegistry(deps: TemplateRegistryDeps): TemplateRegis
           // expose build tool set as an instance; agent will attach via sourcePorts.memory
           get memoryTools() {
             const factory = (opts: { threadId?: string }) => memNode.getMemoryService({ threadId: opts.threadId });
-            const tools = buildMemoryTools(factory);
-            // Adapter to BaseTool is handled by SimpleAgent via addTool expecting BaseTool; wrapping is not implemented here.
-            // For wiring simplicity in this phase, we expose a faux BaseTool set via an adaptor in templates.
-            return tools;
+            // Return BaseTool adapters consumable by SimpleAgent
+            return buildMemoryToolAdapters(factory);
           },
           // Provide connector factory for CallModel when integrated later
           createConnector(config?: { placement?: 'after_system' | 'last_message'; content?: 'full' | 'tree'; maxChars?: number }) {
