@@ -1,4 +1,3 @@
-import { exec } from 'child_process';
 import { z } from 'zod';
 import { LoggerService } from '../services/logger.service';
 import { tool, DynamicStructuredTool } from '@langchain/core/tools';
@@ -6,7 +5,6 @@ import { BaseTool } from './base.tool';
 import { ContainerProviderEntity } from '../entities/containerProvider.entity';
 
 // Regex to strip ANSI escape sequences (colors, cursor moves, etc.)
-// Matches ESC followed by a bracket and command bytes or other OSC sequences.
 const ANSI_REGEX =
   // eslint-disable-next-line no-control-regex
   /[\u001B\u009B][[\]()#;?]*(?:[0-9]{1,4}(?:;[0-9]{0,4})*)?[0-9A-ORZcf-nq-uy=><]/g;
@@ -19,7 +17,7 @@ const bashCommandSchema = z.object({
     ),
 });
 
-// Static config schema for ShellTool (currently no options, placeholder for future flags)
+// Static config schema for ShellTool (currently no options). Supports workingDir via container entity options.
 export const ShellToolStaticConfigSchema = z.object({}).strict();
 
 export class ShellTool extends BaseTool {
@@ -29,6 +27,7 @@ export class ShellTool extends BaseTool {
     super();
   }
 
+  // Port wiring: container provider instance injected by graph
   setContainerProvider(provider: ContainerProviderEntity | undefined): void {
     this.containerProvider = provider;
   }
@@ -61,13 +60,9 @@ export class ShellTool extends BaseTool {
       },
       {
         name: 'shell_command',
-        description: 'Execute a shell command and return the output.',
+        description: 'Execute a shell command and return the output. Optional workingDir supported via container.',
         schema: bashCommandSchema,
       },
     );
-  }
-
-  async setConfig(_cfg: Record<string, unknown>): Promise<void> {
-    /* tool currently has no configurable runtime settings */
   }
 }

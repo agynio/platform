@@ -3,28 +3,20 @@ import { AIMessage, BaseMessage, SystemMessage } from '@langchain/core/messages'
 import { LoggerService } from '../src/services/logger.service';
 import { ConfigService } from '../src/services/config.service';
 import { CheckpointerService } from '../src/services/checkpointer.service';
-import { SimpleAgent } from '../src/agents/simple.agent';
+import { Agent as SimpleAgent } from '../src/agents/agent';
 
-// Mock ChatOpenAI to control responses
 vi.mock('@langchain/openai', async (importOriginal) => {
   const mod = await importOriginal();
   class MockChatOpenAI extends mod.ChatOpenAI {
     withConfig(_cfg: any) {
-      return {
-        invoke: async (_msgs: BaseMessage[]) => this._mockResponse(_msgs),
-      } as any;
+      return { invoke: async (_msgs: BaseMessage[]) => this._mockResponse(_msgs) } as any;
     }
-    async invoke(_msgs: BaseMessage[]) {
-      return this._mockResponse(_msgs);
-    }
+    async invoke(_msgs: BaseMessage[]) { return this._mockResponse(_msgs); }
     async _mockResponse(msgs: BaseMessage[]) {
       const last = msgs[msgs.length - 1];
-      // If the last message is a SystemMessage containing 'Do not produce a final answer directly',
-      // then simulate that the model follows instruction by calling the finish tool
       if (last instanceof SystemMessage && String(last.content).includes('Do not produce a final answer directly')) {
         return new AIMessage({ content: '', tool_calls: [{ id: 't1', name: 'finish', args: { note: 'ok' } }] });
       }
-      // Otherwise, return a normal message without tool calls
       return new AIMessage('plain');
     }
     async getNumTokens(text: string): Promise<number> { return text.length; }
@@ -32,10 +24,8 @@ vi.mock('@langchain/openai', async (importOriginal) => {
   return { ...mod, ChatOpenAI: MockChatOpenAI };
 });
 
-// Mock ToolsNode to include the finish tool
 import { FinishTool } from '../src/tools/finish.tool';
 
-// Mock CheckpointerService to avoid Mongo requirements
 vi.mock('../src/services/checkpointer.service', async (importOriginal) => {
   const mod = await importOriginal();
   class Fake extends mod.CheckpointerService {
@@ -52,33 +42,25 @@ vi.mock('../src/services/checkpointer.service', async (importOriginal) => {
   return { ...mod, CheckpointerService: Fake };
 });
 
-// Patch SimpleAgent to add finish tool quickly in tests
-vi.mock('../src/agents/simple.agent', async (importOriginal) => {
+// Patch Agent to add finish tool quickly in tests
+vi.mock('../src/agents/agent', async (importOriginal) => {
   const mod = await importOriginal();
-  const Original = mod.SimpleAgent;
+  const Original = mod.Agent;
   class TestAgent extends Original {
     addTool(tool: any) { super.addTool(tool); }
     init(config: any) {
       super.init(config);
-      // add finish tool so model can call it
-      // @ts-ignore private access for tests
+      // @ts-ignore
       this.addTool(new FinishTool());
       return this;
     }
   }
-  return { ...mod, SimpleAgent: TestAgent };
+  return { ...mod, Agent: TestAgent };
 });
 
-describe('SimpleAgent restriction enforcement', () => {
+describe('Agent restriction enforcement', () => {
   const cfg = new ConfigService({
-    githubAppId: '1',
-    githubAppPrivateKey: 'k',
-    githubInstallationId: 'i',
-    openaiApiKey: 'x',
-    githubToken: 't',
-    slackBotToken: 's',
-    slackAppToken: 'sa',
-    mongodbUrl: 'm',
+    githubAppId: '1', githubAppPrivateKey: 'k', githubInstallationId: 'i', openaiApiKey: 'x', githubToken: 't', slackBotToken: 's', slackAppToken: 'sa', mongodbUrl: 'm',
   });
 
   it('restrictOutput=false: call_model with no tool_calls leads to END (no enforce)', async () => {
@@ -96,7 +78,6 @@ describe('SimpleAgent restriction enforcement', () => {
   });
 
   it('restrictOutput=true & restrictionMaxInjections=2: injects twice then ends if still no tool_calls', async () => {
-    // Remock LLM to never call tools even after injection
     const openai = await import('@langchain/openai');
     class NoToolLLM extends (openai as any).ChatOpenAI {
       withConfig() { return { invoke: async (_: any) => new AIMessage('still-no-tool') } as any; }
