@@ -59,6 +59,7 @@ export class LocalMCPServer implements McpServer, Provisionable, DynamicConfigur
   private pendingStart?: Promise<void>; // ensure single in-flight start
   private cfg?: z.infer<typeof LocalMcpServerStaticConfigSchema>;
   private toolsDiscovered = false; // tracks if we've done initial tool discovery
+  private frozenNamespace?: string; // once discovery happens, lock namespace
   // Resilient start state
   private wantStart = false; // intent flag indicating someone requested start
   private startWaiters: { resolve: () => void; reject: (e: any) => void }[] = [];
@@ -168,6 +169,8 @@ export class LocalMCPServer implements McpServer, Provisionable, DynamicConfigur
 
       this.logger.info(`[MCP:${this.namespace}] [disc:${discoveryId}] Discovered ${this.toolsCache.length} tools`);
       this.toolsDiscovered = true;
+      // Freeze namespace after first successful discovery
+      if (!this.frozenNamespace && this.cfg?.namespace) this.frozenNamespace = this.cfg.namespace;
       // Invalidate dynamic schema cache so it will be rebuilt including newly discovered tools
       this._dynamicConfigZodSchema = undefined;
       // If user supplied a dynamic config before discovery completed, we preserve it.
@@ -239,9 +242,14 @@ export class LocalMCPServer implements McpServer, Provisionable, DynamicConfigur
       );
       throw new Error('Invalid MCP server config');
     }
-    // Cast to McpServerConfig (schema is stricter than interface; compatible subset)
-    this.cfg = parsed.data;
-    // TODO: react to namespace changes (re-register tools) if needed
+    const next = parsed.data;
+    if (this.frozenNamespace && next.namespace && next.namespace !== this.frozenNamespace) {
+      this.logger.info(
+        `[MCP:${this.namespace}] Ignoring namespace change to '${next.namespace}' after discovery; using '${this.frozenNamespace}'`,
+      );
+      next.namespace = this.frozenNamespace;
+    }
+    this.cfg = next;
   }
 
   async listTools(force = false): Promise<McpTool[]> {
