@@ -17,7 +17,7 @@ import { SlackTriggerStaticConfigSchema } from './triggers/slack.trigger';
 import { LocalMcpServerStaticConfigSchema } from './mcp/localMcpServer';
 import { FinishTool, FinishToolStaticConfigSchema } from './tools/finish.tool';
 import { MongoService } from './services/mongo.service';
-import { MemoryNode } from './lgnodes/memory.lgnode';
+import { MemoryNode, type MemoryNodeConfig } from './lgnodes/memory.lgnode';
 import { MemoryConnectorNode } from './lgnodes/memory.connector.lgnode';
 import { buildMemoryToolAdapters } from './tools/memory.adapters';
 
@@ -206,7 +206,7 @@ export function buildTemplateRegistry(deps: TemplateRegistryDeps): TemplateRegis
             const factory = (opts: { threadId?: string }) => memNode.getMemoryService({ threadId: opts.threadId });
             return buildMemoryToolAdapters(factory);
           },
-          setConfig(cfg: Record<string, unknown>) { memNode.setConfig(cfg as unknown as Partial<{ scope: any } >); },
+          setConfig(cfg: Partial<MemoryNodeConfig>) { memNode.setConfig(cfg); },
         };
       },
       {
