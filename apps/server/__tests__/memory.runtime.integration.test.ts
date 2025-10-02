@@ -97,7 +97,7 @@ function makeRuntime(db: Db, placement: 'after_system'|'last_message') {
   templates.register(
     'memory',
     async (ctx) => {
-      const mod = await import('../src/lgnodes/memory.connector.node');
+      const mod = await import('../src/nodes/memory.connector.node');
       const MemoryConnectorNode = mod.MemoryConnectorNode;
       const factory = (opts: { threadId?: string }) => new MemoryService(db, ctx.nodeId, opts.threadId ? 'perThread' : 'global', opts.threadId);
       // Return the connector instance directly so it can be wired into CallModel.setMemoryConnector
