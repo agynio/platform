@@ -28,7 +28,7 @@ describe('templates: memory registration and agent memory port', () => {
     expect(agentTargets.memory).toBeTruthy();
     // Method mapping to attach/detach memory connector
     expect((agentTargets.memory as any).kind).toBe('method');
-    expect((agentTargets.memory as any).create).toBe('setMemoryConnector');
-    expect((agentTargets.memory as any).destroy).toBe('clearMemoryConnector');
+    expect((agentTargets.memory as any).create).toBe('attachMemoryConnector');
+    expect((agentTargets.memory as any).destroy).toBe('detachMemoryConnector');
   });
 });

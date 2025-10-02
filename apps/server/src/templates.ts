@@ -17,9 +17,7 @@ import { SlackTriggerStaticConfigSchema } from './triggers/slack.trigger';
 import { LocalMcpServerStaticConfigSchema } from './mcp/localMcpServer';
 import { FinishTool, FinishToolStaticConfigSchema } from './tools/finish.tool';
 import { MongoService } from './services/mongo.service';
-import { MemoryNode, type MemoryNodeConfig } from './lgnodes/memory.node';
-import { MemoryConnectorNode } from './lgnodes/memory.connector.node';
-import { buildMemoryToolAdapters } from './tools/memory.adapters';
+import { createMemoryRegistry } from './memory/memory.registry';
 
 export interface TemplateRegistryDeps {
   logger: LoggerService;
@@ -155,7 +153,7 @@ export function buildTemplateRegistry(deps: TemplateRegistryDeps): TemplateRegis
         targetPorts: {
           $self: { kind: 'instance' },
           // Attach/detach memory connector via explicit methods on the agent
-          memory: { kind: 'method', create: 'setMemoryConnector', destroy: 'clearMemoryConnector' },
+          memory: { kind: 'method', create: 'attachMemoryConnector', destroy: 'detachMemoryConnector' },
         },
       },
       {
@@ -190,24 +188,7 @@ export function buildTemplateRegistry(deps: TemplateRegistryDeps): TemplateRegis
       'memoryNode',
       (ctx) => {
         if (!mongoService) throw new Error('MongoService is required for memoryNode');
-        const db = mongoService.getDb();
-        const memNode = new MemoryNode(db, ctx.nodeId, { scope: 'global' });
-        return {
-          // Light factory: delegate construction to MemoryConnectorNode and adapters
-          createConnector(config?: { placement?: 'after_system' | 'last_message'; content?: 'full' | 'tree'; maxChars?: number }) {
-            const factory = (opts: { threadId?: string }) => memNode.getMemoryService({ threadId: opts.threadId });
-            return new MemoryConnectorNode(factory, {
-              placement: config?.placement || 'after_system',
-              content: config?.content || 'tree',
-              maxChars: config?.maxChars ?? 4000,
-            });
-          },
-          get memoryTools() {
-            const factory = (opts: { threadId?: string }) => memNode.getMemoryService({ threadId: opts.threadId });
-            return buildMemoryToolAdapters(factory);
-          },
-          setConfig(cfg: Partial<MemoryNodeConfig>) { memNode.setConfig(cfg); },
-        };
+        return createMemoryRegistry(mongoService, ctx.nodeId);
       },
       {
         sourcePorts: { $self: { kind: 'instance' } },

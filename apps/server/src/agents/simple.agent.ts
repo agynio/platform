@@ -199,8 +199,8 @@ export class SimpleAgent extends BaseAgent {
     return this;
   }
 
-  // Inject/clear a memory connector into the underlying CallModel
-  setMemoryConnector(mem: MemoryConnector | { getConnector?: () => MemoryConnector | undefined; createConnector?: () => MemoryConnector } ) {
+  // Attach/detach a memory connector into the underlying CallModel
+  attachMemoryConnector(mem?: MemoryConnector | { getConnector?: () => MemoryConnector | undefined; createConnector?: () => MemoryConnector }) {
     // Accept either a connector-like object or a provider exposing getConnector/createConnector
     let connector: MemoryConnector | undefined = undefined;
     if (mem && typeof (mem as MemoryConnector).renderMessage === 'function') {
@@ -213,11 +213,11 @@ export class SimpleAgent extends BaseAgent {
       }
     }
     this.callModelNode.setMemoryConnector(connector);
-    this.loggerService.info('SimpleAgent memory connector updated');
+    this.loggerService.info('SimpleAgent memory connector attached');
   }
-  clearMemoryConnector() {
+  detachMemoryConnector() {
     this.callModelNode.setMemoryConnector(undefined);
-    this.loggerService.info('SimpleAgent memory connector cleared');
+    this.loggerService.info('SimpleAgent memory connector detached');
   }
 
   addTool(tool: BaseTool) {
