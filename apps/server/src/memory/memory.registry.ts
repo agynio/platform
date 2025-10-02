@@ -1,6 +1,6 @@
 import { MongoService } from '../services/mongo.service';
-import { MemoryNode, type MemoryNodeConfig } from '../lgnodes/memory.node';
-import { MemoryConnectorNode } from '../lgnodes/memory.connector.node';
+import { MemoryNode, type MemoryNodeConfig } from '../nodes/memory.node';
+import { MemoryConnectorNode } from '../nodes/memory.connector.node';
 import { buildMemoryToolAdapters } from '../tools/memory.adapters';
 
 // Factory for memory-related instances to keep templates.ts thin.
