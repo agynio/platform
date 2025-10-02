@@ -1,6 +1,8 @@
 import { Db } from 'mongodb';
 import { z } from 'zod';
 import { MemoryService, MemoryScope } from '../services/memory.service';
+import { buildMemoryToolAdapters } from '../tools/memory.adapters';
+import type { BaseTool } from '../tools/base.tool';
 
 export interface MemoryNodeConfig {
   scope: MemoryScope; // 'global' | 'perThread'
@@ -37,5 +39,11 @@ export class MemoryNode {
   getMemoryService(opts: { threadId?: string }): MemoryService {
     const threadId = this.config.scope === 'perThread' ? opts.threadId : undefined;
     return new MemoryService(this.db, this.nodeId, this.config.scope, threadId);
+  }
+
+  // Expose memory tools as BaseTool adapters built on top of this node's MemoryService factory
+  getTools(): BaseTool[] {
+    const factory = (opts: { threadId?: string }) => this.getMemoryService(opts);
+    return buildMemoryToolAdapters(factory);
   }
 }

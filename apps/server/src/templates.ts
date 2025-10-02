@@ -192,13 +192,13 @@ export function buildTemplateRegistry(deps: TemplateRegistryDeps): TemplateRegis
         return new MemoryNode(db, ctx.nodeId, { scope: 'global' });
       },
       {
-        // Expose an accessor to obtain a MemoryService scoped to optional threadId
-        sourcePorts: { getService: { kind: 'method', create: 'getMemoryService' } },
+        // Expose an accessor to obtain a MemoryService scoped to optional threadId and memory tools
+        sourcePorts: { getService: { kind: 'method', create: 'getMemoryService' }, tools: { kind: 'method', create: 'getTools' } },
       },
       {
         title: 'Memory',
         kind: 'tool',
-        capabilities: { provisionable: true, dynamicConfigurable: true, staticConfigurable: true },
+        capabilities: { provisionable: true, staticConfigurable: true },
         staticConfigSchema: toJSONSchema(MemoryNodeStaticConfigSchema),
       },
     )
@@ -213,7 +213,7 @@ export function buildTemplateRegistry(deps: TemplateRegistryDeps): TemplateRegis
       {
         title: 'Memory Connector',
         kind: 'tool',
-        capabilities: { provisionable: true, dynamicConfigurable: true, staticConfigurable: true },
+        capabilities: { provisionable: true, staticConfigurable: true },
         staticConfigSchema: toJSONSchema(MemoryConnectorStaticConfigSchema),
       },
     );
