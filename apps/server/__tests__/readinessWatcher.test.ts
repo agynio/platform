@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { ReadinessWatcher } from '../utils/readinessWatcher.js';
+import { ReadinessWatcher } from '../src/utils/readinessWatcher.js';
 
 // Minimal stub runtime
 class RuntimeStub {
