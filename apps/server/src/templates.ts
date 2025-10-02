@@ -19,6 +19,11 @@ import { FinishTool, FinishToolStaticConfigSchema } from './tools/finish.tool';
 import { MongoService } from './services/mongo.service';
 import { MemoryNode, MemoryNodeStaticConfigSchema } from './nodes/memory.node';
 import { MemoryConnectorNode, MemoryConnectorStaticConfigSchema } from './nodes/memory.connector.node';
+import { MemoryReadTool, MemoryReadToolStaticConfigSchema } from './tools/memory/memory_read.tool';
+import { MemoryListTool, MemoryListToolStaticConfigSchema } from './tools/memory/memory_list.tool';
+import { MemoryAppendTool, MemoryAppendToolStaticConfigSchema } from './tools/memory/memory_append.tool';
+import { MemoryUpdateTool, MemoryUpdateToolStaticConfigSchema } from './tools/memory/memory_update.tool';
+import { MemoryDeleteTool, MemoryDeleteToolStaticConfigSchema } from './tools/memory/memory_delete.tool';
 
 export interface TemplateRegistryDeps {
   logger: LoggerService;
@@ -49,7 +54,7 @@ export function buildTemplateRegistry(deps: TemplateRegistryDeps): TemplateRegis
       },
       {
         title: 'Workspace',
-        kind: 'tool',
+        kind: 'service',
         capabilities: { staticConfigurable: true },
         staticConfigSchema: toJSONSchema(ContainerProviderStaticConfigSchema),
       },
@@ -164,6 +169,37 @@ export function buildTemplateRegistry(deps: TemplateRegistryDeps): TemplateRegis
         staticConfigSchema: toJSONSchema(SimpleAgentStaticConfigSchema),
       },
     )
+    // Register memory tools individually so they appear as Tool nodes and can be wired to agent.tools
+    .register(
+      'memory_read',
+      () => new MemoryReadTool(),
+      { targetPorts: { $self: { kind: 'instance' }, memory: { kind: 'method', create: 'setMemoryFactory' } } },
+      { title: 'Memory Read', kind: 'tool', capabilities: { provisionable: true, staticConfigurable: true }, staticConfigSchema: toJSONSchema(MemoryReadToolStaticConfigSchema) }
+    )
+    .register(
+      'memory_list',
+      () => new MemoryListTool(),
+      { targetPorts: { $self: { kind: 'instance' }, memory: { kind: 'method', create: 'setMemoryFactory' } } },
+      { title: 'Memory List', kind: 'tool', capabilities: { provisionable: true, staticConfigurable: true }, staticConfigSchema: toJSONSchema(MemoryListToolStaticConfigSchema) }
+    )
+    .register(
+      'memory_append',
+      () => new MemoryAppendTool(),
+      { targetPorts: { $self: { kind: 'instance' }, memory: { kind: 'method', create: 'setMemoryFactory' } } },
+      { title: 'Memory Append', kind: 'tool', capabilities: { provisionable: true, staticConfigurable: true }, staticConfigSchema: toJSONSchema(MemoryAppendToolStaticConfigSchema) }
+    )
+    .register(
+      'memory_update',
+      () => new MemoryUpdateTool(),
+      { targetPorts: { $self: { kind: 'instance' }, memory: { kind: 'method', create: 'setMemoryFactory' } } },
+      { title: 'Memory Update', kind: 'tool', capabilities: { provisionable: true, staticConfigurable: true }, staticConfigSchema: toJSONSchema(MemoryUpdateToolStaticConfigSchema) }
+    )
+    .register(
+      'memory_delete',
+      () => new MemoryDeleteTool(),
+      { targetPorts: { $self: { kind: 'instance' }, memory: { kind: 'method', create: 'setMemoryFactory' } } },
+      { title: 'Memory Delete', kind: 'tool', capabilities: { provisionable: true, staticConfigurable: true }, staticConfigSchema: toJSONSchema(MemoryDeleteToolStaticConfigSchema) }
+    )
     .register(
       'mcpServer',
       () => {
@@ -197,7 +233,7 @@ export function buildTemplateRegistry(deps: TemplateRegistryDeps): TemplateRegis
       },
       {
         title: 'Memory',
-        kind: 'tool',
+        kind: 'service',
         capabilities: { provisionable: true, staticConfigurable: true },
         staticConfigSchema: toJSONSchema(MemoryNodeStaticConfigSchema),
       },
@@ -212,7 +248,7 @@ export function buildTemplateRegistry(deps: TemplateRegistryDeps): TemplateRegis
       },
       {
         title: 'Memory Connector',
-        kind: 'tool',
+        kind: 'service',
         capabilities: { provisionable: true, staticConfigurable: true },
         staticConfigSchema: toJSONSchema(MemoryConnectorStaticConfigSchema),
       },

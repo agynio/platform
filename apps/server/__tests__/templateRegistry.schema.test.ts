@@ -18,7 +18,7 @@ describe('TemplateRegistry.toSchema with capabilities/staticConfigSchema', () =>
       dummyPorts as any,
       {
         title: 'With Meta',
-        kind: 'tool' as TemplateKind,
+        kind: 'service' as TemplateKind,
         capabilities: {
           pausable: true,
           staticConfigurable: true,
@@ -55,7 +55,7 @@ describe('TemplateRegistry.toSchema with capabilities/staticConfigSchema', () =>
     const reg = new TemplateRegistry();
     reg.register('noMeta', noopFactory, dummyPorts as any, {
       title: 'No Meta',
-      kind: 'agent' as TemplateKind,
+      kind: 'service' as TemplateKind,
     });
 
     const schema = reg.toSchema();

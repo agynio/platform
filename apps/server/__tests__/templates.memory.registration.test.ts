@@ -28,6 +28,12 @@ describe('templates: memory registration and agent memory port', () => {
     expect(ports.simpleAgent).toBeTruthy();
     // Schema contains static config for memory and memoryConnector
     const memSchema = schema.find((s) => s.name === 'memory');
+    // Memory and MemoryConnector are services
+    expect(memSchema?.kind).toBe('service');
+    const memConnMeta = schema.find((s) => s.name === 'memoryConnector');
+    expect(memConnMeta?.kind).toBe('service');
+    const workspaceMeta = schema.find((s) => s.name === 'containerProvider');
+    expect(workspaceMeta?.kind).toBe('service');
     expect(memSchema?.staticConfigSchema).toBeTruthy();
     const memConnSchema = schema.find((s) => s.name === 'memoryConnector');
     expect(memConnSchema?.staticConfigSchema).toBeTruthy();
@@ -49,6 +55,17 @@ describe('templates: memory registration and agent memory port', () => {
 
     // Memory tools exposed via memory sourcePorts.tools
     expect((ports.memory.sourcePorts as any).tools).toBeTruthy();
+
+    // Individual memory tool nodes exist and can wire to agent.tools
+    const toolNames = ['memory_read','memory_list','memory_append','memory_update','memory_delete'];
+    for (const t of toolNames) {
+      const entry = schema.find((s) => s.name === t);
+      expect(entry?.kind).toBe('tool');
+      const p = (ports as any)[t];
+      expect(p).toBeTruthy();
+      expect(p.targetPorts.memory).toBeTruthy();
+      expect(p.targetPorts.$self).toBeTruthy();
+    }
 
     const agentTargets = ports.simpleAgent.targetPorts!;
     expect(agentTargets.memory).toBeTruthy();
