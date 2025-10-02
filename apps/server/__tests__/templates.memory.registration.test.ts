@@ -43,10 +43,10 @@ describe('templates: memory registration and agent memory port', () => {
     expect(memConnSchema?.capabilities?.staticConfigurable).toBe(true);
     expect(memSchema?.capabilities?.dynamicConfigurable).toBeUndefined();
     expect(memConnSchema?.capabilities?.dynamicConfigurable).toBeUndefined();
-    // memory node exposes $self and getService port; memoryConnector exposes $self and $memory target
+    // memory node exposes only $self; memoryConnector exposes $self and $memory target
     const memorySources = ports.memory.sourcePorts!;
     expect(memorySources.$self).toBeTruthy();
-    expect(memorySources.getService).toBeTruthy();
+    expect((memorySources as any).getService).toBeUndefined();
 
     const memConnSources = ports.memoryConnector.sourcePorts!;
     expect(memConnSources.$self).toBeTruthy();

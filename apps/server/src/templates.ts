@@ -228,8 +228,8 @@ export function buildTemplateRegistry(deps: TemplateRegistryDeps): TemplateRegis
         return new MemoryNode(db, ctx.nodeId, { scope: 'global' });
       },
       {
-        // Expose $self for instance wiring and a factory accessor for optional use
-        sourcePorts: { $self: { kind: 'instance' }, getService: { kind: 'method', create: 'getMemoryService' } },
+        // Expose only $self for instance wiring
+        sourcePorts: { $self: { kind: 'instance' } },
       },
       {
         title: 'Memory',
