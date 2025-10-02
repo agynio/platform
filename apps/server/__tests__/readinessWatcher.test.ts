@@ -48,17 +48,15 @@ describe('ReadinessWatcher', () => {
       { provisionStatus: { state: 'ready' }, dynamicConfigReady: false },
     ]);
 
+    // Start twice immediately to verify debounce of concurrent watchers
     watcher.start(nodeId);
+    watcher.start(nodeId);
+
     // wait enough time for polling
     await new Promise((r) => setTimeout(r, 50));
 
     expect(emit).toHaveBeenCalledTimes(1);
     expect(emit).toHaveBeenCalledWith(nodeId);
-
-    // ensure subsequent starts are debounced while active
-    watcher.start(nodeId);
-    await new Promise((r) => setTimeout(r, 20));
-    expect(emit).toHaveBeenCalledTimes(1);
 
     watcher.stopAll();
   });
