@@ -8,11 +8,12 @@ let ready = false;
 let schemaData: any = undefined;
 let pending = false;
 let setMutateImpl: any = vi.fn();
+let refetchImpl: any = vi.fn();
 
 vi.mock('../../../lib/graph/hooks', () => ({
   useNodeStatus: () => ({ data: { dynamicConfigReady: ready } }),
   useDynamicConfig: () => ({
-    schema: { data: schemaData },
+    schema: { data: schemaData, refetch: (...args: any[]) => refetchImpl(...args) },
     set: { mutate: (...args: any[]) => setMutateImpl(...args), isPending: pending },
   }),
 }));
@@ -23,13 +24,15 @@ describe('DynamicConfigForm', () => {
     schemaData = undefined;
     pending = false;
     setMutateImpl = vi.fn();
+    refetchImpl = vi.fn();
   });
 
   const renderForm = () => {
     const qc = new QueryClient();
     return render(
       <QueryClientProvider client={qc}>
-  <DynamicConfigForm nodeId="n1" />
+        {/* @ts-expect-error allow missing initialConfig for test convenience */}
+        <DynamicConfigForm nodeId="n1" />
       </QueryClientProvider>,
     );
   };
@@ -39,13 +42,22 @@ describe('DynamicConfigForm', () => {
     expect(screen.getByText(/Dynamic config not available yet/)).toBeInTheDocument();
   });
 
+  it('shows loading placeholder when ready but schema invalid and triggers refetch once', () => {
+    ready = true;
+    schemaData = {};
+    renderForm();
+    expect(screen.getByText(/Loading dynamic config/)).toBeInTheDocument();
+    expect(refetchImpl).toHaveBeenCalledOnce();
+  });
+
   it('renders form when ready and autosaves on toggle', () => {
     ready = true;
     schemaData = { type: 'object', properties: { a: { type: 'boolean', title: 'a' } } };
     const qc = new QueryClient();
     render(
       <QueryClientProvider client={qc}>
-  <DynamicConfigForm nodeId="n1" />
+        {/* @ts-expect-error allow missing initialConfig for test convenience */}
+        <DynamicConfigForm nodeId="n1" />
       </QueryClientProvider>,
     );
     const input = screen.getByLabelText('a') as HTMLInputElement;
@@ -61,7 +73,8 @@ describe('DynamicConfigForm', () => {
     const qc = new QueryClient();
     render(
       <QueryClientProvider client={qc}>
-  <DynamicConfigForm nodeId="n1" />
+        {/* @ts-expect-error allow missing initialConfig for test convenience */}
+        <DynamicConfigForm nodeId="n1" />
       </QueryClientProvider>,
     );
     const input = screen.getByLabelText('a');
