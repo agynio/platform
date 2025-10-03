@@ -83,16 +83,11 @@ describe('Runtime integration: memory injection via LiveGraphRuntime', () => {
   let db: Db;
 
   beforeAll(async () => {
-    try {
-      mongod = await MongoMemoryServer.create();
-      client = new MongoClient(mongod.getUri());
-      await client.connect();
-      db = client.db('test');
-    } catch (e: any) {
-      // eslint-disable-next-line no-console
-      console.warn('[memory.runtime.integration] Skipping tests due to Mongo startup error:', e?.message || e);
-      // leave client undefined; individual tests will short-circuit
-    }
+    // Pin explicit MongoDB binary to ensure consistency across CI/local (mirrors MONGOMS_VERSION)
+    mongod = await MongoMemoryServer.create({ binary: { version: '7.0.14' } });
+    client = new MongoClient(mongod.getUri());
+    await client.connect();
+    db = client.db('test');
   });
 
   afterAll(async () => {
@@ -101,7 +96,6 @@ describe('Runtime integration: memory injection via LiveGraphRuntime', () => {
   });
 
   it('injects memory after system when placement=after_system', async () => {
-    if (!db) { console.warn('[memory.runtime.integration] Mongo not available; skipping test'); return; }
     const runtime = makeRuntime(db, 'after_system');
     const graph: GraphDefinition = {
       nodes: [ { id: 'cm', data: { template: 'callModel', config: {} } }, { id: 'mem', data: { template: 'memory', config: {} } } ],
@@ -121,7 +115,6 @@ describe('Runtime integration: memory injection via LiveGraphRuntime', () => {
   });
 
   it('appends memory to last when placement=last_message', async () => {
-    if (!db) { console.warn('[memory.runtime.integration] Mongo not available; skipping test'); return; }
     const runtime = makeRuntime(db, 'last_message');
     const graph: GraphDefinition = {
       nodes: [ { id: 'cm', data: { template: 'callModel', config: {} } }, { id: 'mem', data: { template: 'memory', config: {} } } ],
@@ -141,7 +134,6 @@ describe('Runtime integration: memory injection via LiveGraphRuntime', () => {
   });
 
   it('maxChars fallback: full -> tree when exceeded; per-thread empty falls back to global', async () => {
-    if (!db) { console.warn('[memory.runtime.integration] Mongo not available; skipping test'); return; }
     // Configure memory connector with content=full and small maxChars so it triggers tree fallback
     const templates = new TemplateRegistry();
     const logger = new LoggerService();

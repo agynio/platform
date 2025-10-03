@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "tsx src/index.ts",
-    "test": "vitest run",
+    "test": "cross-env MONGOMS_VERSION=7.0.14 vitest run",
     "test:watch": "vitest"
   },
   "dependencies": {
@@ -31,6 +31,7 @@
     "zod": "^4.1.9"
   },
   "devDependencies": {
+    "cross-env": "^7.0.3",
     "@langchain/langgraph-cli": "^0.0.66",
     "@types/dockerode": "^3.3.44",
     "@types/json-schema": "^7.0.15",
