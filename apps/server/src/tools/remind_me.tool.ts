@@ -11,7 +11,6 @@ interface CallerAgentLike {
 }
 
 export class RemindMeTool extends BaseTool {
-  private lastTimeout?: ReturnType<typeof setTimeout>; // useful for tests/cleanup
   constructor(private logger: LoggerService) {
     super();
   }
@@ -21,11 +20,19 @@ export class RemindMeTool extends BaseTool {
       async (raw, config) => {
         const { delayMs, note } = remindMeSchema.parse(raw);
         // Guarded extraction of configurable context
-        const cfg = (config && typeof config === 'object' ? (config as Record<string, unknown>).configurable : undefined) as
-          | Record<string, unknown>
-          | undefined;
-        const threadId = cfg && typeof cfg.thread_id === 'string' ? (cfg.thread_id as string) : undefined;
-        const callerAgent = cfg && typeof cfg.caller_agent === 'object' && cfg.caller_agent !== null ? (cfg.caller_agent as CallerAgentLike) : undefined;
+        const cfg = (config && typeof config === 'object'
+          ? (config as Record<string, unknown>).configurable
+          : undefined) as Record<string, unknown> | undefined;
+
+        // Narrow thread id from generic configurable bag
+        const threadId = (() => {
+          const v = cfg?.['thread_id'];
+          return typeof v === 'string' ? v : undefined;
+        })();
+
+        // Type guard for caller agent shape
+        const maybeCaller = cfg?.['caller_agent'] as unknown;
+        const callerAgent = isCallerAgentLike(maybeCaller) ? maybeCaller : undefined;
 
         if (!threadId) {
           const msg = 'RemindMeTool error: missing thread_id in runtime config.';
@@ -39,7 +46,7 @@ export class RemindMeTool extends BaseTool {
         }
 
         // Schedule async reminder; do not await or reject the original call.
-        this.lastTimeout = setTimeout(async () => {
+        setTimeout(async () => {
           try {
             await callerAgent.invoke(threadId, [
               { kind: 'system', content: note, info: { reason: 'reminded' } },
@@ -64,3 +71,13 @@ export class RemindMeTool extends BaseTool {
 }
 
 export const RemindMeToolStaticConfigSchema = z.object({}).strict();
+
+// Runtime type guard to ensure the caller comes with an invoke function
+function isCallerAgentLike(x: unknown): x is CallerAgentLike {
+  return !!(
+    x &&
+    typeof x === 'object' &&
+    'invoke' in (x as object) &&
+    typeof (x as { invoke?: unknown }).invoke === 'function'
+  );
+}

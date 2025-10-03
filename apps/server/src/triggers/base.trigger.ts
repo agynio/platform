@@ -16,7 +16,7 @@ export function isSystemTrigger(msg: TriggerMessage): msg is TriggerSystemMessag
 }
 
 export interface TriggerListener {
-  invoke(thread: string, messages: TriggerMessage[]): Promise<any>;
+  invoke(thread: string, messages: TriggerMessage[]): Promise<unknown>;
 }
 
 /**
