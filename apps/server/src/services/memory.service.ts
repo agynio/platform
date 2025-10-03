@@ -100,7 +100,11 @@ export class MemoryService {
       { upsert: true, returnDocument: 'after' },
     );
     // findOneAndUpdate with upsert always returns a value with after + upserted id
-    return res.value as WithId<MemoryDoc>;
+    const doc = (res.value as WithId<MemoryDoc>) || ({} as any);
+    // Coalesce legacy docs missing fields to safe shapes to avoid runtime TypeErrors
+    (doc as any).data = (doc as any).data ?? {};
+    (doc as any).dirs = (doc as any).dirs ?? {};
+    return doc as WithId<MemoryDoc>;
   }
 
   private dotted(path: string): string {
@@ -185,14 +189,21 @@ export class MemoryService {
   /** Append string data to a file; creates file if missing. Errors if path is a directory. */
   async append(path: string, data: string): Promise<void> {
     if (typeof data !== 'string') throw new Error('append expects string data');
-    const key = this.dotted(path);
+    const norm = this.normalizePath(path);
+    const key = this.dotted(norm);
+    // Ensure immediate parent dir marker exists for nested paths and mark ancestors
+    const lastSlash = norm.lastIndexOf('/');
+    const parent = lastSlash <= 0 ? '/' : norm.slice(0, lastSlash);
+    await this.ensureDir(parent);
     await this.ensureParentDirs(key);
     const doc = await this.getDocOrCreate();
 
+    const dirs = (doc as any).dirs ?? {};
+    const dataMap = (doc as any).data ?? {};
     // error if explicit dir at this key
-    if (Object.prototype.hasOwnProperty.call(doc.dirs, key)) throw new Error('EISDIR: path is a directory');
+    if (Object.prototype.hasOwnProperty.call(dirs, key)) throw new Error('EISDIR: path is a directory');
 
-    const current = doc.data[key];
+    const current = dataMap[key];
     const next = current === undefined ? data : current + (current.endsWith('\n') || data.startsWith('\n') ? '' : '\n') + data;
     await this.collection.updateOne(this.filter, { $set: { [`data.${key}`]: next } });
   }
