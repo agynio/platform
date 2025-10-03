@@ -87,7 +87,7 @@ describe('Memory tool adapters', () => {
 
     const update = adapters.find((a) => a.init().name === 'memory_update')!.init();
     const count = await update.invoke({ path: '/a/x', old_data: 'one', new_data: 'two' }, config);
-    expect(count).toBe('1');
+    expect(count).toBe(1);
 
     const list = adapters.find((a) => a.init().name === 'memory_list')!.init();
     const listing = JSON.parse(await list.invoke({ path: '/' }, config));

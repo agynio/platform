@@ -1,7 +1,7 @@
 import { BaseStore, LangGraphRunnableConfig } from "@langchain/langgraph";
 import { BaseTool } from "./base.tool";
 import { LoggerService } from "../services/logger.service";
-import z from "zod";
+import { z } from "zod";
 import { tool } from "@langchain/core/tools";
 import { v4 as uuidv4 } from "uuid";
 

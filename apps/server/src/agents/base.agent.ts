@@ -6,7 +6,7 @@ import { TriggerListener, TriggerMessage } from '../triggers/base.trigger';
 import { NodeOutput } from '../types';
 import { withAgent } from '@traceloop/node-server-sdk';
 import type { StaticConfigurable } from '../graph/capabilities';
-import * as z from 'zod';
+import { z } from 'zod';
 import { JSONSchema } from 'zod/v4/core';
 
 export abstract class BaseAgent implements TriggerListener, StaticConfigurable {

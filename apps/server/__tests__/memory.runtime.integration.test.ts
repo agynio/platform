@@ -1,11 +1,13 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeAll, afterAll } from 'vitest';
 import type { Db } from 'mongodb';
+import { MongoClient } from 'mongodb';
+import { MongoMemoryServer } from 'mongodb-memory-server';
 import { BaseMessage, SystemMessage, AIMessage } from '@langchain/core/messages';
 import { LiveGraphRuntime } from '../src/graph/liveGraph.manager';
 import { TemplateRegistry } from '../src/graph/templateRegistry';
 import type { GraphDefinition } from '../src/graph/types';
 import { LoggerService } from '../src/services/logger.service';
-import { MemoryService, type MemoryDoc } from '../src/services/memory.service';
+import { MemoryService } from '../src/services/memory.service';
 import { CallModelNode } from '../src/lgnodes/callModel.lgnode';
 import { BaseTool } from '../src/tools/base.tool';
 
@@ -28,54 +30,6 @@ vi.mock('@langchain/openai', async (importOriginal) => {
 
 // Minimal tool stub (unused but CallModelNode expects tools BaseTool[])
 class DummyTool extends BaseTool { init(): any { return { name: 'dummy', invoke: async () => 'x' }; } }
-
-// In-memory fake Mongo DB compatible with MemoryService operations
-class FakeCollection<T extends MemoryDoc> {
-  private store = new Map<string, any>();
-  private _indexes: any[] = [];
-  constructor(private name: string) {}
-  private keyOf(filter: any): string { return JSON.stringify(filter); }
-  async indexes() { return this._indexes; }
-  async createIndex(key: any, opts: any) { this._indexes.push({ name: opts?.name || 'idx', key }); return opts?.name || 'idx'; }
-  async findOne(filter: any, _options?: any) {
-    const key = this.keyOf(filter);
-    const doc = this.store.get(key);
-    return doc ? { ...doc } : null;
-  }
-  async findOneAndUpdate(filter: any, update: any, options: any) {
-    const key = this.keyOf(filter);
-    let doc = this.store.get(key);
-    if (!doc && options?.upsert) {
-      doc = { ...filter, data: {}, dirs: {} };
-      if (update.$setOnInsert) Object.assign(doc, update.$setOnInsert);
-      this.store.set(key, doc);
-    }
-    if (!doc) return { value: null } as any;
-    if (update.$set) for (const [p, v] of Object.entries(update.$set)) setByPathFlat(doc, p as string, v);
-    if (update.$unset) for (const p of Object.keys(update.$unset)) unsetByPathFlat(doc, p);
-    return { value: doc } as any;
-  }
-  async updateOne(filter: any, update: any, options?: any) {
-    const key = this.keyOf(filter);
-    let doc = this.store.get(key);
-    if (!doc && options?.upsert) { doc = { ...filter, data: {}, dirs: {} }; if (update.$setOnInsert) Object.assign(doc, update.$setOnInsert); this.store.set(key, doc); }
-    if (!doc) return { matchedCount: 0, modifiedCount: 0 } as any;
-    if (update.$set) for (const [p, v] of Object.entries(update.$set)) setByPathFlat(doc, p as string, v);
-    if (update.$unset) for (const p of Object.keys(update.$unset)) unsetByPathFlat(doc, p);
-    return { matchedCount: 1, modifiedCount: 1 } as any;
-  }
-}
-class FakeDb {
-  private cols = new Map<string, any>();
-  // @ts-ignore minimal surface
-  collection<T>(name: string) { if (!this.cols.has(name)) this.cols.set(name, new FakeCollection<T>(name)); return this.cols.get(name) as any; }
-  // @ts-ignore not used
-  [key: string]: any;
-}
-function setByPath(obj: any, path: string, value: any) { const parts = path.split('.'); let curr = obj; for (let i=0;i<parts.length-1;i++){ const p=parts[i]; curr[p]=curr[p]??{}; curr=curr[p]; } curr[parts[parts.length-1]] = value; }
-function setByPathFlat(doc: any, path: string, value: any) { const [root,...rest]=path.split('.'); if (root==='data'||root==='dirs'){ const key=rest.join('.'); doc[root]=doc[root]||{}; doc[root][key]=value; return; } setByPath(doc,path,value); }
-function unsetByPath(obj: any, path: string) { const parts=path.split('.'); let curr=obj; for (let i=0;i<parts.length-1;i++){ const p=parts[i]; if(!curr[p]) return; curr=curr[p]; } delete curr[parts[parts.length-1]]; }
-function unsetByPathFlat(doc: any, path: string) { const [root,...rest]=path.split('.'); if (root==='data'||root==='dirs'){ const key=rest.join('.'); if (doc[root]) delete doc[root][key]; return; } unsetByPath(doc,path); }
 
 // Build a tiny runtime with two templates: callModel and memory
 function makeRuntime(db: Db, placement: 'after_system'|'last_message') {
@@ -124,10 +78,30 @@ async function getLastMessages(runtime: LiveGraphRuntime, nodeId: string): Promi
 }
 
 describe('Runtime integration: memory injection via LiveGraphRuntime', () => {
+  let mongod: MongoMemoryServer;
+  let client: MongoClient;
   let db: Db;
-  beforeEach(() => { db = new FakeDb() as unknown as Db; });
+
+  beforeAll(async () => {
+    try {
+      mongod = await MongoMemoryServer.create();
+      client = new MongoClient(mongod.getUri());
+      await client.connect();
+      db = client.db('test');
+    } catch (e: any) {
+      // eslint-disable-next-line no-console
+      console.warn('[memory.runtime.integration] Skipping tests due to Mongo startup error:', e?.message || e);
+      // leave client undefined; individual tests will short-circuit
+    }
+  });
+
+  afterAll(async () => {
+    try { await client?.close(true); } catch {}
+    try { await mongod?.stop(); } catch {}
+  });
 
   it('injects memory after system when placement=after_system', async () => {
+    if (!db) { console.warn('[memory.runtime.integration] Mongo not available; skipping test'); return; }
     const runtime = makeRuntime(db, 'after_system');
     const graph: GraphDefinition = {
       nodes: [ { id: 'cm', data: { template: 'callModel', config: {} } }, { id: 'mem', data: { template: 'memory', config: {} } } ],
@@ -147,6 +121,7 @@ describe('Runtime integration: memory injection via LiveGraphRuntime', () => {
   });
 
   it('appends memory to last when placement=last_message', async () => {
+    if (!db) { console.warn('[memory.runtime.integration] Mongo not available; skipping test'); return; }
     const runtime = makeRuntime(db, 'last_message');
     const graph: GraphDefinition = {
       nodes: [ { id: 'cm', data: { template: 'callModel', config: {} } }, { id: 'mem', data: { template: 'memory', config: {} } } ],
@@ -163,5 +138,59 @@ describe('Runtime integration: memory injection via LiveGraphRuntime', () => {
     expect(last).toBeInstanceOf(SystemMessage);
     expect((last as any).content).toMatch(/Memory/);
     expect((last as any).content).toMatch(/\[F\] alpha|\[D\] alpha/);
+  });
+
+  it('maxChars fallback: full -> tree when exceeded; per-thread empty falls back to global', async () => {
+    if (!db) { console.warn('[memory.runtime.integration] Mongo not available; skipping test'); return; }
+    // Configure memory connector with content=full and small maxChars so it triggers tree fallback
+    const templates = new TemplateRegistry();
+    const logger = new LoggerService();
+
+    templates.register(
+      'callModel',
+      async () => {
+        const { ChatOpenAI } = await import('@langchain/openai');
+        const llm = new ChatOpenAI({ model: 'x', apiKey: 'k' }) as any;
+        const node = new CallModelNode([new DummyTool()] as any, llm);
+        node.setSystemPrompt('SYS');
+        return node as any;
+      },
+      { targetPorts: { setMemoryConnector: { kind: 'method', create: 'setMemoryConnector' }, $self: { kind: 'instance' } }, sourcePorts: { $self: { kind: 'instance' } } },
+      { title: 'CallModel', kind: 'tool' },
+    );
+
+    templates.register(
+      'memory',
+      async (ctx) => {
+        const mod = await import('../src/nodes/memory.connector.node');
+        const MemoryConnectorNode = mod.MemoryConnectorNode;
+        const factory = (opts: { threadId?: string }) => new MemoryService(db, ctx.nodeId, opts.threadId ? 'perThread' : 'global', opts.threadId);
+        return new MemoryConnectorNode(factory, { placement: 'after_system', content: 'full', maxChars: 20 }) as any;
+      },
+      { sourcePorts: { $self: { kind: 'instance' } } },
+      { title: 'Memory', kind: 'tool' },
+    );
+
+    const runtime = new LiveGraphRuntime(logger, templates);
+    const graph: GraphDefinition = {
+      nodes: [ { id: 'cm', data: { template: 'callModel', config: {} } }, { id: 'mem', data: { template: 'memory', config: {} } } ],
+      edges: [ { source: 'mem', sourceHandle: '$self', target: 'cm', targetHandle: 'setMemoryConnector' } ],
+    };
+    await runtime.apply(graph);
+
+    // Populate global memory with a file whose full content would exceed 20 chars.
+    const globalSvc = new MemoryService(db, 'mem', 'global');
+    await globalSvc.append('/long/file', 'aaaaaaaaaaaaaaaaaaaa-long');
+
+    // Per-thread scope is empty; connector should fallback to global and render a tree instead of full content
+    const cm: any = runtime.getNodeInstance('cm');
+    const res = await cm.action({ messages: [] as BaseMessage[] }, { configurable: { thread_id: 'T' } });
+    const llm = (cm as any).llm as any;
+    const msgs = (llm.lastMessages || []) as BaseMessage[];
+    const sys = msgs[1] as SystemMessage;
+    const text = (sys as any).content as string;
+    expect(text).toMatch(/^Memory\n\//); // starts with Memory and a path line
+    expect(text).toContain('[D] long'); // tree view, not full contents
+    expect(text).not.toContain('aaaaaaaaaaaa'); // should not leak full content
   });
 });

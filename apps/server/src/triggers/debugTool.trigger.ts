@@ -72,10 +72,11 @@ export class DebugToolTrigger extends BaseTrigger {
         }
         const result = await this.tool.invoke(input, { configurable: { thread_id: 'debug' } } as any);
         return { ok: true, result };
-      } catch (err: any) {
-        this.logger.error('[DebugToolTrigger] request error', err?.message || err);
+      } catch (err: unknown) {
+        const msg = (err && typeof err === 'object' && 'message' in err) ? String((err as any).message) : String(err);
+        this.logger.error('[DebugToolTrigger] request error', msg);
         reply.code(500);
-        return { error: 'internal_error', message: err?.message || String(err) };
+        return { error: 'internal_error', message: msg };
       }
     };
     const service = DebugHttpService(this.logger);

@@ -19,3 +19,10 @@ Consequences
 - Deterministic local/unit tests using in-memory FakeDb ensure CI stability.
 - No binary/JSON types in memory values; callers must serialize manually if needed.
 - Tree fallback prevents overlong context when `full` exceeds `maxChars`.
+
+Migration Notes (v1 -> v2)
+- Tools are now individual nodes; wire `memory_*` tools to agent `tools` source port and connect a `memoryConnector` to the agent for injection.
+- `memory_update` returns a number (replacement count) instead of a string; update consumers/tests to expect numeric output.
+- Tests: integration/E2E use `mongodb-memory-server` exclusively; FakeDb is restricted to unit tests only.
+- Zod import style standardized to `import { z } from 'zod'` across server code.
+- `maxChars` behavior: when `content=full` exceeds the limit, connector falls back to `tree` for the same scope; if per-thread is empty, falls back to global scope before rendering.

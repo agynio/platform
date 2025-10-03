@@ -41,9 +41,10 @@ export class SendSlackMessageTool extends BaseTool {
           const resp = await this.slack.sendMessage({ channel, text, thread_ts, broadcast, ephemeral_user });
           if (!resp.ok) return `Failed to send message: ${resp.error}`;
           return JSON.stringify(resp);
-        } catch (err: any) {
-          this.logger.error("Error sending Slack message", err);
-          return `Error sending Slack message: ${err.message || String(err)}`;
+        } catch (err: unknown) {
+          const msg = (err && typeof err === 'object' && 'message' in err) ? String((err as any).message) : String(err);
+          this.logger.error("Error sending Slack message", msg);
+          return `Error sending Slack message: ${msg}`;
         }
       },
       {

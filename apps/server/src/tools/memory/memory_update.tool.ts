@@ -15,12 +15,17 @@ export class MemoryUpdateTool extends MemoryToolBase {
     return tool(
       async (raw, runtimeCfg) => {
         const args = schema.parse(raw);
-        this.logger.info('Tool called', 'memory_update', { args: args });
+        // Trim noisy/sensitive payloads in logs
+        const truncate = (s: string) => (s.length > 200 ? s.slice(0, 200) + '…' : s);
+        this.logger.info('Tool called', 'memory_update', {
+          args: { path: args.path, old_data: truncate(args.old_data), new_data: truncate(args.new_data) },
+        });
         const factory = this.requireFactory();
         const service = factory({ threadId: runtimeCfg?.configurable?.thread_id });
         const path = normalizePathRuntime(args.path);
         const count = await service.update(path, args.old_data, args.new_data);
-        return String(count);
+        // Prefer numeric output so callers can use directly
+        return count;
       },
       { name: 'memory_update', description: 'Replace occurrences in memory file', schema },
     );
