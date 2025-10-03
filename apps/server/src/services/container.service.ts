@@ -3,6 +3,9 @@ import { ContainerEntity } from '../entities/container.entity';
 import { LoggerService } from './logger.service';
 
 const DEFAULT_IMAGE = 'mcr.microsoft.com/vscode/devcontainers/base';
+// Central label used to record container platform for reuse checks.
+// If a conflicting user label is provided, we override it deliberately.
+export const PLATFORM_LABEL = 'hautech.ai/platform';
 
 export type ContainerOpts = {
   image?: string;
@@ -47,11 +50,12 @@ export class ContainerService {
   /** Pull an image if it's not already present locally. */
   async ensureImage(image: string, platform?: string): Promise<void> {
     this.logger.info(`Ensuring image '${image}' is available locally`);
-    // Check if image exists
+    // Check if image exists (but when platform is specified we still pull to ensure correct variant)
+    let exists = false;
     try {
       await this.docker.getImage(image).inspect();
+      exists = true;
       this.logger.debug(`Image '${image}' already present`);
-      return;
     } catch {
       this.logger.info(`Image '${image}' not found locally. Pulling...`);
     }
@@ -77,8 +81,14 @@ export class ContainerService {
         );
       };
       // dockerode: when an options object is provided, it becomes query params (e.g., platform)
-      if (platform) (this.docker.pull as any)(image, { platform }, cb);
-      else (this.docker.pull as any)(image, cb);
+      if (platform) {
+        if (exists) this.logger.info(`Image '${image}' present locally; pulling with platform='${platform}' to ensure correct variant`);
+        this.docker.pull(image, { platform }, cb);
+      } else {
+        // Only pull when not present
+        if (!exists) this.docker.pull(image, cb);
+        else resolve();
+      }
     });
   }
 
@@ -96,10 +106,10 @@ export class ContainerService {
         ? Object.entries(optsWithDefaults.env).map(([k, v]) => `${k}=${v}`)
         : undefined;
 
-    const createOptions: ContainerCreateOptions & { platform?: string } = {
+    const createOptions: ContainerCreateOptions = {
       Image: optsWithDefaults.image,
       name: optsWithDefaults.name,
-      platform: optsWithDefaults.platform,
+      ...(optsWithDefaults.platform ? { platform: optsWithDefaults.platform } : {}),
       Cmd: optsWithDefaults.cmd,
       Env,
       WorkingDir: optsWithDefaults.workingDir,
@@ -113,7 +123,7 @@ export class ContainerService {
       AttachStderr: true,
       Labels: {
         ...(optsWithDefaults.labels || {}),
-        ...(optsWithDefaults.platform ? { 'hautech.ai/platform': optsWithDefaults.platform } : {}),
+        ...(optsWithDefaults.platform ? { [PLATFORM_LABEL]: optsWithDefaults.platform } : {}),
       },
     };
 

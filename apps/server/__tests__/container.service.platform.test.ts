@@ -4,24 +4,29 @@ import { LoggerService } from '../src/services/logger.service';
 
 function createMockDocker() {
   const modem = {
-    followProgress: (_stream: any, onFinished: any, _onProgress: any) => {
+    followProgress: (_stream: unknown, onFinished: (e?: unknown) => void) => {
       setTimeout(() => onFinished(undefined), 0);
     },
     demuxStream: vi.fn(),
-  } as any;
+  } as { followProgress: any; demuxStream: any };
 
-  const docker: any = {
+  const docker = {
     modem,
-    pull: vi.fn((_image: string, _optsOrCb: any, _cb?: any) => {}),
-    getImage: vi.fn((image: string) => ({
+    pull: vi.fn((_image: string, _optsOrCb?: unknown, _cb?: unknown) => {}),
+    getImage: vi.fn((_image: string) => ({
       inspect: vi.fn(async () => {
         throw new Error('not found');
       }),
     })),
-    createContainer: vi.fn(async (opts: any) => ({
+    createContainer: vi.fn(async (_opts: unknown) => ({
       start: vi.fn(async () => {}),
       inspect: vi.fn(async () => ({ Id: '1234567890abcdef', State: { Status: 'running' } })),
     })),
+  } as unknown as {
+    modem: { followProgress: any; demuxStream: any };
+    pull: any;
+    getImage: any;
+    createContainer: any;
   };
   return docker;
 }
@@ -44,8 +49,8 @@ describe('ContainerService platform support', () => {
   it('passes platform to pull/create and labels the container when platform is provided', async () => {
     const image = 'node:20-alpine';
     // Arrange pull to call our cb
-    (docker.pull as any).mockImplementation((img: string, optsOrCb: any, cb?: any) => {
-      const cbFn = typeof optsOrCb === 'function' ? optsOrCb : cb;
+    (docker.pull as any).mockImplementation((img: string, optsOrCb?: unknown, cb?: unknown) => {
+      const cbFn = typeof optsOrCb === 'function' ? (optsOrCb as Function) : (cb as Function);
       setTimeout(() => cbFn(undefined, {} as any), 0);
     });
 
@@ -56,7 +61,8 @@ describe('ContainerService platform support', () => {
     const pullArgs = (docker.pull as any).mock.calls[0];
     expect(pullArgs[0]).toBe(image);
     const pullOpts = typeof pullArgs[1] === 'function' ? undefined : pullArgs[1];
-    expect(pullOpts).toMatchObject({ platform: 'linux/arm64' });
+    expect(pullOpts).toBeDefined();
+    expect(pullOpts.platform).toBe('linux/arm64');
 
     // createContainer options include platform and label
     expect(docker.createContainer).toHaveBeenCalled();
@@ -67,8 +73,8 @@ describe('ContainerService platform support', () => {
 
   it('does not set platform when not provided', async () => {
     const image = 'node:20-alpine';
-    (docker.pull as any).mockImplementation((img: string, optsOrCb: any, cb?: any) => {
-      const cbFn = typeof optsOrCb === 'function' ? optsOrCb : cb;
+    (docker.pull as any).mockImplementation((img: string, optsOrCb?: unknown, cb?: unknown) => {
+      const cbFn = typeof optsOrCb === 'function' ? (optsOrCb as Function) : (cb as Function);
       setTimeout(() => cbFn(undefined, {} as any), 0);
     });
 
@@ -79,6 +85,8 @@ describe('ContainerService platform support', () => {
     const pullOpts = typeof pullArgs[1] === 'function' ? undefined : pullArgs[1];
     if (pullOpts) {
       expect(pullOpts.platform).toBeUndefined();
+    } else {
+      // If no options were passed, this test is also satisfied
     }
 
     const createOpts = (docker.createContainer as any).mock.calls[0][0];

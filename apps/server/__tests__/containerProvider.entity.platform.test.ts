@@ -6,7 +6,7 @@ import { LoggerService } from '../src/services/logger.service';
 function setup() {
   const logger = new LoggerService();
   const svc = new ContainerService(logger);
-  const docker: any = svc.getDocker();
+  const docker = svc.getDocker() as any;
 
   // Mock findContainerByLabels to return a stubbed ContainerEntity-like object
   const foundContainer = {

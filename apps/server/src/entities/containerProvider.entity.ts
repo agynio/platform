@@ -1,4 +1,4 @@
-import { ContainerOpts, ContainerService } from '../services/container.service';
+import { ContainerOpts, ContainerService, PLATFORM_LABEL } from '../services/container.service';
 import { ContainerEntity } from './container.entity';
 import { z } from 'zod';
 
@@ -54,13 +54,69 @@ export class ContainerProviderEntity {
       try {
         const docker = this.containerService.getDocker();
         const inspect = await docker.getContainer(container.id).inspect();
-        const existingPlatform = inspect?.Config?.Labels?.['hautech.ai/platform'];
-        if (requestedPlatform && existingPlatform !== requestedPlatform) {
-          await container.stop(5);
-          await container.remove(true);
+        const existingPlatform = inspect?.Config?.Labels?.[PLATFORM_LABEL];
+        if (!existingPlatform && requestedPlatform) {
+          this.containerService
+            .getDocker();
+          // Missing label; conservative: do not reuse if a platform is requested
+          this.containerService['logger']?.info?.(
+            `Workspace: platform label missing on existing container; requested='${requestedPlatform}'. Recreating. cid=${container.id.substring(0, 12)}`,
+          );
+          // Try to stop/remove even if label missing
+          try {
+            await container.stop(5);
+          } catch (e: any) {
+            this.containerService['logger']?.warn?.(
+              `Workspace: stop failed during platform-mismatch cleanup cid=${container.id.substring(0, 12)}: ${e?.message || e}`,
+            );
+          }
+          try {
+            await container.remove(true);
+          } catch (e: any) {
+            this.containerService['logger']?.warn?.(
+              `Workspace: remove failed during platform-mismatch cleanup cid=${container.id.substring(0, 12)}: ${e?.message || e}`,
+            );
+          }
+          container = undefined;
+        } else if (requestedPlatform && existingPlatform !== requestedPlatform) {
+          this.containerService['logger']?.info?.(
+            `Workspace: skipping reuse due to platform mismatch requested='${requestedPlatform}' existing='${existingPlatform}' cid=${container.id.substring(0, 12)}`,
+          );
+          try {
+            await container.stop(5);
+          } catch (e: any) {
+            this.containerService['logger']?.warn?.(
+              `Workspace: stop failed during platform-mismatch cleanup cid=${container.id.substring(0, 12)}: ${e?.message || e}`,
+            );
+          }
+          try {
+            await container.remove(true);
+          } catch (e: any) {
+            this.containerService['logger']?.warn?.(
+              `Workspace: remove failed during platform-mismatch cleanup cid=${container.id.substring(0, 12)}: ${e?.message || e}`,
+            );
+          }
           container = undefined;
         }
-      } catch {
+      } catch (e: any) {
+        // If inspection fails, warn and fall through to creating a new container
+        this.containerService['logger']?.warn?.(
+          `Workspace: failed to inspect existing container for platform label; recreating. cid=${container.id.substring(0, 12)} err=${e?.message || e}`,
+        );
+        try {
+          await container.stop(5);
+        } catch (e2: any) {
+          this.containerService['logger']?.warn?.(
+            `Workspace: stop failed during cleanup after inspect error cid=${container.id.substring(0, 12)}: ${e2?.message || e2}`,
+          );
+        }
+        try {
+          await container.remove(true);
+        } catch (e3: any) {
+          this.containerService['logger']?.warn?.(
+            `Workspace: remove failed during cleanup after inspect error cid=${container.id.substring(0, 12)}: ${e3?.message || e3}`,
+          );
+        }
         container = undefined; // treat as invalid and create new
       }
     }
