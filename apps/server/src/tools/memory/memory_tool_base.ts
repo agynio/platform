@@ -32,13 +32,27 @@ export abstract class MemoryToolBase extends BaseTool {
   abstract init(config?: LangGraphRunnableConfig): DynamicStructuredTool;
 }
 
-// Shared path schema for memory tools:
-// - require non-empty string
-// - normalize to have a leading slash
-// - forbid ".." and "$" to avoid traversal and Mongo operator conflicts
-export const NormalizedPathSchema = z
+// UI-safe path schemas for tool argument JSON Schema generation.
+// IMPORTANT: Avoid .transform in UI schemas; transforms cannot be represented in JSON Schema.
+export const PathSchemaUI = z
   .string()
-  .min(1, 'path is required')
-  .transform((p) => (p.startsWith('/') ? p : '/' + p))
-  .refine((p) => !p.includes('..'), 'invalid path: ".." not allowed')
-  .refine((p) => !p.includes('$'), 'invalid path: "$" not allowed');
+  .min(1)
+  // Allow A-Z a-z 0-9 underscore, dash, space and forward slashes only.
+  .regex(/^[A-Za-z0-9_\-\/ ]+$/)
+  .describe('Path; leading slash optional; will be normalized at runtime');
+
+export const OptionalPathSchemaUI = PathSchemaUI.optional();
+
+// Runtime normalization/validation used by memory tools prior to invoking MemoryService.
+export function normalizePathRuntime(input: string): string {
+  if (!input) throw new Error('path is required');
+  // convert backslashes and collapse multiple slashes
+  let p = input.replace(/\\+/g, '/');
+  p = p.replace(/\/+/g, '/');
+  if (!p.startsWith('/')) p = '/' + p;
+  // trim trailing slash except for root
+  if (p.length > 1 && p.endsWith('/')) p = p.replace(/\/+$/g, '');
+  if (p.includes('..')) throw new Error('invalid path: ".." not allowed');
+  if (p.includes('$')) throw new Error('invalid path: "$" not allowed');
+  return p;
+}

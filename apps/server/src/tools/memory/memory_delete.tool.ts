@@ -1,19 +1,20 @@
 import { tool, type DynamicStructuredTool } from '@langchain/core/tools';
 import { z } from 'zod';
-import { MemoryToolBase, NormalizedPathSchema } from './memory_tool_base';
+import { MemoryToolBase, PathSchemaUI, normalizePathRuntime } from './memory_tool_base';
 import type { LangGraphRunnableConfig } from '@langchain/langgraph';
 
-export const MemoryDeleteToolStaticConfigSchema = z.object({}).strict();
+export const MemoryDeleteToolStaticConfigSchema = z.object({ path: PathSchemaUI }).strict();
 
 export class MemoryDeleteTool extends MemoryToolBase {
   init(_config?: LangGraphRunnableConfig): DynamicStructuredTool {
-    const schema = z.object({ path: NormalizedPathSchema });
+    const schema = MemoryDeleteToolStaticConfigSchema;
     return tool(
       async (raw, runtimeCfg) => {
         const args = schema.parse(raw);
         const factory = this.requireFactory();
         const service = factory({ threadId: runtimeCfg?.configurable?.thread_id });
-        const res = await service.delete(args.path);
+        const path = normalizePathRuntime(args.path);
+        const res = await service.delete(path);
         return JSON.stringify(res);
       },
       { name: 'memory_delete', description: 'Delete memory path (file or dir subtree)', schema },
