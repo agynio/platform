@@ -16,6 +16,8 @@ export type ContainerOpts = {
   networkMode?: string;
   tty?: boolean;
   labels?: Record<string, string>;
+  // Optional Docker platform selector (query param passthrough). Limited support for now.
+  platform?: 'linux/amd64' | 'linux/arm64';
 };
 
 /**
@@ -43,7 +45,7 @@ export class ContainerService {
   }
 
   /** Pull an image if it's not already present locally. */
-  async ensureImage(image: string): Promise<void> {
+  async ensureImage(image: string, platform?: string): Promise<void> {
     this.logger.info(`Ensuring image '${image}' is available locally`);
     // Check if image exists
     try {
@@ -55,7 +57,7 @@ export class ContainerService {
     }
 
     await new Promise<void>((resolve, reject) => {
-      this.docker.pull(image, (err: Error | undefined, stream: NodeJS.ReadableStream | undefined) => {
+      const cb = (err: Error | undefined, stream: NodeJS.ReadableStream | undefined) => {
         if (err) return reject(err);
         if (!stream) return reject(new Error('No pull stream returned'));
         this.docker.modem.followProgress(
@@ -73,7 +75,10 @@ export class ContainerService {
             }
           },
         );
-      });
+      };
+      // dockerode: when an options object is provided, it becomes query params (e.g., platform)
+      if (platform) (this.docker.pull as any)(image, { platform }, cb);
+      else (this.docker.pull as any)(image, cb);
     });
   }
 
@@ -81,9 +86,9 @@ export class ContainerService {
    * Start a new container and return a ContainerEntity representing it.
    */
   async start(opts?: ContainerOpts): Promise<ContainerEntity> {
-    const { image, autoRemove, ...rest } = opts || {};
-    const optsWithDefaults = { image: image ?? DEFAULT_IMAGE, autoRemove: autoRemove ?? true, ...rest };
-    await this.ensureImage(optsWithDefaults.image!);
+    const { image, autoRemove, platform, ...rest } = opts || {};
+    const optsWithDefaults = { image: image ?? DEFAULT_IMAGE, autoRemove: autoRemove ?? true, platform, ...rest };
+    await this.ensureImage(optsWithDefaults.image!, optsWithDefaults.platform);
 
     const Env: string[] | undefined = Array.isArray(optsWithDefaults.env)
       ? optsWithDefaults.env
@@ -91,9 +96,10 @@ export class ContainerService {
         ? Object.entries(optsWithDefaults.env).map(([k, v]) => `${k}=${v}`)
         : undefined;
 
-    const createOptions: ContainerCreateOptions = {
+    const createOptions: ContainerCreateOptions & { platform?: string } = {
       Image: optsWithDefaults.image,
       name: optsWithDefaults.name,
+      platform: optsWithDefaults.platform,
       Cmd: optsWithDefaults.cmd,
       Env,
       WorkingDir: optsWithDefaults.workingDir,
@@ -105,7 +111,10 @@ export class ContainerService {
       Tty: optsWithDefaults.tty ?? false,
       AttachStdout: true,
       AttachStderr: true,
-      Labels: optsWithDefaults.labels,
+      Labels: {
+        ...(optsWithDefaults.labels || {}),
+        ...(optsWithDefaults.platform ? { 'hautech.ai/platform': optsWithDefaults.platform } : {}),
+      },
     };
 
     this.logger.info(

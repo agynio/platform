@@ -11,6 +11,10 @@ export const ContainerProviderStaticConfigSchema = z
       .record(z.string().min(1), z.string())
       .optional()
       .describe('Environment variables to inject into started containers.'),
+    platform: z
+      .enum(['linux/amd64', 'linux/arm64'])
+      .optional()
+      .describe('Docker platform selector'),
     initialScript: z
       .string()
       .optional()
@@ -22,7 +26,7 @@ export const ContainerProviderStaticConfigSchema = z
 export type ContainerProviderStaticConfig = z.infer<typeof ContainerProviderStaticConfigSchema>;
 
 export class ContainerProviderEntity {
-  private cfg?: Pick<ContainerOpts, 'image' | 'env'> & { initialScript?: string };
+  private cfg?: Pick<ContainerOpts, 'image' | 'env' | 'platform'> & { initialScript?: string };
 
   constructor(
     private containerService: ContainerService,
@@ -43,13 +47,30 @@ export class ContainerProviderEntity {
 
   async provide(threadId: string) {
     const labels = this.idLabels(threadId);
+    const requestedPlatform = this.cfg?.platform ?? this.opts.platform;
     let container: ContainerEntity | undefined = await this.containerService.findContainerByLabels(labels);
+    if (container) {
+      // Enforce non-reuse if platform mismatches the requested one
+      try {
+        const docker = this.containerService.getDocker();
+        const inspect = await docker.getContainer(container.id).inspect();
+        const existingPlatform = inspect?.Config?.Labels?.['hautech.ai/platform'];
+        if (requestedPlatform && existingPlatform !== requestedPlatform) {
+          await container.stop(5);
+          await container.remove(true);
+          container = undefined;
+        }
+      } catch {
+        container = undefined; // treat as invalid and create new
+      }
+    }
     if (!container) {
       container = await this.containerService.start({
         ...this.opts,
-        // Only merge image/env from cfg (initialScript is provider-level behavior, not a start option)
+        // Only merge image/env/platform from cfg (initialScript is provider-level behavior, not a start option)
         image: this.cfg?.image ?? this.opts.image,
         env: { ...(this.opts.env || {}), ...(this.cfg?.env || {}) },
+        platform: requestedPlatform,
         labels: { ...(this.opts.labels || {}), ...labels },
       });
 
