@@ -16,6 +16,7 @@ import { SlackTrigger } from './triggers';
 import { SlackTriggerStaticConfigSchema } from './triggers/slack.trigger';
 import { LocalMcpServerStaticConfigSchema } from './mcp/localMcpServer';
 import { FinishTool, FinishToolStaticConfigSchema } from './tools/finish.tool';
+import { RemindMeTool, RemindMeToolStaticConfigSchema } from './tools/remind_me.tool';
 
 export interface TemplateRegistryDeps {
   logger: LoggerService;
@@ -120,6 +121,17 @@ export function buildTemplateRegistry(deps: TemplateRegistryDeps): TemplateRegis
         kind: 'tool',
         capabilities: { staticConfigurable: true },
         staticConfigSchema: toJSONSchema(CallAgentToolStaticConfigSchema),
+      },
+    )
+    .register(
+      'remindMeTool',
+      () => new RemindMeTool(logger),
+      { targetPorts: { $self: { kind: 'instance' } } },
+      {
+        title: 'Remind Me',
+        kind: 'tool',
+        capabilities: { staticConfigurable: true },
+        staticConfigSchema: toJSONSchema(RemindMeToolStaticConfigSchema),
       },
     )
     .register(

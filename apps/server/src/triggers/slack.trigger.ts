@@ -1,4 +1,4 @@
-import { BaseTrigger, BaseTriggerOptions } from './base.trigger';
+import { BaseTrigger, BaseTriggerOptions, TriggerHumanMessage } from './base.trigger';
 import { LoggerService } from '../services/logger.service';
 import { SlackService } from '../services/slack.service';
 import { z } from 'zod';
@@ -36,17 +36,18 @@ export class SlackTrigger extends BaseTrigger {
       try {
         if (!event.text) return;
         const thread = `${event.user}_${event.thread_ts ?? event.ts}`;
-        await this.notify(thread, [
-          {
-            content: event.text,
-            info: {
-              user: event.user,
-              channel: event.channel,
-              channel_type: (event as any).channel_type,
-              thread_ts: event.thread_ts ?? event.ts,
-            },
+        const ch = (event as Record<string, unknown>).channel_type;
+        const msg: TriggerHumanMessage = {
+          kind: 'human',
+          content: event.text,
+          info: {
+            user: event.user,
+            channel: event.channel,
+            channel_type: typeof ch === 'string' ? ch : undefined,
+            thread_ts: event.thread_ts ?? event.ts,
           },
-        ]);
+        };
+        await this.notify(thread, [msg]);
       } catch (err) {
         this.logger.error('SlackTrigger handler error', err);
       }

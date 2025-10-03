@@ -1,9 +1,22 @@
 import type { Pausable, ProvisionStatus, Provisionable } from '../graph/capabilities';
 
-export type TriggerMessage = { content: string; info: Record<string, unknown> };
+// Base trigger message. Backward-compatible: no 'kind' field required.
+export interface TriggerMessage {
+  content: string;
+  info: Record<string, unknown>;
+}
+// Explicitly-typed variants for clarity/forward-compatibility
+export type TriggerHumanMessage = TriggerMessage & { kind: 'human' };
+export type TriggerSystemMessage = TriggerMessage & { kind: 'system' };
+
+// Small centralized type guards for trigger messages
+export function isSystemTrigger(msg: TriggerMessage): msg is TriggerSystemMessage {
+  // Check discriminator without leaking details of other variants
+  return (msg as Partial<TriggerSystemMessage>).kind === 'system';
+}
 
 export interface TriggerListener {
-  invoke(thread: string, messages: TriggerMessage[]): Promise<any>;
+  invoke(thread: string, messages: TriggerMessage[]): Promise<unknown>;
 }
 
 /**
