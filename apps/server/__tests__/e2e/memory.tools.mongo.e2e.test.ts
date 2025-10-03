@@ -15,7 +15,7 @@ describe('E2E: memory tools with real MongoDB (mongodb-memory-server)', () => {
   beforeAll(async () => {
     try {
       // Use older binary to avoid AVX requirement on CI; fallback to default if needed
-      mongod = await MongoMemoryServer.create({ binary: { version: '4.0.28' } });
+      mongod = await MongoMemoryServer.create({ binary: { version: '6.0.25' } });
       const uri = mongod.getUri();
       client = new MongoClient(uri);
       await client.connect();
