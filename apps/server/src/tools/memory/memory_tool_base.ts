@@ -34,7 +34,10 @@ export abstract class MemoryToolBase extends BaseTool {
   }
 
   protected requireFactory(): (opts: { threadId?: string }) => MemoryService {
-    if (!this.serviceFactory) throw new Error('Memory tool: memory factory not set');
+    if (!this.serviceFactory) {
+      // Explicit guidance for runtime wiring
+      throw new Error('Memory not connected: wire Memory.$self to Tool.$memory (setMemorySource)');
+    }
     return this.serviceFactory;
   }
 
