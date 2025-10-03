@@ -21,6 +21,12 @@ class FakeCollection<T extends MemoryDoc> {
     return opts?.name || 'idx';
   }
 
+  async findOne(filter: any, _options?: any) {
+    const key = this.keyOf(filter);
+    const doc = this.store.get(key);
+    return doc ? { ...doc } : null;
+  }
+
   async findOneAndUpdate(filter: any, update: any, options: any) {
     const key = this.keyOf(filter);
     let doc = this.store.get(key);
@@ -61,7 +67,7 @@ class FakeCollection<T extends MemoryDoc> {
   }
 }
 
-class FakeDb implements Db {
+class FakeDb {
   // @ts-ignore minimal implementation for tests
   collection<T>(name: string) {
     return new FakeCollection<T>(name) as any;

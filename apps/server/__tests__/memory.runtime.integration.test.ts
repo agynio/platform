@@ -11,7 +11,7 @@ import { BaseTool } from '../src/tools/base.tool';
 
 // Fake LLM: replace ChatOpenAI to avoid network and capture messages
 vi.mock('@langchain/openai', async (importOriginal) => {
-  const mod = await importOriginal();
+  const mod: any = await importOriginal();
   class MockChatOpenAI extends mod.ChatOpenAI {
     lastMessages: BaseMessage[] = [];
     withConfig(_cfg: any) {
@@ -23,7 +23,7 @@ vi.mock('@langchain/openai', async (importOriginal) => {
       } as any;
     }
   }
-  return { ...mod, ChatOpenAI: MockChatOpenAI };
+  return { ...(mod as any), ChatOpenAI: MockChatOpenAI } as any;
 });
 
 // Minimal tool stub (unused but CallModelNode expects tools BaseTool[])
@@ -37,6 +37,11 @@ class FakeCollection<T extends MemoryDoc> {
   private keyOf(filter: any): string { return JSON.stringify(filter); }
   async indexes() { return this._indexes; }
   async createIndex(key: any, opts: any) { this._indexes.push({ name: opts?.name || 'idx', key }); return opts?.name || 'idx'; }
+  async findOne(filter: any, _options?: any) {
+    const key = this.keyOf(filter);
+    const doc = this.store.get(key);
+    return doc ? { ...doc } : null;
+  }
   async findOneAndUpdate(filter: any, update: any, options: any) {
     const key = this.keyOf(filter);
     let doc = this.store.get(key);
@@ -60,7 +65,7 @@ class FakeCollection<T extends MemoryDoc> {
     return { matchedCount: 1, modifiedCount: 1 } as any;
   }
 }
-class FakeDb implements Db {
+class FakeDb {
   private cols = new Map<string, any>();
   // @ts-ignore minimal surface
   collection<T>(name: string) { if (!this.cols.has(name)) this.cols.set(name, new FakeCollection<T>(name)); return this.cols.get(name) as any; }

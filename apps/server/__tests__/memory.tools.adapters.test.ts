@@ -14,6 +14,11 @@ class FakeCollection<T extends MemoryDoc> {
   async indexes() { return []; }
   async createIndex() { return 'idx'; }
   private keyOf(filter: any) { return JSON.stringify(filter); }
+  async findOne(filter: any, _options?: any) {
+    const k = this.keyOf(filter);
+    const doc = this.store.get(k);
+    return doc ? { ...doc } : null;
+  }
   async findOneAndUpdate(filter: any, update: any, options: any) {
     const k = this.keyOf(filter);
     let doc = this.store.get(k);
@@ -40,7 +45,7 @@ class FakeCollection<T extends MemoryDoc> {
     return { matchedCount: 1, modifiedCount: 1 } as any;
   }
 }
-class FakeDb implements Db {
+class FakeDb {
   private cols = new Map<string, any>();
   collection<T>(name: string) {
     if (!this.cols.has(name)) this.cols.set(name, new FakeCollection<T>());
