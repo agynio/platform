@@ -16,6 +16,7 @@ export type ContainerOpts = {
   networkMode?: string;
   tty?: boolean;
   labels?: Record<string, string>;
+  platform?: string; // e.g., "linux/amd64", "linux/arm64"
 };
 
 /**
@@ -43,8 +44,8 @@ export class ContainerService {
   }
 
   /** Pull an image if it's not already present locally. */
-  async ensureImage(image: string): Promise<void> {
-    this.logger.info(`Ensuring image '${image}' is available locally`);
+  async ensureImage(image: string, platform?: string): Promise<void> {
+    this.logger.info(`Ensuring image '${image}' is available locally${platform ? ` platform=${platform}` : ''}`);
     // Check if image exists
     try {
       await this.docker.getImage(image).inspect();
@@ -55,7 +56,9 @@ export class ContainerService {
     }
 
     await new Promise<void>((resolve, reject) => {
-      this.docker.pull(image, (err: Error | undefined, stream: NodeJS.ReadableStream | undefined) => {
+      // dockerode forwards unknown keys to query params; platform is supported by the daemon
+      const pullOpts = platform ? { platform } : undefined;
+      this.docker.pull(image, pullOpts as any, (err: Error | undefined, stream: NodeJS.ReadableStream | undefined) => {
         if (err) return reject(err);
         if (!stream) return reject(new Error('No pull stream returned'));
         this.docker.modem.followProgress(
@@ -81,9 +84,9 @@ export class ContainerService {
    * Start a new container and return a ContainerEntity representing it.
    */
   async start(opts?: ContainerOpts): Promise<ContainerEntity> {
-    const { image, autoRemove, ...rest } = opts || {};
-    const optsWithDefaults = { image: image ?? DEFAULT_IMAGE, autoRemove: autoRemove ?? true, ...rest };
-    await this.ensureImage(optsWithDefaults.image!);
+    const { image, autoRemove, platform, ...rest } = opts || {};
+    const optsWithDefaults = { image: image ?? DEFAULT_IMAGE, autoRemove: autoRemove ?? true, platform, ...rest };
+    await this.ensureImage(optsWithDefaults.image!, optsWithDefaults.platform);
 
     const Env: string[] | undefined = Array.isArray(optsWithDefaults.env)
       ? optsWithDefaults.env
@@ -91,7 +94,7 @@ export class ContainerService {
         ? Object.entries(optsWithDefaults.env).map(([k, v]) => `${k}=${v}`)
         : undefined;
 
-    const createOptions: ContainerCreateOptions = {
+    const createOptions: ContainerCreateOptions & { platform?: string } = {
       Image: optsWithDefaults.image,
       name: optsWithDefaults.name,
       Cmd: optsWithDefaults.cmd,
@@ -106,6 +109,8 @@ export class ContainerService {
       AttachStdout: true,
       AttachStderr: true,
       Labels: optsWithDefaults.labels,
+      // dockerode passes unknown fields as query params on POST /containers/create
+      ...(optsWithDefaults.platform ? { platform: optsWithDefaults.platform } : {}),
     };
 
     this.logger.info(
@@ -374,6 +379,39 @@ export class ContainerService {
 
   getDocker(): Docker {
     return this.docker;
+  }
+
+  /**
+   * Inspect container's image to derive platform string os/arch[/variant].
+   * Keeps logic here for testability and reuse.
+   */
+  async getContainerPlatform(containerId: string): Promise<string | undefined> {
+    const c = this.docker.getContainer(containerId);
+    const cInfo = await c.inspect();
+    const imageId = cInfo.Image;
+    const imgInfo = await this.docker.getImage(imageId).inspect();
+    const os = (imgInfo.Os || (cInfo as any).Platform || 'linux').toLowerCase();
+    const archRaw = (imgInfo.Architecture || '').toLowerCase();
+    const arch = this.normalizeArch(archRaw);
+    const variantRaw = (imgInfo.Variant || '').toLowerCase();
+    const variant = this.normalizeVariant(variantRaw);
+    return variant ? `${os}/${arch}/${variant}` : `${os}/${arch}`;
+  }
+
+  private normalizeArch(arch: string): string {
+    if (arch === 'x86_64') return 'amd64';
+    if (arch === 'aarch64') return 'arm64';
+    if (arch === 'armhf') return 'arm';
+    return arch || 'amd64';
+  }
+
+  private normalizeVariant(variant: string): string | undefined {
+    if (!variant) return undefined;
+    if (variant === '8') return 'v8';
+    if (variant === '7') return 'v7';
+    if (variant === '6') return 'v6';
+    if (variant === '5') return 'v5';
+    return variant.startsWith('v') ? variant : `v${variant}`;
   }
 }
 
