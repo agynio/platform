@@ -1,10 +1,10 @@
-import { BaseTrigger, BaseTriggerOptions, TriggerMessage } from "./base.trigger";
+import { BaseTrigger, TriggerMessage } from './base.trigger';
 import { LoggerService } from "../services/logger.service";
 import { PRService } from "../services/pr.service";
 import { GithubService } from "../services/github.service";
 import md5 from "md5";
 
-export interface PRTriggerOptions extends BaseTriggerOptions {
+export interface PRTriggerOptions {
   /** Poll interval in ms (default 60000) */
   intervalMs?: number;
   /** List of repositories to watch (names only) */
@@ -37,7 +37,7 @@ export class PRTrigger extends BaseTrigger {
     private logger: LoggerService,
     private opts: PRTriggerOptions,
   ) {
-    super(opts);
+    super();
     if (!opts.intervalMs) opts.intervalMs = 60_000;
   }
 

@@ -3,6 +3,5 @@ node_modules
 # LangGraph API
 .langgraph_api
 agent_instances
-# lock files (pnpm only)
-package-lock.json
+# Ignore npm lockfiles (we use pnpm)
 **/package-lock.json

@@ -4,7 +4,8 @@ export default defineConfig({
   test: {
     environment: "node",
     globals: true,
-    include: ["__tests__/**/*.test.ts"],
+    // Look for tests anywhere under apps/* and packages/*
+    include: ["**/__tests__/**/*.test.ts"],
     coverage: {
       enabled: false,
     },

@@ -19,33 +19,28 @@ vi.mock('../../../lib/graph/templates.provider', () => ({
   }),
 }));
 
-let mutateImpl: any = vi.fn();
-vi.mock('../../../lib/graph/hooks', () => ({
-  useSetNodeConfig: () => ({ mutate: (...args: any[]) => mutateImpl(...args), isPending: false }),
-}));
-
 describe('StaticConfigForm', () => {
   beforeEach(() => {
     withSchema = true;
-    mutateImpl = vi.fn();
   });
 
   const renderForm = (props: any = {}) => {
     const qc = new QueryClient();
     return render(
       <QueryClientProvider client={qc}>
-        <StaticConfigForm nodeId="n1" templateName="tmpl" initialConfig={{ systemPrompt: 'hi' }} {...props} />
+        <StaticConfigForm templateName="tmpl" initialConfig={{ systemPrompt: 'hi' }} {...props} />
       </QueryClientProvider>,
     );
   };
 
-  it('renders input and autosaves value on change', () => {
-    renderForm();
+  it('renders input and calls onChange to propagate value', () => {
+    const onChange = vi.fn();
+    renderForm({ onConfigChange: onChange });
     const input = screen.getByLabelText('systemPrompt');
     expect(input).toBeInTheDocument();
     fireEvent.change(input, { target: { value: 'hello' } });
-    expect(mutateImpl).toHaveBeenCalled();
-    const arg = (mutateImpl as any).mock.calls[0][0];
+    expect(onChange).toHaveBeenCalled();
+    const arg = (onChange as any).mock.calls[0][0];
     expect(arg.systemPrompt).toBe('hello');
   });
 
@@ -54,22 +49,9 @@ describe('StaticConfigForm', () => {
     const qc = new QueryClient();
     render(
       <QueryClientProvider client={qc}>
-        <StaticConfigForm nodeId="n1" templateName="tmpl" />
+        <StaticConfigForm templateName="tmpl" />
       </QueryClientProvider>,
     );
     expect(screen.getByText(/No static config available/)).toBeInTheDocument();
-  });
-
-  it('still triggers mutate (error path) on change without Save button', () => {
-    mutateImpl = vi.fn((_data: any, opts?: any) => opts?.onError?.(new Error('x')));
-    const qc = new QueryClient();
-    render(
-      <QueryClientProvider client={qc}>
-        <StaticConfigForm nodeId="n1" templateName="tmpl" initialConfig={{}} />
-      </QueryClientProvider>,
-    );
-    const input = screen.getByLabelText('systemPrompt');
-    fireEvent.change(input, { target: { value: 'new' } });
-    expect(mutateImpl).toHaveBeenCalled();
   });
 });

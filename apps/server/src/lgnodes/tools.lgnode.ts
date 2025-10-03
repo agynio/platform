@@ -6,12 +6,15 @@ import { NodeOutput } from '../types';
 import { BaseNode } from './base.lgnode';
 import { TerminateResponse } from '../tools/terminateResponse';
 
-// Narrowed view of a tool call extracted from AIMessage to avoid loose casting
-type ToolCall = { id?: string; name: string; args: unknown };
-// Config shape we rely on at runtime (thread_id + optional caller_agent passthrough)
-type WithRuntime = LangGraphRunnableConfig & { configurable?: { thread_id?: string; caller_agent?: unknown } };
+// ToolsNode appends ToolMessage(s) produced by executing tool calls present in the preceding AIMessage.
+// Any HumanMessage injection (agent-side buffering) is handled upstream in CallModelNode.
 
-export class ToolsNode extends BaseNode {
+// Narrowed view of a tool call extracted from AIMessage to avoid loose casting
+ type ToolCall = { id?: string; name: string; args: unknown };
+ // Config shape we rely on at runtime (thread_id + optional caller_agent passthrough)
+ type WithRuntime = LangGraphRunnableConfig & { configurable?: { thread_id?: string; caller_agent?: unknown } };
+ 
+ export class ToolsNode extends BaseNode {
   constructor(private tools: BaseTool[]) {
     super();
     this.tools = [...tools];
@@ -80,6 +83,7 @@ export class ToolsNode extends BaseNode {
       }),
     );
 
+    // Return only tool results here; any agent-side injections are handled by CallModelNode
     return { messages: { method: 'append', items: toolMessages }, done: terminated };
   }
 }

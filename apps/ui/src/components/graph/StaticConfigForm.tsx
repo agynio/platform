@@ -1,4 +1,4 @@
-// Static configuration autosave form
+// Static configuration form; persistence is handled upstream by builder autosave
 import { useEffect, useRef, useState } from 'react';
 import { useTemplatesCache } from '../../lib/graph/templates.provider';
 import { normalizeForRjsf } from './form/normalize';
@@ -15,7 +15,6 @@ export default function StaticConfigForm({
   onConfigChange,
   submitDisabled,
 }: {
-  nodeId: string;
   templateName: string;
   initialConfig?: Record<string, unknown>;
   onConfigChange?: (cfg: Record<string, unknown>) => void;
@@ -53,6 +52,7 @@ export default function StaticConfigForm({
         onChange={(next) => {
           touched.current = true;
           setFormData(next as Record<string, unknown>);
+          // Upstream autosave persists graph changes; keep this component passive
           onConfigChange?.(next as Record<string, unknown>);
         }}
       />

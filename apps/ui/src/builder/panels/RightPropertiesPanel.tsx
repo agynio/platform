@@ -95,7 +95,6 @@ export function RightPropertiesPanel({ node, onChange }: Props) {
             // preventing the previous node's in-memory form state from leaking and overwriting
             // the newly selected node's config (which caused empty config saves).
             key={node.id}
-            nodeId={node.id}
             templateName={data.template}
             initialConfig={cfg}
             onConfigChange={(next) => update({ config: next })}

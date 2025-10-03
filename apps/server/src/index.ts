@@ -17,6 +17,7 @@ import { GraphService } from './services/graph.service.js';
 import { GraphDefinition, PersistedGraphUpsertRequest } from './graph/types.js';
 import { ContainerService } from './services/container.service.js';
 import { SlackService } from './services/slack.service.js';
+import { ReadinessWatcher } from './utils/readinessWatcher.js';
 
 const logger = new LoggerService();
 const config = ConfigService.fromEnv();
@@ -80,6 +81,9 @@ async function bootstrap() {
 
   const fastify = Fastify({ logger: false });
   await fastify.register(cors, { origin: true });
+
+  // Background watcher reference (initialized after socket is attached)
+  let readinessWatcher: ReadinessWatcher | null = null;
 
   // Existing endpoints (namespaced under /api)
   fastify.get('/api/templates', async () => templateRegistry.toSchema());
@@ -157,9 +161,13 @@ async function bootstrap() {
           break;
         case 'provision':
           await runtime.provisionNode(nodeId);
+          // Start background readiness watcher after provision
+          readinessWatcher?.start(nodeId);
           break;
         case 'deprovision':
           await runtime.deprovisionNode(nodeId);
+          // Stop any watcher if node is deprovisioned
+          readinessWatcher?.stop(nodeId);
           break;
         default:
           reply.code(400);
@@ -212,8 +220,12 @@ async function bootstrap() {
     io.emit('node_status', { nodeId, ...status, updatedAt: new Date().toISOString() });
   }
 
+  // Watcher that emits a follow-up node_status once node becomes ready after provision/start.
+  readinessWatcher = new ReadinessWatcher(runtime, emitStatus, logger);
+
   const shutdown = async () => {
     logger.info('Shutting down...');
+    readinessWatcher?.stopAll();
     await mongo.close();
     try {
       await fastify.close();

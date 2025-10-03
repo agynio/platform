@@ -26,11 +26,18 @@ async function http<T>(input: RequestInfo, init?: RequestInit): Promise<T> {
   }
 }
 
+function isLikelyJsonSchemaRoot(obj: unknown): obj is Record<string, unknown> {
+  if (!obj || typeof obj !== 'object') return false;
+  const o = obj as Record<string, unknown>;
+  // Minimal signal: presence of at least one of 'type', 'properties', or '$ref'
+  return 'type' in o || 'properties' in o || '$ref' in o;
+}
+
 export const api = {
   getTemplates: () => http<TemplateSchema[]>(`${BASE}/graph/templates`),
   getNodeStatus: (nodeId: string) => http<NodeStatus>(`${BASE}/graph/nodes/${encodeURIComponent(nodeId)}/status`),
   // Dynamic config schema endpoint: try the newer '/dynamic-config/schema' first, fallback to legacy '/dynamic-config-schema'
-  getDynamicConfigSchema: async (nodeId: string) => {
+  getDynamicConfigSchema: async (nodeId: string): Promise<Record<string, unknown> | null> => {
     // Prefer legacy path first (currently implemented server / tests), then new structured path
     const legacy = `${BASE}/graph/nodes/${encodeURIComponent(nodeId)}/dynamic-config-schema`;
     const structured = `${BASE}/graph/nodes/${encodeURIComponent(nodeId)}/dynamic-config/schema`;
@@ -46,12 +53,21 @@ export const api = {
     }
     let data = await tryFetch(legacy);
     if (!data) data = await tryFetch(structured);
-    // Normalize accepted shapes: either { ready, schema } or plain schema object
-    if (data && typeof data === 'object' && 'schema' in data) {
-      const rec = data as Record<string, unknown>;
-      if (rec.schema && typeof rec.schema === 'object') return rec.schema as Record<string, unknown>;
+
+    // Normalize accepted shapes: either { ready, schema } or plain schema object.
+    // If wrapper or ambiguous/empty, return null so UI does not render invalid form.
+    if (!data || typeof data !== 'object') return null;
+
+    // If server wraps shape as { ready, schema }
+    if ('schema' in data) {
+      const rec = data as Record<string, unknown> & { schema?: unknown; ready?: unknown };
+      const maybeSchema = rec.schema;
+      if (isLikelyJsonSchemaRoot(maybeSchema)) return maybeSchema as Record<string, unknown>;
+      return null;
     }
-    return (data || {}) as Record<string, unknown>;
+
+    // If plain object, validate it's likely a schema; otherwise null
+    return isLikelyJsonSchemaRoot(data) ? (data as Record<string, unknown>) : null;
   },
   postNodeAction: (nodeId: string, action: 'pause' | 'resume' | 'provision' | 'deprovision') =>
     http<void>(`${BASE}/graph/nodes/${encodeURIComponent(nodeId)}/actions`, { method: 'POST', body: JSON.stringify({ action }) }),

@@ -1,15 +1,7 @@
 import { AIMessage, BaseMessage } from '@langchain/core/messages';
 import { RunnableConfig } from '@langchain/core/runnables';
 import { tool as lcTool } from '@langchain/core/tools';
-import {
-  Annotation,
-  CompiledStateGraph,
-  END,
-  START,
-  StateGraph,
-  Messages,
-  messagesStateReducer,
-} from '@langchain/langgraph';
+import { Annotation, CompiledStateGraph, END, START, StateGraph } from '@langchain/langgraph';
 import { ChatOpenAI } from '@langchain/openai';
 import { last } from 'lodash-es';
 import { McpServer, McpTool } from '../mcp';
@@ -196,6 +188,7 @@ export class SimpleAgent extends BaseAgent {
       checkpointer: this.checkpointerService.getCheckpointer(this.agentId),
     }) as CompiledStateGraph<unknown, unknown>;
 
+    // Apply runtime scheduling defaults (debounce=0, whenBusy=wait) already set in BaseAgent; allow overrides from agentId namespace if needed later
     return this;
   }
 
@@ -401,6 +394,10 @@ export class SimpleAgent extends BaseAgent {
         ),
       ),
     ) as Partial<SimpleAgentStaticConfig> & Record<string, any>;
+
+    // Apply agent-side scheduling config
+    this.applyRuntimeConfig(config);
+
     if (parsedConfig.systemPrompt !== undefined) {
       this.callModelNode.setSystemPrompt(parsedConfig.systemPrompt);
       this.loggerService.info('SimpleAgent system prompt updated');

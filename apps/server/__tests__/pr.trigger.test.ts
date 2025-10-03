@@ -1,6 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
 import { PRTrigger } from "../src/triggers/pr.trigger";
-import { BaseTriggerOptions } from "../src/triggers/base.trigger";
 
 // Simple mock classes
 class MockGithubService {
@@ -47,7 +46,7 @@ describe("PRTrigger", () => {
       gh as any,
       prs as any,
       logger as any,
-      { owner: "org", repos: ["repo"], intervalMs: 10 } as BaseTriggerOptions & any,
+      { owner: "org", repos: ["repo"], intervalMs: 10 },
     );
 
     const received: Array<{ thread: string; messages: any[] }> = [];

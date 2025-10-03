@@ -26,6 +26,7 @@ import { MemoryUpdateTool, MemoryUpdateToolStaticConfigSchema } from './tools/me
 import { MemoryDeleteTool, MemoryDeleteToolStaticConfigSchema } from './tools/memory/memory_delete.tool';
 import { MemoryDumpTool, MemoryDumpToolStaticConfigSchema } from './tools/memory/memory_dump.tool';
 import { DebugToolTrigger, DebugToolTriggerStaticConfigSchema } from './triggers/debugTool.trigger';
+import { RemindMeTool, RemindMeToolStaticConfigSchema } from './tools/remind_me.tool';
 
 export interface TemplateRegistryDeps {
   logger: LoggerService;
@@ -77,6 +78,7 @@ export function buildTemplateRegistry(deps: TemplateRegistryDeps): TemplateRegis
           capabilities: { staticConfigurable: true },
           staticConfigSchema: toJSONSchema(ShellToolStaticConfigSchema),
         },
+<<<<<<< HEAD
       )
       .register(
         'githubCloneRepoTool',
@@ -86,6 +88,91 @@ export function buildTemplateRegistry(deps: TemplateRegistryDeps): TemplateRegis
             $self: { kind: 'instance' },
             containerProvider: { kind: 'method', create: 'setContainerProvider' },
           },
+=======
+      },
+      {
+        title: 'Github clone',
+        kind: 'tool',
+        capabilities: { staticConfigurable: true },
+        staticConfigSchema: toJSONSchema(GithubCloneRepoToolStaticConfigSchema),
+      },
+    )
+    .register(
+      'sendSlackMessageTool',
+      () => new SendSlackMessageTool(slackService, logger),
+      {
+        targetPorts: { $self: { kind: 'instance' } },
+      },
+      {
+        title: 'Send Slack message',
+        kind: 'tool',
+        capabilities: { staticConfigurable: true },
+        staticConfigSchema: toJSONSchema(SendSlackMessageToolStaticConfigSchema),
+      },
+    )
+    .register(
+      'finishTool',
+      () => new FinishTool(),
+      {
+        targetPorts: { $self: { kind: 'instance' } },
+      },
+      {
+        title: 'Finish',
+        kind: 'tool',
+        capabilities: { staticConfigurable: true },
+        staticConfigSchema: toJSONSchema(FinishToolStaticConfigSchema),
+      },
+    )
+    .register(
+      'callAgentTool',
+      () => new CallAgentTool(logger),
+      {
+        targetPorts: { $self: { kind: 'instance' } },
+        sourcePorts: { agent: { kind: 'method', create: 'setAgent' } },
+      },
+      {
+        title: 'Call agent',
+        kind: 'tool',
+        capabilities: { staticConfigurable: true },
+        staticConfigSchema: toJSONSchema(CallAgentToolStaticConfigSchema),
+      },
+    )
+    .register(
+      'remindMeTool',
+      () => new RemindMeTool(logger),
+      { targetPorts: { $self: { kind: 'instance' } } },
+      {
+        title: 'Remind Me',
+        kind: 'tool',
+        capabilities: { staticConfigurable: true },
+        staticConfigSchema: toJSONSchema(RemindMeToolStaticConfigSchema),
+      },
+    )
+    .register(
+      'slackTrigger',
+      () => {
+        const trigger = new SlackTrigger(slackService, logger);
+        void trigger.start();
+        return trigger;
+      },
+      {
+        sourcePorts: { subscribe: { kind: 'method', create: 'subscribe', destroy: 'unsubscribe' } },
+      },
+      {
+        title: 'Slack trigger',
+        kind: 'trigger',
+        capabilities: { provisionable: true, pausable: true, staticConfigurable: true },
+        staticConfigSchema: toJSONSchema(SlackTriggerStaticConfigSchema),
+      },
+    )
+    .register(
+      'simpleAgent',
+      (ctx) => new SimpleAgent(configService, logger, checkpointerService, ctx.nodeId),
+      {
+        sourcePorts: {
+          tools: { kind: 'method', create: 'addTool', destroy: 'removeTool' },
+          mcp: { kind: 'method', create: 'addMcpServer', destroy: 'removeMcpServer' },
+>>>>>>> refs/rewritten/onto
         },
         {
           title: 'Github clone',
