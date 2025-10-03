@@ -129,6 +129,26 @@ export abstract class BaseAgent implements TriggerListener, StaticConfigurable, 
       const batch = Array.isArray(messages) ? messages : [messages];
       this.logger.info(`New trigger event in thread ${thread} with messages: ${JSON.stringify(batch)}`);
       const s = this.ensureThread(thread);
+
+      // Edge case: If OneByOne mode and caller enqueued multiple messages, split into per-message tokens.
+      if (this.processBuffer === ProcessBuffer.OneByOne && batch.length > 1) {
+        const promises: Promise<BaseMessage | undefined>[] = [];
+        for (const msg of batch) {
+          const tid = `${thread}:${++s.seq}`;
+          this.buffer.enqueueWithToken(thread, tid, [msg]);
+          promises.push(
+            new Promise<BaseMessage | undefined>((resolve, reject) => {
+              s.tokens.set(tid, { id: tid, total: 1, resolve, reject });
+            }),
+          );
+        }
+        this.maybeStart(thread);
+        const results = await Promise.all(promises);
+        const last = results[results.length - 1];
+        this.logger.info(`Agent response in thread ${thread}: ${last?.text}`);
+        return last;
+      }
+
       const tokenId = `${thread}:${++s.seq}`;
       // Tag queued messages with this invocation's token id for later resolution
       this.buffer.enqueueWithToken(thread, tokenId, batch);
