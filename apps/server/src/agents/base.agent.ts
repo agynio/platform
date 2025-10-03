@@ -14,8 +14,17 @@ export type WhenBusyMode = 'wait' | 'injectAfterTools';
 
 // Minimal interface exposed to nodes to request agent-controlled injections.
 export interface InjectionProvider {
+  // Nodes call this during a run to request agent-controlled injection. Returns only messages;
+  // the agent tracks token associations internally for proper awaiter resolution.
   getInjectedMessages(thread: string): BaseMessage[];
 }
+
+type InvocationToken = {
+  id: string;
+  total: number; // number of messages contributed by this invocation
+  resolve: (m: BaseMessage | undefined) => void;
+  reject: (e: any) => void;
+};
 
 export abstract class BaseAgent implements TriggerListener, StaticConfigurable, InjectionProvider {
   protected _graph: CompiledStateGraph<unknown, unknown> | undefined;
@@ -31,7 +40,13 @@ export abstract class BaseAgent implements TriggerListener, StaticConfigurable, 
   // Per-thread scheduler state
   private threads: Map<
     string,
-    { running: boolean; awaiters: Array<(m: BaseMessage | undefined) => void>; timer?: NodeJS.Timeout }
+    {
+      running: boolean;
+      seq: number;
+      tokens: Map<string, InvocationToken>;
+      inFlight?: { runId: string; includedCounts: Map<string, number> };
+      timer?: NodeJS.Timeout;
+    }
   > = new Map();
 
   get graph() {
@@ -83,7 +98,7 @@ export abstract class BaseAgent implements TriggerListener, StaticConfigurable, 
         processBuffer: z
           .enum(['allTogether', 'oneByOne'])
           .default('allTogether')
-          .describe("Drain mode for buffer: deliver all queued or one message at a time."),
+          .describe('Drain mode for buffer: deliver all queued or one message at a time.'),
       })
       .passthrough();
     return z.toJSONSchema(schema);
@@ -113,11 +128,13 @@ export abstract class BaseAgent implements TriggerListener, StaticConfigurable, 
     return await withAgent({ name: 'agent.invoke', inputParameters: [{ thread }, { messages }] }, async () => {
       const batch = Array.isArray(messages) ? messages : [messages];
       this.logger.info(`New trigger event in thread ${thread} with messages: ${JSON.stringify(batch)}`);
-      this.buffer.enqueue(thread, batch);
-      // Return a promise that resolves when the run that processes these messages completes
-      const p = new Promise<BaseMessage | undefined>((resolve) => {
-        const s = this.ensureThread(thread);
-        s.awaiters.push(resolve);
+      const s = this.ensureThread(thread);
+      const tokenId = `${thread}:${++s.seq}`;
+      // Tag queued messages with this invocation's token id for later resolution
+      this.buffer.enqueueWithToken(thread, tokenId, batch);
+      // Return a promise that resolves/rejects when the run that processes these messages completes
+      const p = new Promise<BaseMessage | undefined>((resolve, reject) => {
+        s.tokens.set(tokenId, { id: tokenId, total: batch.length, resolve, reject });
       });
       this.maybeStart(thread);
       const result = await p;
@@ -130,64 +147,104 @@ export abstract class BaseAgent implements TriggerListener, StaticConfigurable, 
   private ensureThread(thread: string) {
     let s = this.threads.get(thread);
     if (!s) {
-      s = { running: false, awaiters: [] };
+      s = { running: false, seq: 0, tokens: new Map() } as any;
       this.threads.set(thread, s);
     }
     return s;
   }
 
   private scheduleOrRun(thread: string) {
-  const s = this.ensureThread(thread);
-  if (s.running) return;
-  const drained = this.buffer.tryDrain(thread, this.processBuffer);
-  if (!drained.length) {
-  const at = this.buffer.nextReadyAt(thread);
-  if (at === undefined) return;
-  const delay = Math.max(0, at - Date.now());
-  if (s.timer) clearTimeout(s.timer);
-  s.timer = setTimeout(() => {
-  s.timer = undefined;
-  this.scheduleOrRun(thread);
-  }, delay);
-  return;
-  }
-  this.startRun(thread, drained);
+    const s = this.ensureThread(thread);
+    if (s.running) return;
+    const drained = this.buffer.tryDrainDescriptor(thread, this.processBuffer);
+    if (!drained.messages.length) {
+      const at = this.buffer.nextReadyAt(thread);
+      if (at === undefined) return;
+      const delay = Math.max(0, at - Date.now());
+      if (s.timer) clearTimeout(s.timer);
+      s.timer = setTimeout(() => {
+        s.timer = undefined;
+        this.scheduleOrRun(thread);
+      }, delay);
+      return;
+    }
+    this.startRun(thread, drained.messages, drained.tokenParts);
   }
 
   private maybeStart(thread: string) {
-  this.scheduleOrRun(thread);
+    this.scheduleOrRun(thread);
   }
 
   private startNext(thread: string) {
-  this.scheduleOrRun(thread);
+    this.scheduleOrRun(thread);
   }
 
-  private async startRun(thread: string, batch: TriggerMessage[]): Promise<void> {
+  private async startRun(
+    thread: string,
+    batch: TriggerMessage[],
+    tokenParts: { tokenId: string; count: number }[],
+  ): Promise<void> {
     const s = this.ensureThread(thread);
     s.running = true;
+    const runId = `${thread}/run-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    s.inFlight = { runId, includedCounts: new Map(tokenParts.map((p) => [p.tokenId, p.count])) };
+    this.logger.info(`Starting run ${runId} with ${batch.length} message(s)`);
     try {
-      const last = await this.runGraph(thread, batch);
-      const awaiters = s.awaiters.slice();
-      s.awaiters.length = 0;
-      for (const res of awaiters) {
-        try {
-          res(last);
-        } catch {
-          // ignore
+      const last = await this.runGraph(thread, batch, runId);
+      // Success: resolve tokens fully included in this run
+      const resolved: string[] = [];
+      for (const [tokenId, included] of s.inFlight!.includedCounts.entries()) {
+        const token = s.tokens.get(tokenId);
+        if (!token) continue;
+        if (included >= token.total) {
+          try {
+            token.resolve(last);
+          } catch {}
+          resolved.push(tokenId);
+          s.tokens.delete(tokenId);
         }
       }
+      this.logger.info(`Completed run ${runId}; resolved tokens: [${resolved.join(', ')}]`);
+    } catch (e: any) {
+      // Failure: reject awaiters for tokens tied to this run; leave others pending
+      const run = s.inFlight;
+      const affected = run ? Array.from(run.includedCounts.keys()) : [];
+      this.logger.error(`Run ${run?.runId || 'unknown'} failed for thread ${thread}: ${e?.message || e}`);
+      for (const tokenId of affected) {
+        const token = s.tokens.get(tokenId);
+        if (!token) continue;
+        try {
+          token.reject(e);
+        } catch {}
+        s.tokens.delete(tokenId);
+      }
+      // Ensure no stale parts remain for these tokens in the buffer
+      if (affected.length) this.buffer.dropTokens(thread, affected);
     } finally {
+      s.inFlight = undefined;
       s.running = false;
       this.startNext(thread);
     }
   }
 
-  private async runGraph(thread: string, batch: TriggerMessage[]): Promise<BaseMessage | undefined> {
+  private async runGraph(
+    thread: string,
+    batch: TriggerMessage[],
+    runId: string,
+  ): Promise<BaseMessage | undefined> {
     const response = (await this.graph.invoke(
       {
         messages: { method: 'append', items: batch.map((msg) => new HumanMessage(JSON.stringify(msg))) },
       },
-      { ...this.config, configurable: { ...this.config?.configurable, thread_id: thread, caller_agent: this as InjectionProvider } },
+      {
+        ...this.config,
+        configurable: {
+          ...this.config?.configurable,
+          thread_id: thread,
+          caller_agent: this as InjectionProvider,
+          run_id: runId,
+        },
+      },
     )) as { messages: BaseMessage[] };
     return response.messages?.[response.messages.length - 1];
   }
@@ -195,9 +252,17 @@ export abstract class BaseAgent implements TriggerListener, StaticConfigurable, 
   // Public injection surface: nodes may ask for injected messages to include in the same turn.
   getInjectedMessages(thread: string): BaseMessage[] {
     if (this.whenBusy !== 'injectAfterTools') return [];
-    const drained = this.buffer.tryDrain(thread, this.processBuffer);
-    if (!drained.length) return [];
-    return drained.map((m) => new HumanMessage(JSON.stringify(m)));
+    const s = this.ensureThread(thread);
+    // If no in-flight run, do not drain for injection
+    if (!s.running || !s.inFlight) return [];
+    const drained = this.buffer.tryDrainDescriptor(thread, this.processBuffer);
+    if (!drained.messages.length) return [];
+    // Record token parts injected into this run for proper resolution
+    for (const part of drained.tokenParts) {
+      const prev = s.inFlight.includedCounts.get(part.tokenId) || 0;
+      s.inFlight.includedCounts.set(part.tokenId, prev + part.count);
+    }
+    return drained.messages.map((m) => new HumanMessage(JSON.stringify(m)));
   }
 
   // New universal teardown hook for graph runtime
@@ -205,15 +270,12 @@ export abstract class BaseAgent implements TriggerListener, StaticConfigurable, 
     // Resolve any pending awaiters to avoid hangs on teardown
     for (const [, s] of this.threads) {
       if (s.timer) clearTimeout(s.timer);
-      const awaiters = s.awaiters.slice();
-      s.awaiters.length = 0;
-      for (const res of awaiters) {
+      for (const [, token] of s.tokens) {
         try {
-          res(undefined);
-        } catch {
-          // ignore
-        }
+          token.resolve(undefined);
+        } catch {}
       }
+      s.tokens.clear();
     }
     this.buffer.destroy();
     this.threads.clear();
