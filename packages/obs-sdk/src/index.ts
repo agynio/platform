@@ -21,6 +21,7 @@ export interface SpanInput {
   attributes?: Record<string, unknown>;
   nodeId?: string;
   threadId?: string;
+  kind?: string; // added: semantic kind of span (tool_call, llm, thread, agent, summarize, system)
 }
 
 export interface SpanContext {
@@ -55,7 +56,9 @@ function genId(bytes: number) {
   return randomBytes(bytes).toString('hex');
 }
 
-function sleep(ms: number) { return new Promise(r => setTimeout(r, ms)); }
+function sleep(ms: number) {
+  return new Promise((r) => setTimeout(r, ms));
+}
 
 async function httpPost(url: string, body: unknown, idempotencyKey?: string) {
   if (!url) return; // allow SDK usage without server for tests
@@ -86,9 +89,19 @@ async function retryingPost(url: string, body: unknown, idempotencyKey: string) 
   }
 }
 
-function now() { return new Date().toISOString(); }
+function now() {
+  return new Date().toISOString();
+}
 
-export async function withSpan<T>(input: SpanInput, fn: () => Promise<T> | T): Promise<T> {
+// Internal low-level span creator. Accepts optional computeEndAttrs to add attributes/status at completion.
+export async function withSpan<T>(
+  input: SpanInput,
+  fn: () => Promise<T> | T,
+  computeEndAttrs?: (
+    result: T | undefined,
+    error: unknown | undefined,
+  ) => { attributes?: Record<string, unknown>; status?: 'ok' | 'error' } | void,
+): Promise<T> {
   if (!config) throw new Error('obs-sdk not initialized');
   const cfg = config as InternalConfig; // capture for type narrowing
   const parent = als.getStore();
@@ -102,13 +115,16 @@ export async function withSpan<T>(input: SpanInput, fn: () => Promise<T> | T): P
   if (cfg.mode === 'extended') {
     const created = {
       state: 'created',
-      traceId, spanId, parentSpanId: ctx.parentSpanId,
+      traceId,
+      spanId,
+      parentSpanId: ctx.parentSpanId,
       label: input.label,
       startTime,
       status: 'running',
       attributes: baseAttrs,
       nodeId: input.nodeId,
-      threadId: input.threadId
+      threadId: input.threadId,
+      kind: input.kind,
     };
     const keyCreated = genId(8);
     await retryingPost(cfg.endpoints.extended + '/v1/spans/upsert', created, keyCreated).catch(() => {});
@@ -118,32 +134,66 @@ export async function withSpan<T>(input: SpanInput, fn: () => Promise<T> | T): P
     als.run(ctx, async () => {
       try {
         const result = await fn();
+        const endExtra = computeEndAttrs?.(result, undefined) || {};
+        const statusFinal = endExtra.status || 'ok';
         if (cfg.mode === 'extended') {
           const completed = {
             state: 'completed',
-            traceId, spanId,
+            traceId,
+            spanId,
             endTime: now(),
-            status: 'ok'
+            status: statusFinal,
+            kind: input.kind,
+            attributes: endExtra.attributes ? { ...baseAttrs, ...endExtra.attributes } : baseAttrs,
           };
           await retryingPost(cfg.endpoints.extended + '/v1/spans/upsert', completed, genId(8)).catch(() => {});
         } else {
           // otlp mode buffer: send one completed span via OTLP HTTP/protobuf later
           // Stage 1 simplified: send JSON to /v1/traces placeholder; server will map when OTLP implemented
-          const otlpLike = [{ traceId, spanId, parentSpanId: ctx.parentSpanId, label: input.label, startTime, endTime: now(), status: 'ok', attributes: baseAttrs }];
+          const otlpLike = [
+            {
+              traceId,
+              spanId,
+              parentSpanId: ctx.parentSpanId,
+              label: input.label,
+              startTime,
+              endTime: now(),
+              status: statusFinal,
+              kind: input.kind,
+              attributes: endExtra.attributes ? { ...baseAttrs, ...endExtra.attributes } : baseAttrs,
+            },
+          ];
           await retryingPost(cfg.endpoints.otlp + '/v1/traces', { spans: otlpLike }, genId(8)).catch(() => {});
         }
         resolve(result);
       } catch (err) {
+        const endExtra = computeEndAttrs?.(undefined, err) || {};
+        const statusFinal = endExtra.status || 'error';
         if (cfg.mode === 'extended') {
           const completed = {
             state: 'completed',
-            traceId, spanId,
+            traceId,
+            spanId,
             endTime: now(),
-            status: 'error'
+            status: statusFinal,
+            kind: input.kind,
+            attributes: endExtra.attributes ? { ...baseAttrs, ...endExtra.attributes } : baseAttrs,
           };
           await retryingPost(cfg.endpoints.extended + '/v1/spans/upsert', completed, genId(8)).catch(() => {});
         } else {
-          const otlpLike = [{ traceId, spanId, parentSpanId: ctx.parentSpanId, label: input.label, startTime, endTime: now(), status: 'error', attributes: baseAttrs }];
+          const otlpLike = [
+            {
+              traceId,
+              spanId,
+              parentSpanId: ctx.parentSpanId,
+              label: input.label,
+              startTime,
+              endTime: now(),
+              status: statusFinal,
+              kind: input.kind,
+              attributes: endExtra.attributes ? { ...baseAttrs, ...endExtra.attributes } : baseAttrs,
+            },
+          ];
           await retryingPost(cfg.endpoints.otlp + '/v1/traces', { spans: otlpLike }, genId(8)).catch(() => {});
         }
         reject(err);
@@ -152,8 +202,72 @@ export async function withSpan<T>(input: SpanInput, fn: () => Promise<T> | T): P
   });
 }
 
-export function currentSpan(): SpanContext | undefined { return als.getStore(); }
+export function currentSpan(): SpanContext | undefined {
+  return als.getStore();
+}
 
 export async function flush() {
   // Stage 1 minimal stub (no background buffers yet)
+}
+
+// Helper creators (per spec) - only the specified parameters and mandatory mapping to attributes/kind.
+
+export function withThread<T>(attributes: { threadId: string; [k: string]: unknown }, fn: () => Promise<T> | T) {
+  const { threadId, ...rest } = attributes;
+  return withSpan({ label: 'thread', threadId, kind: 'thread', attributes: { threadId, ...rest } }, fn);
+}
+
+export function withAgent<T>(attributes: Record<string, unknown>, fn: () => Promise<T> | T) {
+  return withSpan({ label: 'agent', kind: 'agent', attributes }, fn);
+}
+
+export function withLLM<T>(
+  attributes: { newMessages: unknown[]; context: unknown; [k: string]: unknown },
+  fn: () => Promise<T> | T,
+) {
+  const { newMessages, context, ...rest } = attributes;
+  return withSpan({ label: 'llm', kind: 'llm', attributes: { newMessages, context, ...rest } }, fn, (result) => {
+    if (result && typeof result === 'object') {
+      const r: any = result as any;
+      const output: Record<string, unknown> = {};
+      if ('text' in r) output.text = r.text;
+      if ('toolCalls' in r) output.toolCalls = r.toolCalls;
+      return { attributes: Object.keys(output).length ? { output } : undefined };
+    }
+    return;
+  });
+}
+
+export function withToolCall<T>(
+  attributes: { name: string; input: unknown; [k: string]: unknown },
+  fn: () => Promise<T> | T,
+) {
+  const { name, input, ...rest } = attributes;
+  return withSpan(
+    { label: `tool:${name}`, kind: 'tool_call', attributes: { name, input, ...rest } },
+    fn,
+    (result, err) => {
+      if (err) return { attributes: { status: 'error' }, status: 'error' };
+      return { attributes: { output: result, status: 'success' }, status: 'ok' };
+    },
+  );
+}
+
+export function withSummarize<T>(attributes: { oldContext: unknown; [k: string]: unknown }, fn: () => Promise<T> | T) {
+  const { oldContext, ...rest } = attributes;
+  return withSpan({ label: 'summarize', kind: 'summarize', attributes: { oldContext, ...rest } }, fn, (result) => {
+    if (result && typeof result === 'object') {
+      const r: any = result as any;
+      const out: Record<string, unknown> = {};
+      if ('summary' in r) out.summary = r.summary;
+      if ('newContext' in r) out.newContext = r.newContext;
+      return { attributes: Object.keys(out).length ? out : undefined };
+    }
+    return;
+  });
+}
+
+export function withSystem<T>(attributes: { label: string; [k: string]: unknown }, fn: () => Promise<T> | T) {
+  const { label, ...rest } = attributes;
+  return withSpan({ label, kind: 'system', attributes: { ...rest } }, fn);
 }
