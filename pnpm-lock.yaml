@@ -234,6 +234,87 @@ importers:
         specifier: ^3.2.4
         version: 3.2.4(@types/node@24.5.2)(jiti@2.5.1)(jsdom@27.0.0(postcss@8.5.6))(lightningcss@1.30.1)(msw@2.11.3(@types/node@24.5.2)(typescript@5.8.3))(tsx@4.20.5)(yaml@2.8.1)
 
+  examples/observability-demo:
+    dependencies:
+      '@hautech/obs-sdk':
+        specifier: workspace:*
+        version: link:../../packages/obs-sdk
+    devDependencies:
+      '@types/node':
+        specifier: ^24.5.1
+        version: 24.5.2
+      tsx:
+        specifier: ^4.20.5
+        version: 4.20.5
+      typescript:
+        specifier: ^5.0.0
+        version: 5.8.3
+
+  packages/obs-sdk:
+    dependencies:
+      uuid:
+        specifier: ^13.0.0
+        version: 13.0.0
+    devDependencies:
+      '@types/node':
+        specifier: ^24.5.1
+        version: 24.5.2
+      '@types/uuid':
+        specifier: ^11.0.0
+        version: 11.0.0
+      prettier:
+        specifier: ^3.6.2
+        version: 3.6.2
+      typescript:
+        specifier: ^5.0.0
+        version: 5.8.3
+      vitest:
+        specifier: ^3.2.4
+        version: 3.2.4(@types/node@24.5.2)(jiti@2.5.1)(jsdom@27.0.0(postcss@8.5.6))(lightningcss@1.30.1)(msw@2.11.3(@types/node@24.5.2)(typescript@5.8.3))(tsx@4.20.5)(yaml@2.8.1)
+
+  packages/obs-server:
+    dependencies:
+      '@fastify/cors':
+        specifier: ^11.1.0
+        version: 11.1.0
+      dotenv:
+        specifier: ^17.2.2
+        version: 17.2.2
+      fastify:
+        specifier: ^5.6.1
+        version: 5.6.1
+      mongodb:
+        specifier: ^6.20.0
+        version: 6.20.0
+      uuid:
+        specifier: ^13.0.0
+        version: 13.0.0
+      zod:
+        specifier: ^4.1.9
+        version: 4.1.11
+    devDependencies:
+      '@types/node':
+        specifier: ^24.5.1
+        version: 24.5.2
+      '@types/uuid':
+        specifier: ^11.0.0
+        version: 11.0.0
+      mongodb-memory-server:
+        specifier: ^10.1.4
+        version: 10.2.1
+      prettier:
+        specifier: ^3.6.2
+        version: 3.6.2
+      tsx:
+        specifier: ^4.20.5
+        version: 4.20.5
+      typescript:
+        specifier: ^5.0.0
+        version: 5.8.3
+      vitest:
+        specifier: ^3.2.4
+        version: 3.2.4(@types/node@24.5.2)(jiti@2.5.1)(jsdom@27.0.0(postcss@8.5.6))(lightningcss@1.30.1)(msw@2.11.3(@types/node@24.5.2)(typescript@5.8.3))(tsx@4.20.5)(yaml@2.8.1)
+
   packages/shared: {}
 
 packages:
@@ -1868,6 +1949,10 @@ packages:
 
   '@types/uuid@10.0.0':
     resolution: {integrity: sha512-7gqG38EyHgyP1S+7+xomFtL+ZNHcKv6DwNaCZmJmo1vgMugyF3TCnXVg4t1uk89mLNwnLtnY3TpOpCOyp1/xHQ==}
+
+  '@types/uuid@11.0.0':
+    resolution: {integrity: sha512-HVyk8nj2m+jcFRNazzqyVKiZezyhDKrGUA3jlEcg/nZ6Ms+qHwocba1Y/AaVaznJTAM9xpdFSh+ptbNrhOGvZA==}
+    deprecated: This is a stub types definition. uuid provides its own type definitions, so you do not need this installed.
 
   '@types/webidl-conversions@7.0.3':
     resolution: {integrity: sha512-CiJJvcRtIgzadHCYXw7dqEnMNRjhGZlYK05Mj9OyktqV8uVT8fD2BFOB7S1uwBE3Kj2Z+4UyPmFw/Ixgw/LAlA==}
@@ -6619,6 +6704,10 @@ snapshots:
   '@types/triple-beam@1.3.5': {}
 
   '@types/uuid@10.0.0': {}
+
+  '@types/uuid@11.0.0':
+    dependencies:
+      uuid: 13.0.0
 
   '@types/webidl-conversions@7.0.3': {}
 

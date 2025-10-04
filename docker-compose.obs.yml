@@ -1,0 +1,37 @@
+version: '3.8'
+
+services:
+  mongodb:
+    image: mongo:7.0
+    container_name: obs-mongodb
+    ports:
+      - "27017:27017"
+    environment:
+      - MONGO_INITDB_DATABASE=observability
+    volumes:
+      - mongodb_data:/data/db
+    networks:
+      - observability
+
+  obs-server:
+    build:
+      context: ./packages/obs-server
+      dockerfile: Dockerfile
+    container_name: obs-server
+    ports:
+      - "3001:3001"
+    environment:
+      - MONGO_URL=mongodb://mongodb:27017/observability
+      - PORT=3001
+      - LOG_LEVEL=info
+    depends_on:
+      - mongodb
+    networks:
+      - observability
+
+volumes:
+  mongodb_data:
+
+networks:
+  observability:
+    driver: bridge

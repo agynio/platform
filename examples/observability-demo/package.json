@@ -1,0 +1,18 @@
+{
+  "name": "observability-demo",
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "start": "node src/demo.js",
+    "build": "tsc",
+    "dev": "tsx src/demo.ts"
+  },
+  "dependencies": {
+    "@hautech/obs-sdk": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^24.5.1",
+    "tsx": "^4.20.5",
+    "typescript": "^5.0.0"
+  }
+}
