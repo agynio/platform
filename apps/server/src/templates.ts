@@ -162,7 +162,8 @@ export function buildTemplateRegistry(deps: TemplateRegistryDeps): TemplateRegis
         () => new SlackTrigger(slackService, logger),
         {
           sourcePorts: {
-            trigger: { kind: 'method', create: 'subscribe', destroy: 'unsubscribe' },
+            // Preserve prior port naming: 'subscribe' handle to call instance.subscribe/unsubscribe
+            subscribe: { kind: 'method', create: 'subscribe', destroy: 'unsubscribe' },
           },
         },
         {
