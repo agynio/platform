@@ -1,0 +1,1 @@
+Update: Removed Docker compose and Dockerfile for obs-server; server runs from sources via pnpm scripts. Added @hautech/obs-examples package with PoC script. Switched builds to esbuild + tsc for types; updated exports and start scripts.
