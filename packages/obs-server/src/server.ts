@@ -1,4 +1,5 @@
 import Fastify, { FastifyInstance } from 'fastify';
+import cors from '@fastify/cors';
 import { Collection, Db } from 'mongodb';
 import { z } from 'zod';
 
@@ -53,6 +54,16 @@ const QuerySchema = z.object({
 
 export async function createServer(db: Db, opts: { logger?: boolean } = {}): Promise<FastifyInstance> {
   const fastify = Fastify({ logger: opts.logger ?? true });
+  // CORS (dev only, permissive). TODO: tighten for prod when auth added.
+  await fastify.register(cors, {
+    origin: (origin: string | undefined, cb: (err: Error | null, allow: boolean) => void) => {
+      if (!origin) return cb(null, true); // allow non-browser / curl
+      // Allow all localhost origins and any origin for now (Stage 1 UI)
+      cb(null, true);
+    },
+    methods: ['GET', 'POST', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'X-Idempotency-Key'],
+  });
   const spans: Collection<SpanDoc> = db.collection('spans');
 
   // indexes (idempotent)

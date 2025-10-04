@@ -9,6 +9,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@fastify/cors": "^8.4.2",
     "dotenv": "^17.2.2",
     "fastify": "^4.28.1",
     "fastify-plugin": "^4.5.1",
