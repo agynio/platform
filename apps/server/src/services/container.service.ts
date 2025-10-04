@@ -1,7 +1,7 @@
 import Docker, { ContainerCreateOptions, Exec } from 'dockerode';
 import { ContainerEntity } from '../entities/container.entity';
 import { LoggerService } from './logger.service';
-import { PLATFORM_LABEL } from '../constants';
+import { PLATFORM_LABEL } from '../constants.js';
 
 const DEFAULT_IMAGE = 'mcr.microsoft.com/vscode/devcontainers/base';
 

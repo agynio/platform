@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { ContainerProviderEntity, ContainerProviderStaticConfigSchema } from '../src/entities/containerProvider.entity';
 import { ContainerService } from '../src/services/container.service';
 import { ContainerEntity } from '../src/entities/container.entity';
-import { PLATFORM_LABEL } from '../src/constants';
+import { PLATFORM_LABEL } from '../src/constants.js';
 
 class MockContainer extends ContainerEntity {
   constructor(id: string, private svc: Partial<ContainerService>) {

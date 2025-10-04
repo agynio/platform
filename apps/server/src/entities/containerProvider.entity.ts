@@ -1,7 +1,7 @@
 import { ContainerOpts, ContainerService } from '../services/container.service';
 import { ContainerEntity } from './container.entity';
 import { z } from 'zod';
-import { PLATFORM_LABEL } from '../constants';
+import { PLATFORM_LABEL } from '../constants.js';
 
 // Static configuration schema for ContainerProviderEntity
 // Allows overriding the base image and supplying environment variables.
