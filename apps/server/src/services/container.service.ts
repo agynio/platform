@@ -56,12 +56,12 @@ export class ContainerService {
     }
 
     await new Promise<void>((resolve, reject) => {
-      const cb = (err: Error | undefined, stream: NodeJS.ReadableStream | undefined) => {
+      const cb = (err: Error | undefined, stream?: NodeJS.ReadableStream) => {
         if (err) return reject(err);
         if (!stream) return reject(new Error('No pull stream returned'));
         this.docker.modem.followProgress(
-          stream as NodeJS.ReadableStream,
-          (doneErr: any) => {
+          stream,
+          (doneErr: Error | undefined) => {
             if (doneErr) return reject(doneErr);
             this.logger.info(`Finished pulling image '${image}'`);
             resolve();
@@ -76,9 +76,9 @@ export class ContainerService {
         );
       };
       if (platform) {
-        (this.docker as any).pull(image, { platform }, cb as any);
+        this.docker.pull(image, { platform }, cb);
       } else {
-        this.docker.pull(image, cb as any);
+        this.docker.pull(image, cb);
       }
     });
   }
@@ -97,10 +97,9 @@ export class ContainerService {
         ? Object.entries(optsWithDefaults.env).map(([k, v]) => `${k}=${v}`)
         : undefined;
 
-    const createOptions: ContainerCreateOptions & { name?: string; platform?: string } = {
+    const createOptions: ContainerCreateOptions & { name?: string } = {
       Image: optsWithDefaults.image,
       name: optsWithDefaults.name,
-      platform: optsWithDefaults.platform,
       Cmd: optsWithDefaults.cmd,
       Env,
       WorkingDir: optsWithDefaults.workingDir,
@@ -118,10 +117,12 @@ export class ContainerService {
       },
     };
 
+    const query = optsWithDefaults.platform ? { platform: optsWithDefaults.platform } : undefined;
+
     this.logger.info(
       `Creating container from '${optsWithDefaults.image}'${optsWithDefaults.name ? ` name=${optsWithDefaults.name}` : ''}`,
     );
-    const container = await (this.docker as any).createContainer(createOptions as any);
+    const container = await this.docker.createContainer({ ...(createOptions as ContainerCreateOptions), ...(query ?? {}) });
     await container.start();
     const inspect = await container.inspect();
     this.logger.info(`Container started cid=${inspect.Id.substring(0, 12)} status=${inspect.State?.Status}`);
@@ -346,16 +347,16 @@ export class ContainerService {
 
   /** Remove a container by docker id. */
   async removeContainer(containerId: string, force = false): Promise<void> {
-  this.logger.info(`Removing container cid=${containerId.substring(0, 12)} force=${force}`);
-  const container = this.docker.getContainer(containerId);
-  await container.remove({ force });
+    this.logger.info(`Removing container cid=${containerId.substring(0, 12)} force=${force}`);
+    const container = this.docker.getContainer(containerId);
+    await container.remove({ force });
   }
 
   /** Inspect and return container labels */
-  async getContainerLabels(containerId: string): Promise<Record<string, string> | undefined> {
+  async getContainerLabels(containerId: string): Promise<Record<string, string>> {
     const container = this.docker.getContainer(containerId);
     const details = await container.inspect();
-    return (details?.Config as any)?.Labels as Record<string, string> | undefined;
+    return details?.Config?.Labels ?? {};
   }
 
   /**

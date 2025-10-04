@@ -43,7 +43,7 @@ describe('ContainerService platform support', () => {
     const docker = (svc as any).docker as Docker;
 
     const pullSpy = vi.spyOn(docker, 'pull');
-    const createSpy = vi.spyOn(docker as any, 'createContainer');
+    const createSpy = vi.spyOn(docker, 'createContainer');
 
     const container = await svc.start({ image: 'alpine:3', cmd: ['sleep', '1'], platform: 'linux/arm64' });
     expect(container.id).toBeDefined();
@@ -68,7 +68,7 @@ describe('ContainerService platform support', () => {
     const docker = (svc as any).docker as Docker;
 
     const pullSpy = vi.spyOn(docker, 'pull');
-    const createSpy = vi.spyOn(docker as any, 'createContainer');
+    const createSpy = vi.spyOn(docker, 'createContainer');
 
     const container = await svc.start({ image: 'alpine:3', cmd: ['sleep', '1'] });
     expect(container.id).toBeDefined();

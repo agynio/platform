@@ -221,7 +221,7 @@ Workspace container platform
   - platform: linux/amd64
   - image: node:20
   - env: { FOO: "bar" }
-- Note: Docker Desktop generally supports both platforms; non-native emulation may be slower.
+- Note: Docker Desktop generally supports both platforms; non-native emulation may be slower (qemu/binfmt). Not all tags are multi-arch; prefer multi-arch images when specifying platform.
 
 Defaults and toggles
 - LiveGraphRuntime serializes apply operations by default.

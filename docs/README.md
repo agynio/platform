@@ -19,3 +19,5 @@ Agent-side buffering and scheduling determines when `agent.invoke()` resolves:
 - whenBusy=`injectAfterTools`: messages arriving during an in-flight run are injected after tools and resolve when that run completes; arrivals too late to inject remain queued for the next run.
 
 On errors thrown by the graph runtime, only tokens included in the failed run are rejected; others remain pending. `dropTokens()` cleans up any remaining buffered items for those tokens. Each run is tagged with a per-run identifier in logs for easier tracing.
+
+Note: Running a non-native platform may be slower depending on Docker Engine/Desktop emulation (qemu/binfmt). Not all image tags are multi-arch; prefer multi-arch images when specifying platform.

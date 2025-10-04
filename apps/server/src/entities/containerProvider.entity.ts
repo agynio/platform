@@ -50,19 +50,29 @@ export class ContainerProviderEntity {
     let container: ContainerEntity | undefined = await this.containerService.findContainerByLabels(labels);
 
     // Enforce non-reuse on platform mismatch if a platform is requested now
-    const requestedPlatform = this.cfg?.platform ?? (this.opts as any)?.platform;
+    const requestedPlatform = this.cfg?.platform ?? this.opts.platform;
     if (container && requestedPlatform) {
       try {
         const containerLabels = await this.containerService.getContainerLabels(container.id);
         const existingPlatform = containerLabels?.['hautech.ai/platform'];
         if (!existingPlatform || existingPlatform !== requestedPlatform) {
           // Stop and remove old container, then recreate
-          await container.stop();
+          try {
+            await container.stop();
+          } catch {
+            // ignore stop errors (already stopped / not running)
+          }
           await container.remove(true);
           container = undefined;
         }
       } catch {
-        // If inspect fails, do not reuse to be safe
+        // If inspect fails, do not reuse to be safe; still attempt cleanup
+        try {
+          await container.stop();
+        } catch {}
+        try {
+          await container.remove(true);
+        } catch {}
         container = undefined;
       }
     }

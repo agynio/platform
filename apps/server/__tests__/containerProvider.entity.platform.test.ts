@@ -68,6 +68,7 @@ describe('ContainerProviderEntity platform reuse logic', () => {
     const c = await provider.provide('t3');
 
     expect(existing.stop).not.toHaveBeenCalled();
+    expect(existing.remove).not.toHaveBeenCalled();
     expect(svc.start).not.toHaveBeenCalled();
     expect(c).toBe(existing);
   });
