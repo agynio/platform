@@ -42,7 +42,10 @@ describe('LLM span persistence end-to-end (real server + memory mongo)', () => {
             toolCalls: [{ id: toolCallId, name: 'weather', arguments: { city: 'NYC' } }],
           });
         });
-        await withToolCall({ toolCallId, name: 'weather', input: { city: 'NYC' } }, async () => ({ tempC: 21 }));
+        await withToolCall({ toolCallId, name: 'weather', input: { city: 'NYC' } }, async () => {
+          const result = { tempC: 21 };
+          return new sdk.ToolCallResponse({ raw: result, output: result, status: 'success' });
+        });
       });
     });
 

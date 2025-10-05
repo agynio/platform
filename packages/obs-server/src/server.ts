@@ -45,7 +45,8 @@ const UpsertSchema = z.object({
   label: z.string().optional(),
   startTime: z.string().optional(),
   endTime: z.string().optional(),
-  status: z.enum(['running', 'ok', 'error', 'cancelled']).optional(),
+  // Accept 'success' from SDK but we'll normalize it later to 'ok'
+  status: z.enum(['running', 'ok', 'error', 'cancelled', 'success']).optional(),
   attributes: z.record(z.any()).optional(),
   events: z.array(z.object({ ts: z.string(), name: z.string(), attrs: z.record(z.any()).optional() })).optional(),
   idempotencyKey: z.string().optional(),
@@ -98,8 +99,13 @@ export async function createServer(db: Db, opts: { logger?: boolean } = {}): Pro
   fastify.post('/v1/spans/upsert', async (req, reply) => {
     const parsed = UpsertSchema.safeParse((req as any).body);
     if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
-    const body = parsed.data;
+    const body = { ...parsed.data } as any;
+    if (body.status === 'success') body.status = 'ok';
     const now = new Date().toISOString();
+    fastify.log.debug(
+      { state: body.state, spanId: body.spanId, traceId: body.traceId, hasAttributes: !!body.attributes },
+      'incoming span upsert',
+    );
     const key = body.idempotencyKey;
     if (key) {
       const existing = await spans.findOne({ traceId: body.traceId, spanId: body.spanId, idempotencyKeys: key });
@@ -113,7 +119,7 @@ export async function createServer(db: Db, opts: { logger?: boolean } = {}): Pro
           traceId: body.traceId,
           spanId: body.spanId,
           parentSpanId: body.parentSpanId,
-            label: body.label || 'span',
+          label: body.label || 'span',
           status: 'running',
           startTime: body.startTime || now,
           endTime: undefined,
@@ -128,69 +134,78 @@ export async function createServer(db: Db, opts: { logger?: boolean } = {}): Pro
 
     const update: any = { $setOnInsert: setOnInsert };
     update.$set = { updatedAt: now, lastUpdate: now };
-    if (doc) update.$inc = { rev: 1 }; else update.$set.rev = 0;
+    if (doc) update.$inc = { rev: 1 };
+    else update.$set.rev = 0;
     if (key) update.$addToSet = { idempotencyKeys: key };
 
     if (body.state === 'created') {
-        if (doc) {
-          // Existing span transitioning (should be rare) - merge mutable fields
-          const createdSet: any = {
-            attributes: { ...(doc?.attributes || {}), ...(body.attributes || {}) },
-            label: body.label ?? (doc?.label || 'span'),
-            status: 'running',
-            startTime: body.startTime || doc?.startTime || now,
-            parentSpanId: body.parentSpanId ?? doc?.parentSpanId,
-            nodeId: body.nodeId ?? doc?.nodeId,
-            threadId: body.threadId ?? doc?.threadId,
-          };
-          update.$set = { ...update.$set, ...createdSet };
-        } else {
-          // New doc: attributes & other fields already present in $setOnInsert; avoid duplicating in $set
-        }
+      if (doc) {
+        // Existing span transitioning (should be rare) - merge mutable fields
+        const createdSet: any = {
+          attributes: { ...(doc?.attributes || {}), ...(body.attributes || {}) },
+          label: body.label ?? (doc?.label || 'span'),
+          status: 'running',
+          startTime: body.startTime || doc?.startTime || now,
+          parentSpanId: body.parentSpanId ?? doc?.parentSpanId,
+          nodeId: body.nodeId ?? doc?.nodeId,
+          threadId: body.threadId ?? doc?.threadId,
+        };
+        update.$set = { ...update.$set, ...createdSet };
+      } else {
+        // New doc: attributes & other fields already present in $setOnInsert; avoid duplicating in $set
+      }
     } else if (body.state === 'updated') {
-        // only set attributes; avoid conflict if inserting (attributes already in $setOnInsert)
-        if (doc) {
-          update.$set = {
-            ...update.$set,
-            attributes: { ...(doc?.attributes || {}), ...(body.attributes || {}) },
-          };
-        }
+      // only set attributes; avoid conflict if inserting (attributes already in $setOnInsert)
+      if (doc) {
+        update.$set = {
+          ...update.$set,
+          attributes: { ...(doc?.attributes || {}), ...(body.attributes || {}) },
+        };
+      }
     } else if (body.state === 'completed') {
+      fastify.log.debug({ spanId: body.spanId, traceId: body.traceId }, 'processing completed state');
       if (doc?.completed) {
         return { ok: true, id: doc._id };
       }
-        const completedSet: any = {
+      // Normalize client SDK status (which currently uses 'success'/'error') to server enum ('ok'/'error')
+      const rawStatus: any = body.status;
+      const normalizedStatus = rawStatus === 'success' ? 'ok' : rawStatus === 'error' ? 'error' : body.status;
+      const completedSet: any = {
+        endTime: body.endTime || now,
+        completed: true,
+        status: normalizedStatus || 'ok',
+      };
+      // Merge attributes from completed event (including new output / llm.* attributes)
+      if (doc) {
+        if (body.attributes && Object.keys(body.attributes).length) {
+          const merged = mergeCompletedAttributes(doc.attributes || {}, body.attributes);
+          completedSet.attributes = merged;
+        }
+      } else if (body.attributes && Object.keys(body.attributes).length) {
+        // Insert path: normalize attributes before setting on insert
+        const normalized = mergeCompletedAttributes({}, body.attributes);
+        update.$setOnInsert = {
+          ...update.$setOnInsert,
+          attributes: { ...(update.$setOnInsert?.attributes || {}), ...normalized },
+        };
+      }
+      // If inserting, remove keys that would conflict (completed/status/endTime exist in setOnInsert except endTime which is undefined there)
+      if (!doc) {
+        // status, completed, endTime all in setOnInsert (endTime as undefined) – let setOnInsert win
+        delete completedSet.status;
+        delete completedSet.completed;
+        delete completedSet.endTime; // initial endTime for completed insert is handled below
+        // For a directly completed new span treat as fully completed doc: modify setOnInsert instead
+        update.$setOnInsert = {
+          ...update.$setOnInsert,
+          status: normalizedStatus || 'ok',
           endTime: body.endTime || now,
           completed: true,
-          status: body.status || 'ok',
         };
-        // Merge attributes from completed event (including new output / llm.* attributes)
-        if (doc) {
-          if (body.attributes && Object.keys(body.attributes).length) {
-            const merged = mergeCompletedAttributes(doc.attributes || {}, body.attributes);
-            completedSet.attributes = merged;
-          }
-        } else if (body.attributes && Object.keys(body.attributes).length) {
-          // Insert path: normalize attributes before setting on insert
-          const normalized = mergeCompletedAttributes({}, body.attributes);
-          update.$setOnInsert = { ...update.$setOnInsert, attributes: { ...(update.$setOnInsert?.attributes || {}), ...normalized } };
-        }
-        // If inserting, remove keys that would conflict (completed/status/endTime exist in setOnInsert except endTime which is undefined there)
-        if (!doc) {
-          // status, completed, endTime all in setOnInsert (endTime as undefined) – let setOnInsert win
-          delete completedSet.status;
-          delete completedSet.completed;
-          delete completedSet.endTime; // initial endTime for completed insert is handled below
-          // For a directly completed new span treat as fully completed doc: modify setOnInsert instead
-          update.$setOnInsert = {
-            ...update.$setOnInsert,
-            status: body.status || 'ok',
-            endTime: body.endTime || now,
-            completed: true,
-          };
-        } else {
-          update.$set = { ...update.$set, ...completedSet };
-        }
+      } else {
+        fastify.log.debug({ spanId: body.spanId, traceId: body.traceId }, 'applying completedSet to existing doc');
+        update.$set = { ...update.$set, ...completedSet };
+      }
     }
 
     fastify.log.debug({ filter, update }, 'span upsert update document');
@@ -202,7 +217,9 @@ export async function createServer(db: Db, opts: { logger?: boolean } = {}): Pro
     }
     const final = await spans.findOne(filter);
     // Emit realtime event (best-effort; ignore failures)
-    try { if (final && spanIo) spanIo.emit('span_upsert', final); } catch {}
+    try {
+      if (final && spanIo) spanIo.emit('span_upsert', final);
+    } catch {}
     return { ok: true, id: final?._id };
   });
 
@@ -230,7 +247,12 @@ export async function createServer(db: Db, opts: { logger?: boolean } = {}): Pro
     }
     const docs = await spans.find(q).sort(sortSpec).limit(limit).toArray();
     const tail = docs[docs.length - 1] as any;
-    const cursorObj = tail ? { [sort === 'startTime' ? 'startTime' : 'lastUpdate']: tail[sort === 'startTime' ? 'startTime' : 'lastUpdate'], _id: tail._id } : undefined;
+    const cursorObj = tail
+      ? {
+          [sort === 'startTime' ? 'startTime' : 'lastUpdate']: tail[sort === 'startTime' ? 'startTime' : 'lastUpdate'],
+          _id: tail._id,
+        }
+      : undefined;
     const nextCursor = cursorObj ? Buffer.from(JSON.stringify(cursorObj)).toString('base64') : undefined;
     return { items: docs, nextCursor };
   });
@@ -275,7 +297,9 @@ export async function createServer(db: Db, opts: { logger?: boolean } = {}): Pro
     );
     if (spanIo) {
       for (const e of emitted) {
-        try { spanIo.emit('span_upsert', e); } catch {}
+        try {
+          spanIo.emit('span_upsert', e);
+        } catch {}
       }
     }
     return { ok: true, count: spansIn.length };
@@ -298,7 +322,7 @@ export async function createServer(db: Db, opts: { logger?: boolean } = {}): Pro
     const nowIso = new Date().toISOString();
     const arr = Array.isArray(parsed.data) ? parsed.data : [parsed.data];
     if (arr.length === 0) return { ok: true, count: 0 };
-    const docs: LogDoc[] = arr.map(l => ({
+    const docs: LogDoc[] = arr.map((l) => ({
       traceId: l.traceId,
       spanId: l.spanId,
       level: l.level,
@@ -320,7 +344,9 @@ export async function createServer(db: Db, opts: { logger?: boolean } = {}): Pro
     // Emit realtime events (best-effort)
     if (spanIo) {
       for (const d of docs) {
-        try { spanIo.emit('log', d); } catch {}
+        try {
+          spanIo.emit('log', d);
+        } catch {}
       }
     }
     return { ok: true, count: docs.length };
@@ -395,11 +421,14 @@ export function attachSpanSocket(io: SocketIOServer) {
   spanIo = io;
   io.on('connection', (socket) => {
     // Emit initial connected event with server timestamp
-    try { socket.emit('connected', { ts: Date.now() }); } catch {}
+    try {
+      socket.emit('connected', { ts: Date.now() });
+    } catch {}
     // Support client ping (ack form or event form)
     socket.on('ping', (data: any, cb: ((resp: any) => void) | undefined) => {
       const resp = { ts: Date.now() };
-      if (typeof cb === 'function') cb(resp); else socket.emit('pong', resp);
+      if (typeof cb === 'function') cb(resp);
+      else socket.emit('pong', resp);
     });
   });
 }

@@ -342,8 +342,8 @@ export function withToolCall<TOutput = unknown, TRaw = any>(
       if (!(result instanceof ToolCallResponse)) {
         return { attributes: { status: 'error', error: 'tool.response.missingWrapper' }, status: 'error' };
       }
-      const statusAttr: SpanStatus = (result.status as SpanStatus) || 'success';
-      return { attributes: { output: result.output, status: statusAttr }, status: statusAttr };
+
+      return { attributes: { output: result.output } };
     },
   ).then((res) => (res as ToolCallResponse<TRaw, TOutput>).raw);
 }
