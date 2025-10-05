@@ -344,18 +344,29 @@ export function withToolCall<T>(
   ).then((res) => (res instanceof ToolCallResponse ? (res as ToolCallResponse<T>).raw : (res as T)));
 }
 
-export function withSummarize<T>(attributes: { oldContext: unknown; [k: string]: unknown }, fn: () => Promise<T> | T) {
-  const { oldContext, ...rest } = attributes;
-  return withSpan({ label: 'summarize', kind: 'summarize', attributes: { kind: 'summarize', oldContext, ...rest } }, fn, (result) => {
-    if (result && typeof result === 'object') {
-      const r: any = result as any;
-      const out: Record<string, unknown> = {};
-      if ('summary' in r) out.summary = r.summary;
-      if ('newContext' in r) out.newContext = r.newContext;
-      return { attributes: Object.keys(out).length ? out : undefined };
-    }
-    return;
-  });
+export function withSummarize<TRaw = any>(
+  attributes: { oldContext: Array<ChatMessageInput>; [k: string]: unknown },
+  fn: () => Promise<SummarizeResponse<TRaw>> | SummarizeResponse<TRaw>,
+) {
+  /**
+   * NOTE: The provided callback MUST return an instance of SummarizeResponse.
+   * This mirrors withLLM to keep instrumentation deterministic.
+   */
+  const { oldContext: rawOldContext, ...rest } = attributes;
+  const oldContext = rawOldContext.map(BaseMessage.fromLangChain).map((m) => m.toJSON());
+  return withSpan(
+    { label: 'summarize', kind: 'summarize', attributes: { kind: 'summarize', oldContext, ...rest } },
+    fn,
+    (result) => {
+      if (!(result instanceof SummarizeResponse)) {
+        return { attributes: { error: 'summarize.response.missingWrapper' }, status: 'error' };
+      }
+      const attr: Record<string, unknown> = {};
+      if (result.summary !== undefined) attr.summary = result.summary;
+      if (result.newContext !== undefined) attr.newContext = result.newContext;
+      return { attributes: Object.keys(attr).length ? attr : undefined };
+    },
+  ).then((res) => (res as SummarizeResponse<TRaw>).raw);
 }
 
 export function withSystem<T>(attributes: { label: string; [k: string]: unknown }, fn: () => Promise<T> | T) {
@@ -479,5 +490,17 @@ export class ToolCallResponse<TRaw = any, TOutput = unknown> {
   constructor(params: { raw: TRaw; output?: TOutput }) {
     this.raw = params.raw;
     this.output = params.output;
+  }
+}
+
+// SummarizeResponse wrapper for summarization instrumentation
+export class SummarizeResponse<TRaw = any> {
+  readonly raw: TRaw;
+  readonly summary?: string;
+  readonly newContext?: Array<ChatMessageInput>;
+  constructor(params: { raw: TRaw; summary?: string; newContext?: Array<ChatMessageInput> }) {
+    this.raw = params.raw;
+    this.summary = params.summary;
+    this.newContext = params.newContext;
   }
 }

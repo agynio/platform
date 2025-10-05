@@ -1,14 +1,14 @@
 import {
   init,
-  withSpan,
-  withSystem,
-  withThread,
+  LLMResponse,
+  logger,
+  SummarizeResponse,
   withAgent,
   withLLM,
-  withToolCall,
   withSummarize,
-  logger,
-  LLMResponse,
+  withSystem,
+  withThread,
+  withToolCall
 } from '@hautech/obs-sdk';
 
 async function main() {
@@ -56,16 +56,19 @@ async function main() {
         { role: 'human', content: 'Let me know if you need clarification.' },
       ];
 
+      let llmResult1Content: string | undefined;
       const llmResult1 = await withLLM({ context: richContext as any }, async () => {
         await new Promise((r) => setTimeout(r, 800));
         const raw = { text: 'Initial weather request acknowledged.' };
-        return new LLMResponse({
+        const resp = new LLMResponse({
           raw,
           content: 'I will look up the weather for NYC including Brooklyn details.',
           toolCalls: [
             { id: weatherToolCallId1, name: 'weather', arguments: { city: 'NYC' } },
           ],
         });
+        llmResult1Content = resp.content;
+        return resp;
       });
 
       const weather1 = await withToolCall({ toolCallId: weatherToolCallId1, name: 'weather', input: { city: 'NYC' } }, async () => {
@@ -81,17 +84,20 @@ async function main() {
 
       // Loop 2: follow-up analysis -> different tool (e.g., advisory)
       const advisoryToolCallId = 'tc_advisory_1';
+      let llmResult2Content: string | undefined;
       const llmResult2 = await withLLM({ context: [
         { role: 'system', content: 'You are an assistant generating human-friendly advisories.' },
         { role: 'human', content: 'Provide clothing and UV advice given current conditions.' },
         { role: 'tool', toolCallId: weatherToolCallId1, content: JSON.stringify(weather1) },
       ] }, async () => {
         await new Promise((r) => setTimeout(r, 600));
-        return new LLMResponse({
+        const resp = new LLMResponse({
           raw: { text: 'Computing advisories.' },
           content: 'Based on current conditions I will compute advisory.',
           toolCalls: [ { id: advisoryToolCallId, name: 'advisory', arguments: { tempC: weather1.tempC, humidity: weather1.humidity } } ],
         });
+        llmResult2Content = resp.content;
+        return resp;
       });
 
       const advisory = await withToolCall({ toolCallId: advisoryToolCallId, name: 'advisory', input: { tempC: weather1.tempC } }, async () => {
@@ -101,6 +107,7 @@ async function main() {
       });
 
       // Loop 3: final synthesis (no tool call) -> exit
+      let llmResult3Content: string | undefined;
       const llmResult3 = await withLLM({ context: [
         { role: 'system', content: 'You are a summarizer.' },
         { role: 'tool', toolCallId: weatherToolCallId1, content: JSON.stringify(weather1) },
@@ -108,17 +115,35 @@ async function main() {
         { role: 'human', content: 'Provide a concise final weather + advisory summary.' },
       ] }, async () => {
         await new Promise((r) => setTimeout(r, 400));
-        return new LLMResponse({
+        const resp = new LLMResponse({
           raw: { text: 'Summary ready.' },
           content: 'NYC Weather: 22°C (humid 55%). Light jacket recommended. No UV caution today.',
           toolCalls: [],
         });
+        llmResult3Content = resp.content;
+        return resp;
       });
 
       // Summarize context across loops
-      await withSummarize({ oldContext: JSON.stringify({ llmResult1, weather1, llmResult2, advisory, llmResult3 }) }, async () => {
+      await withSummarize({ oldContext: [
+        { role: 'system', content: 'Conversation recap preparation.' },
+        { role: 'ai', content: llmResult1Content || 'No first response' },
+        { role: 'tool', toolCallId: weatherToolCallId1, content: JSON.stringify(weather1) },
+        { role: 'ai', content: llmResult2Content || 'No second response' },
+        { role: 'tool', toolCallId: advisoryToolCallId, content: JSON.stringify(advisory) },
+        { role: 'ai', content: llmResult3Content || 'No third response' },
+      ] as any }, async () => {
         await new Promise((r) => setTimeout(r, 300));
-        return { summary: 'Performed 3-loop interaction (weather, advisory, final summary).', newContext: { weather1, advisory, final: llmResult3.content ?? 'No final content' } };
+        return new SummarizeResponse({
+          raw: { note: 'synthetic summarization output' },
+            summary: 'Performed 3-loop interaction (weather, advisory, final summary).',
+            newContext: [
+              { role: 'system', content: 'Conversation summary context' },
+              { role: 'tool', toolCallId: weatherToolCallId1, content: JSON.stringify(weather1) },
+              { role: 'tool', toolCallId: advisoryToolCallId, content: JSON.stringify(advisory) },
+              { role: 'ai', content: llmResult3Content ?? 'No final content' },
+            ] as any,
+          });
       });
     });
   });
