@@ -87,65 +87,65 @@ export function buildTemplateRegistry(deps: TemplateRegistryDeps): TemplateRegis
             $self: { kind: 'instance' },
             containerProvider: { kind: 'method', create: 'setContainerProvider' },
           },
-      },
-      {
-        title: 'Github clone',
-        kind: 'tool',
-        capabilities: { staticConfigurable: true },
-        staticConfigSchema: toJSONSchema(GithubCloneRepoToolStaticConfigSchema),
-      },
-    )
-    .register(
-      'sendSlackMessageTool',
-      () => new SendSlackMessageTool(slackService, logger),
-      {
-        targetPorts: { $self: { kind: 'instance' } },
-      },
-      {
-        title: 'Send Slack message',
-        kind: 'tool',
-        capabilities: { staticConfigurable: true },
-        staticConfigSchema: toJSONSchema(SendSlackMessageToolStaticConfigSchema),
-      },
-    )
-    .register(
-      'finishTool',
-      () => new FinishTool(logger),
-      {
-        targetPorts: { $self: { kind: 'instance' } },
-      },
-      {
-        title: 'Finish',
-        kind: 'tool',
-        capabilities: { staticConfigurable: true },
-        staticConfigSchema: toJSONSchema(FinishToolStaticConfigSchema),
-      },
-    )
-    .register(
-      'callAgentTool',
-      () => new CallAgentTool(logger),
-      {
-        targetPorts: { $self: { kind: 'instance' } },
-        sourcePorts: { agent: { kind: 'method', create: 'setAgent' } },
-      },
-      {
-        title: 'Call agent',
-        kind: 'tool',
-        capabilities: { staticConfigurable: true },
-        staticConfigSchema: toJSONSchema(CallAgentToolStaticConfigSchema),
-      },
-    )
-    .register(
-      'remindMeTool',
-      () => new RemindMeTool(logger),
-      { targetPorts: { $self: { kind: 'instance' } } },
-      {
-        title: 'Remind Me',
-        kind: 'tool',
-        capabilities: { staticConfigurable: true },
-        staticConfigSchema: toJSONSchema(RemindMeToolStaticConfigSchema),
-      },
-    )
+        },
+        {
+          title: 'Github clone',
+          kind: 'tool',
+          capabilities: { staticConfigurable: true },
+          staticConfigSchema: toJSONSchema(GithubCloneRepoToolStaticConfigSchema),
+        },
+      )
+      .register(
+        'sendSlackMessageTool',
+        () => new SendSlackMessageTool(slackService, logger),
+        {
+          targetPorts: { $self: { kind: 'instance' } },
+        },
+        {
+          title: 'Send Slack message',
+          kind: 'tool',
+          capabilities: { staticConfigurable: true },
+          staticConfigSchema: toJSONSchema(SendSlackMessageToolStaticConfigSchema),
+        },
+      )
+      .register(
+        'finishTool',
+        () => new FinishTool(logger),
+        {
+          targetPorts: { $self: { kind: 'instance' } },
+        },
+        {
+          title: 'Finish',
+          kind: 'tool',
+          capabilities: { staticConfigurable: true },
+          staticConfigSchema: toJSONSchema(FinishToolStaticConfigSchema),
+        },
+      )
+      .register(
+        'callAgentTool',
+        () => new CallAgentTool(logger),
+        {
+          targetPorts: { $self: { kind: 'instance' } },
+          sourcePorts: { agent: { kind: 'method', create: 'setAgent' } },
+        },
+        {
+          title: 'Call agent',
+          kind: 'tool',
+          capabilities: { staticConfigurable: true },
+          staticConfigSchema: toJSONSchema(CallAgentToolStaticConfigSchema),
+        },
+      )
+      .register(
+        'remindMeTool',
+        () => new RemindMeTool(logger),
+        { targetPorts: { $self: { kind: 'instance' } } },
+        {
+          title: 'Remind Me',
+          kind: 'tool',
+          capabilities: { staticConfigurable: true },
+          staticConfigSchema: toJSONSchema(RemindMeToolStaticConfigSchema),
+        },
+      )
       .register(
         'debugTool',
         () => new DebugToolTrigger(logger),
@@ -159,7 +159,11 @@ export function buildTemplateRegistry(deps: TemplateRegistryDeps): TemplateRegis
       )
       .register(
         'slackTrigger',
-        () => new SlackTrigger(slackService, logger),
+        () => {
+          const instance = new SlackTrigger(slackService, logger);
+          void instance.start();
+          return instance;
+        },
         {
           sourcePorts: {
             // Preserve prior port naming: 'subscribe' handle to call instance.subscribe/unsubscribe
