@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState, useRef, useCallback } from 'react';
+import { useHotkeys } from 'react-hotkeys-hook';
 import { useParams } from 'react-router-dom';
 import { fetchTrace } from '../services/api';
 import { spanRealtime } from '../services/socket';
@@ -158,6 +159,42 @@ export function TracePage() {
 
   const rows = useMemo(() => buildRows(spans), [spans]);
   const ruler = useMemo(() => buildRuler(spans), [spans]);
+  // Flatten visible spans for keyboard navigation (same order as rows)
+  const flatSpanIds = useMemo(() => rows.map(r => r.span.spanId), [rows]);
+
+  // Keyboard navigation: ArrowUp / ArrowDown to move selection in tree
+  useHotkeys('arrowdown', (e) => {
+    if (!flatSpanIds.length) return;
+    e.preventDefault();
+    if (!selected) {
+      // Select first
+      const first = spans.find(s => s.spanId === flatSpanIds[0]);
+      if (first) setSelected(first);
+      return;
+    }
+    const idx = flatSpanIds.indexOf(selected.spanId);
+    const nextIdx = Math.min(flatSpanIds.length - 1, idx + 1);
+    if (nextIdx !== idx) {
+      const next = spans.find(s => s.spanId === flatSpanIds[nextIdx]);
+      if (next) setSelected(next);
+    }
+  }, { enableOnFormTags: false, preventDefault: true }, [flatSpanIds, selected, spans]);
+
+  useHotkeys('arrowup', (e) => {
+    if (!flatSpanIds.length) return;
+    e.preventDefault();
+    if (!selected) {
+      const last = spans.find(s => s.spanId === flatSpanIds[flatSpanIds.length - 1]);
+      if (last) setSelected(last);
+      return;
+    }
+    const idx = flatSpanIds.indexOf(selected.spanId);
+    const prevIdx = Math.max(0, idx - 1);
+    if (prevIdx !== idx) {
+      const prev = spans.find(s => s.spanId === flatSpanIds[prevIdx]);
+      if (prev) setSelected(prev);
+    }
+  }, { enableOnFormTags: false, preventDefault: true }, [flatSpanIds, selected, spans]);
   const loadingEl = loading && (<div style={{ padding: 16 }}>Loading trace...</div>);
   const errorEl = !loading && error && (<div style={{ padding: 16, color: 'red' }}>Error: {error}</div>);
   const ready = !loading && !error;

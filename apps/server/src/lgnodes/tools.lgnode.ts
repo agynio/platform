@@ -10,11 +10,11 @@ import { TerminateResponse } from '../tools/terminateResponse';
 // Any HumanMessage injection (agent-side buffering) is handled upstream in CallModelNode.
 
 // Narrowed view of a tool call extracted from AIMessage to avoid loose casting
- type ToolCall = { id?: string; name: string; args: unknown };
- // Config shape we rely on at runtime (thread_id + optional caller_agent passthrough)
- type WithRuntime = LangGraphRunnableConfig & { configurable?: { thread_id?: string; caller_agent?: unknown } };
- 
- export class ToolsNode extends BaseNode {
+type ToolCall = { id?: string; name: string; args: unknown };
+// Config shape we rely on at runtime (thread_id + optional caller_agent passthrough)
+type WithRuntime = LangGraphRunnableConfig & { configurable?: { thread_id?: string; caller_agent?: unknown } };
+
+export class ToolsNode extends BaseNode {
   constructor(private tools: BaseTool[]) {
     super();
     this.tools = [...tools];
@@ -43,8 +43,8 @@ import { TerminateResponse } from '../tools/terminateResponse';
 
     const toolMessages: ToolMessage[] = await Promise.all(
       toolCalls.map(async (tc) => {
-  return await withToolCall({ name: tc.name, input: tc.args }, async () => {
-          const callId = tc.id ?? `missing_id_${Math.random().toString(36).slice(2)}`;
+        const callId = tc.id ?? `missing_id_${Math.random().toString(36).slice(2)}`;
+        return await withToolCall({ toolCallId: callId, name: tc.name, input: tc.args }, async () => {
           const tool = tools.find((t) => t.name === tc.name);
           const createMessage = (content: string) =>
             new ToolMessage({

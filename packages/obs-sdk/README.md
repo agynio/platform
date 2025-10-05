@@ -14,6 +14,7 @@ import {
   withToolCall,
   withSummarize,
   withSystem,
+  SummarizeResponse,
 } from '@hautech/obs-sdk';
 
 init({
@@ -40,6 +41,13 @@ await withThread({ threadId: 'thread-123' }, async () => {
       summary: 'short',
       newContext: 'short+more',
     }));
+      await withSummarize({ oldContext: [ { role: 'system', content: 'Long thread start...' } ] as any }, async () =>
+        new SummarizeResponse({
+          raw: { text: 'provider raw summary response' },
+          summary: 'short',
+          newContext: [ { role: 'system', content: 'short+more' } ] as any,
+        }),
+      );
   });
 });
 
@@ -59,7 +67,7 @@ All helpers wrap `withSpan` and set a `kind` plus required attributes only.
 | withAgent     | (attributes, fn)                    | agent     | attributes                      | -                                              |
 | withLLM       | ({ newMessages, context, ... }, fn) | llm       | newMessages, context (+ extras) | End: `output` object with `text` / `toolCalls` |
 | withToolCall  | ({ name, input, ... }, fn)          | tool_call | name, input (+ extras)          | `output`, `status`                             |
-| withSummarize | ({ oldContext, ... }, fn)           | summarize | oldContext (+ extras)           | `summary`, `newContext` if present             |
+| withSummarize | ({ oldContext: ChatMessageInput[] }, fn returning SummarizeResponse) | summarize | oldContext (normalized messages) (+ extras) | `summary`, `newContext` if present             |
 | withSystem    | ({ label, ... }, fn)                | system    | extras                          | -                                              |
 
 Notes:
@@ -67,6 +75,7 @@ Notes:
 1. Helpers intentionally keep parameter surface minimal (spec-driven).
 2. Additional attributes can still be added via raw `withSpan` if needed.
 3. In error paths, `withToolCall` marks status=error; other helpers rely on span status.
+4. `withLLM` and `withSummarize` require returning wrapper classes (`LLMResponse`, `SummarizeResponse`) so instrumentation can deterministically extract attributes.
 
 ## Raw API
 

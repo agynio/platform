@@ -164,6 +164,17 @@ export async function createServer(db: Db, opts: { logger?: boolean } = {}): Pro
           completed: true,
           status: body.status || 'ok',
         };
+        // Merge attributes from completed event (including new output / llm.* attributes)
+        if (doc) {
+          if (body.attributes && Object.keys(body.attributes).length) {
+            const merged = mergeCompletedAttributes(doc.attributes || {}, body.attributes);
+            completedSet.attributes = merged;
+          }
+        } else if (body.attributes && Object.keys(body.attributes).length) {
+          // Insert path: normalize attributes before setting on insert
+          const normalized = mergeCompletedAttributes({}, body.attributes);
+          update.$setOnInsert = { ...update.$setOnInsert, attributes: { ...(update.$setOnInsert?.attributes || {}), ...normalized } };
+        }
         // If inserting, remove keys that would conflict (completed/status/endTime exist in setOnInsert except endTime which is undefined there)
         if (!doc) {
           // status, completed, endTime all in setOnInsert (endTime as undefined) – let setOnInsert win
@@ -330,6 +341,50 @@ export async function createServer(db: Db, opts: { logger?: boolean } = {}): Pro
   });
 
   return fastify;
+}
+
+// ---------------- Attribute merge helpers ----------------
+/**
+ * Merge incoming completed-event attributes into existing attributes while normalizing
+ * dotted keys such as "llm.content" -> attributes.llm.content. Also deep-merges
+ * `output` object and preserves existing keys unless explicitly overwritten.
+ */
+function mergeCompletedAttributes(existing: Record<string, any>, incoming: Record<string, any>): Record<string, any> {
+  const out: Record<string, any> = { ...existing };
+  for (const [key, value] of Object.entries(incoming)) {
+    // Consolidate llm.* flattened keys into output.* only (no separate llm object persisted)
+    if (key === 'llm.content') {
+      out.output = { ...(out.output || {}), content: value };
+      continue;
+    }
+    if (key === 'llm.toolCalls') {
+      out.output = { ...(out.output || {}), toolCalls: value };
+      continue;
+    }
+    if (key === 'output' && value && typeof value === 'object' && !Array.isArray(value)) {
+      out.output = { ...(out.output || {}), ...value };
+      continue;
+    }
+    if (key.includes('.')) {
+      // For other dotted keys, attempt nested normalization
+      const parts = key.split('.');
+      let cursor: any = out;
+      for (let i = 0; i < parts.length; i++) {
+        const p = parts[i];
+        if (i === parts.length - 1) {
+          cursor[p] = value;
+        } else {
+          cursor[p] = cursor[p] && typeof cursor[p] === 'object' ? cursor[p] : {};
+          cursor = cursor[p];
+        }
+      }
+      continue;
+    }
+    out[key] = value;
+  }
+  // Remove any lingering llm object if previously stored (dedupe)
+  if (out.llm && typeof out.llm === 'object') delete out.llm;
+  return out;
 }
 
 // --- Realtime (socket.io) integration attachment point ---

@@ -1,13 +1,14 @@
 import {
   init,
-  withSpan,
-  withSystem,
-  withThread,
+  LLMResponse,
+  logger,
+  SummarizeResponse,
   withAgent,
   withLLM,
-  withToolCall,
   withSummarize,
-  logger,
+  withSystem,
+  withThread,
+  withToolCall
 } from '@hautech/obs-sdk';
 
 async function main() {
@@ -24,36 +25,125 @@ async function main() {
 
   await withThread({ threadId: 'demo-thread' }, async () => {
     await withAgent({ agentName: 'demo-agent' }, async () => {
-      // Simulate an LLM call
-      const llmResult = await withLLM(
-        { newMessages: [{ role: 'user', content: 'Hello' }], context: { topic: 'greeting' } },
-        async () => {
-          await new Promise((r) => setTimeout(r, 1500));
-          return { text: 'Hi there!', toolCalls: [] };
-        },
-      );
+      // Loop 1: existing rich context -> tool
+      const weatherToolCallId1 = 'tc_weather_1';
+      const richContext: any[] = [
+        { role: 'system', content: 'You are a helpful assistant specializing in weather and reminders.' },
+        { role: 'human', content: 'Hi assistant!' },
+        { role: 'ai', content: 'Hello! How can I help you today?' },
+        { role: 'human', content: 'What is the weather in NYC?' },
+        { role: 'system', content: 'Ensure responses are concise.' },
+        { role: 'human', content: 'Also, set a reminder to check humidity.' },
+        { role: 'ai', content: 'I can fetch the weather and set a reminder. One moment.' },
+        { role: 'tool', toolCallId: 'memory_lookup_1', content: 'No prior weather queries stored.' },
+        { role: 'human', content: 'Add Brooklyn specifically.' },
+        { role: 'ai', content: 'Got it. Will include Brooklyn specifics.' },
+        { role: 'human', content: 'And include temperature in Celsius.' },
+        { role: 'system', content: 'Do not include sensitive data.' },
+        { role: 'human', content: 'What about sunrise time?' },
+        { role: 'ai', content: 'I will retrieve current conditions and sunrise time.' },
+        { role: 'system', content: 'Formatting Guidelines:\n- Provide temperature in Celsius and Fahrenheit\n- Include sunrise and sunset on separate lines\n- If UV index > 7, add a caution line\n- Keep overall response under 120 words' },
+        { role: 'human', content: 'Actually, could you also:\n1. Show humidity\n2. Show wind speed\n3. Provide a short recommendation about clothing\n4. Repeat the city name at the top\nThanks!' },
+        { role: 'ai', content: 'Plan:\n- Fetch base weather (temp, humidity, wind)\n- Fetch astronomical data (sunrise/sunset)\n- Derive clothing recommendation from temperature + wind chill\n- Check UV index for safety notice\nProceeding with tool calls...' },
+        { role: 'human', content: '# Detailed Weather Report Request\n\nPlease include:\n\n## Sections\n- **Current Conditions**\n- **Astronomy** (sunrise/sunset)\n- **Advisories** (UV, wind)\n\n## Format\n1. Start with a title line.\n2. Provide a bullet list summary.\n3. Add a short code block showing JSON of raw key metrics.\n\n```json\n{ "want": ["tempC", "tempF", "humidity", "windKph" ] }\n```\n\nThanks!' },
+        { role: 'ai', content: 'Acknowledged. I will structure the response as requested.\n\n```pseudo\nsteps = [\n  "gather_weather()",\n  "compute_advisories()",\n  "format_markdown()"\n]\n```' },
+        { role: 'tool', toolCallId: 'weather_source_prefetch', content: 'Prefetch complete: sources=[noaa, open-meteo]\nlat=40.7128 lon=-74.0060' },
+        { role: 'tool', toolCallId: 'prior_summary_1', content: 'Previous summary: greeting only.' },
+        { role: 'human', content: 'Thanks!' },
+        { role: 'ai', content: 'You are welcome. Proceeding with weather lookup.' },
+        { role: 'human', content: 'Can you also estimate UV index?' },
+        { role: 'system', content: 'If multiple tool calls needed, batch them.' },
+        { role: 'human', content: 'Let me know if you need clarification.' },
+      ];
 
-      // Simulate tool call with logging demo (5 logs, 500ms gaps)
-      const weather = await withToolCall({ name: 'weather', input: { city: 'NYC' } }, async () => {
-        const log = logger();
-        const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
-        log.info('Starting weather lookup sequence');
-        await sleep(500);
-        log.debug('Fetching upstream provider data', { provider: 'demo-weather', attempt: 1 });
-        await sleep(500);
-        log.error('Intermittent provider warning (simulated)', { code: 'UPSTREAM_WARN', severity: 'low' });
-        await sleep(500);
-        log.debug('Retry succeeded, normalizing payload');
-        await sleep(500);
-        log.info('Completed weather lookup successfully');
-        // Final simulated result
-        return { tempC: 22 };
+      let llmResult1Content: string | undefined;
+      const llmResult1 = await withLLM({ context: richContext as any }, async () => {
+        await new Promise((r) => setTimeout(r, 800));
+        const raw = { text: 'Initial weather request acknowledged.' };
+        const resp = new LLMResponse({
+          raw,
+          content: 'I will look up the weather for NYC including Brooklyn details.',
+          toolCalls: [
+            { id: weatherToolCallId1, name: 'weather', arguments: { city: 'NYC' } },
+          ],
+        });
+        llmResult1Content = resp.content;
+        return resp;
       });
 
-      // Summarize context
-      await withSummarize({ oldContext: JSON.stringify({ llmResult, weather }) }, async () => {
-        await new Promise((r) => setTimeout(r, 800));
-        return { summary: 'Exchanged greeting and fetched weather', newContext: { greeted: true, weather } };
+      const weather1 = await withToolCall({ toolCallId: weatherToolCallId1, name: 'weather', input: { city: 'NYC' } }, async () => {
+        const log = logger();
+        const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+        log.info('Loop1: starting weather lookup');
+        await sleep(300);
+        log.debug('Loop1: fetching provider data');
+        await sleep(300);
+        log.info('Loop1: complete');
+        return { tempC: 22, humidity: 0.55 };
+      });
+
+      // Loop 2: follow-up analysis -> different tool (e.g., advisory)
+      const advisoryToolCallId = 'tc_advisory_1';
+      let llmResult2Content: string | undefined;
+      const llmResult2 = await withLLM({ context: [
+        { role: 'system', content: 'You are an assistant generating human-friendly advisories.' },
+        { role: 'human', content: 'Provide clothing and UV advice given current conditions.' },
+        { role: 'tool', toolCallId: weatherToolCallId1, content: JSON.stringify(weather1) },
+      ] }, async () => {
+        await new Promise((r) => setTimeout(r, 600));
+        const resp = new LLMResponse({
+          raw: { text: 'Computing advisories.' },
+          content: 'Based on current conditions I will compute advisory.',
+          toolCalls: [ { id: advisoryToolCallId, name: 'advisory', arguments: { tempC: weather1.tempC, humidity: weather1.humidity } } ],
+        });
+        llmResult2Content = resp.content;
+        return resp;
+      });
+
+      const advisory = await withToolCall({ toolCallId: advisoryToolCallId, name: 'advisory', input: { tempC: weather1.tempC } }, async () => {
+        const log = logger();
+        log.info('Loop2: generating advisory');
+        return { clothing: 'Light jacket', uvCaution: false };
+      });
+
+      // Loop 3: final synthesis (no tool call) -> exit
+      let llmResult3Content: string | undefined;
+      const llmResult3 = await withLLM({ context: [
+        { role: 'system', content: 'You are a summarizer.' },
+        { role: 'tool', toolCallId: weatherToolCallId1, content: JSON.stringify(weather1) },
+        { role: 'tool', toolCallId: advisoryToolCallId, content: JSON.stringify(advisory) },
+        { role: 'human', content: 'Provide a concise final weather + advisory summary.' },
+      ] }, async () => {
+        await new Promise((r) => setTimeout(r, 400));
+        const resp = new LLMResponse({
+          raw: { text: 'Summary ready.' },
+          content: 'NYC Weather: 22°C (humid 55%). Light jacket recommended. No UV caution today.',
+          toolCalls: [],
+        });
+        llmResult3Content = resp.content;
+        return resp;
+      });
+
+      // Summarize context across loops
+      await withSummarize({ oldContext: [
+        { role: 'system', content: 'Conversation recap preparation.' },
+        { role: 'ai', content: llmResult1Content || 'No first response' },
+        { role: 'tool', toolCallId: weatherToolCallId1, content: JSON.stringify(weather1) },
+        { role: 'ai', content: llmResult2Content || 'No second response' },
+        { role: 'tool', toolCallId: advisoryToolCallId, content: JSON.stringify(advisory) },
+        { role: 'ai', content: llmResult3Content || 'No third response' },
+      ] as any }, async () => {
+        await new Promise((r) => setTimeout(r, 300));
+        return new SummarizeResponse({
+          raw: { note: 'synthetic summarization output' },
+            summary: 'Performed 3-loop interaction (weather, advisory, final summary).',
+            newContext: [
+              { role: 'system', content: 'Conversation summary context' },
+              { role: 'tool', toolCallId: weatherToolCallId1, content: JSON.stringify(weather1) },
+              { role: 'tool', toolCallId: advisoryToolCallId, content: JSON.stringify(advisory) },
+              { role: 'ai', content: llmResult3Content ?? 'No final content' },
+            ] as any,
+          });
       });
     });
   });

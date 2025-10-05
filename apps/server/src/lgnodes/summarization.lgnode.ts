@@ -1,6 +1,6 @@
 import { AIMessage, BaseMessage, HumanMessage, SystemMessage, ToolMessage } from '@langchain/core/messages';
 import { ChatOpenAI } from '@langchain/openai';
-import { withSummarize } from '@hautech/obs-sdk';
+import { withSummarize, SummarizeResponse, BaseMessage as ObsBaseMessage } from '@hautech/obs-sdk';
 import { trimMessages } from '@langchain/core/messages';
 import { NodeOutput } from '../types';
 
@@ -188,13 +188,25 @@ export class SummarizationNode {
       `Previous summary:\n${state.summary ?? '(none)'}\n\nFold in the following messages (grouped tool responses kept together):\n${foldLines}\n\nReturn only the updated summary.`,
     );
 
-    const res = (await withSummarize(
-      { oldContext: state.summary ?? '' },
-      async () => (await llm.invoke([sys, human])) as AIMessage & { summary?: string; newContext?: string },
-    )) as AIMessage;
-    const newSummary = typeof res.content === 'string' ? res.content : JSON.stringify(res.content);
+    const task = await withSummarize(
+      { oldContext: state.messages.map((m) => ObsBaseMessage.fromLangChain(m)) },
+      async () => {
+        const invocation = (await llm.invoke([sys, human])) as AIMessage;
+        const summary =
+          typeof invocation.content === 'string' ? invocation.content : JSON.stringify(invocation.content);
 
-    return { summary: newSummary, messages: tail.flat() };
+        // Computation of newContext supposed to be fully inside withSummarize
+        const newContext = tail.flat();
+
+        return new SummarizeResponse({
+          raw: { summary, newContext },
+          summary: summary,
+          newContext: newContext.map((m) => ObsBaseMessage.fromLangChain(m)),
+        });
+      },
+    );
+
+    return { summary: task.summary, messages: task.newContext };
   }
 }
 

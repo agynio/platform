@@ -4,5 +4,5 @@
     "outDir": "dist",
     "rootDir": "."
   },
-  "include": ["src", "__tests__"]
+  "include": ["src", "__tests__", "../obs-sdk/src"]
 }

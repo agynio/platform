@@ -3,7 +3,7 @@ import { ChatOpenAI } from '@langchain/openai';
 import { BaseTool } from '../tools/base.tool';
 import { BaseNode } from './base.lgnode';
 import { NodeOutput } from '../types';
-import { withLLM } from '@hautech/obs-sdk';
+import { LLMResponse, withLLM } from '@hautech/obs-sdk';
 
 // Minimal connector contract used by CallModelNode for memory injection
 export interface MemoryConnector {
@@ -101,10 +101,17 @@ export class CallModelNode extends BaseNode {
       }
     }
 
-    const result = await withLLM({ newMessages: finalMessages.slice(-10), context: {} }, async () => {
-      return await boundLLM.invoke(finalMessages, {
-        recursionLimit: 2500,
-      });
+    const result = await withLLM({ context: finalMessages.slice(-10) as any }, async () => {
+      const raw = await boundLLM.invoke(finalMessages, { recursionLimit: 2500 });
+      // Attempt to normalize output: LangChain ChatModel responses often expose .content and .tool_calls
+      const content = raw.text;
+      const toolCalls = raw.tool_calls?.map((tc: any, idx: number) => ({
+        id: tc.id || `tc_${idx}`,
+        name: tc.name,
+        arguments: tc.args,
+      }));
+      // Return LLMResponse so instrumentation extracts attributes while caller receives raw
+      return new LLMResponse({ raw, content, toolCalls });
     });
 
     // Return only delta; reducer in state will append

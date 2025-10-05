@@ -1,10 +1,11 @@
 import { BaseMessage } from '@langchain/core/messages';
+import { BaseMessage as ObsBaseMessage } from '@hautech/obs-sdk';
 import { BaseStore, LangGraphRunnableConfig } from '@langchain/langgraph';
 import { ChatOpenAI } from '@langchain/openai';
 import { BaseTool } from '../tools/base.tool';
 import { BaseNode } from './base.lgnode';
 import { NodeOutput } from '../types';
-import { withLLM } from '@hautech/obs-sdk';
+import { LLMResponse, withLLM } from '@hautech/obs-sdk';
 
 export const SYSTEM_PROMPT = `You are a helpful and friendly chatbot. Get to know the user! \
 Ask questions! Be spontaneous! 
@@ -71,15 +72,22 @@ export class MemoryCallModelNode extends BaseNode {
       tool_choice: 'auto',
     });
 
+    const context = [{ role: 'system', content: sys }, ...state.messages];
     const result = await withLLM(
-      { newMessages: state.messages.slice(-10), context: { model: configurable.model } },
+      {
+        context: [{ role: 'system', content: sys }, ...state.messages].map((msg) => ObsBaseMessage.fromLangChain(msg)),
+      },
       async () => {
-        const r = await boundLLM.invoke([{ role: 'system', content: sys }, ...state.messages], {
+        const raw = await boundLLM.invoke(context, {
           configurable: this.splitModelAndProvider(configurable.model),
         });
-        const toolCalls: any[] = (r as any).tool_calls || [];
-        const text = typeof (r as any).content === 'string' ? (r as any).content : JSON.stringify((r as any).content);
-        return { ...(r as any), text, toolCalls } as any;
+        const toolCalls = raw.tool_calls?.map((tc, idx) => ({
+          id: tc.id || `tc_${idx}`,
+          name: tc.name,
+          arguments: tc.args,
+        }));
+        const content = typeof raw.content === 'string' ? raw.content : JSON.stringify(raw.content);
+        return new LLMResponse({ raw, content, toolCalls });
       },
     );
 

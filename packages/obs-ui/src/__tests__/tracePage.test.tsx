@@ -8,7 +8,8 @@ vi.mock('../services/api', () => ({
   fetchTrace: vi.fn().mockResolvedValue([
     { traceId: 't1', spanId: 'a', label: 'root', status: 'ok', startTime: new Date().toISOString(), endTime: new Date().toISOString(), completed: true, lastUpdate: new Date().toISOString(), attributes: {}, events: [], rev: 0, idempotencyKeys: [], createdAt: '', updatedAt: '' },
     { traceId: 't1', spanId: 'b', parentSpanId: 'a', label: 'child', status: 'ok', startTime: new Date().toISOString(), endTime: new Date().toISOString(), completed: true, lastUpdate: new Date().toISOString(), attributes: {}, events: [], rev: 0, idempotencyKeys: [], createdAt: '', updatedAt: '' }
-  ])
+  ]),
+  fetchLogs: vi.fn().mockResolvedValue([])
 }));
 
 vi.mock('react-router-dom', async (orig) => {
@@ -24,7 +25,8 @@ describe('TracePage', () => {
     expect(timeline).toBeTruthy();
   const rootSpans = await screen.findAllByText('root');
   fireEvent.click(rootSpans[0]);
-    const attrs = await screen.findByText(/Attributes/);
-    expect(attrs).toBeTruthy();
+  // After selecting span, ensure Attributes tab button is present (unique by role and name)
+  const attrsTab = await screen.findAllByText('Attributes');
+  expect(attrsTab.length).toBeGreaterThan(0);
   });
 });
