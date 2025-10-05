@@ -60,7 +60,7 @@ export class ToolsNode extends BaseNode {
           };
 
           if (!tool) {
-            return createMessage(`Tool '${tc.name}' not found.`);
+            return createMessage(`Tool '${tc.name}' not found.`, false);
           }
           try {
             const output = await tool.invoke(tc.args, {
@@ -77,13 +77,13 @@ export class ToolsNode extends BaseNode {
             }
             const content = typeof output === 'string' ? output : JSON.stringify(output);
             if (content.length > 50000) {
-              return createMessage(`Error (output too long: ${content.length} characters).`);
+              return createMessage(`Error (output too long: ${content.length} characters).`, false);
             } else {
               return createMessage(content);
             }
           } catch (e) {
             const err = e as Error;
-            return createMessage(`Error executing tool '${tc.name}': ${err?.message || String(err)}`);
+            return createMessage(`Error executing tool '${tc.name}': ${err?.message || String(err)}`, false);
           }
         });
       }),

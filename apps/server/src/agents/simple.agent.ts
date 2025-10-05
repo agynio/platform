@@ -51,11 +51,7 @@ export const SimpleAgentStaticConfigSchema = z
       .default(
         "Do not produce a final answer directly. Before finishing, call a tool. If no tool is needed, call the 'finish' tool.",
       ),
-    restrictionMaxInjections: z
-      .number()
-      .int()
-      .min(0)
-      .default(0), // 0 = unlimited per turn
+    restrictionMaxInjections: z.number().int().min(0).default(0), // 0 = unlimited per turn
   })
   .strict();
 
@@ -133,9 +129,8 @@ export class SimpleAgent extends BaseAgent {
 
     // Read restriction config from static config and store locally for closures
     const cfgUnknown = this._staticConfig;
-    const cfg = (cfgUnknown && typeof cfgUnknown === 'object'
-      ? (cfgUnknown as Partial<SimpleAgentStaticConfig>)
-      : undefined);
+    const cfg =
+      cfgUnknown && typeof cfgUnknown === 'object' ? (cfgUnknown as Partial<SimpleAgentStaticConfig>) : undefined;
     this.restrictOutput = !!cfg?.restrictOutput;
     this.restrictionMessage =
       cfg?.restrictionMessage ||
@@ -172,16 +167,14 @@ export class SimpleAgent extends BaseAgent {
           enforce: 'enforce',
         },
       )
-      .addConditionalEdges(
-        'enforce',
-        (state) => (state.restrictionInjected === true ? 'call_model' : END),
-        { call_model: 'call_model', [END]: END },
-      )
-      .addConditionalEdges(
-        'tools',
-        (state) => (state.done === true ? END : 'summarize'),
-        { [END]: END, summarize: 'summarize' },
-      );
+      .addConditionalEdges('enforce', (state) => (state.restrictionInjected === true ? 'call_model' : END), {
+        call_model: 'call_model',
+        [END]: END,
+      })
+      .addConditionalEdges('tools', (state) => (state.done === true ? END : 'summarize'), {
+        [END]: END,
+        summarize: 'summarize',
+      });
 
     // Compile with a plain MongoDBSaver; scoping is handled via configurable.checkpoint_ns
     this._graph = builder.compile({
@@ -193,7 +186,11 @@ export class SimpleAgent extends BaseAgent {
   }
 
   // Attach/detach a memory connector into the underlying CallModel
-  attachMemoryConnector(mem?: MemoryConnector | { getConnector?: () => MemoryConnector | undefined; createConnector?: () => MemoryConnector }) {
+  attachMemoryConnector(
+    mem?:
+      | MemoryConnector
+      | { getConnector?: () => MemoryConnector | undefined; createConnector?: () => MemoryConnector },
+  ) {
     // Accept either a connector-like object or a provider exposing getConnector/createConnector
     let connector: MemoryConnector | undefined = undefined;
     if (mem && typeof (mem as MemoryConnector).renderMessage === 'function') {
@@ -261,6 +258,11 @@ export class SimpleAgent extends BaseAgent {
               );
               const threadId = config?.configurable?.thread_id;
               const res = await server.callTool(t.name, raw, { threadId });
+              if (res.isError) {
+                throw new Error(
+                  res.structuredContent ?? res.content ?? res.raw ?? 'MCP tool call failed with unknown error',
+                );
+              }
               if (res.structuredContent) return JSON.stringify(res.structuredContent);
               return res.content || '';
             },
@@ -270,7 +272,7 @@ export class SimpleAgent extends BaseAgent {
               schema,
             },
           );
-          const adapted = new LangChainToolAdapter(dynamic);
+          const adapted = new LangChainToolAdapter(dynamic, this.loggerService);
           // Defensive: skip if already present (e.g. if a dynamic sync slipped through).
           const existingNames = new Set(this.toolsNode.listTools().map((tool) => tool.init().name));
           if (existingNames.has(dynamic.name)) {
