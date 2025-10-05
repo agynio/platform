@@ -44,4 +44,23 @@ describe('ToolCallResponse & withToolCall', () => {
     });
     expect(r).toBe(raw);
   });
+
+  it('propagates explicit error status from ToolCallResponse to span upsert', async () => {
+    const posted: any[] = [];
+    // @ts-ignore override per-test
+    global.fetch = async (url: string, init: any) => {
+      if (url.includes('/v1/spans/upsert')) {
+        try { posted.push(JSON.parse(init.body)); } catch { /* ignore */ }
+      }
+      return { ok: true } as any;
+    };
+    const raw = { code: 'EMPTY_INPUT', message: 'No payload provided' };
+    await withToolCall({ toolCallId: 'tc_err', name: 'checker', input: { mode: 'validate', payloadSize: 0 } }, async () => {
+      return new ToolCallResponse({ raw, output: raw, status: 'error' });
+    });
+    const completed = posted.find(p => p.state === 'completed');
+    expect(completed).toBeTruthy();
+    expect(completed.status).toBe('error');
+    // status normalized on server, but client sends 'error'
+  });
 });

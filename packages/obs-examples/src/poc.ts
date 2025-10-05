@@ -149,6 +149,89 @@ async function main() {
         },
       );
 
+      // Loop 2b: demonstrate a failing tool call (intentional error)
+      // Shows how instrumentation records a span with status=error when the tool function throws
+      const failingToolCallId = 'tc_fail_demo_1';
+      try {
+        await withLLM(
+          {
+            context: [
+              { role: 'system', content: 'Assistant deciding whether to invoke unreliable tool.' },
+              { role: 'human', content: 'Please run the unreliable step.' },
+            ],
+          },
+          async () => {
+            return new LLMResponse({
+              raw: { text: 'About to invoke failing tool.' },
+              content: 'Attempting failing tool call now.',
+              toolCalls: [
+                {
+                  id: failingToolCallId,
+                  name: 'unstable_tool',
+                  arguments: { simulate: 'failure' },
+                },
+              ],
+            });
+          },
+        );
+
+        // Intentionally throw inside withToolCall to produce status=error
+        await withToolCall(
+          { toolCallId: failingToolCallId, name: 'unstable_tool', input: { simulate: 'failure' } },
+          async () => {
+            const log = logger();
+            log.info('Loop2b: about to fail intentionally');
+            await new Promise((r) => setTimeout(r, 200));
+            throw new Error('Demonstration failure from unstable_tool');
+          },
+        );
+      } catch (err) {
+        const log = logger();
+        log.error('Captured expected failing tool call', { error: err instanceof Error ? err.message : String(err) });
+      }
+
+      // Loop 2c: explicit error ToolCallResponse (return-based, not thrown)
+      // This demonstrates providing a structured error payload via ToolCallResponse with status='error'
+      const explicitErrorToolCallId = 'tc_explicit_error_1';
+      await withLLM(
+        {
+          context: [
+            { role: 'system', content: 'Assistant planning an explicit error tool call.' },
+            { role: 'human', content: 'Invoke the checker tool even if it will report an error.' },
+          ],
+        },
+        async () =>
+          new LLMResponse({
+            raw: { text: 'Preparing explicit error tool call' },
+            content: 'Calling checker tool which will return an error structure.',
+            toolCalls: [
+              {
+                id: explicitErrorToolCallId,
+                name: 'checker',
+                arguments: { mode: 'validate', payloadSize: 0 },
+              },
+            ],
+          }),
+      );
+
+      await withToolCall(
+        { toolCallId: explicitErrorToolCallId, name: 'checker', input: { mode: 'validate', payloadSize: 0 } },
+        async () => {
+          const log = logger();
+          log.info('Loop2c: returning explicit error ToolCallResponse');
+          const errorDetails = {
+            code: 'EMPTY_INPUT',
+            message: 'No payload provided for validation',
+            hint: 'Provide non-empty payloadSize to proceed',
+          };
+          return new ToolCallResponse({
+            raw: errorDetails,
+            output: errorDetails,
+            status: 'error',
+          });
+        },
+      );
+
       // Loop 3: final synthesis (no tool call) -> exit
       let llmResult3Content: string | undefined;
       const llmResult3 = await withLLM(
@@ -157,6 +240,8 @@ async function main() {
             { role: 'system', content: 'You are a summarizer.' },
             { role: 'tool', toolCallId: weatherToolCallId1, content: JSON.stringify(weather1) },
             { role: 'tool', toolCallId: advisoryToolCallId, content: JSON.stringify(advisory) },
+            // Include failing tool call reference as a tool message so it appears in summary context (optional)
+            { role: 'tool', toolCallId: 'tc_fail_demo_1', content: 'Tool failed intentionally (no output).' },
             { role: 'human', content: 'Provide a concise final weather + advisory summary.' },
           ],
         },

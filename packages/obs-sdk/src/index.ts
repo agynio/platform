@@ -342,8 +342,10 @@ export function withToolCall<TOutput = unknown, TRaw = any>(
       if (!(result instanceof ToolCallResponse)) {
         return { attributes: { status: 'error', error: 'tool.response.missingWrapper' }, status: 'error' };
       }
-
-      return { attributes: { output: result.output } };
+      // Propagate declared ToolCallResponse.status so spans reflect explicit error payloads
+      // without requiring the tool function to throw. This enables UI to display failed tool calls
+      // (e.g. validation failures) based solely on structured ToolCallResponse metadata.
+      return { attributes: { output: result.output }, status: result.status };
     },
   ).then((res) => (res as ToolCallResponse<TRaw, TOutput>).raw);
 }
