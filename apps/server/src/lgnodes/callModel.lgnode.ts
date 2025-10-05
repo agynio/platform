@@ -3,7 +3,7 @@ import { ChatOpenAI } from '@langchain/openai';
 import { BaseTool } from '../tools/base.tool';
 import { BaseNode } from './base.lgnode';
 import { NodeOutput } from '../types';
-import { withTask } from '@traceloop/node-server-sdk';
+import { withLLM } from '@hautech/obs-sdk';
 
 // Minimal connector contract used by CallModelNode for memory injection
 export interface MemoryConnector {
@@ -101,7 +101,7 @@ export class CallModelNode extends BaseNode {
       }
     }
 
-    const result = await withTask({ name: 'llm', inputParameters: [finalMessages.slice(-10)] }, async () => {
+    const result = await withLLM({ newMessages: finalMessages.slice(-10), context: {} }, async () => {
       return await boundLLM.invoke(finalMessages, {
         recursionLimit: 2500,
       });

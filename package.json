@@ -4,6 +4,7 @@
   "description": "",
   "private": true,
   "scripts": {
+    "build": "pnpm -r --filter ./packages/* run build",
     "test": "vitest run"
   },
   "keywords": [],
@@ -14,7 +15,9 @@
     "socket.io": "^4.8.1"
   },
   "devDependencies": {
+    "@types/node": "^20.12.12",
     "@types/socket.io": "^3.0.2",
+    "tsx": "^4.19.2",
     "vitest": "^3.2.4"
   }
 }

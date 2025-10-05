@@ -1,6 +1,6 @@
 import { AIMessage, BaseMessage, HumanMessage, SystemMessage, ToolMessage } from '@langchain/core/messages';
 import { ChatOpenAI } from '@langchain/openai';
-import { task, withTask } from '@traceloop/node-server-sdk';
+import { withSummarize } from '@hautech/obs-sdk';
 import { trimMessages } from '@langchain/core/messages';
 import { NodeOutput } from '../types';
 
@@ -188,7 +188,10 @@ export class SummarizationNode {
       `Previous summary:\n${state.summary ?? '(none)'}\n\nFold in the following messages (grouped tool responses kept together):\n${foldLines}\n\nReturn only the updated summary.`,
     );
 
-    const res = await withTask({ name: 'summarize' }, async () => (await llm.invoke([sys, human])) as AIMessage);
+    const res = (await withSummarize(
+      { oldContext: state.summary ?? '' },
+      async () => (await llm.invoke([sys, human])) as AIMessage & { summary?: string; newContext?: string },
+    )) as AIMessage;
     const newSummary = typeof res.content === 'string' ? res.content : JSON.stringify(res.content);
 
     return { summary: newSummary, messages: tail.flat() };

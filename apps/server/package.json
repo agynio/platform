@@ -19,7 +19,7 @@
     "@octokit/auth-app": "^8.1.0",
     "@octokit/rest": "^22.0.0",
     "@slack/bolt": "^4.4.0",
-    "@traceloop/node-server-sdk": "^0.19.1",
+  "@hautech/obs-sdk": "workspace:*",
     "@types/json-schema": "^7.0.15",
     "dockerode": "^4.0.8",
     "dotenv": "^17.2.2",
