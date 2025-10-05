@@ -102,11 +102,9 @@ export class CallModelNode extends BaseNode {
     }
 
     const result = await withLLM({ newMessages: finalMessages.slice(-10), context: {} }, async () => {
-      const r = await boundLLM.invoke(finalMessages, { recursionLimit: 2500 });
-      // Map ChatOpenAI result to expected shape with text/toolCalls for obs-sdk augmentation
-      const toolCalls: any[] = (r as any).tool_calls || [];
-      const text = typeof (r as any).content === 'string' ? (r as any).content : JSON.stringify((r as any).content);
-      return { ...(r as any), text, toolCalls } as any;
+      return await boundLLM.invoke(finalMessages, {
+        recursionLimit: 2500,
+      });
     });
 
     // Return only delta; reducer in state will append
