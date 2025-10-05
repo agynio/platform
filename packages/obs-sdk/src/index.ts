@@ -30,6 +30,13 @@ export interface SpanContext {
   parentSpanId?: string;
 }
 
+// Log document shape (Stage 1)
+export interface LogInput {
+  level: 'debug' | 'info' | 'error';
+  message: string;
+  attributes?: Record<string, unknown>;
+}
+
 type InternalConfig = {
   mode: ObsMode;
   endpoints: { extended: string; otlp: string };
@@ -43,13 +50,57 @@ const als = new AsyncLocalStorage<SpanContext>();
 
 let config: InternalConfig | null = null;
 
+// Simple bounded in-memory queue for future batching (Stage 1 immediate send)
+type LoggerApi = {
+  debug(msg: string, attrs?: Record<string, unknown>): void;
+  info(msg: string, attrs?: Record<string, unknown>): void;
+  error(msg: string, attrs?: Record<string, unknown>): void;
+};
+
+let loggerInstance: LoggerApi | null = null;
+
 export function init(c: InitConfig) {
   const retry: InternalConfig['retry'] = { maxRetries: 3, baseMs: 100, maxMs: 2000, jitter: true, ...(c.retry || {}) };
   const batching: InternalConfig['batching'] = { maxBatchSize: 50, flushIntervalMs: 1000, ...(c.batching || {}) };
   const sampling: InternalConfig['sampling'] = { rate: 1, ...(c.sampling || {}) };
   const endpoints: InternalConfig['endpoints'] = { extended: c.endpoints.extended || '', otlp: c.endpoints.otlp || '' };
   config = { mode: c.mode, endpoints, batching, sampling, defaultAttributes: c.defaultAttributes || {}, retry };
+  // Initialize logger instance (idempotent); safe to re-init
+  loggerInstance = createLogger();
   return config;
+}
+
+function createLogger(): LoggerApi {
+  return {
+    debug: (msg, attrs) => emitLog('debug', msg, attrs),
+    info: (msg, attrs) => emitLog('info', msg, attrs),
+    error: (msg, attrs) => emitLog('error', msg, attrs),
+  };
+}
+
+async function emitLog(level: 'debug' | 'info' | 'error', message: string, attributes?: Record<string, unknown>) {
+  try {
+    if (!config) return;
+    const cfg = config as InternalConfig;
+    if (cfg.mode !== 'extended') return; // logging only in extended mode for now
+    const ctx = als.getStore();
+    const body = {
+      level,
+      message,
+      ts: now(),
+      traceId: ctx?.traceId,
+      spanId: ctx?.spanId,
+      attributes: attributes || {},
+    };
+    await retryingPost(cfg.endpoints.extended + '/v1/logs', body, genId(8)).catch(() => {});
+  } catch {
+    // swallow
+  }
+}
+
+export function logger(): LoggerApi {
+  if (!loggerInstance) loggerInstance = createLogger();
+  return loggerInstance;
 }
 
 function genId(bytes: number) {

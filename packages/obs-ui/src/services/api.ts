@@ -1,4 +1,4 @@
-import { SpanDoc } from '../types';
+import { SpanDoc, LogDoc } from '../types';
 
 const BASE_URL = (import.meta as any).env?.VITE_OBS_SERVER_URL || 'http://localhost:4319';
 
@@ -22,6 +22,17 @@ export async function fetchTrace(traceId: string): Promise<SpanDoc[]> {
 export async function fetchSpans(): Promise<SpanDoc[]> {
   const r = await fetch(BASE_URL + '/v1/spans');
   if (!r.ok) throw new Error('Failed to fetch spans');
+  const data = await r.json();
+  return data.items || [];
+}
+
+export async function fetchLogs(params: { traceId?: string; spanId?: string; limit?: number } = {}): Promise<LogDoc[]> {
+  const usp = new URLSearchParams();
+  if (params.traceId) usp.set('traceId', params.traceId);
+  if (params.spanId) usp.set('spanId', params.spanId);
+  if (params.limit) usp.set('limit', String(params.limit));
+  const r = await fetch(BASE_URL + '/v1/logs' + (usp.toString() ? '?' + usp.toString() : ''));
+  if (!r.ok) throw new Error('Failed to fetch logs');
   const data = await r.json();
   return data.items || [];
 }

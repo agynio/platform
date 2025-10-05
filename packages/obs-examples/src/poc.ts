@@ -7,6 +7,7 @@ import {
   withLLM,
   withToolCall,
   withSummarize,
+  logger,
 } from '@hautech/obs-sdk';
 
 async function main() {
@@ -32,9 +33,20 @@ async function main() {
         },
       );
 
-      // Simulate tool call
+      // Simulate tool call with logging demo (5 logs, 500ms gaps)
       const weather = await withToolCall({ name: 'weather', input: { city: 'NYC' } }, async () => {
-        await new Promise((r) => setTimeout(r, 1000));
+        const log = logger();
+        const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
+        log.info('Starting weather lookup sequence');
+        await sleep(500);
+        log.debug('Fetching upstream provider data', { provider: 'demo-weather', attempt: 1 });
+        await sleep(500);
+        log.error('Intermittent provider warning (simulated)', { code: 'UPSTREAM_WARN', severity: 'low' });
+        await sleep(500);
+        log.debug('Retry succeeded, normalizing payload');
+        await sleep(500);
+        log.info('Completed weather lookup successfully');
+        // Final simulated result
         return { tempC: 22 };
       });
 

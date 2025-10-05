@@ -19,3 +19,14 @@ export interface SpanDoc {
   nodeId?: string;
   threadId?: string;
 }
+
+export interface LogDoc {
+  _id?: string;
+  traceId?: string;
+  spanId?: string;
+  level: 'debug' | 'info' | 'error';
+  message: string;
+  ts: string;
+  attributes?: Record<string, unknown>;
+  createdAt: string;
+}

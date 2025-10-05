@@ -71,3 +71,23 @@ Notes:
 ## Raw API
 
 `withSpan({ label, threadId?, nodeId?, kind?, attributes? }, fn, internal)` is the primitive. Prefer helpers for standardized semantics.
+
+## Logging (Stage 1)
+
+The SDK provides a contextual logger bound to the active span via `AsyncLocalStorage`.
+
+Usage:
+
+```ts
+import { logger, withToolCall } from '@hautech/obs-sdk';
+
+await withToolCall({ name: 'work', input: {} }, async () => {
+  const log = logger();
+  log.info('Starting work');
+  log.debug('Halfway', { progress: 0.5 });
+  log.error('Non-fatal issue', { code: 'E_WARN' });
+  return { ok: true };
+});
+```
+
+Configuration: Works in `extended` mode. Ensure `init({ mode: 'extended', endpoints: { extended: 'http://localhost:4319' } })` is called. Logs POST to `/v1/logs` and are streamed as realtime `log` events on the socket.

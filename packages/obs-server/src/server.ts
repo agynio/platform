@@ -25,6 +25,18 @@ export type SpanDoc = {
   threadId?: string;
 };
 
+// Log document (denormalized span linkage). Keep minimal for Stage 1.
+export interface LogDoc {
+  _id?: string;
+  traceId?: string; // optional if outside span context
+  spanId?: string;
+  level: 'debug' | 'info' | 'error';
+  message: string;
+  ts: string; // ISO timestamp
+  attributes?: Record<string, unknown>;
+  createdAt: string;
+}
+
 const UpsertSchema = z.object({
   state: z.enum(['created', 'updated', 'completed']),
   traceId: z.string(),
@@ -66,12 +78,16 @@ export async function createServer(db: Db, opts: { logger?: boolean } = {}): Pro
     allowedHeaders: ['Content-Type', 'X-Idempotency-Key'],
   });
   const spans: Collection<SpanDoc> = db.collection('spans');
+  const logs: Collection<LogDoc> = db.collection('logs');
 
   // indexes (idempotent)
   await spans.createIndex({ status: 1, lastUpdate: -1 });
   await spans.createIndex({ startTime: -1 });
   await spans.createIndex({ traceId: 1, spanId: 1 }, { unique: true });
   await spans.createIndex({ completed: 1, lastUpdate: -1 }, { partialFilterExpression: { completed: false } });
+  // Log indexes
+  await logs.createIndex({ traceId: 1, spanId: 1, ts: -1 });
+  await logs.createIndex({ ts: -1 });
 
   fastify.get('/healthz', async () => ({ ok: true }));
   fastify.get('/readyz', async () => {
@@ -252,6 +268,65 @@ export async function createServer(db: Db, opts: { logger?: boolean } = {}): Pro
       }
     }
     return { ok: true, count: spansIn.length };
+  });
+
+  // --- Logs Endpoints ---
+  const LogSchema = z.object({
+    level: z.enum(['debug', 'info', 'error']),
+    message: z.string(),
+    ts: z.string().optional(),
+    traceId: z.string().optional(),
+    spanId: z.string().optional(),
+    attributes: z.record(z.any()).optional(),
+  });
+  const LogsInSchema = z.union([LogSchema, z.array(LogSchema)]);
+
+  fastify.post('/v1/logs', async (req, reply) => {
+    const parsed = LogsInSchema.safeParse((req as any).body);
+    if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
+    const nowIso = new Date().toISOString();
+    const arr = Array.isArray(parsed.data) ? parsed.data : [parsed.data];
+    if (arr.length === 0) return { ok: true, count: 0 };
+    const docs: LogDoc[] = arr.map(l => ({
+      traceId: l.traceId,
+      spanId: l.spanId,
+      level: l.level,
+      message: l.message,
+      ts: l.ts || nowIso,
+      attributes: l.attributes || {},
+      createdAt: nowIso,
+    }));
+    try {
+      if (docs.length === 1) {
+        await logs.insertOne(docs[0] as any);
+      } else {
+        await logs.insertMany(docs as any);
+      }
+    } catch (err: any) {
+      fastify.log.error({ err }, 'log insert failed');
+      return reply.code(500).send({ error: 'insert_failed' });
+    }
+    // Emit realtime events (best-effort)
+    if (spanIo) {
+      for (const d of docs) {
+        try { spanIo.emit('log', d); } catch {}
+      }
+    }
+    return { ok: true, count: docs.length };
+  });
+
+  fastify.get('/v1/logs', async (req, reply) => {
+    const q = (req as any).query as any;
+    const traceId = typeof q.traceId === 'string' ? q.traceId : undefined;
+    const spanId = typeof q.spanId === 'string' ? q.spanId : undefined;
+    const level = typeof q.level === 'string' ? q.level : undefined;
+    const limit = q.limit ? Math.min(500, parseInt(q.limit, 10) || 200) : 200;
+    const find: any = {};
+    if (traceId) find.traceId = traceId;
+    if (spanId) find.spanId = spanId;
+    if (level && ['debug', 'info', 'error'].includes(level)) find.level = level;
+    const docs = await logs.find(find).sort({ ts: -1 }).limit(limit).toArray();
+    return { items: docs };
   });
 
   return fastify;

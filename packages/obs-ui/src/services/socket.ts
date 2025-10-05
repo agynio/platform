@@ -1,13 +1,15 @@
 import { io, Socket } from 'socket.io-client';
-import { SpanDoc } from '../types';
+import { SpanDoc, LogDoc } from '../types';
 
 // Lightweight singleton socket for span realtime events.
 // Stage 1: global subscription to all span_upsert events.
 export type SpanUpsertHandler = (span: SpanDoc) => void;
+export type LogHandler = (log: LogDoc) => void;
 
 class SpanRealtime {
   private socket: Socket | null = null;
   private handlers = new Set<SpanUpsertHandler>();
+  private logHandlers = new Set<LogHandler>();
   private connecting = false;
   private connected = false;
   private lastPongTs: number | null = null;
@@ -76,12 +78,23 @@ class SpanRealtime {
         this.handlers.forEach(h => h(payload as SpanDoc));
       }
     });
+    s.on('log', (payload: any) => {
+      if (payload && typeof payload === 'object' && payload.message) {
+        this.logHandlers.forEach(h => h(payload as LogDoc));
+      }
+    });
   }
 
   onSpanUpsert(handler: SpanUpsertHandler) {
     this.ensure();
     this.handlers.add(handler);
     return () => { this.handlers.delete(handler); };
+  }
+
+  onLog(handler: LogHandler) {
+    this.ensure();
+    this.logHandlers.add(handler);
+    return () => { this.logHandlers.delete(handler); };
   }
 
   onConnectionState(listener: (state: { connected: boolean; lastPongTs: number | null }) => void) {
