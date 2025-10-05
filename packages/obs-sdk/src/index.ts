@@ -288,11 +288,11 @@ export async function flush() {
 
 export function withThread<T>(attributes: { threadId: string; [k: string]: unknown }, fn: () => Promise<T> | T) {
   const { threadId, ...rest } = attributes;
-  return withSpan({ label: 'thread', threadId, kind: 'thread', attributes: { threadId, ...rest } }, fn);
+  return withSpan({ label: 'thread', threadId, kind: 'thread', attributes: { kind: 'thread', threadId, ...rest } }, fn);
 }
 
 export function withAgent<T>(attributes: Record<string, unknown>, fn: () => Promise<T> | T) {
-  return withSpan({ label: 'agent', kind: 'agent', attributes }, fn);
+  return withSpan({ label: 'agent', kind: 'agent', attributes: { kind: 'agent', ...attributes } }, fn);
 }
 
 export function withLLM<T>(
@@ -307,7 +307,7 @@ export function withLLM<T>(
    */
   const { context: rawContext, ...rest } = attributes;
   const context = rawContext.map(BaseMessage.fromLangChain).map((m) => m.toJSON());
-  return withSpan({ label: 'llm', kind: 'llm', attributes: { context, ...rest } }, fn, (result) => {
+  return withSpan({ label: 'llm', kind: 'llm', attributes: { kind: 'llm', context, ...rest } }, fn, (result) => {
     if (!(result instanceof LLMResponse)) {
       return { attributes: { error: 'llm.response.missingWrapper' }, status: 'error' };
     }
@@ -332,7 +332,7 @@ export function withToolCall<T>(
 ) {
   const { toolCallId, name, input, ...rest } = attributes;
   return withSpan(
-    { label: `tool:${name}`, kind: 'tool_call', attributes: { toolCallId, name, input, ...rest } },
+  { label: `tool:${name}`, kind: 'tool_call', attributes: { kind: 'tool_call', toolCallId, name, input, ...rest } },
     fn,
     (result, err) => {
       if (err) return { attributes: { status: 'error' }, status: 'error' };
@@ -346,7 +346,7 @@ export function withToolCall<T>(
 
 export function withSummarize<T>(attributes: { oldContext: unknown; [k: string]: unknown }, fn: () => Promise<T> | T) {
   const { oldContext, ...rest } = attributes;
-  return withSpan({ label: 'summarize', kind: 'summarize', attributes: { oldContext, ...rest } }, fn, (result) => {
+  return withSpan({ label: 'summarize', kind: 'summarize', attributes: { kind: 'summarize', oldContext, ...rest } }, fn, (result) => {
     if (result && typeof result === 'object') {
       const r: any = result as any;
       const out: Record<string, unknown> = {};
@@ -360,7 +360,7 @@ export function withSummarize<T>(attributes: { oldContext: unknown; [k: string]:
 
 export function withSystem<T>(attributes: { label: string; [k: string]: unknown }, fn: () => Promise<T> | T) {
   const { label, ...rest } = attributes;
-  return withSpan({ label, kind: 'system', attributes: { ...rest } }, fn);
+  return withSpan({ label, kind: 'system', attributes: { kind: 'system', ...rest } }, fn);
 }
 
 // ---------------------------------------------------------------------------

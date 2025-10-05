@@ -1,4 +1,19 @@
-import React, { useEffect, useMemo, useState, useCallback } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
+// Monaco heavy library; import when tool input viewer actually renders to reduce initial bundle
+type MonacoEditorComponent = React.ComponentType<{
+  height: string;
+  defaultLanguage: string;
+  value: string;
+  theme?: string;
+  options?: Record<string, unknown>;
+}>;
+let MonacoEditor: MonacoEditorComponent | null = null;
+async function ensureMonaco() {
+  if (MonacoEditor) return MonacoEditor;
+  const mod = await import('@monaco-editor/react');
+  MonacoEditor = (mod as { default: MonacoEditorComponent }).default;
+  return MonacoEditor;
+}
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { SpanDoc, LogDoc } from '../types';
@@ -81,53 +96,65 @@ export function SpanDetails({
   const displayedAttrs =
     attrsExpanded || !showCollapseToggle ? attrsJson : attrsJson.slice(0, ATTRS_COLLAPSE_THRESHOLD) + '\n… (truncated)';
 
-  // Detect if this is an LLM span (kind recorded as label 'llm' in current backend)
-  const isLLMSpan = span.label === 'llm' || (span.attributes && (span.attributes as any).kind === 'llm');
+  // Detect span types based purely on kind (ignore label)
+  const rawKind: string | undefined =
+    typeof span.attributes === 'object' && span.attributes !== null
+      ? ((span.attributes as Record<string, unknown>)['kind'] as string | undefined)
+      : undefined;
+  const isLLMSpan = rawKind === 'llm';
+  const isToolSpan = rawKind === 'tool_call';
 
   // Extract LLM context messages (array) safely. withLLM stored under attributes.context
-  type ContextMsg = {
+  interface ContextMsg {
     role: 'system' | 'human' | 'ai' | 'tool';
-    content?: any;
-    toolCalls?: any[];
-    tool_calls?: any;
+    content?: unknown;
+    toolCalls?: unknown[];
+    tool_calls?: unknown;
     toolCallId?: string;
     tool_call_id?: string;
-  } & Record<string, any>;
+    [k: string]: unknown;
+  }
   const contextMessages: ContextMsg[] = useMemo(() => {
-    const raw = (span.attributes as any)?.context;
+    const attrs = span.attributes as Record<string, unknown> | null | undefined;
+    const raw = attrs && (attrs['context'] as unknown);
     if (!Array.isArray(raw)) return [];
     return raw as ContextMsg[];
   }, [span.attributes]);
 
   // Extract output content + toolCalls (normalized to attributes.output.toolCalls or llm.toolCalls keys)
   const llmContent: string | undefined = useMemo(() => {
-    const attrs: any = span.attributes || {};
-    // Prefer consolidated output.content then fallback to llm.content or output?.content
-    if (attrs.output && typeof (attrs.output as any).content === 'string') return (attrs.output as any).content;
-    if (typeof attrs['llm.content'] === 'string') return attrs['llm.content'];
-    if (attrs.output && typeof (attrs.output as any) === 'object' && typeof (attrs.output as any).text === 'string')
-      return (attrs.output as any).text;
+    const attrs = (span.attributes || {}) as Record<string, unknown>;
+    const output = attrs['output'] as Record<string, unknown> | undefined;
+    if (output && typeof output === 'object') {
+      const content = output['content'];
+      if (typeof content === 'string') return content;
+      const text = output['text'];
+      if (typeof text === 'string') return text;
+    }
+    const flattened = attrs['llm.content'];
+    if (typeof flattened === 'string') return flattened;
     return undefined;
   }, [span.attributes]);
 
   interface ToolCall {
     id?: string;
     name?: string;
-    arguments?: any;
+    arguments?: unknown;
   }
   const toolCalls: ToolCall[] = useMemo(() => {
-    const attrs: any = span.attributes || {};
-    const arr = attrs.output?.toolCalls || attrs['llm.toolCalls'] || [];
+    const attrs = (span.attributes || {}) as Record<string, unknown>;
+    const output = attrs['output'] as Record<string, unknown> | undefined;
+    const arr = (output && output['toolCalls']) || attrs['llm.toolCalls'];
     if (Array.isArray(arr)) return arr as ToolCall[];
     return [];
   }, [span.attributes]);
 
-  // Tabs: show IO first if LLM span: io | attributes | logs (else attributes | logs)
+  // Tabs: show IO first if LLM or Tool span: io | attributes | logs (else attributes | logs)
   type TabKey = 'attributes' | 'logs' | 'io';
-  const [activeTab, setActiveTab] = useState<TabKey>(isLLMSpan ? 'io' : 'attributes');
+  const [activeTab, setActiveTab] = useState<TabKey>(isLLMSpan || isToolSpan ? 'io' : 'attributes');
   // We keep the user's selected tab (even if it's 'io') so when they navigate back to an LLM span
   // the IO tab restores automatically. For rendering we derive an effective tab.
-  const effectiveTab: TabKey = activeTab === 'io' && !isLLMSpan ? 'attributes' : activeTab;
+  const effectiveTab: TabKey = activeTab === 'io' && !(isLLMSpan || isToolSpan) ? 'attributes' : activeTab;
 
   // Left/Right arrow keyboard navigation between tabs (scoped to this panel when focused)
   // We attach a keydown listener on mount; simple since component unmounts when span deselected.
@@ -143,7 +170,7 @@ export function SpanDetails({
 
       // Build ordered list of visible tabs
       const tabs: TabKey[] = [];
-      if (isLLMSpan) tabs.push('io');
+      if (isLLMSpan || isToolSpan) tabs.push('io');
       tabs.push('attributes', 'logs');
       const current = effectiveTab; // effective to handle case activeTab==='io' but LLM vanished
       const idx = tabs.indexOf(current);
@@ -162,11 +189,30 @@ export function SpanDetails({
     return () => window.removeEventListener('keydown', onKey);
   }, [effectiveTab, isLLMSpan]);
 
+  // Helper to extract tool output content as string (markdown friendly)
+  function getToolOutput(s: SpanDoc): string | undefined {
+    const attrs = (s.attributes || {}) as Record<string, unknown>;
+    const out = (attrs['output'] as Record<string, unknown>) || {};
+    const cand =
+      (out as Record<string, unknown>)['result'] ??
+      out['content'] ??
+      out['text'] ??
+      attrs['result'] ??
+      attrs['content'];
+    if (cand == null) return undefined;
+    if (typeof cand === 'string') return cand;
+    try {
+      return '```json\n' + JSON.stringify(cand, null, 2) + '\n```';
+    } catch {
+      return String(cand);
+    }
+  }
+
   // Log severity counts (only in logs tab header badges)
   const severityCounts = useMemo(() => {
     const counts = { debug: 0, info: 0, error: 0 };
     filteredLogs.forEach((l) => {
-      if (l.level in counts) (counts as any)[l.level]++;
+      if (l.level in counts) (counts as Record<string, number>)[l.level]!++;
     });
     return counts;
   }, [filteredLogs]);
@@ -267,8 +313,10 @@ export function SpanDetails({
           }}
         >
           <div style={{ display: 'flex', borderBottom: '1px solid #ddd', background: '#f8f9fa' }}>
-            {isLLMSpan && (
-              <TabButton active={activeTab === 'io'} onClick={() => setActiveTab('io')}>IO</TabButton>
+            {(isLLMSpan || isToolSpan) && (
+              <TabButton active={activeTab === 'io'} onClick={() => setActiveTab('io')}>
+                IO
+              </TabButton>
             )}
             <TabButton active={effectiveTab === 'attributes'} onClick={() => setActiveTab('attributes')}>
               Attributes
@@ -368,49 +416,133 @@ export function SpanDetails({
                 )}
               </div>
             )}
-            {effectiveTab === 'io' && isLLMSpan && (
+            {effectiveTab === 'io' && (isLLMSpan || isToolSpan) && (
               <div style={{ display: 'flex', gap: 16, alignItems: 'stretch', height: '100%', minHeight: 0 }}>
-                {/* Context (Input) */}
+                {/* Left Column: Input / Context */}
                 <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
-                  <h3 style={{ margin: '0 0 8px 0', fontSize: 13 }}>Context</h3>
+                  <h3 style={{ margin: '0 0 8px 0', fontSize: 13 }}>{isToolSpan ? 'Input' : 'Context'}</h3>
                   <div style={{ flex: 1, overflow: 'auto', display: 'flex', flexDirection: 'column', gap: 8 }}>
-                    {contextMessages.length === 0 && (
+                    {isToolSpan && <ToolInputViewer span={span} />}
+                    {!isToolSpan && contextMessages.length === 0 && (
                       <div style={{ fontSize: 12, color: '#666' }}>No context messages</div>
                     )}
-                    {contextMessages.map((m, i) => (
+                    {!isToolSpan &&
+                      contextMessages.map((m, i) => (
+                        <div
+                          key={i}
+                          style={{
+                            background: '#f6f8fa',
+                            border: '1px solid #e1e4e8',
+                            borderRadius: 4,
+                            padding: 8,
+                            fontSize: 12,
+                          }}
+                        >
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
+                            <RoleBadge role={m.role} />
+                            <span style={{ fontSize: 10, color: '#555' }}>#{i + 1}</span>
+                            {Array.isArray((m as ContextMsg).toolCalls) && (m as ContextMsg).toolCalls!.length > 0 && (
+                              <span
+                                style={{
+                                  fontSize: 10,
+                                  background: '#0366d6',
+                                  color: '#fff',
+                                  padding: '2px 6px',
+                                  borderRadius: 10,
+                                }}
+                              >
+                                {((m as ContextMsg).toolCalls || []).length} tool calls
+                              </span>
+                            )}
+                          </div>
+                          <div style={{ fontFamily: 'monospace', fontSize: 12 }}>
+                            <ReactMarkdown
+                              remarkPlugins={[remarkGfm]}
+                              components={{
+                                code({ className, children, ...props }) {
+                                  const isBlock =
+                                    String(className || '').includes('language-') || String(children).includes('\n');
+                                  return (
+                                    <code
+                                      style={{
+                                        background: '#eaeef2',
+                                        padding: isBlock ? 8 : '2px 4px',
+                                        display: isBlock ? 'block' : 'inline',
+                                        borderRadius: 4,
+                                        fontSize: 11,
+                                        whiteSpace: 'pre-wrap',
+                                      }}
+                                      className={className}
+                                      {...props}
+                                    >
+                                      {children}
+                                    </code>
+                                  );
+                                },
+                                pre({ children }) {
+                                  return (
+                                    <pre style={{ background: '#eaeef2', padding: 0, margin: 0, overflow: 'auto' }}>
+                                      {children}
+                                    </pre>
+                                  );
+                                },
+                              }}
+                            >
+                              {String(m.content ?? '')}
+                            </ReactMarkdown>
+                          </div>
+                        </div>
+                      ))}
+                  </div>
+                </div>
+                {/* Right Column: Output */}
+                <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+                  <h3 style={{ margin: '0 0 8px 0', fontSize: 13 }}>Output</h3>
+                  <div style={{ flex: 1, overflow: 'auto', display: 'flex', flexDirection: 'column', gap: 12 }}>
+                    <div>
+                      <div style={{ fontSize: 11, fontWeight: 600, marginBottom: 4 }}>Content</div>
                       <div
-                        key={i}
                         style={{
                           background: '#f6f8fa',
                           border: '1px solid #e1e4e8',
                           borderRadius: 4,
                           padding: 8,
                           fontSize: 12,
+                          fontFamily: 'monospace',
                         }}
                       >
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
-                          <RoleBadge role={m.role} />
-                          <span style={{ fontSize: 10, color: '#555' }}>#{i + 1}</span>
-                          {Array.isArray((m as any).toolCalls) && (m as any).toolCalls.length > 0 && (
-                            <span
-                              style={{
-                                fontSize: 10,
-                                background: '#0366d6',
-                                color: '#fff',
-                                padding: '2px 6px',
-                                borderRadius: 10,
-                              }}
-                            >
-                              {((m as any).toolCalls || []).length} tool calls
-                            </span>
-                          )}
-                        </div>
-                        <div style={{ fontFamily: 'monospace', fontSize: 12 }}>
+                        {isToolSpan ? (
+                          (() => {
+                            // For tool_call spans, show raw attributes.output JSON directly (no markdown transform)
+                            const attrs = (span.attributes || {}) as Record<string, unknown>;
+                            const output = attrs['output'];
+                            if (output == null) return <span style={{ color: '#666' }}>(no output)</span>;
+                            try {
+                              const pretty = JSON.stringify(output, null, 2);
+                              return (
+                                <pre
+                                  style={{
+                                    margin: 0,
+                                    background: 'transparent',
+                                    padding: 0,
+                                    whiteSpace: 'pre-wrap',
+                                    wordBreak: 'break-word',
+                                  }}
+                                >
+                                  {pretty}
+                                </pre>
+                              );
+                            } catch {
+                              return <span>{String(output)}</span>;
+                            }
+                          })()
+                        ) : (isLLMSpan ? llmContent : getToolOutput(span)) ? (
                           <ReactMarkdown
                             remarkPlugins={[remarkGfm]}
                             components={{
                               code({ className, children, ...props }) {
-                                const isBlock = String(className || '').includes('language-') || String(children).includes('\n');
+                                const isBlock =
+                                  String(className || '').includes('language-') || String(children).includes('\n');
                                 return (
                                   <code
                                     style={{
@@ -419,81 +551,42 @@ export function SpanDetails({
                                       display: isBlock ? 'block' : 'inline',
                                       borderRadius: 4,
                                       fontSize: 11,
-                                      whiteSpace: 'pre-wrap'
+                                      whiteSpace: 'pre-wrap',
                                     }}
                                     className={className}
                                     {...props}
-                                  >{children}</code>
+                                  >
+                                    {children}
+                                  </code>
                                 );
                               },
                               pre({ children }) {
-                                return <pre style={{ background: '#eaeef2', padding: 0, margin: 0, overflow: 'auto' }}>{children}</pre>;
-                              }
-                            }}
-                          >
-                            {String(m.content ?? '')}
-                          </ReactMarkdown>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-                {/* Output */}
-                <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
-                  <h3 style={{ margin: '0 0 8px 0', fontSize: 13 }}>Output</h3>
-                  <div style={{ flex: 1, overflow: 'auto', display: 'flex', flexDirection: 'column', gap: 12 }}>
-                    <div>
-                      <div style={{ fontSize: 11, fontWeight: 600, marginBottom: 4 }}>Content</div>
-                      <div style={{
-                        background: '#f6f8fa',
-                        border: '1px solid #e1e4e8',
-                        borderRadius: 4,
-                        padding: 8,
-                        fontSize: 12,
-                        fontFamily: 'monospace'
-                      }}>
-                        {llmContent ? (
-                          <ReactMarkdown
-                            remarkPlugins={[remarkGfm]}
-                            components={{
-                              code({ className, children, ...props }) {
-                                const isBlock = String(className || '').includes('language-') || String(children).includes('\n');
                                 return (
-                                  <code
-                                    style={{
-                                      background: '#eaeef2',
-                                      padding: isBlock ? 8 : '2px 4px',
-                                      display: isBlock ? 'block' : 'inline',
-                                      borderRadius: 4,
-                                      fontSize: 11,
-                                      whiteSpace: 'pre-wrap'
-                                    }}
-                                    className={className}
-                                    {...props}
-                                  >{children}</code>
+                                  <pre style={{ background: '#eaeef2', padding: 0, margin: 0, overflow: 'auto' }}>
+                                    {children}
+                                  </pre>
                                 );
                               },
-                              pre({ children }) {
-                                return <pre style={{ background: '#eaeef2', padding: 0, margin: 0, overflow: 'auto' }}>{children}</pre>;
-                              }
                             }}
                           >
-                            {llmContent}
+                            {(isLLMSpan ? llmContent : getToolOutput(span)) || ''}
                           </ReactMarkdown>
                         ) : (
                           <span style={{ color: '#666' }}>(no content)</span>
                         )}
                       </div>
                     </div>
-                    <div>
-                      <div style={{ fontSize: 11, fontWeight: 600, marginBottom: 4 }}>Tool Calls</div>
-                      {toolCalls.length === 0 && <div style={{ fontSize: 12, color: '#666' }}>(none)</div>}
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                        {toolCalls.map((tc, idx) => (
-                          <CollapsibleToolCall key={idx} toolCall={tc} />
-                        ))}
+                    {isLLMSpan && (
+                      <div>
+                        <div style={{ fontSize: 11, fontWeight: 600, marginBottom: 4 }}>Tool Calls</div>
+                        {toolCalls.length === 0 && <div style={{ fontSize: 12, color: '#666' }}>(none)</div>}
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                          {toolCalls.map((tc, idx) => (
+                            <CollapsibleToolCall key={idx} toolCall={tc} />
+                          ))}
+                        </div>
                       </div>
-                    </div>
+                    )}
                   </div>
                 </div>
               </div>
@@ -581,7 +674,13 @@ function RoleBadge({ role }: { role: string }) {
   );
 }
 
-function CollapsibleToolCall({ toolCall }: { toolCall: { id?: string; name?: string; arguments?: any } }) {
+// Lightweight duplicate of ToolCall interface (component-level interface is inside SpanDetails closure)
+interface LocalToolCall {
+  id?: string;
+  name?: string;
+  arguments?: unknown;
+}
+function CollapsibleToolCall({ toolCall }: { toolCall: LocalToolCall }) {
   const [open, setOpen] = useState(false);
   const argsStr = useMemo(() => {
     if (toolCall && toolCall.arguments !== undefined) {
@@ -626,6 +725,67 @@ function CollapsibleToolCall({ toolCall }: { toolCall: { id?: string; name?: str
           {argsStr}
         </pre>
       )}
+    </div>
+  );
+}
+
+// Renders tool input JSON using monaco editor (read-only)
+function ToolInputViewer({ span }: { span: SpanDoc }) {
+  const [_editorReady, setEditorReady] = useState(false); // reserved if we want to show state later
+  const [EditorComp, setEditorComp] = useState<MonacoEditorComponent | null>(null);
+  const inputValue = useMemo(() => {
+    const attrs = (span.attributes || {}) as Record<string, unknown>;
+    const toolObj = attrs['tool'] as Record<string, unknown> | undefined;
+    const outputObj = attrs['output'] as Record<string, unknown> | undefined;
+    const input =
+      (attrs['input'] !== undefined ? attrs['input'] : undefined) ??
+      (attrs['args'] !== undefined ? attrs['args'] : undefined) ??
+      (toolObj && toolObj['input']) ??
+      (outputObj && outputObj['input']);
+    if (input == null) return '// (no input)';
+    if (typeof input === 'string') {
+      // If already JSON string try to pretty format
+      try {
+        return JSON.stringify(JSON.parse(input), null, 2);
+      } catch {
+        return input;
+      }
+    }
+    try {
+      return JSON.stringify(input, null, 2);
+    } catch {
+      return String(input);
+    }
+  }, [span.attributes]);
+
+  useEffect(() => {
+    let cancelled = false;
+    ensureMonaco().then((Monaco) => {
+      if (!cancelled) {
+        setEditorComp(() => Monaco);
+        setEditorReady(true);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  return (
+    <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+      <div style={{ flex: 1, minHeight: 200, border: '1px solid #e1e4e8', borderRadius: 4, overflow: 'hidden' }}>
+        {EditorComp ? (
+          <EditorComp
+            height="100%"
+            defaultLanguage="json"
+            value={inputValue}
+            theme="vs-light"
+            options={{ readOnly: true, minimap: { enabled: false }, fontSize: 12, scrollBeyondLastLine: false }}
+          />
+        ) : (
+          <pre style={{ margin: 0, padding: 8, fontSize: 12, background: '#f6f8fa' }}>Loading editor…</pre>
+        )}
+      </div>
     </div>
   );
 }
