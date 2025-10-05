@@ -508,7 +508,7 @@ export function SpanDetails({
                                   </span>
                                 )}
                             </div>
-                            <div style={{ fontFamily: 'monospace', fontSize: 12 }}>
+                            <div style={{ fontFamily: 'monospace', fontSize: 12, wordBreak: 'break-word' }}>
                               <ReactMarkdown
                                 remarkPlugins={[remarkGfm]}
                                 components={{
@@ -582,7 +582,7 @@ export function SpanDetails({
                                       </span>
                                     )}
                                 </div>
-                                <div style={{ fontFamily: 'monospace', fontSize: 12 }}>
+                                <div style={{ fontFamily: 'monospace', fontSize: 12, wordBreak: 'break-word' }}>
                                   <ReactMarkdown
                                     remarkPlugins={[remarkGfm]}
                                     components={{
@@ -675,7 +675,7 @@ export function SpanDetails({
                               </span>
                             )}
                           </div>
-                          <div style={{ fontFamily: 'monospace', fontSize: 12 }}>
+                          <div style={{ fontFamily: 'monospace', fontSize: 12, wordBreak: 'break-word' }}>
                             <ReactMarkdown
                               remarkPlugins={[remarkGfm]}
                               components={{

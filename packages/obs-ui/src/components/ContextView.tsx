@@ -81,7 +81,8 @@ export function ContextView({ messages, title = 'Context', collapse = true, styl
           </button>
         </div>
       )}
-      {collapseEnabled && historyCollapsed &&
+      {collapseEnabled &&
+        historyCollapsed &&
         visibleMessageIndices.map((i) => {
           const m = contextMessages[i] as ContextMessageLike;
           return <MessageCard key={i} index={i} message={m} />;
@@ -147,7 +148,7 @@ function MessageCard({ message, index }: { message: ContextMessageLike; index: n
           </span>
         )}
       </div>
-      <div style={{ fontFamily: 'monospace', fontSize: 12 }}>
+      <div style={{ fontFamily: 'monospace', fontSize: 12, wordBreak: 'break-word' }}>
         <ReactMarkdown
           remarkPlugins={[remarkGfm]}
           components={{
@@ -171,9 +172,7 @@ function MessageCard({ message, index }: { message: ContextMessageLike; index: n
               );
             },
             pre({ children }) {
-              return (
-                <pre style={{ background: '#eaeef2', padding: 0, margin: 0, overflow: 'auto' }}>{children}</pre>
-              );
+              return <pre style={{ background: '#eaeef2', padding: 0, margin: 0, overflow: 'auto' }}>{children}</pre>;
             },
           }}
         >
