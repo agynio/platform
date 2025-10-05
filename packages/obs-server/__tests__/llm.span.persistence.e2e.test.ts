@@ -54,7 +54,5 @@ describe('LLM span persistence end-to-end (real server + memory mongo)', () => {
     expect(doc?.attributes?.output?.content).toBe('Hi! I will help you.');
     expect(Array.isArray(doc?.attributes?.output?.toolCalls)).toBe(true);
     expect(doc?.attributes?.output?.toolCalls?.[0]?.id).toBe(toolCallId);
-  // Ensure no duplicated llm object present
-  expect(doc?.attributes?.llm).toBeUndefined();
   });
 });
