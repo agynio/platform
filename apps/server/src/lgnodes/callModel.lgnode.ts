@@ -3,7 +3,7 @@ import { ChatOpenAI } from '@langchain/openai';
 import { BaseTool } from '../tools/base.tool';
 import { BaseNode } from './base.lgnode';
 import { NodeOutput } from '../types';
-import { withTask } from '@traceloop/node-server-sdk';
+import { withLLM } from '@hautech/obs-sdk';
 
 // Minimal connector contract used by CallModelNode for memory injection
 export interface MemoryConnector {
@@ -101,10 +101,12 @@ export class CallModelNode extends BaseNode {
       }
     }
 
-    const result = await withTask({ name: 'llm', inputParameters: [finalMessages.slice(-10)] }, async () => {
-      return await boundLLM.invoke(finalMessages, {
-        recursionLimit: 2500,
-      });
+    const result = await withLLM({ newMessages: finalMessages.slice(-10), context: {} }, async () => {
+      const r = await boundLLM.invoke(finalMessages, { recursionLimit: 2500 });
+      // Map ChatOpenAI result to expected shape with text/toolCalls for obs-sdk augmentation
+      const toolCalls: any[] = (r as any).tool_calls || [];
+      const text = typeof (r as any).content === 'string' ? (r as any).content : JSON.stringify((r as any).content);
+      return { ...(r as any), text, toolCalls } as any;
     });
 
     // Return only delta; reducer in state will append

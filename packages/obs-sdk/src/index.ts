@@ -153,7 +153,10 @@ export async function withSpan<T>(
     error: unknown | undefined,
   ) => { attributes?: Record<string, unknown>; status?: 'ok' | 'error' } | void,
 ): Promise<T> {
-  if (!config) throw new Error('obs-sdk not initialized');
+  // If SDK not initialized, execute user function without instrumentation (silent no-op)
+  if (!config) {
+    return await fn();
+  }
   const cfg = config as InternalConfig; // capture for type narrowing
   const parent = als.getStore();
   const traceId = parent?.traceId || genId(16);

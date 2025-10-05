@@ -1,6 +1,10 @@
-import * as traceloop from '@traceloop/node-server-sdk';
-traceloop.initialize({
-  disableBatch: true,
+// Observability SDK initialization (replaces traceloop)
+import { init as initObs, withSystem } from '@hautech/obs-sdk';
+
+initObs({
+  mode: 'extended',
+  endpoints: { extended: process.env.OBS_ENDPOINT_EXTENDED || 'http://localhost:4319' },
+  defaultAttributes: { service: 'server' },
 });
 
 import Fastify from 'fastify';

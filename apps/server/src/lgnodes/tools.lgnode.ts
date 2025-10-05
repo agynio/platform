@@ -1,6 +1,6 @@
 import { AIMessage, BaseMessage, ToolMessage } from '@langchain/core/messages';
 import { LangGraphRunnableConfig } from '@langchain/langgraph';
-import { withTool } from '@traceloop/node-server-sdk';
+import { withToolCall } from '@hautech/obs-sdk';
 import { BaseTool } from '../tools/base.tool';
 import { NodeOutput } from '../types';
 import { BaseNode } from './base.lgnode';
@@ -43,7 +43,7 @@ import { TerminateResponse } from '../tools/terminateResponse';
 
     const toolMessages: ToolMessage[] = await Promise.all(
       toolCalls.map(async (tc) => {
-        return await withTool({ name: tc.name, inputParameters: [tc.args] }, async () => {
+  return await withToolCall({ name: tc.name, input: tc.args }, async () => {
           const callId = tc.id ?? `missing_id_${Math.random().toString(36).slice(2)}`;
           const tool = tools.find((t) => t.name === tc.name);
           const createMessage = (content: string) =>
