@@ -1,3 +1,3 @@
 export * from './SpanTree';
-export * from './Timeline';
 export * from './SpanDetails';
+export * from './SpanTimeline';

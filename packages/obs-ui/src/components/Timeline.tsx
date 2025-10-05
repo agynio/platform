@@ -33,37 +33,7 @@ export function Timeline({ spans, onSelect }: Props) {
 
   return (
     <div style={{ padding: 16, overflow: 'auto' }}>
-      <h2 style={{ marginTop: 0 }}>Timeline</h2>
-      <div style={{ position: 'relative', border: '1px solid #ddd', padding: 8, borderRadius: 4 }}>
-        {byDepth.map(({ span, depth }) => (
-          <div key={span.spanId} style={{ position: 'relative', height: 28 }}>
-            <div
-              onClick={() => onSelect(span)}
-              title={span.label}
-              style={{
-                position: 'absolute',
-                left: offsetPct(span) + '%',
-                top: 4,
-                height: 20,
-                width: widthPct(span) + '%',
-                background: '#0d6efd33',
-                border: '1px solid #0d6efd66',
-                borderRadius: 4,
-                fontSize: 11,
-                lineHeight: '20px',
-                padding: '0 4px',
-                whiteSpace: 'nowrap',
-                overflow: 'hidden',
-                textOverflow: 'ellipsis',
-                transform: `translateY(${depth * 26}px)`
-              }}
-            >
-              {span.label}
-            </div>
-          </div>
-        ))}
-        <div style={{ height: (Math.max(...byDepth.map(d => d.depth)) + 1) * 26 + 16 }} />
-      </div>
+      
     </div>
   );
 }

@@ -4,7 +4,7 @@ import { useParams } from 'react-router-dom';
 import { fetchTrace } from '../services/api';
 import { spanRealtime } from '../services/socket';
 import { SpanDoc } from '../types';
-import { SpanDetails } from '../components';
+import { SpanDetails, SpanTree, SpanTimeline } from '../components';
 
 // Layout constants to keep visual alignment exact across panes
 const HEADER_HEIGHT = 32; // px
@@ -75,114 +75,9 @@ function buildRuler(spans: SpanDoc[]) {
   return { ticks, min, total, empty: false };
 }
 
-function TimelinePane({
-  rows,
-  ruler,
-  onSelect,
-}: {
-  rows: RowData[];
-  ruler: ReturnType<typeof buildRuler>;
-  onSelect(s: SpanDoc): void;
-}) {
-  if (ruler.empty) return <div style={{ padding: 16 }}>No completed spans.</div>;
-  const { min, total } = ruler;
-  return (
-    <div style={{ position: 'relative' }}>
-      {rows.map((r) => {
-        const s = r.span;
-        const start = Date.parse(s.startTime);
-        const end = Date.parse(s.endTime || s.startTime);
-        const left = ((start - min) / total) * 100;
-        const width = Math.max(0.5, ((end - start) / total) * 100);
-        return (
-          <div key={s.spanId} style={{ position: 'relative', height: ROW_HEIGHT }}>
-            <div
-              onClick={() => onSelect(s)}
-              title={s.label}
-              style={{
-                position: 'absolute',
-                left: left + '%',
-                top: BAR_TOP,
-                height: BAR_HEIGHT,
-                width: width + '%',
-                background: '#0d6efd33',
-                border: '1px solid #0d6efd66',
-                borderRadius: 4,
-                fontSize: 11,
-                lineHeight: BAR_HEIGHT + 'px',
-                padding: '0 4px',
-                whiteSpace: 'nowrap',
-                overflow: 'hidden',
-                textOverflow: 'ellipsis',
-              }}
-            >
-              {s.label}
-            </div>
-          </div>
-        );
-      })}
-    </div>
-  );
-}
+// TimelinePane removed in favor of reusable <SpanTimeline /> component
 
-function TreePane({
-  rows,
-  selectedId,
-  onSelect,
-  onToggle,
-}: {
-  rows: RowData[];
-  selectedId?: string;
-  onSelect(s: SpanDoc): void;
-  onToggle(id: string): void;
-}) {
-  return (
-    <div>
-      {rows.map((r) => {
-        const s = r.span;
-        const isSelected = selectedId === s.spanId;
-        return (
-          <div
-            key={s.spanId}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              height: ROW_HEIGHT,
-              cursor: 'pointer',
-              background: isSelected ? '#0d6efd10' : 'transparent',
-            }}
-            onClick={() => onSelect(s)}
-          >
-            <div style={{ display: 'flex', alignItems: 'center', paddingLeft: 4 + r.depth * 12 }}>
-              {r.hasChildren ? (
-                <span
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onToggle(s.spanId);
-                  }}
-                  style={{
-                    width: 14,
-                    display: 'inline-block',
-                    textAlign: 'center',
-                    cursor: 'pointer',
-                    userSelect: 'none',
-                    fontSize: 11,
-                  }}
-                >
-                  {r.collapsed ? '▸' : '▾'}
-                </span>
-              ) : (
-                <span style={{ width: 14, display: 'inline-block' }} />
-              )}
-              <span style={{ fontFamily: 'monospace', fontSize: 12, wordBreak: 'break-word' }}>{s.label}</span>
-            </div>
-            <div style={{ marginLeft: 6, fontSize: 10, color: '#666' }}>{s.status}</div>
-          </div>
-        );
-      })}
-    </div>
-  );
-}
+// TreePane removed in favor of reusable <SpanTree /> component
 
 export function TracePage() {
   const { traceId } = useParams();
@@ -396,11 +291,12 @@ export function TracePage() {
               >
                 Span
               </div>
-              <TreePane
-                rows={rows}
+              <SpanTree
+                spans={spans}
                 selectedId={selected?.spanId}
                 onSelect={(s) => setSelected(s)}
-                onToggle={toggleCollapsed}
+                collapsedIds={collapsed}
+                onToggle={(id) => toggleCollapsed(id)}
               />
             </div>
             {/* Right (timeline or details) */}
@@ -461,7 +357,11 @@ export function TracePage() {
                       </div>
                     )}
                   </div>
-                  <TimelinePane rows={rows} ruler={ruler} onSelect={(s) => setSelected(s)} />
+                  <SpanTimeline
+                    rows={rows.map(r => ({ span: r.span, depth: r.depth, hasChildren: r.hasChildren, collapsed: r.collapsed }))}
+                    ruler={ruler}
+                    onSelect={(s: SpanDoc) => setSelected(s)}
+                  />
                 </div>
               )}
               {selected && (
