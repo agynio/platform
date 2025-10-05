@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState, useCallback } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { SpanDoc, LogDoc } from '../types';
@@ -128,6 +128,39 @@ export function SpanDetails({
   // We keep the user's selected tab (even if it's 'io') so when they navigate back to an LLM span
   // the IO tab restores automatically. For rendering we derive an effective tab.
   const effectiveTab: TabKey = activeTab === 'io' && !isLLMSpan ? 'attributes' : activeTab;
+
+  // Left/Right arrow keyboard navigation between tabs (scoped to this panel when focused)
+  // We attach a keydown listener on mount; simple since component unmounts when span deselected.
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      // Ignore if user is typing inside an input/textarea or has modifier keys
+      const target = e.target as HTMLElement | null;
+      if (!target) return;
+      const tag = target.tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || target.isContentEditable) return;
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+      if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
+
+      // Build ordered list of visible tabs
+      const tabs: TabKey[] = [];
+      if (isLLMSpan) tabs.push('io');
+      tabs.push('attributes', 'logs');
+      const current = effectiveTab; // effective to handle case activeTab==='io' but LLM vanished
+      const idx = tabs.indexOf(current);
+      if (idx === -1) return;
+      if (e.key === 'ArrowLeft' && idx > 0) {
+        const prev = tabs[idx - 1];
+        setActiveTab(prev);
+        e.preventDefault();
+      } else if (e.key === 'ArrowRight' && idx < tabs.length - 1) {
+        const next = tabs[idx + 1];
+        setActiveTab(next);
+        e.preventDefault();
+      }
+    }
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [effectiveTab, isLLMSpan]);
 
   // Log severity counts (only in logs tab header badges)
   const severityCounts = useMemo(() => {
