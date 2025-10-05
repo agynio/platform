@@ -22,6 +22,7 @@ import { GraphDefinition, PersistedGraphUpsertRequest } from './graph/types.js';
 import { ContainerService } from './services/container.service.js';
 import { SlackService } from './services/slack.service.js';
 import { ReadinessWatcher } from './utils/readinessWatcher.js';
+import { autostartSlackTriggerNodes } from './autostart.js';
 
 const logger = new LoggerService();
 const config = ConfigService.fromEnv();
@@ -226,6 +227,13 @@ async function bootstrap() {
 
   // Watcher that emits a follow-up node_status once node becomes ready after provision/start.
   readinessWatcher = new ReadinessWatcher(runtime, emitStatus, logger);
+
+  // Autostart SlackTrigger nodes (scoped to Slack only)
+  try {
+    await autostartSlackTriggerNodes(runtime, logger, readinessWatcher);
+  } catch (e) {
+    logger.error('Autostart[SlackTrigger]: unexpected error', e);
+  }
 
   const shutdown = async () => {
     logger.info('Shutting down...');

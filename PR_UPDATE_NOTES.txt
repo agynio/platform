@@ -1,1 +1,17 @@
-Update: Removed Docker compose and Dockerfile for obs-server; server runs from sources via pnpm scripts. Added @hautech/obs-examples package with PoC script. Switched builds to esbuild + tsc for types; updated exports and start scripts.
+Issue #92: Restore automatic start for SlackTrigger only on server boot.
+
+Changes
+- apps/server/src/autostart.ts: new Slack-only autostart that provisions `slackTrigger` nodes at boot; idempotent and gated by `AUTO_START_SLACK_TRIGGER` (default true). Logs include Autostart[SlackTrigger] prefix.
+- apps/server/src/index.ts: call autostart after runtime is ready and readiness watcher is set up.
+- apps/server/src/__tests__/autostart/slack.autostart.test.ts: unit tests covering autostart selection and env gate.
+- apps/server/README.md: document behavior and env toggle.
+
+Verification
+- Set SLACK_BOT_TOKEN, SLACK_APP_TOKEN, MONGODB_URL.
+- Persist a graph with a SlackTrigger wired to an agent.
+- Start server; observe logs for Autostart[SlackTrigger]; within ~10s `GET /graph/nodes/:id/status` should report ready.
+- Send Slack message to validate events are received.
+
+Notes
+- Manual provision/deprovision via UI/API remains unchanged.
+- Provision is idempotent; SlackService.start is already idempotent.
