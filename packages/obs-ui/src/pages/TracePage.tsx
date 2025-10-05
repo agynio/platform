@@ -4,7 +4,7 @@ import { useParams } from 'react-router-dom';
 import { fetchTrace } from '../services/api';
 import { spanRealtime } from '../services/socket';
 import { SpanDoc } from '../types';
-import { SpanDetails } from '../components/SpanDetails';
+import { SpanDetails } from '../components';
 
 // Layout constants to keep visual alignment exact across panes
 const HEADER_HEIGHT = 32; // px
@@ -12,22 +12,35 @@ const ROW_HEIGHT = 26; // px (data row height)
 const BAR_HEIGHT = 18; // px (timeline bar visual height)
 const BAR_TOP = (ROW_HEIGHT - BAR_HEIGHT) / 2; // centers bar within row
 
-interface RowData { span: SpanDoc; depth: number; }
-
-function buildRows(spans: SpanDoc[]): RowData[] {
-  const byId: Record<string, SpanDoc> = Object.fromEntries(spans.map(s => [s.spanId, s]));
-  function depth(s: SpanDoc): number {
-    if (!s.parentSpanId) return 0;
-    const p = byId[s.parentSpanId];
-    if (!p) return 0;
-    return depth(p) + 1;
+interface RowData { span: SpanDoc; depth: number; hasChildren: boolean; collapsed: boolean; }
+function buildRows(spans: SpanDoc[], collapsed: Set<string>): RowData[] {
+  // Build adjacency list grouped by parent
+  const children: Record<string, SpanDoc[]> = {};
+  const roots: SpanDoc[] = [];
+  for (const s of spans) {
+    if (!s.parentSpanId) roots.push(s);
+    else (children[s.parentSpanId] ||= []).push(s);
   }
-  const rows = spans.map(s => ({ span: s, depth: depth(s) }));
-  rows.sort((a, b) => {
-    const startA = Date.parse(a.span.startTime);
-    const startB = Date.parse(b.span.startTime);
-    return startA - startB;
+  const sortSiblings = (arr: SpanDoc[]) => arr.sort((a, b) => {
+    const at = Date.parse(a.startTime);
+    const bt = Date.parse(b.startTime);
+    if (at !== bt) return at - bt; // earliest first
+    const al = a.label.localeCompare(b.label);
+    if (al !== 0) return al;
+    return a.spanId.localeCompare(b.spanId);
   });
+  sortSiblings(roots);
+  Object.values(children).forEach(sortSiblings);
+  const rows: RowData[] = [];
+  function dfs(node: SpanDoc, depth: number) {
+    const kids = children[node.spanId] || [];
+    const isCollapsed = collapsed.has(node.spanId);
+    rows.push({ span: node, depth, hasChildren: kids.length > 0, collapsed: isCollapsed });
+    if (!isCollapsed) {
+      for (const k of kids) dfs(k, depth + 1);
+    }
+  }
+  for (const r of roots) dfs(r, 0);
   return rows;
 }
 
@@ -93,7 +106,7 @@ function TimelinePane({ rows, ruler, onSelect }: { rows: RowData[]; ruler: Retur
   );
 }
 
-function TreePane({ rows, selectedId, onSelect }: { rows: RowData[]; selectedId?: string; onSelect(s: SpanDoc): void }) {
+function TreePane({ rows, selectedId, onSelect, onToggle }: { rows: RowData[]; selectedId?: string; onSelect(s: SpanDoc): void; onToggle(id: string): void }) {
   return (
     <div>
       {rows.map(r => {
@@ -111,7 +124,17 @@ function TreePane({ rows, selectedId, onSelect }: { rows: RowData[]; selectedId?
             }}
             onClick={() => onSelect(s)}
           >
-            <div style={{ paddingLeft: 8 + r.depth * 12, fontFamily: 'monospace', fontSize: 12 }}>{s.label}</div>
+            <div style={{ display: 'flex', alignItems: 'center', paddingLeft: 4 + r.depth * 12 }}>
+              {r.hasChildren ? (
+                <span
+                  onClick={(e) => { e.stopPropagation(); onToggle(s.spanId); }}
+                  style={{ width: 14, display: 'inline-block', textAlign: 'center', cursor: 'pointer', userSelect: 'none', fontSize: 11 }}
+                >{r.collapsed ? '▸' : '▾'}</span>
+              ) : (
+                <span style={{ width: 14, display: 'inline-block' }} />
+              )}
+              <span style={{ fontFamily: 'monospace', fontSize: 12 }}>{s.label}</span>
+            </div>
             <div style={{ marginLeft: 6, fontSize: 10, color: '#666' }}>{s.status}</div>
           </div>
         );
@@ -126,6 +149,14 @@ export function TracePage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selected, setSelected] = useState<SpanDoc | null>(null);
+  const [collapsed, setCollapsed] = useState<Set<string>>(() => new Set());
+  const toggleCollapsed = useCallback((id: string) => {
+    setCollapsed(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  }, []);
   // Refs & callbacks placed before any conditional returns to maintain hook order stability
   const containerRef = useRef<HTMLDivElement | null>(null);
   const leftRef = useRef<HTMLDivElement | null>(null);
@@ -157,7 +188,7 @@ export function TracePage() {
     return () => { cancelled = true; };
   }, [traceId]);
 
-  const rows = useMemo(() => buildRows(spans), [spans]);
+  const rows = useMemo(() => buildRows(spans, collapsed), [spans, collapsed]);
   const ruler = useMemo(() => buildRuler(spans), [spans]);
   // Flatten visible spans for keyboard navigation (same order as rows)
   const flatSpanIds = useMemo(() => rows.map(r => r.span.spanId), [rows]);
@@ -195,6 +226,44 @@ export function TracePage() {
       if (prev) setSelected(prev);
     }
   }, { enableOnFormTags: false, preventDefault: true }, [flatSpanIds, selected, spans]);
+
+  // ArrowLeft: if node expanded and has children -> collapse; else move to parent
+  useHotkeys('arrowleft', (e) => {
+    if (!selected) return;
+    e.preventDefault();
+    const row = rows.find(r => r.span.spanId === selected.spanId);
+    if (!row) return;
+    if (row.hasChildren && !row.collapsed) {
+      toggleCollapsed(row.span.spanId);
+      return;
+    }
+    // Move to parent if exists
+    const parentId = selected.parentSpanId;
+    if (parentId) {
+      const parent = spans.find(s => s.spanId === parentId);
+      if (parent) setSelected(parent);
+    }
+  }, { enableOnFormTags: false, preventDefault: true }, [rows, selected, spans, toggleCollapsed]);
+
+  // ArrowRight: if node has children and is collapsed -> expand; else move to first child
+  useHotkeys('arrowright', (e) => {
+    if (!selected) return;
+    e.preventDefault();
+    const row = rows.find(r => r.span.spanId === selected.spanId);
+    if (!row) return;
+    if (row.hasChildren) {
+      if (row.collapsed) {
+        toggleCollapsed(row.span.spanId);
+        return;
+      }
+      // Move to first visible child
+      const firstChildRowIndex = rows.findIndex(r => r.span.parentSpanId === row.span.spanId && r.depth === row.depth + 1);
+      if (firstChildRowIndex !== -1) {
+        const firstChild = rows[firstChildRowIndex].span;
+        setSelected(firstChild);
+      }
+    }
+  }, { enableOnFormTags: false, preventDefault: true }, [rows, selected, toggleCollapsed]);
   const loadingEl = loading && (<div style={{ padding: 16 }}>Loading trace...</div>);
   const errorEl = !loading && error && (<div style={{ padding: 16, color: 'red' }}>Error: {error}</div>);
   const ready = !loading && !error;
@@ -213,7 +282,7 @@ export function TracePage() {
             {/* Left (tree) */}
             <div ref={leftRef} onScroll={onScroll} style={{ width: 300, borderRight: '1px solid #ddd', overflow: 'auto' }}>
               <div style={{ position: 'sticky', top: 0, height: HEADER_HEIGHT, background: '#fff', zIndex: 10, borderBottom: '1px solid #ddd', display: 'flex', alignItems: 'center', fontWeight: 600, padding: '0 8px' }}>Span</div>
-              <TreePane rows={rows} selectedId={selected?.spanId} onSelect={s => setSelected(s)} />
+              <TreePane rows={rows} selectedId={selected?.spanId} onSelect={s => setSelected(s)} onToggle={toggleCollapsed} />
             </div>
             {/* Right (timeline or details) */}
             <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0, overflow: 'hidden' }}>
