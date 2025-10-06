@@ -11,6 +11,11 @@ export interface SpanTreeProps {
   onToggle?(spanId: string, collapsed: boolean): void;
   /** Initial auto-expand depth (default 2) */
   autoExpandDepth?: number;
+  /**
+   * External visible row ordering (single source of truth for keyboard navigation + rendering).
+   * When provided, internal ordering + collapse calculation is skipped.
+   */
+  rows?: { span: SpanDoc; depth: number; hasChildren: boolean; collapsed?: boolean }[];
 }
 
 interface RowData { span: SpanDoc; depth: number; hasChildren: boolean; }
@@ -42,6 +47,7 @@ export function SpanTree({
   collapsedIds,
   onToggle,
   autoExpandDepth = 2,
+  rows: externalRows,
 }: SpanTreeProps) {
   // If collapsedIds not provided, manage locally
   const [internalCollapsed, setInternalCollapsed] = useState<Set<string>>(() => new Set());
@@ -68,19 +74,23 @@ export function SpanTree({
     // Pre-expand nodes up to autoExpandDepth (i.e., do not mark them as collapsed)
     setInitialized(true);
   }
-  const visibleRows: RowData[] = [];
-  const collapsedSet = collapsed;
-  const childMap = children;
-  function pushVisible(node: SpanDoc, depth: number) {
-    const kids = childMap[node.spanId] || [];
-    const isCollapsed = collapsedSet.has(node.spanId);
-    visibleRows.push({ span: node, depth, hasChildren: kids.length > 0 });
-    if (!isCollapsed) {
-      for (const k of kids) pushVisible(k, depth + 1);
+  let visibleRows: RowData[] = [];
+  if (externalRows) {
+    // Directly trust provided ordering
+    visibleRows = externalRows.map(r => ({ span: r.span, depth: r.depth, hasChildren: r.hasChildren }));
+  } else {
+    const collapsedSet = collapsed;
+    const childMap = children;
+    function pushVisible(node: SpanDoc, depth: number) {
+      const kids = childMap[node.spanId] || [];
+      const isCollapsed = collapsedSet.has(node.spanId);
+      visibleRows.push({ span: node, depth, hasChildren: kids.length > 0 });
+      if (!isCollapsed) {
+        for (const k of kids) pushVisible(k, depth + 1);
+      }
     }
+    for (const r of spans.filter(s => !s.parentSpanId)) pushVisible(r, 0);
   }
-  // roots are those with no parent
-  for (const r of spans.filter(s => !s.parentSpanId)) pushVisible(r, 0);
 
   return (
     <div>

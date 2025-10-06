@@ -297,6 +297,9 @@ export function TracePage() {
                 onSelect={(s) => setSelected(s)}
                 collapsedIds={collapsed}
                 onToggle={(id) => toggleCollapsed(id)}
+                // Provide externally computed ordered visible rows so SpanTree and
+                // keyboard navigation share a single source of truth.
+                rows={rows.map(r => ({ span: r.span, depth: r.depth, hasChildren: r.hasChildren, collapsed: r.collapsed }))}
               />
             </div>
             {/* Right (timeline or details) */}
