@@ -60,6 +60,7 @@ export function TracesListPage() {
           <tr style={{ textAlign: 'left', borderBottom: '1px solid #ddd' }}>
             <th>Trace ID</th>
             <th>Root Label</th>
+            <th>Status</th>
             <th>Spans</th>
             <th>Last Update</th>
           </tr>
@@ -69,6 +70,7 @@ export function TracesListPage() {
             <tr key={t.traceId} style={{ borderBottom: '1px solid #eee' }}>
               <td><Link to={`/trace/${t.traceId}`}>{t.traceId}</Link></td>
               <td>{t.root?.label}</td>
+              <td>{t.root?.status && <StatusBadge status={t.root.status} />}</td>
               <td>{t.spanCount} {t.failedCount > 0 && <span style={{ color: 'red' }}>({t.failedCount})</span>}</td>
               <td>{new Date(t.lastUpdate).toLocaleTimeString()}</td>
             </tr>
@@ -76,5 +78,16 @@ export function TracesListPage() {
         </tbody>
       </table>
     </div>
+  );
+}
+
+function StatusBadge({ status }: { status: SpanDoc['status'] }) {
+  const color = status === 'error' ? '#dc3545' : status === 'ok' ? '#28a745' : status === 'running' ? '#ffc107' : '#6c757d';
+  const bg = status === 'running' ? '#fff3cd' : status === 'error' ? '#f8d7da' : status === 'ok' ? '#d4edda' : '#e2e3e5';
+  return (
+    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 11, padding: '2px 6px', borderRadius: 12, background: bg, color }}>
+      <span style={{ width: 6, height: 6, borderRadius: '50%', background: color }} />
+      {status}
+    </span>
   );
 }
