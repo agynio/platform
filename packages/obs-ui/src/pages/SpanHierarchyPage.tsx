@@ -53,6 +53,11 @@ export function SpanHierarchyPage({ mode, id, fetcher }: SpanHierarchyPageProps)
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selected, setSelected] = useState<SpanDoc | null>(null);
+  const [follow, setFollow] = useState<boolean>(false);
+  const followRef = useRef(false);
+  const selectedRef = useRef<SpanDoc | null>(null);
+  useEffect(() => { followRef.current = follow; }, [follow]);
+  useEffect(() => { selectedRef.current = selected; }, [selected]);
   const [collapsed, setCollapsed] = useState<Set<string>>(() => new Set());
   const toggleCollapsed = useCallback((sid: string) => setCollapsed(prev => { const n = new Set(prev); n.has(sid) ? n.delete(sid) : n.add(sid); return n; }), []);
   const leftRef = useRef<HTMLDivElement | null>(null); const rightRef = useRef<HTMLDivElement | null>(null);
@@ -94,9 +99,20 @@ export function SpanHierarchyPage({ mode, id, fetcher }: SpanHierarchyPageProps)
           return;
         }
       }
-      setSpans(prev => {
-        return upsert(prev, span);
-      });
+      setSpans(prev => upsert(prev, span));
+      // After state queued, schedule selection if follow enabled (using refs to avoid effect re-run)
+      if (followRef.current) {
+        queueMicrotask(() => {
+          setSpans(cur => {
+            if (!followRef.current) return cur;
+            const newest = [...cur].sort((a,b) => Date.parse(b.startTime) - Date.parse(a.startTime))[0];
+            if (newest && (!selectedRef.current || selectedRef.current.spanId !== newest.spanId)) {
+              setSelected(newest);
+            }
+            return cur;
+          });
+        });
+      }
     });
     return () => { cancelled = true; off(); };
   }, [id, mode, fetcher]);
@@ -160,11 +176,49 @@ export function SpanHierarchyPage({ mode, id, fetcher }: SpanHierarchyPageProps)
   }, { enableOnFormTags: false, preventDefault: true }, [rows, selected, toggleCollapsed]);
 
   const titlePrefix = mode === 'trace' ? 'Trace' : 'Thread';
-  const headerExtra = mode === 'thread' ? (
-    <span style={{ fontWeight: 400, marginLeft: 12, fontSize: 11, color: '#666' }}>{rows.length} spans (thread view)</span>
-  ) : (
-    <span style={{ fontWeight: 400, marginLeft: 12, fontSize: 11, color: '#666' }}>{rows.length} spans</span>
+  const headerExtra = (
+    <>
+      {mode === 'thread' ? (
+        <span style={{ fontWeight: 400, marginLeft: 12, fontSize: 11, color: '#666' }}>{rows.length} spans (thread view)</span>
+      ) : (
+        <span style={{ fontWeight: 400, marginLeft: 12, fontSize: 11, color: '#666' }}>{rows.length} spans</span>
+      )}
+      <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 8 }}>
+        <button
+          type="button"
+          onClick={() => setFollow(f => !f)}
+          style={{
+            fontSize: 11,
+            padding: '4px 10px',
+            borderRadius: 4,
+            border: '1px solid ' + (follow ? '#0d6efd' : '#ccc'),
+            background: follow ? '#0d6efd' : '#f7f9fa',
+            color: follow ? '#fff' : '#222',
+            cursor: 'pointer'
+          }}
+          title="Automatically select newest span when it appears"
+        >
+          {follow ? 'Following' : 'Follow'}
+        </button>
+      </div>
+    </>
   );
+
+  // Ensure selected node stays visible with minimal scroll movement (must be before any early returns to keep hook order stable)
+  useEffect(() => {
+    if (!selected) return;
+    const container = leftRef.current;
+    if (!container) return;
+    const el = container.querySelector<HTMLElement>(`[data-span-id="${selected.spanId}"]`);
+    if (!el) return;
+    const cTop = container.scrollTop;
+    const cBottom = cTop + container.clientHeight;
+    const eTop = el.offsetTop;
+    const eBottom = eTop + el.offsetHeight;
+    if (eTop >= cTop && eBottom <= cBottom) return;
+    if (eTop < cTop) { container.scrollTo({ top: eTop - 4 }); return; }
+    if (eBottom > cBottom) { const delta = eBottom - cBottom; container.scrollTo({ top: cTop + delta + 4 }); }
+  }, [selected, rows]);
 
   if (loading) return <div style={{ padding: 16 }}>Loading {titlePrefix.toLowerCase()}...</div>;
   if (error) return <div style={{ padding: 16, color: 'red' }}>Error: {error}</div>;
