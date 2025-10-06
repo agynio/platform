@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState, useRef, useCallback } from 'react';
 import { useHotkeys } from 'react-hotkeys-hook';
-import { useParams } from 'react-router-dom';
+import { useParams, Link } from 'react-router-dom';
 import { fetchTrace } from '../services/api';
 import { spanRealtime } from '../services/socket';
 import { SpanDoc } from '../types';
@@ -265,6 +265,22 @@ export function TracePage() {
               fontWeight: 600,
             }}
           >
+            <Link
+              to="/"
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 4,
+                textDecoration: 'none',
+                color: '#0366d6',
+                fontWeight: 500,
+                marginRight: 12,
+                fontSize: 12,
+              }}
+            >
+              <span style={{ fontSize: 16, lineHeight: 1 }}>←</span>
+              <span>Back</span>
+            </Link>
             Trace {traceId}
             <span style={{ fontWeight: 400, marginLeft: 12, fontSize: 11, color: '#666' }}>{rows.length} spans</span>
           </div>
