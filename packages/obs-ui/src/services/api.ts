@@ -2,7 +2,7 @@ import { SpanDoc, LogDoc } from '../types';
 
 const BASE_URL = (import.meta as any).env?.VITE_OBS_SERVER_URL || 'http://localhost:4319';
 
-export async function fetchTraces(): Promise<Array<{ traceId: string; root?: SpanDoc; spanCount: number; lastUpdate: string }>> {
+export async function fetchTraces(): Promise<Array<{ traceId: string; root?: SpanDoc; spanCount: number; failedCount: number; lastUpdate: string }>> {
   // We only have spans endpoint; derive traces by grouping spans.latest
   const spans = await fetchSpans();
   const byTrace: Record<string, SpanDoc[]> = {};
@@ -10,7 +10,8 @@ export async function fetchTraces(): Promise<Array<{ traceId: string; root?: Spa
   return Object.entries(byTrace).map(([traceId, arr]) => {
     const root = arr.find(s => !s.parentSpanId);
     const lastUpdate = arr.map(s => s.lastUpdate).sort().reverse()[0];
-    return { traceId, root, spanCount: arr.length, lastUpdate };
+    const failedCount = arr.filter(s => s.status === 'error').length;
+    return { traceId, root, spanCount: arr.length, failedCount, lastUpdate };
   }).sort((a,b) => b.lastUpdate.localeCompare(a.lastUpdate));
 }
 

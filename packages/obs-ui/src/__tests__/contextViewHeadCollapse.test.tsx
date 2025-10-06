@@ -17,7 +17,7 @@ function msgs() {
 describe('ContextView head collapse', () => {
   it('collapses when last AI final and strategy head', () => {
     render(<ContextView messages={msgs()} title="Ctx" />);
-    // Should show button 'Show earlier'
-    expect(screen.getByText(/Show earlier/)).toBeTruthy();
+    // Should show button 'Show previous'
+    expect(screen.getByText(/Show previous/)).toBeTruthy();
   });
 });

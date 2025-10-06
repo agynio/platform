@@ -4,7 +4,7 @@ import { fetchTraces } from '../services/api';
 import { spanRealtime } from '../services/socket';
 import { SpanDoc } from '../types';
 
-interface TraceSummary { traceId: string; root?: SpanDoc; spanCount: number; lastUpdate: string; }
+interface TraceSummary { traceId: string; root?: SpanDoc; spanCount: number; failedCount: number; lastUpdate: string; }
 
 export function TracesListPage() {
   const [loading, setLoading] = useState(true);
@@ -16,7 +16,7 @@ export function TracesListPage() {
     let cancelled = false;
     fetchTraces().then(data => {
       if (cancelled) return;
-      setTraces(data);
+  setTraces(data);
     }).catch(e => { if (!cancelled) setError(e.message || 'error'); }).finally(() => { if (!cancelled) setLoading(false); });
     // Realtime subscription: update/insert trace summaries
     const off = spanRealtime.onSpanUpsert(span => {
@@ -25,18 +25,17 @@ export function TracesListPage() {
         let existing = prev.find(t => t.traceId === span.traceId);
         if (!existing) {
           const root = !span.parentSpanId ? span : undefined;
-            const next = [{ traceId: span.traceId, root, spanCount: 1, lastUpdate: span.lastUpdate }, ...prev];
+            const failedCount = span.status === 'error' ? 1 : 0;
+            const next = [{ traceId: span.traceId, root, spanCount: 1, failedCount, lastUpdate: span.lastUpdate }, ...prev];
             return next.sort((a,b) => Date.parse(b.lastUpdate) - Date.parse(a.lastUpdate));
         }
         const updated = prev.map(t => {
           if (t.traceId !== span.traceId) return t;
           const root = t.root || (!span.parentSpanId ? span : undefined) || t.root;
-          const spanCount = t.spanCount + ( // increment if new unique
-            // naive: if spanId not in current root tree count; we don't track all span ids here, so just bump when lastUpdate changes and rev===0
-            0
-          );
-          // For simplicity (Stage1) we will refetch counts later; but keep lastUpdate fresh
-          return { ...t, root, lastUpdate: span.lastUpdate, spanCount: spanCount };
+          // We cannot reliably know if it's a new span vs update without tracking IDs; approximate: if rev===0 treat as new
+          const spanCount = t.spanCount + (span.rev === 0 ? 1 : 0);
+          const failedCount = t.failedCount + (span.rev === 0 && span.status === 'error' ? 1 : 0) + (span.rev > 0 && span.status === 'error' && t.failedCount === 0 ? 0 : 0); // basic increment only on creation
+          return { ...t, root, lastUpdate: span.lastUpdate, spanCount, failedCount };
         });
         return updated.sort((a,b) => Date.parse(b.lastUpdate) - Date.parse(a.lastUpdate));
       });
@@ -70,7 +69,7 @@ export function TracesListPage() {
             <tr key={t.traceId} style={{ borderBottom: '1px solid #eee' }}>
               <td><Link to={`/trace/${t.traceId}`}>{t.traceId}</Link></td>
               <td>{t.root?.label}</td>
-              <td>{t.spanCount}</td>
+              <td>{t.spanCount} {t.failedCount > 0 && <span style={{ color: 'red' }}>({t.failedCount})</span>}</td>
               <td>{new Date(t.lastUpdate).toLocaleTimeString()}</td>
             </tr>
           ))}

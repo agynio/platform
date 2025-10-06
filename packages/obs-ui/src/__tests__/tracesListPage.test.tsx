@@ -6,7 +6,7 @@ import { MemoryRouter } from 'react-router-dom';
 
 vi.mock('../services/api', () => ({
   fetchTraces: vi.fn().mockResolvedValue([
-    { traceId: 't1', root: { traceId: 't1', spanId: 'a', label: 'root', status: 'ok', startTime: '', completed: true, lastUpdate: new Date().toISOString(), attributes: {}, events: [], rev: 0, idempotencyKeys: [], createdAt: '', updatedAt: '' }, spanCount: 2, lastUpdate: new Date().toISOString() }
+    { traceId: 't1', root: { traceId: 't1', spanId: 'a', label: 'root', status: 'ok', startTime: '', completed: true, lastUpdate: new Date().toISOString(), attributes: {}, events: [], rev: 0, idempotencyKeys: [], createdAt: '', updatedAt: '' }, spanCount: 2, failedCount: 1, lastUpdate: new Date().toISOString() }
   ])
 }));
 
