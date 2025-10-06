@@ -218,21 +218,9 @@ export function SpanDetails({
 
   // Helper to extract tool output content as string (markdown friendly)
   function getToolOutput(s: SpanDoc): string | undefined {
-    const attrs = (s.attributes || {}) as Record<string, unknown>;
-    const out = (attrs['output'] as Record<string, unknown>) || {};
-    const cand =
-      (out as Record<string, unknown>)['result'] ??
-      out['content'] ??
-      out['text'] ??
-      attrs['result'] ??
-      attrs['content'];
-    if (cand == null) return undefined;
-    if (typeof cand === 'string') return cand;
-    try {
-      return '```json\n' + JSON.stringify(cand, null, 2) + '\n```';
-    } catch {
-      return String(cand);
-    }
+    const output = s?.attributes?.output;
+    if (typeof output === 'string') return output;
+    return JSON.stringify(output, null, 2);
   }
 
   // Log severity counts (only in logs tab header badges)
@@ -731,32 +719,7 @@ export function SpanDetails({
                           fontFamily: 'monospace',
                         }}
                       >
-                        {isToolSpan ? (
-                          (() => {
-                            // For tool_call spans, show raw attributes.output JSON directly (no markdown transform)
-                            const attrs = (span.attributes || {}) as Record<string, unknown>;
-                            const output = attrs['output'];
-                            if (output == null) return <span style={{ color: '#666' }}>(no output)</span>;
-                            try {
-                              const pretty = JSON.stringify(output, null, 2);
-                              return (
-                                <pre
-                                  style={{
-                                    margin: 0,
-                                    background: 'transparent',
-                                    padding: 0,
-                                    whiteSpace: 'pre-wrap',
-                                    wordBreak: 'break-word',
-                                  }}
-                                >
-                                  {pretty}
-                                </pre>
-                              );
-                            } catch {
-                              return <span>{String(output)}</span>;
-                            }
-                          })()
-                        ) : (isLLMSpan ? llmContent : getToolOutput(span)) ? (
+                        {(isLLMSpan ? llmContent : getToolOutput(span)) ? (
                           <ReactMarkdown
                             remarkPlugins={[remarkGfm]}
                             components={{
