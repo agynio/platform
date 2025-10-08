@@ -20,6 +20,31 @@ export async function fetchTrace(traceId: string): Promise<SpanDoc[]> {
   return spans.filter(s => s.traceId === traceId);
 }
 
+export async function fetchThread(threadId: string): Promise<SpanDoc[]> {
+  const spans = await fetchSpans();
+  const byParent: Record<string, SpanDoc[]> = {};
+  for (const s of spans) {
+    if (s.parentSpanId) (byParent[s.parentSpanId] ||= []).push(s);
+  }
+  const isThreadSpan = (s: SpanDoc) => (s.threadId || (s.attributes?.['threadId'] as string | undefined)) === threadId;
+  const seeds = spans.filter(isThreadSpan);
+  if (!seeds.length) return [];
+  const included: Record<string, SpanDoc> = {};
+  const stack = [...seeds];
+  for (const seed of seeds) included[seed.spanId] = seed;
+  while (stack.length) {
+    const current = stack.pop()!;
+    const children = byParent[current.spanId] || [];
+    for (const c of children) {
+      if (!included[c.spanId]) {
+        included[c.spanId] = c;
+        stack.push(c);
+      }
+    }
+  }
+  return Object.values(included);
+}
+
 export async function fetchSpans(opts: { limit?: number; cursor?: string } = {}): Promise<SpanDoc[]> {
   const usp = new URLSearchParams();
   // Default to large limit (5000) now that server supports it, unless caller overrides

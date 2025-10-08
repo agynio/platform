@@ -59,6 +59,7 @@ export function TracesListPage() {
         <thead>
           <tr style={{ textAlign: 'left', borderBottom: '1px solid #ddd' }}>
             <th>Trace ID</th>
+            <th>Thread ID</th>
             <th>Root Label</th>
             <th>Status</th>
             <th>Spans</th>
@@ -69,6 +70,12 @@ export function TracesListPage() {
           {traces.map(t => (
             <tr key={t.traceId} style={{ borderBottom: '1px solid #eee' }}>
               <td><Link to={`/trace/${t.traceId}`}>{t.traceId}</Link></td>
+              <td>
+                {(() => {
+                  const threadId = (t.root?.threadId || (t.root?.attributes?.threadId as string | undefined));
+                  return threadId ? <Link to={`/thread/${threadId}`}>{threadId}</Link> : '-';
+                })()}
+              </td>
               <td>{t.root?.label}</td>
               <td>{t.root?.status && <StatusBadge status={t.root.status} />}</td>
               <td>{t.spanCount} {t.failedCount > 0 && <span style={{ color: 'red' }}>({t.failedCount})</span>}</td>

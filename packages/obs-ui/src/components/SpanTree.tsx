@@ -102,6 +102,7 @@ export function SpanTree({
         return (
           <div
             key={s.spanId}
+            data-span-id={s.spanId}
             style={{
               display: 'flex',
               alignItems: 'center',

@@ -170,38 +170,7 @@ export function SpanDetails({
   const effectiveTab: TabKey =
     activeTab === 'io' && !(isLLMSpan || isToolSpan || isSummarizeSpan) ? 'attributes' : activeTab;
 
-  // Left/Right arrow keyboard navigation between tabs (scoped to this panel when focused)
-  // We attach a keydown listener on mount; simple since component unmounts when span deselected.
-  useEffect(() => {
-    function onKey(e: KeyboardEvent) {
-      // Ignore if user is typing inside an input/textarea or has modifier keys
-      const target = e.target as HTMLElement | null;
-      if (!target) return;
-      const tag = target.tagName;
-      if (tag === 'INPUT' || tag === 'TEXTAREA' || target.isContentEditable) return;
-      if (e.metaKey || e.ctrlKey || e.altKey) return;
-      if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
-
-      // Build ordered list of visible tabs
-      const tabs: TabKey[] = [];
-      if (isLLMSpan || isToolSpan || isSummarizeSpan) tabs.push('io');
-      tabs.push('attributes', 'logs');
-      const current = effectiveTab; // effective to handle case activeTab==='io' but LLM vanished
-      const idx = tabs.indexOf(current);
-      if (idx === -1) return;
-      if (e.key === 'ArrowLeft' && idx > 0) {
-        const prev = tabs[idx - 1];
-        setActiveTab(prev);
-        e.preventDefault();
-      } else if (e.key === 'ArrowRight' && idx < tabs.length - 1) {
-        const next = tabs[idx + 1];
-        setActiveTab(next);
-        e.preventDefault();
-      }
-    }
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [effectiveTab, isLLMSpan]);
+  // Removed global ArrowLeft/ArrowRight tab keyboard navigation to free keys for tree navigation.
 
   // Helper to extract tool output content as string (markdown friendly)
   function getToolOutput(s: SpanDoc): string | undefined {
