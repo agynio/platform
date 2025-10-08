@@ -19,6 +19,7 @@ import { SummarizationNode } from '../lgnodes/summarization.lgnode';
 import { NodeOutput } from '../types';
 import { z } from 'zod';
 import { EnforceRestrictionNode } from '../lgnodes/enforceRestriction.lgnode';
+import { stringify as toYaml } from 'yaml';
 
 /**
  * Zod schema describing static configuration for SimpleAgent.
@@ -263,7 +264,7 @@ export class SimpleAgent extends BaseAgent {
                   res.structuredContent ?? res.content ?? res.raw ?? 'MCP tool call failed with unknown error',
                 );
               }
-              if (res.structuredContent) return JSON.stringify(res.structuredContent);
+              if (res.structuredContent) return toYaml(res.structuredContent);
               return res.content || '';
             },
             {
@@ -361,7 +362,7 @@ export class SimpleAgent extends BaseAgent {
                   schema,
                 },
               );
-              const adapted = new LangChainToolAdapter(dynamic);
+              const adapted = new LangChainToolAdapter(dynamic, this.loggerService);
               this.addTool(adapted);
               const updated = this.mcpServerTools.get(server) || [];
               updated.push(adapted);

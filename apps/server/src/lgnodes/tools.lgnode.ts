@@ -81,9 +81,9 @@ export class ToolsNode extends BaseNode {
             } else {
               return createMessage(content);
             }
-          } catch (e) {
-            const err = e as Error;
-            return createMessage(`Error executing tool '${tc.name}': ${err?.message || String(err)}`, false);
+          } catch (e: unknown) {
+            const err = e instanceof Error ? e?.message : JSON.stringify(e);
+            return createMessage(`Error executing tool '${tc.name}': ${err}`, false);
           }
         });
       }),

@@ -123,6 +123,7 @@ export class LocalMCPServer implements McpServer, Provisionable, DynamicConfigur
       // Create temporary transport and client for discovery
       tempTransport = new DockerExecTransport(
         docker,
+        this.logger,
         async () => {
           this.logger.debug(`[MCP:${this.namespace}] [disc:${discoveryId}] launching docker exec`);
           const exec = await docker.getContainer(tempContainerId).exec({
@@ -279,6 +280,7 @@ export class LocalMCPServer implements McpServer, Provisionable, DynamicConfigur
       // Create transport and client for this tool call
       transport = new DockerExecTransport(
         docker,
+        this.logger,
         async () => {
           const exec = await docker.getContainer(containerId).exec({
             Cmd: ['sh', '-lc', command],
