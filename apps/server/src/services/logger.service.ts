@@ -29,36 +29,83 @@ export class LoggerService {
   }
 
   private serialize(params: any[]) {
-    const redactKeys = /token|api[_-]?key|authorization|password|secret/i;
-    const seen = new WeakSet();
-    const toSafe = (v: any): any => {
+    const redactKeyRe = /(authorization|token|accessToken|api[_-]?key|password|secret)/i;
+    // Value pattern redaction (ghp_, github_pat_, Bearer tokens)
+    const redactValuePatterns: RegExp[] = [
+      /(ghp_[A-Za-z0-9]{20,})/g,
+      /(github_pat_[A-Za-z0-9_]{20,})/g,
+      /(Bearer)\s+[A-Za-z0-9\-\._~\+\/]+=*/gi,
+    ];
+    const MAX_STRING = 2000; // cap long strings
+    const MAX_JSON = 20000; // cap overall payload
+    const MAX_DEPTH = 3; // limit nested depth
+    const MAX_KEYS = 100; // limit wide objects
+
+    const seen = new WeakSet<object>();
+
+    const redactString = (s: string): string => {
+      let out = s;
+      for (const re of redactValuePatterns) {
+        out = out.replace(re, (_m, g1, _g2, _g3) => {
+          // If first group is 'Bearer', preserve it; otherwise replace token match
+          if (typeof g1 === 'string' && /^Bearer$/i.test(g1)) return 'Bearer [REDACTED]';
+          return '[REDACTED]';
+        });
+      }
+      if (out.length > MAX_STRING) {
+        const extra = out.length - MAX_STRING;
+        out = out.slice(0, MAX_STRING) + `…(+${extra} chars)`;
+      }
+      return out;
+    };
+
+    const toSafe = (v: any, depth = 0): any => {
       if (v instanceof Error) {
-        const cause = (v as any).cause;
-        return {
+        // Redact and truncate error fields, guard cause depth
+        const cause: any = (v as any).cause;
+        const safe: any = {
           name: v.name,
-          message: v.message,
-          stack: v.stack,
-          cause: cause instanceof Error
-            ? { name: cause.name, message: cause.message, stack: cause.stack }
-            : cause,
+          message: redactString(String(v.message || '')),
+          stack: v.stack ? redactString(String(v.stack)) : undefined,
         };
+        if (cause !== undefined) {
+          if (depth + 1 >= MAX_DEPTH) safe.cause = '[Truncated]';
+          else if (cause instanceof Error) safe.cause = toSafe(cause, depth + 1);
+          else if (cause && typeof cause === 'object') safe.cause = toSafe(cause, depth + 1);
+          else safe.cause = redactString(String(cause));
+        }
+        return safe;
       }
       if (v && typeof v === 'object') {
         if (seen.has(v)) return '[Circular]';
         seen.add(v);
-        if (Array.isArray(v)) return v.map(toSafe);
+        if (Array.isArray(v)) return v.slice(0, MAX_KEYS).map((x) => toSafe(x, depth + 1));
         const out: Record<string, any> = {} as any;
-        for (const [k, val] of Object.entries(v as any)) {
-          out[k] = redactKeys.test(k) ? '[REDACTED]' : toSafe(val);
+        let count = 0;
+        for (const [k, val] of Object.entries(v as Record<string, any>)) {
+          if (count++ >= MAX_KEYS) {
+            out['__truncated__'] = `[+${Object.keys(v as any).length - MAX_KEYS} keys omitted]`;
+            break;
+          }
+          out[k] = redactKeyRe.test(k) ? '[REDACTED]' : toSafe(val, depth + 1);
         }
         return out;
       }
+      if (typeof v === 'string') return redactString(v);
       return v;
     };
+
     try {
-      return JSON.stringify(params.map(toSafe));
+      const json = JSON.stringify(params.map((p) => toSafe(p, 0)));
+      if (json.length > MAX_JSON) return json.slice(0, MAX_JSON) + `…(+${json.length - MAX_JSON} chars)`;
+      return json;
     } catch (err) {
-      try { return String(params); } catch { return '[unserializable]'; }
+      try {
+        const s = String(params);
+        return s.length > MAX_JSON ? s.slice(0, MAX_JSON) + '…' : s;
+      } catch {
+        return '[unserializable]';
+      }
     }
   }
 }

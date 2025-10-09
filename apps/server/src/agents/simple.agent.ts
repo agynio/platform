@@ -20,6 +20,7 @@ import { NodeOutput } from '../types';
 import { z } from 'zod';
 import { EnforceRestrictionNode } from '../lgnodes/enforceRestriction.lgnode';
 import { stringify as toYaml } from 'yaml';
+import { buildMcpToolError } from '../mcp/errorUtils';
 
 /**
  * Zod schema describing static configuration for SimpleAgent.
@@ -259,23 +260,10 @@ export class SimpleAgent extends BaseAgent {
               );
               const threadId = config?.configurable?.thread_id;
               const res = await server.callTool(t.name, raw, { threadId });
-              if (res.isError) {
-                // Build readable message from structuredContent when available; attach as cause
-                let msg = 'MCP tool call failed';
-                const sc: any = res.structuredContent;
-                if (sc && typeof sc === 'object') {
-                  if (typeof sc.message === 'string') msg = sc.message;
-                  else if (typeof sc.error === 'string') msg = sc.error;
-                  else if (typeof sc.detail === 'string') msg = sc.detail;
-                  else {
-                    try { msg = `MCP tool call failed: ${JSON.stringify(sc)}`; } catch { /* ignore */ }
-                  }
-                } else if (typeof res.content === 'string' && res.content.trim()) {
-                  msg = res.content;
-                }
-                // Use 'cause' to carry the structured content for better downstream serialization.
-                throw new Error(msg, { cause: sc ?? res.content ?? res.raw });
-              }
+                    if (res.isError) {
+                      const { message, cause } = buildMcpToolError(res);
+                      throw new Error(message, { cause });
+                    }
               if (res.structuredContent) return toYaml(res.structuredContent);
               return res.content || '';
             },
@@ -366,17 +354,8 @@ export class SimpleAgent extends BaseAgent {
                   const threadId = config?.configurable?.thread_id;
                   const res = await server.callTool(t.name, raw, { threadId });
                   if ((res as any).isError) {
-                    let msg = 'MCP tool call failed';
-                    const sc: any = (res as any).structuredContent;
-                    if (sc && typeof sc === 'object') {
-                      if (typeof sc.message === 'string') msg = sc.message;
-                      else if (typeof sc.error === 'string') msg = sc.error;
-                      else if (typeof sc.detail === 'string') msg = sc.detail;
-                      else { try { msg = `MCP tool call failed: ${JSON.stringify(sc)}`; } catch {} }
-                    } else if (typeof (res as any).content === 'string' && (res as any).content.trim()) {
-                      msg = (res as any).content;
-                    }
-                    throw new Error(msg, { cause: sc ?? (res as any).content ?? (res as any).raw });
+                    const { message, cause } = buildMcpToolError(res as any);
+                    throw new Error(message, { cause });
                   }
                   if (res.structuredContent) return JSON.stringify(res.structuredContent);
                   return res.content || '';

@@ -337,7 +337,9 @@ export class LocalMCPServer implements McpServer, Provisionable, DynamicConfigur
         raw: result,
       };
     } catch (e: any) {
-      throw new McpError(`Tool '${name}' failed: ${e.message}`, e.code || 'TOOL_CALL_ERROR');
+      const emsg = e && typeof e === 'object' && 'message' in e ? String(e.message) : String(e);
+      const ename = e && typeof e === 'object' && 'name' in e ? String(e.name) : 'Error';
+      throw new McpError(`Tool '${name}' failed: ${ename}: ${emsg}`.trim(), e?.code || 'TOOL_CALL_ERROR');
     } finally {
       // Clean up after tool call
       if (client) {
@@ -481,7 +483,7 @@ export class LocalMCPServer implements McpServer, Provisionable, DynamicConfigur
         // New flat shape: tool names are top-level boolean properties
         normalized = this._dynamicConfigZodSchema.parse(cfg) as Record<string, boolean>;
       } catch (e) {
-        this.logger.error(`[MCP:${this.namespace}] Dynamic config validation failed: ${(e as Error).message}`);
+        this.logger.error(`[MCP:${this.namespace}] Dynamic config validation failed`, e as any);
       }
     }
     const enabled = new Set<string>();
@@ -651,7 +653,7 @@ export class LocalMCPServer implements McpServer, Provisionable, DynamicConfigur
         this.logger.info(`[MCP:${this.namespace}] Started successfully with ${this.toolsCache?.length || 0} tools`);
         this.flushStartWaiters();
       } catch (e: any) {
-        this.logger.error(`[MCP:${this.namespace}] Start attempt failed: ${e.message}`);
+        this.logger.error(`[MCP:${this.namespace}] Start attempt failed`, e);
         this.restartAttempts++;
         // Immediately reject any pending starters so callers of provision() can observe the error
         this.flushStartWaiters(e);
