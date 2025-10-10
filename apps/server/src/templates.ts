@@ -89,7 +89,7 @@ export function buildTemplateRegistry(deps: TemplateRegistryDeps): TemplateRegis
       )
       .register(
         'shellTool',
-        () => new ShellTool(logger),
+        () => new ShellTool(vault, logger),
         {
           targetPorts: {
             $self: { kind: 'instance' },

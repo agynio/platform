@@ -8,7 +8,14 @@ import { ContainerService } from '../services/container.service.js';
 import { LoggerService } from '../services/logger.service.js';
 import { DockerExecTransport } from './dockerExecTransport.js';
 import { DEFAULT_MCP_COMMAND, McpError, McpServer, McpTool, McpToolCallResult } from './types.js';
+import { VaultService } from '../services/vault.service.js';
+import { parseVaultRef } from '../utils/refs.js';
 import { JSONSchema } from 'zod/v4/core';
+
+const EnvItemSchema = z
+  .object({ key: z.string().min(1), value: z.string(), source: z.enum(['static', 'vault']).optional().default('static') })
+  .strict()
+  .describe('Environment variable entry. When source=vault, value is "<MOUNT>/<PATH>/<KEY>".');
 
 export const LocalMcpServerStaticConfigSchema = z.object({
   title: z.string().optional(),
@@ -18,6 +25,10 @@ export const LocalMcpServerStaticConfigSchema = z.object({
     .optional()
     .describe('Startup command executed inside the container (default: mcp start --stdio).'),
   workdir: z.string().optional().describe('Working directory inside the container.'),
+  env: z
+    .array(EnvItemSchema)
+    .optional()
+    .describe('Environment variables overlay for MCP execs (supports Vault).'),
   requestTimeoutMs: z.number().int().positive().optional().describe('Per-request timeout in ms.'),
   startupTimeoutMs: z.number().int().positive().optional().describe('Startup handshake timeout in ms.'),
   heartbeatIntervalMs: z.number().int().positive().optional().describe('Interval for heartbeat pings in ms.'),
@@ -32,6 +43,35 @@ export const LocalMcpServerStaticConfigSchema = z.object({
 // .strict();
 
 export class LocalMCPServer implements McpServer, Provisionable, DynamicConfigurable<Record<string, boolean>> {
+  private async resolveEnvOverlay(): Promise<Record<string, string> | undefined> {
+    const items = this.cfg?.env || [];
+    if (!items.length) return undefined;
+    // We do not have direct access to VaultService here; reuse from container provider path if available
+    // LocalMCPServer is constructed in templates with a VaultService instance available to ContainerProvider.
+    // For simplicity, try to obtain via this.containerService (not available) so we pass through using parseVaultRef only when vault is injected.
+    const out: Record<string, string> = {};
+    const vlt = (this as any).vault as VaultService | undefined;
+    for (const it of items) {
+      if (!it?.key) continue;
+      if (it.source === 'vault') {
+        if (vlt?.isEnabled()) {
+          try {
+            const ref = parseVaultRef(it.value);
+            const val = await vlt.getSecret(ref);
+            if (val != null) out[it.key] = val;
+          } catch {}
+        }
+      } else out[it.key] = it.value ?? '';
+    }
+    return Object.keys(out).length ? out : undefined;
+  }
+
+  private buildExecConfig(command: string, envOverlay?: Record<string, string>) {
+    const cfg = this.cfg!;
+    const cmdToRun = command;
+    const envArr = envOverlay ? Object.entries(envOverlay).map(([k, v]) => `${k}=${v}`) : undefined;
+    return { cmdToRun, envArr, workdir: cfg.workdir };
+  }
   /**
    * Lifecycle (post-refactor single discovery path):
    *
@@ -114,6 +154,8 @@ export class LocalMCPServer implements McpServer, Provisionable, DynamicConfigur
 
     const cfg = this.cfg!;
     const command = cfg.command ?? DEFAULT_MCP_COMMAND;
+    const envOverlay = await this.resolveEnvOverlay();
+    const { cmdToRun, envArr, workdir } = this.buildExecConfig(command, envOverlay);
     const docker = this.containerService.getDocker();
 
     let tempTransport: DockerExecTransport | undefined;
@@ -127,12 +169,13 @@ export class LocalMCPServer implements McpServer, Provisionable, DynamicConfigur
         async () => {
           this.logger.debug(`[MCP:${this.namespace}] [disc:${discoveryId}] launching docker exec`);
           const exec = await docker.getContainer(tempContainerId).exec({
-            Cmd: ['sh', '-lc', command],
+            Cmd: ['sh', '-lc', cmdToRun],
             AttachStdout: true,
             AttachStderr: true,
             AttachStdin: true,
             Tty: false,
-            WorkingDir: cfg.workdir,
+            WorkingDir: workdir,
+            Env: envArr,
           });
           const stream: any = await new Promise((resolve, reject) => {
             exec.start({ hijack: true, stdin: true }, (err, s) => {
@@ -271,6 +314,8 @@ export class LocalMCPServer implements McpServer, Provisionable, DynamicConfigur
 
     const cfg = this.cfg!;
     const command = cfg.command ?? DEFAULT_MCP_COMMAND;
+    const envOverlay = await this.resolveEnvOverlay();
+    const { cmdToRun, envArr, workdir } = this.buildExecConfig(command, envOverlay);
     const docker = this.containerService.getDocker();
 
     let transport: DockerExecTransport | undefined;
@@ -283,12 +328,13 @@ export class LocalMCPServer implements McpServer, Provisionable, DynamicConfigur
         this.logger,
         async () => {
           const exec = await docker.getContainer(containerId).exec({
-            Cmd: ['sh', '-lc', command],
+            Cmd: ['sh', '-lc', cmdToRun],
             AttachStdout: true,
             AttachStderr: true,
             AttachStdin: true,
             Tty: false,
-            WorkingDir: cfg.workdir,
+            WorkingDir: workdir,
+            Env: envArr,
           });
           const stream: any = await new Promise((resolve, reject) => {
             exec.start({ hijack: true, stdin: true }, (err, s) => {
