@@ -75,5 +75,31 @@ describe('GET /v1/metrics/errors-by-tool', () => {
     const hasCalc = body.items.some((i: any) => i.label === 'tool:calc');
     expect(hasCalc).toBe(true);
   });
-});
 
+  it('validates ISO datetime and from<=to', async () => {
+    const res1 = await server.inject({ method: 'GET', url: '/v1/metrics/errors-by-tool?from=not-a-date&to=also-bad' });
+    expect(res1.statusCode).toBe(400);
+    const now = new Date();
+    const from = new Date(now.getTime()).toISOString();
+    const to = new Date(now.getTime() - 3600_000).toISOString();
+    const res2 = await server.inject({ method: 'GET', url: `/v1/metrics/errors-by-tool?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}` });
+    expect(res2.statusCode).toBe(400);
+  });
+
+  it('GET /v1/spans enforces ISO, range and sorting/limit cap', async () => {
+    // invalid iso
+    const bad = await server.inject({ method: 'GET', url: '/v1/spans?from=bad&to=worse' });
+    expect(bad.statusCode).toBe(400);
+    // insert docs
+    const now = new Date();
+    await mm.db.collection('spans').insertMany([
+      { traceId: 't', spanId: 'a', label: 'L', status: 'ok', startTime: now.toISOString(), lastUpdate: new Date(now.getTime()-1000).toISOString(), completed: true, attributes: {}, events: [], rev: 0, idempotencyKeys: [], createdAt: now.toISOString(), updatedAt: now.toISOString() },
+      { traceId: 't', spanId: 'b', label: 'L', status: 'error', startTime: now.toISOString(), lastUpdate: now.toISOString(), completed: true, attributes: {}, events: [], rev: 0, idempotencyKeys: [], createdAt: now.toISOString(), updatedAt: now.toISOString() },
+    ] as any);
+    const ok = await server.inject({ method: 'GET', url: '/v1/spans?limit=1&sort=lastUpdate' });
+    expect(ok.statusCode).toBe(200);
+    const body = ok.json();
+    expect(body.items.length).toBe(1);
+    expect(body.items[0].spanId).toBe('b');
+  });
+});

@@ -13,7 +13,7 @@ export function ErrorsByToolPage() {
   const navigate = useNavigate();
 
   useEffect(() => {
-    setSearchParams({ from: range.from, to: range.to });
+    setSearchParams({ from: range.from, to: range.to }, { replace: true });
     let cancelled = false;
     setLoading(true); setError(null);
     fetchErrorsByTool(range, { limit: 50 }).then((res) => {
@@ -59,4 +59,3 @@ function getRangeFromParams(sp: URLSearchParams) {
   if (from && to) return { from, to };
   return null;
 }
-

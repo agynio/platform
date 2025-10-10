@@ -1,6 +1,6 @@
 import Fastify, { FastifyInstance } from 'fastify';
 import cors from '@fastify/cors';
-import { Collection, Db } from 'mongodb';
+import { Collection, Db, Document, Filter, UpdateFilter } from 'mongodb';
 import { z } from 'zod';
 import { Server as SocketIOServer } from 'socket.io';
 
@@ -58,8 +58,8 @@ const UpsertSchema = z.object({
 const QuerySchema = z.object({
   status: z.enum(['running', 'ok', 'error', 'cancelled']).optional(),
   running: z.coerce.boolean().optional(),
-  from: z.string().optional(),
-  to: z.string().optional(),
+  from: z.string().datetime().optional(),
+  to: z.string().datetime().optional(),
   label: z.string().optional(),
   sort: z.enum(['lastUpdate', 'startTime']).default('lastUpdate'),
   cursor: z.string().optional(),
@@ -97,10 +97,10 @@ export async function createServer(db: Db, opts: { logger?: boolean } = {}): Pro
     return { ok: true };
   });
 
-  fastify.post('/v1/spans/upsert', async (req, reply) => {
-    const parsed = UpsertSchema.safeParse((req as any).body);
+  fastify.post<{ Body: z.infer<typeof UpsertSchema> }>('/v1/spans/upsert', async (req, reply) => {
+    const parsed = UpsertSchema.safeParse(req.body);
     if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
-    const body = { ...parsed.data } as any;
+    const body = { ...parsed.data };
     if (body.status === 'success') body.status = 'ok';
     const now = new Date().toISOString();
     fastify.log.debug(
@@ -112,7 +112,7 @@ export async function createServer(db: Db, opts: { logger?: boolean } = {}): Pro
       const existing = await spans.findOne({ traceId: body.traceId, spanId: body.spanId, idempotencyKeys: key });
       if (existing) return { ok: true, id: existing._id };
     }
-    const filter = { traceId: body.traceId, spanId: body.spanId };
+    const filter: Filter<SpanDoc> = { traceId: body.traceId, spanId: body.spanId };
     const doc = await spans.findOne(filter);
     const setOnInsert: Partial<SpanDoc> = doc
       ? {}
@@ -133,16 +133,15 @@ export async function createServer(db: Db, opts: { logger?: boolean } = {}): Pro
           threadId: body.threadId,
         };
 
-    const update: any = { $setOnInsert: setOnInsert };
-    update.$set = { updatedAt: now, lastUpdate: now };
-    if (doc) update.$inc = { rev: 1 };
-    else update.$set.rev = 0;
-    if (key) update.$addToSet = { idempotencyKeys: key };
+    const update: UpdateFilter<SpanDoc> = { $setOnInsert: setOnInsert, $set: { updatedAt: now, lastUpdate: now } };
+    if (doc) (update.$inc = { rev: 1 } as any);
+    else (update.$set = { ...update.$set, rev: 0 });
+    if (key) (update.$addToSet = { idempotencyKeys: key } as any);
 
     if (body.state === 'created') {
       if (doc) {
         // Existing span transitioning (should be rare) - merge mutable fields
-        const createdSet: any = {
+        const createdSet: Partial<SpanDoc> = {
           attributes: { ...(doc?.attributes || {}), ...(body.attributes || {}) },
           label: body.label ?? (doc?.label || 'span'),
           status: 'running',
@@ -151,7 +150,7 @@ export async function createServer(db: Db, opts: { logger?: boolean } = {}): Pro
           nodeId: body.nodeId ?? doc?.nodeId,
           threadId: body.threadId ?? doc?.threadId,
         };
-        update.$set = { ...update.$set, ...createdSet };
+        update.$set = { ...update.$set, ...createdSet } as any;
       } else {
         // New doc: attributes & other fields already present in $setOnInsert; avoid duplicating in $set
       }
@@ -161,7 +160,7 @@ export async function createServer(db: Db, opts: { logger?: boolean } = {}): Pro
         update.$set = {
           ...update.$set,
           attributes: { ...(doc?.attributes || {}), ...(body.attributes || {}) },
-        };
+        } as any;
       }
     } else if (body.state === 'completed') {
       fastify.log.debug({ spanId: body.spanId, traceId: body.traceId }, 'processing completed state');
@@ -169,18 +168,18 @@ export async function createServer(db: Db, opts: { logger?: boolean } = {}): Pro
         return { ok: true, id: doc._id };
       }
       // Normalize client SDK status (which currently uses 'success'/'error') to server enum ('ok'/'error')
-      const rawStatus: any = body.status;
+      const rawStatus = body.status as string | undefined;
       const normalizedStatus = rawStatus === 'success' ? 'ok' : rawStatus === 'error' ? 'error' : body.status;
-      const completedSet: any = {
+      const completedSet: Partial<SpanDoc> = {
         endTime: body.endTime || now,
         completed: true,
-        status: normalizedStatus || 'ok',
+        status: (normalizedStatus as SpanDoc['status']) || 'ok',
       };
       // Merge attributes from completed event (including new output / llm.* attributes)
       if (doc) {
         if (body.attributes && Object.keys(body.attributes).length) {
           const merged = mergeCompletedAttributes(doc.attributes || {}, body.attributes);
-          completedSet.attributes = merged;
+          (completedSet as any).attributes = merged;
         }
       } else if (body.attributes && Object.keys(body.attributes).length) {
         // Insert path: normalize attributes before setting on insert
@@ -188,33 +187,34 @@ export async function createServer(db: Db, opts: { logger?: boolean } = {}): Pro
         update.$setOnInsert = {
           ...update.$setOnInsert,
           attributes: { ...(update.$setOnInsert?.attributes || {}), ...normalized },
-        };
+        } as any;
       }
       // If inserting, remove keys that would conflict (completed/status/endTime exist in setOnInsert except endTime which is undefined there)
       if (!doc) {
         // status, completed, endTime all in setOnInsert (endTime as undefined) – let setOnInsert win
-        delete completedSet.status;
-        delete completedSet.completed;
-        delete completedSet.endTime; // initial endTime for completed insert is handled below
+        delete (completedSet as any).status;
+        delete (completedSet as any).completed;
+        delete (completedSet as any).endTime; // initial endTime for completed insert is handled below
         // For a directly completed new span treat as fully completed doc: modify setOnInsert instead
         update.$setOnInsert = {
           ...update.$setOnInsert,
-          status: normalizedStatus || 'ok',
+          status: (normalizedStatus as SpanDoc['status']) || 'ok',
           endTime: body.endTime || now,
           completed: true,
-        };
+        } as any;
       } else {
         fastify.log.debug({ spanId: body.spanId, traceId: body.traceId }, 'applying completedSet to existing doc');
-        update.$set = { ...update.$set, ...completedSet };
+        update.$set = { ...update.$set, ...completedSet } as any;
       }
     }
 
     fastify.log.debug({ filter, update }, 'span upsert update document');
     try {
       await spans.updateOne(filter, update, { upsert: true });
-    } catch (err: any) {
+    } catch (err) {
       fastify.log.error({ err, filter, update }, 'upsert failed');
-      return reply.code(500).send({ error: 'upsert_failed', details: err?.message });
+      const details = (err as Error)?.message;
+      return reply.code(500).send({ error: 'upsert_failed', details });
     }
     const final = await spans.findOne(filter);
     // Emit realtime event (best-effort; ignore failures)
@@ -224,30 +224,33 @@ export async function createServer(db: Db, opts: { logger?: boolean } = {}): Pro
     return { ok: true, id: final?._id };
   });
 
-  fastify.get('/v1/spans', async (req, reply) => {
-    const parsed = QuerySchema.safeParse((req as any).query);
+  fastify.get<{ Querystring: z.infer<typeof QuerySchema> }>('/v1/spans', async (req, reply) => {
+    const parsed = QuerySchema.safeParse(req.query);
     if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
     const { status, running, from, to, label, sort, cursor, limit } = parsed.data;
-    const q: any = {};
+    if (from && to && new Date(from).getTime() > new Date(to).getTime()) {
+      return reply.code(400).send({ error: 'invalid_range', details: '`from` must be <= `to`' });
+    }
+    const q: Filter<SpanDoc> = {} as Filter<SpanDoc>;
     if (status) q.status = status;
-    if (running !== undefined) q.completed = running ? false : { $in: [true, false] };
+    if (running !== undefined) (q as any).completed = running ? false : { $in: [true, false] };
     if (label) q.label = label;
     if (from || to) {
       const field = sort === 'startTime' ? 'startTime' : 'lastUpdate';
-      q[field] = {};
-      if (from) q[field].$gte = from;
-      if (to) q[field].$lte = to;
+      (q as any)[field] = {};
+      if (from) (q as any)[field].$gte = from;
+      if (to) (q as any)[field].$lte = to;
     }
-    const sortSpec: any = sort === 'startTime' ? { startTime: -1, _id: -1 } : { lastUpdate: -1, _id: -1 };
+    const sortSpec = sort === 'startTime' ? ({ startTime: -1, _id: -1 } as const) : ({ lastUpdate: -1, _id: -1 } as const);
     if (cursor) {
       try {
         const obj = JSON.parse(Buffer.from(cursor, 'base64').toString('utf8'));
         const field = sort === 'startTime' ? 'startTime' : 'lastUpdate';
-        q.$or = [{ [field]: { $lt: obj[field] } }, { [field]: obj[field], _id: { $lt: obj._id } }];
+        (q as any).$or = [{ [field]: { $lt: obj[field] } }, { [field]: obj[field], _id: { $lt: obj._id } }];
       } catch {}
     }
     const docs = await spans.find(q).sort(sortSpec).limit(limit).toArray();
-    const tail = docs[docs.length - 1] as any;
+    const tail = docs[docs.length - 1] as SpanDoc | undefined;
     const cursorObj = tail
       ? {
           [sort === 'startTime' ? 'startTime' : 'lastUpdate']: tail[sort === 'startTime' ? 'startTime' : 'lastUpdate'],
@@ -260,65 +263,72 @@ export async function createServer(db: Db, opts: { logger?: boolean } = {}): Pro
 
   // Metrics: errors grouped by tool label
   const MetricsErrorsByToolQuery = z.object({
-    from: z.string().optional(),
-    to: z.string().optional(),
+    from: z.string().datetime().optional(),
+    to: z.string().datetime().optional(),
     limit: z.coerce.number().int().min(1).max(1000).default(50),
     field: z.enum(['lastUpdate', 'startTime']).default('lastUpdate'),
   });
 
-  fastify.get('/v1/metrics/errors-by-tool', async (req, reply) => {
-    const parsed = MetricsErrorsByToolQuery.safeParse((req as any).query);
+  fastify.get<{ Querystring: z.infer<typeof MetricsErrorsByToolQuery> }>('/v1/metrics/errors-by-tool', async (req, reply) => {
+    const parsed = MetricsErrorsByToolQuery.safeParse(req.query);
     if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
     const now = new Date();
     const defaultFrom = new Date(now.getTime() - 6 * 60 * 60 * 1000).toISOString();
     const from = parsed.data.from ?? defaultFrom;
     const to = parsed.data.to ?? now.toISOString();
+    if (new Date(from).getTime() > new Date(to).getTime()) {
+      return reply.code(400).send({ error: 'invalid_range', details: '`from` must be <= `to`' });
+    }
     const field = parsed.data.field;
     const limit = parsed.data.limit;
     // Build aggregation pipeline
-    const match: any = {
+    const match: Document = {
       status: 'error',
       label: { $regex: /^tool:/ },
     };
-    match[field] = { $gte: from, $lte: to };
-    const pipeline = [
+    (match as any)[field] = { $gte: from, $lte: to };
+    const pipeline: Document[] = [
       { $match: match },
       { $group: { _id: '$label', count: { $sum: 1 } } },
       { $sort: { count: -1 } },
       { $limit: limit },
       { $project: { _id: 0, label: '$_id', count: 1 } },
     ];
-    const items = await spans.aggregate(pipeline as any).toArray();
+    // Indexing note: ensure indexes exist on:
+    // - { status: 1, lastUpdate: -1 }
+    // - { startTime: -1 }
+    // These make the time-window + status match efficient before grouping by label.
+    const items = await spans.aggregate(pipeline).toArray();
     return { items, from, to };
   });
 
-  fastify.get('/v1/spans/:id', async (req, reply) => {
-    const id = (req.params as any).id;
+  fastify.get<{ Params: { id: string } }>('/v1/spans/:id', async (req, reply) => {
+    const id = req.params.id;
     const { ObjectId } = await import('mongodb');
     const doc = await spans.findOne({ _id: new ObjectId(id) as any });
     if (!doc) return reply.code(404).send({ error: 'not_found' });
     return doc;
   });
 
-  fastify.post('/v1/traces', async (req, reply) => {
-    const body = (req as any).body as any;
+  fastify.post<{ Body: { spans?: Array<Partial<SpanDoc>> } }>('/v1/traces', async (req, reply) => {
+    const body = req.body;
     const now = new Date().toISOString();
     const spansIn = Array.isArray(body?.spans) ? body.spans : [];
-    const emitted: any[] = [];
+    const emitted: SpanDoc[] = [];
     await Promise.all(
-      spansIn.map(async (s: any) => {
-        const filter = { traceId: s.traceId, spanId: s.spanId };
+      spansIn.map(async (s) => {
+        const filter: Filter<SpanDoc> = { traceId: s.traceId as string, spanId: s.spanId as string };
         const doc: Partial<SpanDoc> = {
-          traceId: s.traceId,
-          spanId: s.spanId,
+          traceId: s.traceId as string,
+          spanId: s.spanId as string,
           parentSpanId: s.parentSpanId,
-          label: s.label || 'span',
-          status: s.status || 'ok',
-          startTime: s.startTime || now,
-          endTime: s.endTime || now,
+          label: (s.label as string) || 'span',
+          status: (s.status as SpanDoc['status']) || 'ok',
+          startTime: (s.startTime as string) || now,
+          endTime: (s.endTime as string) || now,
           completed: true,
           lastUpdate: now,
-          attributes: s.attributes || {},
+          attributes: (s.attributes as Record<string, unknown>) || {},
           events: [],
           rev: 1,
           idempotencyKeys: [],
@@ -327,7 +337,7 @@ export async function createServer(db: Db, opts: { logger?: boolean } = {}): Pro
         };
         await spans.updateOne(filter, { $set: doc }, { upsert: true });
         const final = await spans.findOne(filter);
-        if (final) emitted.push(final);
+        if (final) emitted.push(final as SpanDoc);
       }),
     );
     if (spanIo) {
@@ -351,8 +361,8 @@ export async function createServer(db: Db, opts: { logger?: boolean } = {}): Pro
   });
   const LogsInSchema = z.union([LogSchema, z.array(LogSchema)]);
 
-  fastify.post('/v1/logs', async (req, reply) => {
-    const parsed = LogsInSchema.safeParse((req as any).body);
+  fastify.post<{ Body: z.infer<typeof LogsInSchema> }>('/v1/logs', async (req, reply) => {
+    const parsed = LogsInSchema.safeParse(req.body);
     if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
     const nowIso = new Date().toISOString();
     const arr = Array.isArray(parsed.data) ? parsed.data : [parsed.data];
@@ -368,11 +378,11 @@ export async function createServer(db: Db, opts: { logger?: boolean } = {}): Pro
     }));
     try {
       if (docs.length === 1) {
-        await logs.insertOne(docs[0] as any);
+        await logs.insertOne(docs[0]);
       } else {
-        await logs.insertMany(docs as any);
+        await logs.insertMany(docs);
       }
-    } catch (err: any) {
+    } catch (err) {
       fastify.log.error({ err }, 'log insert failed');
       return reply.code(500).send({ error: 'insert_failed' });
     }
@@ -388,15 +398,15 @@ export async function createServer(db: Db, opts: { logger?: boolean } = {}): Pro
   });
 
   fastify.get('/v1/logs', async (req, reply) => {
-    const q = (req as any).query as any;
+    const q = req.query as Record<string, string | undefined>;
     const traceId = typeof q.traceId === 'string' ? q.traceId : undefined;
     const spanId = typeof q.spanId === 'string' ? q.spanId : undefined;
     const level = typeof q.level === 'string' ? q.level : undefined;
-    const limit = q.limit ? Math.min(500, parseInt(q.limit, 10) || 200) : 200;
-    const find: any = {};
+    const limit = q.limit ? Math.min(500, parseInt(String(q.limit), 10) || 200) : 200;
+    const find: Filter<LogDoc> = {} as Filter<LogDoc>;
     if (traceId) find.traceId = traceId;
     if (spanId) find.spanId = spanId;
-    if (level && ['debug', 'info', 'error'].includes(level)) find.level = level;
+    if (level && ['debug', 'info', 'error'].includes(level)) find.level = level as any;
     const docs = await logs.find(find).sort({ ts: -1 }).limit(limit).toArray();
     return { items: docs };
   });

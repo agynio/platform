@@ -80,13 +80,23 @@ export async function fetchErrorsByTool(range: TimeRange, opts: { field?: 'lastU
   const r = await fetch(url);
   if (r.status === 404) {
     // Fallback: client-side aggregation using /v1/spans
-    const spans = await fetchSpansInRange(range, { status: 'error', limit: 5000 });
+    const maxWindowMs = 24 * 60 * 60 * 1000; // 24h cap to avoid heavy pulls
+    const fromMs = Date.parse(range.from); const toMs = Date.parse(range.to);
+    if (!Number.isFinite(fromMs) || !Number.isFinite(toMs)) throw new Error('Invalid time range');
+    if (toMs - fromMs > maxWindowMs) {
+      console.warn('Narrowing client-side fallback range to last 24h to avoid heavy pull');
+    }
+    const narrowed: TimeRange = (toMs - fromMs > maxWindowMs)
+      ? { from: new Date(toMs - maxWindowMs).toISOString(), to: new Date(toMs).toISOString() }
+      : range;
+    const spansRes = await fetchSpansInRange(narrowed, { status: 'error', limit: 2000 });
+    const spans = spansRes.items;
     const counts: Record<string, number> = {};
     for (const s of spans) {
       if (s.label && s.label.startsWith('tool:')) counts[s.label] = (counts[s.label] || 0) + 1;
     }
     const items = Object.entries(counts).map(([label, count]) => ({ label, count })).sort((a,b) => b.count - a.count).slice(0, opts.limit ?? 50);
-    return { items, from: range.from, to: range.to };
+    return { items, from: narrowed.from, to: narrowed.to };
   }
   if (!r.ok) throw new Error('Failed to fetch metrics');
   const data = await r.json();

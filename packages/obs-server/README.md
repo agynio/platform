@@ -29,3 +29,7 @@ Metrics
     - field ('lastUpdate'|'startTime', default 'lastUpdate')
   - Aggregation: match status=error AND label /^tool:/ AND time window on field; group by label with count; sort by count desc; limit.
   - Response: { items: Array<{ label: string; count: number }>, from, to }
+  - Indexing note: this query is served efficiently by compound/simple indexes on
+    - { status: 1, lastUpdate: -1 }
+    - { startTime: -1 }
+    The pipeline first filters by time and status, making the subsequent label /^tool:/ match cheap before grouping.

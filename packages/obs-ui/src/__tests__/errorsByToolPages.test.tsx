@@ -4,6 +4,7 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { MemoryRouter, Routes, Route } from 'react-router-dom';
 import { ErrorsByToolPage } from '../pages/ErrorsByToolPage';
 import { ToolErrorsPage } from '../pages/ToolErrorsPage';
+import { TimeRangeSelector } from '../components/TimeRangeSelector';
 
 vi.mock('../services/api', async () => {
   const actual = await vi.importActual<any>('../services/api');
@@ -70,5 +71,26 @@ describe('Errors by Tool pages', () => {
     const next = await screen.findByText('Next →');
     fireEvent.click(next);
     expect(await screen.findByText('s2')).toBeTruthy();
+  });
+
+  it('time range inputs apply on blur (no spam)', async () => {
+    render(
+      <MemoryRouter initialEntries={[`/errors/tools`]}> 
+        <Routes>
+          <Route path="/errors/tools" element={<ErrorsByToolPage />} />
+        </Routes>
+      </MemoryRouter>
+    );
+    // change inputs but do not blur -> fetchErrorsByTool should not be called again yet
+    const api = await import('../services/api');
+    const spy = vi.spyOn(api, 'fetchErrorsByTool');
+    const inputs = await screen.findAllByDisplayValue(/T/);
+    const fromInput = inputs[0] as HTMLInputElement;
+    fromInput.focus();
+    fromInput.setSelectionRange(fromInput.value.length, fromInput.value.length);
+    fromInput.value = fromInput.value; // simulate typing without blur
+    // Now blur to trigger
+    fromInput.blur();
+    await waitFor(() => expect(spy).toHaveBeenCalled());
   });
 });

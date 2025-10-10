@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { TimeRangeSelector, defaultLast6h } from '../components/TimeRangeSelector';
 import { fetchSpansInRange } from '../services/api';
@@ -19,7 +19,10 @@ export function ToolErrorsPage() {
   const [selected, setSelected] = useState<SpanDoc | null>(null);
   const navigate = useNavigate();
 
-  useEffect(() => { setSearchParams({ from: range.from, to: range.to }); }, [range.from, range.to]);
+  useEffect(() => { setSearchParams({ from: range.from, to: range.to }, { replace: true }); }, [range.from, range.to]);
+
+  // Reset pagination when label or range changes
+  useEffect(() => { setCursor(undefined); }, [label, range.from, range.to]);
 
   useEffect(() => {
     let cancelled = false;
@@ -94,4 +97,3 @@ function getRangeFromParams(sp: URLSearchParams) {
   if (from && to) return { from, to };
   return null;
 }
-
