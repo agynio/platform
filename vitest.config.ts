@@ -1,11 +1,16 @@
-import { defineConfig } from "vitest/config";
+import { defineConfig } from 'vitest/config';
+
+if (!process.stdout.isTTY && process.argv.some((arg) => /^(-w|--watch)(=|$)/.test(arg))) {
+  console.error('Vitest watch mode cannot run without a TTY.');
+  process.exit(1);
+}
 
 export default defineConfig({
   test: {
-    environment: "node",
+    environment: 'node',
     globals: true,
     // Look for tests anywhere under apps/* and packages/*
-    include: ["**/__tests__/**/*.test.ts"],
+    include: ['**/__tests__/**/*.test.ts'],
     coverage: {
       enabled: false,
     },
