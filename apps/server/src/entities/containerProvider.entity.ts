@@ -84,14 +84,16 @@ export const ContainerProviderExposedStaticConfigSchema = z
 
 export type ContainerProviderStaticConfig = z.infer<typeof ContainerProviderStaticConfigSchema>;
 
+type NewEnvItem = { key: string; value: string; source?: 'static' | 'vault' };
+type LegacyEnvRefs = Record<string, { source: 'vault'; mount?: string; path: string; key?: string; optional?: boolean }>;
+
 export class ContainerProviderEntity {
-  private cfg?:
-    | (Pick<ContainerOpts, 'image' | 'env' | 'platform'> & {
-        env?: Record<string, string> | Array<{ key: string; value: string; source?: 'static' | 'vault' }>;
-        initialScript?: string;
-        envRefs?: Record<string, { source: 'vault'; mount?: string; path: string; key?: string; optional?: boolean }>;
-        enableDinD?: boolean;
-      });
+  private cfg?: Pick<ContainerOpts, 'image' | 'env' | 'platform'> & {
+    env?: Record<string, string> | Array<NewEnvItem>;
+    initialScript?: string;
+    envRefs?: LegacyEnvRefs;
+    enableDinD?: boolean;
+  };
 
   private vaultService: VaultService | undefined;
   private opts: ContainerOpts;

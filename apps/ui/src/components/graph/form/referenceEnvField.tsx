@@ -24,7 +24,7 @@ export function ReferenceEnvField({ formData, onChange }: { formData?: EnvItem[]
     onChange?.(next);
   }
   function add() {
-    if (!newKey.trim() || dup(newKey)) return;
+    if (!newKey.trim() || isDup(newKey)) return;
     const next = [...items, { key: newKey.trim(), value: newVal.value || '', source: newVal.source || 'static' }];
     onChange?.(next);
     setNewKey('');
@@ -57,7 +57,7 @@ export function ReferenceEnvField({ formData, onChange }: { formData?: EnvItem[]
       ))}
       <div className="flex items-center gap-2">
         <input
-          className={`w-40 rounded border px-2 py-1 text-xs ${dup(newKey) ? 'border-red-500' : ''}`}
+          className={`w-40 rounded border px-2 py-1 text-xs ${isDup(newKey) ? 'border-red-500' : ''}`}
           placeholder="key"
           value={newKey}
           onChange={(e) => setNewKey(e.target.value)}
