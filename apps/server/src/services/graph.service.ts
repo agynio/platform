@@ -1,14 +1,8 @@
 import { Collection, Db } from 'mongodb';
 import { LoggerService } from './logger.service';
 import { TemplateRegistry } from '../graph/templateRegistry';
-import {
-  PersistedGraph,
-  PersistedGraphEdge,
-  PersistedGraphNode,
-  PersistedGraphUpsertRequest,
-  PersistedGraphUpsertResponse,
-  TemplateNodeSchema,
-} from '../graph/types';
+import { PersistedGraph, PersistedGraphEdge, PersistedGraphNode, PersistedGraphUpsertRequest, PersistedGraphUpsertResponse } from '../graph/types';
+import { validatePersistedGraph } from './graph.validation';
 
 interface GraphDocument {
   _id: string; // name
@@ -19,6 +13,7 @@ interface GraphDocument {
 }
 
 export class GraphService {
+  // Kept for backward-compat when GRAPH_STORE=mongo
   private collection?: Collection<GraphDocument>;
   // Stateless service: persistence only and template exposure.
   // Single-graph endpoint shape expected at /graph/nodes/:nodeId for runtime actions (handled elsewhere).
@@ -39,8 +34,7 @@ export class GraphService {
   }
 
   async upsert(req: PersistedGraphUpsertRequest): Promise<PersistedGraphUpsertResponse> {
-    const schema = this.templateRegistry.toSchema();
-    this.validate(req, schema);
+    validatePersistedGraph(req, this.templateRegistry.toSchema());
     const now = new Date();
     const name = req.name;
     const existing = await this.collection!.findOne({ _id: name });
@@ -79,31 +73,7 @@ export class GraphService {
     return this.templateRegistry.toSchema();
   }
 
-  private validate(req: PersistedGraphUpsertRequest, schema: TemplateNodeSchema[]) {
-    const templateSet = new Set(schema.map((s) => s.name));
-    const schemaMap = new Map(schema.map((s) => [s.name, s] as const));
-    const nodeIds = new Set<string>();
-    for (const n of req.nodes) {
-      if (!n.id) throw new Error(`Node missing id`);
-      if (nodeIds.has(n.id)) throw new Error(`Duplicate node id ${n.id}`);
-      nodeIds.add(n.id);
-      if (!templateSet.has(n.template)) throw new Error(`Unknown template ${n.template}`);
-    }
-    for (const e of req.edges) {
-      if (!nodeIds.has(e.source)) throw new Error(`Edge source missing node ${e.source}`);
-      if (!nodeIds.has(e.target)) throw new Error(`Edge target missing node ${e.target}`);
-      const sourceNode = req.nodes.find((n) => n.id === e.source)!;
-      const targetNode = req.nodes.find((n) => n.id === e.target)!;
-      const sourceSchema = schemaMap.get(sourceNode.template)!;
-      const targetSchema = schemaMap.get(targetNode.template)!;
-      if (!sourceSchema.sourcePorts.includes(e.sourceHandle)) {
-        throw new Error(`Invalid source handle ${e.sourceHandle} on template ${sourceNode.template}`);
-      }
-      if (!targetSchema.targetPorts.includes(e.targetHandle)) {
-        throw new Error(`Invalid target handle ${e.targetHandle} on template ${targetNode.template}`);
-      }
-    }
-  }
+  // Validation moved to graph.validation.ts to share with GitGraphService
 
   private stripInternalNode(n: PersistedGraphNode): PersistedGraphNode {
     // Preserve dynamicConfig so it round-trips through persistence.

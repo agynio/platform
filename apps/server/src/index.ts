@@ -18,6 +18,7 @@ import { SocketService } from './services/socket.service.js';
 import { buildTemplateRegistry } from './templates';
 import { LiveGraphRuntime } from './graph/liveGraph.manager.js';
 import { GraphService } from './services/graph.service.js';
+import { GitGraphService } from './services/gitGraph.service.js';
 import { GraphDefinition, PersistedGraphUpsertRequest } from './graph/types.js';
 import { ContainerService } from './services/container.service.js';
 import { SlackService } from './services/slack.service.js';
@@ -55,7 +56,27 @@ async function bootstrap() {
   });
 
   const runtime = new LiveGraphRuntime(logger, templateRegistry);
-  const graphService = new GraphService(mongo.getDb(), logger, templateRegistry);
+  const graphService =
+    config.graphStore === 'git'
+      ? new GitGraphService(
+          {
+            repoPath: config.graphRepoPath,
+            branch: config.graphBranch,
+            defaultAuthor: { name: config.graphAuthorName, email: config.graphAuthorEmail },
+          },
+          logger,
+          templateRegistry,
+        )
+      : new GraphService(mongo.getDb(), logger, templateRegistry);
+
+  if (graphService instanceof GitGraphService) {
+    try {
+      await graphService.initIfNeeded();
+    } catch (e: any) {
+      logger.error('Failed to initialize git graph repo: %s', e?.message || e);
+      process.exit(1);
+    }
+  }
 
   // Helper to convert persisted graph to runtime GraphDefinition
   const toRuntimeGraph = (saved: { nodes: any[]; edges: any[] }) =>
@@ -76,18 +97,13 @@ async function bootstrap() {
   try {
     const existing = await graphService.get('main');
     if (existing) {
-      logger.info(
-        'Applying persisted graph to live runtime (version=%s, nodes=%d, edges=%d)',
-        existing.version,
-        existing.nodes.length,
-        existing.edges.length,
-      );
+      logger.info('Applying persisted graph to live runtime (version=%s, nodes=%d, edges=%d)', existing.version, existing.nodes.length, existing.edges.length);
       await runtime.apply(toRuntimeGraph(existing));
     } else {
       logger.info('No persisted graph found; starting with empty runtime graph.');
     }
-  } catch (e) {
-    logger.error('Failed to apply initial persisted graph', e);
+  } catch (e: any) {
+    logger.error('Failed to apply initial persisted graph: %s', e?.message || e);
   }
 
   // Expose globally for diagnostics (optional)
@@ -132,9 +148,16 @@ async function bootstrap() {
     try {
       const parsed = request.body as PersistedGraphUpsertRequest;
       parsed.name = parsed.name || 'main';
+      // Resolve author from headers
+      const headers = request.headers as Record<string, string | string[] | undefined>;
+      const author = {
+        name: (headers['x-graph-author-name'] || headers['x-author-name']) as string | undefined,
+        email: (headers['x-graph-author-email'] || headers['x-author-email']) as string | undefined,
+      };
       // Capture previous graph (for change detection / events)
       const before = await graphService.get(parsed.name);
-      const saved = await graphService.upsert(parsed);
+      // Support both GraphService and GitGraphService signatures
+      const saved = graphService instanceof GitGraphService ? await graphService.upsert(parsed, author) : await (graphService as GraphService).upsert(parsed);
       try {
         await runtime.apply(toRuntimeGraph(saved));
       } catch {
@@ -161,10 +184,17 @@ async function bootstrap() {
       }
       return saved;
     } catch (e: any) {
-      // eslint-disable-line @typescript-eslint/no-explicit-any
       if (e.code === 'VERSION_CONFLICT') {
         reply.code(409);
         return { error: 'VERSION_CONFLICT', current: e.current };
+      }
+      if (e.code === 'LOCK_TIMEOUT') {
+        reply.code(409);
+        return { error: 'LOCK_TIMEOUT' };
+      }
+      if (e.code === 'COMMIT_FAILED') {
+        reply.code(500);
+        return { error: 'COMMIT_FAILED' };
       }
       reply.code(400);
       return { error: e.message || 'Bad Request' };
