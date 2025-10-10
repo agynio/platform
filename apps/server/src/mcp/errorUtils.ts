@@ -11,11 +11,15 @@ export function buildMcpToolError(res: McpToolCallResult): { message: string; ca
 
   if (sc && typeof sc === 'object') {
     const m = typeof sc.message === 'string' ? sc.message : undefined;
-    const e = typeof sc.error === 'string' ? sc.error : undefined;
+    const eStr = typeof sc.error === 'string' ? sc.error : undefined;
+    const eObj = sc && typeof sc.error === 'object' && sc.error ? (sc.error as any) : undefined;
+    const eObjMsg = eObj && typeof eObj.message === 'string' ? eObj.message : undefined;
     const d = typeof sc.detail === 'string' ? sc.detail : undefined;
-    msgBase = m || e || d || msgBase;
-    const code = sc.code ?? sc.errorCode ?? sc.statusCode;
-    const retriable = sc.retriable ?? sc.retryable;
+    // Prefer top-level message, then string error, then nested error.message, then detail
+    msgBase = m || eStr || eObjMsg || d || msgBase;
+    // Surface code/retriable from either top-level or nested error object
+    const code = sc.code ?? sc.errorCode ?? sc.statusCode ?? eObj?.code ?? eObj?.errorCode ?? eObj?.statusCode;
+    const retriable = sc.retriable ?? sc.retryable ?? eObj?.retriable ?? eObj?.retryable;
     const parts: string[] = [];
     if (code != null) parts.push(`code=${String(code)}`);
     if (retriable != null) parts.push(`retriable=${Boolean(retriable)}`);
@@ -34,4 +38,3 @@ export function buildMcpToolError(res: McpToolCallResult): { message: string; ca
   const cause = sc ?? content ?? res?.raw;
   return { message: `${msgBase}${details}`, cause };
 }
-
