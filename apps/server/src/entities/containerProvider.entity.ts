@@ -376,16 +376,3 @@ function getStatusCode(e: unknown): number | undefined {
   }
   return undefined;
 }
-
-// Parse Vault reference string in format "mount/path/key" with path supporting nested segments.
-// Returns VaultRef and throws on invalid inputs.
-export function parseVaultRef(ref: string): VaultRef {
-  if (!ref || typeof ref !== 'string') throw new Error('Vault ref must be a non-empty string');
-  if (ref.startsWith('/')) throw new Error('Vault ref must not start with /');
-  const parts = ref.split('/').filter((p) => p.length > 0);
-  if (parts.length < 3) throw new Error('Vault ref must be in format mount/path/key');
-  const mount = parts[0].replace(/\/$/, '');
-  const key = parts[parts.length - 1];
-  const path = parts.slice(1, parts.length - 1).join('/');
-  if (!mount || !path || !key) throw new Error('Vault ref must include mount, path and key');
-  return { mount, path, key };
