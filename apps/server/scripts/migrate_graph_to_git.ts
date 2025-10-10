@@ -1,13 +1,40 @@
 #!/usr/bin/env tsx
+import * as dotenv from 'dotenv';
+dotenv.config();
+
 import { MongoClient, Db, Collection } from 'mongodb';
 import { promises as fs } from 'fs';
 import path from 'path';
 import { spawn } from 'child_process';
 
-interface PersistedGraphNode { id: string; template: string; config?: any; dynamicConfig?: any; position?: { x: number; y: number } }
-interface PersistedGraphEdge { id?: string; source: string; sourceHandle: string; target: string; targetHandle: string }
-interface PersistedGraph { name: string; version: number; updatedAt: string; nodes: PersistedGraphNode[]; edges: PersistedGraphEdge[] }
-interface GraphDocument { _id: string; version: number; updatedAt: Date; nodes: PersistedGraphNode[]; edges: PersistedGraphEdge[] }
+interface PersistedGraphNode {
+  id: string;
+  template: string;
+  config?: any;
+  dynamicConfig?: any;
+  position?: { x: number; y: number };
+}
+interface PersistedGraphEdge {
+  id?: string;
+  source: string;
+  sourceHandle: string;
+  target: string;
+  targetHandle: string;
+}
+interface PersistedGraph {
+  name: string;
+  version: number;
+  updatedAt: string;
+  nodes: PersistedGraphNode[];
+  edges: PersistedGraphEdge[];
+}
+interface GraphDocument {
+  _id: string;
+  version: number;
+  updatedAt: Date;
+  nodes: PersistedGraphNode[];
+  edges: PersistedGraphEdge[];
+}
 
 async function runGit(args: string[], cwd: string, env?: NodeJS.ProcessEnv) {
   await new Promise<void>((resolve, reject) => {
@@ -27,7 +54,11 @@ async function ensureRepo(repoPath: string, branch: string) {
     await runGit(['init', '-b', branch], repoPath);
   }
   // ensure branch checkout
-  try { await runGit(['rev-parse', '--verify', branch], repoPath); } catch { await runGit(['branch', branch], repoPath); }
+  try {
+    await runGit(['rev-parse', '--verify', branch], repoPath);
+  } catch {
+    await runGit(['branch', branch], repoPath);
+  }
   await runGit(['checkout', branch], repoPath);
 }
 
@@ -55,7 +86,13 @@ async function main() {
   await ensureRepo(repoPath, branch);
 
   const cursor = col.find({});
-  const env = { ...process.env, GIT_AUTHOR_NAME: authorName, GIT_AUTHOR_EMAIL: authorEmail, GIT_COMMITTER_NAME: authorName, GIT_COMMITTER_EMAIL: authorEmail };
+  const env = {
+    ...process.env,
+    GIT_AUTHOR_NAME: authorName,
+    GIT_AUTHOR_EMAIL: authorEmail,
+    GIT_COMMITTER_NAME: authorName,
+    GIT_COMMITTER_EMAIL: authorEmail,
+  };
   while (await cursor.hasNext()) {
     const doc = await cursor.next();
     if (!doc) break;
