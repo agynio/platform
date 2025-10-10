@@ -127,7 +127,9 @@ export async function migrateRepo(opts?: { repoPath?: string; branch?: string; g
   const env = { ...process.env, GIT_AUTHOR_NAME: authorName, GIT_AUTHOR_EMAIL: authorEmail, GIT_COMMITTER_NAME: authorName, GIT_COMMITTER_EMAIL: authorEmail };
   await runGit(['add', '--all', 'graph.meta.json', 'nodes', 'edges'], repoPath, env);
   // Try to remove legacy graphs dir
-  try { await runGit(['rm', '-r', '--ignore-unmatch', 'graphs'], repoPath, env); } catch {}
+  try { await runGit(['rm', '-r', '--ignore-unmatch', 'graphs'], repoPath, env); } catch {
+    try { await fs.rm(path.join(repoPath, 'graphs'), { recursive: true, force: true }); } catch {}
+  }
   await runGit(['commit', '-m', `chore(graph): migrate to format:2 (${name} v${source.version})`], repoPath, env);
   return { migrated: true, name };
 }
@@ -144,4 +146,3 @@ if (require.main === module) {
     process.exit(1);
   });
 }
-
