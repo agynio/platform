@@ -22,6 +22,7 @@ import { GraphDefinition, PersistedGraphUpsertRequest } from './graph/types.js';
 import { ContainerService } from './services/container.service.js';
 import { SlackService } from './services/slack.service.js';
 import { ReadinessWatcher } from './utils/readinessWatcher.js';
+import { VaultService, VaultConfigSchema } from './services/vault.service.js';
 
 const logger = new LoggerService();
 const config = ConfigService.fromEnv();
@@ -29,6 +30,15 @@ const mongo = new MongoService(config, logger);
 const checkpointer = new CheckpointerService(logger);
 const containerService = new ContainerService(logger);
 const slackService = new SlackService(config, logger);
+const vaultService = new VaultService(
+  VaultConfigSchema.parse({
+    enabled: config.vaultEnabled,
+    addr: config.vaultAddr,
+    token: config.vaultToken,
+    defaultMounts: ['secret'],
+  }),
+  logger,
+);
 
 async function bootstrap() {
   await mongo.connect();
@@ -91,6 +101,23 @@ async function bootstrap() {
 
   // Existing endpoints (namespaced under /api)
   fastify.get('/api/templates', async () => templateRegistry.toSchema());
+
+  // Vault autocomplete endpoints (only when enabled)
+  if (vaultService.isEnabled()) {
+    fastify.get('/api/vault/mounts', async () => ({ items: await vaultService.listKvV2Mounts() }));
+    fastify.get('/api/vault/kv/:mount/paths', async (req) => {
+      const { mount } = req.params as { mount: string };
+      const { prefix } = (req.query || {}) as { prefix?: string };
+      const items = await vaultService.listPaths(mount, prefix || '');
+      return { items };
+    });
+    fastify.get('/api/vault/kv/:mount/keys', async (req) => {
+      const { mount } = req.params as { mount: string };
+      const { path } = (req.query || {}) as { path?: string };
+      const items = await vaultService.listKeys(mount, path || '');
+      return { items };
+    });
+  }
 
   fastify.get('/api/graph', async () => {
     const name = 'main';

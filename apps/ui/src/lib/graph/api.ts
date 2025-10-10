@@ -35,6 +35,12 @@ function isLikelyJsonSchemaRoot(obj: unknown): obj is Record<string, unknown> {
 
 export const api = {
   getTemplates: () => http<TemplateSchema[]>(`${BASE}/graph/templates`),
+  // Vault autocomplete endpoints (only available when enabled server-side)
+  listVaultMounts: () => http<{ items: string[] }>(`${BASE}/api/vault/mounts`).catch(() => ({ items: [] })),
+  listVaultPaths: (mount: string, prefix = '') =>
+    http<{ items: string[] }>(`${BASE}/api/vault/kv/${encodeURIComponent(mount)}/paths?prefix=${encodeURIComponent(prefix)}`).catch(() => ({ items: [] })),
+  listVaultKeys: (mount: string, path = '') =>
+    http<{ items: string[] }>(`${BASE}/api/vault/kv/${encodeURIComponent(mount)}/keys?path=${encodeURIComponent(path)}`).catch(() => ({ items: [] })),
   getNodeStatus: (nodeId: string) => http<NodeStatus>(`${BASE}/graph/nodes/${encodeURIComponent(nodeId)}/status`),
   // Dynamic config schema endpoint: try the newer '/dynamic-config/schema' first, fallback to legacy '/dynamic-config-schema'
   getDynamicConfigSchema: async (nodeId: string): Promise<Record<string, unknown> | null> => {

@@ -11,3 +11,9 @@ Quick links
 Getting started
 - Architecture and setup: [docs/technical-overview.md](docs/technical-overview.md)
 - Contribution workflow & style guides: [docs/contributing/index.md](docs/contributing/index.md)
+
+Development services
+- docker compose up -d mongo1 mongo-setup mongo-express jaeger
+- Optional: start Vault for dev secret flows: `docker compose up -d vault vault-init`
+  - Set VAULT_ENABLED=true, VAULT_ADDR, VAULT_TOKEN in apps/server/.env
+  - See docs/security/vault.md

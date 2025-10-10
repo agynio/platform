@@ -7,6 +7,7 @@ import { CheckpointerService } from './services/checkpointer.service';
 import { ConfigService } from './services/config.service';
 import { ContainerService } from './services/container.service';
 import { LoggerService } from './services/logger.service';
+import { VaultService, VaultConfigSchema } from './services/vault.service';
 import { SlackService } from './services/slack.service';
 import { CallAgentTool, CallAgentToolStaticConfigSchema } from './tools/call_agent.tool';
 import { GithubCloneRepoTool, GithubCloneRepoToolStaticConfigSchema } from './tools/github_clone_repo';
@@ -40,6 +41,17 @@ export interface TemplateRegistryDeps {
 export function buildTemplateRegistry(deps: TemplateRegistryDeps): TemplateRegistry {
   const { logger, containerService, configService, slackService, checkpointerService, mongoService } = deps;
 
+  // Initialize Vault service from config (optional)
+  const vault = new VaultService(
+    VaultConfigSchema.parse({
+      enabled: configService.vaultEnabled,
+      addr: configService.vaultAddr,
+      token: configService.vaultToken,
+      defaultMounts: ['secret'],
+    }),
+    logger,
+  );
+
   return (
     new TemplateRegistry()
       .register(
@@ -47,6 +59,7 @@ export function buildTemplateRegistry(deps: TemplateRegistryDeps): TemplateRegis
         (ctx) =>
           new ContainerProviderEntity(
             containerService,
+            vault,
             {
               cmd: ['sleep', 'infinity'],
               workingDir: '/workspace',
@@ -81,7 +94,7 @@ export function buildTemplateRegistry(deps: TemplateRegistryDeps): TemplateRegis
       )
       .register(
         'githubCloneRepoTool',
-        () => new GithubCloneRepoTool(configService, logger),
+        () => new GithubCloneRepoTool(configService, vault, logger),
         {
           targetPorts: {
             $self: { kind: 'instance' },

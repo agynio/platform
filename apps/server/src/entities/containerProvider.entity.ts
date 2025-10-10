@@ -2,6 +2,7 @@ import { ContainerOpts, ContainerService } from '../services/container.service';
 import { ContainerEntity } from './container.entity';
 import { z } from 'zod';
 import { PLATFORM_LABEL, SUPPORTED_PLATFORMS, type Platform } from '../constants.js';
+import { VaultService, type VaultRef } from '../services/vault.service';
 
 // Static configuration schema for ContainerProviderEntity
 // Allows overriding the base image and supplying environment variables.
@@ -12,6 +13,23 @@ export const ContainerProviderStaticConfigSchema = z
       .record(z.string().min(1), z.string())
       .optional()
       .describe('Environment variables to inject into started containers.'),
+    // UI hint: render env as key/value map and envRefs as a separate section.
+    // Future iteration may unify with per-row source selector.
+    envRefs: z
+      .record(
+        z.string().min(1),
+        z
+          .object({
+            source: z.literal('vault').default('vault').describe('Secret source (Vault KV v2).'),
+            mount: z.string().default('secret').describe('KV v2 mount name (e.g., secret)'),
+            path: z.string().min(1).describe('Secret path under mount'),
+            key: z.string().min(1).default('value').describe('Key within the secret object'),
+            optional: z.boolean().optional().describe('If true, missing keys are ignored'),
+          })
+          .strict(),
+      )
+      .optional()
+      .describe('Vault-backed environment variable references (server resolves at runtime).'),
     initialScript: z
       .string()
       .optional()
@@ -28,10 +46,14 @@ export const ContainerProviderStaticConfigSchema = z
 export type ContainerProviderStaticConfig = z.infer<typeof ContainerProviderStaticConfigSchema>;
 
 export class ContainerProviderEntity {
-  private cfg?: Pick<ContainerOpts, 'image' | 'env' | 'platform'> & { initialScript?: string };
+  private cfg?: Pick<ContainerOpts, 'image' | 'env' | 'platform'> & {
+    initialScript?: string;
+    envRefs?: Record<string, { source: 'vault'; mount?: string; path: string; key?: string; optional?: boolean }>;
+  };
 
   constructor(
     private containerService: ContainerService,
+    private vaultService: VaultService | undefined,
     private opts: ContainerOpts,
     private idLabels: (id: string) => Record<string, string>,
   ) {}
@@ -87,11 +109,39 @@ export class ContainerProviderEntity {
     }
 
     if (!container) {
+      // Resolve env from envRefs via Vault (server-side only)
+      let envMerged: Record<string, string> | undefined = { ...(this.opts.env || {}) } as Record<string, string>;
+      if (this.cfg?.env) envMerged = { ...envMerged, ...this.cfg.env };
+      const refs = this.cfg?.envRefs || {};
+      if (refs && Object.keys(refs).length > 0) {
+        if (!this.vaultService || !this.vaultService.isEnabled()) {
+          throw new Error('Vault is not enabled but envRefs are configured');
+        }
+        for (const [varName, ref] of Object.entries(refs)) {
+          const vr: VaultRef = {
+            mount: (ref.mount || 'secret').replace(/\/$/, ''),
+            path: ref.path,
+            key: ref.key || 'value',
+          };
+          try {
+            const value = await this.vaultService.getSecret(vr);
+            if (value == null) {
+              if (ref.optional) continue;
+              throw new Error(`Missing Vault secret for ${varName} at ${vr.mount}/${vr.path}#${vr.key}`);
+            }
+            envMerged[varName] = String(value);
+          } catch (e: unknown) {
+            // Do not include secret values; only reference context
+            throw new Error(`Vault resolution failed for ${varName} at ${vr.mount}/${vr.path}#${vr.key}: ${(e as Error).message}`);
+          }
+        }
+      }
+
       container = await this.containerService.start({
         ...this.opts,
         // Only merge image/env from cfg (initialScript is provider-level behavior, not a start option)
         image: this.cfg?.image ?? this.opts.image,
-        env: { ...(this.opts.env || {}), ...(this.cfg?.env || {}) },
+        env: envMerged,
         labels: { ...(this.opts.labels || {}), ...labels },
         platform: requestedPlatform,
       });

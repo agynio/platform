@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { ContainerProviderEntity } from '../entities/containerProvider.entity';
 import { ConfigService } from '../services/config.service';
 import { LoggerService } from '../services/logger.service';
+import { VaultService, type VaultRef } from '../services/vault.service';
 import { BaseTool } from './base.tool';
 
 // Schema for cloning a GitHub repository inside a running container
@@ -14,14 +15,28 @@ const githubCloneSchema = z.object({
   depth: z.number().int().positive().optional().describe('Shallow clone depth (omit for full clone).'),
 });
 
-// Static config schema placeholder (no options yet but enables uniform handling)
-export const GithubCloneRepoToolStaticConfigSchema = z.object({}).strict();
+// Static config schema with optional authRef override
+export const GithubCloneRepoToolStaticConfigSchema = z
+  .object({
+    authRef: z
+      .object({
+        source: z.enum(['env', 'vault']).describe('Token source override'),
+        envVar: z.string().optional().describe('When source=env, name of env var'),
+        mount: z.string().optional().describe('When source=vault, KV mount (default secret)'),
+        path: z.string().optional().describe('When source=vault, secret path'),
+        key: z.string().optional().describe('When source=vault, key within secret (default GH_TOKEN)'),
+      })
+      .optional(),
+  })
+  .strict();
 
 export class GithubCloneRepoTool extends BaseTool {
   private containerProvider?: ContainerProviderEntity;
+  private authRef?: { source: 'env' | 'vault'; envVar?: string; mount?: string; path?: string; key?: string };
 
   constructor(
     private config: ConfigService,
+    private vault?: VaultService,
     logger: LoggerService,
   ) {
     super(logger);
@@ -44,12 +59,13 @@ export class GithubCloneRepoTool extends BaseTool {
         const container = await this.containerProvider.provide(thread_id);
 
         const { owner, repo, path, branch, depth } = input;
-        this.logger.info('Tool called', 'github_clone_repo', { owner, repo, path, branch, depth });
+        // Redact sensitive details
+        this.logger.info('Tool called', 'github_clone_repo', { owner, repo, path, branch, depth, auth: this.authRef?.source || 'default' });
 
         // Prepare auth URL. GitHub allows using just the token as the username segment
         // but we follow the requested pattern: username:token.
         // We'll use "oauth2" as a conventional username placeholder.
-        const token = this.config.githubToken;
+        const token = await this.resolveToken();
         const username = 'oauth2';
         const encodedUser = encodeURIComponent(username);
         const encodedToken = encodeURIComponent(token);
@@ -101,6 +117,32 @@ export class GithubCloneRepoTool extends BaseTool {
   }
 
   async setConfig(_cfg: Record<string, unknown>): Promise<void> {
-    /* no dynamic config yet */
+    const parsed = GithubCloneRepoToolStaticConfigSchema.parse(_cfg || {});
+    this.authRef = parsed.authRef as any;
+  }
+
+  private async resolveToken(): Promise<string> {
+    // If authRef provided, resolve per source; otherwise fallback to ConfigService token
+    const ref = this.authRef;
+    if (!ref) return this.config.githubToken;
+    if (ref.source === 'env') {
+      const name = ref.envVar || 'GH_TOKEN';
+      const v = process.env[name] || '';
+      return v || this.config.githubToken;
+    }
+    // Vault source
+    const vlt = this.vault;
+    if (!vlt || !vlt.isEnabled()) return this.config.githubToken;
+    const vr: VaultRef = {
+      mount: (ref.mount || 'secret').replace(/\/$/, ''),
+      path: ref.path || 'github',
+      key: ref.key || 'GH_TOKEN',
+    };
+    try {
+      const token = await vlt.getSecret(vr);
+      return token || this.config.githubToken;
+    } catch {
+      return this.config.githubToken;
+    }
   }
 }

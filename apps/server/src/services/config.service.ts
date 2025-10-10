@@ -11,6 +11,13 @@ export const configSchema = z.object({
   slackBotToken: z.string().min(1, "Slack bot token is required"),
   slackAppToken: z.string().min(1, "Slack app-level token is required (starts with xapp-)"),
   mongodbUrl: z.string().min(1, "MongoDB connection string is required"),
+  // Optional Vault flags (disabled by default)
+  vaultEnabled: z
+    .union([z.boolean(), z.string()])
+    .optional()
+    .transform((v) => (typeof v === 'string' ? v.toLowerCase() === 'true' : !!v)),
+  vaultAddr: z.string().optional(),
+  vaultToken: z.string().optional(),
 });
 
 export type Config = z.infer<typeof configSchema>;
@@ -48,6 +55,17 @@ export class ConfigService implements Config {
     return this.params.mongodbUrl;
   }
 
+  // Vault getters (optional)
+  get vaultEnabled(): boolean {
+    return !!(this as any).params.vaultEnabled;
+  }
+  get vaultAddr(): string | undefined {
+    return (this as any).params.vaultAddr;
+  }
+  get vaultToken(): string | undefined {
+    return (this as any).params.vaultToken;
+  }
+
   static fromEnv(): ConfigService {
     const parsed = configSchema.parse({
       githubAppId: process.env.GITHUB_APP_ID,
@@ -58,6 +76,9 @@ export class ConfigService implements Config {
       slackBotToken: process.env.SLACK_BOT_TOKEN,
       slackAppToken: process.env.SLACK_APP_TOKEN,
       mongodbUrl: process.env.MONGODB_URL,
+      vaultEnabled: process.env.VAULT_ENABLED,
+      vaultAddr: process.env.VAULT_ADDR,
+      vaultToken: process.env.VAULT_TOKEN,
     });
     return new ConfigService(parsed);
   }
