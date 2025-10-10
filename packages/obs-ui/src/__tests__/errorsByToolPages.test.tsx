@@ -47,5 +47,28 @@ describe('Errors by Tool pages', () => {
     expect(await screen.findByText(/Tool Errors — tool:weather/)).toBeTruthy();
     expect(await screen.findByText('s1')).toBeTruthy();
   });
-});
 
+  it('paginates on Next', async () => {
+    const api = await import('../services/api');
+    const spy = vi.spyOn(api, 'fetchSpansInRange');
+    spy.mockImplementationOnce(async (_range: any, params: any) => {
+      expect(params.cursor).toBeUndefined();
+      return { items: [ { traceId: 't1', spanId: 's1', label: 'tool:weather', status: 'error', startTime: new Date().toISOString(), endTime: new Date().toISOString(), completed: true, lastUpdate: new Date().toISOString(), attributes: {}, events: [], rev: 0, idempotencyKeys: [], createdAt: '', updatedAt: '' } ], nextCursor: 'abc' } as any;
+    });
+    spy.mockImplementationOnce(async (_range: any, params: any) => {
+      expect(params.cursor).toBe('abc');
+      return { items: [ { traceId: 't2', spanId: 's2', label: 'tool:weather', status: 'error', startTime: new Date().toISOString(), endTime: new Date().toISOString(), completed: true, lastUpdate: new Date().toISOString(), attributes: {}, events: [], rev: 0, idempotencyKeys: [], createdAt: '', updatedAt: '' } ] } as any;
+    });
+    render(
+      <MemoryRouter initialEntries={[`/errors/tools/tool%3Aweather`]}>
+        <Routes>
+          <Route path="/errors/tools/:label" element={<ToolErrorsPage />} />
+        </Routes>
+      </MemoryRouter>
+    );
+    expect(await screen.findByText('s1')).toBeTruthy();
+    const next = await screen.findByText('Next →');
+    fireEvent.click(next);
+    expect(await screen.findByText('s2')).toBeTruthy();
+  });
+});
