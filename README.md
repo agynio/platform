@@ -42,5 +42,5 @@ Migration
   - `nodes/<encodeURIComponent(id)>.json` and `edges/<encodeURIComponent(edgeId)>.json`
   - Deterministic edge id: `${source}-${sourceHandle}__${target}-${targetHandle}`
   - Commit per graph: `chore(graph): migrate <name> to per-file v<version> (+N nodes, +M edges)` (idempotent: no-op if no changes)
-- Optional flatten-to-root mode: set `FLATTEN_TO_ROOT=true` and `GRAPH_NAME=<name>` to write root-level `graph.meta.json`, `nodes/`, `edges/`, and stage deletion of `graphs/`. Commit message: `chore(graph): migrate <name> to per-file root layout v<version>`.
+- Optional flatten-to-root mode: set `FLATTEN_TO_ROOT=true` and `GRAPH_NAME=<name>` to write root-level `graph.meta.json`, `nodes/`, `edges/`, and stage deletion of `graphs/`. Commit message: `chore(graph): migrate <name> to per-file root layout v<version>`. Filenames use `encodeURIComponent` of the ids (including deterministic edge id).
 - Env: `MONGODB_URL` (default `mongodb://localhost:27017/agents`), `GRAPH_REPO_PATH` (default `./data/graph`), `GRAPH_BRANCH` (default `graph-state`), `GRAPH_AUTHOR_NAME`, `GRAPH_AUTHOR_EMAIL`, `GRAPH_NAME` (optional), `FLATTEN_TO_ROOT` (optional).

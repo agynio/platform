@@ -19,6 +19,7 @@ Storage layout (format: 2)
 - Preferred working tree layout is root-level per-entity: `graph.meta.json`, `nodes/`, `edges/`.
 - Filenames are `encodeURIComponent(id)`; edge id is deterministic: `<src>-<srcH>__<tgt>-<tgtH>`.
 - The service can read from historical layouts in HEAD for compatibility: per-graph per-entity under `graphs/<name>/` or legacy monolith `graphs/<name>/graph.json`.
+- Robustness: when reading, if an entity file lacks an explicit `id` field, the service decodes it from the filename (see readEntitiesFromDir/readFromHeadRoot).
 
 Enabling Memory
 - Default connector config: placement=after_system, content=tree, maxChars=4000.

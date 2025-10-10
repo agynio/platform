@@ -2,7 +2,7 @@
 import * as dotenv from 'dotenv';
 dotenv.config();
 
-import { MongoClient, Db, Collection } from 'mongodb';
+import { MongoClient, Collection } from 'mongodb';
 import { promises as fs } from 'fs';
 import path from 'path';
 import { spawn } from 'child_process';
@@ -10,8 +10,8 @@ import { spawn } from 'child_process';
 interface PersistedGraphNode {
   id: string;
   template: string;
-  config?: any;
-  dynamicConfig?: any;
+  config?: unknown;
+  dynamicConfig?: unknown;
   position?: { x: number; y: number };
 }
 interface PersistedGraphEdge {
@@ -136,18 +136,19 @@ async function main() {
     if (!flattenToRoot) {
       const base = path.posix.join('graphs', name);
       const targetBase = path.join(repoPath, base);
+      // write nodes/edges in parallel
+      const nodeWrites = normalizedNodes.map((n) => {
+        const rel = path.posix.join(base, 'nodes', `${encodeURIComponent(n.id)}.json`);
+        return atomicWrite(path.join(repoPath, rel), JSON.stringify(n, null, 2));
+      });
+      const edgeWrites = normalizedEdges.map((e) => {
+        const rel = path.posix.join(base, 'edges', `${encodeURIComponent(e.id!)}.json`);
+        return atomicWrite(path.join(repoPath, rel), JSON.stringify(e, null, 2));
+      });
+      await Promise.all([...nodeWrites, ...edgeWrites]);
+      // meta last
       const meta = { name, version: doc.version, updatedAt: doc.updatedAt.toISOString(), format: 2 as const };
       await atomicWrite(path.join(targetBase, 'graph.meta.json'), JSON.stringify(meta, null, 2));
-      // write nodes
-      for (const n of normalizedNodes) {
-        const rel = path.posix.join(base, 'nodes', `${encodeURIComponent(n.id)}.json`);
-        await atomicWrite(path.join(repoPath, rel), JSON.stringify(n, null, 2));
-      }
-      // write edges
-      for (const e of normalizedEdges) {
-        const rel = path.posix.join(base, 'edges', `${encodeURIComponent(e.id!)}.json`);
-        await atomicWrite(path.join(repoPath, rel), JSON.stringify(e, null, 2));
-      }
       // Stage new/updated files
       await runGit(['add', '--all', path.posix.join(base, 'graph.meta.json'), path.posix.join(base, 'nodes'), path.posix.join(base, 'edges')], repoPath);
       // Remove legacy monolith if present
@@ -163,18 +164,21 @@ async function main() {
         // Skip non-target graphs in flatten mode
         continue;
       }
+      // write nodes/edges in parallel
+      const nodeWrites = normalizedNodes.map((n) => {
+        const rel = path.posix.join('nodes', `${encodeURIComponent(n.id)}.json`);
+        return atomicWrite(path.join(repoPath, rel), JSON.stringify(n, null, 2));
+      });
+      const edgeWrites = normalizedEdges.map((e) => {
+        const rel = path.posix.join('edges', `${encodeURIComponent(e.id!)}.json`);
+        return atomicWrite(path.join(repoPath, rel), JSON.stringify(e, null, 2));
+      });
+      await Promise.all([...nodeWrites, ...edgeWrites]);
+      // meta last
       const meta = { name, version: doc.version, updatedAt: doc.updatedAt.toISOString(), format: 2 as const };
       await atomicWrite(path.join(repoPath, 'graph.meta.json'), JSON.stringify(meta, null, 2));
-      for (const n of normalizedNodes) {
-        const rel = path.posix.join('nodes', `${encodeURIComponent(n.id)}.json`);
-        await atomicWrite(path.join(repoPath, rel), JSON.stringify(n, null, 2));
-      }
-      for (const e of normalizedEdges) {
-        const rel = path.posix.join('edges', `${encodeURIComponent(e.id!)}.json`);
-        await atomicWrite(path.join(repoPath, rel), JSON.stringify(e, null, 2));
-      }
       // Stage files and deletion of graphs/
-      await runGit(['add', '--all', 'graph.meta.json', 'nodes', 'edges'], repoPath);
+      await runGit(['add', '--all', 'graph.meta.json', path.posix.join('nodes'), path.posix.join('edges')], repoPath);
       if (await pathExists(path.join(repoPath, 'graphs'))) {
         try { await runGit(['rm', '-r', '--ignore-unmatch', 'graphs'], repoPath); } catch {}
       }
