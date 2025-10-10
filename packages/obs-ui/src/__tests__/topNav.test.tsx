@@ -77,4 +77,41 @@ describe('TopNav and EntryLayout', () => {
     fireEvent.click(tracesA2);
     expect(tracesA2).toHaveAttribute('href', '/');
   });
+
+  it('renders on /errors/tools/:label and marks Error tools active; preserves params on link', async () => {
+    render(
+      <MemoryRouter initialEntries={[`/errors/tools/tool%3Asearch?from=2024-05-01T00%3A00%3A00.000Z&to=2024-05-02T00%3A00%3A00.000Z`]}>
+        <Routes>
+          <Route element={<EntryLayout />}>
+            <Route path="/" element={<TracesListPage />} />
+            <Route path="/errors/tools" element={<ErrorsByToolPage />} />
+            <Route path="/errors/tools/:label" element={<ToolErrorsPage />} />
+          </Route>
+        </Routes>
+      </MemoryRouter>
+    );
+    const errLink = await screen.findByText('Error tools');
+    const errA = (errLink as HTMLElement).closest('a')!;
+    expect(errA).toHaveAttribute('aria-current', 'page');
+    expect(errA.getAttribute('href')).toContain('from=');
+    expect(errA.getAttribute('href')).toContain('to=');
+    // Clicking navigates to the list page retaining params
+    fireEvent.click(errA);
+    expect(await screen.findByText('Errors by Tool')).toBeTruthy();
+  });
+
+  it('TopNav not rendered on /thread/:id', async () => {
+    render(
+      <MemoryRouter initialEntries={[`/thread/xyz`]}>
+        <Routes>
+          <Route element={<EntryLayout />}>
+            <Route path="/" element={<TracesListPage />} />
+          </Route>
+          <Route path="/thread/:threadId" element={<div>Thread page</div>} />
+        </Routes>
+      </MemoryRouter>
+    );
+    expect(screen.queryByText('Error tools')).toBeNull();
+    expect(screen.queryByText('Traces')).toBeNull();
+  });
 });

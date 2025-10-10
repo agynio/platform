@@ -23,7 +23,7 @@ export function TopNav() {
   const linkBase: React.CSSProperties = {
     padding: '6px 10px',
     borderRadius: 6,
-    color: '#333',
+    color: '#222',
     textDecoration: 'none',
     outlineOffset: 2,
   };
@@ -44,14 +44,14 @@ export function TopNav() {
         <NavLink to="/" end style={({ isActive }) => ({
           ...linkBase,
           fontWeight: isActive ? 600 : 500,
-          background: isActive ? '#f1f3f5' : undefined,
+          background: isActive ? '#f7f9fa' : undefined,
         })}>
           Traces
         </NavLink>
         <NavLink to={errorsToolsHref} style={({ isActive }) => ({
           ...linkBase,
           fontWeight: isActive ? 600 : 500,
-          background: isActive ? '#f1f3f5' : undefined,
+          background: isActive ? '#f7f9fa' : undefined,
         })}>
           Error tools
         </NavLink>
@@ -59,4 +59,3 @@ export function TopNav() {
     </nav>
   );
 }
-
