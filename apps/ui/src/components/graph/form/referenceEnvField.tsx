@@ -8,8 +8,12 @@ export function ReferenceEnvField({ formData, onChange }: { formData?: EnvItem[]
   const [newKey, setNewKey] = useState('');
   const [newVal, setNewVal] = useState<ReferenceValue>({ value: '', source: 'static' });
 
-  const keys = new Set(items.map((i) => i.key));
-  const dup = (k: string) => k && keys.has(k);
+  const counts = useMemo(() => {
+    const c: Record<string, number> = {};
+    for (const it of items) c[it.key] = (c[it.key] || 0) + 1;
+    return c;
+  }, [items]);
+  const isDup = (k: string) => !!k && (counts[k] || 0) > 1;
 
   function updateAt(idx: number, patch: Partial<EnvItem>) {
     const next = items.map((it, i) => (i === idx ? { ...it, ...patch } : it));
@@ -34,7 +38,7 @@ export function ReferenceEnvField({ formData, onChange }: { formData?: EnvItem[]
       {items.length === 0 && <div className="text-[10px] text-muted-foreground">No environment variables</div>}
       {items.map((it, idx) => (
         <div key={`${it.key}-${idx}`} className="flex items-center gap-2">
-          <input className={`w-40 rounded border px-2 py-1 text-xs ${dup(it.key) ? 'border-red-500' : ''}`} value={it.key} readOnly />
+          <input className={`w-40 rounded border px-2 py-1 text-xs ${isDup(it.key) ? 'border-red-500' : ''}`} value={it.key} readOnly />
           <div className="flex-1">
             <ReferenceField
               formData={{ value: it.value, source: it.source || 'static' }}
@@ -61,7 +65,7 @@ export function ReferenceEnvField({ formData, onChange }: { formData?: EnvItem[]
         <div className="flex-1">
           <ReferenceField formData={newVal} onChange={(r) => setNewVal(r)} />
         </div>
-        <button type="button" className="text-xs px-2 py-1 rounded border hover:bg-accent/50" onClick={add} disabled={!newKey.trim() || dup(newKey)}>
+        <button type="button" className="text-xs px-2 py-1 rounded border hover:bg-accent/50" onClick={add} disabled={!newKey.trim() || isDup(newKey)}>
           Add
         </button>
       </div>
@@ -75,4 +79,3 @@ function isValidVaultRef(v?: string): boolean {
   const parts = v.split('/').filter(Boolean);
   return parts.length >= 3;
 }
-

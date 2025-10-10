@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { PLATFORM_LABEL, SUPPORTED_PLATFORMS, type Platform } from '../constants.js';
 import { VaultService, type VaultRef } from '../services/vault.service';
 import { ConfigService } from '../services/config.service';
+import { parseVaultRef } from '../utils/refs';
 
 // Static configuration schema for ContainerProviderEntity
 // Allows overriding the base image and supplying environment variables.
@@ -200,9 +201,12 @@ export class ContainerProviderEntity {
       const cfgEnv = this.cfg?.env as unknown;
       if (Array.isArray(cfgEnv)) {
         const seen = new Set<string>();
-        for (const item of cfgEnv) {
-          const { key, value } = (item || {}) as { key?: string; value?: string; source?: 'static' | 'vault' };
-          const source = ((item as any)?.source || 'static') as 'static' | 'vault';
+        const vaultLookups: Array<{ k: string; ref: VaultRef }> = [];
+        const staticPairs: Array<{ k: string; v: string }> = [];
+        for (const item of cfgEnv as Array<{ key?: string; value?: string; source?: 'static'|'vault' }>) {
+          const key = item?.key?.trim();
+          const value = item?.value ?? '';
+          const source = (item?.source || 'static');
           if (!key) throw new Error('env entries require non-empty key');
           if (seen.has(key)) throw new Error(`Duplicate env key: ${key}`);
           seen.add(key);
@@ -210,18 +214,27 @@ export class ContainerProviderEntity {
             if (!this.vaultService || !this.vaultService.isEnabled()) {
               throw new Error('Vault is not enabled but env contains vault-sourced entries');
             }
-            const vr = parseVaultRef(value || '');
-            try {
-              const v = await this.vaultService.getSecret(vr);
-              if (v == null) throw new Error(`Missing Vault secret at ${vr.mount}/${vr.path}#${vr.key}`);
-              envMerged[key] = String(v);
-            } catch (e: unknown) {
-              throw new Error(`Vault resolution failed for ${key} at ${vr.mount}/${vr.path}#${vr.key}: ${(e as Error).message}`);
-            }
+            const vr = parseVaultRef(value);
+            vaultLookups.push({ k: key, ref: vr });
           } else {
-            envMerged[key] = value ?? '';
+            staticPairs.push({ k: key, v: value });
           }
         }
+        // Apply static pairs immediately
+        for (const { k, v } of staticPairs) envMerged[k] = v;
+        // Resolve all vault refs concurrently
+        const resolved = await Promise.all(
+          vaultLookups.map(async ({ k, ref }) => {
+            try {
+              const v = await this.vaultService!.getSecret(ref);
+              if (v == null) throw new Error(`Missing Vault secret at ${ref.mount}/${ref.path}#${ref.key}`);
+              return { k, v: String(v) };
+            } catch (e) {
+              throw new Error(`Vault resolution failed for ${k} at ${ref.mount}/${ref.path}#${ref.key}: ${(e as Error).message}`);
+            }
+          }),
+        );
+        for (const { k, v } of resolved) envMerged[k] = v;
       } else {
         // Legacy: plain env map
         if (this.cfg?.env && typeof this.cfg.env === 'object') {
@@ -233,24 +246,27 @@ export class ContainerProviderEntity {
           if (!this.vaultService || !this.vaultService.isEnabled()) {
             throw new Error('Vault is not enabled but envRefs are configured');
           }
-          for (const [varName, ref] of Object.entries(refs)) {
-            const vr: VaultRef = {
-              mount: (ref.mount || 'secret').replace(/\/$/, ''),
-              path: ref.path,
-              key: ref.key || 'value',
-            };
-            try {
-              const value = await this.vaultService.getSecret(vr);
-              if (value == null) {
-                if (ref.optional) continue;
-                throw new Error(`Missing Vault secret for ${varName} at ${vr.mount}/${vr.path}#${vr.key}`);
+          const entries = Object.entries(refs);
+          const results = await Promise.all(
+            entries.map(async ([varName, ref]) => {
+              const vr: VaultRef = {
+                mount: (ref.mount || 'secret').replace(/\/$/, ''),
+                path: ref.path,
+                key: ref.key || 'value',
+              };
+              try {
+                const value = await this.vaultService!.getSecret(vr);
+                if (value == null) {
+                  if (ref.optional) return { varName, skip: true as const };
+                  throw new Error(`Missing Vault secret for ${varName} at ${vr.mount}/${vr.path}#${vr.key}`);
+                }
+                return { varName, value: String(value) };
+              } catch (e) {
+                throw new Error(`Vault resolution failed for ${varName} at ${vr.mount}/${vr.path}#${vr.key}: ${(e as Error).message}`);
               }
-              envMerged[varName] = String(value);
-            } catch (e: unknown) {
-              // Do not include secret values; only reference context
-              throw new Error(`Vault resolution failed for ${varName} at ${vr.mount}/${vr.path}#${vr.key}: ${(e as Error).message}`);
-            }
-          }
+            }),
+          );
+          for (const r of results) if ('value' in r) envMerged[r.varName] = r.value;
         }
       }
 
@@ -361,14 +377,4 @@ function getStatusCode(e: unknown): number | undefined {
 
 // Parse Vault reference string in format "mount/path/key" with path supporting nested segments.
 // Returns VaultRef and throws on invalid inputs.
-export function parseVaultRef(ref: string): VaultRef {
-  if (!ref || typeof ref !== 'string') throw new Error('Vault ref must be a non-empty string');
-  if (ref.startsWith('/')) throw new Error('Vault ref must not start with /');
-  const parts = ref.split('/').filter((p) => p.length > 0);
-  if (parts.length < 3) throw new Error('Vault ref must be in format mount/path/key');
-  const mount = parts[0].replace(/\/$/, '');
-  const key = parts[parts.length - 1];
-  const path = parts.slice(1, parts.length - 1).join('/');
-  if (!mount || !path || !key) throw new Error('Vault ref must include mount, path and key');
-  return { mount, path, key };
-}
+// parseVaultRef now imported from ../utils/refs

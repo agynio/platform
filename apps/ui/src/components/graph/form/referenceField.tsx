@@ -42,6 +42,8 @@ export function ReferenceField({ formData, onChange }: { formData?: ReferenceVal
 
   const invalidVault = mode === 'vault' && val && !isValidVaultRef(val);
 
+  const uniqueId = useMemo(() => `rf-${Math.random().toString(36).slice(2)}`, []);
+
   return (
     <div className="flex items-center gap-2">
       <input
@@ -49,7 +51,7 @@ export function ReferenceField({ formData, onChange }: { formData?: ReferenceVal
         placeholder={mode === 'vault' ? 'mount/path/key' : 'value'}
         value={val}
         onChange={(e) => setVal(e.target.value)}
-        list={mode === 'vault' ? 'vault-suggestions' : undefined}
+        list={mode === 'vault' ? `${uniqueId}-vault-suggestions` : undefined}
       />
       <div className="relative">
         <select
@@ -65,7 +67,7 @@ export function ReferenceField({ formData, onChange }: { formData?: ReferenceVal
       {/* datalists for simple suggestions */}
       {mode === 'vault' && (
         <>
-          <datalist id="vault-suggestions">
+          <datalist id={`${uniqueId}-vault-suggestions`}>
             {mounts.map((m) => (
               <option key={`m-${m}`} value={`${m}/`} />
             ))}
@@ -101,4 +103,3 @@ function isValidVaultRef(v?: string): boolean {
   const parts = v.split('/').filter(Boolean);
   return parts.length >= 3;
 }
-

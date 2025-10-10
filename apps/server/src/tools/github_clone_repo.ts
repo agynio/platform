@@ -5,6 +5,7 @@ import { ConfigService } from '../services/config.service';
 import { LoggerService } from '../services/logger.service';
 import { VaultService, type VaultRef } from '../services/vault.service';
 import { BaseTool } from './base.tool';
+import { parseVaultRef } from '../utils/refs';
 
 // Schema for cloning a GitHub repository inside a running container
 const githubCloneSchema = z.object({
@@ -145,7 +146,9 @@ export class GithubCloneRepoTool extends BaseTool {
             const vr = parseVaultRef(this.token.value);
             const token = await vlt.getSecret(vr);
             if (token) return token;
-          } catch {}
+          } catch {
+            // ignore and continue fallbacks
+          }
         }
       } else if (typeof this.token.value === 'string' && this.token.value) {
         return this.token.value;
@@ -170,7 +173,9 @@ export class GithubCloneRepoTool extends BaseTool {
           try {
             const token = await vlt.getSecret(vr);
             if (token) return token;
-          } catch {}
+          } catch {
+            // ignore and continue fallbacks
+          }
         }
       }
     }
