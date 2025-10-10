@@ -1,22 +1,13 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { ReferenceField, type ReferenceValue } from './referenceField';
 
 type EnvItem = { key: string; value: string; source?: 'static' | 'vault' };
 
 export function ReferenceEnvField({ formData, onChange }: { formData?: EnvItem[]; onChange?: (next: EnvItem[]) => void }) {
-  const items = useMemo(() => (Array.isArray(formData) ? [...formData] : []), [formData]);
+  const items = useMemo(() => Array.isArray(formData) ? [...formData] : [], [formData]);
   const [newKey, setNewKey] = useState('');
   const [newVal, setNewVal] = useState<ReferenceValue>({ value: '', source: 'static' });
 
-<<<<<<< HEAD
-  // Reset new row state when list resets from outside
-  useEffect(() => {
-    setNewKey('');
-    setNewVal({ value: '', source: 'static' });
-  }, [formData]);
-
-=======
->>>>>>> 532949b (refactor(#113): batch Vault lookups; share parseVaultRef; tighten types; UI fixes\n\n- Batch env and envRefs vault resolutions with Promise.all.\n- Extract shared parseVaultRef in server utils and reuse.\n- Tighten Zod types and remove any casts where feasible.\n- UI: fix duplicate key detection and unique datalist ids.\n- Extend tests for token fallbacks, legacy compatibility, and error paths.)
   const counts = useMemo(() => {
     const c: Record<string, number> = {};
     for (const it of items) c[it.key] = (c[it.key] || 0) + 1;
@@ -48,10 +39,6 @@ export function ReferenceEnvField({ formData, onChange }: { formData?: EnvItem[]
       {items.map((it, idx) => (
         <div key={`${it.key}-${idx}`} className="flex items-center gap-2">
           <input className={`w-40 rounded border px-2 py-1 text-xs ${isDup(it.key) ? 'border-red-500' : ''}`} value={it.key} readOnly />
-<<<<<<< HEAD
-          <input className={`w-40 rounded border px-2 py-1 text-xs ${isDup(it.key) ? 'border-red-500' : ''}`} value={it.key} readOnly />
-=======
->>>>>>> 532949b (refactor(#113): batch Vault lookups; share parseVaultRef; tighten types; UI fixes\n\n- Batch env and envRefs vault resolutions with Promise.all.\n- Extract shared parseVaultRef in server utils and reuse.\n- Tighten Zod types and remove any casts where feasible.\n- UI: fix duplicate key detection and unique datalist ids.\n- Extend tests for token fallbacks, legacy compatibility, and error paths.)
           <div className="flex-1">
             <ReferenceField
               formData={{ value: it.value, source: it.source || 'static' }}
@@ -70,7 +57,6 @@ export function ReferenceEnvField({ formData, onChange }: { formData?: EnvItem[]
       ))}
       <div className="flex items-center gap-2">
         <input
-          className={`w-40 rounded border px-2 py-1 text-xs ${isDup(newKey) ? 'border-red-500' : ''}`}
           className={`w-40 rounded border px-2 py-1 text-xs ${isDup(newKey) ? 'border-red-500' : ''}`}
           placeholder="key"
           value={newKey}
@@ -93,10 +79,3 @@ function isValidVaultRef(v?: string): boolean {
   const parts = v.split('/').filter(Boolean);
   return parts.length >= 3;
 }
-<<<<<<< HEAD
-<<<<<<< HEAD
-=======
-
->>>>>>> 42b54f2 (feat(config,#113): unify env and token references with source-aware fields)
-=======
->>>>>>> 532949b (refactor(#113): batch Vault lookups; share parseVaultRef; tighten types; UI fixes\n\n- Batch env and envRefs vault resolutions with Promise.all.\n- Extract shared parseVaultRef in server utils and reuse.\n- Tighten Zod types and remove any casts where feasible.\n- UI: fix duplicate key detection and unique datalist ids.\n- Extend tests for token fallbacks, legacy compatibility, and error paths.)
