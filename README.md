@@ -11,3 +11,10 @@ Quick links
 Getting started
 - Architecture and setup: [docs/technical-overview.md](docs/technical-overview.md)
 - Contribution workflow & style guides: [docs/contributing/index.md](docs/contributing/index.md)
+
+Server graph store configuration
+- GRAPH_STORE: `mongo` | `git` (default `mongo`)
+- GRAPH_REPO_PATH: path to local git repo (default `./data/graph`)
+- GRAPH_BRANCH: branch name (default `graph-state`)
+- GRAPH_AUTHOR_NAME / GRAPH_AUTHOR_EMAIL: default commit author
+Run migration: `tsx scripts/migrate_graph_to_git.ts` to export Mongo graphs into the git repo.
