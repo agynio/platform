@@ -18,8 +18,14 @@ export const LocalMcpServerStaticConfigSchema = z.object({
     .optional()
     .describe('Startup command executed inside the container (default: mcp start --stdio).'),
   workdir: z.string().optional().describe('Working directory inside the container.'),
-  env: z.record(z.string().min(1), z.string()).optional().describe('Environment variables overlay for MCP execs.'),
-  unset: z.array(z.string().min(1)).optional().describe('Variables to unset in shell before starting MCP.'),
+  env: z
+    .record(z.string().min(1), z.string())
+    .optional()
+    .describe('Environment variables overlay for MCP execs (applied per discovery/call).'),
+  unset: z
+    .array(z.string().min(1).regex(/^[A-Za-z_][A-Za-z0-9_]*$/))
+    .optional()
+    .describe('Variables to unset in shell before starting MCP.'),
   requestTimeoutMs: z.number().int().positive().optional().describe('Per-request timeout in ms.'),
   startupTimeoutMs: z.number().int().positive().optional().describe('Startup handshake timeout in ms.'),
   heartbeatIntervalMs: z.number().int().positive().optional().describe('Interval for heartbeat pings in ms.'),
@@ -34,6 +40,13 @@ export const LocalMcpServerStaticConfigSchema = z.object({
 // .strict();
 
 export class LocalMCPServer implements McpServer, Provisionable, DynamicConfigurable<Record<string, boolean>> {
+  private buildExecConfig(command: string) {
+    const cfg = this.cfg!;
+    const unsetClause = cfg.unset && cfg.unset.length > 0 ? `unset ${cfg.unset.join(' ')}; ` : '';
+    const cmdToRun = `${unsetClause}${command}`;
+    const envArr = cfg.env ? Object.entries(cfg.env).map(([k, v]) => `${k}=${v}`) : undefined;
+    return { cmdToRun, envArr, workdir: cfg.workdir };
+  }
   /**
    * Lifecycle (post-refactor single discovery path):
    *
@@ -116,8 +129,7 @@ export class LocalMCPServer implements McpServer, Provisionable, DynamicConfigur
 
     const cfg = this.cfg!;
     const command = cfg.command ?? DEFAULT_MCP_COMMAND;
-    const unsetClause = cfg.unset && cfg.unset.length > 0 ? `unset ${cfg.unset.join(' ')}; ` : '';
-    const cmdToRun = `${unsetClause}${command}`;
+    const { cmdToRun, envArr, workdir } = this.buildExecConfig(command);
     const docker = this.containerService.getDocker();
 
     let tempTransport: DockerExecTransport | undefined;
@@ -136,8 +148,8 @@ export class LocalMCPServer implements McpServer, Provisionable, DynamicConfigur
             AttachStderr: true,
             AttachStdin: true,
             Tty: false,
-            WorkingDir: cfg.workdir,
-            Env: cfg.env ? Object.entries(cfg.env).map(([k, v]) => `${k}=${v}`) : undefined,
+            WorkingDir: workdir,
+            Env: envArr,
           });
           const stream: any = await new Promise((resolve, reject) => {
             exec.start({ hijack: true, stdin: true }, (err, s) => {
@@ -276,8 +288,7 @@ export class LocalMCPServer implements McpServer, Provisionable, DynamicConfigur
 
     const cfg = this.cfg!;
     const command = cfg.command ?? DEFAULT_MCP_COMMAND;
-    const unsetClause = cfg.unset && cfg.unset.length > 0 ? `unset ${cfg.unset.join(' ')}; ` : '';
-    const cmdToRun = `${unsetClause}${command}`;
+    const { cmdToRun, envArr, workdir } = this.buildExecConfig(command);
     const docker = this.containerService.getDocker();
 
     let transport: DockerExecTransport | undefined;
@@ -295,8 +306,8 @@ export class LocalMCPServer implements McpServer, Provisionable, DynamicConfigur
             AttachStderr: true,
             AttachStdin: true,
             Tty: false,
-            WorkingDir: cfg.workdir,
-            Env: cfg.env ? Object.entries(cfg.env).map(([k, v]) => `${k}=${v}`) : undefined,
+            WorkingDir: workdir,
+            Env: envArr,
           });
           const stream: any = await new Promise((resolve, reject) => {
             exec.start({ hijack: true, stdin: true }, (err, s) => {

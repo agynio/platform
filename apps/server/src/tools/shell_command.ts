@@ -20,12 +20,18 @@ const bashCommandSchema = z.object({
 });
 
 // Static config schema for ShellTool: per-node env overlay, unset list, and optional workdir
-const ShellEnvSchema = z.record(z.string().min(1), z.string());
+const ShellEnvSchema = z
+  .record(z.string().min(1), z.string())
+  .describe('Environment variables to overlay for this Shell node. Applied per exec only.');
+const VarNameRe = /^[A-Za-z_][A-Za-z0-9_]*$/;
 export const ShellToolStaticConfigSchema = z
   .object({
     env: ShellEnvSchema.optional(),
-    unset: z.array(z.string().min(1)).optional(),
-    workdir: z.string().optional(),
+    unset: z
+      .array(z.string().min(1).regex(VarNameRe))
+      .optional()
+      .describe('List of variable names to unset in the shell before executing the command.'),
+    workdir: z.string().optional().describe('Working directory to use for each exec.'),
   })
   .strict();
 
