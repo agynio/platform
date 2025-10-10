@@ -18,6 +18,8 @@ export const LocalMcpServerStaticConfigSchema = z.object({
     .optional()
     .describe('Startup command executed inside the container (default: mcp start --stdio).'),
   workdir: z.string().optional().describe('Working directory inside the container.'),
+  env: z.record(z.string().min(1), z.string()).optional().describe('Environment variables overlay for MCP execs.'),
+  unset: z.array(z.string().min(1)).optional().describe('Variables to unset in shell before starting MCP.'),
   requestTimeoutMs: z.number().int().positive().optional().describe('Per-request timeout in ms.'),
   startupTimeoutMs: z.number().int().positive().optional().describe('Startup handshake timeout in ms.'),
   heartbeatIntervalMs: z.number().int().positive().optional().describe('Interval for heartbeat pings in ms.'),
@@ -114,6 +116,8 @@ export class LocalMCPServer implements McpServer, Provisionable, DynamicConfigur
 
     const cfg = this.cfg!;
     const command = cfg.command ?? DEFAULT_MCP_COMMAND;
+    const unsetClause = cfg.unset && cfg.unset.length > 0 ? `unset ${cfg.unset.join(' ')}; ` : '';
+    const cmdToRun = `${unsetClause}${command}`;
     const docker = this.containerService.getDocker();
 
     let tempTransport: DockerExecTransport | undefined;
@@ -127,12 +131,13 @@ export class LocalMCPServer implements McpServer, Provisionable, DynamicConfigur
         async () => {
           this.logger.debug(`[MCP:${this.namespace}] [disc:${discoveryId}] launching docker exec`);
           const exec = await docker.getContainer(tempContainerId).exec({
-            Cmd: ['sh', '-lc', command],
+            Cmd: ['sh', '-lc', cmdToRun],
             AttachStdout: true,
             AttachStderr: true,
             AttachStdin: true,
             Tty: false,
             WorkingDir: cfg.workdir,
+            Env: cfg.env ? Object.entries(cfg.env).map(([k, v]) => `${k}=${v}`) : undefined,
           });
           const stream: any = await new Promise((resolve, reject) => {
             exec.start({ hijack: true, stdin: true }, (err, s) => {
@@ -271,6 +276,8 @@ export class LocalMCPServer implements McpServer, Provisionable, DynamicConfigur
 
     const cfg = this.cfg!;
     const command = cfg.command ?? DEFAULT_MCP_COMMAND;
+    const unsetClause = cfg.unset && cfg.unset.length > 0 ? `unset ${cfg.unset.join(' ')}; ` : '';
+    const cmdToRun = `${unsetClause}${command}`;
     const docker = this.containerService.getDocker();
 
     let transport: DockerExecTransport | undefined;
@@ -283,12 +290,13 @@ export class LocalMCPServer implements McpServer, Provisionable, DynamicConfigur
         this.logger,
         async () => {
           const exec = await docker.getContainer(containerId).exec({
-            Cmd: ['sh', '-lc', command],
+            Cmd: ['sh', '-lc', cmdToRun],
             AttachStdout: true,
             AttachStderr: true,
             AttachStdin: true,
             Tty: false,
             WorkingDir: cfg.workdir,
+            Env: cfg.env ? Object.entries(cfg.env).map(([k, v]) => `${k}=${v}`) : undefined,
           });
           const stream: any = await new Promise((resolve, reject) => {
             exec.start({ hijack: true, stdin: true }, (err, s) => {

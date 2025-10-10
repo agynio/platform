@@ -19,11 +19,19 @@ const bashCommandSchema = z.object({
     ),
 });
 
-// Static config schema for ShellTool (currently no options, placeholder for future flags)
-export const ShellToolStaticConfigSchema = z.object({}).strict();
+// Static config schema for ShellTool: per-node env overlay, unset list, and optional workdir
+const ShellEnvSchema = z.record(z.string().min(1), z.string());
+export const ShellToolStaticConfigSchema = z
+  .object({
+    env: ShellEnvSchema.optional(),
+    unset: z.array(z.string().min(1)).optional(),
+    workdir: z.string().optional(),
+  })
+  .strict();
 
 export class ShellTool extends BaseTool {
   private containerProvider?: ContainerProviderEntity;
+  private cfg?: z.infer<typeof ShellToolStaticConfigSchema>;
 
   constructor(logger: LoggerService) { super(logger); }
 
@@ -47,7 +55,9 @@ export class ShellTool extends BaseTool {
         const container = await this.containerProvider.provide(thread_id!);
         const { command } = bashCommandSchema.parse(input);
         this.logger.info('Tool called', 'shell_command', { command });
-        const response = await container.exec(command);
+        const unsetClause = this.cfg?.unset && this.cfg.unset.length > 0 ? `unset ${this.cfg.unset.join(' ')}; ` : '';
+        const cmdToRun = `${unsetClause}${command}`;
+        const response = await container.exec(cmdToRun, { env: this.cfg?.env, workdir: this.cfg?.workdir });
 
         const cleanedStdout = this.stripAnsi(response.stdout);
         const cleanedStderr = this.stripAnsi(response.stderr);
@@ -66,6 +76,8 @@ export class ShellTool extends BaseTool {
   }
 
   async setConfig(_cfg: Record<string, unknown>): Promise<void> {
-    /* tool currently has no configurable runtime settings */
+    const parsed = ShellToolStaticConfigSchema.safeParse(_cfg);
+    if (!parsed.success) throw new Error(`Invalid Shell tool config: ${parsed.error.message}`);
+    this.cfg = parsed.data;
   }
 }
