@@ -17,19 +17,11 @@ Development services
 - Optional: start Vault for dev secret flows: `docker compose up -d vault vault-init`
   - Set VAULT_ENABLED=true, VAULT_ADDR, VAULT_TOKEN in apps/server/.env
   - See docs/security/vault.md
-Notes for Docker-in-Docker (Issue #99)
-- Workspace containers can opt-in to a per-workspace Docker daemon via DOCKER_HOST=tcp://localhost:2375; this port is only reachable inside the workspace namespace and is not published on the host.
+
+Docker-in-Docker and registry mirror (Issue #99)
+- Workspace containers can opt-in to a per-workspace Docker daemon via `DOCKER_HOST=tcp://localhost:2375`; this port is only reachable inside the workspace namespace and is not published on the host.
 - A lightweight registry mirror runs as a compose service `registry-mirror` on the shared network `agents_net`. It is HTTP-only and only reachable within that network.
-- Override the mirror by setting DOCKER_MIRROR_URL (default http://registry-mirror:5000).
-Development services
-- docker compose up -d mongo1 mongo-setup mongo-express jaeger
-- Optional: start Vault for dev secret flows: `docker compose up -d vault vault-init`
-  - Set VAULT_ENABLED=true, VAULT_ADDR, VAULT_TOKEN in apps/server/.env
-  - See docs/security/vault.md
-Notes for Docker-in-Docker (Issue #99)
-- Workspace containers can opt-in to a per-workspace Docker daemon via DOCKER_HOST=tcp://localhost:2375; this port is only reachable inside the workspace namespace and is not published on the host.
-- A lightweight registry mirror runs as a compose service `registry-mirror` on the shared network `agents_net`. It is HTTP-only and only reachable within that network.
-- Override the mirror by setting DOCKER_MIRROR_URL (default http://registry-mirror:5000).
+- Override the mirror by setting `DOCKER_MIRROR_URL` (default `http://registry-mirror:5000`).
 
 Server graph store configuration
 - GRAPH_STORE: `mongo` | `git` (default `mongo`)

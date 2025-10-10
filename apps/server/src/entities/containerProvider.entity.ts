@@ -262,11 +262,17 @@ export class ContainerProviderEntity {
       } catch {}
       // Early fail if DinD exited unexpectedly (best-effort; skip if low-level client not available)
       try {
-        const getDocker = (this.containerService as unknown as { getDocker?: () => any }).getDocker;
-        if (typeof getDocker === 'function') {
-          const inspect = await getDocker().getContainer(dind.id).inspect();
-          if (inspect.State && inspect.State.Running === false) {
-            throw new Error(`DinD sidecar exited unexpectedly: status=${inspect.State.Status}`);
+        const maybeSvc: unknown = this.containerService;
+        // Narrow to objects that expose getDocker(): Docker
+        const hasGetDocker =
+          typeof maybeSvc === 'object' && maybeSvc !== null && 'getDocker' in maybeSvc &&
+          typeof (maybeSvc as { getDocker?: unknown }).getDocker === 'function';
+        if (hasGetDocker) {
+          const docker = (maybeSvc as { getDocker: () => import('dockerode').default }).getDocker();
+          const inspect = await docker.getContainer(dind.id).inspect();
+          const state = inspect?.State as { Running?: boolean; Status?: string } | undefined;
+          if (state && state.Running === false) {
+            throw new Error(`DinD sidecar exited unexpectedly: status=${state.Status}`);
           }
         }
       } catch (e) {
