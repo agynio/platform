@@ -17,4 +17,14 @@ Server graph store configuration
 - GRAPH_REPO_PATH: path to local git repo (default `./data/graph`)
 - GRAPH_BRANCH: branch name (default `graph-state`)
 - GRAPH_AUTHOR_NAME / GRAPH_AUTHOR_EMAIL: default commit author
-Run migration: `tsx scripts/migrate_graph_to_git.ts` to export Mongo graphs into the git repo.
+
+Git graph storage (format: 2)
+- Root-level files/directories: `graph.meta.json`, `nodes/`, `edges/`, and advisory lock `.graph.lock`.
+- Filenames use encodeURIComponent(id); edge ids are deterministic: `<src>-<srcH>__<tgt>-<tgtH>`.
+- Writes are atomic per-entity; meta is written last; `.graph.lock` guards concurrent writers.
+
+Migration
+- From legacy layouts (`graphs/<name>/graph.json` or per-entity under `graphs/<name>/`), run:
+  `tsx scripts/migrate_graph_storage.ts`
+- Options via env: GRAPH_REPO_PATH, GRAPH_BRANCH, GRAPH_AUTHOR_NAME, GRAPH_AUTHOR_EMAIL, GRAPH_NAME.
+- The script stages `graph.meta.json`, `nodes/`, `edges/`, removes `graphs/`, and commits the change.

@@ -135,6 +135,46 @@ describe('GitGraphService', () => {
     expect(await hasFile(edgeFile)).toBeTruthy();
   });
 
+  it('round-trips ids with special characters via encodeURIComponent/ decodeURIComponent', async () => {
+    const before = await svc.get('main');
+    const ids = ['A%20B', 'C?D#E'];
+    const saved = await svc.upsert({
+      name: 'main',
+      version: before?.version ?? 0,
+      nodes: ids.map((id) => ({ id, template: 'noop' })),
+      edges: [
+        { source: ids[0], sourceHandle: 'out', target: ids[1], targetHandle: 'in' },
+      ],
+    });
+    expect(saved.nodes.map((n) => n.id)).toEqual(ids);
+    const fs = await import('fs/promises');
+    // files should exist and decode back to ids
+    for (const id of ids) {
+      const f = path.join(tmp, 'nodes', `${encodeURIComponent(id)}.json`);
+      const data = JSON.parse(await fs.readFile(f, 'utf8'));
+      expect(data.id).toBe(id);
+    }
+    const eid = `${ids[0]}-out__${ids[1]}-in`;
+    const ef = path.join(tmp, 'edges', `${encodeURIComponent(eid)}.json`);
+    const eData = JSON.parse(await fs.readFile(ef, 'utf8'));
+    expect(eData.id).toBe(eid);
+  });
+
+  it('falls back to HEAD when an entity file is corrupt', async () => {
+    // seed graph with two nodes so partial read would be detectable
+    const before = await svc.upsert({ name: 'main', version: 0, nodes: [
+      { id: 'nA', template: 'noop' },
+      { id: 'nB', template: 'noop' },
+    ], edges: [] });
+    // corrupt one node file
+    const fs = await import('fs/promises');
+    await fs.writeFile(path.join(tmp, 'nodes', `${encodeURIComponent('nA')}.json`), '{ bad-json');
+    const recovered = await svc.get('main');
+    // Should fallback to last committed snapshot (before)
+    expect(recovered?.nodes.length).toBe(before.nodes.length);
+    expect(recovered?.version).toBe(before.version);
+  });
+
   it('bumps version and stages only deltas', async () => {
     const first = await svc.upsert({ name: 'main', version: 0, nodes: [{ id: 'n1', template: 'noop' }], edges: [] });
     const second = await svc.upsert({ name: 'main', version: first.version, nodes: [{ id: 'n1', template: 'noop', position: { x: 1, y: 2 } }], edges: [] });
