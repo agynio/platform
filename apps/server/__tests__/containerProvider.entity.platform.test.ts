@@ -33,7 +33,7 @@ describe('ContainerProviderEntity platform reuse logic', () => {
     (svc.getContainerLabels as any).mockResolvedValue({ [PLATFORM_LABEL]: 'linux/amd64' });
 
     const provider = new ContainerProviderEntity(svc as any, {}, idLabels);
-    provider.setConfig({ platform: 'linux/arm64' });
+    provider.setConfig({ platform: 'linux/arm64' }); // DinD disabled by default
     const c = await provider.provide('t1');
 
     // ensure lookup used the thread-scoped label
@@ -53,7 +53,7 @@ describe('ContainerProviderEntity platform reuse logic', () => {
     (svc.getContainerLabels as any).mockResolvedValue({});
 
     const provider = new ContainerProviderEntity(svc as any, {}, idLabels);
-    provider.setConfig({ platform: 'linux/arm64' });
+    provider.setConfig({ platform: 'linux/arm64' }); // DinD disabled by default
     const c = await provider.provide('t2');
 
     expect(existing.stop).toHaveBeenCalled();
@@ -93,5 +93,28 @@ describe('ContainerProviderEntity platform reuse logic', () => {
   it('schema rejects invalid platform values', () => {
     const res = ContainerProviderStaticConfigSchema.safeParse({ platform: 'linux/arm/v7' });
     expect(res.success).toBe(false);
+  });
+
+  it('does not attempt DinD when flag disabled (default)', async () => {
+    const startImpl = async (_opts: Parameters<ContainerService['start']>[0]) => new MockContainer('cid123', svc as any);
+    (svc.start as any).mockImplementationOnce(startImpl);
+    const provider = new ContainerProviderEntity(svc as any, {}, idLabels);
+    provider.setConfig({});
+    const c = await provider.provide('tdis');
+    expect(c).toBeInstanceOf(MockContainer);
+    // verify DOCKER_HOST is NOT injected when DinD disabled
+    const call = (svc.start as any).mock.calls.find(Boolean);
+    expect(call[0].env?.DOCKER_HOST).toBeUndefined();
+  });
+
+  it('injects DOCKER_HOST and would ensure DinD when enabled', async () => {
+    const startImpl = async (_opts: Parameters<ContainerService['start']>[0]) => new MockContainer('cid999', svc as any);
+    (svc.start as any).mockImplementationOnce(startImpl);
+    const provider = new ContainerProviderEntity(svc as any, {}, idLabels);
+    provider.setConfig({ enableDinD: true });
+    const c = await provider.provide('ten');
+    expect(c).toBeInstanceOf(MockContainer);
+    const call = (svc.start as any).mock.calls.find(Boolean);
+    expect(call[0].env?.DOCKER_HOST).toBe('tcp://localhost:2375');
   });
 });

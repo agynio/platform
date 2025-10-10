@@ -41,16 +41,22 @@ export const ContainerProviderStaticConfigSchema = z
       .optional()
       .describe('Docker platform selector for the workspace container')
       .meta({ 'ui:widget': 'select' }),
+    enableDinD: z
+      .boolean()
+      .default(false)
+      .describe('Enable per-workspace Docker-in-Docker sidecar; defaults to disabled for tests/CI.'),
   })
   .strict();
 
 export type ContainerProviderStaticConfig = z.infer<typeof ContainerProviderStaticConfigSchema>;
 
 export class ContainerProviderEntity {
-  private cfg?: Pick<ContainerOpts, 'image' | 'env' | 'platform'> & {
-    initialScript?: string;
-    envRefs?: Record<string, { source: 'vault'; mount?: string; path: string; key?: string; optional?: boolean }>;
-  };
+  private cfg?:
+    | (Pick<ContainerOpts, 'image' | 'env' | 'platform'> & {
+        initialScript?: string;
+        envRefs?: Record<string, { source: 'vault'; mount?: string; path: string; key?: string; optional?: boolean }>;
+        enableDinD?: boolean;
+      });
 
   private vaultService: VaultService | undefined;
   private opts: ContainerOpts;
@@ -95,6 +101,7 @@ export class ContainerProviderEntity {
     let container: ContainerEntity | undefined = await this.containerService.findContainerByLabels(labels);
     const DOCKER_HOST_ENV = 'tcp://localhost:2375';
     const DOCKER_MIRROR_URL = process.env.DOCKER_MIRROR_URL || 'http://registry-mirror:5000';
+    const enableDinD = this.cfg?.enableDinD ?? false;
 
     // Enforce non-reuse on platform mismatch if a platform is requested now
     const requestedPlatform = this.cfg?.platform ?? this.opts.platform;
@@ -103,22 +110,24 @@ export class ContainerProviderEntity {
         const containerLabels = await this.containerService.getContainerLabels(container.id);
         const existingPlatform = containerLabels?.[PLATFORM_LABEL];
         if (!existingPlatform || existingPlatform !== requestedPlatform) {
-          // Remove associated DinD sidecar(s) first
-          try {
-            const dinds = await this.containerService.findContainersByLabels({
-              ...labels,
-              'hautech.ai/role': 'dind',
-              'hautech.ai/parent_cid': container.id,
-            });
-            for (const d of dinds) {
-              try {
-                await d.stop(5);
-              } catch {}
-              try {
-                await d.remove(true);
-              } catch {}
-            }
-          } catch {}
+          // If DinD is enabled, remove associated DinD sidecar(s) first
+          if (enableDinD) {
+            try {
+              const dinds = await this.containerService.findContainersByLabels({
+                ...labels,
+                'hautech.ai/role': 'dind',
+                'hautech.ai/parent_cid': container.id,
+              });
+              for (const d of dinds) {
+                try {
+                  await d.stop(5);
+                } catch {}
+                try {
+                  await d.remove(true);
+                } catch {}
+              }
+            } catch {}
+          }
           // Stop and remove old container, then recreate (handle benign errors)
           try {
             await container.stop();
@@ -179,14 +188,15 @@ export class ContainerProviderEntity {
         ...this.opts,
         // Only merge image/env from cfg (initialScript is provider-level behavior, not a start option)
         image: this.cfg?.image ?? this.opts.image,
-        // Inject DOCKER_HOST for DinD usage alongside resolved env
-        env: { ...(envMerged || {}), DOCKER_HOST: DOCKER_HOST_ENV },
+        env: enableDinD ? { ...(envMerged || {}), DOCKER_HOST: DOCKER_HOST_ENV } : envMerged,
         labels: { ...(this.opts.labels || {}), ...labels },
         platform: requestedPlatform,
       });
 
-      // Create per-workspace DinD sidecar attached to the workspace network namespace
-      await this.ensureDinD(container, labels, DOCKER_MIRROR_URL);
+      // Create per-workspace DinD sidecar attached to the workspace network namespace (only when enabled)
+      if (enableDinD) {
+        await this.ensureDinD(container, labels, DOCKER_MIRROR_URL);
+      }
 
       // Run initial script after DinD readiness. Treat non-zero exit code as failure.
       if (this.cfg?.initialScript) {
@@ -201,8 +211,10 @@ export class ContainerProviderEntity {
         }
       }
     } else {
-      // Reuse path: ensure DinD exists and is healthy
-      await this.ensureDinD(container, labels, DOCKER_MIRROR_URL);
+      // Reuse path: ensure DinD exists and is healthy (only when enabled)
+      if (enableDinD) {
+        await this.ensureDinD(container, labels, DOCKER_MIRROR_URL);
+      }
     }
     return container;
   }
