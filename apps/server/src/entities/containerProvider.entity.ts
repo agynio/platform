@@ -202,38 +202,23 @@ export class ContainerProviderEntity {
 
       const cfgEnv = this.cfg?.env as unknown;
       if (Array.isArray(cfgEnv)) {
-        const seen = new Set<string>();
-<<<<<<< HEAD
-<<<<<<< HEAD
-=======
->>>>>>> 532949b (refactor(#113): batch Vault lookups; share parseVaultRef; tighten types; UI fixes\n\n- Batch env and envRefs vault resolutions with Promise.all.\n- Extract shared parseVaultRef in server utils and reuse.\n- Tighten Zod types and remove any casts where feasible.\n- UI: fix duplicate key detection and unique datalist ids.\n- Extend tests for token fallbacks, legacy compatibility, and error paths.)
+        const seen = new Set<string>();)
         const vaultLookups: Array<{ k: string; ref: VaultRef }> = [];
         const staticPairs: Array<{ k: string; v: string }> = [];
         for (const item of cfgEnv as Array<{ key?: string; value?: string; source?: 'static'|'vault' }>) {
           const key = item?.key?.trim();
           const value = item?.value ?? '';
           const source = (item?.source || 'static');
-<<<<<<< HEAD
-=======
         for (const item of cfgEnv) {
           const { key, value } = (item || {}) as { key?: string; value?: string; source?: 'static' | 'vault' };
-          const source = ((item as any)?.source || 'static') as 'static' | 'vault';
->>>>>>> 42b54f2 (feat(config,#113): unify env and token references with source-aware fields)
-=======
->>>>>>> 532949b (refactor(#113): batch Vault lookups; share parseVaultRef; tighten types; UI fixes\n\n- Batch env and envRefs vault resolutions with Promise.all.\n- Extract shared parseVaultRef in server utils and reuse.\n- Tighten Zod types and remove any casts where feasible.\n- UI: fix duplicate key detection and unique datalist ids.\n- Extend tests for token fallbacks, legacy compatibility, and error paths.)
+          const source = ((item as any)?.source || 'static') as 'static' | 'vault';)
+=======)
           if (!key) throw new Error('env entries require non-empty key');
           if (seen.has(key)) throw new Error(`Duplicate env key: ${key}`);
           seen.add(key);
           if (source === 'vault') {
             if (!this.vaultService || !this.vaultService.isEnabled()) {
               throw new Error('Vault is not enabled but env contains vault-sourced entries');
-<<<<<<< HEAD
-            }
-            const vr = parseVaultRef(value);
-            vaultLookups.push({ k: key, ref: vr });
-          } else {
-            staticPairs.push({ k: key, v: value });
-=======
             }
             const vr = parseVaultRef(value);
             vaultLookups.push({ k: key, ref: vr });
@@ -285,19 +270,9 @@ export class ContainerProviderEntity {
               } catch (e) {
                 throw new Error(`Vault resolution failed for ${varName} at ${vr.mount}/${vr.path}#${vr.key}: ${(e as Error).message}`);
               }
-<<<<<<< HEAD
-              envMerged[varName] = String(value);
-            } catch (e: unknown) {
-              // Do not include secret values; only reference context
-              throw new Error(`Vault resolution failed for ${varName} at ${vr.mount}/${vr.path}#${vr.key}: ${(e as Error).message}`);
-            }
->>>>>>> 42b54f2 (feat(config,#113): unify env and token references with source-aware fields)
-          }
-=======
             }),
           );
-          for (const r of results) if ('value' in r) envMerged[r.varName] = r.value;
->>>>>>> 532949b (refactor(#113): batch Vault lookups; share parseVaultRef; tighten types; UI fixes\n\n- Batch env and envRefs vault resolutions with Promise.all.\n- Extract shared parseVaultRef in server utils and reuse.\n- Tighten Zod types and remove any casts where feasible.\n- UI: fix duplicate key detection and unique datalist ids.\n- Extend tests for token fallbacks, legacy compatibility, and error paths.)
+          for (const r of results) if ('value' in r) envMerged[r.varName] = r.value;)
         }
         // Apply static pairs immediately
         for (const { k, v } of staticPairs) envMerged[k] = v;
@@ -456,10 +431,6 @@ function getStatusCode(e: unknown): number | undefined {
 
 // Parse Vault reference string in format "mount/path/key" with path supporting nested segments.
 // Returns VaultRef and throws on invalid inputs.
-<<<<<<< HEAD
-<<<<<<< HEAD
-// parseVaultRef now imported from ../utils/refs
-=======
 export function parseVaultRef(ref: string): VaultRef {
   if (!ref || typeof ref !== 'string') throw new Error('Vault ref must be a non-empty string');
   if (ref.startsWith('/')) throw new Error('Vault ref must not start with /');
@@ -470,8 +441,6 @@ export function parseVaultRef(ref: string): VaultRef {
   const path = parts.slice(1, parts.length - 1).join('/');
   if (!mount || !path || !key) throw new Error('Vault ref must include mount, path and key');
   return { mount, path, key };
-}
->>>>>>> 42b54f2 (feat(config,#113): unify env and token references with source-aware fields)
+})
 =======
-// parseVaultRef now imported from ../utils/refs
->>>>>>> 532949b (refactor(#113): batch Vault lookups; share parseVaultRef; tighten types; UI fixes\n\n- Batch env and envRefs vault resolutions with Promise.all.\n- Extract shared parseVaultRef in server utils and reuse.\n- Tighten Zod types and remove any casts where feasible.\n- UI: fix duplicate key detection and unique datalist ids.\n- Extend tests for token fallbacks, legacy compatibility, and error paths.)
+// parseVaultRef now imported from ../utils/refs)
