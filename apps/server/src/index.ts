@@ -18,6 +18,7 @@ import { SocketService } from './services/socket.service.js';
 import { buildTemplateRegistry } from './templates';
 import { LiveGraphRuntime } from './graph/liveGraph.manager.js';
 import { GraphService } from './services/graph.service.js';
+import { GitGraphService } from './services/gitGraph.service.js';
 import { GraphDefinition, PersistedGraphUpsertRequest } from './graph/types.js';
 import { ContainerService } from './services/container.service.js';
 import { SlackService } from './services/slack.service.js';
@@ -45,7 +46,27 @@ async function bootstrap() {
   });
 
   const runtime = new LiveGraphRuntime(logger, templateRegistry);
-  const graphService = new GraphService(mongo.getDb(), logger, templateRegistry);
+  const graphService =
+    config.graphStore === 'git'
+      ? new GitGraphService(
+          {
+            repoPath: config.graphRepoPath,
+            branch: config.graphBranch,
+            defaultAuthor: { name: config.graphAuthorName, email: config.graphAuthorEmail },
+          },
+          logger,
+          templateRegistry,
+        )
+      : new GraphService(mongo.getDb(), logger, templateRegistry);
+
+  if (graphService instanceof GitGraphService) {
+    try {
+      await graphService.initIfNeeded();
+    } catch (e: any) {
+      logger.error('Failed to initialize git graph repo: %s', e?.message || e);
+      process.exit(1);
+    }
+  }
 
   // Helper to convert persisted graph to runtime GraphDefinition
   const toRuntimeGraph = (saved: { nodes: any[]; edges: any[] }) =>
@@ -66,18 +87,13 @@ async function bootstrap() {
   try {
     const existing = await graphService.get('main');
     if (existing) {
-      logger.info(
-        'Applying persisted graph to live runtime (version=%s, nodes=%d, edges=%d)',
-        existing.version,
-        existing.nodes.length,
-        existing.edges.length,
-      );
+      logger.info('Applying persisted graph to live runtime (version=%s, nodes=%d, edges=%d)', existing.version, existing.nodes.length, existing.edges.length);
       await runtime.apply(toRuntimeGraph(existing));
     } else {
       logger.info('No persisted graph found; starting with empty runtime graph.');
     }
-  } catch (e) {
-    logger.error('Failed to apply initial persisted graph', e);
+  } catch (e: any) {
+    logger.error('Failed to apply initial persisted graph: %s', e?.message || e);
   }
 
   // Expose globally for diagnostics (optional)
@@ -105,6 +121,10 @@ async function bootstrap() {
     try {
       const parsed = request.body as PersistedGraphUpsertRequest;
       parsed.name = parsed.name || 'main';
+      // Attach author if available in headers
+      const headers = request.headers as any;
+      (parsed as any).authorName = headers['x-graph-author-name'] || headers['x-author-name'];
+      (parsed as any).authorEmail = headers['x-graph-author-email'] || headers['x-author-email'];
       // Capture previous graph (for change detection / events)
       const before = await graphService.get(parsed.name);
       const saved = await graphService.upsert(parsed);
@@ -138,6 +158,10 @@ async function bootstrap() {
       if (e.code === 'VERSION_CONFLICT') {
         reply.code(409);
         return { error: 'VERSION_CONFLICT', current: e.current };
+      }
+      if (e.code === 'LOCK_TIMEOUT') {
+        reply.code(409);
+        return { error: 'LOCK_TIMEOUT' };
       }
       reply.code(400);
       return { error: e.message || 'Bad Request' };

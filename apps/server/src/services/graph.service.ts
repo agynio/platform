@@ -19,6 +19,7 @@ interface GraphDocument {
 }
 
 export class GraphService {
+  // Kept for backward-compat when GRAPH_STORE=mongo
   private collection?: Collection<GraphDocument>;
   // Stateless service: persistence only and template exposure.
   // Single-graph endpoint shape expected at /graph/nodes/:nodeId for runtime actions (handled elsewhere).

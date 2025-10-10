@@ -11,6 +11,12 @@ export const configSchema = z.object({
   slackBotToken: z.string().min(1, "Slack bot token is required"),
   slackAppToken: z.string().min(1, "Slack app-level token is required (starts with xapp-)"),
   mongodbUrl: z.string().min(1, "MongoDB connection string is required"),
+  // Graph persistence
+  graphStore: z.enum(['mongo', 'git']).default('mongo'),
+  graphRepoPath: z.string().default('./data/graph'),
+  graphBranch: z.string().default('graph-state'),
+  graphAuthorName: z.string().optional(),
+  graphAuthorEmail: z.string().optional(),
 });
 
 export type Config = z.infer<typeof configSchema>;
@@ -48,6 +54,23 @@ export class ConfigService implements Config {
     return this.params.mongodbUrl;
   }
 
+  // Graph config accessors
+  get graphStore(): 'mongo' | 'git' {
+    return this.params.graphStore;
+  }
+  get graphRepoPath(): string {
+    return this.params.graphRepoPath;
+  }
+  get graphBranch(): string {
+    return this.params.graphBranch;
+  }
+  get graphAuthorName(): string | undefined {
+    return this.params.graphAuthorName;
+  }
+  get graphAuthorEmail(): string | undefined {
+    return this.params.graphAuthorEmail;
+  }
+
   static fromEnv(): ConfigService {
     const parsed = configSchema.parse({
       githubAppId: process.env.GITHUB_APP_ID,
@@ -58,6 +81,11 @@ export class ConfigService implements Config {
       slackBotToken: process.env.SLACK_BOT_TOKEN,
       slackAppToken: process.env.SLACK_APP_TOKEN,
       mongodbUrl: process.env.MONGODB_URL,
+      graphStore: (process.env.GRAPH_STORE as any) || 'mongo',
+      graphRepoPath: process.env.GRAPH_REPO_PATH || './data/graph',
+      graphBranch: process.env.GRAPH_BRANCH || 'graph-state',
+      graphAuthorName: process.env.GRAPH_AUTHOR_NAME,
+      graphAuthorEmail: process.env.GRAPH_AUTHOR_EMAIL,
     });
     return new ConfigService(parsed);
   }

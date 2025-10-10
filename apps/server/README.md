@@ -2,6 +2,15 @@
 
 Runtime for graph-driven agents, tool adapters, triggers, and memory. See docs for architecture.
 
+Graph persistence
+- Configure via env:
+  - GRAPH_STORE: `mongo` | `git` (default `mongo`)
+  - GRAPH_REPO_PATH: path to local git repo for graphs (default `./data/graph`)
+  - GRAPH_BRANCH: branch name to use (default `graph-state`)
+  - GRAPH_AUTHOR_NAME / GRAPH_AUTHOR_EMAIL: default git author (can be overridden per request with headers `x-graph-author-name`/`x-graph-author-email`)
+- On startup with GRAPH_STORE=git, the server will initialize `GRAPH_REPO_PATH` as a git repo if missing, seed `graphs/main/graph.json` at version 0, and commit an initial state.
+- The existing API `/api/graph` supports GET and POST. POST maintains optimistic locking via the `version` field. Each successful write creates one commit with message `chore(graph): <name> v<version> (+/- nodes, +/- edges)` on the configured branch.
+
 Enabling Memory
 - Default connector config: placement=after_system, content=tree, maxChars=4000.
 - To wire memory into an agent's CallModel at runtime, add a `memoryNode` and connect its `$self` source port to the agent's `callModel`/`setMemoryConnector` target port (or use template API to create a connector).
