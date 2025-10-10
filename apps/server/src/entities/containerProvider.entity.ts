@@ -52,12 +52,31 @@ export class ContainerProviderEntity {
     envRefs?: Record<string, { source: 'vault'; mount?: string; path: string; key?: string; optional?: boolean }>;
   };
 
+  private vaultService: VaultService | undefined;
+  private opts: ContainerOpts;
+  private idLabels: (id: string) => Record<string, string>;
+
+  // Backward-compatible constructor signatures:
+  // - New: (containerService, vaultService, opts, idLabels)
+  // - Old: (containerService, opts, idLabels)
   constructor(
     private containerService: ContainerService,
-    private vaultService: VaultService | undefined,
-    private opts: ContainerOpts,
-    private idLabels: (id: string) => Record<string, string>,
-  ) {}
+    vaultOrOpts: VaultService | ContainerOpts | undefined,
+    optsOrId: ContainerOpts | ((id: string) => Record<string, string>),
+    maybeId?: (id: string) => Record<string, string>,
+  ) {
+    if (typeof optsOrId === 'function') {
+      // Old signature
+      this.vaultService = undefined;
+      this.opts = (vaultOrOpts as ContainerOpts) || {};
+      this.idLabels = optsOrId;
+    } else {
+      // New signature
+      this.vaultService = (vaultOrOpts as VaultService) || undefined;
+      this.opts = (optsOrId as ContainerOpts) || {};
+      this.idLabels = maybeId || ((id: string) => ({ 'hautech.ai/thread_id': id }));
+    }
+  }
 
   // Accept static configuration (image/env/initialScript). Validation performed via zod schema.
   setConfig(cfg: Record<string, unknown>): void {

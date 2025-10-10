@@ -36,7 +36,7 @@ export class GithubCloneRepoTool extends BaseTool {
 
   constructor(
     private config: ConfigService,
-    private vault?: VaultService,
+    private vault: VaultService | undefined,
     logger: LoggerService,
   ) {
     super(logger);
