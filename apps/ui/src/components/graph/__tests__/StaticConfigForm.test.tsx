@@ -5,6 +5,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import StaticConfigForm from '../StaticConfigForm';
 
 let withSchema = true;
+let useRefToken = false;
 vi.mock('../../../lib/graph/templates.provider', () => ({
   useTemplatesCache: () => ({
     getTemplate: (name: string) => ({
@@ -14,7 +15,15 @@ vi.mock('../../../lib/graph/templates.provider', () => ({
       sourcePorts: {},
       targetPorts: {},
       capabilities: { staticConfigurable: withSchema },
-      staticConfigSchema: withSchema ? { type: 'object', properties: { systemPrompt: { type: 'string', title: 'systemPrompt' } } } : undefined,
+      staticConfigSchema: withSchema
+        ? useRefToken
+          ? {
+              type: 'object',
+              properties: { token: { $ref: '#/$defs/TokenRef' } },
+              $defs: { TokenRef: { type: 'object', 'ui:field': 'ReferenceField' } },
+            }
+          : { type: 'object', properties: { systemPrompt: { type: 'string', title: 'systemPrompt' } } }
+        : undefined,
     }),
   }),
 }));
@@ -22,6 +31,7 @@ vi.mock('../../../lib/graph/templates.provider', () => ({
 describe('StaticConfigForm', () => {
   beforeEach(() => {
     withSchema = true;
+    useRefToken = false;
   });
 
   const renderForm = (props: any = {}) => {
@@ -53,5 +63,17 @@ describe('StaticConfigForm', () => {
       </QueryClientProvider>,
     );
     expect(screen.getByText(/No static config available/)).toBeInTheDocument();
+  });
+
+  it('renders ReferenceField for token via $ref ui:field', () => {
+    useRefToken = true;
+    const qc = new QueryClient();
+    render(
+      <QueryClientProvider client={qc}>
+        <StaticConfigForm templateName="githubCloneRepoTool" />
+      </QueryClientProvider>,
+    );
+    // ReferenceField renders a select with aria-label
+    expect(screen.getByLabelText('Reference source')).toBeInTheDocument();
   });
 });
