@@ -38,20 +38,6 @@ services:
       ME_CONFIG_BASICAUTH_ENABLED: true
       ME_CONFIG_BASICAUTH_USERNAME: root
       ME_CONFIG_BASICAUTH_PASSWORD: root
-  jaeger:
-    image: jaegertracing/jaeger:2.10.0
-    ports:
-      - "16686:16686" # UI
-      - "4317:4317" # OTLP gRPC
-      - "4318:4318" # OTLP HTTP
-    environment:
-      SPAN_STORAGE_TYPE: badger
-      BADGER_EPHEMERAL: "false"
-      BADGER_DIRECTORY_VALUE: /badger/data
-      BADGER_DIRECTORY_KEY: /badger/key
-    volumes:
-      - jaeger-data:/badger
-
   vault:
     image: hashicorp/vault:1.17
     container_name: vault
@@ -90,7 +76,7 @@ services:
     volumes:
       - vault-file:/vault/file
       - ./vault/auto-init.sh:/auto-init.sh:ro
-    entrypoint: ["/bin/sh","/auto-init.sh"]
+    entrypoint: ["/bin/sh", "/auto-init.sh"]
   # Lightweight Docker registry mirror (proxy cache)
   # - Uses official registry:2 with proxy enabled via env var
   # - Exposed only on the user-defined bridge network 'agents_net' (no host ports)
@@ -106,8 +92,6 @@ services:
 
 volumes:
   mongo1_data:
-    driver: local
-  jaeger-data:
     driver: local
   vault-file:
     driver: local
