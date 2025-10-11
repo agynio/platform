@@ -9,13 +9,12 @@ services:
     volumes:
       - mongo1_data:/data/db
 
-  
   mongo-setup:
     image: mongo:latest
     container_name: mongo-setup
     depends_on:
       - mongo1
-    entrypoint: [ "bash", "-c" ]
+    entrypoint: ["bash", "-c"]
     command: >
       "
       sleep 5 &&
@@ -42,9 +41,9 @@ services:
   jaeger:
     image: jaegertracing/jaeger:2.10.0
     ports:
-      - "16686:16686"   # UI
-      - "4317:4317"     # OTLP gRPC
-      - "4318:4318"     # OTLP HTTP
+      - "16686:16686" # UI
+      - "4317:4317" # OTLP gRPC
+      - "4318:4318" # OTLP HTTP
     environment:
       SPAN_STORAGE_TYPE: badger
       BADGER_EPHEMERAL: "false"
@@ -56,33 +55,42 @@ services:
   vault:
     image: hashicorp/vault:1.17
     container_name: vault
+    restart: unless-stopped
     cap_add:
       - IPC_LOCK
-    environment:
-      VAULT_DEV_ROOT_TOKEN_ID: dev-root
-      VAULT_DEV_LISTEN_ADDRESS: 0.0.0.0:8200
     ports:
       - "8200:8200"
-    command: server -dev -dev-root-token-id=dev-root -dev-listen-address=0.0.0.0:8200
+    environment:
+      VAULT_ADDR: http://127.0.0.1:8200
+      VAULT_LOCAL_CONFIG: |
+        ui = true
+        cluster_name = "local-vault"
+        disable_mlock = true
+        listener "tcp" {
+          address     = "0.0.0.0:8200"
+          tls_disable = 1
+        }
+        storage "file" {
+          path = "/vault/file"
+        }
+        api_addr     = "http://vault:8200"
+        cluster_addr = "http://vault:8201"
+    command: ["server"]
+    volumes:
+      - vault-file:/vault/file
 
-  vault-init:
+  vault-auto-init:
     image: hashicorp/vault:1.17
-    container_name: vault-init
+    container_name: vault-auto-init
     depends_on:
       - vault
-    entrypoint: ["/bin/sh","-lc"]
+    restart: "no"
     environment:
       VAULT_ADDR: http://vault:8200
-      VAULT_TOKEN: dev-root
-    command: >
-      "
-      set -e
-      # enable kv v2 at secret/
-      vault secrets enable -path=secret -version=2 kv || true
-      # seed example secret
-      vault kv put secret/github GH_TOKEN=ghp_example_token
-      echo 'vault init done'
-      "
+    volumes:
+      - vault-file:/vault/file
+      - ./vault/auto-init.sh:/auto-init.sh:ro
+    entrypoint: ["/bin/sh","/auto-init.sh"]
   # Lightweight Docker registry mirror (proxy cache)
   # - Uses official registry:2 with proxy enabled via env var
   # - Exposed only on the user-defined bridge network 'agents_net' (no host ports)
@@ -96,11 +104,12 @@ services:
     networks:
       - agents_net
 
-  
 volumes:
   mongo1_data:
     driver: local
   jaeger-data:
+    driver: local
+  vault-file:
     driver: local
 
 networks:
