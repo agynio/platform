@@ -155,7 +155,7 @@ export class ContainerService {
   async execContainer(
     containerId: string,
     command: string[] | string,
-    options?: { workdir?: string; env?: Record<string, string> | string[]; timeoutMs?: number; tty?: boolean },
+    options?: { workdir?: string; env?: Record<string, string> | string[]; timeoutMs?: number; tty?: boolean; killOnTimeout?: boolean },
   ): Promise<{ stdout: string; stderr: string; exitCode: number }> {
     const container = this.docker.getContainer(containerId);
     const inspectData = await container.inspect();
@@ -177,15 +177,29 @@ export class ContainerService {
       AttachStderr: true,
       WorkingDir: options?.workdir,
       Env,
-      Tty: false,
+      Tty: options?.tty ?? false,
       AttachStdin: false,
     });
 
-    const { stdout, stderr, exitCode } = await this.startAndCollectExec(exec, options?.timeoutMs);
-    this.logger.debug(
-      `Exec finished cid=${inspectData.Id.substring(0, 12)} exitCode=${exitCode} stdoutBytes=${stdout.length} stderrBytes=${stderr.length}`,
-    );
-    return { stdout, stderr, exitCode };
+    try {
+      const { stdout, stderr, exitCode } = await this.startAndCollectExec(exec, options?.timeoutMs);
+      this.logger.debug(
+        `Exec finished cid=${inspectData.Id.substring(0, 12)} exitCode=${exitCode} stdoutBytes=${stdout.length} stderrBytes=${stderr.length}`,
+      );
+      return { stdout, stderr, exitCode };
+    } catch (err: any) {
+      const isTimeout = err instanceof Error && typeof err.message === 'string' && /^Exec timed out after \d+ms/.test(err.message);
+      if (isTimeout && options?.killOnTimeout) {
+        // Gracefully stop the container to ensure process-tree cleanup.
+        try {
+          await this.stopContainer(containerId, 10);
+        } catch (stopErr) {
+          // Log but do not swallow original timeout error
+          this.logger.error('Failed to stop container after exec timeout', { containerId, error: stopErr });
+        }
+      }
+      throw err;
+    }
   }
 
   /**

@@ -64,7 +64,18 @@ export class ShellTool extends BaseTool {
         const { command } = bashCommandSchema.parse(input);
         this.logger.info('Tool called', 'shell_command', { command });
         const envOverlay = await this.resolveEnv();
-        const response = await container.exec(command, { env: envOverlay, workdir: this.cfg?.workdir });
+        // Enforce hard 1-hour timeout with container kill on timeout for full cleanup
+        const timeoutMs = 60 * 60 * 1000; // 1 hour
+        let response;
+        try {
+          response = await container.exec(command, { env: envOverlay, workdir: this.cfg?.workdir, timeoutMs, killOnTimeout: true });
+        } catch (err: any) {
+          const isTimeout = err instanceof Error && typeof err.message === 'string' && /^Exec timed out after \d+ms/.test(err.message);
+          if (isTimeout) {
+            return `Error (timeout after 1h): command exceeded ${timeoutMs}ms and was terminated.`;
+          }
+          throw err;
+        }
 
         const cleanedStdout = this.stripAnsi(response.stdout);
         const cleanedStderr = this.stripAnsi(response.stderr);
