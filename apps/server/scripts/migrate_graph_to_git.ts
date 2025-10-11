@@ -103,7 +103,6 @@ async function main() {
   const branch = process.env.GRAPH_BRANCH || 'graph-state';
   const authorName = process.env.GRAPH_AUTHOR_NAME || 'Graph Migrator';
   const authorEmail = process.env.GRAPH_AUTHOR_EMAIL || 'graph-migrator@example.com';
-  const flattenToRoot = String(process.env.FLATTEN_TO_ROOT || '').toLowerCase() === 'true';
   const onlyGraphName = process.env.GRAPH_NAME || '';
 
   const client = new MongoClient(mongoUrl);
@@ -113,7 +112,27 @@ async function main() {
 
   await ensureRepo(repoPath, branch);
 
-  const cursor = flattenToRoot && onlyGraphName ? col.find({ _id: onlyGraphName }) : col.find({});
+  // Selection rules: require exactly one target graph
+  let selected: GraphDocument | null = null;
+  if (onlyGraphName) {
+    selected = await col.findOne({ _id: onlyGraphName });
+    if (!selected) {
+      console.error(`Graph not found: ${onlyGraphName}. Set GRAPH_NAME to a valid graph.`);
+      process.exit(2);
+    }
+  } else {
+    const names = await col.find({}, { projection: { _id: 1 } }).toArray();
+    if (names.length === 0) {
+      console.error('No graphs found in Mongo. Nothing to migrate.');
+      process.exit(2);
+    }
+    if (names.length > 1) {
+      const list = names.map((n) => n._id).join(', ');
+      console.error(`Multiple graphs found (${names.length}): ${list}. Set GRAPH_NAME to select one.`);
+      process.exit(2);
+    }
+    selected = await col.findOne({ _id: names[0]._id });
+  }
   const env = {
     ...process.env,
     GIT_AUTHOR_NAME: authorName,
@@ -121,71 +140,49 @@ async function main() {
     GIT_COMMITTER_NAME: authorName,
     GIT_COMMITTER_EMAIL: authorEmail,
   };
-  while (await cursor.hasNext()) {
-    const doc = await cursor.next();
-    if (!doc) break;
-    const name = doc._id;
-    // Normalize edges to deterministic ids
-    const normalizedEdges = (doc.edges || []).map((e) => {
-      const det = edgeId(e);
-      return { ...e, id: det };
-    });
-    const normalizedNodes = (doc.nodes || []).map((n) => ({ id: n.id, template: n.template, config: n.config, dynamicConfig: n.dynamicConfig, position: n.position }));
+  if (!selected) {
+    console.error('No graph selected for migration.');
+    process.exit(2);
+  }
 
-    // Default mode: per-graph per-file under graphs/<name>/
-    if (!flattenToRoot) {
-      const base = path.posix.join('graphs', name);
-      const targetBase = path.join(repoPath, base);
-      // write nodes/edges in parallel
-      const nodeWrites = normalizedNodes.map((n) => {
-        const rel = path.posix.join(base, 'nodes', `${encodeURIComponent(n.id)}.json`);
-        return atomicWrite(path.join(repoPath, rel), JSON.stringify(n, null, 2));
-      });
-      const edgeWrites = normalizedEdges.map((e) => {
-        const rel = path.posix.join(base, 'edges', `${encodeURIComponent(e.id!)}.json`);
-        return atomicWrite(path.join(repoPath, rel), JSON.stringify(e, null, 2));
-      });
-      await Promise.all([...nodeWrites, ...edgeWrites]);
-      // meta last
-      const meta = { name, version: doc.version, updatedAt: doc.updatedAt.toISOString(), format: 2 as const };
-      await atomicWrite(path.join(targetBase, 'graph.meta.json'), JSON.stringify(meta, null, 2));
-      // Stage new/updated files
-      await runGit(['add', '--all', path.posix.join(base, 'graph.meta.json'), path.posix.join(base, 'nodes'), path.posix.join(base, 'edges')], repoPath);
-      // Remove legacy monolith if present
-      try { await runGit(['rm', '-f', '--ignore-unmatch', path.posix.join('graphs', name, 'graph.json')], repoPath); } catch {}
-      const nodeCount = normalizedNodes.length;
-      const edgeCount = normalizedEdges.length;
-      if (await hasStagedChanges(repoPath)) {
-        await runGit(['commit', '-m', `chore(graph): migrate ${name} to per-file v${doc.version} (+${nodeCount} nodes, +${edgeCount} edges)`], repoPath, env);
-      }
-    } else {
-      // Flatten-to-root mode for a single graph
-      if (!onlyGraphName || onlyGraphName !== name) {
-        // Skip non-target graphs in flatten mode
-        continue;
-      }
-      // write nodes/edges in parallel
-      const nodeWrites = normalizedNodes.map((n) => {
-        const rel = path.posix.join('nodes', `${encodeURIComponent(n.id)}.json`);
-        return atomicWrite(path.join(repoPath, rel), JSON.stringify(n, null, 2));
-      });
-      const edgeWrites = normalizedEdges.map((e) => {
-        const rel = path.posix.join('edges', `${encodeURIComponent(e.id!)}.json`);
-        return atomicWrite(path.join(repoPath, rel), JSON.stringify(e, null, 2));
-      });
-      await Promise.all([...nodeWrites, ...edgeWrites]);
-      // meta last
-      const meta = { name, version: doc.version, updatedAt: doc.updatedAt.toISOString(), format: 2 as const };
-      await atomicWrite(path.join(repoPath, 'graph.meta.json'), JSON.stringify(meta, null, 2));
-      // Stage files and deletion of graphs/
-      await runGit(['add', '--all', 'graph.meta.json', path.posix.join('nodes'), path.posix.join('edges')], repoPath);
-      if (await pathExists(path.join(repoPath, 'graphs'))) {
-        try { await runGit(['rm', '-r', '--ignore-unmatch', 'graphs'], repoPath); } catch {}
-      }
-      if (await hasStagedChanges(repoPath)) {
-        await runGit(['commit', '-m', `chore(graph): migrate ${name} to per-file root layout v${doc.version}`], repoPath, env);
-      }
+  const name = selected._id;
+  // Normalize edges to deterministic ids
+  const normalizedEdges = (selected.edges || []).map((e) => {
+    const det = edgeId(e);
+    return { ...e, id: det };
+  });
+  const normalizedNodes = (selected.nodes || []).map((n) => ({ id: n.id, template: n.template, config: n.config, dynamicConfig: n.dynamicConfig, position: n.position }));
+
+  // Ensure root layout
+  await fs.mkdir(path.join(repoPath, 'nodes'), { recursive: true });
+  await fs.mkdir(path.join(repoPath, 'edges'), { recursive: true });
+
+  // Write nodes/edges in parallel
+  const nodeWrites = normalizedNodes.map((n) => {
+    const rel = path.posix.join('nodes', `${encodeURIComponent(n.id)}.json`);
+    return atomicWrite(path.join(repoPath, rel), JSON.stringify(n, null, 2));
+  });
+  const edgeWrites = normalizedEdges.map((e) => {
+    const rel = path.posix.join('edges', `${encodeURIComponent(e.id!)}.json`);
+    return atomicWrite(path.join(repoPath, rel), JSON.stringify(e, null, 2));
+  });
+  await Promise.all([...nodeWrites, ...edgeWrites]);
+  // meta last
+  const meta = { name, version: selected.version, updatedAt: selected.updatedAt.toISOString(), format: 2 as const };
+  await atomicWrite(path.join(repoPath, 'graph.meta.json'), JSON.stringify(meta, null, 2));
+
+  // Stage files
+  await runGit(['add', '--all', 'graph.meta.json', path.posix.join('nodes'), path.posix.join('edges')], repoPath);
+  // Remove legacy graphs/ directory
+  if (await pathExists(path.join(repoPath, 'graphs'))) {
+    try { await runGit(['rm', '-r', '--ignore-unmatch', 'graphs'], repoPath); } catch {
+      try { await fs.rm(path.join(repoPath, 'graphs'), { recursive: true, force: true }); } catch {}
     }
+  }
+  const nodeCount = normalizedNodes.length;
+  const edgeCount = normalizedEdges.length;
+  if (await hasStagedChanges(repoPath)) {
+    await runGit(['commit', '-m', `chore(graph): migrate to single-graph root layout: ${name} v${selected.version} (+${nodeCount} nodes, +${edgeCount} edges)`], repoPath, env);
   }
 
   await client.close();
