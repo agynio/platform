@@ -54,7 +54,7 @@ describe('templates: memory registration and agent memory port', () => {
     const memConnTargets = ports.memoryConnector.targetPorts!;
     expect(memConnTargets.$memory).toBeTruthy();
 
-    // Unified memory tool node exists and can wire to agent.tools
+    // Unified memory tool node exists and can wire to agent.tools (template key stays 'memoryTool')
     const t = 'memoryTool';
     const entry = schema.find((s) => s.name === t);
     expect(entry?.kind).toBe('tool');

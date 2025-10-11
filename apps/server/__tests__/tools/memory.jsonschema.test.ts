@@ -12,4 +12,14 @@ describe('Unified memory tool schema: toJSONSchema', () => {
     const enumVals = js.properties.command.enum || js.properties.command.anyOf?.flatMap((x: any) => x.enum ?? []);
     expect(enumVals).toEqual(expect.arrayContaining(['read','list','append','update','delete']));
   });
+  
+  it('runtime parsing: invalid combos return EINVAL envelope upstream (validate via safeParse here)', () => {
+    // JSON Schema cannot express conditional requirements easily; ensure base keys exist
+    const valid = UnifiedMemoryToolStaticConfigSchema.safeParse({ path: '/a', command: 'read' });
+    expect(valid.success).toBe(true);
+    const missingCmd = UnifiedMemoryToolStaticConfigSchema.safeParse({ path: '/a' } as any);
+    expect(missingCmd.success).toBe(false);
+    const missingPath = UnifiedMemoryToolStaticConfigSchema.safeParse({ command: 'read' } as any);
+    expect(missingPath.success).toBe(false);
+  });
 });

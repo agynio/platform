@@ -85,4 +85,53 @@ describe('Memory tool adapters', () => {
     const delRes = JSON.parse(await unified.invoke({ path: '/a', command: 'delete' }, config) as any);
     expect(delRes.result.files).toBe(1);
   });
+
+  it('negative cases: ENOENT, EISDIR, EINVAL, ENOTMEM, list empty path', async () => {
+    const db = new FakeDb() as unknown as Db;
+    const serviceFactory = (opts: { threadId?: string }) => new MemoryService(db, 'nodeX', opts.threadId ? 'perThread' : 'global', opts.threadId);
+    const logger = new LoggerService();
+
+    // ENOTMEM: do not wire memory
+    const unconnected = new UnifiedMemoryTool(logger).init();
+    const enotmem = JSON.parse((await unconnected.invoke({ path: '/x', command: 'read' }, { configurable: { thread_id: 'T1' } } as any)) as any);
+    expect(enotmem.ok).toBe(false);
+    expect(enotmem.error.code).toBe('ENOTMEM');
+
+    // Properly wired instance
+    const wired = new UnifiedMemoryTool(logger); wired.setMemorySource(serviceFactory); const tool = wired.init();
+    const cfg = { configurable: { thread_id: 'T1' } } as any;
+
+    // ENOENT on read
+    const enoentRead = JSON.parse((await tool.invoke({ path: '/missing', command: 'read' }, cfg)) as any);
+    expect(enoentRead.ok).toBe(false);
+    expect(enoentRead.error.code).toBe('ENOENT');
+
+    // Prepare a dir and file
+    await tool.invoke({ path: 'dir/file', command: 'append', content: 'v' }, cfg);
+
+    // EISDIR on append/update at dir
+    const eisdirAppend = JSON.parse((await tool.invoke({ path: '/dir', command: 'append', content: 'x' }, cfg)) as any);
+    expect(eisdirAppend.ok).toBe(false);
+    expect(eisdirAppend.error.code).toBe('EISDIR');
+
+    const eisdirUpdate = JSON.parse((await tool.invoke({ path: '/dir', command: 'update', oldContent: 'a', content: 'b' }, cfg)) as any);
+    expect(eisdirUpdate.ok).toBe(false);
+    expect(eisdirUpdate.error.code).toBe('EISDIR');
+
+    // EINVAL: missing content/oldContent and unknown command
+    const einvalAppend = JSON.parse((await tool.invoke({ path: '/dir/file', command: 'append' } as any, cfg)) as any);
+    expect(einvalAppend.ok).toBe(false);
+    expect(einvalAppend.error.code).toBe('EINVAL');
+    const einvalUpdate = JSON.parse((await tool.invoke({ path: '/dir/file', command: 'update', oldContent: 'x' } as any, cfg)) as any);
+    expect(einvalUpdate.ok).toBe(false);
+    expect(einvalUpdate.error.code).toBe('EINVAL');
+    const unknownCmd = JSON.parse((await tool.invoke({ path: '/dir/file', command: 'unknown' } as any, cfg)) as any);
+    expect(unknownCmd.ok).toBe(false);
+    expect(unknownCmd.error.code).toBe('EINVAL');
+
+    // list with empty path
+    const listRoot = JSON.parse((await tool.invoke({ path: '', command: 'list' } as any, cfg)) as any);
+    expect(listRoot.ok).toBe(true);
+    expect(Array.isArray(listRoot.result.entries)).toBe(true);
+  });
 });

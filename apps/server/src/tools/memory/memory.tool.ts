@@ -15,42 +15,89 @@ export const UnifiedMemoryToolStaticConfigSchema = z
 
 type Cmd = z.infer<typeof UnifiedMemoryToolStaticConfigSchema>['command'];
 
+// Minimal service surface used by the tool
+type MemoryToolService = {
+  getDebugInfo?: () => { nodeId: string; scope: string; threadId?: string };
+  read: (path: string) => Promise<string>;
+  list: (path?: string) => Promise<Array<{ name: string; kind: 'file' | 'dir' }>>;
+  append: (path: string, content: string) => Promise<void>;
+  update: (path: string, oldContent: string, content: string) => Promise<number>;
+  delete: (path: string) => Promise<{ files: number; dirs: number }>;
+};
+
 export class UnifiedMemoryTool extends MemoryToolBase {
   constructor(logger: LoggerService) {
     super(logger);
   }
 
-  private makeEnvelope(command: Cmd, path: string, ok: boolean, result?: any, error?: { message: string; code?: string }) {
-    const base: any = { command, path, ok };
+  private makeEnvelope(
+    command: Cmd | string,
+    path: string,
+    ok: boolean,
+    result?: unknown,
+    error?: { message: string; code?: string },
+  ): string {
+    const base: { command: string; path: string; ok: boolean; result?: unknown; error?: { message: string; code?: string } } = {
+      command: String(command),
+      path,
+      ok,
+    };
     if (ok) base.result = result;
-    else base.error = error;
+    else if (error) base.error = error;
     return JSON.stringify(base);
   }
+
+  // Narrow error to message/code if present; prefer explicit code property then message parse.
+  private extractError(err: unknown): { message: string; code?: string } {
+    let message = 'error';
+    let code: string | undefined;
+    if (err && typeof err === 'object') {
+      const anyErr = err as { message?: string; code?: unknown };
+      if (typeof anyErr.message === 'string') message = anyErr.message;
+      if (typeof anyErr.code === 'string') code = anyErr.code;
+    }
+    if (!code) {
+      if (/ENOENT/.test(message)) code = 'ENOENT';
+      else if (/EISDIR/.test(message)) code = 'EISDIR';
+    }
+    return { message, code };
+  }
+
+  
 
   init(_config?: LangGraphRunnableConfig): DynamicStructuredTool {
     const schema = UnifiedMemoryToolStaticConfigSchema;
     return tool(
       async (raw, runtimeCfg) => {
-        // Validate and normalize inputs
-        const args = schema.parse(raw);
+        // First, attempt to parse; if invalid, return EINVAL envelope instead of throw
+        const parsed = schema.safeParse(raw);
+        if (!parsed.success) {
+          const r: unknown = raw as unknown;
+          const obj = r && typeof r === 'object' ? (r as Record<string, unknown>) : {};
+          const cmd = typeof obj.command === 'string' ? (obj.command as string) : 'unknown';
+          const pth = typeof obj.path === 'string' ? (obj.path as string) : '/';
+          return this.makeEnvelope(String(cmd), pth || '/', false, undefined, { message: 'invalid arguments', code: 'EINVAL' });
+        }
+        const args = parsed.data;
         const command = args.command as Cmd;
         let path = args.path;
+        // Special-case: list treats empty path as '/'
+        if (command === 'list' && (!path || path === '')) path = '/';
         try {
           path = normalizePathRuntime(path);
-        } catch (e: any) {
-          return this.makeEnvelope(command, path || '/', false, undefined, { message: e?.message || 'invalid path', code: 'EINVAL' });
+        } catch (e) {
+          const err = this.extractError(e);
+          return this.makeEnvelope(command, path || '/', false, undefined, { message: err.message || 'invalid path', code: 'EINVAL' });
         }
 
-        // Treat empty path as '/' for list to preserve optional behavior
-        if (command === 'list' && (!path || path === '')) path = '/';
-
         const threadId = runtimeCfg?.configurable?.thread_id;
-        let service: any;
+        let service: MemoryToolService;
         try {
           const factory = this.requireFactory();
-          service = factory({ threadId });
-        } catch (e: any) {
-          return this.makeEnvelope(command, path, false, undefined, { message: e?.message || 'memory not connected', code: 'ENOTMEM' });
+          service = factory({ threadId }) as unknown as MemoryToolService;
+        } catch (e) {
+          const err = this.extractError(e);
+          return this.makeEnvelope(command, path, false, undefined, { message: err.message || 'memory not connected', code: 'ENOTMEM' });
         }
 
         if (isMemoryDebugEnabled()) {
@@ -89,13 +136,9 @@ export class UnifiedMemoryTool extends MemoryToolBase {
             default:
               return this.makeEnvelope(command, path, false, undefined, { message: `unknown command: ${String(command)}`, code: 'EINVAL' });
           }
-        } catch (e: any) {
-          const msg = e?.message || 'error';
-          // Attempt to pass through well-known codes in message
-          let code: string | undefined = undefined;
-          if (/ENOENT/.test(msg)) code = 'ENOENT';
-          else if (/EISDIR/.test(msg)) code = 'EISDIR';
-          return this.makeEnvelope(command, path, false, undefined, { message: msg, code });
+        } catch (e) {
+          const err = this.extractError(e);
+          return this.makeEnvelope(command, path, false, undefined, err);
         }
       },
       { name: 'memory', description: 'Unified Memory tool: read, list, append, update, delete', schema },

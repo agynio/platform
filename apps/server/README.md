@@ -9,6 +9,7 @@ Graph persistence
   - GRAPH_BRANCH: branch name to use (default `graph-state`)
   - GRAPH_AUTHOR_NAME / GRAPH_AUTHOR_EMAIL: default git author (can be overridden per request with headers `x-graph-author-name`/`x-graph-author-email`)
 - On startup with GRAPH_STORE=git, the server initializes `GRAPH_REPO_PATH` as a git repo if missing, ensures branch checkout, seeds root-level per-entity layout (format: 2) with empty `nodes/` and `edges/`, writes `graph.meta.json` for the active graph name (default `main`), and commits the initial state.
+ - The existing API `/api/graph` supports GET and POST. POST maintains optimistic locking via the `version` field. Each successful write creates one commit with message `chore(graph): <name> v<version> (+/- nodes, +/- edges)` on the configured branch.
  - Error responses:
    - 409 VERSION_CONFLICT with `{ error, current }` body when version mismatch.
    - 409 LOCK_TIMEOUT when advisory lock not acquired within timeout.
