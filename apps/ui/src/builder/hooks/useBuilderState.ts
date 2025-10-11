@@ -36,7 +36,12 @@ interface UseBuilderStateResult {
   deleteSelected: () => void;
 }
 
-export function useBuilderState(serverBase = 'http://localhost:3010'): UseBuilderStateResult {
+type BuilderOptions = { debounceMs?: number };
+
+export function useBuilderState(
+  serverBase = 'http://localhost:3010',
+  options?: BuilderOptions,
+): UseBuilderStateResult {
   const [nodes, setNodes] = useState<BuilderNode[]>([]);
   const [edges, setEdges] = useState<Edge[]>([]);
   const [templates, setTemplates] = useState<TemplateNodeSchema[]>([]);
@@ -44,6 +49,9 @@ export function useBuilderState(serverBase = 'http://localhost:3010'): UseBuilde
   const [saveState, setSaveState] = useState<UseBuilderStateResult['saveState']>('idle');
   const versionRef = useRef<number>(0);
   const debounceRef = useRef<number | null>(null);
+  // Hydration and dirty gating: prevent autosave on initial load and only save on user edits
+  const [hydrated, setHydrated] = useState(false);
+  const [dirty, setDirty] = useState(false);
 
   // Load templates + saved graph
   useEffect(() => {
@@ -77,7 +85,11 @@ export function useBuilderState(serverBase = 'http://localhost:3010'): UseBuilde
       } catch (e) {
         console.error('Failed to load builder data', e);
       } finally {
-        if (!cancelled) setLoading(false);
+        if (!cancelled) {
+          setLoading(false);
+          // Mark hydrated after initial graph load completes
+          setHydrated(true);
+        }
       }
     })();
     return () => {
@@ -89,10 +101,19 @@ export function useBuilderState(serverBase = 'http://localhost:3010'): UseBuilde
 
   const onNodesChange = useCallback((changes: NodeChange[]) => {
     setNodes((nds) => applyNodeChanges(changes, nds));
+    // Only mark dirty for graph-affecting changes (ignore selection, dimensions)
+    if (
+      changes.some((c) => c.type === 'add' || c.type === 'remove' || c.type === 'position')
+    ) {
+      setDirty(true);
+    }
   }, []);
 
   const onEdgesChange = useCallback((changes: EdgeChange[]) => {
     setEdges((eds) => applyEdgeChanges(changes, eds));
+    if (changes.some((c) => c.type === 'add' || c.type === 'remove')) {
+      setDirty(true);
+    }
   }, []);
 
   const isValidConnection = useCallback(
@@ -122,6 +143,7 @@ export function useBuilderState(serverBase = 'http://localhost:3010'): UseBuilde
         if (eds.some((e) => e.id === edgeId)) return eds; // prevent duplicates
         return addEdge({ ...connection, id: edgeId }, eds);
       });
+      setDirty(true);
     },
     [isValidConnection],
   );
@@ -136,20 +158,24 @@ export function useBuilderState(serverBase = 'http://localhost:3010'): UseBuilde
       dragHandle: '.drag-handle',
     };
     setNodes((nds) => [...nds, node]);
+    setDirty(true);
   }, []);
 
   const updateNodeData = useCallback((id: string, data: Partial<BuilderNodeData>) => {
     setNodes((nds) => nds.map((n) => (n.id === id ? { ...n, data: { ...n.data, ...data } } : n)));
+    setDirty(true);
   }, []);
 
   const deleteSelected = useCallback(() => {
     setEdges((eds) => eds.filter((e) => !nodes.some((n) => n.selected && (n.id === e.source || n.id === e.target))));
     setNodes((nds) => nds.filter((n) => !n.selected));
+    setDirty(true);
   }, [nodes]);
 
   // Autosave (debounced)
   const scheduleSave = useCallback(() => {
     if (debounceRef.current) window.clearTimeout(debounceRef.current);
+    const delay = options?.debounceMs ?? 1000;
     debounceRef.current = window.setTimeout(async () => {
       try {
         setSaveState('saving');
@@ -183,18 +209,27 @@ export function useBuilderState(serverBase = 'http://localhost:3010'): UseBuilde
         if (!res.ok) throw new Error('Save failed');
         const saved: PersistedGraph = await res.json();
         versionRef.current = saved.version;
+        setDirty(false); // reset dirty after successful save
         setSaveState('saved');
         setTimeout(() => setSaveState('idle'), 1500);
       } catch (e) {
         console.error(e);
         setSaveState('error');
       }
-    }, 1000);
-  }, [nodes, edges, serverBase]);
+    }, delay);
+  }, [nodes, edges, serverBase, options?.debounceMs]);
 
   useEffect(() => {
-    if (!loading) scheduleSave();
-  }, [nodes, edges, scheduleSave, loading]);
+    // Only autosave after initial hydration and when dirty
+    if (hydrated && dirty) scheduleSave();
+  }, [nodes, edges, scheduleSave, hydrated, dirty]);
+
+  // Cleanup debounce on unmount
+  useEffect(() => {
+    return () => {
+      if (debounceRef.current) window.clearTimeout(debounceRef.current);
+    };
+  }, []);
 
   return {
     nodes,
