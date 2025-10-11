@@ -37,10 +37,14 @@ Git graph storage (format: 2)
 Migration
 - From legacy layouts (monolithic `graphs/<name>/graph.json` or per-entity under `graphs/<name>/`), run:
   `tsx apps/server/scripts/migrate_graph_to_git.ts`
-- Default behavior: writes per-graph per-file layout under `graphs/<name>/` with:
+- Behavior: always writes a single graph to the repository root (single-graph layout):
   - `graph.meta.json` containing `{ name, version, updatedAt, format: 2 }`
   - `nodes/<encodeURIComponent(id)>.json` and `edges/<encodeURIComponent(edgeId)>.json`
   - Deterministic edge id: `${source}-${sourceHandle}__${target}-${targetHandle}`
-  - Commit per graph: `chore(graph): migrate <name> to per-file v<version> (+N nodes, +M edges)` (idempotent: no-op if no changes)
-- Optional flatten-to-root mode: set `FLATTEN_TO_ROOT=true` and `GRAPH_NAME=<name>` to write root-level `graph.meta.json`, `nodes/`, `edges/`, and stage deletion of `graphs/`. Commit message: `chore(graph): migrate <name> to per-file root layout v<version>`. Filenames use `encodeURIComponent` of the ids (including deterministic edge id).
-- Env: `MONGODB_URL` (default `mongodb://localhost:27017/agents`), `GRAPH_REPO_PATH` (default `./data/graph`), `GRAPH_BRANCH` (default `graph-state`), `GRAPH_AUTHOR_NAME`, `GRAPH_AUTHOR_EMAIL`, `GRAPH_NAME` (optional), `FLATTEN_TO_ROOT` (optional).
+  - Removes legacy `graphs/` directory via `git rm -r --ignore-unmatch graphs` (with fs fallback)
+- Graph selection rules:
+  - If `GRAPH_NAME` is set, migrate only that graph.
+  - If `GRAPH_NAME` is not set: if exactly one graph exists in Mongo, migrate it; if zero, exit non-zero with a clear message; if more than one, exit non-zero with a message instructing to set `GRAPH_NAME`.
+- Idempotency: commit only when staged changes exist; reruns are no-ops.
+- Commit message: `chore(graph): migrate to single-graph root layout: <name> v<version> (+N nodes, +M edges)`.
+- Env: `MONGODB_URL` (default `mongodb://localhost:27017/agents`), `GRAPH_REPO_PATH` (default `./data/graph`), `GRAPH_BRANCH` (default `graph-state`), `GRAPH_AUTHOR_NAME`, `GRAPH_AUTHOR_EMAIL`, `GRAPH_NAME` (optional).
