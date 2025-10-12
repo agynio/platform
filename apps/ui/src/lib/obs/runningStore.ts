@@ -84,7 +84,9 @@ class RunningStoreImpl {
       set = new Set<string>();
       this.bucketSpans.set(key, set);
     }
-    if (!set.has(spanId)) {
+    const keysExisting = this.spanToKeys.get(spanId);
+    const alreadyCounted = !!keysExisting && keysExisting.has(key);
+    if (!alreadyCounted) {
       set.add(spanId);
       this.counts.set(key, (this.counts.get(key) || 0) + 1);
       // Cap size; evict oldest to keep memory bounded
@@ -110,16 +112,16 @@ class RunningStoreImpl {
   }
 
   private removeSpanFromKey(spanId: string, key: string) {
-    const set = this.bucketSpans.get(key);
-    if (set && set.delete(spanId)) {
-      const next = Math.max(0, (this.counts.get(key) || 0) - 1);
-      this.counts.set(key, next);
-    }
+    // Decrement count if this span was previously counted for this key,
+    // even if membership set evicted it earlier.
     const keys = this.spanToKeys.get(spanId);
-    if (keys) {
+    if (keys && keys.has(key)) {
+      this.counts.set(key, Math.max(0, (this.counts.get(key) || 0) - 1));
       keys.delete(key);
       if (keys.size === 0) this.spanToKeys.delete(spanId);
     }
+    const set = this.bucketSpans.get(key);
+    if (set) set.delete(spanId);
   }
 
   private onSpan(span: SpanDoc) {
@@ -164,4 +166,3 @@ export function useRunningCount(nodeId: string | undefined, kind: Bucket | undef
   if (!nodeId || !kind) return 0;
   return useSyncExternalStore((cb) => store.subscribe(cb), () => store.getCount(nodeId, kind));
 }
-
