@@ -12,7 +12,7 @@ type BuilderPanelNodeData = {
   dynamicConfig?: Record<string, unknown>;
 };
 
-const OBS_UI_BASE: string = (import.meta as any).env?.VITE_OBS_UI_BASE || 'http://localhost:4320';
+const OBS_UI_BASE: string = import.meta.env.VITE_OBS_UI_BASE || 'http://localhost:4320';
 
 function spanMatchesContext(span: SpanDoc, node: Node<BuilderPanelNodeData>, kind: 'agent' | 'tool') {
   const attrs = (span.attributes || {}) as Record<string, unknown>;

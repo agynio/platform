@@ -18,4 +18,9 @@ Example package
 - Build + run: `pnpm --filter @hautech/obs-examples build && pnpm --filter @hautech/obs-examples start`
 - Env: `OBS_EXTENDED_ENDPOINT` (default http://localhost:4319)
 
+Linking from Builder UI (Activity panel)
+- The Builder UI (apps/ui) can deep-link to the Observability UI using `VITE_OBS_UI_BASE` (default http://localhost:4320).
+- The Activity panel displays recent agent/tool spans for the selected node and links to `/trace/:traceId` on the Observability UI.
+- Ensure spans include `nodeId` so filtering is accurate.
+
 The rest of the plan remains unchanged: minimal filters, status transitions, index strategy, and acceptance criteria.

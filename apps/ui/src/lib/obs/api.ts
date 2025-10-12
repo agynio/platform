@@ -22,7 +22,7 @@ export interface SpanDoc {
   threadId?: string;
 }
 
-const OBS_BASE: string = (import.meta as any).env?.VITE_OBS_SERVER_URL || 'http://localhost:4319';
+const OBS_BASE: string = import.meta.env.VITE_OBS_SERVER_URL || 'http://localhost:4319';
 
 export function getObsBaseUrl(): string {
   return OBS_BASE;

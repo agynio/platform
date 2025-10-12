@@ -24,6 +24,7 @@ import { LeftPalette } from './panels/LeftPalette';
 import { RightPropertiesPanel } from './panels/RightPropertiesPanel';
 import { useBuilderState } from './hooks/useBuilderState';
 import type { BuilderNodeKind } from './types';
+import type { TemplateNodeSchema } from 'shared';
 import { getDisplayTitle } from './lib/display';
 
 interface CanvasAreaProps {
@@ -146,7 +147,7 @@ export function AgentBuilder() {
   }, [selectedNode, rightTab]);
 
   // Eligibility: show tabs for agent or tool nodes
-  const isActivityEligible = useCallback((node: RFNode | null, tpls: any[]): boolean => {
+  const isActivityEligible = useCallback((node: RFNode | null, tpls: TemplateNodeSchema[]): boolean => {
     if (!node) return false;
     const tpl = tpls.find((t) => t.name === node.data.template);
     const kind = tpl?.kind as string | undefined;
@@ -214,7 +215,7 @@ export function AgentBuilder() {
               {rightTab === 'activity' && activityEligible && selectedNode ? (
                 <div className="space-y-4">
                   {/* Show OBS spans for agent/tool nodes */}
-                  <NodeObsSidebar node={selectedNode as any} />
+                  <NodeObsSidebar node={selectedNode} />
                 </div>
               ) : (
                 <RightPropertiesPanel node={selectedNode} onChange={updateNodeData} />

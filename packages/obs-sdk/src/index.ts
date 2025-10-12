@@ -343,7 +343,7 @@ export function withLLM<T>(
   }).then((res) => (res as LLMResponse<T>).raw);
 }
 
-export function withToolCall<TOutput = unknown, TRaw = any>(
+export function withToolCall<TOutput = unknown, TRaw = unknown>(
   attributes: { toolCallId: string; name: string; input: unknown; nodeId?: string; [k: string]: unknown },
   fn: () => Promise<ToolCallResponse<TRaw, TOutput>> | ToolCallResponse<TRaw, TOutput>,
 ): Promise<TRaw> {
@@ -369,7 +369,7 @@ export function withToolCall<TOutput = unknown, TRaw = any>(
   ).then((res) => (res as ToolCallResponse<TRaw, TOutput>).raw);
 }
 
-export function withSummarize<TRaw = any>(
+export function withSummarize<TRaw = unknown>(
   attributes: { oldContext: Array<ChatMessageInput>; [k: string]: unknown },
   fn: () => Promise<SummarizeResponse<TRaw>> | SummarizeResponse<TRaw>,
 ) {
@@ -497,7 +497,7 @@ export class ToolMessage extends BaseMessage {
 export type ChatMessage = BaseMessage;
 
 // LLMResponse wrapper to extract standardized attributes while returning raw provider output
-export class LLMResponse<TRaw = any> {
+export class LLMResponse<TRaw = unknown> {
   readonly raw: TRaw;
   readonly content?: string;
   readonly toolCalls?: ToolCall[];
@@ -509,7 +509,7 @@ export class LLMResponse<TRaw = any> {
 }
 
 // ToolCallResponse wrapper for tool execution instrumentation
-export class ToolCallResponse<TRaw = any, TOutput = unknown> {
+export class ToolCallResponse<TRaw = unknown, TOutput = unknown> {
   readonly raw: TRaw;
   readonly output?: TOutput;
   readonly status: SpanStatus;
@@ -521,7 +521,7 @@ export class ToolCallResponse<TRaw = any, TOutput = unknown> {
 }
 
 // SummarizeResponse wrapper for summarization instrumentation
-export class SummarizeResponse<TRaw = any> {
+export class SummarizeResponse<TRaw = unknown> {
   readonly raw: TRaw;
   readonly summary?: string;
   readonly newContext?: Array<ChatMessageInput>;

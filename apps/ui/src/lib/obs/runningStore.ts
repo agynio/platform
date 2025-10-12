@@ -3,7 +3,7 @@
 // - Uses obsRealtime span_upsert events and seeds from /v1/spans
 // - Memory is capped per node-kind bucket to avoid unbounded growth
 
-import { useSyncExternalStore, useEffect } from 'react';
+import { useSyncExternalStore } from 'react';
 import { obsRealtime } from './socket';
 import type { SpanDoc } from './api';
 import { fetchRunningSpansFromTo } from './api';
@@ -38,10 +38,12 @@ class RunningStoreImpl {
   private initialized = false;
   private subscribers = new Set<() => void>();
   // key = `${nodeId}|${bucket}`
-  private bucketSpans = new Map<string, Set<string>>();
+  // Maintain only counts per key and mapping spanId -> key set to support accurate decrements.
   private counts = new Map<string, number>();
-  // Track span -> keys it contributes to (normally one)
   private spanToKeys = new Map<string, Set<string>>();
+  // Optional TTL for orphaned span mappings (defensive)
+  private spanFirstSeen = new Map<string, number>();
+  private static readonly MAPPING_TTL_MS = 24 * 60 * 60 * 1000; // 24h
 
   private emit() {
     this.subscribers.forEach((cb) => {
@@ -80,36 +82,18 @@ class RunningStoreImpl {
   }
 
   private addSpanToKey(spanId: string, key: string) {
-    let set = this.bucketSpans.get(key);
-    if (!set) {
-      set = new Set<string>();
-      this.bucketSpans.set(key, set);
-    }
     const keysExisting = this.spanToKeys.get(spanId);
     const alreadyCounted = !!keysExisting && keysExisting.has(key);
-    if (!alreadyCounted) {
-      set.add(spanId);
-      this.counts.set(key, (this.counts.get(key) || 0) + 1);
-      // Cap size; evict oldest to keep memory bounded
-      if (set.size > BUCKET_CAP) {
-        const it = set.values();
-        const oldest = it.next().value as string | undefined;
-        if (oldest) {
-          set.delete(oldest);
-          // NOTE: We intentionally do not decrement count on eviction to avoid
-          // undercounting while the evicted span may still be running. This implies
-          // counts may saturate at cap for very active nodes.
-          const keys = this.spanToKeys.get(oldest);
-          if (keys) keys.delete(key);
-        }
-      }
-      let keys = this.spanToKeys.get(spanId);
-      if (!keys) {
-        keys = new Set<string>();
-        this.spanToKeys.set(spanId, keys);
-      }
-      keys.add(key);
+    if (alreadyCounted) return;
+    this.counts.set(key, (this.counts.get(key) || 0) + 1);
+    let keys = this.spanToKeys.get(spanId);
+    if (!keys) {
+      keys = new Set<string>();
+      this.spanToKeys.set(spanId, keys);
+      this.spanFirstSeen.set(spanId, Date.now());
     }
+    keys.add(key);
+    this.gcMappings();
   }
 
   private removeSpanFromKey(spanId: string, key: string) {
@@ -121,8 +105,7 @@ class RunningStoreImpl {
       keys.delete(key);
       if (keys.size === 0) this.spanToKeys.delete(spanId);
     }
-    const set = this.bucketSpans.get(key);
-    if (set) set.delete(spanId);
+    // membership set removed; counts and spanToKeys are the source of truth
   }
 
   private onSpan(span: SpanDoc) {
@@ -154,16 +137,24 @@ class RunningStoreImpl {
     else this.removeSpanFromKey(span.spanId, key);
     this.emit();
   }
+
+  private gcMappings() {
+    // Opportunistic GC: drop mappings older than TTL if span is not running (best-effort)
+    const now = Date.now();
+    for (const [spanId, first] of this.spanFirstSeen.entries()) {
+      if (now - first < RunningStoreImpl.MAPPING_TTL_MS) continue;
+      const keys = this.spanToKeys.get(spanId);
+      if (!keys || keys.size === 0) {
+        this.spanFirstSeen.delete(spanId);
+        this.spanToKeys.delete(spanId);
+      }
+    }
+  }
 }
 
 const store = new RunningStoreImpl();
 
 export function useRunningCount(nodeId: string | undefined, kind: Bucket | undefined): number {
-  // Subscribe only when meaningful
-  useEffect(() => {
-    // ensure init side-effects even if subscribe returns noop due to undefined kinds
-    // eslint-disable-next-line @typescript-eslint/no-empty-function
-  }, []);
   if (!nodeId || !kind) return 0;
   return useSyncExternalStore((cb) => store.subscribe(cb), () => store.getCount(nodeId, kind));
 }
