@@ -35,6 +35,23 @@ export const SimpleAgentStaticConfigSchema = z
       .default('You are a helpful AI assistant.')
       .describe('System prompt injected at the start of each conversation turn.')
       .meta({ 'ui:widget': 'textarea', 'ui:options': { rows: 6 } }),
+    // Agent-side message buffer handling (exposed for SimpleAgent static config)
+    debounceMs: z
+      .number()
+      .int()
+      .min(0)
+      .default(0)
+      .describe('Debounce window (ms) for agent-side message buffer.'),
+    whenBusy: z
+      .enum(['wait', 'injectAfterTools'])
+      .default('wait')
+      .describe(
+        "When agent is busy: 'wait' queues new messages for next run; 'injectAfterTools' injects them into the current run after tools stage.",
+      ),
+    processBuffer: z
+      .enum(['allTogether', 'oneByOne'])
+      .default('allTogether')
+      .describe('Drain mode: process all queued messages together vs one message per run.'),
     summarizationKeepTokens: z
       .number()
       .int()
@@ -402,6 +419,9 @@ export class SimpleAgent extends BaseAgent {
             'title',
             'model',
             'systemPrompt',
+            'debounceMs',
+            'whenBusy',
+            'processBuffer',
             'summarizationKeepTokens',
             'summarizationMaxTokens',
             'restrictOutput',
@@ -413,6 +433,11 @@ export class SimpleAgent extends BaseAgent {
     ) as Partial<SimpleAgentStaticConfig> & Record<string, any>;
 
     // Apply agent-side scheduling config
+    // Optional legacy mapping (conservative):
+    // if ('waitForBusy' in config && (config as any).whenBusy === undefined) {
+    //   // Map true -> 'wait'. Do NOT map false automatically.
+    //   if ((config as any).waitForBusy === true) (config as any).whenBusy = 'wait';
+    // }
     this.applyRuntimeConfig(config);
 
     if (parsedConfig.systemPrompt !== undefined) {
