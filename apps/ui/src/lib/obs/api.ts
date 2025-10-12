@@ -41,3 +41,16 @@ export async function fetchSpansInRange(params: { from: string; to: string; labe
   return res.json();
 }
 
+// Convenience: fetch running spans within a window
+export async function fetchRunningSpansFromTo(from: string, to: string): Promise<SpanDoc[]> {
+  const usp = new URLSearchParams();
+  usp.set('status', 'running');
+  usp.set('from', from);
+  usp.set('to', to);
+  usp.set('sort', 'lastUpdate');
+  usp.set('limit', '5000');
+  const res = await fetch(`${OBS_BASE}/v1/spans?${usp.toString()}`);
+  if (!res.ok) throw new Error('Failed to fetch running spans');
+  const body = (await res.json()) as { items: SpanDoc[] };
+  return body.items || [];
+}
