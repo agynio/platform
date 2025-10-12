@@ -31,5 +31,21 @@ describe('SimpleAgent buffer handling config schema', () => {
     expect(spy).toHaveBeenCalled();
     // Optional legacy mapping is commented (no-op), so just ensure no throw
   });
-});
 
+  it('rejects invalid enum values in schema and setConfig', () => {
+    const res = SimpleAgentStaticConfigSchema.safeParse({ whenBusy: 'bogus' });
+    expect(res.success).toBe(false);
+    const a = makeAgent();
+    expect(() => a.setConfig({ whenBusy: 'bogus' as any })).toThrowError();
+  });
+
+  it('rejects negative summarizationKeepTokens/maxTokens', () => {
+    const res1 = SimpleAgentStaticConfigSchema.safeParse({ summarizationKeepTokens: -1 });
+    const res2 = SimpleAgentStaticConfigSchema.safeParse({ summarizationMaxTokens: 0 });
+    expect(res1.success).toBe(false);
+    expect(res2.success).toBe(false);
+    const a = makeAgent();
+    expect(() => a.setConfig({ summarizationKeepTokens: -1 } as any)).toThrowError();
+    expect(() => a.setConfig({ summarizationMaxTokens: 0 } as any)).toThrowError();
+  });
+});

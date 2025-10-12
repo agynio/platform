@@ -57,8 +57,39 @@ function makeAgent() {
 }
 
 describe('SimpleAgent buffer behavior', () => {
+  it('debounce delays run start and batches within window', async () => {
+    vi.useFakeTimers();
+    const cfg = new ConfigService({
+      githubAppId: '1', githubAppPrivateKey: 'k', githubInstallationId: 'i',
+      openaiApiKey: 'x', githubToken: 't', slackBotToken: 's', slackAppToken: 'sa', mongodbUrl: 'm',
+    });
+    const logger = { info: vi.fn(), debug: vi.fn(), error: vi.fn() } as unknown as LoggerService;
+    const agent = new SimpleAgent(cfg, logger as any, new CheckpointerService(new LoggerService()) as any, 'agent-deb');
+    agent.setConfig({ debounceMs: 50, processBuffer: 'allTogether' });
+
+    const p1 = agent.invoke('td', { content: 'a', info: {} } as any);
+    // Enqueue another within debounce window; should batch into the same run
+    const p2 = agent.invoke('td', { content: 'b', info: {} } as any);
+
+    // Before debounce elapses, no run should have started
+    await vi.advanceTimersByTimeAsync(40);
+    const startsEarly = (logger.info as any).mock.calls.filter((c: any[]) => String(c[0]).startsWith('Starting run'));
+    expect(startsEarly.length).toBe(0);
+
+    // After window, exactly one run should start
+    await vi.advanceTimersByTimeAsync(20);
+    const starts = (logger.info as any).mock.calls.filter((c: any[]) => String(c[0]).startsWith('Starting run'));
+    expect(starts.length).toBe(1);
+    await Promise.all([p1, p2]);
+  });
+
   it('processBuffer=oneByOne splits multi-message invoke into separate runs', async () => {
-    const agent = makeAgent();
+    const cfg = new ConfigService({
+      githubAppId: '1', githubAppPrivateKey: 'k', githubInstallationId: 'i',
+      openaiApiKey: 'x', githubToken: 't', slackBotToken: 's', slackAppToken: 'sa', mongodbUrl: 'm',
+    });
+    const logger = { info: vi.fn(), debug: vi.fn(), error: vi.fn() } as unknown as LoggerService;
+    const agent = new SimpleAgent(cfg, logger as any, new CheckpointerService(new LoggerService()) as any, 'agent-one');
     agent.setConfig({ processBuffer: 'oneByOne' });
     const r = await agent.invoke('t1', [
       { content: 'a', info: {} } as any,
@@ -66,6 +97,8 @@ describe('SimpleAgent buffer behavior', () => {
       { content: 'c', info: {} } as any,
     ]);
     expect(r).toBeDefined();
+    const starts = (logger.info as any).mock.calls.filter((c: any[]) => String(c[0]).startsWith('Starting run'));
+    expect(starts.length).toBe(3);
   });
 
   it("whenBusy='injectAfterTools' injects messages during in-flight run", async () => {
@@ -81,4 +114,3 @@ describe('SimpleAgent buffer behavior', () => {
     expect(r2).toBeDefined();
   });
 });
-
