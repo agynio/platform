@@ -20,6 +20,7 @@ function detectBucket(span: SpanDoc): Bucket | undefined {
 }
 
 function getNodeIdFromSpan(span: SpanDoc): string | undefined {
+  // Strictly require nodeId presence; do not infer
   const nodeId = span.nodeId || (span.attributes?.nodeId as string | undefined) || undefined;
   if (typeof nodeId === 'string' && nodeId.length > 0) return nodeId;
   return undefined;

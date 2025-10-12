@@ -15,7 +15,7 @@ type ToolCall = { id?: string; name: string; args: unknown };
 type WithRuntime = LangGraphRunnableConfig & { configurable?: { thread_id?: string; caller_agent?: unknown } };
 
 export class ToolsNode extends BaseNode {
-  constructor(private tools: BaseTool[]) {
+  constructor(private tools: BaseTool[], private nodeId?: string) {
     super();
     this.tools = [...tools];
   }
@@ -44,7 +44,7 @@ export class ToolsNode extends BaseNode {
     const toolMessages: ToolMessage[] = await Promise.all(
       toolCalls.map(async (tc) => {
         const callId = tc.id ?? `missing_id_${Math.random().toString(36).slice(2)}`;
-        return await withToolCall({ toolCallId: callId, name: tc.name, input: tc.args }, async () => {
+        return await withToolCall({ toolCallId: callId, name: tc.name, input: tc.args, nodeId: this.nodeId || (config as any)?.configurable?.node_id || (config as any)?.configurable?.nodeId }, async () => {
           const tool = tools.find((t) => t.name === tc.name);
           const createMessage = (content: string, success = true) => {
             const toolMessage = new ToolMessage({

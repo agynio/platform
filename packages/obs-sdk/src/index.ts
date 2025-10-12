@@ -289,9 +289,27 @@ export async function flush() {
 
 // Helper creators (per spec) - only the specified parameters and mandatory mapping to attributes/kind.
 
-export function withAgent<T>(attributes: { threadId?: string; [k: string]: unknown }, fn: () => Promise<T> | T) {
-  const { threadId, ...rest } = attributes;
-  return withSpan({ label: 'agent', kind: 'agent', threadId, attributes: { kind: 'agent', ...(threadId ? { threadId } : {}), ...rest } }, fn);
+export function withAgent<T>(
+  attributes: { threadId?: string; nodeId?: string; [k: string]: unknown },
+  fn: () => Promise<T> | T,
+) {
+  const { threadId, nodeId, ...rest } = attributes;
+  // Propagate nodeId both top-level and in attributes for downstream filtering
+  return withSpan(
+    {
+      label: 'agent',
+      kind: 'agent',
+      threadId,
+      nodeId,
+      attributes: {
+        kind: 'agent',
+        ...(threadId ? { threadId } : {}),
+        ...(nodeId ? { nodeId } : {}),
+        ...rest,
+      },
+    },
+    fn,
+  );
 }
 
 export function withLLM<T>(
@@ -326,12 +344,17 @@ export function withLLM<T>(
 }
 
 export function withToolCall<TOutput = unknown, TRaw = any>(
-  attributes: { toolCallId: string; name: string; input: unknown; [k: string]: unknown },
+  attributes: { toolCallId: string; name: string; input: unknown; nodeId?: string; [k: string]: unknown },
   fn: () => Promise<ToolCallResponse<TRaw, TOutput>> | ToolCallResponse<TRaw, TOutput>,
 ): Promise<TRaw> {
-  const { toolCallId, name, input, ...rest } = attributes;
+  const { toolCallId, name, input, nodeId, ...rest } = attributes;
   return withSpan(
-    { label: `tool:${name}`, kind: 'tool_call', attributes: { kind: 'tool_call', toolCallId, name, input, ...rest } },
+    {
+      label: `tool:${name}`,
+      kind: 'tool_call',
+      nodeId,
+      attributes: { kind: 'tool_call', toolCallId, name, input, ...(nodeId ? { nodeId } : {}), ...rest },
+    },
     fn,
     (result, err) => {
       if (err) return { attributes: { status: 'error' }, status: 'error' };

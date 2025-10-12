@@ -21,9 +21,8 @@ function spanMatchesContext(span: SpanDoc, node: Node<BuilderPanelNodeData>, kin
   const nodeIdAttr = (attrs['nodeId'] as string | undefined) || span.nodeId;
   const kindOk = kind === 'agent' ? (kindAttr === 'agent' || label === 'agent') : (kindAttr === 'tool_call' || label.startsWith('tool:'));
   if (!kindOk) return false;
-  // Prefer strict nodeId match when present
-  if (nodeIdAttr) return nodeIdAttr === node.id;
-  return true; // fallback: filter by kind only
+  // Strict: require nodeId match; do not fallback to kind-only
+  return nodeIdAttr === node.id;
 }
 
 function summarizeStatus(s: SpanDoc['status']) {
@@ -57,8 +56,8 @@ export function NodeObsSidebar({ node }: { node: Node<BuilderPanelNodeData> }) {
         if (cancelled) return;
         const items = res.items || [];
         const filtered = items.filter((s) => spanMatchesContext(s, node, kind === 'agent' ? 'agent' : 'tool'));
-        const anyHasNodeId = filtered.some((s) => !!((s.attributes as any)?.nodeId || s.nodeId));
-        setNote(anyHasNodeId ? null : 'Showing by kind only; nodeId missing');
+        if (filtered.length === 0) setNote('No spans for this node. Ensure nodeId is instrumented.');
+        else setNote(null);
         // Order by lastUpdate desc and cap to 100
         const sorted = filtered.sort((a, b) => b.lastUpdate.localeCompare(a.lastUpdate)).slice(0, 100);
         setSpans(sorted);

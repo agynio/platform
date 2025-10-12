@@ -87,6 +87,11 @@ export class SimpleAgent extends BaseAgent {
     this.init();
   }
 
+  // Expose nodeId for instrumentation (used by BaseAgent.withAgent wrapper)
+  protected override getNodeId(): string | undefined {
+    return this.agentId;
+  }
+
   protected state() {
     return Annotation.Root({
       messages: Annotation<BaseMessage[], NodeOutput['messages']>({
@@ -123,7 +128,8 @@ export class SimpleAgent extends BaseAgent {
     });
 
     this.callModelNode = new CallModelNode([], this.llm);
-    this.toolsNode = new ToolsNode([]);
+    // Pass this agent's node id to ToolsNode for span attribution
+    this.toolsNode = new ToolsNode([], this.agentId);
     this.summarizeNode = new SummarizationNode(this.llm, {
       keepTokens: this.summarizationKeepTokens ?? 0,
       maxTokens: this.summarizationMaxTokens ?? 0,
