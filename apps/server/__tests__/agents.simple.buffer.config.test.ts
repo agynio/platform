@@ -36,7 +36,7 @@ describe('SimpleAgent buffer handling config schema', () => {
     const res = SimpleAgentStaticConfigSchema.safeParse({ whenBusy: 'bogus' });
     expect(res.success).toBe(false);
     const a = makeAgent();
-    expect(() => a.setConfig({ whenBusy: 'bogus' as any })).toThrowError();
+    expect(() => a.setConfig({ whenBusy: 'bogus' })).toThrowError();
   });
 
   it('rejects negative summarizationKeepTokens/maxTokens', () => {
@@ -45,7 +45,7 @@ describe('SimpleAgent buffer handling config schema', () => {
     expect(res1.success).toBe(false);
     expect(res2.success).toBe(false);
     const a = makeAgent();
-    expect(() => a.setConfig({ summarizationKeepTokens: -1 } as any)).toThrowError();
-    expect(() => a.setConfig({ summarizationMaxTokens: 0 } as any)).toThrowError();
+    expect(() => a.setConfig({ summarizationKeepTokens: -1 })).toThrowError();
+    expect(() => a.setConfig({ summarizationMaxTokens: 0 })).toThrowError();
   });
 });

@@ -426,6 +426,8 @@ export class SimpleAgent extends BaseAgent {
   /**
    * Dynamically set configuration values like the system prompt.
    */
+  // Overload preserves BaseAgent signature while exposing a more precise config shape for callers.
+  setConfig(config: Partial<SimpleAgentStaticConfig> & Record<string, unknown>): void;
   setConfig(config: Record<string, unknown>): void {
     const parsedConfig = SimpleAgentStaticConfigSchema.partial().parse(
       Object.fromEntries(

@@ -46,6 +46,7 @@ vi.mock('../src/services/checkpointer.service', async (importOriginal) => {
 });
 
 import { SimpleAgent } from '../src/agents/simple.agent';
+import type { TriggerMessage } from '../src/triggers/base.trigger';
 
 // Helper to make a configured agent
 function makeAgent() {
@@ -67,9 +68,9 @@ describe('SimpleAgent buffer behavior', () => {
     const agent = new SimpleAgent(cfg, logger as any, new CheckpointerService(new LoggerService()) as any, 'agent-deb');
     agent.setConfig({ debounceMs: 50, processBuffer: 'allTogether' });
 
-    const p1 = agent.invoke('td', { content: 'a', info: {} } as any);
+    const p1 = agent.invoke('td', { content: 'a', info: {} });
     // Enqueue another within debounce window; should batch into the same run
-    const p2 = agent.invoke('td', { content: 'b', info: {} } as any);
+    const p2 = agent.invoke('td', { content: 'b', info: {} });
 
     // Before debounce elapses, no run should have started
     await vi.advanceTimersByTimeAsync(40);
@@ -91,23 +92,43 @@ describe('SimpleAgent buffer behavior', () => {
     const logger = { info: vi.fn(), debug: vi.fn(), error: vi.fn() } as unknown as LoggerService;
     const agent = new SimpleAgent(cfg, logger as any, new CheckpointerService(new LoggerService()) as any, 'agent-one');
     agent.setConfig({ processBuffer: 'oneByOne' });
-    const r = await agent.invoke('t1', [
-      { content: 'a', info: {} } as any,
-      { content: 'b', info: {} } as any,
-      { content: 'c', info: {} } as any,
-    ]);
+    const msgs: TriggerMessage[] = [
+      { content: 'a', info: {} },
+      { content: 'b', info: {} },
+      { content: 'c', info: {} },
+    ];
+    const r = await agent.invoke('t1', msgs);
     expect(r).toBeDefined();
     const starts = (logger.info as any).mock.calls.filter((c: any[]) => String(c[0]).startsWith('Starting run'));
     expect(starts.length).toBe(3);
+  });
+
+  it("processBuffer='allTogether' batches multi-message invoke into a single run (no debounce)", async () => {
+    const cfg = new ConfigService({
+      githubAppId: '1', githubAppPrivateKey: 'k', githubInstallationId: 'i',
+      openaiApiKey: 'x', githubToken: 't', slackBotToken: 's', slackAppToken: 'sa', mongodbUrl: 'm',
+    });
+    const logger = { info: vi.fn(), debug: vi.fn(), error: vi.fn() } as unknown as LoggerService;
+    const agent = new SimpleAgent(cfg, logger as any, new CheckpointerService(new LoggerService()), 'agent-all');
+    agent.setConfig({ processBuffer: 'allTogether', debounceMs: 0 });
+    const msgs: TriggerMessage[] = [
+      { content: 'a', info: {} },
+      { content: 'b', info: {} },
+      { content: 'c', info: {} },
+    ];
+    const r = await agent.invoke('tA', msgs);
+    expect(r).toBeDefined();
+    const starts = (logger.info as any).mock.calls.filter((c: any[]) => String(c[0]).startsWith('Starting run'));
+    expect(starts.length).toBe(1);
   });
 
   it("whenBusy='injectAfterTools' injects messages during in-flight run", async () => {
     const agent = makeAgent();
     agent.setConfig({ whenBusy: 'injectAfterTools', debounceMs: 0 });
     // Kick off a run with one message
-    const p = agent.invoke('t2', { content: 'start', info: {} } as any);
+    const p = agent.invoke('t2', { content: 'start', info: {} });
     // Immediately enqueue another which should be injected into the current run
-    const p2 = agent.invoke('t2', { content: 'follow', info: {} } as any);
+    const p2 = agent.invoke('t2', { content: 'follow', info: {} });
     const r1 = await p;
     const r2 = await p2;
     expect(r1).toBeDefined();
