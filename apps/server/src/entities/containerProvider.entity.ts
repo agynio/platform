@@ -135,8 +135,10 @@ export class ContainerProviderEntity {
   }
 
   async provide(threadId: string) {
+    // Build base thread labels and workspace-specific labels
     const labels = this.idLabels(threadId);
-    let container: ContainerEntity | undefined = await this.containerService.findContainerByLabels(labels);
+    const workspaceLabels = { ...labels, 'hautech.ai/role': 'workspace' } as Record<string, string>;
+    let container: ContainerEntity | undefined = await this.containerService.findContainerByLabels(workspaceLabels);
     const DOCKER_HOST_ENV = 'tcp://localhost:2375';
     const DOCKER_MIRROR_URL = this.configService?.dockerMirrorUrl || process.env.DOCKER_MIRROR_URL || 'http://registry-mirror:5000';
     const enableDinD = this.cfg?.enableDinD ?? false;
@@ -277,7 +279,7 @@ export class ContainerProviderEntity {
         // Only merge image/env from cfg (initialScript is provider-level behavior, not a start option)
         image: this.cfg?.image ?? this.opts.image,
         env: enableDinD ? { ...(envMerged || {}), DOCKER_HOST: DOCKER_HOST_ENV } : envMerged,
-        labels: { ...(this.opts.labels || {}), ...labels },
+        labels: { ...(this.opts.labels || {}), ...workspaceLabels },
         platform: requestedPlatform,
       });
 

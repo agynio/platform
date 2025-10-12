@@ -5,7 +5,7 @@ import { ContainerProviderEntity } from '../entities/containerProvider.entity';
 
 // Minimal fakes
 class FakeContainerService {
-  async findContainerByLabels() { return undefined; }
+  async findContainerByLabels(_labels?: any) { return undefined; }
   async start(opts: any) { return { id: 'c', exec: async () => ({ exitCode: 0 }), ...opts }; }
 }
 class FakeVault { isEnabled() { return true; } async getSecret() { return 'VAL'; } }
@@ -29,5 +29,7 @@ describe('ContainerProviderEntity parseVaultRef', () => {
     const container: any = await ent.provide('t');
     expect(container.env.A).toBe('x');
     expect(container.env.B).toBe('VAL');
+    // labels should include role=workspace now
+    expect(container.labels['hautech.ai/role']).toBe('workspace');
   });
 });

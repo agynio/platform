@@ -424,7 +424,16 @@ export class ContainerService {
       all: options?.all ?? false,
       filters: { label: labelFilters },
     });
-    return list.map((c) => new ContainerEntity(this, c.Id));
+    // Deterministic ordering to stabilize selection in callers using findContainerByLabels
+    const sorted = [...list].sort((a: any, b: any) => {
+      const ac = typeof a.Created === 'number' ? a.Created : 0;
+      const bc = typeof b.Created === 'number' ? b.Created : 0;
+      if (ac !== bc) return ac - bc; // ascending by Created
+      const aid = String(a.Id ?? '');
+      const bid = String(b.Id ?? '');
+      return aid.localeCompare(bid);
+    });
+    return sorted.map((c) => new ContainerEntity(this, c.Id));
   }
 
   /**

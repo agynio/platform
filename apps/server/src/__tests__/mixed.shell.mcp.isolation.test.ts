@@ -39,7 +39,7 @@ describe('Mixed Shell + MCP overlay isolation', () => {
     const cs: any = { getDocker: () => docker };
     const mcp = new LocalMCPServer(cs, logger as any);
     (mcp as any).setContainerProvider(provider);
-    await mcp.setConfig({ namespace: 'n', command: 'mcp start --stdio', env: [ { key: 'M_VAR', value: 'm' } ] } as any);
+    await mcp.setConfig({ namespace: 'n', command: 'mcp start --stdio', env: [ { key: 'M_VAR', value: 'm' } ], startupTimeoutMs: 10 } as any);
 
     // Shell exec
     const tool = shell.init();
