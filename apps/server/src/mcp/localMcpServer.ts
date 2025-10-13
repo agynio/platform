@@ -312,7 +312,7 @@ export class LocalMCPServer implements McpServer, Provisionable, DynamicConfigur
     // Get thread-specific container
     const container = await this.containerProvider.provide(threadId);
     // Touch last-used when starting a tool call (defensive; provider already updates on provide)
-    try { await (this.containerService as any).touchLastUsed?.(container.id); } catch {}
+    try { await this.containerService.touchLastUsed(container.id); } catch {}
     const containerId = container.id;
 
     const cfg = this.cfg!;
@@ -365,7 +365,7 @@ export class LocalMCPServer implements McpServer, Provisionable, DynamicConfigur
       // Heartbeat: keep last_used_at fresh during the session
       const hbInterval = Math.max(60_000, (cfg.heartbeatIntervalMs ?? 300_000));
       hbTimer = setInterval(() => {
-        (this.containerService as any).touchLastUsed?.(containerId).catch(() => {});
+        this.containerService.touchLastUsed(containerId).catch(() => {});
       }, hbInterval);
 
       // Call the tool

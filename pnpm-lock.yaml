@@ -87,6 +87,9 @@ importers:
       node-fetch:
         specifier: ^3.3.2
         version: 3.3.2
+      p-limit:
+        specifier: ^3.1.0
+        version: 3.1.0
       uuid:
         specifier: ^13.0.0
         version: 13.0.0

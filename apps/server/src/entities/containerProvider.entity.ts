@@ -347,7 +347,7 @@ export class ContainerProviderEntity {
     }
     // Update last-used on provide reuse or after create
     try {
-      await (this.containerService as any).touchLastUsed?.(container.id);
+      await this.containerService.touchLastUsed(container.id);
     } catch {}
     return container;
   }

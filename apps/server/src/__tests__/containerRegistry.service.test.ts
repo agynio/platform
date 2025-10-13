@@ -64,5 +64,32 @@ describe('ContainerRegistryService', () => {
     expect(doc?.status).toBe('stopped');
     expect(doc?.termination_reason).toBe('ttl_expired');
   });
-});
 
+  it('backfill is idempotent and only includes role=workspace', async () => {
+    // Fake container service to emulate docker
+    const fake = {
+      findContainersByLabels: async (_labels: Record<string, string>, _opts?: any) => [
+        { id: 'w1' },
+        { id: 'w2' },
+      ],
+      getContainerLabels: async (id: string) =>
+        id === 'w1'
+          ? { 'hautech.ai/role': 'workspace', 'hautech.ai/thread_id': 'node__t' }
+          : { 'hautech.ai/role': 'not-workspace' },
+      getDocker: () => ({
+        getContainer: (_id: string) => ({
+          inspect: async () => ({ Created: new Date().toISOString(), State: { Running: true }, Config: { Image: 'img' } }),
+        }),
+      }),
+    } as any;
+
+    await registry.backfillFromDocker(fake);
+    await registry.backfillFromDocker(fake); // run twice
+    const col = client.db('test').collection('containers');
+    const all = await col.find({}).toArray();
+    // Only w1 should be present and running
+    const ids = all.map((d) => d.container_id);
+    expect(ids).toContain('w1');
+    expect(ids).not.toContain('w2');
+  });
+});

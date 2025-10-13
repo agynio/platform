@@ -1,4 +1,4 @@
-import type { Db, Collection, WithId, UpdateFilter } from 'mongodb';
+import type { Db, Collection, WithId, UpdateFilter, Filter } from 'mongodb';
 import type { ContainerService } from './container.service';
 import { LoggerService } from './logger.service';
 
@@ -73,7 +73,7 @@ export class ContainerRegistryService {
         deleted_at: null,
         metadata,
       },
-    } as any;
+    };
     await this.col.updateOne({ container_id: args.containerId }, update, { upsert: true });
   }
 
@@ -87,24 +87,21 @@ export class ContainerRegistryService {
     };
     if (!doc) {
       // Unknown container; upsert minimal record to avoid missing updates
-      await this.col.updateOne(
-        { container_id: containerId },
-        {
-          $setOnInsert: {
-            node_id: 'unknown',
-            thread_id: 'unknown',
-            provider_type: 'docker',
-            image: 'unknown',
-            status: 'running',
-            created_at: nowIso,
-            termination_reason: null,
-            deleted_at: null,
-            metadata: { ttlSeconds: ttl },
-          },
-          ...update,
-        } as any,
-        { upsert: true },
-      );
+      const fullUpdate: UpdateFilter<ContainerDoc> = {
+        $setOnInsert: {
+          node_id: 'unknown',
+          thread_id: 'unknown',
+          provider_type: 'docker',
+          image: 'unknown',
+          status: 'running',
+          created_at: nowIso,
+          termination_reason: null,
+          deleted_at: null,
+          metadata: { ttlSeconds: ttl },
+        },
+        ...update,
+      };
+      await this.col.updateOne({ container_id: containerId }, fullUpdate, { upsert: true });
     } else {
       await this.col.updateOne({ container_id: containerId }, update);
     }
@@ -112,11 +109,15 @@ export class ContainerRegistryService {
 
   async markTerminating(containerId: string, reason: string, claimId?: string): Promise<void> {
     const nowIso = new Date().toISOString();
-    await this.col.updateOne(
-      { container_id: containerId },
-      { $set: { status: 'terminating', updated_at: nowIso, termination_reason: reason }, ...(claimId ? { $setOnInsert: {} } : {}) },
-    );
-    if (claimId) await this.col.updateOne({ container_id: containerId }, { $set: { 'metadata.claimId': claimId } });
+    const update: UpdateFilter<ContainerDoc> = {
+      $set: {
+        status: 'terminating',
+        updated_at: nowIso,
+        termination_reason: reason,
+        ...(claimId ? { 'metadata.claimId': claimId } : {}),
+      },
+    };
+    await this.col.updateOne({ container_id: containerId }, update);
   }
 
   async markStopped(containerId: string, reason: string): Promise<void> {
@@ -138,7 +139,41 @@ export class ContainerRegistryService {
 
   async getExpired(now: Date = new Date()) {
     const iso = now.toISOString();
-    return await this.col.find({ status: 'running', kill_after_at: { $ne: null, $lte: iso } as any }).toArray();
+    // Include running past kill_after_at, and terminating past retryAfter (or missing)
+    const filter: Filter<ContainerDoc> = {
+      $or: [
+        { status: 'running', kill_after_at: { $ne: null, $lte: iso } },
+        {
+          status: 'terminating',
+          $or: [
+            { 'metadata.retryAfter': { $exists: false } },
+            { 'metadata.retryAfter': { $lte: iso } },
+          ],
+        },
+      ],
+    } as unknown as Filter<ContainerDoc>;
+    return await this.col.find(filter).toArray();
+  }
+
+  /** Record a termination failure and schedule a retry with backoff. */
+  async recordTerminationFailure(containerId: string, message: string): Promise<void> {
+    const now = Date.now();
+    // Read current attempts to compute backoff
+    const doc = await this.col.findOne({ container_id: containerId });
+    const attempts = (doc?.metadata?.terminationAttempts as number | undefined) ?? 0;
+    const nextAttempts = attempts + 1;
+    // Exponential backoff in seconds: min(2^attempts, 900s)
+    const delayMs = Math.min(Math.pow(2, attempts) * 1000, 15 * 60 * 1000);
+    const retryAfterIso = new Date(now + delayMs).toISOString();
+    const update: UpdateFilter<ContainerDoc> = {
+      $set: {
+        updated_at: new Date().toISOString(),
+        'metadata.lastError': message,
+        'metadata.retryAfter': retryAfterIso,
+        'metadata.terminationAttempts': nextAttempts,
+      },
+    };
+    await this.col.updateOne({ container_id: containerId }, update);
   }
 
   async backfillFromDocker(containerService: ContainerService): Promise<void> {
@@ -146,42 +181,49 @@ export class ContainerRegistryService {
     try {
       const list = await containerService.findContainersByLabels({ 'hautech.ai/role': 'workspace' }, { all: true });
       const nowIso = new Date().toISOString();
-      for (const c of list) {
+      // Concurrency-controlled backfill to avoid long sequential runs
+      const concurrency = 5;
+      let index = 0;
+      const runNext = async (): Promise<void> => {
+        const i = index++;
+        const item = list[i];
+        if (!item) return;
         try {
-          const labels = await containerService.getContainerLabels(c.id);
+          const labels = await containerService.getContainerLabels(item.id);
+          if (labels && labels['hautech.ai/role'] !== 'workspace') {
+            return; // skip non-workspace containers defensively
+          }
           const thread = labels?.['hautech.ai/thread_id'] || '';
           const [nodeId, threadId] = thread.includes('__') ? thread.split('__', 2) : ['unknown', thread];
-          const inspect = await containerService.getDocker().getContainer(c.id).inspect();
+          const inspect = await containerService.getDocker().getContainer(item.id).inspect();
           const created = inspect?.Created ? new Date(inspect.Created).toISOString() : nowIso;
           const running = !!inspect?.State?.Running;
-          await this.col.updateOne(
-            { container_id: c.id },
-            {
-              $setOnInsert: { created_at: created },
-              $set: {
-                container_id: c.id,
-                node_id: nodeId,
-                thread_id: threadId,
-                provider_type: 'docker',
-                image: inspect?.Config?.Image || 'unknown',
-                status: running ? 'running' : 'stopped',
-                updated_at: nowIso,
-                last_used_at: running ? nowIso : created,
-                kill_after_at: running ? this.computeKillAfter(nowIso, 86400) : null,
-                termination_reason: null,
-                deleted_at: running ? null : nowIso,
-                metadata: { labels, platform: labels?.['hautech.ai/platform'], ttlSeconds: 86400 },
-              },
-            } as any,
-            { upsert: true },
-          );
+          const update: UpdateFilter<ContainerDoc> = {
+            $setOnInsert: { created_at: created },
+            $set: {
+              container_id: item.id,
+              node_id: nodeId,
+              thread_id: threadId,
+              provider_type: 'docker',
+              image: inspect?.Config?.Image || 'unknown',
+              status: running ? 'running' : 'stopped',
+              updated_at: nowIso,
+              last_used_at: running ? nowIso : created,
+              kill_after_at: running ? this.computeKillAfter(nowIso, 86400) : null,
+              termination_reason: null,
+              deleted_at: running ? null : nowIso,
+              metadata: { labels, platform: labels?.['hautech.ai/platform'], ttlSeconds: 86400 },
+            },
+          };
+          await this.col.updateOne({ container_id: item.id }, update, { upsert: true });
         } catch (e) {
-          this.logger.error('ContainerRegistry: backfill error for container', c.id, e);
+          this.logger.error('ContainerRegistry: backfill error for container', item.id, e);
         }
-      }
+        await runNext();
+      };
+      await Promise.all(Array.from({ length: Math.min(concurrency, list.length) }, () => runNext()));
     } catch (e) {
       this.logger.error('ContainerRegistry: backfill listing error', e);
     }
   }
 }
-

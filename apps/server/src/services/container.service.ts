@@ -63,8 +63,9 @@ export class ContainerService {
   async touchLastUsed(containerId: string): Promise<void> {
     try {
       await this.registry?.updateLastUsed(containerId, new Date());
-    } catch (e) {
-      this.logger.debug(`touchLastUsed failed for cid=${containerId.substring(0, 12)} ${(e as any)?.message || e}`);
+    } catch (e: unknown) {
+      const msg = e && typeof e === 'object' && 'message' in e ? String((e as Error).message) : String(e);
+      this.logger.debug(`touchLastUsed failed for cid=${containerId.substring(0, 12)} ${msg}`);
     }
   }
 

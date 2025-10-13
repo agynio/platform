@@ -44,28 +44,44 @@ export class ContainerCleanupService {
     const expired = await this.registry.getExpired(now);
     if (!expired.length) return;
     this.logger.info(`ContainerCleanup: found ${expired.length} expired containers`);
-    for (const doc of expired) {
-      const claimId = randomUUID();
-      const ok = await this.registry.claimForTermination(doc.container_id, claimId);
-      if (!ok) continue; // claimed by another worker
-      try {
-        // Try graceful stop then remove
-        try {
-          await this.containers.stopContainer(doc.container_id, 10);
-        } catch (e: any) {
-          if (e?.statusCode !== 304 && e?.statusCode !== 404) throw e;
-        }
-        try {
-          await this.containers.removeContainer(doc.container_id, true);
-        } catch (e: any) {
-          if (e?.statusCode !== 404) throw e;
-        }
-        await this.registry.markStopped(doc.container_id, 'ttl_expired');
-      } catch (e) {
-        this.logger.error('ContainerCleanup: error stopping/removing', { id: doc.container_id, error: e });
-        // On error, leave status=terminating; next sweep will retry
-      }
-    }
+
+    // Controlled concurrency to avoid long sequential sweeps
+    const { default: pLimit } = await import('p-limit');
+    const limit = pLimit(5);
+
+    await Promise.allSettled(
+      expired.map((doc) =>
+        limit(async () => {
+          const id = doc.container_id;
+          const claimId = randomUUID();
+          // Only CAS-claim when transitioning from running; terminating should be retried idempotently
+          if (doc.status === 'running') {
+            const ok = await this.registry.claimForTermination(id, claimId);
+            if (!ok) return; // claimed by another worker
+          }
+
+          try {
+            // Try graceful stop then remove (handle benign errors)
+            try {
+              await this.containers.stopContainer(id, 10);
+            } catch (e: unknown) {
+              const sc = (e as { statusCode?: number } | undefined)?.statusCode;
+              if (sc !== 304 && sc !== 404) throw e;
+            }
+            try {
+              await this.containers.removeContainer(id, true);
+            } catch (e: unknown) {
+              const sc = (e as { statusCode?: number } | undefined)?.statusCode;
+              if (sc !== 404) throw e;
+            }
+            await this.registry.markStopped(id, 'ttl_expired');
+          } catch (e) {
+            this.logger.error('ContainerCleanup: error stopping/removing', { id, error: e });
+            // Schedule retry with backoff metadata; leave as terminating
+            await this.registry.recordTerminationFailure(id, e instanceof Error ? e.message : String(e));
+          }
+        }),
+      ),
+    );
   }
 }
-

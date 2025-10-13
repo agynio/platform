@@ -31,7 +31,8 @@
     "mongodb": "^6.20.0",
     "uuid": "^13.0.0",
     "yaml": "^2.8.1",
-    "zod": "^4.1.9"
+    "zod": "^4.1.9",
+    "p-limit": "^3.1.0"
   },
   "devDependencies": {
     "@langchain/langgraph-cli": "^0.0.66",
