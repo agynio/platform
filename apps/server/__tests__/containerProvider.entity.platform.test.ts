@@ -38,8 +38,9 @@ describe('ContainerProviderEntity platform reuse logic', () => {
     provider.setConfig({ platform: 'linux/arm64' }); // DinD disabled by default
     const c = await provider.provide('t1');
 
-    // ensure lookup used the thread-scoped label
-    expect((svc.findContainerByLabels as vi.Mock).mock.calls[0][0]).toMatchObject(idLabels('t1'));
+    // ensure lookup used the thread-scoped label and role=workspace
+    const lookupLabels = (svc.findContainerByLabels as vi.Mock).mock.calls[0][0] as Record<string, string>;
+    expect(lookupLabels).toMatchObject({ ...idLabels('t1'), 'hautech.ai/role': 'workspace' });
 
     expect(existing.stop).toHaveBeenCalled();
     expect(existing.remove).toHaveBeenCalled();
@@ -48,6 +49,31 @@ describe('ContainerProviderEntity platform reuse logic', () => {
     const startArgs = (svc.start as vi.Mock).mock.calls[0][0] as StartOpts;
     expect(startArgs.platform).toBe('linux/arm64');
     expect(c).toBeInstanceOf(MockContainer);
+  });
+
+  it("does not select a dind container when sharing the same thread label", async () => {
+    const dind = new MockContainer('dind123', svc);
+    // Return a result only if caller forgets to include role=workspace; our code should not do that.
+    (svc.findContainerByLabels as unknown as vi.Mock).mockImplementation(async (labels: Record<string, string>) => {
+      if (labels['hautech.ai/role'] === 'workspace') return undefined; // no existing workspace
+      if (labels['hautech.ai/role'] === 'dind') return dind;
+      // Simulate that a wrong lookup without role filter would match the dind
+      if (!('hautech.ai/role' in labels)) return dind;
+      return undefined;
+    });
+
+    const startImpl = async (_opts: Parameters<ContainerService['start']>[0]) => new MockContainer('ws999', svc);
+    (svc.start as vi.Mock).mockImplementationOnce(startImpl);
+
+    const provider = new ContainerProviderEntity(svc as unknown as ContainerService, {}, idLabels);
+    // DinD disabled in this test, but even if enabled, provider should not pick dind as workspace
+    provider.setConfig({ enableDinD: false });
+    const c = await provider.provide('t-dind');
+
+    // Should have started a fresh workspace container, not reused dind
+    expect((svc.start as vi.Mock).mock.calls.length).toBe(1);
+    expect(c).toBeInstanceOf(MockContainer);
+    expect((c as MockContainer).id).toBe('ws999');
   });
 
   it('recreates when existing has no platform label but platform is requested', async () => {

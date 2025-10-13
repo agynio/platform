@@ -36,7 +36,7 @@ describe('LocalMCPServer env overlay and workdir', () => {
   it('passes resolved Env (incl. vault refs) for discovery and per-call, without persistence', async () => {
     // Inject a fake vault into server instance
     (server as any).vault = { isEnabled: () => true, getSecret: vi.fn(async () => 'VAULTED') };
-    await server.setConfig({ namespace: 'x', command: 'mcp start --stdio', env: [ { key: 'A', value: '1' }, { key: 'B', value: 'mount/path/key', source: 'vault' } ], workdir: '/w' } as any);
+    await server.setConfig({ namespace: 'x', command: 'mcp start --stdio', env: [ { key: 'A', value: '1' }, { key: 'B', value: 'mount/path/key', source: 'vault' } ], workdir: '/w', startupTimeoutMs: 10 } as any);
     // Discovery
     try { await server.discoverTools(); } catch {}
     // Simulate discovered tool for call

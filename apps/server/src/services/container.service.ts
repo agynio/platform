@@ -420,11 +420,22 @@ export class ContainerService {
   ): Promise<ContainerEntity[]> {
     const labelFilters = Object.entries(labels).map(([k, v]) => `${k}=${v}`);
     this.logger.info(`Listing containers by labels all=${options?.all ?? false} filters=${labelFilters.join(',')}`);
-    const list = await this.docker.listContainers({
+    // dockerode returns Docker.ContainerInfo[]; type explicitly for comparator safety
+    const list: Docker.ContainerInfo[] = await this.docker.listContainers({
       all: options?.all ?? false,
       filters: { label: labelFilters },
     });
-    return list.map((c) => new ContainerEntity(this, c.Id));
+    // Deterministic ordering to stabilize selection; sort by Created then Id
+    // Note: explicit Docker.ContainerInfo types avoid any in comparator.
+    const sorted = [...list].sort((a: Docker.ContainerInfo, b: Docker.ContainerInfo) => {
+      const ac = typeof a.Created === 'number' ? a.Created : 0;
+      const bc = typeof b.Created === 'number' ? b.Created : 0;
+      if (ac !== bc) return ac - bc; // ascending by Created
+      const aid = String(a.Id ?? '');
+      const bid = String(b.Id ?? '');
+      return aid.localeCompare(bid);
+    });
+    return sorted.map((c) => new ContainerEntity(this, c.Id));
   }
 
   /**
