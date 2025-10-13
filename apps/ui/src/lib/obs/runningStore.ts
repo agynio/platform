@@ -1,7 +1,7 @@
 // Running spans store and hook
 // - Tracks realtime running span counts per node and kind (agent/tool)
 // - Uses obsRealtime span_upsert events and seeds from /v1/spans
-// - Memory is capped per node-kind bucket to avoid unbounded growth
+// - Memory is bounded via mapping GC to avoid unbounded growth
 
 import { useSyncExternalStore } from 'react';
 import { obsRealtime } from './socket';
@@ -31,8 +31,7 @@ function isRunningSpan(span: SpanDoc): boolean {
   return span.status === 'running' || span.completed === false;
 }
 
-// Bounded bucket entries per node-kind; if over capacity we evict oldest.
-const BUCKET_CAP = 500;
+// Note: capacity is controlled indirectly via TTL-based GC of mappings.
 
 class RunningStoreImpl {
   private initialized = false;

@@ -5,11 +5,28 @@ import '../../obs/runningStore';
 import { useRunningCount } from '../../obs/runningStore';
 import { renderHook, act } from '@testing-library/react';
 
-// Helper to emit span_upsert
-function upsert(span: Partial<SpanDoc> & Pick<SpanDoc, 'traceId' | 'spanId' | 'label' | 'status' | 'startTime' | 'completed' | 'lastUpdate' | 'attributes'>) {
-  const payload = { nodeId: undefined, threadId: undefined, endTime: undefined, events: [], idempotencyKeys: [], rev: 0, createdAt: '', updatedAt: '', parentSpanId: undefined, ...span } as SpanDoc;
-  // @ts-expect-error internal event
-  (obsRealtime as any).handlers.forEach((h: (s: SpanDoc) => void) => h(payload));
+// Helper to emit span_upsert using the public test API
+function upsert(
+  span: Partial<SpanDoc> &
+    Pick<
+      SpanDoc,
+      'traceId' | 'spanId' | 'label' | 'status' | 'startTime' | 'completed' | 'lastUpdate' | 'attributes'
+    >,
+) {
+  const payload: SpanDoc = {
+    nodeId: undefined,
+    threadId: undefined,
+    endTime: undefined,
+    events: [],
+    idempotencyKeys: [],
+    rev: 0,
+    createdAt: '',
+    updatedAt: '',
+    parentSpanId: undefined,
+    _id: undefined,
+    ...span,
+  } as SpanDoc;
+  obsRealtime.emitSpanUpsertForTest(payload);
 }
 
 describe('runningStore transitions', () => {

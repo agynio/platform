@@ -150,7 +150,7 @@ export function AgentBuilder() {
   const isActivityEligible = useCallback((node: RFNode | null, tpls: TemplateNodeSchema[]): boolean => {
     if (!node) return false;
     const tpl = tpls.find((t) => t.name === node.data.template);
-    const kind = tpl?.kind as string | undefined;
+    const kind = tpl?.kind; // TemplateKind union
     if (kind === 'agent' || kind === 'tool') return true;
     // Fallback: template name conventions from prior PR
     if (/agent/i.test(node.data.template)) return true;
