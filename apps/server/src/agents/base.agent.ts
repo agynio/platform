@@ -65,6 +65,12 @@ export abstract class BaseAgent implements TriggerListener, StaticConfigurable, 
 
   constructor(private logger: LoggerService) {}
 
+  // Allow subclasses to expose their runtime nodeId for instrumentation
+  // Default: undefined (not bound to a graph node)
+  protected getNodeId(): string | undefined {
+    return undefined;
+  }
+
   protected state(): AnnotationRoot<{}> {
     return Annotation.Root({
       messages: Annotation<BaseMessage[], NodeOutput['messages']>({
@@ -125,7 +131,7 @@ export abstract class BaseAgent implements TriggerListener, StaticConfigurable, 
   }
 
   async invoke(thread: string, messages: TriggerMessage[] | TriggerMessage): Promise<BaseMessage | undefined> {
-    return await withAgent({ threadId: thread, inputParameters: [{ thread }, { messages }] }, async () => {
+    return await withAgent({ threadId: thread, nodeId: this.getNodeId(), inputParameters: [{ thread }, { messages }] }, async () => {
       const batch = Array.isArray(messages) ? messages : [messages];
       // Log minimal, non-sensitive metadata about the batch
       const kinds = batch.reduce(

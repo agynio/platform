@@ -82,7 +82,7 @@ export function useDynamicConfig(nodeId: string) {
     retry: 2,
     onError: (err: unknown) => {
       const message = err instanceof Error ? err.message : String(err);
-      notifyError(`Load dynamic config failed: ${message}`);
+      notifyError(`Dynamic config load failed: ${message}`);
     },
   });
   return { schema };

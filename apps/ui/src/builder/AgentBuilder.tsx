@@ -19,11 +19,12 @@ import { DND_ITEM_NODE } from './dnd';
 import { makeNodeTypes } from './nodeTypes';
 import { TemplatesProvider } from './TemplatesProvider';
 import type { NodeTypes } from 'reactflow';
-import { CheckpointStreamPanel } from '@/components/stream/CheckpointStreamPanel';
+import { NodeObsSidebar } from '@/components/graph/NodeObsSidebar';
 import { LeftPalette } from './panels/LeftPalette';
 import { RightPropertiesPanel } from './panels/RightPropertiesPanel';
 import { useBuilderState } from './hooks/useBuilderState';
 import type { BuilderNodeKind } from './types';
+import type { TemplateNodeSchema } from 'shared';
 import { getDisplayTitle } from './lib/display';
 
 interface CanvasAreaProps {
@@ -131,21 +132,31 @@ export function AgentBuilder() {
     saveState,
   } = useBuilderState();
   const nodeTypes = useMemo(() => makeNodeTypes(templates), [templates]);
-  const [rightTab, setRightTab] = useState<'properties' | 'checkpoint'>('properties');
+  const [rightTab, setRightTab] = useState<'properties' | 'activity'>('properties');
 
-  // Reset tab when selection changes or if selected node no longer supports checkpoint view
+  // Reset tab when selection changes or if selected node no longer supports activity view
   useEffect(() => {
     if (!selectedNode) {
       setRightTab('properties');
       return;
     }
-    const tpl = selectedNode.data.template;
-    if (tpl !== 'simpleAgent' && rightTab === 'checkpoint') {
+    // If node not eligible for Activity, reset
+    if (!isActivityEligible(selectedNode, templates) && rightTab === 'activity') {
       setRightTab('properties');
     }
   }, [selectedNode, rightTab]);
 
-  const isCheckpointEligible = selectedNode?.data.template === 'simpleAgent';
+  // Eligibility: show tabs for agent or tool nodes
+  const isActivityEligible = useCallback((node: RFNode | null, tpls: TemplateNodeSchema[]): boolean => {
+    if (!node) return false;
+    const tpl = tpls.find((t) => t.name === node.data.template);
+    const kind = tpl?.kind; // TemplateKind union
+    if (kind === 'agent' || kind === 'tool') return true;
+    // Fallback: template name conventions from prior PR
+    if (/agent/i.test(node.data.template)) return true;
+    return false; // treat others as ineligible
+  }, []);
+  const activityEligible = isActivityEligible(selectedNode, templates);
   const selectedDisplayTitle = selectedNode
     ? getDisplayTitle(templates, selectedNode.data.template, selectedNode.data.config)
     : 'No Selection';
@@ -177,7 +188,7 @@ export function AgentBuilder() {
           <aside className="w-96 shrink-0 border-l bg-sidebar p-0 flex flex-col overflow-hidden">
             <div className="border-b flex items-center gap-2 px-4 h-10">
               <div className="text-xs font-semibold tracking-wide">{selectedDisplayTitle}</div>
-              {isCheckpointEligible && (
+              {activityEligible && (
                 <div className="ml-auto flex gap-1">
                   <button
                     type="button"
@@ -190,21 +201,21 @@ export function AgentBuilder() {
                   </button>
                   <button
                     type="button"
-                    onClick={() => setRightTab('checkpoint')}
+                    onClick={() => setRightTab('activity')}
                     className={`px-2 py-1 text-[11px] rounded ${
-                      rightTab === 'checkpoint' ? 'bg-primary text-primary-foreground' : 'bg-muted text-foreground'
+                      rightTab === 'activity' ? 'bg-primary text-primary-foreground' : 'bg-muted text-foreground'
                     }`}
                   >
-                    Checkpoint
+                    Activity
                   </button>
                 </div>
               )}
             </div>
             <div className="flex-1 overflow-y-auto p-4">
-              {rightTab === 'checkpoint' && isCheckpointEligible ? (
+              {rightTab === 'activity' && activityEligible && selectedNode ? (
                 <div className="space-y-4">
-                  <div className="text-[10px] uppercase text-muted-foreground">Checkpoint Stream</div>
-                  <CheckpointStreamPanel agentId={selectedNode?.id} />
+                  {/* Show OBS spans for agent/tool nodes */}
+                  <NodeObsSidebar node={selectedNode} />
                 </div>
               ) : (
                 <RightPropertiesPanel node={selectedNode} onChange={updateNodeData} />

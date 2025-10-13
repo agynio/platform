@@ -31,7 +31,7 @@ export const CallAgentToolStaticConfigSchema = z.object({
   response: z.enum(['sync', 'async', 'ignore']).default('sync'),
 });
 
-type WithRuntime = LangGraphRunnableConfig & { configurable?: { thread_id?: string; caller_agent?: BaseAgent } };
+type WithRuntime = LangGraphRunnableConfig & { configurable?: { thread_id?: string; caller_agent?: BaseAgent; nodeId?: string; node_id?: string } };
 
 type SentAck = { status: 'sent' };
 

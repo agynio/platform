@@ -7,6 +7,10 @@ Quickstart
 - Run tests: pnpm -w -F ui test
 - Dev: pnpm -w -F ui dev
 
+Env configuration
+- VITE_OBS_SERVER_URL (default http://localhost:4319): obs-server base URL for spans/logs and realtime.
+- VITE_OBS_UI_BASE (default http://localhost:4320): base URL for deep-linking to the Observability UI trace page.
+
 Provider setup
 ```tsx
 import React from 'react';
