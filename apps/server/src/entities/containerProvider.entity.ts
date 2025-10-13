@@ -138,7 +138,6 @@ export class ContainerProviderEntity {
     // Build base thread labels and workspace-specific labels
     const labels = this.idLabels(threadId);
     const workspaceLabels = { ...labels, 'hautech.ai/role': 'workspace' } as Record<string, string>;
-<<<<<<< HEAD
     // Primary lookup: thread-scoped workspace container only
     // Debug note: ContainerService logs the exact filters as well.
     // Optional local debug:
@@ -153,56 +152,20 @@ export class ContainerProviderEntity {
       if (typeof svcAny.findContainersByLabels === 'function') {
         try { console.debug('[ContainerProviderEntity] fallback lookup by thread_id only', labels); } catch {}
         const candidates = await svcAny.findContainersByLabels(labels);
-        for (const c of candidates) {
-          try {
-            const cl = await this.containerService.getContainerLabels(c.id);
-            // Skip DinD sidecars; allow unlabeled legacy workspaces
-            if (cl?.['hautech.ai/role'] === 'dind') continue;
-            container = c;
-            break;
-          } catch {
-            // If labels cannot be read, skip candidate and continue
-            continue;
-          }
+        // Fetch candidate labels in parallel, then iterate in original order to preserve selection semantics
+        const labelPromises = candidates.map((c) => this.containerService.getContainerLabels(c.id).then((cl) => ({ c, cl })).catch(() => ({ c, cl: undefined as Record<string, string> | undefined })));
+        const results = await Promise.all(labelPromises);
+        for (const { c, cl } of results) {
+          // Skip DinD sidecars; allow unlabeled legacy workspaces
+          if (cl?.['hautech.ai/role'] === 'dind') continue;
+          container = c;
+          break;
         }
       } else {
         // Back-compat note: when batch lookup is unavailable, unlabeled legacy workspaces
         // will not be reused and a new container will be created.
       }
     }
-=======
-    // Primary lookup: thread-scoped workspace container only
-    // Debug note: ContainerService logs the exact filters as well.
-    // Optional local debug:
-    try { console.debug('[ContainerProviderEntity] lookup labels (workspace)', workspaceLabels); } catch {}
-    let container: ContainerEntity | undefined = await this.containerService.findContainerByLabels(workspaceLabels);
-
-    // Back-compat safe fallback: if no labeled workspace found, retry by thread_id only
-    // and exclude any DinD sidecars by inspecting labels before reuse.
-    if (!container) {
-      // Only perform fallback if the container service exposes the batch finder
-      const svcAny = this.containerService as unknown as { findContainersByLabels?: (labels: Record<string, string>) => Promise<ContainerEntity[]> };
-      if (typeof svcAny.findContainersByLabels === 'function') {
-        try { console.debug('[ContainerProviderEntity] fallback lookup by thread_id only', labels); } catch {}
-        const candidates = await svcAny.findContainersByLabels(labels);
-        for (const c of candidates) {
-          try {
-            const cl = await this.containerService.getContainerLabels(c.id);
-            // Skip DinD sidecars; allow unlabeled legacy workspaces
-            if (cl?.['hautech.ai/role'] === 'dind') continue;
-            container = c;
-            break;
-          } catch {
-            // If labels cannot be read, skip candidate and continue
-            continue;
-          }
-        }
-      } else {
-        // Back-compat note: when batch lookup is unavailable, unlabeled legacy workspaces
-        // will not be reused and a new container will be created.
-      }
-    }
->>>>>>> c4301a5 (fix(containerProvider): add workspace role label and filter lookups to avoid selecting dind (Issue #139)\n\nAlso set workspace labels on creation; keep DinD logic filtering by role=dind and parent_cid.\n\nchore(container.service): deterministic sort when listing by labels to stabilize selection.\n\ntest(containerProvider): expect role=workspace in lookups and ensure dind not selected; update env test to check label.\n\nNote: Some E2E Mongo tests fail in this environment due to mongodb-memory-server AVX requirement; unit tests for touched areas pass.)
     const DOCKER_HOST_ENV = 'tcp://localhost:2375';
     const DOCKER_MIRROR_URL = this.configService?.dockerMirrorUrl || process.env.DOCKER_MIRROR_URL || 'http://registry-mirror:5000';
     const enableDinD = this.cfg?.enableDinD ?? false;
