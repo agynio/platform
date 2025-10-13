@@ -2,17 +2,23 @@
 // - Hash: FNV-1a 32-bit
 // - PRNG: simple LCG to derive 3 indices
 
-// Curated alphabet (~64). Prefer simple, single-codepoint emojis to avoid
-// substring/variation selector traps and keep rendering consistent.
+// Curated non-face, high-contrast symbols/shapes.
+// Rationale:
+// - Avoid faces/people and any skin-tone/ZWJ sequences.
+// - Prefer single code points for consistent rendering across platforms.
+// - Favor shapes/symbols that read well on light themes; avoid low-contrast white fills.
+// NOTE: Order is intentional; changing order changes determinism for prior inputs.
 export const emojiAlphabet: string[] = [
-  '😀','😁','😂','😃','😄','😅','😆','😉',
-  '😊','😎','😍','😘','😗','😙','😚','🙂',
-  '🤗','🤔','😐','😑','😶','🙄','😏','😣',
-  '😥','😮','🤐','😯','😪','😫','😴','😌',
-  '😛','😜','😝','🤤','😒','😓','😔','😕',
-  '🙃','🤑','😲','🙁','😖','😞','😟','😡',
-  '😤','😢','😭','😦','😧','😨','😩','🤯',
-  '😬','😰','😱','😳','🤪','🤨','🤩','🤠'
+  '🔴','🟠','🟡','🟢','🔵','🟣','🟤','⚫','⭕',
+  '🟥','🟦','🟧','🟨','🟩','🟪','🟫','⬛','🔲','🔳',
+  '🔶','🔷','🔸','🔹','💠',
+  '🔺','🔻','🔼','🔽',
+  '⭐','🌟','✨','🌠',
+  '⏩','⏪','⏫','⏬','⏸','⏯','⏭','⏮',
+  '⬆','⬇','⬅','➡',
+  '↖','↗','↘','↙',
+  '⏺','⏹','⏏',
+  '🔘','🔱','🔰'
 ];
 
 // FNV-1a 32-bit
