@@ -112,7 +112,7 @@ export async function createServer(db: Db, opts: { logger?: boolean } = {}): Pro
     const filter: Filter<SpanDoc> = {
       completed: false,
       lastUpdate: { $lt: cutoff },
-    } as any;
+    };
     // Rely on partial index { completed: 1, lastUpdate: -1 } for efficiency
     const update: UpdateFilter<SpanDoc> = {
       $set: {
@@ -123,18 +123,19 @@ export async function createServer(db: Db, opts: { logger?: boolean } = {}): Pro
         lastUpdate: nowIso,
       },
       $push: { events: { ts: nowIso, name: 'terminated', attrs: { reason: 'stale_no_heartbeat', by: reason } } },
-    } as any;
+    };
     try {
-      const res = await spans.updateMany(filter, update);
+      // Index-friendly path: identify candidate ids using the indexed predicate,
+      // then apply update by _id and emit them.
+      const ids = await spans.find(filter, { projection: { _id: 1 } }).map((d) => d._id).toArray();
+      if (ids.length === 0) return;
+      const res = await spans.updateMany({ _id: { $in: ids }, completed: false }, update);
       if (res.modifiedCount) {
         fastify.log.warn({ modified: res.modifiedCount, since: STALE_TTL_MS }, 'sweeper cancelled stale spans');
-        // Emit realtime updates for affected spans (best-effort)
+        // Emit realtime updates for affected spans by ids (best-effort)
         if (spanIo) {
           try {
-            const changed = await spans
-              .find({ status: 'cancelled', endTime: nowIso } as any)
-              .limit(5000)
-              .toArray();
+            const changed = await spans.find({ _id: { $in: ids } }, { limit: 5000 }).toArray();
             for (const d of changed) spanIo.emit('span_upsert', d);
           } catch {}
         }

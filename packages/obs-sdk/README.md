@@ -97,3 +97,4 @@ Configuration: Works in `extended` mode. Ensure `init({ mode: 'extended', endpoi
   - Env: `OBS_HEARTBEAT_MS`
   - `init({ heartbeatMs })`
 - Heartbeats stop automatically when the span completes or errors.
+ - Set `OBS_HEARTBEAT_MS=0` or `init({ heartbeatMs: 0 })` to disable heartbeats.

@@ -72,17 +72,16 @@ export function init(c: InitConfig) {
   const batching: InternalConfig['batching'] = { maxBatchSize: 50, flushIntervalMs: 1000, ...(c.batching || {}) };
   const sampling: InternalConfig['sampling'] = { rate: 1, ...(c.sampling || {}) };
   const endpoints: InternalConfig['endpoints'] = { extended: c.endpoints.extended || '', otlp: c.endpoints.otlp || '' };
-  const hbEnv = process.env.OBS_HEARTBEAT_MS ? Number(process.env.OBS_HEARTBEAT_MS) : undefined;
-  const heartbeatMs = Number.isFinite(hbEnv as number)
-    ? (hbEnv as number)
-    : c.heartbeatMs !== undefined
-      ? (c.heartbeatMs as number)
-      : 60_000; // default 60s
+  const envHbRaw = process.env.OBS_HEARTBEAT_MS;
+  const envHbMs = envHbRaw !== undefined ? Number(envHbRaw) : undefined;
+  let heartbeatMs = envHbMs ?? c.heartbeatMs ?? 60_000; // default 60s
+  if (!Number.isFinite(heartbeatMs)) heartbeatMs = 60_000;
+  heartbeatMs = Math.max(0, heartbeatMs);
   const debug = c.debug ?? !!process.env.OBS_SDK_DEBUG;
   config = {
     mode: c.mode,
     endpoints,
-    heartbeatMs: Math.max(0, heartbeatMs || 0),
+    heartbeatMs,
     batching,
     sampling,
     defaultAttributes: c.defaultAttributes || {},
@@ -280,7 +279,6 @@ export async function withSpan<T>(
           ];
           await retryingPost(cfg.endpoints.otlp + '/v1/traces', { spans: otlpLike }, genId(8)).catch(() => {});
         }
-        stopHeartbeat();
         resolve(result);
       } catch (err) {
         const endExtra = computeEndAttrs?.(undefined, err) || {};
@@ -314,8 +312,9 @@ export async function withSpan<T>(
           ];
           await retryingPost(cfg.endpoints.otlp + '/v1/traces', { spans: otlpLike }, genId(8)).catch(() => {});
         }
-        stopHeartbeat();
         reject(err);
+      } finally {
+        stopHeartbeat();
       }
     });
   });

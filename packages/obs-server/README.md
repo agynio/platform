@@ -30,6 +30,7 @@ Sweeper behavior
 - Predicate: { completed: false, lastUpdate: { $lt: now - OBS_STALE_TTL_MS } }.
 - Update: set completed=true, status='cancelled', endTime=now; push event { name:'terminated', attrs:{ reason:'stale_no_heartbeat' } }.
 - Indexes: { completed: 1, lastUpdate: -1 } (partial on completed=false) ensures efficient query; created on startup.
+ - The terminated event includes an attrs.by field: 'periodic' or 'startup'.
 
 Spans query limits:
 - Default limit: 50
