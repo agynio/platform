@@ -38,6 +38,7 @@ services:
       ME_CONFIG_BASICAUTH_ENABLED: true
       ME_CONFIG_BASICAUTH_USERNAME: root
       ME_CONFIG_BASICAUTH_PASSWORD: root
+
   vault:
     image: hashicorp/vault:1.17
     container_name: vault

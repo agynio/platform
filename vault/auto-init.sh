@@ -16,6 +16,7 @@
 # development/testing. Do NOT use this approach in production; instead leverage a secure
 # auto-unseal mechanism (e.g., KMS / HSM) and secret management for the root token.
 #
+# Safe to re-run: if already initialized/unsealed it exits gracefully.
 # We do NOT use 'set -e' because Vault exit codes are used for state signaling.
 set -u
 
@@ -230,4 +231,3 @@ main() {
 }
 
 main "$@"
-

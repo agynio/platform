@@ -28,13 +28,35 @@ import { buildMcpToolError } from '../mcp/errorUtils';
  */
 export const SimpleAgentStaticConfigSchema = z
   .object({
-    title: z.string().optional(),
+    title: z
+      .string()
+      .optional()
+      .describe('Display name for this agent (UI only).'),
     model: z.string().default('gpt-5').describe('LLM model identifier to use for this agent (provider-specific name).'),
     systemPrompt: z
       .string()
       .default('You are a helpful AI assistant.')
       .describe('System prompt injected at the start of each conversation turn.')
       .meta({ 'ui:widget': 'textarea', 'ui:options': { rows: 6 } }),
+    // Agent-side message buffer handling (exposed for SimpleAgent static config)
+    debounceMs: z
+      .number()
+      .int()
+      .min(0)
+      .default(0)
+      .describe('Debounce window (ms) for agent-side message buffer.'),
+    whenBusy: z
+      .enum(['wait', 'injectAfterTools'])
+      .default('wait')
+      .describe(
+        "When agent is busy: 'wait' queues new messages for next run; 'injectAfterTools' injects them into the current run after tools stage.",
+      )
+      .meta({ 'ui:widget': 'select' }),
+    processBuffer: z
+      .enum(['allTogether', 'oneByOne'])
+      .default('allTogether')
+      .describe('Drain mode: process all queued messages together vs one message per run.')
+      .meta({ 'ui:widget': 'select' }),
     summarizationKeepTokens: z
       .number()
       .int()
@@ -47,13 +69,23 @@ export const SimpleAgentStaticConfigSchema = z
       .min(1)
       .default(512)
       .describe('Maximum token budget for generated summaries.'),
-    restrictOutput: z.boolean().default(false),
+    restrictOutput: z
+      .boolean()
+      .default(false)
+      .describe('When true, enforce calling a tool before finishing the turn.'),
     restrictionMessage: z
       .string()
       .default(
         "Do not produce a final answer directly. Before finishing, call a tool. If no tool is needed, call the 'finish' tool.",
-      ),
-    restrictionMaxInjections: z.number().int().min(0).default(0), // 0 = unlimited per turn
+      )
+      .describe('Instruction injected to steer the model when restrictOutput=true.')
+      .meta({ 'ui:widget': 'textarea', 'ui:options': { rows: 4 } }),
+    restrictionMaxInjections: z
+      .number()
+      .int()
+      .min(0)
+      .default(0)
+      .describe('Max enforcement injections per turn (0 = unlimited).'),
   })
   .strict();
 
@@ -343,7 +375,7 @@ export class SimpleAgent extends BaseAgent {
           // Remove tools no longer enabled
           for (const [name, tool] of existingByName.entries()) {
             if (!desiredNames.has(name)) {
-              this.removeTool(tool as BaseTool);
+              this.removeTool(tool);
               this.mcpServerTools.set(
                 server,
                 (this.mcpServerTools.get(server) || []).filter((t) => t !== tool),
@@ -394,6 +426,8 @@ export class SimpleAgent extends BaseAgent {
   /**
    * Dynamically set configuration values like the system prompt.
    */
+  // Overload preserves BaseAgent signature while exposing a more precise config shape for callers.
+  setConfig(config: Partial<SimpleAgentStaticConfig> & Record<string, unknown>): void;
   setConfig(config: Record<string, unknown>): void {
     const parsedConfig = SimpleAgentStaticConfigSchema.partial().parse(
       Object.fromEntries(
@@ -402,6 +436,9 @@ export class SimpleAgent extends BaseAgent {
             'title',
             'model',
             'systemPrompt',
+            'debounceMs',
+            'whenBusy',
+            'processBuffer',
             'summarizationKeepTokens',
             'summarizationMaxTokens',
             'restrictOutput',
@@ -410,7 +447,7 @@ export class SimpleAgent extends BaseAgent {
           ].includes(k),
         ),
       ),
-    ) as Partial<SimpleAgentStaticConfig> & Record<string, any>;
+    ) as Partial<SimpleAgentStaticConfig>;
 
     // Apply agent-side scheduling config
     this.applyRuntimeConfig(config);
@@ -471,7 +508,7 @@ export class SimpleAgent extends BaseAgent {
     const tools = this.mcpServerTools.get(server);
     if (tools && tools.length) {
       for (const tool of tools) {
-        this.removeTool(tool as BaseTool);
+        this.removeTool(tool);
       }
     }
     this.mcpServerTools.delete(server);
