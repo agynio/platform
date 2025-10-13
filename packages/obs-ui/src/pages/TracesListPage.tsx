@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { fetchTraces } from '../services/api';
 import { spanRealtime } from '../services/socket';
 import { SpanDoc } from '../types';
+import { emojiHash3 } from '../utils/emojiId';
 
 interface TraceSummary { traceId: string; root?: SpanDoc; spanCount: number; failedCount: number; lastUpdate: string; }
 
@@ -73,7 +74,14 @@ export function TracesListPage() {
               <td>
                 {(() => {
                   const threadId = (t.root?.threadId || (t.root?.attributes?.threadId as string | undefined));
-                  return threadId ? <Link to={`/thread/${threadId}`}>{threadId}</Link> : '-';
+                  if (!threadId) return '-';
+                  const e3 = emojiHash3(threadId);
+                  return (
+                    <Link to={`/thread/${threadId}`} title={threadId} style={{ textDecoration: 'none', color: 'inherit' }}>
+                      <span style={{ fontSize: 18, marginRight: 6 }}>{e3}</span>
+                      <span style={{ color: '#6c757d', fontSize: 11 }}>({threadId})</span>
+                    </Link>
+                  );
                 })()}
               </td>
               <td>{t.root?.label}</td>
