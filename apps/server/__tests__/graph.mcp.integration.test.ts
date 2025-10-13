@@ -4,7 +4,6 @@ import { LocalMCPServer } from '../src/mcp/localMcpServer';
 import { LoggerService } from '../src/services/logger.service';
 import { ContainerService } from '../src/services/container.service';
 import { ConfigService } from '../src/services/config.service';
-import { SlackService } from '../src/services/slack.service';
 import { CheckpointerService } from '../src/services/checkpointer.service';
 import { LiveGraphRuntime, GraphDefinition } from '../src/graph';
 
@@ -48,7 +47,6 @@ describe('Graph MCP integration', () => {
       mongodbUrl: 'mongodb://localhost:27017/?replicaSet=rs0',
     } as any);
 
-    const slackService = new SlackService(configService, logger);
     const containerService = new ContainerService(logger);
     const checkpointerService = new CheckpointerService(logger);
     // Patch to bypass Mongo requirement for this lightweight integration test
@@ -61,8 +59,9 @@ describe('Graph MCP integration', () => {
       logger,
       containerService,
       configService,
-      slackService,
       checkpointerService,
+      // memory templates require mongoService in registry deps
+      mongoService: { getDb: () => ({} as any) } as any,
     });
 
     const graph: GraphDefinition = {

@@ -1,10 +1,11 @@
 import { BaseTrigger, TriggerHumanMessage } from './base.trigger';
 import { LoggerService } from '../services/logger.service';
-import { SlackService } from '../services/slack.service';
 import { z } from 'zod';
+import { SocketModeClient } from '@slack/socket-mode';
 
-// Minimal static config schema (backward-compatible, no fields)
-export const SlackTriggerStaticConfigSchema = z.object({}).strict();
+export const SlackTriggerStaticConfigSchema = z.object({
+  app_token: z.string().min(1).startsWith('xapp-', { message: 'Slack app-level token must start with xapp-' }).describe('Slack App-level token (xapp-...) for Socket Mode.'),
+}).strict();
 
 /**
  * SlackTrigger
@@ -12,43 +13,67 @@ export const SlackTriggerStaticConfigSchema = z.object({}).strict();
  * (non-bot, non-thread broadcast) to subscribers via notify().
  */
 export class SlackTrigger extends BaseTrigger {
-  constructor(
-    private slack: SlackService,
-    private logger: LoggerService,
-  ) {
+  private logger: LoggerService;
+  private cfg: z.infer<typeof SlackTriggerStaticConfigSchema> | null = null;
+  private client: SocketModeClient | null = null;
+
+  constructor(logger: LoggerService) {
     super();
-    // Subscribe to Slack message events; minimal behavior only (no additional filtering)
-    this.slack.onMessage(async (event) => {
+    this.logger = logger;
+  }
+
+  async setConfig(cfg: Record<string, unknown>): Promise<void> {
+    const parsed = SlackTriggerStaticConfigSchema.parse(cfg || {});
+    this.cfg = parsed;
+  }
+
+  private ensureClient(): SocketModeClient {
+    if (this.client) return this.client;
+    const cfg = this.cfg;
+    if (!cfg) throw new Error('SlackTrigger not configured: app_token is required');
+    const client = new SocketModeClient({ appToken: cfg.app_token, logLevel: undefined as any });
+    client.on('events_api', async ({ envelope_id, payload }) => {
       try {
-        if (!event.text) return;
-        const thread = `${event.user}_${(event as any).thread_ts ?? event.ts}`;
-        const ch = (event as Record<string, unknown>).channel_type;
+        await client.ack(envelope_id);
+        const event = (payload as any)?.event;
+        if (!event || event.type !== 'message' || !event.text) return;
+        const thread = `${event.user}_${(event.thread_ts || event.ts)}`;
         const msg: TriggerHumanMessage = {
           kind: 'human',
           content: event.text,
           info: {
             user: event.user,
             channel: event.channel,
-            channel_type: typeof ch === 'string' ? ch : undefined,
-            thread_ts: (event as any).thread_ts ?? event.ts,
+            channel_type: event.channel_type,
+            thread_ts: event.thread_ts || event.ts,
           },
         };
         await this.notify(thread, [msg]);
       } catch (err) {
-        this.logger.error('SlackTrigger handler error', err);
+        this.logger.error('SlackTrigger handler error');
       }
     });
+    this.client = client;
+    return client;
   }
 
-  // Provision hooks delegate to SlackService
-  protected async doProvision(): Promise<void> { await this.slack.start(); }
-  protected async doDeprovision(): Promise<void> { await this.slack.stop(); }
+  protected async doProvision(): Promise<void> {
+    const client = this.ensureClient();
+    this.logger.info('Starting SlackTrigger (socket mode)');
+    await client.start();
+    this.logger.info('SlackTrigger started');
+  }
+  protected async doDeprovision(): Promise<void> {
+    try {
+      await this.client?.disconnect();
+    } catch {}
+    this.client = null;
+    this.logger.info('SlackTrigger stopped');
+  }
 
   // Backward-compatible public API
   async start(): Promise<void> { await this.provision(); }
   async stop(): Promise<void> { await this.deprovision(); }
 
-  async setConfig(_cfg: Record<string, unknown>): Promise<void> {
-    /* trigger has no dynamic config */
-  }
+  async setDynamicConfig(_cfg: Record<string, unknown>): Promise<void> { /* no dynamic config */ }
 }

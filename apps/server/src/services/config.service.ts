@@ -8,8 +8,6 @@ export const configSchema = z.object({
   githubInstallationId: z.string().min(1, "GitHub Installation ID is required"),
   openaiApiKey: z.string().min(1, "OpenAI API key is required"),
   githubToken: z.string().min(1, "GitHub personal access token is required"),
-  slackBotToken: z.string().min(1, "Slack bot token is required"),
-  slackAppToken: z.string().min(1, "Slack app-level token is required (starts with xapp-)"),
   mongodbUrl: z.string().min(1, "MongoDB connection string is required"),
   // Graph persistence
   graphStore: z.enum(['mongo', 'git']).default('mongo'),
@@ -49,14 +47,6 @@ export class ConfigService implements Config {
   }
   get githubToken(): string {
     return this.params.githubToken;
-  }
-
-  get slackBotToken(): string {
-    return this.params.slackBotToken;
-  }
-
-  get slackAppToken(): string {
-    return this.params.slackAppToken;
   }
 
   get mongodbUrl(): string {
@@ -102,8 +92,6 @@ export class ConfigService implements Config {
       githubInstallationId: process.env.GITHUB_INSTALLATION_ID,
       openaiApiKey: process.env.OPENAI_API_KEY,
       githubToken: process.env.GH_TOKEN,
-      slackBotToken: process.env.SLACK_BOT_TOKEN,
-      slackAppToken: process.env.SLACK_APP_TOKEN,
       mongodbUrl: process.env.MONGODB_URL,
       graphStore: (process.env.GRAPH_STORE as any) || 'mongo',
       graphRepoPath: process.env.GRAPH_REPO_PATH || './data/graph',

@@ -52,7 +52,7 @@ import type { TriggerMessage } from '../src/triggers/base.trigger';
 function makeAgent() {
   const cfg = new ConfigService({
     githubAppId: '1', githubAppPrivateKey: 'k', githubInstallationId: 'i',
-    openaiApiKey: 'x', githubToken: 't', slackBotToken: 's', slackAppToken: 'sa', mongodbUrl: 'm',
+    openaiApiKey: 'x', githubToken: 't', mongodbUrl: 'm',
   });
   return new SimpleAgent(cfg, new LoggerService(), new CheckpointerService(new LoggerService()) as any, 'agent-buf');
 }
@@ -62,7 +62,7 @@ describe('SimpleAgent buffer behavior', () => {
     vi.useFakeTimers();
     const cfg = new ConfigService({
       githubAppId: '1', githubAppPrivateKey: 'k', githubInstallationId: 'i',
-      openaiApiKey: 'x', githubToken: 't', slackBotToken: 's', slackAppToken: 'sa', mongodbUrl: 'm',
+      openaiApiKey: 'x', githubToken: 't', mongodbUrl: 'm',
     });
     const logger = { info: vi.fn(), debug: vi.fn(), error: vi.fn() } as unknown as LoggerService;
     const agent = new SimpleAgent(cfg, logger as any, new CheckpointerService(new LoggerService()) as any, 'agent-deb');
@@ -87,7 +87,7 @@ describe('SimpleAgent buffer behavior', () => {
   it('processBuffer=oneByOne splits multi-message invoke into separate runs', async () => {
     const cfg = new ConfigService({
       githubAppId: '1', githubAppPrivateKey: 'k', githubInstallationId: 'i',
-      openaiApiKey: 'x', githubToken: 't', slackBotToken: 's', slackAppToken: 'sa', mongodbUrl: 'm',
+      openaiApiKey: 'x', githubToken: 't', mongodbUrl: 'm',
     });
     const logger = { info: vi.fn(), debug: vi.fn(), error: vi.fn() } as unknown as LoggerService;
     const agent = new SimpleAgent(cfg, logger as any, new CheckpointerService(new LoggerService()) as any, 'agent-one');

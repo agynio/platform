@@ -2,7 +2,7 @@ import { tool, DynamicStructuredTool } from "@langchain/core/tools";
 import { z } from "zod";
 import { BaseTool } from "./base.tool";
 import { LoggerService } from "../services/logger.service";
-import { SlackService } from "../services/slack.service";
+import { WebClient } from '@slack/web-api';
 
 const sendSlackMessageSchema = z.object({
   channel: z.string().min(1).describe("Slack channel ID (e.g. C123..., D123... for DM)."),
@@ -20,12 +20,16 @@ const sendSlackMessageSchema = z.object({
     ),
 });
 
-// Static config schema placeholder (none yet)
-export const SendSlackMessageToolStaticConfigSchema = z.object({}).strict();
+// Static config schema for per-node Slack bot token and optional default channel
+export const SendSlackMessageToolStaticConfigSchema = z.object({
+  bot_token: z.string().min(1).startsWith('xoxb-', { message: 'Slack bot token must start with xoxb-' }).describe('Slack bot token (xoxb-...) for sending messages.'),
+  default_channel: z.string().optional().describe('Default Slack channel ID to use when not provided in the call.'),
+}).strict();
 
 export class SendSlackMessageTool extends BaseTool {
+  private cfg: z.infer<typeof SendSlackMessageToolStaticConfigSchema> | null = null;
+
   constructor(
-    private slack: SlackService,
     logger: LoggerService,
   ) {
     super(logger);
@@ -34,13 +38,26 @@ export class SendSlackMessageTool extends BaseTool {
   init(): DynamicStructuredTool {
     return tool(
       async (rawInput) => {
-        const { channel, text, thread_ts, broadcast, ephemeral_user } = sendSlackMessageSchema.parse(rawInput);
+        const { channel: channelInput, text, thread_ts, broadcast, ephemeral_user } = sendSlackMessageSchema.parse(rawInput);
+        const cfg = this.cfg;
+        if (!cfg) throw new Error('SendSlackMessageTool not configured: bot_token is required');
+        const channel = channelInput || cfg.default_channel;
+        if (!channel) throw new Error('channel is required (or set default_channel in static config)');
         this.logger.info("Tool called", "send_slack_message", { channel, hasThread: !!thread_ts, broadcast });
 
         try {
-          const resp = await this.slack.sendMessage({ channel, text, thread_ts, broadcast, ephemeral_user });
+          const client = new WebClient(cfg.bot_token, { logLevel: undefined });
+          if (ephemeral_user) {
+            const resp = await client.chat.postEphemeral({ channel, user: ephemeral_user, text, thread_ts });
+            if (!resp.ok) return `Failed to send message: ${resp.error}`;
+            return JSON.stringify({ ok: true, channel, message_ts: (resp as any).message_ts, ephemeral: true });
+          }
+          const args: any = { channel, text };
+          if (thread_ts) args.thread_ts = thread_ts;
+          if (thread_ts && broadcast) args.reply_broadcast = true;
+          const resp = await client.chat.postMessage(args);
           if (!resp.ok) return `Failed to send message: ${resp.error}`;
-          return JSON.stringify(resp);
+          return JSON.stringify({ ok: true, channel: resp.channel, ts: resp.ts, thread_ts: (resp as any).message?.thread_ts || thread_ts || resp.ts, broadcast: !!broadcast });
         } catch (err: unknown) {
           const msg = (err && typeof err === 'object' && 'message' in err) ? String((err as any).message) : String(err);
           this.logger.error("Error sending Slack message", msg);
@@ -56,5 +73,10 @@ export class SendSlackMessageTool extends BaseTool {
     );
   }
 
-  async setConfig(_cfg: Record<string, unknown>): Promise<void> { /* no runtime config */ }
+  async setConfig(_cfg: Record<string, unknown>): Promise<void> {
+    // Validate and apply static config (bot_token & optional default_channel)
+    const parsed = SendSlackMessageToolStaticConfigSchema.parse(_cfg || {});
+    // Do not log tokens; mask length only
+    this.cfg = { ...parsed, bot_token: parsed.bot_token };
+  }
 }
