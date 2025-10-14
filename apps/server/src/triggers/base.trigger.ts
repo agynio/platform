@@ -1,4 +1,5 @@
 import type { Pausable, ProvisionStatus, Provisionable } from '../graph/capabilities';
+import { LoggerService } from '../services/logger.service';
 
 // Base trigger message. Backward-compatible: no 'kind' field required.
 export interface TriggerMessage {
@@ -30,7 +31,7 @@ export abstract class BaseTrigger implements Pausable, Provisionable {
   private _provListeners: Array<(s: ProvisionStatus) => void> = [];
   private _provInFlight: Promise<void> | null = null;
 
-  constructor() {}
+  constructor(protected readonly logger: LoggerService) {}
 
   async subscribe(listener: TriggerListener): Promise<void> {
     this.listeners.push(listener);
@@ -84,6 +85,7 @@ export abstract class BaseTrigger implements Pausable, Provisionable {
         await this.doProvision();
         this.setProvisionStatus({ state: 'ready' });
       } catch (err) {
+        this.logger.error('Provisioning error:', err);
         this.setProvisionStatus({ state: 'error', details: err });
       } finally {
         this._provInFlight = null;
@@ -104,8 +106,12 @@ export abstract class BaseTrigger implements Pausable, Provisionable {
   }
 
   /** Hooks for subclasses to implement actual resource lifecycle */
-  protected async doProvision(): Promise<void> { /* no-op by default */ }
-  protected async doDeprovision(): Promise<void> { /* no-op by default */ }
+  protected async doProvision(): Promise<void> {
+    /* no-op by default */
+  }
+  protected async doDeprovision(): Promise<void> {
+    /* no-op by default */
+  }
 
   /**
    * External triggers call this to fan-out messages to listeners immediately (agent-side buffering applies).
