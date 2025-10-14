@@ -12,7 +12,7 @@ export class ContainerEntity {
 
   exec(
     command: string[] | string,
-    options?: { workdir?: string; env?: Record<string, string> | string[]; timeoutMs?: number; killOnTimeout?: boolean; tty?: boolean },
+    options?: { workdir?: string; env?: Record<string, string> | string[]; timeoutMs?: number; idleTimeoutMs?: number; killOnTimeout?: boolean; tty?: boolean },
   ) {
     return this.service.execContainer(this.id, command, options);
   }

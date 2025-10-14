@@ -2,7 +2,7 @@ import Docker, { ContainerCreateOptions, Exec } from 'dockerode';
 import { ContainerEntity } from '../entities/container.entity';
 import { LoggerService } from './logger.service';
 import { PLATFORM_LABEL, type Platform } from '../constants.js';
-import { isExecTimeoutError, ExecTimeoutError } from '../utils/execTimeout';
+import { isExecTimeoutError, ExecTimeoutError, ExecIdleTimeoutError, isExecIdleTimeoutError } from '../utils/execTimeout';
 import type { ContainerRegistryService } from './containerRegistry.service';
 
 const DEFAULT_IMAGE = 'mcr.microsoft.com/vscode/devcontainers/base';
@@ -197,7 +197,7 @@ export class ContainerService {
   async execContainer(
     containerId: string,
     command: string[] | string,
-    options?: { workdir?: string; env?: Record<string, string> | string[]; timeoutMs?: number; tty?: boolean; killOnTimeout?: boolean },
+    options?: { workdir?: string; env?: Record<string, string> | string[]; timeoutMs?: number; idleTimeoutMs?: number; tty?: boolean; killOnTimeout?: boolean },
   ): Promise<{ stdout: string; stderr: string; exitCode: number }> {
     const container = this.docker.getContainer(containerId);
     const inspectData = await container.inspect();
@@ -226,19 +226,20 @@ export class ContainerService {
     });
 
     try {
-      const { stdout, stderr, exitCode } = await this.startAndCollectExec(exec, options?.timeoutMs);
+      const { stdout, stderr, exitCode } = await this.startAndCollectExec(exec, options?.timeoutMs, options?.idleTimeoutMs);
       this.logger.debug(
         `Exec finished cid=${inspectData.Id.substring(0, 12)} exitCode=${exitCode} stdoutBytes=${stdout.length} stderrBytes=${stderr.length}`,
       );
       return { stdout, stderr, exitCode };
     } catch (err: unknown) {
-      const isTimeout = isExecTimeoutError(err);
+      const isTimeout = isExecTimeoutError(err) || isExecIdleTimeoutError(err);
       if (isTimeout && options?.killOnTimeout) {
         // Gracefully stop the container to ensure process-tree cleanup.
         try {
           this.logger.info('Exec timeout detected; stopping container', {
             containerId,
             timeoutMs: options?.timeoutMs,
+            idleTimeoutMs: options?.idleTimeoutMs,
           });
           await this.stopContainer(containerId, 10);
         } catch (stopErr) {
@@ -335,29 +336,51 @@ export class ContainerService {
   private startAndCollectExec(
     exec: Exec,
     timeoutMs?: number,
+    idleTimeoutMs?: number,
   ): Promise<{ stdout: string; stderr: string; exitCode: number }> {
     return new Promise((resolve, reject) => {
       let stdout = '';
       let stderr = '';
       let finished = false;
-      const timer = timeoutMs
+      // Underlying hijacked stream reference, to destroy on timeouts
+      let streamRef: NodeJS.ReadableStream | null = null;
+      const clearAll = (...ts: (NodeJS.Timeout | null)[]) => ts.forEach((t) => t && clearTimeout(t));
+      const execTimer = timeoutMs && timeoutMs > 0
         ? setTimeout(() => {
+            if (finished) return;
             finished = true;
+            // Ensure underlying stream is torn down to avoid further data/timers
+            try { streamRef?.destroy?.(); } catch {}
             reject(new ExecTimeoutError(timeoutMs!, stdout, stderr));
           }, timeoutMs)
         : null;
+      let idleTimer: NodeJS.Timeout | null = null;
+      const armIdle = () => {
+        if (finished) return; // do not arm after completion
+        if (!idleTimeoutMs || idleTimeoutMs <= 0) return;
+        if (idleTimer) clearTimeout(idleTimer);
+        idleTimer = setTimeout(() => {
+          if (finished) return;
+          finished = true;
+          // Ensure underlying stream is torn down to avoid further data/timers
+          try { streamRef?.destroy?.(); } catch {}
+          reject(new ExecIdleTimeoutError(idleTimeoutMs!, stdout, stderr));
+        }, idleTimeoutMs);
+      };
 
       exec.start({ hijack: true, stdin: false }, (err, stream) => {
         if (err) {
-          if (timer) clearTimeout(timer);
+          clearAll(execTimer, idleTimer);
           return reject(err);
         }
         if (!stream) {
-          if (timer) clearTimeout(timer);
+          clearAll(execTimer, idleTimer);
           return reject(new Error('No stream returned from exec.start'));
         }
 
         // If exec created without TTY, docker multiplexes stdout/stderr
+        // capture stream for timeout teardown
+        streamRef = stream;
         if (!exec.inspect) {
           // Very unlikely, but guard.
           this.logger.error('Exec instance missing inspect method');
@@ -368,34 +391,49 @@ export class ContainerService {
           try {
             const details = await exec.inspect();
             const tty = details.ProcessConfig?.tty;
+            armIdle();
             if (tty) {
               stream.on('data', (chunk: Buffer | string) => {
+                if (finished) return;
                 const text = chunk.toString();
                 this.logger.debug(`[Exec stdout chunk]`, text.trim());
                 stdout += text;
+                armIdle();
               });
             } else {
-              this.docker.modem.demuxStream(
-                stream,
-                {
-                  write: (chunk: any) => {
-                    const text = Buffer.isBuffer(chunk) ? chunk.toString() : chunk;
+              const { Writable } = require('node:stream') as typeof import('node:stream');
+              const outStdout = new Writable({
+                write: (chunk, _enc, cb) => {
+                  if (!finished) {
+                    const text = Buffer.isBuffer(chunk) ? chunk.toString() : String(chunk);
                     this.logger.debug(`[Exec stdout chunk]`, text.trim());
                     stdout += text;
-                  },
-                } as any,
-                {
-                  write: (chunk: any) => {
-                    const text = Buffer.isBuffer(chunk) ? chunk.toString() : chunk;
+                    armIdle();
+                  }
+                  cb();
+                },
+              });
+              const outStderr = new Writable({
+                write: (chunk, _enc, cb) => {
+                  if (!finished) {
+                    const text = Buffer.isBuffer(chunk) ? chunk.toString() : String(chunk);
                     this.logger.debug(`[Exec stderr chunk]`, text.trim());
                     stderr += text;
-                  },
-                } as any,
-              );
+                    armIdle();
+                  }
+                  cb();
+                },
+              });
+              this.docker.modem.demuxStream(stream, outStdout, outStderr);
             }
           } catch (e) {
             // Fallback: treat as single combined stream
-            stream.on('data', (c: Buffer | string) => (stdout += c.toString()));
+            armIdle();
+            stream.on('data', (c: Buffer | string) => {
+              if (finished) return;
+              stdout += c.toString();
+              armIdle();
+            });
           }
         })();
 
@@ -403,21 +441,25 @@ export class ContainerService {
           if (finished) return; // already timed out
           try {
             const inspectData = await exec.inspect();
-            if (timer) clearTimeout(timer);
+            clearAll(execTimer, idleTimer);
             finished = true;
             resolve({ stdout, stderr, exitCode: inspectData.ExitCode ?? -1 });
           } catch (e) {
-            if (timer) clearTimeout(timer);
+            clearAll(execTimer, idleTimer);
             finished = true;
             reject(e);
           }
         });
         stream.on('error', (e) => {
           if (finished) return;
-          if (timer) clearTimeout(timer);
+          clearAll(execTimer, idleTimer);
           // eslint-disable-next-line @typescript-eslint/no-unused-vars
           finished = true;
           reject(e);
+        });
+        // Extra safety: clear timers on close as well
+        stream.on('close', () => {
+          clearAll(execTimer, idleTimer);
         });
       });
     });

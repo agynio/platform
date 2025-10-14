@@ -9,8 +9,11 @@ Shell tool
 - Static config fields:
   - `env?: Record<string,string>` — key/value pairs to set for this tool’s execs.
   - `workdir?: string` — working directory for each exec.
+  - `executionTimeoutMs?: number` — max wall time in ms (default 3600000; 0 disables). When enabled (non-zero), must be an integer between 1000 and 86400000 inclusive.
+  - `idleTimeoutMs?: number` — max idle time with no output in ms (default 60000; 0 disables). When enabled (non-zero), must be an integer between 1000 and 86400000 inclusive.
 - Behavior:
-  - Pass `env` and `workdir` to container.exec options (per exec only).
+  - Pass `env`, `workdir`, `executionTimeoutMs`, `idleTimeoutMs` to container.exec (per exec only).
+  - On timeout and when killOnTimeout=true, the container is stopped with a 10s grace period.
   - Empty string sets a variable to empty (does not unset).
 
 MCP server

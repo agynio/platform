@@ -29,7 +29,7 @@ describe('ShellTool timeout tail inclusion and ANSI stripping', () => {
 
     await expect(
       t.invoke({ command: 'sleep 1h' }, { configurable: { thread_id: 't' } } as any),
-    ).rejects.toThrowError(/Error \(timeout after 1h\): command exceeded 3600000ms and was terminated\. See output tail below\./);
+    ).rejects.toThrowError(/Error \(timeout after 3600000ms\): command exceeded 3600000ms and was terminated\. See output tail below\./);
 
     try {
       await t.invoke({ command: 'sleep 1h' }, { configurable: { thread_id: 't' } } as any);
@@ -46,4 +46,3 @@ describe('ShellTool timeout tail inclusion and ANSI stripping', () => {
     }
   });
 });
-
