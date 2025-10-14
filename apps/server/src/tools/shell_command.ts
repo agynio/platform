@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { LoggerService } from '../services/logger.service';
 import { VaultService } from '../services/vault.service';
 import { parseVaultRef } from '../utils/refs';
-import { isExecTimeoutError } from '../utils/execTimeout';
+import { isExecTimeoutError, ExecTimeoutError } from '../utils/execTimeout';
 import { tool, DynamicStructuredTool } from '@langchain/core/tools';
 import { BaseTool } from './base.tool';
 import { ContainerProviderEntity } from '../entities/containerProvider.entity';
@@ -76,7 +76,19 @@ export class ShellTool extends BaseTool {
           response = await container.exec(command, { env: envOverlay, workdir: this.cfg?.workdir, timeoutMs, killOnTimeout: true });
         } catch (err: unknown) {
           if (isExecTimeoutError(err)) {
-            return `Error (timeout after 1h): command exceeded ${timeoutMs}ms and was terminated.`;
+            // Gather any available output from the error instance
+            let combined = '';
+            if (err instanceof ExecTimeoutError) {
+              combined = `${err.stdout || ''}${err.stderr || ''}`;
+            } else if (err instanceof Error) {
+              // Legacy path: no streams provided
+              combined = '';
+            }
+            const cleaned = this.stripAnsi(combined);
+            const tail = cleaned.length > 10000 ? cleaned.slice(-10000) : cleaned;
+            throw new Error(
+              `Error (timeout after 1h): command exceeded ${timeoutMs}ms and was terminated. See output tail below.\n----------\n${tail}`,
+            );
           }
           throw err;
         }

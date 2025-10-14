@@ -2,7 +2,7 @@ import Docker, { ContainerCreateOptions, Exec } from 'dockerode';
 import { ContainerEntity } from '../entities/container.entity';
 import { LoggerService } from './logger.service';
 import { PLATFORM_LABEL, type Platform } from '../constants.js';
-import { isExecTimeoutError } from '../utils/execTimeout';
+import { isExecTimeoutError, ExecTimeoutError } from '../utils/execTimeout';
 
 const DEFAULT_IMAGE = 'mcr.microsoft.com/vscode/devcontainers/base';
 
@@ -298,7 +298,7 @@ export class ContainerService {
       const timer = timeoutMs
         ? setTimeout(() => {
             finished = true;
-            reject(new Error(`Exec timed out after ${timeoutMs}ms`));
+            reject(new ExecTimeoutError(timeoutMs!, stdout, stderr));
           }, timeoutMs)
         : null;
 

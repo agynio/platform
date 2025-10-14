@@ -5,7 +5,7 @@ import { ContainerService } from '../../services/container.service';
 import { isExecTimeoutError } from '../../utils/execTimeout';
 
 describe('ShellTool timeout error message', () => {
-  it('returns clear timeout error string on exec timeout', async () => {
+  it('throws clear timeout error with tail header on exec timeout', async () => {
     const logger = new LoggerService();
     const timeoutErr = new Error('Exec timed out after 3600000ms');
 
@@ -22,9 +22,12 @@ describe('ShellTool timeout error message', () => {
     await tool.setConfig({});
     const t = tool.init();
 
-    const res = String(await t.invoke({ command: 'sleep 999999' }, { configurable: { thread_id: 't' } } as any));
-    expect(res).toContain('Error (timeout after 1h)');
-    expect(res).toContain('3600000ms');
+    await expect(
+      t.invoke({ command: 'sleep 999999' }, { configurable: { thread_id: 't' } } as any),
+    ).rejects.toThrowError(/Error \(timeout after 1h\): command exceeded 3600000ms and was terminated\. See output tail below\./);
+    await expect(
+      t.invoke({ command: 'sleep 999999' }, { configurable: { thread_id: 't' } } as any),
+    ).rejects.toThrowError(/----------/);
   });
 });
 
