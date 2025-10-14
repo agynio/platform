@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+const RUN_MONGOMS = process.env.RUN_MONGOMS === '1';
 import { startMemoryMongo } from './helpers/mongoMemory';
 import { createServer } from '../src/server';
 
@@ -15,7 +16,7 @@ let baseUrl: string;
  * Ensures that the tool call output returned via ToolCallResponse is merged
  * into the persisted span document under attributes.output.
  */
-describe('ToolCall span persistence end-to-end (real server + memory mongo)', () => {
+describe.skipIf(!RUN_MONGOMS)('ToolCall span persistence end-to-end (real server + memory mongo)', () => {
   beforeAll(async () => {
     mm = await startMemoryMongo();
     server = await createServer(mm.db, { logger: false });

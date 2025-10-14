@@ -113,11 +113,18 @@ export class DockerExecTransport {
 
   async send(message: JSONRPCMessage): Promise<void> {
     if (this._closed) throw new Error('Transport closed');
+    if (!this._stdin || (this._stdin as any).writableEnded || (this._stdin as any).destroyed) {
+      throw new Error('Transport closed');
+    }
     const payload = serializeMessageInline(message);
     // console.debug('[DockerExecTransport send]', payload.trim());
     return new Promise((resolve, reject) => {
-      const ok = this._stdin.write(payload, (err: any) => (err ? reject(err) : resolve()));
-      if (!ok) this._stdin.once('drain', resolve);
+      try {
+        const ok = this._stdin.write(payload, (err: unknown) => (err ? reject(err) : resolve()));
+        if (!ok) this._stdin.once('drain', resolve);
+      } catch (e) {
+        reject(e);
+      }
     });
   }
 

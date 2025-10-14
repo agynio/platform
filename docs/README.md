@@ -4,6 +4,7 @@
 - Contributing: [contributing/index.md](contributing/index.md)
 - Style Guides: [contributing/style_guides.md](contributing/style_guides.md)
 - MCP Design: [mcp-design.md](mcp-design.md)
+- Slack migration: [slack-migration.md](slack-migration.md)
 
 ## Recent Additions
 

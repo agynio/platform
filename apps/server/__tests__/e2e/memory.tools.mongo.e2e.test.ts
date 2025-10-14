@@ -5,7 +5,9 @@ import { MemoryNode } from '../../src/nodes/memory.node';
 import { LoggerService } from '../../src/services/logger.service';
 import { UnifiedMemoryTool } from '../../src/tools/memory/memory.tool';
 
-describe('E2E: memory tools with real MongoDB (mongodb-memory-server)', () => {
+const RUN_MONGOMS = process.env.RUN_MONGOMS === '1';
+
+describe.skipIf(!RUN_MONGOMS)('E2E: memory tools with real MongoDB (mongodb-memory-server)', () => {
   const logger = new LoggerService();
   let mongod: MongoMemoryServer;
   let client: MongoClient;

@@ -21,7 +21,6 @@ import { GraphService } from './services/graph.service.js';
 import { GitGraphService } from './services/gitGraph.service.js';
 import { GraphDefinition, PersistedGraphUpsertRequest } from './graph/types.js';
 import { ContainerService } from './services/container.service.js';
-import { SlackService } from './services/slack.service.js';
 import { ReadinessWatcher } from './utils/readinessWatcher.js';
 import { VaultService, VaultConfigSchema } from './services/vault.service.js';
 import { registerRemindersRoute } from './routes/reminders.route.js';
@@ -31,7 +30,6 @@ const config = ConfigService.fromEnv();
 const mongo = new MongoService(config, logger);
 const checkpointer = new CheckpointerService(logger);
 const containerService = new ContainerService(logger);
-const slackService = new SlackService(config, logger);
 const vaultService = new VaultService(
   VaultConfigSchema.parse({
     enabled: config.vaultEnabled,
@@ -51,7 +49,6 @@ async function bootstrap() {
     logger,
     containerService: containerService,
     configService: config,
-    slackService: slackService,
     checkpointerService: checkpointer,
     mongoService: mongo,
   });

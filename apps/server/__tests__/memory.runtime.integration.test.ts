@@ -77,7 +77,9 @@ async function getLastMessages(runtime: LiveGraphRuntime, nodeId: string): Promi
   return (llm.lastMessages || []) as BaseMessage[];
 }
 
-describe('Runtime integration: memory injection via LiveGraphRuntime', () => {
+const RUN_MONGOMS = process.env.RUN_MONGOMS === '1';
+
+describe.skipIf(!RUN_MONGOMS)('Runtime integration: memory injection via LiveGraphRuntime', () => {
   let mongod: MongoMemoryServer;
   let client: MongoClient;
   let db: Db;

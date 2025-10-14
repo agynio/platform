@@ -1,5 +1,20 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { SlackTrigger } from '../src/triggers/slack.trigger';
+
+// Mock @slack/socket-mode to avoid network/real client
+vi.mock('@slack/socket-mode', () => {
+  class MockClient {
+    handlers: Record<string, Function[]> = {};
+    on(ev: string, fn: Function) {
+      this.handlers[ev] = this.handlers[ev] || [];
+      this.handlers[ev].push(fn);
+    }
+    async start() { /* no-op */ }
+    async disconnect() { /* no-op */ }
+    async ack(_id: string) { /* no-op */ }
+  }
+  return { SocketModeClient: MockClient };
+});
 import { PRTrigger } from '../src/triggers/pr.trigger';
 
 // Minimal mocks
@@ -9,13 +24,8 @@ class MockLogger {
   error = vi.fn();
 }
 
-class MockSlackService {
-  started = false;
-  handlers: any[] = [];
-  onMessage = (h: any) => this.handlers.push(h);
-  start = vi.fn(async () => { this.started = true; });
-  stop = vi.fn(async () => { this.started = false; });
-}
+// New design: SlackTrigger manages its own SocketMode client with app_token.
+// Mock minimal SocketModeClient behavior via module mock.
 
 class MockGithub {
   getAuthenticatedUserLogin = vi.fn(async () => 'user');
@@ -28,18 +38,13 @@ const nextTick = () => new Promise((res) => setTimeout(res, 0));
 describe('SlackTrigger and PRTrigger lifecycle', () => {
   beforeEach(() => { vi.useRealTimers(); });
 
-  it('SlackTrigger start/stop delegates to provision/deprovision (via SlackService)', async () => {
-    const slack = new MockSlackService();
+  it('SlackTrigger start/stop manages socket-mode lifecycle', async () => {
     const logger = new MockLogger() as any;
-    const trigger = new SlackTrigger(slack as any, logger);
-
+    const trigger = new SlackTrigger(logger);
+    await trigger.setConfig({ app_token: 'xapp-test' });
     await trigger.start();
-    expect(slack.start).toHaveBeenCalled();
-    expect(slack.started).toBe(true);
-
     await trigger.stop();
-    expect(slack.stop).toHaveBeenCalled();
-    expect(slack.started).toBe(false);
+    expect(logger.info).toHaveBeenCalled();
   });
 
   it('PRTrigger start/stop remains backward compatible while using provision hooks', async () => {

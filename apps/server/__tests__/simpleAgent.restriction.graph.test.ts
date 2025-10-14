@@ -76,8 +76,6 @@ describe('SimpleAgent restriction enforcement', () => {
     githubInstallationId: 'i',
     openaiApiKey: 'x',
     githubToken: 't',
-    slackBotToken: 's',
-    slackAppToken: 'sa',
     mongodbUrl: 'm',
   });
 

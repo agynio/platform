@@ -14,8 +14,8 @@ vi.mock('../src/services/checkpointer.service', async (importOriginal) => {
 describe('SimpleAgent config restrictions', () => {
   it('setConfig preserves systemPrompt and toggles restriction flags without concatenation', async () => {
     const cfg = new ConfigService({
-      githubAppId: '1', githubAppPrivateKey: 'k', githubInstallationId: 'i', openaiApiKey: 'x', githubToken: 't', slackBotToken: 's', slackAppToken: 'sa', mongodbUrl: 'm',
-    });
+      githubAppId: '1', githubAppPrivateKey: 'k', githubInstallationId: 'i', openaiApiKey: 'x', githubToken: 't', mongodbUrl: 'm',
+    } as any);
     const agent = new SimpleAgent(cfg, new LoggerService(), new CheckpointerService(new LoggerService()) as any, 'a1');
     // Update system prompt
     agent.setConfig({ systemPrompt: 'Base system' });

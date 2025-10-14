@@ -59,8 +59,6 @@ describe('SimpleAgent summarization graph', () => {
       githubInstallationId: 'i',
       openaiApiKey: 'x',
       githubToken: 't',
-      slackBotToken: 's',
-      slackAppToken: 'sa',
       mongodbUrl: 'm',
     });
     const agent = new SimpleAgent(cfg, new LoggerService(), new CheckpointerService(new LoggerService()) as any, 'agent-1');

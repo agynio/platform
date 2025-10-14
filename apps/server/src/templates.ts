@@ -8,7 +8,6 @@ import { ConfigService } from './services/config.service';
 import { ContainerService } from './services/container.service';
 import { LoggerService } from './services/logger.service';
 import { VaultService, VaultConfigSchema } from './services/vault.service';
-import { SlackService } from './services/slack.service';
 import { CallAgentTool, CallAgentToolStaticConfigSchema } from './tools/call_agent.tool';
 import { GithubCloneRepoTool, GithubCloneRepoToolExposedStaticConfigSchema } from './tools/github_clone_repo';
 import { SendSlackMessageTool, SendSlackMessageToolStaticConfigSchema } from './tools/send_slack_message.tool';
@@ -29,13 +28,12 @@ export interface TemplateRegistryDeps {
   logger: LoggerService;
   containerService: ContainerService;
   configService: ConfigService;
-  slackService: SlackService;
   checkpointerService: CheckpointerService;
   mongoService: MongoService; // required for memory nodes
 }
 
 export function buildTemplateRegistry(deps: TemplateRegistryDeps): TemplateRegistry {
-  const { logger, containerService, configService, slackService, checkpointerService, mongoService } = deps;
+  const { logger, containerService, configService, checkpointerService, mongoService } = deps;
 
   // Initialize Vault service from config (optional)
   const vault = new VaultService(
@@ -117,7 +115,7 @@ export function buildTemplateRegistry(deps: TemplateRegistryDeps): TemplateRegis
       )
       .register(
         'sendSlackMessageTool',
-        () => new SendSlackMessageTool(slackService, logger),
+        () => new SendSlackMessageTool(logger),
         {
           targetPorts: { $self: { kind: 'instance' } },
         },
@@ -180,7 +178,7 @@ export function buildTemplateRegistry(deps: TemplateRegistryDeps): TemplateRegis
       .register(
         'slackTrigger',
         () => {
-          const instance = new SlackTrigger(slackService, logger);
+          const instance = new SlackTrigger(logger);
           void instance.start();
           return instance;
         },

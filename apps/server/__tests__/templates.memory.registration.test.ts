@@ -3,7 +3,6 @@ import { buildTemplateRegistry } from '../src/templates';
 import type { LoggerService } from '../src/services/logger.service';
 import type { ContainerService } from '../src/services/container.service';
 import type { ConfigService } from '../src/services/config.service';
-import type { SlackService } from '../src/services/slack.service';
 import type { CheckpointerService } from '../src/services/checkpointer.service';
 import type { MongoService } from '../src/services/mongo.service';
 
@@ -14,7 +13,7 @@ describe('templates: memory registration and agent memory port', () => {
       logger: {} as unknown as LoggerService,
       containerService: {} as unknown as ContainerService,
       configService: {} as unknown as ConfigService,
-      slackService: {} as unknown as SlackService,
+      slackService: {} as unknown as any,
       checkpointerService: {} as unknown as CheckpointerService,
       mongoService: { getDb: () => ({} as any) } as unknown as MongoService,
     };

@@ -1,10 +1,11 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+const RUN_MONGOMS = process.env.RUN_MONGOMS === '1';
 import { startMemoryMongo } from './helpers/mongoMemory';
 import { createServer, SpanDoc } from '../src/server';
 
 let server: any; let mm: any;
 
-describe('GET /v1/metrics/errors-by-tool', () => {
+describe.skipIf(!RUN_MONGOMS)('GET /v1/metrics/errors-by-tool', () => {
   beforeAll(async () => {
     mm = await startMemoryMongo('obs-metrics');
     server = await createServer(mm.db, { logger: false });

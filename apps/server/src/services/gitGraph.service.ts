@@ -37,6 +37,9 @@ export class GitGraphService {
     private readonly templateRegistry: TemplateRegistry,
   ) {}
 
+  // Cache of last successfully committed snapshot to tolerate partial/corrupt working tree reads
+  private lastCommitted?: PersistedGraph;
+
   // Repo/bootstrap helpers
   async initIfNeeded(): Promise<void> {
     await fs.mkdir(this.cfg.repoPath, { recursive: true });
@@ -71,6 +74,8 @@ export class GitGraphService {
     } catch {
       // ignore and try HEAD fallbacks
     }
+    // If working tree failed or absent, prefer the last committed snapshot if available (should match HEAD)
+    if (this.lastCommitted) return this.lastCommitted;
     const headRoot = await this.readFromHeadRoot(name);
     if (headRoot) return headRoot;
     const headPerGraph = await this.readFromHeadPerGraph(name);
@@ -176,6 +181,8 @@ export class GitGraphService {
       const deltaMsg = this.deltaSummaryDetailed({ before: current, after: target });
       try {
         await this.commit(`chore(graph): v${target.version} ${deltaMsg}`, author ?? this.cfg.defaultAuthor);
+        // Update in-memory snapshot after successful commit
+        this.lastCommitted = JSON.parse(JSON.stringify(target));
       } catch (e: unknown) {
         await this.rollbackPaths(touched);
         const msg = e instanceof Error ? e.message : String(e);
@@ -335,6 +342,8 @@ export class GitGraphService {
       const nodesRes = await this.readEntitiesFromDir<PersistedGraphNode>(path.join(this.cfg.repoPath, 'nodes'));
       const edgesRes = await this.readEntitiesFromDir<PersistedGraphEdge>(path.join(this.cfg.repoPath, 'edges'));
       if (nodesRes.hadError || edgesRes.hadError) {
+        // Prefer lastCommitted snapshot if available; otherwise fall back to HEAD
+        if (this.lastCommitted) return this.lastCommitted;
         const head = await this.readFromHeadRoot(name);
         if (head) return head;
       }

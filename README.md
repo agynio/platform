@@ -6,6 +6,7 @@ Quick links
 - Server: [apps/server](apps/server) — runtime, triggers, tools, MCP, graph persistence
 - UI: [apps/ui](apps/ui) — graph builder and checkpoint stream viewer
 - Docs: [docs/README.md](docs/README.md) — technical overview, contributing, MCP design
+- Slack migration: [docs/slack-migration.md](docs/slack-migration.md) — per-node config and how to migrate from SLACK_* env
 - Tools: [docs/tools/remind_me.md](docs/tools/remind_me.md) — RemindMe tool behavior and usage
 
 Getting started

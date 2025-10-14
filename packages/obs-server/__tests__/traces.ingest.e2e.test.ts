@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+const RUN_MONGOMS = process.env.RUN_MONGOMS === '1';
 import { startMemoryMongo } from './helpers/mongoMemory';
 import { createServer } from '../src/server';
 
@@ -15,7 +16,7 @@ async function get(url: string) {
   return { status: res.statusCode, body: res.json() };
 }
 
-describe('traces ingestion e2e', () => {
+describe.skipIf(!RUN_MONGOMS)('traces ingestion e2e', () => {
   beforeAll(async () => {
     mm = await startMemoryMongo();
     server = await createServer(mm.db, { logger: false });
