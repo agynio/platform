@@ -7,6 +7,8 @@ import { emojiHash3 } from '../utils/emojiId';
 
 interface TraceSummary { traceId: string; root?: SpanDoc; spanCount: number; failedCount: number; lastUpdate: string; }
 
+type AgentRootAttributes = { kind?: string; inputParameters?: unknown; threadId?: string };
+
 export function TracesListPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -61,6 +63,7 @@ export function TracesListPage() {
           <tr style={{ textAlign: 'left', borderBottom: '1px solid #ddd' }}>
             <th>Trace ID</th>
             <th>Thread ID</th>
+            <th>Messages</th>
             <th>Root Label</th>
             <th>Status</th>
             <th>Spans</th>
@@ -73,7 +76,8 @@ export function TracesListPage() {
               <td><Link to={`/trace/${t.traceId}`}>{t.traceId}</Link></td>
               <td>
                 {(() => {
-                  const attrThreadId = t.root?.attributes?.threadId;
+                  const attrs = t.root?.attributes as AgentRootAttributes | undefined;
+                  const attrThreadId = attrs?.threadId;
                   const threadId = t.root?.threadId ?? (typeof attrThreadId === 'string' ? attrThreadId : undefined);
                   if (!threadId) return '-';
                   const e3 = emojiHash3(threadId);
@@ -82,6 +86,33 @@ export function TracesListPage() {
                       <span style={{ fontSize: 18, marginRight: 6 }}>{e3}</span>
                       <span style={{ color: '#6c757d', fontSize: 11 }}>({threadId})</span>
                     </Link>
+                  );
+                })()}
+              </td>
+              <td>
+                {(() => {
+                  const root = t.root;
+                  const attrs = root?.attributes as AgentRootAttributes | undefined;
+                  const isAgent = !root?.parentSpanId && attrs?.kind === 'agent';
+                  if (!isAgent) return '-';
+                  const msgs = extractMessagesFromInputParameters(attrs?.inputParameters);
+                  if (msgs.length === 0) return '-';
+                  const firstTwo = msgs.slice(0, 2);
+                  const base = firstTwo.join(' | ');
+                  const moreCount = msgs.length - firstTwo.length;
+                  const suffix = moreCount > 0 ? ` (+${moreCount} more)` : '';
+                  const MAX_CELL = 120;
+                  let display = base + suffix;
+                  if (display.length > MAX_CELL) {
+                    const keep = Math.max(0, MAX_CELL - suffix.length - 1); // leave room for ellipsis
+                    display = base.slice(0, keep) + '…' + suffix;
+                  }
+                  const fullCombined = msgs.join(' | ');
+                  const fullLimited = fullCombined.length > 1000 ? fullCombined.slice(0, 1000) + '…' : fullCombined;
+                  return (
+                    <span title={fullLimited} aria-label={fullLimited}>
+                      {display}
+                    </span>
                   );
                 })()}
               </td>
@@ -106,4 +137,40 @@ function StatusBadge({ status }: { status: SpanDoc['status'] }) {
       {status}
     </span>
   );
+}
+
+// Extract messages content strings from attributes.inputParameters in a defensive, type-safe way
+function extractMessagesFromInputParameters(inputParameters: unknown): string[] {
+  if (inputParameters == null) return [];
+
+  const isRecord = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 'object';
+  const isMessageObject = (m: unknown): m is { content: string } =>
+    isRecord(m) && typeof (m as { content?: unknown }).content === 'string';
+
+  let ip: unknown = inputParameters;
+  if (typeof ip === 'string') {
+    try { ip = JSON.parse(ip); } catch { /* ignore parse error */ }
+  }
+  // If array, find first element that has messages
+  if (Array.isArray(ip)) {
+    // Only one element is expected to carry messages per schema; stop at first match.
+    for (const item of ip) {
+      const msgs = extractMessagesFromInputParameters(item);
+      if (msgs.length) return msgs;
+    }
+    return [];
+  }
+  // If object with messages
+  if (isRecord(ip)) {
+    const raw = (ip as { messages?: unknown }).messages;
+    if (Array.isArray(raw)) {
+      const out: string[] = [];
+      for (const m of raw) {
+        if (typeof m === 'string') out.push(m);
+        else if (isMessageObject(m)) out.push(m.content);
+      }
+      return out.filter((v) => typeof v === 'string' && v.length > 0);
+    }
+  }
+  return [];
 }
