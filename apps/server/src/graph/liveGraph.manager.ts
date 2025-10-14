@@ -13,6 +13,7 @@ import { Errors } from './errors';
 import { PortsRegistry } from './ports.registry';
 import { TemplateRegistry } from './templateRegistry';
 import type { Pausable, ProvisionStatus, Provisionable, DynamicConfigurable } from './capabilities';
+import { ZodError } from 'zod';
 
 const configsEqual = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b); // unchanged
 
@@ -171,8 +172,12 @@ export class LiveGraphRuntime {
       if (!live) continue;
       try {
         const setter = (live.instance as any)['setConfig'];
-        if (typeof setter === 'function') await (setter as Function).call(live.instance, nodeDef.data.config || {});
-        live.config = nodeDef.data.config || {};
+        if (typeof setter === 'function') {
+          const cfg = nodeDef.data.config || {};
+          const cleaned = await this.applyConfigWithUnknownKeyStripping(live.instance, 'setConfig', cfg, nodeId);
+          if (cleaned) live.config = cleaned; // update only when success
+          else live.config = cfg; // fallback to provided
+        }
       } catch (e) {
         logger?.error?.('Config update failed', nodeId, e);
         // non-fatal
@@ -185,7 +190,14 @@ export class LiveGraphRuntime {
       if (!live) continue;
       try {
         const dynSetter = (live.instance as any)['setDynamicConfig'];
-        if (typeof dynSetter === 'function') await (dynSetter as Function).call(live.instance, nodeDef.data.dynamicConfig || {});
+        if (typeof dynSetter === 'function') {
+          await this.applyConfigWithUnknownKeyStripping(
+            live.instance,
+            'setDynamicConfig',
+            (nodeDef.data as any).dynamicConfig || {},
+            nodeId,
+          );
+        }
       } catch (e) {
         logger?.error?.('Dynamic config update failed', nodeId, e);
       }
@@ -281,31 +293,113 @@ export class LiveGraphRuntime {
   }
 
   private async instantiateNode(node: NodeDef): Promise<void> {
-    const factory = this.templateRegistry.get(node.data.template);
-    if (!factory) throw Errors.unknownTemplate(node.data.template, node.id);
-    // Factories receive a minimal context (deps deprecated -> empty object)
-    const created = await factory({
-      deps: {},
-      get: (id: string) => this.state.nodes.get(id)?.instance,
-      nodeId: node.id,
-    });
-    // NOTE: setGraphNodeId reflection removed; prefer factories to leverage ctx.nodeId directly.
-    const live: LiveNode = { id: node.id, template: node.data.template, instance: created, config: node.data.config };
-    this.state.nodes.set(node.id, live);
-    if (node.data.config) {
-      const setter = (created as any)['setConfig'];
-      if (typeof setter === 'function') await (setter as Function).call(created, node.data.config);
-    }
-    if (node.data.dynamicConfig) { // New block for dynamic config
-      const dynSetter = (created as any)['setDynamicConfig'];
-      if (typeof dynSetter === 'function') {
-        try {
-          await (dynSetter as Function).call(created, node.data.dynamicConfig);
-        } catch (e) {
-          this.logger.error('Initial dynamic config apply failed', node.id, e);
+    try {
+      const factory = this.templateRegistry.get(node.data.template);
+      if (!factory) throw Errors.unknownTemplate(node.data.template, node.id);
+      // Factories receive a minimal context (deps deprecated -> empty object)
+      const created = await factory({
+        deps: {},
+        get: (id: string) => this.state.nodes.get(id)?.instance,
+        nodeId: node.id,
+      });
+      // NOTE: setGraphNodeId reflection removed; prefer factories to leverage ctx.nodeId directly.
+      const live: LiveNode = { id: node.id, template: node.data.template, instance: created, config: node.data.config };
+      this.state.nodes.set(node.id, live);
+      if (node.data.config) {
+        const setter = (created as any)['setConfig'];
+        if (typeof setter === 'function') {
+          try {
+            const cleaned = await this.applyConfigWithUnknownKeyStripping(created, 'setConfig', node.data.config, node.id);
+            if (cleaned) live.config = cleaned;
+          } catch (err) {
+            const e = err as any;
+            if (e instanceof GraphError) throw e; // already wrapped upstream
+            const msg = e?.message ? String(e.message) : 'Error during initial setConfig';
+            throw new GraphError({
+              code: 'NODE_INIT_ERROR',
+              message: `Config initialization failed for node ${node.id}: ${msg}`,
+              nodeId: node.id,
+              cause: e,
+            });
+          }
         }
       }
+      if (node.data.dynamicConfig) {
+        const dynSetter = (created as any)['setDynamicConfig'];
+        if (typeof dynSetter === 'function') {
+          try {
+            await this.applyConfigWithUnknownKeyStripping(created, 'setDynamicConfig', node.data.dynamicConfig, node.id);
+          } catch (err) {
+            const e = err as any;
+            if (e instanceof GraphError) throw e;
+            const msg = e?.message ? String(e.message) : 'Error during initial setDynamicConfig';
+            throw new GraphError({
+              code: 'NODE_INIT_ERROR',
+              message: `Dynamic config initialization failed for node ${node.id}: ${msg}`,
+              nodeId: node.id,
+              cause: e,
+            });
+          }
+        }
+      }
+    } catch (e) {
+      // Factory creation or any init error should include nodeId
+      if (e instanceof GraphError) throw e; // already enriched
+      const msg = (e as any)?.message ? String((e as any).message) : 'Node initialization error';
+      throw new GraphError({
+        code: 'NODE_INIT_ERROR',
+        message: `Failed to initialize node ${node.id}: ${msg}`,
+        nodeId: node.id,
+        cause: e as any,
+      });
     }
+  }
+
+  // Attempt to apply config via setter; if ZodError contains only unrecognized_keys at top-level, strip and retry.
+  private async applyConfigWithUnknownKeyStripping(
+    instance: unknown,
+    method: 'setConfig' | 'setDynamicConfig',
+    cfg: Record<string, unknown>,
+    nodeId: string,
+  ): Promise<Record<string, unknown>> {
+    const fn = (instance as any)[method];
+    if (typeof fn !== 'function') return cfg;
+
+    let attempt = 0;
+    let current = { ...(cfg || {}) } as Record<string, unknown>;
+    const MAX_RETRIES = 3;
+    while (attempt <= MAX_RETRIES) {
+      try {
+        await (fn as Function).call(instance, current);
+        return current; // success
+      } catch (err) {
+        if (err instanceof ZodError) {
+          const issues = err.issues || [];
+          const unknownRoot = issues.filter(
+            (i: any) => i?.code === 'unrecognized_keys' && Array.isArray(i?.keys) && (Array.isArray(i?.path) ? i.path.length === 0 : true),
+          );
+          if (unknownRoot.length > 0) {
+            const keys = new Set<string>();
+            for (const i of unknownRoot) for (const k of i.keys as string[]) keys.add(k);
+            if (keys.size > 0) {
+              const next: Record<string, unknown> = {};
+              for (const [k, v] of Object.entries(current)) if (!keys.has(k)) next[k] = v;
+              current = next;
+              attempt += 1;
+              continue; // retry
+            }
+          }
+        }
+        // Not an unknown keys case: rethrow; caller decides behavior (wrap/log)
+        throw err;
+      }
+    }
+    // If we exhausted retries, throw an error (non-fatal for update path; fatal during init caller wraps)
+    throw new GraphError({
+      code: 'CONFIG_APPLY_ERROR',
+      message: `Failed to apply ${method} for node ${nodeId} after stripping unknown keys`,
+      nodeId,
+    });
   }
 
   private async disposeNode(nodeId: string): Promise<void> {
