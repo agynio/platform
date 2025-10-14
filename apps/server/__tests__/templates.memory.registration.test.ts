@@ -62,6 +62,12 @@ describe('templates: memory registration and agent memory port', () => {
     expect(p.targetPorts.$memory).toBeTruthy();
     expect(p.targetPorts.$self).toBeTruthy();
 
+    // memoryTool exposes node-level static config schema with name/description/title
+    const memToolSchema = entry?.staticConfigSchema as any;
+    expect(memToolSchema?.type).toBe('object');
+    const propKeys = Object.keys(memToolSchema?.properties || {});
+    expect(propKeys).toEqual(expect.arrayContaining(['name','description','title']));
+
     const agentTargets = ports.simpleAgent.targetPorts!;
     expect(agentTargets.memory).toBeTruthy();
     // Method mapping to attach/detach memory connector

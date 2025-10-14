@@ -22,7 +22,7 @@ import { MongoService } from './services/mongo.service';
 import { MemoryNode, MemoryNodeStaticConfigSchema } from './nodes/memory.node';
 import { MemoryConnectorNode, MemoryConnectorStaticConfigSchema } from './nodes/memory.connector.node';
 // Unified Memory tool
-import { UnifiedMemoryTool, UnifiedMemoryToolStaticConfigSchema } from './tools/memory/memory.tool';
+import { UnifiedMemoryTool, UnifiedMemoryToolNodeStaticConfigSchema } from './tools/memory/memory.tool';
 
 export interface TemplateRegistryDeps {
   logger: LoggerService;
@@ -225,7 +225,8 @@ export function buildTemplateRegistry(deps: TemplateRegistryDeps): TemplateRegis
           title: 'Memory Tool',
           kind: 'tool',
           capabilities: {},
-          staticConfigSchema: toJSONSchema(UnifiedMemoryToolStaticConfigSchema),
+          // Expose node-level static config (name/description/title), not invocation schema
+          staticConfigSchema: toJSONSchema(UnifiedMemoryToolNodeStaticConfigSchema),
         },
       )
       .register(

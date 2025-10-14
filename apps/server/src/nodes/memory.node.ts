@@ -12,6 +12,8 @@ export const MemoryNodeStaticConfigSchema = z
   .object({
     scope: z.enum(['global', 'thread']).default('global'),
     collectionPrefix: z.string().optional(),
+    // UI display only; not used by service
+    title: z.string().min(1).optional(),
   })
   .strict();
 export type MemoryNodeStaticConfig = z.infer<typeof MemoryNodeStaticConfigSchema>;
@@ -31,6 +33,7 @@ export class MemoryNode {
       next.scope = scopeVal === 'thread' ? 'perThread' : scopeVal;
     }
     if (config.collectionPrefix !== undefined) next.collectionPrefix = config.collectionPrefix;
+    // title is UI-only; accept and ignore for runtime behavior
     this.config = { ...this.config, ...next } as MemoryNodeConfig;
   }
 
