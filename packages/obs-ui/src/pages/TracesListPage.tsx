@@ -7,6 +7,8 @@ import { emojiHash3 } from '../utils/emojiId';
 
 interface TraceSummary { traceId: string; root?: SpanDoc; spanCount: number; failedCount: number; lastUpdate: string; }
 
+type AgentRootAttributes = { kind?: string; inputParameters?: unknown; threadId?: string };
+
 export function TracesListPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -74,7 +76,8 @@ export function TracesListPage() {
               <td><Link to={`/trace/${t.traceId}`}>{t.traceId}</Link></td>
               <td>
                 {(() => {
-                  const attrThreadId = t.root?.attributes?.threadId;
+                  const attrs = t.root?.attributes as AgentRootAttributes | undefined;
+                  const attrThreadId = attrs?.threadId;
                   const threadId = t.root?.threadId ?? (typeof attrThreadId === 'string' ? attrThreadId : undefined);
                   if (!threadId) return '-';
                   const e3 = emojiHash3(threadId);
@@ -89,12 +92,10 @@ export function TracesListPage() {
               <td>
                 {(() => {
                   const root = t.root;
-                  const kind = (root?.attributes as Record<string, unknown> | undefined)?.['kind'];
-                  const isAgent = !root?.parentSpanId && kind === 'agent';
+                  const attrs = root?.attributes as AgentRootAttributes | undefined;
+                  const isAgent = !root?.parentSpanId && attrs?.kind === 'agent';
                   if (!isAgent) return '-';
-                  const msgs = extractMessagesFromInputParameters(
-                    (root?.attributes as Record<string, unknown> | undefined)?.['inputParameters']
-                  );
+                  const msgs = extractMessagesFromInputParameters(attrs?.inputParameters);
                   if (msgs.length === 0) return '-';
                   const firstTwo = msgs.slice(0, 2);
                   const base = firstTwo.join(' | ');
@@ -138,48 +139,38 @@ function StatusBadge({ status }: { status: SpanDoc['status'] }) {
   );
 }
 
-// Extract messages content strings from attributes.inputParameters in a defensive way
+// Extract messages content strings from attributes.inputParameters in a defensive, type-safe way
 function extractMessagesFromInputParameters(inputParameters: unknown): string[] {
-  if (!inputParameters) return [];
-  try {
-    let ip: unknown = inputParameters;
-    if (typeof ip === 'string') {
-      try { ip = JSON.parse(ip); } catch { /* ignore parse error */ }
+  if (inputParameters == null) return [];
+
+  const isRecord = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 'object';
+  const isMessageObject = (m: unknown): m is { content: string } =>
+    isRecord(m) && typeof (m as { content?: unknown }).content === 'string';
+
+  let ip: unknown = inputParameters;
+  if (typeof ip === 'string') {
+    try { ip = JSON.parse(ip); } catch { /* ignore parse error */ }
+  }
+  // If array, find first element that has messages
+  if (Array.isArray(ip)) {
+    // Only one element is expected to carry messages per schema; stop at first match.
+    for (const item of ip) {
+      const msgs = extractMessagesFromInputParameters(item);
+      if (msgs.length) return msgs;
     }
-    // If array, find first element that has messages
-    if (Array.isArray(ip)) {
-      for (const item of ip) {
-        const msgs = extractMessagesFromInputParameters(item);
-        if (msgs.length > 0) return msgs;
+    return [];
+  }
+  // If object with messages
+  if (isRecord(ip)) {
+    const raw = (ip as { messages?: unknown }).messages;
+    if (Array.isArray(raw)) {
+      const out: string[] = [];
+      for (const m of raw) {
+        if (typeof m === 'string') out.push(m);
+        else if (isMessageObject(m)) out.push(m.content);
       }
-      return [];
+      return out.filter((v) => typeof v === 'string' && v.length > 0);
     }
-    // If object with messages
-    if (ip && typeof ip === 'object') {
-      const obj = ip as Record<string, unknown>;
-      if ('messages' in obj) {
-        const raw = (obj as any).messages;
-        if (Array.isArray(raw)) {
-          return raw
-            .map((m) => {
-              try {
-                // Accept both string message or object with content
-                if (typeof m === 'string') return m;
-                if (m && typeof m === 'object') {
-                  const content = (m as any).content;
-                  return typeof content === 'string' ? content : undefined;
-                }
-                return undefined;
-              } catch {
-                return undefined;
-              }
-            })
-            .filter((v): v is string => typeof v === 'string' && v.length > 0);
-        }
-      }
-    }
-  } catch {
-    // ignore
   }
   return [];
 }
