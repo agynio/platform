@@ -10,10 +10,10 @@ import { LoggerService } from './services/logger.service';
 import { VaultService, VaultConfigSchema } from './services/vault.service';
 import { CallAgentTool, CallAgentToolStaticConfigSchema } from './tools/call_agent.tool';
 import { GithubCloneRepoTool, GithubCloneRepoToolExposedStaticConfigSchema } from './tools/github_clone_repo';
-import { SendSlackMessageTool, SendSlackMessageToolStaticConfigSchema } from './tools/send_slack_message.tool';
+import { SendSlackMessageTool, SendSlackMessageToolExposedStaticConfigSchema } from './tools/send_slack_message.tool';
 import { ShellTool, ShellToolStaticConfigSchema } from './tools/shell_command';
 import { SlackTrigger } from './triggers';
-import { SlackTriggerStaticConfigSchema } from './triggers/slack.trigger';
+import { SlackTriggerExposedStaticConfigSchema } from './triggers/slack.trigger';
 import { RemindMeTool, RemindMeToolStaticConfigSchema } from './tools/remind_me.tool';
 import { DebugToolTrigger, DebugToolTriggerStaticConfigSchema } from './triggers/debugTool.trigger';
 import { LocalMcpServerStaticConfigSchema } from './mcp/localMcpServer';
@@ -115,7 +115,7 @@ export function buildTemplateRegistry(deps: TemplateRegistryDeps): TemplateRegis
       )
       .register(
         'sendSlackMessageTool',
-        () => new SendSlackMessageTool(logger),
+        () => new SendSlackMessageTool(vault, logger),
         {
           targetPorts: { $self: { kind: 'instance' } },
         },
@@ -123,7 +123,7 @@ export function buildTemplateRegistry(deps: TemplateRegistryDeps): TemplateRegis
           title: 'Send Slack message',
           kind: 'tool',
           capabilities: { staticConfigurable: true },
-          staticConfigSchema: toJSONSchema(SendSlackMessageToolStaticConfigSchema),
+          staticConfigSchema: toJSONSchema(SendSlackMessageToolExposedStaticConfigSchema),
         },
       )
       .register(
@@ -178,7 +178,7 @@ export function buildTemplateRegistry(deps: TemplateRegistryDeps): TemplateRegis
       .register(
         'slackTrigger',
         () => {
-          const instance = new SlackTrigger(logger);
+          const instance = new SlackTrigger(logger, vault);
           void instance.start();
           return instance;
         },
@@ -192,7 +192,7 @@ export function buildTemplateRegistry(deps: TemplateRegistryDeps): TemplateRegis
           title: 'Slack (Socket Mode)',
           kind: 'trigger',
           capabilities: { provisionable: true, pausable: true, staticConfigurable: true },
-          staticConfigSchema: toJSONSchema(SlackTriggerStaticConfigSchema),
+          staticConfigSchema: toJSONSchema(SlackTriggerExposedStaticConfigSchema),
         },
       )
       .register(

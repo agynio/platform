@@ -2,36 +2,98 @@ import { BaseTrigger, TriggerHumanMessage } from './base.trigger';
 import { LoggerService } from '../services/logger.service';
 import { z } from 'zod';
 import { SocketModeClient } from '@slack/socket-mode';
+import { VaultService } from '../services/vault.service';
+import { parseVaultRef, ReferenceFieldSchema } from '../utils/refs';
 
-export const SlackTriggerStaticConfigSchema = z.object({
-  app_token: z.string().min(1).startsWith('xapp-', { message: 'Slack app-level token must start with xapp-' }).describe('Slack App-level token (xapp-...) for Socket Mode.'),
-}).strict();
+// Internal schema: accept either plain string or ReferenceField
+export const SlackTriggerStaticConfigSchema = z
+  .object({
+    app_token: z.union([
+      z
+        .string()
+        .min(1)
+        .startsWith('xapp-', { message: 'Slack app-level token must start with xapp-' })
+        .describe('Slack App-level token (xapp-...) for Socket Mode.'),
+      ReferenceFieldSchema,
+    ]),
+  })
+  .strict();
+
+// Exposed UI schema: always show as ReferenceField with help
+export const SlackTriggerExposedStaticConfigSchema = z
+  .object({
+    app_token: ReferenceFieldSchema.meta({
+      'ui:field': 'ReferenceField',
+      'ui:help': 'Use "vault" to reference a secret as mount/path/key.',
+    }),
+  })
+  .strict();
 
 /**
  * SlackTrigger
  * Starts a Socket Mode connection to Slack and relays inbound user messages
  * (non-bot, non-thread broadcast) to subscribers via notify().
  */
+type TokenRef = { value: string; source: 'static' | 'vault' };
+
 export class SlackTrigger extends BaseTrigger {
   private logger: LoggerService;
-  private cfg: z.infer<typeof SlackTriggerStaticConfigSchema> | null = null;
+  private cfg: { app_token: TokenRef } | null = null;
   private client: SocketModeClient | null = null;
+  private vault?: VaultService;
 
-  constructor(logger: LoggerService) {
+  constructor(logger: LoggerService, vault?: VaultService) {
     super();
     this.logger = logger;
+    this.vault = vault;
   }
 
   async setConfig(cfg: Record<string, unknown>): Promise<void> {
     const parsed = SlackTriggerStaticConfigSchema.parse(cfg || {});
-    this.cfg = parsed;
+    // Normalize to { value, source }
+    let appToken: TokenRef;
+    if (typeof parsed.app_token === 'string') {
+      appToken = { value: parsed.app_token, source: 'static' };
+    } else {
+      const ref = parsed.app_token;
+      const source = ref.source || 'static';
+      if (source === 'vault') {
+        if (!this.vault || !this.vault.isEnabled()) {
+          throw new Error('Vault is disabled but a vault reference was provided for app_token');
+        }
+        // Validate ref format early
+        parseVaultRef(ref.value);
+      } else {
+        if (!ref.value?.startsWith('xapp-')) {
+          throw new Error('Slack app-level token must start with xapp-');
+        }
+      }
+      appToken = { value: ref.value, source };
+    }
+    this.cfg = { app_token: appToken };
   }
 
-  private ensureClient(): SocketModeClient {
-    if (this.client) return this.client;
+  private async resolveAppToken(): Promise<string> {
     const cfg = this.cfg;
     if (!cfg) throw new Error('SlackTrigger not configured: app_token is required');
-    const client = new SocketModeClient({ appToken: cfg.app_token, logLevel: undefined });
+    const t = cfg.app_token;
+    if (t.source === 'vault') {
+      const vlt = this.vault;
+      if (!vlt || !vlt.isEnabled()) throw new Error('Vault is disabled but a vault reference was provided for app_token');
+      const vr = parseVaultRef(t.value);
+      const secret = await vlt.getSecret(vr);
+      if (!secret) throw new Error('Vault secret for app_token not found');
+      if (!secret.startsWith('xapp-')) throw new Error('Resolved Slack app token is invalid (must start with xapp-)');
+      return secret;
+    }
+    if (!t.value.startsWith('xapp-')) throw new Error('Slack app-level token must start with xapp-');
+    return t.value;
+  }
+
+  private async ensureClient(): Promise<SocketModeClient> {
+    if (this.client) return this.client;
+    const appToken = await this.resolveAppToken();
+    const client = new SocketModeClient({ appToken, logLevel: undefined });
 
     type SlackMessageEvent = {
       type: 'message';
@@ -98,7 +160,7 @@ export class SlackTrigger extends BaseTrigger {
   }
 
   protected async doProvision(): Promise<void> {
-    const client = this.ensureClient();
+    const client = await this.ensureClient();
     this.logger.info('Starting SlackTrigger (socket mode)');
     await client.start();
     this.logger.info('SlackTrigger started');
