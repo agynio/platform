@@ -61,6 +61,7 @@ export function TracesListPage() {
           <tr style={{ textAlign: 'left', borderBottom: '1px solid #ddd' }}>
             <th>Trace ID</th>
             <th>Thread ID</th>
+            <th>Messages</th>
             <th>Root Label</th>
             <th>Status</th>
             <th>Spans</th>
@@ -85,6 +86,35 @@ export function TracesListPage() {
                   );
                 })()}
               </td>
+              <td>
+                {(() => {
+                  const root = t.root;
+                  const kind = (root?.attributes as Record<string, unknown> | undefined)?.['kind'];
+                  const isAgent = !root?.parentSpanId && kind === 'agent';
+                  if (!isAgent) return '-';
+                  const msgs = extractMessagesFromInputParameters(
+                    (root?.attributes as Record<string, unknown> | undefined)?.['inputParameters']
+                  );
+                  if (msgs.length === 0) return '-';
+                  const firstTwo = msgs.slice(0, 2);
+                  const base = firstTwo.join(' | ');
+                  const moreCount = msgs.length - firstTwo.length;
+                  const suffix = moreCount > 0 ? ` (+${moreCount} more)` : '';
+                  const MAX_CELL = 120;
+                  let display = base + suffix;
+                  if (display.length > MAX_CELL) {
+                    const keep = Math.max(0, MAX_CELL - suffix.length - 1); // leave room for ellipsis
+                    display = base.slice(0, keep) + '…' + suffix;
+                  }
+                  const fullCombined = msgs.join(' | ');
+                  const fullLimited = fullCombined.length > 1000 ? fullCombined.slice(0, 1000) + '…' : fullCombined;
+                  return (
+                    <span title={fullLimited} aria-label={fullLimited}>
+                      {display}
+                    </span>
+                  );
+                })()}
+              </td>
               <td>{t.root?.label}</td>
               <td>{t.root?.status && <StatusBadge status={t.root.status} />}</td>
               <td>{t.spanCount} {t.failedCount > 0 && <span style={{ color: 'red' }}>({t.failedCount})</span>}</td>
@@ -106,4 +136,50 @@ function StatusBadge({ status }: { status: SpanDoc['status'] }) {
       {status}
     </span>
   );
+}
+
+// Extract messages content strings from attributes.inputParameters in a defensive way
+function extractMessagesFromInputParameters(inputParameters: unknown): string[] {
+  if (!inputParameters) return [];
+  try {
+    let ip: unknown = inputParameters;
+    if (typeof ip === 'string') {
+      try { ip = JSON.parse(ip); } catch { /* ignore parse error */ }
+    }
+    // If array, find first element that has messages
+    if (Array.isArray(ip)) {
+      for (const item of ip) {
+        const msgs = extractMessagesFromInputParameters(item);
+        if (msgs.length > 0) return msgs;
+      }
+      return [];
+    }
+    // If object with messages
+    if (ip && typeof ip === 'object') {
+      const obj = ip as Record<string, unknown>;
+      if ('messages' in obj) {
+        const raw = (obj as any).messages;
+        if (Array.isArray(raw)) {
+          return raw
+            .map((m) => {
+              try {
+                // Accept both string message or object with content
+                if (typeof m === 'string') return m;
+                if (m && typeof m === 'object') {
+                  const content = (m as any).content;
+                  return typeof content === 'string' ? content : undefined;
+                }
+                return undefined;
+              } catch {
+                return undefined;
+              }
+            })
+            .filter((v): v is string => typeof v === 'string' && v.length > 0);
+        }
+      }
+    }
+  } catch {
+    // ignore
+  }
+  return [];
 }
