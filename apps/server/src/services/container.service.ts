@@ -342,21 +342,28 @@ export class ContainerService {
       let stdout = '';
       let stderr = '';
       let finished = false;
+      // Underlying hijacked stream reference, to destroy on timeouts
+      let streamRef: NodeJS.ReadableStream | null = null;
       const clearAll = (...ts: (NodeJS.Timeout | null)[]) => ts.forEach((t) => t && clearTimeout(t));
       const execTimer = timeoutMs && timeoutMs > 0
         ? setTimeout(() => {
             if (finished) return;
             finished = true;
+            // Ensure underlying stream is torn down to avoid further data/timers
+            try { streamRef?.destroy?.(); } catch {}
             reject(new ExecTimeoutError(timeoutMs!, stdout, stderr));
           }, timeoutMs)
         : null;
       let idleTimer: NodeJS.Timeout | null = null;
       const armIdle = () => {
+        if (finished) return; // do not arm after completion
         if (!idleTimeoutMs || idleTimeoutMs <= 0) return;
         if (idleTimer) clearTimeout(idleTimer);
         idleTimer = setTimeout(() => {
           if (finished) return;
           finished = true;
+          // Ensure underlying stream is torn down to avoid further data/timers
+          try { streamRef?.destroy?.(); } catch {}
           reject(new ExecIdleTimeoutError(idleTimeoutMs!, stdout, stderr));
         }, idleTimeoutMs);
       };
@@ -372,6 +379,8 @@ export class ContainerService {
         }
 
         // If exec created without TTY, docker multiplexes stdout/stderr
+        // capture stream for timeout teardown
+        streamRef = stream;
         if (!exec.inspect) {
           // Very unlikely, but guard.
           this.logger.error('Exec instance missing inspect method');
@@ -385,36 +394,46 @@ export class ContainerService {
             armIdle();
             if (tty) {
               stream.on('data', (chunk: Buffer | string) => {
+                if (finished) return;
                 const text = chunk.toString();
                 this.logger.debug(`[Exec stdout chunk]`, text.trim());
                 stdout += text;
                 armIdle();
               });
             } else {
-              this.docker.modem.demuxStream(
-                stream,
-                {
-                  write: (chunk: any) => {
-                    const text = Buffer.isBuffer(chunk) ? chunk.toString() : chunk;
+              const { Writable } = require('node:stream') as typeof import('node:stream');
+              const outStdout = new Writable({
+                write: (chunk, _enc, cb) => {
+                  if (!finished) {
+                    const text = Buffer.isBuffer(chunk) ? chunk.toString() : String(chunk);
                     this.logger.debug(`[Exec stdout chunk]`, text.trim());
                     stdout += text;
                     armIdle();
-                  },
-                } as any,
-                {
-                  write: (chunk: any) => {
-                    const text = Buffer.isBuffer(chunk) ? chunk.toString() : chunk;
+                  }
+                  cb();
+                },
+              });
+              const outStderr = new Writable({
+                write: (chunk, _enc, cb) => {
+                  if (!finished) {
+                    const text = Buffer.isBuffer(chunk) ? chunk.toString() : String(chunk);
                     this.logger.debug(`[Exec stderr chunk]`, text.trim());
                     stderr += text;
                     armIdle();
-                  },
-                } as any,
-              );
+                  }
+                  cb();
+                },
+              });
+              this.docker.modem.demuxStream(stream, outStdout, outStderr);
             }
           } catch (e) {
             // Fallback: treat as single combined stream
             armIdle();
-            stream.on('data', (c: Buffer | string) => { stdout += c.toString(); armIdle(); });
+            stream.on('data', (c: Buffer | string) => {
+              if (finished) return;
+              stdout += c.toString();
+              armIdle();
+            });
           }
         })();
 
@@ -437,6 +456,10 @@ export class ContainerService {
           // eslint-disable-next-line @typescript-eslint/no-unused-vars
           finished = true;
           reject(e);
+        });
+        // Extra safety: clear timers on close as well
+        stream.on('close', () => {
+          clearAll(execTimer, idleTimer);
         });
       });
     });

@@ -43,6 +43,20 @@ describe('ShellTool timeout error message', () => {
       t.invoke({ command: 'sleep 999999' }, { configurable: { thread_id: 't' } } as any),
     ).rejects.toThrowError(/Error \(idle timeout\): no output for 60000ms; command was terminated\./);
   });
+
+  it('reports actual enforced idle timeout from error.timeoutMs when available', async () => {
+    const logger = new LoggerService();
+    const idleErr = new (class extends ExecIdleTimeoutError { constructor() { super(12345, 'out', 'err'); } })();
+    const fakeContainer = { exec: vi.fn(async () => { throw idleErr; }) } as any;
+    const provider = { provide: vi.fn(async () => fakeContainer) } as any;
+    const tool = new ShellTool(undefined as any, logger);
+    tool.setContainerProvider(provider);
+    await tool.setConfig({ idleTimeoutMs: 60000 });
+    const t = tool.init();
+    await expect(
+      t.invoke({ command: 'sleep 999999' }, { configurable: { thread_id: 't' } } as any),
+    ).rejects.toThrowError(/no output for 12345ms/);
+  });
 });
 
 describe('ContainerService.execContainer killOnTimeout behavior', () => {

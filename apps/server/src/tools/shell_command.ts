@@ -39,17 +39,13 @@ export const ShellToolStaticConfigSchema = z
       .meta({ 'ui:field': 'ReferenceEnvField' }),
     workdir: z.string().optional().describe('Working directory to use for each exec.'),
     executionTimeoutMs: z
-      .number()
-      .int()
-      .nonnegative()
+      .union([z.literal(0), z.number().int().min(1000).max(86_400_000)])
       .default(60 * 60 * 1000)
-      .describe('Maximum wall time for the command in milliseconds. 0 disables.'),
+      .describe('Maximum wall time for the command in milliseconds. 0 disables. Range: 1000-86400000 when enabled.'),
     idleTimeoutMs: z
-      .number()
-      .int()
-      .nonnegative()
+      .union([z.literal(0), z.number().int().min(1000).max(86_400_000)])
       .default(60 * 1000)
-      .describe('Maximum idle time (no output) in milliseconds. 0 disables.'),
+      .describe('Maximum idle time (no output) in milliseconds. 0 disables. Range: 1000-86400000 when enabled.'),
   })
   .strict();
 
@@ -99,13 +95,14 @@ export class ShellTool extends BaseTool {
             const cleaned = this.stripAnsi(combined);
             const tail = cleaned.length > 10000 ? cleaned.slice(-10000) : cleaned;
             if (isExecIdleTimeoutError(err)) {
-              const idleMs = this.cfg?.idleTimeoutMs ?? 60 * 1000;
+              const idleMs = (err as ExecIdleTimeoutError | Error & { timeoutMs?: number })?.timeoutMs ?? idleTimeoutMs;
               throw new Error(
                 `Error (idle timeout): no output for ${idleMs}ms; command was terminated. See output tail below.\n----------\n${tail}`,
               );
             } else {
+              const usedMs = (err as ExecTimeoutError | Error & { timeoutMs?: number })?.timeoutMs ?? timeoutMs;
               throw new Error(
-                `Error (timeout after ${timeoutMs}ms): command exceeded ${timeoutMs}ms and was terminated. See output tail below.\n----------\n${tail}`,
+                `Error (timeout after ${usedMs}ms): command exceeded ${usedMs}ms and was terminated. See output tail below.\n----------\n${tail}`,
               );
             }
           }

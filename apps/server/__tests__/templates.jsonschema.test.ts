@@ -18,6 +18,14 @@ describe('template schemas: env ui:field', () => {
     // Ensure timeouts are exposed
     expect(Object.prototype.hasOwnProperty.call(props, 'executionTimeoutMs')).toBe(true);
     expect(Object.prototype.hasOwnProperty.call(props, 'idleTimeoutMs')).toBe(true);
+    // Verify min/max constraints are present in JSON schema for active (non-zero) case
+    const execSchema = props['executionTimeoutMs'] as JSONSchema7;
+    const idleSchema = props['idleTimeoutMs'] as JSONSchema7;
+    // union translates to anyOf with literal 0 or constrained number
+    const hasExecRange = Array.isArray(execSchema.anyOf) && execSchema.anyOf.some((s: any) => s.minimum === 1000 && s.maximum === 86400000);
+    const hasIdleRange = Array.isArray(idleSchema.anyOf) && idleSchema.anyOf.some((s: any) => s.minimum === 1000 && s.maximum === 86400000);
+    expect(hasExecRange).toBe(true);
+    expect(hasIdleRange).toBe(true);
   });
 
   it('LocalMcpServerStaticConfigSchema.env includes ui:field ReferenceEnvField', () => {
