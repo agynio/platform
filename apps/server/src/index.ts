@@ -24,6 +24,7 @@ import { ContainerService } from './services/container.service.js';
 import { SlackService } from './services/slack.service.js';
 import { ReadinessWatcher } from './utils/readinessWatcher.js';
 import { VaultService, VaultConfigSchema } from './services/vault.service.js';
+import { registerRemindersRoute } from './routes/reminders.route.js';
 
 const logger = new LoggerService();
 const config = ConfigService.fromEnv();
@@ -267,6 +268,9 @@ async function bootstrap() {
     }
   });
 
+  // Register routes that need runtime
+  registerRemindersRoute(fastify, runtime, logger);
+
   // Start Fastify then attach Socket.io
   const PORT = Number(process.env.PORT) || 3010;
   await fastify.listen({ port: PORT, host: '0.0.0.0' });
@@ -283,6 +287,8 @@ async function bootstrap() {
 
   // Watcher that emits a follow-up node_status once node becomes ready after provision/start.
   readinessWatcher = new ReadinessWatcher(runtime, emitStatus, logger);
+
+  // Routes registered above
 
   const shutdown = async () => {
     logger.info('Shutting down...');

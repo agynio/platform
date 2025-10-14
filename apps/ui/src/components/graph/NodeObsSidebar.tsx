@@ -4,6 +4,7 @@ import type { SpanDoc } from '@/lib/obs/api';
 import { fetchSpansInRange } from '@/lib/obs/api';
 import { obsRealtime } from '@/lib/obs/socket';
 import { useTemplatesCache } from '@/lib/graph/templates.provider';
+import { useNodeReminders } from '@/lib/graph/hooks';
 
 type BuilderPanelNodeData = {
   template: string;
@@ -41,6 +42,7 @@ export function NodeObsSidebar({ node }: { node: Node<BuilderPanelNodeData> }) {
   const { getTemplate } = useTemplatesCache();
   const tmpl = getTemplate(node.data.template);
   const kind: 'agent' | 'tool' | 'other' = (tmpl?.kind === 'agent' || /agent/i.test(node.data.template)) ? 'agent' : (tmpl?.kind === 'tool' ? 'tool' : 'other');
+  const reminders = useNodeReminders(node.id, node.data.template === 'remindMeTool');
 
   if (kind === 'other') return null; // Only show for agent/tool nodes
 
@@ -90,6 +92,34 @@ export function NodeObsSidebar({ node }: { node: Node<BuilderPanelNodeData> }) {
 
   return (
     <div className="space-y-2 text-xs">
+      {node.data.template === 'remindMeTool' && (
+        <div className="space-y-1">
+          <div className="text-[10px] uppercase text-muted-foreground">Active Reminders</div>
+          {reminders.isLoading ? (
+            <div className="text-muted-foreground">Loading…</div>
+          ) : reminders.error ? (
+            <div role="alert" className="text-red-700 border border-red-300 bg-red-50 rounded px-2 py-1 text-[11px]">
+              {(() => { const e = reminders.error as unknown; const msg = e instanceof Error ? e.message : String(e); return `Failed to load reminders: ${msg}`; })()}
+            </div>
+          ) : (reminders.data?.items?.length || 0) === 0 ? (
+            <div className="text-muted-foreground">None</div>
+          ) : (
+            <ul className="divide-y border rounded">
+              {reminders.data!.items.map((r) => (
+                <li key={r.id} className="px-2 py-1 flex items-center justify-between" aria-label={`Reminder for thread ${r.threadId}`}>
+                  <div className="truncate mr-2">
+                    <div className="text-[11px]">{r.note}</div>
+                    <div className="text-[10px] text-muted-foreground font-mono">thread: {r.threadId}</div>
+                  </div>
+                  <div className="text-[10px] text-muted-foreground" aria-label={`Scheduled at ${new Date(r.at).toLocaleString()}`}>
+                    {new Date(r.at).toLocaleTimeString()}
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
       <div className="text-[10px] uppercase text-muted-foreground">{title}</div>
       {note && <div className="text-[10px] italic text-muted-foreground">{note}</div>}
       {items.length === 0 ? (

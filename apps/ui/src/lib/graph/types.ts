@@ -30,3 +30,11 @@ export interface NodeStatusEvent extends NodeStatus {
   nodeId: string;
   updatedAt?: string;
 }
+
+// Shared DTO for reminders
+export interface ReminderDTO {
+  id: string;
+  threadId: string;
+  note: string;
+  at: string; // ISO timestamp
+}

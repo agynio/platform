@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from './api';
 import type { PersistedGraphUpsertRequestUI } from './api';
 import { graphSocket } from './socket';
-import type { NodeStatus, NodeStatusEvent } from './types';
+import type { NodeStatus, NodeStatusEvent, ReminderDTO } from './types';
 
 export function useTemplates() {
   return useQuery({
@@ -44,6 +44,18 @@ export function useNodeStatus(nodeId: string) {
     return () => off();
   }, [nodeId, qc]);
 
+  return q;
+}
+
+// Reminders polling hook for RemindMe tool nodes
+export function useNodeReminders(nodeId: string, enabled: boolean = true) {
+  const q = useQuery<{ items: ReminderDTO[] }>({
+    queryKey: ['graph', 'node', nodeId, 'reminders'],
+    queryFn: () => api.getNodeReminders(nodeId),
+    refetchInterval: enabled ? 3500 : false,
+    staleTime: 2000,
+    enabled: enabled && !!nodeId,
+  });
   return q;
 }
 

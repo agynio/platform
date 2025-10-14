@@ -52,6 +52,60 @@ describe('RemindMeTool', () => {
     ]);
   });
 
+  it('registry tracks active reminders until fired', async () => {
+    const logger = new LoggerService();
+    const tool = new RemindMeTool(logger);
+    const dyn = tool.init();
+    const invokeSpy = vi.fn(async () => undefined);
+    const caller_agent: CallerAgentStub = { invoke: invokeSpy };
+    const cfg = { configurable: { thread_id: 't-reg', caller_agent } };
+
+    // schedule two timers
+    await dyn.invoke({ delayMs: 1000, note: 'A' }, cfg);
+    await dyn.invoke({ delayMs: 2000, note: 'B' }, cfg);
+
+    // tool exposes getActiveReminders via instance
+    const active1 = (tool as any).getActiveReminders() as any[];
+    expect(active1.length).toBe(2);
+
+    await vi.advanceTimersByTimeAsync(1000);
+    const active2 = (tool as any).getActiveReminders() as any[];
+    expect(active2.length).toBe(1);
+    expect(active2[0].note).toBe('B');
+
+    await vi.advanceTimersByTimeAsync(1000);
+    const active3 = (tool as any).getActiveReminders() as any[];
+    expect(active3.length).toBe(0);
+  });
+
+  it('destroy cancels timers and clears registry', async () => {
+    const logger = new LoggerService();
+    const tool = new RemindMeTool(logger);
+    const dyn = tool.init();
+    const caller_agent: CallerAgentStub = { invoke: vi.fn(async () => undefined) };
+    await dyn.invoke({ delayMs: 10_000, note: 'X' }, { configurable: { thread_id: 't', caller_agent } });
+    expect((tool as any).getActiveReminders().length).toBe(1);
+    await (tool as any).destroy();
+    expect((tool as any).getActiveReminders().length).toBe(0);
+    // advancing timers should not call invoke
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(caller_agent.invoke).not.toHaveBeenCalled();
+  });
+
+  it('enforces cap on active reminders', async () => {
+    const logger = new LoggerService();
+    const tool = new RemindMeTool(logger);
+    const dyn = tool.init();
+    const caller_agent: CallerAgentStub = { invoke: vi.fn(async () => undefined) };
+
+    // monkey-patch maxActive for test visibility
+    (tool as any).maxActive = 1;
+    await dyn.invoke({ delayMs: 10_000, note: 'ok' }, { configurable: { thread_id: 't', caller_agent } });
+    await expect(
+      dyn.invoke({ delayMs: 10_000, note: 'nope' }, { configurable: { thread_id: 't', caller_agent } })
+    ).rejects.toThrow();
+  });
+
   it('schedules immediate reminder when delayMs=0', async () => {
     const tool = getToolInstance();
     const invokeSpy = vi.fn(async () => undefined);

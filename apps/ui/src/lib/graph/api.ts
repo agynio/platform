@@ -1,4 +1,4 @@
-import type { NodeStatus, TemplateSchema } from './types';
+import type { NodeStatus, TemplateSchema, ReminderDTO } from './types';
 // Minimal graph type (align with backend PersistedGraphUpsertRequest shape)
 export interface PersistedGraphUpsertRequestUI {
   name?: string;
@@ -35,6 +35,8 @@ function isLikelyJsonSchemaRoot(obj: unknown): obj is Record<string, unknown> {
 
 export const api = {
   getTemplates: () => http<TemplateSchema[]>(`${BASE}/graph/templates`),
+  // Reminders for RemindMe tool node
+  getNodeReminders: (nodeId: string) => http<{ items: ReminderDTO[] }>(`${BASE}/graph/nodes/${encodeURIComponent(nodeId)}/reminders`),
   // Vault autocomplete endpoints (only available when enabled server-side)
   listVaultMounts: () => http<{ items: string[] }>(`${BASE}/api/vault/mounts`).catch(() => ({ items: [] })),
   listVaultPaths: (mount: string, prefix = '') =>
