@@ -28,13 +28,15 @@ function getNodeIdFromSpan(span: SpanDoc): string | undefined {
   const isTool = attrs['kind'] === 'tool_call' || (label.startsWith('tool:') === true);
   const isAgent = attrs['kind'] === 'agent' || label === 'agent';
 
-  // For tool spans, prefer attributes.toolNodeId (Tool id), fallback to nodeId for legacy
+  // For tool spans, use ONLY top-level nodeId (Tool id). No fallback to legacy attributes.toolNodeId
   if (isTool) {
-    const toolNodeId = (attrs['toolNodeId'] as string | undefined) || undefined;
-    if (toolNodeId && typeof toolNodeId === 'string' && toolNodeId.length > 0) return toolNodeId;
+    const nodeIdNew = span.nodeId || (attrs['nodeId'] as string | undefined) || undefined;
+    if (nodeIdNew && typeof nodeIdNew === 'string' && nodeIdNew.length > 0) return nodeIdNew;
+    // If absent, do not attribute tool activity to any node (surfacing missing instrumentation)
+    return undefined;
   }
 
-  // For non-tool or when no toolNodeId present, use the standard nodeId
+  // For non-tool, use the standard nodeId
   const nodeId = span.nodeId || (attrs['nodeId'] as string | undefined) || undefined;
   if (typeof nodeId === 'string' && nodeId.length > 0) return nodeId;
   return undefined;

@@ -85,15 +85,21 @@ describe('runningStore transitions', () => {
     expect(result.current).toBe(N - 1);
   });
 
-  it('tool bucket falls back to legacy nodeId when toolNodeId missing', async () => {
+  it('tool bucket only counts when nodeId equals Tool id', async () => {
     const { result } = renderHook(() => useRunningCount(nodeId, 'tool'));
     expect(result.current).toBe(0);
+    // Missing nodeId on tool_call should not count, even if legacy toolNodeId present
     act(() => {
-      upsert({ traceId: 'tf', spanId: 'sf', label: 'tool:legacy', status: 'running', startTime: now(), completed: false, lastUpdate: now(), attributes: { kind: 'tool_call' }, nodeId });
+      upsert({ traceId: 'tf', spanId: 'sf', label: 'tool:legacy', status: 'running', startTime: now(), completed: false, lastUpdate: now(), attributes: { kind: 'tool_call', toolNodeId: nodeId } });
+    });
+    expect(result.current).toBe(0);
+    // Properly attributed with nodeId should count
+    act(() => {
+      upsert({ traceId: 'tf2', spanId: 'sf2', label: 'tool:new', status: 'running', startTime: now(), completed: false, lastUpdate: now(), attributes: { kind: 'tool_call' }, nodeId });
     });
     expect(result.current).toBe(1);
     act(() => {
-      upsert({ traceId: 'tf', spanId: 'sf', label: 'tool:legacy', status: 'ok', startTime: now(), completed: true, lastUpdate: now(), attributes: { kind: 'tool_call' }, nodeId });
+      upsert({ traceId: 'tf2', spanId: 'sf2', label: 'tool:new', status: 'ok', startTime: now(), completed: true, lastUpdate: now(), attributes: { kind: 'tool_call' }, nodeId });
     });
     expect(result.current).toBe(0);
   });

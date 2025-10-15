@@ -35,8 +35,8 @@ class EchoTool extends BaseTool {
 }
 
 describe('ToolsNode tool_call span attribution', () => {
-  it('stamps nodeId=agent and toolNodeId=tool when provided', async () => {
-    const node = new ToolsNode([new EchoTool()], 'agent-node-id');
+  it('stamps nodeId=Tool id when provided (no toolNodeId attribute)', async () => {
+    const node = new ToolsNode([new EchoTool()], 'agent-node-id'); // agent id should NOT be used for tool_call spans
     const ai = new AIMessage({ content: '', tool_calls: [{ id: '1', name: 'echo', args: { x: 1 } }] } as any);
     const config = { configurable: { thread_id: 't1', nodeId: 'tool-node-id' } } as any;
     const res = await node.action({ messages: [ai] } as any, config);
@@ -44,12 +44,13 @@ describe('ToolsNode tool_call span attribution', () => {
     const obs: any = await import('@hautech/obs-sdk');
     const captured = (obs as any).__test.captured as Array<{ nodeId?: string; toolNodeId?: string }>;
     expect(captured.length).toBeGreaterThan(0);
-    expect(captured[0].nodeId).toBe('agent-node-id');
-    expect(captured[0].toolNodeId).toBeDefined();
-    expect(captured[0].toolNodeId).toBe('tool-node-id');
+    // nodeId should equal the Tool node id
+    expect(captured[0].nodeId).toBe('tool-node-id');
+    // toolNodeId is no longer emitted
+    expect(captured[0].toolNodeId).toBeUndefined();
   });
 
-  it('stamps nodeId=agent and no toolNodeId when not provided', async () => {
+  it('omits nodeId when Tool id not provided (no agent fallback)', async () => {
     const obs: any = await import('@hautech/obs-sdk');
     (obs as any).__test.captured.length = 0; // reset captured
 
@@ -59,7 +60,8 @@ describe('ToolsNode tool_call span attribution', () => {
     expect(res.done).toBeFalsy();
     const captured = (obs as any).__test.captured as Array<{ nodeId?: string; toolNodeId?: string }>;
     expect(captured.length).toBeGreaterThan(0);
-    expect(captured[0].nodeId).toBe('agent-node-id');
+    // No nodeId should be set when tool id is missing
+    expect(captured[0].nodeId).toBeUndefined();
     expect(captured[0].toolNodeId).toBeUndefined();
   });
 });
