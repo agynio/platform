@@ -12,7 +12,7 @@ import { LoggerService } from '../services/logger.service';
 import { Errors } from './errors';
 import { PortsRegistry } from './ports.registry';
 import { TemplateRegistry } from './templateRegistry';
-import type { Pausable, ProvisionStatus, Provisionable, DynamicConfigurable } from './capabilities';
+import type { NodeLifecycle } from '../nodes/node.types';
 
 const configsEqual = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b); // unchanged
 
@@ -26,8 +26,7 @@ export class LiveGraphRuntime {
     lastGraph: undefined,
   };
 
-  // Track paused state for nodes that don't implement isPaused()
-  private pausedFallback = new Set<string>();
+  // Simplified lifecycle: no paused/provision fallbacks
 
   private applying: Promise<unknown> = Promise.resolve(); // serialize updates
   private portsRegistry: PortsRegistry;
@@ -69,62 +68,24 @@ export class LiveGraphRuntime {
     return this.applying as Promise<GraphDiffResult>;
   }
 
-  // Runtime helpers for Pausable/Provisionable
-  private hasMethod(o: unknown, name: string): boolean {
-    return !!o && typeof (o as Record<string, unknown>)[name] === 'function';
+  // Node lifecycle API
+  async startNode(id: string): Promise<void> {
+    const inst = this.state.nodes.get(id)?.instance as NodeLifecycle | undefined;
+    if (inst && typeof inst.start === 'function') await inst.start();
   }
-  private isPausable(o: unknown): o is Pausable {
-    return this.hasMethod(o, 'pause') && this.hasMethod(o, 'resume');
+  async stopNode(id: string): Promise<void> {
+    const inst = this.state.nodes.get(id)?.instance as NodeLifecycle | undefined;
+    if (inst && typeof inst.stop === 'function') await inst.stop();
   }
-  private isProvisionable(o: unknown): o is Provisionable {
-    return (
-      this.hasMethod(o, 'getProvisionStatus') && this.hasMethod(o, 'provision') && this.hasMethod(o, 'deprovision')
-    );
+  async configureNode(id: string, cfg: Record<string, unknown>): Promise<void> {
+    const live = this.state.nodes.get(id);
+    if (!live) return;
+    const inst = live.instance as NodeLifecycle | undefined;
+    if (inst && typeof inst.configure === 'function') await inst.configure(cfg || {});
+    this.updateNodeConfig(id, cfg || {});
   }
-  private isDynConfigurable(o: unknown): o is DynamicConfigurable {
-    return this.hasMethod(o, 'isDynamicConfigReady');
-  }
-
-  async pauseNode(id: string): Promise<void> {
-    const inst = this.state.nodes.get(id)?.instance as unknown;
-    if (this.isPausable(inst)) await inst.pause();
-    else this.pausedFallback.add(id);
-  }
-  async resumeNode(id: string): Promise<void> {
-    const inst = this.state.nodes.get(id)?.instance as unknown;
-    if (this.isPausable(inst)) await inst.resume();
-    else this.pausedFallback.delete(id);
-  }
-  async provisionNode(id: string): Promise<void> {
-    const inst = this.state.nodes.get(id)?.instance as unknown;
-    if (this.isProvisionable(inst)) await inst.provision();
-  }
-  async deprovisionNode(id: string): Promise<void> {
-    const inst = this.state.nodes.get(id)?.instance as unknown;
-    if (this.isProvisionable(inst)) await inst.deprovision();
-  }
-  getNodeStatus(id: string): { isPaused?: boolean; provisionStatus?: ProvisionStatus; dynamicConfigReady?: boolean } {
-    const inst = this.state.nodes.get(id)?.instance as unknown;
-    const out: { isPaused?: boolean; provisionStatus?: ProvisionStatus; dynamicConfigReady?: boolean } = {};
-    if (inst) {
-      if (this.hasMethod(inst, 'isPaused')) {
-        const fn = (inst as any)['isPaused'] as () => unknown; // dynamic reflection
-        out.isPaused = !!fn.call(inst);
-      } else {
-        out.isPaused = this.pausedFallback.has(id);
-      }
-      if (this.isProvisionable(inst)) {
-        const fn = (inst as any)['getProvisionStatus'] as () => unknown;
-        out.provisionStatus = fn.call(inst) as ProvisionStatus;
-      }
-      if (this.isDynConfigurable(inst)) {
-        const fn = (inst as any)['isDynamicConfigReady'] as () => unknown;
-        out.dynamicConfigReady = !!fn.call(inst);
-      }
-    } else {
-      out.isPaused = this.pausedFallback.has(id);
-    }
-    return out;
+  async deleteNode(id: string): Promise<void> {
+    await this.disposeNode(id);
   }
 
   private async _applyGraphInternal(next: GraphDefinition): Promise<GraphDiffResult> {
@@ -170,7 +131,7 @@ export class LiveGraphRuntime {
       const live = this.state.nodes.get(nodeId);
       if (!live) continue;
       try {
-        const setter = (live.instance as any)['setConfig'];
+        const setter = (live.instance as any)['configure'];
         if (typeof setter === 'function') await (setter as Function).call(live.instance, nodeDef.data.config || {});
         live.config = nodeDef.data.config || {};
       } catch (e) {
@@ -293,7 +254,7 @@ export class LiveGraphRuntime {
     const live: LiveNode = { id: node.id, template: node.data.template, instance: created, config: node.data.config };
     this.state.nodes.set(node.id, live);
     if (node.data.config) {
-      const setter = (created as any)['setConfig'];
+      const setter = (created as any)['configure'];
       if (typeof setter === 'function') await (setter as Function).call(created, node.data.config);
     }
     if (node.data.dynamicConfig) { // New block for dynamic config
@@ -328,26 +289,10 @@ export class LiveGraphRuntime {
         this.unregisterEdgeRecord(rec);
       }
     }
-    // Call lifecycle teardown if present
-    const inst = live.instance as unknown;
-    if (inst) {
-      const destroy = (inst as Record<string, unknown>)['destroy'];
-      if (typeof destroy === 'function') {
-        try {
-          await (destroy as Function).call(inst);
-        } catch {}
-      } else {
-        // fallback legacy
-        for (const method of ['dispose', 'close', 'stop'] as const) {
-          const fn = (inst as Record<string, unknown>)[method];
-          if (typeof fn === 'function') {
-            try {
-              await (fn as Function).call(inst);
-            } catch {}
-            break;
-          }
-        }
-      }
+    // Call lifecycle teardown if present (delete)
+    const inst = live.instance as NodeLifecycle | undefined;
+    if (inst && typeof inst.delete === 'function') {
+      try { await inst.delete(); } catch {}
     }
     this.state.nodes.delete(nodeId);
     this.state.inboundEdges.delete(nodeId);

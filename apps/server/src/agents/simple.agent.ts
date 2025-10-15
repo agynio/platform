@@ -427,8 +427,8 @@ export class SimpleAgent extends BaseAgent {
    * Dynamically set configuration values like the system prompt.
    */
   // Overload preserves BaseAgent signature while exposing a more precise config shape for callers.
-  setConfig(config: Partial<SimpleAgentStaticConfig> & Record<string, unknown>): void;
-  setConfig(config: Record<string, unknown>): void {
+  configure(config: Partial<SimpleAgentStaticConfig> & Record<string, unknown>): void;
+  configure(config: Record<string, unknown>): void {
     const parsedConfig = SimpleAgentStaticConfigSchema.partial().parse(
       Object.fromEntries(
         Object.entries(config).filter(([k]) =>
@@ -515,7 +515,7 @@ export class SimpleAgent extends BaseAgent {
     // Attempt to call stop/destroy lifecycle if available
     const anyServer: any = server;
     try {
-      if (typeof anyServer.destroy === 'function') await anyServer.destroy();
+      if (typeof anyServer.delete === 'function') await anyServer.delete();
       else if (typeof anyServer.stop === 'function') await anyServer.stop();
     } catch (e) {
       const msg = e instanceof Error ? `${e.name}: ${e.message}` : String(e);

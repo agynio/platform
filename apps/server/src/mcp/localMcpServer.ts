@@ -265,10 +265,8 @@ export class LocalMCPServer implements McpServer, Provisionable, DynamicConfigur
     return this.toolsCache ?? [];
   }
 
-  async start(): Promise<void> {
-    // Backward-compat: delegate to provision()
-    return this.provision();
-  }
+  // Node lifecycle API
+  async start(): Promise<void> { return this.provision(); }
 
   /** Inject a container provider (graph edge). If server already started with a different container, no action taken. */
   setContainerProvider(provider: ContainerProviderEntity | undefined): void {
@@ -276,7 +274,7 @@ export class LocalMCPServer implements McpServer, Provisionable, DynamicConfigur
   }
 
   /** Update runtime configuration (only env/workdir/command currently applied to next restart). */
-  async setConfig(cfg: Record<string, unknown>): Promise<void> {
+  async configure(cfg: Record<string, unknown>): Promise<void> {
     const parsed = LocalMcpServerStaticConfigSchema.safeParse(cfg);
     if (!parsed.success) {
       this.logger.error(
@@ -417,17 +415,14 @@ export class LocalMCPServer implements McpServer, Provisionable, DynamicConfigur
     }
   }
 
-  async stop(): Promise<void> {
-    // Backward-compat: delegate to deprovision()
-    return this.deprovision();
-  }
+  async stop(): Promise<void> { return this.deprovision(); }
 
   /**
    * Full teardown invoked by graph runtime when node removed. Ensures no further retries
    * or background timers are left running and clears intent flags so the server will not
    * auto-start again due to late dependency resolution events.
    */
-  async destroy(): Promise<void> {
+  async delete(): Promise<void> {
     this.wantStart = false; // cancel intent so maybeStart() does nothing further
     await this.stop();
     this.toolsCache = null;

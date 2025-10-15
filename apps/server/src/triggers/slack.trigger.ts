@@ -46,7 +46,7 @@ export class SlackTrigger extends BaseTrigger {
     this.vault = vault;
   }
 
-  async setConfig(cfg: Record<string, unknown>): Promise<void> {
+  async configure(cfg: Record<string, unknown>): Promise<void> {
     const parsed = SlackTriggerStaticConfigSchema.parse(cfg || {});
     // Normalize to { value, source }
     const appToken = normalizeTokenRef(parsed.app_token as any);
@@ -154,7 +154,7 @@ export class SlackTrigger extends BaseTrigger {
     this.logger.info('SlackTrigger stopped');
   }
 
-  // Backward-compatible public API
+  // Node lifecycle API (idempotent)
   async start(): Promise<void> { await this.provision(); }
   async stop(): Promise<void> { await this.deprovision(); }
 

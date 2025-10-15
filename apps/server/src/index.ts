@@ -212,43 +212,56 @@ async function bootstrap() {
   // Bridge runtime endpoints for UI (/graph/*)
   fastify.get('/graph/templates', async () => templateRegistry.toSchema());
 
-  fastify.get('/graph/nodes/:nodeId/status', async (req) => {
+  fastify.post('/graph/nodes/:nodeId/start', async (req, reply) => {
     const { nodeId } = req.params as { nodeId: string };
-    return runtime.getNodeStatus(nodeId);
-  });
-
-  fastify.post('/graph/nodes/:nodeId/actions', async (req, reply) => {
-    const { nodeId } = req.params as { nodeId: string };
-    const body = req.body as { action?: string };
     try {
-      switch (body.action) {
-        case 'pause':
-          await runtime.pauseNode(nodeId);
-          break;
-        case 'resume':
-          await runtime.resumeNode(nodeId);
-          break;
-        case 'provision':
-          await runtime.provisionNode(nodeId);
-          // Start background readiness watcher after provision
-          readinessWatcher?.start(nodeId);
-          break;
-        case 'deprovision':
-          await runtime.deprovisionNode(nodeId);
-          // Stop any watcher if node is deprovisioned
-          readinessWatcher?.stop(nodeId);
-          break;
-        default:
-          reply.code(400);
-          return { error: 'unknown_action' };
-      }
+      await runtime.startNode(nodeId);
+      readinessWatcher?.start(nodeId);
       emitStatus(nodeId);
       reply.code(204);
       return null;
     } catch (e: any) {
-      // eslint-disable-line @typescript-eslint/no-explicit-any
       reply.code(500);
-      return { error: e.message || 'action_failed' };
+      return { error: e.message || 'start_failed' };
+    }
+  });
+  fastify.post('/graph/nodes/:nodeId/stop', async (req, reply) => {
+    const { nodeId } = req.params as { nodeId: string };
+    try {
+      await runtime.stopNode(nodeId);
+      readinessWatcher?.stop(nodeId);
+      emitStatus(nodeId);
+      reply.code(204);
+      return null;
+    } catch (e: any) {
+      reply.code(500);
+      return { error: e.message || 'stop_failed' };
+    }
+  });
+  fastify.post('/graph/nodes/:nodeId/configure', async (req, reply) => {
+    const { nodeId } = req.params as { nodeId: string };
+    const body = (req.body || {}) as { config?: Record<string, unknown> };
+    try {
+      await runtime.configureNode(nodeId, body.config || {});
+      emitStatus(nodeId);
+      reply.code(204);
+      return null;
+    } catch (e: any) {
+      reply.code(500);
+      return { error: e.message || 'configure_failed' };
+    }
+  });
+  fastify.delete('/graph/nodes/:nodeId', async (req, reply) => {
+    const { nodeId } = req.params as { nodeId: string };
+    try {
+      await runtime.deleteNode(nodeId);
+      readinessWatcher?.stop(nodeId);
+      emitStatus(nodeId);
+      reply.code(204);
+      return null;
+    } catch (e: any) {
+      reply.code(500);
+      return { error: e.message || 'delete_failed' };
     }
   });
   // Removed per-node config & dynamic-config endpoints; config updates now flow through full /api/graph saves.
