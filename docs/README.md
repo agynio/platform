@@ -6,6 +6,20 @@
 - MCP Design: [mcp-design.md](mcp-design.md)
 - Slack migration: [slack-migration.md](slack-migration.md)
 
+## Refactor Direction
+
+This repository is converging on a single Node lifecycle and unified nodes structure.
+
+- Lifecycle and semantics: [LIFECYCLE.md](LIFECYCLE.md)
+- Architecture conventions: [ARCHITECTURE.md](ARCHITECTURE.md)
+- Migration plan: [MIGRATION.md](MIGRATION.md)
+
+Key decisions:
+- Single Node interface: `configure()`, `start()`, `stop()`, `delete()`; all methods idempotent with explicit allowed calls per state.
+- Everything is a Node and lives under `apps/server/src/nodes/` (tools, triggers, workspace provider, MCP servers, memory, agents, etc.).
+- Agent-as-Node: Agents implement the same lifecycle; constructors are DI-only; `start()` performs setup/compilation; existing scheduling/buffering is retained.
+- Templates must be pure: construct nodes only; lifecycle is managed by orchestration.
+
 ## Recent Additions
 
 - Workspace container provider supports an optional `platform` static field with allowed values `linux/amd64` or `linux/arm64`. When set, Docker image pulls include the platform selector and container creation uses the same platform (as a query parameter). Newly created containers are labeled with `hautech.ai/platform` for future reuse decisions. If a workspace is requested with a platform and an existing container has a different or missing platform label, it will not be reused; it is stopped and removed, and a new one is created. Note: Running a non-native platform may be slower depending on Docker's emulation.
