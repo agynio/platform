@@ -14,6 +14,19 @@ export const UnifiedMemoryToolStaticConfigSchema = z
   })
   .strict();
 
+// Node-level static config for the tool instance (UI). Mirrors call_agent pattern.
+export const UnifiedMemoryToolNodeStaticConfigSchema = z
+  .object({
+    description: z.string().min(1).optional().describe('Optional description for tool metadata.'),
+    name: z
+      .string()
+      .regex(/^[a-z0-9_]{1,64}$/)
+      .optional()
+      .describe('Optional tool name (a-z, 0-9, underscore). Default: memory'),
+    title: z.string().min(1).optional().describe('UI-only title for the node.'),
+  })
+  .strict();
+
 type Cmd = z.infer<typeof UnifiedMemoryToolStaticConfigSchema>['command'];
 
 // Minimal service surface used by the tool
@@ -30,6 +43,12 @@ export class UnifiedMemoryTool extends MemoryToolBase {
   constructor(logger: LoggerService) {
     super(logger);
   }
+
+  // Default metadata; can be overridden by setConfig
+  private description: string = 'Unified Memory tool: read, list, append, update, delete';
+  private name: string | undefined;
+  // UI-only; stored for completeness
+  private title: string | undefined;
 
   private makeEnvelope(
     command: Cmd | string,
@@ -64,7 +83,16 @@ export class UnifiedMemoryTool extends MemoryToolBase {
     return { message, code };
   }
 
-  
+  async setConfig(cfg: Record<string, unknown>): Promise<void> {
+    const parsed = UnifiedMemoryToolNodeStaticConfigSchema.safeParse(cfg);
+    if (!parsed.success) {
+      throw new Error('Invalid Memory tool config');
+    }
+    const { name, description, title } = parsed.data;
+    if (description) this.description = description;
+    if (name) this.name = name;
+    if (title) this.title = title;
+  }
 
   init(_config?: LangGraphRunnableConfig): DynamicStructuredTool {
     const schema = UnifiedMemoryToolStaticConfigSchema;
@@ -142,7 +170,7 @@ export class UnifiedMemoryTool extends MemoryToolBase {
           return this.makeEnvelope(command, path, false, undefined, err);
         }
       },
-      { name: 'memory', description: 'Unified Memory tool: read, list, append, update, delete', schema },
+      { name: this.name || 'memory', description: this.description, schema },
     );
   }
 }

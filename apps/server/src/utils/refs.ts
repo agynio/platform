@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import type { VaultRef } from '../services/vault.service';
+import type { VaultRef, VaultService } from '../services/vault.service';
 
 // Shared Vault reference parser: 'mount/path/key'
 export function parseVaultRef(ref: string): VaultRef {
@@ -19,3 +19,36 @@ export const ReferenceFieldSchema = z
   .object({ value: z.string(), source: z.enum(['static', 'vault']).optional().default('static') })
   .strict();
 
+export type ReferenceValue = z.infer<typeof ReferenceFieldSchema>;
+
+// Normalize a token reference from union input
+export function normalizeTokenRef(input: string | ReferenceValue): ReferenceValue {
+  if (typeof input === 'string') return { value: input, source: 'static' };
+  return { value: input.value, source: input.source || 'static' };
+}
+
+// Resolve a token reference, validating expected prefix and handling vault semantics
+export async function resolveTokenRef(
+  ref: ReferenceValue,
+  opts: { expectedPrefix: string; fieldName: string; vault?: VaultService },
+): Promise<string> {
+  const { expectedPrefix, fieldName, vault } = opts;
+  if ((ref.source || 'static') === 'vault') {
+    if (!vault || !vault.isEnabled()) {
+      throw new Error(`Vault is disabled but a vault reference was provided for ${fieldName}`);
+    }
+    const vr = parseVaultRef(ref.value);
+    const secret = await vault.getSecret(vr);
+    if (!secret) throw new Error(`Vault secret for ${fieldName} not found`);
+    if (!String(secret).startsWith(expectedPrefix)) {
+      const name = fieldName === 'bot_token' ? 'bot token' : 'app token';
+      throw new Error(`Resolved Slack ${name} is invalid (must start with ${expectedPrefix})`);
+    }
+    return secret;
+  }
+  if (!ref.value?.startsWith(expectedPrefix)) {
+    const name = fieldName === 'bot_token' ? 'bot token' : 'app token';
+    throw new Error(`Slack ${name} must start with ${expectedPrefix}`);
+  }
+  return ref.value;
+}
