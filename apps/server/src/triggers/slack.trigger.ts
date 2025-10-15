@@ -35,13 +35,15 @@ export const SlackTriggerExposedStaticConfigSchema = z
  * (non-bot, non-thread broadcast) to subscribers via notify().
  */
 export class SlackTrigger extends BaseTrigger {
-  private logger: LoggerService;
   private cfg: { app_token: { value: string; source?: 'static' | 'vault' } } | null = null;
   private client: SocketModeClient | null = null;
   private vault?: VaultService;
 
-  constructor(logger: LoggerService, vault?: VaultService) {
-    super();
+  constructor(
+    protected logger: LoggerService,
+    vault?: VaultService,
+  ) {
+    super(logger);
     this.logger = logger;
     this.vault = vault;
   }
@@ -62,13 +64,18 @@ export class SlackTrigger extends BaseTrigger {
       }
     }
     this.cfg = { app_token: appToken };
+    void this.start();
   }
 
   private async resolveAppToken(): Promise<string> {
     const cfg = this.cfg;
+    console.log(cfg, this.cfg);
     if (!cfg) throw new Error('SlackTrigger not configured: app_token is required');
     const t = cfg.app_token;
-    return resolveTokenRef(t, { expectedPrefix: 'xapp-', fieldName: 'app_token', vault: this.vault });
+    console.log(t);
+    const resolved = await resolveTokenRef(t, { expectedPrefix: 'xapp-', fieldName: 'app_token', vault: this.vault });
+    console.log(resolved);
+    return resolved;
   }
 
   private async ensureClient(): Promise<SocketModeClient> {

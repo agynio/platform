@@ -179,7 +179,6 @@ export function buildTemplateRegistry(deps: TemplateRegistryDeps): TemplateRegis
         'slackTrigger',
         () => {
           const instance = new SlackTrigger(logger, vault);
-          void instance.start();
           return instance;
         },
         {
