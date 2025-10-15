@@ -32,9 +32,9 @@ describe('ShellTool env/workdir isolation with vault-backed overlay', () => {
     const fakeVault = { isEnabled: () => true, getSecret: vi.fn(async () => 'VAULTED') } as any;
 
     const a = new ShellTool(fakeVault, logger); a.setContainerProvider(provider);
-    await a.setConfig({ env: [ { key: 'FOO', value: 'A' }, { key: 'BAR', value: 'secret/path/key', source: 'vault' } ], workdir: '/w/a' });
+    await a.configure({ env: [ { key: 'FOO', value: 'A' }, { key: 'BAR', value: 'secret/path/key', source: 'vault' } ], workdir: '/w/a' });
     const b = new ShellTool(undefined as any, logger); b.setContainerProvider(provider);
-    await b.setConfig({ env: [ { key: 'FOO', value: 'B' } ], workdir: '/w/b' });
+    await b.configure({ env: [ { key: 'FOO', value: 'B' } ], workdir: '/w/b' });
 
     const at = a.init();
     const bt = b.init();

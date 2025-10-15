@@ -28,7 +28,7 @@ describe('Runtime helpers and GraphService API surfaces', () => {
       private status: ProvisionStatus = { state: 'not_ready' };
       private dynReady = false;
       private listeners: Array<(s: ProvisionStatus)=>void> = [];
-      setConfig = vi.fn(async (_cfg: Record<string, unknown>) => {});
+      configure = vi.fn(async (_cfg: Record<string, unknown>) => {});
       pause() { this.paused = true; }
       resume() { this.paused = false; }
       isPaused() { return this.paused; }
@@ -66,7 +66,7 @@ describe('Runtime helpers and GraphService API surfaces', () => {
     const { registry, runtime } = makeRuntimeAndRegistry();
 
     // Expand template with capabilities and static schema
-    registry.register('dyn', async () => ({ setConfig: async () => {} } as any), { sourcePorts: {}, targetPorts: {} }, {
+    registry.register('dyn', async () => ({ configure: async () => {} } as any), { sourcePorts: {}, targetPorts: {} }, {
       title: 'Dyn', kind: 'tool', capabilities: { pausable: true, provisionable: true, dynamicConfigurable: true, staticConfigurable: false },
       staticConfigSchema: { type: 'object', properties: {} } as any,
     });
@@ -76,7 +76,7 @@ describe('Runtime helpers and GraphService API surfaces', () => {
       isDynamicConfigReady() { return true; }
       getDynamicConfigSchema() { return { type: 'object', properties: { a: { type: 'boolean' } } } as any; }
       setDynamicConfig = vi.fn((_cfg: Record<string, unknown>) => {});
-      setConfig = vi.fn(async (_cfg: Record<string, unknown>) => {});
+      configure = vi.fn(async (_cfg: Record<string, unknown>) => {});
     }
     registry.register('dyn2', async () => new DynNode() as any, { sourcePorts: {}, targetPorts: {} }, { title: 'Dyn2', kind: 'tool' });
 
@@ -103,8 +103,8 @@ describe('Runtime helpers and GraphService API surfaces', () => {
     expect(instB.setDynamicConfig).toHaveBeenCalledWith({ a: true });
 
     // setNodeConfig on instance directly
-    instB.setConfig = vi.fn();
-    await instB.setConfig({ x: 1 });
-    expect(instB.setConfig).toHaveBeenCalledWith({ x: 1 });
+    instB.configure = vi.fn();
+    await instB.configure({ x: 1 });
+    expect(instB.configure).toHaveBeenCalledWith({ x: 1 });
   });
 });

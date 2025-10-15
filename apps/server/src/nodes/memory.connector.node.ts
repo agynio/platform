@@ -37,7 +37,7 @@ export class MemoryConnectorNode {
     this.setServiceFactory(source);
   }
 
-  setConfig(config: Partial<MemoryConnectorConfig> & Partial<MemoryConnectorStaticConfig>) {
+  configure(config: Partial<MemoryConnectorConfig> & Partial<MemoryConnectorStaticConfig>) {
     const next: Partial<MemoryConnectorConfig> = { ...this.config };
     if (config.placement !== undefined) next.placement = config.placement as any;
     if (config.content !== undefined) next.content = config.content as any;

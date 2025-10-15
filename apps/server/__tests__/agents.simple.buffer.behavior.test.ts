@@ -66,7 +66,7 @@ describe('SimpleAgent buffer behavior', () => {
     });
     const logger = { info: vi.fn(), debug: vi.fn(), error: vi.fn() } as unknown as LoggerService;
     const agent = new SimpleAgent(cfg, logger as any, new CheckpointerService(new LoggerService()) as any, 'agent-deb');
-    agent.setConfig({ debounceMs: 50, processBuffer: 'allTogether' });
+    agent.configure({ debounceMs: 50, processBuffer: 'allTogether' });
 
     const p1 = agent.invoke('td', { content: 'a', info: {} });
     // Enqueue another within debounce window; should batch into the same run
@@ -91,7 +91,7 @@ describe('SimpleAgent buffer behavior', () => {
     });
     const logger = { info: vi.fn(), debug: vi.fn(), error: vi.fn() } as unknown as LoggerService;
     const agent = new SimpleAgent(cfg, logger as any, new CheckpointerService(new LoggerService()) as any, 'agent-one');
-    agent.setConfig({ processBuffer: 'oneByOne' });
+    agent.configure({ processBuffer: 'oneByOne' });
     const msgs: TriggerMessage[] = [
       { content: 'a', info: {} },
       { content: 'b', info: {} },
@@ -110,7 +110,7 @@ describe('SimpleAgent buffer behavior', () => {
     });
     const logger = { info: vi.fn(), debug: vi.fn(), error: vi.fn() } as unknown as LoggerService;
     const agent = new SimpleAgent(cfg, logger as any, new CheckpointerService(new LoggerService()), 'agent-all');
-    agent.setConfig({ processBuffer: 'allTogether', debounceMs: 0 });
+    agent.configure({ processBuffer: 'allTogether', debounceMs: 0 });
     const msgs: TriggerMessage[] = [
       { content: 'a', info: {} },
       { content: 'b', info: {} },
@@ -124,7 +124,7 @@ describe('SimpleAgent buffer behavior', () => {
 
   it("whenBusy='injectAfterTools' injects messages during in-flight run", async () => {
     const agent = makeAgent();
-    agent.setConfig({ whenBusy: 'injectAfterTools', debounceMs: 0 });
+    agent.configure({ whenBusy: 'injectAfterTools', debounceMs: 0 });
     // Kick off a run with one message
     const p = agent.invoke('t2', { content: 'start', info: {} });
     // Immediately enqueue another which should be injected into the current run

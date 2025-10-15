@@ -170,7 +170,7 @@ export class LiveGraphRuntime {
       const live = this.state.nodes.get(nodeId);
       if (!live) continue;
       try {
-        const setter = (live.instance as any)['setConfig'];
+        const setter = (live.instance as any)['configure'];
         if (typeof setter === 'function') await (setter as Function).call(live.instance, nodeDef.data.config || {});
         live.config = nodeDef.data.config || {};
       } catch (e) {
@@ -293,7 +293,7 @@ export class LiveGraphRuntime {
     const live: LiveNode = { id: node.id, template: node.data.template, instance: created, config: node.data.config };
     this.state.nodes.set(node.id, live);
     if (node.data.config) {
-      const setter = (created as any)['setConfig'];
+      const setter = (created as any)['configure'];
       if (typeof setter === 'function') await (setter as Function).call(created, node.data.config);
     }
     if (node.data.dynamicConfig) { // New block for dynamic config

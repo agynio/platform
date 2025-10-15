@@ -46,7 +46,7 @@ export class SlackTrigger extends BaseTrigger {
     this.vault = vault;
   }
 
-  async setConfig(cfg: Record<string, unknown>): Promise<void> {
+  async configure(cfg: Record<string, unknown>): Promise<void> {
     const parsed = SlackTriggerStaticConfigSchema.parse(cfg || {});
     // Normalize to { value, source }
     const appToken = normalizeTokenRef(parsed.app_token as any);

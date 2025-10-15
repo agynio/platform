@@ -179,7 +179,7 @@ export function buildTemplateRegistry(deps: TemplateRegistryDeps): TemplateRegis
         'slackTrigger',
         () => {
           const instance = new SlackTrigger(logger, vault);
-          void instance.start();
+          // Factories must not call lifecycle methods
           return instance;
         },
         {
@@ -233,7 +233,7 @@ export function buildTemplateRegistry(deps: TemplateRegistryDeps): TemplateRegis
         'mcpServer',
         () => {
           const server = new LocalMCPServer(containerService, logger);
-          void server.start();
+          // Factories must not call lifecycle methods
           return server;
         },
         {

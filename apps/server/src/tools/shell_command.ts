@@ -125,7 +125,7 @@ export class ShellTool extends BaseTool {
     );
   }
 
-  async setConfig(_cfg: Record<string, unknown>): Promise<void> {
+  async configure(_cfg: Record<string, unknown>): Promise<void> {
     const parsed = ShellToolStaticConfigSchema.safeParse(_cfg);
     if (!parsed.success) throw new Error(`Invalid Shell tool config: ${parsed.error.message}`);
     this.cfg = parsed.data;

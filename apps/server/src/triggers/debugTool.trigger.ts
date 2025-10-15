@@ -24,7 +24,7 @@ export class DebugToolTrigger extends BaseTrigger {
     this.tool = tool || null;
   }
 
-  async setConfig(cfg: Record<string, unknown>): Promise<void> {
+  async configure(cfg: Record<string, unknown>): Promise<void> {
     const parsed = DebugToolTriggerStaticConfigSchema.safeParse(cfg);
     if (!parsed.success) throw new Error('Invalid DebugToolTrigger config');
     this.cfg = parsed.data;

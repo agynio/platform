@@ -116,7 +116,7 @@ export class SimpleAgent extends BaseAgent {
     private agentId?: string,
   ) {
     super(loggerService);
-    this.init();
+    // Defer initialization to start(); constructor should not self-init
   }
 
   // Expose nodeId for instrumentation (used by BaseAgent.withAgent wrapper)
@@ -149,7 +149,7 @@ export class SimpleAgent extends BaseAgent {
     });
   }
 
-  init(config: RunnableConfig = { recursionLimit: 2500 }) {
+  private init(config: RunnableConfig = { recursionLimit: 2500 }) {
     if (!this.agentId) throw new Error('agentId is required to initialize SimpleAgent');
 
     this._config = config;
@@ -223,6 +223,33 @@ export class SimpleAgent extends BaseAgent {
 
     // Apply runtime scheduling defaults (debounce=0, whenBusy=wait) already set in BaseAgent; allow overrides from agentId namespace if needed later
     return this;
+  }
+
+  // Lifecycle: start compiles/builds; idempotent
+  async start(): Promise<void> {
+    if (this._graph && this._config) return; // already started
+    this.init();
+  }
+
+  // stop: abort in-flight runs immediately, no graceful wait
+  async stop(): Promise<void> {
+    this.abortAllRuns();
+  }
+
+  // delete: detach MCP servers and memory connectors, then final cleanup
+  async delete(): Promise<void> {
+    try {
+      // Detach memory connector
+      this.detachMemoryConnector();
+    } catch {}
+    try {
+      // Detach all MCP servers
+      const servers = Array.from(this.mcpServerTools.keys());
+      for (const srv of servers) {
+        await this.removeMcpServer(srv);
+      }
+    } catch {}
+    await this.destroy();
   }
 
   // Attach/detach a memory connector into the underlying CallModel
@@ -427,8 +454,8 @@ export class SimpleAgent extends BaseAgent {
    * Dynamically set configuration values like the system prompt.
    */
   // Overload preserves BaseAgent signature while exposing a more precise config shape for callers.
-  setConfig(config: Partial<SimpleAgentStaticConfig> & Record<string, unknown>): void;
-  setConfig(config: Record<string, unknown>): void {
+  configure(config: Partial<SimpleAgentStaticConfig> & Record<string, unknown>): void;
+  configure(config: Record<string, unknown>): void {
     const parsedConfig = SimpleAgentStaticConfigSchema.partial().parse(
       Object.fromEntries(
         Object.entries(config).filter(([k]) =>

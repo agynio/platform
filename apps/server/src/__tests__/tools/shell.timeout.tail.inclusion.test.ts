@@ -24,7 +24,7 @@ describe('ShellTool timeout tail inclusion and ANSI stripping', () => {
     const provider = { provide: vi.fn(async () => fakeContainer) } as any;
     const tool = new ShellTool(undefined as any, logger);
     tool.setContainerProvider(provider);
-    await tool.setConfig({});
+    await tool.configure({});
     const t = tool.init();
 
     await expect(

@@ -24,7 +24,7 @@ describe('ContainerProviderEntity parseVaultRef', () => {
     const svc = new FakeContainerService() as any;
     const vault = new FakeVault() as any;
     const ent = new ContainerProviderEntity(svc, vault, {}, () => ({}));
-    ent.setConfig({ env: [ { key: 'A', value: 'x' }, { key: 'B', value: 'secret/path/key', source: 'vault' } ] });
+    ent.configure({ env: [ { key: 'A', value: 'x' }, { key: 'B', value: 'secret/path/key', source: 'vault' } ] });
     const container: any = await ent.provide('t');
     expect(container.env.A).toBe('x');
     expect(container.env.B).toBe('VAL');

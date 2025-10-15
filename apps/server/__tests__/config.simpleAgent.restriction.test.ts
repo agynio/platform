@@ -12,17 +12,17 @@ vi.mock('../src/services/checkpointer.service', async (importOriginal) => {
 });
 
 describe('SimpleAgent config restrictions', () => {
-  it('setConfig preserves systemPrompt and toggles restriction flags without concatenation', async () => {
+  it('configure preserves systemPrompt and toggles restriction flags without concatenation', async () => {
     const cfg = new ConfigService({
       githubAppId: '1', githubAppPrivateKey: 'k', githubInstallationId: 'i', openaiApiKey: 'x', githubToken: 't', mongodbUrl: 'm',
     } as any);
     const agent = new SimpleAgent(cfg, new LoggerService(), new CheckpointerService(new LoggerService()) as any, 'a1');
     // Update system prompt
-    agent.setConfig({ systemPrompt: 'Base system' });
+    agent.configure({ systemPrompt: 'Base system' });
     // Toggle restriction flags
-    agent.setConfig({ restrictOutput: true, restrictionMessage: 'Please call tools', restrictionMaxInjections: 2 });
+    agent.configure({ restrictOutput: true, restrictionMessage: 'Please call tools', restrictionMaxInjections: 2 });
     // Update again to ensure no concatenation side effects
-    agent.setConfig({ systemPrompt: 'Base system 2' });
+    agent.configure({ systemPrompt: 'Base system 2' });
     // There is no direct getter; we ensure invocation does not throw and behavior is isolated
     const res = await agent.invoke('t', { content: 'hi', info: {} } as any);
     expect(res).toBeDefined();

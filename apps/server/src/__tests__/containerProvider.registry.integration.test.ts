@@ -23,10 +23,9 @@ describe('ContainerProvider + registry hooks', () => {
     const reg = new FakeRegistry();
     svc.setRegistry(reg);
     const provider = new ContainerProviderEntity(svc, {} as any, {}, () => ({ 'hautech.ai/thread_id': 'node__t' }));
-    provider.setConfig({ ttlSeconds: 86400 });
+    provider.configure({ ttlSeconds: 86400 });
     const c = await provider.provide('t');
     expect(c.id).toBe('cid123');
     expect(reg.lastUsed).toContain('cid123');
   });
 });
-

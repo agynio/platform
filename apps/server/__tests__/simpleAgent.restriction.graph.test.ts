@@ -81,14 +81,14 @@ describe('SimpleAgent restriction enforcement', () => {
 
   it('restrictOutput=false: call_model with no tool_calls leads to END (no enforce)', async () => {
     const agent = new SimpleAgent(cfg, new LoggerService(), new CheckpointerService(new LoggerService()) as any, 'a1');
-    agent.setConfig({ restrictOutput: false });
+    agent.configure({ restrictOutput: false });
     const res = await agent.invoke('t', { content: 'hi', info: {} } as any);
     expect(res).toBeDefined();
   });
 
   it('restrictOutput=true & restrictionMaxInjections=0: injects and loops until tool call', async () => {
     const agent = new SimpleAgent(cfg, new LoggerService(), new CheckpointerService(new LoggerService()) as any, 'a2');
-    agent.setConfig({ restrictOutput: true, restrictionMaxInjections: 0 });
+    agent.configure({ restrictOutput: true, restrictionMaxInjections: 0 });
     const res = await agent.invoke('t', { content: 'hi', info: {} } as any);
     expect(res).toBeDefined();
   });
@@ -104,7 +104,7 @@ describe('SimpleAgent restriction enforcement', () => {
     ;(openai as any).ChatOpenAI = NoToolLLM;
 
     const agent = new SimpleAgent(cfg, new LoggerService(), new CheckpointerService(new LoggerService()) as any, 'a3');
-    agent.setConfig({ restrictOutput: true, restrictionMaxInjections: 2 });
+    agent.configure({ restrictOutput: true, restrictionMaxInjections: 2 });
     const res = await agent.invoke('t', { content: 'hello', info: {} } as any);
     expect(res).toBeDefined();
   });

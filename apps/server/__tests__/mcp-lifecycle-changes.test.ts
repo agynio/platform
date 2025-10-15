@@ -21,7 +21,7 @@ describe('MCP Lifecycle Changes', () => {
     };
     
     server.setContainerProvider(mockProvider as any);
-    await server.setConfig({ namespace: 'test' } as McpServerConfig);
+    await server.configure({ namespace: 'test' } as McpServerConfig);
     
     // This would fail if threadId wasn't supported in the interface
     try {

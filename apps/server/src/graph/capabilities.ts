@@ -10,7 +10,7 @@ export interface Pausable {
 }
 
 export interface StaticConfigurable {
-  setConfig(cfg: Record<string, unknown>): Promise<void> | void;
+  configure(cfg: Record<string, unknown>): Promise<void> | void;
   getConfigSchema(): JSONSchema.BaseSchema;
 }
 

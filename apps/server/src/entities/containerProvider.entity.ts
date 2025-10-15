@@ -134,7 +134,7 @@ export class ContainerProviderEntity {
   }
 
   // Accept static configuration (image/env/initialScript). Validation performed via zod schema.
-  setConfig(cfg: Record<string, unknown>): void {
+  configure(cfg: Record<string, unknown>): void {
     try {
       const parsed = ContainerProviderStaticConfigSchema.parse(cfg);
       this.cfg = parsed;

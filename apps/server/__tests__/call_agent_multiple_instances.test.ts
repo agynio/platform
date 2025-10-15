@@ -14,12 +14,12 @@ describe('CallAgentTool configurable name', () => {
     const logger = new LoggerService();
 
     const toolDocs = new CallAgentTool(logger);
-    await toolDocs.setConfig({ description: 'docs', name: 'call_agent_docs' });
+    await toolDocs.configure({ description: 'docs', name: 'call_agent_docs' });
     toolDocs.setAgent(new FakeAgent() as any);
     const dynDocs = toolDocs.init();
 
     const toolOps = new CallAgentTool(logger);
-    await toolOps.setConfig({ description: 'ops', name: 'call_agent_ops' });
+    await toolOps.configure({ description: 'ops', name: 'call_agent_ops' });
     toolOps.setAgent(new FakeAgent() as any);
     const dynOps = toolOps.init();
 

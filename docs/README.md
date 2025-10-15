@@ -16,7 +16,7 @@
     - whenBusy: 'wait' queues new messages; 'injectAfterTools' injects them into the current run after the tools stage.
     - processBuffer: 'allTogether' drains all queued messages; 'oneByOne' processes one message per run.
   - Defaults: `debounceMs=0`, `whenBusy='wait'`, `processBuffer='allTogether'`.
-  - Changes made via `setConfig({...})` apply immediately at runtime without a restart; the agent updates scheduling and summarization behavior in-place.
+  - Changes made via `configure({...})` apply immediately at runtime without a restart; the agent updates scheduling and summarization behavior in-place.
 
 ## Invoke Resolution Semantics
 
