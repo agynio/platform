@@ -34,7 +34,7 @@ export interface FactoryContext {
   nodeId: string; // id of the node currently being instantiated (for namespacing / awareness)
 }
 
-// All factories must return a Configurable instance that implements setConfig
+// All factories must return a Configurable instance that implements configure
 export interface Configurable {
   configure(cfg: Record<string, unknown>): void | Promise<void>;
 }
@@ -73,7 +73,7 @@ export type Endpoint = MethodEndpoint | PropertyEndpoint | SelfEndpoint;
 
 export interface GraphBuilderOptions {
   continueOnError?: boolean; // if true collects errors and proceeds, else fail-fast
-  warnOnMissingSetConfig?: boolean; // log / collect a warning when config provided but setConfig missing
+  warnOnMissingConfigure?: boolean; // log / collect a warning when config provided but configure missing
 }
 
 export interface GraphErrorDetails {

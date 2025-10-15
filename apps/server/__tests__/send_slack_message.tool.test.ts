@@ -64,7 +64,7 @@ describe('SendSlackMessageTool', () => {
     expect(String(res)).toContain('Error sending Slack message');
   });
 
-  it('throws on invalid reference string during setConfig', async () => {
+  it('throws on invalid reference string during configure', async () => {
     const vault = { isEnabled: () => true, getSecret: vi.fn() } as any;
     const tool = new SendSlackMessageTool(logger, vault);
     await expect(tool.configure({ bot_token: { value: 'invalid', source: 'vault' } } as any)).rejects.toThrow();

@@ -44,7 +44,7 @@ export class UnifiedMemoryTool extends MemoryToolBase {
     super(logger);
   }
 
-  // Default metadata; can be overridden by setConfig
+  // Default metadata; can be overridden by configure
   private description: string = 'Unified Memory tool: read, list, append, update, delete';
   private name: string | undefined;
   // UI-only; stored for completeness

@@ -135,7 +135,7 @@ export class LocalMCPServer implements McpServer, Provisionable, DynamicConfigur
    * This is called during agent registration to discover available tools.
    */
   async discoverTools(): Promise<McpTool[]> {
-    if (!this.cfg) throw new Error('LocalMCPServer: config not yet set via setConfig');
+    if (!this.cfg) throw new Error('LocalMCPServer: config not yet set via configure');
     if (!this.containerProvider) throw new Error('LocalMCPServer: no containerProvider set; cannot discover tools');
     if (!this.cfg.command) throw new Error('LocalMCPServer: config.command is required for tool discovery');
 
@@ -300,7 +300,7 @@ export class LocalMCPServer implements McpServer, Provisionable, DynamicConfigur
     args: any,
     options?: { timeoutMs?: number; threadId?: string },
   ): Promise<McpToolCallResult> {
-    if (!this.cfg) throw new Error('LocalMCPServer: config not yet set via setConfig');
+    if (!this.cfg) throw new Error('LocalMCPServer: config not yet set via configure');
     if (!this.containerProvider) throw new Error('LocalMCPServer: no containerProvider set; cannot call tool');
 
     const threadId = options?.threadId;

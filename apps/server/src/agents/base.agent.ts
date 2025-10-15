@@ -48,6 +48,8 @@ export abstract class BaseAgent implements TriggerListener, StaticConfigurable, 
       timer?: NodeJS.Timeout;
     }
   > = new Map();
+  // Abort controllers per in-flight runId
+  private aborters: Map<string, AbortController> = new Map();
 
   get graph() {
     if (!this._graph) {
@@ -258,6 +260,9 @@ export abstract class BaseAgent implements TriggerListener, StaticConfigurable, 
       // Ensure no stale parts remain for these tokens in the buffer
       if (affected.length) this.buffer.dropTokens(thread, affected);
     } finally {
+      // Cleanup abort controller
+      const ac = this.aborters.get(s.inFlight?.runId || runId);
+      if (ac) this.aborters.delete(s.inFlight?.runId || runId);
       s.inFlight = undefined;
       s.running = false;
       this.startNext(thread);
@@ -269,6 +274,9 @@ export abstract class BaseAgent implements TriggerListener, StaticConfigurable, 
     const items = batch.map((msg) =>
       isSystemTrigger(msg) ? new SystemMessage(JSON.stringify(msg)) : new HumanMessage(JSON.stringify(msg)),
     );
+    // Attach abort signal for this run
+    const controller = new AbortController();
+    this.aborters.set(runId, controller);
     const response = (await this.graph.invoke(
       { messages: { method: 'append', items } },
       {
@@ -279,6 +287,7 @@ export abstract class BaseAgent implements TriggerListener, StaticConfigurable, 
           caller_agent: this as InjectionProvider,
           run_id: runId,
         },
+        signal: (controller as any).signal,
       },
     )) as { messages: BaseMessage[] };
     return response.messages?.[response.messages.length - 1];
@@ -315,9 +324,47 @@ export abstract class BaseAgent implements TriggerListener, StaticConfigurable, 
       }
       s.tokens.clear();
     }
+    // Abort any in-flight runs without waiting
+    for (const [, ac] of this.aborters) {
+      try { ac.abort(); } catch {}
+    }
+    this.aborters.clear();
     this.buffer.destroy();
     this.threads.clear();
   }
 
   abstract configure(_cfg: Record<string, unknown>): void | Promise<void>;
+  // Helper for subclasses to implement stop semantics: abort in-flight runs and drop queued messages.
+  protected abortAllRuns(): void {
+    for (const [thread, s] of this.threads) {
+      // Abort current run (if any)
+      const rid = s.inFlight?.runId;
+      if (rid) {
+        const ac = this.aborters.get(rid);
+        try {
+          ac?.abort();
+        } catch {}
+        // Reject affected tokens for this run
+        const affected = Array.from(s.inFlight!.includedCounts.keys());
+        for (const tokenId of affected) {
+          const token = s.tokens.get(tokenId);
+          if (!token) continue;
+          try {
+            token.reject(new Error('aborted'));
+          } catch {}
+          s.tokens.delete(tokenId);
+        }
+      }
+      // Drop any queued messages for this thread
+      this.buffer.dropTokens(thread, Array.from(s.tokens.keys()));
+      // Clear any remaining tokens
+      s.tokens.clear();
+      s.inFlight = undefined;
+      s.running = false;
+      if (s.timer) {
+        clearTimeout(s.timer);
+        s.timer = undefined;
+      }
+    }
+  }
 }

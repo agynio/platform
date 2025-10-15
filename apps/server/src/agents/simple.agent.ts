@@ -97,6 +97,9 @@ export class SimpleAgent extends BaseAgent {
   private mcpServerTools: Map<McpServer, BaseTool[]> = new Map();
   // Persist the underlying ChatOpenAI instance so we can update its model dynamically
   private llm!: ChatOpenAI;
+  // Defaults captured before init to support configure() calls pre-start
+  private initialModel: string = 'gpt-5';
+  private initialSystemPrompt: string | undefined;
 
   private summarizationKeepTokens?: number; // token budget for verbatim tail
   private summarizationMaxTokens?: number;
@@ -116,7 +119,7 @@ export class SimpleAgent extends BaseAgent {
     private agentId?: string,
   ) {
     super(loggerService);
-    this.init();
+    // Defer initialization to start(); constructor should not self-init
   }
 
   // Expose nodeId for instrumentation (used by BaseAgent.withAgent wrapper)
@@ -149,17 +152,20 @@ export class SimpleAgent extends BaseAgent {
     });
   }
 
-  init(config: RunnableConfig = { recursionLimit: 2500 }) {
+  private init(config: RunnableConfig = { recursionLimit: 2500 }) {
     if (!this.agentId) throw new Error('agentId is required to initialize SimpleAgent');
 
     this._config = config;
 
     this.llm = new ChatOpenAI({
-      model: 'gpt-5',
+      model: this.initialModel,
       apiKey: this.configService.openaiApiKey,
     });
 
     this.callModelNode = new CallModelNode([], this.llm);
+    if (this.initialSystemPrompt !== undefined) {
+      this.callModelNode.setSystemPrompt(this.initialSystemPrompt);
+    }
     // Pass this agent's node id to ToolsNode for span attribution
     this.toolsNode = new ToolsNode([], this.agentId);
     this.summarizeNode = new SummarizationNode(this.llm, {
@@ -223,6 +229,33 @@ export class SimpleAgent extends BaseAgent {
 
     // Apply runtime scheduling defaults (debounce=0, whenBusy=wait) already set in BaseAgent; allow overrides from agentId namespace if needed later
     return this;
+  }
+
+  // Lifecycle: start compiles/builds; idempotent
+  async start(): Promise<void> {
+    if (this._graph && this._config) return; // already started
+    this.init();
+  }
+
+  // stop: abort in-flight runs immediately, no graceful wait
+  async stop(): Promise<void> {
+    this.abortAllRuns();
+  }
+
+  // delete: detach MCP servers and memory connectors, then final cleanup
+  async delete(): Promise<void> {
+    try {
+      // Detach memory connector
+      this.detachMemoryConnector();
+    } catch {}
+    try {
+      // Detach all MCP servers
+      const servers = Array.from(this.mcpServerTools.keys());
+      for (const srv of servers) {
+        await this.removeMcpServer(srv);
+      }
+    } catch {}
+    await this.destroy();
   }
 
   // Attach/detach a memory connector into the underlying CallModel
@@ -453,13 +486,15 @@ export class SimpleAgent extends BaseAgent {
     this.applyRuntimeConfig(config);
 
     if (parsedConfig.systemPrompt !== undefined) {
-      this.callModelNode.setSystemPrompt(parsedConfig.systemPrompt);
+      if (this.callModelNode) this.callModelNode.setSystemPrompt(parsedConfig.systemPrompt);
+      this.initialSystemPrompt = parsedConfig.systemPrompt;
       this.loggerService.info('SimpleAgent system prompt updated');
     }
 
     if (parsedConfig.model !== undefined) {
       // Update model on stored llm instance (lightweight change similar to systemPrompt logic)
-      this.llm.model = parsedConfig.model;
+      if (this.llm) this.llm.model = parsedConfig.model;
+      this.initialModel = parsedConfig.model;
       this.loggerService.info(`SimpleAgent model updated to ${parsedConfig.model}`);
     }
 
