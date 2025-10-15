@@ -41,7 +41,7 @@ describe('SlackTrigger and PRTrigger lifecycle', () => {
   it('SlackTrigger start/stop manages socket-mode lifecycle', async () => {
     const logger = new MockLogger() as any;
     const trigger = new SlackTrigger(logger);
-    await trigger.setConfig({ app_token: 'xapp-test' });
+    await trigger.configure({ app_token: 'xapp-test' });
     await trigger.start();
     await trigger.stop();
     expect(logger.info).toHaveBeenCalled();

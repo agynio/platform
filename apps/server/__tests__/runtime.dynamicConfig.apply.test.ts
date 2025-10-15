@@ -14,7 +14,7 @@ describe('Runtime dynamicConfig first-class support', () => {
     const instSetDynamic = vi.fn();
     const dynStore: any[] = [];
     registry.register('dynNode', async () => ({
-      setConfig: vi.fn(),
+      configure: vi.fn(),
       setDynamicConfig: (cfg: Record<string, unknown>) => { instSetDynamic(cfg); dynStore.push(cfg); },
       isDynamicConfigReady: () => true,
       getDynamicConfigSchema: () => ({ type: 'object', properties: { a: { type: 'boolean' } } }),

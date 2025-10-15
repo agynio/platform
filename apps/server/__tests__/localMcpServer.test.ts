@@ -134,7 +134,7 @@ describe('LocalMCPServer (mock)', () => {
     };
     (server as any).setContainerProvider(mockProvider);
     const cfg: McpServerConfig = { namespace: 'mock', command: 'ignored' } as any;
-    await server.setConfig(cfg);
+    await server.configure(cfg);
     await server.start();
   }, 10000);
 

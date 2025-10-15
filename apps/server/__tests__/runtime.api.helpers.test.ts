@@ -19,19 +19,15 @@ function makeRuntimeAndRegistry() {
 }
 
 describe('Runtime helpers and GraphService API surfaces', () => {
-  it('pause/resume/provision/deprovision + status work against live nodes', async () => {
+  it('start/stop + status work against live nodes', async () => {
     const { registry, runtime } = makeRuntimeAndRegistry();
 
     // Mock node impl
-    class MockNode implements Pausable, Provisionable, DynamicConfigurable<Record<string, boolean>> {
-      private paused = false;
+    class MockNode implements Provisionable, DynamicConfigurable<Record<string, boolean>> {
       private status: ProvisionStatus = { state: 'not_ready' };
       private dynReady = false;
       private listeners: Array<(s: ProvisionStatus)=>void> = [];
-      setConfig = vi.fn(async (_cfg: Record<string, unknown>) => {});
-      pause() { this.paused = true; }
-      resume() { this.paused = false; }
-      isPaused() { return this.paused; }
+      configure = vi.fn(async (_cfg: Record<string, unknown>) => {});
       getProvisionStatus() { return this.status; }
       async provision() { this.status = { state: 'ready' }; this.dynReady = true; this.listeners.forEach(l=>l(this.status)); }
       async deprovision() { this.status = { state: 'not_ready' }; this.dynReady = false; this.listeners.forEach(l=>l(this.status)); }
@@ -48,17 +44,11 @@ describe('Runtime helpers and GraphService API surfaces', () => {
     await runtime.apply({ nodes: [{ id: 'n1', data: { template: 'mock', config: {} } }], edges: [] });
 
     // Exercise runtime helpers
-    await runtime.pauseNode('n1');
-    expect(runtime.getNodeStatus('n1').isPaused).toBe(true);
-    await runtime.resumeNode('n1');
-    expect(runtime.getNodeStatus('n1').isPaused).toBe(false);
-
-    await runtime.provisionNode('n1');
+    await runtime.startNode('n1');
     const status1 = runtime.getNodeStatus('n1');
     expect(status1.provisionStatus?.state).toBe('ready');
     expect(status1.dynamicConfigReady).toBe(true);
-
-    await runtime.deprovisionNode('n1');
+    await runtime.stopNode('n1');
     expect(runtime.getNodeStatus('n1').provisionStatus?.state).toBe('not_ready');
   });
 
@@ -66,7 +56,7 @@ describe('Runtime helpers and GraphService API surfaces', () => {
     const { registry, runtime } = makeRuntimeAndRegistry();
 
     // Expand template with capabilities and static schema
-    registry.register('dyn', async () => ({ setConfig: async () => {} } as any), { sourcePorts: {}, targetPorts: {} }, {
+    registry.register('dyn', async () => ({ configure: async () => {} } as any), { sourcePorts: {}, targetPorts: {} }, {
       title: 'Dyn', kind: 'tool', capabilities: { pausable: true, provisionable: true, dynamicConfigurable: true, staticConfigurable: false },
       staticConfigSchema: { type: 'object', properties: {} } as any,
     });
@@ -76,7 +66,7 @@ describe('Runtime helpers and GraphService API surfaces', () => {
       isDynamicConfigReady() { return true; }
       getDynamicConfigSchema() { return { type: 'object', properties: { a: { type: 'boolean' } } } as any; }
       setDynamicConfig = vi.fn((_cfg: Record<string, unknown>) => {});
-      setConfig = vi.fn(async (_cfg: Record<string, unknown>) => {});
+      configure = vi.fn(async (_cfg: Record<string, unknown>) => {});
     }
     registry.register('dyn2', async () => new DynNode() as any, { sourcePorts: {}, targetPorts: {} }, { title: 'Dyn2', kind: 'tool' });
 
@@ -93,8 +83,7 @@ describe('Runtime helpers and GraphService API surfaces', () => {
     expect(dynEntry?.staticConfigSchema).toBeTruthy();
 
     // Node pause via runtime directly
-    await runtime.pauseNode('a');
-    expect(runtime.getNodeStatus('a').isPaused).toBe(true);
+    await runtime.startNode('a');
 
     // Dynamic config routing on dyn2 via runtime instance
     const instB: any = runtime.getNodeInstance('b');

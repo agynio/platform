@@ -57,8 +57,8 @@ export function RightPropertiesPanel({ node, onChange }: Props) {
     const disableAll = state === 'deprovisioning';
     const canStart = provisionable && state === 'not_ready' && !disableAll;
     const canStop = provisionable && (state === 'ready' || state === 'provisioning') && !disableAll;
-    const canPauseBtn = pausable && state === 'ready' && !isPaused && !disableAll;
-    const canResumeBtn = pausable && state === 'ready' && isPaused && !disableAll;
+    const canPauseBtn = false; // pause/resume removed in Phase 1
+    const canResumeBtn = false;
     return (
       <div className="space-y-3 text-xs">
         <NodeStatusBadges state={state} isPaused={isPaused} detail={detail} />
@@ -69,10 +69,10 @@ export function RightPropertiesPanel({ node, onChange }: Props) {
           canStop={canStop}
           canPauseBtn={canPauseBtn}
           canResumeBtn={canResumeBtn}
-          onStart={() => action.mutate('provision')}
-          onStop={() => action.mutate('deprovision')}
-          onPause={() => action.mutate('pause')}
-          onResume={() => action.mutate('resume')}
+          onStart={() => action.mutate('start')}
+          onStop={() => action.mutate('stop')}
+          onPause={() => {}}
+          onResume={() => {}}
         />
       </div>
     );

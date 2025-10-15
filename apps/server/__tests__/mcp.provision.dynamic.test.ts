@@ -28,7 +28,7 @@ describe('LocalMCPServer Provisionable + DynamicConfigurable', () => {
       (server as any).toolsDiscovered = true;
       return tools;
     });
-    await server.setConfig({ namespace: 'ns', command: 'cmd' } as McpServerConfig);
+    await server.configure({ namespace: 'ns', command: 'cmd' } as McpServerConfig);
 
     const transitions: string[] = [];
     server.onProvisionStatusChange((s) => transitions.push(s.state));
@@ -41,7 +41,7 @@ describe('LocalMCPServer Provisionable + DynamicConfigurable', () => {
 
   it('provision error path sets error with details', async () => {
     (server as any).discoverTools = vi.fn(async () => { throw new Error('disc boom'); });
-    await server.setConfig({ namespace: 'ns', command: 'cmd' } as McpServerConfig);
+    await server.configure({ namespace: 'ns', command: 'cmd' } as McpServerConfig);
 
     const transitions: string[] = [];
     server.onProvisionStatusChange((s) => transitions.push(s.state));
@@ -65,7 +65,7 @@ describe('LocalMCPServer Provisionable + DynamicConfigurable', () => {
       (server as any).toolsDiscovered = true;
       return [];
     });
-    await server.setConfig({ namespace: 'ns', command: 'cmd' } as McpServerConfig);
+    await server.configure({ namespace: 'ns', command: 'cmd' } as McpServerConfig);
     await server.provision();
     await server.deprovision();
     expect(server.getProvisionStatus().state).toBe('not_ready');
@@ -77,7 +77,7 @@ describe('LocalMCPServer Provisionable + DynamicConfigurable', () => {
       (server as any).toolsDiscovered = true;
       return (server as any).toolsCache;
     });
-    await server.setConfig({ namespace: 'ns', command: 'cmd' } as McpServerConfig);
+    await server.configure({ namespace: 'ns', command: 'cmd' } as McpServerConfig);
     expect(server.isDynamicConfigReady()).toBe(false);
     await server.provision();
     expect(server.isDynamicConfigReady()).toBe(true);
