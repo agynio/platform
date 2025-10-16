@@ -1,8 +1,31 @@
 import { registerConfigView } from './registry';
 import SimpleAgentConfigView from './SimpleAgentConfigView';
 import McpServerDynamicConfigView from './McpServerDynamicConfigView';
+import McpServerStaticConfigView from './McpServerStaticConfigView';
+import ContainerProviderConfigView from './ContainerProviderConfigView';
+import ShellToolConfigView from './ShellToolConfigView';
+import GithubCloneRepoToolConfigView from './GithubCloneRepoToolConfigView';
+import SendSlackMessageToolConfigView from './SendSlackMessageToolConfigView';
+import FinishToolConfigView from './FinishToolConfigView';
+import CallAgentToolConfigView from './CallAgentToolConfigView';
+import RemindMeToolConfigView from './RemindMeToolConfigView';
+import DebugToolTriggerConfigView from './DebugToolTriggerConfigView';
+import SlackTriggerConfigView from './SlackTriggerConfigView';
+import MemoryServiceConfigView from './MemoryServiceConfigView';
+import MemoryConnectorConfigView from './MemoryConnectorConfigView';
 
 // Register built-in custom views for SSR import side-effects.
 registerConfigView({ template: 'simpleAgent', mode: 'static', component: SimpleAgentConfigView });
 registerConfigView({ template: 'mcpServer', mode: 'dynamic', component: McpServerDynamicConfigView });
-
+registerConfigView({ template: 'mcpServer', mode: 'static', component: McpServerStaticConfigView });
+registerConfigView({ template: 'containerProvider', mode: 'static', component: ContainerProviderConfigView });
+registerConfigView({ template: 'shellTool', mode: 'static', component: ShellToolConfigView });
+registerConfigView({ template: 'githubCloneRepoTool', mode: 'static', component: GithubCloneRepoToolConfigView });
+registerConfigView({ template: 'sendSlackMessageTool', mode: 'static', component: SendSlackMessageToolConfigView });
+registerConfigView({ template: 'finishTool', mode: 'static', component: FinishToolConfigView });
+registerConfigView({ template: 'callAgentTool', mode: 'static', component: CallAgentToolConfigView });
+registerConfigView({ template: 'remindMeTool', mode: 'static', component: RemindMeToolConfigView });
+registerConfigView({ template: 'debugTool', mode: 'static', component: DebugToolTriggerConfigView });
+registerConfigView({ template: 'slackTrigger', mode: 'static', component: SlackTriggerConfigView });
+registerConfigView({ template: 'memory', mode: 'static', component: MemoryServiceConfigView });
+registerConfigView({ template: 'memoryConnector', mode: 'static', component: MemoryConnectorConfigView });
