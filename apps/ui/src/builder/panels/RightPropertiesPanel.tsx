@@ -3,7 +3,7 @@ import type { TemplateNodeSchema } from 'shared';
 import { useTemplates } from '../useTemplates';
 // Runtime graph components & hooks
 // Removed NodeDetailsPanel wrapper; using granular components directly
-import { StaticConfigForm, DynamicConfigForm } from '@/components/graph';
+// Custom config views only; legacy RJSF forms removed
 import { useTemplatesCache } from '@/lib/graph/templates.provider';
 import { hasStaticConfigByName, hasDynamicConfigByName } from '@/lib/graph/capabilities';
 import { NodeStatusBadges } from '@/components/graph/NodeStatusBadges';
@@ -11,6 +11,8 @@ import { NodeActionButtons } from '@/components/graph/NodeActionButtons';
 import { useNodeAction, useNodeStatus } from '@/lib/graph/hooks';
 import { canPause, canProvision } from '@/lib/graph/capabilities';
 import { NixPackagesSection } from '@/components/nix/NixPackagesSection';
+import { getConfigView } from '@/components/configViews/registry';
+import '@/configViews.init';
 
 interface BuilderPanelNodeData {
   template: string;
@@ -35,6 +37,8 @@ export function RightPropertiesPanel({ node, onChange }: Props) {
   const update = (patch: Record<string, unknown>) => onChange(node.id, patch);
   const cfg = (data.config || {}) as Record<string, unknown>;
   const dynamicConfig = (data.dynamicConfig || {}) as Record<string, unknown>;
+
+  // Feature flag removed: always use custom views
 
   // Runtime capabilities (may be absent if backend templates not yet loaded)
   const runtimeStaticCap = hasStaticConfigByName(data.template, runtimeTemplates.getTemplate);
@@ -79,6 +83,10 @@ export function RightPropertiesPanel({ node, onChange }: Props) {
     );
   }
 
+  // Resolve custom view components if enabled
+  const StaticView = getConfigView(data.template, 'static') as any;
+  const DynamicView = getConfigView(data.template, 'dynamic') as any;
+
   return (
     <div className="space-y-4">
       {/* Runtime status & actions */}
@@ -91,26 +99,36 @@ export function RightPropertiesPanel({ node, onChange }: Props) {
       {runtimeStaticCap && (
         <div className="space-y-2">
           <div className="text-[10px] uppercase text-muted-foreground">Static Configuration</div>
-          <StaticConfigForm
-            // Key ensures the form remounts when switching between different nodes/templates
-            // preventing the previous node's in-memory form state from leaking and overwriting
-            // the newly selected node's config (which caused empty config saves).
-            key={node.id}
-            templateName={data.template}
-            initialConfig={cfg}
-            onConfigChange={(next) => update({ config: next })}
-          />
+          {StaticView ? (
+            <StaticView
+              key={`static-${node.id}`}
+              templateName={data.template}
+              value={cfg}
+              onChange={(next: Record<string, unknown>) => update({ config: next })}
+              readOnly={false}
+              disabled={false}
+            />
+          ) : (
+            <div className="text-xs text-muted-foreground">No custom view registered for {data.template} (static)</div>
+          )}
         </div>
       )}
       {runtimeDynamicCap && (
         <div className="space-y-2">
           <div className="text-[10px] uppercase text-muted-foreground">Dynamic Configuration</div>
-          <DynamicConfigForm
-            key={node.id}
-            nodeId={node.id}
-            initialConfig={dynamicConfig}
-            onConfigChange={(next) => update({ dynamicConfig: next })}
-          />
+          {DynamicView ? (
+            <DynamicView
+              key={`dynamic-${node.id}`}
+              nodeId={node.id}
+              templateName={data.template}
+              value={dynamicConfig}
+              onChange={(next: Record<string, unknown>) => update({ dynamicConfig: next })}
+              readOnly={false}
+              disabled={false}
+            />
+          ) : (
+            <div className="text-xs text-muted-foreground">No custom view registered for {data.template} (dynamic)</div>
+          )}
         </div>
       )}
       {data.template === 'containerProvider' && (
@@ -128,3 +146,4 @@ export function RightPropertiesPanel({ node, onChange }: Props) {
     </div>
   );
 }
+
