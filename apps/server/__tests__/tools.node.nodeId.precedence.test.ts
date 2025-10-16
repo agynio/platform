@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import { AIMessage } from '@langchain/core/messages';
-import { ToolsNode } from '../src/nodes/tools.node';
+import { ToolsNode } from '../src/lgnodes/tools.lgnode';
 import { BaseTool } from '../src/tools/base.tool';
 import { tool, DynamicStructuredTool } from '@langchain/core/tools';
 
