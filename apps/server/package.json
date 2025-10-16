@@ -16,6 +16,7 @@
     "@langchain/langgraph": "^0.4.9",
     "@langchain/langgraph-checkpoint": "^0.1.1",
     "@langchain/langgraph-checkpoint-mongodb": "^0.1.1",
+    "@langchain/langgraph-checkpoint-postgres": "^0.1.1",
     "@langchain/openai": "^0.6.13",
     "@modelcontextprotocol/sdk": "^1.18.1",
     "@octokit/auth-app": "^8.1.0",

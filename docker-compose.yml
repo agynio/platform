@@ -9,6 +9,33 @@ services:
     volumes:
       - mongo1_data:/data/db
 
+  postgres:
+    image: postgres:16-alpine
+    container_name: postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: postgres
+    ports:
+      - "5442:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    command: [
+      "postgres",
+      "-c", "shared_buffers=128MB",
+      "-c", "work_mem=4MB",
+      "-c", "maintenance_work_mem=64MB",
+      "-c", "max_connections=50",
+      "-c", "wal_buffers=4MB",
+      "-c", "effective_cache_size=256MB"
+    ]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
   mongo-setup:
     image: mongo:latest
     container_name: mongo-setup
@@ -95,6 +122,8 @@ volumes:
   mongo1_data:
     driver: local
   vault-file:
+    driver: local
+  pgdata:
     driver: local
 
 networks:
