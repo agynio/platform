@@ -24,6 +24,28 @@ export const configSchema = z.object({
   vaultToken: z.string().optional(),
   // Docker registry mirror URL (used by DinD sidecar)
   dockerMirrorUrl: z.string().min(1).default('http://registry-mirror:5000'),
+  // Nix search/proxy settings
+  nixAllowedChannels: z
+    .string()
+    .default('nixpkgs-unstable,nixos-24.11')
+    .transform((s) =>
+      s
+        .split(',')
+        .map((x) => x.trim())
+        .filter((x) => !!x),
+    ),
+  nixHttpTimeoutMs: z
+    .union([z.string(), z.number()])
+    .default('5000')
+    .transform((v) => Number(v) || 5000),
+  nixCacheTtlMs: z
+    .union([z.string(), z.number()])
+    .default(String(5 * 60_000))
+    .transform((v) => Number(v) || 5 * 60_000),
+  nixCacheMax: z
+    .union([z.string(), z.number()])
+    .default('500')
+    .transform((v) => Number(v) || 500),
 });
 
 export type Config = z.infer<typeof configSchema>;
@@ -85,6 +107,20 @@ export class ConfigService implements Config {
     return this.params.dockerMirrorUrl || 'http://registry-mirror:5000';
   }
 
+  // Nix proxy getters
+  get nixAllowedChannels(): string[] {
+    return this.params.nixAllowedChannels;
+  }
+  get nixHttpTimeoutMs(): number {
+    return this.params.nixHttpTimeoutMs;
+  }
+  get nixCacheTtlMs(): number {
+    return this.params.nixCacheTtlMs;
+  }
+  get nixCacheMax(): number {
+    return this.params.nixCacheMax;
+  }
+
   static fromEnv(): ConfigService {
     const parsed = configSchema.parse({
       githubAppId: process.env.GITHUB_APP_ID,
@@ -102,6 +138,10 @@ export class ConfigService implements Config {
       vaultAddr: process.env.VAULT_ADDR,
       vaultToken: process.env.VAULT_TOKEN,
       dockerMirrorUrl: process.env.DOCKER_MIRROR_URL || 'http://registry-mirror:5000',
+      nixAllowedChannels: process.env.NIX_ALLOWED_CHANNELS || 'nixpkgs-unstable,nixos-24.11',
+      nixHttpTimeoutMs: process.env.NIX_HTTP_TIMEOUT_MS || '5000',
+      nixCacheTtlMs: process.env.NIX_CACHE_TTL_MS || String(5 * 60_000),
+      nixCacheMax: process.env.NIX_CACHE_MAX || '500',
     });
     return new ConfigService(parsed);
   }

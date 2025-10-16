@@ -1,6 +1,4 @@
-// Simple client for NixOS Search API (UI-only; no persistence)
-// Note: Public search API may have CORS restrictions in browsers.
-// Phase 1 intentionally avoids adding a proxy. Tests mock network via MSW.
+// Client for NixOS Search via backend proxy
 import { z } from 'zod';
 
 export const CHANNELS = ['nixpkgs-unstable', 'nixos-24.11'] as const;
@@ -25,25 +23,12 @@ const NixItemSchema = z.object({
 });
 const NixSearchResponseSchema = z.object({ items: z.array(NixItemSchema) });
 
-const BASE_URL = 'https://search.nixos.org/packages';
-
-// Constructs a URL for the public search endpoint.
-function buildSearchUrl(query: string, channel: NixChannel): string {
-  const u = new URL(BASE_URL);
-  // Required params per review: format=json, size=20, sort=relevance, order=desc
-  u.searchParams.set('type', 'packages');
-  u.searchParams.set('channel', channel);
-  u.searchParams.set('query', query);
-  u.searchParams.set('format', 'json');
-  u.searchParams.set('size', '20');
-  u.searchParams.set('sort', 'relevance');
-  u.searchParams.set('order', 'desc');
-  return u.toString();
-}
+// Use relative paths so the UI hits the same origin backend proxy
+const BASE = '';
 
 export async function searchPackages(query: string, channel: NixChannel, signal?: AbortSignal): Promise<NixSearchItem[]> {
   if (!query || query.trim().length < 2) return [];
-  const url = buildSearchUrl(query.trim(), channel);
+  const url = `${BASE}/api/nix/search?channel=${encodeURIComponent(channel)}&query=${encodeURIComponent(query.trim())}`;
   const res = await fetch(url, { signal, headers: { Accept: 'application/json' } });
   if (!res.ok) throw new Error(`Nix search failed: ${res.status}`);
   const json = await res.json();
@@ -65,15 +50,14 @@ export async function fetchPackageVersion(
 ): Promise<string | null> {
   const q = ident.attr ? `attr:${ident.attr}` : ident.pname ? ident.pname : '';
   if (!q) return null;
-  const url = buildSearchUrl(q, channel);
+  const params = new URLSearchParams({ channel, ...(ident.attr ? { attr: ident.attr } : { pname: ident.pname! }) });
+  const url = `${BASE}/api/nix/show?${params.toString()}`;
   const res = await fetch(url, { signal, headers: { Accept: 'application/json' } });
   if (!res.ok) throw new Error(`Nix package lookup failed: ${res.status}`);
   const json = await res.json();
-  const parsed = NixSearchResponseSchema.safeParse(json);
+  const parsed = NixItemSchema.safeParse(json);
   if (!parsed.success) throw new Error('Nix details: invalid response shape');
-  if (!parsed.data.items.length) return null;
-  const hit = parsed.data.items[0];
-  return hit.version ?? null;
+  return parsed.data.version ?? null;
 }
 
 // Utility to merge results from two channels by attr; prefer pname when present.

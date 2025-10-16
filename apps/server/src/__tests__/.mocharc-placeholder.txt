@@ -1,0 +1,1 @@
+This repository uses Vitest. Placeholder to ensure test discovery path includes newly added files.

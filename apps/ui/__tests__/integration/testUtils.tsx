@@ -46,6 +46,20 @@ export const handlers = [
     await request.json().catch(() => ({}));
     return HttpResponse.json({ version: Date.now(), updatedAt: new Date().toISOString() });
   }),
+  // Nix proxy handlers used by UI services
+  http.get('/api/nix/search', ({ request }) => {
+    const url = new URL(request.url);
+    const q = url.searchParams.get('query') || url.searchParams.get('q') || '';
+    const items = q && q.length >= 2 ? [{ attr: `${q}.attr`, pname: q, version: '1.0.0' }] : [];
+    return HttpResponse.json({ items });
+  }),
+  http.get('/api/nix/show', ({ request }) => {
+    const url = new URL(request.url);
+    const attr = url.searchParams.get('attr');
+    const pname = url.searchParams.get('pname');
+    if (!attr && !pname) return new HttpResponse(null, { status: 400 });
+    return HttpResponse.json({ attr: attr || `${pname}.attr`, pname: pname || null, version: '1.2.3' });
+  }),
 ];
 
 export const server = setupServer(...handlers);
