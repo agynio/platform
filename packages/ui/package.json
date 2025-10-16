@@ -12,7 +12,7 @@
       "import": "./dist/index.js"
     },
     "./styles.css": "./styles.css",
-    "./tailwind-preset": "./tailwind-preset.js",
+    "./tailwind-preset": "./dist/tailwind-preset.js",
     "./package.json": "./package.json"
   },
   "peerDependencies": {
