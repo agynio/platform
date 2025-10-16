@@ -23,6 +23,7 @@ describe('ContainerProviderEntity platform reuse logic', () => {
     const startImpl = async (_opts: Parameters<ContainerService['start']>[0]) => new MockContainer('cid123', svc);
     svc = {
       findContainerByLabels: vi.fn(async (_labels: Record<string, string>) => undefined),
+      findContainersByLabels: vi.fn(async (_labels: Record<string, string>) => []),
       start: vi.fn(startImpl),
       getContainerLabels: vi.fn(async (_id: string) => ({})),
       execContainer: vi.fn(async () => ({ stdout: '', stderr: '', exitCode: 0 })),
@@ -53,14 +54,10 @@ describe('ContainerProviderEntity platform reuse logic', () => {
 
   it("does not select a dind container when sharing the same thread label", async () => {
     const dind = new MockContainer('dind123', svc);
-    // Return a result only if caller forgets to include role=workspace; our code should not do that.
-    (svc.findContainerByLabels as unknown as vi.Mock).mockImplementation(async (labels: Record<string, string>) => {
-      if (labels['hautech.ai/role'] === 'workspace') return undefined; // no existing workspace
-      if (labels['hautech.ai/role'] === 'dind') return dind;
-      // Simulate that a wrong lookup without role filter would match the dind
-      if (!('hautech.ai/role' in labels)) return dind;
-      return undefined;
-    });
+    // No workspace exists; fallback returns candidate dind with same thread label
+    (svc.findContainerByLabels as unknown as vi.Mock).mockResolvedValue(undefined);
+    (svc.findContainersByLabels as unknown as vi.Mock).mockResolvedValue([dind]);
+    (svc.getContainerLabels as unknown as vi.Mock).mockResolvedValueOnce({ 'hautech.ai/role': 'dind' });
 
     const startImpl = async (_opts: Parameters<ContainerService['start']>[0]) => new MockContainer('ws999', svc);
     (svc.start as vi.Mock).mockImplementationOnce(startImpl);

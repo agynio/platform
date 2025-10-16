@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { LoggerService } from '../services/logger.service';
 import { VaultService } from '../services/vault.service';
-import { EnvService } from '../services/env.service';
+import { EnvService, type EnvItem } from '../services/env.service';
 import { isExecTimeoutError, ExecTimeoutError, ExecIdleTimeoutError, isExecIdleTimeoutError } from '../utils/execTimeout';
 import { tool, DynamicStructuredTool } from '@langchain/core/tools';
 import { BaseTool } from './base.tool';
@@ -133,8 +133,8 @@ export class ShellTool extends BaseTool {
   }
 
   private async resolveEnv(): Promise<Record<string, string> | undefined> {
-    const items = this.cfg?.env || [];
+    const items: EnvItem[] = (this.cfg?.env || []) as EnvItem[];
     if (!items.length) return undefined;
-    try { const r = await this.envService.resolveEnvItems(items as any); return Object.keys(r).length ? r : undefined; } catch { return undefined; }
+    try { const r = await this.envService.resolveEnvItems(items); return Object.keys(r).length ? r : undefined; } catch { return undefined; }
   }
 }

@@ -4,7 +4,7 @@ import { z } from 'zod';
 import { PLATFORM_LABEL, SUPPORTED_PLATFORMS, type Platform } from '../constants.js';
 import { VaultService } from '../services/vault.service';
 import { ConfigService } from '../services/config.service';
-import { EnvService } from '../services/env.service';
+import { EnvService, type EnvItem } from '../services/env.service';
 
 // Static configuration schema for ContainerProviderEntity
 // Allows overriding the base image and supplying environment variables.
@@ -78,7 +78,7 @@ export const ContainerProviderExposedStaticConfigSchema = z
 
 export type ContainerProviderStaticConfig = z.infer<typeof ContainerProviderStaticConfigSchema>;
 
-type NewEnvItem = { key: string; value: string; source?: 'static' | 'vault' };
+type NewEnvItem = EnvItem;
 
 export class ContainerProviderEntity {
   private cfg?: Pick<ContainerOpts, 'image' | 'env' | 'platform'> & {
@@ -132,23 +132,21 @@ export class ContainerProviderEntity {
     // Back-compat safe fallback: if no labeled workspace found, retry by thread_id only
     // and exclude any DinD sidecars by inspecting labels before reuse.
     if (!container) {
-      // Only perform fallback if the container service exposes the batch finder
-      const svcAny = this.containerService as unknown as { findContainersByLabels?: (labels: Record<string, string>) => Promise<ContainerEntity[]> };
-      if (typeof svcAny.findContainersByLabels === 'function') {
-        try { console.debug('[ContainerProviderEntity] fallback lookup by thread_id only', labels); } catch {}
-        const candidates = await svcAny.findContainersByLabels(labels);
-        // Fetch candidate labels in parallel, then iterate in original order to preserve selection semantics
-        const labelPromises = candidates.map((c) => this.containerService.getContainerLabels(c.id).then((cl) => ({ c, cl })).catch(() => ({ c, cl: undefined as Record<string, string> | undefined })));
-        const results = await Promise.all(labelPromises);
-        for (const { c, cl } of results) {
-          // Skip DinD sidecars; allow unlabeled legacy workspaces
-          if (cl?.['hautech.ai/role'] === 'dind') continue;
-          container = c;
-          break;
-        }
-      } else {
-        // Back-compat note: when batch lookup is unavailable, unlabeled legacy workspaces
-        // will not be reused and a new container will be created.
+      try { console.debug('[ContainerProviderEntity] fallback lookup by thread_id only', labels); } catch {}
+      const candidates = await this.containerService.findContainersByLabels(labels);
+      // Fetch candidate labels in parallel, then iterate in original order to preserve selection semantics
+      const labelPromises = candidates.map((c) =>
+        this.containerService
+          .getContainerLabels(c.id)
+          .then((cl) => ({ c, cl }))
+          .catch(() => ({ c, cl: undefined as Record<string, string> | undefined })),
+      );
+      const results = await Promise.all(labelPromises);
+      for (const { c, cl } of results) {
+        // Skip DinD sidecars; allow unlabeled legacy workspaces
+        if (cl?.['hautech.ai/role'] === 'dind') continue;
+        container = c;
+        break;
       }
     }
     const DOCKER_HOST_ENV = 'tcp://localhost:2375';
@@ -229,9 +227,18 @@ export class ContainerProviderEntity {
       const DOCKER_MIRROR_URL = this.configService?.dockerMirrorUrl || process.env.DOCKER_MIRROR_URL || 'http://registry-mirror:5000';
       const enableDinD = this.cfg?.enableDinD ?? false;
       const envMerged = await (async () => {
-        const base = (this.opts.env || {}) as Record<string, string>;
-        const cfgEnv = this.cfg?.env as unknown;
-        return this.envService.resolveProviderEnv(cfgEnv as any, undefined, base);
+        const base: Record<string, string> = Array.isArray(this.opts.env)
+          ? Object.fromEntries(
+              (this.opts.env || [])
+                .map((s) => String(s))
+                .map((pair) => {
+                  const idx = pair.indexOf('=');
+                  return idx > -1 ? [pair.slice(0, idx), pair.slice(idx + 1)] : [pair, ''];
+                }),
+            )
+          : (this.opts.env as Record<string, string>) || {};
+        const cfgEnv = this.cfg?.env as Record<string, string> | EnvItem[] | undefined;
+        return this.envService.resolveProviderEnv(cfgEnv, undefined, base);
       })();
       container = await this.containerService.start({
         ...this.opts,
