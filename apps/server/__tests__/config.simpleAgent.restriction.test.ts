@@ -18,11 +18,11 @@ describe('SimpleAgent config restrictions', () => {
     } as any);
     const agent = new SimpleAgent(cfg, new LoggerService(), new CheckpointerService(new LoggerService()) as any, 'a1');
     // Update system prompt
-    agent.setConfig({ systemPrompt: 'Base system' });
+    agent.configure({ systemPrompt: 'Base system' });
     // Toggle restriction flags
-    agent.setConfig({ restrictOutput: true, restrictionMessage: 'Please call tools', restrictionMaxInjections: 2 });
+    agent.configure({ restrictOutput: true, restrictionMessage: 'Please call tools', restrictionMaxInjections: 2 });
     // Update again to ensure no concatenation side effects
-    agent.setConfig({ systemPrompt: 'Base system 2' });
+    agent.configure({ systemPrompt: 'Base system 2' });
     // There is no direct getter; we ensure invocation does not throw and behavior is isolated
     const res = await agent.invoke('t', { content: 'hi', info: {} } as any);
     expect(res).toBeDefined();

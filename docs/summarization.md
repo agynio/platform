@@ -31,7 +31,7 @@ Configuration
 
 Examples
 - Configure at runtime:
-  agent.setConfig({ summarizationKeepLast: 4, summarizationMaxTokens: 4096 });
+  agent.configure({ summarizationKeepLast: 4, summarizationMaxTokens: 4096 });
 
 Notes
 - Summary is stored in the agent state, default ''.

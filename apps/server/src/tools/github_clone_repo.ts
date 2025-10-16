@@ -130,7 +130,7 @@ export class GithubCloneRepoTool extends BaseTool {
     );
   }
 
-  async setConfig(_cfg: Record<string, unknown>): Promise<void> {
+  async configure(_cfg: Record<string, unknown>): Promise<void> {
     const parsed = GithubCloneRepoToolStaticConfigSchema.parse(_cfg || {});
     this.authRef = parsed.authRef;
     this.token = parsed.token;

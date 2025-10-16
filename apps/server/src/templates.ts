@@ -177,11 +177,7 @@ export function buildTemplateRegistry(deps: TemplateRegistryDeps): TemplateRegis
       )
       .register(
         'slackTrigger',
-        () => {
-          const instance = new SlackTrigger(logger, vault);
-          void instance.start();
-          return instance;
-        },
+        () => new SlackTrigger(logger, vault),
         {
           sourcePorts: {
             // Preserve prior port naming: 'subscribe' handle to call instance.subscribe/unsubscribe
@@ -231,11 +227,7 @@ export function buildTemplateRegistry(deps: TemplateRegistryDeps): TemplateRegis
       )
       .register(
         'mcpServer',
-        () => {
-          const server = new LocalMCPServer(containerService, logger);
-          void server.start();
-          return server;
-        },
+        () => new LocalMCPServer(containerService, logger),
         {
           targetPorts: {
             $self: { kind: 'instance' },

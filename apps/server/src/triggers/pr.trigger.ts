@@ -41,7 +41,7 @@ export class PRTrigger extends BaseTrigger {
     if (!opts.intervalMs) opts.intervalMs = 60_000;
   }
 
-  // Backward-compatible start delegates to provision()
+  // Node lifecycle API
   async start(): Promise<void> {
     if (!this.stopped) return;
     this.stopped = false;
@@ -51,7 +51,6 @@ export class PRTrigger extends BaseTrigger {
     this.schedule();
   }
 
-  // Backward-compatible stop delegates to deprovision()
   async stop(): Promise<void> {
     this.stopped = true;
     if (this.timer) clearTimeout(this.timer);

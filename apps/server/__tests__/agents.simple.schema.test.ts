@@ -26,10 +26,10 @@ describe('BaseAgent.getConfigSchema / SimpleAgent.setConfig', () => {
     anyA.callModelNode = { setSystemPrompt: vi.fn(), addTool: vi.fn(), removeTool: vi.fn() };
     anyA.summarizeNode = { setOptions: vi.fn() };
 
-    a.setConfig({ systemPrompt: 'You are helpful.' });
+  a.configure({ systemPrompt: 'You are helpful.' });
     expect(anyA.callModelNode.setSystemPrompt).toHaveBeenCalledWith('You are helpful.');
 
-    a.setConfig({ summarizationKeepLast: 5, summarizationMaxTokens: 100 });
+  a.configure({ summarizationKeepLast: 5, summarizationMaxTokens: 100 });
     expect(anyA.summarizeNode.setOptions).toHaveBeenCalledWith({ keepTokens: 5, maxTokens: 100 });
   });
 
@@ -37,7 +37,7 @@ describe('BaseAgent.getConfigSchema / SimpleAgent.setConfig', () => {
     const a = makeAgent();
     const anyA: any = a as any;
   const originalLLM = (anyA.llm);
-  a.setConfig({ model: 'override-model' });
+  a.configure({ model: 'override-model' });
   // Expect underlying llm object mutated, not replaced with a new node
   expect(anyA.llm).toBe(originalLLM);
   expect((anyA.llm as any).model).toBe('override-model');

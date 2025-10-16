@@ -24,7 +24,7 @@ describe('MCP dynamic tool enable/disable sync', () => {
     logger = new MockLogger();
     server = new LocalMCPServer(new MockContainerService() as any, logger as any);
     (server as any).setContainerProvider(mockProvider as any);
-  await server.setConfig({ namespace: 'ns', command: 'cmd' } as any);
+  await server.configure({ namespace: 'ns', command: 'cmd' } as any);
 
     // Stub discovery with two tools
     (server as any).discoverTools = vi.fn(async () => {

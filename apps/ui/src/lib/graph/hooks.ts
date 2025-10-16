@@ -62,18 +62,15 @@ export function useNodeReminders(nodeId: string, enabled: boolean = true) {
 export function useNodeAction(nodeId: string) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (action: 'pause' | 'resume' | 'provision' | 'deprovision') => api.postNodeAction(nodeId, action),
+    mutationFn: (action: 'start' | 'stop') => (action === 'start' ? api.startNode(nodeId) : api.stopNode(nodeId)),
     onMutate: async (action) => {
       await qc.cancelQueries({ queryKey: ['graph', 'node', nodeId, 'status'] });
       const key = ['graph', 'node', nodeId, 'status'] as const;
       const prev = qc.getQueryData<NodeStatus>(key);
       // Optimistic update rules
       let optimistic: Partial<NodeStatus> = {};
-      if (action === 'provision') optimistic = { provisionStatus: { state: 'provisioning' as const }, isPaused: false };
-      if (action === 'deprovision')
-        optimistic = { provisionStatus: { state: 'deprovisioning' as const }, isPaused: false };
-      if (action === 'pause') optimistic = { isPaused: true };
-      if (action === 'resume') optimistic = { isPaused: false };
+      if (action === 'start') optimistic = { provisionStatus: { state: 'provisioning' as const }, isPaused: false };
+      if (action === 'stop') optimistic = { provisionStatus: { state: 'deprovisioning' as const }, isPaused: false };
       qc.setQueryData(key, { ...(prev || {}), ...optimistic });
       return { prev };
     },

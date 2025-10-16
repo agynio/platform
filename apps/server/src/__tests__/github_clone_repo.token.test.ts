@@ -14,7 +14,7 @@ describe('GithubCloneRepoTool token resolution', () => {
   });
   it('prefers static token value', async () => {
     const tool = new GithubCloneRepoTool({ githubToken: 'FALLBACK' } as any, undefined, logger);
-    await tool.setConfig({ token: { value: 'DIRECT', source: 'static' } });
+    await tool.configure({ token: { value: 'DIRECT', source: 'static' } });
     // @ts-ignore access private method via cast
     const t = await (tool as any).resolveToken();
     expect(t).toBe('DIRECT');
@@ -22,14 +22,14 @@ describe('GithubCloneRepoTool token resolution', () => {
   it('falls back to env GH_TOKEN via legacy authRef', async () => {
     process.env.GH_TOKEN = 'FROM_ENV';
     const tool = new GithubCloneRepoTool({ githubToken: 'FALLBACK' } as any, undefined, logger);
-    await tool.setConfig({ authRef: { source: 'env', envVar: 'GH_TOKEN' } });
+    await tool.configure({ authRef: { source: 'env', envVar: 'GH_TOKEN' } });
     // @ts-ignore
     const t = await (tool as any).resolveToken();
     expect(t).toBe('FROM_ENV');
   });
   it('falls back to ConfigService when nothing provided', async () => {
     const tool = new GithubCloneRepoTool({ githubToken: 'FALLBACK' } as any, undefined, logger);
-    await tool.setConfig({});
+    await tool.configure({});
     // @ts-ignore
     const t = await (tool as any).resolveToken();
     expect(t).toBe('FALLBACK');
@@ -37,7 +37,7 @@ describe('GithubCloneRepoTool token resolution', () => {
   it('resolves from vault when token.source=vault', async () => {
     const vlt: Partial<VaultService> = { isEnabled: () => true, getSecret: vi.fn().mockResolvedValue('FROM_VAULT') };
     const tool = new GithubCloneRepoTool({ githubToken: 'FALLBACK' } as any, vlt as VaultService, logger);
-    await tool.setConfig({ token: { value: 'secret/github/GH_TOKEN', source: 'vault' } });
+    await tool.configure({ token: { value: 'secret/github/GH_TOKEN', source: 'vault' } });
     // @ts-ignore
     const t = await (tool as any).resolveToken();
     expect(t).toBe('FROM_VAULT');

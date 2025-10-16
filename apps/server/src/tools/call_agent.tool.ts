@@ -47,7 +47,7 @@ export class CallAgentTool extends BaseTool {
     this.targetAgent = agent;
   }
 
-  async setConfig(cfg: Record<string, unknown>): Promise<void> {
+  async configure(cfg: Record<string, unknown>): Promise<void> {
     const parsed = CallAgentToolStaticConfigSchema.safeParse(cfg);
     if (!parsed.success) {
       throw new Error('Invalid CallAgentTool config');

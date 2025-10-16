@@ -31,20 +31,14 @@ export default function NodeDetailsPanel({ nodeId, templateName }: Props) {
           type="button"
           className="rounded border px-2 py-1 disabled:opacity-50"
           disabled={provisionState !== 'not_ready'}
-          onClick={() => action.mutate('provision')}
+          onClick={() => action.mutate('start')}
         >Start</button>
-        {tmpl?.capabilities?.pausable && isReady && (
-          <button
-            type="button"
-            className="rounded border px-2 py-1 disabled:opacity-50"
-            onClick={() => action.mutate(isPaused ? 'resume' : 'pause')}
-          >{isPaused ? 'Resume' : 'Pause'}</button>
-        )}
+        {/* Pause/Resume removed in Phase 1 */}
         <button
           type="button"
           className="rounded border px-2 py-1 disabled:opacity-50"
           disabled={!isReady}
-          onClick={() => action.mutate('deprovision')}
+          onClick={() => action.mutate('stop')}
         >Stop</button>
       </div>
     </div>

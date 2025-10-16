@@ -77,8 +77,11 @@ export const api = {
     // If plain object, validate it's likely a schema; otherwise null
     return isLikelyJsonSchemaRoot(data) ? (data as Record<string, unknown>) : null;
   },
-  postNodeAction: (nodeId: string, action: 'pause' | 'resume' | 'provision' | 'deprovision') =>
-    http<void>(`${BASE}/graph/nodes/${encodeURIComponent(nodeId)}/actions`, { method: 'POST', body: JSON.stringify({ action }) }),
+  startNode: (nodeId: string) => http<void>(`${BASE}/graph/nodes/${encodeURIComponent(nodeId)}/start`, { method: 'POST' }),
+  stopNode: (nodeId: string) => http<void>(`${BASE}/graph/nodes/${encodeURIComponent(nodeId)}/stop`, { method: 'POST' }),
+  configureNode: (nodeId: string, config: Record<string, unknown>) =>
+    http<void>(`${BASE}/graph/nodes/${encodeURIComponent(nodeId)}/configure`, { method: 'POST', body: JSON.stringify({ config }) }),
+  deleteNode: (nodeId: string) => http<void>(`${BASE}/graph/nodes/${encodeURIComponent(nodeId)}`, { method: 'DELETE' }),
   saveFullGraph: (graph: PersistedGraphUpsertRequestUI) =>
     http<PersistedGraphUpsertRequestUI & { version: number; updatedAt: string }>(`${BASE}/api/graph`, {
       method: 'POST',

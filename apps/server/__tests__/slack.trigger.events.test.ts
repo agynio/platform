@@ -19,7 +19,7 @@ describe('SlackTrigger events', () => {
   it('relays message events from socket-mode client', async () => {
     const logger = { info: vi.fn(), error: vi.fn(), debug: vi.fn() } as any;
     const trig = new SlackTrigger(logger);
-    await trig.setConfig({ app_token: 'xapp-abc' });
+    await trig.configure({ app_token: 'xapp-abc' });
     // Subscribe a listener
     const received: any[] = [];
     await trig.subscribe({ invoke: async (_t, msgs) => { received.push(...msgs); } });
@@ -34,14 +34,14 @@ describe('SlackTrigger events', () => {
   it('fails fast when vault ref provided but vault disabled', async () => {
     const logger = { info: vi.fn(), error: vi.fn(), debug: vi.fn() } as any;
     const trig = new SlackTrigger(logger, undefined as any);
-    await expect(trig.setConfig({ app_token: { value: 'secret/slack/APP', source: 'vault' } } as any)).rejects.toThrow();
+    await expect(trig.configure({ app_token: { value: 'secret/slack/APP', source: 'vault' } } as any)).rejects.toThrow();
   });
 
   it('resolves app token via vault during provision', async () => {
     const logger = { info: vi.fn(), error: vi.fn(), debug: vi.fn() } as any;
     const vault = { isEnabled: () => true, getSecret: vi.fn(async () => 'xapp-from-vault') } as any;
     const trig = new SlackTrigger(logger, vault);
-    await trig.setConfig({ app_token: { value: 'secret/slack/APP', source: 'vault' } } as any);
+    await trig.configure({ app_token: { value: 'secret/slack/APP', source: 'vault' } } as any);
     await trig.provision();
     expect((trig as any).client).toBeTruthy();
   });
@@ -50,7 +50,7 @@ describe('SlackTrigger events', () => {
     const logger = { info: vi.fn(), error: vi.fn(), debug: vi.fn() } as any;
     const vault = { isEnabled: () => true, getSecret: vi.fn(async () => 'xoxb-wrong') } as any;
     const trig = new SlackTrigger(logger, vault);
-    await trig.setConfig({ app_token: { value: 'secret/slack/APP', source: 'vault' } } as any);
+    await trig.configure({ app_token: { value: 'secret/slack/APP', source: 'vault' } } as any);
     await trig.provision();
     expect(trig.getProvisionStatus().state).toBe('error');
   });
