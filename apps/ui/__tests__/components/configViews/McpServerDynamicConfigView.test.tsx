@@ -22,6 +22,8 @@ describe('McpServerDynamicConfigView', () => {
       />,
     );
     expect(screen.getByTestId('mcp-dyn-view')).toBeInTheDocument();
+    // Seeds missing boolean keys via initial onChange
+    expect(onChange).toHaveBeenCalledWith({ a: false, b: false });
     const checkA = screen.getByLabelText('a') as HTMLInputElement;
     expect(checkA.disabled).toBe(true);
   });
@@ -40,5 +42,20 @@ describe('McpServerDynamicConfigView', () => {
     fireEvent.click(checkA);
     expect(onChange).toHaveBeenCalledWith({ a: true, b: false });
   });
-});
 
+  it('disables inputs when readOnly=true (even if disabled=false)', () => {
+    const onChange = vi.fn();
+    render(
+      <McpServerDynamicConfigView
+        nodeId="n1"
+        templateName="mcpServer"
+        value={{ a: false, b: false }}
+        onChange={onChange}
+        readOnly={true}
+        disabled={false}
+      />,
+    );
+    const checkA = screen.getByLabelText('a') as HTMLInputElement;
+    expect(checkA.disabled).toBe(true);
+  });
+});

@@ -90,6 +90,7 @@ export function RightPropertiesPanel({ node, onChange }: Props) {
   const StaticView = getConfigView(data.template, 'static');
   const DynamicView = getConfigView(data.template, 'dynamic');
   const disableAll = status?.provisionStatus?.state === 'deprovisioning';
+  const readOnly = status?.provisionStatus?.state === 'provisioning' || false;
   // Track static validation errors reported by StaticView
   const [staticErrors, setStaticErrors] = useState<string[]>([]);
 
@@ -111,7 +112,7 @@ export function RightPropertiesPanel({ node, onChange }: Props) {
               templateName={data.template}
               value={cfg}
               onChange={(next) => update({ config: next })}
-              readOnly={false}
+              readOnly={readOnly}
               disabled={!!disableAll}
               onValidate={(errs) => setStaticErrors(errs || [])}
             />
@@ -130,7 +131,7 @@ export function RightPropertiesPanel({ node, onChange }: Props) {
               templateName={data.template}
               value={dynamicConfig}
               onChange={(next) => update({ dynamicConfig: next })}
-              readOnly={false}
+              readOnly={readOnly}
               disabled={!!disableAll}
             />
           ) : (

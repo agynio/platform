@@ -1,8 +1,9 @@
-// Explicit initialization of built-in ConfigViews to avoid side-effect imports
-import './components/configViews/registerDefaults';
+// Explicit initialization of built-in ConfigViews (no side-effect registrations)
+import { installDefaultConfigViews } from './components/configViews/registerDefaults';
+import { registerConfigView } from './components/configViews/registry';
 
 export function initConfigViewsRegistry(): null {
-  // No-op function to make tree-shaking retain the registration module
+  // Register all defaults during app startup
+  installDefaultConfigViews(registerConfigView);
   return null;
 }
-
