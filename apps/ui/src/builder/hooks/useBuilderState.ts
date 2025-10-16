@@ -11,6 +11,7 @@ import {
   type Node,
 } from 'reactflow';
 import { v4 as uuid } from 'uuid';
+import { getApiBase } from '../../lib/apiClient';
 import type { TemplateNodeSchema, PersistedGraph } from 'shared';
 
 interface BuilderNodeData {
@@ -39,7 +40,7 @@ interface UseBuilderStateResult {
 type BuilderOptions = { debounceMs?: number };
 
 export function useBuilderState(
-  serverBase = 'http://localhost:3010',
+  serverBase = getApiBase(),
   options?: BuilderOptions,
 ): UseBuilderStateResult {
   const [nodes, setNodes] = useState<BuilderNode[]>([]);

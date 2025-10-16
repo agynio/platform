@@ -16,8 +16,13 @@
     "socket.io": "^4.8.1"
   },
   "devDependencies": {
+    "@radix-ui/react-slot": "^1.2.3",
+    "@radix-ui/react-switch": "^1.2.6",
     "@types/node": "^20.12.12",
     "@types/socket.io": "^3.0.2",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
+    "tailwind-merge": "^3.3.1",
     "tsx": "^4.19.2",
     "vitest": "^3.2.4"
   }

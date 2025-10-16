@@ -1,4 +1,5 @@
 import { io, Socket } from 'socket.io-client';
+import { getApiBase } from '../apiClient';
 import type { NodeStatusEvent } from './types';
 
 type Listener = (ev: NodeStatusEvent) => void;
@@ -9,9 +10,7 @@ class GraphSocket {
 
   connect(baseUrl?: string) {
     if (this.socket) return this.socket;
-  interface ViteEnv { VITE_GRAPH_API_BASE?: string }
-  const envHost = (typeof import.meta !== 'undefined' ? (import.meta as unknown as { env?: ViteEnv }).env?.VITE_GRAPH_API_BASE : undefined);
-  const host = baseUrl || envHost || 'http://localhost:3010';
+    const host = getApiBase(baseUrl);
     this.socket = io(host, { path: '/socket.io', transports: ['websocket'], forceNew: false, autoConnect: true, timeout: 10000, reconnection: true, reconnectionAttempts: Infinity, reconnectionDelay: 1000, reconnectionDelayMax: 5000, withCredentials: true });
     this.socket.on('connect', () => {
       // noop

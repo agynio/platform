@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { io, Socket } from 'socket.io-client';
+import { getApiBase } from '../lib/apiClient';
 
 export interface CheckpointWriteClient {
   id: string;
@@ -28,7 +29,7 @@ interface InitialPayload {
 } // eslint-disable-line @typescript-eslint/no-explicit-any
 
 export function useCheckpointStream({
-  url = 'http://localhost:3010',
+  url = getApiBase(),
   threadId,
   agentId,
   maxItems = 500,

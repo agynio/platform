@@ -10,6 +10,7 @@ Quickstart
 Env configuration
 - VITE_OBS_SERVER_URL (default http://localhost:4319): obs-server base URL for spans/logs and realtime.
 - VITE_OBS_UI_BASE (default http://localhost:4320): base URL for deep-linking to the Observability UI trace page.
+- VITE_API_BASE_URL (default http://localhost:3010): base URL for the Agents API used by the UI. In tests (VITEST), defaults to ''. In production deployments, set VITE_API_BASE_URL to your server origin (e.g., https://agents.example.com).
 
 Provider setup
 ```tsx
