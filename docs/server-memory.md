@@ -3,7 +3,7 @@
 Enabling Memory
 - Connector defaults: placement=after_system, content=tree, maxChars=4000.
 - Wiring: add a `memoryNode` and connect its `$self` to the agent's CallModel via `setMemoryConnector`.
-- Tool: attach the unified `memory` tool to `simpleAgent` and wire `$memory` from Memory node. Commands supported: `read | list | append | update | delete`. Node-level static config supports optional `name`, `description`, and `title` fields for tool metadata/UI; defaults preserve current behavior.
+- Tool: attach the unified `memory` tool to `agent` and wire `$memory` from Memory node. Commands supported: `read | list | append | update | delete`. Node-level static config supports optional `name`, `description`, and `title` fields for tool metadata/UI; defaults preserve current behavior.
 - Scope: `global` per node by default; `perThread` uses the thread id. Data is string-only.
 - Environment: server requires MongoDB in prod; integration/E2E tests use mongodb-memory-server (no env gating); FakeDb is reserved for unit tests only.
 
@@ -39,7 +39,7 @@ Example: Two memory tools with distinct names
 {
   "nodes": [
     { "id": "M", "data": { "template": "memory", "config": { "scope": "global" } } },
-    { "id": "A", "data": { "template": "simpleAgent", "config": {} } },
+    { "id": "A", "data": { "template": "agent", "config": {} } },
     { "id": "T1", "data": { "template": "memoryTool", "config": { "name": "memory_readonly", "description": "Read-only memory tool", "title": "Mem Read" } } },
     { "id": "T2", "data": { "template": "memoryTool", "config": { "name": "memory_write", "description": "Write memory tool", "title": "Mem Write" } } }
   ],

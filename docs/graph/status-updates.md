@@ -45,7 +45,7 @@ Each template now advertises its capabilities and optional static configuration 
 - `capabilities.dynamicConfigurable`: Node exposes a dynamic runtime config surface (MCP server tool enable/disable) once `dynamicConfigReady` is true.
 
 Static config schemas (all templates now expose one – some are currently empty placeholders to allow forward-compatible UI forms):
-- `simpleAgent`: title, systemPrompt, summarization options.
+- `agent`: title, systemPrompt, summarization options.
 - `containerProvider`: image, env map.
 - `callAgentTool`: description, name override.
 - `mcpServer`: namespace, command, workdir, timeouts, restart strategy.

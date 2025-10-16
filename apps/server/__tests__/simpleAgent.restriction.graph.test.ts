@@ -3,7 +3,7 @@ import { AIMessage, BaseMessage, SystemMessage } from '@langchain/core/messages'
 import { LoggerService } from '../src/services/logger.service';
 import { ConfigService } from '../src/services/config.service';
 import { CheckpointerService } from '../src/services/checkpointer.service';
-import { SimpleAgent } from '../src/agents/simple.agent';
+import { Agent as SimpleAgent } from '../src/agents/agent';
 
 // Mock ChatOpenAI to control responses
 vi.mock('@langchain/openai', async (importOriginal) => {

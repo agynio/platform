@@ -13,7 +13,7 @@ Decision
 - Indexes: idempotent unique indexes `uniq_global(nodeId,scope)` and `uniq_per_thread(nodeId,scope,threadId)` with partial filters.
 - Scope: `global` across all threads for a node; `perThread` isolates by `threadId`.
 - Connector defaults: `placement=after_system`, `content=tree`, `maxChars=4000`.
-- Wiring: MemoryNode exposes `memoryTools` (for agents) and `createConnector()` returning a MemoryConnectorNode; SimpleAgent accepts `setMemoryConnector()`; CallModelNode injects a SystemMessage based on placement.
+- Wiring: MemoryNode exposes `memoryTools` (for agents) and `createConnector()` returning a MemoryConnectorNode; Agent accepts `attachMemoryConnector()`; CallModelNode injects a SystemMessage based on placement.
 
 Consequences
 - Deterministic local/unit tests using in-memory FakeDb ensure CI stability.

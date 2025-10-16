@@ -49,7 +49,7 @@ vi.mock('../src/services/checkpointer.service', async (importOriginal) => {
   return { ...mod, CheckpointerService: Fake };
 });
 
-import { SimpleAgent } from '../src/agents/simple.agent';
+import { Agent as SimpleAgent } from '../src/agents/agent';
 
 describe('SimpleAgent summarization graph', () => {
   it('invokes successfully over several turns with summarization configured', async () => {

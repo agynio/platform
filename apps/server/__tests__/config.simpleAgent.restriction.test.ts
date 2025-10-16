@@ -2,7 +2,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { LoggerService } from '../src/services/logger.service';
 import { ConfigService } from '../src/services/config.service';
 import { CheckpointerService } from '../src/services/checkpointer.service';
-import { SimpleAgent } from '../src/agents/simple.agent';
+import { Agent as SimpleAgent } from '../src/agents/agent';
 
 vi.mock('@langchain/openai', () => ({ ChatOpenAI: class { withConfig() { return { invoke: async () => ({ text: 'ok' }) } as any; } async getNumTokens(t: string) { return t.length; } } }));
 vi.mock('../src/services/checkpointer.service', async (importOriginal) => {

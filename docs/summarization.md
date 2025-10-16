@@ -23,7 +23,7 @@ Budgeting and trimming
 - countTokens() uses llm.getNumTokens() and is used by shouldSummarize() to determine whether to summarize.
 
 Configuration
-- SimpleAgent.setConfig accepts:
+- Agent.setConfig accepts:
   - summarizationKeepLast: integer >= 0
   - summarizationMaxTokens: integer > 0
 - When both are set, SummarizationNode performs summarization and stores trimmed context into state.messages.

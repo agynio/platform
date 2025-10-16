@@ -24,7 +24,7 @@ Storage layout (format: 2)
 Enabling Memory
 - Default connector config: placement=after_system, content=tree, maxChars=4000.
 - To wire memory into an agent's CallModel at runtime, add a `memoryNode` and connect its `$self` source port to the agent's `callModel`/`setMemoryConnector` target port (or use template API to create a connector).
-- Tool usage: attach the unified `memory` tool to the `simpleAgent` via the `memory` target port on the tool; commands: `read|list|append|update|delete`.
+- Tool usage: attach the unified `memory` tool to the `agent` via the `memory` target port on the tool; commands: `read|list|append|update|delete`.
 - Scope: `global` per node by default; use `perThread` to isolate by thread id. No external Mongo needed in tests; the service works with a real `Db` in prod.
 - Environment: requires MongoDB URL for server runtime; tests use in-memory fakes.
 

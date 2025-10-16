@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { LangGraphRunnableConfig } from '@langchain/langgraph';
 import { BaseTool } from './base.tool';
 import { LoggerService } from '../services/logger.service';
-import { BaseAgent } from '../agents/base.agent';
+import type { Agent } from '../agents/agent';
 import { TriggerMessage } from '../triggers/base.trigger';
 import { BaseMessage } from '@langchain/core/messages';
 
@@ -31,19 +31,19 @@ export const CallAgentToolStaticConfigSchema = z.object({
   response: z.enum(['sync', 'async', 'ignore']).default('sync'),
 });
 
-type WithRuntime = LangGraphRunnableConfig & { configurable?: { thread_id?: string; caller_agent?: BaseAgent; nodeId?: string; node_id?: string } };
+type WithRuntime = LangGraphRunnableConfig & { configurable?: { thread_id?: string; caller_agent?: Agent; nodeId?: string; node_id?: string } };
 
 type SentAck = { status: 'sent' };
 
 export class CallAgentTool extends BaseTool {
   private description = 'Call another agent with a message and optional context.';
   private name: string | undefined;
-  private targetAgent: BaseAgent | undefined;
+  private targetAgent: Agent | undefined;
   private responseMode: 'sync' | 'async' | 'ignore' = 'sync';
 
   constructor(logger: LoggerService) { super(logger); }
 
-  setAgent(agent: BaseAgent | undefined): void {
+  setAgent(agent: Agent | undefined): void {
     this.targetAgent = agent;
   }
 

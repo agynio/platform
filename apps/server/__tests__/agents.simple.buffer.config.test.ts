@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { SimpleAgent, SimpleAgentStaticConfigSchema } from '../src/agents/simple.agent';
+import { Agent as SimpleAgent, AgentStaticConfigSchema as SimpleAgentStaticConfigSchema } from '../src/agents/agent';
 
 class MockConfigService { openaiApiKey = 'sk-abc'; }
 class MockLoggerService { info = vi.fn(); debug = vi.fn(); error = vi.fn(); }

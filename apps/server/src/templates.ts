@@ -1,5 +1,5 @@
 import { toJSONSchema } from 'zod';
-import { SimpleAgent, SimpleAgentStaticConfigSchema } from './agents/simple.agent';
+import { Agent, AgentStaticConfigSchema } from './agents/agent';
 import { ContainerProviderEntity, ContainerProviderExposedStaticConfigSchema } from './entities/containerProvider.entity';
 import { TemplateRegistry } from './graph';
 import { LocalMCPServer } from './mcp';
@@ -192,8 +192,8 @@ export function buildTemplateRegistry(deps: TemplateRegistryDeps): TemplateRegis
         },
       )
       .register(
-        'simpleAgent',
-        (ctx) => new SimpleAgent(configService, logger, checkpointerService, ctx.nodeId),
+        'agent',
+        (ctx) => new Agent(configService, logger, checkpointerService, ctx.nodeId),
         {
           sourcePorts: {
             tools: { kind: 'method', create: 'addTool', destroy: 'removeTool' },
@@ -209,7 +209,7 @@ export function buildTemplateRegistry(deps: TemplateRegistryDeps): TemplateRegis
           title: 'Agent',
           kind: 'agent',
           capabilities: { pausable: true, staticConfigurable: true },
-          staticConfigSchema: toJSONSchema(SimpleAgentStaticConfigSchema),
+          staticConfigSchema: toJSONSchema(AgentStaticConfigSchema),
         },
       )
       // Register a single unified Memory tool

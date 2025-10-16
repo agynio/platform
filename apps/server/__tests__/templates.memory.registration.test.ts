@@ -8,7 +8,7 @@ import type { MongoService } from '../src/services/mongo.service';
 
 // Build a registry and assert memory templates and agent memory port wiring are present.
 describe('templates: memory registration and agent memory port', () => {
-  it('registers memory and memoryConnector templates and exposes SimpleAgent memory target port', () => {
+  it('registers memory and memoryConnector templates and exposes Agent memory target port', () => {
     const deps = {
       logger: {} as unknown as LoggerService,
       containerService: {} as unknown as ContainerService,
@@ -24,7 +24,7 @@ describe('templates: memory registration and agent memory port', () => {
 
     expect(Object.keys(ports)).toContain('memory');
     expect(Object.keys(ports)).toContain('memoryConnector');
-    expect(ports.simpleAgent).toBeTruthy();
+    expect((ports as any).agent).toBeTruthy();
     // Schema contains static config for memory and memoryConnector
     const memSchema = schema.find((s) => s.name === 'memory');
     // Memory and MemoryConnector are services
@@ -68,7 +68,7 @@ describe('templates: memory registration and agent memory port', () => {
     const propKeys = Object.keys(memToolSchema?.properties || {});
     expect(propKeys).toEqual(expect.arrayContaining(['name','description','title']));
 
-    const agentTargets = ports.simpleAgent.targetPorts!;
+    const agentTargets = (ports as any).agent.targetPorts!;
     expect(agentTargets.memory).toBeTruthy();
     // Method mapping to attach/detach memory connector
     expect((agentTargets.memory as any).kind).toBe('method');

@@ -25,7 +25,7 @@ Key decisions:
 - Workspace container provider supports an optional `platform` static field with allowed values `linux/amd64` or `linux/arm64`. When set, Docker image pulls include the platform selector and container creation uses the same platform (as a query parameter). Newly created containers are labeled with `hautech.ai/platform` for future reuse decisions. If a workspace is requested with a platform and an existing container has a different or missing platform label, it will not be reused; it is stopped and removed, and a new one is created. Note: Running a non-native platform may be slower depending on Docker's emulation.
 - Container Provider supports an optional `initialScript` configuration field. When set, the script is executed inside a newly created container immediately after it starts (via `/bin/sh -lc`). A non-zero exit code fails provisioning of that container.
 - Simple Agent now accepts a `model` static configuration parameter to select the underlying LLM (default: `gpt-5`). You can override it per agent instance via the graph static config UI or API.
-  - Also configurable: agent-side message buffer handling for SimpleAgent (static config fields in apps/server/src/agents/simple.agent.ts):
+  - Also configurable: agent-side message buffer handling for Agent (static config fields in apps/server/src/agents/agent.ts):
     - debounceMs: Debounce window (ms) for agent-side message buffer.
     - whenBusy: 'wait' queues new messages; 'injectAfterTools' injects them into the current run after the tools stage.
     - processBuffer: 'allTogether' drains all queued messages; 'oneByOne' processes one message per run.

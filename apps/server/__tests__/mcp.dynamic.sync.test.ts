@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { SimpleAgent } from '../src/agents/simple.agent';
+import { Agent as SimpleAgent } from '../src/agents/agent';
 import { LocalMCPServer } from '../src/mcp/localMcpServer';
 import { LoggerService } from '../src/services/logger.service';
 import { ConfigService } from '../src/services/config.service';

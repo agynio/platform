@@ -1,18 +1,17 @@
 import { describe, it, expect, vi } from 'vitest';
-import { SimpleAgent } from '../src/agents/simple.agent';
-import { BaseAgent } from '../src/agents/base.agent';
+import { Agent, AgentStaticConfigSchema } from '../src/agents/agent';
 
 class MockConfigService { openaiApiKey = 'sk-abc'; }
 class MockLoggerService { info = vi.fn(); debug = vi.fn(); error = vi.fn(); }
 class MockCheckpointerService { getCheckpointer = vi.fn(() => ({} as any)); }
 
-// Minimal stub: SimpleAgent requires an agentId to init
-const makeAgent = () => new SimpleAgent(new MockConfigService() as any, new MockLoggerService() as any, new MockCheckpointerService() as any, 'agent-1');
+// Minimal stub: Agent requires an agentId to init
+const makeAgent = () => new Agent(new MockConfigService() as any, new MockLoggerService() as any, new MockCheckpointerService() as any, 'agent-1');
 
-describe('BaseAgent.getConfigSchema / SimpleAgent.setConfig', () => {
+describe('Agent.getConfigSchema / Agent.setConfig', () => {
   it('returns expected JSON schema', () => {
     const a = makeAgent();
-    const schema = (a as unknown as BaseAgent).getConfigSchema() as any;
+    const schema = (a as unknown as any).getConfigSchema() as any;
     expect(schema.type).toBe('object');
     expect(schema.properties.systemPrompt).toMatchObject({ type: 'string' });
   // Legacy key summarizationKeepLast intentionally not present in schema anymore; we accept it leniently at runtime.
@@ -37,10 +36,14 @@ describe('BaseAgent.getConfigSchema / SimpleAgent.setConfig', () => {
     const a = makeAgent();
     const anyA: any = a as any;
   const originalLLM = (anyA.llm);
+<<<<<<< HEAD
   a.configure({ model: 'override-model' });
+=======
+    a.setConfig({ model: 'override-model' });
+>>>>>>> e9905a9 (feat(server): Phase 3 unified Agent node and buffer\n\n- Add unified apps/server/src/agents/agent.ts\n- Add apps/server/src/agents/messages-buffer.ts\n- Remove BaseAgent/SimpleAgent from public surface\n- Update templates to template key agent; adjust schema UI\n- LiveGraph destroy uses delete() if available\n- Update tests/docs references from SimpleAgent to Agent)
   // Expect underlying llm object mutated, not replaced with a new node
   expect(anyA.llm).toBe(originalLLM);
   expect((anyA.llm as any).model).toBe('override-model');
-  expect(anyA.loggerService.info).toHaveBeenCalledWith('SimpleAgent model updated to override-model');
+  expect(anyA.loggerService.info).toHaveBeenCalledWith('Agent model updated to override-model');
   });
 });

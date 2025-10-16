@@ -4,7 +4,7 @@ import { LoggerService } from '../src/services/logger.service';
 import { ConfigService } from '../src/services/config.service';
 import { CheckpointerService } from '../src/services/checkpointer.service';
 
-// Mock ChatOpenAI to avoid network; must be declared before importing SimpleAgent
+// Mock ChatOpenAI to avoid network; must be declared before importing Agent
 vi.mock('@langchain/openai', async (importOriginal) => {
   const mod = await importOriginal();
   class MockChatOpenAI extends mod.ChatOpenAI {
@@ -45,7 +45,7 @@ vi.mock('../src/services/checkpointer.service', async (importOriginal) => {
   return { ...mod, CheckpointerService: Fake };
 });
 
-import { SimpleAgent } from '../src/agents/simple.agent';
+import { Agent as SimpleAgent } from '../src/agents/agent';
 import type { TriggerMessage } from '../src/triggers/base.trigger';
 
 // Helper to make a configured agent

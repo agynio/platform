@@ -2,7 +2,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { AIMessage } from '@langchain/core/messages';
 import { CallAgentTool } from '../src/tools/call_agent.tool';
 import { LoggerService } from '../src/services/logger.service';
-import { BaseAgent } from '../src/agents/base.agent';
+import { Agent } from '../src/agents/agent';
 import { DynamicStructuredTool } from '@langchain/core/tools';
 import { TemplateRegistry } from '../src/graph/templateRegistry';
 import { LiveGraphRuntime } from '../src/graph/liveGraph.manager';
@@ -11,14 +11,14 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 type Msg = { content: string; info: Record<string, unknown> };
 
-class FakeAgent extends BaseAgent {
+class FakeAgent extends Agent {
   constructor(
     logger: LoggerService,
     private responder?: (thread: string, msgs: Msg[]) => Promise<AIMessage>,
   ) {
-    super(logger);
-    this._graph = { invoke: vi.fn() } as any;
-    this._config = { configurable: {} } as any;
+    super({ openaiApiKey: 'sk' } as any, logger, { getCheckpointer: () => ({}) } as any, 'node1');
+    (this as any)._graph = { invoke: vi.fn() } as any;
+    (this as any)._config = { configurable: {} } as any;
   }
   async configure(_: Record<string, unknown>): Promise<void> {}
   async invoke(thread: string, messages: Msg[]): Promise<AIMessage> {
@@ -27,12 +27,12 @@ class FakeAgent extends BaseAgent {
   }
 }
 
-class FakeParentAgent extends BaseAgent {
+class FakeParentAgent extends Agent {
   public calls: Array<{ thread: string; messages: Msg[] }> = [];
   constructor(logger: LoggerService) {
-    super(logger);
-    this._graph = { invoke: vi.fn() } as any;
-    this._config = { configurable: {} } as any;
+    super({ openaiApiKey: 'sk' } as any, logger, { getCheckpointer: () => ({}) } as any, 'nodeP');
+    (this as any)._graph = { invoke: vi.fn() } as any;
+    (this as any)._config = { configurable: {} } as any;
   }
   async configure(_: Record<string, unknown>): Promise<void> {}
   async invoke(thread: string, messages: Msg[]): Promise<AIMessage> {
@@ -162,7 +162,7 @@ describe('CallAgentTool graph wiring', () => {
 
     class FakeAgent2 extends FakeAgent {}
 
-    // Minimal TemplateRegistry with simpleAgent and callAgentTool
+    // Minimal TemplateRegistry with agent and callAgentTool
     const registry = new TemplateRegistry();
     class FakeAgentWithTools extends FakeAgent2 {
       addTool(_tool: unknown) {}
@@ -170,7 +170,7 @@ describe('CallAgentTool graph wiring', () => {
     }
 
     registry
-      .register('simpleAgent', () => new FakeAgentWithTools(logger) as any, {
+      .register('agent', () => new FakeAgentWithTools(logger) as any, {
         sourcePorts: {
           tools: { kind: 'method', create: 'addTool', destroy: 'removeTool' },
         },
@@ -185,8 +185,8 @@ describe('CallAgentTool graph wiring', () => {
 
     const graph = {
       nodes: [
-        { id: 'A', data: { template: 'simpleAgent', config: {} } },
-        { id: 'B', data: { template: 'simpleAgent', config: {} } },
+        { id: 'A', data: { template: 'agent', config: {} } },
+        { id: 'B', data: { template: 'agent', config: {} } },
         { id: 'T', data: { template: 'callAgentTool', config: { description: 'desc' } } },
       ],
       edges: [

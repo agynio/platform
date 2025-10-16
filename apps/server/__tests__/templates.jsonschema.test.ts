@@ -5,7 +5,7 @@ import type { JSONSchema7 } from 'json-schema';
 type JsonSchemaWithUi = JSONSchema7 & { 'ui:field'?: string };
 import { ShellToolStaticConfigSchema } from '../src/tools/shell_command';
 import { LocalMcpServerStaticConfigSchema } from '../src/mcp/localMcpServer';
-import { SimpleAgentStaticConfigSchema } from '../src/agents/simple.agent';
+import { AgentStaticConfigSchema as SimpleAgentStaticConfigSchema } from '../src/agents/agent';
 
 describe('template schemas: env ui:field', () => {
   it('ShellToolStaticConfigSchema.env includes ui:field ReferenceEnvField', () => {
@@ -38,7 +38,7 @@ describe('template schemas: env ui:field', () => {
   });
 });
 
-describe('SimpleAgent schema: enum UI metadata', () => {
+describe('Agent schema: enum UI metadata', () => {
   it("includes ui:widget 'select' for whenBusy/processBuffer", () => {
     const js = toJSONSchema(SimpleAgentStaticConfigSchema) as JSONSchema7 & { properties?: Record<string, any> };
     expect(js.type).toBe('object');

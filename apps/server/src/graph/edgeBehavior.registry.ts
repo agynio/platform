@@ -5,5 +5,5 @@ import { EdgeBehaviorRegistry } from './liveGraph.types';
 export const defaultEdgeBehaviors: EdgeBehaviorRegistry = {
   // Example assumptions for existing system (adjust if actual templates differ):
   'SlackTrigger.subscribe': { reversible: true, reverseHandle: 'unsubscribe', skipIfExecuted: true },
-  'SimpleAgent.addTool': { idempotent: true, skipIfExecuted: true },
+  'agent.addTool': { idempotent: true, skipIfExecuted: true },
 };

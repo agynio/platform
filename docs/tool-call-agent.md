@@ -7,7 +7,7 @@ TerminateResponse
 - Any tool may return `new TerminateResponse(note?)` to explicitly signal the agent should end the current run.
 - ToolsNode inspects tool outputs. If a tool returns a TerminateResponse:
   - It appends a ToolMessage with content = `note` if provided, else `"Finished"`.
-  - It returns NodeOutput with `done=true`. The SimpleAgent graph treats this as a terminal condition from the tools branch.
+- It returns NodeOutput with `done=true`. The Agent graph treats this as a terminal condition from the tools branch.
 
 Finish tool
 - New tool at apps/server/src/tools/finish.tool.ts providing a standard way to end a task.
@@ -17,8 +17,8 @@ Finish tool
   - Behavior: returns `new TerminateResponse(note)`.
 - Registered in the template registry as `finishTool` with `targetPorts: { $self: { kind: 'instance' } }` and metadata `{ title: 'Finish', kind: 'tool', capabilities: { staticConfigurable: true } }`.
 
-SimpleAgent configuration additions
-- Three static config fields were added to SimpleAgent (apps/server/src/agents/simple.agent.ts):
+Agent configuration additions
+- Three static config fields were added to Agent (apps/server/src/agents/agent.ts):
   - `restrictOutput: boolean = false` (default false for backward compatibility)
   - `restrictionMessage: string = "Do not produce a final answer directly. Before finishing, call a tool. If no tool is needed, call the 'finish' tool."`
   - `restrictionMaxInjections: number = 0` (0 means unlimited per turn)
@@ -35,10 +35,10 @@ Enforcement node
 
 State and NodeOutput additions
 - NodeOutput now includes optional `done`, `restrictionInjectionCount`, and `restrictionInjected` fields.
-- SimpleAgent state tracks the same keys with reducers `(right ?? left)` and defaults `(false/0/false)`.
+- Agent state tracks the same keys with reducers `(right ?? left)` and defaults `(false/0/false)`.
 - SummarizationNode resets `restrictionInjectionCount` and `restrictionInjected` to per-turn defaults each time it runs.
 
-Graph wiring (SimpleAgent)
+Graph wiring (Agent)
 - Nodes: summarize, call_model, tools, enforce.
 - Edges:
   - START → summarize
