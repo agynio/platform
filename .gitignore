@@ -7,3 +7,5 @@ agent_instances
 **/package-lock.json
 
 dist/
+
+.idea/

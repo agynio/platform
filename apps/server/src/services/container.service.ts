@@ -51,7 +51,9 @@ export class ContainerService {
   private registry?: ContainerRegistryService;
 
   constructor(private logger: LoggerService) {
-    this.docker = new Docker();
+    this.docker = new Docker({
+      socketPath: process.env.DOCKER_SOCKET
+    });
   }
 
   /** Attach registry service for persistence and last-used tracking */
