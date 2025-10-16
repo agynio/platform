@@ -54,10 +54,10 @@ export const Errors = {
       message: `Factory for node ${nodeId} requested dependency ${depId} before it was created (ensure ordering)`,
       nodeId,
     }),
-  missingSetConfig: (nodeId: string) =>
+  missingConfigure: (nodeId: string) =>
     new GraphError({
-      code: 'MISSING_SET_CONFIG',
-      message: `Config provided for node ${nodeId} but instance has no setConfig method`,
+      code: 'MISSING_CONFIGURE',
+      message: `Config provided for node ${nodeId} but instance has no configure method`,
       nodeId,
     }),
 };

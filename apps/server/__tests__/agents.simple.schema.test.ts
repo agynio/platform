@@ -9,7 +9,7 @@ class MockCheckpointerService { getCheckpointer = vi.fn(() => ({} as any)); }
 // Minimal stub: SimpleAgent requires an agentId to init
 const makeAgent = () => new SimpleAgent(new MockConfigService() as any, new MockLoggerService() as any, new MockCheckpointerService() as any, 'agent-1');
 
-describe('BaseAgent.getConfigSchema / SimpleAgent.setConfig', () => {
+describe('BaseAgent.getConfigSchema / SimpleAgent.configure', () => {
   it('returns expected JSON schema', () => {
     const a = makeAgent();
     const schema = (a as unknown as BaseAgent).getConfigSchema() as any;
@@ -19,21 +19,21 @@ describe('BaseAgent.getConfigSchema / SimpleAgent.setConfig', () => {
     expect(schema.properties.summarizationMaxTokens).toMatchObject({ type: 'integer', minimum: 1 });
   });
 
-  it('setConfig applies systemPrompt and summarization fields', () => {
+  it('configure applies systemPrompt and summarization fields', () => {
     const a = makeAgent();
     // Spy on internal nodes via any access (we just validate calls not strict behavior)
     const anyA: any = a as any;
     anyA.callModelNode = { setSystemPrompt: vi.fn(), addTool: vi.fn(), removeTool: vi.fn() };
     anyA.summarizeNode = { setOptions: vi.fn() };
 
-  a.configure({ systemPrompt: 'You are helpful.' });
+    a.configure({ systemPrompt: 'You are helpful.' });
     expect(anyA.callModelNode.setSystemPrompt).toHaveBeenCalledWith('You are helpful.');
 
-  a.configure({ summarizationKeepLast: 5, summarizationMaxTokens: 100 });
+    a.configure({ summarizationKeepLast: 5, summarizationMaxTokens: 100 });
     expect(anyA.summarizeNode.setOptions).toHaveBeenCalledWith({ keepTokens: 5, maxTokens: 100 });
   });
 
-  it('supports model override via setConfig', () => {
+  it('supports model override via configure', () => {
     const a = makeAgent();
     const anyA: any = a as any;
   const originalLLM = (anyA.llm);

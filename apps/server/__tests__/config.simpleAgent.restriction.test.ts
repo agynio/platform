@@ -12,7 +12,7 @@ vi.mock('../src/services/checkpointer.service', async (importOriginal) => {
 });
 
 describe('SimpleAgent config restrictions', () => {
-  it('setConfig preserves systemPrompt and toggles restriction flags without concatenation', async () => {
+  it('configure preserves systemPrompt and toggles restriction flags without concatenation', async () => {
     const cfg = new ConfigService({
       githubAppId: '1', githubAppPrivateKey: 'k', githubInstallationId: 'i', openaiApiKey: 'x', githubToken: 't', mongodbUrl: 'm',
     } as any);

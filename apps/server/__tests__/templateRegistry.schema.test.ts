@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { TemplateRegistry } from '../src/graph/templateRegistry';
 import type { TemplateNodeSchema, TemplateKind } from '../src/graph/types';
 
-const noopFactory = () => ({ setConfig: () => {} });
+const noopFactory = () => ({ configure: () => {} });
 
 const dummyPorts = {
   sourcePorts: { out: { kind: 'instance' as const } },

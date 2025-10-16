@@ -41,7 +41,7 @@ Each template now advertises its capabilities and optional static configuration 
 
 - `capabilities.pausable`: Node supports pause/resume (triggers, agents).
 - `capabilities.provisionable`: Node exposes provision/deprovision lifecycle (Slack trigger, MCP server).
-- `capabilities.staticConfigurable`: Node accepts an initial static config that is applied through `setConfig` (agent, container provider, call_agent tool, MCP server).
+- `capabilities.staticConfigurable`: Node accepts an initial static config that is applied through `configure` (agent, container provider, call_agent tool, MCP server).
 - `capabilities.dynamicConfigurable`: Node exposes a dynamic runtime config surface (MCP server tool enable/disable) once `dynamicConfigReady` is true.
 
 Static config schemas (all templates now expose one – some are currently empty placeholders to allow forward-compatible UI forms):
@@ -52,6 +52,6 @@ Static config schemas (all templates now expose one – some are currently empty
 - `shellTool`: (empty object for now).
 - `githubCloneRepoTool`: (empty object for now).
 - `sendSlackMessageTool`: (empty object for now).
-- `slackTrigger`: debounceMs, waitForBusy (note: presently setConfig is a no-op; values must be supplied at creation time until runtime reconfiguration is implemented).
+- `slackTrigger`: debounceMs, waitForBusy (note: presently configure is a no-op; values must be supplied at creation time until runtime reconfiguration is implemented).
 
 Dynamic config (currently only MCP server) becomes available after initial tool discovery; UI should check `dynamicConfigReady` before rendering its form.

@@ -6,7 +6,7 @@ describe('Slack static config schemas', () => {
   it('SendSlackMessageToolStaticConfigSchema: accepts xoxb- tokens or reference field', () => {
     expect(() => SendSlackMessageToolStaticConfigSchema.parse({ bot_token: 'xoxb-123', default_channel: 'C1' })).not.toThrow();
     expect(() => SendSlackMessageToolStaticConfigSchema.parse({ bot_token: { value: 'xoxb-abc', source: 'static' } })).not.toThrow();
-    // vault ref is allowed syntactically; deeper validation occurs in setConfig
+    // vault ref is allowed syntactically; deeper validation occurs in configure
     expect(() => SendSlackMessageToolStaticConfigSchema.parse({ bot_token: { value: 'secret/path/KEY', source: 'vault' } })).not.toThrow();
   });
 
