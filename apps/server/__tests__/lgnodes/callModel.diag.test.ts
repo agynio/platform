@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import { AIMessage, HumanMessage } from '@langchain/core/messages';
-import { CallModelNode } from '../../src/lgnodes/callModel.lgnode';
+import { CallModelNode } from '../../src/nodes/callModel.node';
 
 // Mock OpenAI LLM to detect invocation
 vi.mock('@langchain/openai', () => {

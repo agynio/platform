@@ -311,7 +311,6 @@ export class LiveGraphRuntime {
     const inst = live.instance as NodeLifecycle | undefined;
     if (inst && typeof inst.delete === 'function') {
       try { await inst.delete(); } catch {}
- (feat(server): Phase 3 unified Agent node and buffer\n\n- Add unified apps/server/src/agents/agent.ts\n- Add apps/server/src/agents/messages-buffer.ts\n- Remove BaseAgent/SimpleAgent from public surface\n- Update templates to template key agent; adjust schema UI\n- LiveGraph destroy uses delete() if available\n- Update tests/docs references from SimpleAgent to Agent)
     }
     this.state.nodes.delete(nodeId);
     this.state.inboundEdges.delete(nodeId);
