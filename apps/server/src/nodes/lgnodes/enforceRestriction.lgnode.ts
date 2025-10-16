@@ -1,5 +1,5 @@
 import { AIMessage, BaseMessage, SystemMessage } from '@langchain/core/messages';
-import { NodeOutput } from '../types';
+import { NodeOutput } from '../../types';
 
 export class EnforceRestrictionNode {
   constructor(

@@ -1,6 +1,6 @@
 import { BaseMessage } from '@langchain/core/messages';
 import { LangGraphRunnableConfig } from '@langchain/langgraph';
-import { NodeOutput } from '../types';
+import { NodeOutput } from '../../types';
 
 export abstract class BaseNode {
   constructor() {}
