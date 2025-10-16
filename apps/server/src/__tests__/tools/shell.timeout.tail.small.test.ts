@@ -24,7 +24,7 @@ describe('ShellTool timeout full inclusion when <=10k', () => {
     const provider = { provide: vi.fn(async () => fakeContainer) } as any;
     const tool = new ShellTool(undefined as any, logger);
     tool.setContainerProvider(provider);
-    await tool.setConfig({});
+    await tool.configure({});
     const t = tool.init();
 
     try {
@@ -42,4 +42,3 @@ describe('ShellTool timeout full inclusion when <=10k', () => {
     }
   });
 });
-

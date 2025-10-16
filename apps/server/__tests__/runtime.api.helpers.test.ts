@@ -29,6 +29,8 @@ describe('Runtime helpers and GraphService API surfaces', () => {
       private listeners: Array<(s: ProvisionStatus)=>void> = [];
       configure = vi.fn(async (_cfg: Record<string, unknown>) => {});
       getProvisionStatus() { return this.status; }
+      async start() { await this.provision(); }
+      async stop() { await this.deprovision(); }
       async provision() { this.status = { state: 'ready' }; this.dynReady = true; this.listeners.forEach(l=>l(this.status)); }
       async deprovision() { this.status = { state: 'not_ready' }; this.dynReady = false; this.listeners.forEach(l=>l(this.status)); }
       onProvisionStatusChange(l: (s: ProvisionStatus)=>void) { this.listeners.push(l); return ()=>{ this.listeners = this.listeners.filter(x=>x!==l); }; }
@@ -92,8 +94,8 @@ describe('Runtime helpers and GraphService API surfaces', () => {
     expect(instB.setDynamicConfig).toHaveBeenCalledWith({ a: true });
 
     // setNodeConfig on instance directly
-    instB.setConfig = vi.fn();
-    await instB.setConfig({ x: 1 });
-    expect(instB.setConfig).toHaveBeenCalledWith({ x: 1 });
+    instB.configure = vi.fn();
+    await instB.configure({ x: 1 });
+    expect(instB.configure).toHaveBeenCalledWith({ x: 1 });
   });
 });

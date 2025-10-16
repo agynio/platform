@@ -35,7 +35,7 @@ describe('ContainerProviderEntity platform reuse logic', () => {
     (svc.getContainerLabels as unknown as vi.Mock).mockResolvedValue({ [PLATFORM_LABEL]: 'linux/amd64' });
 
     const provider = new ContainerProviderEntity(svc as unknown as ContainerService, {}, idLabels);
-    provider.setConfig({ platform: 'linux/arm64' }); // DinD disabled by default
+    provider.configure({ platform: 'linux/arm64' }); // DinD disabled by default
     const c = await provider.provide('t1');
 
     // ensure lookup used the thread-scoped label and role=workspace
@@ -67,7 +67,7 @@ describe('ContainerProviderEntity platform reuse logic', () => {
 
     const provider = new ContainerProviderEntity(svc as unknown as ContainerService, {}, idLabels);
     // DinD disabled in this test, but even if enabled, provider should not pick dind as workspace
-    provider.setConfig({ enableDinD: false });
+    provider.configure({ enableDinD: false });
     const c = await provider.provide('t-dind');
 
     // Should have started a fresh workspace container, not reused dind
@@ -82,7 +82,7 @@ describe('ContainerProviderEntity platform reuse logic', () => {
     (svc.getContainerLabels as unknown as vi.Mock).mockResolvedValue({});
 
     const provider = new ContainerProviderEntity(svc as unknown as ContainerService, {}, idLabels);
-    provider.setConfig({ platform: 'linux/arm64' }); // DinD disabled by default
+    provider.configure({ platform: 'linux/arm64' }); // DinD disabled by default
     const c = await provider.provide('t2');
 
     expect(existing.stop).toHaveBeenCalled();
@@ -128,7 +128,7 @@ describe('ContainerProviderEntity platform reuse logic', () => {
     const startImpl = async (_opts: Parameters<ContainerService['start']>[0]) => new MockContainer('cid123', svc);
     (svc.start as vi.Mock).mockImplementationOnce(startImpl);
     const provider = new ContainerProviderEntity(svc as unknown as ContainerService, {}, idLabels);
-    provider.setConfig({});
+    provider.configure({});
     const c = await provider.provide('tdis');
     expect(c).toBeInstanceOf(MockContainer);
     // verify DOCKER_HOST is NOT injected when DinD disabled
@@ -141,7 +141,7 @@ describe('ContainerProviderEntity platform reuse logic', () => {
     (svc.start as vi.Mock).mockImplementationOnce(startImpl);
     // DinD readiness already mocked in beforeEach via execContainer
     const provider = new ContainerProviderEntity(svc as unknown as ContainerService, {}, idLabels);
-    provider.setConfig({ enableDinD: true });
+    provider.configure({ enableDinD: true });
     const c = await provider.provide('ten');
     expect(c).toBeInstanceOf(MockContainer);
     const call = (svc.start as vi.Mock).mock.calls[0];

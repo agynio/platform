@@ -19,7 +19,7 @@ describe('ShellTool timeout error message', () => {
 
     const tool = new ShellTool(undefined as any, logger);
     tool.setContainerProvider(provider);
-    await tool.setConfig({});
+    await tool.configure({});
     const t = tool.init();
 
     await expect(
@@ -37,7 +37,7 @@ describe('ShellTool timeout error message', () => {
     const provider = { provide: vi.fn(async () => fakeContainer) } as any;
     const tool = new ShellTool(undefined as any, logger);
     tool.setContainerProvider(provider);
-    await tool.setConfig({});
+    await tool.configure({});
     const t = tool.init();
     await expect(
       t.invoke({ command: 'sleep 999999' }, { configurable: { thread_id: 't' } } as any),
@@ -51,7 +51,7 @@ describe('ShellTool timeout error message', () => {
     const provider = { provide: vi.fn(async () => fakeContainer) } as any;
     const tool = new ShellTool(undefined as any, logger);
     tool.setContainerProvider(provider);
-    await tool.setConfig({ idleTimeoutMs: 60000 });
+    await tool.configure({ idleTimeoutMs: 60000 });
     const t = tool.init();
     await expect(
       t.invoke({ command: 'sleep 999999' }, { configurable: { thread_id: 't' } } as any),
@@ -186,7 +186,7 @@ describe('ShellTool non-timeout error propagation', () => {
 
     const tool = new ShellTool(undefined as any, logger);
     tool.setContainerProvider(provider as any);
-    await tool.setConfig({});
+    await tool.configure({});
     const t = tool.init();
 
     await expect(

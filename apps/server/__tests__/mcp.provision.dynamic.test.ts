@@ -92,7 +92,7 @@ describe('LocalMCPServer Provisionable + DynamicConfigurable', () => {
       (server as any).toolsDiscovered = true;
       return (server as any).toolsCache;
     });
-    await server.setConfig({ namespace: 'ns', command: 'cmd' } as McpServerConfig);
+    await server.configure({ namespace: 'ns', command: 'cmd' } as McpServerConfig);
     await server.provision();
     let tools = await server.listTools();
     expect(tools.map(t => t.name).sort()).toEqual(['toolA', 'toolB']);

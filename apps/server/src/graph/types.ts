@@ -10,7 +10,7 @@ export interface NodeDef {
   id: string;
   data: {
     template: string; // template name registered in TemplateRegistry
-    config?: Record<string, unknown>; // optional configuration passed via instance.setConfig
+    config?: Record<string, unknown>; // optional configuration passed via instance.configure
     dynamicConfig?: Record<string, unknown>; // optional dynamic configuration passed via instance.setDynamicConfig
   };
 }
@@ -36,7 +36,7 @@ export interface FactoryContext {
 
 // All factories must return a Configurable instance that implements setConfig
 export interface Configurable {
-  setConfig(cfg: Record<string, unknown>): void | Promise<void>;
+  configure(cfg: Record<string, unknown>): void | Promise<void>;
 }
 
 export type FactoryFn = (ctx: FactoryContext) => Configurable | Promise<Configurable>;

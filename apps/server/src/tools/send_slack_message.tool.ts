@@ -103,7 +103,7 @@ export class SendSlackMessageTool extends BaseTool {
     );
   }
 
-  async setConfig(_cfg: Record<string, unknown>): Promise<void> {
+  async configure(_cfg: Record<string, unknown>): Promise<void> {
     // Validate and apply static config
     const parsed = SendSlackMessageToolStaticConfigSchema.parse(_cfg || {});
     const bot = normalizeTokenRef(parsed.bot_token as any);

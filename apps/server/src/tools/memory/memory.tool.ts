@@ -83,7 +83,7 @@ export class UnifiedMemoryTool extends MemoryToolBase {
     return { message, code };
   }
 
-  async setConfig(cfg: Record<string, unknown>): Promise<void> {
+  async configure(cfg: Record<string, unknown>): Promise<void> {
     const parsed = UnifiedMemoryToolNodeStaticConfigSchema.safeParse(cfg);
     if (!parsed.success) {
       throw new Error('Invalid Memory tool config');

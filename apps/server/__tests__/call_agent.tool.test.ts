@@ -20,7 +20,7 @@ class FakeAgent extends BaseAgent {
     this._graph = { invoke: vi.fn() } as any;
     this._config = { configurable: {} } as any;
   }
-  async setConfig(_: Record<string, unknown>): Promise<void> {}
+  async configure(_: Record<string, unknown>): Promise<void> {}
   async invoke(thread: string, messages: Msg[]): Promise<AIMessage> {
     if (this.responder) return this.responder(thread, messages);
     return new AIMessage('OK');
@@ -34,7 +34,7 @@ class FakeParentAgent extends BaseAgent {
     this._graph = { invoke: vi.fn() } as any;
     this._config = { configurable: {} } as any;
   }
-  async setConfig(_: Record<string, unknown>): Promise<void> {}
+  async configure(_: Record<string, unknown>): Promise<void> {}
   async invoke(thread: string, messages: Msg[]): Promise<AIMessage> {
     this.calls.push({ thread, messages });
     return new AIMessage('ACK');
@@ -44,7 +44,7 @@ class FakeParentAgent extends BaseAgent {
 describe('CallAgentTool unit', () => {
   it('returns error when no agent attached', async () => {
     const tool = new CallAgentTool(new LoggerService());
-    await expect(tool.setConfig({ description: 'desc' })).resolves.toBeUndefined();
+    await expect(tool.configure({ description: 'desc' })).resolves.toBeUndefined();
     const dynamic: DynamicStructuredTool = tool.init();
     const out = await dynamic.invoke(
       { input: 'hi', childThreadId: 'x' },
@@ -55,7 +55,7 @@ describe('CallAgentTool unit', () => {
 
   it('calls attached agent and returns its response.text', async () => {
     const tool = new CallAgentTool(new LoggerService());
-    await tool.setConfig({ description: 'desc' });
+    await tool.configure({ description: 'desc' });
     const agent = new FakeAgent(new LoggerService(), async (thread, _msgs) => {
       expect(thread).toBe('t2__sub');
       return new AIMessage('OK');
@@ -71,7 +71,7 @@ describe('CallAgentTool unit', () => {
 
   it('passes context through info', async () => {
     const tool = new CallAgentTool(new LoggerService());
-    await tool.setConfig({ description: 'desc' });
+    await tool.configure({ description: 'desc' });
     const agent = new FakeAgent(new LoggerService(), async (_thread, msgs) => {
       expect(msgs[0]?.info?.deep).toBe(42);
       return new AIMessage('OK');
@@ -87,7 +87,7 @@ describe('CallAgentTool unit', () => {
 
   it('uses provided description in tool metadata', async () => {
     const tool = new CallAgentTool(new LoggerService());
-    await tool.setConfig({ description: 'My desc' });
+    await tool.configure({ description: 'My desc' });
     const dynamic = tool.init();
     expect(dynamic.description).toBe('My desc');
     expect(dynamic.name).toBe('call_agent');
@@ -95,7 +95,7 @@ describe('CallAgentTool unit', () => {
 
   it('concatenates childThreadId with parent thread_id when provided', async () => {
     const tool = new CallAgentTool(new LoggerService());
-    await tool.setConfig({ description: 'desc' });
+    await tool.configure({ description: 'desc' });
     const agent = new FakeAgent(new LoggerService(), async (thread, _msgs) => {
       expect(thread).toBe('parent__sub');
       return new AIMessage('OK');
@@ -111,7 +111,7 @@ describe('CallAgentTool unit', () => {
 
   it('async mode returns sent immediately and later triggers parent with child result', async () => {
     const tool = new CallAgentTool(new LoggerService());
-    await tool.setConfig({ description: 'desc', response: 'async' });
+    await tool.configure({ description: 'desc', response: 'async' });
     const child = new FakeAgent(new LoggerService(), async (thread, msgs) => {
       expect(thread).toBe('p__c1');
       expect(msgs[0]?.content).toBe('do work');
@@ -135,7 +135,7 @@ describe('CallAgentTool unit', () => {
 
   it('ignore mode returns sent and does not trigger parent', async () => {
     const tool = new CallAgentTool(new LoggerService());
-    await tool.setConfig({ description: 'desc', response: 'ignore' });
+    await tool.configure({ description: 'desc', response: 'ignore' });
     const child = new FakeAgent(new LoggerService(), async () => {
       await sleep(5);
       return new AIMessage('ignored');

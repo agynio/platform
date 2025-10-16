@@ -9,7 +9,7 @@ import { LoggerService } from '../src/services/logger.service';
 // Simple fixtures
 class A {
   value = 0;
-  setConfig(cfg: any) {
+  configure(cfg: any) {
     this.value = cfg.value;
   }
   attach(b: any) {
@@ -21,7 +21,7 @@ class A {
 }
 class B {
   count = 0;
-  setConfig(cfg: any) {
+  configure(cfg: any) {
     this.count = cfg.count;
   }
   subscribe(t: any) {

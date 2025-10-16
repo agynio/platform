@@ -14,13 +14,13 @@ describe('UnifiedMemoryTool config overrides and templates exposure', () => {
     expect(dynamic.description).toMatch(/Unified Memory tool/i);
 
     // override description only (back-compat default name)
-    await tool.setConfig({ description: 'Custom desc' });
+    await tool.configure({ description: 'Custom desc' });
     dynamic = tool.init();
     expect(dynamic.name).toBe('memory');
     expect(dynamic.description).toBe('Custom desc');
 
     // override name (valid)
-    await tool.setConfig({ name: 'mem_x' });
+    await tool.configure({ name: 'mem_x' });
     dynamic = tool.init();
     expect(dynamic.name).toBe('mem_x');
     expect(dynamic.description).toBe('Custom desc');
@@ -28,7 +28,7 @@ describe('UnifiedMemoryTool config overrides and templates exposure', () => {
 
   it('rejects invalid name via schema', async () => {
     const tool = new UnifiedMemoryTool(new LoggerService());
-    await expect(tool.setConfig({ name: 'Bad-Name' })).rejects.toThrow();
+    await expect(tool.configure({ name: 'Bad-Name' })).rejects.toThrow();
     // ensure defaults unchanged
     const dynamic = tool.init();
     expect(dynamic.name).toBe('memory');
@@ -40,4 +40,3 @@ describe('UnifiedMemoryTool config overrides and templates exposure', () => {
     expect(Object.keys(js.properties)).toEqual(expect.arrayContaining(['name','description','title']));
   });
 });
-

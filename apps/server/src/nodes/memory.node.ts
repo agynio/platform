@@ -26,7 +26,7 @@ export class MemoryNode {
   constructor(private db: Db, private nodeId: string, private config: MemoryNodeConfig) {}
 
   // Accept either internal config shape or static schema shape; map 'thread' -> 'perThread'.
-  setConfig(config: Partial<MemoryNodeConfig> & Partial<MemoryNodeStaticConfig>) {
+  configure(config: Partial<MemoryNodeConfig> & Partial<MemoryNodeStaticConfig>) {
     const next: Partial<MemoryNodeConfig> = { ...this.config };
     if (config.scope !== undefined) {
       const scopeVal = (config as any).scope;

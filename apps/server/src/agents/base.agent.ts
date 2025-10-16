@@ -319,5 +319,5 @@ export abstract class BaseAgent implements TriggerListener, StaticConfigurable, 
     this.threads.clear();
   }
 
-  abstract setConfig(_cfg: Record<string, unknown>): void | Promise<void>;
+  abstract configure(_cfg: Record<string, unknown>): void | Promise<void>;
 }

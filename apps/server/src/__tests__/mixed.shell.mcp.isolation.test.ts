@@ -26,7 +26,7 @@ describe('Mixed Shell + MCP overlay isolation', () => {
     const provider: any = new SharedProvider();
 
     const shell = new ShellTool(undefined as any, logger); shell.setContainerProvider(provider);
-    await shell.setConfig({ env: [ { key: 'S_VAR', value: 's' } ] });
+    await shell.configure({ env: [ { key: 'S_VAR', value: 's' } ] });
 
     // Mock docker for MCP
     const captured: any[] = [];
@@ -39,7 +39,7 @@ describe('Mixed Shell + MCP overlay isolation', () => {
     const cs: any = { getDocker: () => docker };
     const mcp = new LocalMCPServer(cs, logger as any);
     (mcp as any).setContainerProvider(provider);
-    await mcp.setConfig({ namespace: 'n', command: 'mcp start --stdio', env: [ { key: 'M_VAR', value: 'm' } ], startupTimeoutMs: 10 } as any);
+    await mcp.configure({ namespace: 'n', command: 'mcp start --stdio', env: [ { key: 'M_VAR', value: 'm' } ], startupTimeoutMs: 10 } as any);
 
     // Shell exec
     const tool = shell.init();
