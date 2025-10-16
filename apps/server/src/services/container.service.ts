@@ -324,16 +324,27 @@ export class ContainerService {
     const stdoutStream = new PassThrough();
     const stderrStream = new PassThrough();
 
-    const hijackStream: any = await new Promise((resolve, reject) => {
+    // Hijacked stream is duplex (readable+writeable)
+    const hijackStream: NodeJS.ReadWriteStream = (await new Promise<NodeJS.ReadWriteStream>((resolve, reject) => {
       exec.start({ hijack: true, stdin: true }, (err, stream) => {
         if (err) return reject(err);
         if (!stream) return reject(new Error('No stream returned from exec.start'));
-        resolve(stream);
+        resolve(stream as unknown as NodeJS.ReadWriteStream);
       });
-    });
+    })) as NodeJS.ReadWriteStream;
 
     if (!tty && demux) {
-      this.docker.modem.demuxStream(hijackStream, stdoutStream, stderrStream);
+      // Prefer docker modem demux; fall back to manual demux if unavailable or throws
+      try {
+        // Narrow modem type to expected shape for demux
+        const modem = this.docker.modem as unknown as { demuxStream: (s: NodeJS.ReadableStream, out: NodeJS.WritableStream, err: NodeJS.WritableStream) => void };
+        if (!modem?.demuxStream) throw new Error('demuxStream not available');
+        modem.demuxStream(hijackStream, stdoutStream, stderrStream);
+      } catch {
+        const { stdout, stderr } = demuxDockerMultiplex(hijackStream);
+        stdout.pipe(stdoutStream);
+        stderr.pipe(stderrStream);
+      }
     } else {
       hijackStream.pipe(stdoutStream);
     }
@@ -457,7 +468,9 @@ export class ContainerService {
                 },
               });
               try {
-                this.docker.modem.demuxStream(stream as any, outStdout as any, outStderr as any);
+                const modem = this.docker.modem as unknown as { demuxStream: (s: NodeJS.ReadableStream, out: NodeJS.WritableStream, err: NodeJS.WritableStream) => void };
+                if (!modem?.demuxStream) throw new Error('demuxStream not available');
+                modem.demuxStream(stream, outStdout, outStderr);
               } catch {
                 const { stdout, stderr } = demuxDockerMultiplex(stream);
                 stdout.pipe(outStdout);
@@ -496,7 +509,11 @@ export class ContainerService {
         stream.on('error', (e) => {
           if (finished) return;
           clearAll(execTimer, idleTimer);
-          // eslint-disable-next-line @typescript-eslint/no-unused-vars
+          // Flush decoders to avoid dropping partial code units
+          try {
+            stdoutCollector.flush();
+            stderrCollector.flush();
+          } catch {}
           finished = true;
           reject(e);
         });
