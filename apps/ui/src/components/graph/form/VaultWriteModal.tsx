@@ -3,7 +3,8 @@ import { useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/graph/api';
 import { notifyError, notifySuccess } from '@/lib/notify';
 
-export function VaultWriteModal({ mount, path, key, onClose }: { mount: string; path: string; key: string; onClose: (didWrite?: boolean) => void }) {
+// Avoid reserved React prop name "key" in component props
+export function VaultWriteModal({ mount, path, secretKey, onClose }: { mount: string; path: string; secretKey: string; onClose: (didWrite?: boolean) => void }) {
   const [value, setValue] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const ref = useRef<HTMLTextAreaElement | null>(null);
@@ -52,7 +53,7 @@ export function VaultWriteModal({ mount, path, key, onClose }: { mount: string; 
   async function submit() {
     setSubmitting(true);
     try {
-      await api.writeVaultKey(mount, { path, key, value });
+      await api.writeVaultKey(mount, { path, key: secretKey, value });
       await qc.invalidateQueries({ queryKey: ['vault', 'keys', mount, path] });
       notifySuccess('Secret updated');
       onClose(true);
@@ -80,7 +81,7 @@ export function VaultWriteModal({ mount, path, key, onClose }: { mount: string; 
             <span className="font-mono">path:</span> <span className="font-mono">{path}</span>
           </div>
           <div>
-            <span className="font-mono">key:</span> <span className="font-mono">{key}</span>
+            <span className="font-mono">key:</span> <span className="font-mono">{secretKey}</span>
           </div>
         </div>
         <label className="block text-[11px] mb-1" htmlFor="vault-value">

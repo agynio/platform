@@ -129,7 +129,7 @@ export function ReferenceField({ formData, onChange }: { formData?: ReferenceVal
         <VaultWriteModal
           mount={ref.mount}
           path={ref.path}
-          key={ref.key}
+          secretKey={ref.key}
           onClose={(didWrite) => {
             setOpen(false);
             // Return focus to the trigger for accessibility

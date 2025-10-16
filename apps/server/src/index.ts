@@ -155,8 +155,8 @@ async function bootstrap() {
         reply.code(201);
         return { mount, path: body.path, key: body.key, version };
       } catch (e: unknown) {
-        const status = isHttpError(e) ? e.statusCode : 500;
-        reply.code(status);
+        const sc = statusCodeFrom(e);
+        reply.code(typeof sc === 'number' && Number.isFinite(sc) ? sc : 500);
         return { error: 'vault_write_failed' };
       }
     });
@@ -352,6 +352,14 @@ function isValidWriteBody(body: unknown): body is { path: string; key: string; v
   return typeof o.path === 'string' && o.path.length > 0 && typeof o.key === 'string' && o.key.length > 0 && typeof o.value === 'string';
 }
 
-function isHttpError(e: unknown): e is { statusCode?: number } {
-  return !!e && typeof e === 'object' && 'statusCode' in (e as any);
+function statusCodeFrom(e: unknown): number | undefined {
+  if (e && typeof e === 'object') {
+    const v = (e as { statusCode?: unknown }).statusCode;
+    if (typeof v === 'number') return v;
+    if (typeof v === 'string') {
+      const n = Number(v);
+      if (Number.isFinite(n)) return n;
+    }
+  }
+  return undefined;
 }
