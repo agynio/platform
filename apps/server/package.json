@@ -41,6 +41,7 @@
     "@types/lodash-es": "^4.17.12",
     "@types/md5": "^2.3.5",
     "@types/node": "^24.5.1",
+    "nock": "^14.0.0",
     "cross-env": "^7.0.3",
     "mongodb-memory-server": "^10.1.4",
     "prettier": "^3.6.2",

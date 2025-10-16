@@ -100,7 +100,8 @@ export function registerNixRoutes(
         const msg = String(e?.message || '');
         const retriable = msg.includes('upstream_502') || msg.includes('upstream_503') || msg.includes('upstream_504') || e?.name === 'FetchError' || e?.code === 'ECONNRESET';
         if (attempt >= maxAttempts || !retriable) break;
-        await new Promise((r) => setTimeout(r, Math.min(250 * attempt, 1000)));
+        // Retry quickly; keep delay below typical route timeout to allow success within deadline
+        await new Promise((r) => setTimeout(r, Math.min(50 * attempt, 200)));
       }
     }
     throw lastErr;
@@ -199,4 +200,3 @@ export function registerNixRoutes(
     }
   });
 }
-
