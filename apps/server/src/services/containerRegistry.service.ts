@@ -201,7 +201,8 @@ export class ContainerRegistryService {
           // Determine whether this is a new or existing record
           const existing = await this.col.findOne({ container_id: item.id });
           if (existing) {
-            // Existing record: do not bump last_used_at; optionally recompute kill_after_at if missing
+            // Existing record: do not bump last_used_at; optionally recompute kill_after_at if missing.
+            // Preserve unrelated metadata fields (e.g., lastError, retryAfter, terminationAttempts) by updating dotted paths only.
             const setFields: Record<string, any> = {
               container_id: item.id,
               node_id: nodeId,
@@ -212,12 +213,15 @@ export class ContainerRegistryService {
               updated_at: nowIso,
               termination_reason: null,
               deleted_at: running ? null : nowIso,
-              metadata: { labels, platform: labels?.['hautech.ai/platform'], ttlSeconds: existing?.metadata?.ttlSeconds ?? 86400 },
+              'metadata.labels': labels,
+              'metadata.platform': labels?.['hautech.ai/platform'],
+              'metadata.ttlSeconds': typeof existing?.metadata?.ttlSeconds === 'number' ? existing.metadata.ttlSeconds : 86400,
             };
             if (!existing.kill_after_at && existing.last_used_at && typeof existing.metadata?.ttlSeconds === 'number') {
               const ttl = existing.metadata?.ttlSeconds;
               const recomputed = this.computeKillAfter(existing.last_used_at, ttl);
               setFields.kill_after_at = recomputed;
+              // Note: recomputation is safe even for stopped containers; getExpired() only targets running/terminating.
               this.logger.debug(
                 `ContainerRegistry: backfill recomputed kill_after_at for existing cid=${item.id.substring(0, 12)} ttl=${ttl}`,
               );
