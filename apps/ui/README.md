@@ -32,9 +32,9 @@ Docs
 - See docs/ui/graph for:
   - Data layer (API, hooks, socket)
   - TemplatesProvider + capability helpers
-  - Components: NodeDetailsPanel, StaticConfigForm, DynamicConfigForm
+  - Components: NodeDetailsPanel, RightPropertiesPanel (uses custom ConfigViews)
   - Socket.io status updates (no polling)
 
-Notes
-- Server emits JSON Schema 7 generated from Zod v4. UI uses RJSF with ajv8.
+Docs
+- Custom ConfigViews use shadcn/ui primitives and a typed registry. See docs/ui/config-views.md
 - Actions are optimistic; authoritative socket events reconcile cache.

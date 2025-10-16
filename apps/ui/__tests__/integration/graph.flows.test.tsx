@@ -2,7 +2,7 @@ import React from 'react';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
-import { DynamicConfigForm, NodeDetailsPanel, StaticConfigForm } from '../../src/components/graph';
+import { NodeDetailsPanel } from '../../src/components/graph';
 import { emitNodeStatus, server, TestProviders } from './testUtils';
 
 beforeAll(() => server.listen());
@@ -55,37 +55,5 @@ describe('Integration flows: Node actions, dynamic/static config', () => {
     await waitFor(() => expect(screen.queryByText('paused')).not.toBeInTheDocument());
   });
 
-  it('Dynamic config readiness, schema fetch, submit', async () => {
-    render(
-      <TestProviders>
-  <DynamicConfigForm nodeId="n3" />
-      </TestProviders>,
-    );
-
-    // Not ready placeholder
-    await waitFor(() => expect(screen.getByText(/Dynamic config not available yet/)).toBeInTheDocument());
-
-    // Ready event then schema-based form appears
-    emitNodeStatus({ nodeId: 'n3', dynamicConfigReady: true });
-
-    // Checkbox presence
-    await waitFor(() => expect(screen.getByLabelText('toolA')).toBeInTheDocument());
-
-  fireEvent.click(screen.getByLabelText('toolA'));
-  });
-
-  it('Static config submission and error handling', async () => {
-    // Force POST /config to error
-    server.use(http.post('/graph/nodes/:nodeId/config', () => new HttpResponse(null, { status: 500 })));
-
-    render(
-      <TestProviders>
-  <StaticConfigForm nodeId="n4" templateName="mock" />
-      </TestProviders>,
-    );
-
-    // Form appears
-    const input = await screen.findByLabelText('systemPrompt');
-  fireEvent.change(input, { target: { value: 'xyz' } });
-  });
+  // Schema-driven forms removed; covered by custom views tests elsewhere
 });

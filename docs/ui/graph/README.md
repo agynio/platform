@@ -7,8 +7,8 @@ Key ideas
 - Capabilities drive UI controls:
   - provisionable → Start/Stop buttons
   - pausable → Pause/Resume toggle
-  - staticConfigurable → StaticConfigForm rendered from staticConfigSchema
-  - dynamicConfigurable → DynamicConfigForm rendered from server-provided schema when ready
+  - staticConfigurable → custom static ConfigView rendered from registry
+  - dynamicConfigurable → custom dynamic ConfigView rendered from registry
 - Live status via socket.io; no polling
 
 Endpoints (reference)
