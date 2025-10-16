@@ -10,6 +10,7 @@ import { NodeStatusBadges } from '@/components/graph/NodeStatusBadges';
 import { NodeActionButtons } from '@/components/graph/NodeActionButtons';
 import { useNodeAction, useNodeStatus } from '@/lib/graph/hooks';
 import { canPause, canProvision } from '@/lib/graph/capabilities';
+import { NixPackagesSection } from '@/components/nix/NixPackagesSection';
 
 interface BuilderPanelNodeData {
   template: string;
@@ -110,6 +111,11 @@ export function RightPropertiesPanel({ node, onChange }: Props) {
             initialConfig={dynamicConfig}
             onConfigChange={(next) => update({ dynamicConfig: next })}
           />
+        </div>
+      )}
+      {data.template === 'containerProvider' && (
+        <div className="space-y-2">
+          <NixPackagesSection />
         </div>
       )}
       <hr className="border-border" />
