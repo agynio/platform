@@ -1,5 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { StaticConfigViewProps } from './types';
+import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
+import { Select } from '@/components/ui/select';
 
 const MODELS = ['gpt-5', 'gpt-4o-mini', 'o3-mini'];
 
@@ -42,8 +45,8 @@ export default function SimpleAgentConfigView({
   return (
     <div className="space-y-2 text-sm">
       <div>
-        <label className="block text-xs text-muted-foreground mb-1">Model</label>
-        <select
+        <Label>Model</Label>
+        <Select
           className="w-full border rounded px-2 py-1 bg-background"
           value={model}
           onChange={(e) => setModel(e.target.value)}
@@ -55,12 +58,12 @@ export default function SimpleAgentConfigView({
               {m}
             </option>
           ))}
-        </select>
+        </Select>
       </div>
 
       <div>
-        <label className="block text-xs text-muted-foreground mb-1">System prompt</label>
-        <textarea
+        <Label>System prompt</Label>
+        <Textarea
           className="w-full border rounded px-2 py-1 bg-background"
           rows={5}
           value={systemPrompt}

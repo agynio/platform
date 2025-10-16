@@ -20,8 +20,8 @@ export interface DynamicConfigViewProps {
   disabled?: boolean;
 }
 
-export type StaticConfigViewComponent = (props: StaticConfigViewProps) => ReactNode;
-export type DynamicConfigViewComponent = (props: DynamicConfigViewProps) => ReactNode;
+export type StaticConfigViewComponent = ComponentType<StaticConfigViewProps>;
+export type DynamicConfigViewComponent = ComponentType<DynamicConfigViewProps>;
 
 export interface ConfigViewRegistration {
   template: string;
