@@ -86,6 +86,53 @@ describe('ContainerCleanupService', () => {
     expect(after2?.status).toBe('stopped');
   });
 
+  it('treats 409 on remove as benign and marks stopped without recording failure', async () => {
+    if (!setupOk) return;
+    const cid = 'rminprog-1';
+    await registry.registerStart({ containerId: cid, nodeId: 'n', threadId: 't', image: 'i', ttlSeconds: 1 });
+    const col = client.db('test').collection('containers');
+    const past = new Date(Date.now() - 10_000).toISOString();
+    await col.updateOne({ container_id: cid }, { $set: { last_used_at: past, kill_after_at: past, status: 'running' } });
+    const svc = new ContainerCleanupService(
+      registry,
+      {
+        stopContainer: async () => { /* ok */ },
+        removeContainer: async () => { const e: any = new Error('removing'); e.statusCode = 409; throw e; },
+      } as any,
+      logger,
+    );
+    await svc.sweep(new Date());
+    const doc = await col.findOne({ container_id: cid });
+    expect(doc?.status).toBe('stopped');
+    // No termination failure metadata should be present
+    // @ts-expect-error metadata is optional
+    expect(doc?.metadata?.terminationAttempts).toBeUndefined();
+    // @ts-expect-error metadata is optional
+    expect(doc?.metadata?.lastError).toBeUndefined();
+    // @ts-expect-error metadata is optional
+    expect(doc?.metadata?.retryAfter).toBeUndefined();
+  });
+
+  it('treats 409 on stop as benign and proceeds to removal', async () => {
+    if (!setupOk) return;
+    const cid = 'stopinprog-1';
+    await registry.registerStart({ containerId: cid, nodeId: 'n', threadId: 't', image: 'i', ttlSeconds: 1 });
+    const col = client.db('test').collection('containers');
+    const past = new Date(Date.now() - 10_000).toISOString();
+    await col.updateOne({ container_id: cid }, { $set: { last_used_at: past, kill_after_at: past, status: 'running' } });
+    const svc = new ContainerCleanupService(
+      registry,
+      {
+        stopContainer: async () => { const e: any = new Error('conflict'); e.statusCode = 409; throw e; },
+        removeContainer: async () => { const gone: any = new Error('gone'); gone.statusCode = 404; throw gone; },
+      } as any,
+      logger,
+    );
+    await svc.sweep(new Date());
+    const doc = await col.findOne({ container_id: cid });
+    expect(doc?.status).toBe('stopped');
+  });
+
   it('respects CONTAINERS_CLEANUP_ENABLED gate in start()', async () => {
     if (!setupOk) return;
     process.env.CONTAINERS_CLEANUP_ENABLED = 'false';

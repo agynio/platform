@@ -501,6 +501,9 @@ export class ContainerService {
     } catch (e: any) {
       if (e?.statusCode === 304) {
         this.logger.debug(`Container already stopped cid=${containerId.substring(0, 12)}`);
+      } else if (e?.statusCode === 409) {
+        // Conflict typically indicates removal already in progress; treat as benign
+        this.logger.info(`Container stop conflict (likely removing) cid=${containerId.substring(0, 12)}`);
       } else {
         throw e;
       }
@@ -511,7 +514,16 @@ export class ContainerService {
   async removeContainer(containerId: string, force = false): Promise<void> {
     this.logger.info(`Removing container cid=${containerId.substring(0, 12)} force=${force}`);
     const container = this.docker.getContainer(containerId);
-    await container.remove({ force });
+    try {
+      await container.remove({ force });
+    } catch (e: any) {
+      if (e?.statusCode === 404) {
+        // Already removed – benign
+        this.logger.debug(`Container already removed cid=${containerId.substring(0, 12)}`);
+      } else {
+        throw e;
+      }
+    }
   }
 
   /** Inspect and return container labels */
