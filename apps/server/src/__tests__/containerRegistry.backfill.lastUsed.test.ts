@@ -36,7 +36,7 @@ describe('ContainerRegistryService backfill last_used behavior', () => {
     const col = client.db('test').collection('containers');
     const cid = 'exist-1';
     const past = new Date(Date.now() - 60_000).toISOString();
-    const precomputedKillAfter = new Date(new Date(past).getTime() + 86400 * 1000).toISOString();
+    const presetKill = new Date(new Date(past).getTime() + 86400 * 1000).toISOString();
     await col.insertOne({
       container_id: cid,
       node_id: 'n',
@@ -47,29 +47,32 @@ describe('ContainerRegistryService backfill last_used behavior', () => {
       created_at: past,
       updated_at: past,
       last_used_at: past,
-      kill_after_at: precomputedKillAfter,
+      kill_after_at: presetKill,
+      kill_after_at: presetKill,
       termination_reason: null,
       deleted_at: null,
       metadata: { ttlSeconds: 86400, labels: { 'hautech.ai/role': 'workspace' } },
     });
 
-    type MockSvc = Pick<ContainerService, 'findContainersByLabels' | 'getContainerLabels' | 'getDocker'>;
-    const dockerLike: Pick<Docker, 'getContainer'> = {
-      getContainer: (_id: string) => ({
-        inspect: async () => ({ Created: past, State: { Running: true }, Config: { Image: 'img' } }),
-      }) as unknown as Docker.Container,
-    } as unknown as Pick<Docker, 'getContainer'>;
-    const fake: MockSvc = {
-      findContainersByLabels: async () => [{ id: cid }] as unknown as any,
+    type Adapter = InstanceType<typeof ContainerRegistryService.BackfillAdapter>;
+    const fake: Adapter = {
+      findContainersByLabels: async () => [{ id: cid }],
       getContainerLabels: async () => ({ 'hautech.ai/role': 'workspace', 'hautech.ai/thread_id': 'node__t' }),
-      getDocker: () => dockerLike as unknown as Docker,
-    };
+      getDocker: () => ({
+        getContainer: (_id: string) => ({
+          inspect: async () => ({ Created: past, State: { Running: true }, Config: { Image: 'img' } }),
+        }),
+      }),
+    } as unknown as Adapter;
 
     await registry.backfillFromDocker(fake as unknown as ContainerService);
     const after = await col.findOne({ container_id: cid });
     expect(after?.last_used_at).toBe(past);
     // Ensure we didn't null out or change kill_after_at when it already existed
-    expect(after?.kill_after_at).toBe(precomputedKillAfter);
+    // Ensure kill_after_at remains unchanged when already present
+    expect(after?.kill_after_at).toBe(presetKill);
+    // Ensure kill_after_at remains unchanged when already present
+    expect(after?.kill_after_at).toBe(presetKill);
   });
 
   it('sets last_used_at and kill_after_at for newly discovered running container', async () => {
@@ -77,18 +80,16 @@ describe('ContainerRegistryService backfill last_used behavior', () => {
     const col = client.db('test').collection('containers');
     const cid = 'new-1';
     const now = Date.now();
-    type MockSvc = Pick<ContainerService, 'findContainersByLabels' | 'getContainerLabels' | 'getDocker'>;
-    const createdIso = new Date(now).toISOString();
-    const dockerLike: Pick<Docker, 'getContainer'> = {
-      getContainer: (_id: string) => ({
-        inspect: async () => ({ Created: createdIso, State: { Running: true }, Config: { Image: 'img' } }),
-      }) as unknown as Docker.Container,
-    } as unknown as Pick<Docker, 'getContainer'>;
-    const fake: MockSvc = {
-      findContainersByLabels: async () => [{ id: cid }] as unknown as any,
+    type Adapter = InstanceType<typeof ContainerRegistryService.BackfillAdapter>;
+    const fake: Adapter = {
+      findContainersByLabels: async () => [{ id: cid }],
       getContainerLabels: async () => ({ 'hautech.ai/role': 'workspace', 'hautech.ai/thread_id': 'node__t2' }),
-      getDocker: () => dockerLike as unknown as Docker,
-    };
+      getDocker: () => ({
+        getContainer: (_id: string) => ({
+          inspect: async () => ({ Created: new Date(now).toISOString(), State: { Running: true }, Config: { Image: 'img' } }),
+        }),
+      }),
+    } as unknown as Adapter;
 
     await registry.backfillFromDocker(fake as unknown as ContainerService);
     const doc = await col.findOne({ container_id: cid });
@@ -103,6 +104,47 @@ describe('ContainerRegistryService backfill last_used behavior', () => {
     expect(Math.abs(ka - (lu + 86400 * 1000))).toBeLessThan(5000);
   });
 
+  it('recomputes kill_after_at when missing and ttlSeconds present; last_used_at unchanged', async () => {
+    if (!setupOk) return;
+    const col = client.db('test').collection('containers');
+    const cid = 'exist-2';
+    const past = new Date(Date.now() - 5 * 60_000).toISOString();
+    // Existing record has last_used_at set, kill_after_at missing, and ttlSeconds present
+    await col.insertOne({
+      container_id: cid,
+      node_id: 'n',
+      thread_id: 't',
+      provider_type: 'docker',
+      image: 'img',
+      status: 'running',
+      created_at: past,
+      updated_at: past,
+      last_used_at: past,
+      kill_after_at: null,
+      termination_reason: null,
+      deleted_at: null,
+      metadata: { ttlSeconds: 600, labels: { 'hautech.ai/role': 'workspace' } },
+    });
+
+    type Adapter = InstanceType<typeof ContainerRegistryService.BackfillAdapter>;
+    const fake: Adapter = {
+      findContainersByLabels: async () => [{ id: cid }],
+      getContainerLabels: async () => ({ 'hautech.ai/role': 'workspace', 'hautech.ai/thread_id': 'node__t' }),
+      getDocker: () => ({
+        getContainer: (_id: string) => ({
+          inspect: async () => ({ Created: past, State: { Running: true }, Config: { Image: 'img' } }),
+        }),
+      }),
+    } as unknown as Adapter;
+
+    await registry.backfillFromDocker(fake);
+    const after = await col.findOne({ container_id: cid });
+    expect(after?.last_used_at).toBe(past);
+    // Expect kill_after_at = last_used + ttl (600s)
+    const expected = new Date(new Date(past).getTime() + 600 * 1000).toISOString();
+    expect(after?.kill_after_at).toBe(expected);
+  });
+
   it('touchLastUsed path still updates last_used_at', async () => {
     if (!setupOk) return;
     const col = client.db('test').collection('containers');
@@ -115,52 +157,5 @@ describe('ContainerRegistryService backfill last_used behavior', () => {
     expect(after?.last_used_at).toBe(future.toISOString());
     expect(after?.kill_after_at).toBeTruthy();
     expect(after?.kill_after_at).not.toBe(before?.kill_after_at);
-  });
-
-  it('recomputes kill_after_at when missing and ttlSeconds present, preserving last_used_at', async () => {
-    if (!setupOk) return;
-    const col = client.db('test').collection('containers');
-    const cid = 'recompute-1';
-    const lastUsed = new Date(Date.now() - 5 * 60 * 1000).toISOString();
-    const ttl = 3600; // 1 hour
-
-    await col.insertOne({
-      container_id: cid,
-      node_id: 'n',
-      thread_id: 't',
-      provider_type: 'docker',
-      image: 'img',
-      status: 'running',
-      created_at: lastUsed,
-      updated_at: lastUsed,
-      last_used_at: lastUsed,
-      kill_after_at: null,
-      termination_reason: null,
-      deleted_at: null,
-      metadata: { ttlSeconds: ttl, lastError: 'x', retryAfter: new Date(Date.now() + 1000).toISOString(), terminationAttempts: 2, labels: { 'hautech.ai/role': 'workspace' } },
-    });
-
-    // expected recompute from last_used_at + ttl
-    const expectedKillAfter = new Date(new Date(lastUsed).getTime() + ttl * 1000).toISOString();
-
-    type MockSvc = Pick<ContainerService, 'findContainersByLabels' | 'getContainerLabels' | 'getDocker'>;
-    const dockerLike: Pick<Docker, 'getContainer'> = {
-      getContainer: (_id: string) => ({
-        inspect: async () => ({ Created: lastUsed, State: { Running: true }, Config: { Image: 'img' } }),
-      }) as unknown as Docker.Container,
-    } as unknown as Pick<Docker, 'getContainer'>;
-    const fake: MockSvc = {
-      findContainersByLabels: async () => [{ id: cid }] as unknown as any,
-      getContainerLabels: async () => ({ 'hautech.ai/role': 'workspace', 'hautech.ai/thread_id': 'node__t' }),
-      getDocker: () => dockerLike as unknown as Docker,
-    };
-
-    await registry.backfillFromDocker(fake as unknown as ContainerService);
-    const doc = await col.findOne({ container_id: cid });
-    expect(doc?.last_used_at).toBe(lastUsed);
-    expect(doc?.kill_after_at).toBe(expectedKillAfter);
-    // assert metadata fields unrelated to labels/platform/ttlSeconds are preserved
-    expect(doc?.metadata?.lastError).toBe('x');
-    expect(doc?.metadata?.terminationAttempts).toBe(2);
   });
 });

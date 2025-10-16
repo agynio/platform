@@ -1,5 +1,4 @@
 import type { Db, Collection, WithId, UpdateFilter, Filter } from 'mongodb';
-import type { ContainerService } from './container.service';
 import { LoggerService } from './logger.service';
 
 export type ContainerStatus = 'running' | 'stopped' | 'terminating' | 'failed';
@@ -176,7 +175,25 @@ export class ContainerRegistryService {
     await this.col.updateOne({ container_id: containerId }, update);
   }
 
-  async backfillFromDocker(containerService: ContainerService): Promise<void> {
+  // Minimal adapter used for backfill. ContainerService satisfies this structurally.
+  // Keeping it local enables strongly-typed fakes in tests without any casts.
+  // eslint-disable-next-line @typescript-eslint/consistent-type-definitions
+  static BackfillAdapter = class {
+    // This class is used only for its shape; do not instantiate.
+    private constructor() {}
+    findContainersByLabels!: (
+      labels: Record<string, string>,
+      options?: { all?: boolean },
+    ) => Promise<Array<{ id: string }>>;
+    getContainerLabels!: (id: string) => Promise<Record<string, string> | undefined>;
+    getDocker!: () => {
+      getContainer: (
+        id: string,
+      ) => { inspect: () => Promise<{ Created?: string; State?: { Running?: boolean }; Config?: { Image?: string } }> };
+    };
+  };
+
+  async backfillFromDocker(containerService: InstanceType<typeof ContainerRegistryService.BackfillAdapter>): Promise<void> {
     this.logger.info('ContainerRegistry: backfilling from Docker');
     try {
       const list = await containerService.findContainersByLabels({ 'hautech.ai/role': 'workspace' }, { all: true });
@@ -213,15 +230,17 @@ export class ContainerRegistryService {
               updated_at: nowIso,
               termination_reason: null,
               deleted_at: running ? null : nowIso,
+              // Preserve existing metadata; update selective paths only
               'metadata.labels': labels,
               'metadata.platform': labels?.['hautech.ai/platform'],
-              'metadata.ttlSeconds': typeof existing?.metadata?.ttlSeconds === 'number' ? existing.metadata.ttlSeconds : 86400,
             };
             if (!existing.kill_after_at && existing.last_used_at && typeof existing.metadata?.ttlSeconds === 'number') {
               const ttl = existing.metadata?.ttlSeconds;
               const recomputed = this.computeKillAfter(existing.last_used_at, ttl);
               setFields.kill_after_at = recomputed;
-              // Note: recomputation is safe even for stopped containers; getExpired() only targets running/terminating.
+              // Rationale: Parity with legacy data. During backfill, if kill_after_at is missing
+              // but last_used_at and ttlSeconds are present, recompute to restore expected value.
+              // Do not gate on running to avoid missing stopped-but-not-cleaned historical records.
               this.logger.debug(
                 `ContainerRegistry: backfill recomputed kill_after_at for existing cid=${item.id.substring(0, 12)} ttl=${ttl}`,
               );
@@ -230,6 +249,9 @@ export class ContainerRegistryService {
                 `ContainerRegistry: backfill existing cid=${item.id.substring(0, 12)} - skipping last_used_at update`,
               );
             }
+            // Preserve existing ttlSeconds; only set default when absent.
+            // Preserve existing ttlSeconds; only set default when absent.
+            if (typeof existing.metadata?.ttlSeconds !== 'number') setFields['metadata.ttlSeconds'] = 86400;
             const updateExisting: UpdateFilter<ContainerDoc> = { $set: setFields };
             await this.col.updateOne({ container_id: item.id }, updateExisting, { upsert: false });
           } else {
@@ -248,7 +270,10 @@ export class ContainerRegistryService {
                 kill_after_at: running ? this.computeKillAfter(running ? nowIso : created, 86400) : null,
                 termination_reason: null,
                 deleted_at: running ? null : nowIso,
-                metadata: { labels, platform: labels?.['hautech.ai/platform'], ttlSeconds: 86400 },
+                // Use targeted metadata updates to avoid clobbering potential future fields.
+                'metadata.labels': labels,
+                'metadata.platform': labels?.['hautech.ai/platform'],
+                'metadata.ttlSeconds': 86400,
               },
             };
             await this.col.updateOne({ container_id: item.id }, updateNew, { upsert: true });

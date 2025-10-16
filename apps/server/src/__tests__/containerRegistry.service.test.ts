@@ -78,8 +78,9 @@ describe('ContainerRegistryService', () => {
   it('backfill is idempotent and only includes role=workspace', async () => {
     if (!setupOk) return;
     // Fake container service to emulate docker
-    const fake = {
-      findContainersByLabels: async (_labels: Record<string, string>, _opts?: any) => [
+    type Adapter = InstanceType<typeof ContainerRegistryService.BackfillAdapter>;
+    const fake: Adapter = {
+      findContainersByLabels: async (_labels: Record<string, string>, _opts?: { all?: boolean }) => [
         { id: 'w1' },
         { id: 'w2' },
       ],
@@ -92,7 +93,7 @@ describe('ContainerRegistryService', () => {
           inspect: async () => ({ Created: new Date().toISOString(), State: { Running: true }, Config: { Image: 'img' } }),
         }),
       }),
-    } as any;
+    } as unknown as Adapter;
 
     await registry.backfillFromDocker(fake);
     await registry.backfillFromDocker(fake); // run twice
