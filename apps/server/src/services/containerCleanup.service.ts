@@ -66,13 +66,17 @@ export class ContainerCleanupService {
               await this.containers.stopContainer(id, 10);
             } catch (e: unknown) {
               const sc = (e as { statusCode?: number } | undefined)?.statusCode;
-              if (sc !== 304 && sc !== 404) throw e;
+              // Treat 304 (already stopped), 404 (gone), and 409 (removal in progress) as benign
+              if (sc !== 304 && sc !== 404 && sc !== 409) throw e;
+              this.logger.debug(`ContainerCleanup: benign stop error status=${sc} id=${id}`);
             }
             try {
               await this.containers.removeContainer(id, true);
             } catch (e: unknown) {
               const sc = (e as { statusCode?: number } | undefined)?.statusCode;
-              if (sc !== 404) throw e;
+              // Treat 404 (already removed) and 409 (removal in progress) as benign
+              if (sc !== 404 && sc !== 409) throw e;
+              this.logger.debug(`ContainerCleanup: benign remove error status=${sc} id=${id}`);
             }
             await this.registry.markStopped(id, 'ttl_expired');
           } catch (e) {

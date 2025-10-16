@@ -201,10 +201,18 @@ export class ContainerProviderEntity {
                 dinds.map(async (d) => {
                   try {
                     await d.stop(5);
-                  } catch {}
+                  } catch (e: unknown) {
+                    const sc = getStatusCode(e);
+                    // benign: already stopped/removed-in-progress
+                    if (sc !== 304 && sc !== 404 && sc !== 409) throw e;
+                  }
                   try {
                     await d.remove(true);
-                  } catch {}
+                  } catch (e: unknown) {
+                    const sc = getStatusCode(e);
+                    // benign: already removed / removal-in-progress
+                    if (sc !== 404 && sc !== 409) throw e;
+                  }
                 }),
               );
             } catch {}
@@ -214,13 +222,13 @@ export class ContainerProviderEntity {
             await container.stop();
           } catch (e: unknown) {
             const sc = getStatusCode(e);
-            if (sc !== 304 && sc !== 404) throw e;
+            if (sc !== 304 && sc !== 404 && sc !== 409) throw e;
           }
           try {
             await container.remove(true);
           } catch (e: unknown) {
             const sc = getStatusCode(e);
-            if (sc !== 404) throw e;
+            if (sc !== 404 && sc !== 409) throw e;
           }
           container = undefined;
         }
@@ -228,10 +236,16 @@ export class ContainerProviderEntity {
         // If inspect fails, do not reuse to be safe; still attempt cleanup
         try {
           await container.stop();
-        } catch {}
+        } catch (e: unknown) {
+          const sc = getStatusCode(e);
+          if (sc !== 304 && sc !== 404 && sc !== 409) throw e;
+        }
         try {
           await container.remove(true);
-        } catch {}
+        } catch (e: unknown) {
+          const sc = getStatusCode(e);
+          if (sc !== 404 && sc !== 409) throw e;
+        }
         container = undefined;
       }
     }
