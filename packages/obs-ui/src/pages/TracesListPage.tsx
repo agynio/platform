@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Table, Thead, Tbody, Tr, Th, Td, Button } from '@hautech/ui';
+import { Table, Thead, Tbody, Tr, Th, Td } from '@hautech/ui';
 import { Link } from 'react-router-dom';
 import { fetchTraces } from '../services/api';
 import { spanRealtime } from '../services/socket';
