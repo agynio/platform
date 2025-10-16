@@ -1,5 +1,6 @@
 // Client for NixOS Search via backend proxy
 import { z } from 'zod';
+import { buildUrl } from '../lib/apiClient';
 
 export const CHANNELS = ['nixpkgs-unstable', 'nixos-24.11'] as const;
 export type NixChannel = typeof CHANNELS[number];
@@ -23,12 +24,11 @@ const NixItemSchema = z.object({
 });
 const NixSearchResponseSchema = z.object({ items: z.array(NixItemSchema) });
 
-// Use relative paths so the UI hits the same origin backend proxy
-const BASE = '';
+// Resolved via buildUrl/getApiBase; do not hardcode base here.
 
 export async function searchPackages(query: string, channel: NixChannel, signal?: AbortSignal): Promise<NixSearchItem[]> {
   if (!query || query.trim().length < 2) return [];
-  const url = `${BASE}/api/nix/search?channel=${encodeURIComponent(channel)}&query=${encodeURIComponent(query.trim())}`;
+  const url = buildUrl(`/api/nix/search?channel=${encodeURIComponent(channel)}&query=${encodeURIComponent(query.trim())}`);
   const res = await fetch(url, { signal, headers: { Accept: 'application/json' } });
   if (!res.ok) throw new Error(`Nix search failed: ${res.status}`);
   const json = await res.json();
@@ -51,7 +51,7 @@ export async function fetchPackageVersion(
   const q = ident.attr ? `attr:${ident.attr}` : ident.pname ? ident.pname : '';
   if (!q) return null;
   const params = new URLSearchParams({ channel, ...(ident.attr ? { attr: ident.attr } : { pname: ident.pname! }) });
-  const url = `${BASE}/api/nix/show?${params.toString()}`;
+  const url = buildUrl(`/api/nix/show?${params.toString()}`);
   const res = await fetch(url, { signal, headers: { Accept: 'application/json' } });
   if (!res.ok) throw new Error(`Nix package lookup failed: ${res.status}`);
   const json = await res.json();

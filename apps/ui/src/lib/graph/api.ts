@@ -1,4 +1,6 @@
 import type { NodeStatus, TemplateSchema, ReminderDTO } from './types';
+import { buildUrl, httpJson } from '../apiClient';
+
 // Minimal graph type (align with backend PersistedGraphUpsertRequest shape)
 export interface PersistedGraphUpsertRequestUI {
   name?: string;
@@ -6,25 +8,7 @@ export interface PersistedGraphUpsertRequestUI {
   nodes: Array<{ id: string; position?: { x: number; y: number }; template: string; config?: Record<string, unknown> }>;
   edges: Array<{ source: string; sourceHandle?: string; target: string; targetHandle?: string }>;
 }
-// Base host for graph API; override via VITE_GRAPH_API_BASE
-interface ViteEnv { VITE_GRAPH_API_BASE?: string }
-const envHost = (typeof import.meta !== 'undefined' ? (import.meta as unknown as { env?: ViteEnv }).env?.VITE_GRAPH_API_BASE : undefined);
-// In test (node) environment we prefer relative paths so MSW handlers using relative URL match.
-const isNode = typeof window === 'undefined';
-// In vitest (process.env.VITEST) use relative URLs so MSW relative handlers intercept.
-const isVitest = typeof process !== 'undefined' && typeof (process as unknown as { env?: Record<string, string | undefined> }).env?.VITEST === 'string';
-const BASE = envHost || (isVitest ? '' : isNode ? '' : 'http://localhost:3010');
-
-async function http<T>(input: RequestInfo, init?: RequestInit): Promise<T> {
-  const res = await fetch(input, { ...init, headers: { 'Content-Type': 'application/json', ...(init?.headers || {}) } });
-  if (!res.ok) throw new Error(`HTTP ${res.status}: ${await res.text()}`);
-  if (res.status === 204) return undefined as unknown as T;
-  try {
-    return (await res.json()) as T;
-  } catch {
-    return undefined as unknown as T;
-  }
-}
+// All base URL logic moved to apiClient.ts
 
 function isLikelyJsonSchemaRoot(obj: unknown): obj is Record<string, unknown> {
   if (!obj || typeof obj !== 'object') return false;
@@ -34,29 +18,29 @@ function isLikelyJsonSchemaRoot(obj: unknown): obj is Record<string, unknown> {
 }
 
 export const api = {
-  getTemplates: () => http<TemplateSchema[]>(`${BASE}/graph/templates`),
+  getTemplates: () => httpJson<TemplateSchema[]>(`/graph/templates`),
   // Reminders for RemindMe tool node
-  getNodeReminders: (nodeId: string) => http<{ items: ReminderDTO[] }>(`${BASE}/graph/nodes/${encodeURIComponent(nodeId)}/reminders`),
+  getNodeReminders: (nodeId: string) => httpJson<{ items: ReminderDTO[] }>(`/graph/nodes/${encodeURIComponent(nodeId)}/reminders`),
   // Vault autocomplete endpoints (only available when enabled server-side)
-  listVaultMounts: () => http<{ items: string[] }>(`${BASE}/api/vault/mounts`).catch(() => ({ items: [] })),
+  listVaultMounts: () => httpJson<{ items: string[] }>(`/api/vault/mounts`).catch(() => ({ items: [] })),
   listVaultPaths: (mount: string, prefix = '') =>
-    http<{ items: string[] }>(`${BASE}/api/vault/kv/${encodeURIComponent(mount)}/paths?prefix=${encodeURIComponent(prefix)}`).catch(() => ({ items: [] })),
+    httpJson<{ items: string[] }>(`/api/vault/kv/${encodeURIComponent(mount)}/paths?prefix=${encodeURIComponent(prefix)}`).catch(() => ({ items: [] })),
   listVaultKeys: (mount: string, path = '', opts?: { maskErrors?: boolean }) =>
     (opts?.maskErrors === false
-      ? http<{ items: string[] }>(`${BASE}/api/vault/kv/${encodeURIComponent(mount)}/keys?path=${encodeURIComponent(path)}`)
-      : http<{ items: string[] }>(`${BASE}/api/vault/kv/${encodeURIComponent(mount)}/keys?path=${encodeURIComponent(path)}`).catch(() => ({ items: [] }))
+      ? httpJson<{ items: string[] }>(`/api/vault/kv/${encodeURIComponent(mount)}/keys?path=${encodeURIComponent(path)}`)
+      : httpJson<{ items: string[] }>(`/api/vault/kv/${encodeURIComponent(mount)}/keys?path=${encodeURIComponent(path)}`).catch(() => ({ items: [] }))
     ),
   writeVaultKey: (mount: string, body: { path: string; key: string; value: string }) =>
-    http<{ mount: string; path: string; key: string; version: number }>(
-      `${BASE}/api/vault/kv/${encodeURIComponent(mount)}/write`,
+    httpJson<{ mount: string; path: string; key: string; version: number }>(
+      `/api/vault/kv/${encodeURIComponent(mount)}/write`,
       { method: 'POST', body: JSON.stringify(body) },
     ),
-  getNodeStatus: (nodeId: string) => http<NodeStatus>(`${BASE}/graph/nodes/${encodeURIComponent(nodeId)}/status`),
+  getNodeStatus: (nodeId: string) => httpJson<NodeStatus>(`/graph/nodes/${encodeURIComponent(nodeId)}/status`),
   // Dynamic config schema endpoint: try the newer '/dynamic-config/schema' first, fallback to legacy '/dynamic-config-schema'
   getDynamicConfigSchema: async (nodeId: string): Promise<Record<string, unknown> | null> => {
     // Prefer legacy path first (currently implemented server / tests), then new structured path
-    const legacy = `${BASE}/graph/nodes/${encodeURIComponent(nodeId)}/dynamic-config-schema`;
-    const structured = `${BASE}/graph/nodes/${encodeURIComponent(nodeId)}/dynamic-config/schema`;
+    const legacy = buildUrl(`/graph/nodes/${encodeURIComponent(nodeId)}/dynamic-config-schema`);
+    const structured = buildUrl(`/graph/nodes/${encodeURIComponent(nodeId)}/dynamic-config/schema`);
     async function tryFetch(url: string) {
       try {
         const res = await fetch(url, { headers: { 'Content-Type': 'application/json' } });
@@ -86,10 +70,11 @@ export const api = {
     return isLikelyJsonSchemaRoot(data) ? (data as Record<string, unknown>) : null;
   },
   postNodeAction: (nodeId: string, action: 'pause' | 'resume' | 'provision' | 'deprovision') =>
-    http<void>(`${BASE}/graph/nodes/${encodeURIComponent(nodeId)}/actions`, { method: 'POST', body: JSON.stringify({ action }) }),
+    httpJson<void>(`/graph/nodes/${encodeURIComponent(nodeId)}/actions`, { method: 'POST', body: JSON.stringify({ action }) }),
   saveFullGraph: (graph: PersistedGraphUpsertRequestUI) =>
-    http<PersistedGraphUpsertRequestUI & { version: number; updatedAt: string }>(`${BASE}/api/graph`, {
+    httpJson<PersistedGraphUpsertRequestUI & { version: number; updatedAt: string }>(`/api/graph`, {
       method: 'POST',
       body: JSON.stringify(graph),
     }),
 };
+
