@@ -80,13 +80,12 @@ The runtime orchestrator uses exactly the following flows:
 stateDiagram-v2
   created --> configured: configure
   configured --> started: start
+  started --> stopped: stop
   stopped --> configured: configure
-  stopped --> started: start
   stopped --> deleted: delete
 ```
 
 Flows represented:
 - create → configure → start
-- stop → configure → start
-- stop → delete
-
+- started → stop → configure → start
+- started → stop → delete
