@@ -267,7 +267,7 @@ export class ContainerRegistryService {
                 status: running ? 'running' : 'stopped',
                 updated_at: nowIso,
                 last_used_at: running ? nowIso : created,
-                kill_after_at: running ? this.computeKillAfter(running ? nowIso : created, 86400) : null,
+                kill_after_at: running ? this.computeKillAfter(nowIso, 86400) : null,
                 termination_reason: null,
                 deleted_at: running ? null : nowIso,
                 // Use targeted metadata updates to avoid clobbering potential future fields.

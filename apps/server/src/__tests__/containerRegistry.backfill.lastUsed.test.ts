@@ -3,8 +3,6 @@ import { MongoMemoryServer } from 'mongodb-memory-server';
 import { MongoClient } from 'mongodb';
 import { ContainerRegistryService } from '../services/containerRegistry.service';
 import { LoggerService } from '../services/logger.service';
-import type { ContainerService } from '../services/container.service';
-import type Docker from 'dockerode';
 
 describe('ContainerRegistryService backfill last_used behavior', () => {
   let mongod: MongoMemoryServer;
@@ -54,23 +52,24 @@ describe('ContainerRegistryService backfill last_used behavior', () => {
       metadata: { ttlSeconds: 86400, labels: { 'hautech.ai/role': 'workspace' } },
     });
 
+    // Narrow types to the adapter used by backfill
     type Adapter = InstanceType<typeof ContainerRegistryService.BackfillAdapter>;
+    type FindByLabelsResult = Awaited<ReturnType<Adapter['findContainersByLabels']>>;
+    const list: FindByLabelsResult = [{ id: cid }];
+    type DockerLike = ReturnType<Adapter['getDocker']>;
     const fake: Adapter = {
-      findContainersByLabels: async () => [{ id: cid }],
+      findContainersByLabels: async () => list,
       getContainerLabels: async () => ({ 'hautech.ai/role': 'workspace', 'hautech.ai/thread_id': 'node__t' }),
-      getDocker: () => ({
+      getDocker: (): DockerLike => ({
         getContainer: (_id: string) => ({
           inspect: async () => ({ Created: past, State: { Running: true }, Config: { Image: 'img' } }),
         }),
       }),
-    } as unknown as Adapter;
+    };
 
-    await registry.backfillFromDocker(fake as unknown as ContainerService);
+    await registry.backfillFromDocker(fake);
     const after = await col.findOne({ container_id: cid });
     expect(after?.last_used_at).toBe(past);
-    // Ensure we didn't null out or change kill_after_at when it already existed
-    // Ensure kill_after_at remains unchanged when already present
-    expect(after?.kill_after_at).toBe(presetKill);
     // Ensure kill_after_at remains unchanged when already present
     expect(after?.kill_after_at).toBe(presetKill);
   });
@@ -81,17 +80,20 @@ describe('ContainerRegistryService backfill last_used behavior', () => {
     const cid = 'new-1';
     const now = Date.now();
     type Adapter = InstanceType<typeof ContainerRegistryService.BackfillAdapter>;
+    type FindByLabelsResult = Awaited<ReturnType<Adapter['findContainersByLabels']>>;
+    const list: FindByLabelsResult = [{ id: cid }];
+    type DockerLike = ReturnType<Adapter['getDocker']>;
     const fake: Adapter = {
-      findContainersByLabels: async () => [{ id: cid }],
+      findContainersByLabels: async () => list,
       getContainerLabels: async () => ({ 'hautech.ai/role': 'workspace', 'hautech.ai/thread_id': 'node__t2' }),
-      getDocker: () => ({
+      getDocker: (): DockerLike => ({
         getContainer: (_id: string) => ({
           inspect: async () => ({ Created: new Date(now).toISOString(), State: { Running: true }, Config: { Image: 'img' } }),
         }),
       }),
-    } as unknown as Adapter;
+    };
 
-    await registry.backfillFromDocker(fake as unknown as ContainerService);
+    await registry.backfillFromDocker(fake);
     const doc = await col.findOne({ container_id: cid });
     expect(doc).toBeTruthy();
     expect(typeof doc!.last_used_at).toBe('string');
@@ -127,15 +129,18 @@ describe('ContainerRegistryService backfill last_used behavior', () => {
     });
 
     type Adapter = InstanceType<typeof ContainerRegistryService.BackfillAdapter>;
+    type FindByLabelsResult = Awaited<ReturnType<Adapter['findContainersByLabels']>>;
+    const list: FindByLabelsResult = [{ id: cid }];
+    type DockerLike = ReturnType<Adapter['getDocker']>;
     const fake: Adapter = {
-      findContainersByLabels: async () => [{ id: cid }],
+      findContainersByLabels: async () => list,
       getContainerLabels: async () => ({ 'hautech.ai/role': 'workspace', 'hautech.ai/thread_id': 'node__t' }),
-      getDocker: () => ({
+      getDocker: (): DockerLike => ({
         getContainer: (_id: string) => ({
           inspect: async () => ({ Created: past, State: { Running: true }, Config: { Image: 'img' } }),
         }),
       }),
-    } as unknown as Adapter;
+    };
 
     await registry.backfillFromDocker(fake);
     const after = await col.findOne({ container_id: cid });
