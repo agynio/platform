@@ -11,6 +11,7 @@ export default defineConfig({
     globals: true,
     // Look for tests anywhere under apps/* and packages/*
     include: ['**/__tests__/**/*.test.ts'],
+    hookTimeout: 60000,
     coverage: {
       enabled: false,
     },
