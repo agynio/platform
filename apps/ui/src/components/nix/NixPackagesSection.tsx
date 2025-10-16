@@ -52,10 +52,13 @@ export function NixPackagesSection() {
     return filtered.slice(0, 20);
   }, [qUnstable.data, qStable.data, debouncedQuery, selected]);
 
+  const isSearching = debouncedQuery.trim().length >= 2 && (qUnstable.isFetching || qStable.isFetching);
+
   useEffect(() => {
-    setIsOpen(suggestions.length > 0 && document.activeElement === inputRef.current);
+    const focused = document.activeElement === inputRef.current;
+    setIsOpen((suggestions.length > 0 || isSearching) && focused);
     setActiveIndex(0);
-  }, [suggestions.length]);
+  }, [suggestions.length, isSearching]);
 
   // Scroll active option into view when navigating
   useEffect(() => {
@@ -106,7 +109,7 @@ export function NixPackagesSection() {
           type="text"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          onFocus={() => setIsOpen(suggestions.length > 0)}
+          onFocus={() => setIsOpen(suggestions.length > 0 || isSearching)}
           onBlur={() => setTimeout(() => setIsOpen(false), 150)}
           onKeyDown={onKeyDown}
           placeholder="Search Nix packages..."
@@ -153,11 +156,17 @@ export function NixPackagesSection() {
         )}
       </div>
 
-      {(qUnstable.error || qStable.error) && (
+      {(() => {
+        const errA = qUnstable.error as any;
+        const errB = qStable.error as any;
+        const isAbort = (e: any) => e && typeof e === 'object' && e.name === 'AbortError';
+        const showError = (!!errA && !isAbort(errA)) || (!!errB && !isAbort(errB));
+        return showError ? (
         <div className="text-xs text-destructive" aria-live="polite">
           Error searching Nix packages. This may be due to CORS/network. Please retry.
         </div>
-      )}
+        ) : null;
+      })()}
 
       {selected.length > 0 && (
         <ul className="space-y-2" aria-label="Selected Nix packages">
@@ -183,7 +192,7 @@ function SelectedPackageItem({ pkg, onRemove }: { pkg: { attr: string; pname?: s
     staleTime: 5 * 60_000,
   });
   const options = useMemo(() => {
-    return CHANNELS_CONST.map((ch) => ({
+    return CHANNELS.map((ch) => ({
       ch,
       version: ch === 'nixpkgs-unstable' ? qUnstable.data : qStable.data,
       isLoading: ch === 'nixpkgs-unstable' ? qUnstable.isLoading : qStable.isLoading,
@@ -200,7 +209,11 @@ function SelectedPackageItem({ pkg, onRemove }: { pkg: { attr: string; pname?: s
         aria-label={`Select version for ${label}`}
         className="rounded border border-input bg-background px-2 py-1 text-sm"
         value={chosen}
-        onChange={(e) => setChosen(e.target.value as NixChannel | '')}
+        onChange={(e) => {
+          const v = e.target.value;
+          const isChannel = (x: string): x is NixChannel => (CHANNELS as readonly string[]).includes(x);
+          setChosen(v === '' ? '' : isChannel(v) ? v : '');
+        }}
       >
         <option value="">Select version…</option>
         {options.map(({ ch, version, isLoading, isError }) => (
