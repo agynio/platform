@@ -47,7 +47,7 @@ describe('runtime config unknown keys handling', () => {
   it('throws GraphError with nodeId on true validation error', async () => {
     const runtime = makeRuntime();
     const g: GraphDefinition = {
-      nodes: [{ id: 'bad', data: { template: 'Strict', config: { foo: 123 as any } } }],
+      nodes: [{ id: 'bad', data: { template: 'Strict', config: { foo: 123 } } }],
       edges: [],
     };
     await expect(runtime.apply(g)).rejects.toMatchObject({
@@ -63,7 +63,7 @@ describe('runtime config unknown keys handling', () => {
       nodes: [
         {
           id: 'n2',
-          data: { template: 'Strict', config: { foo: 'ok' }, dynamicConfig: { bar: 1, ignore: true } as any },
+          data: { template: 'Strict', config: { foo: 'ok' }, dynamicConfig: { bar: 1, ignore: true } },
         },
       ],
       edges: [],
@@ -91,5 +91,23 @@ describe('runtime config unknown keys handling', () => {
     expect(inst.appliedStatic).toEqual({ foo: 'next' });
     const live = runtime.getNodes().find((n) => n.id === 'n3')!;
     expect(live.config).toEqual({ foo: 'next' });
+  });
+
+  it('invalid dynamicConfig at init rejects with NODE_INIT_ERROR and nodeId', async () => {
+    const runtime = makeRuntime();
+    const g: GraphDefinition = {
+      nodes: [
+        {
+          id: 'dyn-bad',
+          data: { template: 'Strict', config: { foo: 'ok' }, dynamicConfig: { bar: 'nope' as unknown as number } },
+        },
+      ],
+      edges: [],
+    };
+    await expect(runtime.apply(g)).rejects.toMatchObject({
+      name: 'GraphError',
+      code: 'NODE_INIT_ERROR',
+      nodeId: 'dyn-bad',
+    } as Partial<GraphError>);
   });
 });

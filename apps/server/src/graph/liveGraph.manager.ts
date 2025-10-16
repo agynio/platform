@@ -184,7 +184,7 @@ export class LiveGraphRuntime {
       }
     }
     // 2b. Dynamic config updates
-    for (const nodeId of (diff as any).dynamicConfigUpdateNodeIds || []) {
+    for (const nodeId of diff.dynamicConfigUpdateNodeIds || []) {
       const nodeDef = next.nodes.find((n) => n.id === nodeId)!;
       const live = this.state.nodes.get(nodeId);
       if (!live) continue;
@@ -193,7 +193,7 @@ export class LiveGraphRuntime {
           await this.applyConfigWithUnknownKeyStripping(
             live.instance,
             'setDynamicConfig',
-            (nodeDef.data as any).dynamicConfig || {},
+            nodeDef.data.dynamicConfig || {},
             nodeId,
           );
         }
@@ -332,12 +332,15 @@ export class LiveGraphRuntime {
 
   // Attempt to apply config via setter; if ZodError contains only unrecognized_keys at top-level, strip and retry.
   private async applyConfigWithUnknownKeyStripping(
-    instance: unknown,
+    instance: {
+      setConfig?: (cfg: Record<string, unknown>) => unknown | Promise<unknown>;
+      setDynamicConfig?: (cfg: Record<string, unknown>) => unknown | Promise<unknown>;
+    },
     method: 'setConfig' | 'setDynamicConfig',
     cfg: Record<string, unknown>,
     nodeId: string,
   ): Promise<Record<string, unknown>> {
-    const fn = (instance as any)[method];
+    const fn = instance[method];
     if (typeof fn !== 'function') return cfg;
 
     // Retry unknown-key stripping up to MAX_RETRIES times after the initial failure (total attempts = 1 + MAX_RETRIES)
