@@ -8,6 +8,7 @@ import { ConfigService } from './services/config.service';
 import { ContainerService } from './services/container.service';
 import { LoggerService } from './services/logger.service';
 import { VaultService, VaultConfigSchema } from './services/vault.service';
+import { EnvService } from './services/env.service';
 import { CallAgentTool, CallAgentToolStaticConfigSchema } from './tools/call_agent.tool';
 import { GithubCloneRepoTool, GithubCloneRepoToolExposedStaticConfigSchema } from './tools/github_clone_repo';
 import { SendSlackMessageTool, SendSlackMessageToolExposedStaticConfigSchema } from './tools/send_slack_message.tool';
@@ -45,6 +46,7 @@ export function buildTemplateRegistry(deps: TemplateRegistryDeps): TemplateRegis
     }),
     logger,
   );
+  const envService = new EnvService(vault);
 
   return (
     new TemplateRegistry()
@@ -232,6 +234,8 @@ export function buildTemplateRegistry(deps: TemplateRegistryDeps): TemplateRegis
         'mcpServer',
         () => {
           const server = new LocalMCPServer(containerService, logger);
+          server.setEnvService(envService);
+          server.setVault(vault);
           void server.start();
           return server;
         },

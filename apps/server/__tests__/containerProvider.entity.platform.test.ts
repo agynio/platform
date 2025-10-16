@@ -34,7 +34,7 @@ describe('ContainerProviderEntity platform reuse logic', () => {
     (svc.findContainerByLabels as unknown as vi.Mock).mockResolvedValue(existing);
     (svc.getContainerLabels as unknown as vi.Mock).mockResolvedValue({ [PLATFORM_LABEL]: 'linux/amd64' });
 
-    const provider = new ContainerProviderEntity(svc as unknown as ContainerService, {}, idLabels);
+    const provider = new ContainerProviderEntity(svc as unknown as ContainerService, undefined as any, {}, idLabels);
     provider.setConfig({ platform: 'linux/arm64' }); // DinD disabled by default
     const c = await provider.provide('t1');
 
@@ -65,7 +65,7 @@ describe('ContainerProviderEntity platform reuse logic', () => {
     const startImpl = async (_opts: Parameters<ContainerService['start']>[0]) => new MockContainer('ws999', svc);
     (svc.start as vi.Mock).mockImplementationOnce(startImpl);
 
-    const provider = new ContainerProviderEntity(svc as unknown as ContainerService, {}, idLabels);
+    const provider = new ContainerProviderEntity(svc as unknown as ContainerService, undefined as any, {}, idLabels);
     // DinD disabled in this test, but even if enabled, provider should not pick dind as workspace
     provider.setConfig({ enableDinD: false });
     const c = await provider.provide('t-dind');
@@ -81,7 +81,7 @@ describe('ContainerProviderEntity platform reuse logic', () => {
     (svc.findContainerByLabels as unknown as vi.Mock).mockResolvedValue(existing);
     (svc.getContainerLabels as unknown as vi.Mock).mockResolvedValue({});
 
-    const provider = new ContainerProviderEntity(svc as unknown as ContainerService, {}, idLabels);
+    const provider = new ContainerProviderEntity(svc as unknown as ContainerService, undefined as any, {}, idLabels);
     provider.setConfig({ platform: 'linux/arm64' }); // DinD disabled by default
     const c = await provider.provide('t2');
 
@@ -97,7 +97,7 @@ describe('ContainerProviderEntity platform reuse logic', () => {
     const existing = new MockContainer('abc', svc);
     (svc.findContainerByLabels as unknown as vi.Mock).mockResolvedValue(existing);
 
-    const provider = new ContainerProviderEntity(svc as unknown as ContainerService, {}, idLabels);
+    const provider = new ContainerProviderEntity(svc as unknown as ContainerService, undefined as any, {}, idLabels);
     // no platform in config
     const c = await provider.provide('t3');
 
@@ -111,7 +111,7 @@ describe('ContainerProviderEntity platform reuse logic', () => {
     const existing = new MockContainer('abc', svc);
     (svc.findContainerByLabels as unknown as vi.Mock).mockResolvedValue(existing);
 
-    const provider = new ContainerProviderEntity(svc as unknown as ContainerService, {}, idLabels);
+    const provider = new ContainerProviderEntity(svc as unknown as ContainerService, undefined as any, {}, idLabels);
     const c = await provider.provide('t4');
 
     expect(existing.stop).not.toHaveBeenCalled();
@@ -127,7 +127,7 @@ describe('ContainerProviderEntity platform reuse logic', () => {
   it('does not attempt DinD when flag disabled (default)', async () => {
     const startImpl = async (_opts: Parameters<ContainerService['start']>[0]) => new MockContainer('cid123', svc);
     (svc.start as vi.Mock).mockImplementationOnce(startImpl);
-    const provider = new ContainerProviderEntity(svc as unknown as ContainerService, {}, idLabels);
+    const provider = new ContainerProviderEntity(svc as unknown as ContainerService, undefined as any, {}, idLabels);
     provider.setConfig({});
     const c = await provider.provide('tdis');
     expect(c).toBeInstanceOf(MockContainer);
@@ -140,7 +140,7 @@ describe('ContainerProviderEntity platform reuse logic', () => {
     const startImpl = async (_opts: Parameters<ContainerService['start']>[0]) => new MockContainer('cid999', svc);
     (svc.start as vi.Mock).mockImplementationOnce(startImpl);
     // DinD readiness already mocked in beforeEach via execContainer
-    const provider = new ContainerProviderEntity(svc as unknown as ContainerService, {}, idLabels);
+    const provider = new ContainerProviderEntity(svc as unknown as ContainerService, undefined as any, {}, idLabels);
     provider.setConfig({ enableDinD: true });
     const c = await provider.provide('ten');
     expect(c).toBeInstanceOf(MockContainer);

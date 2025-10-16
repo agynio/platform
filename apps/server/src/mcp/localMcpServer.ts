@@ -9,7 +9,7 @@ import { LoggerService } from '../services/logger.service.js';
 import { DockerExecTransport } from './dockerExecTransport.js';
 import { DEFAULT_MCP_COMMAND, McpError, McpServer, McpTool, McpToolCallResult } from './types.js';
 import { VaultService } from '../services/vault.service.js';
-import { parseVaultRef } from '../utils/refs.js';
+import { EnvService } from '../services/env.service.js';
 import { JSONSchema } from 'zod/v4/core';
 
 const EnvItemSchema = z
@@ -44,26 +44,20 @@ export const LocalMcpServerStaticConfigSchema = z.object({
 // .strict();
 
 export class LocalMCPServer implements McpServer, Provisionable, DynamicConfigurable<Record<string, boolean>> {
+  private envService?: EnvService;
+  private vault?: VaultService;
+
+  setEnvService(svc?: EnvService): void { this.envService = svc; }
+  setVault(vault?: VaultService): void { this.vault = vault; }
+
   private async resolveEnvOverlay(): Promise<Record<string, string> | undefined> {
     const items = this.cfg?.env || [];
     if (!items.length) return undefined;
-    // We do not have direct access to VaultService here; reuse from container provider path if available
-    // LocalMCPServer is constructed in templates with a VaultService instance available to ContainerProvider.
-    // For simplicity, try to obtain via this.containerService (not available) so we pass through using parseVaultRef only when vault is injected.
-    const out: Record<string, string> = {};
-    const vlt = (this as any).vault as VaultService | undefined;
-    for (const it of items) {
-      if (!it?.key) continue;
-      if (it.source === 'vault') {
-        if (vlt?.isEnabled()) {
-          try {
-            const ref = parseVaultRef(it.value);
-            const val = await vlt.getSecret(ref);
-            if (val != null) out[it.key] = val;
-          } catch {}
-        }
-      } else out[it.key] = it.value ?? '';
+    if (this.envService) {
+      try { const r = await this.envService.resolveEnvItems(items as any); return Object.keys(r).length ? r : undefined; } catch { return undefined; }
     }
+    const out: Record<string, string> = {};
+    for (const it of items) { if (it?.key && (it.source || 'static') === 'static') out[it.key] = it.value ?? ''; }
     return Object.keys(out).length ? out : undefined;
   }
 

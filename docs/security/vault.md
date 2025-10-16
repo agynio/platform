@@ -21,7 +21,7 @@ Workspace env vars
   - When source='static' (default), `value` is used as-is.
   - When source='vault', `value` must be a Vault reference string: `mount/path/key`.
 - On provision, the server resolves vault-backed entries and injects values into the container environment.
-- Backward compatibility: legacy `env` (map) and `envRefs` are still accepted at runtime, but are no longer advertised via templates or UI.
+- Legacy compatibility removed: envRefs is no longer supported. Providing envRefs will fail validation. A legacy plain env map may still be accepted by the server for convenience, but new configurations should use the array form.
 
 GitHub Clone Repo auth
 - New: `token?: { value: string; source?: 'static' | 'vault' }`
