@@ -2,9 +2,9 @@ import { BaseMessage } from '@langchain/core/messages';
 import { BaseMessage as ObsBaseMessage } from '@hautech/obs-sdk';
 import { BaseStore, LangGraphRunnableConfig } from '@langchain/langgraph';
 import { ChatOpenAI } from '@langchain/openai';
-import { BaseTool } from '../tools/base.tool';
+import { BaseTool } from '../../tools/base.tool';
 import { BaseNode } from './base.lgnode';
-import { NodeOutput } from '../types';
+import { NodeOutput } from '../../types';
 import { LLMResponse, withLLM } from '@hautech/obs-sdk';
 
 export const SYSTEM_PROMPT = `You are a helpful and friendly chatbot. Get to know the user! \

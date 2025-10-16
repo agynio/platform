@@ -2,7 +2,7 @@ import { AIMessage, BaseMessage, HumanMessage, SystemMessage, ToolMessage } from
 import { ChatOpenAI } from '@langchain/openai';
 import { withSummarize, SummarizeResponse, BaseMessage as ObsBaseMessage } from '@hautech/obs-sdk';
 import { trimMessages } from '@langchain/core/messages';
-import { NodeOutput } from '../types';
+import { NodeOutput } from '../../types';
 
 export type ChatState = { messages: BaseMessage[]; summary?: string };
 
