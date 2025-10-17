@@ -1,9 +1,9 @@
 import { z } from 'zod';
-import { BaseTrigger } from './base.trigger';
-import { LoggerService } from '../services/logger.service';
+import { BaseTrigger } from './base.trigger.node';
+import { LoggerService } from '../../services/logger.service';
 import { DynamicStructuredTool } from '@langchain/core/tools';
 import type { FastifyReply, FastifyRequest } from 'fastify';
-import { DebugHttpService } from '../services/debugHttp.service';
+import { DebugHttpService } from '../../services/debugHttp.service';
 
 export const DebugToolTriggerStaticConfigSchema = z
   .object({

@@ -1,3 +1,3 @@
 export * from './types.js';
 export * from './dockerExecTransport.js';
-export * from './localMcpServer.js';
+// LocalMCPServer is a Node under nodes/mcp; do not export legacy path

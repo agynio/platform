@@ -1,4 +1,4 @@
-import type { ProvisionStatus } from '../graph/capabilities';
+import type { ProvisionStatus } from '../../graph/capabilities';
 
 // Base trigger message. Backward-compatible: no 'kind' field required.
 export interface TriggerMessage {
@@ -22,9 +22,6 @@ export interface TriggerListener {
 export abstract class BaseTrigger {
   private listeners: TriggerListener[] = [];
 
-  // Pausable implementation
-  private _paused = false;
-
   // Legacy provision status retained to feed UI status; managed by subclasses using start/stop
   private _provStatus: ProvisionStatus = { state: 'not_ready' };
   private _provListeners: Array<(s: ProvisionStatus) => void> = [];
@@ -37,17 +34,6 @@ export abstract class BaseTrigger {
 
   async unsubscribe(listener: TriggerListener): Promise<void> {
     this.listeners = this.listeners.filter((l) => l !== listener);
-  }
-
-  // Pausable
-  pause(): void {
-    this._paused = true;
-  }
-  resume(): void {
-    this._paused = false;
-  }
-  isPaused(): boolean {
-    return this._paused;
   }
 
   // Status accessors (for UI)
@@ -84,13 +70,12 @@ export abstract class BaseTrigger {
    * External triggers call this to fan-out messages to listeners immediately (agent-side buffering applies).
    */
   protected async notify(thread: string, messages: TriggerMessage[]): Promise<void> {
-    if (this._paused) return; // drop events while paused
     if (!messages.length) return;
     await Promise.all(this.listeners.map(async (listener) => listener.invoke(thread, messages)));
   }
 
   // Universal teardown method for runtime disposal
-  async destroy(): Promise<void> {
+  async delete(): Promise<void> {
     // default: unsubscribe all listeners by clearing the array
     this.listeners = [];
   }

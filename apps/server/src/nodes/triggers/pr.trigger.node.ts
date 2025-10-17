@@ -1,7 +1,7 @@
-import { BaseTrigger, TriggerMessage } from './base.trigger';
-import { LoggerService } from "../services/logger.service";
-import { PRService } from "../services/pr.service";
-import { GithubService } from "../services/github.service";
+import { BaseTrigger, TriggerMessage } from './base.trigger.node';
+import { LoggerService } from "../../services/logger.service";
+import { PRService } from "../../services/pr.service";
+import { GithubService } from "../../services/github.service";
 import md5 from "md5";
 
 export interface PRTriggerOptions {
