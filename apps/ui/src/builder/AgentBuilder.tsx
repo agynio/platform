@@ -136,6 +136,18 @@ export function AgentBuilder() {
   const nodeTypes = useMemo(() => makeNodeTypes(templates), [templates]);
   const [rightTab, setRightTab] = useState<'properties' | 'activity'>('properties');
 
+  // Eligibility: show tabs for agent or tool nodes
+  // Keep callback stable and declare before any effects that reference it to avoid TDZ issues.
+  const isActivityEligible = useCallback((node: RFNode | null, tpls: TemplateNodeSchema[]): boolean => {
+    if (!node) return false;
+    const tpl = tpls.find((t) => t.name === node.data.template);
+    const kind = tpl?.kind; // TemplateKind union
+    if (kind === 'agent' || kind === 'tool') return true;
+    // Fallback: template name conventions from prior PR
+    if (/agent/i.test(node.data.template)) return true;
+    return false; // treat others as ineligible
+  }, []);
+
   // Reset tab when selection changes or if selected node no longer supports activity view
   useEffect(() => {
     if (!selectedNode) {
@@ -147,17 +159,6 @@ export function AgentBuilder() {
       setRightTab('properties');
     }
   }, [selectedNode, rightTab, isActivityEligible, templates]);
-
-  // Eligibility: show tabs for agent or tool nodes
-  const isActivityEligible = useCallback((node: RFNode | null, tpls: TemplateNodeSchema[]): boolean => {
-    if (!node) return false;
-    const tpl = tpls.find((t) => t.name === node.data.template);
-    const kind = tpl?.kind; // TemplateKind union
-    if (kind === 'agent' || kind === 'tool') return true;
-    // Fallback: template name conventions from prior PR
-    if (/agent/i.test(node.data.template)) return true;
-    return false; // treat others as ineligible
-  }, []);
   const activityEligible = isActivityEligible(selectedNode, templates);
   const selectedDisplayTitle = selectedNode
     ? getDisplayTitle(templates, selectedNode.data.template, selectedNode.data.config)
