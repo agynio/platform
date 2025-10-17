@@ -1,31 +1,35 @@
 # Agents Documentation
 
-- Technical Overview: [technical-overview.md](technical-overview.md)
-- Contributing: [contributing/index.md](contributing/index.md)
-- Style Guides: [contributing/style_guides.md](contributing/style_guides.md)
+How these docs are organized
+- Product specification: end-to-end features, behaviors, and operations.
+- API and graph store: HTTP/Socket APIs and persistence internals.
+- Containers and security: workspace lifecycle and secret handling.
+- Observability and UI: traces, spans, and the graph builder.
+- Contributing and ADRs: internal engineering references.
+
+Index
+- Product Spec: [product-spec.md](product-spec.md)
+- API Reference: [api/index.md](api/index.md)
+- Graph
+  - Git-backed Store: [graph/git-store.md](graph/git-store.md)
+  - Status Updates: [graph/status-updates.md](graph/status-updates.md)
+- Containers
+  - Workspaces: [containers/workspaces.md](containers/workspaces.md)
+  - Env Overlays: [config/env-overlays.md](../docs/config/env-overlays.md)
+- Observability
+  - Overview: [observability/index.md](observability/index.md)
+  - Heartbeats and Sweeper: [observability/heartbeats-and-sweeper.md](observability/heartbeats-and-sweeper.md)
+  - Stage 1 Plan: [observability/stage-1-plan.md](observability/stage-1-plan.md)
+- UI
+  - Graph Builder Overview: [ui/graph/index.md](ui/graph/index.md)
+  - Config Views: [ui/config-views.md](ui/config-views.md)
+- Security
+  - Vault: [security/vault.md](security/vault.md)
 - MCP Design: [mcp-design.md](mcp-design.md)
+- Technical Overview: [technical-overview.md](technical-overview.md)
+- ADR: Memory v2: [adr/adr-0005-memory-v2.md](adr/adr-0005-memory-v2.md)
+- Server Memory: [server-memory.md](server-memory.md)
+- Summarization: [summarization.md](summarization.md)
 - Slack migration: [slack-migration.md](slack-migration.md)
-
-## Recent Additions
-
-- Workspace container provider supports an optional `platform` static field with allowed values `linux/amd64` or `linux/arm64`. When set, Docker image pulls include the platform selector and container creation uses the same platform (as a query parameter). Newly created containers are labeled with `hautech.ai/platform` for future reuse decisions. If a workspace is requested with a platform and an existing container has a different or missing platform label, it will not be reused; it is stopped and removed, and a new one is created. Note: Running a non-native platform may be slower depending on Docker's emulation.
-- Container Provider supports an optional `initialScript` configuration field. When set, the script is executed inside a newly created container immediately after it starts (via `/bin/sh -lc`). A non-zero exit code fails provisioning of that container.
-- Simple Agent now accepts a `model` static configuration parameter to select the underlying LLM (default: `gpt-5`). You can override it per agent instance via the graph static config UI or API.
-  - Also configurable: agent-side message buffer handling for SimpleAgent (static config fields in apps/server/src/agents/simple.agent.ts):
-    - debounceMs: Debounce window (ms) for agent-side message buffer.
-    - whenBusy: 'wait' queues new messages; 'injectAfterTools' injects them into the current run after the tools stage.
-    - processBuffer: 'allTogether' drains all queued messages; 'oneByOne' processes one message per run.
-  - Defaults: `debounceMs=0`, `whenBusy='wait'`, `processBuffer='allTogether'`.
-  - Changes made via `setConfig({...})` apply immediately at runtime without a restart; the agent updates scheduling and summarization behavior in-place.
-
-## Invoke Resolution Semantics
-
-Agent-side buffering and scheduling determines when `agent.invoke()` resolves:
-- whenBusy=`wait` + processBuffer=`oneByOne`: resolves per message/run; if a run fails, only that message's awaiter rejects. Tokens split across runs resolve independently.
-- whenBusy=`wait` + processBuffer=`allTogether`: resolves all included together when the batch's run completes; rejects together on error.
-- whenBusy=`injectAfterTools`: messages arriving during an in-flight run are injected after tools and resolve when that run completes; arrivals too late to inject remain queued for the next run.
-
-On errors thrown by the graph runtime, only tokens included in the failed run are rejected; others remain pending. `dropTokens()` cleans up any remaining buffered items for those tokens. Each run is tagged with a per-run identifier in logs for easier tracing.
-
-Notes: Running a non-native platform may be slower depending on Docker Engine/Desktop emulation (qemu/binfmt); your Docker Engine must support the requested platform; and not all registries publish multi-arch images for the same tag.
-When platform is undefined, we do not set the `hautech.ai/platform` label and reuse behavior remains unchanged.
+- Glossary: [glossary.md](glossary.md)
+- Changelog Template: [CHANGELOG_TEMPLATE.md](CHANGELOG_TEMPLATE.md)
