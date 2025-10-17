@@ -108,10 +108,14 @@ export function CheckpointItem({ item, onFilterThread, currentThreadId }: Checkp
   const threadFilterBtn = onFilterThread && (
     <Button
       type="button"
-      size="sm"
       variant="outline"
       onClick={() => onFilterThread(item.threadId)}
-      className={currentThreadId === item.threadId ? 'bg-blue-500/20 text-blue-700 dark:text-blue-300 border-blue-400' : ''}
+      className={
+        `h-auto px-1.5 py-0.5 text-[10px] font-medium hover:bg-muted/70 border ` +
+        (currentThreadId === item.threadId
+          ? 'bg-blue-500/20 text-blue-700 dark:text-blue-300 border-blue-400'
+          : 'bg-muted border-transparent')
+      }
       title={currentThreadId === item.threadId ? 'Currently filtered by this thread' : 'Filter by this thread'}
     >
       {currentThreadId === item.threadId ? 'thread ✓' : 'filter thread'}
