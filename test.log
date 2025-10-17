@@ -1,0 +1,688 @@
+
+> agents@1.0.0 test /workspace/repo
+> vitest run
+
+
+ RUN  v3.2.4 /workspace/repo
+
+ ✓ apps/ui/src/lib/__tests__/apiClient.test.ts (11 tests | 1 skipped) 184ms
+stdout | apps/server/__tests__/config.simpleAgent.restriction.test.ts
+[dotenv@17.2.2] injecting env (0) from .env -- tip: 🔐 prevent building .env in docker: https://dotenvx.com/prebuild
+
+ ✓ apps/server/__tests__/readinessWatcher.test.ts (3 tests) 177ms
+stdout | apps/server/src/__tests__/containerProvider.env.test.ts > ContainerProviderEntity parseVaultRef > merges env array and resolves vault entries
+[ContainerProviderEntity] lookup labels (workspace) { [32m'hautech.ai/role'[39m: [32m'workspace'[39m }
+
+stdout | apps/server/src/__tests__/containerProvider.registry.integration.test.ts > ContainerProvider + registry hooks > updates last_used on provide()
+[ContainerProviderEntity] lookup labels (workspace) { [32m'hautech.ai/thread_id'[39m: [32m'node__t'[39m, [32m'hautech.ai/role'[39m: [32m'workspace'[39m }
+
+ ✓ apps/server/src/__tests__/containerProvider.env.test.ts (3 tests) 17ms
+ ✓ apps/server/src/__tests__/containerProvider.registry.integration.test.ts (1 test) 12ms
+stdout | packages/obs-sdk/__tests__/llm.attributes.e2e.test.ts > obs-sdk LLM span attributes (e2e) > captures completed LLM span with output content and toolCalls
+Captured events count [33m6[39m [
+  [32m'created:agent'[39m,
+  [32m'created:llm'[39m,
+  [32m'completed:llm'[39m,
+  [32m'created:tool:weather'[39m,
+  [32m'completed:tool:weather'[39m,
+  [32m'completed:agent'[39m
+]
+
+stdout | apps/server/__tests__/simpleAgent.summarization.graph.test.ts
+[dotenv@17.2.2] injecting env (0) from .env -- tip: ⚙️  load multiple .env files with { path: ['.env.local', '.env'] }
+
+ ✓ packages/obs-sdk/__tests__/llm.attributes.e2e.test.ts (1 test) 239ms
+stdout | apps/server/__tests__/agents.simple.buffer.behavior.test.ts
+[dotenv@17.2.2] injecting env (0) from .env -- tip: 🔐 prevent building .env in docker: https://dotenvx.com/prebuild
+
+stdout | apps/server/__tests__/simpleAgent.restriction.graph.test.ts
+[dotenv@17.2.2] injecting env (0) from .env -- tip: ⚙️  write to custom object with { processEnv: myObject }
+
+stdout | apps/server/src/__tests__/container.exec.streams.test.ts > ContainerService.startAndCollectExec stream handling > decodes UTF-8 split across chunk boundaries (TTY=true path)
+[DEBUG] Exec in container cid=abc: /bin/sh -lc echo
+
+stdout | apps/server/src/__tests__/container.exec.streams.test.ts > ContainerService.startAndCollectExec stream handling > decodes UTF-8 split across chunk boundaries (TTY=true path)
+[DEBUG] Exec finished cid=abc exitCode=0 stdoutBytes=8 stderrBytes=0
+
+stdout | apps/server/src/__tests__/container.exec.streams.test.ts > ContainerService.startAndCollectExec stream handling > demuxes multiplexed stream when TTY=false (stdout/stderr separation)
+[DEBUG] Exec in container cid=cid: /bin/sh -lc echo
+
+stdout | apps/server/src/__tests__/container.exec.streams.test.ts > ContainerService.startAndCollectExec stream handling > demuxes multiplexed stream when TTY=false (stdout/stderr separation)
+[DEBUG] Exec finished cid=cid exitCode=0 stdoutBytes=8 stderrBytes=4
+
+stdout | apps/server/src/__tests__/container.exec.streams.test.ts > ContainerService.startAndCollectExec stream handling > falls back safely when header invalid (treat raw as stdout)
+[DEBUG] Exec in container cid=x: /bin/sh -lc echo
+
+stdout | apps/server/src/__tests__/container.exec.streams.test.ts > ContainerService.startAndCollectExec stream handling > falls back safely when header invalid (treat raw as stdout)
+[DEBUG] Exec finished cid=x exitCode=0 stdoutBytes=26 stderrBytes=0
+
+stdout | apps/server/src/__tests__/container.exec.streams.test.ts > ContainerService.startAndCollectExec stream handling > handles large output streams without garbling
+[DEBUG] Exec in container cid=big: /bin/sh -lc echo
+
+stdout | apps/server/src/__tests__/container.exec.streams.test.ts > ContainerService.startAndCollectExec stream handling > handles large output streams without garbling
+[DEBUG] Exec finished cid=big exitCode=0 stdoutBytes=102400 stderrBytes=0
+
+stdout | apps/server/src/__tests__/container.exec.streams.test.ts > ContainerService.startAndCollectExec stream handling > preserves ANSI escape sequences (TTY=true)
+[DEBUG] Exec in container cid=ansi: /bin/sh -lc echo
+
+stdout | apps/server/src/__tests__/container.exec.streams.test.ts > ContainerService.startAndCollectExec stream handling > preserves ANSI escape sequences (TTY=true)
+[DEBUG] Exec finished cid=ansi exitCode=0 stdoutBytes=19 stderrBytes=0
+
+stdout | apps/server/src/__tests__/container.exec.streams.test.ts > ContainerService.startAndCollectExec stream handling > flushes decoder on overall timeout with partial multibyte and destroys stream
+[DEBUG] Exec in container cid=tmo: /bin/sh -lc echo
+
+stdout | apps/server/src/__tests__/container.exec.streams.test.ts > ContainerService.startAndCollectExec stream handling > flushes decoder on idle timeout with partial multibyte and destroys stream
+[DEBUG] Exec in container cid=idle: /bin/sh -lc echo
+
+ ✓ apps/server/__tests__/memory.connector.callmodel.wiring.test.ts (2 tests) 124ms
+stdout | apps/server/src/__tests__/container.exec.streams.test.ts > ContainerService.startAndCollectExec stream handling > manual demux handles header split across chunk boundaries
+[DEBUG] Exec in container cid=split: /bin/sh -lc echo
+
+stdout | apps/server/src/__tests__/container.exec.streams.test.ts > ContainerService.startAndCollectExec stream handling > manual demux handles header split across chunk boundaries
+[DEBUG] Exec finished cid=split exitCode=0 stdoutBytes=5 stderrBytes=0
+
+stdout | apps/server/src/__tests__/container.exec.streams.test.ts > ContainerService.startAndCollectExec stream handling > invalid header switches to passthrough for subsequent chunks
+[DEBUG] Exec in container cid=raw: /bin/sh -lc echo
+
+stdout | apps/server/src/__tests__/container.exec.streams.test.ts > ContainerService.startAndCollectExec stream handling > invalid header switches to passthrough for subsequent chunks
+[DEBUG] Exec finished cid=raw exitCode=0 stdoutBytes=19 stderrBytes=0
+
+ ✓ apps/server/src/__tests__/container.exec.streams.test.ts (9 tests) 124ms
+ ✓ apps/server/src/__tests__/nix.routes.test.ts (9 tests) 521ms
+stdout | apps/server/__tests__/simpleAgent.summarization.graph.test.ts > SimpleAgent summarization graph > invokes successfully over several turns with summarization configured
+[INFO] SimpleAgent system prompt updated
+[INFO] SimpleAgent model updated to gpt-5
+[INFO] SimpleAgent summarization options updated
+[INFO] New trigger event in thread t (messages=1, human=1, system=0)
+[INFO] Starting run t/run-1760662294410-6ns84i with 1 message(s)
+
+stdout | apps/server/__tests__/config.simpleAgent.restriction.test.ts > SimpleAgent config restrictions > setConfig preserves systemPrompt and toggles restriction flags without concatenation
+[INFO] SimpleAgent system prompt updated
+[INFO] SimpleAgent model updated to gpt-5
+[INFO] SimpleAgent system prompt updated
+[INFO] SimpleAgent model updated to gpt-5
+[INFO] SimpleAgent system prompt updated
+[INFO] SimpleAgent model updated to gpt-5
+[INFO] New trigger event in thread t (messages=1, human=1, system=0)
+[INFO] Starting run t/run-1760662294414-wer3rl with 1 message(s)
+
+stdout | apps/server/__tests__/simpleAgent.restriction.graph.test.ts > SimpleAgent restriction enforcement > restrictOutput=false: call_model with no tool_calls leads to END (no enforce)
+[INFO] Tool added to SimpleAgent: FinishTool
+[INFO] SimpleAgent system prompt updated
+[INFO] SimpleAgent model updated to gpt-5
+[INFO] New trigger event in thread t (messages=1, human=1, system=0)
+[INFO] Starting run t/run-1760662294435-8rydtl with 1 message(s)
+
+stdout | apps/server/__tests__/simpleAgent.summarization.graph.test.ts > SimpleAgent summarization graph > invokes successfully over several turns with summarization configured
+[INFO] Completed run t/run-1760662294410-6ns84i; resolved tokens: [t:1]
+[INFO] Agent response in thread t: ok
+
+stdout | apps/server/__tests__/simpleAgent.summarization.graph.test.ts > SimpleAgent summarization graph > invokes successfully over several turns with summarization configured
+[INFO] New trigger event in thread t (messages=1, human=1, system=0)
+[INFO] Starting run t/run-1760662294501-rwena7 with 1 message(s)
+
+stdout | apps/server/__tests__/simpleAgent.summarization.graph.test.ts > SimpleAgent summarization graph > invokes successfully over several turns with summarization configured
+[INFO] Completed run t/run-1760662294501-rwena7; resolved tokens: [t:2]
+[INFO] Agent response in thread t: ok
+
+stdout | apps/server/__tests__/simpleAgent.summarization.graph.test.ts > SimpleAgent summarization graph > invokes successfully over several turns with summarization configured
+[INFO] New trigger event in thread t (messages=1, human=1, system=0)
+[INFO] Starting run t/run-1760662294518-amueqp with 1 message(s)
+
+stdout | apps/server/__tests__/config.simpleAgent.restriction.test.ts > SimpleAgent config restrictions > setConfig preserves systemPrompt and toggles restriction flags without concatenation
+[INFO] Completed run t/run-1760662294414-wer3rl; resolved tokens: [t:1]
+[INFO] Agent response in thread t: ok
+
+ ✓ apps/server/__tests__/config.simpleAgent.restriction.test.ts (1 test) 128ms
+stdout | apps/server/__tests__/simpleAgent.summarization.graph.test.ts > SimpleAgent summarization graph > invokes successfully over several turns with summarization configured
+[INFO] Completed run t/run-1760662294518-amueqp; resolved tokens: [t:3]
+[INFO] Agent response in thread t: ok
+
+stdout | apps/server/__tests__/simpleAgent.restriction.graph.test.ts > SimpleAgent restriction enforcement > restrictOutput=false: call_model with no tool_calls leads to END (no enforce)
+[INFO] Completed run t/run-1760662294435-8rydtl; resolved tokens: [t:1]
+[INFO] Agent response in thread t: plain
+
+ ✓ apps/server/__tests__/simpleAgent.summarization.graph.test.ts (1 test) 136ms
+stdout | apps/server/__tests__/simpleAgent.restriction.graph.test.ts > SimpleAgent restriction enforcement > restrictOutput=true & restrictionMaxInjections=0: injects and loops until tool call
+[INFO] Tool added to SimpleAgent: FinishTool
+[INFO] SimpleAgent system prompt updated
+[INFO] SimpleAgent model updated to gpt-5
+[INFO] New trigger event in thread t (messages=1, human=1, system=0)
+[INFO] Starting run t/run-1760662294540-owghxa with 1 message(s)
+
+stdout | apps/server/__tests__/simpleAgent.restriction.graph.test.ts > SimpleAgent restriction enforcement > restrictOutput=true & restrictionMaxInjections=0: injects and loops until tool call
+[INFO] Completed run t/run-1760662294540-owghxa; resolved tokens: [t:1]
+[INFO] Agent response in thread t: Do not produce a final answer directly. Before finishing, call a tool. If no tool is needed, call the 'finish' tool.
+
+stdout | apps/server/__tests__/simpleAgent.restriction.graph.test.ts > SimpleAgent restriction enforcement > restrictOutput=true & restrictionMaxInjections=2: injects twice then ends if still no tool_calls
+[INFO] Tool added to SimpleAgent: FinishTool
+[INFO] SimpleAgent system prompt updated
+[INFO] SimpleAgent model updated to gpt-5
+[INFO] New trigger event in thread t (messages=1, human=1, system=0)
+[INFO] Starting run t/run-1760662294570-gqw69k with 1 message(s)
+
+stdout | apps/server/__tests__/simpleAgent.restriction.graph.test.ts > SimpleAgent restriction enforcement > restrictOutput=true & restrictionMaxInjections=2: injects twice then ends if still no tool_calls
+[INFO] Completed run t/run-1760662294570-gqw69k; resolved tokens: [t:1]
+[INFO] Agent response in thread t: Do not produce a final answer directly. Before finishing, call a tool. If no tool is needed, call the 'finish' tool.
+
+stdout | apps/server/__tests__/agents.simple.buffer.behavior.test.ts > SimpleAgent buffer behavior > whenBusy='injectAfterTools' injects messages during in-flight run
+[INFO] SimpleAgent system prompt updated
+[INFO] SimpleAgent model updated to gpt-5
+[INFO] New trigger event in thread t2 (messages=1, human=1, system=0)
+[INFO] Starting run t2/run-1760662294467-cpc3fs with 1 message(s)
+[INFO] New trigger event in thread t2 (messages=1, human=1, system=0)
+
+stdout | apps/server/__tests__/container.service.platform.test.ts > ContainerService platform support > threads platform to pull and createContainer and labels when set
+[INFO] Ensuring image 'alpine:3' is available locally
+
+stdout | apps/server/__tests__/container.service.platform.test.ts > ContainerService platform support > threads platform to pull and createContainer and labels when set
+[INFO] Image 'alpine:3' not found locally. Pulling...
+
+ ✓ apps/server/__tests__/simpleAgent.restriction.graph.test.ts (3 tests) 164ms
+stdout | apps/server/__tests__/agents.simple.buffer.behavior.test.ts > SimpleAgent buffer behavior > whenBusy='injectAfterTools' injects messages during in-flight run
+[INFO] Completed run t2/run-1760662294467-cpc3fs; resolved tokens: [t2:1]
+[INFO] Starting run t2/run-1760662294467-a9hyqx with 1 message(s)
+[INFO] Agent response in thread t2: ok
+
+stdout | apps/server/__tests__/agents.simple.buffer.behavior.test.ts > SimpleAgent buffer behavior > whenBusy='injectAfterTools' injects messages during in-flight run
+[INFO] Completed run t2/run-1760662294467-a9hyqx; resolved tokens: [t2:2]
+[INFO] Agent response in thread t2: ok
+
+ ✓ apps/server/__tests__/agents.simple.buffer.behavior.test.ts (4 tests) 196ms
+stdout | apps/server/__tests__/container.service.platform.test.ts > ContainerService platform support > threads platform to pull and createContainer and labels when set
+[INFO] Finished pulling image 'alpine:3'
+
+stdout | apps/server/__tests__/container.service.platform.test.ts > ContainerService platform support > threads platform to pull and createContainer and labels when set
+[INFO] Creating container from 'alpine:3'
+
+stdout | apps/server/__tests__/container.service.platform.test.ts > ContainerService platform support > threads platform to pull and createContainer and labels when set
+[INFO] Container started cid=deadbeefcafe status=running
+
+stdout | apps/server/__tests__/container.service.platform.test.ts > ContainerService platform support > omits platform from pull and createContainer when undefined
+[INFO] Ensuring image 'alpine:3' is available locally
+
+stdout | apps/server/__tests__/container.service.platform.test.ts > ContainerService platform support > omits platform from pull and createContainer when undefined
+[INFO] Image 'alpine:3' not found locally. Pulling...
+
+stdout | apps/server/__tests__/container.service.platform.test.ts > ContainerService platform support > omits platform from pull and createContainer when undefined
+[INFO] Finished pulling image 'alpine:3'
+
+stdout | apps/server/__tests__/container.service.platform.test.ts > ContainerService platform support > omits platform from pull and createContainer when undefined
+[INFO] Creating container from 'alpine:3'
+
+stdout | apps/server/__tests__/container.service.platform.test.ts > ContainerService platform support > omits platform from pull and createContainer when undefined
+[INFO] Container started cid=deadbeefcafe status=running
+
+stdout | apps/server/__tests__/container.service.platform.test.ts > ContainerService platform support > pulls even if image exists when platform is specified
+[INFO] Ensuring image 'alpine:3' is available locally
+
+stdout | apps/server/__tests__/container.service.platform.test.ts > ContainerService platform support > pulls even if image exists when platform is specified
+[DEBUG] Image 'alpine:3' already present
+
+stdout | apps/server/__tests__/container.service.platform.test.ts > ContainerService platform support > pulls even if image exists when platform is specified
+[INFO] Finished pulling image 'alpine:3'
+
+stdout | apps/server/__tests__/container.service.platform.test.ts > ContainerService platform support > pulls even if image exists when platform is specified
+[INFO] Creating container from 'alpine:3'
+
+stdout | apps/server/__tests__/container.service.platform.test.ts > ContainerService platform support > pulls even if image exists when platform is specified
+[INFO] Container started cid=deadbeefcafe status=running
+
+ ✓ apps/server/__tests__/container.service.platform.test.ts (3 tests) 69ms
+ ✓ packages/obs-sdk/__tests__/context.test.ts (1 test) 1316ms
+   ✓ ALS context > propagates  1306ms
+stderr | apps/server/src/__tests__/containerRegistry.backfill.lastUsed.test.ts > ContainerRegistryService backfill last_used behavior
+Starting the MongoMemoryServer Instance failed, enable debug log for more information. Error:
+ UnexpectedCloseError: Instance closed unexpectedly with code "null" and signal "SIGILL"
+The Process Exited with SIGILL, which mean illegal instruction, which is commonly thrown in mongodb 5.0+ when not having AVX available on the CPU
+    at MongoInstance.closeHandler [90m(/workspace/repo/[39mnode_modules/[4m.pnpm[24m/mongodb-memory-server-core@10.2.1/node_modules/[4mmongodb-memory-server-core[24m/src/util/MongoInstance.ts:581:52[90m)[39m
+[90m    at ChildProcess.emit (node:events:519:28)[39m
+[90m    at maybeClose (node:internal/child_process:1101:16)[39m
+[90m    at Process.ChildProcess._handle.onexit (node:internal/child_process:304:5)[39m
+
+stderr | apps/server/src/__tests__/containerRegistry.backfill.lastUsed.test.ts > ContainerRegistryService backfill last_used behavior
+Skipping backfill last_used tests: mongodb-memory-server unavailable: Instance closed unexpectedly with code "null" and signal "SIGILL"
+The Process Exited with SIGILL, which mean illegal instruction, which is commonly thrown in mongodb 5.0+ when not having AVX available on the CPU
+
+stderr | apps/server/src/__tests__/containerCleanup.service.test.ts > ContainerCleanupService
+Starting the MongoMemoryServer Instance failed, enable debug log for more information. Error:
+ UnexpectedCloseError: Instance closed unexpectedly with code "null" and signal "SIGILL"
+The Process Exited with SIGILL, which mean illegal instruction, which is commonly thrown in mongodb 5.0+ when not having AVX available on the CPU
+    at MongoInstance.closeHandler [90m(/workspace/repo/[39mnode_modules/[4m.pnpm[24m/mongodb-memory-server-core@10.2.1/node_modules/[4mmongodb-memory-server-core[24m/src/util/MongoInstance.ts:581:52[90m)[39m
+[90m    at ChildProcess.emit (node:events:519:28)[39m
+[90m    at maybeClose (node:internal/child_process:1101:16)[39m
+[90m    at Process.ChildProcess._handle.onexit (node:internal/child_process:304:5)[39m
+
+ ✓ apps/server/src/__tests__/containerRegistry.backfill.lastUsed.test.ts (4 tests) 99ms
+stderr | apps/server/src/__tests__/containerCleanup.service.test.ts > ContainerCleanupService
+Skipping ContainerCleanupService tests: mongodb-memory-server unavailable: Instance closed unexpectedly with code "null" and signal "SIGILL"
+The Process Exited with SIGILL, which mean illegal instruction, which is commonly thrown in mongodb 5.0+ when not having AVX available on the CPU
+
+ ✓ apps/server/src/__tests__/containerCleanup.service.test.ts (5 tests) 74ms
+stdout | apps/server/__tests__/call_agent.tool.test.ts > CallAgentTool unit > returns error when no agent attached
+[INFO] call_agent invoked { targetAttached: [33mfalse[39m, hasContext: [33mfalse[39m, responseMode: [32m'sync'[39m }
+
+stdout | apps/server/__tests__/call_agent.tool.test.ts > CallAgentTool unit > calls attached agent and returns its response.text
+[INFO] call_agent invoked { targetAttached: [33mtrue[39m, hasContext: [33mfalse[39m, responseMode: [32m'sync'[39m }
+
+stdout | apps/server/__tests__/call_agent.tool.test.ts > CallAgentTool unit > passes context through info
+[INFO] call_agent invoked { targetAttached: [33mtrue[39m, hasContext: [33mtrue[39m, responseMode: [32m'sync'[39m }
+
+stdout | apps/server/__tests__/call_agent.tool.test.ts > CallAgentTool unit > concatenates childThreadId with parent thread_id when provided
+[INFO] call_agent invoked { targetAttached: [33mtrue[39m, hasContext: [33mfalse[39m, responseMode: [32m'sync'[39m }
+
+stdout | apps/server/__tests__/call_agent.tool.test.ts > CallAgentTool unit > async mode returns sent immediately and later triggers parent with child result
+[INFO] call_agent invoked { targetAttached: [33mtrue[39m, hasContext: [33mfalse[39m, responseMode: [32m'async'[39m }
+
+stdout | apps/server/__tests__/call_agent.tool.test.ts > CallAgentTool unit > ignore mode returns sent and does not trigger parent
+[INFO] call_agent invoked { targetAttached: [33mtrue[39m, hasContext: [33mfalse[39m, responseMode: [32m'ignore'[39m }
+
+stdout | apps/server/src/__tests__/mixed.shell.mcp.isolation.test.ts > Mixed Shell + MCP overlay isolation > does not leak env between Shell and MCP nodes
+[INFO] Tool called shell_command { command: [32m'printenv'[39m }
+
+stdout | apps/server/src/__tests__/mixed.shell.mcp.isolation.test.ts > Mixed Shell + MCP overlay isolation > does not leak env between Shell and MCP nodes
+[INFO] [MCP:n] [disc:1] Starting tool discovery (toolsDiscovered=false)
+
+stdout | apps/server/__tests__/call_agent.tool.test.ts > CallAgentTool graph wiring > wires agent method to tool instance via ports and sets agent
+[INFO] Applying graph diff: +3 nodes, -0 nodes, ~0 config updates, +2 edges, -0 edges
+
+ ✓ apps/server/__tests__/call_agent.tool.test.ts (8 tests) 85ms
+stdout | apps/server/src/__tests__/mixed.shell.mcp.isolation.test.ts > Mixed Shell + MCP overlay isolation > does not leak env between Shell and MCP nodes
+[INFO] [MCP:n] [disc:1] Connecting for tool discovery
+[INFO] [DockerExecTransport#1] START initiating exec
+[DEBUG] [MCP:n] [disc:1] launching docker exec
+
+stdout | apps/server/src/__tests__/mixed.shell.mcp.isolation.test.ts > Mixed Shell + MCP overlay isolation > does not leak env between Shell and MCP nodes
+[INFO] [DockerExecTransport#1] CLOSED
+
+stderr | apps/server/src/__tests__/mixed.shell.mcp.isolation.test.ts > Mixed Shell + MCP overlay isolation > does not leak env between Shell and MCP nodes
+[ERROR] [MCP:n] [disc:1] Tool discovery failed McpError: MCP error -32001: Request timed out
+    at Timeout.timeoutHandler [90m(file:///workspace/repo/[39mnode_modules/[4m.pnpm[24m/@modelcontextprotocol+sdk@1.18.1/node_modules/[4m@modelcontextprotocol[24m/sdk/src/shared/protocol.ts:625:43[90m)[39m
+[90m    at listOnTimeout (node:internal/timers:588:17)[39m
+[90m    at processTimers (node:internal/timers:523:7)[39m {
+  code: [33m-32001[39m,
+  data: { timeout: [33m10[39m }
+}
+
+stderr | apps/server/src/__tests__/mixed.shell.mcp.isolation.test.ts > Mixed Shell + MCP overlay isolation > does not leak env between Shell and MCP nodes
+[ERROR] [MCP:n] [disc:1] Error cleaning up temp container TypeError: tempContainer.stop is not a function
+    at LocalMCPServer.discoverTools [90m(/workspace/repo/[39mapps/server/src/mcp/localMcpServer.ts:252:29[90m)[39m
+    at [90m/workspace/repo/[39mapps/server/src/__tests__/mixed.shell.mcp.isolation.test.ts:51:11
+    at [90mfile:///workspace/repo/[39mnode_modules/[4m.pnpm[24m/@vitest+runner@3.2.4/node_modules/[4m@vitest[24m/runner/dist/chunk-hooks.js:752:20
+
+ ✓ apps/server/src/__tests__/mixed.shell.mcp.isolation.test.ts (1 test) 84ms
+stderr | apps/server/src/__tests__/containerRegistry.service.test.ts > ContainerRegistryService
+Starting the MongoMemoryServer Instance failed, enable debug log for more information. Error:
+ UnexpectedCloseError: Instance closed unexpectedly with code "null" and signal "SIGILL"
+The Process Exited with SIGILL, which mean illegal instruction, which is commonly thrown in mongodb 5.0+ when not having AVX available on the CPU
+    at MongoInstance.closeHandler [90m(/workspace/repo/[39mnode_modules/[4m.pnpm[24m/mongodb-memory-server-core@10.2.1/node_modules/[4mmongodb-memory-server-core[24m/src/util/MongoInstance.ts:581:52[90m)[39m
+[90m    at ChildProcess.emit (node:events:519:28)[39m
+[90m    at maybeClose (node:internal/child_process:1101:16)[39m
+[90m    at Process.ChildProcess._handle.onexit (node:internal/child_process:304:5)[39m
+
+stderr | apps/server/src/__tests__/containerRegistry.service.test.ts > ContainerRegistryService
+Skipping ContainerRegistryService tests: mongodb-memory-server unavailable: Instance closed unexpectedly with code "null" and signal "SIGILL"
+The Process Exited with SIGILL, which mean illegal instruction, which is commonly thrown in mongodb 5.0+ when not having AVX available on the CPU
+
+ ✓ apps/server/src/__tests__/containerRegistry.service.test.ts (4 tests) 95ms
+stdout | apps/server/__tests__/localMcpServer.test.ts > LocalMCPServer (mock)
+[DEBUG] [MCP:mock] [start:1] provision() invoked (started=false wantStart=false)
+[DEBUG] [MCP:mock] [start:1] Created pendingStart promise
+[DEBUG] [MCP:mock] [maybe:1] maybeStart() check wantStart=true started=false retryTimer=false
+[DEBUG] [MCP:mock] [try:1] tryStartOnce invoked (started=false)
+[INFO] [MCP:mock] Start attempt 1/5 (trySeq=1)
+[INFO] [MCP:mock] [disc:1] Starting tool discovery (toolsDiscovered=false)
+
+stdout | apps/server/__tests__/localMcpServer.test.ts > LocalMCPServer (mock)
+[INFO] [MCP:mock] [disc:1] Connecting for tool discovery
+[INFO] [DockerExecTransport#1] START initiating exec
+[DEBUG] [MCP:mock] [disc:1] launching docker exec
+
+stdout | apps/server/__tests__/localMcpServer.test.ts > LocalMCPServer (mock)
+[DEBUG] [DockerExecTransport#1 stdout] {"jsonrpc":"2.0","id":0,"result":{"protocolVersion":"2025-06-18","capabilities":{"tools":{}},"serverInfo":{"name":"mock","version":"0.0.1"}}}
+
+stdout | apps/server/__tests__/localMcpServer.test.ts > LocalMCPServer (mock)
+[DEBUG] [DockerExecTransport#1 stdout] {"jsonrpc":"2.0","error":{"code":-32601,"message":"Method not found"}}
+
+stdout | apps/server/__tests__/localMcpServer.test.ts > LocalMCPServer (mock)
+[INFO] [MCP:mock] [disc:1] Handshake complete
+[DEBUG] [DockerExecTransport#1 stdout] {"jsonrpc":"2.0","id":1,"result":{"tools":[{"name":"echo","description":"Echo back provided text","inputSchema":{"type":"object","properties":{"text":{"type":"string"}},"required":["text"]}}]}}
+
+stdout | apps/server/__tests__/localMcpServer.test.ts > LocalMCPServer (mock)
+[DEBUG] [MCP:mock] Discovered tools: ["echo"]
+[INFO] [MCP:mock] [disc:1] Discovered 1 tools
+[INFO] [DockerExecTransport#1] CLOSED
+
+stdout | apps/server/__tests__/localMcpServer.test.ts > LocalMCPServer (mock)
+[INFO] [MCP:mock] [disc:1] Temporary discovery container stopped and removed (duration=36ms)
+
+stdout | apps/server/__tests__/localMcpServer.test.ts > LocalMCPServer (mock)
+[DEBUG] [MCP:mock] Discovery phase duration 36ms
+[INFO] [MCP:mock] Started successfully with 1 tools
+
+stdout | apps/server/__tests__/localMcpServer.test.ts > LocalMCPServer (mock) > calls tool
+[INFO] [MCP:mock] Calling tool echo for thread test-thread
+
+stdout | apps/server/__tests__/localMcpServer.test.ts > LocalMCPServer (mock) > calls tool
+[INFO] [DockerExecTransport#2] START initiating exec
+
+stdout | apps/server/__tests__/localMcpServer.test.ts > LocalMCPServer (mock) > calls tool
+[DEBUG] [DockerExecTransport#2] start() called more than once; ignoring.
+
+stdout | apps/server/__tests__/localMcpServer.test.ts > LocalMCPServer (mock) > calls tool
+[DEBUG] [DockerExecTransport#2 stdout] {"jsonrpc":"2.0","id":0,"result":{"protocolVersion":"2025-06-18","capabilities":{"tools":{}},"serverInfo":{"name":"mock","version":"0.0.1"}}}
+
+stdout | apps/server/__tests__/localMcpServer.test.ts > LocalMCPServer (mock) > calls tool
+[DEBUG] [DockerExecTransport#2 stdout] {"jsonrpc":"2.0","error":{"code":-32601,"message":"Method not found"}}
+
+stdout | apps/server/__tests__/localMcpServer.test.ts > LocalMCPServer (mock) > calls tool
+[DEBUG] [DockerExecTransport#2 stdout] {"jsonrpc":"2.0","id":1,"result":{"content":[{"type":"text","text":"echo:hello"}]}}
+
+stdout | apps/server/__tests__/localMcpServer.test.ts > LocalMCPServer (mock) > calls tool
+[INFO] [DockerExecTransport#2] CLOSED
+
+ ✓ apps/server/__tests__/localMcpServer.test.ts (2 tests) 57ms
+stdout | apps/server/__tests__/mcp-lifecycle-changes.test.ts > MCP Lifecycle Changes > supports threadId parameter in callTool method
+[INFO] [MCP:test] Calling tool nonexistent for thread thread-123
+
+stdout | apps/server/__tests__/mcp-lifecycle-changes.test.ts > MCP Lifecycle Changes > supports threadId parameter in callTool method
+[INFO] [DockerExecTransport#1] START initiating exec
+
+stdout | apps/server/__tests__/mcp-lifecycle-changes.test.ts > MCP Lifecycle Changes > supports threadId parameter in callTool method
+[INFO] [DockerExecTransport#1] CLOSED
+
+ ✓ apps/server/__tests__/mcp-lifecycle-changes.test.ts (3 tests) 62ms
+ ✓ packages/obs-sdk/__tests__/summarizeResponse.test.ts (2 tests) 1995ms
+   ✓ SummarizeResponse & withSummarize > returns raw value and records summary/newContext attributes when wrapper used  766ms
+   ✓ SummarizeResponse & withSummarize > sets error attr when wrapper missing and returns undefined raw  1225ms
+ ✓ apps/server/src/__tests__/mcp.env.overlay.test.ts (1 test) 77ms
+stderr | apps/server/src/__tests__/tools.remind_me.test.ts > RemindMeTool > enforces cap on active reminders
+[ERROR] Too many active reminders (max 1).
+
+stderr | apps/server/src/__tests__/tools.remind_me.test.ts > RemindMeTool > returns error when thread_id missing
+[ERROR] RemindMeTool error: missing thread_id in runtime config.
+
+stderr | apps/server/src/__tests__/tools.remind_me.test.ts > RemindMeTool > returns error when caller_agent missing
+[ERROR] RemindMeTool error: missing caller_agent in runtime config.
+
+ ✓ apps/server/src/__tests__/tools.remind_me.test.ts (10 tests) 68ms
+stdout | apps/server/src/__tests__/tools/shell.idle.disable.test.ts > ContainerService idle timeout disable > does not trigger idle timeout when idleTimeoutMs=0
+[DEBUG] Exec in container cid=cid: /bin/sh -lc echo test
+
+stdout | apps/server/src/__tests__/tools/shell.idle.disable.test.ts > ContainerService idle timeout disable > does not trigger idle timeout when idleTimeoutMs=0
+[DEBUG] Exec finished cid=cid exitCode=0 stdoutBytes=0 stderrBytes=0
+
+ ✓ apps/server/src/__tests__/tools/shell.idle.disable.test.ts (1 test) 63ms
+stdout | apps/server/src/__tests__/tools/shell.idle.stderr-only.test.ts > ContainerService idle timer resets on stderr-only output > should reset idle timer when only stderr produces data
+[DEBUG] Exec in container cid=cid: /bin/sh -lc echo test
+
+stdout | apps/server/src/__tests__/tools/shell.idle.stderr-only.test.ts > ContainerService idle timer resets on stderr-only output > should reset idle timer when only stderr produces data
+[DEBUG] Exec finished cid=cid exitCode=0 stdoutBytes=0 stderrBytes=6
+
+ ✓ apps/server/src/__tests__/tools/shell.idle.stderr-only.test.ts (1 test) 69ms
+stdout | apps/server/__tests__/containerProvider.entity.platform.test.ts > ContainerProviderEntity platform reuse logic > recreates when existing platform mismatches requested
+[ContainerProviderEntity] lookup labels (workspace) { [32m'hautech.ai/thread_id'[39m: [32m'node__t1'[39m, [32m'hautech.ai/role'[39m: [32m'workspace'[39m }
+
+stdout | apps/server/__tests__/containerProvider.entity.platform.test.ts > ContainerProviderEntity platform reuse logic > does not select a dind container when sharing the same thread label
+[ContainerProviderEntity] lookup labels (workspace) {
+  [32m'hautech.ai/thread_id'[39m: [32m'node__t-dind'[39m,
+  [32m'hautech.ai/role'[39m: [32m'workspace'[39m
+}
+
+stdout | apps/server/__tests__/containerProvider.entity.platform.test.ts > ContainerProviderEntity platform reuse logic > does not select a dind container when sharing the same thread label
+[ContainerProviderEntity] fallback lookup by thread_id only { [32m'hautech.ai/thread_id'[39m: [32m'node__t-dind'[39m }
+
+stdout | apps/server/__tests__/containerProvider.entity.platform.test.ts > ContainerProviderEntity platform reuse logic > recreates when existing has no platform label but platform is requested
+[ContainerProviderEntity] lookup labels (workspace) { [32m'hautech.ai/thread_id'[39m: [32m'node__t2'[39m, [32m'hautech.ai/role'[39m: [32m'workspace'[39m }
+
+stdout | apps/server/__tests__/containerProvider.entity.platform.test.ts > ContainerProviderEntity platform reuse logic > reuses existing when platform undefined
+[ContainerProviderEntity] lookup labels (workspace) { [32m'hautech.ai/thread_id'[39m: [32m'node__t3'[39m, [32m'hautech.ai/role'[39m: [32m'workspace'[39m }
+
+stdout | apps/server/__tests__/containerProvider.entity.platform.test.ts > ContainerProviderEntity platform reuse logic > does not call remove() when platform undefined and container reused
+[ContainerProviderEntity] lookup labels (workspace) { [32m'hautech.ai/thread_id'[39m: [32m'node__t4'[39m, [32m'hautech.ai/role'[39m: [32m'workspace'[39m }
+
+stdout | apps/server/__tests__/containerProvider.entity.platform.test.ts > ContainerProviderEntity platform reuse logic > does not attempt DinD when flag disabled (default)
+[ContainerProviderEntity] lookup labels (workspace) {
+  [32m'hautech.ai/thread_id'[39m: [32m'node__tdis'[39m,
+  [32m'hautech.ai/role'[39m: [32m'workspace'[39m
+}
+
+stdout | apps/server/__tests__/containerProvider.entity.platform.test.ts > ContainerProviderEntity platform reuse logic > does not attempt DinD when flag disabled (default)
+[ContainerProviderEntity] fallback lookup by thread_id only { [32m'hautech.ai/thread_id'[39m: [32m'node__tdis'[39m }
+
+stdout | apps/server/__tests__/containerProvider.entity.platform.test.ts > ContainerProviderEntity platform reuse logic > injects DOCKER_HOST and would ensure DinD when enabled
+[ContainerProviderEntity] lookup labels (workspace) { [32m'hautech.ai/thread_id'[39m: [32m'node__ten'[39m, [32m'hautech.ai/role'[39m: [32m'workspace'[39m }
+
+stdout | apps/server/__tests__/containerProvider.entity.platform.test.ts > ContainerProviderEntity platform reuse logic > injects DOCKER_HOST and would ensure DinD when enabled
+[ContainerProviderEntity] fallback lookup by thread_id only { [32m'hautech.ai/thread_id'[39m: [32m'node__ten'[39m }
+
+ ✓ apps/server/__tests__/containerProvider.entity.platform.test.ts (8 tests) 51ms
+ ✓ apps/server/src/__tests__/routes.reminders.test.ts (3 tests) 91ms
+stdout | apps/server/src/__tests__/tools/shell.timeout.tail.small.test.ts > ShellTool timeout full inclusion when <=10k > includes full stripped output when combined <= 10k chars
+[INFO] Tool called shell_command { command: [32m'sleep 1h'[39m }
+
+ ✓ apps/server/src/__tests__/tools/shell.timeout.tail.small.test.ts (1 test) 56ms
+ ✓ apps/server/__tests__/agents.simple.schema.test.ts (3 tests) 35ms
+stdout | apps/server/src/__tests__/tools/shell.timeout.behavior.test.ts > ShellTool timeout error message > throws clear timeout error with tail header on exec timeout
+[INFO] Tool called shell_command { command: [32m'sleep 999999'[39m }
+
+stdout | apps/server/src/__tests__/tools/shell.timeout.behavior.test.ts > ShellTool timeout error message > throws clear timeout error with tail header on exec timeout
+[INFO] Tool called shell_command { command: [32m'sleep 999999'[39m }
+
+stdout | apps/server/src/__tests__/tools/shell.timeout.behavior.test.ts > ShellTool timeout error message > distinguishes idle timeout messaging
+[INFO] Tool called shell_command { command: [32m'sleep 999999'[39m }
+
+stdout | apps/server/src/__tests__/tools/shell.timeout.behavior.test.ts > ShellTool timeout error message > reports actual enforced idle timeout from error.timeoutMs when available
+[INFO] Tool called shell_command { command: [32m'sleep 999999'[39m }
+
+stdout | apps/server/src/__tests__/tools/shell.timeout.behavior.test.ts > ContainerService.execContainer killOnTimeout behavior > stops container on timeout when killOnTimeout=true
+[DEBUG] Exec in container cid=cid123: /bin/sh -lc echo hi
+
+stdout | apps/server/src/__tests__/tools/shell.timeout.behavior.test.ts > ContainerService.execContainer killOnTimeout behavior > stops container on timeout when killOnTimeout=true
+[INFO] Exec timeout detected; stopping container { containerId: [32m'cid123'[39m, timeoutMs: [33m123[39m, idleTimeoutMs: [90mundefined[39m }
+[INFO] Stopping container cid=cid123 (timeout=10s)
+
+stdout | apps/server/src/__tests__/tools/shell.timeout.behavior.test.ts > ContainerService.execContainer killOnTimeout behavior > does not stop container when killOnTimeout is false/omitted
+[DEBUG] Exec in container cid=cid999: /bin/sh -lc echo nope
+
+stdout | apps/server/src/__tests__/tools/shell.timeout.behavior.test.ts > ContainerService.execContainer killOnTimeout behavior > propagates non-timeout errors unchanged (service)
+[DEBUG] Exec in container cid=cid42: /bin/sh -lc echo oops
+
+stdout | apps/server/src/__tests__/tools/shell.timeout.behavior.test.ts > ContainerService.execContainer killOnTimeout behavior > stops container on idle timeout with killOnTimeout=true
+[DEBUG] Exec in container cid=cidIdle: /bin/sh -lc echo idle
+
+stdout | apps/server/src/__tests__/tools/shell.timeout.behavior.test.ts > ContainerService.execContainer killOnTimeout behavior > stops container on idle timeout with killOnTimeout=true
+[INFO] Exec timeout detected; stopping container { containerId: [32m'cidIdle'[39m, timeoutMs: [33m9999[39m, idleTimeoutMs: [33m321[39m }
+[INFO] Stopping container cid=cidIdle (timeout=10s)
+
+stdout | apps/server/src/__tests__/tools/shell.timeout.behavior.test.ts > ShellTool non-timeout error propagation > rethrows non-timeout errors
+[INFO] Tool called shell_command { command: [32m'ls'[39m }
+
+ ✓ apps/server/src/__tests__/tools/shell.timeout.behavior.test.ts (8 tests) 58ms
+stdout | apps/server/__tests__/localMcpServer.heartbeat.test.ts > LocalMCPServer heartbeat behavior > touches last_used during session and stops after completion
+[INFO] [MCP:mock] Calling tool echo for thread thr
+
+stdout | apps/server/__tests__/localMcpServer.heartbeat.test.ts > LocalMCPServer heartbeat behavior > touches last_used during session and stops after completion
+[INFO] [DockerExecTransport#1] START initiating exec
+
+stdout | apps/server/__tests__/localMcpServer.heartbeat.test.ts > LocalMCPServer heartbeat behavior > touches last_used during session and stops after completion
+[DEBUG] [DockerExecTransport#1] start() called more than once; ignoring.
+
+stdout | apps/server/__tests__/localMcpServer.heartbeat.test.ts > LocalMCPServer heartbeat behavior > touches last_used during session and stops after completion
+[DEBUG] [DockerExecTransport#1 stdout] {"jsonrpc":"2.0","id":0,"result":{"protocolVersion":"2025-06-18","capabilities":{"tools":{}},"serverInfo":{"name":"m","version":"0"}}}
+
+stdout | apps/server/__tests__/localMcpServer.heartbeat.test.ts > LocalMCPServer heartbeat behavior > touches last_used during session and stops after completion
+[DEBUG] [DockerExecTransport#1 stdout] {"jsonrpc":"2.0","error":{"code":-32601,"message":"nf"}}
+
+stdout | apps/server/__tests__/localMcpServer.heartbeat.test.ts > LocalMCPServer heartbeat behavior > touches last_used during session and stops after completion
+[DEBUG] [DockerExecTransport#1 stdout] {"jsonrpc":"2.0","id":1,"result":{"content":[{"type":"text","text":"ok"}]}}
+
+stdout | apps/server/__tests__/localMcpServer.heartbeat.test.ts > LocalMCPServer heartbeat behavior > touches last_used during session and stops after completion
+[INFO] [DockerExecTransport#1] CLOSED
+
+ ✓ apps/server/__tests__/localMcpServer.heartbeat.test.ts (1 test) 75ms
+ ✓ apps/server/__tests__/runtime.api.helpers.test.ts (2 tests) 56ms
+stdout | apps/server/src/__tests__/tools/shell.timeout.tail.inclusion.test.ts > ShellTool timeout tail inclusion and ANSI stripping > includes stripped tail up to 10k chars from combined stdout+stderr
+[INFO] Tool called shell_command { command: [32m'sleep 1h'[39m }
+
+stdout | apps/server/src/__tests__/tools/shell.timeout.tail.inclusion.test.ts > ShellTool timeout tail inclusion and ANSI stripping > includes stripped tail up to 10k chars from combined stdout+stderr
+[INFO] Tool called shell_command { command: [32m'sleep 1h'[39m }
+
+ ✓ apps/server/src/__tests__/tools/shell.timeout.tail.inclusion.test.ts (1 test) 24ms
+ ✓ apps/server/__tests__/logger.serializer.test.ts (7 tests) 22ms
+stdout | apps/server/__tests__/runtime.config.unknownKeys.test.ts > runtime config unknown keys handling > strips extra keys during initial setConfig and stores cleaned config
+[INFO] Applying graph diff: +1 nodes, -0 nodes, ~0 config updates, +0 edges, -0 edges
+
+stdout | apps/server/__tests__/runtime.config.unknownKeys.test.ts > runtime config unknown keys handling > throws GraphError with nodeId on true validation error
+[INFO] Applying graph diff: +1 nodes, -0 nodes, ~0 config updates, +0 edges, -0 edges
+
+stdout | apps/server/__tests__/runtime.config.unknownKeys.test.ts > runtime config unknown keys handling > strips extra keys for dynamic config updates
+[INFO] Applying graph diff: +1 nodes, -0 nodes, ~0 config updates, +0 edges, -0 edges
+
+stdout | apps/server/__tests__/runtime.config.unknownKeys.test.ts > runtime config unknown keys handling > strips extra keys on config update path and updates live config
+[INFO] Applying graph diff: +1 nodes, -0 nodes, ~0 config updates, +0 edges, -0 edges
+
+stdout | apps/server/__tests__/runtime.config.unknownKeys.test.ts > runtime config unknown keys handling > strips extra keys on config update path and updates live config
+[INFO] Applying graph diff: +0 nodes, -0 nodes, ~1 config updates, +0 edges, -0 edges
+
+stdout | apps/server/__tests__/runtime.config.unknownKeys.test.ts > runtime config unknown keys handling > invalid dynamicConfig at init rejects with NODE_INIT_ERROR and nodeId
+[INFO] Applying graph diff: +1 nodes, -0 nodes, ~0 config updates, +0 edges, -0 edges
+
+ ✓ apps/server/__tests__/runtime.config.unknownKeys.test.ts (5 tests) 34ms
+ ✓ apps/server/__tests__/templates.jsonschema.test.ts (3 tests) 12ms
+stdout | apps/server/src/__tests__/tools/shell.env.overlay.test.ts > ShellTool env/workdir isolation with vault-backed overlay > applies per-node overlay and sets workdir without leaking; supports vault refs
+[INFO] Tool called shell_command { command: [32m'printenv'[39m }
+
+stdout | apps/server/src/__tests__/tools/shell.env.overlay.test.ts > ShellTool env/workdir isolation with vault-backed overlay > applies per-node overlay and sets workdir without leaking; supports vault refs
+[INFO] Tool called shell_command { command: [32m'printenv'[39m }
+
+ ✓ apps/server/src/__tests__/tools/shell.env.overlay.test.ts (1 test) 32ms
+ ✓ apps/server/__tests__/tools/memory.config_overrides.test.ts (3 tests) 21ms
+ ✓ apps/server/__tests__/memory.service.test.ts (3 tests) 14ms
+ ✓ apps/server/__tests__/tools/memory.append.tool.test.ts (6 tests) 45ms
+ ✓ apps/server/__tests__/memory.tools.adapters.test.ts (2 tests) 41ms
+ ✓ apps/server/__tests__/pr.trigger.test.ts (1 test) 11ms
+stdout | apps/server/__tests__/call_agent_multiple_instances.test.ts > CallAgentTool configurable name > registers different names and routes calls accordingly
+[INFO] call_agent invoked { targetAttached: [33mtrue[39m, hasContext: [33mfalse[39m, responseMode: [32m'sync'[39m }
+
+stdout | apps/server/__tests__/call_agent_multiple_instances.test.ts > CallAgentTool configurable name > registers different names and routes calls accordingly
+[INFO] call_agent invoked { targetAttached: [33mtrue[39m, hasContext: [33mfalse[39m, responseMode: [32m'sync'[39m }
+
+ ✓ apps/server/__tests__/call_agent_multiple_instances.test.ts (1 test) 140ms
+ ✓ apps/server/__tests__/send_slack_message.tool.test.ts (8 tests) 67ms
+ ✓ apps/server/__tests__/mcp.provision.dynamic.test.ts (5 tests) 64ms
+ ✓ apps/server/__tests__/agents.simple.buffer.config.test.ts (5 tests) 77ms
+stdout | apps/server/__tests__/mcp.dynamic.sync.test.ts
+[dotenv@17.2.2] injecting env (0) from .env -- tip: ⚙️  suppress all logs with { quiet: true }
+
+stdout | apps/server/__tests__/live.graph.runtime.test.ts > LiveGraphRuntime basic diff > adds nodes and edges then updates config
+[INFO] Applying graph diff: +2 nodes, -0 nodes, ~0 config updates, +1 edges, -0 edges
+
+stdout | apps/server/__tests__/live.graph.runtime.test.ts > LiveGraphRuntime basic diff > adds nodes and edges then updates config
+[INFO] Applying graph diff: +0 nodes, -0 nodes, ~1 config updates, +0 edges, -0 edges
+
+stdout | apps/server/__tests__/live.graph.runtime.test.ts > LiveGraphRuntime basic diff > recreates node when template changes
+[INFO] Applying graph diff: +1 nodes, -0 nodes, ~0 config updates, +0 edges, -0 edges
+
+stdout | apps/server/__tests__/live.graph.runtime.test.ts > LiveGraphRuntime basic diff > recreates node when template changes
+[INFO] Applying graph diff: +0 nodes, -0 nodes, ~0 config updates, +0 edges, -0 edges
+
+stdout | apps/server/__tests__/live.graph.runtime.test.ts > LiveGraphRuntime basic diff > removes node and edges
+[INFO] Applying graph diff: +2 nodes, -0 nodes, ~0 config updates, +1 edges, -0 edges
+
+stdout | apps/server/__tests__/live.graph.runtime.test.ts > LiveGraphRuntime basic diff > removes node and edges
+[INFO] Applying graph diff: +0 nodes, -1 nodes, ~0 config updates, +0 edges, -1 edges
+
+stdout | apps/server/__tests__/live.graph.runtime.test.ts > LiveGraphRuntime basic diff > reversible edge executes and reverses on removal
+[INFO] Applying graph diff: +2 nodes, -0 nodes, ~0 config updates, +1 edges, -0 edges
+
+stdout | apps/server/__tests__/live.graph.runtime.test.ts > LiveGraphRuntime basic diff > reversible edge executes and reverses on removal
+[INFO] Applying graph diff: +0 nodes, -0 nodes, ~0 config updates, +0 edges, -1 edges
+
+ ✓ apps/server/__tests__/live.graph.runtime.test.ts (4 tests) 21ms
+ ✓ apps/server/__tests__/slack.pr.trigger.lifecycle.test.ts (2 tests) 14ms
+ ✓ apps/server/__tests__/mcp.dynamic.sync.test.ts (1 test) 18ms
+stderr | apps/server/__tests__/tools.node.nodeId.precedence.test.ts > ToolsNode tool_call span attribution > omits nodeId when Tool id not provided (no agent fallback)
+[ToolsNode] Missing Tool node id in config.configurable.nodeId/node_id; emitting tool_call span without nodeId
+
+ ✓ apps/server/__tests__/tools.node.nodeId.precedence.test.ts (2 tests) 36ms
+ ✓ apps/server/__tests__/templates.memory.registration.test.ts (1 test) 62ms
+ ✓ packages/obs-sdk/__tests__/llmAndToolResponses.test.ts (4 tests) 33ms
+ ✓ apps/server/__tests__/runtime.dynamicConfig.apply.test.ts (1 test) 32ms
+ ✓ apps/server/src/__tests__/env.service.test.ts (11 tests) 78ms
+stderr | apps/server/__tests__/tools.node.terminate.test.ts > ToolsNode termination > sets done=true when tool returns TerminateResponse and includes note in ToolMessage
+[ToolsNode] Missing Tool node id in config.configurable.nodeId/node_id; emitting tool_call span without nodeId
+
+stderr | apps/server/__tests__/tools.node.terminate.test.ts > ToolsNode termination > does not set done for non-terminating tools
+[ToolsNode] Missing Tool node id in config.configurable.nodeId/node_id; emitting tool_call span without nodeId
+
+ ✓ apps/server/__tests__/tools.node.terminate.test.ts (2 tests) 25ms
+ ✓ apps/ui/src/lib/graph/__tests__/api.test.ts (4 tests) 23ms
+ ✓ apps/server/__tests__/graph.git.service.test.ts (10 tests) 5526ms
+   ✓ GitGraphService > upserts with optimistic locking and commits  552ms
+   ✓ GitGraphService > returns conflict on mismatched version  457ms
+   ✓ GitGraphService > advisory lock times out when held by another writer  637ms
+   ✓ GitGraphService > recovers from a corrupt write by restoring last committed version on read  476ms
+   ✓ GitGraphService > rolls back working tree when commit fails  591ms
+   ✓ GitGraphService > writes per-entity files and encodes deterministic edge id in filename  472ms
+   ✓ GitGraphService > round-trips ids with special characters via encodeURIComponent/ decodeURIComponent  527ms
+   ✓ GitGraphService > falls back to HEAD when an entity file is corrupt  696ms
+   ✓ GitGraphService > bumps version and stages only deltas  840ms
+ ✓ packages/obs-ui/src/__tests__/tree.test.ts (1 test) 13ms
+ ✓ apps/server/src/__tests__/tools/shell.schema.validation.test.ts (2 tests) 12ms
+ ✓ apps/server/__tests__/base.trigger.provisionable.test.ts (3 tests) 28ms
+ ✓ apps/server/__tests__/base.trigger.test.ts (1 test) 20ms
+ ✓ packages/obs-sdk/__tests__/messageClasses.test.ts (3 tests) 16ms
+stderr | apps/server/__tests__/summarization.node.test.ts > summarization helpers > groupMessages groups AI tool_calls with following ToolMessages
+New LangChain packages are available that more efficiently handle tool calling.
+
+Please upgrade your packages to versions that set message tool calls. e.g., `yarn add @langchain/anthropic`, yarn add @langchain/openai`, etc.
+
+ ✓ apps/server/__tests__/summarization.node.test.ts (7 tests) 30ms
+stdout | apps/server/src/__tests__/container.service.lastUsed.test.ts > ContainerService last_used updates > updates last_used when execContainer() is called
+[DEBUG] Exec in container cid=abc123cid: /bin/sh -lc echo hi
+
+stdout | apps/server/src/__tests__/container.service.lastUsed.test.ts > ContainerService last_used updates > updates last_used when execContainer() is called
+[DEBUG] Exec finished cid=abc123cid exitCode=0 stdoutBytes=0 stderrBytes=0
+
+stdout | apps/server/src/__tests__/container.service.lastUsed.test.ts > ContainerService last_used updates > updates last_used when openInteractiveExec() is called
+[DEBUG] Interactive exec in container cid=xyz789cid tty=false demux=true: /bin/sh -lc sh -lc "echo hi"
+
+ ✓ apps/server/src/__tests__/container.service.lastUsed.test.ts (2 tests) 17ms
+ ✓ apps/server/__tests__/mcp.errorUtils.test.ts (8 tests) 46ms
+ ✓ apps/server/__tests__/slack.trigger.events.test.ts (4 tests) 32ms
+ ✓ apps/server/src/__tests__/github_clone_repo.token.test.ts (4 tests) 16ms
+ ✓ apps/server/__tests__/messagesBuffer.test.ts (4 tests) 8ms
+ ✓ packages/obs-ui/src/__tests__/emojiId.test.ts (3 tests) 25ms
+ ✓ apps/server/__tests__/templateRegistry.schema.test.ts (2 tests) 9ms
+ ✓ apps/ui/src/lib/graph/__tests__/capabilities.test.ts (2 tests) 6ms
+ ✓ apps/ui/src/lib/vault/__tests__/collect.test.ts (3 tests) 14ms
+ ✓ apps/server/__tests__/callModel.summarization.test.ts (2 tests) 13ms
+ ✓ apps/server/__tests__/tools/memory.jsonschema.test.ts (2 tests) 14ms
+ ✓ apps/ui/src/lib/vault/__tests__/parse.test.ts (4 tests) 17ms
+ ✓ apps/server/__tests__/slack.config.schemas.test.ts (2 tests) 9ms
+stdout | apps/server/src/__tests__/tools/shell.idle.killOnTimeout.false.test.ts > ContainerService idle timeout with killOnTimeout=false > does not stop container on idle timeout when killOnTimeout=false
+[DEBUG] Exec in container cid=cid: /bin/sh -lc echo
+
+ ✓ apps/server/src/__tests__/tools/shell.idle.killOnTimeout.false.test.ts (1 test) 8ms
+ ✓ apps/server/__tests__/lgnodes/callModel.diag.test.ts (2 tests) 29ms
+ ✓ apps/server/__tests__/base.trigger.pausable.test.ts (1 test) 10ms
+ ↓ packages/obs-server/__tests__/smoke.test.ts (1 test | 1 skipped)
+ ↓ packages/obs-server/__tests__/llm.span.persistence.e2e.test.ts (1 test | 1 skipped)
+ ↓ packages/obs-server/__tests__/metrics.errorsByTool.test.ts (4 tests | 4 skipped)
+ ↓ apps/server/__tests__/memory.runtime.integration.test.ts (3 tests | 3 skipped)
+ ↓ packages/obs-server/__tests__/traces.ingest.e2e.test.ts (1 test | 1 skipped)
+ ↓ packages/obs-server/__tests__/toolcall.span.persistence.e2e.test.ts (1 test | 1 skipped)
+ ↓ packages/obs-server/__tests__/spans.upsert.e2e.test.ts (4 tests | 4 skipped)
+ ↓ apps/server/__tests__/e2e/memory.tools.mongo.e2e.test.ts (4 tests | 4 skipped)
+stdout | apps/server/__tests__/graph.mcp.integration.test.ts
+[dotenv@17.2.2] injecting env (0) from .env -- tip: 🔐 prevent building .env in docker: https://dotenvx.com/prebuild
+
+ ✓ apps/server/__tests__/graph.mcp.integration.test.ts (1 test) 4ms
+ ✓ apps/ui/src/lib/obs/__tests__/runningStore.test.ts (5 tests) 160ms
+
+ Test Files  82 passed | 8 skipped (90)
+      Tests  281 passed | 20 skipped (301)
+   Start at  00:51:32
+   Duration  11.33s (transform 7.34s, setup 0ms, collect 42.97s, tests 13.69s, environment 993ms, prepare 11.56s)
+

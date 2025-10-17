@@ -78,7 +78,12 @@ export class EnvService {
     if (Array.isArray(cfgEnv)) {
       const overlay = await this.resolveEnvItems(cfgEnv);
       const merged = this.mergeEnv(baseMap, overlay);
-      return Object.keys(merged).length || hasBaseParam ? merged : undefined;
+      // Special-case: when cfgEnv is provided as an array but resolves to empty,
+      // preserve explicit emptiness (return {}) instead of undefined when a base
+      // value was provided by caller. This allows callers to distinguish between
+      // "no env provided" vs "provided but empty".
+      if (!Object.keys(merged).length) return hasBaseParam ? {} : undefined;
+      return merged;
     }
     if (typeof cfgEnv === 'object') {
       const merged = this.mergeEnv(baseMap, cfgEnv as Record<string, string>);

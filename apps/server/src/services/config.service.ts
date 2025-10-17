@@ -51,6 +51,13 @@ export const configSchema = z.object({
     .union([z.string(), z.number()])
     .default('0')
     .transform((v) => Number(v) || 0),
+  // NCPS (Nix Cache Proxy Server) settings
+  ncpsEnabled: z
+    .union([z.boolean(), z.string()])
+    .default('false')
+    .transform((v) => (typeof v === 'string' ? v.toLowerCase() === 'true' : !!v)),
+  ncpsUrl: z.string().min(1).default('http://ncps:8501'),
+  ncpsPublicKey: z.string().optional(),
 });
 
 export type Config = z.infer<typeof configSchema>;
@@ -128,7 +135,18 @@ export class ConfigService implements Config {
 
   // MCP tools cache staleness timeout (global default)
   get mcpToolsStaleTimeoutMs(): number {
-    return (this.params as any).mcpToolsStaleTimeoutMs ?? 0;
+    return this.params.mcpToolsStaleTimeoutMs ?? 0;
+  }
+
+  // NCPS getters
+  get ncpsEnabled(): boolean {
+    return this.params.ncpsEnabled;
+  }
+  get ncpsUrl(): string {
+    return this.params.ncpsUrl;
+  }
+  get ncpsPublicKey(): string | undefined {
+    return this.params.ncpsPublicKey;
   }
 
   static fromEnv(): ConfigService {
@@ -139,20 +157,23 @@ export class ConfigService implements Config {
       openaiApiKey: process.env.OPENAI_API_KEY,
       githubToken: process.env.GH_TOKEN,
       mongodbUrl: process.env.MONGODB_URL,
-      graphStore: (process.env.GRAPH_STORE as any) || 'mongo',
-      graphRepoPath: process.env.GRAPH_REPO_PATH || './data/graph',
-      graphBranch: process.env.GRAPH_BRANCH || 'graph-state',
+      graphStore: process.env.GRAPH_STORE as any,
+      graphRepoPath: process.env.GRAPH_REPO_PATH,
+      graphBranch: process.env.GRAPH_BRANCH,
       graphAuthorName: process.env.GRAPH_AUTHOR_NAME,
       graphAuthorEmail: process.env.GRAPH_AUTHOR_EMAIL,
       vaultEnabled: process.env.VAULT_ENABLED,
       vaultAddr: process.env.VAULT_ADDR,
       vaultToken: process.env.VAULT_TOKEN,
-      dockerMirrorUrl: process.env.DOCKER_MIRROR_URL || 'http://registry-mirror:5000',
-      nixAllowedChannels: process.env.NIX_ALLOWED_CHANNELS || 'nixpkgs-unstable,nixos-24.11',
-      nixHttpTimeoutMs: process.env.NIX_HTTP_TIMEOUT_MS || '5000',
-      nixCacheTtlMs: process.env.NIX_CACHE_TTL_MS || String(5 * 60_000),
-      nixCacheMax: process.env.NIX_CACHE_MAX || '500',
-      mcpToolsStaleTimeoutMs: process.env.MCP_TOOLS_STALE_TIMEOUT_MS || '0',
+      dockerMirrorUrl: process.env.DOCKER_MIRROR_URL,
+      nixAllowedChannels: process.env.NIX_ALLOWED_CHANNELS,
+      nixHttpTimeoutMs: process.env.NIX_HTTP_TIMEOUT_MS,
+      nixCacheTtlMs: process.env.NIX_CACHE_TTL_MS,
+      nixCacheMax: process.env.NIX_CACHE_MAX,
+      mcpToolsStaleTimeoutMs: process.env.MCP_TOOLS_STALE_TIMEOUT_MS,
+      ncpsEnabled: process.env.NCPS_ENABLED,
+      ncpsUrl: process.env.NCPS_URL,
+      ncpsPublicKey: process.env.NCPS_PUBLIC_KEY,
     });
     return new ConfigService(parsed);
   }

@@ -97,6 +97,16 @@ describe('EnvService', () => {
     expect(await svc.resolveProviderEnv(undefined, undefined, { A: '1' })).toEqual({ A: '1' });
   });
 
+  it('resolveProviderEnv: base present + empty overlay => {} ; no base + empty overlay => undefined', async () => {
+    const svc = new EnvService(undefined as any);
+    // empty overlay (array that resolves to empty) with base present -> {}
+    const res1 = await svc.resolveProviderEnv([], undefined, { A: '1' });
+    expect(res1).toEqual({});
+    // empty overlay with no base -> undefined
+    const res2 = await svc.resolveProviderEnv([], undefined, undefined);
+    expect(res2).toBeUndefined();
+  });
+
   it('resolveProviderEnv: rejects cfgEnvRefs usage', async () => {
     const svc = new EnvService(undefined as any);
     await expect(svc.resolveProviderEnv([], undefined as any, {})).resolves.toEqual({});
@@ -106,4 +116,3 @@ describe('EnvService', () => {
     ).rejects.toMatchObject({ code: 'env_items_invalid' });
   });
 });
-
