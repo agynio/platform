@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { buildTemplateRegistry } from '../src/templates';
-import { LocalMCPServer } from '../src/mcp/localMcpServer';
+import { LocalMCPServer } from '../src/nodes/mcp/local/local-mcp-server.node';
 import { LoggerService } from '../src/services/logger.service';
 import { ContainerService } from '../src/services/container.service';
 import { ConfigService } from '../src/services/config.service';

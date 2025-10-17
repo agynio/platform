@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { GithubCloneRepoTool } from '../src/tools/github_clone_repo';
+import { GithubCloneRepoTool } from '../src/nodes/tools/github-clone-repo-tool.node';
 import { LoggerService } from '../src/services/logger.service';
 import type { VaultService } from '../src/services/vault.service';
 

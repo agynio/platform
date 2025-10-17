@@ -33,7 +33,7 @@ vi.mock('@langchain/openai', async (importOriginal) => {
 });
 
 // Mock ToolsNode to include the finish tool
-import { FinishTool } from '../src/tools/finish.tool';
+import { FinishTool } from '../src/nodes/tools/finish-tool.node';
 
 // Mock CheckpointerService to avoid Mongo requirements
 vi.mock('../src/services/checkpointer.service', async (importOriginal) => {

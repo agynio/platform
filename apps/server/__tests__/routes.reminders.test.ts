@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import Fastify from 'fastify';
 import { registerRemindersRoute } from '../routes/reminders.route';
-import { RemindMeTool } from '../src/tools/remind_me.tool';
+import { RemindMeTool } from '../src/nodes/tools/remind-me-tool.node';
 import { LoggerService } from '../src/services/logger.service';
 
 describe('GET /graph/nodes/:nodeId/reminders', () => {

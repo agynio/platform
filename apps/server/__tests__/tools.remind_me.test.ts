@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { RemindMeTool } from '../src/tools/remind_me.tool';
+import { RemindMeTool } from '../src/nodes/tools/remind-me-tool.node';
 import { LoggerService } from '../src/services/logger.service';
 
 // Minimal typed stub for the caller agent used by the tool

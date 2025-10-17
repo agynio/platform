@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { SendSlackMessageToolStaticConfigSchema } from '../src/tools/send_slack_message.tool';
+import { SendSlackMessageToolStaticConfigSchema } from '../src/nodes/tools/send-slack-message-tool.node';
 import { SlackTriggerStaticConfigSchema } from '../src/triggers/slack.trigger';
 
 describe('Slack static config schemas', () => {

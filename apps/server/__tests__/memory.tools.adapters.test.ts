@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import type { Db } from 'mongodb';
 import { MemoryService, type MemoryDoc } from '../src/services/memory.service';
-import { UnifiedMemoryTool } from '../src/tools/memory/memory.tool';
+import { UnifiedMemoryTool } from '../src/nodes/tools/memory-tool.node';
 import { LoggerService } from '../src/services/logger.service';
 
 // In-memory fake Db compatible with MemoryService for deterministic tests

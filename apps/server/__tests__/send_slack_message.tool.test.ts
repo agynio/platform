@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { SendSlackMessageTool } from '../src/tools/send_slack_message.tool';
+import { SendSlackMessageTool } from '../src/nodes/tools/send-slack-message-tool.node';
 
 // Mock @slack/web-api WebClient
 vi.mock('@slack/web-api', () => {

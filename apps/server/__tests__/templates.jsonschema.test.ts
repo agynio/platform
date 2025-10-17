@@ -3,8 +3,8 @@ import { toJSONSchema } from 'zod';
 import type { JSONSchema7 } from 'json-schema';
 
 type JsonSchemaWithUi = JSONSchema7 & { 'ui:field'?: string };
-import { ShellToolStaticConfigSchema } from '../src/tools/shell_command';
-import { LocalMcpServerStaticConfigSchema } from '../src/mcp/localMcpServer';
+import { ShellToolStaticConfigSchema } from '../src/nodes/tools/shell-tool.node';
+import { LocalMcpServerStaticConfigSchema } from '../src/nodes/mcp/local/local-mcp-server.node';
 import { AgentStaticConfigSchema as SimpleAgentStaticConfigSchema } from '../src/agents/agent';
 
 describe('template schemas: env ui:field', () => {

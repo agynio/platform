@@ -1,9 +1,9 @@
 import { describe, it, expect } from 'vitest';
-import { UnifiedMemoryTool } from '../../src/tools/memory/memory.tool';
+import { UnifiedMemoryTool } from '../../src/nodes/tools/memory-tool.node';
 import { LoggerService } from '../../src/services/logger.service';
 import { TemplateRegistry } from '../../src/graph/templateRegistry';
 import { toJSONSchema } from 'zod';
-import { UnifiedMemoryToolNodeStaticConfigSchema } from '../../src/tools/memory/memory.tool';
+import { UnifiedMemoryToolNodeStaticConfigSchema } from '../../src/nodes/tools/memory-tool.node';
 
 describe('UnifiedMemoryTool config overrides and templates exposure', () => {
   it('applies name/description overrides and keeps defaults', async () => {
