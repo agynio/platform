@@ -6,11 +6,13 @@ import { LoggerService } from '../services/logger.service';
 import { BaseAgent } from '../agents/base.agent';
 import { TriggerMessage } from '../triggers/base.trigger';
 
-const invocationSchema = z.object({
-  command: z.enum(['list', 'send_message', 'check_status']).describe('Command to execute.'),
-  worker: z.string().min(1).optional().describe('Target worker name (required for send_message).'),
-  message: z.string().min(1).optional().describe('Message to send (required for send_message).'),
-});
+const invocationSchema = z
+  .object({
+    command: z.enum(['list', 'send_message', 'check_status']).describe('Command to execute.'),
+    worker: z.string().min(1).optional().describe('Target worker name (required for send_message).'),
+    message: z.string().min(1).optional().describe('Message to send (required for send_message).'),
+  })
+  .strict();
 
 export const ManageToolStaticConfigSchema = z
   .object({
@@ -40,7 +42,15 @@ export class ManageTool extends BaseTool {
     if (nodeId && !this.workers.some((w) => w.name === nodeId)) name = nodeId;
     else name = `agent_${++this.fallbackCounter}`;
     this.workers.push({ name, agent });
-    this.logger.info('Manage: agent added', { name, hasNodeId: !!nodeId });
+    this.logger.info('Manage: agent added', { name, hasNodeId: !!nodeId, nodeId });
+  }
+
+  removeAgent(agent: BaseAgent | undefined): void {
+    if (!agent) return;
+    const before = this.workers.length;
+    this.workers = this.workers.filter((w) => w.agent !== agent);
+    const after = this.workers.length;
+    this.logger.info('Manage: agent removed', { removed: before - after });
   }
 
   async setConfig(cfg: Record<string, unknown>): Promise<void> {
@@ -75,9 +85,10 @@ export class ManageTool extends BaseTool {
           try {
             const res = await worker.agent.invoke(childThreadId, [triggerMessage]);
             return res?.text ?? '';
-          } catch (err: any) {
-            this.logger.error('Manage: error sending message', err?.message || err, err?.stack);
-            return `Error: ${err?.message || String(err)}`;
+          } catch (err: unknown) {
+            const e = err instanceof Error ? err : new Error(String(err));
+            this.logger.error('Manage: send_message failed', { worker: worker.name, childThreadId, error: e.message });
+            throw e;
           }
         }
 
@@ -91,7 +102,10 @@ export class ManageTool extends BaseTool {
               for (const t of threads) {
                 if (t.startsWith(prefix)) ids.add(t.slice(prefix.length));
               }
-            } catch {}
+            } catch (err: unknown) {
+              const e = err instanceof Error ? err : new Error(String(err));
+              this.logger.error('Manage: listActiveThreads failed', { worker: w.name, error: e.message });
+            }
           }
           const childThreadIds = Array.from(ids.values());
           return { activeTasks: childThreadIds.length, childThreadIds };
@@ -108,4 +122,3 @@ export class ManageTool extends BaseTool {
     );
   }
 }
-

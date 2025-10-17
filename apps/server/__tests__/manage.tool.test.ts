@@ -39,17 +39,17 @@ describe('ManageTool unit', () => {
     await tool.setConfig({ description: 'desc' });
     const dyn: DynamicStructuredTool = tool.init();
 
-    const empty = await dyn.invoke({ command: 'list' }, { configurable: { thread_id: 'p' } } as any);
+    const empty = (await dyn.invoke({ command: 'list' }, { configurable: { thread_id: 'p' } } as any)) as string[];
     expect(Array.isArray(empty)).toBe(true);
-    expect((empty as string[]).length).toBe(0);
+    expect(empty.length).toBe(0);
 
     const a1 = new FakeAgent(new LoggerService(), 'agent-A');
     const a2 = new FakeAgent(new LoggerService()); // unnamed -> agent_1
     tool.addAgent(a1);
     tool.addAgent(a2);
 
-    const after = await dyn.invoke({ command: 'list' }, { configurable: { thread_id: 'p' } } as any);
-    const names = after as string[];
+    const after = (await dyn.invoke({ command: 'list' }, { configurable: { thread_id: 'p' } } as any)) as string[];
+    const names: string[] = after;
     expect(names).toContain('agent-A');
     // either agent_1 or agent_2 depending on ordering, ensure one fallback exists
     const hasFallback = names.some((n) => /^agent_\d+$/.test(n));
@@ -94,13 +94,40 @@ describe('ManageTool unit', () => {
     a2.markRunning('q__B'); // different parent, should be ignored
 
     const dyn = tool.init();
-    const status = (await dyn.invoke({ command: 'check_status' }, { configurable: { thread_id: 'p' } } as any)) as any;
+    const status = (await dyn.invoke({ command: 'check_status' }, { configurable: { thread_id: 'p' } } as any)) as {
+      activeTasks: number;
+      childThreadIds: string[];
+    };
     expect(status.activeTasks).toBe(status.childThreadIds.length);
     // ensure only children of parent 'p' are reported (suffixes only)
     const allPrefixed = status.childThreadIds.every((s: string) => typeof s === 'string' && !s.includes('__'));
     expect(allPrefixed).toBe(true);
     // should include at least 'A' and 'B' if present
     expect(status.childThreadIds).toContain('A');
+  });
+
+  it('throws when runtime configurable.thread_id is missing', async () => {
+    const tool = new ManageTool(new LoggerService());
+    await tool.setConfig({ description: 'desc' });
+    const dyn = tool.init();
+    await expect(dyn.invoke({ command: 'list' }, {} as any)).rejects.toBeTruthy();
+  });
+
+  it('throws when child agent invoke fails (send_message)', async () => {
+    const logger = new LoggerService();
+    const tool = new ManageTool(logger);
+    await tool.setConfig({ description: 'desc' });
+    class ThrowingAgent extends FakeAgent {
+      override async invoke(_thread: string, _messages: Msg[]): Promise<AIMessage> {
+        throw new Error('child failure');
+      }
+    }
+    const a = new ThrowingAgent(logger, 'W');
+    tool.addAgent(a);
+    const dyn = tool.init();
+    await expect(
+      dyn.invoke({ command: 'send_message', worker: 'W', message: 'go' }, { configurable: { thread_id: 'p' } } as any),
+    ).rejects.toBeTruthy();
   });
 });
 
@@ -140,8 +167,10 @@ describe('ManageTool graph wiring', () => {
     const toolInst = toolNode?.instance as unknown as ManageTool;
 
     const dyn = toolInst.init();
-    const list = (await dyn.invoke({ command: 'list' }, { configurable: { thread_id: 'p' } } as any)) as string[];
+    const list: string[] = (await dyn.invoke(
+      { command: 'list' },
+      { configurable: { thread_id: 'p' } } as any,
+    )) as string[];
     expect(Array.isArray(list)).toBe(true);
   });
 });
-

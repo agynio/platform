@@ -161,7 +161,7 @@ export function buildTemplateRegistry(deps: TemplateRegistryDeps): TemplateRegis
         () => new ManageTool(logger),
         {
           targetPorts: { $self: { kind: 'instance' } },
-          sourcePorts: { agent: { kind: 'method', create: 'addAgent' } },
+          sourcePorts: { agent: { kind: 'method', create: 'addAgent', destroy: 'removeAgent' } },
         },
         {
           title: 'Manage',
