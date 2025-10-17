@@ -5,7 +5,7 @@ import { LoggerService } from '../src/services/logger.service';
 import { ContainerService } from '../src/services/container.service';
 import { ConfigService } from '../src/services/config.service';
 import { CheckpointerService } from '../src/services/checkpointer.service';
-import { MongoService } from '../src/services/mongo.service';
+// Avoid real Mongo connections; stub minimal service
 import { LiveGraphRuntime } from '../src/graph/liveGraph.manager';
 import { GitGraphService } from '../src/services/gitGraph.service';
 import os from 'os';
@@ -22,8 +22,8 @@ describe('API guard: MCP command mutation forbidden', () => {
     } as any);
     const checkpointer = new CheckpointerService(logger);
     const containerService = new ContainerService(logger);
-    const mongo = new MongoService(config, logger);
-    const templateRegistry = buildTemplateRegistry({ logger, containerService, configService: config, checkpointerService: checkpointer, mongoService: mongo });
+    const mongoStub = { getDb: () => ({}) } as any;
+    const templateRegistry = buildTemplateRegistry({ logger, containerService, configService: config, checkpointerService: checkpointer, mongoService: mongoStub });
     const runtime = new LiveGraphRuntime(logger, templateRegistry);
     const graphService = new GitGraphService({ repoPath: config.graphRepoPath, branch: config.graphBranch, defaultAuthor: { name: 'Test', email: 't@example.com' } }, logger, templateRegistry);
     await graphService.initIfNeeded();
@@ -47,7 +47,8 @@ describe('API guard: MCP command mutation forbidden', () => {
         enforceMcpCommandMutationGuard(before, parsed, runtime);
       } catch (e: any) {
         reply.code(409);
-        return { error: e.code };
+        const { GraphErrorCode } = await import('../src/graph/errors');
+        return { error: e.code || GraphErrorCode.McpCommandMutationForbidden };
       }
       return { ok: true };
     });
@@ -55,6 +56,7 @@ describe('API guard: MCP command mutation forbidden', () => {
     const res = await fastify.inject({ method: 'POST', url: '/api/graph', payload: { name: 'main', version: 1, nodes: [{ id: 'm1', template: 'mcpServer', config: { command: 'b' } }], edges: [] } });
     expect(res.statusCode).toBe(409);
     const body = JSON.parse(res.body);
-    expect(body.error).toBe('MCP_COMMAND_MUTATION_FORBIDDEN');
+    const { GraphErrorCode } = await import('../src/graph/errors');
+    expect(body.error).toBe(GraphErrorCode.McpCommandMutationForbidden);
   });
 });

@@ -7,7 +7,7 @@ import type { DynamicConfigurable, ProvisionStatus, Provisionable } from '../gra
 import { ContainerService } from '../services/container.service.js';
 import { LoggerService } from '../services/logger.service.js';
 import { DockerExecTransport } from './dockerExecTransport.js';
-import { DEFAULT_MCP_COMMAND, McpError, McpServer, McpTool, McpToolCallResult } from './types.js';
+import { DEFAULT_MCP_COMMAND, McpError, McpServer, McpTool, McpToolCallResult, PersistedMcpState } from './types.js';
 import { VaultService } from '../services/vault.service.js';
 import { EnvService, type EnvItem } from '../services/env.service.js';
 import { JSONSchema } from 'zod/v4/core';
@@ -263,8 +263,8 @@ export class LocalMCPServer implements McpServer, Provisionable, DynamicConfigur
       }
       // Persist state if persistor provided
       try {
-        const state = { mcp: { tools: this.toolsCache, toolsUpdatedAt: this.lastToolsUpdatedAt } } as Record<string, unknown>;
-        await this.statePersistor?.(state);
+        const state: { mcp: PersistedMcpState } = { mcp: { tools: this.toolsCache || undefined, toolsUpdatedAt: this.lastToolsUpdatedAt } };
+        await this.statePersistor?.(state as unknown as Record<string, unknown>);
       } catch (e) {
         this.logger.error(`[MCP:${this.namespace}] Failed to persist state`, e);
       }

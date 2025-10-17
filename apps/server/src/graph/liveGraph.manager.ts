@@ -6,7 +6,7 @@ import {
   LiveNode,
   edgeKey,
 } from './liveGraph.types';
-import { EdgeDef, GraphDefinition, GraphError, NodeDef } from './types';
+import { EdgeDef, GraphDefinition, GraphError, NodeDef, DependencyBag } from './types';
 // Ports based reversible universal edges
 import { LoggerService } from '../services/logger.service';
 import { Errors } from './errors';
@@ -315,23 +315,26 @@ export class LiveGraphRuntime {
       try {
         const instAny = created as any;
         // Provide per-node state persistor if instance supports it and we have a graphStateService
-        if (instAny && typeof instAny.setStatePersistor === 'function' && this.factoryDeps && (this.factoryDeps as any).graphStateService) {
-          const svc = (this.factoryDeps as any).graphStateService as { upsertNodeState: (nodeId: string, state: Record<string, unknown>) => Promise<void> };
+        const deps = this.factoryDeps as { graphStateService?: { upsertNodeState: (nodeId: string, state: Record<string, unknown>) => Promise<void> }; configService?: { mcpToolsStaleTimeoutMs?: number } };
+        if (instAny && typeof instAny.setStatePersistor === 'function' && deps.graphStateService) {
+          const svc = deps.graphStateService;
           instAny.setStatePersistor(async (state: Record<string, unknown>) => {
             await svc.upsertNodeState(node.id, state);
           });
         }
         // Preload cached MCP tools if instance supports it and state contains mcp tools
-        const st = (node.data as any).state;
-        if (st && st.mcp && Array.isArray(st.mcp.tools) && typeof instAny?.preloadCachedTools === 'function') {
-          instAny.preloadCachedTools(st.mcp.tools, (st.mcp as any).toolsUpdatedAt);
+        const st = node.data.state as { mcp?: { tools?: unknown[]; toolsUpdatedAt?: number | string } } | undefined;
+        if (st?.mcp && Array.isArray(st.mcp.tools) && typeof instAny?.preloadCachedTools === 'function') {
+          instAny.preloadCachedTools(st.mcp.tools, st.mcp.toolsUpdatedAt);
         }
         // Pass global MCP stale timeout if provided via deps.configService
-        if (typeof instAny?.setGlobalStaleTimeoutMs === 'function' && (this.factoryDeps as any)?.configService) {
-          const ms = Number(((this.factoryDeps as any).configService.mcpToolsStaleTimeoutMs ?? 0));
+        if (typeof instAny?.setGlobalStaleTimeoutMs === 'function' && deps?.configService) {
+          const ms = Number(deps.configService.mcpToolsStaleTimeoutMs ?? 0);
           instAny.setGlobalStaleTimeoutMs(Number.isFinite(ms) ? ms : 0);
         }
-      } catch { /* non-fatal */ }
+      } catch (e) {
+        this.logger.debug('Post-create wiring failed', e);
+      }
       if (node.data.config) {
         if (hasSetConfig(created)) {
           try {

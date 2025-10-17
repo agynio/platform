@@ -27,6 +27,13 @@ export interface McpToolCallResult {
   raw?: any; // full raw SDK result
 }
 
+// Minimal internal type for persisted MCP state
+export interface PersistedMcpState {
+  tools?: McpTool[];
+  toolsUpdatedAt?: string | number; // ISO string or epoch ms
+  toolsEtag?: string;
+}
+
 export interface McpServerConfig {
   namespace: string;
   command?: string; // default: 'mcp start --stdio'

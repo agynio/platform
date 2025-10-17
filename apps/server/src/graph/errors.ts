@@ -1,5 +1,9 @@
 import { GraphError } from './types';
 
+export enum GraphErrorCode {
+  McpCommandMutationForbidden = 'MCP_COMMAND_MUTATION_FORBIDDEN',
+}
+
 // Helper constructors for consistent error creation
 export const Errors = {
   unknownTemplate: (template: string, nodeId: string) =>

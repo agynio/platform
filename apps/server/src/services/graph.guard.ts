@@ -1,4 +1,5 @@
 import type { PersistedGraph, PersistedGraphUpsertRequest } from '../graph/types';
+import { GraphErrorCode } from '../graph/errors';
 import type { LiveGraphRuntime } from '../graph/liveGraph.manager';
 
 export type GuardError = Error & { code?: string };
@@ -30,8 +31,7 @@ export function enforceMcpCommandMutationGuard(
     const status = runtime.getNodeStatus(n.id);
     const state = status?.provisionStatus?.state || 'not_ready';
     if (state !== 'not_ready') {
-      throw makeError('MCP_COMMAND_MUTATION_FORBIDDEN', 'Cannot change MCP command while node is provisioned');
+      throw makeError(GraphErrorCode.McpCommandMutationForbidden, 'Cannot change MCP command while node is provisioned');
     }
   }
 }
-
