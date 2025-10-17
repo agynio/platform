@@ -30,6 +30,10 @@ Index
 - ADR: Memory v2: [adr/adr-0005-memory-v2.md](adr/adr-0005-memory-v2.md)
 - Server Memory: [server-memory.md](server-memory.md)
 - Summarization: [summarization.md](summarization.md)
-- Slack migration: [slack-migration.md](slack-migration.md)
 - Glossary: [glossary.md](glossary.md)
 - Changelog Template: [CHANGELOG_TEMPLATE.md](CHANGELOG_TEMPLATE.md)
+
+Slack integration
+- For Slack-triggered flows and outbound messages, see:
+  - Secrets and tokens: [security/vault.md](security/vault.md)
+  - Graph UI templates (SlackTrigger, SendSlackMessageTool): [ui/graph/README.md](ui/graph/README.md)
