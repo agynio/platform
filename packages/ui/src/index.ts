@@ -108,7 +108,6 @@ export { DateRangePicker } from './components/date-range-picker';
 export { InputOTP, InputOTPSlot, InputOTPSeparator } from './components/input-otp';
 // Feedback
 export { Alert, AlertTitle, AlertDescription } from './components/alert';
-export { Toaster, toast } from './components/toaster';
 // Display
 export { Avatar, AvatarImage, AvatarFallback } from './components/avatar';
 export { Progress } from './components/progress';
@@ -128,4 +127,3 @@ export {
   SidebarMenuItem,
   SidebarMenuButton
 } from './components/sidebar';
-
