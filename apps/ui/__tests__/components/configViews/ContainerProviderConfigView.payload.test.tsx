@@ -1,3 +1,4 @@
+import React from 'react';
 import { render, screen, fireEvent } from '@testing-library/react';
 import ContainerProviderConfigView from '@/components/configViews/ContainerProviderConfigView';
 
@@ -29,4 +30,3 @@ describe('ContainerProviderConfigView payload', () => {
     expect(cfg.ttlSeconds).toBe(123);
   });
 });
-

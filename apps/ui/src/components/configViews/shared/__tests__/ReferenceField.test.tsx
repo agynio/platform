@@ -1,5 +1,6 @@
+import React from 'react';
 import { render, screen, fireEvent } from '@testing-library/react';
-import ReferenceField from '../../ReferenceField';
+import ReferenceField from '../ReferenceField';
 
 describe('ReferenceField', () => {
   it('emits normalized shape for string input', () => {
@@ -18,4 +19,3 @@ describe('ReferenceField', () => {
     expect(last).toEqual({ value: 'xoxb-456', source: 'static' });
   });
 });
-

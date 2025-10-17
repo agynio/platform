@@ -1,5 +1,6 @@
+import React from 'react';
 import { render, screen, fireEvent } from '@testing-library/react';
-import ReferenceEnvField from '../../ReferenceEnvField';
+import ReferenceEnvField from '../ReferenceEnvField';
 
 describe('ReferenceEnvField', () => {
   it('adds rows and emits array', () => {
@@ -12,4 +13,3 @@ describe('ReferenceEnvField', () => {
     expect(last[1]).toEqual({ key: 'BAR', value: '2', source: 'static' });
   });
 });
-

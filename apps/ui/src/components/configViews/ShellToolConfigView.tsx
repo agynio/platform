@@ -33,8 +33,8 @@ export default function ShellToolConfigView({ value, onChange, readOnly, disable
   return (
     <div className="space-y-3 text-sm">
       <div>
-        <label className="block text-xs mb-1">Working directory</label>
-        <Input value={workdir} onChange={(e) => setWorkdir(e.target.value)} disabled={isDisabled} />
+        <label htmlFor="workdir" className="block text-xs mb-1">Working directory</label>
+        <Input id="workdir" value={workdir} onChange={(e) => setWorkdir(e.target.value)} disabled={isDisabled} />
       </div>
       <div>
         <div className="text-xs mb-1">Environment</div>
@@ -42,12 +42,12 @@ export default function ShellToolConfigView({ value, onChange, readOnly, disable
       </div>
       <div className="grid grid-cols-2 gap-2">
         <div>
-          <label className="block text-xs mb-1">Execution timeout (ms)</label>
-          <Input type="number" min={0} value={executionTimeoutMs} onChange={(e) => setExecutionTimeoutMs(parseInt(e.target.value || '0', 10))} disabled={isDisabled} />
+          <label htmlFor="executionTimeoutMs" className="block text-xs mb-1">Execution timeout (ms)</label>
+          <Input id="executionTimeoutMs" type="number" min={0} value={executionTimeoutMs} onChange={(e) => setExecutionTimeoutMs(parseInt(e.target.value || '0', 10))} disabled={isDisabled} />
         </div>
         <div>
-          <label className="block text-xs mb-1">Idle timeout (ms)</label>
-          <Input type="number" min={0} value={idleTimeoutMs} onChange={(e) => setIdleTimeoutMs(parseInt(e.target.value || '0', 10))} disabled={isDisabled} />
+          <label htmlFor="idleTimeoutMs" className="block text-xs mb-1">Idle timeout (ms)</label>
+          <Input id="idleTimeoutMs" type="number" min={0} value={idleTimeoutMs} onChange={(e) => setIdleTimeoutMs(parseInt(e.target.value || '0', 10))} disabled={isDisabled} />
         </div>
       </div>
     </div>
