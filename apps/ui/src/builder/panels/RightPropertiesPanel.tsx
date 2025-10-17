@@ -1,5 +1,5 @@
 import type { Node } from 'reactflow';
-import { useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import type { TemplateNodeSchema } from 'shared';
 import { useTemplates } from '../useTemplates';
 // Runtime graph components & hooks
@@ -95,6 +95,20 @@ function RightPropertiesPanelBody({ node, onChange }: Props) {
   // Track static validation errors reported by StaticView
   const [staticErrors, setStaticErrors] = useState<string[]>([]);
 
+  // Clear validation errors when switching nodes/templates
+  useEffect(() => {
+    setStaticErrors([]);
+  }, [node.id, data.template]);
+
+  // Stable validation handler; guards against no-op updates
+  const handleValidate = useCallback((errs?: string[]) => {
+    const next = errs || [];
+    setStaticErrors((prev) => {
+      if (prev.length === next.length && prev.every((v, i) => v === next[i])) return prev;
+      return next;
+    });
+  }, [node.id]);
+
   return (
     <div className="space-y-4">
       {hasRuntimeCaps && (
@@ -114,7 +128,7 @@ function RightPropertiesPanelBody({ node, onChange }: Props) {
               onChange={(next) => update({ config: next })}
               readOnly={readOnly}
               disabled={!!disableAll}
-              onValidate={(errs) => setStaticErrors(errs || [])}
+              onValidate={handleValidate}
             />
           ) : (
             <div className="text-xs text-muted-foreground">No custom view registered for {data.template} (static)</div>
