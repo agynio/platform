@@ -1,0 +1,60 @@
+import { describe, it, expect, beforeAll } from 'vitest';
+import Fastify from 'fastify';
+import { buildTemplateRegistry } from '../src/templates';
+import { LoggerService } from '../src/services/logger.service';
+import { ContainerService } from '../src/services/container.service';
+import { ConfigService } from '../src/services/config.service';
+import { CheckpointerService } from '../src/services/checkpointer.service';
+import { MongoService } from '../src/services/mongo.service';
+import { LiveGraphRuntime } from '../src/graph/liveGraph.manager';
+import { GitGraphService } from '../src/services/gitGraph.service';
+import os from 'os';
+import path from 'path';
+import { promises as fs } from 'fs';
+
+describe('API guard: MCP command mutation forbidden', () => {
+  it('returns 409 when mutating MCP command while provisioned', async () => {
+    const logger = new LoggerService();
+    const config = new ConfigService({
+      githubAppId: '1', githubAppPrivateKey: 'k', githubInstallationId: 'i', openaiApiKey: 'k', githubToken: 't', mongodbUrl: 'mongodb://x',
+      graphStore: 'git', graphRepoPath: await fs.mkdtemp(path.join(os.tmpdir(), 'graph-')), graphBranch: 'graph-state', nixAllowedChannels: ['x'], nixHttpTimeoutMs: 1, nixCacheTtlMs: 1, nixCacheMax: 1, dockerMirrorUrl: 'http://x',
+      mcpToolsStaleTimeoutMs: 0,
+    } as any);
+    const checkpointer = new CheckpointerService(logger);
+    const containerService = new ContainerService(logger);
+    const mongo = new MongoService(config, logger);
+    const templateRegistry = buildTemplateRegistry({ logger, containerService, configService: config, checkpointerService: checkpointer, mongoService: mongo });
+    const runtime = new LiveGraphRuntime(logger, templateRegistry);
+    const graphService = new GitGraphService({ repoPath: config.graphRepoPath, branch: config.graphBranch, defaultAuthor: { name: 'Test', email: 't@example.com' } }, logger, templateRegistry);
+    await graphService.initIfNeeded();
+    // Seed graph with mcp node
+    await graphService.upsert({ name: 'main', version: 0, nodes: [{ id: 'm1', template: 'mcpServer', config: { command: 'a' } } as any], edges: [] });
+    await runtime.apply({ nodes: [{ id: 'm1', data: { template: 'mcpServer', config: { command: 'a' } } }], edges: [] });
+    // Mark provisioned by patching runtime node status
+    const inst = (runtime as any).getNodeInstance('m1');
+    if (inst && typeof (inst as any).getProvisionStatus === 'function') {
+      // Force provision status to ready
+      (inst as any)._provStatus = { state: 'ready' };
+    }
+
+    const fastify = Fastify();
+    // minimal POST handler simulation importing guard
+    fastify.post('/api/graph', async (request, reply) => {
+      const parsed = request.body as any;
+      const before = await graphService.get('main');
+      const { enforceMcpCommandMutationGuard } = await import('../src/services/graph.guard');
+      try {
+        enforceMcpCommandMutationGuard(before, parsed, runtime);
+      } catch (e: any) {
+        reply.code(409);
+        return { error: e.code };
+      }
+      return { ok: true };
+    });
+
+    const res = await fastify.inject({ method: 'POST', url: '/api/graph', payload: { name: 'main', version: 1, nodes: [{ id: 'm1', template: 'mcpServer', config: { command: 'b' } }], edges: [] } });
+    expect(res.statusCode).toBe(409);
+    const body = JSON.parse(res.body);
+    expect(body.error).toBe('MCP_COMMAND_MUTATION_FORBIDDEN');
+  });
+});

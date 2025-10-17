@@ -46,6 +46,11 @@ export const configSchema = z.object({
     .union([z.string(), z.number()])
     .default('500')
     .transform((v) => Number(v) || 500),
+  // Global MCP tools cache staleness timeout (ms). 0 => never stale by time.
+  mcpToolsStaleTimeoutMs: z
+    .union([z.string(), z.number()])
+    .default('0')
+    .transform((v) => Number(v) || 0),
 });
 
 export type Config = z.infer<typeof configSchema>;
@@ -121,6 +126,11 @@ export class ConfigService implements Config {
     return this.params.nixCacheMax;
   }
 
+  // MCP tools cache staleness timeout (global default)
+  get mcpToolsStaleTimeoutMs(): number {
+    return (this.params as any).mcpToolsStaleTimeoutMs ?? 0;
+  }
+
   static fromEnv(): ConfigService {
     const parsed = configSchema.parse({
       githubAppId: process.env.GITHUB_APP_ID,
@@ -142,6 +152,7 @@ export class ConfigService implements Config {
       nixHttpTimeoutMs: process.env.NIX_HTTP_TIMEOUT_MS || '5000',
       nixCacheTtlMs: process.env.NIX_CACHE_TTL_MS || String(5 * 60_000),
       nixCacheMax: process.env.NIX_CACHE_MAX || '500',
+      mcpToolsStaleTimeoutMs: process.env.MCP_TOOLS_STALE_TIMEOUT_MS || '0',
     });
     return new ConfigService(parsed);
   }

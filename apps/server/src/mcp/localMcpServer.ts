@@ -33,6 +33,7 @@ export const LocalMcpServerStaticConfigSchema = z.object({
   requestTimeoutMs: z.number().int().positive().optional().describe('Per-request timeout in ms.'),
   startupTimeoutMs: z.number().int().positive().optional().describe('Startup handshake timeout in ms.'),
   heartbeatIntervalMs: z.number().int().positive().optional().describe('Interval for heartbeat pings in ms.'),
+  staleTimeoutMs: z.number().int().nonnegative().optional().describe('Staleness timeout for cached tools (ms).'),
   restart: z
     .object({
       maxAttempts: z.number().int().positive().default(5).describe('Maximum restart attempts during resilient start.'),
@@ -101,6 +102,7 @@ export class LocalMCPServer implements McpServer, Provisionable, DynamicConfigur
   private client?: Client;
   private started = false;
   private toolsCache: McpTool[] | null = null;
+  private lastToolsUpdatedAt?: number; // ms epoch
   private heartbeatTimer?: NodeJS.Timeout;
   private restartAttempts = 0;
   private containerProvider?: ContainerProviderEntity;
@@ -131,11 +133,30 @@ export class LocalMCPServer implements McpServer, Provisionable, DynamicConfigur
   // Dynamic config change listeners (normalized config record)
   private _dynCfgListeners: Array<(cfg: Record<string, boolean>) => void> = [];
   private _lastEnabledSig?: string; // signature of last emitted enabled set for change detection
+  private _globalStaleTimeoutMs = 0;
 
   constructor(
     private containerService: ContainerService,
     private logger: LoggerService,
   ) {}
+
+  // Hooks for state preload/persist
+  private statePersistor?: (state: Record<string, unknown>) => Promise<void> | void;
+  setStatePersistor(fn?: (state: Record<string, unknown>) => Promise<void> | void) { this.statePersistor = fn; }
+  preloadCachedTools(tools: McpTool[] | undefined | null, updatedAt?: number | string | Date): void {
+    if (tools && Array.isArray(tools) && tools.length > 0) {
+      this.toolsCache = tools;
+      this.toolsDiscovered = true; // consider discovered for initial dynamic schema availability
+    }
+    if (updatedAt !== undefined) {
+      const ts = typeof updatedAt === 'number' ? updatedAt : (updatedAt instanceof Date ? updatedAt.getTime() : Date.parse(String(updatedAt)));
+      if (Number.isFinite(ts)) this.lastToolsUpdatedAt = ts;
+    }
+  }
+
+  setGlobalStaleTimeoutMs(ms: number) {
+    this._globalStaleTimeoutMs = Number.isFinite(ms) && ms >= 0 ? ms : 0;
+  }
 
   /**
    * Discover tools by starting temporary MCP server, fetching tools, then stopping the container.
@@ -221,6 +242,7 @@ export class LocalMCPServer implements McpServer, Provisionable, DynamicConfigur
 
       this.logger.info(`[MCP:${this.namespace}] [disc:${discoveryId}] Discovered ${this.toolsCache.length} tools`);
       this.toolsDiscovered = true;
+      this.lastToolsUpdatedAt = Date.now();
       // Invalidate dynamic schema cache so it will be rebuilt including newly discovered tools
       this._dynamicConfigZodSchema = undefined;
       // If user supplied a dynamic config before discovery completed, we preserve it.
@@ -238,6 +260,13 @@ export class LocalMCPServer implements McpServer, Provisionable, DynamicConfigur
           // this path only occurs for early configs applied pre-discovery.
           this.emitDynamicConfigChanged();
         }
+      }
+      // Persist state if persistor provided
+      try {
+        const state = { mcp: { tools: this.toolsCache, toolsUpdatedAt: this.lastToolsUpdatedAt } } as Record<string, unknown>;
+        await this.statePersistor?.(state);
+      } catch (e) {
+        this.logger.error(`[MCP:${this.namespace}] Failed to persist state`, e);
       }
     } catch (err) {
       this.logger.error(`[MCP:${this.namespace}] [disc:${discoveryId}] Tool discovery failed`, err);
@@ -718,7 +747,13 @@ export class LocalMCPServer implements McpServer, Provisionable, DynamicConfigur
       try {
         // SINGLE DISCOVERY PATH: Only perform tool discovery here during the resilient start sequence.
         // listTools() no longer triggers discovery; SimpleAgent waits for 'ready'.
-        if (!this.toolsDiscovered) {
+        const staleTimeout = (this.cfg?.staleTimeoutMs ?? this._globalStaleTimeoutMs ?? 0) as number;
+        const isStale = (() => {
+          if (!staleTimeout) return false;
+          const last = this.lastToolsUpdatedAt || 0;
+          return last <= 0 || Date.now() - last > staleTimeout;
+        })();
+        if (!this.toolsDiscovered || isStale) {
           const tDisc0 = Date.now();
           await this.discoverTools();
           const tDiscMs = Date.now() - tDisc0;

@@ -41,6 +41,12 @@ export class LiveGraphRuntime {
     this.portsRegistry = new PortsRegistry(this.templateRegistry.getPortsMap());
   }
 
+  // Optional global deps bag exposed to factories and post-instantiation hooks
+  private factoryDeps: DependencyBag = {};
+  setFactoryDeps(deps: DependencyBag) {
+    this.factoryDeps = deps || {};
+  }
+
   get version() {
     return this.state.version;
   }
@@ -297,13 +303,35 @@ export class LiveGraphRuntime {
       if (!factory) throw Errors.unknownTemplate(node.data.template, node.id);
       // Factories receive a minimal context (deps deprecated -> empty object)
       const created = await factory({
-        deps: {},
+        deps: this.factoryDeps,
         get: (id: string) => this.state.nodes.get(id)?.instance,
         nodeId: node.id,
       });
       // NOTE: setGraphNodeId reflection removed; prefer factories to leverage ctx.nodeId directly.
       const live: LiveNode = { id: node.id, template: node.data.template, instance: created, config: node.data.config };
       this.state.nodes.set(node.id, live);
+
+      // Post-create wiring: provide state persistor and preload cached MCP tools if present
+      try {
+        const instAny = created as any;
+        // Provide per-node state persistor if instance supports it and we have a graphStateService
+        if (instAny && typeof instAny.setStatePersistor === 'function' && this.factoryDeps && (this.factoryDeps as any).graphStateService) {
+          const svc = (this.factoryDeps as any).graphStateService as { upsertNodeState: (nodeId: string, state: Record<string, unknown>) => Promise<void> };
+          instAny.setStatePersistor(async (state: Record<string, unknown>) => {
+            await svc.upsertNodeState(node.id, state);
+          });
+        }
+        // Preload cached MCP tools if instance supports it and state contains mcp tools
+        const st = (node.data as any).state;
+        if (st && st.mcp && Array.isArray(st.mcp.tools) && typeof instAny?.preloadCachedTools === 'function') {
+          instAny.preloadCachedTools(st.mcp.tools, (st.mcp as any).toolsUpdatedAt);
+        }
+        // Pass global MCP stale timeout if provided via deps.configService
+        if (typeof instAny?.setGlobalStaleTimeoutMs === 'function' && (this.factoryDeps as any)?.configService) {
+          const ms = Number(((this.factoryDeps as any).configService.mcpToolsStaleTimeoutMs ?? 0));
+          instAny.setGlobalStaleTimeoutMs(Number.isFinite(ms) ? ms : 0);
+        }
+      } catch { /* non-fatal */ }
       if (node.data.config) {
         if (hasSetConfig(created)) {
           try {

@@ -82,6 +82,44 @@ async function bootstrap() {
         )
       : new GraphService(mongo.getDb(), logger, templateRegistry);
 
+  // Provide deps to factories/runtime for state persistence and config access
+  (runtime as any).setFactoryDeps?.({
+    configService: config,
+    graphStateService: {
+      // Simple per-node state upsert helper for both Mongo and Git stores
+      upsertNodeState: async (nodeId: string, state: Record<string, unknown>) => {
+        try {
+          const current = await graphService.get('main');
+          const base =
+            current ?? {
+              name: 'main',
+              version: 0,
+              updatedAt: new Date().toISOString(),
+              nodes: [],
+              edges: [],
+            };
+          const nodes = Array.from(base.nodes || []);
+          const idx = nodes.findIndex((n) => n.id === nodeId);
+          if (idx >= 0) nodes[idx] = { ...nodes[idx], state } as any;
+          else nodes.push({ id: nodeId, template: 'unknown', state } as any);
+          const updated = await (graphService instanceof GitGraphService
+            ? graphService.upsert({ name: 'main', version: base.version, nodes, edges: base.edges })
+            : (graphService as GraphService).upsert({ name: 'main', version: base.version, nodes, edges: base.edges }));
+          // Also update live runtime snapshot
+          const lg = runtime as any;
+          if (lg?.state?.lastGraph) {
+            const last = lg.state.lastGraph as any;
+            const ln = last.nodes.find((n: any) => n.id === nodeId);
+            if (ln) ln.data.state = state;
+          }
+          return updated;
+        } catch (e) {
+          logger.error('Failed to upsert node state for %s: %s', nodeId, (e as any)?.message || e);
+        }
+      },
+    },
+  });
+
   if (graphService instanceof GitGraphService) {
     try {
       await graphService.initIfNeeded();
@@ -96,7 +134,7 @@ async function bootstrap() {
     ({
       nodes: saved.nodes.map((n) => ({
         id: n.id,
-        data: { template: n.template, config: n.config, dynamicConfig: n.dynamicConfig },
+        data: { template: n.template, config: n.config, dynamicConfig: n.dynamicConfig, state: (n as any).state },
       })),
       edges: saved.edges.map((e) => ({
         source: e.source,
@@ -188,6 +226,18 @@ async function bootstrap() {
       };
       // Capture previous graph (for change detection / events)
       const before = await graphService.get(parsed.name);
+      // Guard against unsafe MCP command mutation
+      try {
+        const { enforceMcpCommandMutationGuard } = await import('./services/graph.guard');
+        enforceMcpCommandMutationGuard(before, parsed, runtime);
+      } catch (e) {
+        const err = e as any;
+        if (err?.code === 'MCP_COMMAND_MUTATION_FORBIDDEN') {
+          reply.code(409);
+          return { error: 'MCP_COMMAND_MUTATION_FORBIDDEN' };
+        }
+      }
+
       // Support both GraphService and GitGraphService signatures
       const saved = graphService instanceof GitGraphService ? await graphService.upsert(parsed, author) : await (graphService as GraphService).upsert(parsed);
       try {

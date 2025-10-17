@@ -30,12 +30,20 @@ describe('LocalMCPServer env overlay and workdir', () => {
     };
     const cs: any = { getDocker: () => docker };
     server = new LocalMCPServer(cs, logger as any);
+    // Inject EnvService using fake vault for overlay
+    (server as any).envService = { resolveEnvItems: async (items: any[]) => {
+      const out: Record<string, string> = {};
+      for (const it of items) {
+        if (it.source === 'vault') out[it.key] = 'VAULTED';
+        else out[it.key] = it.value;
+      }
+      return out;
+    }};
     (server as any).setContainerProvider({ provide: async (id: string) => ({ id }) });
   });
 
   it('passes resolved Env (incl. vault refs) for discovery and per-call, without persistence', async () => {
-    // Inject a fake vault into server instance
-    (server as any).vault = { isEnabled: () => true, getSecret: vi.fn(async () => 'VAULTED') };
+    // vault handled by injected envService above
     await server.setConfig({ namespace: 'x', command: 'mcp start --stdio', env: [ { key: 'A', value: '1' }, { key: 'B', value: 'mount/path/key', source: 'vault' } ], workdir: '/w', startupTimeoutMs: 10 } as any);
     // Discovery
     try { await server.discoverTools(); } catch {}
