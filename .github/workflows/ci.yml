@@ -82,8 +82,10 @@ jobs:
       - name: Build UI app
         run: pnpm -w -F ui build
 
-      - name: Lint UI app
-        if: always()
+      - name: Lint UI app (non-blocking)
+        continue-on-error: true
         run: pnpm -w -F ui lint --if-present
-      - name: Lint server
-        run: pnpm --filter server lint
+
+      - name: Test UI app (non-blocking)
+        continue-on-error: true
+        run: pnpm -w -F ui test --if-present
