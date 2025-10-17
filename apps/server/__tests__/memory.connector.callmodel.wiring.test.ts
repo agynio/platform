@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import { CallModelNode } from '../src/nodes/callModel.node';
-import { BaseTool } from '../src/tools/base.tool';
+import { BaseTool } from '../src/nodes/tools/base.tool';
 import { AIMessage, BaseMessage, SystemMessage } from '@langchain/core/messages';
 
 // Mock ChatOpenAI to avoid network and capture messages passed to invoke

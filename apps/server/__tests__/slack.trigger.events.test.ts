@@ -13,7 +13,7 @@ vi.mock('@slack/socket-mode', () => {
   }
   return { SocketModeClient: MockClient };
 });
-import { SlackTrigger } from '../src/triggers/slack.trigger';
+import { SlackTrigger } from '../src/nodes/triggers/slack.trigger.node';
 
 describe('SlackTrigger events', () => {
   it('relays message events from socket-mode client', async () => {

@@ -2,14 +2,14 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { EventEmitter } from 'events';
 import { v4 as uuidv4 } from 'uuid';
 import { toJSONSchema, z } from 'zod';
-import { ContainerProviderEntity } from '../entities/containerProvider.entity.js';
-import type { DynamicConfigurable, ProvisionStatus, Provisionable } from '../graph/capabilities.js';
-import { ContainerService } from '../services/container.service.js';
-import { LoggerService } from '../services/logger.service.js';
-import { DockerExecTransport } from './dockerExecTransport.js';
-import { DEFAULT_MCP_COMMAND, McpError, McpServer, McpTool, McpToolCallResult } from './types.js';
-import { VaultService } from '../services/vault.service.js';
-import { parseVaultRef } from '../utils/refs.js';
+import { ContainerProviderEntity } from '../../../entities/containerProvider.entity.js';
+import type { DynamicConfigurable, ProvisionStatus } from '../../../graph/capabilities.js';
+import { ContainerService } from '../../../services/container.service.js';
+import { LoggerService } from '../../../services/logger.service.js';
+import { DockerExecTransport } from '../../../mcp/dockerExecTransport.js';
+import { DEFAULT_MCP_COMMAND, McpError, McpServer, McpTool, McpToolCallResult } from '../../../mcp/types.js';
+import { VaultService } from '../../../services/vault.service.js';
+import { parseVaultRef } from '../../../utils/refs.js';
 import { JSONSchema } from 'zod/v4/core';
 
 const EnvItemSchema = z
@@ -43,7 +43,7 @@ export const LocalMcpServerStaticConfigSchema = z.object({
 });
 // .strict();
 
-export class LocalMCPServer implements McpServer, Provisionable, DynamicConfigurable<Record<string, boolean>> {
+export class LocalMCPServer implements McpServer, DynamicConfigurable<Record<string, boolean>> {
   private async resolveEnvOverlay(): Promise<Record<string, string> | undefined> {
     const items = this.cfg?.env || [];
     if (!items.length) return undefined;

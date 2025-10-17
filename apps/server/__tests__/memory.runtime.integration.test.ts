@@ -9,7 +9,7 @@ import type { GraphDefinition } from '../src/graph/types';
 import { LoggerService } from '../src/services/logger.service';
 import { MemoryService } from '../src/services/memory.service';
 import { CallModelNode } from '../src/nodes/callModel.node';
-import { BaseTool } from '../src/tools/base.tool';
+import { BaseTool } from '../src/nodes/tools/base.tool';
 
 // Fake LLM: replace ChatOpenAI to avoid network and capture messages
 vi.mock('@langchain/openai', async (importOriginal) => {

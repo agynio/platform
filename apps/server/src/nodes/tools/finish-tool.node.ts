@@ -2,7 +2,7 @@ import { tool, DynamicStructuredTool } from '@langchain/core/tools';
 import { z } from 'zod';
 import { BaseTool } from './base.tool';
 import { TerminateResponse } from './terminateResponse';
-import { LoggerService } from '../services/logger.service';
+import { LoggerService } from '../../services/logger.service';
 
 const finishSchema = z.object({ note: z.string().optional() });
 

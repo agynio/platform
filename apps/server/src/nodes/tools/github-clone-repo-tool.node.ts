@@ -1,11 +1,11 @@
 import { DynamicStructuredTool, tool } from '@langchain/core/tools';
 import { z } from 'zod';
-import { ContainerProviderEntity } from '../entities/containerProvider.entity';
-import { ConfigService } from '../services/config.service';
-import { LoggerService } from '../services/logger.service';
-import { VaultService, type VaultRef } from '../services/vault.service';
+import { ContainerProviderEntity } from '../../entities/containerProvider.entity';
+import { ConfigService } from '../../services/config.service';
+import { LoggerService } from '../../services/logger.service';
+import { VaultService, type VaultRef } from '../../services/vault.service';
 import { BaseTool } from './base.tool';
-import { parseVaultRef } from '../utils/refs';
+import { parseVaultRef } from '../../utils/refs';
 
 // Schema for cloning a GitHub repository inside a running container
 const githubCloneSchema = z.object({

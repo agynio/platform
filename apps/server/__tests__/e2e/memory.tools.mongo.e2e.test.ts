@@ -3,7 +3,7 @@ import { MongoMemoryServer } from 'mongodb-memory-server';
 import { MongoClient } from 'mongodb';
 import { MemoryNode } from '../../src/nodes/memory.node';
 import { LoggerService } from '../../src/services/logger.service';
-import { UnifiedMemoryTool } from '../../src/tools/memory/memory.tool';
+import { UnifiedMemoryTool } from '../../src/nodes/tools/memory-tool.node';
 
 const RUN_MONGOMS = process.env.RUN_MONGOMS === '1';
 

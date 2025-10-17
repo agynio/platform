@@ -33,7 +33,7 @@ describe('LocalMCPServer Provisionable + DynamicConfigurable', () => {
     const transitions: string[] = [];
     server.onProvisionStatusChange((s) => transitions.push(s.state));
 
-    await server.provision();
+    await server.start();
     expect(server.getProvisionStatus().state).toBe('ready');
     expect(transitions).toContain('provisioning');
     expect(transitions).toContain('ready');
@@ -47,7 +47,7 @@ describe('LocalMCPServer Provisionable + DynamicConfigurable', () => {
     server.onProvisionStatusChange((s) => transitions.push(s.state));
 
     // Trigger start flow which will call discoverTools via maybeStart/tryStartOnce
-    await server.provision();
+    await server.start();
     // We don't have timers/backoff in this stubbed flow; directly simulate failure by flushing waiters
     // Since our provision awaits pendingStart (if deps present), we need to emulate failure
     // For simplicity, invoke internal flushStartWaiters with error
@@ -66,8 +66,8 @@ describe('LocalMCPServer Provisionable + DynamicConfigurable', () => {
       return [];
     });
     await server.configure({ namespace: 'ns', command: 'cmd' } as McpServerConfig);
-    await server.provision();
-    await server.deprovision();
+    await server.start();
+    await server.stop();
     expect(server.getProvisionStatus().state).toBe('not_ready');
   });
 
@@ -79,7 +79,7 @@ describe('LocalMCPServer Provisionable + DynamicConfigurable', () => {
     });
     await server.configure({ namespace: 'ns', command: 'cmd' } as McpServerConfig);
     expect(server.isDynamicConfigReady()).toBe(false);
-    await server.provision();
+    await server.start();
     expect(server.isDynamicConfigReady()).toBe(true);
     const schema = server.getDynamicConfigSchema() as any;
     expect(schema.type).toBe('object');
@@ -93,7 +93,7 @@ describe('LocalMCPServer Provisionable + DynamicConfigurable', () => {
       return (server as any).toolsCache;
     });
     await server.configure({ namespace: 'ns', command: 'cmd' } as McpServerConfig);
-    await server.provision();
+    await server.start();
     let tools = await server.listTools();
     expect(tools.map(t => t.name).sort()).toEqual(['toolA', 'toolB']);
 

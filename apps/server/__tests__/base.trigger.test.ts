@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { BaseTrigger, TriggerMessage } from '../src/triggers/base.trigger';
+import { BaseTrigger, TriggerMessage } from '../src/nodes/triggers/base.trigger.node';
 
 // Concrete test subclass exposing protected notify
 class TestTrigger extends BaseTrigger {

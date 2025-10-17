@@ -45,8 +45,8 @@ vi.mock('../src/services/checkpointer.service', async (importOriginal) => {
   return { ...mod, CheckpointerService: Fake };
 });
 
-import { Agent as SimpleAgent } from '../src/agents/agent';
-import type { TriggerMessage } from '../src/triggers/base.trigger';
+import { Agent as SimpleAgent } from '../src/nodes/agent.node';
+import type { TriggerMessage } from '../src/nodes/triggers/base.trigger.node';
 
 // Helper to make a configured agent
 function makeAgent() {

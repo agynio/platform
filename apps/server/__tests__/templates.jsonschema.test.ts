@@ -5,7 +5,7 @@ import type { JSONSchema7 } from 'json-schema';
 type JsonSchemaWithUi = JSONSchema7 & { 'ui:field'?: string };
 import { ShellToolStaticConfigSchema } from '../src/nodes/tools/shell-tool.node';
 import { LocalMcpServerStaticConfigSchema } from '../src/nodes/mcp/local/local-mcp-server.node';
-import { AgentStaticConfigSchema as SimpleAgentStaticConfigSchema } from '../src/agents/agent';
+import { AgentStaticConfigSchema as SimpleAgentStaticConfigSchema } from '../src/nodes/agent.node';
 
 describe('template schemas: env ui:field', () => {
   it('ShellToolStaticConfigSchema.env includes ui:field ReferenceEnvField', () => {

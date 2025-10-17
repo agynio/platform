@@ -1,7 +1,7 @@
 import { tool, DynamicStructuredTool } from "@langchain/core/tools";
 import { z } from "zod";
 import { BaseTool } from "./base.tool";
-import { LoggerService } from "../services/logger.service";
+import { LoggerService } from "../../services/logger.service";
 import { VaultService } from '../services/vault.service';
 import { ReferenceFieldSchema, normalizeTokenRef, resolveTokenRef } from '../utils/refs';
 import { parseVaultRef } from '../utils/refs';

@@ -1,9 +1,9 @@
 import { describe, it, expect, vi } from 'vitest';
 import { AIMessage, BaseMessage } from '@langchain/core/messages';
 import { ToolsNode } from '../src/nodes/tools.node';
-import { BaseTool } from '../src/tools/base.tool';
+import { BaseTool } from '../src/nodes/tools/base.tool';
 import { tool, DynamicStructuredTool } from '@langchain/core/tools';
-import { TerminateResponse } from '../src/tools/terminateResponse';
+import { TerminateResponse } from '../src/nodes/tools/terminateResponse';
 
 class TerminatingTool extends BaseTool {
   init(): DynamicStructuredTool {

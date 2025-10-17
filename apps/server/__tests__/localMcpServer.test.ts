@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { LocalMCPServer } from '../src/mcp/localMcpServer.js';
+import { LocalMCPServer } from '../src/nodes/mcp/local/local-mcp-server.node';
 import { McpServerConfig } from '../src/mcp/types.js';
 import { LoggerService } from '../src/services/logger.service.js';
 import { PassThrough } from 'node:stream';
