@@ -12,6 +12,7 @@ export interface NodeDef {
     template: string; // template name registered in TemplateRegistry
     config?: Record<string, unknown>; // optional configuration passed via instance.setConfig
     dynamicConfig?: Record<string, unknown>; // optional dynamic configuration passed via instance.setDynamicConfig
+    state?: Record<string, unknown>; // optional persisted runtime state (per-node)
   };
 }
 
@@ -133,6 +134,7 @@ export interface PersistedGraphNode {
   template: string;
   config?: Record<string, unknown>;
   dynamicConfig?: Record<string, unknown>;
+  state?: Record<string, unknown>;
   position?: { x: number; y: number }; // UI hint, optional server side
 }
 export interface PersistedGraphEdge {

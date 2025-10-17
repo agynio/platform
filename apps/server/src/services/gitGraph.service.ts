@@ -194,11 +194,22 @@ export class GitGraphService {
     }
   }
 
+  // Upsert partial state for a single node without altering other fields
+  async upsertNodeState(name: string, nodeId: string, patch: Record<string, unknown>): Promise<void> {
+    const current = await this.get(name);
+    const base = current ?? { name, version: 0, updatedAt: new Date().toISOString(), nodes: [], edges: [] };
+    const nodes = Array.from(base.nodes || []);
+    const idx = nodes.findIndex((n) => n.id === nodeId);
+    if (idx >= 0) nodes[idx] = { ...nodes[idx], state: patch } as PersistedGraphNode;
+    else nodes.push({ id: nodeId, template: 'unknown', state: patch } as PersistedGraphNode);
+    await this.upsert({ name, version: base.version, nodes, edges: base.edges }, undefined);
+  }
+
   // Internal helpers
   // Validation is shared via validatePersistedGraph
 
   private stripInternalNode(n: PersistedGraphNode): PersistedGraphNode {
-    return { id: n.id, template: n.template, config: n.config, dynamicConfig: n.dynamicConfig, position: n.position };
+    return { id: n.id, template: n.template, config: n.config, dynamicConfig: n.dynamicConfig, state: n.state, position: n.position };
   }
   private stripInternalEdge(e: PersistedGraphEdge): PersistedGraphEdge {
     return { source: e.source, sourceHandle: e.sourceHandle, target: e.target, targetHandle: e.targetHandle, id: e.id };
@@ -445,8 +456,10 @@ export class GitGraphService {
   }
 
   private diffNodes(before: PersistedGraphNode[], after: PersistedGraphNode[]) {
-    const b = new Map(before.map((n) => [n.id, JSON.stringify(n)]));
-    const a = new Map(after.map((n) => [n.id, JSON.stringify(n)]));
+    // Include position and state so both cause updates; encode template/config/dynamicConfig/state/position
+    const normalize = (n: PersistedGraphNode) => JSON.stringify({ id: n.id, template: n.template, config: n.config, dynamicConfig: n.dynamicConfig, state: n.state, position: n.position });
+    const b = new Map(before.map((n) => [n.id, normalize(n)]));
+    const a = new Map(after.map((n) => [n.id, normalize(n)]));
     const nodeAdds: string[] = [];
     const nodeUpdates: string[] = [];
     const nodeDeletes: string[] = [];

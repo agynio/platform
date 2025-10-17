@@ -6,7 +6,7 @@ import {
   LiveNode,
   edgeKey,
 } from './liveGraph.types';
-import { EdgeDef, GraphDefinition, GraphError, NodeDef } from './types';
+import { EdgeDef, GraphDefinition, GraphError, NodeDef, DependencyBag } from './types';
 // Ports based reversible universal edges
 import { LoggerService } from '../services/logger.service';
 import { Errors } from './errors';
@@ -39,6 +39,12 @@ export class LiveGraphRuntime {
     private readonly templateRegistry: TemplateRegistry,
   ) {
     this.portsRegistry = new PortsRegistry(this.templateRegistry.getPortsMap());
+  }
+
+  // Optional global deps bag exposed to factories and post-instantiation hooks
+  private factoryDeps: DependencyBag = {};
+  setFactoryDeps(deps: DependencyBag) {
+    this.factoryDeps = deps || {};
   }
 
   get version() {
@@ -297,13 +303,38 @@ export class LiveGraphRuntime {
       if (!factory) throw Errors.unknownTemplate(node.data.template, node.id);
       // Factories receive a minimal context (deps deprecated -> empty object)
       const created = await factory({
-        deps: {},
+        deps: this.factoryDeps,
         get: (id: string) => this.state.nodes.get(id)?.instance,
         nodeId: node.id,
       });
       // NOTE: setGraphNodeId reflection removed; prefer factories to leverage ctx.nodeId directly.
       const live: LiveNode = { id: node.id, template: node.data.template, instance: created, config: node.data.config };
       this.state.nodes.set(node.id, live);
+
+      // Post-create wiring: provide state persistor and preload cached MCP tools if present
+      try {
+        const instAny = created as any;
+        // Provide per-node state persistor if instance supports it and we have a graphStateService
+        const deps = this.factoryDeps as { graphStateService?: { upsertNodeState: (nodeId: string, state: Record<string, unknown>) => Promise<void> }; configService?: { mcpToolsStaleTimeoutMs?: number } };
+        if (instAny && typeof instAny.setStatePersistor === 'function' && deps.graphStateService) {
+          const svc = deps.graphStateService;
+          instAny.setStatePersistor(async (state: Record<string, unknown>) => {
+            await svc.upsertNodeState(node.id, state);
+          });
+        }
+        // Preload cached MCP tools if instance supports it and state contains mcp tools
+        const st = node.data.state as { mcp?: { tools?: unknown[]; toolsUpdatedAt?: number | string } } | undefined;
+        if (st?.mcp && Array.isArray(st.mcp.tools) && typeof instAny?.preloadCachedTools === 'function') {
+          instAny.preloadCachedTools(st.mcp.tools, st.mcp.toolsUpdatedAt);
+        }
+        // Pass global MCP stale timeout if provided via deps.configService
+        if (typeof instAny?.setGlobalStaleTimeoutMs === 'function' && deps?.configService) {
+          const ms = Number(deps.configService.mcpToolsStaleTimeoutMs ?? 0);
+          instAny.setGlobalStaleTimeoutMs(Number.isFinite(ms) ? ms : 0);
+        }
+      } catch (e) {
+        this.logger.debug('Post-create wiring failed', e);
+      }
       if (node.data.config) {
         if (hasSetConfig(created)) {
           try {
