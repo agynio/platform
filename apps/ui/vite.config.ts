@@ -10,6 +10,13 @@ export default defineConfig({
     alias: {
       '@': path.resolve(__dirname, './src'),
       '@hautech/ui': path.resolve(__dirname, '../../packages/ui/src'),
+      // Ensure React JSX runtime resolves when importing TSX from workspace packages
+      'react/jsx-runtime': path.resolve(__dirname, './node_modules/react/jsx-runtime.js'),
+      'react/jsx-dev-runtime': path.resolve(
+        __dirname,
+        './node_modules/react/jsx-dev-runtime.js'
+      ),
+      react: path.resolve(__dirname, './node_modules/react/index.js'),
     },
   },
 });
