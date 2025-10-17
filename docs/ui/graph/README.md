@@ -18,7 +18,7 @@ Endpoints (reference)
 - GET /graph/nodes/:nodeId/dynamic-config/schema
 
 Socket updates
-- Namespace: /graph
+- Socket: default namespace (no custom path)
 - Event: node_status
 - Payload: { nodeId, isPaused?, provisionStatus?, dynamicConfigReady?, updatedAt? }
 - The UI subscribes per-node and reconciles socket events into React Query cache.
