@@ -10,6 +10,7 @@ import { LoggerService } from './services/logger.service';
 import { VaultService, VaultConfigSchema } from './services/vault.service';
 import { EnvService } from './services/env.service';
 import { CallAgentTool, CallAgentToolStaticConfigSchema } from './tools/call_agent.tool';
+import { ManageTool, ManageToolStaticConfigSchema } from './tools/manage.tool';
 import { GithubCloneRepoTool, GithubCloneRepoToolExposedStaticConfigSchema } from './tools/github_clone_repo';
 import { SendSlackMessageTool, SendSlackMessageToolExposedStaticConfigSchema } from './tools/send_slack_message.tool';
 import { ShellTool, ShellToolStaticConfigSchema } from './tools/shell_command';
@@ -153,6 +154,20 @@ export function buildTemplateRegistry(deps: TemplateRegistryDeps): TemplateRegis
           kind: 'tool',
           capabilities: { staticConfigurable: true },
           staticConfigSchema: toJSONSchema(CallAgentToolStaticConfigSchema),
+        },
+      )
+      .register(
+        'manageTool',
+        () => new ManageTool(logger),
+        {
+          targetPorts: { $self: { kind: 'instance' } },
+          sourcePorts: { agent: { kind: 'method', create: 'addAgent', destroy: 'removeAgent' } },
+        },
+        {
+          title: 'Manage',
+          kind: 'tool',
+          capabilities: { staticConfigurable: true },
+          staticConfigSchema: toJSONSchema(ManageToolStaticConfigSchema),
         },
       )
       .register(

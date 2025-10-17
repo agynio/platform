@@ -74,6 +74,11 @@ export abstract class BaseAgent implements TriggerListener, StaticConfigurable, 
     return undefined;
   }
 
+  // Public helper: expose node id (if any) for external naming/status
+  public getAgentNodeId(): string | undefined {
+    return this.getNodeId();
+  }
+
   // Inject AgentRunService to enable persistence of run state
   setRunService(svc?: AgentRunService) {
     this.runService = svc;
@@ -343,6 +348,16 @@ export abstract class BaseAgent implements TriggerListener, StaticConfigurable, 
   getCurrentRunId(thread: string): string | undefined {
     const s = this.threads.get(thread);
     return s?.inFlight?.runId;
+  }
+
+  // Public helper: list active (running) thread ids, optionally filtered by prefix
+  public listActiveThreads(prefix?: string): string[] {
+    const out: string[] = [];
+    for (const [threadId, state] of this.threads.entries()) {
+      if (prefix && !threadId.startsWith(prefix)) continue;
+      if (state.running) out.push(threadId);
+    }
+    return out;
   }
 
   // Cooperative termination: mark current run as terminating and abort signal
