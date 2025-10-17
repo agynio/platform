@@ -12,22 +12,18 @@ Spans and traces
 - Traces aggregate spans per run; the UI can deep-link into a trace in the Observability UI.
 
 Storage and indices
-- The reference implementation stores spans in MongoDB (packages/obs-server). Suggested indices:
+- The reference implementation stores spans in MongoDB. Suggested indices:
   - Spans by `nodeId`
   - Spans by `traceId`
   - Spans by timestamps (start/end)
-- See packages/obs-server/README.md for storage behavior and packages/obs-server/src/server.ts for server wiring.
+  
 
 UI linkage
-- The graph UI can link to a trace in the Observability UI via the base configured in `VITE_OBS_UI_BASE` (default http://localhost:4320). Set this in apps/ui environment.
+- The graph UI can link to a trace in the Observability UI via the base configured in `VITE_OBS_UI_BASE` (default http://localhost:4320). Set this in the UI environment.
 
 Related docs
 - docs/observability/heartbeats-and-sweeper.md
 - docs/observability/stage-1-plan.md
 
-Related code
-- packages/obs-sdk
-- packages/obs-server
-- packages/obs-ui
-- apps/server/src/index.ts (obs-sdk init)
-
+Related behavior
+- SDK initialization occurs at server startup; spans are emitted for model/tool calls.

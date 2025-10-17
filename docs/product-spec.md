@@ -31,38 +31,26 @@ Architecture and components
   - Live graph runtime applies versioned diffs serially to a single named graph. PortsRegistry enables reversible edge updates; TemplateRegistry defines template factories, ports, capabilities, and config schemas.
   - Unknown-key handling and retries: apply strips unknown config keys on schema validation errors and retries up to 3 times.
   - Checkpointing via Mongo (default) or Postgres; UI stream currently depends on Mongo change streams.
-  - Code: apps/server/src/graph/*.ts, apps/server/src/templates.ts, apps/server/src/checkpointer.ts
 - Server
   - HTTP APIs and Socket.IO for management and status streaming.
   - Endpoints manage graph templates, graph state, node lifecycle/actions, dynamic-config schema, reminders, runs, vault proxy, and Nix proxy (when enabled).
-  - Code: apps/server/src/index.ts (routes), apps/server/src/routes/*.ts
 - Persistence
   - Graph store: Mongo or Git-backed working tree (format: 2) with deterministic edge IDs and advisory lock. Upsert commit per version with conflict/timeout/commit error modes.
-    - Code: apps/server/src/services/graph.service.ts, apps/server/src/services/gitGraph.service.ts
   - Container registry: Mongo collection of workspace lifecycle and TTL; cleanup service with backoff.
-    - Code: apps/server/src/services/containerRegistry.service.ts, apps/server/src/services/containerCleanup.service.ts
 - Containers and workspace network
   - Workspaces via container provider; labeled hautech.ai/role=workspace and hautech.ai/thread_id; optional hautech.ai/platform for platform-aware reuse. Network: agents_net. Optional DinD sidecar with DOCKER_HOST=tcp://localhost:2375. Optional HTTP-only registry mirror on agents_net.
   - Exec behavior: wall/idle timeouts, abort/kill on timeout, demux, and ANSI stripping.
-  - Code: apps/server/src/entities/container*.ts, apps/server/src/services/container*.ts
 - Secrets and env overlays
-  - VaultService optionally resolves vault refs; EnvService merges static and vault overlays; values never logged; per-node env overlays used for shell and MCP calls only.
-  - Code: apps/server/src/services/vault.service.ts, apps/server/src/services/env.service.ts
+  - Vault optionally resolves vault refs; Env overlays merge static and vault inputs; values never logged; per-node env overlays used for shell and MCP calls only.
 - Observability
-  - SDK init at server start; spans for model/tool calls; UI checkpoint stream via socket; obs-server and obs-ui packages provide storage and UI.
-  - Code: packages/obs-server, packages/obs-ui, packages/obs-sdk
+  - SDK init at server start; spans for model/tool calls; UI checkpoint stream via socket; dedicated services provide storage and UI.
 
 Features and capabilities
 - Agents: SimpleAgent graph with scheduling and buffer policies; dynamic summarization; restriction enforcement for tool-first flows.
-  - Code: apps/server/src/agents/*.ts
 - Tools: Shell, GitHub clone, Slack, finish, call_agent, manage, remind_me, unified memory tool.
-  - Code: apps/server/src/tools/*.ts
 - Triggers: Slack Socket Mode trigger, debug trigger.
-  - Code: apps/server/src/triggers/*.ts
 - Memory: Memory node/connector or unified memory tool; supports connector placement and scopes.
-  - Code: apps/server/src/nodes/memory*.ts, apps/server/src/tools/memory/*
 - MCP: Local server inside workspace container with dynamic tool registration and re-sync; namespace-prefixed tool names; staleness timeout.
-  - Code: apps/server/src/mcp/*.ts
 
 Core data model and state
 - Graph
@@ -106,7 +94,7 @@ Performance and scale
 - Observability storage relies on Mongo; add indices on spans by nodeId, traceId, timestamps.
 
 Upgrade and migration
-- Graph store migration to Git: apps/server/scripts/migrate_graph_to_git.ts — idempotent.
+- Graph store migration to Git: use the provided migration script — idempotent.
   - Inputs: MONGODB_URL, GRAPH_REPO_PATH, GRAPH_BRANCH, author name/email, optional GRAPH_NAME filter.
   - Output: repo layout with format 2 files.
 - UI dependency on Mongo change streams remains until Postgres streaming is added.
@@ -152,7 +140,7 @@ Runbooks
   - Verify: curl http://localhost:3010/api/templates; open UI; connect socket to observe node_status when provisioning.
  - Docker Compose stack
   - Services: mongo, mongo-express, vault (auto-init), postgres, registry-mirror.
-  - Observability: This repo does not include Jaeger in compose. Use packages/obs-server (port 4319) and packages/obs-ui (port 4320) for observability. Quickstart:
+  - Observability: This repo does not include Jaeger in compose. Use the provided observability services (ports 4319 and 4320) for storage and UI. Quickstart:
     - `pnpm --filter @hautech/obs-server dev` (or build+start)
     - `pnpm --filter @hautech/obs-ui dev` (or build+start)
   - Vault init: vault/auto-init.sh populates root token/unseal keys; set VAULT_ENABLED=true and VAULT_ADDR/VAULT_TOKEN.

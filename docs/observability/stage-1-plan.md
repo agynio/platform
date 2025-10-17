@@ -13,17 +13,17 @@ Run server from sources
 - Endpoints: /healthz, /readyz, POST /v1/spans/upsert, GET /v1/spans, GET /v1/spans/:id, POST /v1/traces (JSON placeholder in Stage 1)
 
 Example package
-- `@hautech/obs-examples` contains PoC script under `src/poc.ts`.
+- Example scripts are provided to exercise the observability APIs.
 - Dev: `pnpm --filter @hautech/obs-examples dev`
 - Build + run: `pnpm --filter @hautech/obs-examples build && pnpm --filter @hautech/obs-examples start`
 - Env: `OBS_EXTENDED_ENDPOINT` (default http://localhost:4319)
 
 Linking from Builder UI (Activity panel)
-- The Builder UI (apps/ui) can deep-link to the Observability UI using `VITE_OBS_UI_BASE` (default http://localhost:4320).
+- The Builder UI can deep-link to the Observability UI using `VITE_OBS_UI_BASE` (default http://localhost:4320).
 - The Activity panel displays recent agent/tool spans for the selected node and links to `/trace/:traceId` on the Observability UI.
 - Ensure spans include `nodeId` so filtering is accurate.
 
 Scope
-- Obs server and UI live under packages (`@hautech/obs-server`, `@hautech/obs-ui`). Docker compose is optional/orthogonal to local dev and not required for Stage 1.
+- Observability services and UI are provided as separate components. Docker compose is optional/orthogonal to local dev and not required for Stage 1.
 
 The rest of the plan remains unchanged: minimal filters, status transitions, index strategy, and acceptance criteria.

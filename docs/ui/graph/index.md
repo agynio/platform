@@ -8,7 +8,7 @@ Data flow
 - Refer to docs/graph/status-updates.md for event shapes and sequencing.
 
 Configuration
-- API base URL precedence (from apps/ui/README.md):
+- API base URL precedence:
   1) VITE_API_BASE_URL
   2) API_BASE_URL (Node env)
   3) VITEST: '' (tests use relative URLs)
@@ -19,10 +19,5 @@ Related docs
 - docs/ui/config-views.md (custom config view registry)
 - docs/graph/status-updates.md (status event reference)
 
-Related code
-- apps/ui/src/lib/graph/templates.provider.tsx (provider)
-- apps/ui/src/lib/graph/api.ts (HTTP helpers)
-- apps/ui/src/lib/graph/socket.ts (socket wiring)
-- apps/ui/src/components/graph/* (panels and widgets)
-- apps/ui/README.md (environment configuration)
-
+Related concepts
+- Templates provider, HTTP helpers, socket wiring, and graph panels/widgets are part of the UI implementation.

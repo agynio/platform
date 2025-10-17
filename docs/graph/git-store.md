@@ -34,7 +34,7 @@ Working tree recovery
 - If working tree is partially written or corrupt, service falls back to last committed snapshot (HEAD) or the previous in-memory snapshot.
 
 Migration tool
-- apps/server/scripts/migrate_graph_to_git.ts migrates a Mongo-stored graph into the format:2 root layout.
+- Use the provided migration script to migrate a Mongo-stored graph into the format:2 root layout.
   - Inputs via env:
     - MONGODB_URL (default mongodb://localhost:27017/agents)
     - GRAPH_REPO_PATH (e.g., ./data/graph)
@@ -66,10 +66,8 @@ GRAPH_REPO_PATH='./data/graph' \
 GRAPH_BRANCH='graph-state' \
 GRAPH_AUTHOR_NAME='Graph Migrator' \
 GRAPH_AUTHOR_EMAIL='graph-migrator@example.com' \
-pnpm -w -F server tsx apps/server/scripts/migrate_graph_to_git.ts
+pnpm -w -F server tsx <migration script>
 ```
 
-Related code
-- apps/server/src/services/gitGraph.service.ts
-- apps/server/scripts/migrate_graph_to_git.ts
-- apps/server/src/index.ts (routes)
+Related behavior
+- Server manages persistence, routing, and error handling for the Git-backed store.

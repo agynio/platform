@@ -80,9 +80,8 @@ Sockets
   - Event `node_config`: `{ nodeId, config, dynamicConfig, version }` (emitted after successful /api/graph save with changes)
   - See docs/graph/status-updates.md and docs/ui/graph/index.md
 
-Related code
-- apps/server/src/index.ts (route handlers and socket events)
-- apps/server/src/services/gitGraph.service.ts (Git-backed store and error codes)
-- apps/server/src/services/graph.service.ts (Mongo-backed store)
-- apps/server/src/services/graph.guard.ts (MCP mutation guard)
-- apps/server/src/graph/errors.ts (GraphErrorCode)
+Notes
+- Route handlers surface structured errors and emit socket events on state changes.
+- The Git-backed store enforces deterministic edge IDs and advisory locking.
+- MCP mutation guard prevents unsafe changes to MCP commands.
+- Error codes align with the error envelope described above.
