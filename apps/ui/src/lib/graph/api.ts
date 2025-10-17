@@ -26,7 +26,11 @@ type TemplateName =
   | 'githubCloneRepoTool'
   | 'mcpServer'
   | 'finishTool'
-  | 'remindMeTool';
+  | 'remindMeTool'
+  | 'callAgentTool'
+  | 'debugTool'
+  | 'memory'
+  | 'memoryConnector';
 
 type ReferenceValue = { value: string; source?: 'static' | 'vault' };
 type EnvItem = { key: string; value: string; source?: 'static' | 'vault' };
@@ -42,6 +46,13 @@ function normalizeConfigByTemplate(template: TemplateName | string, cfg?: Record
       if ('workingDir' in c) delete (c as Record<string, unknown>).workingDir;
       // Remove fields no longer in schema
       delete (c as Record<string, unknown>).note; // FinishTool carryover
+      if (!c.image) delete (c as Record<string, unknown>).image; // optional
+      return c;
+    }
+    case 'callAgentTool': {
+      delete (c as Record<string, unknown>).target_agent;
+      const resp = (c as Record<string, unknown>).response as string | undefined;
+      if (resp && !['sync', 'async', 'ignore'].includes(resp)) (c as Record<string, unknown>).response = 'sync';
       return c;
     }
     case 'shellTool': {
@@ -53,6 +64,12 @@ function normalizeConfigByTemplate(template: TemplateName | string, cfg?: Record
       if (c.env && !Array.isArray(c.env) && typeof c.env === 'object') {
         c.env = Object.entries(c.env as Record<string, string>).map(([k, v]) => ({ key: k, value: v, source: 'static' } as EnvItem));
       }
+      return c;
+    }
+    case 'debugTool': {
+      (c as Record<string, unknown>).method = 'POST';
+      const p = (c as Record<string, unknown>).path as string | undefined;
+      if (p && !p.startsWith('/')) (c as Record<string, unknown>).path = '/' + p;
       return c;
     }
     case 'sendSlackMessageTool': {
@@ -93,6 +110,19 @@ function normalizeConfigByTemplate(template: TemplateName | string, cfg?: Record
     }
     case 'remindMeTool': {
       delete (c as Record<string, unknown>).maxActive;
+      return c;
+    }
+    case 'memory': {
+      delete (c as Record<string, unknown>).connection;
+      return c;
+    }
+    case 'memoryConnector': {
+      const placement = (c as Record<string, unknown>).placement as string | undefined;
+      if (placement && !['after_system', 'last_message'].includes(placement)) (c as Record<string, unknown>).placement = 'after_system';
+      const content = (c as Record<string, unknown>).content as string | undefined;
+      if (content && !['full', 'tree'].includes(content)) (c as Record<string, unknown>).content = 'tree';
+      const mc = (c as Record<string, unknown>).maxChars as number | undefined;
+      if (typeof mc === 'number' && mc > 20000) (c as Record<string, unknown>).maxChars = 20000;
       return c;
     }
     default:

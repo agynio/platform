@@ -18,7 +18,6 @@ export default function ShellToolConfigView({ value, onChange, readOnly, disable
 
   useEffect(() => {
     const errors: string[] = [];
-    if (!workdir) errors.push('workdir is required');
     const inRange = (v: number) => v === 0 || (Number.isInteger(v) && v >= 1000 && v <= 86400000);
     if (!inRange(executionTimeoutMs)) errors.push('executionTimeoutMs must be 0 or 1000-86400000');
     if (!inRange(idleTimeoutMs)) errors.push('idleTimeoutMs must be 0 or 1000-86400000');

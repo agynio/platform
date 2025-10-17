@@ -5,7 +5,7 @@ import ReferenceEnvField, { type EnvItem } from './shared/ReferenceEnvField';
 
 export default function ContainerProviderConfigView({ value, onChange, readOnly, disabled, onValidate }: StaticConfigViewProps) {
   const init = useMemo(() => ({ ...(value || {}) }), [value]);
-  const [image, setImage] = useState<string>((init.image as string) || 'alpine:3');
+  const [image, setImage] = useState<string>((init.image as string) || '');
   const [env, setEnv] = useState<EnvItem[]>((init.env as EnvItem[]) || []);
   const [initialScript, setInitialScript] = useState<string>((init.initialScript as string) || '');
   const [platform, setPlatform] = useState<string>((init.platform as string) || '');
@@ -16,20 +16,27 @@ export default function ContainerProviderConfigView({ value, onChange, readOnly,
 
   useEffect(() => {
     const errors: string[] = [];
-    if (!image) errors.push('image is required');
     onValidate?.(errors);
   }, [image, onValidate]);
 
   useEffect(() => {
-    onChange({ ...value, image, env, initialScript: initialScript || undefined, platform: platform || undefined, enableDinD, ttlSeconds });
+    onChange({
+      ...value,
+      image: image || undefined,
+      env,
+      initialScript: initialScript || undefined,
+      platform: platform || undefined,
+      enableDinD,
+      ttlSeconds,
+    });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [image, JSON.stringify(env), initialScript, platform, enableDinD, ttlSeconds]);
 
   return (
     <div className="space-y-3 text-sm">
       <div>
-        <label htmlFor="image" className="block text-xs mb-1">Image</label>
-        <Input id="image" value={image} onChange={(e) => setImage(e.target.value)} disabled={isDisabled} />
+        <label htmlFor="image" className="block text-xs mb-1">Image (optional)</label>
+        <Input id="image" value={image} onChange={(e) => setImage(e.target.value)} disabled={isDisabled} placeholder="e.g., alpine:3" />
       </div>
       <div>
         <div className="text-xs mb-1">Environment</div>
