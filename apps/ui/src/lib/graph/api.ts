@@ -1,4 +1,4 @@
-import type { NodeStatus, TemplateSchema, ReminderDTO } from './types';
+import type { NodeStatus, TemplateSchema, ReminderDTO, PersistedGraphUpsertRequestUI } from './types';
 import { buildUrl, httpJson } from '../apiClient';
 
 // Minimal graph type (align with backend PersistedGraphUpsertRequest shape)
@@ -27,6 +27,8 @@ function normalizeConfigByTemplate(template: string, cfg?: Record<string, unknow
         c.env = Object.entries(c.env as Record<string, string>).map(([k, v]) => ({ key: k, value: v, source: 'static' }));
       }
       if ('workingDir' in c) delete (c as any).workingDir;
+      // Remove fields no longer in schema
+      delete (c as any).note; // FinishTool carryover
       return c;
     }
     case 'shellTool': {
@@ -42,13 +44,16 @@ function normalizeConfigByTemplate(template: string, cfg?: Record<string, unknow
     case 'sendSlackMessageTool': {
       const t = c.bot_token as any;
       if (typeof t === 'string') c.bot_token = { value: t, source: 'static' };
+      // Remove extras
+      delete (c as any).note;
       return c;
     }
     case 'slackTrigger': {
       const at = (c as any).app_token;
-      const bt = (c as any).bot_token;
       if (typeof at === 'string') (c as any).app_token = { value: at, source: 'static' };
-      if (typeof bt === 'string') (c as any).bot_token = { value: bt, source: 'static' };
+      // Remove fields not in staticConfig
+      delete (c as any).bot_token;
+      delete (c as any).default_channel;
       return c;
     }
     case 'githubCloneRepoTool': {
@@ -63,6 +68,17 @@ function normalizeConfigByTemplate(template: string, cfg?: Record<string, unknow
       if (c.env && !Array.isArray(c.env) && typeof c.env === 'object') {
         c.env = Object.entries(c.env as Record<string, string>).map(([k, v]) => ({ key: k, value: v, source: 'static' }));
       }
+      // Remove omitted fields per review
+      delete (c as any).image;
+      delete (c as any).toolDiscoveryTimeoutMs;
+      return c;
+    }
+    case 'finishTool': {
+      delete (c as any).note;
+      return c;
+    }
+    case 'remindMeTool': {
+      delete (c as any).maxActive;
       return c;
     }
     default:
@@ -137,10 +153,13 @@ export const api = {
     const normalized = {
       ...graph,
       nodes: graph.nodes.map((n) => ({ ...n, config: normalizeConfigByTemplate(n.template, n.config) })),
-    };
+    } as PersistedGraphUpsertRequestUI;
     return httpJson<PersistedGraphUpsertRequestUI & { version: number; updatedAt: string }>(`/api/graph`, {
       method: 'POST',
       body: JSON.stringify(normalized),
     });
   },
 };
+
+// expose for tests
+(api as any).__test_normalize = normalizeConfigByTemplate;

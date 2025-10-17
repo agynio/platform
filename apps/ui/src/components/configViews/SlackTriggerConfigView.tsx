@@ -1,53 +1,41 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Input } from '@hautech/ui';
 import type { StaticConfigViewProps } from './types';
-import ReferenceField from './shared/ReferenceField';
+import ReferenceField, { type ReferenceValue } from './shared/ReferenceField';
+
+function isVaultRef(v: string) {
+  return /^([^\/]+)\/([^\/]+)\/([^\/]+)$/.test(v || '');
+}
 
 export default function SlackTriggerConfigView({ value, onChange, readOnly, disabled, onValidate }: StaticConfigViewProps) {
   const init = useMemo(() => ({ ...(value || {}) }), [value]);
-  const [app_token, setAppToken] = useState<{ value: string; source?: 'static' | 'vault' } | string>((init.app_token as any) || '');
-  const [bot_token, setBotToken] = useState<{ value: string; source?: 'static' | 'vault' } | string>((init.bot_token as any) || '');
-  const [default_channel, setDefaultChannel] = useState<string>((init.default_channel as string) || '');
-  const isDisabled = !!readOnly || !!disabled;
+  const [app_token, setAppToken] = useState<ReferenceValue | string>((init.app_token as any) || '');
 
   useEffect(() => {
     const errors: string[] = [];
-    if (!app_token) errors.push('app_token is required');
-    if (!bot_token) errors.push('bot_token is required');
+    const at = typeof app_token === 'string' ? { value: app_token, source: 'static' as const } : (app_token as ReferenceValue);
+    if ((at.value || '').length === 0) errors.push('app_token is required');
+    if ((at.source || 'static') === 'static' && at.value && !at.value.startsWith('xapp-')) errors.push('app_token must start with xapp-');
+    if ((at.source || 'static') === 'vault' && at.value && !isVaultRef(at.value)) errors.push('app_token vault ref must be mount/path/key');
     onValidate?.(errors);
-  }, [app_token, bot_token, onValidate]);
+  }, [app_token, onValidate]);
 
   useEffect(() => {
-    const at = typeof app_token === 'string' ? { value: app_token, source: 'static' as const } : (app_token as any);
-    const bt = typeof bot_token === 'string' ? { value: bot_token, source: 'static' as const } : (bot_token as any);
-    onChange({ ...value, app_token: at, bot_token: bt, default_channel });
+    const at = typeof app_token === 'string' ? { value: app_token, source: 'static' as const } : (app_token as ReferenceValue);
+    onChange({ ...value, app_token: at });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [app_token, bot_token, default_channel]);
+  }, [app_token]);
 
   return (
     <div className="space-y-3 text-sm">
       <ReferenceField
         label="App token"
         value={app_token as any}
-        onChange={setAppToken as any}
+        onChange={(v) => setAppToken(v)}
         readOnly={readOnly}
         disabled={disabled}
         placeholder="xapp-... or mount/path/key"
-        helpText="Use source=vault to reference a secret as mount/path/key."
+        helpText="Use source=vault to reference a secret as mount/path/key. Must start with xapp- for static."
       />
-      <ReferenceField
-        label="Bot token"
-        value={bot_token as any}
-        onChange={setBotToken as any}
-        readOnly={readOnly}
-        disabled={disabled}
-        placeholder="xoxb-... or mount/path/key"
-        helpText="Use source=vault to reference a secret as mount/path/key."
-      />
-      <div>
-        <label className="block text-xs mb-1">Default channel</label>
-        <Input value={default_channel} onChange={(e) => setDefaultChannel(e.target.value)} disabled={isDisabled} placeholder="#general or C123" />
-      </div>
     </div>
   );
 }

@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Button, Input, Label } from '@hautech/ui';
 
 export type EnvItem = { key: string; value: string; source?: 'static' | 'vault' };
@@ -19,25 +19,28 @@ function toArray(v?: EnvItem[] | Record<string, string>): EnvItem[] {
   return Object.entries(v).map(([k, val]) => ({ key: k, value: val as string, source: 'static' as const }));
 }
 
+function isVaultRef(v: string) {
+  return /^([^\/]+)\/([^\/]+)\/([^\/]+)$/.test(v || '');
+}
+
 export default function ReferenceEnvField({ label, value, onChange, readOnly, disabled, addLabel = 'Add env', onValidate }: ReferenceEnvFieldProps) {
   const [items, setItems] = useState<EnvItem[]>(toArray(value));
 
   const isDisabled = !!readOnly || !!disabled;
 
-  const validate = useCallback(
-    (list: EnvItem[]) => {
-      const errors: string[] = [];
-      const seen = new Set<string>();
-      for (const it of list) {
-        const k = (it.key || '').trim();
-        if (!k) errors.push('env key is required');
-        if (seen.has(k)) errors.push(`duplicate env key: ${k}`);
-        if (k) seen.add(k);
-      }
-      onValidate?.(errors);
-    },
-    [onValidate],
-  );
+  const validate = useCallback((list: EnvItem[]) => {
+    const errors: string[] = [];
+    const seen = new Set<string>();
+    for (const it of list) {
+      const k = (it.key || '').trim();
+      if (!k) errors.push('env key is required');
+      if (seen.has(k)) errors.push(`duplicate env key: ${k}`);
+      if (k) seen.add(k);
+      const src = (it.source || 'static');
+      if (src === 'vault' && it.value && !isVaultRef(it.value)) errors.push(`env ${k || '(blank)'} vault ref must be mount/path/key`);
+    }
+    onValidate?.(errors);
+  }, [onValidate]);
 
   const commit = useCallback(
     (list: EnvItem[]) => {
@@ -117,4 +120,3 @@ export default function ReferenceEnvField({ label, value, onChange, readOnly, di
     </div>
   );
 }
-

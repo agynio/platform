@@ -1,12 +1,12 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Input } from '@hautech/ui';
 import type { StaticConfigViewProps } from './types';
-import ReferenceEnvField from './shared/ReferenceEnvField';
+import ReferenceEnvField, { type EnvItem } from './shared/ReferenceEnvField';
 
 export default function ContainerProviderConfigView({ value, onChange, readOnly, disabled, onValidate }: StaticConfigViewProps) {
   const init = useMemo(() => ({ ...(value || {}) }), [value]);
   const [image, setImage] = useState<string>((init.image as string) || 'alpine:3');
-  const [env, setEnv] = useState<any>((init.env as any) || []);
+  const [env, setEnv] = useState<EnvItem[]>((init.env as EnvItem[]) || []);
   const [initialScript, setInitialScript] = useState<string>((init.initialScript as string) || '');
   const [platform, setPlatform] = useState<string>((init.platform as string) || '');
   const [enableDinD, setEnableDinD] = useState<boolean>(!!init.enableDinD);
@@ -33,7 +33,7 @@ export default function ContainerProviderConfigView({ value, onChange, readOnly,
       </div>
       <div>
         <div className="text-xs mb-1">Environment</div>
-        <ReferenceEnvField value={env as any} onChange={setEnv} readOnly={readOnly} disabled={disabled} addLabel="Add env" />
+        <ReferenceEnvField value={env} onChange={setEnv} readOnly={readOnly} disabled={disabled} addLabel="Add env" onValidate={onValidate} />
       </div>
       <div>
         <label className="block text-xs mb-1">Initial script (optional)</label>

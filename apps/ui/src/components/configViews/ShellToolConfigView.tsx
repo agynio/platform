@@ -1,12 +1,12 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Input } from '@hautech/ui';
 import type { StaticConfigViewProps } from './types';
-import ReferenceEnvField from './shared/ReferenceEnvField';
+import ReferenceEnvField, { type EnvItem } from './shared/ReferenceEnvField';
 
 export default function ShellToolConfigView({ value, onChange, readOnly, disabled, onValidate }: StaticConfigViewProps) {
   const init = useMemo(() => ({ ...(value || {}) }), [value]);
   const [workdir, setWorkdir] = useState<string>((init.workdir as string) || (init.workingDir as string) || '/workspace');
-  const [env, setEnv] = useState<any>((init.env as any) || []);
+  const [env, setEnv] = useState<EnvItem[]>((init.env as EnvItem[]) || []);
   const [executionTimeoutMs, setExecutionTimeoutMs] = useState<number>(
     typeof init.executionTimeoutMs === 'number' ? (init.executionTimeoutMs as number) : 60 * 60 * 1000,
   );
@@ -38,7 +38,7 @@ export default function ShellToolConfigView({ value, onChange, readOnly, disable
       </div>
       <div>
         <div className="text-xs mb-1">Environment</div>
-        <ReferenceEnvField value={env as any} onChange={setEnv} readOnly={readOnly} disabled={disabled} addLabel="Add env" />
+        <ReferenceEnvField value={env} onChange={setEnv} readOnly={readOnly} disabled={disabled} addLabel="Add env" onValidate={onValidate} />
       </div>
       <div className="grid grid-cols-2 gap-2">
         <div>
