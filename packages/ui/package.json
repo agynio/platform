@@ -45,6 +45,8 @@
     "@radix-ui/react-alert-dialog": ">=1.0.0",
     "@radix-ui/react-avatar": ">=1.0.0",
     "@radix-ui/react-progress": ">=1.0.0",
+    "@radix-ui/react-checkbox": ">=1.0.0",
+    "@radix-ui/react-radio-group": ">=1.0.0",
     "lucide-react": ">=0.3.0"
   },
   "devDependencies": {
@@ -72,6 +74,8 @@
     "@radix-ui/react-alert-dialog": "^1.1.7",
     "@radix-ui/react-avatar": "^1.1.2",
     "@radix-ui/react-progress": "^1.1.2",
+    "@radix-ui/react-checkbox": "^1.1.2",
+    "@radix-ui/react-radio-group": "^1.1.2",
     "cmdk": "^1.0.0",
     "embla-carousel-react": "^8.3.0",
     "input-otp": "^1.2.5",
