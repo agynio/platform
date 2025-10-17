@@ -2,7 +2,7 @@
 
 Transport: socket.io
 
-- Namespace: /graph
+- Socket: default namespace (no custom path)
 - Event: node_status
 - Payload:
   {
@@ -14,15 +14,15 @@ Transport: socket.io
   }
 
 Client guidance
-- Connect to the /graph namespace and subscribe to `node_status`.
+- Connect to the default namespace and subscribe to `node_status`.
 - Server emits `node_status` for relevant changes: pause/resume, provision status updates, dynamic-config readiness.
 - Initial render can still use HTTP GET /graph/nodes/:nodeId/status; subsequent updates should come via socket.io push.
 
 Example (client)
 
-const socket = io('/graph');
+const socket = io();
 socket.on('connect', () => {
-  console.log('connected to graph namespace');
+  console.log('connected to default namespace');
   // Optionally subscribe to a room per graph or node
 });
 
@@ -34,6 +34,10 @@ socket.on('node_status', (payload) => {
 Notes
 - HTTP endpoints remain for actions (pause/resume, provision/deprovision) and configuration updates.
 - Remove any polling loops (e.g., 2s intervals) for status; rely on socket events.
+
+Config persistence
+- Graph configuration changes persist via POST /api/graph (full-graph updates).
+- The per-node dynamic-config save endpoint was removed; only the schema endpoint remains for rendering purposes.
 
 ## Template Capabilities & Static Config (Updated)
 

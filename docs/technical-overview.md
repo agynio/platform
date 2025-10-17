@@ -5,14 +5,10 @@ This document provides a comprehensive, developer-focused overview of the Agents
 Table of contents
 - Project Overview
 - High-Level Architecture
-- File & Directory Organization
-- Code Patterns & Conventions
-- Unique Details & Domain Logic
 - Key Flows
 - Configuration & Dependencies
 - How to Develop & Test
 - Conversation summarization
-- How to Extend & Contribute
 - Security & Ops Notes
 - Glossary
 
@@ -25,13 +21,11 @@ Table of contents
 - Pipeline phases:
   - Persisted graph fetch/validate -> Live graph apply (diff) -> Runtime execution (triggers -> agent graph -> tools) -> Checkpoint stream.
   - Parallelism: Graph diff/apply serializes graph mutations (to keep consistency), while operations inside nodes/tools (e.g., tool execution, network IO) run concurrently.
-- Primary entry points:
-  - Server bootstrap: apps/server/src/index.ts
-  - Live graph runtime: apps/server/src/graph/liveGraph.manager.ts (class LiveGraphRuntime)
-  - Template registry: apps/server/src/templates.ts (buildTemplateRegistry)
-  - Triggers: apps/server/src/triggers
-  - Tools: apps/server/src/tools
-  - MCP: apps/server/src/mcp
+- Notes on implementation entry points:
+  - Server bootstrap initializes routes and sockets.
+  - Live graph runtime manages diffs and reversible edges.
+  - Template registry provides factories, ports, and schemas.
+  - Triggers, tools, and MCP compose the runtime surface.
 
 2. High-Level Architecture
 Design principles
@@ -42,14 +36,14 @@ Design principles
 - Container isolation per thread: Tools and MCP operations run in per-thread containers to isolate state.
 
 Layers
-- Application server (apps/server/src/index.ts): wires services, loads persisted graph, exposes minimal REST (templates/graph) and a Socket.IO stream for checkpoints.
-- Graph runtime (apps/server/src/graph/*): live diff/apply engine (LiveGraphRuntime) enforcing reversible edges via PortsRegistry and TemplateRegistry wiring.
-- Templates (apps/server/src/templates.ts): declarative registration of node factories and their ports.
-- Triggers (apps/server/src/triggers/*): external event sources (Slack, PR polling) that push messages into agents.
-- Nodes (apps/server/src/nodes/*): graph components like LLM invocation (CallModelNode, MemoryCallModelNode, ToolsNode).
-- Tools (apps/server/src/tools/*): actions callable by the LLM (bash, GitHub clone, Slack message) and adapters.
-- MCP (apps/server/src/mcp/*): LocalMCPServer and DockerExecTransport.
-- Services (apps/server/src/services/*): infra clients and helpers (config, docker container provision, Mongo, Slack, GitHub, checkpointer, sockets).
+- Application server: wires services, loads persisted graph, exposes minimal REST (templates/graph) and a Socket.IO stream for checkpoints.
+- Graph runtime: live diff/apply engine enforcing reversible edges via ports and template registries.
+- Templates: declarative registration of node factories and their ports.
+- Triggers: external event sources (Slack, PR polling) that push messages into agents.
+- Nodes: graph components like LLM invocation and memory.
+- Tools: actions callable by the LLM (bash, GitHub clone, Slack message) and adapters.
+- MCP: local server inside a workspace container with transport over docker exec.
+- Services: infra clients and helpers (config, docker container provision, Mongo, Slack, GitHub, checkpointer, sockets).
 
 Workspace container platform
 - containerProvider.staticConfig.platform: Optional; enum of `linux/amd64` or `linux/arm64`.

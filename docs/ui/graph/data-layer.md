@@ -1,11 +1,11 @@
 # Data layer: API, hooks, socket
 
-Files
-- apps/ui/src/lib/graph/api.ts – REST client
-- apps/ui/src/lib/graph/socket.ts – socket.io client wrapper
-- apps/ui/src/lib/graph/hooks.ts – React Query hooks
-- apps/ui/src/lib/graph/templates.provider.tsx – Templates cache provider
-- apps/ui/src/lib/graph/capabilities.ts – Capability helpers
+Overview
+- REST client for graph endpoints
+- Socket client wrapper for realtime updates
+- React Query hooks for data fetching/mutations
+- Templates cache provider
+- Capability helpers for conditional UI
 
 API client usage
 ```ts
@@ -37,7 +37,7 @@ function Node({ nodeId }: { nodeId: string }) {
 ```
 
 Socket client
-- graph/socket.ts wraps socket.io-client and exposes onNodeStatus(nodeId, cb)
+- The socket client wraps socket.io-client and exposes onNodeStatus(nodeId, cb)
 - useNodeStatus registers a listener and sets React Query cache on events
 - useNodeAction applies optimistic updates and rolls back on errors; socket events reconcile authoritative state
 

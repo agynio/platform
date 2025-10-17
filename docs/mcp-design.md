@@ -11,7 +11,7 @@ We integrate a Model Context Protocol (MCP) server that runs *inside a Docker co
 2. **Line-Oriented Protocol**: We rely on MCP servers emitting one JSON-RPC message per line. No `Content-Length` framing implemented for now—keeps implementation simple and matches the current SDK `ReadBuffer` expectations.
 3. **Namespace Tool Registration**: Tools from each MCP server are registered into the agent with the prefix `<namespace>:<toolName>` to prevent collisions.
 4. **Minimal Local Type for JSONRPCMessage**: Due to path / export constraints under `nodenext` resolution we defined a structural `JSONRPCMessage` type locally instead of deep-importing SDK internals; this can be replaced later.
-5. **Heartbeat & Resilience (Planned)**: A periodic `ping` (using `client.ping()`) detects liveness. On failure we will attempt a controlled restart (future enhancement stubbed in design).
+5. **Heartbeat & Resilience (Implemented)**: The client maintains liveness with periodic `ping` and enforces timeouts. On failure it triggers a controlled restart with backoff per config.
 
 ## Components
 - `ContainerService.openInteractiveExec(...)` (added): Creates a long-lived interactive exec suitable for protocols.
@@ -26,14 +26,20 @@ We integrate a Model Context Protocol (MCP) server that runs *inside a Docker co
 4. When the model calls a tool, the dynamic wrapper invokes `server.callTool()` which issues `tools/call` via JSON-RPC.
 5. Responses are validated by SDK (output schema) and returned to the tool wrapper, then to the agent graph.
 
-## Restart Strategy (Future)
-- Maintain `restartAttempts` with exponential/backoff (configurable: `restart.maxAttempts`, `restart.backoffMs`).
-- On transport `onclose` unexpectedly: schedule restart unless attempts exceeded.
+## Resilience & Restart Strategy
+- Timeouts and heartbeats are configurable on the server config:
+  - `requestTimeoutMs`: per-request timeout for MCP JSON-RPC calls.
+  - `startupTimeoutMs`: time allowed for initial `initialize`/discovery before giving up.
+  - `heartbeatIntervalMs`: interval for periodic `ping` to verify liveness.
+  - `staleTimeoutMs`: if no heartbeat/traffic is observed within this window, consider the session stale and restart.
+  - `restart.maxAttempts`: maximum restart attempts before surfacing a terminal error.
+  - `restart.backoffMs`: fixed backoff between restart attempts (may evolve to exponential).
+- Discovery path is single and consistent; per-call tool sessions are ephemeral execs created for each invocation.
 
 ## Limitations
 - Only newline-delimited JSON is supported. If a server uses `Content-Length` framing, a framing layer must be added.
 - No streaming tool output segmentation implemented (tool results assumed to fit in memory). Future enhancement: progressive `notifications/progress` handling.
-- No multiple-session multiplex; one MCP session per server instance.
+- No multiple-session multiplex; one MCP session per server instance. Per-call tool sessions are isolated ephemeral execs.
 
 ## Error surfacing and formatting
 - Structured errors: When an MCP tool call fails, we prefer messages from `structuredContent` in this order: `message` > string `error` > nested `error.message` > `detail`. We also surface common code fields (`code|errorCode|statusCode`) and boolean-like retriable flags (`retriable|retryable`, including string/number forms) in a compact suffix, e.g. "(code=E_TIMEOUT retriable=false)".
@@ -58,4 +64,4 @@ We integrate a Model Context Protocol (MCP) server that runs *inside a Docker co
 If the upstream SDK later exposes a generic transport interface accepting arbitrary duplex streams, we can replace `DockerExecTransport` with that and remove inline serialization logic.
 
 ---
-*Last updated: 2025-09-21*
+*Last updated: 2025-10-17*
