@@ -14,7 +14,8 @@ describe('ContainerProviderConfigView payload', () => {
         disabled={false}
       />,
     );
-    const img = screen.getByLabelText('Image') as HTMLInputElement;
+    // Be resilient to optional markers like "(optional)" in label text
+    const img = screen.getByLabelText(/Image/i) as HTMLInputElement;
     fireEvent.change(img, { target: { value: 'node:20' } });
     fireEvent.click(screen.getByText('Add env'));
     fireEvent.change(screen.getByTestId('env-key-0'), { target: { value: 'A' } });
