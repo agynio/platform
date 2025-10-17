@@ -3,12 +3,14 @@ import type { StaticConfigViewProps } from './types';
 import ReferenceField, { type ReferenceValue } from './shared/ReferenceField';
 
 function isVaultRef(v: string) {
-  return /^([^\/]+)\/([^\/]+)\/([^\/]+)$/.test(v || '');
+  // Expect mount/path/key
+  return /^(?:[^/]+)\/(?:[^/]+)\/(?:[^/]+)$/.test(v || '');
 }
 
 export default function SlackTriggerConfigView({ value, onChange, readOnly, disabled, onValidate }: StaticConfigViewProps) {
   const init = useMemo(() => ({ ...(value || {}) }), [value]);
-  const [app_token, setAppToken] = useState<ReferenceValue | string>((init.app_token as any) || '');
+  type Cfg = { app_token?: ReferenceValue | string };
+  const [app_token, setAppToken] = useState<ReferenceValue | string>(((init as unknown as Cfg).app_token) || '');
 
   useEffect(() => {
     const errors: string[] = [];
@@ -29,7 +31,7 @@ export default function SlackTriggerConfigView({ value, onChange, readOnly, disa
     <div className="space-y-3 text-sm">
       <ReferenceField
         label="App token"
-        value={app_token as any}
+        value={app_token}
         onChange={(v) => setAppToken(v)}
         readOnly={readOnly}
         disabled={disabled}

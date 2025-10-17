@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useState } from 'react';
 import { Button, Input, Label } from '@hautech/ui';
 
 export type EnvItem = { key: string; value: string; source?: 'static' | 'vault' };
@@ -20,7 +20,8 @@ function toArray(v?: EnvItem[] | Record<string, string>): EnvItem[] {
 }
 
 function isVaultRef(v: string) {
-  return /^([^\/]+)\/([^\/]+)\/([^\/]+)$/.test(v || '');
+  // Expect mount/path/key
+  return /^(?:[^/]+)\/(?:[^/]+)\/(?:[^/]+)$/.test(v || '');
 }
 
 export default function ReferenceEnvField({ label, value, onChange, readOnly, disabled, addLabel = 'Add env', onValidate }: ReferenceEnvFieldProps) {

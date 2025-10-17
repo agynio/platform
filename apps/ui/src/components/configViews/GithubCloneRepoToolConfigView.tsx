@@ -3,12 +3,20 @@ import type { StaticConfigViewProps } from './types';
 import ReferenceField, { type ReferenceValue } from './shared/ReferenceField';
 
 function isVaultRef(v: string) {
-  return /^([^\/]+)\/([^\/]+)\/([^\/]+)$/.test(v || '');
+  // Expect mount/path/key with no leading slash
+  return /^(?:[^/]+)\/(?:[^/]+)\/(?:[^/]+)$/.test(v || '');
 }
 
 export default function GithubCloneRepoToolConfigView({ value, onChange, readOnly, disabled }: StaticConfigViewProps) {
   const init = useMemo(() => ({ ...(value || {}) }), [value]);
-  const [token, setToken] = useState<ReferenceValue | string>((init.token as any) || '');
+  type Cfg = { token?: ReferenceValue | string };
+  const initialToken = (() => {
+    const t = (init as unknown as Cfg).token;
+    if (!t) return '';
+    if (typeof t === 'string') return t;
+    return t;
+  })();
+  const [token, setToken] = useState<ReferenceValue | string>(initialToken);
   const [errors, setErrors] = useState<string[]>([]);
 
   useEffect(() => {
@@ -24,7 +32,7 @@ export default function GithubCloneRepoToolConfigView({ value, onChange, readOnl
     <div className="space-y-3 text-sm">
       <ReferenceField
         label="GitHub token (optional)"
-        value={token as any}
+        value={token}
         onChange={(v) => setToken(v)}
         readOnly={readOnly}
         disabled={disabled}

@@ -18,67 +18,81 @@ function isLikelyJsonSchemaRoot(obj: unknown): obj is Record<string, unknown> {
 }
 
 // Normalize legacy UI config shapes to server-aligned templates
-function normalizeConfigByTemplate(template: string, cfg?: Record<string, unknown>): Record<string, unknown> | undefined {
+type TemplateName =
+  | 'containerProvider'
+  | 'shellTool'
+  | 'sendSlackMessageTool'
+  | 'slackTrigger'
+  | 'githubCloneRepoTool'
+  | 'mcpServer'
+  | 'finishTool'
+  | 'remindMeTool';
+
+type ReferenceValue = { value: string; source?: 'static' | 'vault' };
+type EnvItem = { key: string; value: string; source?: 'static' | 'vault' };
+
+function normalizeConfigByTemplate(template: TemplateName | string, cfg?: Record<string, unknown>): Record<string, unknown> | undefined {
   if (!cfg || typeof cfg !== 'object') return cfg;
   const c = { ...(cfg as Record<string, unknown>) };
   switch (template) {
     case 'containerProvider': {
       if (c.env && !Array.isArray(c.env) && typeof c.env === 'object') {
-        c.env = Object.entries(c.env as Record<string, string>).map(([k, v]) => ({ key: k, value: v, source: 'static' }));
+        c.env = Object.entries(c.env as Record<string, string>).map(([k, v]) => ({ key: k, value: v, source: 'static' } as EnvItem));
       }
-      if ('workingDir' in c) delete (c as any).workingDir;
+      if ('workingDir' in c) delete (c as Record<string, unknown>).workingDir;
       // Remove fields no longer in schema
-      delete (c as any).note; // FinishTool carryover
+      delete (c as Record<string, unknown>).note; // FinishTool carryover
       return c;
     }
     case 'shellTool': {
-      if ((c as any).workingDir && !(c as any).workdir) {
-        (c as any).workdir = (c as any).workingDir;
-        delete (c as any).workingDir;
+      const rc = c as Record<string, unknown>;
+      if (typeof rc.workingDir !== 'undefined' && typeof rc.workdir === 'undefined') {
+        rc.workdir = rc.workingDir as unknown;
+        delete rc.workingDir;
       }
       if (c.env && !Array.isArray(c.env) && typeof c.env === 'object') {
-        c.env = Object.entries(c.env as Record<string, string>).map(([k, v]) => ({ key: k, value: v, source: 'static' }));
+        c.env = Object.entries(c.env as Record<string, string>).map(([k, v]) => ({ key: k, value: v, source: 'static' } as EnvItem));
       }
       return c;
     }
     case 'sendSlackMessageTool': {
-      const t = c.bot_token as any;
-      if (typeof t === 'string') c.bot_token = { value: t, source: 'static' };
+      const t = (c as Record<string, unknown>)['bot_token'];
+      if (typeof t === 'string') (c as Record<string, unknown>)['bot_token'] = { value: t, source: 'static' } as ReferenceValue;
       // Remove extras
-      delete (c as any).note;
+      delete (c as Record<string, unknown>).note;
       return c;
     }
     case 'slackTrigger': {
-      const at = (c as any).app_token;
-      if (typeof at === 'string') (c as any).app_token = { value: at, source: 'static' };
+      const at = (c as Record<string, unknown>)['app_token'];
+      if (typeof at === 'string') (c as Record<string, unknown>)['app_token'] = { value: at, source: 'static' } as ReferenceValue;
       // Remove fields not in staticConfig
-      delete (c as any).bot_token;
-      delete (c as any).default_channel;
+      delete (c as Record<string, unknown>).bot_token;
+      delete (c as Record<string, unknown>).default_channel;
       return c;
     }
     case 'githubCloneRepoTool': {
-      const token = (c as any).token;
-      if (typeof token === 'string') (c as any).token = { value: token, source: 'static' };
-      delete (c as any).repoUrl;
-      delete (c as any).destPath;
-      delete (c as any).authToken;
+      const token = (c as Record<string, unknown>)['token'];
+      if (typeof token === 'string') (c as Record<string, unknown>)['token'] = { value: token, source: 'static' } as ReferenceValue;
+      delete (c as Record<string, unknown>).repoUrl;
+      delete (c as Record<string, unknown>).destPath;
+      delete (c as Record<string, unknown>).authToken;
       return c;
     }
     case 'mcpServer': {
       if (c.env && !Array.isArray(c.env) && typeof c.env === 'object') {
-        c.env = Object.entries(c.env as Record<string, string>).map(([k, v]) => ({ key: k, value: v, source: 'static' }));
+        c.env = Object.entries(c.env as Record<string, string>).map(([k, v]) => ({ key: k, value: v, source: 'static' } as EnvItem));
       }
       // Remove omitted fields per review
-      delete (c as any).image;
-      delete (c as any).toolDiscoveryTimeoutMs;
+      delete (c as Record<string, unknown>).image;
+      delete (c as Record<string, unknown>).toolDiscoveryTimeoutMs;
       return c;
     }
     case 'finishTool': {
-      delete (c as any).note;
+      delete (c as Record<string, unknown>).note;
       return c;
     }
     case 'remindMeTool': {
-      delete (c as any).maxActive;
+      delete (c as Record<string, unknown>).maxActive;
       return c;
     }
     default:
@@ -161,5 +175,5 @@ export const api = {
   },
 };
 
-// expose for tests
-(api as any).__test_normalize = normalizeConfigByTemplate;
+// expose for tests without using `any`
+Object.defineProperty(api, '__test_normalize', { value: normalizeConfigByTemplate });

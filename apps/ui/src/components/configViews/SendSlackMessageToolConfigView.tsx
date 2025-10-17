@@ -4,13 +4,16 @@ import type { StaticConfigViewProps } from './types';
 import ReferenceField, { type ReferenceValue } from './shared/ReferenceField';
 
 function isVaultRef(v: string) {
-  return /^([^\/]+)\/([^\/]+)\/([^\/]+)$/.test(v || '');
+  // Expect mount/path/key
+  return /^(?:[^/]+)\/(?:[^/]+)\/(?:[^/]+)$/.test(v || '');
 }
 
 export default function SendSlackMessageToolConfigView({ value, onChange, readOnly, disabled, onValidate }: StaticConfigViewProps) {
   const init = useMemo(() => ({ ...(value || {}) }), [value]);
   const [default_channel, setDefaultChannel] = useState<string>((init.default_channel as string) || '');
-  const [bot_token, setBotToken] = useState<ReferenceValue | string>((init.bot_token as any) || '');
+  type Cfg = { bot_token?: ReferenceValue | string; default_channel?: string };
+  const initCfg = init as unknown as Cfg;
+  const [bot_token, setBotToken] = useState<ReferenceValue | string>(initCfg.bot_token || '');
   const [errors, setErrors] = useState<string[]>([]);
   const isDisabled = !!readOnly || !!disabled;
 
@@ -34,7 +37,7 @@ export default function SendSlackMessageToolConfigView({ value, onChange, readOn
     <div className="space-y-3 text-sm">
       <ReferenceField
         label="Bot token"
-        value={bot_token as any}
+        value={bot_token}
         onChange={(v) => setBotToken(v)}
         readOnly={readOnly}
         disabled={disabled}
