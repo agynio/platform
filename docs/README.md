@@ -15,7 +15,7 @@ Index
   - Status Updates: [graph/status-updates.md](graph/status-updates.md)
 - Containers
   - Workspaces: [containers/workspaces.md](containers/workspaces.md)
-  - Env Overlays: [config/env-overlays.md](../docs/config/env-overlays.md)
+  - Env Overlays: [config/env-overlays.md](config/env-overlays.md)
 - Observability
   - Overview: [observability/index.md](observability/index.md)
   - Heartbeats and Sweeper: [observability/heartbeats-and-sweeper.md](observability/heartbeats-and-sweeper.md)
