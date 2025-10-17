@@ -15,12 +15,11 @@ Env configuration
 API base URL precedence
 1) VITE_API_BASE_URL
 2) API_BASE_URL (Node env)
-3) VITE_GRAPH_API_BASE (legacy)
-4) VITEST: '' (tests use relative URLs)
-5) default http://localhost:3010
+3) VITEST: '' (tests use relative URLs)
+4) default http://localhost:3010
 
 Notes
-- VITE_GRAPH_API_BASE is deprecated; prefer VITE_API_BASE_URL.
+- Legacy VITE_GRAPH_API_BASE has been removed. Use VITE_API_BASE_URL.
 
 Provider setup
 ```tsx

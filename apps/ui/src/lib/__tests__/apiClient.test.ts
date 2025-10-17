@@ -36,18 +36,6 @@ describe('apiClient base URL resolution', () => {
     expect(getApiBase()).toBe('https://node.example');
   });
 
-  it('falls back to legacy VITE_GRAPH_API_BASE when others missing', async () => {
-    vi.stubEnv('VITE_GRAPH_API_BASE', 'https://legacy.example');
-    const { getApiBase } = await importFresh();
-    expect(getApiBase()).toBe('https://legacy.example');
-  });
-
-  it('when both API_BASE_URL and legacy VITE_GRAPH_API_BASE set, API_BASE_URL wins', async () => {
-    vi.stubEnv('API_BASE_URL', 'https://node.example');
-    vi.stubEnv('VITE_GRAPH_API_BASE', 'https://legacy.example');
-    const { getApiBase } = await importFresh();
-    expect(getApiBase()).toBe('https://node.example');
-  });
 
   it('returns empty string when VITEST is set', async () => {
     vi.stubEnv('VITEST', 'true');

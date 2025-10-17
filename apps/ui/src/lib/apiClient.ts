@@ -5,8 +5,6 @@
 
 type ViteEnv = {
   VITE_API_BASE_URL?: string;
-  // Legacy fallback for compatibility; prefer VITE_API_BASE_URL (deprecated)
-  VITE_GRAPH_API_BASE?: string;
 };
 
 function readViteEnv(): ViteEnv | undefined {
@@ -41,9 +39,8 @@ export function getApiBase(override?: string): string {
   // 1) explicit override
   // 2) import.meta.env.VITE_API_BASE_URL
   // 3) process.env.API_BASE_URL
-  // 4) legacy import.meta.env.VITE_GRAPH_API_BASE (deprecated)
-  // 5) if process.env.VITEST -> ''
-  // 6) default 'http://localhost:3010'
+  // 4) if process.env.VITEST -> ''
+  // 5) default 'http://localhost:3010'
   if (override !== undefined) return override;
   const ve = readViteEnv();
   const ne = readNodeEnv();
@@ -53,9 +50,6 @@ export function getApiBase(override?: string): string {
 
   const nodeBase = ne?.API_BASE_URL;
   if (nodeBase) return nodeBase;
-
-  const legacyVite = ve?.VITE_GRAPH_API_BASE; // deprecated
-  if (legacyVite) return legacyVite;
 
   const isVitest = typeof ne?.VITEST === 'string';
   if (isVitest) return '';
