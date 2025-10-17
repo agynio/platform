@@ -15,12 +15,14 @@ Endpoints (reference)
 - GET /graph/templates
 - GET /graph/nodes/:nodeId/status
 - POST /graph/nodes/:nodeId/actions  body: { action: 'provision' | 'deprovision' | 'pause' | 'resume' }
-- POST /graph/nodes/:nodeId/config       body: Record<string, unknown>
-- GET /graph/nodes/:nodeId/dynamic-config-schema
-- POST /graph/nodes/:nodeId/dynamic-config body: Record<string, unknown>
+- GET /graph/nodes/:nodeId/dynamic-config/schema (UI may fallback to a legacy internal path)
 
 Socket updates
-- Namespace: /graph
+- Socket: default namespace (no custom path)
 - Event: node_status
 - Payload: { nodeId, isPaused?, provisionStatus?, dynamicConfigReady?, updatedAt? }
 - The UI subscribes per-node and reconciles socket events into React Query cache.
+
+See also
+- docs/ui/graph/index.md for data flow and configuration
+- docs/graph/status-updates.md for event details

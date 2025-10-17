@@ -6,7 +6,7 @@ Quick links
 - Server: [apps/server](apps/server) — runtime, triggers, tools, MCP, graph persistence
 - UI: [apps/ui](apps/ui) — graph builder and checkpoint stream viewer
 - Docs: [docs/README.md](docs/README.md) — technical overview, contributing, MCP design
-- Slack migration: [docs/slack-migration.md](docs/slack-migration.md) — per-node config and how to migrate from SLACK_* env
+ 
 - Tools: [docs/tools/remind_me.md](docs/tools/remind_me.md) — RemindMe tool behavior and usage
 
 Getting started
@@ -25,6 +25,11 @@ Postgres checkpointer (optional)
   - `LANGGRAPH_CHECKPOINTER=postgres`
   - `POSTGRES_URL=postgresql://postgres:postgres@localhost:5442/postgres?sslmode=disable`
 - Note: The UI checkpoint stream currently depends on Mongo change streams and won’t reflect Postgres writes in this initial version.
+
+Slack integration
+- Use Vault-managed secrets and the Graph UI templates for SlackTrigger and SendSlackMessageTool.
+  - Setup: docs/security/vault.md
+  - UI reference: docs/ui/graph/README.md
 
 Docker-in-Docker and registry mirror (Issue #99)
 - Workspace containers can opt-in to a per-workspace Docker daemon via `DOCKER_HOST=tcp://localhost:2375`; this port is only reachable inside the workspace namespace and is not published on the host.

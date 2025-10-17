@@ -19,7 +19,6 @@ Shell tool
 MCP server
 - Static config fields:
   - `env?: Record<string,string>` — per-exec overlay for discovery and tool calls.
-  - `unset?: string[]` — names to unset before starting MCP in the shell.
   - `workdir?: string` — working directory for MCP execs.
 - Behavior:
   - During discovery and each tool call, pass Env as `K=V` array, preserve workdir.

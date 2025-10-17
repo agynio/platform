@@ -5,10 +5,10 @@ Overview
 - Views are registered in a typed registry and resolved by template name and mode (static or dynamic).
 
 How to add a new Config View
-- Create a component under apps/ui/src/components/configViews/ implementing either:
+- Create a component implementing either:
   - StaticConfigViewProps (for static config saved in graph), or
   - DynamicConfigViewProps (for runtime-driven config schema).
-- Add an entry in apps/ui/src/components/configViews/registerDefaults.ts:
+- Register it in the default config views registry:
   - registerConfigView({ template: '<templateName>', mode: 'static' | 'dynamic', component: YourComponent })
 
 Event semantics
@@ -19,8 +19,7 @@ Handling readOnly/disabled
 - Each view receives readOnly and disabled; compute a single isDisabled = !!readOnly || !!disabled and honor it on inputs.
 
 Initialization
-- The registry is initialized explicitly via initConfigViewsRegistry() invoked in apps/ui/src/main.tsx.
-- This ensures registrations are retained after bundler tree-shaking.
+- The registry is initialized explicitly at UI startup to ensure registrations are retained after bundler tree-shaking.
 
 Flags
 - VITE_ENABLE_CUSTOM_CONFIG_VIEWS is deprecated; custom views are always enabled.
@@ -28,4 +27,3 @@ Flags
 
 Fallback behavior
 - If no view is registered for a template/mode, RightPropertiesPanel shows a simple placeholder informing the user no custom view exists.
-
