@@ -7,15 +7,15 @@ import { last } from 'lodash-es';
 import { McpServer, McpTool } from '../mcp';
 import { isDynamicConfigurable, type StaticConfigurable } from '../graph/capabilities';
 import { inferArgsSchema } from '../mcp/jsonSchemaToZod';
-import { CallModelNode, type MemoryConnector } from '../nodes/callModel.node';
-import { ToolsNode } from '../nodes/tools.node';
+import { CallModelNode, type MemoryConnector } from './callModel.node';
+import { ToolsNode } from './tools.node';
 import { CheckpointerService } from '../services/checkpointer.service';
 import { ConfigService } from '../services/config.service';
 import { LoggerService } from '../services/logger.service';
 import { BaseTool } from '../tools/base.tool';
 import { LangChainToolAdapter } from '../tools/langchainTool.adapter';
-import { SummarizationNode } from '../nodes/summarization.node';
-import { EnforceRestrictionNode } from '../nodes/enforceRestriction.node';
+import { SummarizationNode } from './summarization.node';
+import { EnforceRestrictionNode } from './enforceRestriction.node';
 import { NodeOutput } from '../types';
 import { z } from 'zod';
 import { stringify as toYaml } from 'yaml';
@@ -23,7 +23,7 @@ import { buildMcpToolError } from '../mcp/errorUtils';
 import { withAgent } from '@hautech/obs-sdk';
 import { TriggerListener, TriggerMessage, isSystemTrigger } from '../triggers/base.trigger';
 import { JSONSchema } from 'zod/v4/core';
-import { MessagesBuffer, ProcessBuffer } from './messages-buffer';
+import { MessagesBuffer, ProcessBuffer } from '../agents/messages-buffer';
 
 export type WhenBusyMode = 'wait' | 'injectAfterTools';
 
