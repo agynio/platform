@@ -12,6 +12,7 @@ class FakeContainerService {
   private _registry?: FakeRegistry;
   setRegistry(r: any) { this._registry = r; }
   async findContainerByLabels() { return undefined; }
+  async findContainersByLabels() { return []; }
   async start() { return { id: 'cid123', exec: async () => ({ exitCode: 0 }) }; }
   async getContainerLabels() { return {}; }
   async touchLastUsed(id: string) { await this._registry?.updateLastUsed(id); }
@@ -29,4 +30,3 @@ describe('ContainerProvider + registry hooks', () => {
     expect(reg.lastUsed).toContain('cid123');
   });
 });
-

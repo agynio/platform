@@ -221,6 +221,14 @@ export class SimpleAgent extends BaseAgent {
       checkpointer: this.checkpointerService.getCheckpointer(this.agentId),
     }) as CompiledStateGraph<unknown, unknown>;
 
+    // Attach run service if runtime provided one via global. Best effort; no casts.
+    try {
+      const runSvc = globalThis.__agentRunsService;
+      if (runSvc) {
+        this.setRunService(runSvc);
+      }
+    } catch {}
+
     // Apply runtime scheduling defaults (debounce=0, whenBusy=wait) already set in BaseAgent; allow overrides from agentId namespace if needed later
     return this;
   }

@@ -72,18 +72,18 @@ export class EnvService {
     base?: Record<string, string>,
   ): Promise<Record<string, string> | undefined> {
     if (cfgEnvRefs !== undefined) throw new EnvError('envRefs not supported', 'env_items_invalid');
+    const hasBaseParam = base !== undefined;
     const baseMap = base || {};
-    if (!cfgEnv) return Object.keys(baseMap).length ? { ...baseMap } : undefined;
+    if (!cfgEnv) return Object.keys(baseMap).length || hasBaseParam ? { ...baseMap } : undefined;
     if (Array.isArray(cfgEnv)) {
       const overlay = await this.resolveEnvItems(cfgEnv);
       const merged = this.mergeEnv(baseMap, overlay);
-      return Object.keys(merged).length ? merged : undefined;
+      return Object.keys(merged).length || hasBaseParam ? merged : undefined;
     }
     if (typeof cfgEnv === 'object') {
       const merged = this.mergeEnv(baseMap, cfgEnv as Record<string, string>);
-      return Object.keys(merged).length ? merged : undefined;
+      return Object.keys(merged).length || hasBaseParam ? merged : undefined;
     }
     throw new EnvError('invalid env configuration', 'env_items_invalid');
   }
 }
-

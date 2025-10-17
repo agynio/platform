@@ -3,7 +3,7 @@ import { ChatOpenAI } from '@langchain/openai';
 import { BaseTool } from '../tools/base.tool';
 import { BaseNode } from './base.lgnode';
 import { NodeOutput } from '../types';
-import { LLMResponse, withLLM } from '@hautech/obs-sdk';
+import { ChatMessageInput, LLMResponse, withLLM } from '@hautech/obs-sdk';
 
 // Minimal connector contract used by CallModelNode for memory injection
 export interface MemoryConnector {
@@ -71,8 +71,21 @@ export class CallModelNode extends BaseNode {
       }
     }
 
-    const result = await withLLM({ context: finalMessages.slice(-10) as any }, async () => {
-      const raw = await boundLLM.invoke(finalMessages, { recursionLimit: 2500 });
+    const abortSignal: AbortSignal | undefined = config?.configurable?.abort_signal;
+    // Convert LangChain messages to the SDK's ChatMessageInput shape to avoid casts
+    const context: ChatMessageInput[] = finalMessages.slice(-10).map((m) => {
+      if (m instanceof SystemMessage) return { role: 'system', content: String((m as any).content ?? '') };
+      if (m instanceof HumanMessage) return { role: 'human', content: String((m as any).content ?? '') };
+      if (m instanceof AIMessage) {
+        const content = String((m as any).content ?? '');
+        const toolCalls = (m as any).toolCalls || (m as any).tool_calls;
+        return { role: 'ai', content, toolCalls } as ChatMessageInput;
+      }
+      const role = (m as any).role || (m as any)._getType?.() || 'system';
+      return { role, content: String((m as any).content ?? '') } as ChatMessageInput;
+    });
+    const result = await withLLM({ context }, async () => {
+      const raw = await boundLLM.invoke(finalMessages, { recursionLimit: 2500, signal: abortSignal });
       // Attempt to normalize output: LangChain ChatModel responses often expose .content and .tool_calls
       const content = raw.text;
       const toolCalls = raw.tool_calls?.map((tc: any, idx: number) => ({

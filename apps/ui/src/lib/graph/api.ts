@@ -19,6 +19,15 @@ function isLikelyJsonSchemaRoot(obj: unknown): obj is Record<string, unknown> {
 
 export const api = {
   getTemplates: () => httpJson<TemplateSchema[]>(`/graph/templates`),
+  // Runs: list and termination controls (no auth/gates)
+  listNodeRuns: (nodeId: string, status: 'running' | 'terminating' | 'all' = 'all') =>
+    httpJson<{ items: Array<{ nodeId: string; threadId: string; runId: string; status: string; startedAt: string; updatedAt: string }> }>(
+      `/graph/nodes/${encodeURIComponent(nodeId)}/runs?status=${encodeURIComponent(status)}`,
+    ),
+  terminateRun: (nodeId: string, runId: string) =>
+    httpJson<{ status: string }>(`/graph/nodes/${encodeURIComponent(nodeId)}/runs/${encodeURIComponent(runId)}/terminate`, { method: 'POST' }),
+  terminateThread: (nodeId: string, threadId: string) =>
+    httpJson<{ status: string }>(`/graph/nodes/${encodeURIComponent(nodeId)}/threads/${encodeURIComponent(threadId)}/terminate`, { method: 'POST' }),
   // Reminders for RemindMe tool node
   getNodeReminders: (nodeId: string) => httpJson<{ items: ReminderDTO[] }>(`/graph/nodes/${encodeURIComponent(nodeId)}/reminders`),
   // Vault autocomplete endpoints (only available when enabled server-side)
@@ -77,4 +86,3 @@ export const api = {
       body: JSON.stringify(graph),
     }),
 };
-

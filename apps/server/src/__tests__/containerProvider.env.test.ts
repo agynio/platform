@@ -5,6 +5,7 @@ import { ContainerProviderEntity } from '../entities/containerProvider.entity';
 // Minimal fakes
 class FakeContainerService {
   async findContainerByLabels(_labels?: any) { return undefined; }
+  async findContainersByLabels(_labels?: any) { return []; }
   async start(opts: any) { return { id: 'c', exec: async () => ({ exitCode: 0 }), ...opts }; }
 }
 class FakeVault { isEnabled() { return true; } async getSecret() { return 'VAL'; } }
