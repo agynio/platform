@@ -1,4 +1,5 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { Input } from '@hautech/ui';
 import type { StaticConfigViewProps } from './types';
 
 function isGithubUrl(u: string) {
@@ -30,18 +31,17 @@ export default function GithubCloneRepoToolConfigView({ value, onChange, readOnl
     <div className="space-y-3 text-sm">
       <div>
         <label className="block text-xs mb-1">Repository URL</label>
-        <input className="w-full border rounded px-2 py-1" value={repoUrl} onChange={(e) => setRepoUrl(e.target.value)} disabled={isDisabled} placeholder="https://github.com/org/repo" />
+        <Input value={repoUrl} onChange={(e) => setRepoUrl(e.target.value)} disabled={isDisabled} placeholder="https://github.com/org/repo" />
       </div>
       <div>
         <label className="block text-xs mb-1">Destination path</label>
-        <input className="w-full border rounded px-2 py-1" value={destPath} onChange={(e) => setDestPath(e.target.value)} disabled={isDisabled} />
+        <Input value={destPath} onChange={(e) => setDestPath(e.target.value)} disabled={isDisabled} />
       </div>
       <div>
         <label className="block text-xs mb-1">Auth token (optional)</label>
-        <input className="w-full border rounded px-2 py-1" value={authToken} onChange={(e) => setAuthToken(e.target.value)} disabled={isDisabled} placeholder="vault ref or token" />
+        <Input value={authToken} onChange={(e) => setAuthToken(e.target.value)} disabled={isDisabled} placeholder="vault ref or token" />
         <div className="text-[10px] text-muted-foreground mt-1">Use a vault ref in production; raw token only for testing.</div>
       </div>
     </div>
   );
 }
-

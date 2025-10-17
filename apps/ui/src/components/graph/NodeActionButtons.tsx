@@ -1,4 +1,6 @@
 
+import { Button } from '@hautech/ui';
+
 export interface NodeActionButtonsProps {
   provisionable: boolean;
   pausable: boolean;
@@ -31,22 +33,22 @@ export function NodeActionButtons({
       <div className="flex flex-wrap items-center gap-2">
         {provisionable && (
           <>
-            <button className="h-6 px-2 rounded border text-[10px] disabled:opacity-50" onClick={onStart} disabled={!canStart}>
+            <Button size="sm" variant="outline" onClick={onStart} disabled={!canStart}>
               Start
-            </button>
-            <button className="h-6 px-2 rounded border text-[10px] disabled:opacity-50" onClick={onStop} disabled={!canStop}>
+            </Button>
+            <Button size="sm" variant="outline" onClick={onStop} disabled={!canStop}>
               Stop
-            </button>
+            </Button>
           </>
         )}
         {pausable && (
           <>
-            <button className="h-6 px-2 rounded border text-[10px] disabled:opacity-50" onClick={onPause} disabled={!canPauseBtn}>
+            <Button size="sm" variant="outline" onClick={onPause} disabled={!canPauseBtn}>
               Pause
-            </button>
-            <button className="h-6 px-2 rounded border text-[10px] disabled:opacity-50" onClick={onResume} disabled={!canResumeBtn}>
+            </Button>
+            <Button size="sm" variant="outline" onClick={onResume} disabled={!canResumeBtn}>
               Resume
-            </button>
+            </Button>
           </>
         )}
       </div>

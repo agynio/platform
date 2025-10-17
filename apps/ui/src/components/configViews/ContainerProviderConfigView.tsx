@@ -1,4 +1,5 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { Input } from '@hautech/ui';
 import type { StaticConfigViewProps } from './types';
 import KeyValueEditor from './shared/KeyValueEditor';
 
@@ -26,11 +27,11 @@ export default function ContainerProviderConfigView({ value, onChange, readOnly,
     <div className="space-y-3 text-sm">
       <div>
         <label className="block text-xs mb-1">Image</label>
-        <input className="w-full border rounded px-2 py-1" value={image} onChange={(e) => setImage(e.target.value)} disabled={isDisabled} />
+        <Input value={image} onChange={(e) => setImage(e.target.value)} disabled={isDisabled} />
       </div>
       <div>
         <label className="block text-xs mb-1">Working directory</label>
-        <input className="w-full border rounded px-2 py-1" value={workingDir} onChange={(e) => setWorkingDir(e.target.value)} disabled={isDisabled} />
+        <Input value={workingDir} onChange={(e) => setWorkingDir(e.target.value)} disabled={isDisabled} />
       </div>
       <div>
         <div className="text-xs mb-1">Environment</div>
@@ -39,4 +40,3 @@ export default function ContainerProviderConfigView({ value, onChange, readOnly,
     </div>
   );
 }
-

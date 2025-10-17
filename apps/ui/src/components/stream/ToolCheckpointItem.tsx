@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Button } from '@hautech/ui';
 import type { CheckpointWriteClient } from '@/hooks/useCheckpointStream';
 import { CheckpointItemUI } from './CheckpointItemUI';
 import { ExpandableText, JsonBlock } from './CheckpointItemUtils.tsx';
@@ -36,13 +37,9 @@ export function ToolCheckpointItem({
       toolCallId={parseToolContent(parsed.content ?? '')?.tool_call_id}
       infoButton={
         parsed.info && (
-          <button
-            type="button"
-            onClick={() => setShowInfo((s) => !s)}
-            className="rounded bg-muted px-1.5 py-0.5 text-[10px] font-medium hover:bg-muted/70"
-          >
+          <Button type="button" size="sm" variant="outline" onClick={() => setShowInfo((s) => !s)}>
             {showInfo ? 'hide info' : 'info'}
-          </button>
+          </Button>
         )
       }
       rawToggleButton={rawToggleButton}
@@ -70,14 +67,15 @@ export function ToolCheckpointItem({
               const open = openTools[i];
               return (
                 <div key={i} className="rounded border border-border/50 bg-card/40">
-                  <button
+                  <Button
                     type="button"
+                    variant="ghost"
+                    className="flex w-full items-center justify-between px-2 py-1 text-left font-mono text-[10px] hover:bg-muted/40 h-auto"
                     onClick={() => setOpenTools((o) => ({ ...o, [i]: !o[i] }))}
-                    className="flex w-full items-center justify-between px-2 py-1 text-left font-mono text-[10px] hover:bg-muted/40"
                   >
                     <span className="truncate">{tc.name} ({(tc.raw as { id?: string })?.id ?? ''})</span>
                     <span className="text-muted-foreground">{open ? '−' : '+'}</span>
-                  </button>
+                  </Button>
                   {open && (
                     <div className="border-t border-border/50 p-2">
                       <JsonBlock value={tc.args ?? tc.raw} />

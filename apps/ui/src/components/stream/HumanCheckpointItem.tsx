@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Button } from '@hautech/ui';
 import type { CheckpointWriteClient } from '@/hooks/useCheckpointStream';
 import { CheckpointItemUI } from './CheckpointItemUI';
 import { ExpandableText, JsonBlock } from './CheckpointItemUtils.tsx';
@@ -19,13 +20,9 @@ export function HumanCheckpointItem({ item, parsed, kindBadge, rawToggleButton }
       kind={parsed.kind}
       kindBadge={kindBadge}
       infoButton={parsed.info && (
-        <button
-          type="button"
-          onClick={() => setShowInfo((s) => !s)}
-          className="rounded bg-muted px-1.5 py-0.5 text-[10px] font-medium hover:bg-muted/70"
-        >
+        <Button type="button" size="sm" variant="outline" onClick={() => setShowInfo((s) => !s)}>
           {showInfo ? 'hide info' : 'info'}
-        </button>
+        </Button>
       )}
       rawToggleButton={rawToggleButton}
       content={parsed.content && (

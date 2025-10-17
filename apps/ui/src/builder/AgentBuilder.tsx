@@ -26,6 +26,7 @@ import { useBuilderState } from './hooks/useBuilderState';
 import type { BuilderNodeKind } from './types';
 import type { TemplateNodeSchema } from 'shared';
 import { getDisplayTitle } from './lib/display';
+import { Button } from '@hautech/ui';
 
 interface CanvasAreaProps {
   nodes: RFNode[];
@@ -104,13 +105,14 @@ function CanvasArea({
         </ReactFlow>
       </div>
       <div className="pointer-events-none absolute left-2 top-2 z-10 flex gap-2">
-        <button
+        <Button
           type="button"
-          className="pointer-events-auto rounded bg-primary px-2 py-1 text-[10px] font-medium text-primary-foreground shadow"
+          size="sm"
+          className="pointer-events-auto text-[10px]"
           onClick={() => reactFlow.fitView()}
         >
           Fit
-        </button>
+        </Button>
       </div>
     </div>
   );
@@ -190,24 +192,12 @@ export function AgentBuilder() {
               <div className="text-xs font-semibold tracking-wide">{selectedDisplayTitle}</div>
               {activityEligible && (
                 <div className="ml-auto flex gap-1">
-                  <button
-                    type="button"
-                    onClick={() => setRightTab('properties')}
-                    className={`px-2 py-1 text-[11px] rounded ${
-                      rightTab === 'properties' ? 'bg-primary text-primary-foreground' : 'bg-muted text-foreground'
-                    }`}
-                  >
+                  <Button type="button" size="sm" variant={rightTab === 'properties' ? 'default' : 'secondary'} onClick={() => setRightTab('properties')}>
                     Props
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setRightTab('activity')}
-                    className={`px-2 py-1 text-[11px] rounded ${
-                      rightTab === 'activity' ? 'bg-primary text-primary-foreground' : 'bg-muted text-foreground'
-                    }`}
-                  >
+                  </Button>
+                  <Button type="button" size="sm" variant={rightTab === 'activity' ? 'default' : 'secondary'} onClick={() => setRightTab('activity')}>
                     Activity
-                  </button>
+                  </Button>
                 </div>
               )}
             </div>

@@ -1,4 +1,4 @@
-import React from 'react';
+import { Button, Input } from '@hautech/ui';
 
 export interface KeyValueEditorProps {
   value: Record<string, string> | undefined;
@@ -47,35 +47,17 @@ export function KeyValueEditor({ value, onChange, readOnly, disabled, addLabel =
       <div className="space-y-2">
         {entries.map(([k, v], idx) => (
           <div key={`${k}-${idx}`} className="flex items-center gap-2">
-            <input
-              className="border rounded px-2 py-1 text-xs w-1/3"
-              value={k}
-              onChange={(e) => updateAt(idx, e.target.value, v)}
-              disabled={isDisabled}
-              placeholder="Key"
-            />
-            <input
-              className="border rounded px-2 py-1 text-xs flex-1"
-              value={v}
-              onChange={(e) => updateAt(idx, k, e.target.value)}
-              disabled={isDisabled}
-              placeholder="Value"
-            />
-            <button
-              type="button"
-              className="text-xs border rounded px-2 py-1 disabled:opacity-50"
-              onClick={() => removeAt(idx)}
-              disabled={isDisabled}
-            >Remove</button>
+            <Input className="text-xs w-1/3" value={k} onChange={(e) => updateAt(idx, e.target.value, v)} disabled={isDisabled} placeholder="Key" />
+            <Input className="text-xs flex-1" value={v} onChange={(e) => updateAt(idx, k, e.target.value)} disabled={isDisabled} placeholder="Value" />
+            <Button type="button" size="sm" variant="outline" onClick={() => removeAt(idx)} disabled={isDisabled}>Remove</Button>
           </div>
         ))}
       </div>
-      <button type="button" className="text-xs border rounded px-2 py-1 disabled:opacity-50" onClick={addRow} disabled={isDisabled}>
+      <Button type="button" size="sm" variant="outline" onClick={addRow} disabled={isDisabled}>
         {addLabel}
-      </button>
+      </Button>
     </div>
   );
 }
 
 export default KeyValueEditor;
-

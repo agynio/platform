@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { useCheckpointStream } from '@/hooks/useCheckpointStream';
-import { Button } from '@hautech/ui';
+import { Button, Input } from '@hautech/ui';
 import { CheckpointItem } from './CheckpointItem';
 import { StatusChip } from './StatusChip';
 
@@ -38,8 +38,8 @@ export function CheckpointStreamPanel({ defaultThreadId = '', agentId, url }: Pr
   return (
     <div className="w-full max-w-5xl space-y-4">
       <div className="flex flex-wrap gap-2">
-        <input
-          className="h-9 flex-1 min-w-[160px] rounded border border-input bg-background px-3 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        <Input
+          className="flex-1 min-w-[160px]"
           placeholder="threadId (optional)"
           value={threadId}
           onChange={(e) => setThreadId(e.target.value)}

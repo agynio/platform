@@ -1,4 +1,5 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { Input } from '@hautech/ui';
 import type { StaticConfigViewProps } from './types';
 
 export default function MemoryServiceConfigView({ value, onChange, readOnly, disabled }: StaticConfigViewProps) {
@@ -15,9 +16,8 @@ export default function MemoryServiceConfigView({ value, onChange, readOnly, dis
     <div className="space-y-3 text-sm">
       <div>
         <label className="block text-xs mb-1">Connection URI</label>
-        <input className="w-full border rounded px-2 py-1" value={connection} onChange={(e) => setConnection(e.target.value)} disabled={isDisabled} />
+        <Input value={connection} onChange={(e) => setConnection(e.target.value)} disabled={isDisabled} />
       </div>
     </div>
   );
 }
-

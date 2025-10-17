@@ -1,4 +1,5 @@
 // React import not needed with react-jsx runtime
+import { Button, Badge } from '@hautech/ui';
 import { useNodeStatus, useNodeAction } from '../../lib/graph/hooks';
 import { useTemplatesCache } from '../../lib/graph/templates.provider';
 
@@ -19,33 +20,36 @@ export default function NodeDetailsPanel({ nodeId, templateName }: Props) {
     <div className="space-y-2 text-xs">
       <h3 className="font-semibold text-sm">Node {nodeId}</h3>
       <div className="flex flex-wrap gap-1 items-center">
-        <span className="px-1.5 py-0.5 rounded border bg-accent/20">Template: {templateName}</span>
-        <span className="px-1.5 py-0.5 rounded border bg-accent/20">{provisionState}</span>
-        {tmpl?.capabilities?.pausable && <span className="px-1.5 py-0.5 rounded border bg-accent/20">pausable</span>}
-        {tmpl?.capabilities?.pausable && isReady && isPaused && (
-          <span className="px-1.5 py-0.5 rounded border bg-accent/20">paused</span>
-        )}
+        <Badge variant="accent">Template: {templateName}</Badge>
+        <Badge variant={provisionState === 'ready' ? 'secondary' : provisionState === 'error' ? 'destructive' : 'neutral'}>
+          {provisionState}
+        </Badge>
+        {tmpl?.capabilities?.pausable && <Badge variant="outline">pausable</Badge>}
+        {tmpl?.capabilities?.pausable && isReady && isPaused && <Badge variant="outline">paused</Badge>}
       </div>
       <div className="flex gap-2 items-center flex-wrap">
-        <button
+        <Button
           type="button"
-          className="rounded border px-2 py-1 disabled:opacity-50"
+          size="sm"
+          variant="outline"
           disabled={provisionState !== 'not_ready'}
           onClick={() => action.mutate('provision')}
-        >Start</button>
+        >Start</Button>
         {tmpl?.capabilities?.pausable && isReady && (
-          <button
+          <Button
             type="button"
-            className="rounded border px-2 py-1 disabled:opacity-50"
+            size="sm"
+            variant="outline"
             onClick={() => action.mutate(isPaused ? 'resume' : 'pause')}
-          >{isPaused ? 'Resume' : 'Pause'}</button>
+          >{isPaused ? 'Resume' : 'Pause'}</Button>
         )}
-        <button
+        <Button
           type="button"
-          className="rounded border px-2 py-1 disabled:opacity-50"
+          size="sm"
+          variant="outline"
           disabled={!isReady}
           onClick={() => action.mutate('deprovision')}
-        >Stop</button>
+        >Stop</Button>
       </div>
     </div>
   );

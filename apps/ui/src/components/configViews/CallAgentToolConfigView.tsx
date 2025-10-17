@@ -1,4 +1,5 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { Input } from '@hautech/ui';
 import type { StaticConfigViewProps } from './types';
 
 export default function CallAgentToolConfigView({ value, onChange, readOnly, disabled, onValidate }: StaticConfigViewProps) {
@@ -21,9 +22,8 @@ export default function CallAgentToolConfigView({ value, onChange, readOnly, dis
     <div className="space-y-3 text-sm">
       <div>
         <label className="block text-xs mb-1">Target agent</label>
-        <input className="w-full border rounded px-2 py-1" value={target_agent} onChange={(e) => setTargetAgent(e.target.value)} disabled={isDisabled} placeholder="agent node id or ref" />
+        <Input value={target_agent} onChange={(e) => setTargetAgent(e.target.value)} disabled={isDisabled} placeholder="agent node id or ref" />
       </div>
     </div>
   );
 }
-

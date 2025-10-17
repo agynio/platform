@@ -1,4 +1,5 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { Input } from '@hautech/ui';
 import type { StaticConfigViewProps } from './types';
 
 export default function MemoryConnectorConfigView({ value, onChange, readOnly, disabled }: StaticConfigViewProps) {
@@ -37,9 +38,8 @@ export default function MemoryConnectorConfigView({ value, onChange, readOnly, d
       </div>
       <div>
         <label className="block text-xs mb-1">Max chars</label>
-        <input type="number" min={1} className="w-full border rounded px-2 py-1" value={maxChars} onChange={(e) => setMaxChars(parseInt(e.target.value || '1', 10))} disabled={isDisabled} />
+        <Input type="number" min={1} value={maxChars} onChange={(e) => setMaxChars(parseInt(e.target.value || '1', 10))} disabled={isDisabled} />
       </div>
     </div>
   );
 }
-

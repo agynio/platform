@@ -1,4 +1,5 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { Input } from '@hautech/ui';
 import type { StaticConfigViewProps } from './types';
 
 export default function SendSlackMessageToolConfigView({ value, onChange, readOnly, disabled, onValidate }: StaticConfigViewProps) {
@@ -22,13 +23,12 @@ export default function SendSlackMessageToolConfigView({ value, onChange, readOn
     <div className="space-y-3 text-sm">
       <div>
         <label className="block text-xs mb-1">Bot token</label>
-        <input className="w-full border rounded px-2 py-1" value={bot_token} onChange={(e) => setBotToken(e.target.value)} disabled={isDisabled} placeholder="xoxb-... or vault ref" />
+        <Input value={bot_token} onChange={(e) => setBotToken(e.target.value)} disabled={isDisabled} placeholder="xoxb-... or vault ref" />
       </div>
       <div>
         <label className="block text-xs mb-1">Default channel</label>
-        <input className="w-full border rounded px-2 py-1" value={default_channel} onChange={(e) => setDefaultChannel(e.target.value)} disabled={isDisabled} placeholder="C123 or #general" />
+        <Input value={default_channel} onChange={(e) => setDefaultChannel(e.target.value)} disabled={isDisabled} placeholder="C123 or #general" />
       </div>
     </div>
   );
 }
-

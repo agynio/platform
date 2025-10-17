@@ -1,4 +1,5 @@
 import type { CheckpointWriteClient } from '@/hooks/useCheckpointStream';
+import { Button } from '@hautech/ui';
 import { useMemo, useState } from 'react';
 import { HumanCheckpointItem } from './HumanCheckpointItem';
 import { AICheckpointItem } from './AICheckpointItem';
@@ -99,28 +100,26 @@ export function CheckpointItem({ item, onFilterThread, currentThreadId }: Checkp
   const parsed = useMemo(() => parseValue(item.value), [item.value]);
   if (item.channel === 'branch:to:call_model' || item.channel === 'branch:to:tools') return null;
   const rawToggleBtn = (
-    <button
-      type="button"
-      onClick={() => setShowRaw((r) => !r)}
-      className="rounded bg-muted px-1.5 py-0.5 text-[10px] font-medium hover:bg-muted/70"
-    >
+    <Button type="button" size="sm" variant="outline" onClick={() => setShowRaw((r) => !r)}>
       {showRaw ? 'parsed' : 'raw'}
-    </button>
+    </Button>
   );
 
   const threadFilterBtn = onFilterThread && (
-    <button
+    <Button
       type="button"
+      variant={currentThreadId === item.threadId ? 'outline' : 'ghost'}
       onClick={() => onFilterThread(item.threadId)}
-      className={`rounded px-1.5 py-0.5 text-[10px] font-medium hover:bg-muted/70 border ${
-        currentThreadId === item.threadId
-          ? 'bg-blue-500/20 text-blue-700 dark:text-blue-300 border-blue-400'
-          : 'bg-muted border-transparent'
-      }`}
+      className={
+        `h-auto px-1.5 py-0.5 text-[10px] font-medium hover:bg-muted/70 ` +
+        (currentThreadId === item.threadId
+          ? 'border bg-blue-500/20 text-blue-700 dark:text-blue-300 border-blue-400'
+          : '')
+      }
       title={currentThreadId === item.threadId ? 'Currently filtered by this thread' : 'Filter by this thread'}
     >
       {currentThreadId === item.threadId ? 'thread ✓' : 'filter thread'}
-    </button>
+    </Button>
   );
 
   if (showRaw) {

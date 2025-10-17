@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { cn } from '@/lib/utils';
+import { Button, cn } from '@hautech/ui';
 
 // Re-export types for consumers if needed (placeholder to satisfy TS resolution in strict setups)
 export type { };
@@ -13,13 +13,9 @@ export function ExpandableText({ text, className, limit = 200 }: { text: string;
   return (
     <span className={cn('inline', className)}>
       {visible}{' '}
-      <button
-        type="button"
-        onClick={() => setOpen((o) => !o)}
-        className="text-xs underline text-primary hover:text-primary/80"
-      >
+      <Button type="button" size="sm" variant="link" className="px-0 h-auto underline" onClick={() => setOpen((o) => !o)}>
         {open ? 'show less' : 'show more'}
-      </button>
+      </Button>
     </span>
   );
 }

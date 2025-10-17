@@ -1,4 +1,5 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { Input } from '@hautech/ui';
 import type { StaticConfigViewProps } from './types';
 
 export default function RemindMeToolConfigView({ value, onChange, readOnly, disabled }: StaticConfigViewProps) {
@@ -15,9 +16,8 @@ export default function RemindMeToolConfigView({ value, onChange, readOnly, disa
     <div className="space-y-3 text-sm">
       <div>
         <label className="block text-xs mb-1">Max active reminders</label>
-        <input type="number" min={1} className="w-full border rounded px-2 py-1" value={maxActive} onChange={(e) => setMaxActive(parseInt(e.target.value || '1', 10))} disabled={isDisabled} />
+        <Input type="number" min={1} value={maxActive} onChange={(e) => setMaxActive(parseInt(e.target.value || '1', 10))} disabled={isDisabled} />
       </div>
     </div>
   );
 }
-

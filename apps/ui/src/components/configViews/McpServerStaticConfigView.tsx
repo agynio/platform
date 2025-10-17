@@ -1,4 +1,5 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { Input } from '@hautech/ui';
 import type { StaticConfigViewProps } from './types';
 
 export default function McpServerStaticConfigView({ value, onChange, readOnly, disabled, onValidate }: StaticConfigViewProps) {
@@ -22,13 +23,12 @@ export default function McpServerStaticConfigView({ value, onChange, readOnly, d
     <div className="space-y-3 text-sm">
       <div>
         <label className="block text-xs mb-1">Image</label>
-        <input className="w-full border rounded px-2 py-1" value={image} onChange={(e) => setImage(e.target.value)} disabled={isDisabled} />
+        <Input value={image} onChange={(e) => setImage(e.target.value)} disabled={isDisabled} />
       </div>
       <div>
         <label className="block text-xs mb-1">Tool discovery timeout (ms)</label>
-        <input type="number" min={1000} className="w-full border rounded px-2 py-1" value={toolDiscoveryTimeoutMs} onChange={(e) => setToolDiscoveryTimeoutMs(parseInt(e.target.value || '1000', 10))} disabled={isDisabled} />
+        <Input type="number" min={1000} value={toolDiscoveryTimeoutMs} onChange={(e) => setToolDiscoveryTimeoutMs(parseInt(e.target.value || '1000', 10))} disabled={isDisabled} />
       </div>
     </div>
   );
 }
-

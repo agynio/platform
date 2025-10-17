@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { Button, Input } from '@hautech/ui';
 import { useQuery } from '@tanstack/react-query';
 import type { NixChannel, NixSearchItem } from '@/services/nix';
 import { CHANNELS, fetchPackageVersion, mergeChannelSearchResults, searchPackages } from '@/services/nix';
@@ -18,7 +19,7 @@ type SelectedPkg = {
   pname?: string;
 };
 
-const CHANNELS_CONST = CHANNELS;
+//
 
 export function NixPackagesSection() {
   const [query, setQuery] = useState('');
@@ -104,7 +105,7 @@ export function NixPackagesSection() {
     <div className="space-y-2">
       <div className="text-[10px] uppercase text-muted-foreground">Nix Packages (beta)</div>
       <div className="relative">
-        <input
+        <Input
           ref={inputRef}
           type="text"
           value={query}
@@ -113,7 +114,6 @@ export function NixPackagesSection() {
           onBlur={() => setTimeout(() => setIsOpen(false), 150)}
           onKeyDown={onKeyDown}
           placeholder="Search Nix packages..."
-          className="w-full rounded border border-input bg-background px-2 py-1 text-sm outline-none focus:ring-2 focus:ring-ring"
           role="combobox"
           aria-expanded={isOpen}
           aria-controls="nix-search-listbox"
@@ -222,14 +222,9 @@ function SelectedPackageItem({ pkg, onRemove }: { pkg: { attr: string; pname?: s
           </option>
         ))}
       </select>
-      <button
-        type="button"
-        aria-label={`Remove ${label}`}
-        className="rounded px-2 py-1 text-xs text-destructive hover:bg-destructive/10"
-        onClick={onRemove}
-      >
+      <Button type="button" size="sm" variant="outline" className="text-destructive" aria-label={`Remove ${label}`} onClick={onRemove}>
         ×
-      </button>
+      </Button>
     </li>
   );
 }

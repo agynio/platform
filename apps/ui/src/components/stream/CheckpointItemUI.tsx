@@ -1,4 +1,4 @@
-import { cn } from '@/lib/utils';
+import { cn } from '@hautech/ui';
 
 export type ParsedMessageType = 'human' | 'ai' | 'tool' | 'unknown';
 

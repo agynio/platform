@@ -1,4 +1,5 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { Input } from '@hautech/ui';
 import type { StaticConfigViewProps } from './types';
 
 export default function DebugToolTriggerConfigView({ value, onChange, readOnly, disabled, onValidate }: StaticConfigViewProps) {
@@ -23,7 +24,7 @@ export default function DebugToolTriggerConfigView({ value, onChange, readOnly, 
     <div className="space-y-3 text-sm">
       <div>
         <label className="block text-xs mb-1">Path</label>
-        <input className="w-full border rounded px-2 py-1" value={path} onChange={(e) => setPath(e.target.value)} disabled={isDisabled} />
+        <Input value={path} onChange={(e) => setPath(e.target.value)} disabled={isDisabled} />
       </div>
       <div>
         <label className="block text-xs mb-1">Method</label>
@@ -38,4 +39,3 @@ export default function DebugToolTriggerConfigView({ value, onChange, readOnly, 
     </div>
   );
 }
-
