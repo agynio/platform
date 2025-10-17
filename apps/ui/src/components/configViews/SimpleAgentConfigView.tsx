@@ -1,8 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { StaticConfigViewProps } from './types';
-import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
-import { Select } from '@/components/ui/select';
+// Use shared UI lib components; do not import from app alias paths.
+import { Label } from '@hautech/ui';
 
 const MODELS = ['gpt-5', 'gpt-4o-mini', 'o3-mini'];
 
@@ -46,7 +45,7 @@ export default function SimpleAgentConfigView({
     <div className="space-y-2 text-sm">
       <div>
         <Label>Model</Label>
-        <Select
+        <select
           className="w-full border rounded px-2 py-1 bg-background"
           value={model}
           onChange={(e) => setModel(e.target.value)}
@@ -58,12 +57,12 @@ export default function SimpleAgentConfigView({
               {m}
             </option>
           ))}
-        </Select>
+        </select>
       </div>
 
       <div>
         <Label>System prompt</Label>
-        <Textarea
+        <textarea
           className="w-full border rounded px-2 py-1 bg-background"
           rows={5}
           value={systemPrompt}
@@ -102,4 +101,3 @@ export default function SimpleAgentConfigView({
     </div>
   );
 }
-
