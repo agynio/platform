@@ -37,18 +37,22 @@ export class AgentRunService {
       { key: idx2Key, opts: idx2Opts },
       { key: idx3Key, opts: idx3Opts },
     ];
-    for (const { key, opts } of plan) {
-      try {
+    const results = await Promise.allSettled(
+      plan.map(({ key, opts }) => {
         const options = {
           ...(opts.name ? { name: opts.name } : {}),
           ...(opts.unique ? { unique: opts.unique } : {}),
           ...(typeof opts.expireAfterSeconds === 'number' ? { expireAfterSeconds: opts.expireAfterSeconds } : {}),
-        };
-        await this.col.createIndex(key, options);
-      } catch (e) {
-        this.logger.debug?.('createIndex failed (non-fatal)', (e as Error)?.message || String(e));
+        } as const;
+        return this.col.createIndex(key, options);
+      }),
+    );
+    results.forEach((r) => {
+      if (r.status === 'rejected') {
+        const reason = (r.reason as Error)?.message || String(r.reason);
+        this.logger.debug?.('createIndex failed (non-fatal)', reason);
       }
-    }
+    });
   }
 
   async startRun(nodeId: string, threadId: string, runId: string): Promise<void> {

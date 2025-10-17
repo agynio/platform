@@ -55,13 +55,22 @@ export class LocalMCPServer implements McpServer, Provisionable, DynamicConfigur
     if (!items.length) return undefined;
     // Prefer injected EnvService; fallback to local via Vault if available
     const svc = this.envService || (this.vault ? new EnvService(this.vault) : undefined);
-    if (!svc) return undefined;
-    try {
-      const r = await svc.resolveEnvItems(items);
-      return Object.keys(r).length ? r : undefined;
-    } catch {
-      return undefined;
+    if (svc) {
+      try {
+        const r = await svc.resolveEnvItems(items);
+        return Object.keys(r).length ? r : undefined;
+      } catch {
+        // fall through to static-only fallback
+      }
     }
+    // Fallback: include only static entries when resolver is unavailable
+    const staticOnly = items
+      .filter((i) => (i.source ?? 'static') === 'static')
+      .reduce<Record<string, string>>((acc, it) => {
+        acc[it.key] = it.value;
+        return acc;
+      }, {});
+    return Object.keys(staticOnly).length ? staticOnly : undefined;
   }
 
   private buildExecConfig(command: string, envOverlay?: Record<string, string>) {
