@@ -61,9 +61,9 @@ export class LiveGraphRuntime {
     }
   }
 
-  // Return the live node instance (if present)
-  getNodeInstance(id: string): unknown {
-    return this.state.nodes.get(id)?.instance;
+  // Return the live node instance (if present). Authoritative API used by routes (no any casts).
+  getNodeInstance<T = unknown>(id: string): T | undefined {
+    return this.state.nodes.get(id)?.instance as T | undefined;
   }
 
   async apply(graph: GraphDefinition): Promise<GraphDiffResult> {

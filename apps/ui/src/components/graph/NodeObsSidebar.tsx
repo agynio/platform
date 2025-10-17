@@ -5,6 +5,8 @@ import { fetchSpansInRange } from '@/lib/obs/api';
 import { obsRealtime } from '@/lib/obs/socket';
 import { useTemplatesCache } from '@/lib/graph/templates.provider';
 import { useNodeReminders } from '@/lib/graph/hooks';
+import { api } from '@/lib/graph/api';
+import { notifyError, notifySuccess } from '@/lib/notify';
 
 type BuilderPanelNodeData = {
   template: string;
@@ -41,6 +43,7 @@ function summarizeStatus(s: SpanDoc['status']) {
 export function NodeObsSidebar({ node }: { node: Node<BuilderPanelNodeData> }) {
   const [spans, setSpans] = useState<SpanDoc[]>([]);
   const [note, setNote] = useState<string | null>(null);
+  const [runs, setRuns] = useState<Array<{ runId: string; threadId: string; status: string; updatedAt: string }>>([]);
   const { getTemplate } = useTemplatesCache();
   const tmpl = getTemplate(node.data.template);
   const kind: 'agent' | 'tool' | 'other' = (tmpl?.kind === 'agent' || /agent/i.test(node.data.template)) ? 'agent' : (tmpl?.kind === 'tool' ? 'tool' : 'other');
@@ -85,12 +88,47 @@ export function NodeObsSidebar({ node }: { node: Node<BuilderPanelNodeData> }) {
     return () => { off(); };
   }, [node.id, node.data.template, kind]);
 
+  // Poll active runs every ~3s for agent nodes
+  useEffect(() => {
+    if (kind !== 'agent') return;
+    let cancelled = false;
+    let timer: any;
+    const tick = async () => {
+      try {
+        const res = await api.listNodeRuns(node.id, 'all');
+        if (cancelled) return;
+        const items = (res.items || []).map((r) => ({ runId: r.runId, threadId: r.threadId, status: r.status, updatedAt: r.updatedAt }));
+        setRuns(items);
+      } catch (e) {
+        // mask errors in UI; devtools will show console
+      } finally {
+        if (!cancelled) timer = setTimeout(tick, 3000);
+      }
+    };
+    tick();
+    return () => { cancelled = true; if (timer) clearTimeout(timer); };
+  }, [node.id, kind]);
+
+  async function onTerminate(runId: string) {
+    const ok = typeof window !== 'undefined' ? window.confirm('Terminate this run?') : true;
+    if (!ok) return;
+    try {
+      await api.terminateRun(node.id, runId);
+      notifySuccess('Termination signaled');
+      // locally mark as terminating immediately
+      setRuns((prev) => prev.map((r) => (r.runId === runId ? { ...r, status: 'terminating' } : r)));
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      notifyError(`Failed to terminate: ${msg}`);
+    }
+  }
+
   const items = useMemo(() => spans.map((s) => ({
     span: s,
     link: `${OBS_UI_BASE}/trace/${encodeURIComponent(s.traceId)}`,
   })), [spans]);
 
-  const title = kind === 'agent' ? 'Agent Spans (24h)' : 'Tool Spans (24h)';
+  const title = kind === 'agent' ? 'Agent Activity' : 'Tool Spans (24h)';
 
   return (
     <div className="space-y-2 text-xs">
@@ -123,6 +161,31 @@ export function NodeObsSidebar({ node }: { node: Node<BuilderPanelNodeData> }) {
         </div>
       )}
       <div className="text-[10px] uppercase text-muted-foreground">{title}</div>
+      {kind === 'agent' && (
+        <div className="space-y-1">
+          <div className="text-[10px] uppercase text-muted-foreground">Active Runs</div>
+          {runs.length === 0 ? (
+            <div className="text-muted-foreground">None</div>
+          ) : (
+            <ul className="divide-y border rounded">
+              {runs.map((r) => (
+                <li key={r.runId} className="px-2 py-1 flex items-center justify-between">
+                  <div className="truncate mr-2">
+                    <div className="text-[11px] font-mono truncate">{r.threadId}</div>
+                    <div className="text-[10px] text-muted-foreground font-mono truncate">{r.runId}</div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="px-1.5 py-0.5 rounded border bg-accent/20 text-[10px]">{r.status}</span>
+                    {r.status === 'running' && (
+                      <button className="text-[11px] text-red-700 hover:underline" onClick={() => onTerminate(r.runId)}>Terminate</button>
+                    )}
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
       {note && <div className="text-[10px] italic text-muted-foreground">{note}</div>}
       {items.length === 0 ? (
         <div className="text-muted-foreground">No spans yet.</div>

@@ -12,7 +12,7 @@ import { TerminateResponse } from '../tools/terminateResponse';
 // Narrowed view of a tool call extracted from AIMessage to avoid loose casting
 type ToolCall = { id?: string; name: string; args: unknown };
 // Config shape we rely on at runtime (thread_id + optional caller_agent passthrough, nodeId variants)
-type WithRuntime = LangGraphRunnableConfig & { configurable?: { thread_id?: string; caller_agent?: unknown; nodeId?: string; node_id?: string } };
+type WithRuntime = LangGraphRunnableConfig & { configurable?: { thread_id?: string; caller_agent?: unknown; nodeId?: string; node_id?: string; abort_signal?: AbortSignal } };
 
 export class ToolsNode extends BaseNode {
   constructor(private tools: BaseTool[], private nodeId?: string) {
@@ -78,6 +78,7 @@ export class ToolsNode extends BaseNode {
                 thread_id: config?.configurable?.thread_id,
                 // pass through the caller agent if provided by the parent agent's runtime
                 caller_agent: config?.configurable?.caller_agent,
+                abort_signal: config?.configurable?.abort_signal,
               },
             });
             if (output instanceof TerminateResponse) {
@@ -93,6 +94,10 @@ export class ToolsNode extends BaseNode {
             }
           } catch (e: unknown) {
             // Prefer readable error strings to avoid "[object Object]"; don't interpolate objects directly
+            if (e instanceof Error && e.name === 'AbortError') {
+              // Propagate abort to terminate the run instead of swallowing as a tool error
+              throw e;
+            }
             let errStr = 'Unknown error';
             if (e instanceof Error) errStr = `${e.name}: ${e.message}`;
             else {

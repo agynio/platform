@@ -71,8 +71,9 @@ export class CallModelNode extends BaseNode {
       }
     }
 
+    const abortSignal: AbortSignal | undefined = config?.configurable?.abort_signal;
     const result = await withLLM({ context: finalMessages.slice(-10) as any }, async () => {
-      const raw = await boundLLM.invoke(finalMessages, { recursionLimit: 2500 });
+      const raw = await boundLLM.invoke(finalMessages, { recursionLimit: 2500, signal: abortSignal });
       // Attempt to normalize output: LangChain ChatModel responses often expose .content and .tool_calls
       const content = raw.text;
       const toolCalls = raw.tool_calls?.map((tc: any, idx: number) => ({

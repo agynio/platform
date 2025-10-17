@@ -26,6 +26,8 @@ import { VaultService, VaultConfigSchema } from './services/vault.service.js';
 import { ContainerRegistryService } from './services/containerRegistry.service.js';
 import { ContainerCleanupService } from './services/containerCleanup.service.js';
 import { registerRemindersRoute } from './routes/reminders.route.js';
+import { AgentRunService } from './services/run.service.js';
+import { registerRunsRoutes } from './routes/runs.route.js';
 import { registerNixRoutes } from './routes/nix.route.js';
 
 const logger = new LoggerService();
@@ -65,6 +67,8 @@ async function bootstrap() {
   });
 
   const runtime = new LiveGraphRuntime(logger, templateRegistry);
+  const runsService = new AgentRunService(mongo.getDb(), logger);
+  await runsService.ensureIndexes();
   const graphService =
     config.graphStore === 'git'
       ? new GitGraphService(
@@ -118,6 +122,8 @@ async function bootstrap() {
 
   // Expose globally for diagnostics (optional)
   (globalThis as any).liveGraphRuntime = runtime; // eslint-disable-line @typescript-eslint/no-explicit-any
+  // Expose runsService so agents can capture it during init in a loosely-coupled way
+  (globalThis as any).__agentRunsService = runsService;
 
   const fastify = Fastify({ logger: false });
   await fastify.register(cors, { origin: true });
@@ -296,6 +302,7 @@ async function bootstrap() {
 
   // Register routes that need runtime
   registerRemindersRoute(fastify, runtime, logger);
+  registerRunsRoutes(fastify, runtime, runsService, logger);
   // Nix proxy routes
   try {
     registerNixRoutes(fastify, {

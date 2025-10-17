@@ -9,6 +9,7 @@ import type { StaticConfigurable } from '../graph/capabilities';
 import { z } from 'zod';
 import { JSONSchema } from 'zod/v4/core';
 import { MessagesBuffer, ProcessBuffer } from './messagesBuffer';
+import type { AgentRunService } from '../services/run.service';
 
 export type WhenBusyMode = 'wait' | 'injectAfterTools';
 
@@ -44,10 +45,12 @@ export abstract class BaseAgent implements TriggerListener, StaticConfigurable, 
       running: boolean;
       seq: number;
       tokens: Map<string, InvocationToken>;
-      inFlight?: { runId: string; includedCounts: Map<string, number> };
+      inFlight?: { runId: string; includedCounts: Map<string, number>; abortController: AbortController; status: 'running' | 'terminating' };
       timer?: NodeJS.Timeout;
     }
   > = new Map();
+  // Optional persistence hook for run state listing/termination
+  private runService?: AgentRunService;
 
   get graph() {
     if (!this._graph) {
@@ -69,6 +72,11 @@ export abstract class BaseAgent implements TriggerListener, StaticConfigurable, 
   // Default: undefined (not bound to a graph node)
   protected getNodeId(): string | undefined {
     return undefined;
+  }
+
+  // Inject AgentRunService to enable persistence of run state
+  setRunService(svc?: AgentRunService) {
+    this.runService = svc;
   }
 
   protected state(): AnnotationRoot<{}> {
@@ -224,10 +232,16 @@ export abstract class BaseAgent implements TriggerListener, StaticConfigurable, 
     const s = this.ensureThread(thread);
     s.running = true;
     const runId = `${thread}/run-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-    s.inFlight = { runId, includedCounts: new Map(tokenParts.map((p) => [p.tokenId, p.count])) };
+    const ac = new AbortController();
+    s.inFlight = { runId, includedCounts: new Map(tokenParts.map((p) => [p.tokenId, p.count])), abortController: ac, status: 'running' };
     this.logger.info(`Starting run ${runId} with ${batch.length} message(s)`);
+    // Persist start (best-effort)
     try {
-      const last = await this.runGraph(thread, batch, runId);
+      const nodeId = this.getNodeId();
+      if (nodeId && this.runService) await this.runService.startRun(nodeId, thread, runId);
+    } catch {}
+    try {
+      const last = await this.runGraph(thread, batch, runId, ac.signal);
       // Success: resolve tokens fully included in this run
       const resolved: string[] = [];
       for (const [tokenId, included] of s.inFlight!.includedCounts.entries()) {
@@ -258,13 +272,18 @@ export abstract class BaseAgent implements TriggerListener, StaticConfigurable, 
       // Ensure no stale parts remain for these tokens in the buffer
       if (affected.length) this.buffer.dropTokens(thread, affected);
     } finally {
+      // Persist termination (best-effort)
+      try {
+        const nodeId = this.getNodeId();
+        if (nodeId && this.runService) await this.runService.markTerminated(nodeId, s.inFlight?.runId || runId);
+      } catch {}
       s.inFlight = undefined;
       s.running = false;
       this.startNext(thread);
     }
   }
 
-  private async runGraph(thread: string, batch: TriggerMessage[], runId: string): Promise<BaseMessage | undefined> {
+  private async runGraph(thread: string, batch: TriggerMessage[], runId: string, abortSignal?: AbortSignal): Promise<BaseMessage | undefined> {
     // Preserve system vs human message kind when serializing for the model
     const items = batch.map((msg) =>
       isSystemTrigger(msg) ? new SystemMessage(JSON.stringify(msg)) : new HumanMessage(JSON.stringify(msg)),
@@ -278,6 +297,7 @@ export abstract class BaseAgent implements TriggerListener, StaticConfigurable, 
           thread_id: thread,
           caller_agent: this as InjectionProvider,
           run_id: runId,
+          abort_signal: abortSignal,
         },
       },
     )) as { messages: BaseMessage[] };
@@ -317,6 +337,29 @@ export abstract class BaseAgent implements TriggerListener, StaticConfigurable, 
     }
     this.buffer.destroy();
     this.threads.clear();
+  }
+
+  // Expose current run id for a thread (for admin endpoints)
+  getCurrentRunId(thread: string): string | undefined {
+    const s = this.threads.get(thread);
+    return s?.inFlight?.runId;
+  }
+
+  // Cooperative termination: mark current run as terminating and abort signal
+  terminateRun(thread: string, runId?: string): 'ok' | 'not_running' | 'not_found' {
+    const s = this.threads.get(thread);
+    if (!s || !s.running || !s.inFlight) return 'not_running';
+    if (runId && s.inFlight.runId !== runId) return 'not_found';
+    try {
+      s.inFlight.status = 'terminating';
+      s.inFlight.abortController.abort();
+      // Persist transition best-effort
+      const nodeId = this.getNodeId();
+      void (async () => { try { if (nodeId && this.runService) await this.runService.markTerminating(nodeId, s.inFlight!.runId); } catch {} })();
+      return 'ok';
+    } catch {
+      return 'not_running';
+    }
   }
 
   abstract setConfig(_cfg: Record<string, unknown>): void | Promise<void>;

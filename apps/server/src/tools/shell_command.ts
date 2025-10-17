@@ -67,7 +67,7 @@ export class ShellTool extends BaseTool {
   init(): DynamicStructuredTool {
     return tool(
       async (input, config) => {
-        const { thread_id } = config.configurable;
+        const { thread_id, abort_signal } = (config?.configurable || {}) as { thread_id?: string; abort_signal?: AbortSignal };
         if (!thread_id) throw new Error('thread_id is required in configurable to use shell_command tool');
 
         if (!this.containerProvider) {
@@ -82,7 +82,7 @@ export class ShellTool extends BaseTool {
         const idleTimeoutMs = this.cfg?.idleTimeoutMs ?? 60 * 1000;
         let response;
         try {
-          response = await container.exec(command, { env: envOverlay, workdir: this.cfg?.workdir, timeoutMs, idleTimeoutMs, killOnTimeout: true });
+          response = await container.exec(command, { env: envOverlay, workdir: this.cfg?.workdir, timeoutMs, idleTimeoutMs, killOnTimeout: true, signal: abort_signal });
         } catch (err: unknown) {
           if (isExecTimeoutError(err) || isExecIdleTimeoutError(err)) {
             // Gather any available output from the error instance
