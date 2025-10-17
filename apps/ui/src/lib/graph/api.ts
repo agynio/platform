@@ -1,4 +1,4 @@
-import type { NodeStatus, TemplateSchema, ReminderDTO } from './types';
+import type { NodeStatus, TemplateSchema, ReminderDTO, PersistedGraphUpsertRequestUI } from './types';
 import { buildUrl, httpJson } from '../apiClient';
 
 // Minimal graph type (align with backend PersistedGraphUpsertRequest shape)
@@ -15,6 +15,89 @@ function isLikelyJsonSchemaRoot(obj: unknown): obj is Record<string, unknown> {
   const o = obj as Record<string, unknown>;
   // Minimal signal: presence of at least one of 'type', 'properties', or '$ref'
   return 'type' in o || 'properties' in o || '$ref' in o;
+}
+
+// Normalize legacy UI config shapes to server-aligned templates
+type TemplateName =
+  | 'containerProvider'
+  | 'shellTool'
+  | 'sendSlackMessageTool'
+  | 'slackTrigger'
+  | 'githubCloneRepoTool'
+  | 'mcpServer'
+  | 'finishTool'
+  | 'remindMeTool';
+
+type ReferenceValue = { value: string; source?: 'static' | 'vault' };
+type EnvItem = { key: string; value: string; source?: 'static' | 'vault' };
+
+function normalizeConfigByTemplate(template: TemplateName | string, cfg?: Record<string, unknown>): Record<string, unknown> | undefined {
+  if (!cfg || typeof cfg !== 'object') return cfg;
+  const c = { ...(cfg as Record<string, unknown>) };
+  switch (template) {
+    case 'containerProvider': {
+      if (c.env && !Array.isArray(c.env) && typeof c.env === 'object') {
+        c.env = Object.entries(c.env as Record<string, string>).map(([k, v]) => ({ key: k, value: v, source: 'static' } as EnvItem));
+      }
+      if ('workingDir' in c) delete (c as Record<string, unknown>).workingDir;
+      // Remove fields no longer in schema
+      delete (c as Record<string, unknown>).note; // FinishTool carryover
+      return c;
+    }
+    case 'shellTool': {
+      const rc = c as Record<string, unknown>;
+      if (typeof rc.workingDir !== 'undefined' && typeof rc.workdir === 'undefined') {
+        rc.workdir = rc.workingDir as unknown;
+        delete rc.workingDir;
+      }
+      if (c.env && !Array.isArray(c.env) && typeof c.env === 'object') {
+        c.env = Object.entries(c.env as Record<string, string>).map(([k, v]) => ({ key: k, value: v, source: 'static' } as EnvItem));
+      }
+      return c;
+    }
+    case 'sendSlackMessageTool': {
+      const t = (c as Record<string, unknown>)['bot_token'];
+      if (typeof t === 'string') (c as Record<string, unknown>)['bot_token'] = { value: t, source: 'static' } as ReferenceValue;
+      // Remove extras
+      delete (c as Record<string, unknown>).note;
+      return c;
+    }
+    case 'slackTrigger': {
+      const at = (c as Record<string, unknown>)['app_token'];
+      if (typeof at === 'string') (c as Record<string, unknown>)['app_token'] = { value: at, source: 'static' } as ReferenceValue;
+      // Remove fields not in staticConfig
+      delete (c as Record<string, unknown>).bot_token;
+      delete (c as Record<string, unknown>).default_channel;
+      return c;
+    }
+    case 'githubCloneRepoTool': {
+      const token = (c as Record<string, unknown>)['token'];
+      if (typeof token === 'string') (c as Record<string, unknown>)['token'] = { value: token, source: 'static' } as ReferenceValue;
+      delete (c as Record<string, unknown>).repoUrl;
+      delete (c as Record<string, unknown>).destPath;
+      delete (c as Record<string, unknown>).authToken;
+      return c;
+    }
+    case 'mcpServer': {
+      if (c.env && !Array.isArray(c.env) && typeof c.env === 'object') {
+        c.env = Object.entries(c.env as Record<string, string>).map(([k, v]) => ({ key: k, value: v, source: 'static' } as EnvItem));
+      }
+      // Remove omitted fields per review
+      delete (c as Record<string, unknown>).image;
+      delete (c as Record<string, unknown>).toolDiscoveryTimeoutMs;
+      return c;
+    }
+    case 'finishTool': {
+      delete (c as Record<string, unknown>).note;
+      return c;
+    }
+    case 'remindMeTool': {
+      delete (c as Record<string, unknown>).maxActive;
+      return c;
+    }
+    default:
+      return c;
+  }
 }
 
 export const api = {
@@ -80,9 +163,17 @@ export const api = {
   },
   postNodeAction: (nodeId: string, action: 'pause' | 'resume' | 'provision' | 'deprovision') =>
     httpJson<void>(`/graph/nodes/${encodeURIComponent(nodeId)}/actions`, { method: 'POST', body: JSON.stringify({ action }) }),
-  saveFullGraph: (graph: PersistedGraphUpsertRequestUI) =>
-    httpJson<PersistedGraphUpsertRequestUI & { version: number; updatedAt: string }>(`/api/graph`, {
+  saveFullGraph: (graph: PersistedGraphUpsertRequestUI) => {
+    const normalized = {
+      ...graph,
+      nodes: graph.nodes.map((n) => ({ ...n, config: normalizeConfigByTemplate(n.template, n.config) })),
+    } as PersistedGraphUpsertRequestUI;
+    return httpJson<PersistedGraphUpsertRequestUI & { version: number; updatedAt: string }>(`/api/graph`, {
       method: 'POST',
-      body: JSON.stringify(graph),
-    }),
+      body: JSON.stringify(normalized),
+    });
+  },
 };
+
+// expose for tests without using `any`
+Object.defineProperty(api, '__test_normalize', { value: normalizeConfigByTemplate });
