@@ -82,10 +82,8 @@ jobs:
       - name: Build UI app
         run: pnpm -w -F ui build
 
-      - name: Lint UI app (non-blocking)
-        continue-on-error: true
-        run: pnpm -w -F ui lint --if-present
+      - name: Lint UI app
+        run: pnpm -w -F ui lint
 
-      - name: Test UI app (non-blocking)
-        continue-on-error: true
-        run: pnpm -w -F ui test --if-present
+      - name: Test UI app
+        run: pnpm -w -F ui test
