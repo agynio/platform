@@ -272,7 +272,7 @@ export function buildTemplateRegistry(deps: TemplateRegistryDeps): TemplateRegis
         'memory',
         (ctx) => {
           const db = mongoService.getDb();
-          return new MemoryNode(db, ctx.nodeId, { scope: 'global' });
+          return new MemoryNode(db, ctx.nodeId);
         },
         {
           // Expose only $self for instance wiring
@@ -292,7 +292,6 @@ export function buildTemplateRegistry(deps: TemplateRegistryDeps): TemplateRegis
             () => {
               throw new Error('MemoryConnectorNode: memory factory not set');
             },
-            { placement: 'after_system', content: 'tree', maxChars: 4000 },
           ),
         {
           // Accept memory source (node or factory) from Memory node; expose self to Agent

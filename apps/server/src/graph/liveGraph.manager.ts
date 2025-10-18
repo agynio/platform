@@ -335,7 +335,7 @@ export class LiveGraphRuntime {
       } catch (e) {
         this.logger.debug('Post-create wiring failed', e);
       }
-      if (node.data.config) {
+      if (!isNodeLifecycle(created) && node.data.config) {
         if (hasSetConfig(created)) {
           try {
             const cleaned = await this.applyConfigWithUnknownKeyStripping(created, 'setConfig', node.data.config, node.id);
@@ -437,21 +437,37 @@ export class LiveGraphRuntime {
     // Call lifecycle teardown if present
     const inst = live.instance as unknown;
     if (inst) {
-      const destroy = (inst as Record<string, unknown>)['destroy'];
-      if (typeof destroy === 'function') {
-        try {
-          await (destroy as Function).call(inst);
-        } catch {}
-      } else {
-        // fallback legacy
-        for (const method of ['dispose', 'close', 'stop'] as const) {
-          const fn = (inst as Record<string, unknown>)[method];
-          if (typeof fn === 'function') {
+      try {
+        const { isNodeLifecycle } = await import('../nodes/types');
+        if (isNodeLifecycle(inst)) {
+          try { await (inst as any).stop?.(); } catch {}
+          try { await (inst as any).destroy?.(); } catch {}
+        } else {
+          const destroy = (inst as Record<string, unknown>)['destroy'];
+          if (typeof destroy === 'function') {
             try {
-              await (fn as Function).call(inst);
+              await (destroy as Function).call(inst);
             } catch {}
-            break;
+          } else {
+            // fallback legacy
+            for (const method of ['dispose', 'close', 'stop'] as const) {
+              const fn = (inst as Record<string, unknown>)[method];
+              if (typeof fn === 'function') {
+                try {
+                  await (fn as Function).call(inst);
+                } catch {}
+                break;
+              }
+            }
           }
+        }
+      } catch {
+        // fallback to legacy behavior above if import fails
+        const destroy = (inst as Record<string, unknown>)['destroy'];
+        if (typeof destroy === 'function') {
+          try {
+            await (destroy as Function).call(inst);
+          } catch {}
         }
       }
     }

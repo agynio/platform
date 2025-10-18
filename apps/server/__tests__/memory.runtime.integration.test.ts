@@ -59,8 +59,9 @@ function makeRuntime(db: Db, placement: 'after_system'|'last_message') {
       const mod = await import('../src/nodes/memory.connector.node');
       const MemoryConnectorNode = mod.MemoryConnectorNode;
       const factory = (opts: { threadId?: string }) => new MemoryService(db, ctx.nodeId, opts.threadId ? 'perThread' : 'global', opts.threadId);
-      // Return the connector instance directly so it can be wired into CallModel.setMemoryConnector
-      return new MemoryConnectorNode(factory, { placement, content: 'tree', maxChars: 4000 }) as any;
+      const n = new MemoryConnectorNode(factory);
+      n.configure({ placement, content: 'tree', maxChars: 4000 });
+      return n as any;
     },
     { sourcePorts: { $self: { kind: 'instance' } } },
     { title: 'Memory', kind: 'tool' },
@@ -159,7 +160,9 @@ describe.skipIf(!RUN_MONGOMS)('Runtime integration: memory injection via LiveGra
         const mod = await import('../src/nodes/memory.connector.node');
         const MemoryConnectorNode = mod.MemoryConnectorNode;
         const factory = (opts: { threadId?: string }) => new MemoryService(db, ctx.nodeId, opts.threadId ? 'perThread' : 'global', opts.threadId);
-        return new MemoryConnectorNode(factory, { placement: 'after_system', content: 'full', maxChars: 20 }) as any;
+        const n = new MemoryConnectorNode(factory);
+        n.configure({ placement: 'after_system', content: 'full', maxChars: 20 });
+        return n as any;
       },
       { sourcePorts: { $self: { kind: 'instance' } } },
       { title: 'Memory', kind: 'tool' },
