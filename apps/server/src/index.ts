@@ -159,6 +159,13 @@ async function bootstrap() {
       })),
     }) as GraphDefinition;
 
+  // Expose selected runtime services globally for diagnostics and agent wiring
+  // Important: set globals BEFORE applying any persisted graph so that
+  // agent nodes created during runtime.apply() can see __agentRunsService
+  // in their constructors/init() and wire persistence correctly.
+  globalThis.liveGraphRuntime = runtime;
+  globalThis.__agentRunsService = runsService;
+
   // Load and apply existing persisted graph BEFORE starting server
   try {
     const existing = await graphService.get('main');
@@ -180,9 +187,7 @@ async function bootstrap() {
     logger.error('Failed to apply initial persisted graph: %s', String(e));
   }
 
-  // Expose selected runtime services globally for diagnostics and agent wiring
-  globalThis.liveGraphRuntime = runtime;
-  globalThis.__agentRunsService = runsService;
+  // Globals already set above
 
   const fastify = Fastify({ logger: false });
   await fastify.register(cors, { origin: true });

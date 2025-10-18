@@ -59,3 +59,8 @@ Static config schemas (all templates now expose one – some are currently empty
 - `slackTrigger`: debounceMs, waitForBusy (note: presently setConfig is a no-op; values must be supplied at creation time until runtime reconfiguration is implemented).
 
 Dynamic config (currently only MCP server) becomes available after initial tool discovery; UI should check `dynamicConfigReady` before rendering its form.
+
+Wiring timing and run state visibility
+- During server bootstrap, globalThis.liveGraphRuntime and globalThis.__agentRunsService must be assigned before applying any persisted graph to the runtime.
+- Reason: agent factories created by runtime.apply() may read these globals during init() to wire run persistence and termination hooks. If set too late, the UI Activity tab may not see active runs and the Terminate button can be hidden.
+- The server now sets these globals before runtime.apply(); no UI changes are required. If Terminate is hidden, verify the agent node shows at least one run with status 'running' or 'terminating' via GET /graph/nodes/:nodeId/runs.
