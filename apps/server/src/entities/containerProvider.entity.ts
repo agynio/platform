@@ -350,6 +350,61 @@ export class ContainerProviderEntity {
     return container;
   }
 
+
+  /**
+   * Install Nix packages inside the workspace container based on cfg.nix.packages.
+   * Supports package entries that provide commit and attribute path information.
+   * Silently skips when Nix is not present in the container.
+   */
+  private async installNixPackages(container: ContainerEntity) {
+    const pkgsRaw = (this.cfg as unknown as { nix?: { packages?: unknown[] } } | undefined)?.nix?.packages;
+    if (!Array.isArray(pkgsRaw) || pkgsRaw.length === 0) return;
+
+    // Normalize package specs from assorted shapes.
+    type AnyPkg = Record<string, unknown>;
+    const toStr = (v: unknown) => (typeof v === 'string' ? v : undefined);
+    const specs: string[] = [];
+    for (const item of pkgsRaw as AnyPkg[]) {
+      if (!item || typeof item !== 'object') continue;
+      const commit = toStr((item as AnyPkg)['commit']) || toStr((item as AnyPkg)['commitHash']) || toStr((item as AnyPkg)['rev']);
+      const attr =
+        toStr((item as AnyPkg)['attributePath']) ||
+        toStr((item as AnyPkg)['attrPath']) ||
+        toStr((item as AnyPkg)['attr']) ||
+        toStr((item as AnyPkg)['name']);
+      if (commit && attr) {
+        specs.push(`'github:NixOS/nixpkgs/${commit}#${attr}'`);
+      }
+    }
+
+    if (specs.length === 0) return; // nothing usable to install
+
+    // Check that nix binary exists in the container
+    try {
+      const { exitCode } = await container.exec(['sh', '-lc', 'command -v nix >/dev/null 2>&1']);
+      if (exitCode !== 0) {
+        try {
+          console.error(
+            `[ContainerProviderEntity] nix is not installed in workspace container ${container.id.substring(0, 12)}; skipping Nix packages install (${specs.length} items)`,
+          );
+        } catch {}
+        return;
+      }
+    } catch {
+      // If exec fails unexpectedly, skip quietly
+      return;
+    }
+
+    const cmd = `nix profile install ${specs.join(' ')}`;
+    const { exitCode, stderr } = await container.exec(cmd, { tty: false, timeoutMs: 15 * 60_000 });
+    if (exitCode !== 0) {
+      const msg = stderr?.trim()?.slice(0, 800) || `exitCode=${exitCode}`;
+      try { console.error(`[ContainerProviderEntity] Nix install error: ${msg}`); } catch {}
+    } else {
+      try { console.debug(`[ContainerProviderEntity] Installed ${specs.length} Nix packages`); } catch {}
+    }
+  }
+
   private async ensureDinD(workspace: ContainerEntity, baseLabels: Record<string, string>, mirrorUrl: string) {
     // Check existing
     let dind = await this.containerService.findContainerByLabels({
