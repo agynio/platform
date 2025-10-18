@@ -46,7 +46,7 @@ export class MemoryNode implements NodeLifecycle<Partial<MemoryNodeConfig> & Par
 
   async start(): Promise<void> { /* no-op */ }
   async stop(): Promise<void> { /* no-op */ }
-  async destroy(): Promise<void> { /* no-op */ }
+  async delete(): Promise<void> { /* no-op */ }
 
   getMemoryService(opts: { threadId?: string }): MemoryService {
     const threadId = this.config.scope === 'perThread' ? opts.threadId : undefined;

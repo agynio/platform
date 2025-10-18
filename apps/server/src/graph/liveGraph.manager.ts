@@ -178,7 +178,12 @@ export class LiveGraphRuntime {
       const live = this.state.nodes.get(nodeId);
       if (!live) continue;
       try {
-        if (hasSetConfig(live.instance)) {
+        const { isNodeLifecycle } = await import('../nodes/types');
+        if (isNodeLifecycle(live.instance)) {
+          const cfg = nodeDef.data.config || {};
+          await (live.instance as any).configure(cfg);
+          live.config = cfg;
+        } else if (hasSetConfig(live.instance)) {
           const cfg = nodeDef.data.config || {};
           const cleaned = await this.applyConfigWithUnknownKeyStripping(live.instance, 'setConfig', cfg, nodeId);
           // set live.config to cleaned object only on success
@@ -345,6 +350,17 @@ export class LiveGraphRuntime {
           }
         }
       }
+      // Lifecycle-aware path: configure + start
+      if (isNodeLifecycle(created)) {
+        try {
+          const cfg = (node.data.config || {}) as Record<string, unknown>;
+          await (created as any).configure(cfg);
+          if (typeof (created as any).start === 'function') await (created as any).start();
+          live.config = cfg;
+        } catch (err) {
+          throw Errors.nodeInitFailure(node.id, err);
+        }
+      }
       if (node.data.dynamicConfig) {
         if (hasSetDynamicConfig(created)) {
           try {
@@ -441,7 +457,7 @@ export class LiveGraphRuntime {
         const { isNodeLifecycle } = await import('../nodes/types');
         if (isNodeLifecycle(inst)) {
           try { await (inst as any).stop?.(); } catch {}
-          try { await (inst as any).destroy?.(); } catch {}
+          try { await (inst as any).delete?.(); } catch {}
         } else {
           const destroy = (inst as Record<string, unknown>)['destroy'];
           if (typeof destroy === 'function') {

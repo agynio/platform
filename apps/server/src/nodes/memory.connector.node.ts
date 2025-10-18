@@ -54,7 +54,7 @@ export class MemoryConnectorNode implements NodeLifecycle<Partial<MemoryConnecto
 
   async start(): Promise<void> { /* no-op */ }
   async stop(): Promise<void> { /* no-op */ }
-  async destroy(): Promise<void> { /* no-op */ }
+  async delete(): Promise<void> { /* no-op */ }
 
   getPlacement(): MemoryConnectorConfig['placement'] {
     return this.config.placement;
