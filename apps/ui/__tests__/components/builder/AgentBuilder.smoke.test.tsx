@@ -4,6 +4,7 @@ import { render, screen, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { server, TestProviders } from '../../integration/testUtils';
 import { AgentBuilder } from '../../../src/builder/AgentBuilder';
+import { TooltipProvider } from '@hautech/ui';
 
 describe('AgentBuilder smoke render', () => {
   beforeAll(() => server.listen());
@@ -34,7 +35,9 @@ describe('AgentBuilder smoke render', () => {
 
     render(
       <TestProviders>
-        <AgentBuilder />
+        <TooltipProvider>
+          <AgentBuilder />
+        </TooltipProvider>
       </TestProviders>,
     );
 
@@ -42,5 +45,9 @@ describe('AgentBuilder smoke render', () => {
     await waitFor(() => expect(screen.getByTestId('add-node-button')).toBeInTheDocument());
     // Right panel header present (no selection initially)
     expect(screen.getByText('No Selection')).toBeInTheDocument();
+
+    // SaveStatusIndicator is rendered and no visible "Fit" control exists
+    expect(screen.getByTestId('save-status')).toBeInTheDocument();
+    expect(screen.queryByText('Fit')).not.toBeInTheDocument();
   });
 });

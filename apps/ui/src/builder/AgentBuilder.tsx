@@ -28,6 +28,7 @@ import { getDisplayTitle } from './lib/display';
 import { Button, Popover, PopoverTrigger, PopoverContent, ScrollArea, Card } from '@hautech/ui';
 import { Plus } from 'lucide-react';
 import { kindBadgeClasses, kindLabel } from './lib/display';
+import { SaveStatusIndicator } from './SaveStatusIndicator';
 
 interface CanvasAreaProps {
   nodes: RFNode[];
@@ -122,19 +123,10 @@ function CanvasArea({
           <Controls />
         </ReactFlow>
       </div>
-      {/* Top-left overlay: Fit + Save state indicator */}
+      {/* Top-left overlay: Save status indicator only */}
       <div className="pointer-events-none absolute left-2 top-2 z-10 flex items-center gap-2">
-        <Button
-          type="button"
-          size="sm"
-          className="pointer-events-auto text-[10px]"
-          onClick={() => reactFlow.fitView()}
-        >
-          Fit
-        </Button>
-        <div className="text-[10px] text-muted-foreground" aria-live="polite">
-          Save: {saveState}
-        </div>
+        {/* Keep overlay non-interactive; indicator enables pointer events for tooltip */}
+        <SaveStatusIndicator state={saveState} />
       </div>
 
       {/* Bottom-center add button and popover */}
