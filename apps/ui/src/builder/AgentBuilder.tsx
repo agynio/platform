@@ -166,37 +166,38 @@ function CanvasArea({
               </Button>
             </PopoverTrigger>
           </div>
-          <PopoverContent
-            forceMount
-            side="top"
-            align="center"
-            sideOffset={8}
-            onInteractOutside={(e) => {
-              // Keep popover open during active drags from its content
-              if (isAnyDragging) e.preventDefault();
-            }}
-            className="w-[560px] max-w-[90vw] p-2"
-            aria-labelledby="add-node-title"
-          >
-            <h2 id="add-node-title" className="sr-only">Add node</h2>
-            <PopoverList
-              templates={templates}
-              onInsert={(tplName) => {
-                insertAtViewportCenter(tplName);
-                setOpen(false);
-                triggerRef.current?.focus();
+          {open ? (
+            <PopoverContent
+              side="top"
+              align="center"
+              sideOffset={8}
+              onInteractOutside={(e) => {
+                // Keep popover open during active drags from its content
+                if (isAnyDragging) e.preventDefault();
               }}
-              onDropSuccess={() => {
-                setOpen(false);
-                triggerRef.current?.focus();
-              }}
-              setAnyDragging={setIsAnyDragging}
-              onRequestClose={() => {
-                setOpen(false);
-                triggerRef.current?.focus();
-              }}
-            />
-          </PopoverContent>
+              className="w-[560px] max-w-[90vw] p-2"
+              aria-labelledby="add-node-title"
+            >
+              <h2 id="add-node-title" className="sr-only">Add node</h2>
+              <PopoverList
+                templates={templates}
+                onInsert={(tplName) => {
+                  insertAtViewportCenter(tplName);
+                  setOpen(false);
+                  triggerRef.current?.focus();
+                }}
+                onDropSuccess={() => {
+                  setOpen(false);
+                  triggerRef.current?.focus();
+                }}
+                setAnyDragging={setIsAnyDragging}
+                onRequestClose={() => {
+                  setOpen(false);
+                  triggerRef.current?.focus();
+                }}
+              />
+            </PopoverContent>
+          ) : null}
         </Popover>
       </div>
       {/* Global custom drag layer for preview */}
