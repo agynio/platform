@@ -2,6 +2,8 @@
 export interface NixPackageSelection {
   name: string;
   version?: string | null;
+  attribute_path?: string | null;
+  commit_hash?: string | null;
 }
 
 // Container (Workspace) Nix configuration shape stored under config.nix
