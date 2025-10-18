@@ -79,7 +79,7 @@ describe('ContainerRegistryService', () => {
   it('backfill is idempotent and only includes role=workspace', async () => {
     if (!setupOk) return;
     // Fake container service to emulate docker
-    type Adapter = InstanceType<typeof ContainerRegistryService.BackfillAdapter>;
+    type Adapter = Parameters<ContainerRegistryService['backfillFromDocker']>[0];
     const fake: Adapter = {
       findContainersByLabels: async (_labels: Record<string, string>, _opts?: { all?: boolean }) => [
         { id: 'w1' },
@@ -87,8 +87,8 @@ describe('ContainerRegistryService', () => {
       ],
       getContainerLabels: async (id: string) =>
         id === 'w1'
-          ? { 'hautech.ai/role': 'workspace', 'hautech.ai/thread_id': 'node__t' }
-          : { 'hautech.ai/role': 'not-workspace' },
+          ? ({ 'hautech.ai/role': 'workspace', 'hautech.ai/thread_id': 'node__t' } as Record<string, string>)
+          : ({ 'hautech.ai/role': 'not-workspace' } as Record<string, string>),
       getDocker: () => ({
         getContainer: (_id: string) => ({
           inspect: async () => ({ Created: new Date().toISOString(), State: { Running: true }, Config: { Image: 'img' } }),

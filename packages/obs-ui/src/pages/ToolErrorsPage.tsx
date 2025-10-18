@@ -50,8 +50,8 @@ export function ToolErrorsPage() {
       {error && <div style={{ paddingTop: 16, color: 'red' }}>Error: {error}</div>}
       {!loading && !error && (
         <div style={{ display: 'flex', gap: 12, marginTop: 12, minHeight: 0, flex: 1 }}>
-          <div style={{ flex: 1, overflow: 'auto', border: '1px solid #eee', borderRadius: 6 }}>
-            <Table className="w-full">
+          <div style={{ flex: 1, overflow: 'auto', border: '1px solid #eee', borderRadius: 6 }} data-testid="obsui-errors-list">
+            <Table className="w-full" data-testid="obsui-errors-table">
               <Thead>
                 <Tr>
                   <Th>Time</Th>
@@ -65,6 +65,9 @@ export function ToolErrorsPage() {
                 {items.map((s) => (
                   <Tr
                     key={s._id || s.spanId}
+                    data-testid="obsui-errors-row"
+                    data-trace-id={s.traceId}
+                    data-span-id={s.spanId}
                     className={selected?.spanId === s.spanId ? 'bg-accent/50' : ''}
                     onClick={() => setSelected(s)}
                   >
@@ -85,15 +88,15 @@ export function ToolErrorsPage() {
               </Tbody>
             </Table>
             <div className="flex items-center justify-between p-2">
-              <Button size="sm" variant="outline" disabled={!cursor} onClick={() => setCursor(undefined)}>
+              <Button size="sm" variant="outline" disabled={!cursor} onClick={() => setCursor(undefined)} data-testid="obsui-errors-reset">
                 Reset
               </Button>
-              <Button size="sm" disabled={!nextCursor} onClick={() => setCursor(nextCursor)}>
+              <Button size="sm" disabled={!nextCursor} onClick={() => setCursor(nextCursor)} data-testid="obsui-errors-next">
                 Next →
               </Button>
             </div>
           </div>
-          <div style={{ flex: 1, minWidth: 0, height: '70vh' }}>
+          <div style={{ flex: 1, minWidth: 0, height: '70vh' }} data-testid="obsui-errors-detail">
             {selected ? (
               <SpanDetails span={selected} spans={[selected]} onSelectSpan={() => {}} onClose={() => navigate(-1)} />
             ) : (

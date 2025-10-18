@@ -27,7 +27,6 @@ import type { BuilderNodeKind } from './types';
 import type { TemplateNodeSchema } from 'shared';
 import { getDisplayTitle } from './lib/display';
 import { Button } from '@hautech/ui';
-import { SaveStatusIndicator } from './SaveStatusIndicator';
 
 interface CanvasAreaProps {
   nodes: RFNode[];
@@ -38,7 +37,6 @@ interface CanvasAreaProps {
   addNode: (kind: BuilderNodeKind, position: { x: number; y: number }) => void;
   deleteSelected: () => void;
   nodeTypes: NodeTypes; // reactflow's NodeTypes value type
-  saveState: 'idle' | 'saving' | 'saved' | 'error' | 'conflict';
 }
 
 function CanvasArea({
@@ -50,7 +48,6 @@ function CanvasArea({
   addNode,
   deleteSelected,
   nodeTypes,
-  saveState,
 }: CanvasAreaProps) {
   const flowWrapper = useRef<HTMLDivElement | null>(null);
   const reactFlow = useReactFlow();
@@ -108,7 +105,14 @@ function CanvasArea({
         </ReactFlow>
       </div>
       <div className="pointer-events-none absolute left-2 top-2 z-10 flex gap-2">
-        <SaveStatusIndicator state={saveState} />
+        <Button
+          type="button"
+          size="sm"
+          className="pointer-events-auto text-[10px]"
+          onClick={() => reactFlow.fitView()}
+        >
+          Fit
+        </Button>
       </div>
     </div>
   );
@@ -170,6 +174,7 @@ export function AgentBuilder() {
               <span className="text-[10px] font-medium">{loading ? 'Loading' : templates.length}</span>
             </div>
             <LeftPalette templates={templates} />
+            <div className="mt-4 text-[10px] text-muted-foreground">Save: {saveState}</div>
           </aside>
           <TemplatesProvider templates={templates}>
             <CanvasArea
@@ -181,7 +186,6 @@ export function AgentBuilder() {
               addNode={addNode}
               deleteSelected={deleteSelected}
               nodeTypes={nodeTypes}
-              saveState={saveState}
             />
           </TemplatesProvider>
           <aside className="w-96 shrink-0 border-l bg-sidebar p-0 flex flex-col overflow-hidden">

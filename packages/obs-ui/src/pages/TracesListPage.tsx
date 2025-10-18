@@ -52,14 +52,14 @@ export function TracesListPage() {
   if (error) return <div style={{ padding: 16, color: 'red' }}>Error: {error}</div>;
 
   return (
-    <div style={{ padding: 16 }}>
-      <h1 style={{ marginTop: 0, display: 'flex', alignItems: 'center', gap: 8 }}>Traces
+    <div style={{ padding: 16 }} data-testid="obsui-traces-root">
+      <h1 style={{ marginTop: 0, display: 'flex', alignItems: 'center', gap: 8 }} data-testid="obsui-traces-header">Traces
         <span style={{ fontSize: 11, fontWeight: 400, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
           <span style={{ width: 8, height: 8, borderRadius: '50%', background: conn.connected ? '#28a745' : '#ccc', boxShadow: conn.connected ? '0 0 4px #28a745' : 'none' }} />
           {conn.connected ? 'live' : 'offline'}
         </span>
       </h1>
-      <Table>
+      <Table data-testid="obsui-traces-table">
         <Thead>
           <Tr>
             <Th>Trace ID</Th>
@@ -73,7 +73,7 @@ export function TracesListPage() {
         </Thead>
         <Tbody>
           {traces.map(t => (
-            <Tr key={t.traceId}>
+            <Tr key={t.traceId} data-testid="obsui-traces-row" data-trace-id={t.traceId}>
               <Td><Link to={`/trace/${t.traceId}`}>{t.traceId}</Link></Td>
               <Td>
                 {(() => {
@@ -117,7 +117,7 @@ export function TracesListPage() {
                   );
                 })()}
               </Td>
-              <Td>{t.root?.label}</Td>
+              <Td data-testid="obsui-traces-root-label">{t.root?.label}</Td>
               <Td>{t.root?.status && <StatusBadge status={t.root.status} />}</Td>
               <Td>
                 {t.spanCount} {t.failedCount > 0 && <span style={{ color: 'red' }}>({t.failedCount})</span>}

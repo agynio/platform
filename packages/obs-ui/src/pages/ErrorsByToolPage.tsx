@@ -28,11 +28,11 @@ export function ErrorsByToolPage() {
         <h1 style={{ margin: 0 }}>Errors by Tool</h1>
         <TimeRangeSelector value={range} onChange={setRange} />
       </div>
-      {loading && <div style={{ paddingTop: 16 }}>Loading...</div>}
-      {error && <div style={{ paddingTop: 16, color: 'red' }}>Error: {error}</div>}
-      {!loading && !error && items.length === 0 && <div style={{ paddingTop: 16 }}>No data in selected range.</div>}
+      {loading && <div style={{ paddingTop: 16 }} data-testid="obsui-errors-loading">Loading...</div>}
+      {error && <div style={{ paddingTop: 16, color: 'red' }} data-testid="obsui-errors-error">Error: {error}</div>}
+      {!loading && !error && items.length === 0 && <div style={{ paddingTop: 16 }} data-testid="obsui-errors-empty">No data in selected range.</div>}
       {!loading && !error && items.length > 0 && (
-        <table style={{ width: '100%', borderCollapse: 'collapse', marginTop: 12 }}>
+        <table data-testid="obsui-errors-table" style={{ width: '100%', borderCollapse: 'collapse', marginTop: 12 }}>
           <thead>
             <tr style={{ textAlign: 'left', borderBottom: '1px solid #ddd' }}>
               <th>Tool Label</th>
@@ -41,7 +41,7 @@ export function ErrorsByToolPage() {
           </thead>
           <tbody>
             {items.map((it) => (
-              <tr key={it.label} style={{ borderBottom: '1px solid #eee', cursor: 'pointer' }} onClick={() => navigate(`/errors/tools/${encodeURIComponent(it.label)}?from=${encodeURIComponent(range.from)}&to=${encodeURIComponent(range.to)}`)}>
+              <tr key={it.label} data-testid="obsui-errors-row" data-label={it.label} style={{ borderBottom: '1px solid #eee', cursor: 'pointer' }} onClick={() => navigate(`/errors/tools/${encodeURIComponent(it.label)}?from=${encodeURIComponent(range.from)}&to=${encodeURIComponent(range.to)}`)}>
                 <td>{it.label}</td>
                 <td>{it.count}</td>
               </tr>

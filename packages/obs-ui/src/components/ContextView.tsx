@@ -60,12 +60,13 @@ export function ContextView({ messages, title = 'Context', collapse = true, styl
   }, [historyCollapsed, collapseEnabled, pivotAiIndex, contextMessages]);
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 8, ...style }}>
+    <div data-testid="obsui-context-view" style={{ display: 'flex', flexDirection: 'column', gap: 8, ...style }}>
       {title && <h3 style={{ margin: '0 0 4px 0', fontSize: 13 }}>{title}</h3>}
       {contextMessages.length === 0 && <div style={{ fontSize: 12, color: '#666' }}>(empty)</div>}
       {collapseEnabled && historyCollapsed && (
         <div style={{ textAlign: 'center' }}>
           <button
+            data-testid="obsui-context-toggle-show"
             onClick={() => setHistoryCollapsed(false)}
             style={{
               background: 'none',
@@ -97,6 +98,7 @@ export function ContextView({ messages, title = 'Context', collapse = true, styl
               {i === pivotAiIndex && (
                 <div style={{ textAlign: 'center', margin: '4px 0' }}>
                   <button
+                    data-testid="obsui-context-toggle-hide"
                     onClick={() => setHistoryCollapsed(true)}
                     style={{
                       background: 'none',
@@ -148,10 +150,8 @@ function MessageCard({ message, index }: { message: ContextMessageLike; index: n
           </span>
         )}
       </div>
-      <div style={{ fontFamily: 'monospace', fontSize: 12, wordBreak: 'break-word' }}>
+      <div className="obs-md" data-testid="obs-md" style={{ fontFamily: 'monospace', fontSize: 12, wordBreak: 'break-word' }}>
         <ReactMarkdown
-          className="obs-md"
-          className="obs-md"
           remarkPlugins={[remarkGfm]}
           components={{
             code({ className, children, ...props }) {

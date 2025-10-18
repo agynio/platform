@@ -1,5 +1,6 @@
 import { io, Socket } from 'socket.io-client';
 import { SpanDoc, LogDoc } from '../types';
+import { isBrowser, isTest } from '../utils/env';
 
 // Lightweight singleton socket for span realtime events.
 // Stage 1: global subscription to all span_upsert events.
@@ -15,6 +16,8 @@ class SpanRealtime {
   private lastPongTs: number | null = null;
   private pingInterval: any;
   private listeners: Array<(state: { connected: boolean; lastPongTs: number | null }) => void> = [];
+
+  // Use centralized env helpers
 
   private notify() {
     const state = { connected: this.connected, lastPongTs: this.lastPongTs };
@@ -40,7 +43,16 @@ class SpanRealtime {
     }, 10000);
   }
 
+  private stopPing() {
+    if (this.pingInterval) {
+      clearInterval(this.pingInterval);
+      this.pingInterval = null;
+    }
+  }
+
   private ensure() {
+    // Skip realtime in tests and non-browser/SSR to prevent window access and stray timers
+    if (isTest || !isBrowser) return;
     if (this.socket || this.connecting) return;
     this.connecting = true;
     const url = 'http://localhost:4319'; // Hardcoded dev endpoint
@@ -57,6 +69,7 @@ class SpanRealtime {
     s.on('disconnect', (reason) => {
       this.connected = false;
       console.warn('[obs-realtime] disconnected', reason);
+      this.stopPing();
       this.notify();
     });
     s.on('connect_error', (err) => {
@@ -88,20 +101,44 @@ class SpanRealtime {
   onSpanUpsert(handler: SpanUpsertHandler) {
     this.ensure();
     this.handlers.add(handler);
-    return () => { this.handlers.delete(handler); };
+    return () => {
+      this.handlers.delete(handler);
+      this.maybeShutdown();
+    };
   }
 
   onLog(handler: LogHandler) {
     this.ensure();
     this.logHandlers.add(handler);
-    return () => { this.logHandlers.delete(handler); };
+    return () => {
+      this.logHandlers.delete(handler);
+      this.maybeShutdown();
+    };
   }
 
   onConnectionState(listener: (state: { connected: boolean; lastPongTs: number | null }) => void) {
     this.ensure();
     this.listeners.push(listener);
     listener({ connected: this.connected, lastPongTs: this.lastPongTs });
-    return () => { this.listeners = this.listeners.filter(l => l !== listener); };
+    return () => {
+      this.listeners = this.listeners.filter(l => l !== listener);
+      this.maybeShutdown();
+    };
+  }
+
+  // Disconnect and stop timers when there are no subscribers left
+  private maybeShutdown() {
+    if (this.handlers.size === 0 && this.logHandlers.size === 0 && this.listeners.length === 0) {
+      try {
+        this.stopPing();
+        if (this.socket) {
+          this.socket.disconnect();
+        }
+      } catch {}
+      this.socket = null;
+      this.connected = false;
+      this.connecting = false;
+    }
   }
 }
 

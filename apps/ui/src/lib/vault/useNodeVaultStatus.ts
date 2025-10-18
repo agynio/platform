@@ -61,15 +61,15 @@ export function useNodeVaultStatus(config?: Record<string, unknown>) {
 
   const agg = useMemo(() => {
     const total = refs.length;
-    let exists = 0,
-      missing = 0,
-      error = 0,
-      disabled = 0;
+    let exists = 0;
+    let missing = 0;
+    let error = 0;
+    let disabled = 0;
     for (const s of statuses) {
       if (s === 'exists') exists++;
       else if (s === 'missing') missing++;
       else if (s === 'error') error++;
-      else if (s === 'disabled' || s === 'idle' || s === 'loading') disabled++;
+      else if (s === 'loading') disabled++;
     }
     return { total, exists, missing, error, disabled };
   }, [statuses, refs.length]);

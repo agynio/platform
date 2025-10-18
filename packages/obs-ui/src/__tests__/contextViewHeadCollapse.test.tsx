@@ -17,7 +17,8 @@ function msgs() {
 describe('ContextView head collapse', () => {
   it('collapses when last AI final and strategy head', () => {
     render(<ContextView messages={msgs()} title="Ctx" />);
-    // Should show button 'Show previous'
-    expect(screen.getByText(/Show previous/)).toBeTruthy();
+    // Should render the collapse button; rely on role button and partial accessible name only if necessary
+    const btns = screen.getAllByRole('button');
+    expect(btns.some(b => /Show previous/.test(b.textContent || ''))).toBe(true);
   });
 });
