@@ -157,7 +157,8 @@ export class ConfigService implements Config {
       openaiApiKey: process.env.OPENAI_API_KEY,
       githubToken: process.env.GH_TOKEN,
       mongodbUrl: process.env.MONGODB_URL,
-      graphStore: process.env.GRAPH_STORE as any,
+      // Pass raw env; schema will validate/assign default
+      graphStore: process.env.GRAPH_STORE,
       graphRepoPath: process.env.GRAPH_REPO_PATH,
       graphBranch: process.env.GRAPH_BRANCH,
       graphAuthorName: process.env.GRAPH_AUTHOR_NAME,

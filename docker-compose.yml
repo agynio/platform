@@ -176,6 +176,7 @@ volumes:
   vault-file:
     driver: local
   pgdata:
+  ncps-storage:
     driver: local
   ncps-storage:
     driver: local

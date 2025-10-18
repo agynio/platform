@@ -1,10 +1,17 @@
 import { describe, it, expect } from 'vitest';
 import { parseVaultRef } from '../utils/refs';
 import { ContainerProviderEntity } from '../entities/containerProvider.entity';
+<<<<<<< HEAD
 import { ConfigService, configSchema } from '../services/config.service';
 import { ContainerService } from '../services/container.service';
 import { LoggerService } from '../services/logger.service';
 import { VaultService } from '../services/vault.service';
+=======
+import { ConfigService, configSchema } from '../services/config.service';
+import { ContainerService } from '../services/container.service';
+import { LoggerService } from '../services/logger.service';
+import { VaultService } from '../services/vault.service';
+>>>>>>> ef3aafa (fix(server): address review feedback)
 
 // Typed fakes (no any)
 class FakeContainerService extends ContainerService {
@@ -54,6 +61,7 @@ describe('ContainerProviderEntity parseVaultRef', () => {
   });
 
   it('does not inject NIX_CONFIG when already present', async () => {
+<<<<<<< HEAD
     const svc = new FakeContainerService();
     const cfg = configSchema.parse({
       githubAppId: 'x', githubAppPrivateKey: 'x', githubInstallationId: 'x', openaiApiKey: 'x', githubToken: 'x', mongodbUrl: 'x',
@@ -62,12 +70,23 @@ describe('ContainerProviderEntity parseVaultRef', () => {
       mcpToolsStaleTimeoutMs: '0', ncpsEnabled: 'true', ncpsUrl: 'http://ncps:8501', ncpsPublicKey: 'abc:xyz'
     });
     const ent = new ContainerProviderEntity(svc, undefined, { env: { NIX_CONFIG: 'keep=me' } }, () => ({}), new ConfigService(cfg));
+=======
+    const svc = new FakeContainerService() as any;
+    const ent = new ContainerProviderEntity(svc, undefined as any, { env: { NIX_CONFIG: 'keep=me' } }, () => ({}), new ConfigService({
+      // minimal required fields for ConfigService
+      githubAppId: 'x', githubAppPrivateKey: 'x', githubInstallationId: 'x', openaiApiKey: 'x', githubToken: 'x', mongodbUrl: 'x',
+      graphStore: 'mongo', graphRepoPath: './data/graph', graphBranch: 'graph-state',
+      dockerMirrorUrl: 'http://registry-mirror:5000', nixAllowedChannels: ['nixpkgs-unstable'], nixHttpTimeoutMs: 5000, nixCacheTtlMs: 300000, nixCacheMax: 500,
+      mcpToolsStaleTimeoutMs: 0, ncpsEnabled: true, ncpsUrl: 'http://ncps:8501', ncpsPublicKey: 'abc:xyz'
+    } as unknown as Config));
+>>>>>>> ef3aafa (fix(server): address review feedback)
     ent.setConfig({});
     const container: any = await ent.provide('t2');
     expect(container.env.NIX_CONFIG).toBe('keep=me');
   });
 
   it('injects NIX_CONFIG only when ncps enabled and URL+PUBLIC_KEY present', async () => {
+<<<<<<< HEAD
     const svc = new FakeContainerService();
     // Case 1: enabled=false -> no injection
     const cfgFalse = new ConfigService(
@@ -78,12 +97,23 @@ describe('ContainerProviderEntity parseVaultRef', () => {
         mcpToolsStaleTimeoutMs: '0', ncpsEnabled: 'false', ncpsUrl: 'http://ncps:8501',
       }),
     );
+=======
+    const svc = new FakeContainerService() as any;
+    // Case 1: enabled=false -> no injection
+    const cfgFalse = new ConfigService({
+      githubAppId: 'x', githubAppPrivateKey: 'x', githubInstallationId: 'x', openaiApiKey: 'x', githubToken: 'x', mongodbUrl: 'x',
+      graphStore: 'mongo', graphRepoPath: './data/graph', graphBranch: 'graph-state',
+      dockerMirrorUrl: 'http://registry-mirror:5000', nixAllowedChannels: ['nixpkgs-unstable'], nixHttpTimeoutMs: 5000, nixCacheTtlMs: 300000, nixCacheMax: 500,
+      mcpToolsStaleTimeoutMs: 0, ncpsEnabled: false, ncpsUrl: 'http://ncps:8501', ncpsPublicKey: undefined,
+    } as unknown as Config);
+>>>>>>> ef3aafa (fix(server): address review feedback)
     const ent1 = new ContainerProviderEntity(svc, undefined as any, {}, () => ({}), cfgFalse);
     ent1.setConfig({});
     const c1: any = await ent1.provide('t3');
     expect(c1.env?.NIX_CONFIG).toBeUndefined();
 
     // Case 2: enabled=true but missing public key -> no injection
+<<<<<<< HEAD
     const cfgMissingKey = new ConfigService(
       configSchema.parse({
         githubAppId: 'x', githubAppPrivateKey: 'x', githubInstallationId: 'x', openaiApiKey: 'x', githubToken: 'x', mongodbUrl: 'x',
@@ -92,12 +122,23 @@ describe('ContainerProviderEntity parseVaultRef', () => {
         mcpToolsStaleTimeoutMs: '0', ncpsEnabled: 'true', ncpsUrl: 'http://ncps:8501',
       }),
     );
+=======
+    const cfgMissingKey = new ConfigService(
+      configSchema.parse({
+        githubAppId: 'x', githubAppPrivateKey: 'x', githubInstallationId: 'x', openaiApiKey: 'x', githubToken: 'x', mongodbUrl: 'x',
+        graphStore: 'mongo', graphRepoPath: './data/graph', graphBranch: 'graph-state',
+        dockerMirrorUrl: 'http://registry-mirror:5000', nixAllowedChannels: 'nixpkgs-unstable', nixHttpTimeoutMs: '5000', nixCacheTtlMs: String(300000), nixCacheMax: '500',
+        mcpToolsStaleTimeoutMs: '0', ncpsEnabled: 'true', ncpsUrl: 'http://ncps:8501',
+      }),
+    );
+>>>>>>> ef3aafa (fix(server): address review feedback)
     const ent2 = new ContainerProviderEntity(svc, undefined as any, {}, () => ({}), cfgMissingKey);
     ent2.setConfig({});
     const c2: any = await ent2.provide('t4');
     expect(c2.env?.NIX_CONFIG).toBeUndefined();
 
     // Case 3: enabled=true and both present -> inject
+<<<<<<< HEAD
     const cfgTrue = new ConfigService(
       configSchema.parse({
         githubAppId: 'x', githubAppPrivateKey: 'x', githubInstallationId: 'x', openaiApiKey: 'x', githubToken: 'x', mongodbUrl: 'x',
@@ -106,6 +147,16 @@ describe('ContainerProviderEntity parseVaultRef', () => {
         mcpToolsStaleTimeoutMs: '0', ncpsEnabled: 'true', ncpsUrl: 'http://ncps:8501', ncpsPublicKey: 'pub:key',
       }),
     );
+=======
+    const cfgTrue = new ConfigService(
+      configSchema.parse({
+        githubAppId: 'x', githubAppPrivateKey: 'x', githubInstallationId: 'x', openaiApiKey: 'x', githubToken: 'x', mongodbUrl: 'x',
+        graphStore: 'mongo', graphRepoPath: './data/graph', graphBranch: 'graph-state',
+        dockerMirrorUrl: 'http://registry-mirror:5000', nixAllowedChannels: 'nixpkgs-unstable', nixHttpTimeoutMs: '5000', nixCacheTtlMs: String(300000), nixCacheMax: '500',
+        mcpToolsStaleTimeoutMs: '0', ncpsEnabled: 'true', ncpsUrl: 'http://ncps:8501', ncpsPublicKey: 'pub:key',
+      }),
+    );
+>>>>>>> ef3aafa (fix(server): address review feedback)
     const ent3 = new ContainerProviderEntity(svc, undefined as any, {}, () => ({}), cfgTrue);
     ent3.setConfig({});
     const c3: any = await ent3.provide('t5');

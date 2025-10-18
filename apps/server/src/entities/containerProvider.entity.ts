@@ -246,18 +246,30 @@ export class ContainerProviderEntity {
         return this.envService.resolveProviderEnv(cfgEnv, undefined, base);
       })();
 <<<<<<< HEAD
+<<<<<<< HEAD
       // Inject NIX_CONFIG only when not present and ncps is explicitly enabled and fully configured
       try {
         const hasNixConfig = !!envMerged && typeof envMerged === 'object' && 'NIX_CONFIG' in envMerged;
+=======
+      // Inject NIX_CONFIG only when not present and ncps is explicitly enabled and fully configured
+      try {
+        const hasNixConfig = !!envMerged && typeof envMerged === 'object' && 'NIX_CONFIG' in (envMerged as Record<string, string>);
+>>>>>>> ef3aafa (fix(server): address review feedback)
         const ncpsEnabled = this.configService?.ncpsEnabled === true;
         const ncpsUrl = this.configService?.ncpsUrl;
         const ncpsPub = this.configService?.ncpsPublicKey;
         if (!hasNixConfig && ncpsEnabled && !!ncpsUrl && !!ncpsPub) {
           const nixConfig = `substituters = ${ncpsUrl} https://cache.nixos.org\ntrusted-public-keys = ${ncpsPub} cache.nixos.org-1:6NCHdD59X431o0gWypbMrAURkbJ16ZPMQFGspcDShjY=`;
+<<<<<<< HEAD
           envMerged = { ...(envMerged || {}), NIX_CONFIG: nixConfig };
         }
       } catch {}
 =======
+=======
+          envMerged = { ...(envMerged || {}), NIX_CONFIG: nixConfig } as Record<string, string>;
+        }
+      } catch {}
+>>>>>>> ef3aafa (fix(server): address review feedback)
       const normalizedEnv = envMerged as Record<string, string> | undefined;
 >>>>>>> 7f8ac2c (Restore UI tests in CI; remove duplicate lint and .ci-touch; drop back-compat fallback in provider (#232))
       container = await this.containerService.start({

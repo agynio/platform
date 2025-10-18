@@ -9,3 +9,4 @@ agent_instances
 dist/
 
 .idea/
+test.log
