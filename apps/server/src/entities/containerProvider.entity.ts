@@ -1,7 +1,7 @@
 import { ContainerOpts, ContainerService } from '../services/container.service';
 import { ContainerEntity } from './container.entity';
 import { z } from 'zod';
-import { PLATFORM_LABEL, SUPPORTED_PLATFORMS, type Platform } from '../constants.js';
+import { PLATFORM_LABEL, SUPPORTED_PLATFORMS } from '../constants.js';
 import { VaultService } from '../services/vault.service';
 import { ConfigService } from '../services/config.service';
 import { EnvService, type EnvItem } from '../services/env.service';
@@ -42,6 +42,23 @@ export const ContainerProviderStaticConfigSchema = z
       .int()
       .default(86400)
       .describe('Idle TTL (seconds) before workspace cleanup; <=0 disables cleanup.'),
+    // Optional Nix metadata (no provisioning behavior change in this PR)
+    nix: z
+      .object({
+        packages: z
+          .array(
+            z
+              .object({
+                attr: z.string(),
+                pname: z.string().optional(),
+                channel: z.string().nullable().optional(),
+              })
+              .strict(),
+          )
+          .default([]),
+      })
+      .strict()
+      .optional(),
   })
   .strict();
 
@@ -73,6 +90,23 @@ export const ContainerProviderExposedStaticConfigSchema = z
       .int()
       .default(86400)
       .describe('Idle TTL (seconds) before workspace cleanup; <=0 disables cleanup.'),
+    // Expose Nix metadata for UI/templates
+    nix: z
+      .object({
+        packages: z
+          .array(
+            z
+              .object({
+                attr: z.string(),
+                pname: z.string().optional(),
+                channel: z.string().nullable().optional(),
+              })
+              .strict(),
+          )
+          .default([]),
+      })
+      .strict()
+      .optional(),
   })
   .strict();
 
@@ -82,14 +116,7 @@ type NewEnvItem = EnvItem;
 
 export class ContainerProviderEntity {
   // Keep cfg loosely typed; normalize before use to ContainerOpts at boundaries
-  private cfg?: {
-    image?: ContainerOpts['image'];
-    env?: Record<string, string> | Array<NewEnvItem>;
-    platform?: ContainerOpts['platform'];
-    initialScript?: string;
-    enableDinD?: boolean;
-    ttlSeconds?: number;
-  };
+  private cfg?: ContainerProviderStaticConfig;
 
   private vaultService: VaultService | undefined;
   private opts: ContainerOpts;
@@ -112,14 +139,8 @@ export class ContainerProviderEntity {
 
   // Accept static configuration (image/env/initialScript). Validation performed via zod schema.
   setConfig(cfg: Record<string, unknown>): void {
-    try {
-      const parsed = ContainerProviderStaticConfigSchema.parse(cfg);
-      this.cfg = parsed;
-    } catch (e: unknown) {
-      // If validation fails, surface a clearer error (caller can decide how to handle)
-      const err = e as Error;
-      throw new Error(`Invalid ContainerProvider configuration: ${err.message}`);
-    }
+    // Let ZodError propagate so runtime can handle unknown-key stripping
+    this.cfg = ContainerProviderStaticConfigSchema.parse(cfg);
   }
 
   async provide(threadId: string) {
