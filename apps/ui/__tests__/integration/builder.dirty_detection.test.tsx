@@ -4,6 +4,7 @@ import { render, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { server, TestProviders } from './testUtils';
 import { useBuilderState } from '../../src/builder/hooks/useBuilderState';
+import type { EdgeChange, NodeChange, OnConnect } from 'reactflow';
 
 function Harness({ expose, debounceMs = 80 }: { expose: (api: ReturnType<typeof useBuilderState>) => void; debounceMs?: number }) {
   const api = useBuilderState('http://localhost:3010', { debounceMs });
@@ -62,7 +63,8 @@ describe('Builder dirty detection for graph edits', () => {
     });
 
     // programmatic selection should not trigger dirty
-    api!.onNodesChange([{ id: 'n1', type: 'select', selected: true } as any]);
+    const change: NodeChange = { id: 'n1', type: 'select', selected: true };
+    api!.onNodesChange([change]);
     await new Promise((r) => setTimeout(r, 120));
     expect(counters.posts).toBe(0);
   });
@@ -83,12 +85,14 @@ describe('Builder dirty detection for graph edits', () => {
     });
 
     // Drag end with no delta
-    api!.onNodesChange([{ id: 'n1', type: 'position', dragging: false, position: { x: 10, y: 10 } } as any]);
+    const noMove: NodeChange = { id: 'n1', type: 'position', dragging: false, position: { x: 10, y: 10 } } as any;
+    api!.onNodesChange([noMove]);
     await new Promise((r) => setTimeout(r, 120));
     expect(counters.posts).toBe(0);
 
     // Real move
-    api!.onNodesChange([{ id: 'n1', type: 'position', dragging: false, position: { x: 20, y: 10 } } as any]);
+    const move: NodeChange = { id: 'n1', type: 'position', dragging: false, position: { x: 20, y: 10 } } as any;
+    api!.onNodesChange([move]);
     await new Promise((r) => setTimeout(r, 120));
     expect(counters.posts).toBe(1);
   });
@@ -114,20 +118,22 @@ describe('Builder dirty detection for graph edits', () => {
     expect(counters.posts).toBe(1);
 
     // Edge add via valid connection
-    api!.onConnect({ source: 'n1', sourceHandle: 'out', target: 'n2', targetHandle: 'in' });
+    const conn: Parameters<OnConnect>[0] = { source: 'n1', sourceHandle: 'out', target: 'n2', targetHandle: 'in' };
+    api!.onConnect(conn);
     await new Promise((r) => setTimeout(r, 120));
     expect(counters.posts).toBe(2);
 
     // Edge remove
     const edgeId = 'n1-out__n2-in';
-    api!.onEdgesChange([{ id: edgeId, type: 'remove' } as any]);
+    const erem: EdgeChange = { id: edgeId, type: 'remove' };
+    api!.onEdgesChange([erem]);
     await new Promise((r) => setTimeout(r, 120));
     expect(counters.posts).toBe(3);
 
     // Node remove
-    api!.onNodesChange([{ id: 'n1', type: 'remove' } as any]);
+    const nrem: NodeChange = { id: 'n1', type: 'remove' };
+    api!.onNodesChange([nrem]);
     await new Promise((r) => setTimeout(r, 120));
     expect(counters.posts).toBe(4);
   });
 });
-

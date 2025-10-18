@@ -115,12 +115,11 @@ export function useBuilderState(
           break;
         }
         if (c.type === 'position') {
-          const dragging = (c as any).dragging;
+          const dragging = c.dragging;
           const dragEndedOrExplicit = dragging === false || dragging === undefined;
           if (!dragEndedOrExplicit) continue; // ignore intermediate drag events
-          const id = (c as any).id as string;
-          const prevNode = prev.find((n) => n.id === id);
-          const nextNode = next.find((n) => n.id === id);
+          const prevNode = prev.find((n) => n.id === c.id);
+          const nextNode = next.find((n) => n.id === c.id);
           if (prevNode && nextNode) {
             const moved =
               prevNode.position.x !== nextNode.position.x || prevNode.position.y !== nextNode.position.y;
