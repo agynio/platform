@@ -96,11 +96,11 @@ describe('ContainerProviderEntity nix install', () => {
     await provider.provide('t');
     const calls = (svc.created as FakeContainer).getExecCalls();
     expect(calls.length).toBeGreaterThanOrEqual(2);
-    const combined = calls.find((c: any) => String(c.cmd).includes('nix profile install'));
-    expect(combined).toBeTruthy();
+    const combined = calls.find((c) => String(c.cmd).includes('nix profile install'));
+    expect(combined).toBeDefined();
     // Verify both refs are present
-    expect(String(combined.cmd)).toContain(`github:NixOS/nixpkgs/${'b'.repeat(40)}#htop`);
-    expect(String(combined.cmd)).toContain(`github:NixOS/nixpkgs/${'c'.repeat(40)}#curl`);
+    expect(String((combined as { cmd: string }).cmd)).toContain(`github:NixOS/nixpkgs/${'b'.repeat(40)}#htop`);
+    expect(String((combined as { cmd: string }).cmd)).toContain(`github:NixOS/nixpkgs/${'c'.repeat(40)}#curl`);
     // Info log about combined
     expect((logger.info as unknown as { mock: { calls: unknown[][] } }).mock.calls.some((c) => String(c[0]).includes('Nix install'))).toBe(true);
   });
