@@ -1,13 +1,13 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { ContainerProviderEntity, type ContainerProviderStaticConfig } from '../entities/containerProvider.entity';
 import { ContainerService } from '../services/container.service';
-import type { LoggerService } from '../services/logger.service';
+import { LoggerService } from '../services/logger.service';
 import { ContainerEntity } from '../entities/container.entity';
 
-class StubLogger implements LoggerService {
-  info = vi.fn();
-  debug = vi.fn();
-  error = vi.fn();
+class StubLogger extends LoggerService {
+  override info = vi.fn();
+  override debug = vi.fn();
+  override error = vi.fn();
 }
 
 class FakeContainer extends ContainerEntity {
@@ -26,7 +26,7 @@ class FakeContainer extends ContainerEntity {
 }
 
 class StubContainerService extends ContainerService {
-  constructor() { super({ info() {}, debug() {}, error() {} } as unknown as LoggerService); }
+  constructor() { super(new LoggerService()); }
   created?: FakeContainer;
   override async start(): Promise<ContainerEntity> {
     // Default: container with all exec returning rc=0
@@ -141,4 +141,3 @@ describe('ContainerProviderEntity nix install', () => {
     expect((logger.info as any).mock.calls.some((c: any[]) => String(c[0]).includes('unresolved'))).toBe(true);
   });
 });
-
