@@ -35,3 +35,11 @@ Verify inside a workspace container:
 ```sh
 nix show-config | grep -E 'substituters|trusted-public-keys'
 ```
+
+Startup installs
+
+- Workspace startup performs a best-effort Nix package installation when the node config contains resolved items:
+  - Shape: { commitHash: <40-hex>, attributePath: <attr> }
+  - Command: PATH is prefixed and a single combined `nix profile install` is attempted; on failure, per-package fallbacks run.
+  - If Nix is not present in the container image, install is skipped (info-level log).
+  - When NCPS is configured (NIX_CONFIG injected), installs automatically leverage the cache.
