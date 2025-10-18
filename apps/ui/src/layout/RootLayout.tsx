@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Outlet, NavLink, useLocation } from 'react-router-dom';
+import { Outlet, NavLink } from 'react-router-dom';
 import {
   Sidebar,
   SidebarHeader,
@@ -38,7 +38,7 @@ import {
   ChevronLeft,
   ChevronRight
 } from 'lucide-react';
-import { useUser } from '../user/UserContext';
+import { useUser } from '../user/user.runtime';
 
 const STORAGE_KEYS = {
   collapsed: 'ui.sidebar.collapsed',
@@ -54,13 +54,17 @@ function useStoredBoolean(key: string, defaultValue: boolean) {
       const v = localStorage.getItem(key);
       if (v === 'true') return true;
       if (v === 'false') return false;
-    } catch {}
+    } catch {
+      /* ignore localStorage read errors */
+    }
     return defaultValue;
   });
   useEffect(() => {
     try {
       localStorage.setItem(key, value ? 'true' : 'false');
-    } catch {}
+    } catch {
+      /* ignore localStorage write errors */
+    }
   }, [key, value]);
   return [value, setValue] as const;
 }
@@ -73,8 +77,6 @@ export function RootLayout() {
   const [tracingOpen, setTracingOpen] = useStoredBoolean(STORAGE_KEYS.tracingOpen, false);
   const [monitoringOpen, setMonitoringOpen] = useStoredBoolean(STORAGE_KEYS.monitoringOpen, false);
   const [settingsOpen, setSettingsOpen] = useStoredBoolean(STORAGE_KEYS.settingsOpen, false);
-
-  const location = useLocation();
 
   const sections = useMemo(
     () => [
@@ -121,7 +123,7 @@ export function RootLayout() {
           { label: 'Secrets', to: '/settings/secrets', icon: KeyRound }
         ] as NavItem[]
       }
-    ], [agentsOpen, tracingOpen, monitoringOpen, settingsOpen]
+    ], [agentsOpen, tracingOpen, monitoringOpen, settingsOpen, setAgentsOpen, setTracingOpen, setMonitoringOpen, setSettingsOpen]
   );
 
   const { user } = useUser();

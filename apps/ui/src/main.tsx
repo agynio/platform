@@ -5,7 +5,7 @@ import App from './App.tsx'
 import { initConfigViewsRegistry } from './configViews.init';
 import { TooltipProvider } from '@hautech/ui';
 import { BrowserRouter } from 'react-router-dom';
-import { UserProvider } from './user/UserContext';
+import { UserProvider } from './user/UserProvider';
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
