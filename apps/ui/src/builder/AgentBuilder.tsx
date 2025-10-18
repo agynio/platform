@@ -25,7 +25,7 @@ import { useBuilderState } from './hooks/useBuilderState';
 import type { BuilderNodeKind } from './types';
 import type { TemplateNodeSchema } from 'shared';
 import { getDisplayTitle } from './lib/display';
-import { Button, Popover, PopoverTrigger, PopoverContent, ScrollArea } from '@hautech/ui';
+import { Button, Popover, PopoverTrigger, PopoverContent, ScrollArea, Card } from '@hautech/ui';
 import { Plus } from 'lucide-react';
 import { kindBadgeClasses, kindLabel } from './lib/display';
 
@@ -156,24 +156,25 @@ function CanvasArea({
             <ScrollArea className="max-h-[60vh]">
               <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-2 p-1">
                 {templates.map((tpl) => (
-                  <button
-                    key={tpl.name}
-                    type="button"
-                    className="rounded-lg border bg-card text-card-foreground shadow-xs p-3 text-left outline-none focus-visible:ring-ring/50 focus-visible:ring-[3px] focus-visible:border-ring hover:bg-accent hover:text-accent-foreground"
-                    onClick={() => {
-                      insertAtViewportCenter(tpl.name);
-                      setOpen(false);
-                    }}
-                    aria-label={`Insert ${tpl.title || tpl.name}`}
-                    data-testid={`template-${tpl.name}`}
-                  >
-                    <div className="flex items-center gap-2">
-                      <span className={`inline-block rounded px-1.5 py-0.5 text-[10px] leading-none ${kindBadgeClasses(tpl.kind)}`}>
-                        {kindLabel(tpl.kind)}
-                      </span>
-                      <span className="text-sm font-medium text-primary">{tpl.title || tpl.name}</span>
-                    </div>
-                  </button>
+                  <Card key={tpl.name} className="p-0">
+                    <button
+                      type="button"
+                      className="w-full rounded-lg p-3 text-left outline-none focus-visible:ring-ring/50 focus-visible:ring-[3px] focus-visible:border-ring hover:bg-accent hover:text-accent-foreground"
+                      onClick={() => {
+                        insertAtViewportCenter(tpl.name);
+                        setOpen(false);
+                      }}
+                      aria-label={`Insert ${tpl.title || tpl.name}`}
+                      data-testid={`template-${tpl.name}`}
+                    >
+                      <div className="flex items-center gap-2">
+                        <span className={`inline-block rounded px-1.5 py-0.5 text-[10px] leading-none ${kindBadgeClasses(tpl.kind)}`}>
+                          {kindLabel(tpl.kind)}
+                        </span>
+                        <span className="text-sm font-medium text-primary">{tpl.title || tpl.name}</span>
+                      </div>
+                    </button>
+                  </Card>
                 ))}
               </div>
             </ScrollArea>
@@ -196,7 +197,6 @@ export function AgentBuilder() {
     updateNodeData,
     deleteSelected,
     templates,
-    loading,
     saveState,
   } = useBuilderState();
   const nodeTypes = useMemo(() => makeNodeTypes(templates), [templates]);

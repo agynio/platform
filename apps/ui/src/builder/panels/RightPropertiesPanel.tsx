@@ -107,7 +107,7 @@ function RightPropertiesPanelBody({ node, onChange }: Props) {
       if (prev.length === next.length && prev.every((v, i) => v === next[i])) return prev;
       return next;
     });
-  }, [node.id]);
+  }, []);
 
   return (
     <div className="space-y-4">
