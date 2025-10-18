@@ -3,7 +3,7 @@ import { BaseMessage as ObsBaseMessage } from '@hautech/obs-sdk';
 import { BaseStore, LangGraphRunnableConfig } from '@langchain/langgraph';
 import { ChatOpenAI } from '@langchain/openai';
 import { BaseTool } from '../tools/base.tool';
-import { BaseNode } from './base.node';
+import { BaseNode } from './base.lgnode';
 import { NodeOutput } from '../types';
 import { LLMResponse, withLLM } from '@hautech/obs-sdk';
 

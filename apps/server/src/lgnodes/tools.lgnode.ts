@@ -3,7 +3,7 @@ import { LangGraphRunnableConfig } from '@langchain/langgraph';
 import { ToolCallResponse, withToolCall } from '@hautech/obs-sdk';
 import { BaseTool } from '../tools/base.tool';
 import { NodeOutput } from '../types';
-import { BaseNode } from './base.node';
+import { BaseNode } from './base.lgnode';
 import { TerminateResponse } from '../tools/terminateResponse';
 
 // ToolsNode appends ToolMessage(s) produced by executing tool calls present in the preceding AIMessage.

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { CallModelNode } from '../src/nodes/call-model.node';
+import { CallModelNode } from '../src/lgnodes/callModel.lgnode';
 import { BaseTool } from '../src/tools/base.tool';
 import { AIMessage, BaseMessage, SystemMessage } from '@langchain/core/messages';
 

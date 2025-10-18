@@ -8,7 +8,7 @@ import { TemplateRegistry } from '../src/graph/templateRegistry';
 import type { GraphDefinition } from '../src/graph/types';
 import { LoggerService } from '../src/services/logger.service';
 import { MemoryService } from '../src/services/memory.service';
-import { CallModelNode } from '../src/nodes/call-model.node';
+import { CallModelNode } from '../src/lgnodes/callModel.lgnode';
 import { BaseTool } from '../src/tools/base.tool';
 
 // Fake LLM: replace ChatOpenAI to avoid network and capture messages
