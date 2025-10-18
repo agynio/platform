@@ -1,6 +1,6 @@
 // React import not required with automatic JSX runtime
 import { Save as SaveIcon } from 'lucide-react';
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger, cn } from '@hautech/ui';
+import { Tooltip, TooltipContent, TooltipTrigger, cn } from '@hautech/ui';
 
 export type SaveState = 'idle' | 'saving' | 'saved' | 'error' | 'conflict';
 
@@ -26,22 +26,20 @@ export function SaveStatusIndicator({ state }: { state: SaveState }) {
   const pulse = state === 'saving';
 
   return (
-    <TooltipProvider>
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <div
-            className={cn('pointer-events-auto inline-flex items-center rounded p-1', color, pulse && 'animate-pulse')}
-            role="status"
-            aria-live="polite"
-            aria-label={label}
-            data-testid="save-status"
-            title={label}
-          >
-            <SaveIcon className="h-4 w-4" aria-hidden="true" />
-          </div>
-        </TooltipTrigger>
-        <TooltipContent side="right">{label}</TooltipContent>
-      </Tooltip>
-    </TooltipProvider>
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <div
+          className={cn('pointer-events-auto inline-flex items-center rounded p-1', color, pulse && 'animate-pulse')}
+          role="status"
+          aria-live="polite"
+          aria-label={label}
+          data-testid="save-status"
+          title={label}
+        >
+          <SaveIcon className="h-4 w-4" aria-hidden="true" />
+        </div>
+      </TooltipTrigger>
+      <TooltipContent side="right">{label}</TooltipContent>
+    </Tooltip>
   );
 }
