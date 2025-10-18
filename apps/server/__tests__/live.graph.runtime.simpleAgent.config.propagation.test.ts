@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { LiveGraphRuntime } from '../src/graph/liveGraph.manager';
 import type { GraphDefinition } from '../src/graph/types';
 import { buildTemplateRegistry } from '../src/templates';
@@ -7,7 +7,6 @@ import { ContainerService } from '../src/services/container.service';
 import { ConfigService } from '../src/services/config.service';
 import type { Config } from '../src/services/config.service';
 import { CheckpointerService } from '../src/services/checkpointer.service';
-import { vi } from 'vitest';
 import type { MongoService } from '../src/services/mongo.service';
 
 // Avoid any real network calls by ensuring ChatOpenAI token counting/invoke are not used in this test.
@@ -45,14 +44,17 @@ describe('LiveGraphRuntime -> SimpleAgent config propagation', () => {
     const configService = new ConfigService(cfg);
     const checkpointerService = new CheckpointerService(logger);
     // Typed fake checkpointer via vi.spyOn
-    vi.spyOn(checkpointerService as CheckpointerService, 'getCheckpointer').mockImplementation(() => ({
+    const fakeCheckpointer = {
       async getTuple() { return undefined; },
-      async *list() {},
+      async *list() { /* no-op */ },
       async put(_config: unknown, _checkpoint: unknown, _metadata: unknown) { return { configurable: { thread_id: 't' } }; },
-      async putWrites() {},
+      async putWrites() { /* no-op */ },
       getNextVersion() { return '1'; },
-    } as unknown as ReturnType<CheckpointerService['getCheckpointer']>);
-    const testMongoService = { getDb: () => ({}) } satisfies Pick<MongoService, 'getDb'>;
+    };
+    vi.spyOn(checkpointerService, 'getCheckpointer').mockImplementation(
+      () => fakeCheckpointer as unknown as ReturnType<CheckpointerService['getCheckpointer']>,
+    );
+    const testMongoService: Pick<MongoService, 'getDb'> = { getDb: () => ({}) };
     const registry = buildTemplateRegistry({
       logger,
       containerService,
