@@ -85,17 +85,8 @@ export const ContainerProviderStaticConfigSchema = z
       .int()
       .default(86400)
       .describe('Idle TTL (seconds) before workspace cleanup; <=0 disables cleanup.'),
-    // Optional Nix metadata: accept resolved items for installation; keep legacy/UI shapes for compatibility
-    nix: z
-      .object({
-        packages: z
-          .array(
-            z.union([ResolvedNixPackageItemSchema, LegacyNixPackageItemSchema, UiNixPackageItemSchema, RichNixPackageItemSchema]),
-          )
-          .default([]),
-      })
-      .strict()
-      .optional(),
+    // Optional Nix metadata (opaque to server; UI manages shape)
+    nix: z.unknown().optional(),
   })
   .strict();
 
@@ -127,17 +118,8 @@ export const ContainerProviderExposedStaticConfigSchema = z
       .int()
       .default(86400)
       .describe('Idle TTL (seconds) before workspace cleanup; <=0 disables cleanup.'),
-    // Expose Nix metadata for UI/templates (maintain legacy shape visibility)
-    nix: z
-      .object({
-        packages: z
-          .array(
-            LegacyNixPackageItemSchema,
-          )
-          .default([]),
-      })
-      .strict()
-      .optional(),
+    // Expose nix as opaque; builder custom UI component handles editing
+    nix: z.unknown().optional(),
   })
   .strict();
 
@@ -339,8 +321,12 @@ export class ContainerProviderEntity {
       // This lets the script prepare environment (e.g., user/profile) before installing packages.
       // Install Nix packages when resolved specs are provided (best-effort)
       try {
-        const specs = this.normalizeToInstallSpecs((this.cfg?.nix?.packages as unknown[]) || []);
-        await this.ensureNixPackages(container, specs, (this.cfg?.nix?.packages || []).length);
+        const nixAny = (this.cfg?.nix as any) as { packages?: unknown } | undefined;
+        const pkgsUnknown = nixAny && (nixAny as any).packages;
+        const pkgsArr: unknown[] = Array.isArray(pkgsUnknown) ? (pkgsUnknown as unknown[]) : [];
+        const specs = this.normalizeToInstallSpecs(pkgsArr);
+        const originalCount = Array.isArray(pkgsUnknown) ? pkgsArr.length : 0;
+        await this.ensureNixPackages(container, specs, originalCount);
       } catch (e) {
         // Do not fail startup on install errors; logs provide context
         this.logger.error('Nix install step failed (post-start)', e);
@@ -350,8 +336,12 @@ export class ContainerProviderEntity {
       if (this.cfg?.enableDinD && container) await this.ensureDinD(container, labels, DOCKER_MIRROR_URL);
       // Also attempt install on reuse (idempotent)
       try {
-        const specs = this.normalizeToInstallSpecs((this.cfg?.nix?.packages as unknown[]) || []);
-        await this.ensureNixPackages(container, specs, (this.cfg?.nix?.packages || []).length);
+        const nixAny = (this.cfg?.nix as any) as { packages?: unknown } | undefined;
+        const pkgsUnknown = nixAny && (nixAny as any).packages;
+        const pkgsArr: unknown[] = Array.isArray(pkgsUnknown) ? (pkgsUnknown as unknown[]) : [];
+        const specs = this.normalizeToInstallSpecs(pkgsArr);
+        const originalCount = Array.isArray(pkgsUnknown) ? pkgsArr.length : 0;
+        await this.ensureNixPackages(container, specs, originalCount);
       } catch (e) {
         this.logger.error('Nix install step failed (reuse)', e);
       }

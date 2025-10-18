@@ -27,7 +27,7 @@ describe('Builder toolbar + popover + DnD', () => {
     );
   }
 
-  it('renders floating toolbar and opens popover with animation state classes', async () => {
+  it('renders floating toolbar and popover content is unmounted by default, mounts on open', async () => {
     mockApi();
     render(
       <TestProviders>
@@ -43,6 +43,9 @@ describe('Builder toolbar + popover + DnD', () => {
     expect(overlay.className).toContain('pointer-events-none');
     expect(toolbar.className).toContain('pointer-events-auto');
 
+    // Popover content should not be in the DOM by default
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+
     // Open popover
     const addBtn = screen.getByTestId('add-node-button');
     fireEvent.click(addBtn);
@@ -50,7 +53,6 @@ describe('Builder toolbar + popover + DnD', () => {
     // Content appears with data-state attributes driving classes (from @hautech/ui wrapper)
     const dialog = await screen.findByRole('dialog');
     expect(dialog).toBeInTheDocument();
-    expect(dialog.getAttribute('data-state')).toBe('open');
   });
 
   it('supports keyboard navigation and insert on Enter', async () => {
@@ -72,10 +74,9 @@ describe('Builder toolbar + popover + DnD', () => {
     // ArrowDown then Enter
     fireEvent.keyDown(first, { key: 'ArrowDown' });
     fireEvent.keyDown(first, { key: 'Enter' });
-    // After insert, popover transitions to closed state (forceMounted)
+    // After insert, popover content should be unmounted
     await waitFor(() => {
-      const dlg = screen.getByRole('dialog');
-      expect(dlg.getAttribute('data-state')).toBe('closed');
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
     });
     expect(screen.getByTestId('add-node-button')).toHaveFocus();
   });
@@ -91,14 +92,12 @@ describe('Builder toolbar + popover + DnD', () => {
     );
     const addBtn = await screen.findByTestId('add-node-button');
     await userEvent.click(addBtn);
-    const dialog = await screen.findByRole('dialog');
-    expect(dialog.getAttribute('data-state')).toBe('open');
+    await screen.findByRole('dialog');
     // Press Escape
     await userEvent.keyboard('{Escape}');
     // Wait for closed state and focus return
     await waitFor(() => {
-      const dlg = screen.getByRole('dialog');
-      expect(dlg.getAttribute('data-state')).toBe('closed');
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
       expect(addBtn).toHaveFocus();
     });
   });
@@ -121,8 +120,7 @@ describe('Builder toolbar + popover + DnD', () => {
     expect(first).toHaveFocus();
     await userEvent.keyboard(' ');
     await waitFor(() => {
-      const dlg = screen.getByRole('dialog');
-      expect(dlg.getAttribute('data-state')).toBe('closed');
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
       expect(addBtn).toHaveFocus();
     });
   });
@@ -142,8 +140,7 @@ describe('Builder toolbar + popover + DnD', () => {
     expect(item).toHaveAttribute('draggable', 'true');
     fireEvent.click(item);
     await waitFor(() => {
-      const dlg = screen.getByRole('dialog');
-      expect(dlg.getAttribute('data-state')).toBe('closed');
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
     });
   });
 });

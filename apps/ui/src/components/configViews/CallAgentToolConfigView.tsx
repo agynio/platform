@@ -17,7 +17,8 @@ export default function CallAgentToolConfigView({ value, onChange, readOnly, dis
   }, [name, response, onValidate]);
 
   useEffect(() => {
-    onChange({ ...value, description: description || undefined, name: name || undefined, response: response || undefined });
+    const next = { ...value, description: description || undefined, name: name || undefined, response: response || undefined };
+    if (JSON.stringify(value || {}) !== JSON.stringify(next)) onChange(next);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [description, name, response]);
 

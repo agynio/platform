@@ -5,6 +5,8 @@ import { BaseTool } from '../tools/base.tool';
 import { NodeOutput } from '../types';
 import { BaseNode } from './base.lgnode';
 import { TerminateResponse } from '../tools/terminateResponse';
+import { createSingleFileTar } from '../utils/archive';
+import { randomUUID } from 'node:crypto';
 
 // ToolsNode appends ToolMessage(s) produced by executing tool calls present in the preceding AIMessage.
 // Any HumanMessage injection (agent-side buffering) is handled upstream in CallModelNode.
@@ -37,7 +39,7 @@ export class ToolsNode extends BaseNode {
     const toolCalls = (lastMessage.tool_calls as ToolCall[]) || [];
     if (!toolCalls.length) return {};
 
-    const tools = this.tools.map((tool) => tool.init(config));
+    const toolPairs = this.tools.map((base) => ({ base, dyn: base.init(config) }));
 
     let terminated = false;
 
@@ -55,7 +57,8 @@ export class ToolsNode extends BaseNode {
         return await withToolCall(
           { toolCallId: callId, name: tc.name, input: tc.args, ...(cfgToolNodeId ? { nodeId: cfgToolNodeId } : {}) },
           async () => {
-          const tool = tools.find((t) => t.name === tc.name);
+          const pair = toolPairs.find((p) => p.dyn.name === tc.name);
+          const tool = pair?.dyn;
           const createMessage = (content: string, success = true) => {
             const toolMessage = new ToolMessage({
               tool_call_id: callId,
@@ -87,11 +90,34 @@ export class ToolsNode extends BaseNode {
               return createMessage(msg);
             }
             const content = typeof output === 'string' ? output : JSON.stringify(output);
-            if (content.length > 50000) {
+            const MAX_TOOL_OUTPUT = 50_000;
+            if (content.length > MAX_TOOL_OUTPUT) {
+              // Attempt to save oversized output when tool is container-backed and thread_id is present
+              const threadId = config?.configurable?.thread_id;
+              const baseTool = pair?.base;
+              let savedOk = false;
+              let savedPath = '';
+              if (threadId && baseTool && typeof baseTool.getContainerForThread === 'function') {
+                try {
+                  const container = await baseTool.getContainerForThread(threadId);
+                  if (container && typeof container.putArchive === 'function') {
+                    const uuid = randomUUID();
+                    const filename = `${uuid}.txt`;
+                    const tarBuf = await createSingleFileTar(filename, content);
+                    await container.putArchive(tarBuf, { path: '/tmp' });
+                    savedOk = true;
+                    savedPath = `/tmp/${filename}`;
+                  }
+                } catch {
+                  savedOk = false;
+                }
+              }
+              if (savedOk) {
+                return createMessage(`Error: output is too long (${content.length} characters). The output has been saved to ${savedPath}`, false);
+              }
               return createMessage(`Error (output too long: ${content.length} characters).`, false);
-            } else {
-              return createMessage(content);
             }
+            return createMessage(content);
           } catch (e: unknown) {
             // Prefer readable error strings to avoid "[object Object]"; don't interpolate objects directly
             if (e instanceof Error && e.name === 'AbortError') {

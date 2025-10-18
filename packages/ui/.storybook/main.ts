@@ -1,5 +1,7 @@
 import type { StorybookConfig } from '@storybook/react-vite';
 import { mergeConfig } from 'vite';
+import tailwind from '@tailwindcss/postcss';
+import autoprefixer from 'autoprefixer';
 import tsconfigPaths from 'vite-tsconfig-paths';
 
 const config: StorybookConfig = {
@@ -10,6 +12,13 @@ const config: StorybookConfig = {
   viteFinal: async (baseConfig) => {
     return mergeConfig(baseConfig, {
       plugins: [tsconfigPaths()],
+      css: {
+        // Defensive: ensure PostCSS plugins apply in Storybook
+        postcss: {
+          // Tailwind v4 PostCSS plugin + autoprefixer
+          plugins: [tailwind(), autoprefixer()]
+        }
+      },
       resolve: {
         dedupe: ['react', 'react-dom']
       },
@@ -21,4 +30,3 @@ const config: StorybookConfig = {
 };
 
 export default config;
-

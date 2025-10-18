@@ -13,6 +13,7 @@ import {
 import { v4 as uuid } from 'uuid';
 import { getApiBase } from '../../lib/apiClient';
 import type { TemplateNodeSchema, PersistedGraph } from 'shared';
+import { deepEqual } from '../../lib/utils';
 
 interface BuilderNodeData {
   template: string;
@@ -163,8 +164,27 @@ export function useBuilderState(
   }, []);
 
   const updateNodeData = useCallback((id: string, data: Partial<BuilderNodeData>) => {
-    setNodes((nds) => nds.map((n) => (n.id === id ? { ...n, data: { ...n.data, ...data } } : n)));
-    setDirty(true);
+    let changed = false;
+    setNodes((nds) => {
+      let updated = false;
+      const next = nds.map((n) => {
+        if (n.id !== id) return n;
+        const nextData: BuilderNodeData = { ...n.data, ...data } as BuilderNodeData;
+        // Guard no-op updates: shallow equal on template/name; deep-equal on config/dynamicConfig
+        const sameTemplate = n.data.template === nextData.template;
+        const sameName = n.data.name === nextData.name;
+        const sameConfig = deepEqual(n.data.config, nextData.config);
+        const sameDynConfig = deepEqual(n.data.dynamicConfig, nextData.dynamicConfig);
+        if (sameTemplate && sameName && sameConfig && sameDynConfig) {
+          return n; // no-op
+        }
+        updated = true;
+        return { ...n, data: nextData };
+      });
+      changed = updated;
+      return updated ? next : nds;
+    });
+    if (changed) setDirty(true);
   }, []);
 
   const deleteSelected = useCallback(() => {

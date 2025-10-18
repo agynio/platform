@@ -137,4 +137,9 @@ export class ShellTool extends BaseTool {
     if (!items.length) return undefined;
     try { const r = await this.envService.resolveEnvItems(items); return Object.keys(r).length ? r : undefined; } catch { return undefined; }
   }
+
+  override async getContainerForThread(threadId: string) {
+    if (!this.containerProvider) return undefined;
+    try { return await this.containerProvider.provide(threadId); } catch { return undefined; }
+  }
 }

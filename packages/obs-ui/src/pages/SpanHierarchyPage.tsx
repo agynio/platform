@@ -3,6 +3,7 @@ import { useHotkeys } from 'react-hotkeys-hook';
 import { Link } from 'react-router-dom';
 import { SpanDoc } from '../types';
 import { SpanDetails, SpanTree, SpanTimeline } from '../components';
+import { formatDuration } from '../utils/format';
 import { spanRealtime } from '../services/socket';
 
 // Reusable layout constants (kept in sync with TracePage original values)
@@ -246,7 +247,11 @@ export function SpanHierarchyPage({ mode, id, fetcher }: SpanHierarchyPageProps)
                 {!ruler.empty && (
                   <div style={{ position: 'relative', flex: 1, height: '100%' }}>
                     {ruler.ticks.map(t => { const pct = ((t - ruler.min) / ruler.total) * 100; return <div key={t} style={{ position: 'absolute', left: pct + '%', top: 0, bottom: 0, width: 1, background: '#ccc' }} />; })}
-                    {ruler.ticks.map(t => { const pct = ((t - ruler.min) / ruler.total) * 100; const label = t - ruler.min + 'ms'; return <div key={t + '-lbl'} style={{ position: 'absolute', left: pct + '%', top: 2, fontSize: 10, paddingLeft: 2, transform: 'translateX(2px)' }}>{label}</div>; })}
+                    {ruler.ticks.map(t => {
+                      const pct = ((t - ruler.min) / ruler.total) * 100;
+                      const label = formatDuration(t - ruler.min);
+                      return <div key={t + '-lbl'} style={{ position: 'absolute', left: pct + '%', top: 2, fontSize: 10, paddingLeft: 2, transform: 'translateX(2px)' }}>{label}</div>;
+                    })}
                   </div>
                 )}
               </div>

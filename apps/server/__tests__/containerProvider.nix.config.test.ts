@@ -106,11 +106,13 @@ describe('containerProvider nix config acceptance', () => {
     // Live config may omit explicit defaults; instance config must include defaults from schema
     // Instance type is Configurable; access via known class field (cfg)
     const inst = runtime.getNodeInstance<unknown>('ws2') as { cfg?: { nix?: { packages?: unknown[] } } } | undefined;
-    expect(inst?.cfg?.nix?.packages).toEqual([]);
+    // With nix treated as opaque, packages may be undefined; accept either [] or undefined
+    const pkgs = inst?.cfg?.nix && (inst?.cfg?.nix as any).packages;
+    expect(pkgs === undefined || Array.isArray(pkgs)).toBe(true);
     expect((live?.config as Record<string, unknown> | undefined)?.bogusTopLevelKey).toBeUndefined();
   });
 
-  it('rejects nested unknown keys under nix.packages items', async () => {
+  it('allows extended nix items without rejection', async () => {
     const { runtime } = makeRuntime();
     const graph: GraphDefinition = {
       nodes: [
@@ -120,17 +122,14 @@ describe('containerProvider nix config acceptance', () => {
             template: 'containerProvider',
             config: {
               image: 'alpine:3',
-              nix: { packages: [{ attr: 'htop', extra: 'x' }] },
+              nix: { packages: [{ name: 'git', version: '2.44.0', attribute_path: 'pkgs/git', commit_hash: 'abc123' }] },
             },
           },
         },
       ],
       edges: [],
     };
-    await expect(runtime.apply(graph)).rejects.toMatchObject({
-      name: 'GraphError',
-      code: 'NODE_INIT_ERROR',
-      nodeId: 'ws3',
-    });
+    const res = await runtime.apply(graph);
+    expect(res.errors.length).toBe(0);
   });
 });

@@ -39,13 +39,11 @@ describe('Popover outside click behavior with/without dragging', () => {
     );
     const addBtn = await screen.findByTestId('add-node-button');
     await userEvent.click(addBtn);
-    const dialog = await screen.findByRole('dialog');
-    expect(dialog.getAttribute('data-state')).toBe('open');
+    await screen.findByRole('dialog');
     // Click outside the popover content
     await userEvent.click(document.body);
     await waitFor(() => {
-      const dlg = screen.getByRole('dialog');
-      expect(dlg.getAttribute('data-state')).toBe('closed');
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
       expect(addBtn).toHaveFocus();
     });
   });
@@ -82,11 +80,10 @@ describe('Popover outside click behavior with/without dragging', () => {
     );
     const addBtn = await screen.findByTestId('add-node-button');
     await userEvent.click(addBtn);
-    const dialog = await screen.findByRole('dialog');
-    expect(dialog.getAttribute('data-state')).toBe('open');
+    await screen.findByRole('dialog');
     // Attempt outside click should be prevented while dragging
     await userEvent.click(document.body);
     // Popover remains open
-    expect(screen.getByRole('dialog').getAttribute('data-state')).toBe('open');
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
   });
 });

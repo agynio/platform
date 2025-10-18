@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Button, Input } from '@hautech/ui';
 import type { ContainerNixConfig, NixPackageSelection } from './types';
 import { useQuery } from '@tanstack/react-query';
-import { fetchPackages, fetchVersions } from '@/services/nix';
+import { fetchPackages, fetchVersions, fetchPackageInfo, type PackageInfoResponse } from '@/services/nix';
 
 // Debounce helper
 function useDebounced<T>(value: T, delay = 300) {
@@ -28,6 +28,7 @@ export function NixPackagesSection(props: ControlledProps | UncontrolledProps) {
   const [activeIndex, setActiveIndex] = useState(0);
   const [selected, setSelected] = useState<SelectedPkg[]>([]);
   const [versionsByName, setVersionsByName] = useState<Record<string, string | ''>>({});
+  const [metaByName, setMetaByName] = useState<Record<string, PackageInfoResponse | undefined>>({});
   const lastPushedJson = useRef<string>('');
   const lastPushedPackagesLen = useRef<number>(0);
 
@@ -75,7 +76,24 @@ export function NixPackagesSection(props: ControlledProps | UncontrolledProps) {
     // Build packages array only for items with a chosen version
     const packages = selected.flatMap((p) => {
       const v = versionsByName[p.name];
-      return v && v.length > 0 ? [{ name: p.name, version: v }] : [];
+      if (!v || v.length === 0) return [];
+      const info = metaByName[p.name];
+      let attribute_path: string | undefined;
+      let commit_hash: string | undefined;
+      if (info && Array.isArray(info.releases)) {
+        const candidates = info.releases.filter((r) => r.version === v);
+        const currentPlatform = '';
+        let chosen = candidates[0];
+        if (candidates.length > 1 && currentPlatform) {
+          const match = candidates.find((r) => (r.platforms || []).includes(currentPlatform));
+          if (match) chosen = match;
+        }
+        if (chosen) {
+          attribute_path = chosen.attribute_path;
+          commit_hash = chosen.commit_hash;
+        }
+      }
+      return [{ name: p.name, version: v, attribute_path, commit_hash }];
     });
     // No debug logs in production
 
@@ -253,6 +271,13 @@ export function NixPackagesSection(props: ControlledProps | UncontrolledProps) {
               chosen={versionsByName[p.name] || ''}
               onChoose={(v) => setVersionsByName((prev) => ({ ...prev, [p.name]: v }))}
               onRemove={() => removeSelected(p.name)}
+              onVersionListReady={() => {
+                if (!metaByName[p.name]) {
+                  void fetchPackageInfo(p.name)
+                    .then((res) => setMetaByName((prev) => ({ ...prev, [p.name]: res })))
+                    .catch(() => {});
+                }
+              }}
             />
           ))}
         </ul>
@@ -267,7 +292,7 @@ export function NixPackagesSection(props: ControlledProps | UncontrolledProps) {
 // Note: debounce not required; builder autosave already debounces
 export default NixPackagesSection;
 
-function SelectedPackageItem({ pkg, chosen, onChoose, onRemove }: { pkg: { name: string }; chosen: string | ''; onChoose: (v: string | '') => void; onRemove: () => void }) {
+function SelectedPackageItem({ pkg, chosen, onChoose, onRemove, onVersionListReady }: { pkg: { name: string }; chosen: string | ''; onChoose: (v: string | '') => void; onRemove: () => void; onVersionListReady?: () => void }) {
   const qVersions = useQuery({
     queryKey: ['nix', 'versions', pkg.name],
     queryFn: ({ signal }) => fetchVersions(pkg.name, signal),
@@ -276,6 +301,7 @@ function SelectedPackageItem({ pkg, chosen, onChoose, onRemove }: { pkg: { name:
 
   const label = pkg.name;
   const versions = qVersions.data || [];
+  useEffect(() => { if (versions.length > 0) onVersionListReady?.(); }, [versions.length]);
 
   // Optional: auto-select only when there is a single version available
   useEffect(() => {

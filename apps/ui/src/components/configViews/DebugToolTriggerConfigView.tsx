@@ -17,7 +17,8 @@ export default function DebugToolTriggerConfigView({ value, onChange, readOnly, 
   }, [path, method, onValidate]);
 
   useEffect(() => {
-    onChange({ ...value, path, method: 'POST', authToken: authToken || undefined });
+    const next = { ...value, path, method: 'POST', authToken: authToken || undefined };
+    if (JSON.stringify(value || {}) !== JSON.stringify(next)) onChange(next);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [path, method, authToken]);
 

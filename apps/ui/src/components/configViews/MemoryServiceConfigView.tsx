@@ -10,7 +10,8 @@ export default function MemoryServiceConfigView({ value, onChange, readOnly, dis
   const isDisabled = !!readOnly || !!disabled;
 
   useEffect(() => {
-    onChange({ ...value, scope, collectionPrefix: collectionPrefix || undefined, title: title || undefined });
+    const next = { ...value, scope, collectionPrefix: collectionPrefix || undefined, title: title || undefined };
+    if (JSON.stringify(value || {}) !== JSON.stringify(next)) onChange(next);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [scope, collectionPrefix, title]);
 
