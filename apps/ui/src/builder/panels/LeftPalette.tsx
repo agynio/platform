@@ -10,7 +10,8 @@ function PaletteItem({ template }: PaletteItemProps) {
   const [{ isDragging }, dragRef] = useDrag(
     () => ({
       type: DND_ITEM_NODE,
-      item: { kind: template.name },
+      // Align payload to standardized shape
+      item: { template: template.name, title: template.title, kind: template.kind, origin: 'palette' as const },
       collect: (monitor) => ({ isDragging: monitor.isDragging() }),
     }),
     [template],

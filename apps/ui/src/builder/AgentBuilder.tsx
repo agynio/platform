@@ -13,7 +13,7 @@ import ReactFlow, {
   SelectionMode,
 } from 'reactflow';
 import 'reactflow/dist/style.css';
-import { DndProvider, useDrop } from 'react-dnd';
+import { DndProvider, useDrop, useDragLayer } from 'react-dnd';
 import { HTML5Backend } from 'react-dnd-html5-backend';
 import { DND_ITEM_NODE } from './dnd';
 import type { DragItem } from './dnd';
@@ -30,6 +30,7 @@ import { Plus, Bot, Wrench, Zap } from 'lucide-react';
 import { kindBadgeClasses, kindLabel } from './lib/display';
 import { SaveStatusIndicator } from './SaveStatusIndicator';
 import { useDrag } from 'react-dnd';
+import { BuilderDragLayer } from './BuilderDragLayer';
 
 interface CanvasAreaProps {
   nodes: RFNode[];
@@ -70,7 +71,8 @@ function CanvasArea({
         if (!client || !flowWrapper.current) return undefined;
         const bounds = flowWrapper.current.getBoundingClientRect();
         const position = reactFlow.project({ x: client.x - bounds.left, y: client.y - bounds.top });
-        const templateName = item.template; // always use item.template; no legacy fallback
+        // Validate payload shape
+        const templateName = item?.template;
         if (!templateName) return undefined;
         addNode(templateName, position);
         return { inserted: true };
@@ -144,13 +146,13 @@ function CanvasArea({
             if (!v) setTimeout(() => triggerRef.current?.focus(), 0);
           }}
         >
-          <PopoverTrigger asChild>
-            <div
-              role="toolbar"
-              aria-label="Builder toolbar"
-              className="pointer-events-auto inline-flex items-center gap-1 rounded-full border bg-background/95 shadow-lg backdrop-blur px-2 py-1"
-              data-testid="builder-toolbar"
-            >
+          <div
+            role="toolbar"
+            aria-label="Builder toolbar"
+            className="pointer-events-auto inline-flex items-center gap-1 rounded-full border bg-background/95 shadow-lg backdrop-blur px-2 py-1"
+            data-testid="builder-toolbar"
+          >
+            <PopoverTrigger asChild>
               <Button
                 ref={triggerRef}
                 variant="default"
@@ -162,8 +164,8 @@ function CanvasArea({
               >
                 <Plus className="h-4 w-4" />
               </Button>
-            </div>
-          </PopoverTrigger>
+            </PopoverTrigger>
+          </div>
           <PopoverContent
             forceMount
             side="top"
@@ -197,6 +199,8 @@ function CanvasArea({
           </PopoverContent>
         </Popover>
       </div>
+      {/* Global custom drag layer for preview */}
+      <BuilderDragLayer containerRef={flowWrapper} />
     </div>
   );
 }
@@ -306,7 +310,7 @@ const PopoverListItem = (
   const [{ isDragging }, dragRef, dragPreview] = useDrag<DragItem, { inserted: boolean }, { isDragging: boolean }>(
     () => ({
       type: DND_ITEM_NODE,
-      item: { template: template.name, title: template.title, kind: template.kind },
+      item: { template: template.name, title: template.title, kind: template.kind, origin: 'popover' as const },
       collect: (monitor) => ({ isDragging: monitor.isDragging() }),
       end: (_item, monitor) => {
         onDragStateChange(false);
