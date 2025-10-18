@@ -182,9 +182,14 @@ export function SpanDetails({
 
   // Helper to extract tool output content as string (markdown friendly)
   function getToolOutput(s: SpanDoc): string | undefined {
-    const output = s?.attributes?.output;
+    const output = s?.attributes?.output as unknown;
     if (typeof output === 'string') return output;
-    return JSON.stringify(output, null, 2);
+    if (output && typeof output === 'object') {
+      const maybeContent = (output as Record<string, unknown>)['content'];
+      if (typeof maybeContent === 'string') return maybeContent;
+      return JSON.stringify(output, null, 2);
+    }
+    return undefined;
   }
 
   // Log severity counts (only in logs tab header badges)
@@ -697,12 +702,12 @@ export function SpanDetails({
                   <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
                     <ModeSelect
                       label="Output"
-                      modes=[
+                      modes={[
                         { value: 'md', label: 'Markdown' },
                         { value: 'json', label: 'JSON' },
                         { value: 'yaml', label: 'YAML' },
                         { value: 'terminal', label: 'Terminal' },
-                      ]
+                      ]}
                       value={outputMode}
                       onChange={setOutputMode}
                     />
