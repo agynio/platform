@@ -20,7 +20,6 @@ describe('Server bootstrap wiring timing', () => {
     const registry = new TemplateRegistry();
     const logger = new LoggerService();
     const runtime = new LiveGraphRuntime(logger, registry);
-
     // Register a factory that captures globals at instantiation time
     const factory: FactoryFn = async () => new WiringProbeAgent() as any;
     registry.register('wiringProbe', factory, { sourcePorts: {}, targetPorts: {} }, { title: 'Probe', kind: 'agent' });
@@ -35,4 +34,3 @@ describe('Server bootstrap wiring timing', () => {
     expect(inst.sawRunsService).toBe(true);
   });
 });
-

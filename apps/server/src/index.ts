@@ -188,7 +188,6 @@ async function bootstrap() {
   }
 
   // Globals already set above
-
   const fastify = Fastify({ logger: false });
   await fastify.register(cors, { origin: true });
 
