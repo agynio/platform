@@ -178,8 +178,6 @@ volumes:
   pgdata:
   ncps-storage:
     driver: local
-  ncps-storage:
-    driver: local
 
 networks:
   # Shared user-defined bridge with deterministic name so non-compose containers

@@ -3,10 +3,13 @@ import { createRoot } from 'react-dom/client'
 import './index.css'
 import App from './App.tsx'
 import { initConfigViewsRegistry } from './configViews.init';
+import { TooltipProvider } from '@hautech/ui';
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     {initConfigViewsRegistry()}
-    <App />
+    <TooltipProvider>
+      <App />
+    </TooltipProvider>
   </StrictMode>,
 )

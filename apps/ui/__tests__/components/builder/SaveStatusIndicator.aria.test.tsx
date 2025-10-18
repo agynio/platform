@@ -2,6 +2,7 @@ import React from 'react';
 import { describe, it, expect } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import { SaveStatusIndicator, type SaveState } from '../../../src/builder/SaveStatusIndicator';
+import { TooltipProvider } from '@hautech/ui';
 
 describe('SaveStatusIndicator aria-label and colors', () => {
   const cases: Array<{ state: SaveState; label: string; color: string }> = [
@@ -14,7 +15,11 @@ describe('SaveStatusIndicator aria-label and colors', () => {
 
   for (const c of cases) {
     it(`renders ${c.state} with aria-label and color`, async () => {
-      render(<SaveStatusIndicator state={c.state} />);
+      render(
+        <TooltipProvider delayDuration={0}>
+          <SaveStatusIndicator state={c.state} />
+        </TooltipProvider>
+      );
       const el = await screen.findByTestId('save-status');
       expect(el).toHaveAttribute('aria-label', c.label);
       expect(el.className).toContain(c.color);

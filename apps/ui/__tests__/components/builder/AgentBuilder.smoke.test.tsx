@@ -39,7 +39,7 @@ describe('AgentBuilder smoke render', () => {
     );
 
     // Basic UI appears; if TDZ occurs, render would throw before this
-    await waitFor(() => expect(screen.getByText(/Palette/i)).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByTestId('add-node-button')).toBeInTheDocument());
     // Right panel header present (no selection initially)
     expect(screen.getByText('No Selection')).toBeInTheDocument();
   });

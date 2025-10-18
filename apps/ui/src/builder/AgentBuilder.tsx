@@ -20,13 +20,14 @@ import { makeNodeTypes } from './nodeTypes';
 import { TemplatesProvider } from './TemplatesProvider';
 import type { NodeTypes } from 'reactflow';
 import { NodeObsSidebar } from '@/components/graph/NodeObsSidebar';
-import { LeftPalette } from './panels/LeftPalette';
 import { RightPropertiesPanel } from './panels/RightPropertiesPanel';
 import { useBuilderState } from './hooks/useBuilderState';
 import type { BuilderNodeKind } from './types';
 import type { TemplateNodeSchema } from 'shared';
 import { getDisplayTitle } from './lib/display';
-import { Button } from '@hautech/ui';
+import { Button, Popover, PopoverTrigger, PopoverContent, ScrollArea, Card } from '@hautech/ui';
+import { Plus } from 'lucide-react';
+import { kindBadgeClasses, kindLabel } from './lib/display';
 
 interface CanvasAreaProps {
   nodes: RFNode[];
@@ -37,6 +38,8 @@ interface CanvasAreaProps {
   addNode: (kind: BuilderNodeKind, position: { x: number; y: number }) => void;
   deleteSelected: () => void;
   nodeTypes: NodeTypes; // reactflow's NodeTypes value type
+  templates: TemplateNodeSchema[];
+  saveState: 'idle' | 'saving' | 'saved' | 'error' | 'conflict';
 }
 
 function CanvasArea({
@@ -48,9 +51,12 @@ function CanvasArea({
   addNode,
   deleteSelected,
   nodeTypes,
+  templates,
+  saveState,
 }: CanvasAreaProps) {
   const flowWrapper = useRef<HTMLDivElement | null>(null);
   const reactFlow = useReactFlow();
+  const [open, setOpen] = useState(false);
 
   const [{ isOver }, dropRef] = useDrop(
     () => ({
@@ -82,6 +88,18 @@ function CanvasArea({
   const setDropRef = (el: HTMLDivElement | null) => {
     if (el) dropRef(el);
   };
+  const insertAtViewportCenter = useCallback(
+    (templateName: string) => {
+      if (!flowWrapper.current) return;
+      const bounds = flowWrapper.current.getBoundingClientRect();
+      // Use wrapper-relative center and project to graph coordinates
+      const center = { x: bounds.width / 2, y: bounds.height / 2 };
+      const projected = reactFlow.project(center);
+      addNode(templateName, projected);
+    },
+    [reactFlow, addNode],
+  );
+
   return (
     <div ref={setDropRef} className="relative flex-1" onKeyDown={onKeyDown} tabIndex={0}>
       <div ref={flowWrapper} className={`absolute inset-0 ${isOver ? 'ring-2 ring-primary/40' : ''}`}>
@@ -104,7 +122,8 @@ function CanvasArea({
           <Controls />
         </ReactFlow>
       </div>
-      <div className="pointer-events-none absolute left-2 top-2 z-10 flex gap-2">
+      {/* Top-left overlay: Fit + Save state indicator */}
+      <div className="pointer-events-none absolute left-2 top-2 z-10 flex items-center gap-2">
         <Button
           type="button"
           size="sm"
@@ -113,6 +132,55 @@ function CanvasArea({
         >
           Fit
         </Button>
+        <div className="text-[10px] text-muted-foreground" aria-live="polite">
+          Save: {saveState}
+        </div>
+      </div>
+
+      {/* Bottom-center add button and popover */}
+      <div className="pointer-events-none absolute bottom-4 left-1/2 z-10 -translate-x-1/2">
+        <Popover open={open} onOpenChange={setOpen}>
+          <PopoverTrigger asChild>
+            <Button
+              variant="default"
+              size="icon"
+              type="button"
+              aria-label="Add node"
+              className="pointer-events-auto"
+              data-testid="add-node-button"
+            >
+              <Plus />
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent side="top" align="center" className="w-[720px] max-w-[90vw] p-2" aria-labelledby="add-node-title">
+            <h2 id="add-node-title" className="sr-only">Add node</h2>
+            <ScrollArea className="max-h-[60vh]">
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-2 p-1">
+                {templates.map((tpl) => (
+                  <Card key={tpl.name} className="p-0">
+                    <button
+                      type="button"
+                      className="w-full rounded-lg p-3 text-left outline-none focus-visible:ring-ring/50 focus-visible:ring-[3px] focus-visible:border-ring hover:bg-accent hover:text-accent-foreground"
+                      onClick={() => {
+                        insertAtViewportCenter(tpl.name);
+                        setOpen(false);
+                      }}
+                      aria-label={`Insert ${tpl.title || tpl.name}`}
+                      data-testid={`template-${tpl.name}`}
+                    >
+                      <div className="flex items-center gap-2">
+                        <span className={`inline-block rounded px-1.5 py-0.5 text-[10px] leading-none ${kindBadgeClasses(tpl.kind)}`}>
+                          {kindLabel(tpl.kind)}
+                        </span>
+                        <span className="text-sm font-medium text-primary">{tpl.title || tpl.name}</span>
+                      </div>
+                    </button>
+                  </Card>
+                ))}
+              </div>
+            </ScrollArea>
+          </PopoverContent>
+        </Popover>
       </div>
     </div>
   );
@@ -130,7 +198,6 @@ export function AgentBuilder() {
     updateNodeData,
     deleteSelected,
     templates,
-    loading,
     saveState,
   } = useBuilderState();
   const nodeTypes = useMemo(() => makeNodeTypes(templates), [templates]);
@@ -168,14 +235,6 @@ export function AgentBuilder() {
     <DndProvider backend={HTML5Backend}>
       <ReactFlowProvider>
         <div className="h-svh w-svw flex overflow-hidden">
-          <aside className="w-56 shrink-0 border-r bg-sidebar p-3">
-            <div className="mb-2 flex items-center justify-between">
-              <span className="text-[10px] uppercase tracking-wide text-muted-foreground">Palette</span>
-              <span className="text-[10px] font-medium">{loading ? 'Loading' : templates.length}</span>
-            </div>
-            <LeftPalette templates={templates} />
-            <div className="mt-4 text-[10px] text-muted-foreground">Save: {saveState}</div>
-          </aside>
           <TemplatesProvider templates={templates}>
             <CanvasArea
               nodes={nodes}
@@ -186,6 +245,8 @@ export function AgentBuilder() {
               addNode={addNode}
               deleteSelected={deleteSelected}
               nodeTypes={nodeTypes}
+              templates={templates}
+              saveState={saveState}
             />
           </TemplatesProvider>
           <aside className="w-96 shrink-0 border-l bg-sidebar p-0 flex flex-col overflow-hidden">
