@@ -22,21 +22,6 @@ import { EnforceRestrictionNode } from '../lgnodes/enforceRestriction.lgnode';
 import { stringify as toYaml } from 'yaml';
 import { buildMcpToolError } from '../mcp/errorUtils';
 
-// Module-level constants for clarity and reuse (schema-dependent constant is declared after schema)
-const ALLOWED_CONFIG_KEYS = [
-  'title',
-  'model',
-  'systemPrompt',
-  'debounceMs',
-  'whenBusy',
-  'processBuffer',
-  'summarizationKeepTokens',
-  'summarizationMaxTokens',
-  'restrictOutput',
-  'restrictionMessage',
-  'restrictionMaxInjections',
-] as const;
-
 /**
  * Zod schema describing static configuration for SimpleAgent.
  * Keep this colocated with the implementation so updates stay in sync.
@@ -104,8 +89,6 @@ export const SimpleAgentStaticConfigSchema = z
   })
   .strict();
 
-export const DEFAULT_SYSTEM_PROMPT = SimpleAgentStaticConfigSchema.parse({}).systemPrompt;
-
 export type SimpleAgentStaticConfig = z.infer<typeof SimpleAgentStaticConfigSchema>;
 export class SimpleAgent extends BaseAgent {
   private callModelNode!: CallModelNode;
@@ -114,9 +97,6 @@ export class SimpleAgent extends BaseAgent {
   private mcpServerTools: Map<McpServer, BaseTool[]> = new Map();
   // Persist the underlying ChatOpenAI instance so we can update its model dynamically
   private llm!: ChatOpenAI;
-  // Track systemPrompt handling to avoid overwriting with defaults
-  private hasExplicitSystemPrompt: boolean = false; // set once a custom prompt is provided
-  private appliedDefaultSystemPrompt: boolean = false; // ensure default applied at most once
 
   private summarizationKeepTokens?: number; // token budget for verbatim tail
   private summarizationMaxTokens?: number;
@@ -457,25 +437,31 @@ export class SimpleAgent extends BaseAgent {
   // Overload preserves BaseAgent signature while exposing a more precise config shape for callers.
   setConfig(config: Partial<SimpleAgentStaticConfig> & Record<string, unknown>): void;
   setConfig(config: Record<string, unknown>): void {
-    const filtered = Object.fromEntries(Object.entries(config).filter(([k]) => (ALLOWED_CONFIG_KEYS as readonly string[]).includes(k)));
-    const parsedConfig = SimpleAgentStaticConfigSchema.partial().parse(filtered) as Partial<SimpleAgentStaticConfig>;
-    // Treat only a provided string (including empty string) as explicit; ignore undefined (treated as omission)
-    const rawProvidedSystemPrompt = (filtered as any).systemPrompt;
-    const hasExplicitSystemPromptValue = typeof rawProvidedSystemPrompt === 'string';
+    const parsedConfig = SimpleAgentStaticConfigSchema.partial().parse(
+      Object.fromEntries(
+        Object.entries(config).filter(([k]) =>
+          [
+            'title',
+            'model',
+            'systemPrompt',
+            'debounceMs',
+            'whenBusy',
+            'processBuffer',
+            'summarizationKeepTokens',
+            'summarizationMaxTokens',
+            'restrictOutput',
+            'restrictionMessage',
+            'restrictionMaxInjections',
+          ].includes(k),
+        ),
+      ),
+    ) as Partial<SimpleAgentStaticConfig>;
 
     // Apply agent-side scheduling config
     this.applyRuntimeConfig(config);
 
-    // System prompt handling:
-    // - Only set when parsed value is a defined string (treat undefined as omission).
-    // - Else, if never explicitly set and default not yet applied, set schema default exactly once.
-    if (hasExplicitSystemPromptValue) {
-      this.callModelNode.setSystemPrompt(rawProvidedSystemPrompt as string); // allow empty string as explicit
-      this.hasExplicitSystemPrompt = true;
-      this.loggerService.info('SimpleAgent system prompt updated');
-    } else if (!this.hasExplicitSystemPrompt && !this.appliedDefaultSystemPrompt) {
-      this.callModelNode.setSystemPrompt(DEFAULT_SYSTEM_PROMPT);
-      this.appliedDefaultSystemPrompt = true;
+    if (parsedConfig.systemPrompt !== undefined) {
+      this.callModelNode.setSystemPrompt(parsedConfig.systemPrompt);
       this.loggerService.info('SimpleAgent system prompt updated');
     }
 
