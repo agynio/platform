@@ -2,10 +2,11 @@ import { describe, it, expect } from 'vitest';
 import { LiveGraphRuntime } from '../src/graph/liveGraph.manager';
 import { buildTemplateRegistry } from '../src/templates';
 import type { LoggerService } from '../src/services/logger.service';
-import type { ContainerService } from '../src/services/container.service';
-import type { ConfigService } from '../src/services/config.service';
-import type { CheckpointerService } from '../src/services/checkpointer.service';
+import { ContainerService } from '../src/services/container.service';
+import { ConfigService, configSchema } from '../src/services/config.service';
+import { CheckpointerService } from '../src/services/checkpointer.service';
 import type { MongoService } from '../src/services/mongo.service';
+import { ContainerEntity } from '../src/entities/container.entity';
 import type { GraphDefinition } from '../src/graph/types';
 import type { ContainerProviderStaticConfig } from '../src/entities/containerProvider.entity';
 
@@ -20,26 +21,36 @@ class StubMongo implements MongoService {
   getDb(): any { return {}; }
 } // eslint-disable-line @typescript-eslint/no-explicit-any
 
+class StubContainerService extends ContainerService {
+  constructor() { super({ info() {}, debug() {}, error() {} } as LoggerService); }
+  override async start(): Promise<ContainerEntity> {
+    // return a minimal container entity; methods won't be used in these tests
+    return {
+      id: 'c',
+      exec: async () => ({ exitCode: 0 }),
+      stop: async () => {},
+      remove: async () => {},
+    } as unknown as ContainerEntity;
+  }
+  override async findContainerByLabels(): Promise<ContainerEntity | undefined> { return undefined; }
+  override async findContainersByLabels(): Promise<ContainerEntity[]> { return []; }
+  override async getContainerLabels(): Promise<Record<string, string>> { return {}; }
+}
+
 function makeRuntime() {
   const logger = new StubLogger();
   const deps = {
     logger,
-    containerService: {
-      // minimal methods used by ContainerProviderEntity during tests
-      start: async () => ({
-        id: 'c',
-        exec: async () => ({ exitCode: 0 }),
-        stop: async () => {},
-        remove: async () => {},
-      }),
-      findContainerByLabels: async () => undefined,
-      findContainersByLabels: async () => [],
-      getContainerLabels: async () => ({}),
-    } as unknown as ContainerService,
-    configService: {
-      dockerMirrorUrl: 'http://registry-mirror:5000',
-    } as unknown as ConfigService,
-    checkpointerService: {} as unknown as CheckpointerService,
+    containerService: new StubContainerService(),
+    configService: new ConfigService(
+      configSchema.parse({
+        githubAppId: 'x', githubAppPrivateKey: 'x', githubInstallationId: 'x', openaiApiKey: 'x', githubToken: 'x', mongodbUrl: 'x',
+        graphStore: 'mongo', graphRepoPath: './data/graph', graphBranch: 'graph-state',
+        dockerMirrorUrl: 'http://registry-mirror:5000', nixAllowedChannels: 'nixpkgs-unstable', nixHttpTimeoutMs: '5000', nixCacheTtlMs: String(300000), nixCacheMax: '500',
+        mcpToolsStaleTimeoutMs: '0', ncpsEnabled: 'false', ncpsUrl: 'http://ncps:8501'
+      })
+    ),
+    checkpointerService: new CheckpointerService({ info() {}, debug() {}, error() {} } as LoggerService),
     mongoService: new StubMongo(),
   };
   const registry = buildTemplateRegistry(deps);

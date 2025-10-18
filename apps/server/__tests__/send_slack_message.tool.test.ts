@@ -14,10 +14,10 @@ vi.mock('@slack/web-api', () => {
 });
 
 describe('SendSlackMessageTool', () => {
-  const logger = { info: vi.fn(), error: vi.fn(), debug: vi.fn() } as any;
+  const logger = { info: vi.fn(), error: vi.fn(), debug: vi.fn() } as unknown as { info: Function; error: Function; debug: Function };
 
   it('sends message using provided bot_token and channel (literal)', async () => {
-    const tool = new SendSlackMessageTool(logger, undefined as any);
+    const tool = new SendSlackMessageTool(logger, undefined);
     await tool.setConfig({ bot_token: 'xoxb-valid', default_channel: 'C1' });
     const t = tool.init();
     const res = await t.invoke({ text: 'hi', channel: 'C2' } as any);
@@ -25,7 +25,7 @@ describe('SendSlackMessageTool', () => {
   });
 
   it('sends ephemeral when ephemeral_user set', async () => {
-    const tool = new SendSlackMessageTool(logger, undefined as any);
+    const tool = new SendSlackMessageTool(logger, undefined);
     await tool.setConfig({ bot_token: 'xoxb-valid', default_channel: 'C1' });
     const t = tool.init();
     const res = await t.invoke({ text: 'hi', channel: 'C1', ephemeral_user: 'U1' } as any);
@@ -33,7 +33,7 @@ describe('SendSlackMessageTool', () => {
   });
 
   it('uses default_channel when channel omitted', async () => {
-    const tool = new SendSlackMessageTool(logger, undefined as any);
+    const tool = new SendSlackMessageTool(logger, undefined);
     await tool.setConfig({ bot_token: 'xoxb-valid', default_channel: 'CDEF' });
     const t = tool.init();
     const res = await t.invoke({ text: 'hello' } as any);
@@ -41,7 +41,7 @@ describe('SendSlackMessageTool', () => {
   });
 
   it('fails fast on vault ref when vault disabled', async () => {
-    const tool = new SendSlackMessageTool(logger, undefined as any);
+    const tool = new SendSlackMessageTool(logger, undefined);
     await expect(tool.setConfig({ bot_token: { value: 'secret/slack/BOT', source: 'vault' } } as any)).rejects.toThrow();
   });
 

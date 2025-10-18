@@ -19,10 +19,10 @@ describe('ShellTool timeout tail inclusion and ANSI stripping', () => {
       exec: vi.fn(async () => {
         throw err;
       }),
-    } as any;
+    } as const;
 
-    const provider = { provide: vi.fn(async () => fakeContainer) } as any;
-    const tool = new ShellTool(undefined as any, logger);
+    const provider = { provide: vi.fn(async () => fakeContainer) } as { provide: (t: string) => Promise<typeof fakeContainer> };
+    const tool = new ShellTool(undefined, logger);
     tool.setContainerProvider(provider);
     await tool.setConfig({});
     const t = tool.init();
@@ -33,7 +33,7 @@ describe('ShellTool timeout tail inclusion and ANSI stripping', () => {
 
     try {
       await t.invoke({ command: 'sleep 1h' }, { configurable: { thread_id: 't' } } as any);
-    } catch (e: any) {
+    } catch (e: unknown) {
       const msg = String(e?.message || e);
       // No ANSI should remain
       expect(msg).not.toMatch(/\u001b\[/);

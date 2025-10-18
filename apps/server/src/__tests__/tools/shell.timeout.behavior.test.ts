@@ -13,11 +13,11 @@ describe('ShellTool timeout error message', () => {
       exec: vi.fn(async () => {
         throw timeoutErr;
       }),
-    } as any;
+    } as const;
 
-    const provider = { provide: vi.fn(async () => fakeContainer) } as any;
+    const provider = { provide: vi.fn(async () => fakeContainer) } as { provide: (t: string) => Promise<typeof fakeContainer> };
 
-    const tool = new ShellTool(undefined as any, logger);
+    const tool = new ShellTool(undefined, logger);
     tool.setContainerProvider(provider);
     await tool.setConfig({});
     const t = tool.init();
@@ -33,9 +33,9 @@ describe('ShellTool timeout error message', () => {
   it('distinguishes idle timeout messaging', async () => {
     const logger = new LoggerService();
     const idleErr = new ExecIdleTimeoutError(60000, 'out', 'err');
-    const fakeContainer = { exec: vi.fn(async () => { throw idleErr; }) } as any;
-    const provider = { provide: vi.fn(async () => fakeContainer) } as any;
-    const tool = new ShellTool(undefined as any, logger);
+    const fakeContainer = { exec: vi.fn(async () => { throw idleErr; }) } as const;
+    const provider = { provide: vi.fn(async () => fakeContainer) } as { provide: (t: string) => Promise<typeof fakeContainer> };
+    const tool = new ShellTool(undefined, logger);
     tool.setContainerProvider(provider);
     await tool.setConfig({});
     const t = tool.init();
@@ -47,9 +47,9 @@ describe('ShellTool timeout error message', () => {
   it('reports actual enforced idle timeout from error.timeoutMs when available', async () => {
     const logger = new LoggerService();
     const idleErr = new (class extends ExecIdleTimeoutError { constructor() { super(12345, 'out', 'err'); } })();
-    const fakeContainer = { exec: vi.fn(async () => { throw idleErr; }) } as any;
-    const provider = { provide: vi.fn(async () => fakeContainer) } as any;
-    const tool = new ShellTool(undefined as any, logger);
+    const fakeContainer = { exec: vi.fn(async () => { throw idleErr; }) } as const;
+    const provider = { provide: vi.fn(async () => fakeContainer) } as { provide: (t: string) => Promise<typeof fakeContainer> };
+    const tool = new ShellTool(undefined, logger);
     tool.setContainerProvider(provider);
     await tool.setConfig({ idleTimeoutMs: 60000 });
     const t = tool.init();
@@ -68,7 +68,7 @@ describe('ContainerService.execContainer killOnTimeout behavior', () => {
   });
 
   it('stops container on timeout when killOnTimeout=true', async () => {
-    const docker: any = {
+    const docker = {
       getContainer: vi.fn((id: string) => ({
         inspect: vi.fn(async () => ({ Id: id, State: { Running: true } })),
         exec: vi.fn(async (_opts: any) => ({
@@ -78,7 +78,7 @@ describe('ContainerService.execContainer killOnTimeout behavior', () => {
         stop: vi.fn(async () => {}),
       })),
       modem: { demuxStream: () => {} },
-    };
+    } as const;
 
     // Patch service docker instance
     (svc as any).docker = docker;
@@ -96,7 +96,7 @@ describe('ContainerService.execContainer killOnTimeout behavior', () => {
   });
 
   it('does not stop container when killOnTimeout is false/omitted', async () => {
-    const docker: any = {
+    const docker = {
       getContainer: vi.fn((id: string) => ({
         inspect: vi.fn(async () => ({ Id: id, State: { Running: true } })),
         exec: vi.fn(async (_opts: any) => ({
@@ -106,7 +106,7 @@ describe('ContainerService.execContainer killOnTimeout behavior', () => {
         stop: vi.fn(async () => {}),
       })),
       modem: { demuxStream: () => {} },
-    };
+    } as const;
 
     (svc as any).docker = docker;
     const timeoutErr = new Error('Exec timed out after 456ms');
@@ -116,14 +116,14 @@ describe('ContainerService.execContainer killOnTimeout behavior', () => {
       svc.execContainer('cid999', 'echo nope', { timeoutMs: 456 }),
     ).rejects.toThrow(/timed out/);
     // Ensure stop was not called on any container instance
-    const anyStopped = docker.getContainer.mock.results.some((r: any) => r.value.stop.mock.calls.length > 0);
+    const anyStopped = (docker.getContainer as unknown as vi.Mock).mock.results.some((r: any) => r.value.stop.mock.calls.length > 0);
     expect(anyStopped).toBe(false);
     // Optional: verify only one getContainer call (inspect only)
     expect(docker.getContainer).toHaveBeenCalledTimes(1);
   });
 
   it('propagates non-timeout errors unchanged (service)', async () => {
-    const docker: any = {
+    const docker = {
       getContainer: vi.fn((id: string) => ({
         inspect: vi.fn(async () => ({ Id: id, State: { Running: true } })),
         exec: vi.fn(async (_opts: any) => ({
@@ -133,7 +133,7 @@ describe('ContainerService.execContainer killOnTimeout behavior', () => {
         stop: vi.fn(async () => {}),
       })),
       modem: { demuxStream: () => {} },
-    };
+    } as const;
 
     (svc as any).docker = docker;
     const genericErr = new Error('Some other failure');
@@ -182,10 +182,10 @@ describe('ShellTool non-timeout error propagation', () => {
           throw new Error('Permission denied');
         }),
       })),
-    } as unknown as { provide: (id: string) => Promise<{ exec: (cmd: string, opts?: unknown) => Promise<never> }> };
+    } as { provide: (id: string) => Promise<{ exec: (cmd: string, opts?: unknown) => Promise<never> }> };
 
-    const tool = new ShellTool(undefined as any, logger);
-    tool.setContainerProvider(provider as any);
+    const tool = new ShellTool(undefined, logger);
+    tool.setContainerProvider(provider);
     await tool.setConfig({});
     const t = tool.init();
 

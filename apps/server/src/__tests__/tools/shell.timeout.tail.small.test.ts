@@ -19,10 +19,10 @@ describe('ShellTool timeout full inclusion when <=10k', () => {
       exec: vi.fn(async () => {
         throw err;
       }),
-    } as any;
+    } as const;
 
-    const provider = { provide: vi.fn(async () => fakeContainer) } as any;
-    const tool = new ShellTool(undefined as any, logger);
+    const provider = { provide: vi.fn(async () => fakeContainer) } as { provide: (t: string) => Promise<typeof fakeContainer> };
+    const tool = new ShellTool(undefined, logger);
     tool.setContainerProvider(provider);
     await tool.setConfig({});
     const t = tool.init();
@@ -30,7 +30,7 @@ describe('ShellTool timeout full inclusion when <=10k', () => {
     try {
       await t.invoke({ command: 'sleep 1h' }, { configurable: { thread_id: 't' } } as any);
       throw new Error('expected to throw');
-    } catch (e: any) {
+    } catch (e: unknown) {
       const msg = String(e?.message || e);
       const sepIndex = msg.indexOf('----------');
       expect(sepIndex).toBeGreaterThan(0);
@@ -42,4 +42,3 @@ describe('ShellTool timeout full inclusion when <=10k', () => {
     }
   });
 });
-
