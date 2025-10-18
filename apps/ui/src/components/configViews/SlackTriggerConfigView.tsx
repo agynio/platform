@@ -23,7 +23,8 @@ export default function SlackTriggerConfigView({ value, onChange, readOnly, disa
 
   useEffect(() => {
     const at = typeof app_token === 'string' ? { value: app_token, source: 'static' as const } : (app_token as ReferenceValue);
-    onChange({ ...value, app_token: at });
+    const next = { ...value, app_token: at };
+    if (JSON.stringify(value || {}) !== JSON.stringify(next)) onChange(next);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [app_token]);
 

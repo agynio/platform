@@ -24,7 +24,8 @@ export default function GithubCloneRepoToolConfigView({ value, onChange, readOnl
     const errs: string[] = [];
     if ((t.source || 'static') === 'vault' && t.value && !isVaultRef(t.value)) errs.push('token vault ref must be mount/path/key');
     setErrors(errs);
-    onChange({ ...value, token: t });
+    const next = { ...value, token: t };
+    if (JSON.stringify(value || {}) !== JSON.stringify(next)) onChange(next);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token]);
 

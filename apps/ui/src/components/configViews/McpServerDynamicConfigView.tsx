@@ -30,7 +30,7 @@ export default function McpServerDynamicConfigView({
         changed = true;
       }
     }
-    if (changed) onChange(next);
+    if (changed && JSON.stringify(value || {}) !== JSON.stringify(next)) onChange(next);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ready, keys]);
 
@@ -48,7 +48,10 @@ export default function McpServerDynamicConfigView({
             type="checkbox"
             className="h-4 w-4"
             checked={!!value[k]}
-            onChange={(e) => onChange({ ...value, [k]: e.target.checked })}
+            onChange={(e) => {
+              const next = { ...value, [k]: e.target.checked };
+              if (JSON.stringify(value || {}) !== JSON.stringify(next)) onChange(next);
+            }}
             disabled={isDisabled}
           />
           <label htmlFor={`dyn-${k}`} className="text-xs">

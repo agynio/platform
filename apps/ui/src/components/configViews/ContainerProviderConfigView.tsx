@@ -20,7 +20,7 @@ export default function ContainerProviderConfigView({ value, onChange, readOnly,
   }, [image, onValidate]);
 
   useEffect(() => {
-    onChange({
+    const next = {
       ...value,
       image: image || undefined,
       env,
@@ -28,7 +28,8 @@ export default function ContainerProviderConfigView({ value, onChange, readOnly,
       platform: platform || undefined,
       enableDinD,
       ttlSeconds,
-    });
+    };
+    if (JSON.stringify(value || {}) !== JSON.stringify(next)) onChange(next);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [image, JSON.stringify(env), initialScript, platform, enableDinD, ttlSeconds]);
 

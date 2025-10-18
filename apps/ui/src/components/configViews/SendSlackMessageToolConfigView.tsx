@@ -29,7 +29,8 @@ export default function SendSlackMessageToolConfigView({ value, onChange, readOn
 
   useEffect(() => {
     const token = typeof bot_token === 'string' ? { value: bot_token, source: 'static' as const } : (bot_token as ReferenceValue);
-    onChange({ ...value, bot_token: token, default_channel });
+    const next = { ...value, bot_token: token, default_channel };
+    if (JSON.stringify(value || {}) !== JSON.stringify(next)) onChange(next);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [bot_token, default_channel]);
 

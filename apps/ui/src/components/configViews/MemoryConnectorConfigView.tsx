@@ -10,7 +10,8 @@ export default function MemoryConnectorConfigView({ value, onChange, readOnly, d
   const isDisabled = !!readOnly || !!disabled;
 
   useEffect(() => {
-    onChange({ ...value, placement, content, maxChars });
+    const next = { ...value, placement, content, maxChars };
+    if (JSON.stringify(value || {}) !== JSON.stringify(next)) onChange(next);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [placement, content, maxChars]);
 

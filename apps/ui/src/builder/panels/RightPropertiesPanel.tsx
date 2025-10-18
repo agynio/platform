@@ -42,9 +42,19 @@ function RightPropertiesPanelBody({ node, onChange }: { node: Node<BuilderPanelN
   // Derive readOnly/disabled from runtime status where applicable
   const { data: status } = useNodeStatus(node.id);
   const tpl = templates.find((t: TemplateNodeSchema) => t.name === data.template);
-  const update = (patch: Record<string, unknown>) => onChange(node.id, patch);
   const cfg = (data.config || {}) as Record<string, unknown>;
   const dynamicConfig = (data.dynamicConfig || {}) as Record<string, unknown>;
+  // No-op guard: only forward updates when they change values
+  const update = useCallback((patch: Partial<BuilderPanelNodeData>) => {
+    const nextConfig = (patch.config ?? cfg) as Record<string, unknown>;
+    const nextDyn = (patch.dynamicConfig ?? dynamicConfig) as Record<string, unknown>;
+    const sameConfig = JSON.stringify(cfg) === JSON.stringify(nextConfig);
+    const sameDyn = JSON.stringify(dynamicConfig) === JSON.stringify(nextDyn);
+    const sameName = patch.name === undefined || patch.name === data.name;
+    const sameTemplate = patch.template === undefined || patch.template === data.template;
+    if (sameConfig && sameDyn && sameName && sameTemplate) return; // no-op
+    onChange(node.id, patch);
+  }, [cfg, dynamicConfig, data.name, data.template, node.id, onChange]);
 
   // Runtime capabilities (may be absent if backend templates not yet loaded)
   const runtimeStaticCap = hasStaticConfigByName(data.template, runtimeTemplates.getTemplate);

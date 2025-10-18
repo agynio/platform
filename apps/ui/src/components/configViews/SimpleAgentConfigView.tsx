@@ -45,7 +45,7 @@ export default function SimpleAgentConfigView({
   }, [model, debounceMs, whenBusy, processBuffer, summarizationKeepTokens, summarizationMaxTokens, restrictionMaxInjections, onValidate]);
 
   useEffect(() => {
-    onChange({
+    const next = {
       ...value,
       title: title || undefined,
       model,
@@ -58,7 +58,10 @@ export default function SimpleAgentConfigView({
       restrictOutput,
       restrictionMessage: restrictionMessage || undefined,
       restrictionMaxInjections,
-    });
+    };
+    if (JSON.stringify(value || {}) !== JSON.stringify(next)) {
+      onChange(next);
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [title, model, systemPrompt, debounceMs, whenBusy, processBuffer, summarizationKeepTokens, summarizationMaxTokens, restrictOutput, restrictionMessage, restrictionMaxInjections]);
 

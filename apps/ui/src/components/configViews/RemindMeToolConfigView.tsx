@@ -8,7 +8,8 @@ export default function RemindMeToolConfigView({ value, onChange, readOnly, disa
   const isDisabled = !!readOnly || !!disabled;
 
   useEffect(() => {
-    onChange({ ...value, maxActive });
+    const next = { ...value, maxActive };
+    if (JSON.stringify(value || {}) !== JSON.stringify(next)) onChange(next);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [maxActive]);
 
