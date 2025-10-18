@@ -32,8 +32,8 @@ export function NixPackagesSection(props: ControlledProps | UncontrolledProps) {
   // Listen for resolve events from child items and update local details
   useEffect(() => {
     const onResolved = (e: Event) => {
-      const any = e as CustomEvent<{ name: string; version: string; commitHash: string; attributePath: string }>;
-      const d = any.detail;
+      const ce = e as CustomEvent<{ name: string; version: string; commitHash: string; attributePath: string }>;
+      const d = ce.detail;
       if (!d || !d.name) return;
       setDetailsByName((prev) => ({ ...prev, [d.name]: { version: d.version, commitHash: d.commitHash, attributePath: d.attributePath } }));
     };
@@ -62,7 +62,7 @@ export function NixPackagesSection(props: ControlledProps | UncontrolledProps) {
       // Hydrate chosen versions for UI from controlled value
       setVersionsByName((prev) => {
         const next: Record<string, string | ''> = { ...prev };
-        for (const p of curr) if ((p as any).version) next[p.name] = String((p as any).version);
+        for (const p of curr) if (p.version) next[p.name] = String(p.version);
         return next;
       });
     } else {
@@ -78,7 +78,7 @@ export function NixPackagesSection(props: ControlledProps | UncontrolledProps) {
       // Hydrate chosen versions for UI from existing config if present
       setVersionsByName((prev) => {
         const next: Record<string, string | ''> = { ...prev };
-        for (const p of curr) if ((p as any).version) next[p.name] = String((p as any).version);
+        for (const p of curr) if (p.version) next[p.name] = String(p.version);
         return next;
       });
     }
