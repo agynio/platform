@@ -1,5 +1,5 @@
 import type { Node } from 'reactflow';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useState, useMemo } from 'react';
 import type { TemplateNodeSchema } from 'shared';
 import { useTemplates } from '../useTemplates';
 // Runtime graph components & hooks
@@ -12,6 +12,7 @@ import { NodeActionButtons } from '@/components/graph/NodeActionButtons';
 import { useNodeAction, useNodeStatus } from '@/lib/graph/hooks';
 import { canPause, canProvision } from '@/lib/graph/capabilities';
 import { NixPackagesSection } from '@/components/nix/NixPackagesSection';
+import type { ContainerNixConfig, NixPackageSelection } from '@/components/nix/types';
 import { getConfigView } from '@/components/configViews/registry';
 // Registry is initialized once in main.tsx via initConfigViewsRegistry()
 
@@ -45,6 +46,7 @@ function RightPropertiesPanelBody({ node, onChange }: Props) {
   const tpl = templates.find((t: TemplateNodeSchema) => t.name === data.template);
   const update = (patch: Record<string, unknown>) => onChange(node.id, patch);
   const cfg = (data.config || {}) as Record<string, unknown>;
+  const nixCfg = useMemo(() => (cfg?.nix as ContainerNixConfig | undefined) ?? { packages: [] }, [cfg]);
   const dynamicConfig = (data.dynamicConfig || {}) as Record<string, unknown>;
   const isMcpServer = data.template === 'mcpServer';
   // Narrow state -> mcp.tools with guards; avoid any casts
@@ -187,7 +189,18 @@ function RightPropertiesPanelBody({ node, onChange }: Props) {
       )}
       {data.template === 'containerProvider' && (
         <div className="space-y-2">
-          <NixPackagesSection />
+          <NixPackagesSection
+            value={(nixCfg.packages ?? []) as NixPackageSelection[]}
+            onChange={(pkgs) => {
+              const prevCfg = (cfg || {}) as Record<string, unknown>;
+              // Preserve existing keys immutably
+              const nextNix: ContainerNixConfig = { ...(nixCfg || {}), packages: pkgs };
+              const nextCfg = { ...prevCfg, nix: nextNix };
+              update({ config: nextCfg });
+            }}
+            readOnly={readOnly}
+            disabled={!!disableAll}
+          />
         </div>
       )}
       {staticErrors.length > 0 && (
