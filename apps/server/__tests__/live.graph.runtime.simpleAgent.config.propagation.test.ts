@@ -5,6 +5,7 @@ import { buildTemplateRegistry } from '../src/templates';
 import { LoggerService } from '../src/services/logger.service';
 import { ContainerService } from '../src/services/container.service';
 import { ConfigService } from '../src/services/config.service';
+import type { Config } from '../src/services/config.service';
 import { CheckpointerService } from '../src/services/checkpointer.service';
 import { vi } from 'vitest';
 import type { MongoService } from '../src/services/mongo.service';
@@ -16,7 +17,7 @@ describe('LiveGraphRuntime -> SimpleAgent config propagation', () => {
   function makeRuntime() {
     const logger = new LoggerService();
     const containerService = new ContainerService(logger);
-    const configService = new ConfigService({
+    const cfg: Config = {
       githubAppId: 'test',
       githubAppPrivateKey: 'test',
       githubInstallationId: 'test',
@@ -26,6 +27,11 @@ describe('LiveGraphRuntime -> SimpleAgent config propagation', () => {
       graphStore: 'mongo',
       graphRepoPath: './data/graph',
       graphBranch: 'graph-state',
+      graphAuthorName: undefined,
+      graphAuthorEmail: undefined,
+      vaultEnabled: false,
+      vaultAddr: undefined,
+      vaultToken: undefined,
       dockerMirrorUrl: 'http://registry-mirror:5000',
       nixAllowedChannels: ['nixpkgs-unstable'],
       nixHttpTimeoutMs: 5000,
@@ -34,7 +40,9 @@ describe('LiveGraphRuntime -> SimpleAgent config propagation', () => {
       mcpToolsStaleTimeoutMs: 0,
       ncpsEnabled: false,
       ncpsUrl: 'http://ncps:8501',
-    } satisfies import('../src/services/config.service').Config);
+      ncpsPublicKey: undefined,
+    };
+    const configService = new ConfigService(cfg);
     const checkpointerService = new CheckpointerService(logger);
     // Typed fake checkpointer via vi.spyOn
     vi.spyOn(checkpointerService as CheckpointerService, 'getCheckpointer').mockImplementation(() => ({
@@ -44,8 +52,16 @@ describe('LiveGraphRuntime -> SimpleAgent config propagation', () => {
       async putWrites() {},
       getNextVersion() { return '1'; },
     } as unknown as ReturnType<CheckpointerService['getCheckpointer']>);
-    const mongoService = { getDb: () => ({}) } satisfies Pick<MongoService, 'getDb'>;
-    const registry = buildTemplateRegistry({ logger, containerService, configService, checkpointerService, mongoService: mongoService as unknown as MongoService });
+    class TestMongoService extends (MongoService as { new (...args: any[]): MongoService }) {
+      constructor() {
+        // Pass through to satisfy parent constructor; will not connect/use client
+        super(configService, logger);
+      }
+      // Override to avoid requiring an actual DB
+      getDb(): any { return {}; }
+    }
+    const mongoService = new TestMongoService();
+    const registry = buildTemplateRegistry({ logger, containerService, configService, checkpointerService, mongoService });
     const runtime = new LiveGraphRuntime(logger, registry);
     return { runtime };
   }
