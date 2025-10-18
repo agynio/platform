@@ -42,5 +42,15 @@ describe('AgentBuilder smoke render', () => {
     await waitFor(() => expect(screen.getByText(/Palette/i)).toBeInTheDocument());
     // Right panel header present (no selection initially)
     expect(screen.getByText('No Selection')).toBeInTheDocument();
+
+    // Save status indicator is present with an accessible label
+    const status = await screen.findByTestId('save-status');
+    expect(status).toBeInTheDocument();
+    expect(status).toHaveAttribute('role', 'status');
+    // On initial hydration it should be idle/saved -> label should be defined
+    expect(status.getAttribute('aria-label')).toBeTruthy();
+
+    // Ensure the removed Fit button is not present
+    expect(screen.queryByText('Fit')).toBeNull();
   });
 });
