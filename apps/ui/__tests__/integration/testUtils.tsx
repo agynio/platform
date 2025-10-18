@@ -60,6 +60,17 @@ export const handlers = [
     if (!name) return new _HttpResponse(null, { status: 400 });
     return _HttpResponse.json({ versions: ['1.2.3', '1.0.0'] });
   }),
+  _http.get('/api/nix/package-info', ({ request }) => {
+    const url = new URL(request.url);
+    const name = url.searchParams.get('name') || '';
+    return _HttpResponse.json({
+      name,
+      releases: [
+        { version: '1.2.3', attribute_path: `${name}.attr`, commit_hash: 'abc123', platforms: ['x86_64-linux'] },
+        { version: '1.0.0', attribute_path: `${name}.attr.old`, commit_hash: 'def456' },
+      ],
+    });
+  }),
 ];
 
 export const server = setupServer(...handlers);
