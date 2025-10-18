@@ -1,4 +1,6 @@
 // Tailwind v4 friendly preset via CSS variables mapping
+import type { Config } from 'tailwindcss';
+
 const preset = {
   theme: {
     colors: {
@@ -70,7 +72,6 @@ const preset = {
     }
   },
   darkMode: 'class'
-};
+} satisfies Partial<Config>;
 
 export default preset;
-

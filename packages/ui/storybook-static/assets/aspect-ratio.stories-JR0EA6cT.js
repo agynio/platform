@@ -1,0 +1,5 @@
+import{j as e}from"./jsx-runtime-D_zvdyIk.js";import{r as l}from"./index-CGj_12n1.js";import{P as f}from"./index-C-YlrO5j.js";import"./index-D8dqFcAi.js";import"./index-BBPXtLXU.js";import"./index-CIYbrQaX.js";var u="AspectRatio",i=l.forwardRef((n,p)=>{const{ratio:c=1/1,style:m,...d}=n;return e.jsx("div",{style:{position:"relative",width:"100%",paddingBottom:`${100/c}%`},"data-radix-aspect-ratio-wrapper":"",children:e.jsx(f.div,{...d,ref:p,style:{...m,position:"absolute",top:0,right:0,bottom:0,left:0}})})});i.displayName=u;var x=i;const a=x,N={title:"Components/Aspect Ratio",component:a},t={render:()=>e.jsx(a,{ratio:16/9,children:e.jsx("div",{className:"w-full h-full bg-muted flex items-center justify-center",children:"16:9"})})};var r,o,s;t.parameters={...t.parameters,docs:{...(r=t.parameters)==null?void 0:r.docs,source:{originalSource:`{
+  render: () => <AspectRatio ratio={16 / 9}>
+      <div className="w-full h-full bg-muted flex items-center justify-center">16:9</div>
+    </AspectRatio>
+}`,...(s=(o=t.parameters)==null?void 0:o.docs)==null?void 0:s.source}}};const g=["SixteenNine"];export{t as SixteenNine,g as __namedExportsOrder,N as default};
