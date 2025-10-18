@@ -114,6 +114,9 @@ importers:
       semver:
         specifier: ^7.6.3
         version: 7.7.2
+      tar-stream:
+        specifier: ^3.1.7
+        version: 3.1.7
       uuid:
         specifier: ^13.0.0
         version: 13.0.0

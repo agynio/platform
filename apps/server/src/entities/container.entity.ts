@@ -23,4 +23,10 @@ export class ContainerEntity {
   remove(force = false) {
     return this.service.removeContainer(this.id, force);
   }
+
+  /** Upload a tar archive into the container filesystem (defaults to /tmp). */
+  putArchive(data: Buffer | NodeJS.ReadableStream, options: { path?: string } = { path: '/tmp' }) {
+    const path = options?.path || '/tmp';
+    return this.service.putArchive(this.id, data, { path });
+  }
 }

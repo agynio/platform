@@ -637,6 +637,27 @@ export class ContainerService {
   getDocker(): Docker {
     return this.docker;
   }
+
+  /**
+   * Upload a tar archive into the container filesystem at the specified path.
+   * Intended for saving large tool outputs into /tmp of the workspace container.
+   */
+  async putArchive(
+    containerId: string,
+    data: Buffer | NodeJS.ReadableStream,
+    options: { path: string },
+  ): Promise<void> {
+    const container = this.docker.getContainer(containerId);
+    const inspectData = await container.inspect();
+    if (inspectData.State?.Running !== true) {
+      throw new Error(`Container '${containerId}' is not running`);
+    }
+    this.logger.debug(
+      `putArchive into container cid=${inspectData.Id.substring(0, 12)} path=${options?.path || ''} bytes=${Buffer.isBuffer(data) ? data.length : 'stream'}`,
+    );
+    await container.putArchive(data as any, options as any);
+    void this.touchLastUsed(inspectData.Id);
+  }
 }
 
 export interface ExecResult {

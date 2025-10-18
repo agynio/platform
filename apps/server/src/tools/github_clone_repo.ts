@@ -183,4 +183,9 @@ export class GithubCloneRepoTool extends BaseTool {
     // Fallback to ConfigService
     return this.config.githubToken;
   }
+
+  override async getContainerForThread(threadId: string) {
+    if (!this.containerProvider) return undefined;
+    try { return await this.containerProvider.provide(threadId); } catch { return undefined; }
+  }
 }
