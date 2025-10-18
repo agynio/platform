@@ -230,7 +230,7 @@ export function RootLayout() {
       </aside>
 
       {/* Mobile top bar + Drawer */}
-      <div className="flex min-h-screen flex-1 flex-col">
+      <div className="flex min-h-screen flex-1 min-w-0 flex-col">
         <div className="flex items-center gap-2 border-b px-3 py-2 md:hidden">
           <Drawer>
             <DrawerTrigger asChild>
@@ -256,7 +256,7 @@ export function RootLayout() {
         </div>
 
         {/* Main content */}
-        <main className="flex-1">
+        <main className="flex-1 min-w-0">
           <Outlet />
         </main>
       </div>

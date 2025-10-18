@@ -25,7 +25,7 @@ import { RightPropertiesPanel } from './panels/RightPropertiesPanel';
 import { useBuilderState } from './hooks/useBuilderState';
 import type { TemplateNodeSchema } from 'shared';
 import { getDisplayTitle } from './lib/display';
-import { Button, Popover, PopoverTrigger, PopoverContent, ScrollArea, Card } from '@hautech/ui';
+import { Button, Popover, PopoverTrigger, PopoverContent, ScrollArea, Card, Drawer, DrawerTrigger, DrawerContent } from '@hautech/ui';
 import { Plus, Bot, Wrench, Zap } from 'lucide-react';
 import { kindBadgeClasses, kindLabel } from './lib/display';
 import { SaveStatusIndicator } from './SaveStatusIndicator';
@@ -108,7 +108,7 @@ function CanvasArea({
   );
 
   return (
-    <div ref={setDropRef} className="relative flex-1" onKeyDown={onKeyDown} tabIndex={0}>
+    <div ref={setDropRef} className="relative flex-1 min-w-0" onKeyDown={onKeyDown} tabIndex={0}>
       <div ref={flowWrapper} className={`absolute inset-0 ${isOver ? 'ring-2 ring-primary/40' : ''}`}>
         <ReactFlow
           nodes={nodes}
@@ -423,10 +423,54 @@ export function AgentBuilder() {
     ? getDisplayTitle(templates, selectedNode.data.template, selectedNode.data.config)
     : 'No Selection';
 
+  function RightPanelContent({
+    rightTab,
+    setRightTab,
+    activityEligible,
+    selectedDisplayTitle,
+    selectedNode,
+    updateNodeData,
+  }: {
+    rightTab: 'properties' | 'activity';
+    setRightTab: (tab: 'properties' | 'activity') => void;
+    activityEligible: boolean;
+    selectedDisplayTitle: string;
+    selectedNode: RFNode | null;
+    updateNodeData: (nodeId: string, data: Record<string, unknown>) => void;
+  }) {
+    return (
+      <div className="flex h-full w-full flex-col overflow-hidden">
+        <div className="border-b flex items-center gap-2 px-4 h-10 shrink-0">
+          <div className="text-xs font-semibold tracking-wide truncate" title={selectedDisplayTitle}>{selectedDisplayTitle}</div>
+          {activityEligible && (
+            <div className="ml-auto flex gap-1">
+              <Button type="button" size="sm" variant={rightTab === 'properties' ? 'default' : 'secondary'} onClick={() => setRightTab('properties')}>
+                Props
+              </Button>
+              <Button type="button" size="sm" variant={rightTab === 'activity' ? 'default' : 'secondary'} onClick={() => setRightTab('activity')}>
+                Activity
+              </Button>
+            </div>
+          )}
+        </div>
+        <div className="flex-1 overflow-y-auto p-4">
+          {rightTab === 'activity' && activityEligible && selectedNode ? (
+            <div className="space-y-4">
+              {/* Show OBS spans for agent/tool nodes */}
+              <NodeObsSidebar node={selectedNode} />
+            </div>
+          ) : (
+            <RightPropertiesPanel node={selectedNode} onChange={updateNodeData} />
+          )}
+        </div>
+      </div>
+    );
+  }
+
   return (
     <DndProvider backend={HTML5Backend}>
       <ReactFlowProvider>
-        <div className="h-svh w-svw flex overflow-hidden">
+        <div className="relative flex h-full w-full min-w-0 overflow-hidden">
           <TemplatesProvider templates={templates}>
             <CanvasArea
               nodes={nodes}
@@ -441,31 +485,40 @@ export function AgentBuilder() {
               saveState={saveState}
             />
           </TemplatesProvider>
-          <aside className="w-96 shrink-0 border-l bg-sidebar p-0 flex flex-col overflow-hidden">
-            <div className="border-b flex items-center gap-2 px-4 h-10">
-              <div className="text-xs font-semibold tracking-wide">{selectedDisplayTitle}</div>
-              {activityEligible && (
-                <div className="ml-auto flex gap-1">
-                  <Button type="button" size="sm" variant={rightTab === 'properties' ? 'default' : 'secondary'} onClick={() => setRightTab('properties')}>
-                    Props
-                  </Button>
-                  <Button type="button" size="sm" variant={rightTab === 'activity' ? 'default' : 'secondary'} onClick={() => setRightTab('activity')}>
-                    Activity
-                  </Button>
-                </div>
-              )}
-            </div>
-            <div className="flex-1 overflow-y-auto p-4">
-              {rightTab === 'activity' && activityEligible && selectedNode ? (
-                <div className="space-y-4">
-                  {/* Show OBS spans for agent/tool nodes */}
-                  <NodeObsSidebar node={selectedNode} />
-                </div>
-              ) : (
-                <RightPropertiesPanel node={selectedNode} onChange={updateNodeData} />
-              )}
-            </div>
+          {/* Inline right panel on xl+ */}
+          <aside className="hidden xl:flex w-96 shrink-0 border-l bg-sidebar p-0 flex-col overflow-hidden">
+            <RightPanelContent
+              rightTab={rightTab}
+              setRightTab={setRightTab}
+              activityEligible={activityEligible}
+              selectedDisplayTitle={selectedDisplayTitle}
+              selectedNode={selectedNode}
+              updateNodeData={updateNodeData}
+            />
           </aside>
+
+          {/* Toggle + Drawer for < xl */}
+          <div className="xl:hidden pointer-events-none absolute right-2 top-2 z-20">
+            <Drawer>
+              <DrawerTrigger asChild>
+                <Button type="button" size="sm" variant="secondary" className="pointer-events-auto" aria-label="Open properties panel">
+                  Props
+                </Button>
+              </DrawerTrigger>
+              <DrawerContent className="p-0">
+                <div className="h-[85vh] w-full overflow-hidden">
+                  <RightPanelContent
+                    rightTab={rightTab}
+                    setRightTab={setRightTab}
+                    activityEligible={activityEligible}
+                    selectedDisplayTitle={selectedDisplayTitle}
+                    selectedNode={selectedNode}
+                    updateNodeData={updateNodeData}
+                  />
+                </div>
+              </DrawerContent>
+            </Drawer>
+          </div>
         </div>
       </ReactFlowProvider>
     </DndProvider>
