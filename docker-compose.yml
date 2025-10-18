@@ -175,15 +175,28 @@ services:
   # LiteLLM API proxy and UI
   # - Configure provider keys and models via the built-in UI (no config.yaml mounted)
   # - Exposes port 4000 for UI; you can remove the port mapping below for internal-only use
+  # Dedicated Postgres instance for LiteLLM
+  litellm_db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: litellm
+      POSTGRES_USER: litellm
+      POSTGRES_PASSWORD: litellm
+    volumes:
+      - litellm_pg:/var/lib/postgresql/data
+    networks:
+      - agents_net
+
   litellm:
     image: ghcr.io/berriai/litellm:main-latest
     depends_on:
-      - postgres
+      - litellm_db
     environment:
       # Master/virtual key for LiteLLM; must start with "sk-"
       LITELLM_MASTER_KEY: ${LITELLM_MASTER_KEY}
-      # Reuse the existing Postgres service
-      DATABASE_URL: postgres://postgres:postgres@postgres:5432/postgres
+      # Use dedicated Postgres service for LiteLLM state
+      DATABASE_URL: postgres://litellm:litellm@litellm_db:5432/litellm
       LITELLM_LOG: info
       LITELLM_LOG_FORMAT: json
       LITELLM_TELEMETRY: "false"
@@ -199,6 +212,7 @@ volumes:
   vault-file:
     driver: local
   pgdata:
+  litellm_pg:
   ncps-storage:
     driver: local
 
