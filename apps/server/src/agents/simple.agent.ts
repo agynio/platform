@@ -109,6 +109,27 @@ export class SimpleAgent extends BaseAgent {
     "Do not produce a final answer directly. Before finishing, call a tool. If no tool is needed, call the 'finish' tool.";
   private restrictionMaxInjections: number = 0; // 0 = unlimited per turn
 
+  // Lifecycle/config propagation helpers
+  private lifecycleStarted = false;
+  private lifecycleConfigSnapshot: Partial<SimpleAgentStaticConfig> = {};
+  // Allowed config keys for propagation; keep in sync with setConfig filtering
+  private static readonly allowedConfigKeysArray = [
+    'title',
+    'model',
+    'systemPrompt',
+    'debounceMs',
+    'whenBusy',
+    'processBuffer',
+    'summarizationKeepTokens',
+    'summarizationMaxTokens',
+    'restrictOutput',
+    'restrictionMessage',
+    'restrictionMaxInjections',
+  ] as const satisfies readonly (keyof SimpleAgentStaticConfig)[];
+  private static readonly allowedConfigKeys = new Set<typeof SimpleAgent.allowedConfigKeysArray[number]>(
+    SimpleAgent.allowedConfigKeysArray,
+  );
+
   constructor(
     private configService: ConfigService,
     private loggerService: LoggerService,
@@ -439,35 +460,23 @@ export class SimpleAgent extends BaseAgent {
   // Overload preserves BaseAgent signature while exposing a more precise config shape for callers.
   setConfig(config: Partial<SimpleAgentStaticConfig> & Record<string, unknown>): void;
   setConfig(config: Record<string, unknown>): void {
-    const parsedConfig = SimpleAgentStaticConfigSchema.partial().parse(
-      Object.fromEntries(
-        Object.entries(config).filter(([k]) =>
-          [
-            'title',
-            'model',
-            'systemPrompt',
-            'debounceMs',
-            'whenBusy',
-            'processBuffer',
-            'summarizationKeepTokens',
-            'summarizationMaxTokens',
-            'restrictOutput',
-            'restrictionMessage',
-            'restrictionMaxInjections',
-          ].includes(k),
-        ),
-      ),
-    ) as Partial<SimpleAgentStaticConfig>;
+    // Filter to known keys and validate without letting defaults write missing keys
+    const filteredEntries = Object.entries(config).filter(([k]) =>
+      SimpleAgent.allowedConfigKeys.has(k as (typeof SimpleAgent.allowedConfigKeysArray)[number]),
+    );
+    const filtered = Object.fromEntries(filteredEntries) as Partial<SimpleAgentStaticConfig> & Record<string, unknown>;
+    const parsedConfig = SimpleAgentStaticConfigSchema.partial().parse(filtered) as Partial<SimpleAgentStaticConfig>;
 
     // Apply agent-side scheduling config
     this.applyRuntimeConfig(config);
 
-    if (parsedConfig.systemPrompt !== undefined) {
+    // Only update fields that were explicitly provided by caller
+    if (Object.prototype.hasOwnProperty.call(filtered, 'systemPrompt') && typeof parsedConfig.systemPrompt === 'string') {
       this.callModelNode.setSystemPrompt(parsedConfig.systemPrompt);
       this.loggerService.info('SimpleAgent system prompt updated');
     }
 
-    if (parsedConfig.model !== undefined) {
+    if (Object.prototype.hasOwnProperty.call(filtered, 'model') && typeof parsedConfig.model === 'string') {
       // Update model on stored llm instance (lightweight change similar to systemPrompt logic)
       this.llm.model = parsedConfig.model;
       this.loggerService.info(`SimpleAgent model updated to ${parsedConfig.model}`);
@@ -505,10 +514,62 @@ export class SimpleAgent extends BaseAgent {
     }
 
     // Apply restriction-related config without altering system prompt
-    if (parsedConfig.restrictOutput !== undefined) this.restrictOutput = !!parsedConfig.restrictOutput;
-    if (parsedConfig.restrictionMessage !== undefined) this.restrictionMessage = parsedConfig.restrictionMessage;
-    if (parsedConfig.restrictionMaxInjections !== undefined)
+    if (Object.prototype.hasOwnProperty.call(filtered, 'restrictOutput')) this.restrictOutput = !!parsedConfig.restrictOutput;
+    if (Object.prototype.hasOwnProperty.call(filtered, 'restrictionMessage') && parsedConfig.restrictionMessage !== undefined)
+      this.restrictionMessage = parsedConfig.restrictionMessage;
+    if (
+      Object.prototype.hasOwnProperty.call(filtered, 'restrictionMaxInjections') &&
+      parsedConfig.restrictionMaxInjections !== undefined
+    )
       this.restrictionMaxInjections = parsedConfig.restrictionMaxInjections;
+  }
+
+  // ----- NodeLifecycle: configure/start/stop/delete -----
+  configure(cfg: Record<string, unknown>): void {
+    // Keep only allowed keys; do not inject defaults; store snapshot for start() and diff updates
+    const incoming = Object.fromEntries(
+      Object.entries(cfg || {}).filter(([k]) =>
+        SimpleAgent.allowedConfigKeys.has(k as (typeof SimpleAgent.allowedConfigKeysArray)[number]),
+      ),
+    ) as Partial<SimpleAgentStaticConfig> & Record<string, unknown>;
+    if (!this.lifecycleStarted) {
+      // Before start: replace snapshot
+      this.lifecycleConfigSnapshot = { ...incoming };
+      return;
+    }
+    // After start: compute delta and apply only changed keys to avoid resetting unspecified fields
+    const delta: Record<string, unknown> = {};
+    const prev = this.lifecycleConfigSnapshot;
+    let changed = false;
+    for (const [k, v] of Object.entries(incoming)) {
+      const before = (prev as Partial<SimpleAgentStaticConfig> & Record<string, unknown>)[k];
+      const same = JSON.stringify(before) === JSON.stringify(v);
+      if (!same) {
+        delta[k] = v;
+        changed = true;
+      }
+    }
+    // Merge snapshot
+    this.lifecycleConfigSnapshot = { ...prev, ...incoming };
+    if (changed) this.setConfig(delta);
+  }
+
+  async start(): Promise<void> {
+    if (this.lifecycleStarted) return; // idempotent
+    this.lifecycleStarted = true;
+    const cfg = this.lifecycleConfigSnapshot;
+    if (cfg && Object.keys(cfg).length > 0) {
+      // Propagate all stored keys immediately
+      this.setConfig(cfg);
+    }
+  }
+
+  async stop(): Promise<void> {
+    // no-op for now
+  }
+
+  async delete(): Promise<void> {
+    await this.destroy();
   }
 
   /**
