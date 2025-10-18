@@ -10,6 +10,7 @@ class FakeContainerService {
   removed: string[] = [];
   async stopContainer(id: string, _t?: number) { this.stopped.push(id); }
   async removeContainer(id: string, _force?: boolean) { this.removed.push(id); }
+  async findContainersByLabels(_labels: Record<string,string>) { return []; }
 }
 
 describe('ContainerCleanupService', () => {
@@ -125,6 +126,7 @@ describe('ContainerCleanupService', () => {
       {
         stopContainer: async () => { const e: any = new Error('conflict'); e.statusCode = 409; throw e; },
         removeContainer: async () => { const gone: any = new Error('gone'); gone.statusCode = 404; throw gone; },
+        findContainersByLabels: async () => [],
       } as any,
       logger,
     );
@@ -143,3 +145,30 @@ describe('ContainerCleanupService', () => {
     process.env.CONTAINERS_CLEANUP_ENABLED = 'true';
   });
 });
+
+  it('removes associated DinD sidecars before workspace removal', async () => {
+    if (!setupOk) return;
+    const cid = 'with-dind-1';
+    await registry.registerStart({ containerId: cid, nodeId: 'n', threadId: 't', image: 'i', ttlSeconds: 1 });
+    const col = client.db('test').collection('containers');
+    const past = new Date(Date.now() - 10_000).toISOString();
+    await col.updateOne({ container_id: cid }, { $set: { last_used_at: past, kill_after_at: past, status: 'running' } });
+    const sidecarOps: string[] = [];
+    const fake = {
+      stopContainer: async (_id: string) => {},
+      removeContainer: async (_id: string) => {},
+      findContainersByLabels: async (labels: Record<string,string>) => {
+        expect(labels['hautech.ai/role']).toBe('dind');
+        expect(labels['hautech.ai/parent_cid']).toBe(cid);
+        return [
+          { stop: async () => { sidecarOps.push('sc1.stop'); }, remove: async () => { sidecarOps.push('sc1.remove'); } },
+          { stop: async () => { sidecarOps.push('sc2.stop'); }, remove: async () => { sidecarOps.push('sc2.remove'); } },
+        ];
+      },
+    } as any;
+    const svc = new ContainerCleanupService(registry, fake, logger);
+    await svc.sweep(new Date());
+    const doc = await col.findOne({ container_id: cid });
+    expect(doc?.status).toBe('stopped');
+    expect(sidecarOps).toEqual(expect.arrayContaining(['sc1.stop','sc1.remove','sc2.stop','sc2.remove']));
+  });
