@@ -58,7 +58,7 @@ export const handlers = [
     const url = new URL(request.url);
     const name = url.searchParams.get('name');
     if (!name) return new _HttpResponse(null, { status: 400 });
-    return _HttpResponse.json({ versions: ['1.2.3', '1.0.0'] });
+    return _HttpResponse.json({ releases: [{ version: '1.2.3', attribute_path: 'htop', commit_hash: 'abc123def456' }, { version: '1.0.0', attribute_path: 'htop', commit_hash: 'abc123def456' }] });
   }),
 ];
 
