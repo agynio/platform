@@ -7,7 +7,7 @@ import ContextView, { ContextMessageLike } from './ContextView';
 import { SpanDoc, LogDoc } from '../types';
 import { fetchLogs } from '../services/api';
 import { spanRealtime } from '../services/socket';
-import { toJSONStable, toYAML } from '../utils/format';
+import { toJSONStable, toYAML, formatDuration } from '../utils/format';
 import { isBrowser, isTest } from '../utils/env';
 import { normalizeKeyPart, makeStorageKey } from '../utils/keys';
 import { usePersistedViewMode } from '../hooks/usePersistedViewMode';
@@ -295,7 +295,7 @@ export function SpanDetails({
               <span style={{ color: '#555' }}>End {span.endTime ? new Date(span.endTime).toLocaleString() : '—'}</span>
               {' | '}
               <span style={{ color: '#555' }}>
-                Duration {span.endTime ? Date.parse(span.endTime) - Date.parse(span.startTime) + ' ms' : 'running'}
+                Duration {span.endTime ? formatDuration(Date.parse(span.endTime) - Date.parse(span.startTime)) : 'running'}
               </span>
             </div>
           </div>

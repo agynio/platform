@@ -5,6 +5,7 @@ import { TimeRangeSelector, defaultLast6h } from '../components/TimeRangeSelecto
 import { fetchSpansInRange } from '../services/api';
 import { SpanDoc } from '../types';
 import { SpanDetails } from '../components/SpanDetails';
+import { formatDuration } from '../utils/format';
 
 export function ToolErrorsPage() {
   const { label: encoded } = useParams<{ label: string }>();
@@ -75,7 +76,7 @@ export function ToolErrorsPage() {
                     <Td className="font-mono">{s.traceId}</Td>
                     <Td className="font-mono">{s.spanId}</Td>
                     <Td>{s.status}</Td>
-                    <Td>{s.endTime ? Date.parse(s.endTime) - Date.parse(s.startTime) + ' ms' : 'running'}</Td>
+                    <Td>{s.endTime ? formatDuration(Date.parse(s.endTime) - Date.parse(s.startTime)) : 'running'}</Td>
                   </Tr>
                 ))}
                 {items.length === 0 && (
