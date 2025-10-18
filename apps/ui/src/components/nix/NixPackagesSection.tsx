@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Button, Input } from '@hautech/ui';
 import type { ContainerNixConfig, NixPackageSelection } from './types';
 import { useQuery } from '@tanstack/react-query';
-import { fetchPackages, fetchVersions } from '@/services/nix';
+import { fetchPackages, fetchReleases, type ReleaseDTO } from '@/services/nix';
 
 // Debounce helper
 function useDebounced<T>(value: T, delay = 300) {
@@ -27,7 +27,7 @@ export function NixPackagesSection(props: ControlledProps | UncontrolledProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [activeIndex, setActiveIndex] = useState(0);
   const [selected, setSelected] = useState<SelectedPkg[]>([]);
-  const [versionsByName, setVersionsByName] = useState<Record<string, string | ''>>({});
+  const [releasesByName, setReleasesByName] = useState<Record<string, ReleaseDTO | null>>({});
   const lastPushedJson = useRef<string>('');
   const lastPushedPackagesLen = useRef<number>(0);
 
@@ -74,8 +74,12 @@ export function NixPackagesSection(props: ControlledProps | UncontrolledProps) {
   useEffect(() => {
     // Build packages array only for items with a chosen version
     const packages = selected.flatMap((p) => {
-      const v = versionsByName[p.name];
-      return v && v.length > 0 ? [{ name: p.name, version: v }] : [];
+      const rel = releasesByName[p.name];
+      if (!rel || !rel.version) return [];
+      const entry: NixPackageSelection = { name: p.name, version: rel.version } as any;
+      if (rel.attribute_path) (entry as any).attribute_path = rel.attribute_path;
+      if (rel.commit_hash) (entry as any).commit_hash = rel.commit_hash;
+      return [entry];
     });
     // No debug logs in production
 
@@ -106,7 +110,7 @@ export function NixPackagesSection(props: ControlledProps | UncontrolledProps) {
         (props as UncontrolledProps).onUpdateConfig(next);
       }
     }
-  }, [selected, versionsByName, controlled, controlledValueKey, uncontrolledPkgsKey]);
+  }, [selected, releasesByName, controlled, controlledValueKey, uncontrolledPkgsKey]);
   const listboxRef = useRef<HTMLUListElement | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
 
@@ -267,22 +271,22 @@ export function NixPackagesSection(props: ControlledProps | UncontrolledProps) {
 // Note: debounce not required; builder autosave already debounces
 export default NixPackagesSection;
 
-function SelectedPackageItem({ pkg, chosen, onChoose, onRemove }: { pkg: { name: string }; chosen: string | ''; onChoose: (v: string | '') => void; onRemove: () => void }) {
-  const qVersions = useQuery({
+function SelectedPackageItem({ pkg, chosen, onChoose, onRemove }: { pkg: { name: string }; chosen: ReleaseDTO | null; onChoose: (v: ReleaseDTO | null) => void; onRemove: () => void }) {{
+  const qReleases = useQuery({
     queryKey: ['nix', 'versions', pkg.name],
-    queryFn: ({ signal }) => fetchVersions(pkg.name, signal),
+    queryFn: ({ signal }) => fetchReleases(pkg.name, signal),
     staleTime: 5 * 60_000,
   });
 
   const label = pkg.name;
-  const versions = qVersions.data || [];
+  const releases: ReleaseDTO[] = qReleases.data || [];
 
   // Optional: auto-select only when there is a single version available
   useEffect(() => {
-    if (!chosen && versions.length === 1) {
-      onChoose(versions[0]);
+    if (!chosen && releases.length === 1) {
+      onChoose(releases[0]);
     }
-  }, [chosen, versions]);
+  }, [chosen, releases]);
 
   return (
     <li className="flex items-center gap-2">
@@ -290,22 +294,29 @@ function SelectedPackageItem({ pkg, chosen, onChoose, onRemove }: { pkg: { name:
       <select
         aria-label={`Select version for ${label}`}
         className="rounded border border-input bg-background px-2 py-1 text-sm"
-        value={chosen}
+        value={chosen ? JSON.stringify(chosen) : ""}
         onChange={(e) => {
-          onChoose(e.target.value);
+          const raw = e.target.value;
+          if (!raw) return onChoose(null);
+          try {
+            onChoose(JSON.parse(raw) as ReleaseDTO);
+          } catch { onChoose(null); }
         }}
       >
         <option value="">Select version…</option>
-        {qVersions.isLoading ? (
+        {qReleases.isLoading ? (
           <option value="" disabled>loading…</option>
-        ) : qVersions.isError ? (
+        ) : qReleases.isError ? (
           <option value="" disabled>error</option>
-        ) : versions.length === 0 ? (
+        ) : releases.length === 0 ? (
           <option value="" disabled>n/a</option>
         ) : (
-          versions.map((v) => (
-            <option key={v} value={v}>{v}</option>
-          ))
+          releases.map((r, idx) => {
+            const label = r.commit_hash ? `${r.version} (${r.commit_hash.slice(0,7)})` : r.version;
+            return (
+              <option key={`${r.version}-${idx}`} value={JSON.stringify(r)}>{label}</option>
+            );
+          })
         )}
       </select>
       <Button type="button" size="sm" variant="outline" className="text-destructive" aria-label={`Remove ${label}`} onClick={onRemove}>
