@@ -3,6 +3,10 @@ import React from 'react';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { server, TestProviders } from './testUtils';
 import { AgentBuilder } from '@/builder/AgentBuilder';
+import { useEffect } from 'react';
+import { TemplatesProvider as BuilderTemplatesProvider } from '@/builder/TemplatesProvider';
+import { RightPropertiesPanel } from '@/builder/panels/RightPropertiesPanel';
+import { useBuilderState } from '@/builder/hooks/useBuilderState';
 import { http, HttpResponse } from 'msw';
 
 describe('Nix packages persistence in builder graph', () => {
@@ -31,16 +35,32 @@ describe('Nix packages persistence in builder graph', () => {
       }),
     );
 
+    // Render a minimal harness that uses builder state, programmatically selects the node,
+    // and renders the RightPropertiesPanel (avoids ReactFlow visibility quirks in JSDOM)
+    function Harness() {
+      const state = useBuilderState(undefined, { debounceMs: 200 });
+      useEffect(() => {
+        if (!state.loading && state.nodes.length > 0) {
+          const id = state.nodes[0].id;
+          state.onNodesChange([{ id, type: 'select', selected: true } as any]);
+        }
+      }, [state.loading, state.nodes.length]);
+      return (
+        <BuilderTemplatesProvider templates={state.templates as any}>
+          <RightPropertiesPanel node={state.selectedNode as any} onChange={state.updateNodeData} />
+        </BuilderTemplatesProvider>
+      );
+    }
+
     render(
       <TestProviders>
-        <AgentBuilder />
+        <Harness />
       </TestProviders>,
     );
 
-    // Select the containerProvider node in the canvas sidebar by simulating selection via DOM is complex.
-    // Instead, locate the Nix search input presence after initial render. It appears when the right panel loads.
-    // Trigger a search and select a result.
+    // Now search and select a package
     const input = await screen.findByLabelText('Search Nix packages');
+    ;(input as HTMLInputElement).focus();
     fireEvent.change(input, { target: { value: 'htop' } });
     await waitFor(() => expect(screen.getByRole('listbox')).toBeInTheDocument());
     fireEvent.click(await screen.findByRole('option', { name: /htop \(htop\.attr\)/ }));
@@ -60,4 +80,3 @@ describe('Nix packages persistence in builder graph', () => {
     expect(node.config.nix.packages[0]).toEqual({ attr: 'htop.attr', pname: 'htop', channel: 'nixpkgs-unstable' });
   });
 });
-
