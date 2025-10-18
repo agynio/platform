@@ -20,6 +20,7 @@ interface BuilderPanelNodeData {
   name?: string;
   config?: Record<string, unknown>;
   dynamicConfig?: Record<string, unknown>;
+  state?: Record<string, unknown>;
 }
 interface Props {
   node: Node<BuilderPanelNodeData> | null;
@@ -45,6 +46,24 @@ function RightPropertiesPanelBody({ node, onChange }: Props) {
   const update = (patch: Record<string, unknown>) => onChange(node.id, patch);
   const cfg = (data.config || {}) as Record<string, unknown>;
   const dynamicConfig = (data.dynamicConfig || {}) as Record<string, unknown>;
+  const isMcpServer = data.template === 'mcpServer';
+  // Narrow state -> mcp.tools with guards; avoid any casts
+  type McpTool = { name: string; description?: string; title?: string };
+  type UnknownRec = Record<string, unknown>;
+  const isRecord = (v: unknown): v is UnknownRec => !!v && typeof v === 'object';
+  const isTool = (t: unknown): t is McpTool =>
+    isRecord(t) && typeof t.name === 'string' && (t.description === undefined || typeof t.description === 'string') && (t.title === undefined || typeof t.title === 'string');
+  const readMcpTools = (state: unknown): McpTool[] => {
+    if (!isRecord(state)) return [];
+    const mcp = state.mcp as unknown;
+    if (!isRecord(mcp)) return [];
+    const tools = mcp.tools as unknown;
+    if (!Array.isArray(tools)) return [];
+    return tools
+      .filter(isTool)
+      .map((t) => ({ name: t.name, description: t.description, title: t.title }));
+  };
+  const mcpTools = readMcpTools(data.state);
 
   // Runtime capabilities (may be absent if backend templates not yet loaded)
   const runtimeStaticCap = hasStaticConfigByName(data.template, runtimeTemplates.getTemplate);
@@ -135,7 +154,20 @@ function RightPropertiesPanelBody({ node, onChange }: Props) {
           )}
         </div>
       )}
-      {runtimeDynamicCap && (
+      {isMcpServer && mcpTools.length > 0 && (
+        <ToolsSection
+          tools={mcpTools}
+          enabledMap={toBoolMap(dynamicConfig)}
+          readOnly={readOnly}
+          disabled={!!disableAll}
+          onToggle={(name, val) => {
+            const map = toBoolMap(dynamicConfig);
+            const next: Record<string, boolean> = { ...map, [name]: !!val };
+            update({ dynamicConfig: next });
+          }}
+        />
+      )}
+      {!isMcpServer && runtimeDynamicCap && (
         <div className="space-y-2">
           <div className="text-[10px] uppercase text-muted-foreground">Dynamic Configuration</div>
           {DynamicView ? (
@@ -171,6 +203,55 @@ function RightPropertiesPanelBody({ node, onChange }: Props) {
         {tpl?.title ? (
           <span className="ml-2 text-[10px] italic text-muted-foreground">(Default: {tpl.title})</span>
         ) : null}
+      </div>
+    </div>
+  );
+}
+
+import { Switch } from '@hautech/ui';
+
+// Convert arbitrary record values to a boolean-only map for enabled flags
+function toBoolMap(rec: Record<string, unknown> | undefined | null): Record<string, boolean> {
+  if (!rec || typeof rec !== 'object') return {};
+  const out: Record<string, boolean> = {};
+  for (const [k, v] of Object.entries(rec)) out[k] = !!v;
+  return out;
+}
+
+function ToolsSection({
+  tools,
+  enabledMap,
+  readOnly,
+  disabled,
+  onToggle,
+}: {
+  tools: Array<{ name: string; description?: string; title?: string }>;
+  enabledMap: Record<string, boolean>;
+  readOnly?: boolean;
+  disabled?: boolean;
+  onToggle: (name: string, val: boolean) => void;
+}) {
+  const isDisabled = !!readOnly || !!disabled;
+  return (
+    <div className="space-y-2">
+      <div className="text-[10px] uppercase text-muted-foreground">Tools</div>
+      <div className="space-y-2 text-sm" data-testid="mcp-tools-section">
+        {tools.map((t) => (
+          <div key={t.name} className="flex items-start justify-between gap-2">
+            <div className="flex-1 min-w-0">
+              <div className="text-xs font-medium truncate">{t.title || t.name}</div>
+              {t.description ? (
+                <div className="text-xs text-muted-foreground truncate">{t.description}</div>
+              ) : null}
+            </div>
+            <Switch
+              checked={!!enabledMap[t.name]}
+              onCheckedChange={(v) => onToggle(t.name, !!v)}
+              aria-label={t.name}
+              disabled={isDisabled}
+            />
+          </div>
+        ))}
       </div>
     </div>
   );
