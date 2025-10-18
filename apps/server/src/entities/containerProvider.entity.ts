@@ -44,11 +44,21 @@ const LegacyNixPackageItemSchema = z
   })
   .strict();
 
-// UI item shape (kept for compatibility; ignored for installation without resolver)
+// UI item legacy shape (kept for compatibility; ignored for installation without resolver)
 const UiNixPackageItemSchema = z
   .object({
     name: z.string(),
     version: z.string().nullable().optional(),
+  })
+  .strict();
+
+// New rich UI+resolved shape from #305: include name, version, and resolved fields
+const RichNixPackageItemSchema = z
+  .object({
+    name: z.string(),
+    version: z.string(),
+    commitHash: z.string().regex(/^[0-9a-f]{40}$/),
+    attributePath: z.string().regex(/^[A-Za-z0-9_.+\-]+$/).min(1),
   })
   .strict();
 
@@ -80,7 +90,7 @@ export const ContainerProviderStaticConfigSchema = z
       .object({
         packages: z
           .array(
-            z.union([ResolvedNixPackageItemSchema, LegacyNixPackageItemSchema, UiNixPackageItemSchema]),
+            z.union([ResolvedNixPackageItemSchema, LegacyNixPackageItemSchema, UiNixPackageItemSchema, RichNixPackageItemSchema]),
           )
           .default([]),
       })
@@ -408,6 +418,68 @@ export class ContainerProviderEntity {
       await sleep(1000);
     }
     throw new Error('DinD sidecar did not become ready within timeout');
+  }
+
+  // ---------------------
+  // Nix install helpers (class-private)
+  // ---------------------
+
+  // Coerce any accepted nix.packages array items to resolved install specs; ignore others
+  // Note: this method intentionally avoids throwing; unknown shapes are skipped.
+  private normalizeToInstallSpecs(items: unknown[]): NixInstallSpec[] {
+    const specs: NixInstallSpec[] = [];
+    for (const it of items || []) {
+      if (!it || typeof it !== 'object') continue;
+      const o = it as Record<string, unknown>;
+      const ch = o['commitHash'];
+      const ap = o['attributePath'];
+      if (typeof ch === 'string' && /^[0-9a-f]{40}$/.test(ch) && typeof ap === 'string' && /^[A-Za-z0-9_.+\-]+$/.test(ap) && ap.length > 0) {
+        specs.push({ commitHash: ch, attributePath: ap });
+      }
+    }
+    return specs;
+  }
+
+  // Install Nix packages in the container profile using combined install with per-package fallback
+  private async ensureNixPackages(container: ContainerEntity, specs: NixInstallSpec[], originalCount: number): Promise<void> {
+    try {
+      if (!Array.isArray(specs) || specs.length === 0) {
+        // If original config had entries but none were resolved, log once
+        if ((originalCount || 0) > 0) {
+          this.logger.info('nix.packages present but unresolved; skipping install');
+        }
+        return;
+      }
+      // Log when some items are ignored due to missing fields
+      if ((originalCount || 0) > specs.length) {
+        const ignored = (originalCount || 0) - specs.length;
+        this.logger.info('%d nix.packages item(s) missing commitHash/attributePath; ignored', ignored);
+      }
+      // Detect Nix presence quickly
+      const detect = await container.exec('command -v nix >/dev/null 2>&1 && nix --version', { timeoutMs: 5000, idleTimeoutMs: 0 });
+      if (detect.exitCode !== 0) {
+        this.logger.info('Nix not present; skipping install');
+        return;
+      }
+      const refs = specs.map((s) => `github:NixOS/nixpkgs/${s.commitHash}#${s.attributePath}`);
+      const PATH_PREFIX = 'export PATH="$HOME/.nix-profile/bin:/nix/var/nix/profiles/default/bin:$PATH"';
+      const BASE = "nix profile install --accept-flake-config --extra-experimental-features 'nix-command flakes' --no-write-lock-file";
+      const combined = `${PATH_PREFIX} && ${BASE} ${refs.map((r) => r.replace(/\"/g, '')) .join(' ')}`;
+      this.logger.info('Nix install: %d packages (combined)', refs.length);
+      const combinedRes = await container.exec(combined, { timeoutMs: 10 * 60_000, idleTimeoutMs: 60_000 });
+      if (combinedRes.exitCode === 0) return;
+      // Fallback per package
+      this.logger.error('Nix install (combined) failed', { exitCode: combinedRes.exitCode });
+      for (const ref of refs) {
+        const cmd = `${PATH_PREFIX} && ${BASE} ${ref}`;
+        const r = await container.exec(cmd, { timeoutMs: 3 * 60_000, idleTimeoutMs: 60_000 });
+        if (r.exitCode === 0) this.logger.info('Nix install succeeded for %s', ref);
+        else this.logger.error('Nix install failed for %s', ref, { exitCode: r.exitCode });
+      }
+    } catch (e) {
+      // Surface via logger; caller swallows to avoid failing startup
+      this.logger.error('Nix install threw', e);
+    }
   }
 }
 
