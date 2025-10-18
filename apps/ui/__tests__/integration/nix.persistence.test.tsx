@@ -2,7 +2,7 @@ import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 import React from 'react';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { server, TestProviders } from './testUtils';
-import { AgentBuilder } from '@/builder/AgentBuilder';
+// AgentBuilder not required in this harness
 import { useEffect } from 'react';
 import { TemplatesProvider as BuilderTemplatesProvider } from '@/builder/TemplatesProvider';
 import { RightPropertiesPanel } from '@/builder/panels/RightPropertiesPanel';
