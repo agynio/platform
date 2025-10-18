@@ -32,3 +32,23 @@
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-ring: var(--sidebar-ring);
 }
+
+/* Observability UI: markdown and terminal overflow handling */
+.obs-md {
+  overflow: auto;
+}
+.obs-md p,
+.obs-md li,
+.obs-md code,
+.obs-md pre,
+.obs-md div {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.obs-terminal {
+  font-family: monospace;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}

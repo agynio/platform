@@ -16,6 +16,7 @@
     "@radix-ui/react-slot": "^1.2.3",
     "@radix-ui/react-switch": "^1.2.6",
     "class-variance-authority": "^0.7.1",
+    "yaml": "^2.8.1",
     "tailwind-merge": "^3.3.1",
     "lucide-react": "^0.544.0",
     "@monaco-editor/react": "^4.7.0",
