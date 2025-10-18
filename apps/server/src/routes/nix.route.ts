@@ -38,7 +38,16 @@ const SAFE_IDENT = /^[A-Za-z0-9_.+\-]+$/;
 const PackagesResponseSchema = z.object({
   packages: z.array(z.object({ name: z.string(), description: z.string().nullable().optional() })),
 });
-const VersionsResponseSchema = z.object({ versions: z.array(z.string()) });
+// Return rich release metadata so the UI can persist what's needed to install via Nix
+const ReleasesResponseSchema = z.object({
+  releases: z.array(
+    z.object({
+      version: z.string(),
+      attribute_path: z.string().optional(),
+      commit_hash: z.string().optional(),
+    }),
+  ),
+});
 
 // Minimal upstream shapes for type-safe parsing
 const NixhubSearchSchema = z.object({
@@ -61,6 +70,14 @@ const NixhubPackageSchema = z.object({
     .array(
       z.object({
         version: z.union([z.string(), z.number()]).optional(),
+        platforms: z
+          .array(
+            z.object({
+              attribute_path: z.string().optional(),
+              commit_hash: z.string().optional(),
+            }),
+          )
+          .optional(),
       }),
     )
     .optional(),
@@ -168,19 +185,27 @@ export function registerNixRoutes(
         const json = (await fetchJson(url, ac.signal)) as unknown;
         const upstream = NixhubPackageSchema.safeParse(json);
         const rels: NonNullable<NixhubPackageJSON['releases']> = upstream.success && Array.isArray(upstream.data.releases) ? upstream.data.releases : [];
+        type Release = { version: string; attribute_path?: string; commit_hash?: string };
         const seen = new Set<string>();
-        const withValid: string[] = [];
-        const withInvalid: string[] = [];
+        const valid: Release[] = [];
+        const invalid: Release[] = [];
         for (const r of rels) {
-          const v = String(r?.version ?? '');
+          const v = String((r as any)?.version ?? '');
           if (!v || seen.has(v)) continue;
           seen.add(v);
-          if (semver.valid(v) || semver.valid(semver.coerce(v) || '')) withValid.push(v);
-          else withInvalid.push(v);
+          const plats = Array.isArray((r as any).platforms) ? (r as any).platforms : [];
+          const p0 = plats.length > 0 ? plats[0] : undefined;
+          const rel: Release = { version: v } as Release;
+          if (p0 && typeof p0 === 'object') {
+            if (typeof (p0 as any).attribute_path === 'string') rel.attribute_path = (p0 as any).attribute_path;
+            if (typeof (p0 as any).commit_hash === 'string') rel.commit_hash = (p0 as any).commit_hash;
+          }
+          if (semver.valid(v) || semver.valid(semver.coerce(v) || '')) valid.push(rel);
+          else invalid.push(rel);
         }
-        withValid.sort((a, b) => semver.rcompare(semver.coerce(a) || a, semver.coerce(b) || b));
-        const versions = [...withValid, ...withInvalid];
-        const body = VersionsResponseSchema.parse({ versions });
+        valid.sort((a, b) => semver.rcompare(semver.coerce(a.version) || a.version, semver.coerce(b.version) || b.version));
+        const releases = [...valid, ...invalid];
+        const body = ReleasesResponseSchema.parse({ releases });
         reply.header('Cache-Control', 'public, max-age=60, stale-while-revalidate=300');
         return body;
       } finally {
