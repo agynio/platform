@@ -41,6 +41,7 @@ describe('Builder dirty detection for graph edits', () => {
           edges: [],
         }),
       ),
+      // Align with builder.autosave.test.tsx which posts to http://localhost:3010/api/graph
       http.post('http://localhost:3010/api/graph', async ({ request }) => {
         counters.posts += 1;
         await request.json().catch(() => ({}));
@@ -70,7 +71,7 @@ describe('Builder dirty detection for graph edits', () => {
       api!.onNodesChange([change]);
     });
     await act(async () => {
-      vi.advanceTimersByTime(300);
+      vi.advanceTimersByTime(1200);
       await Promise.resolve();
     });
     expect(counters.posts).toBe(0);
@@ -98,7 +99,7 @@ describe('Builder dirty detection for graph edits', () => {
       api!.onNodesChange([noMove]);
     });
     await act(async () => {
-      vi.advanceTimersByTime(300);
+      vi.advanceTimersByTime(1200);
       await Promise.resolve();
     });
     expect(counters.posts).toBe(0);
@@ -111,10 +112,10 @@ describe('Builder dirty detection for graph edits', () => {
       api!.onNodesChange([move]);
     });
     await act(async () => {
-      vi.advanceTimersByTime(300);
+      vi.advanceTimersByTime(1200);
       await Promise.resolve();
     });
-    expect(counters.posts).toBe(1);
+    await waitFor(() => expect(counters.posts).toBe(1));
   });
 
   it('node and edge add/remove mark dirty', async () => {
@@ -135,10 +136,10 @@ describe('Builder dirty detection for graph edits', () => {
       api!.addNode('mock', { x: 0, y: 0 });
     });
     await act(async () => {
-      vi.advanceTimersByTime(300);
+      vi.advanceTimersByTime(1200);
       await Promise.resolve();
     });
-    expect(counters.posts).toBe(1);
+    await waitFor(() => expect(counters.posts).toBe(1));
 
     // Edge add via valid connection
     const conn: Parameters<OnConnect>[0] = { source: 'n1', sourceHandle: 'out', target: 'n2', targetHandle: 'in' };
@@ -146,10 +147,10 @@ describe('Builder dirty detection for graph edits', () => {
       api!.onConnect(conn);
     });
     await act(async () => {
-      vi.advanceTimersByTime(300);
+      vi.advanceTimersByTime(1200);
       await Promise.resolve();
     });
-    expect(counters.posts).toBe(2);
+    await waitFor(() => expect(counters.posts).toBe(2));
 
     // Edge remove
     const edgeId = 'n1-out__n2-in';
@@ -158,10 +159,10 @@ describe('Builder dirty detection for graph edits', () => {
       api!.onEdgesChange([erem]);
     });
     await act(async () => {
-      vi.advanceTimersByTime(300);
+      vi.advanceTimersByTime(1200);
       await Promise.resolve();
     });
-    expect(counters.posts).toBe(3);
+    await waitFor(() => expect(counters.posts).toBe(3));
 
     // Node remove
     const nrem: NodeChange = { id: 'n1', type: 'remove' };
@@ -169,9 +170,9 @@ describe('Builder dirty detection for graph edits', () => {
       api!.onNodesChange([nrem]);
     });
     await act(async () => {
-      vi.advanceTimersByTime(300);
+      vi.advanceTimersByTime(1200);
       await Promise.resolve();
     });
-    expect(counters.posts).toBe(4);
+    await waitFor(() => expect(counters.posts).toBe(4));
   });
 });
