@@ -34,10 +34,10 @@ export class PRTrigger extends BaseTrigger {
   constructor(
     private github: GithubService,
     private prService: PRService,
-    private logger: LoggerService,
+    logger: LoggerService,
     private opts: PRTriggerOptions,
   ) {
-    super();
+    super(logger);
     if (!opts.intervalMs) opts.intervalMs = 60_000;
   }
 

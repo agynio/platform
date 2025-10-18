@@ -179,8 +179,9 @@ export class ContainerRegistryService {
   // Keeping it local enables strongly-typed fakes in tests without any casts.
   // eslint-disable-next-line @typescript-eslint/consistent-type-definitions
   static BackfillAdapter = class {
-    // This class is used only for its shape; do not instantiate.
-    private constructor() {}
+    // This class is used only for its shape; do not instantiate at runtime.
+    // Use protected constructor to avoid 'private ctor' generic constraint issues in tests.
+    protected constructor() {}
     findContainersByLabels!: (
       labels: Record<string, string>,
       options?: { all?: boolean },
@@ -189,11 +190,22 @@ export class ContainerRegistryService {
     getDocker!: () => {
       getContainer: (
         id: string,
-      ) => { inspect: () => Promise<{ Created?: string; State?: { Running?: boolean }; Config?: { Image?: string } }> };
+      ) => { inspect: () => Promise<{ Created?: string; State?: { Running?: boolean } | undefined; Config?: { Image?: string } | undefined }> };
     };
   };
 
-  async backfillFromDocker(containerService: InstanceType<typeof ContainerRegistryService.BackfillAdapter>): Promise<void> {
+  async backfillFromDocker(containerService: {
+    findContainersByLabels: (
+      labels: Record<string, string>,
+      options?: { all?: boolean },
+    ) => Promise<Array<{ id: string }>>;
+    getContainerLabels: (id: string) => Promise<Record<string, string> | undefined>;
+    getDocker: () => {
+      getContainer: (
+        id: string,
+      ) => { inspect: () => Promise<{ Created?: string; State?: { Running?: boolean }; Config?: { Image?: string } }> };
+    };
+  }): Promise<void> {
     this.logger.info('ContainerRegistry: backfilling from Docker');
     try {
       const list = await containerService.findContainersByLabels({ 'hautech.ai/role': 'workspace' }, { all: true });

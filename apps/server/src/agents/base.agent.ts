@@ -27,6 +27,14 @@ type InvocationToken = {
   reject: (e: any) => void;
 };
 
+type ThreadState = {
+  running: boolean;
+  seq: number;
+  tokens: Map<string, InvocationToken>;
+  inFlight?: { runId: string; includedCounts: Map<string, number>; abortController: AbortController; status: 'running' | 'terminating' };
+  timer?: NodeJS.Timeout;
+};
+
 export abstract class BaseAgent implements TriggerListener, StaticConfigurable, InjectionProvider {
   protected _graph: CompiledStateGraph<unknown, unknown> | undefined;
   protected _config: RunnableConfig | undefined;
@@ -39,16 +47,7 @@ export abstract class BaseAgent implements TriggerListener, StaticConfigurable, 
   private processBuffer: ProcessBuffer = ProcessBuffer.AllTogether;
 
   // Per-thread scheduler state
-  private threads: Map<
-    string,
-    {
-      running: boolean;
-      seq: number;
-      tokens: Map<string, InvocationToken>;
-      inFlight?: { runId: string; includedCounts: Map<string, number>; abortController: AbortController; status: 'running' | 'terminating' };
-      timer?: NodeJS.Timeout;
-    }
-  > = new Map();
+  private threads: Map<string, ThreadState> = new Map();
   // Optional persistence hook for run state listing/termination
   private runService?: AgentRunService;
 
@@ -194,11 +193,12 @@ export abstract class BaseAgent implements TriggerListener, StaticConfigurable, 
   }
 
   // Scheduling helpers
-  private ensureThread(thread: string) {
+  private ensureThread(thread: string): ThreadState {
     let s = this.threads.get(thread);
     if (!s) {
-      s = { running: false, seq: 0, tokens: new Map() } as any;
-      this.threads.set(thread, s);
+      const created: ThreadState = { running: false, seq: 0, tokens: new Map() };
+      this.threads.set(thread, created);
+      return created;
     }
     return s;
   }
@@ -249,7 +249,8 @@ export abstract class BaseAgent implements TriggerListener, StaticConfigurable, 
       const last = await this.runGraph(thread, batch, runId, ac.signal);
       // Success: resolve tokens fully included in this run
       const resolved: string[] = [];
-      for (const [tokenId, included] of s.inFlight!.includedCounts.entries()) {
+      const inflight = s.inFlight as { includedCounts: Map<string, number> } | undefined;
+      for (const [tokenId, included] of (inflight?.includedCounts || new Map<string, number>()).entries()) {
         const token = s.tokens.get(tokenId);
         if (!token) continue;
         if (included >= token.total) {
@@ -261,11 +262,11 @@ export abstract class BaseAgent implements TriggerListener, StaticConfigurable, 
         }
       }
       this.logger.info(`Completed run ${runId}; resolved tokens: [${resolved.join(', ')}]`);
-    } catch (e: any) {
-      // Failure: reject awaiters for tokens tied to this run; leave others pending
-      const run = s.inFlight;
-      const affected = run ? Array.from(run.includedCounts.keys()) : [];
-      this.logger.error(`Run ${run?.runId || 'unknown'} failed for thread ${thread}: ${e?.message || e}`);
+      } catch (e: any) {
+        // Failure: reject awaiters for tokens tied to this run; leave others pending
+        const run = s.inFlight as { includedCounts?: Map<string, number>; runId?: string } | undefined;
+        const affected = run?.includedCounts ? Array.from(run.includedCounts.keys()) : [];
+        this.logger.error(`Run ${(run && run.runId) || 'unknown'} failed for thread ${thread}: ${e?.message || e}`);
       for (const tokenId of affected) {
         const token = s.tokens.get(tokenId);
         if (!token) continue;
@@ -280,7 +281,7 @@ export abstract class BaseAgent implements TriggerListener, StaticConfigurable, 
       // Persist termination (best-effort)
       try {
         const nodeId = this.getNodeId();
-        if (nodeId && this.runService) await this.runService.markTerminated(nodeId, s.inFlight?.runId || runId);
+        if (nodeId && this.runService) await this.runService.markTerminated(nodeId, (s.inFlight && (s.inFlight as any).runId) || runId);
       } catch {}
       s.inFlight = undefined;
       s.running = false;

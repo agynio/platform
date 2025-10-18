@@ -374,7 +374,7 @@ export class GitGraphService {
     }
   }
 
-  private async readEntitiesFromDir<T extends { id: string }>(dir: string): Promise<{ items: T[]; hadError: boolean }> {
+  private async readEntitiesFromDir<T extends { id?: string }>(dir: string): Promise<{ items: T[]; hadError: boolean }> {
     let hadError = false;
     const items: T[] = [];
     try {
@@ -385,7 +385,7 @@ export class GitGraphService {
         try {
           const raw = JSON.parse(await fs.readFile(p, 'utf8')) as Partial<T>;
           const decodedId = decodeURIComponent(f.replace(/\.json$/, ''));
-          const obj = { id: (raw as T).id ?? decodedId, ...(raw as object) } as T;
+          const obj = { id: String((raw as any).id ?? decodedId), ...(raw as object) } as T;
           return obj;
         } catch {
           hadError = true;
@@ -412,12 +412,14 @@ export class GitGraphService {
         const raw = await this.runGitCapture(['show', `HEAD:${p}`], this.cfg.repoPath);
         const obj = JSON.parse(raw);
         if (!obj.id) obj.id = decodeURIComponent(path.basename(p, '.json'));
+        obj.id = String(obj.id);
         return obj as PersistedGraphNode;
       }));
       const edges = await Promise.all(edgePaths.map(async (p) => {
         const raw = await this.runGitCapture(['show', `HEAD:${p}`], this.cfg.repoPath);
         const obj = JSON.parse(raw);
         if (!obj.id) obj.id = decodeURIComponent(path.basename(p, '.json'));
+        obj.id = String(obj.id);
         return obj as PersistedGraphEdge;
       }));
       return { name: meta.name ?? name, version: meta.version ?? 0, updatedAt: meta.updatedAt ?? new Date().toISOString(), nodes, edges };
@@ -437,11 +439,15 @@ export class GitGraphService {
       const paths = list.split('\n').filter(Boolean);
       const nodes = await Promise.all(paths.filter((p) => p.startsWith(`${base}/nodes/`) && p.endsWith('.json')).map(async (p) => {
         const raw = await this.runGitCapture(['show', `HEAD:${p}`], this.cfg.repoPath);
-        return JSON.parse(raw) as PersistedGraphNode;
+        const obj = JSON.parse(raw) as PersistedGraphNode;
+        (obj as any).id = String((obj as any).id ?? decodeURIComponent(path.basename(p, '.json')));
+        return obj;
       }));
       const edges = await Promise.all(paths.filter((p) => p.startsWith(`${base}/edges/`) && p.endsWith('.json')).map(async (p) => {
         const raw = await this.runGitCapture(['show', `HEAD:${p}`], this.cfg.repoPath);
-        return JSON.parse(raw) as PersistedGraphEdge;
+        const obj = JSON.parse(raw) as PersistedGraphEdge;
+        (obj as any).id = String((obj as any).id ?? decodeURIComponent(path.basename(p, '.json')));
+        return obj;
       }));
       return { name: meta.name ?? name, version: meta.version ?? 0, updatedAt: meta.updatedAt ?? new Date().toISOString(), nodes, edges };
     } catch {
@@ -460,7 +466,7 @@ export class GitGraphService {
   }
 
   private edgeId(e: PersistedGraphEdge): string {
-    return `${e.source}-${e.sourceHandle}__${e.target}-${e.targetHandle}`;
+    return String(`${e.source}-${e.sourceHandle}__${e.target}-${e.targetHandle}`);
   }
 
   private diffNodes(before: PersistedGraphNode[], after: PersistedGraphNode[]) {
@@ -480,8 +486,8 @@ export class GitGraphService {
   }
 
   private diffEdges(before: PersistedGraphEdge[], after: PersistedGraphEdge[]) {
-    const bi = new Map(before.map((e) => [e.id ?? this.edgeId(e), JSON.stringify({ ...e, id: e.id ?? this.edgeId(e) })]));
-    const ai = new Map(after.map((e) => [e.id ?? this.edgeId(e), JSON.stringify({ ...e, id: e.id ?? this.edgeId(e) })]));
+    const bi = new Map(before.map((e) => [String(e.id ?? this.edgeId(e)), JSON.stringify({ ...e, id: String(e.id ?? this.edgeId(e)) })]));
+    const ai = new Map(after.map((e) => [String(e.id ?? this.edgeId(e)), JSON.stringify({ ...e, id: String(e.id ?? this.edgeId(e)) })]));
     const edgeAdds: string[] = [];
     const edgeUpdates: string[] = [];
     const edgeDeletes: string[] = [];

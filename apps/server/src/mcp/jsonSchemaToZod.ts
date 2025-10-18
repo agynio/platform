@@ -114,7 +114,7 @@ export function jsonSchemaToZod(schema: JSONSchema | undefined): ZodTypeAny {
 
 export function inferArgsSchema(inputSchema: unknown): ZodTypeAny {
   try {
-    return jsonSchemaToZod(inputSchema);
+    return jsonSchemaToZod(inputSchema as JSONSchema | undefined);
   } catch {
     return z.any();
   }

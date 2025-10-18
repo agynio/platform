@@ -18,7 +18,7 @@ export class DebugToolTrigger extends BaseTrigger {
   private tool: DynamicStructuredTool | null = null;
   private cfg: z.infer<typeof DebugToolTriggerStaticConfigSchema> = { path: '/debug/tool', method: 'POST' } as z.infer<typeof DebugToolTriggerStaticConfigSchema>;
 
-  constructor(private logger: LoggerService) { super(); }
+  constructor(logger: LoggerService) { super(logger); }
 
   setTool(tool: DynamicStructuredTool | undefined) {
     this.tool = tool || null;
@@ -64,8 +64,8 @@ export class DebugToolTrigger extends BaseTrigger {
           reply.code(400);
           return { error: 'tool_not_connected' };
         }
-        const body = (request as { body?: unknown }).body as unknown;
-        const input = body?.input;
+        const body = (request as { body?: any }).body as any;
+        const input = body && typeof body === 'object' ? (body as any)['input'] : undefined;
         if (input === undefined) {
           reply.code(400);
           return { error: 'invalid_body', message: 'expected { input: <args> }' };

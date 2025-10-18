@@ -35,7 +35,7 @@ export const SlackTriggerExposedStaticConfigSchema = z
  * (non-bot, non-thread broadcast) to subscribers via notify().
  */
 export class SlackTrigger extends BaseTrigger {
-  private cfg: { app_token: { value: string; source?: 'static' | 'vault' } } | null = null;
+  private cfg: { app_token: { value: string; source: 'static' | 'vault' } } | null = null;
   private client: SocketModeClient | null = null;
   private vault?: VaultService;
 
@@ -59,7 +59,7 @@ export class SlackTrigger extends BaseTrigger {
         throw new Error('Slack app-level token must start with xapp-');
       }
     }
-    this.cfg = { app_token: appToken };
+    this.cfg = { app_token: { value: appToken.value, source: (appToken.source || 'static') as 'static' | 'vault' } };
     void this.start();
   }
 

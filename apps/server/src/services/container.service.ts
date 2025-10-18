@@ -117,7 +117,7 @@ export class ContainerService {
         );
       };
       // Use overload that accepts optional opts. Undefined maps to (image, cb).
-      this.docker.pull(image, platform ? ({ platform } as PullOpts) : undefined, cb);
+      this.docker.pull(image, (platform ? ({ platform } as PullOpts) : {}) as {}, cb);
     });
   }
 
@@ -386,7 +386,10 @@ export class ContainerService {
       const onAbort = () => {
         if (finished) return;
         finished = true;
-        try { streamRef?.destroy?.(); } catch {}
+        try {
+          // Node.js streams expose destroy(); WHATWG ReadableStream does not. Cast to any safely.
+          (streamRef as any)?.destroy?.();
+        } catch {}
         try { stdoutCollector.flush(); stderrCollector.flush(); } catch {}
         // Properly-typed AbortError without casts
         const abortErr = new Error('Aborted');
@@ -404,7 +407,7 @@ export class ContainerService {
               finished = true;
               // Ensure underlying stream is torn down to avoid further data/timers
               try {
-                streamRef?.destroy?.();
+                (streamRef as any)?.destroy?.();
               } catch {}
               try {
                 stdoutCollector.flush();
@@ -423,7 +426,7 @@ export class ContainerService {
           finished = true;
           // Ensure underlying stream is torn down to avoid further data/timers
           try {
-            streamRef?.destroy?.();
+            (streamRef as any)?.destroy?.();
           } catch {}
           try {
             stdoutCollector.flush();

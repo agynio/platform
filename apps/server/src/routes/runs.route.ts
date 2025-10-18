@@ -51,17 +51,17 @@ export function registerRunsRoutes(
         },
       },
     },
-    async (req: FastifyRequest<{ Params: ListParams; Querystring: ListQuery }>, reply: FastifyReply) => {
+    async (req: FastifyRequest<{ Params: ListParams; Querystring: ListQuery }>, reply: FastifyReply): Promise<void | ListReply> => {
       const { nodeId } = req.params;
       const status = req.query?.status ?? 'all';
       try {
         const items = await runs.list(nodeId, status);
         reply.code(200);
-        return { items: items.map(({ _id, ...rest }) => ({ ...rest, startedAt: rest.startedAt.toISOString(), updatedAt: rest.updatedAt.toISOString(), ...(rest.expiresAt ? { expiresAt: rest.expiresAt.toISOString() } : {}) })) };
+        return { items: items.map(({ _id, ...rest }) => ({ ...rest, startedAt: rest.startedAt.toISOString(), updatedAt: rest.updatedAt.toISOString(), ...(rest.expiresAt ? { expiresAt: rest.expiresAt.toISOString() } : {}) })) } as ListReply;
       } catch (e: unknown) {
         const msg = e instanceof Error ? e.message : 'list_failed';
         reply.code(500);
-        return { error: msg } as const;
+        return { error: msg } as ListReply;
       }
     },
   );
