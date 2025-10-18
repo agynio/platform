@@ -143,7 +143,7 @@ export class ContainerProviderEntity {
     this.cfg = ContainerProviderStaticConfigSchema.parse(cfg);
   }
 
-  async provide(threadId: string) {
+  async provide(threadId: string): Promise<ContainerEntity> {
     // Build base thread labels and workspace-specific labels
     const labels = this.idLabels(threadId);
     const workspaceLabels = { ...labels, 'hautech.ai/role': 'workspace' } as Record<string, string>;
@@ -252,7 +252,7 @@ export class ContainerProviderEntity {
       const DOCKER_HOST_ENV = 'tcp://localhost:2375';
       const DOCKER_MIRROR_URL = this.configService?.dockerMirrorUrl || process.env.DOCKER_MIRROR_URL || 'http://registry-mirror:5000';
       const enableDinD = this.cfg?.enableDinD ?? false;
-      let envMerged = await (async () => {
+      let envMerged: Record<string, string> | undefined = await (async () => {
         const base: Record<string, string> = Array.isArray(this.opts.env)
           ? Object.fromEntries(
               (this.opts.env || [])
@@ -277,7 +277,7 @@ export class ContainerProviderEntity {
           envMerged = { ...(envMerged || {}), NIX_CONFIG: nixConfig } as Record<string, string>;
         }
       } catch {}
-      const normalizedEnv = envMerged as Record<string, string> | undefined;
+      const normalizedEnv: Record<string, string> | undefined = envMerged;
       container = await this.containerService.start({
         ...this.opts,
         image: this.cfg?.image ?? this.opts.image,

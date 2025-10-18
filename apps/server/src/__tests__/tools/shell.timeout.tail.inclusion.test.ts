@@ -2,6 +2,9 @@ import { describe, it, expect, vi } from 'vitest';
 import { ShellTool } from '../../tools/shell_command';
 import { LoggerService } from '../../services/logger.service';
 import { ExecTimeoutError } from '../../utils/execTimeout';
+import { ContainerEntity } from '../../entities/container.entity';
+import { ContainerProviderEntity } from '../../entities/containerProvider.entity';
+import { ContainerService } from '../../services/container.service';
 
 // ANSI colored output to verify stripping; include more than 10k and ensure we only keep tail
 const ANSI_RED = '\u001b[31m';
@@ -15,26 +18,28 @@ describe('ShellTool timeout tail inclusion and ANSI stripping', () => {
     const stderr = `${ANSI_RED}ERR-SECTION${ANSI_RESET}`;
     const err = new ExecTimeoutError(3600000, stdout, stderr);
 
-    const fakeContainer = {
-      exec: vi.fn(async () => {
-        throw err;
-      }),
-    } as any;
-
-    const provider = { provide: vi.fn(async () => fakeContainer) } as any;
-    const tool = new ShellTool(undefined as any, logger);
+    class FakeContainer extends ContainerEntity { override async exec(): Promise<never> { throw err; } }
+    class FakeProvider extends ContainerProviderEntity {
+      constructor(logger: LoggerService) { super(new ContainerService(logger), undefined, {}, () => ({})); }
+      override async provide(): Promise<ContainerEntity> { return new FakeContainer(new ContainerService(logger), 'fake'); }
+    }
+    const provider = new FakeProvider(logger);
+    const tool = new ShellTool(undefined, logger);
     tool.setContainerProvider(provider);
     await tool.setConfig({});
     const t = tool.init();
 
+    type InvokeArgs = Parameters<ReturnType<ShellTool['init']>['invoke']>;
+    const payload: InvokeArgs[0] = { command: 'sleep 1h' };
+    const ctx: InvokeArgs[1] = { configurable: { thread_id: 't' } } as any;
     await expect(
-      t.invoke({ command: 'sleep 1h' }, { configurable: { thread_id: 't' } } as any),
+      t.invoke(payload, ctx),
     ).rejects.toThrowError(/Error \(timeout after 3600000ms\): command exceeded 3600000ms and was terminated\. See output tail below\./);
 
     try {
-      await t.invoke({ command: 'sleep 1h' }, { configurable: { thread_id: 't' } } as any);
-    } catch (e: any) {
-      const msg = String(e?.message || e);
+      await t.invoke(payload, ctx);
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e);
       // No ANSI should remain
       expect(msg).not.toMatch(/\u001b\[/);
       // Tail should contain the last characters of the 12k string + ERR-SECTION
