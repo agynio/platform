@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { TooltipProvider } from '@hautech/ui';
 import ReferenceEnvField from '../ReferenceEnvField';
 
@@ -37,7 +37,7 @@ describe('ReferenceEnvField', () => {
   });
 
 
-  it('keyboard a11y: Enter opens menu and Enter selects option', () => {
+  it('keyboard a11y: Enter opens menu and Enter selects option', async () => {
     render(
       <TooltipProvider delayDuration={0}>
         <ReferenceEnvField value={[{ key: 'FOO', value: '', source: 'static' }]} onChange={() => {}} />
@@ -46,6 +46,7 @@ describe('ReferenceEnvField', () => {
     const trigger = screen.getByTestId('env-source-trigger-0');
     trigger.focus();
     fireEvent.keyDown(trigger, { key: 'Enter' });
+    await screen.findByTestId('env-source-menu-0');
     // After opening, select vault via keyboard
     const vaultItem = screen.getByTestId('env-source-option-vault-0');
     vaultItem.focus();

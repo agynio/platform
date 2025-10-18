@@ -29,7 +29,8 @@ export interface ReferenceEnvFieldProps {
 function toArray(v?: EnvItem[] | Record<string, string>): EnvItem[] {
   if (!v) return [];
   if (Array.isArray(v)) return v.map((it) => ({ key: it.key, value: it.value, source: it.source || 'static' }));
-  return Object.entries(v).map(([k, val]) => ({ key: k, value: val as string, source: 'static' as const }));
+  // v is Record<string, string> here, so val is already string
+  return Object.entries(v).map(([k, val]) => ({ key: k, value: val, source: 'static' }));
 }
 
 function isVaultRef(v: string) {
@@ -121,7 +122,7 @@ export default function ReferenceEnvField({ label, value, onChange, readOnly, di
                       variant="outline"
                       size="icon"
                       disabled={isDisabled}
-                      aria-label="Variable source"
+                      aria-label={(it.source ?? 'static') === 'vault' ? 'Vault secret' : 'Static value'}
                       data-testid={`env-source-trigger-${idx}`}
                     >
                       {(!it.source || it.source === 'static') ? (
@@ -132,12 +133,17 @@ export default function ReferenceEnvField({ label, value, onChange, readOnly, di
                     </Button>
                   </DropdownMenuTrigger>
                 </TooltipTrigger>
-                <TooltipContent>{it.source || 'static'}</TooltipContent>
+                <TooltipContent>
+                  {(it.source ?? 'static') === 'vault' ? 'Vault secret' : 'Static value'}
+                </TooltipContent>
               </Tooltip>
               <DropdownMenuContent align="end">
                 <DropdownMenuRadioGroup
                   value={it.source || 'static'}
-                  onValueChange={(v) => updateAt(idx, { source: (v as 'static' | 'vault') || 'static' })}
+                  onValueChange={(v) => {
+                    const s = v === 'vault' || v === 'static' ? v : 'static';
+                    updateAt(idx, { source: s });
+                  }}
                   data-testid={`env-source-menu-${idx}`}
                 >
                   <DropdownMenuRadioItem value="static" data-testid={`env-source-option-static-${idx}`}>
