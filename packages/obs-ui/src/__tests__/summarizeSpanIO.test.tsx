@@ -34,7 +34,7 @@ describe('Summarize span IO tab', () => {
     // IO tab active by default for summarize span
     expect(screen.getByText('Old Context')).toBeTruthy();
     expect(screen.getByText('New Context')).toBeTruthy();
-  expect(screen.getAllByText(/summary/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/summary/i).length).toBeGreaterThan(0);
     // markdown bold should render; just ensure content present
     expect(screen.getByText('World')).toBeTruthy();
   });
