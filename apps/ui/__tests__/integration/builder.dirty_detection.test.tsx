@@ -93,7 +93,16 @@ describe('Builder dirty detection for graph edits', () => {
     // Drag end with no delta
     // Simulate drag start then drag end with same position (no delta)
     const dragStart: NodeChange = { id: 'n1', type: 'position', dragging: true } as any;
-    const noMove: NodeChange = { id: 'n1', type: 'position', dragging: false, position: { x: 10, y: 10 } } as any;
+    const noMove: NodeChange = {
+      id: 'n1',
+      type: 'position',
+      dragging: false,
+      position: { x: 10, y: 10 },
+      // Include absolute as some RF versions use this when applying
+      // position changes internally
+      // @ts-expect-error positionAbsolute is allowed by RF runtime
+      positionAbsolute: { x: 10, y: 10 },
+    } as any;
     await act(async () => {
       api!.onNodesChange([dragStart]);
       api!.onNodesChange([noMove]);
@@ -106,11 +115,21 @@ describe('Builder dirty detection for graph edits', () => {
 
     // Real move
     const dragStart2: NodeChange = { id: 'n1', type: 'position', dragging: true } as any;
-    const move: NodeChange = { id: 'n1', type: 'position', dragging: false, position: { x: 20, y: 10 } } as any;
+    const move: NodeChange = {
+      id: 'n1',
+      type: 'position',
+      dragging: false,
+      position: { x: 20, y: 10 },
+      // @ts-expect-error see note above
+      positionAbsolute: { x: 20, y: 10 },
+    } as any;
     await act(async () => {
       api!.onNodesChange([dragStart2]);
       api!.onNodesChange([move]);
     });
+    // Sanity check: position actually changed
+    const nodeAfterMove = api!.nodes.find((n) => n.id === 'n1');
+    expect(nodeAfterMove?.position.x).toBe(20);
     await act(async () => {
       vi.advanceTimersByTime(1200);
       await Promise.resolve();
