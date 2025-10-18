@@ -35,6 +35,8 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+    networks:
+      - agents_net
 
   mongo-setup:
     image: mongo:latest
