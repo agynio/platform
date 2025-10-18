@@ -85,3 +85,18 @@ Notes
 - The Git-backed store enforces deterministic edge IDs and advisory locking.
 - MCP mutation guard prevents unsafe changes to MCP commands.
 - Error codes align with the error envelope described above.
+Nix proxy
+- GET `/api/nix/packages?query=`
+  - 200 `{ packages: Array<{ name: string, description?: string|null }> }`
+  - 400 `{ error: 'validation_error', details }`
+  - 5xx `{ error: 'upstream_error'|'server_error' }`
+- GET `/api/nix/versions?name=`
+  - 200 `{ versions: string[] }`
+  - 404 `{ error: 'not_found' }`
+  - 400 `{ error: 'validation_error' }`
+  - 504 `{ error: 'timeout' }`
+- GET `/api/nix/package-info?name=`
+  - 200 `{ name: string, releases: Array<{ version: string, attribute_path?: string, commit_hash?: string, platforms?: string[] }> }`
+  - 404 `{ error: 'not_found' }`
+  - 400 `{ error: 'validation_error' }`
+  - 504 `{ error: 'timeout' }`

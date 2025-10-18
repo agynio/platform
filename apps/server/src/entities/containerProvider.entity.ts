@@ -42,23 +42,8 @@ export const ContainerProviderStaticConfigSchema = z
       .int()
       .default(86400)
       .describe('Idle TTL (seconds) before workspace cleanup; <=0 disables cleanup.'),
-    // Optional Nix metadata (no provisioning behavior change in this PR)
-    nix: z
-      .object({
-        packages: z
-          .array(
-            z
-              .object({
-                attr: z.string(),
-                pname: z.string().optional(),
-                channel: z.string().nullable().optional(),
-              })
-              .strict(),
-          )
-          .default([]),
-      })
-      .strict()
-      .optional(),
+    // Optional Nix metadata (opaque to server; UI manages shape)
+    nix: z.unknown().optional(),
   })
   .strict();
 
@@ -90,23 +75,8 @@ export const ContainerProviderExposedStaticConfigSchema = z
       .int()
       .default(86400)
       .describe('Idle TTL (seconds) before workspace cleanup; <=0 disables cleanup.'),
-    // Expose Nix metadata for UI/templates
-    nix: z
-      .object({
-        packages: z
-          .array(
-            z
-              .object({
-                attr: z.string(),
-                pname: z.string().optional(),
-                channel: z.string().nullable().optional(),
-              })
-              .strict(),
-          )
-          .default([]),
-      })
-      .strict()
-      .optional(),
+    // Expose nix as opaque; builder custom UI component handles editing
+    nix: z.unknown().optional(),
   })
   .strict();
 
