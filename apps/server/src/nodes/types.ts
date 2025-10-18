@@ -10,3 +10,13 @@ export function isNodeLifecycle(obj: unknown): obj is NodeLifecycle<any> {
   return !!obj && typeof (obj as any).configure === 'function';
 }
 
+export function isNodeLifecycle(obj: unknown): obj is NodeLifecycle<Record<string, unknown>> {
+  if (!obj || typeof obj !== 'object') return false;
+  const o = obj as Record<string, unknown>;
+  return (
+    typeof o['configure'] === 'function' &&
+    typeof o['start'] === 'function' &&
+    typeof o['stop'] === 'function' &&
+    typeof o['delete'] === 'function'
+  );
+}

@@ -340,6 +340,7 @@ export class LiveGraphRuntime {
       } catch (e) {
         this.logger.debug('Post-create wiring failed', e);
       }
+      const { isNodeLifecycle } = await import('../nodes/types');
       if (!isNodeLifecycle(created) && node.data.config) {
         if (hasSetConfig(created)) {
           try {
@@ -354,8 +355,8 @@ export class LiveGraphRuntime {
       if (isNodeLifecycle(created)) {
         try {
           const cfg = (node.data.config || {}) as Record<string, unknown>;
-          await (created as any).configure(cfg);
-          if (typeof (created as any).start === 'function') await (created as any).start();
+          await created.configure(cfg);
+          await created.start();
           live.config = cfg;
         } catch (err) {
           throw Errors.nodeInitFailure(node.id, err);
@@ -554,3 +555,27 @@ export class LiveGraphRuntime {
     return this.portsRegistry.resolveEdge(edge, sourceTemplate, targetTemplate);
   }
 }
+
+  // Stop and delete all live nodes that implement lifecycle; ignore errors and always clear state
+  async shutdown(): Promise<void> {
+    const nodes = Array.from(this.state.nodes.values());
+    const { isNodeLifecycle } = await import('../nodes/types');
+    await Promise.all(
+      nodes.map(async (live) => {
+        const inst = live.instance as unknown;
+        if (isNodeLifecycle(inst)) {
+          try {
+            await inst.stop();
+          } catch {}
+          try {
+            await inst.delete();
+          } catch {}
+        }
+        this.unregisterAllEdgesForNode(live.id);
+        this.state.nodes.delete(live.id);
+        this.state.inboundEdges.delete(live.id);
+        this.state.outboundEdges.delete(live.id);
+      })
+    );
+    this.state.executedEdges.clear();
+  }
