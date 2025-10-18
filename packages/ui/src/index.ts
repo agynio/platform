@@ -9,6 +9,7 @@ export { Badge } from './components/badge';
 export { Table, Thead, Tbody, Tr, Th, Td } from './components/table';
 export { Skeleton } from './components/skeleton';
 export { LogoWordmark } from './components/logo-wordmark';
+export { Logo } from './components/logo';
 
 // Layout
 export { Accordion, AccordionItem, AccordionTrigger, AccordionContent } from './components/accordion';
