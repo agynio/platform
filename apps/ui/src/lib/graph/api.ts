@@ -1,4 +1,4 @@
-import type { NodeStatus, TemplateSchema, ReminderDTO, PersistedGraphUpsertRequestUI } from './types';
+import type { NodeStatus, TemplateSchema, ReminderDTO } from './types';
 import { buildUrl, httpJson } from '../apiClient';
 
 // Minimal graph type (align with backend PersistedGraphUpsertRequest shape)
@@ -133,16 +133,21 @@ function normalizeConfigByTemplate(template: TemplateName | string, cfg?: Record
 export const api = {
   getTemplates: () => httpJson<TemplateSchema[]>(`/graph/templates`),
   // Runs: list and termination controls (no auth/gates)
-  listNodeRuns: (nodeId: string, status: 'running' | 'terminating' | 'all' = 'all') =>
-    httpJson<{ items: Array<{ nodeId: string; threadId: string; runId: string; status: string; startedAt: string; updatedAt: string }> }>(
+  listNodeRuns: async (nodeId: string, status: 'running' | 'terminating' | 'all' = 'all') => {
+    const res = await httpJson<{ items: Array<{ nodeId: string; threadId: string; runId: string; status: string; startedAt: string; updatedAt: string }> }>(
       `/graph/nodes/${encodeURIComponent(nodeId)}/runs?status=${encodeURIComponent(status)}`,
-    ),
+    );
+    return res ?? { items: [] };
+  },
   terminateRun: (nodeId: string, runId: string) =>
     httpJson<{ status: string }>(`/graph/nodes/${encodeURIComponent(nodeId)}/runs/${encodeURIComponent(runId)}/terminate`, { method: 'POST' }),
   terminateThread: (nodeId: string, threadId: string) =>
     httpJson<{ status: string }>(`/graph/nodes/${encodeURIComponent(nodeId)}/threads/${encodeURIComponent(threadId)}/terminate`, { method: 'POST' }),
   // Reminders for RemindMe tool node
-  getNodeReminders: (nodeId: string) => httpJson<{ items: ReminderDTO[] }>(`/graph/nodes/${encodeURIComponent(nodeId)}/reminders`),
+  getNodeReminders: async (nodeId: string) => {
+    const res = await httpJson<{ items: ReminderDTO[] }>(`/graph/nodes/${encodeURIComponent(nodeId)}/reminders`);
+    return res ?? { items: [] };
+  },
   // Vault autocomplete endpoints (only available when enabled server-side)
   listVaultMounts: () => httpJson<{ items: string[] }>(`/api/vault/mounts`).catch(() => ({ items: [] })),
   listVaultPaths: (mount: string, prefix = '') =>

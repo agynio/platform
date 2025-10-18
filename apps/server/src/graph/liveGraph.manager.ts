@@ -385,12 +385,18 @@ export class LiveGraphRuntime {
       } catch (err) {
         if (err instanceof ZodError) {
           const issues = err.issues || [];
-          const unknownRoot = issues.filter(
-            (i: any) => i?.code === 'unrecognized_keys' && Array.isArray(i?.keys) && (Array.isArray(i?.path) ? i.path.length === 0 : true),
-          );
+          const unknownRoot = issues.filter((i: unknown) => {
+            const z: any = i as any;
+            if (!z || typeof z !== 'object') return false;
+            if (z.code !== 'unrecognized_keys') return false;
+            const hasKeys = Array.isArray(z.keys as unknown[]);
+            const path = z.path as unknown;
+            const pathOk = Array.isArray(path as unknown[]) ? (path as unknown[]).length === 0 : true;
+            return hasKeys && pathOk;
+          });
           if (unknownRoot.length > 0) {
             const keys = new Set<string>();
-            for (const i of unknownRoot) for (const k of i.keys as string[]) keys.add(k);
+              for (const i of unknownRoot) for (const k of (i as any).keys as string[]) keys.add(k);
             if (keys.size > 0) {
               const next: Record<string, unknown> = {};
               for (const [k, v] of Object.entries(current)) if (!keys.has(k)) next[k] = v;

@@ -17,7 +17,7 @@ type BuilderPanelNodeData = {
 
 const OBS_UI_BASE: string = import.meta.env.VITE_OBS_UI_BASE || 'http://localhost:4320';
 
-function spanMatchesContext(span: SpanDoc, node: Node<BuilderPanelNodeData>, kind: 'agent' | 'tool') {
+  function spanMatchesContext(span: SpanDoc, node: Node<BuilderPanelNodeData>, kind: 'agent' | 'tool') {
   const attrs = (span.attributes || {}) as Record<string, unknown>;
   const kindAttr = String(attrs['kind'] || '');
   const label = span.label || '';
@@ -62,9 +62,9 @@ function NodeObsSidebarBody({ node }: { node: Node<BuilderPanelNodeData> }) {
     const to = now.toISOString();
     const label = kind === 'agent' ? 'agent' : undefined; // optional label filter; tools use client-side filter
     fetchSpansInRange({ from, to, label, limit: 2000, sort: 'lastUpdate' })
-      .then((res) => {
+      .then((res: { items?: SpanDoc[] } | undefined) => {
         if (cancelled) return;
-        const items = res.items || [];
+        const items = Array.isArray(res?.items) ? (res?.items as SpanDoc[]) : [];
         const filtered = items.filter((s) => spanMatchesContext(s, node, kind === 'agent' ? 'agent' : 'tool'));
         if (filtered.length === 0) setNote('No spans for this node. Ensure nodeId is instrumented.');
         else setNote(null);
@@ -132,7 +132,7 @@ function NodeObsSidebarBody({ node }: { node: Node<BuilderPanelNodeData> }) {
     }
   }
 
-  const items = useMemo(() => spans.map((s) => ({
+  const items = useMemo(() => spans.map((s: SpanDoc) => ({
     span: s,
     link: `${OBS_UI_BASE}/trace/${encodeURIComponent(s.traceId)}`,
   })), [spans]);

@@ -1,6 +1,7 @@
 import React from 'react';
-import { describe, it, expect } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { describe, it, expect, afterEach, vi } from 'vitest';
+import { render, screen, waitFor, act } from '@testing-library/react';
+import { flushPromises, mockRealtimeNoop } from './testUtils';
 import { SpanDetails } from '../components/SpanDetails';
 import type { SpanDoc } from '../types';
 
@@ -32,7 +33,12 @@ function spanWithContexts(oldMsgs: any[], newMsgs: any[]): SpanDoc {
 }
 
 describe('SummarizeIO collapse', () => {
-  it('shows collapse button when AI present in old and new context', () => {
+  afterEach(() => {
+    vi.clearAllMocks();
+    vi.useRealTimers();
+  });
+  it('shows collapse button when AI present in old and new context', async () => {
+    mockRealtimeNoop();
     const span = spanWithContexts([
       { role: 'human', content: 'h1' },
       { role: 'ai', content: 'a1' },
@@ -48,5 +54,7 @@ describe('SummarizeIO collapse', () => {
     // Two collapse buttons (one per context view)
     const buttons = screen.getAllByText(/Show previous/);
     expect(buttons.length).toBe(2);
+    await waitFor(async () => expect(flushPromises()).resolves.toBeUndefined());
+    await act(async () => {});
   });
 });

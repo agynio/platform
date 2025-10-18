@@ -22,7 +22,7 @@ function TemplateNodeComponent({ id, data }: NodeProps<BuilderNodeData>) {
   const kind = getKind(templates, data.template);
   const runningCount = useRunningCount(id, kind === 'agent' || kind === 'tool' ? (kind as 'agent' | 'tool') : undefined);
   const reminders = useNodeReminders(id, data.template === 'remindMeTool');
-  const reminderCount = reminders.data?.items?.length || 0;
+  const reminderCount = (reminders.data?.items?.length || 0) as number;
   const nodeStatus = useNodeStatus(id);
   const vaultAgg = useNodeVaultStatus(data?.config);
 

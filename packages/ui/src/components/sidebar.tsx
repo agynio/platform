@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from 'react';
-import { Drawer } from './drawer';
+// Drawer import removed; consumers may compose externally
 import { cn } from '../utils/cn';
 
 // Minimal, composed Sidebar with optional mobile drawer behavior provided by consumer using Drawer.
@@ -55,4 +55,3 @@ export {
   SidebarMenuItem,
   SidebarMenuButton
 };
-

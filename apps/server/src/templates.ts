@@ -45,7 +45,7 @@ export function buildTemplateRegistry(deps: TemplateRegistryDeps): TemplateRegis
       token: configService.vaultToken,
       defaultMounts: ['secret'],
     }),
-    logger,
+    { debug: (...a: unknown[]) => logger.debug(String(a[0] ?? ''), ...(a.slice(1) as any)), error: (...a: unknown[]) => logger.error(String(a[0] ?? ''), ...(a.slice(1) as any)) },
   );
   const envService = new EnvService(vault);
 
@@ -131,7 +131,7 @@ export function buildTemplateRegistry(deps: TemplateRegistryDeps): TemplateRegis
       )
       .register(
         'finishTool',
-        () => new FinishTool(logger),
+        () => (new FinishTool(logger) as unknown as import('./graph/types').Configurable),
         {
           targetPorts: { $self: { kind: 'instance' } },
         },
@@ -172,7 +172,7 @@ export function buildTemplateRegistry(deps: TemplateRegistryDeps): TemplateRegis
       )
       .register(
         'remindMeTool',
-        () => new RemindMeTool(logger),
+        () => (new RemindMeTool(logger) as unknown as import('./graph/types').Configurable),
         { targetPorts: { $self: { kind: 'instance' } } },
         {
           title: 'Remind Me',

@@ -29,7 +29,7 @@ export function TopNav() {
   };
 
   return (
-    <nav aria-label="Primary" style={{
+    <nav aria-label="Primary" data-testid="obsui-topnav" style={{
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'space-between',
@@ -41,14 +41,14 @@ export function TopNav() {
       zIndex: 1,
     }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-        <NavLink to="/" end style={({ isActive }) => ({
+        <NavLink to="/" end data-testid="obsui-link-traces" style={({ isActive }) => ({
           ...linkBase,
           fontWeight: isActive ? 600 : 500,
           background: isActive ? '#f7f9fa' : undefined,
         })}>
           Traces
         </NavLink>
-        <NavLink to={errorsToolsHref} style={({ isActive }) => ({
+        <NavLink to={errorsToolsHref} data-testid="obsui-link-errors-tools" style={({ isActive }) => ({
           ...linkBase,
           fontWeight: isActive ? 600 : 500,
           background: isActive ? '#f7f9fa' : undefined,

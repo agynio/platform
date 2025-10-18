@@ -82,9 +82,10 @@ export class SendSlackMessageTool extends BaseTool {
           const resp: ChatPostMessageResponse = await client.chat.postMessage({
             channel,
             text,
+            attachments: [],
             ...(thread_ts ? { thread_ts } : {}),
             ...(thread_ts && broadcast ? { reply_broadcast: true } : {}),
-          });
+          } as any);
           if (!resp.ok) return `Failed to send message: ${resp.error}`;
           const thread = (resp.message && 'thread_ts' in resp.message ? (resp.message as { thread_ts?: string }).thread_ts : undefined) || thread_ts || resp.ts;
           return JSON.stringify({ ok: true, channel: resp.channel, ts: resp.ts, thread_ts: thread, broadcast: !!broadcast });

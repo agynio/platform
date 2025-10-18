@@ -1,7 +1,7 @@
 import { SpanDoc, LogDoc } from '../types';
 import type { TimeRange } from '../components/TimeRangeSelector';
 
-const BASE_URL = (import.meta as any).env?.VITE_OBS_SERVER_URL || 'http://localhost:4319';
+const BASE_URL = import.meta.env?.VITE_OBS_SERVER_URL || 'http://localhost:4319';
 
 export async function fetchTraces(): Promise<Array<{ traceId: string; root?: SpanDoc; spanCount: number; failedCount: number; lastUpdate: string }>> {
   // We only have spans endpoint; derive traces by grouping spans.latest

@@ -8,8 +8,47 @@ on:
   merge_group:
 
 jobs:
-  server-tests:
+  lint:
+    name: Lint
     runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.5.0
+          run_install: false
+
+      - name: Get pnpm store directory
+        id: pnpm-store
+        shell: bash
+        run: echo "STORE_PATH=$(pnpm store path --silent)" >> $GITHUB_OUTPUT
+
+      - name: Setup pnpm cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ steps.pnpm-store.outputs.STORE_PATH }}
+          key: ${{ runner.os }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-pnpm-store-
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Lint (recursive where available)
+        run: pnpm -r run lint
+
+  test-server:
+    name: Test Server
+    runs-on: ubuntu-latest
+    needs: [lint]
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -43,11 +82,11 @@ jobs:
 
       - name: Run server tests
         run: pnpm --filter server test
-      - name: Lint server
-        run: pnpm --filter server lint
 
-  ui-build:
+  test-ui:
+    name: Test UI
     runs-on: ubuntu-latest
+    needs: [lint]
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -79,11 +118,88 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Build UI app
-        run: pnpm -w -F ui build
+      - name: Run UI tests (apps/ui)
+        run: pnpm --filter ui test
 
-      - name: Lint UI app
-        run: pnpm -w -F ui lint
+      - name: Run UI tests (@hautech/obs-ui)
+        run: pnpm --filter @hautech/obs-ui test
 
-      - name: Test UI app
-        run: pnpm -w -F ui test
+  build-server:
+    name: Build Server
+    runs-on: ubuntu-latest
+    needs: [test-server]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.5.0
+          run_install: false
+
+      - name: Get pnpm store directory
+        id: pnpm-store
+        shell: bash
+        run: echo "STORE_PATH=$(pnpm store path --silent)" >> $GITHUB_OUTPUT
+
+      - name: Setup pnpm cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ steps.pnpm-store.outputs.STORE_PATH }}
+          key: ${{ runner.os }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-pnpm-store-
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # No explicit build script for server; perform type-check as build-equivalent
+      - name: Type-check server (noEmit)
+        run: pnpm --filter server exec tsc -p tsconfig.json --noEmit
+
+  build-ui:
+    name: Build UI
+    runs-on: ubuntu-latest
+    needs: [test-ui]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.5.0
+          run_install: false
+
+      - name: Get pnpm store directory
+        id: pnpm-store
+        shell: bash
+        run: echo "STORE_PATH=$(pnpm store path --silent)" >> $GITHUB_OUTPUT
+
+      - name: Setup pnpm cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ steps.pnpm-store.outputs.STORE_PATH }}
+          key: ${{ runner.os }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-pnpm-store-
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build apps/ui
+        run: pnpm --filter ui build
+
+      - name: Build @hautech/obs-ui
+        run: pnpm --filter @hautech/obs-ui build

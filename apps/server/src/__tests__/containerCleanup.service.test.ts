@@ -106,12 +106,9 @@ describe('ContainerCleanupService', () => {
     const doc = await col.findOne({ container_id: cid });
     expect(doc?.status).toBe('stopped');
     // No termination failure metadata should be present
-    // @ts-expect-error metadata is optional
-    expect(doc?.metadata?.terminationAttempts).toBeUndefined();
-    // @ts-expect-error metadata is optional
-    expect(doc?.metadata?.lastError).toBeUndefined();
-    // @ts-expect-error metadata is optional
-    expect(doc?.metadata?.retryAfter).toBeUndefined();
+    expect((doc as any)?.metadata?.terminationAttempts).toBeUndefined();
+    expect((doc as any)?.metadata?.lastError).toBeUndefined();
+    expect((doc as any)?.metadata?.retryAfter).toBeUndefined();
   });
 
   it('treats 409 on stop as benign and proceeds to removal', async () => {

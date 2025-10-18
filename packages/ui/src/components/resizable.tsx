@@ -12,7 +12,9 @@ function ResizablePanel({ className, ...props }: PanelProps) {
   return <Panel className={cn('min-w-0', className)} {...props} />;
 }
 
-function ResizableHandle({ className, withHandle = true, ...props }: React.ComponentProps<'div'> & { withHandle?: boolean }) {
+function ResizableHandle(
+  { className, withHandle = true, ...props }: React.ComponentProps<typeof PanelResizeHandle> & { withHandle?: boolean },
+) {
   return (
     <PanelResizeHandle
       className={cn(
@@ -27,4 +29,3 @@ function ResizableHandle({ className, withHandle = true, ...props }: React.Compo
 }
 
 export { ResizablePanelGroup, ResizablePanel, ResizableHandle };
-

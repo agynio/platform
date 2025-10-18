@@ -1,6 +1,7 @@
 import React from 'react';
-import { describe, it, expect } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { describe, it, expect, afterEach, vi } from 'vitest';
+import { render, screen, waitFor, act } from '@testing-library/react';
+import { flushPromises, mockRealtimeNoop } from './testUtils';
 import { SpanDetails } from '../components/SpanDetails';
 import type { SpanDoc } from '../types';
 
@@ -19,7 +20,12 @@ function baseSpan(partial: Partial<SpanDoc>): SpanDoc {
 }
 
 describe('Summarize span IO tab', () => {
-  it('renders old context, summary markdown and new context', () => {
+  afterEach(() => {
+    vi.clearAllMocks();
+    vi.useRealTimers();
+  });
+  it('renders old context, summary markdown and new context', async () => {
+    mockRealtimeNoop();
     const span = baseSpan({
       attributes: {
         kind: 'summarize',
@@ -31,11 +37,14 @@ describe('Summarize span IO tab', () => {
 
     render(<SpanDetails span={span} spans={[span]} onSelectSpan={() => {}} onClose={() => {}} />);
 
-    // IO tab active by default for summarize span
+    // IO tab active by default for summarize span; we still rely on visible headings within the component
+    // This test retains text checks only for content presence, not for selecting containers by label.
     expect(screen.getByText('Old Context')).toBeTruthy();
     expect(screen.getByText('New Context')).toBeTruthy();
     expect(screen.getAllByText(/summary/i).length).toBeGreaterThan(0);
     // markdown bold should render; just ensure content present
     expect(screen.getByText('World')).toBeTruthy();
+    await waitFor(async () => expect(flushPromises()).resolves.toBeUndefined());
+    await act(async () => {});
   });
 });

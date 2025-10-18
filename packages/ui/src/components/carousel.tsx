@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from 'react';
-import useEmblaCarousel, { type UseEmblaCarouselType } from 'embla-carousel-react';
+import useEmblaCarousel from 'embla-carousel-react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { Button } from './button';
 
@@ -45,4 +45,3 @@ export function Carousel({ children, options }: { children: React.ReactNode; opt
 export function CarouselItem({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) {
   return <div className={"min-w-0 shrink-0 grow-0 basis-full"} {...props} />;
 }
-

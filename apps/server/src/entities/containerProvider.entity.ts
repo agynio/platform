@@ -29,7 +29,7 @@ export const ContainerProviderStaticConfigSchema = z
       .describe('Shell script (executed with /bin/sh -lc) to run immediately after creating the container.')
       .meta({ 'ui:widget': 'textarea', 'ui:options': { rows: 6 } }),
     platform: z
-      .enum(SUPPORTED_PLATFORMS as [Platform, ...Platform[]])
+      .enum(SUPPORTED_PLATFORMS)
       .optional()
       .describe('Docker platform selector for the workspace container')
       .meta({ 'ui:widget': 'select' }),
@@ -60,7 +60,7 @@ export const ContainerProviderExposedStaticConfigSchema = z
       .describe('Shell script (executed with /bin/sh -lc) to run immediately after creating the container.')
       .meta({ 'ui:widget': 'textarea', 'ui:options': { rows: 6 } }),
     platform: z
-      .enum(SUPPORTED_PLATFORMS as [Platform, ...Platform[]])
+      .enum(SUPPORTED_PLATFORMS)
       .optional()
       .describe('Docker platform selector for the workspace container')
       .meta({ 'ui:widget': 'select' }),
@@ -81,8 +81,11 @@ export type ContainerProviderStaticConfig = z.infer<typeof ContainerProviderStat
 type NewEnvItem = EnvItem;
 
 export class ContainerProviderEntity {
-  private cfg?: Pick<ContainerOpts, 'image' | 'env' | 'platform'> & {
+  // Keep cfg loosely typed; normalize before use to ContainerOpts at boundaries
+  private cfg?: {
+    image?: ContainerOpts['image'];
     env?: Record<string, string> | Array<NewEnvItem>;
+    platform?: ContainerOpts['platform'];
     initialScript?: string;
     enableDinD?: boolean;
     ttlSeconds?: number;
@@ -191,13 +194,13 @@ export class ContainerProviderEntity {
           }
           // Stop and remove old container, then recreate (handle benign errors)
           try {
-            await container.stop();
+            await (container as ContainerEntity).stop();
           } catch (e: unknown) {
             const sc = getStatusCode(e);
             if (sc !== 304 && sc !== 404 && sc !== 409) throw e;
           }
           try {
-            await container.remove(true);
+            await (container as ContainerEntity).remove(true);
           } catch (e: unknown) {
             const sc = getStatusCode(e);
             if (sc !== 404 && sc !== 409) throw e;
@@ -207,13 +210,13 @@ export class ContainerProviderEntity {
       } catch {
         // If inspect fails, do not reuse to be safe; still attempt cleanup
         try {
-          await container.stop();
+          await (container as ContainerEntity).stop();
         } catch (e: unknown) {
           const sc = getStatusCode(e);
           if (sc !== 304 && sc !== 404 && sc !== 409) throw e;
         }
         try {
-          await container.remove(true);
+          await (container as ContainerEntity).remove(true);
         } catch (e: unknown) {
           const sc = getStatusCode(e);
           if (sc !== 404 && sc !== 409) throw e;
@@ -240,10 +243,12 @@ export class ContainerProviderEntity {
         const cfgEnv = this.cfg?.env as Record<string, string> | EnvItem[] | undefined;
         return this.envService.resolveProviderEnv(cfgEnv, undefined, base);
       })();
+      const normalizedEnv = envMerged as Record<string, string> | undefined;
       container = await this.containerService.start({
         ...this.opts,
         image: this.cfg?.image ?? this.opts.image,
-        env: enableDinD ? { ...(envMerged || {}), DOCKER_HOST: DOCKER_HOST_ENV } : envMerged,
+        // Ensure env is in a format ContainerService understands (Record or string[]). envService returns Record.
+        env: enableDinD ? { ...(normalizedEnv || {}), DOCKER_HOST: DOCKER_HOST_ENV } : normalizedEnv,
         labels: { ...(this.opts.labels || {}), ...workspaceLabels },
         platform: requestedPlatform,
         ttlSeconds: this.cfg?.ttlSeconds ?? 86400,
@@ -260,7 +265,7 @@ export class ContainerProviderEntity {
       }
     } else {
       const DOCKER_MIRROR_URL = this.configService?.dockerMirrorUrl || process.env.DOCKER_MIRROR_URL || 'http://registry-mirror:5000';
-      if (this.cfg?.enableDinD) await this.ensureDinD(container, labels, DOCKER_MIRROR_URL);
+      if (this.cfg?.enableDinD && container) await this.ensureDinD(container, labels, DOCKER_MIRROR_URL);
     }
     try { await this.containerService.touchLastUsed(container.id); } catch {}
     return container;
@@ -305,14 +310,16 @@ export class ContainerProviderEntity {
       // Early fail if DinD exited unexpectedly (best-effort; skip if low-level client not available)
       try {
         const maybeSvc: unknown = this.containerService;
-        // Narrow to objects that expose getDocker(): Docker
+        // Minimal interfaces to avoid any-casts
+        interface DockerLike { getContainer(id: string): { inspect(): Promise<unknown> } }
+        interface DockerProvider { getDocker(): DockerLike }
         const hasGetDocker =
           typeof maybeSvc === 'object' && maybeSvc !== null && 'getDocker' in maybeSvc &&
           typeof (maybeSvc as { getDocker?: unknown }).getDocker === 'function';
         if (hasGetDocker) {
-          const docker = (maybeSvc as { getDocker: () => import('dockerode').default }).getDocker();
-          const inspect = await docker.getContainer(dind.id).inspect();
-          const state = inspect?.State as { Running?: boolean; Status?: string } | undefined;
+          const docker = (maybeSvc as DockerProvider).getDocker();
+          const inspect = (await docker.getContainer(dind.id).inspect()) as { State?: { Running?: boolean; Status?: string } };
+          const state = inspect?.State;
           if (state && state.Running === false) {
             throw new Error(`DinD sidecar exited unexpectedly: status=${state.Status}`);
           }

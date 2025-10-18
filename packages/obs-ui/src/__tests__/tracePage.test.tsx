@@ -1,6 +1,6 @@
 import React from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, within } from '@testing-library/react';
 import { TracePage } from '../pages/TracePage';
 import { MemoryRouter } from 'react-router-dom';
 
@@ -20,13 +20,17 @@ vi.mock('react-router-dom', async (orig) => {
 describe('TracePage', () => {
   beforeEach(() => { vi.clearAllMocks(); });
   it('renders timeline then span details after click', async () => {
-  render(<MemoryRouter><TracePage /></MemoryRouter>);
-    const timeline = await screen.findByText(/Timeline/);
-    expect(timeline).toBeTruthy();
-  const rootSpans = await screen.findAllByText('root');
-  fireEvent.click(rootSpans[0]);
-  // After selecting span, ensure Attributes tab button is present (unique by role and name)
-  const attrsTab = await screen.findAllByText('Attributes');
-  expect(attrsTab.length).toBeGreaterThan(0);
+    const { container } = render(<MemoryRouter><TracePage /></MemoryRouter>);
+    // Use test ids on the trace page layout
+    const root = await within(container).findByTestId('obsui-trace-root');
+    const left = await within(container).findByTestId('obsui-trace-left');
+    const timeline = await within(container).findByTestId('obsui-trace-timeline-header');
+    expect(root && left && timeline).toBeTruthy();
+    // Click the first span row (root)
+    const firstSpan = left.querySelector('[data-span-id]') as HTMLElement;
+    fireEvent.click(firstSpan);
+    // After selecting span, expect Tabs container to be present by looking for a button with text IO or Attributes
+    const tabs = Array.from(container.querySelectorAll('button')).filter(b => /Attributes|IO|Logs/.test(b.textContent || ''));
+    expect(tabs.length).toBeGreaterThan(0);
   });
 });

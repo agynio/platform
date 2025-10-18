@@ -1,6 +1,6 @@
 import React from 'react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter, Routes, Route } from 'react-router-dom';
 import { ErrorsByToolPage } from '../pages/ErrorsByToolPage';
 
@@ -39,10 +39,11 @@ describe('ErrorsByToolPage fallback when metrics 404', () => {
         </Routes>
       </MemoryRouter>
     );
-    // Should show weather with count 2
+    // Should show weather with count 2; scope to the table via test id
+    const table = await screen.findByTestId('obsui-errors-table');
     await waitFor(async () => {
-      expect(await screen.findByText('tool:weather')).toBeTruthy();
+      const rows = within(table).getAllByTestId('obsui-errors-row');
+      expect(rows.some(r => r.getAttribute('data-label') === 'tool:weather')).toBe(true);
     });
   });
 });
-

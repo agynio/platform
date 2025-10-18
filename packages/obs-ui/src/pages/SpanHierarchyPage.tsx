@@ -224,7 +224,7 @@ export function SpanHierarchyPage({ mode, id, fetcher }: SpanHierarchyPageProps)
   if (error) return <div style={{ padding: 16, color: 'red' }}>Error: {error}</div>;
 
   return (
-    <div style={{ height: '100vh', display: 'flex', flexDirection: 'column', fontSize: 12, fontFamily: 'system-ui, sans-serif' }}>
+    <div data-testid="obsui-trace-root" style={{ height: '100vh', display: 'flex', flexDirection: 'column', fontSize: 12, fontFamily: 'system-ui, sans-serif' }}>
       <div style={{ height: 40, display: 'flex', alignItems: 'center', padding: '0 12px', borderBottom: '1px solid #ddd', background: '#f7f9fa', fontWeight: 600 }}>
         <Link to="/" style={{ display: 'inline-flex', alignItems: 'center', gap: 4, textDecoration: 'none', color: '#0366d6', fontWeight: 500, marginRight: 12, fontSize: 12 }}>
           <span style={{ fontSize: 16, lineHeight: 1 }}>←</span>
@@ -234,15 +234,15 @@ export function SpanHierarchyPage({ mode, id, fetcher }: SpanHierarchyPageProps)
         {headerExtra}
       </div>
       <div style={{ display: 'flex', flex: 1, minHeight: 0 }}>
-        <div ref={leftRef} onScroll={onScroll} style={{ width: 300, borderRight: '1px solid #ddd', overflow: 'auto' }}>
+        <div ref={leftRef} onScroll={onScroll} style={{ width: 300, borderRight: '1px solid #ddd', overflow: 'auto' }} data-testid="obsui-trace-left">
           <div style={{ position: 'sticky', top: 0, height: HEADER_HEIGHT, background: '#fff', zIndex: 10, borderBottom: '1px solid #ddd', display: 'flex', alignItems: 'center', fontWeight: 600, padding: '0 8px' }}>Span</div>
           <SpanTree spans={spans} selectedId={selected?.spanId} onSelect={s => setSelected(s)} collapsedIds={collapsed} onToggle={toggleCollapsed} rows={rows.map(r => ({ span: r.span, depth: r.depth, hasChildren: r.hasChildren, collapsed: r.collapsed }))} />
         </div>
-        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0, overflow: 'hidden' }}>
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0, overflow: 'hidden' }} data-testid="obsui-trace-right">
           {!selected && (
             <div ref={rightRef} onScroll={onScroll} style={{ overflow: 'auto', height: '100%' }}>
               <div style={{ position: 'sticky', top: 0, height: HEADER_HEIGHT, background: '#fff', zIndex: 10, borderBottom: '1px solid #ddd', display: 'flex', alignItems: 'center', fontWeight: 600 }}>
-                <div style={{ padding: '0 12px', marginRight: 8 }}>Timeline</div>
+                <div style={{ padding: '0 12px', marginRight: 8 }} data-testid="obsui-trace-timeline-header">Timeline</div>
                 {!ruler.empty && (
                   <div style={{ position: 'relative', flex: 1, height: '100%' }}>
                     {ruler.ticks.map(t => { const pct = ((t - ruler.min) / ruler.total) * 100; return <div key={t} style={{ position: 'absolute', left: pct + '%', top: 0, bottom: 0, width: 1, background: '#ccc' }} />; })}

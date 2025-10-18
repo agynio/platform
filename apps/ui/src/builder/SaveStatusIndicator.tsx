@@ -1,4 +1,4 @@
-import React from 'react';
+// React import not required with automatic JSX runtime
 import { Save as SaveIcon } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger, cn } from '@hautech/ui';
 

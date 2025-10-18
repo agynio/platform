@@ -480,20 +480,20 @@ export class SimpleAgent extends BaseAgent {
     const isInt = (v: unknown) => typeof v === 'number' && Number.isInteger(v);
 
     const updates: { keepTokens?: number; maxTokens?: number } = {};
-    if (keepTokensRaw !== undefined) {
-      if (!(isInt(keepTokensRaw) && keepTokensRaw >= 0)) {
+    if (keepTokensRaw !== undefined && keepTokensRaw !== null) {
+      if (!(isInt(keepTokensRaw) && (keepTokensRaw as number) >= 0)) {
         this.loggerService.error('summarizationKeepTokens must be an integer >= 0');
       } else {
-        this.summarizationKeepTokens = keepTokensRaw;
-        updates.keepTokens = keepTokensRaw;
+        this.summarizationKeepTokens = keepTokensRaw as number;
+        updates.keepTokens = keepTokensRaw as number;
       }
     }
-    if (maxTokensRaw !== undefined) {
-      if (!(isInt(maxTokensRaw) && maxTokensRaw > 0)) {
+    if (maxTokensRaw !== undefined && maxTokensRaw !== null) {
+      if (!(isInt(maxTokensRaw) && (maxTokensRaw as number) > 0)) {
         this.loggerService.error('summarizationMaxTokens must be an integer > 0');
       } else {
-        this.summarizationMaxTokens = maxTokensRaw;
-        updates.maxTokens = maxTokensRaw;
+        this.summarizationMaxTokens = maxTokensRaw as number;
+        updates.maxTokens = maxTokensRaw as number;
       }
     }
 

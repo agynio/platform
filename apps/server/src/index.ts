@@ -35,7 +35,7 @@ const logger = new LoggerService();
 const config = ConfigService.fromEnv();
 const mongo = new MongoService(config, logger);
 const checkpointer = new CheckpointerService(logger);
-const containerService = new ContainerService(logger);
+const containerService = new ContainerService({ debug: (...a: unknown[]) => logger.debug(String(a[0] ?? ''), ...(a.slice(1) as any)), error: (...a: unknown[]) => logger.error(String(a[0] ?? ''), ...(a.slice(1) as any)) } as any);
 const vaultService = new VaultService(
   VaultConfigSchema.parse({
     enabled: config.vaultEnabled,
@@ -43,7 +43,7 @@ const vaultService = new VaultService(
     token: config.vaultToken,
     defaultMounts: ['secret'],
   }),
-  logger,
+  { debug: (...a: unknown[]) => logger.debug(String(a[0] ?? ''), ...(a.slice(1) as any)), error: (...a: unknown[]) => logger.error(String(a[0] ?? ''), ...(a.slice(1) as any)) },
 );
 
 async function bootstrap() {

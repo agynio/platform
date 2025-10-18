@@ -13,7 +13,7 @@ const Menubar = React.forwardRef<
 ));
 Menubar.displayName = MenubarPrimitive.Root.displayName;
 
-const MenubarMenu = MenubarPrimitive.Menu;
+const MenubarMenu: typeof MenubarPrimitive.Menu = MenubarPrimitive.Menu;
 const MenubarTrigger = React.forwardRef<
   React.ElementRef<typeof MenubarPrimitive.Trigger>,
   React.ComponentPropsWithoutRef<typeof MenubarPrimitive.Trigger>
@@ -86,4 +86,3 @@ export {
   MenubarSubTrigger,
   MenubarSubContent
 };
-

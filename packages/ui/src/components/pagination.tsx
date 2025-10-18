@@ -4,7 +4,9 @@ import * as React from 'react';
 import { ChevronLeft, ChevronRight, MoreHorizontal } from 'lucide-react';
 import { cn } from '../utils/cn';
 
-function Pagination({ className, ...props }: React.HTMLAttributes<NavElement>) {
+// NavElement unused; removing to satisfy noUnusedLocals
+
+function Pagination({ className, ...props }: React.HTMLAttributes<HTMLElement>) {
   return <nav role="navigation" aria-label="pagination" className={cn('mx-auto flex w-full justify-center', className)} {...props} /> as any;
 }
 
@@ -65,4 +67,3 @@ export {
   PaginationNext,
   PaginationEllipsis
 };
-

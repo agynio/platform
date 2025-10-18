@@ -27,7 +27,7 @@ describe('RemindMeTool', () => {
   it('schedules reminder and invokes caller_agent after delay', async () => {
     const tool = getToolInstance();
 
-    const invokeSpy = vi.fn(async () => undefined);
+    const invokeSpy = vi.fn(async (_t: string, _m: Array<{ kind: 'system' | 'human'; content: string; info: Record<string, unknown> }>) => undefined);
     const caller_agent: CallerAgentStub = { invoke: invokeSpy };
     const thread_id = 't-123';
 
@@ -46,8 +46,9 @@ describe('RemindMeTool', () => {
     await vi.advanceTimersByTimeAsync(1000);
 
     expect(invokeSpy).toHaveBeenCalledTimes(1);
-    expect(invokeSpy.mock.calls[0][0]).toBe(thread_id);
-    expect(invokeSpy.mock.calls[0][1]).toEqual([
+    const calls0 = invokeSpy.mock.calls as unknown as any[][];
+    expect(calls0[0][0]).toBe(thread_id);
+    expect(calls0[0][1]).toEqual([
       { kind: 'system', content: 'Ping', info: { reason: 'reminded' } },
     ]);
   });
@@ -56,7 +57,7 @@ describe('RemindMeTool', () => {
     const logger = new LoggerService();
     const tool = new RemindMeTool(logger);
     const dyn = tool.init();
-    const invokeSpy = vi.fn(async () => undefined);
+    const invokeSpy = vi.fn(async (_t: string, _m: Array<{ kind: 'system' | 'human'; content: string; info: Record<string, unknown> }>) => undefined);
     const caller_agent: CallerAgentStub = { invoke: invokeSpy };
     const cfg = { configurable: { thread_id: 't-reg', caller_agent } };
 
@@ -120,14 +121,17 @@ describe('RemindMeTool', () => {
     // Run pending timers immediately
     await vi.runOnlyPendingTimersAsync();
     expect(invokeSpy).toHaveBeenCalledTimes(1);
-    expect(invokeSpy.mock.calls[0][1]).toEqual([
+    {
+      const calls = invokeSpy.mock.calls as unknown as any[][];
+      expect(calls[0][1]).toEqual([
       { kind: 'system', content: 'Now', info: { reason: 'reminded' } },
-    ]);
+      ]);
+    }
   });
 
   it('supports multiple concurrent reminders for the same thread (delayMs=0)', async () => {
     const tool = getToolInstance();
-    const invokeSpy = vi.fn(async () => undefined);
+    const invokeSpy = vi.fn(async (_t: string, _m: Array<{ kind: 'system' | 'human'; content: string; info: Record<string, unknown> }>) => undefined);
     const caller_agent: CallerAgentStub = { invoke: invokeSpy };
     const cfg = { configurable: { thread_id: 't-x', caller_agent } };
 
@@ -138,7 +142,7 @@ describe('RemindMeTool', () => {
     await vi.runOnlyPendingTimersAsync();
 
     expect(invokeSpy).toHaveBeenCalledTimes(2);
-    const calls = invokeSpy.mock.calls;
+    const calls = invokeSpy.mock.calls as unknown as any[][];
     const payloads = calls.map((c) => c[1][0].content).sort();
     expect(payloads).toEqual(['A', 'B']);
     expect(calls[0][0]).toBe('t-x');
@@ -147,7 +151,7 @@ describe('RemindMeTool', () => {
 
   it('handles overlapping delays for the same thread', async () => {
     const tool = getToolInstance();
-    const invokeSpy = vi.fn(async () => undefined);
+    const invokeSpy = vi.fn(async (_t: string, _m: Array<{ kind: 'system' | 'human'; content: string; info: Record<string, unknown> }>) => undefined);
     const caller_agent: CallerAgentStub = { invoke: invokeSpy };
     const cfg = { configurable: { thread_id: 't-ovl', caller_agent } };
 
@@ -156,11 +160,17 @@ describe('RemindMeTool', () => {
 
     await vi.advanceTimersByTimeAsync(500);
     expect(invokeSpy).toHaveBeenCalledTimes(1);
-    expect(invokeSpy.mock.calls[0][1][0]).toMatchObject({ content: 'half' });
+    {
+      const calls = invokeSpy.mock.calls as unknown as any[][];
+      expect(calls[0][1][0]).toMatchObject({ content: 'half' });
+    }
 
     await vi.advanceTimersByTimeAsync(500);
     expect(invokeSpy).toHaveBeenCalledTimes(2);
-    expect(invokeSpy.mock.calls[1][1][0]).toMatchObject({ content: 'full' });
+    {
+      const calls = invokeSpy.mock.calls as unknown as any[][];
+      expect(calls[1][1][0]).toMatchObject({ content: 'full' });
+    }
   });
 
   it('routes reminders to mixed threads correctly', async () => {
@@ -173,13 +183,19 @@ describe('RemindMeTool', () => {
 
     await vi.advanceTimersByTimeAsync(10);
     expect(invokeSpy).toHaveBeenCalledTimes(1);
-    expect(invokeSpy.mock.calls[0][0]).toBe('t-1');
-    expect(invokeSpy.mock.calls[0][1][0]).toMatchObject({ content: 'one' });
+    {
+      const calls = invokeSpy.mock.calls as unknown as any[][];
+      expect(calls[0][0]).toBe('t-1');
+      expect(calls[0][1][0]).toMatchObject({ content: 'one' });
+    }
 
     await vi.advanceTimersByTimeAsync(10);
     expect(invokeSpy).toHaveBeenCalledTimes(2);
-    expect(invokeSpy.mock.calls[1][0]).toBe('t-2');
-    expect(invokeSpy.mock.calls[1][1][0]).toMatchObject({ content: 'two' });
+    {
+      const calls = invokeSpy.mock.calls as unknown as any[][];
+      expect(calls[1][0]).toBe('t-2');
+      expect(calls[1][1][0]).toMatchObject({ content: 'two' });
+    }
   });
 
   it('returns error when thread_id missing', async () => {

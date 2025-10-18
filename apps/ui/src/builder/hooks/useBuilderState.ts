@@ -19,7 +19,6 @@ interface BuilderNodeData {
   name?: string;
   config?: Record<string, unknown>;
   dynamicConfig?: Record<string, unknown>;
-  state?: Record<string, unknown>;
 }
 export type BuilderNode = Node<BuilderNodeData>;
 
@@ -72,7 +71,7 @@ export function useBuilderState(
           id: n.id,
           type: n.template, // reactflow node type equals template name for now
           position: n.position || { x: Math.random() * 400, y: Math.random() * 300 },
-          data: { template: n.template, name: n.template, config: n.config, dynamicConfig: n.dynamicConfig, state: n.state },
+          data: { template: n.template, name: n.template, config: n.config, dynamicConfig: n.dynamicConfig },
           dragHandle: '.drag-handle',
         }));
         const rfEdges: Edge[] = graph.edges.map((e: PersistedGraph['edges'][number]) => ({
@@ -181,24 +180,23 @@ export function useBuilderState(
     debounceRef.current = window.setTimeout(async () => {
       try {
         setSaveState('saving');
-          const payload = {
-            name: 'main',
-            version: versionRef.current,
-            nodes: nodes.map((n) => ({
-              id: n.id,
-              template: n.type,
-              config: n.data.config,
-              dynamicConfig: n.data.dynamicConfig,
-              state: n.data.state,
-              position: n.position,
-            })),
-            edges: edges.map((e) => ({
-              source: e.source,
-              sourceHandle: e.sourceHandle!,
-              target: e.target,
-              targetHandle: e.targetHandle!,
-            })),
-          };
+        const payload = {
+          name: 'main',
+          version: versionRef.current,
+          nodes: nodes.map((n) => ({
+            id: n.id,
+            template: n.type,
+            config: n.data.config,
+            dynamicConfig: n.data.dynamicConfig,
+            position: n.position,
+          })),
+          edges: edges.map((e) => ({
+            source: e.source,
+            sourceHandle: e.sourceHandle!,
+            target: e.target,
+            targetHandle: e.targetHandle!,
+          })),
+        };
         const res = await fetch(`${serverBase}/api/graph`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },

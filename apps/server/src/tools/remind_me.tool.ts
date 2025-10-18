@@ -24,8 +24,8 @@ export class RemindMeTool extends BaseTool {
   private destroyed = false;
   private maxActive = 1000; // soft cap on simultaneously scheduled reminders
 
-  constructor(private logger: LoggerService) {
-    super();
+  constructor(logger: LoggerService) {
+    super(logger);
   }
 
   // Expose active reminders for UI via HTTP route
