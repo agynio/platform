@@ -5,9 +5,6 @@ import {
   SidebarHeader,
   SidebarFooter,
   SidebarContent,
-  SidebarGroup,
-  SidebarGroupLabel,
-  SidebarGroupContent,
   SidebarMenu,
   SidebarMenuItem,
   SidebarMenuButton,
@@ -24,6 +21,7 @@ import {
   AvatarFallback,
   Separator
 } from '@hautech/ui';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@hautech/ui';
 import {
   Bot,
   Activity,
@@ -35,8 +33,7 @@ import {
   Gauge,
   KeyRound,
   Menu,
-  ChevronLeft,
-  ChevronRight
+  ChevronDown
 } from 'lucide-react';
 import { useUser } from '../user/user.runtime';
 
@@ -136,61 +133,66 @@ export function RootLayout() {
 
   const { user } = useUser();
 
+  // Local sidebar sub menu components (UI-only wrappers)
+  function SidebarMenuSub(props: React.HTMLAttributes<HTMLUListElement>) {
+    const { className = '', ...rest } = props;
+    return <ul className={`ml-6 mt-1 space-y-1 border-l pl-2 ${className}`} {...rest} />;
+  }
+  function SidebarMenuSubItem(props: React.LiHTMLAttributes<HTMLLIElement>) {
+    const { className = '', ...rest } = props;
+    return <li className={`list-none ${className}`} {...rest} />;
+  }
+
   function SidebarInner({ linkWrapper }: { linkWrapper?: (children: React.ReactNode) => React.ReactNode }) {
     return (
       <div className="flex h-full flex-col">
         <SidebarHeader className="flex items-center justify-between">
           <div className="flex items-center gap-2">
-            {/* Logo or text */}
             <span className="font-semibold">Hautech Agents</span>
           </div>
-          <Button variant="ghost" size="icon" onClick={() => setCollapsed((c) => !c)} aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'} className="hidden md:inline-flex">
-            {collapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}
-          </Button>
+          {/* Removed header expand/collapse icon per spec */}
         </SidebarHeader>
         <SidebarContent>
-          {sections.map((section) => (
-            <SidebarGroup key={section.id}>
-              <SidebarGroupLabel>
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <section.icon className="h-4 w-4" />
-                    {!collapsed && <span>{section.label}</span>}
-                  </div>
-                  {!collapsed && (
-                    <Button variant="ghost" size="sm" className="h-6 px-2 py-0 text-xs" onClick={() => section.setOpen(!section.isOpen)} aria-expanded={section.isOpen} aria-controls={`section-${section.id}`}>
-                      {section.isOpen ? 'Hide' : 'Show'}
-                    </Button>
-                  )}
-                </div>
-              </SidebarGroupLabel>
-              {(!collapsed && section.isOpen) || collapsed ? (
-                <SidebarGroupContent id={`section-${section.id}`}>
-                  <SidebarMenu>
-                    {section.items.map((item) => (
-                      <SidebarMenuItem key={item.to}>
-                        {(linkWrapper ?? ((c) => c))(
-                          <NavLink to={item.to} className="block">
-                            {({ isActive }) => (
-                              <Tooltip>
-                                <TooltipTrigger asChild>
-                                  <SidebarMenuButton isActive={isActive} className="">
-                                    <item.icon className="h-4 w-4" />
-                                    {!collapsed && <span>{item.label}</span>}
-                                  </SidebarMenuButton>
-                                </TooltipTrigger>
-                                {collapsed && <TooltipContent side="right">{item.label}</TooltipContent>}
-                              </Tooltip>
-                            )}
-                          </NavLink>
-                        )}
-                      </SidebarMenuItem>
-                    ))}
-                  </SidebarMenu>
-                </SidebarGroupContent>
-              ) : null}
-            </SidebarGroup>
-          ))}
+          <SidebarMenu>
+            {sections.map((section) => (
+              <Collapsible key={section.id} open={section.isOpen} onOpenChange={section.setOpen}>
+                <SidebarMenuItem>
+                  <CollapsibleTrigger asChild>
+                    <button className="inline-flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring/50">
+                      <section.icon className="h-4 w-4" />
+                      {!collapsed && <span className="flex-1 text-left">{section.label}</span>}
+                      {!collapsed && (
+                        <ChevronDown className={`h-4 w-4 transition-transform ${section.isOpen ? 'rotate-0' : '-rotate-90'}`} />
+                      )}
+                    </button>
+                  </CollapsibleTrigger>
+                  <CollapsibleContent>
+                    <SidebarMenuSub>
+                      {section.items.map((item) => (
+                        <SidebarMenuSubItem key={item.to}>
+                          {(linkWrapper ?? ((c) => c))(
+                            <NavLink to={item.to} className="block">
+                              {({ isActive }) => (
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <SidebarMenuButton isActive={isActive}>
+                                      <item.icon className="h-4 w-4" />
+                                      {!collapsed && <span>{item.label}</span>}
+                                    </SidebarMenuButton>
+                                  </TooltipTrigger>
+                                  {collapsed && <TooltipContent side="right">{item.label}</TooltipContent>}
+                                </Tooltip>
+                              )}
+                            </NavLink>
+                          )}
+                        </SidebarMenuSubItem>
+                      ))}
+                    </SidebarMenuSub>
+                  </CollapsibleContent>
+                </SidebarMenuItem>
+              </Collapsible>
+            ))}
+          </SidebarMenu>
         </SidebarContent>
         <SidebarFooter>
           <div className="flex items-center gap-2">
@@ -213,10 +215,18 @@ export function RootLayout() {
   return (
     <div className="flex min-h-screen w-full">
       {/* Desktop sidebar */}
-      <aside className={`hidden md:flex`}>
+      <aside className={`relative hidden md:flex`}>
         <Sidebar className={`${collapsed ? 'w-16' : 'w-64'}`}>
           <SidebarInner />
         </Sidebar>
+        {/* Right-border clickable collapse/expand button (desktop only) */}
+        <button
+          type="button"
+          aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+          onClick={() => setCollapsed((c) => !c)}
+          className="absolute right-0 top-0 hidden h-full w-2 cursor-pointer md:block"
+          title={collapsed ? 'Expand' : 'Collapse'}
+        />
       </aside>
 
       {/* Mobile top bar + Drawer */}
