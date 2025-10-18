@@ -76,9 +76,7 @@ export function NixPackagesSection(props: ControlledProps | UncontrolledProps) {
       const v = versionsByName[p.name];
       return v && v.length > 0 ? [{ name: p.name, version: v }] : [];
     });
-    // Debug: trace updates during tests
-    // eslint-disable-next-line no-console
-    console.debug('[NixPackagesSection] update', { selected, versionsByName, packages });
+    // No debug logs in production
 
     if (controlled) {
       const next: NixPackageSelection[] = packages;
@@ -271,9 +269,9 @@ function SelectedPackageItem({ pkg, chosen, onChoose, onRemove }: { pkg: { name:
   const label = pkg.name;
   const versions = qVersions.data || [];
 
-  // Auto-select the first available version when none chosen yet
+  // Optional: auto-select only when there is a single version available
   useEffect(() => {
-    if (!chosen && versions.length > 0) {
+    if (!chosen && versions.length === 1) {
       onChoose(versions[0]);
     }
   }, [chosen, versions]);
@@ -286,8 +284,6 @@ function SelectedPackageItem({ pkg, chosen, onChoose, onRemove }: { pkg: { name:
         className="rounded border border-input bg-background px-2 py-1 text-sm"
         value={chosen}
         onChange={(e) => {
-          // eslint-disable-next-line no-console
-          console.debug('[NixPackagesSection] onChoose', { name: label, value: e.target.value });
           onChoose(e.target.value);
         }}
       >

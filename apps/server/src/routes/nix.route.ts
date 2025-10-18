@@ -40,17 +40,44 @@ const PackagesResponseSchema = z.object({
 });
 const VersionsResponseSchema = z.object({ versions: z.array(z.string()) });
 
+// Minimal upstream shapes for type-safe parsing
+const NixhubSearchSchema = z.object({
+  query: z.string().optional(),
+  total_results: z.number().optional(),
+  results: z
+    .array(
+      z.object({
+        name: z.string().optional(),
+        summary: z.string().optional(),
+      }),
+    )
+    .optional(),
+});
+type NixhubSearchJSON = z.infer<typeof NixhubSearchSchema>;
+
+const NixhubPackageSchema = z.object({
+  name: z.string().optional(),
+  releases: z
+    .array(
+      z.object({
+        version: z.union([z.string(), z.number()]).optional(),
+      }),
+    )
+    .optional(),
+});
+type NixhubPackageJSON = z.infer<typeof NixhubPackageSchema>;
+
 export function registerNixRoutes(
   fastify: FastifyInstance,
   opts: { timeoutMs: number; cacheTtlMs: number; cacheMax: number },
 ) {
-  const cache = new LruCache<any>(opts.cacheMax, opts.cacheTtlMs);
+  const cache = new LruCache<unknown>(opts.cacheMax, opts.cacheTtlMs);
 
   // Strict query schemas (unknown params -> 400)
   const packagesQuerySchema = z.object({ query: z.string().optional() }).strict();
   const versionsQuerySchema = z.object({ name: z.string().max(200).regex(SAFE_IDENT) }).strict();
 
-  async function fetchJson(url: string, signal: AbortSignal): Promise<any> {
+  async function fetchJson(url: string, signal: AbortSignal): Promise<unknown> {
     const cached = cache.get(url);
     if (cached) return cached;
     const maxAttempts = 3; // 1 + 2 retries on transient errors
@@ -63,7 +90,7 @@ export function registerNixRoutes(
           const txt = await res.text().catch(() => '');
           throw Object.assign(new Error(`upstream_${res.status}`), { status: res.status, body: txt });
         }
-        const json = await res.json();
+        const json = (await res.json()) as unknown;
         cache.set(url, json);
         return json;
       } catch (e: any) {
@@ -89,17 +116,19 @@ export function registerNixRoutes(
       const q = (parsed.data.query || '').trim();
       if (q.length < 2) {
         const body = PackagesResponseSchema.parse({ packages: [] });
+        reply.header('Cache-Control', 'public, max-age=60, stale-while-revalidate=300');
         return body;
       }
       const url = `${NIXHUB_BASE}/search?q=${encodeURIComponent(q)}&_data=routes%2F_nixhub.search`;
       const ac = new AbortController();
       const tid = setTimeout(() => ac.abort(), opts.timeoutMs);
       try {
-        const json = await fetchJson(url, ac.signal);
-        const items = Array.isArray(json?.results) ? json.results : [];
+        const json = (await fetchJson(url, ac.signal)) as unknown;
+        const upstream = NixhubSearchSchema.safeParse(json);
+        const items: NonNullable<NixhubSearchJSON['results']> = upstream.success && Array.isArray(upstream.data.results) ? upstream.data.results : [];
         const mapped = items
-          .map((it: any) => ({ name: it?.name, description: it?.summary ?? null }))
-          .filter((x: any) => typeof x.name === 'string' && x.name.length > 0);
+          .map((it) => ({ name: it?.name ?? '', description: it?.summary ?? null }))
+          .filter((x) => typeof x.name === 'string' && x.name.length > 0);
         const body = PackagesResponseSchema.parse({ packages: mapped });
         reply.header('Cache-Control', 'public, max-age=60, stale-while-revalidate=300');
         return body;
@@ -108,7 +137,8 @@ export function registerNixRoutes(
       }
     } catch (e) {
       const err = e as Error & { status?: number };
-      if ((err as any)?.name === 'AbortError') {
+      const isAbort = (x: unknown): x is { name: string } => !!x && typeof x === 'object' && 'name' in (x as any);
+      if (isAbort(err) && err.name === 'AbortError') {
         reply.code(504);
         return { error: 'timeout' };
       }
@@ -135,8 +165,9 @@ export function registerNixRoutes(
       const ac = new AbortController();
       const tid = setTimeout(() => ac.abort(), opts.timeoutMs);
       try {
-        const json = await fetchJson(url, ac.signal);
-        const rels = Array.isArray(json?.releases) ? json.releases : [];
+        const json = (await fetchJson(url, ac.signal)) as unknown;
+        const upstream = NixhubPackageSchema.safeParse(json);
+        const rels: NonNullable<NixhubPackageJSON['releases']> = upstream.success && Array.isArray(upstream.data.releases) ? upstream.data.releases : [];
         const seen = new Set<string>();
         const withValid: string[] = [];
         const withInvalid: string[] = [];
@@ -157,7 +188,8 @@ export function registerNixRoutes(
       }
     } catch (e) {
       const err = e as Error & { status?: number };
-      if ((err as any)?.name === 'AbortError') {
+      const isAbort = (x: unknown): x is { name: string } => !!x && typeof x === 'object' && 'name' in (x as any);
+      if (isAbort(err) && err.name === 'AbortError') {
         reply.code(504);
         return { error: 'timeout' };
       }

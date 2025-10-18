@@ -1,4 +1,4 @@
-import Fastify from 'fastify';
+import Fastify, { type FastifyInstance } from 'fastify';
 import nock from 'nock';
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { registerNixRoutes } from '../routes/nix.route.js';
@@ -6,10 +6,10 @@ import { registerNixRoutes } from '../routes/nix.route.js';
 const BASE = 'https://www.nixhub.io';
 
 describe('nix routes', () => {
-  let fastify: ReturnType<typeof Fastify>;
+  let fastify: FastifyInstance;
   beforeEach(() => {
     fastify = Fastify({ logger: false });
-    registerNixRoutes(fastify as any, {
+    registerNixRoutes(fastify, {
       timeoutMs: 200,
       cacheTtlMs: 5 * 60_000,
       cacheMax: 500,
@@ -113,6 +113,28 @@ describe('nix routes', () => {
     const res = await fastify.inject({ method: 'GET', url: '/api/nix/packages?query=g' });
     expect(res.statusCode).toBe(200);
     expect(res.json()).toEqual({ packages: [] });
+    expect(res.headers['cache-control']).toContain('max-age=60');
+  });
+
+  it('packages: unknown params rejected with 400', async () => {
+    const scope = nock(BASE)
+      .get('/search')
+      .query(true)
+      .reply(200, { results: [] });
+    const res = await fastify.inject({ method: 'GET', url: '/api/nix/packages?query=git&extra=x' });
+    expect(res.statusCode).toBe(400);
+    // Ensure upstream was not called
+    expect(scope.isDone()).toBe(false);
+  });
+
+  it('versions: invalid name (unsafe ident) -> 400', async () => {
+    const scope = nock(BASE)
+      .get('/packages/bad/name')
+      .query(true)
+      .reply(200, {} as any);
+    const res = await fastify.inject({ method: 'GET', url: '/api/nix/versions?name=bad/name' });
+    expect(res.statusCode).toBe(400);
+    expect(scope.isDone()).toBe(false);
   });
 
   it('versions: success mapping (unique + sorted) and cache hit', async () => {
