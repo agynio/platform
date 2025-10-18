@@ -73,13 +73,14 @@ describe('RightPropertiesPanel', () => {
 
   it('renders Tools section for mcpServer using node.data.state.mcp.tools and toggles dynamicConfig', () => {
     const node = makeNode('mcpServer');
-    node.data.state = { mcp: { tools: [{ name: 't1', description: 'Tool 1' }, { name: 't2' }] } };
+    node.data.state = { mcp: { tools: [{ name: 't1', description: 'Tool 1' }, { name: 't2', title: 'Tool Two' }] } };
     node.data.dynamicConfig = { t1: true };
     render(<RightPropertiesPanel node={node} onChange={onChange} />);
     expect(screen.getByTestId('mcp-tools-section')).toBeInTheDocument();
     // There should be labels/toggles for tools
     expect(screen.getByText('t1')).toBeInTheDocument();
-    expect(screen.getByText('t2')).toBeInTheDocument();
+    // title preferred over name when present
+    expect(screen.getByText('Tool Two')).toBeInTheDocument();
     // Toggle t2 on
     const toggle = screen.getByLabelText('t2');
     fireEvent.click(toggle);
@@ -88,5 +89,18 @@ describe('RightPropertiesPanel', () => {
     expect(args[0]).toBe(node.id);
     expect(args[1].dynamicConfig).toBeDefined();
     expect(args[1].dynamicConfig.t2).toBe(true);
+  });
+
+  it('hides Dynamic Configuration for mcpServer; shows for non-mcp template', () => {
+    // mcpServer should hide Dynamic Configuration label
+    const mcp = makeNode('mcpServer');
+    mcp.data.state = { mcp: { tools: [{ name: 'x' }] } };
+    render(<RightPropertiesPanel node={mcp} onChange={onChange} />);
+    expect(screen.queryByText('Dynamic Configuration')).not.toBeInTheDocument();
+
+    // Non-MCP template shows Dynamic Configuration
+    const t = makeNode('custom');
+    render(<RightPropertiesPanel node={t} onChange={onChange} />);
+    expect(screen.getByText('Dynamic Configuration')).toBeInTheDocument();
   });
 });

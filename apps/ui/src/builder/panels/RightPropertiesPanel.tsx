@@ -47,12 +47,23 @@ function RightPropertiesPanelBody({ node, onChange }: Props) {
   const cfg = (data.config || {}) as Record<string, unknown>;
   const dynamicConfig = (data.dynamicConfig || {}) as Record<string, unknown>;
   const isMcpServer = data.template === 'mcpServer';
-  const mcpTools: Array<{ name: string; description?: string; title?: string }> =
-    (((data.state as any)?.mcp?.tools as Array<any>) || []).map((t) => ({
-      name: String(t?.name ?? ''),
-      description: t?.description,
-      title: t?.title,
-    }));
+  // Narrow state -> mcp.tools with guards; avoid any casts
+  type McpTool = { name: string; description?: string; title?: string };
+  type UnknownRec = Record<string, unknown>;
+  const isRecord = (v: unknown): v is UnknownRec => !!v && typeof v === 'object';
+  const isTool = (t: unknown): t is McpTool =>
+    isRecord(t) && typeof t.name === 'string' && (t.description === undefined || typeof t.description === 'string') && (t.title === undefined || typeof t.title === 'string');
+  const readMcpTools = (state: unknown): McpTool[] => {
+    if (!isRecord(state)) return [];
+    const mcp = state.mcp as unknown;
+    if (!isRecord(mcp)) return [];
+    const tools = mcp.tools as unknown;
+    if (!Array.isArray(tools)) return [];
+    return tools
+      .filter(isTool)
+      .map((t) => ({ name: t.name, description: t.description, title: t.title }));
+  };
+  const mcpTools = readMcpTools(data.state);
 
   // Runtime capabilities (may be absent if backend templates not yet loaded)
   const runtimeStaticCap = hasStaticConfigByName(data.template, runtimeTemplates.getTemplate);
@@ -146,10 +157,14 @@ function RightPropertiesPanelBody({ node, onChange }: Props) {
       {isMcpServer && mcpTools.length > 0 && (
         <ToolsSection
           tools={mcpTools}
-          enabledMap={dynamicConfig as Record<string, boolean>}
+          enabledMap={toBoolMap(dynamicConfig)}
           readOnly={readOnly}
           disabled={!!disableAll}
-          onToggle={(name, val) => update({ dynamicConfig: { ...(dynamicConfig as any), [name]: val } })}
+          onToggle={(name, val) => {
+            const map = toBoolMap(dynamicConfig);
+            const next: Record<string, boolean> = { ...map, [name]: !!val };
+            update({ dynamicConfig: next });
+          }}
         />
       )}
       {!isMcpServer && runtimeDynamicCap && (
@@ -194,6 +209,14 @@ function RightPropertiesPanelBody({ node, onChange }: Props) {
 }
 
 import { Switch } from '@hautech/ui';
+
+// Convert arbitrary record values to a boolean-only map for enabled flags
+function toBoolMap(rec: Record<string, unknown> | undefined | null): Record<string, boolean> {
+  if (!rec || typeof rec !== 'object') return {};
+  const out: Record<string, boolean> = {};
+  for (const [k, v] of Object.entries(rec)) out[k] = !!v;
+  return out;
+}
 
 function ToolsSection({
   tools,
