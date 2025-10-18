@@ -1,6 +1,6 @@
 import type { Preview } from '@storybook/react';
 import React from 'react';
-import '../.storybook/preview.css';
+import './preview.css';
 import { Toaster } from '../src/components/toaster';
 
 const preview: Preview = {
@@ -31,4 +31,3 @@ const preview: Preview = {
 };
 
 export default preview;
-

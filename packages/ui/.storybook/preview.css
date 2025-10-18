@@ -1,5 +1,4 @@
 @import 'tailwindcss';
-@import '../src/styles.css';
+@import '../styles.css';
 
 #storybook-root, #storybook-docs { min-height: 100vh; }
-
