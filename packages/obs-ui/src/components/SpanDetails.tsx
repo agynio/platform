@@ -734,7 +734,7 @@ function ModeSelect({
   label: string;
   modes: { value: string; label: string }[];
   value: string;
-  onChange(v: any): void;
+  onChange(v: string): void;
 }) {
   return (
     <label style={{ fontSize: 12, display: 'inline-flex', alignItems: 'center', gap: 6 }}>
@@ -756,13 +756,17 @@ function ModeSelect({
 
 function formatToolInput(span: SpanDoc, mode: 'json' | 'yaml'): string {
   const attrs = (span.attributes || {}) as Record<string, unknown>;
-  const toolObj = attrs['tool'] as Record<string, unknown> | undefined;
-  const outputObj = attrs['output'] as Record<string, unknown> | undefined;
+  const toolObj = (attrs['tool'] as unknown) ?? undefined;
+  const outputObj = (attrs['output'] as unknown) ?? undefined;
+  const getProp = (o: unknown, k: string): unknown =>
+    typeof o === 'object' && o !== null && k in (o as Record<string, unknown>)
+      ? (o as Record<string, unknown>)[k]
+      : undefined;
   const input =
     (attrs['input'] !== undefined ? attrs['input'] : undefined) ??
     (attrs['args'] !== undefined ? attrs['args'] : undefined) ??
-    (toolObj && (toolObj as any)['input']) ??
-    (outputObj && (outputObj as any)['input']);
+    getProp(toolObj, 'input') ??
+    getProp(outputObj, 'input');
   if (mode === 'yaml') return toYAML(input ?? {});
   return toJSONStable(input ?? {});
 }
@@ -822,10 +826,12 @@ function renderOutputContent(content: string | undefined, mode: 'md' | 'json' | 
     );
   }
   if (mode === 'yaml') {
-    let v: any = content;
+    let v: unknown = content;
     try {
       v = JSON.parse(content);
-    } catch {}
+    } catch {
+      v = content;
+    }
     return (
       <div style={{ ...baseStyle, padding: 0 }}>
         <MonacoEditor
@@ -838,16 +844,34 @@ function renderOutputContent(content: string | undefined, mode: 'md' | 'json' | 
       </div>
     );
   }
-  // json
+  // json with fallback warning if not parseable
+  let jsonStr = '';
+  let jsonParseFailed = false;
+  try {
+    jsonStr = toJSONStable(content);
+    // If content was non-JSON string, toJSONStable returns the same string; detect by a quick parse attempt
+    JSON.parse(jsonStr);
+  } catch {
+    jsonParseFailed = true;
+  }
+  const editorLang = jsonParseFailed ? 'plaintext' : 'json';
+  const editorValue = jsonParseFailed ? String(content) : jsonStr;
   return (
-    <div style={{ ...baseStyle, padding: 0 }}>
-      <MonacoEditor
-        height="240px"
-        defaultLanguage="json"
-        value={toJSONStable(content)}
-        theme="vs-light"
-        options={{ readOnly: true, minimap: { enabled: false }, fontSize: 12, wordWrap: 'on', scrollBeyondLastLine: false }}
-      />
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+      {jsonParseFailed && (
+        <div style={{ color: '#8a6d3b', background: '#fcf8e3', border: '1px solid #faebcc', borderRadius: 4, padding: '4px 6px', fontSize: 11 }}>
+          Not valid JSON; showing raw string
+        </div>
+      )}
+      <div style={{ ...baseStyle, padding: 0 }}>
+        <MonacoEditor
+          height="240px"
+          defaultLanguage={editorLang}
+          value={editorValue}
+          theme="vs-light"
+          options={{ readOnly: true, minimap: { enabled: false }, fontSize: 12, wordWrap: 'on', scrollBeyondLastLine: false }}
+        />
+      </div>
     </div>
   );
 }
@@ -1058,21 +1082,51 @@ function CollapsibleToolCall({ toolCall }: { toolCall: LocalToolCall }) {
 function ToolInputViewer({ span, language, value }: { span: SpanDoc; language: 'json' | 'yaml'; value: string }) {
   return (
     <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
-      <div style={{ flex: 1, minHeight: 200, border: '1px solid #e1e4e8', borderRadius: 4, overflow: 'hidden' }}>
-        <MonacoEditor
-          height="100%"
-          defaultLanguage={language}
-          value={value}
-          theme="vs-light"
-          options={{
-            readOnly: true,
-            minimap: { enabled: false },
-            fontSize: 12,
-            scrollBeyondLastLine: false,
-            wordWrap: 'on',
-          }}
-        />
+      <ToolInputContent language={language} value={value} />
+    </div>
+  );
+}
+
+function ToolInputContent({ language, value }: { language: 'json' | 'yaml'; value: string }) {
+  // For JSON mode, detect invalid JSON string to show warning and fallback to plaintext editor
+  if (language === 'json') {
+    let jsonParseFailed = false;
+    try {
+      JSON.parse(value);
+    } catch {
+      jsonParseFailed = true;
+    }
+    const editorLang = jsonParseFailed ? 'plaintext' : 'json';
+    const editorValue = value;
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+        {jsonParseFailed && (
+          <div style={{ color: '#8a6d3b', background: '#fcf8e3', border: '1px solid #faebcc', borderRadius: 4, padding: '4px 6px', fontSize: 11 }}>
+            Not valid JSON; showing raw string
+          </div>
+        )}
+        <div style={{ flex: 1, minHeight: 200, border: '1px solid #e1e4e8', borderRadius: 4, overflow: 'hidden' }}>
+          <MonacoEditor
+            height="100%"
+            defaultLanguage={editorLang}
+            value={editorValue}
+            theme="vs-light"
+            options={{ readOnly: true, minimap: { enabled: false }, fontSize: 12, scrollBeyondLastLine: false, wordWrap: 'on' }}
+          />
+        </div>
       </div>
+    );
+  }
+  // YAML mode
+  return (
+    <div style={{ flex: 1, minHeight: 200, border: '1px solid #e1e4e8', borderRadius: 4, overflow: 'hidden' }}>
+      <MonacoEditor
+        height="100%"
+        defaultLanguage="yaml"
+        value={value}
+        theme="vs-light"
+        options={{ readOnly: true, minimap: { enabled: false }, fontSize: 12, scrollBeyondLastLine: false, wordWrap: 'on' }}
+      />
     </div>
   );
 }

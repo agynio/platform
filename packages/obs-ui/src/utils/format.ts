@@ -1,24 +1,33 @@
 import { stringify as toYamlStr } from 'yaml';
 
-export function isJSONObject(v: unknown): v is Record<string, unknown> | unknown[] {
-  if (v === null) return false;
-  const t = typeof v;
-  if (t === 'object') return true;
-  return false;
+// Recursively sort object keys to ensure deterministic ordering
+function stabilize(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map((v) => stabilize(v));
+  if (value && typeof value === 'object') {
+    const obj = value as Record<string, unknown>;
+    const out: Record<string, unknown> = {};
+    Object.keys(obj)
+      .sort()
+      .forEach((k) => {
+        out[k] = stabilize(obj[k]);
+      });
+    return out;
+  }
+  return value;
 }
 
 export function toJSONStable(v: unknown): string {
   try {
+    let data: unknown = v;
     if (typeof v === 'string') {
-      // Try parse then re-stringify for pretty formatting
       try {
-        const parsed = JSON.parse(v);
-        return JSON.stringify(parsed, null, 2);
+        data = JSON.parse(v);
       } catch {
+        // Return as-is when non-JSON string; caller may decide to warn
         return v;
       }
     }
-    return JSON.stringify(v, null, 2);
+    return JSON.stringify(stabilize(data), null, 2);
   } catch {
     try {
       return String(v);
@@ -30,16 +39,16 @@ export function toJSONStable(v: unknown): string {
 
 export function toYAML(v: unknown): string {
   try {
+    let data: unknown = v;
     if (typeof v === 'string') {
       try {
-        const parsed = JSON.parse(v);
-        return toYamlStr(parsed);
+        data = JSON.parse(v);
       } catch {
-        // If not JSON string, wrap as plain string
-        return toYamlStr(v);
+        // keep as string in YAML
+        data = v;
       }
     }
-    return toYamlStr(v);
+    return toYamlStr(stabilize(data));
   } catch {
     try {
       return String(v);
@@ -48,4 +57,3 @@ export function toYAML(v: unknown): string {
     }
   }
 }
-

@@ -13,5 +13,13 @@ describe('format utils', () => {
     expect(y).toMatch(/a: 1/);
     expect(y).toMatch(/- 2/);
   });
+  it('returns raw string when non-JSON string for toJSONStable', () => {
+    const s = toJSONStable('not json');
+    expect(s).toBe('not json');
+  });
+  it('stabilizes key order in JSON', () => {
+    const s = toJSONStable({ b: 1, a: { d: 2, c: 3 } });
+    expect(s.indexOf('"a"')).toBeLessThan(s.indexOf('"b"'));
+    expect(s.indexOf('"c"')).toBeLessThan(s.indexOf('"d"'));
+  });
 });
-

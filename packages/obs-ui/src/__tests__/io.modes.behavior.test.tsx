@@ -63,4 +63,21 @@ describe('IO modes', () => {
     expect((screen.getByLabelText('Input:') as HTMLSelectElement).value).toBe('json');
     expect((screen.getByLabelText('Output:') as HTMLSelectElement).value).toBe('md');
   });
+
+  it('shows warning when switching output to JSON for non-JSON string', () => {
+    const span = makeSpan({ kind: 'tool_call', output: { content: 'not json' } });
+    render(<SpanDetails span={span} spans={[span]} onSelectSpan={() => {}} onClose={() => {}} />);
+    const outputSelect = screen.getByLabelText('Output:') as HTMLSelectElement;
+    // switch to JSON mode
+    fireEvent.change(outputSelect, { target: { value: 'json' } });
+    // warning should appear
+    expect(screen.getByText(/Not valid JSON; showing raw string/i)).toBeTruthy();
+  });
+
+  it('shows warning for tool input JSON mode when input is a non-JSON string', () => {
+    const span = makeSpan({ kind: 'tool_call', input: 'not json' });
+    render(<SpanDetails span={span} spans={[span]} onSelectSpan={() => {}} onClose={() => {}} />);
+    // Input defaults to JSON mode
+    expect(screen.getByText(/Not valid JSON; showing raw string/i)).toBeTruthy();
+  });
 });
