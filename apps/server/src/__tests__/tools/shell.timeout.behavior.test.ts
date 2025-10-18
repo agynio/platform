@@ -94,8 +94,8 @@ describe('ContainerService.execContainer killOnTimeout behavior', () => {
       modem: { demuxStream: () => {} },
     } as const;
 
-    // Patch service docker instance
-    (svc as any).docker = docker;
+    // Patch service docker instance without any: use Reflect.set
+    Reflect.set(svc as unknown as object, 'docker', docker);
     // Spy on startAndCollectExec to force timeout rejection
     const timeoutErr = new Error('Exec timed out after 123ms');
     vi.spyOn(svc as any, 'startAndCollectExec').mockRejectedValue(timeoutErr);
@@ -121,8 +121,7 @@ describe('ContainerService.execContainer killOnTimeout behavior', () => {
       })),
       modem: { demuxStream: () => {} },
     } as const;
-
-    (svc as any).docker = docker;
+    Reflect.set(svc as unknown as object, 'docker', docker);
     const timeoutErr = new Error('Exec timed out after 456ms');
     vi.spyOn(svc as any, 'startAndCollectExec').mockRejectedValue(timeoutErr);
 
@@ -130,7 +129,8 @@ describe('ContainerService.execContainer killOnTimeout behavior', () => {
       svc.execContainer('cid999', 'echo nope', { timeoutMs: 456 }),
     ).rejects.toThrow(/timed out/);
     // Ensure stop was not called on any container instance
-    const anyStopped = (docker.getContainer as unknown as Mock).mock.results.some((r: any) => r.value.stop.mock.calls.length > 0);
+    const getContainerMock: Mock = docker.getContainer as unknown as Mock;
+    const anyStopped = getContainerMock.mock.results.some((r: any) => r.value.stop.mock.calls.length > 0);
     expect(anyStopped).toBe(false);
     // Optional: verify only one getContainer call (inspect only)
     expect(docker.getContainer).toHaveBeenCalledTimes(1);
@@ -148,8 +148,7 @@ describe('ContainerService.execContainer killOnTimeout behavior', () => {
       })),
       modem: { demuxStream: () => {} },
     } as const;
-
-    (svc as any).docker = docker;
+    Reflect.set(svc as unknown as object, 'docker', docker);
     const genericErr = new Error('Some other failure');
     vi.spyOn(svc as any, 'startAndCollectExec').mockRejectedValue(genericErr);
 
@@ -162,7 +161,7 @@ describe('ContainerService.execContainer killOnTimeout behavior', () => {
   });
 
   it('stops container on idle timeout with killOnTimeout=true', async () => {
-    const docker: any = {
+    const docker = {
       getContainer: vi.fn((id: string) => ({
         inspect: vi.fn(async () => ({ Id: id, State: { Running: true } })),
         exec: vi.fn(async (_opts: any) => ({
@@ -172,8 +171,8 @@ describe('ContainerService.execContainer killOnTimeout behavior', () => {
         stop: vi.fn(async () => {}),
       })),
       modem: { demuxStream: () => {} },
-    };
-    (svc as any).docker = docker;
+    } as const;
+    Reflect.set(svc as unknown as object, 'docker', docker);
     const idleErr = new ExecIdleTimeoutError(321, 'a', 'b');
     vi.spyOn(svc as any, 'startAndCollectExec').mockRejectedValue(idleErr);
 

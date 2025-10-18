@@ -5,16 +5,17 @@ import { ContainerEntity } from '../entities/container.entity';
 import { LoggerService } from '../services/logger.service';
 import type { ContainerRegistryService } from '../services/containerRegistry.service';
 
-class FakeRegistry {
+class FakeRegistry implements Pick<ContainerRegistryService, 'updateLastUsed' | 'registerStart'> {
   lastUsed: string[] = [];
   async updateLastUsed(id: string) { this.lastUsed.push(id); }
   async registerStart() {}
 }
 
+type MinimalRegistry = Pick<ContainerRegistryService, 'updateLastUsed' | 'registerStart'>;
 class FakeContainerService extends ContainerService {
-  private _registry?: import('../services/containerRegistry.service').ContainerRegistryService;
+  private _registry?: MinimalRegistry;
   constructor() { super(new LoggerService()); }
-  setRegistry(r: import('../services/containerRegistry.service').ContainerRegistryService) { this._registry = r; }
+  setRegistry(r: MinimalRegistry) { this._registry = r; }
   override async findContainerByLabels(): Promise<ContainerEntity | undefined> { return undefined; }
   override async findContainersByLabels(): Promise<ContainerEntity[]> { return []; }
   override async start(): Promise<ContainerEntity> { return new ContainerEntity(this, 'cid123'); }
@@ -26,8 +27,7 @@ describe('ContainerProvider + registry hooks', () => {
   it('updates last_used on provide()', async () => {
     const svc = new FakeContainerService();
     const reg = new FakeRegistry();
-    // Narrow FakeRegistry to the interface type expected by setRegistry
-    svc.setRegistry(reg as unknown as ContainerRegistryService);
+    svc.setRegistry(reg);
     const provider = new ContainerProviderEntity(svc, undefined, {}, () => ({ 'hautech.ai/thread_id': 'node__t' }));
     provider.setConfig({ ttlSeconds: 86400 });
     const c = await provider.provide('t');
