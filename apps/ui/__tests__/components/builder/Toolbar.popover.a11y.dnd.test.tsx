@@ -1,6 +1,7 @@
 import React from 'react';
 import { beforeAll, afterAll, afterEach, describe, it, expect } from 'vitest';
 import { render, screen, waitFor, fireEvent } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { server, TestProviders } from '../../integration/testUtils';
 import { TooltipProvider } from '@hautech/ui';
@@ -77,6 +78,53 @@ describe('Builder toolbar + popover + DnD', () => {
       expect(dlg.getAttribute('data-state')).toBe('closed');
     });
     expect(screen.getByTestId('add-node-button')).toHaveFocus();
+  });
+
+  it('ESC closes popover and returns focus to trigger', async () => {
+    mockApi();
+    render(
+      <TestProviders>
+        <TooltipProvider>
+          <AgentBuilder />
+        </TooltipProvider>
+      </TestProviders>,
+    );
+    const addBtn = await screen.findByTestId('add-node-button');
+    await userEvent.click(addBtn);
+    const dialog = await screen.findByRole('dialog');
+    expect(dialog.getAttribute('data-state')).toBe('open');
+    // Press Escape
+    await userEvent.keyboard('{Escape}');
+    // Wait for closed state and focus return
+    await waitFor(() => {
+      const dlg = screen.getByRole('dialog');
+      expect(dlg.getAttribute('data-state')).toBe('closed');
+      expect(addBtn).toHaveFocus();
+    });
+  });
+
+  it('Space on focused item inserts and closes popover', async () => {
+    mockApi();
+    render(
+      <TestProviders>
+        <TooltipProvider>
+          <AgentBuilder />
+        </TooltipProvider>
+      </TestProviders>,
+    );
+    const addBtn = await screen.findByTestId('add-node-button');
+    await userEvent.click(addBtn);
+    await screen.findByRole('dialog');
+    const options = await screen.findAllByRole('option');
+    const first = options[0] as HTMLElement;
+    first.focus();
+    expect(first).toHaveFocus();
+    await userEvent.keyboard(' ');
+    await waitFor(() => {
+      const dlg = screen.getByRole('dialog');
+      expect(dlg.getAttribute('data-state')).toBe('closed');
+      expect(addBtn).toHaveFocus();
+    });
   });
 
   it('list items are DnD sources (data-testid present) and click insert works', async () => {
