@@ -15,11 +15,8 @@ const config: StorybookConfig = {
       css: {
         // Defensive: ensure PostCSS plugins apply in Storybook
         postcss: {
-          // Use PostCSS config-style object map for reliability
-          plugins: {
-            '@tailwindcss/postcss': {},
-            autoprefixer: {}
-          }
+          // Tailwind v4 PostCSS plugin + autoprefixer
+          plugins: [tailwind(), autoprefixer()]
         }
       },
       resolve: {
