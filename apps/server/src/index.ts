@@ -50,6 +50,13 @@ async function bootstrap() {
   await mongo.connect();
   checkpointer.attachMongoClient(mongo.getClient());
   checkpointer.bindDb(mongo.getDb());
+  // Initialize checkpointer (optional Postgres mode)
+  try {
+    await checkpointer.initIfNeeded();
+  } catch (e) {
+    logger.error('Checkpointer init failed: %s', (e as Error)?.message || String(e));
+    process.exit(1);
+  }
 
   // Initialize container registry and cleanup services
   const registry = new ContainerRegistryService(mongo.getDb(), logger);

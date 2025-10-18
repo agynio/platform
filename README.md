@@ -19,6 +19,13 @@ Development services
   - Set VAULT_ENABLED=true, VAULT_ADDR, VAULT_TOKEN in apps/server/.env
   - See docs/security/vault.md
 
+Postgres checkpointer (optional)
+- Start Postgres only: `docker compose up -d postgres`
+- Configure server env:
+  - `LANGGRAPH_CHECKPOINTER=postgres`
+  - `POSTGRES_URL=postgresql://postgres:postgres@localhost:5442/postgres?sslmode=disable`
+- Note: The UI checkpoint stream currently depends on Mongo change streams and won’t reflect Postgres writes in this initial version.
+
 Docker-in-Docker and registry mirror (Issue #99)
 - Workspace containers can opt-in to a per-workspace Docker daemon via `DOCKER_HOST=tcp://localhost:2375`; this port is only reachable inside the workspace namespace and is not published on the host.
 - A lightweight registry mirror runs as a compose service `registry-mirror` on the shared network `agents_net`. It is HTTP-only and only reachable within that network.

@@ -1,6 +1,9 @@
 import { Collection, ChangeStream, Document, Binary, ObjectId, Db, MongoClient } from 'mongodb';
 import { LoggerService } from './logger.service';
 import { MongoDBSaver } from '../checkpointer';
+// Optional Postgres saver (enabled via env flag)
+// Note: UI stream features (fetchLatestWrites/watchInserts) remain Mongo-only for now.
+import { PostgresSaver } from '@langchain/langgraph-checkpoint-postgres';
 
 // Raw document interface (previously in MongoService)
 export interface RawCheckpointWrite extends Document {
@@ -30,6 +33,7 @@ export interface CheckpointWriteNormalized {
 
 export class CheckpointerService {
   private collection?: Collection<RawCheckpointWrite>;
+  private pgSaver?: PostgresSaver;
   constructor(
     private logger: LoggerService,
     private mongoClient?: MongoClient,
@@ -41,6 +45,33 @@ export class CheckpointerService {
 
   attachMongoClient(client: MongoClient) {
     this.mongoClient = client;
+  }
+
+  /**
+   * Initialize Postgres checkpointer if enabled via LANGGRAPH_CHECKPOINTER=postgres.
+   * Mongo remains initialized/bound for other services and UI streaming.
+   */
+  async initIfNeeded(): Promise<void> {
+    const mode = (process.env.LANGGRAPH_CHECKPOINTER || '').toLowerCase();
+    if (mode !== 'postgres') {
+      this.logger.info('CheckpointerService using MongoDB (default).');
+      return;
+    }
+    const url = process.env.POSTGRES_URL;
+    if (!url) {
+      const msg = 'POSTGRES_URL is required when LANGGRAPH_CHECKPOINTER=postgres';
+      this.logger.error(msg);
+      throw new Error(msg);
+    }
+    try {
+      this.pgSaver = PostgresSaver.fromConnString(url);
+      await this.pgSaver.setup(); // idempotent
+      this.logger.info('Postgres checkpointer initialized.');
+    } catch (e) {
+      const err = e as Error;
+      this.logger.error('Failed to initialize Postgres checkpointer: %s', err?.message || String(e));
+      throw e;
+    }
   }
 
   ensureBound() {
@@ -100,10 +131,17 @@ export class CheckpointerService {
   }
 
   getCheckpointer(agentId: string) {
+    const mode = (process.env.LANGGRAPH_CHECKPOINTER || '').toLowerCase();
+    if (mode === 'postgres') {
+      if (!this.pgSaver) {
+        throw new Error('Postgres checkpointer not initialized. Call initIfNeeded() during server bootstrap.');
+      }
+      return this.pgSaver;
+    }
+    // Default Mongo path (also powers UI stream via change streams)
     if (!this.mongoClient) {
       throw new Error('MongoClient not attached to CheckpointerService');
     }
-
     return new MongoDBSaver({ client: this.mongoClient }, undefined, { agentId });
   }
 }
