@@ -2,7 +2,7 @@ import React from 'react';
 import { Save as SaveIcon } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger, cn } from '@hautech/ui';
 
-type SaveState = 'idle' | 'saving' | 'saved' | 'error' | 'conflict';
+export type SaveState = 'idle' | 'saving' | 'saved' | 'error' | 'conflict';
 
 const LABELS: Record<SaveState, string> = {
   idle: 'All changes saved',

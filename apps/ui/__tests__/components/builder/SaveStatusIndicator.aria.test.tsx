@@ -1,10 +1,10 @@
 import React from 'react';
 import { describe, it, expect } from 'vitest';
 import { render, screen } from '@testing-library/react';
-import { SaveStatusIndicator } from '../../../src/builder/SaveStatusIndicator';
+import { SaveStatusIndicator, type SaveState } from '../../../src/builder/SaveStatusIndicator';
 
 describe('SaveStatusIndicator aria-label and colors', () => {
-  const cases: Array<{ state: any; label: string; color: string }> = [
+  const cases: Array<{ state: SaveState; label: string; color: string }> = [
     { state: 'idle', label: 'All changes saved', color: 'text-emerald-600' },
     { state: 'saved', label: 'Saved', color: 'text-emerald-600' },
     { state: 'saving', label: 'Saving…', color: 'text-yellow-600' },
@@ -21,4 +21,3 @@ describe('SaveStatusIndicator aria-label and colors', () => {
     });
   }
 });
-
