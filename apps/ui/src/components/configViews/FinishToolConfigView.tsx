@@ -8,7 +8,8 @@ export default function FinishToolConfigView({ value, onChange, readOnly, disabl
   const isDisabled = !!readOnly || !!disabled;
 
   useEffect(() => {
-    onChange({ ...value, note });
+    const next = { ...value, note };
+    if (JSON.stringify(value || {}) !== JSON.stringify(next)) onChange(next);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [note]);
 

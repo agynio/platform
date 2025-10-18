@@ -25,7 +25,8 @@ export default function ShellToolConfigView({ value, onChange, readOnly, disable
   }, [workdir, executionTimeoutMs, idleTimeoutMs, onValidate]);
 
   useEffect(() => {
-    onChange({ ...value, workdir, env, executionTimeoutMs, idleTimeoutMs });
+    const next = { ...value, workdir, env, executionTimeoutMs, idleTimeoutMs };
+    if (JSON.stringify(value || {}) !== JSON.stringify(next)) onChange(next);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [workdir, JSON.stringify(env), executionTimeoutMs, idleTimeoutMs]);
 
