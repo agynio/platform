@@ -68,8 +68,8 @@ describe('Nix packages persistence in builder graph', () => {
     // Choose channel
     const select = await screen.findByLabelText(/Select version for htop/);
     // Ensure versions have loaded before selecting
-    await screen.findByRole('option', { name: '1.2.3' });
-    fireEvent.change(select, { target: { value: '1.2.3' } });
+    const opt = await screen.findByRole('option', { name: /1.2.3/ });
+    fireEvent.change(select, { target: { value: (opt as HTMLOptionElement).getAttribute('value')! } });
     // Note: selecting version updates config, which marks builder dirty and should trigger autosave.
 
     // Wait until autosave posts updated graph including nix.packages
@@ -79,8 +79,8 @@ describe('Nix packages persistence in builder graph', () => {
       expect(node.config.image).toBe('alpine:3');
       expect(Array.isArray(node.config?.nix?.packages)).toBe(true);
       expect(node.config.nix.packages.length).toBe(1);
-      // New persistence only stores { name, version }
-      expect(node.config.nix.packages[0]).toEqual({ name: 'htop', version: '1.2.3' });
+      // New persistence stores name, version and nix metadata
+      expect(node.config.nix.packages[0]).toEqual({ name: 'htop', version: '1.2.3', attribute_path: 'htop', commit_hash: 'abc123def456' });
     }, { timeout: 5000 });
 
     // Allow any trailing save-state timers to flush before teardown to avoid unhandled updates

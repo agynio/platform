@@ -137,17 +137,25 @@ describe('nix routes', () => {
     expect(scope.isDone()).toBe(false);
   });
 
-  it('versions: success mapping (unique + sorted) and cache hit', async () => {
+  it('versions: success mapping (unique + sorted) and cache hit (returns releases with platform metadata)', async () => {
     const scope = nock(BASE)
       .get('/packages/git')
       .query((q) => q._data === 'routes/_nixhub.packages.$pkg._index')
       .once()
-      .reply(200, { name: 'git', releases: [{ version: '2.43.1' }, { version: '2.44.0' }, { version: '2.44.0' }, { version: 'v2.45.0' }] });
+      .reply(200, { name: 'git', releases: [
+        { version: '2.43.1', platforms: [{ attribute_path: 'git', commit_hash: 'aaa' }] },
+        { version: '2.44.0', platforms: [{ attribute_path: 'git', commit_hash: 'bbb' }] },
+        { version: '2.44.0', platforms: [{ attribute_path: 'git', commit_hash: 'ccc' }] },
+        { version: 'v2.45.0', platforms: [{ attribute_path: 'git', commit_hash: 'ddd' }] },
+      ] });
     const url = '/api/nix/versions?name=git';
     const r1 = await fastify.inject({ method: 'GET', url });
     expect(r1.statusCode).toBe(200);
     const b1 = r1.json();
-    expect(b1.versions[0]).toBe('v2.45.0');
+    expect(Array.isArray(b1.releases)).toBe(true);
+    expect(b1.releases[0].version).toBe('v2.45.0');
+    expect(b1.releases[0].attribute_path).toBe('git');
+    expect(b1.releases[0].commit_hash).toBe('ddd');
     const r2 = await fastify.inject({ method: 'GET', url });
     expect(r2.statusCode).toBe(200);
     scope.done();
@@ -163,7 +171,7 @@ describe('nix routes', () => {
       .reply(200, { name: 'htop', releases: [{ version: '3.0.0' }] });
     const res = await fastify.inject({ method: 'GET', url: '/api/nix/versions?name=htop' });
     expect(res.statusCode).toBe(200);
-    expect(res.json().versions).toEqual(['3.0.0']);
+    expect(res.json().releases).toEqual([{ version: '3.0.0' }]);
     scope.done();
   });
 

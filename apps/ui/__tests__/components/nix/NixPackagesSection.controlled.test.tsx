@@ -39,8 +39,9 @@ describe('NixPackagesSection (controlled)', () => {
     // Choose a channel (version label will be fetched via MSW)
     const select = screen.getByLabelText(/Select version for gi/) as HTMLSelectElement;
     // MSW returns versions: ['1.2.3','1.0.0']
-    await waitFor(() => expect(select.querySelector('option[value="1.2.3"]')).not.toBeNull());
-    fireEvent.change(select, { target: { value: '1.2.3' } });
+    await screen.findByRole("option", { name: /1.2.3/ });
+    const opt = Array.from(select.options).find(o => o.textContent?.includes("1.2.3")) as HTMLOptionElement;
+    fireEvent.change(select, { target: { value: opt.value } });
 
     // Remove the package
     fireEvent.click(screen.getByLabelText('Remove gi'));
