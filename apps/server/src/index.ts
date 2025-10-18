@@ -35,7 +35,7 @@ const logger = new LoggerService();
 const config = ConfigService.fromEnv();
 const mongo = new MongoService(config, logger);
 const checkpointer = new CheckpointerService(logger);
-const containerService = new ContainerService({ debug: (...a: unknown[]) => logger.debug(String(a[0] ?? ''), ...(a.slice(1) as any)), error: (...a: unknown[]) => logger.error(String(a[0] ?? ''), ...(a.slice(1) as any)) } as any);
+const containerService = new ContainerService(logger);
 const vaultService = new VaultService(
   VaultConfigSchema.parse({
     enabled: config.vaultEnabled,
@@ -43,7 +43,7 @@ const vaultService = new VaultService(
     token: config.vaultToken,
     defaultMounts: ['secret'],
   }),
-  { debug: (...a: unknown[]) => logger.debug(String(a[0] ?? ''), ...(a.slice(1) as any)), error: (...a: unknown[]) => logger.error(String(a[0] ?? ''), ...(a.slice(1) as any)) },
+  logger,
 );
 
 async function bootstrap() {
@@ -102,14 +102,25 @@ async function bootstrap() {
           } else {
             // Fallback if not implemented
             const current = await graphService.get('main');
-            const base = current ?? { name: 'main', version: 0, updatedAt: new Date().toISOString(), nodes: [], edges: [] };
+            const base = current ?? {
+              name: 'main',
+              version: 0,
+              updatedAt: new Date().toISOString(),
+              nodes: [],
+              edges: [],
+            };
             const nodes = Array.from(base.nodes || []);
             const idx = nodes.findIndex((n) => n.id === nodeId);
             if (idx >= 0) nodes[idx] = { ...nodes[idx], state } as any;
             else nodes.push({ id: nodeId, template: 'unknown', state } as any);
             await (graphService instanceof GitGraphService
               ? graphService.upsert({ name: 'main', version: base.version, nodes, edges: base.edges })
-              : (graphService as GraphService).upsert({ name: 'main', version: base.version, nodes, edges: base.edges }));
+              : (graphService as GraphService).upsert({
+                  name: 'main',
+                  version: base.version,
+                  nodes,
+                  edges: base.edges,
+                }));
           }
           // Also update live runtime snapshot
           const last = (runtime as any)?.state?.lastGraph as GraphDefinition | undefined;
@@ -152,7 +163,12 @@ async function bootstrap() {
   try {
     const existing = await graphService.get('main');
     if (existing) {
-      logger.info('Applying persisted graph to live runtime (version=%s, nodes=%d, edges=%d)', existing.version, existing.nodes.length, existing.edges.length);
+      logger.info(
+        'Applying persisted graph to live runtime (version=%s, nodes=%d, edges=%d)',
+        existing.version,
+        existing.nodes.length,
+        existing.edges.length,
+      );
       await runtime.apply(toRuntimeGraph(existing));
     } else {
       logger.info('No persisted graph found; starting with empty runtime graph.');
@@ -243,7 +259,10 @@ async function bootstrap() {
       }
 
       // Support both GraphService and GitGraphService signatures
-      const saved = graphService instanceof GitGraphService ? await graphService.upsert(parsed, author) : await (graphService as GraphService).upsert(parsed);
+      const saved =
+        graphService instanceof GitGraphService
+          ? await graphService.upsert(parsed, author)
+          : await (graphService as GraphService).upsert(parsed);
       try {
         await runtime.apply(toRuntimeGraph(saved));
       } catch {
@@ -409,7 +428,13 @@ bootstrap().catch((e) => {
 function isValidWriteBody(body: unknown): body is { path: string; key: string; value: string } {
   if (!body || typeof body !== 'object') return false;
   const o = body as Record<string, unknown>;
-  return typeof o.path === 'string' && o.path.length > 0 && typeof o.key === 'string' && o.key.length > 0 && typeof o.value === 'string';
+  return (
+    typeof o.path === 'string' &&
+    o.path.length > 0 &&
+    typeof o.key === 'string' &&
+    o.key.length > 0 &&
+    typeof o.value === 'string'
+  );
 }
 
 function statusCodeFrom(e: unknown): number | undefined {

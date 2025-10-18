@@ -45,7 +45,7 @@ export function buildTemplateRegistry(deps: TemplateRegistryDeps): TemplateRegis
       token: configService.vaultToken,
       defaultMounts: ['secret'],
     }),
-    { debug: (...a: unknown[]) => logger.debug(String(a[0] ?? ''), ...(a.slice(1) as any)), error: (...a: unknown[]) => logger.error(String(a[0] ?? ''), ...(a.slice(1) as any)) },
+    logger
   );
   const envService = new EnvService(vault);
 

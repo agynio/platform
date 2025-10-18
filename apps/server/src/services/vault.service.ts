@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { LoggerService } from './logger.service';
 
 // Typed KV v2 response shapes
 type KvV2MountsResponse = Record<string, { type?: string; options?: { version?: string | number } }>;
@@ -27,7 +28,10 @@ export type VaultRef = { mount: string; path: string; key: string };
 export class VaultService {
   private cfg: VaultConfig;
 
-  constructor(cfg: VaultConfig, private logger?: { debug?: (...a: unknown[]) => void; error?: (...a: unknown[]) => void }) {
+  constructor(
+    cfg: VaultConfig,
+    private logger?: LoggerService,
+  ) {
     this.cfg = cfg;
   }
 
@@ -58,7 +62,9 @@ export class VaultService {
       });
       if (!res.ok) {
         const body = await safeJson(res);
-        const err = new Error(`Vault HTTP ${res.status}: ${JSON.stringify(body || {})}`) as Error & { statusCode?: number };
+        const err = new Error(`Vault HTTP ${res.status}: ${JSON.stringify(body || {})}`) as Error & {
+          statusCode?: number;
+        };
         err.statusCode = res.status;
         throw err;
       }
@@ -101,9 +107,12 @@ export class VaultService {
     const m = (mount || 'secret').replace(/\/$/, '');
     const p = (prefix || '').replace(/^\//, '');
     try {
-      const resp = await this.http<KvV2ListPathsResponse>(`/v1/${encodeURIComponent(m)}/metadata/${encodePath(p)}?list=true`, {
-        method: 'GET',
-      });
+      const resp = await this.http<KvV2ListPathsResponse>(
+        `/v1/${encodeURIComponent(m)}/metadata/${encodePath(p)}?list=true`,
+        {
+          method: 'GET',
+        },
+      );
       const keys: string[] = Array.isArray(resp?.data?.keys) ? resp.data!.keys! : [];
       return keys;
     } catch (e: unknown) {
@@ -122,8 +131,10 @@ export class VaultService {
     const m = (mount || 'secret').replace(/\/$/, '');
     const p = (path || '').replace(/^\//, '');
     try {
-      const resp = await this.http<KvV2ReadResponse>(`/v1/${encodeURIComponent(m)}/data/${encodePath(p)}`, { method: 'GET' });
-      const obj = (resp?.data?.data) || {};
+      const resp = await this.http<KvV2ReadResponse>(`/v1/${encodeURIComponent(m)}/data/${encodePath(p)}`, {
+        method: 'GET',
+      });
+      const obj = resp?.data?.data || {};
       return Object.keys(obj).sort();
     } catch (e: unknown) {
       const sc = (e as { statusCode?: number }).statusCode;
@@ -140,8 +151,10 @@ export class VaultService {
     const m = (ref.mount || 'secret').replace(/\/$/, '');
     const p = (ref.path || '').replace(/^\//, '');
     try {
-      const resp = await this.http<KvV2ReadResponse>(`/v1/${encodeURIComponent(m)}/data/${encodePath(p)}`, { method: 'GET' });
-      const obj = (resp?.data?.data) || {};
+      const resp = await this.http<KvV2ReadResponse>(`/v1/${encodeURIComponent(m)}/data/${encodePath(p)}`, {
+        method: 'GET',
+      });
+      const obj = resp?.data?.data || {};
       const v = obj[ref.key];
       if (v == null) return undefined;
       return typeof v === 'string' ? v : String(v);
@@ -160,8 +173,10 @@ export class VaultService {
     const p = (ref.path || '').replace(/^\//, '');
     let existing: Record<string, unknown> = {};
     try {
-      const resp = await this.http<KvV2ReadResponse>(`/v1/${encodeURIComponent(m)}/data/${encodePath(p)}`, { method: 'GET' });
-      existing = (resp?.data?.data) || {};
+      const resp = await this.http<KvV2ReadResponse>(`/v1/${encodeURIComponent(m)}/data/${encodePath(p)}`, {
+        method: 'GET',
+      });
+      existing = resp?.data?.data || {};
     } catch (e: unknown) {
       const sc = (e as { statusCode?: number }).statusCode;
       if (sc !== 404) {
