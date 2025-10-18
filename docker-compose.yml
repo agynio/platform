@@ -187,11 +187,18 @@ services:
       - litellm_pg:/var/lib/postgresql/data
     networks:
       - agents_net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U litellm -d litellm -h 127.0.0.1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
 
   litellm:
     image: ghcr.io/berriai/litellm:main-latest
     depends_on:
-      - litellm_db
+      litellm_db:
+        condition: service_healthy
     environment:
       # Master/virtual key for LiteLLM; must start with "sk-"
       LITELLM_MASTER_KEY: ${LITELLM_MASTER_KEY}
@@ -205,6 +212,12 @@ services:
       - "4000:4000" # Expose UI at http://localhost:4000/ui (remove for internal-only)
     networks:
       - agents_net
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:4000/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
 
 volumes:
   mongo1_data:
