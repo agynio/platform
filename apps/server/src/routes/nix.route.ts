@@ -1,14 +1,8 @@
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 
-// Deterministic URL builder and fixed upstream base
-const NIX_BASE = 'https://search.nixos.org/packages';
-function buildUrl(params: Record<string, string | number | undefined>): string {
-  const url = new URL(NIX_BASE);
-  const keys = Object.keys(params).filter((k) => params[k] !== undefined).sort();
-  for (const k of keys) url.searchParams.set(k, String(params[k]!));
-  return url.toString();
-}
+// Upstream base for NixHub
+const NIXHUB_BASE = 'https://www.nixhub.io';
 
 // Simple Map-based LRU with TTL
 class LruCache<T> {
@@ -60,6 +54,7 @@ export function registerNixRoutes(
     q: z.string().optional(),
     query: z.string().optional(),
     channel: channelSchema,
+    // Preserve validation for these fields but do not forward upstream
     size: z
       .union([z.string(), z.number()])
       .optional()
@@ -118,24 +113,23 @@ export function registerNixRoutes(
       }
       const q = (parsed.data.q || parsed.data.query || '').trim();
       if (q.length < 2) return { items: [] };
-      const url = buildUrl({
-        type: 'packages',
-        channel: parsed.data.channel,
-        query: q,
-        format: 'json',
-        size: parsed.data.size ?? 20,
-        from: parsed.data.from ?? 0,
-        sort: parsed.data.sort || 'relevance',
-        order: parsed.data.order || 'desc',
-      });
+      // NixHub search endpoint: exact params only
+      const url = `${NIXHUB_BASE}/search?q=${encodeURIComponent(q)}&_data=routes%2F_nixhub.search`;
       const ac = new AbortController();
       const tid = setTimeout(() => ac.abort(), opts.timeoutMs);
       try {
         const json = await fetchJson(url, ac.signal);
-        const items = Array.isArray(json?.items) ? json.items : Array.isArray(json?.results) ? json.results : [];
+        // NixHub shape: { query, total_results, results: [{ name, summary, ... }] }
+        const items = Array.isArray(json?.results) ? json.results : [];
         const normalized = items
-          .map((it: any) => ({ attr: it.attr, pname: it.pname ?? null, version: it.version ?? null, description: it.description ?? null }))
-          .filter((x: any) => typeof x.attr === 'string');
+          .map((it: any) => ({
+            attr: it?.name,
+            pname: it?.name,
+            // Omit version per requirements (undefined -> null in normalization pipeline)
+            version: undefined,
+            description: it?.summary ?? null,
+          }))
+          .filter((x: any) => typeof x.attr === 'string' && x.attr.length > 0);
         const body = NixSearchResponseSchema.parse({ items: normalized });
         reply.header('Cache-Control', 'public, max-age=60, stale-while-revalidate=300');
         return body;
@@ -166,20 +160,23 @@ export function registerNixRoutes(
         reply.code(400);
         return { error: 'validation_error', details: parsed.error.issues };
       }
-      const { channel, attr, pname } = parsed.data;
-      const query = attr ? `attr:${attr}` : String(pname);
-      const url = buildUrl({ type: 'packages', channel, query, format: 'json', size: 1, sort: 'relevance', order: 'desc' });
+      const { attr, pname } = parsed.data;
+      // Prefer attr, fallback to pname to form PACKAGE_NAME
+      const pkgName = (attr || pname) as string;
+      // NixHub package endpoint: exact path and _data param only
+      const url = `${NIXHUB_BASE}/packages/${encodeURIComponent(pkgName)}?_data=routes%2F_nixhub.packages.%24pkg._index`;
       const ac = new AbortController();
       const tid = setTimeout(() => ac.abort(), opts.timeoutMs);
       try {
         const json = await fetchJson(url, ac.signal);
-        const items = Array.isArray(json?.items) ? json.items : Array.isArray(json?.results) ? json.results : [];
-        const first = items[0];
-        if (!first) {
-          reply.code(404);
-          return { error: 'not_found' };
-        }
-        const body = NixItemSchema.parse({ attr: first.attr, pname: first.pname ?? null, version: first.version ?? null, description: first.description ?? null });
+        // NixHub show payload: { name, summary, releases: [{ version, ... }] }
+        const version = Array.isArray(json?.releases) && json.releases.length > 0 ? json.releases[0]?.version ?? null : null;
+        const body = NixItemSchema.parse({
+          attr: json?.name,
+          pname: json?.name ?? null,
+          description: json?.summary ?? null,
+          version,
+        });
         reply.header('Cache-Control', 'public, max-age=60, stale-while-revalidate=300');
         return body;
       } finally {
