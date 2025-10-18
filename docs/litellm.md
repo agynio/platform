@@ -1,6 +1,6 @@
 LiteLLM setup (OpenAI-compatible proxy)
 
-- Start services: `docker compose up -d postgres litellm`
+- Start services: `docker compose up -d litellm_db litellm`
 - Open the UI: http://localhost:4000/ui
   - Add providers/models and generate a virtual key
 - Configure the server to use LiteLLM by setting:
