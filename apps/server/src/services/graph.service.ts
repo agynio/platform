@@ -60,7 +60,15 @@ export class GraphService {
       _id: name,
       version: existing.version + 1,
       updatedAt: now,
-      nodes: req.nodes.map(this.stripInternalNode),
+      // Preserve existing node.state when omitted in payload
+      nodes: req.nodes.map((n) => {
+        const out = this.stripInternalNode(n);
+        if (out.state === undefined) {
+          const prev = existing.nodes.find((p) => p.id === out.id);
+          if (prev && prev.state !== undefined) out.state = prev.state;
+        }
+        return out;
+      }),
       edges: req.edges.map(this.stripInternalEdge),
     };
     await this.collection!.replaceOne({ _id: name }, updated);

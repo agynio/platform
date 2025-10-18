@@ -107,7 +107,15 @@ export class GitGraphService {
       }
 
       // Normalize nodes and edges; enforce deterministic edge id
-      const normalizedNodes = req.nodes.map(this.stripInternalNode);
+      // Preserve existing node.state when the incoming payload omits it
+      const normalizedNodes = req.nodes.map((n) => {
+        const out = this.stripInternalNode(n);
+        if (out.state === undefined && existing) {
+          const prev = existing.nodes.find((p) => p.id === out.id);
+          if (prev && prev.state !== undefined) out.state = prev.state;
+        }
+        return out;
+      });
       const normalizedEdges = req.edges.map((e) => {
         const base = this.stripInternalEdge(e);
         const detId = this.edgeId(base);
