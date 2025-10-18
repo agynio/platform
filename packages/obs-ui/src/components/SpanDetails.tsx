@@ -433,7 +433,8 @@ export function SpanDetails({
                         label="Input"
                         modes={[{ value: 'json', label: 'JSON' }, { value: 'yaml', label: 'YAML' }]}
                         value={inputMode}
-                        onChange={setInputMode}
+                        // Adapter to satisfy ModeSelect's (v: string) => void signature
+                        onChange={(v) => setInputMode(v as InputMode)}
                       />
                     </div>
                   )}
@@ -578,7 +579,6 @@ export function SpanDetails({
                                 </div>
                                 <div className="obs-md" data-testid="obs-md" style={{ fontFamily: 'monospace', fontSize: 12, wordBreak: 'break-word' }}>
                                   <ReactMarkdown
-                                    className="obs-md"
                                     remarkPlugins={[remarkGfm]}
                                     components={{
                                       code({ className, children, ...props }) {
@@ -723,7 +723,8 @@ export function SpanDetails({
                         { value: 'terminal', label: 'Terminal' },
                       ]}
                       value={outputMode}
-                      onChange={setOutputMode}
+                      // Adapter to satisfy ModeSelect's (v: string) => void signature
+                      onChange={(v) => setOutputMode(v as OutputMode)}
                     />
                   </div>
                   <section
