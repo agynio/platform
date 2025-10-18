@@ -16,6 +16,26 @@ class SpanRealtime {
   private pingInterval: any;
   private listeners: Array<(state: { connected: boolean; lastPongTs: number | null }) => void> = [];
 
+  // Environment helpers
+  private get isBrowser(): boolean {
+    return typeof window !== 'undefined' && typeof window.addEventListener === 'function';
+  }
+  private get isTest(): boolean {
+    try {
+      if (typeof (import.meta as any)?.vitest !== 'undefined') return true;
+      const mode = (import.meta as any)?.env?.MODE;
+      if (mode === 'test') return true;
+    } catch {
+      // ignore
+    }
+    // Also detect via process.env which is set by Vitest
+    const g: any = typeof globalThis !== 'undefined' ? (globalThis as any) : {};
+    const proc = g.process || undefined;
+    const env = (proc && proc.env) || {};
+    if (env.VITEST || env.VITEST_WORKER_ID || env.JEST_WORKER_ID || env.NODE_ENV === 'test') return true;
+    return false;
+  }
+
   private notify() {
     const state = { connected: this.connected, lastPongTs: this.lastPongTs };
     this.listeners.forEach(l => l(state));
@@ -40,7 +60,16 @@ class SpanRealtime {
     }, 10000);
   }
 
+  private stopPing() {
+    if (this.pingInterval) {
+      clearInterval(this.pingInterval);
+      this.pingInterval = null;
+    }
+  }
+
   private ensure() {
+    // Skip realtime in tests and non-browser/SSR to prevent window access and stray timers
+    if (this.isTest || !this.isBrowser) return;
     if (this.socket || this.connecting) return;
     this.connecting = true;
     const url = 'http://localhost:4319'; // Hardcoded dev endpoint
@@ -57,6 +86,7 @@ class SpanRealtime {
     s.on('disconnect', (reason) => {
       this.connected = false;
       console.warn('[obs-realtime] disconnected', reason);
+      this.stopPing();
       this.notify();
     });
     s.on('connect_error', (err) => {
@@ -88,20 +118,44 @@ class SpanRealtime {
   onSpanUpsert(handler: SpanUpsertHandler) {
     this.ensure();
     this.handlers.add(handler);
-    return () => { this.handlers.delete(handler); };
+    return () => {
+      this.handlers.delete(handler);
+      this.maybeShutdown();
+    };
   }
 
   onLog(handler: LogHandler) {
     this.ensure();
     this.logHandlers.add(handler);
-    return () => { this.logHandlers.delete(handler); };
+    return () => {
+      this.logHandlers.delete(handler);
+      this.maybeShutdown();
+    };
   }
 
   onConnectionState(listener: (state: { connected: boolean; lastPongTs: number | null }) => void) {
     this.ensure();
     this.listeners.push(listener);
     listener({ connected: this.connected, lastPongTs: this.lastPongTs });
-    return () => { this.listeners = this.listeners.filter(l => l !== listener); };
+    return () => {
+      this.listeners = this.listeners.filter(l => l !== listener);
+      this.maybeShutdown();
+    };
+  }
+
+  // Disconnect and stop timers when there are no subscribers left
+  private maybeShutdown() {
+    if (this.handlers.size === 0 && this.logHandlers.size === 0 && this.listeners.length === 0) {
+      try {
+        this.stopPing();
+        if (this.socket) {
+          this.socket.disconnect();
+        }
+      } catch {}
+      this.socket = null;
+      this.connected = false;
+      this.connecting = false;
+    }
   }
 }
 

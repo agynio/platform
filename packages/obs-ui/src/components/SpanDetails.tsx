@@ -20,6 +20,18 @@ export function SpanDetails({
   onSelectSpan(s: SpanDoc): void;
   onClose(): void;
 }) {
+  // Environment guards for SSR/tests
+  const isBrowser = typeof window !== 'undefined';
+  const isTest = (() => {
+    try {
+      if (typeof (import.meta as any)?.vitest !== 'undefined') return true;
+      const mode = (import.meta as any)?.env?.MODE;
+      if (mode === 'test') return true;
+    } catch {}
+    const g: any = typeof globalThis !== 'undefined' ? (globalThis as any) : {};
+    const env = (g.process && g.process.env) || {};
+    return Boolean(env.VITEST || env.VITEST_WORKER_ID || env.NODE_ENV === 'test');
+  })();
   const [allLogs, setAllLogs] = useState<LogDoc[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -32,6 +44,8 @@ export function SpanDetails({
   
 
   useEffect(() => {
+    // Skip network/realtime during tests and SSR; avoids stray timers/updates post-teardown
+    if (isTest || !isBrowser) return;
     let cancelled = false;
     setLoading(true);
     // Fetch all logs for trace; filtering done client-side for subtree view
@@ -54,7 +68,7 @@ export function SpanDetails({
       cancelled = true;
       off();
     };
-  }, [span.spanId, span.traceId]);
+  }, [span.spanId, span.traceId, isTest, isBrowser]);
 
   // Build quick index for parent-child relationships
   const childrenMap = useMemo(() => {
@@ -852,13 +866,17 @@ function renderOutputContent(content: string | undefined, mode: 'md' | 'json' | 
     }
     return (
       <div style={{ ...baseStyle, padding: 0 }}>
-        <MonacoEditor
-          height="240px"
-          defaultLanguage="yaml"
-          value={toYAML(v)}
-          theme="vs-light"
-          options={{ readOnly: true, minimap: { enabled: false }, fontSize: 12, wordWrap: 'on', scrollBeyondLastLine: false }}
-        />
+        {typeof window !== 'undefined' ? (
+          <MonacoEditor
+            height="240px"
+            defaultLanguage="yaml"
+            value={toYAML(v)}
+            theme="vs-light"
+            options={{ readOnly: true, minimap: { enabled: false }, fontSize: 12, wordWrap: 'on', scrollBeyondLastLine: false }}
+          />
+        ) : (
+          <pre style={{ margin: 0, padding: 8 }}>{toYAML(v)}</pre>
+        )}
       </div>
     );
   }
@@ -882,13 +900,17 @@ function renderOutputContent(content: string | undefined, mode: 'md' | 'json' | 
         </div>
       )}
       <div style={{ ...baseStyle, padding: 0 }}>
-        <MonacoEditor
-          height="240px"
-          defaultLanguage={editorLang}
-          value={editorValue}
-          theme="vs-light"
-          options={{ readOnly: true, minimap: { enabled: false }, fontSize: 12, wordWrap: 'on', scrollBeyondLastLine: false }}
-        />
+        {typeof window !== 'undefined' ? (
+          <MonacoEditor
+            height="240px"
+            defaultLanguage={editorLang}
+            value={editorValue}
+            theme="vs-light"
+            options={{ readOnly: true, minimap: { enabled: false }, fontSize: 12, wordWrap: 'on', scrollBeyondLastLine: false }}
+          />
+        ) : (
+          <pre style={{ margin: 0, padding: 8 }}>{editorValue}</pre>
+        )}
       </div>
     </div>
   );
@@ -1125,13 +1147,17 @@ function ToolInputContent({ language, value }: { language: 'json' | 'yaml'; valu
           </div>
         )}
         <div style={{ flex: 1, minHeight: 200, border: '1px solid #e1e4e8', borderRadius: 4, overflow: 'hidden' }}>
-          <MonacoEditor
-            height="100%"
-            defaultLanguage={editorLang}
-            value={editorValue}
-            theme="vs-light"
-            options={{ readOnly: true, minimap: { enabled: false }, fontSize: 12, scrollBeyondLastLine: false, wordWrap: 'on' }}
-          />
+          {typeof window !== 'undefined' ? (
+            <MonacoEditor
+              height="100%"
+              defaultLanguage={editorLang}
+              value={editorValue}
+              theme="vs-light"
+              options={{ readOnly: true, minimap: { enabled: false }, fontSize: 12, scrollBeyondLastLine: false, wordWrap: 'on' }}
+            />
+          ) : (
+            <pre style={{ margin: 0, padding: 8 }}>{editorValue}</pre>
+          )}
         </div>
       </div>
     );
@@ -1139,13 +1165,17 @@ function ToolInputContent({ language, value }: { language: 'json' | 'yaml'; valu
   // YAML mode
   return (
     <div style={{ flex: 1, minHeight: 200, border: '1px solid #e1e4e8', borderRadius: 4, overflow: 'hidden' }}>
-      <MonacoEditor
-        height="100%"
-        defaultLanguage="yaml"
-        value={value}
-        theme="vs-light"
-        options={{ readOnly: true, minimap: { enabled: false }, fontSize: 12, scrollBeyondLastLine: false, wordWrap: 'on' }}
-      />
+      {typeof window !== 'undefined' ? (
+        <MonacoEditor
+          height="100%"
+          defaultLanguage="yaml"
+          value={value}
+          theme="vs-light"
+          options={{ readOnly: true, minimap: { enabled: false }, fontSize: 12, scrollBeyondLastLine: false, wordWrap: 'on' }}
+        />
+      ) : (
+        <pre style={{ margin: 0, padding: 8 }}>{value}</pre>
+      )}
     </div>
   );
 }

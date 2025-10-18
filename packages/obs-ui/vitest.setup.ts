@@ -17,3 +17,13 @@ vi.mock('@monaco-editor/react', () => {
     },
   };
 });
+
+// Ensure global constructors exist for React DOM instanceof checks during teardown
+try {
+  const g: any = globalThis as any;
+  if (typeof g.Node === 'undefined' && typeof window !== 'undefined') g.Node = (window as any).Node;
+  if (typeof g.Element === 'undefined' && typeof window !== 'undefined') g.Element = (window as any).Element;
+  if (typeof g.Document === 'undefined' && typeof window !== 'undefined') g.Document = (window as any).Document;
+} catch {
+  // ignore
+}
