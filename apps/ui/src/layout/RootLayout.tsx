@@ -147,13 +147,9 @@ export function RootLayout() {
   function SidebarInner({ linkWrapper }: { linkWrapper?: (children: React.ReactNode) => React.ReactNode }) {
     return (
       <div className="flex h-full flex-col">
-        <SidebarHeader className="flex items-center justify-between">
+        <SidebarHeader className="flex items-center justify-between py-4">
           <div className="flex items-center gap-2">
-            {!collapsed ? (
-              <Logo size={128} variant="light" aria-label="Hautech Agents" />
-            ) : (
-              <Logo size={28} variant="light" aria-label="Hautech Agents" />
-            )}
+            <Logo size={96} variant="dark" aria-label="Hautech Agents" />
           </div>
           {/* Removed header expand/collapse icon per spec */}
         </SidebarHeader>
@@ -236,7 +232,7 @@ export function RootLayout() {
 
       {/* Mobile top bar + Drawer */}
       <div className="flex min-h-screen flex-1 min-w-0 flex-col">
-        <div className="flex items-center gap-2 border-b px-3 py-2 md:hidden">
+        <div className="flex items-center gap-2 border-b px-3 py-4 md:hidden">
           <Drawer>
             <DrawerTrigger asChild>
               <Button variant="ghost" size="icon" aria-label="Open navigation">
@@ -257,7 +253,7 @@ export function RootLayout() {
             </DrawerContent>
           </Drawer>
           <Separator orientation="vertical" className="h-6" />
-          <Logo size={112} variant="dark" aria-label="Hautech Agents" />
+          <Logo size={96} variant="dark" aria-label="Hautech Agents" />
         </div>
 
         {/* Main content */}
