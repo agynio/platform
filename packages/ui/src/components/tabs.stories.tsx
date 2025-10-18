@@ -12,8 +12,8 @@ export const Basic: Story = {
         <TabsTrigger value="account">Account</TabsTrigger>
         <TabsTrigger value="password">Password</TabsTrigger>
       </TabsList>
-      <TabsContent value="account" className="rounded-md border p-3">Account settings</TabsContent>
-      <TabsContent value="password" className="rounded-md border p-3">Change your password</TabsContent>
+      <TabsContent value="account">Account settings</TabsContent>
+      <TabsContent value="password">Change your password</TabsContent>
     </Tabs>
   )
 };
