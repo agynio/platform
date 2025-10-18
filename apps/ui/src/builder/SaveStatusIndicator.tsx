@@ -1,9 +1,8 @@
 import React from 'react';
 import { Save as SaveIcon } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger, cn } from '@hautech/ui';
-import type { UseBuilderStateResult } from './hooks/useBuilderState';
 
-type SaveState = UseBuilderStateResult['saveState'];
+type SaveState = 'idle' | 'saving' | 'saved' | 'error' | 'conflict';
 
 const LABELS: Record<SaveState, string> = {
   idle: 'All changes saved',
@@ -46,4 +45,3 @@ export function SaveStatusIndicator({ state }: { state: SaveState }) {
     </TooltipProvider>
   );
 }
-
