@@ -157,6 +157,8 @@ export class SimpleAgent extends BaseAgent {
     this.llm = new ChatOpenAI({
       model: 'gpt-5',
       apiKey: this.configService.openaiApiKey,
+      // Allow routing through an OpenAI-compatible proxy such as LiteLLM when configured
+      ...(this.configService.openaiBaseUrl ? { baseURL: this.configService.openaiBaseUrl } : {}),
     });
 
     this.callModelNode = new CallModelNode([], this.llm);

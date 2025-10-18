@@ -170,6 +170,27 @@ services:
       retries: 5
       start_period: 20s
 
+  # LiteLLM API proxy and UI
+  # - Configure provider keys and models via the built-in UI (no config.yaml mounted)
+  # - Exposes port 4000 for UI; you can remove the port mapping below for internal-only use
+  litellm:
+    image: ghcr.io/berriai/litellm:main-latest
+    depends_on:
+      - postgres
+    environment:
+      # Master/virtual key for LiteLLM; must start with "sk-"
+      LITELLM_MASTER_KEY: ${LITELLM_MASTER_KEY}
+      # Reuse the existing Postgres service
+      DATABASE_URL: postgres://postgres:postgres@postgres:5432/postgres
+      LITELLM_LOG: info
+      LITELLM_LOG_FORMAT: json
+      LITELLM_TELEMETRY: "false"
+    command: ["--port", "4000"]
+    ports:
+      - "4000:4000" # Expose UI at http://localhost:4000/ui (remove for internal-only)
+    networks:
+      - agents_net
+
 volumes:
   mongo1_data:
     driver: local
