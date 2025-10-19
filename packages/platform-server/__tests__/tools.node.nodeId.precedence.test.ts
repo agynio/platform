@@ -4,8 +4,8 @@ import { ToolsNode } from '../src/lgnodes/tools.lgnode';
 import { BaseTool } from '../src/tools/base.tool';
 import { tool, DynamicStructuredTool } from '@langchain/core/tools';
 
-// Mock obs-sdk to capture attributes passed to withToolCall
-vi.mock('@agyn/obs-sdk', () => {
+// Mock tracing-sdk to capture attributes passed to withToolCall
+vi.mock('@agyn/tracing-sdk', () => {
   type Captured = { toolCallId: string; name: string; input: unknown; nodeId?: string; toolNodeId?: string };
   const captured: Captured[] = [];
   class ToolCallResponse<TRaw = unknown, TOutput = unknown> {
@@ -41,7 +41,7 @@ describe('ToolsNode tool_call span attribution', () => {
     const config = { configurable: { thread_id: 't1', nodeId: 'tool-node-id' } } as any;
     const res = await node.action({ messages: [ai] } as any, config);
     expect(res.done).toBeFalsy();
-    const obs: any = await import('@agyn/obs-sdk');
+    const obs: any = await import('@agyn/tracing-sdk');
     const captured = (obs as any).__test.captured as Array<{ nodeId?: string; toolNodeId?: string }>;
     expect(captured.length).toBeGreaterThan(0);
     // nodeId should equal the Tool node id
@@ -51,7 +51,7 @@ describe('ToolsNode tool_call span attribution', () => {
   });
 
   it('omits nodeId when Tool id not provided (no agent fallback)', async () => {
-    const obs: any = await import('@agyn/obs-sdk');
+    const obs: any = await import('@agyn/tracing-sdk');
     (obs as any).__test.captured.length = 0; // reset captured
 
     const node = new ToolsNode([new EchoTool()], 'agent-node-id');

@@ -164,7 +164,7 @@ async function retryingPost(url: string, body: unknown, idempotencyKey: string) 
           }
         })();
         // eslint-disable-next-line no-console
-        console.debug('[obs-sdk] POST', url, 'attempt', attempt, 'body<=', preview);
+        console.debug('[tracing-sdk] POST', url, 'attempt', attempt, 'body<=', preview);
       }
       await httpPost(url, body, idempotencyKey);
       return;

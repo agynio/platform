@@ -9,7 +9,7 @@ import {
   withSummarize,
   withSystem,
   withToolCall,
-} from '@agyn/obs-sdk';
+} from '@agyn/tracing-sdk';
 
 async function main() {
   const endpoint = process.env.OBS_EXTENDED_ENDPOINT || 'http://localhost:4319';

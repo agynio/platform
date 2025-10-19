@@ -1,6 +1,6 @@
 // src/logger.service.ts
 
-import { logger as obsLogger } from '@agyn/obs-sdk';
+import { logger as obsLogger } from '@agyn/tracing-sdk';
 
 export class LoggerService {
   private obs() {

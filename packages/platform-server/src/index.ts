@@ -1,5 +1,5 @@
 // Observability SDK initialization (replaces traceloop)
-import { init as initObs, withSystem } from '@agyn/obs-sdk';
+import { init as initObs, withSystem } from '@agyn/tracing-sdk';
 
 initObs({
   mode: 'extended',
