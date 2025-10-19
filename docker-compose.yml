@@ -21,15 +21,22 @@ services:
       - "5442:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
-    command: [
-      "postgres",
-      "-c", "shared_buffers=128MB",
-      "-c", "work_mem=4MB",
-      "-c", "maintenance_work_mem=64MB",
-      "-c", "max_connections=50",
-      "-c", "wal_buffers=4MB",
-      "-c", "effective_cache_size=256MB"
-    ]
+    command:
+      [
+        "postgres",
+        "-c",
+        "shared_buffers=128MB",
+        "-c",
+        "work_mem=4MB",
+        "-c",
+        "maintenance_work_mem=64MB",
+        "-c",
+        "max_connections=50",
+        "-c",
+        "wal_buffers=4MB",
+        "-c",
+        "effective_cache_size=256MB",
+      ]
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres"]
       interval: 10s
@@ -124,10 +131,15 @@ services:
   # - Persistent storage backed by the ncps-storage volume
   ncps-init:
     image: alpine:3.20
-    command: ['/bin/sh', '-c', 'mkdir -m 0755 -p /storage/var && mkdir -m 0700 -p /storage/var/ncps && mkdir -m 0700 -p /storage/var/ncps/db']
+    command:
+      [
+        "/bin/sh",
+        "-c",
+        "mkdir -m 0755 -p /storage/var && mkdir -m 0700 -p /storage/var/ncps && mkdir -m 0700 -p /storage/var/ncps/db",
+      ]
     volumes:
       - ncps-storage:/storage
-    restart: 'no'
+    restart: "no"
     networks:
       - agents_net
 
@@ -137,10 +149,11 @@ services:
       ncps-init:
         condition: service_completed_successfully
     # Run dbmate schema migrations. Note: 'dbmate up' is a one-time schema init per storage volume.
-    command: ['/bin/dbmate', '--url=sqlite:/storage/var/ncps/db/db.sqlite', 'up']
+    command:
+      ["/bin/dbmate", "--url=sqlite:/storage/var/ncps/db/db.sqlite", "up"]
     volumes:
       - ncps-storage:/storage
-    restart: 'no'
+    restart: "no"
     networks:
       - agents_net
 
@@ -158,6 +171,8 @@ services:
       - --cache-database-url=sqlite:/storage/var/ncps/db/db.sqlite
       - --upstream-cache=https://cache.nixos.org
       - --upstream-public-key=cache.nixos.org-1:6NCHdD59X431o0gWypbMrAURkbJ16ZPMQFGspcDShjY=
+    ports:
+      - "8501:8501"
     volumes:
       - ncps-storage:/storage
     networks:
@@ -166,7 +181,7 @@ services:
       - PROMETHEUS_ENABLED=true
     restart: unless-stopped
     healthcheck:
-      test: ['CMD', 'wget', '-qO-', 'http://localhost:8501/nix-cache-info']
+      test: ["CMD", "wget", "-qO-", "http://localhost:8501/nix-cache-info"]
       interval: 30s
       timeout: 3s
       retries: 5
@@ -218,7 +233,7 @@ services:
       test:
         [
           "CMD-SHELL",
-          "wget -qO- http://localhost:4000/health || wget -qO- http://localhost:4000/ui || wget -qO- http://localhost:4000/ || (command -v curl >/dev/null 2>&1 && curl -fsS http://localhost:4000/health) || (command -v nc >/dev/null 2>&1 && nc -z localhost 4000)"
+          "wget -qO- http://localhost:4000/health || wget -qO- http://localhost:4000/ui || wget -qO- http://localhost:4000/ || (command -v curl >/dev/null 2>&1 && curl -fsS http://localhost:4000/health) || (command -v nc >/dev/null 2>&1 && nc -z localhost 4000)",
         ]
       interval: 15s
       timeout: 3s
