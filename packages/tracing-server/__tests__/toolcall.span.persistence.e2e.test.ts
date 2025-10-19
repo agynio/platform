@@ -3,7 +3,7 @@ const RUN_MONGOMS = process.env.RUN_MONGOMS === '1';
 import { startMemoryMongo } from './helpers/mongoMemory';
 import { createServer } from '../src/server';
 
-import * as sdk from '../../tracing/sdk';
+import * as sdk from '../../tracing';
 const { init, withAgent, withToolCall, ToolCallResponse } = sdk as any;
 import type { FastifyInstance } from 'fastify';
 

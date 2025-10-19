@@ -121,8 +121,8 @@ jobs:
       - name: Run UI tests (@agyn/platform-ui)
         run: pnpm --filter @agyn/platform-ui test
 
-      - name: Run SDK tests (@agyn/tracing-sdk)
-        run: pnpm --filter @agyn/tracing-sdk test
+      - name: Run SDK tests (@agyn/tracing)
+        run: pnpm --filter @agyn/tracing test
 
       - name: Type-check tracing UI (@agyn/obs-ui)
         run: pnpm --filter @agyn/obs-ui run typecheck

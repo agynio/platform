@@ -8,11 +8,11 @@
   "types": "dist/index.d.ts",
   "scripts": {
     "dev": "tsx src/poc.ts",
-    "build": "rimraf dist && tsc -p tsconfig.build.json --emitDeclarationOnly && esbuild src/poc.ts --bundle --platform=node --target=node18 --format=cjs --outfile=dist/index.cjs --external:@agyn/tracing-sdk && esbuild src/poc.ts --bundle --platform=node --target=node18 --format=esm --outfile=dist/index.mjs --external:@agyn/tracing-sdk",
+    "build": "rimraf dist && tsc -p tsconfig.build.json --emitDeclarationOnly && esbuild src/poc.ts --bundle --platform=node --target=node18 --format=cjs --outfile=dist/index.cjs --external:@agyn/tracing && esbuild src/poc.ts --bundle --platform=node --target=node18 --format=esm --outfile=dist/index.mjs --external:@agyn/tracing",
     "start": "node dist/index.cjs"
   },
   "dependencies": {
-    "@agyn/tracing-sdk": "workspace:*"
+    "@agyn/tracing": "workspace:*"
   },
   "devDependencies": {
     "esbuild": "^0.23.1",

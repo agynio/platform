@@ -1,6 +1,6 @@
 import { AIMessage, BaseMessage, ToolMessage } from '@langchain/core/messages';
 import { LangGraphRunnableConfig } from '@langchain/langgraph';
-import { ToolCallResponse, withToolCall } from '@agyn/tracing-sdk';
+import { ToolCallResponse, withToolCall } from '@agyn/tracing';
 import { BaseTool } from '../tools/base.tool';
 import { NodeOutput } from '../types';
 import { BaseNode } from './base.lgnode';

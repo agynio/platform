@@ -4,7 +4,7 @@ Overview
 - SDK sends periodic heartbeats for running spans.
 - Server reconciles and cancels spans that miss heartbeats.
 
-SDK Behavior (@agyn/tracing-sdk)
+SDK Behavior (@agyn/tracing)
 - On span start, the SDK begins a timer.
 - Every OBS_HEARTBEAT_MS (default 60s) it POSTs `{ state: 'updated', traceId, spanId }` to `/v1/spans/upsert`.
 - On completion or error, the SDK sends `{ state: 'completed', ... }` and stops the timer.

@@ -4,7 +4,7 @@ import { Annotation, AnnotationRoot, CompiledStateGraph } from '@langchain/langg
 import { LoggerService } from '../services/logger.service';
 import { TriggerListener, TriggerMessage, isSystemTrigger } from '../triggers/base.trigger';
 import { NodeOutput } from '../types';
-import { withAgent } from '@agyn/tracing-sdk';
+import { withAgent } from '@agyn/tracing';
 import type { StaticConfigurable } from '../graph/capabilities';
 import { z } from 'zod';
 import { JSONSchema } from 'zod/v4/core';

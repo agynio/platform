@@ -1,6 +1,6 @@
 import { AIMessage, BaseMessage, HumanMessage, SystemMessage, ToolMessage } from '@langchain/core/messages';
 import { ChatOpenAI } from '@langchain/openai';
-import { withSummarize, SummarizeResponse, BaseMessage as ObsBaseMessage } from '@agyn/tracing-sdk';
+import { withSummarize, SummarizeResponse, BaseMessage as ObsBaseMessage } from '@agyn/tracing';
 import { trimMessages } from '@langchain/core/messages';
 import { NodeOutput } from '../types';
 
