@@ -57,7 +57,38 @@ export const configSchema = z.object({
     .default('false')
     .transform((v) => (typeof v === 'string' ? v.toLowerCase() === 'true' : !!v)),
   ncpsUrl: z.string().min(1).default('http://ncps:8501'),
-  ncpsPublicKey: z.string().optional(),
+  ncpsPubkeyPath: z.string().default('/pubkey'),
+  ncpsFetchTimeoutMs: z
+    .union([z.string(), z.number()])
+    .default('3000')
+    .transform((v) => Number(v) || 3000),
+  ncpsRefreshIntervalMs: z
+    .union([z.string(), z.number()])
+    .default(String(10 * 60_000))
+    .transform((v) => Number(v) || 10 * 60_000),
+  ncpsStartupMaxRetries: z
+    .union([z.string(), z.number()])
+    .default('8')
+    .transform((v) => Number(v) || 8),
+  ncpsRetryBackoffMs: z
+    .union([z.string(), z.number()])
+    .default('500')
+    .transform((v) => Number(v) || 500),
+  ncpsRetryBackoffFactor: z
+    .union([z.string(), z.number()])
+    .default('2')
+    .transform((v) => Number(v) || 2),
+  ncpsAllowStartWithoutKey: z
+    .union([z.boolean(), z.string()])
+    .default('true')
+    .transform((v) => (typeof v === 'string' ? v.toLowerCase() === 'true' : !!v)),
+  ncpsCaBundle: z.string().optional(),
+  ncpsRotationGraceMinutes: z
+    .union([z.string(), z.number()])
+    .default('0')
+    .transform((v) => Number(v) || 0),
+  ncpsAuthHeader: z.string().optional(),
+  ncpsAuthToken: z.string().optional(),
 });
 
 export type Config = z.infer<typeof configSchema>;
@@ -145,9 +176,17 @@ export class ConfigService implements Config {
   get ncpsUrl(): string {
     return this.params.ncpsUrl;
   }
-  get ncpsPublicKey(): string | undefined {
-    return this.params.ncpsPublicKey;
-  }
+  get ncpsPubkeyPath(): string { return this.params.ncpsPubkeyPath; }
+  get ncpsFetchTimeoutMs(): number { return this.params.ncpsFetchTimeoutMs; }
+  get ncpsRefreshIntervalMs(): number { return this.params.ncpsRefreshIntervalMs; }
+  get ncpsStartupMaxRetries(): number { return this.params.ncpsStartupMaxRetries; }
+  get ncpsRetryBackoffMs(): number { return this.params.ncpsRetryBackoffMs; }
+  get ncpsRetryBackoffFactor(): number { return this.params.ncpsRetryBackoffFactor; }
+  get ncpsAllowStartWithoutKey(): boolean { return this.params.ncpsAllowStartWithoutKey; }
+  get ncpsCaBundle(): string | undefined { return this.params.ncpsCaBundle; }
+  get ncpsRotationGraceMinutes(): number { return this.params.ncpsRotationGraceMinutes; }
+  get ncpsAuthHeader(): string | undefined { return this.params.ncpsAuthHeader; }
+  get ncpsAuthToken(): string | undefined { return this.params.ncpsAuthToken; }
 
   static fromEnv(): ConfigService {
     const parsed = configSchema.parse({
@@ -174,7 +213,17 @@ export class ConfigService implements Config {
       mcpToolsStaleTimeoutMs: process.env.MCP_TOOLS_STALE_TIMEOUT_MS,
       ncpsEnabled: process.env.NCPS_ENABLED,
       ncpsUrl: process.env.NCPS_URL,
-      ncpsPublicKey: process.env.NCPS_PUBLIC_KEY,
+      ncpsPubkeyPath: process.env.NCPS_PUBKEY_PATH,
+      ncpsFetchTimeoutMs: process.env.NCPS_FETCH_TIMEOUT_MS,
+      ncpsRefreshIntervalMs: process.env.NCPS_REFRESH_INTERVAL_MS,
+      ncpsStartupMaxRetries: process.env.NCPS_STARTUP_MAX_RETRIES,
+      ncpsRetryBackoffMs: process.env.NCPS_RETRY_BACKOFF_MS,
+      ncpsRetryBackoffFactor: process.env.NCPS_RETRY_BACKOFF_FACTOR,
+      ncpsAllowStartWithoutKey: process.env.NCPS_ALLOW_START_WITHOUT_KEY,
+      ncpsCaBundle: process.env.NCPS_CA_BUNDLE,
+      ncpsRotationGraceMinutes: process.env.NCPS_ROTATION_GRACE_MINUTES,
+      ncpsAuthHeader: process.env.NCPS_AUTH_HEADER,
+      ncpsAuthToken: process.env.NCPS_AUTH_TOKEN,
     });
     return new ConfigService(parsed);
   }

@@ -30,6 +30,7 @@ import { registerRemindersRoute } from './routes/reminders.route.js';
 import { AgentRunService } from './services/run.service.js';
 import { registerRunsRoutes } from './routes/runs.route.js';
 import { registerNixRoutes } from './routes/nix.route.js';
+import { NcpsKeyService } from './services/ncpsKey.service.js';
 
 const logger = new LoggerService();
 const config = ConfigService.fromEnv();
@@ -45,8 +46,16 @@ const vaultService = new VaultService(
   }),
   logger,
 );
+const ncpsKeyService = new NcpsKeyService(config, logger);
 
 async function bootstrap() {
+  // Initialize Ncps key service early
+  try {
+    await ncpsKeyService.init();
+  } catch (e) {
+    logger.error('NcpsKeyService init failed: %s', (e as Error)?.message || String(e));
+    process.exit(1);
+  }
   await mongo.connect();
   checkpointer.attachMongoClient(mongo.getClient());
   checkpointer.bindDb(mongo.getDb());
@@ -72,6 +81,7 @@ async function bootstrap() {
     configService: config,
     checkpointerService: checkpointer,
     mongoService: mongo,
+    ncpsKeyService,
   });
 
   const runtime = new LiveGraphRuntime(logger, templateRegistry);

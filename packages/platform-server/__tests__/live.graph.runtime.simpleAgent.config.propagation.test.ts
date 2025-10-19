@@ -39,7 +39,17 @@ describe('LiveGraphRuntime -> SimpleAgent config propagation', () => {
       mcpToolsStaleTimeoutMs: 0,
       ncpsEnabled: false,
       ncpsUrl: 'http://ncps:8501',
-      ncpsPublicKey: undefined,
+      ncpsPubkeyPath: '/pubkey',
+      ncpsFetchTimeoutMs: 3000,
+      ncpsRefreshIntervalMs: 600000,
+      ncpsStartupMaxRetries: 8,
+      ncpsRetryBackoffMs: 500,
+      ncpsRetryBackoffFactor: 2,
+      ncpsAllowStartWithoutKey: true,
+      ncpsCaBundle: undefined,
+      ncpsRotationGraceMinutes: 0,
+      ncpsAuthHeader: undefined,
+      ncpsAuthToken: undefined,
     };
     const configService = new ConfigService(cfg);
     const checkpointerService = new CheckpointerService(logger);
