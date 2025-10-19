@@ -4,8 +4,8 @@ Graph UI for managing a single graph runtime: inspect node status, start/stop, p
 
 Quickstart
 - Install: pnpm -w install
-- Run tests: pnpm -w -F ui test
-- Dev: pnpm -w -F ui dev
+- Run tests: pnpm -w -F @agyn/platform-ui test
+- Dev: pnpm -w -F @agyn/platform-ui dev
 
 Env configuration
 - VITE_OBS_SERVER_URL (default http://localhost:4319): obs-server base URL for spans/logs and realtime.

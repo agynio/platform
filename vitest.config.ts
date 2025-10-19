@@ -9,7 +9,7 @@ export default defineConfig({
   test: {
     environment: 'node',
     globals: true,
-    // Look for tests anywhere under apps/* and packages/*
+    // Look for tests anywhere under packages/*
     include: ['**/__tests__/**/*.test.ts'],
     hookTimeout: 60000,
     coverage: {

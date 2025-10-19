@@ -135,8 +135,8 @@ Runbooks
   - Prereqs: Node 18+, pnpm, Docker, Mongo.
   - Set: MONGODB_URL, OPENAI_API_KEY, GITHUB_*, GH_TOKEN. Optional VAULT_* and DOCKER_MIRROR_URL.
   - Start deps (compose or local Mongo)
-  - Server: pnpm -w -F server dev
-  - UI: pnpm -w -F ui dev
+  - Server: pnpm -w -F @agyn/platform-server dev
+  - UI: pnpm -w -F @agyn/platform-ui dev
   - Verify: curl http://localhost:3010/api/templates; open UI; connect socket to observe node_status when provisioning.
  - Docker Compose stack
   - Services: mongo, mongo-express, vault (auto-init), postgres, registry-mirror.

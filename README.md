@@ -3,8 +3,8 @@
 Composable, graph-driven AI agents (LangGraph) with a live-updatable runtime, Docker-backed tools/MCP, and a minimal UI.
 
 Quick links
-- Server: [apps/server](apps/server) — runtime, triggers, tools, MCP, graph persistence
-- UI: [apps/ui](apps/ui) — graph builder and checkpoint stream viewer
+- Server: [packages/platform-server](packages/platform-server) — runtime, triggers, tools, MCP, graph persistence
+- UI: [packages/platform-ui](packages/platform-ui) — graph builder and checkpoint stream viewer
 - Docs: [docs/README.md](docs/README.md) — technical overview, contributing, MCP design
  
 - Tools: [docs/tools/remind_me.md](docs/tools/remind_me.md) — RemindMe tool behavior and usage
@@ -16,7 +16,7 @@ Getting started
 Development services
 - docker compose up -d mongo1 mongo-setup mongo-express jaeger
 - Optional: start Vault for dev secret flows: `docker compose up -d vault vault-init`
-  - Set VAULT_ENABLED=true, VAULT_ADDR, VAULT_TOKEN in apps/server/.env
+  - Set VAULT_ENABLED=true, VAULT_ADDR, VAULT_TOKEN in packages/platform-server/.env
   - See docs/security/vault.md
 
 Postgres checkpointer (optional)
@@ -49,7 +49,7 @@ Git graph storage (format: 2)
 
 Migration
 - From legacy layouts (monolithic `graphs/<name>/graph.json` or per-entity under `graphs/<name>/`), run:
-  `tsx apps/server/scripts/migrate_graph_to_git.ts`
+  `tsx packages/platform-server/scripts/migrate_graph_to_git.ts`
 - Behavior: always writes a single graph to the repository root (single-graph layout):
   - `graph.meta.json` containing `{ name, version, updatedAt, format: 2 }`
   - `nodes/<encodeURIComponent(id)>.json` and `edges/<encodeURIComponent(edgeId)>.json`

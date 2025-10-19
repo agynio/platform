@@ -66,7 +66,7 @@ GRAPH_REPO_PATH='./data/graph' \
 GRAPH_BRANCH='graph-state' \
 GRAPH_AUTHOR_NAME='Graph Migrator' \
 GRAPH_AUTHOR_EMAIL='graph-migrator@example.com' \
-pnpm -w -F server tsx <migration script>
+pnpm -w -F @agyn/platform-server tsx <migration script>
 ```
 
 Related behavior

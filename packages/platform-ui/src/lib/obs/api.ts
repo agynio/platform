@@ -1,4 +1,4 @@
-// Minimal OBS API client for apps/ui
+// Minimal OBS API client for platform-ui
 // Defaults: VITE_OBS_SERVER_URL=http://localhost:4319
 
 export interface SpanDoc {
