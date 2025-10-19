@@ -2,45 +2,53 @@
 
 import { logger as obsLogger } from '@hautech/obs-sdk';
 
+// Minimal interface for the obs logger to avoid any-typed usage
+interface ObsLoggerLike {
+  info(msg: string): void;
+  debug(msg: string): void;
+  error(msg: string): void;
+  warn?(msg: string): void;
+}
+
 export class LoggerService {
-  private obs() {
+  private obs(): ObsLoggerLike | null {
     // Obtain contextual logger (bound to active span if any)
     try {
-      return obsLogger();
+      return obsLogger() as unknown as ObsLoggerLike;
     } catch {
       // SDK not initialized yet
       return null;
     }
   }
 
-  info(message: string, ...optionalParams: any[]) {
+  info(message: string, ...optionalParams: unknown[]) {
     console.info(`[INFO] ${message}`, ...optionalParams);
     this.obs()?.info(`${message}\n${this.serialize(optionalParams)}`);
   }
 
   // Warn-level logging; fall back to obs.info with [WARN] prefix if warn not available
-  warn(message: string, ...optionalParams: any[]) {
+  warn(message: string, ...optionalParams: unknown[]) {
     console.warn(`[WARN] ${message}`, ...optionalParams);
     // Some obs logger versions may not expose warn; use info as a safe fallback
-    const o: any = this.obs();
+    const o = this.obs();
     if (o && typeof o.warn === 'function') {
       o.warn(`${message}\n${this.serialize(optionalParams)}`);
     } else {
-      o?.info?.(`[WARN] ${message}\n${this.serialize(optionalParams)}`);
+      o?.info(`[WARN] ${message}\n${this.serialize(optionalParams)}`);
     }
   }
 
-  debug(message: string, ...optionalParams: any[]) {
+  debug(message: string, ...optionalParams: unknown[]) {
     console.debug(`[DEBUG] ${message}`, ...optionalParams);
     this.obs()?.debug(`${message}\n${this.serialize(optionalParams)}`);
   }
 
-  error(message: string, ...optionalParams: any[]) {
+  error(message: string, ...optionalParams: unknown[]) {
     console.error(`[ERROR] ${message}`, ...optionalParams);
     this.obs()?.error(`${message}\n${this.serialize(optionalParams)}`);
   }
 
-  private serialize(params: any[]) {
+  private serialize(params: unknown[]) {
     const redactKeyRe = /(authorization|token|accessToken|api[_-]?key|password|secret)/i;
     // Value pattern redaction (ghp_, github_pat_, Bearer tokens)
     const redactValuePatterns: RegExp[] = [
@@ -75,11 +83,11 @@ export class LoggerService {
       return out;
     };
 
-    const toSafe = (v: any, depth = 0): any => {
+    const toSafe = (v: unknown, depth = 0): unknown => {
       if (v instanceof Error) {
         // Redact and truncate error fields, guard cause depth
-        const cause: any = (v as any).cause;
-        const safe: any = {
+        const cause: unknown = (v as Error & { cause?: unknown }).cause;
+        const safe: Record<string, unknown> = {
           name: v.name,
           message: redactString(String(v.message || '')),
           stack: v.stack ? redactString(String(v.stack)) : undefined,
@@ -96,9 +104,9 @@ export class LoggerService {
         if (seen.has(v)) return '[Circular]';
         seen.add(v);
         if (Array.isArray(v)) return v.slice(0, MAX_KEYS).map((x) => toSafe(x, depth + 1));
-        const out: Record<string, any> = {} as any;
+        const out: Record<string, unknown> = {};
         let count = 0;
-        for (const [k, val] of Object.entries(v as Record<string, any>)) {
+        for (const [k, val] of Object.entries(v as Record<string, unknown>)) {
           if (count++ >= MAX_KEYS) {
             out['__truncated__'] = `[+${Object.keys(v as any).length - MAX_KEYS} keys omitted]`;
             break;

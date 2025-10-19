@@ -61,7 +61,19 @@ export const configSchema = z.object({
   ncpsKeyTtlMs: z
     .union([z.string(), z.number()])
     .default(String(10 * 60_000))
-    .transform((v) => Number(v) || 10 * 60_000),
+    .transform((v) => {
+      // Robust number parsing and sane bounds
+      const n = typeof v === 'string' ? Number(v.trim()) : Number(v);
+      const DEFAULT = 10 * 60_000; // 600000
+      if (!Number.isFinite(n)) return DEFAULT;
+      // Accept only integers within [1000, 24h]
+      const val = Math.trunc(n);
+      const MIN = 1000; // 1s lower bound to avoid hot loops
+      const MAX = 24 * 60 * 60 * 1000; // 24h upper bound
+      if (val < MIN) return DEFAULT;
+      if (val > MAX) return MAX;
+      return val;
+    }),
 });
 
 export type Config = z.infer<typeof configSchema>;

@@ -111,6 +111,38 @@ export class ContainerProviderEntity {
   private static ncpsKeyCache: Map<string, { value: string; expires: number }> = new Map();
   private static ncpsInFlight: Map<string, Promise<string | undefined>> = new Map();
 
+  // Lightweight HTTP/timer seam for tests
+  private static ncpsHttpClient: {
+    fetch: typeof fetch;
+    setTimeout: (handler: (...args: any[]) => void, timeout?: number, ...args: any[]) => any;
+    clearTimeout: (id: any) => void;
+    now: () => number;
+  } = {
+    fetch: (...args: Parameters<typeof fetch>) => fetch(...args),
+    setTimeout: (handler: (...args: any[]) => void, timeout?: number, ...args: any[]) => setTimeout(handler as any, timeout as any, ...args as any[]),
+    clearTimeout: (id: any) => clearTimeout(id as any),
+    now: () => Date.now(),
+  };
+
+  static setNcpsHttpClient(overrides?: Partial<typeof ContainerProviderEntity.ncpsHttpClient>) {
+    if (!overrides) {
+      // reset to defaults
+      ContainerProviderEntity.ncpsHttpClient = {
+        fetch: (...args: Parameters<typeof fetch>) => fetch(...args),
+        setTimeout: (handler: (...args: any[]) => void, timeout?: number, ...args: any[]) => setTimeout(handler as any, timeout as any, ...args as any[]),
+        clearTimeout: (id: any) => clearTimeout(id as any),
+        now: () => Date.now(),
+      };
+      return;
+    }
+    ContainerProviderEntity.ncpsHttpClient = { ...ContainerProviderEntity.ncpsHttpClient, ...overrides } as any;
+  }
+
+  static resetNcpsCaches() {
+    ContainerProviderEntity.ncpsKeyCache.clear();
+    ContainerProviderEntity.ncpsInFlight.clear();
+  }
+
   private isValidNcpsKey(key: string): boolean {
     if (typeof key !== 'string') return false;
     if (key.length === 0 || key.length > 1024) return false;
@@ -123,16 +155,30 @@ export class ContainerProviderEntity {
   }
 
   private async getNcpsPublicKey(ncpsUrl: string, timeoutMs: number, ttlMs: number): Promise<string | undefined> {
-    const now = Date.now();
+    // Validate URL scheme
+    try {
+      const u = new URL(ncpsUrl);
+      if (u.protocol !== 'http:' && u.protocol !== 'https:') {
+        this.logger.warn('NCPS URL must be http/https; got %s', ncpsUrl);
+        return undefined;
+      }
+    } catch {
+      this.logger.warn('Invalid NCPS URL: %s', ncpsUrl);
+      return undefined;
+    }
+    const now = ContainerProviderEntity.ncpsHttpClient.now();
     const cached = ContainerProviderEntity.ncpsKeyCache.get(ncpsUrl);
     if (cached && cached.expires > now && cached.value) return cached.value;
     const inflight = ContainerProviderEntity.ncpsInFlight.get(ncpsUrl);
-    if (inflight) return inflight;
+    if (inflight) {
+      this.logger.debug('NCPS pubkey fetch already in-flight for %s; awaiting existing promise', ncpsUrl);
+      return inflight;
+    }
     const doFetch = async (): Promise<string | undefined> => {
       const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), timeoutMs || 5000);
+      const timer = ContainerProviderEntity.ncpsHttpClient.setTimeout(() => controller.abort(), timeoutMs || 5000);
       try {
-        const res = await fetch(`${ncpsUrl.replace(/\/$/, '')}/pubkey`, { method: 'GET', headers: { Accept: 'text/plain' }, signal: controller.signal });
+        const res = await ContainerProviderEntity.ncpsHttpClient.fetch(`${ncpsUrl.replace(/\/$/, '')}/pubkey`, { method: 'GET', headers: { Accept: 'text/plain' }, signal: controller.signal } as RequestInit);
         if (!res.ok) return undefined;
         const txt = (await res.text()).trim();
         if (!this.isValidNcpsKey(txt)) return undefined;
@@ -140,21 +186,29 @@ export class ContainerProviderEntity {
       } catch {
         return undefined;
       } finally {
-        clearTimeout(timer);
+        ContainerProviderEntity.ncpsHttpClient.clearTimeout(timer);
       }
     };
     const p = (async () => {
       try {
         let key: string | undefined;
-        for (let i = 0; i < 3; i++) {
+        const maxAttempts = 3;
+        for (let i = 0; i < maxAttempts; i++) {
+          this.logger.debug('NCPS pubkey fetch attempt %d/%d for %s', i + 1, maxAttempts, ncpsUrl);
           key = await doFetch();
           if (key) break;
-          if (i < 2) await new Promise((r) => setTimeout(r, i === 0 ? 150 : 300));
+          if (i < maxAttempts - 1) {
+            const delay = i === 0 ? 150 : 300;
+            this.logger.debug('NCPS pubkey fetch retrying in %dms for %s', delay, ncpsUrl);
+            await new Promise((r) => ContainerProviderEntity.ncpsHttpClient.setTimeout(r, delay));
+          }
         }
         if (key) {
           const prev = ContainerProviderEntity.ncpsKeyCache.get(ncpsUrl)?.value;
           if (prev && prev !== key) this.logger.info('NCPS public key rotated for %s', ncpsUrl);
-          ContainerProviderEntity.ncpsKeyCache.set(ncpsUrl, { value: key, expires: Date.now() + (ttlMs || 600_000) });
+          ContainerProviderEntity.ncpsKeyCache.set(ncpsUrl, { value: key, expires: ContainerProviderEntity.ncpsHttpClient.now() + (ttlMs || 600_000) });
+        } else {
+          this.logger.warn('NCPS pubkey fetch failed after retries for %s', ncpsUrl);
         }
         return key;
       } finally {

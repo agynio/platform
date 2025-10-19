@@ -45,9 +45,10 @@ describe('ContainerProviderEntity NCPS pubkey runtime fetch', () => {
     mcpToolsStaleTimeoutMs: '0', ncpsEnabled: 'true', ncpsUrl: 'http://ncps:8501', ncpsKeyTtlMs: '50',
   } as const;
 
-  let realFetch: typeof fetch;
   beforeEach(() => {
-    realFetch = globalThis.fetch as any;
+    // Reset seams and caches for deterministic tests
+    ContainerProviderEntity.setNcpsHttpClient();
+    ContainerProviderEntity.resetNcpsCaches();
   });
 
   it('fetches pubkey once and injects NIX_CONFIG; caches and respects TTL; logs rotation', async () => {
@@ -60,10 +61,12 @@ describe('ContainerProviderEntity NCPS pubkey runtime fetch', () => {
 
     let calls = 0;
     let value = 'pub:key1';
-    // @ts-ignore - mock fetch
-    globalThis.fetch = vi.fn(async () => {
-      calls++;
-      return { ok: true, text: async () => value } as any;
+    const timers: { timeouts: Array<[fn: (...args: any[]) => void, delay?: number]>; now: number } = { timeouts: [], now: 0 };
+    ContainerProviderEntity.setNcpsHttpClient({
+      fetch: (async () => { calls++; return { ok: true, text: async () => value } as any; }) as any,
+      setTimeout: ((handler: (...args: any[]) => void, timeout?: number, ...args: any[]) => { timers.timeouts.push([handler, timeout]); try { handler(...args); } catch {} return 1 as any; }) as any,
+      clearTimeout: ((_id: any) => {}) as any,
+      now: () => timers.now,
     });
 
     entA.setConfig({});
@@ -84,7 +87,8 @@ describe('ContainerProviderEntity NCPS pubkey runtime fetch', () => {
     expect(calls).toBe(1);
 
     // Advance after TTL, rotate key and ensure fetch called again and rotation logged
-    await new Promise((r) => setTimeout(r, 70));
+    // Simulate TTL elapsing by advancing now
+    timers.now += 1000;
     value = 'pub:key2';
     const c4 = (await entA.provide('t4')) as TestContainerEntity;
     expect(c4.env['NIX_CONFIG']).toContain('trusted-public-keys = pub:key2');
@@ -99,8 +103,12 @@ describe('ContainerProviderEntity NCPS pubkey runtime fetch', () => {
     const logger = new CaptureLogger();
     ent.setLogger(logger);
     // invalid value (no colon)
-    // @ts-ignore - mock fetch
-    globalThis.fetch = vi.fn(async () => ({ ok: true, text: async () => 'invalid' } as any));
+    ContainerProviderEntity.setNcpsHttpClient({
+      fetch: (async () => ({ ok: true, text: async () => 'invalid' } as any)) as any,
+      setTimeout: ((h: (...args: any[]) => void) => { try { h(); } catch {} return 1 as any; }) as any,
+      clearTimeout: ((_id: any) => {}) as any,
+      now: () => 0,
+    });
     ent.setConfig({});
     const c = (await ent.provide('t5')) as TestContainerEntity;
     expect(c.env['NIX_CONFIG']).toBeUndefined();
@@ -109,8 +117,7 @@ describe('ContainerProviderEntity NCPS pubkey runtime fetch', () => {
   });
 
   afterEach(() => {
-    // @ts-ignore
-    globalThis.fetch = realFetch;
+    // restore seams
+    ContainerProviderEntity.setNcpsHttpClient();
   });
 });
-
