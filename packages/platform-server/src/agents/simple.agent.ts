@@ -522,7 +522,7 @@ export class SimpleAgent extends BaseAgent {
       this.restrictionMaxInjections = parsedConfig.restrictionMaxInjections;
   }
 
-  // ----- NodeLifecycle: configure/start/stop/delete -----
+  // ----- Node: configure/start/stop/delete -----
   configure(cfg: Record<string, unknown>): void {
     // Keep only allowed keys; do not inject defaults; store snapshot for start() and diff updates
     const incoming = Object.fromEntries(
