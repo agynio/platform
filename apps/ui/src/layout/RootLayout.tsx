@@ -150,10 +150,10 @@ export function RootLayout() {
         {/* Keep py-4; adjust logo size based on collapsed state to avoid clipping when w-16 */}
         <SidebarHeader className="flex items-center justify-between py-4">
           <div className="flex items-center gap-2">
-            {/* Shrink logo to 28px when collapsed; keep 96px when expanded */}
+            {/* Shrink logo to 28px when collapsed; use gradient 64px when expanded */}
             <Logo
-              size={collapsed ? 28 : 96}
-              variant="dark"
+              size={collapsed ? 28 : 64}
+              variant="gradient"
               aria-label="Hautech Agents"
             />
           </div>
@@ -259,7 +259,7 @@ export function RootLayout() {
             </DrawerContent>
           </Drawer>
           <Separator orientation="vertical" className="h-6" />
-          <Logo size={96} variant="dark" aria-label="Hautech Agents" />
+          <Logo size={64} variant="gradient" aria-label="Hautech Agents" />
         </div>
 
         {/* Main content */}
