@@ -57,7 +57,8 @@ function App() {
 
 export default App;
 
-const serverUrl = import.meta.env.VITE_OBS_SERVER_URL as string;
+// Use env var with safe default; avoid unsafe cast
+const serverUrl = import.meta.env.VITE_OBS_SERVER_URL || 'http://localhost:4319';
 
 function TraceDetailRoute() {
   const params = useParams();

@@ -13,7 +13,7 @@ export default defineConfig({
       fileName: 'index'
     },
     rollupOptions: {
-      external: ['react', 'react-dom']
+      external: ['react', 'react-dom', 'react-router-dom', '@agyn/ui']
     },
     // Keep type declarations emitted by tsc (do not wipe dist)
     emptyOutDir: false
