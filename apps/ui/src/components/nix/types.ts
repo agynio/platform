@@ -1,9 +1,9 @@
-// Single selected Nix package stored by name and optional version
+// Selected Nix package stored with fully-resolved metadata (issue #305)
 export interface NixPackageSelection {
   name: string;
-  version?: string | null;
-  attribute_path?: string;
-  commit_hash?: string;
+  version: string;
+  commitHash: string;
+  attributePath: string;
 }
 
 // Container (Workspace) Nix configuration shape stored under config.nix

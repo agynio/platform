@@ -178,52 +178,69 @@ describe('nix routes', () => {
     scope.done();
   });
 
-  it('package-info: maps releases with attribute_path/commit_hash/platforms and caches', async () => {
+  it('resolve: success with platform preference and fields', async () => {
     const scope = nock(BASE)
-      .get('/packages/git')
+      .get('/packages/htop')
       .query((q) => q._data === 'routes/_nixhub.packages.$pkg._index')
-      .once()
       .reply(200, {
-        name: 'git',
+        name: 'htop',
         releases: [
-          { version: '2.44.0', attribute_path: 'pkgs/git', commit_hash: 'abc123', platforms: ['x86_64-linux'] },
-          { version: '2.43.1', variants: [{ attribute_path: 'pkgs/git-2_43', commit_hash: 'def456', platforms: ['aarch64-linux'] }] },
-          { version: 24200 },
+          { version: '1.0.0', commit_hash: 'old', platforms: [{ system: 'x86_64-darwin', attribute_path: 'htop' }] },
+          {
+            version: '1.2.3',
+            commit_hash: 'abcd1234',
+            platforms: [
+              { system: 'aarch64-linux', attribute_path: 'a.htop' },
+              { system: 'x86_64-linux', attribute_path: 'x.htop' },
+            ],
+          },
         ],
       });
-    const url = '/api/nix/package-info?name=git';
-    const r1 = await fastify.inject({ method: 'GET', url });
-    expect(r1.statusCode).toBe(200);
-    const body = r1.json();
-    expect(body.name).toBe('git');
-    expect(Array.isArray(body.releases)).toBe(true);
-    const r = body.releases.find((x: any) => x.version === '2.44.0');
-    expect(r.attribute_path).toBe('pkgs/git');
-    expect(r.commit_hash).toBe('abc123');
-
-    // cache hit
-    const r2 = await fastify.inject({ method: 'GET', url });
-    expect(r2.statusCode).toBe(200);
+    const res = await fastify.inject({ method: 'GET', url: '/api/nix/resolve?name=htop&version=1.2.3' });
+    expect(res.statusCode).toBe(200);
+    const body = res.json();
+    expect(body).toEqual({ name: 'htop', version: '1.2.3', commitHash: 'abcd1234', attributePath: 'x.htop' });
     scope.done();
   });
 
-  it('package-info: 404 passthrough', async () => {
+  it('resolve: release not found -> 404', async () => {
     const scope = nock(BASE)
-      .get('/packages/doesnotexist')
+      .get('/packages/abc')
       .query(true)
-      .reply(404, 'not found');
-    const res = await fastify.inject({ method: 'GET', url: '/api/nix/package-info?name=doesnotexist' });
+      .reply(200, { name: 'abc', releases: [{ version: '0.1.0', commit_hash: 'x', platforms: [] }] });
+    const res = await fastify.inject({ method: 'GET', url: '/api/nix/resolve?name=abc&version=9.9.9' });
     expect(res.statusCode).toBe(404);
     scope.done();
   });
 
-  it('package-info: invalid name rejected with 400', async () => {
+  it('resolve: missing attribute path -> 502', async () => {
     const scope = nock(BASE)
-      .get('/packages/bad/name')
+      .get('/packages/noattr')
       .query(true)
-      .reply(200, {});
-    const res = await fastify.inject({ method: 'GET', url: '/api/nix/package-info?name=bad/name' });
-    expect(res.statusCode).toBe(400);
-    expect(scope.isDone()).toBe(false);
+      .reply(200, { name: 'noattr', releases: [{ version: '1.0.0', commit_hash: 'r1', platforms: [{ system: 'x86_64-linux' }] }] });
+    const res = await fastify.inject({ method: 'GET', url: '/api/nix/resolve?name=noattr&version=1.0.0' });
+    expect(res.statusCode).toBe(502);
+    scope.done();
+  });
+
+  it('resolve: missing commit hash -> 502', async () => {
+    const scope = nock(BASE)
+      .get('/packages/nohash')
+      .query(true)
+      .reply(200, { name: 'nohash', releases: [{ version: '1.0.0', platforms: [{ system: 'x86_64-linux', attribute_path: 'x' }] }] });
+    const res = await fastify.inject({ method: 'GET', url: '/api/nix/resolve?name=nohash&version=1.0.0' });
+    expect(res.statusCode).toBe(502);
+    scope.done();
+  });
+
+  it('resolve: timeout -> 504', async () => {
+    const scope = nock(BASE)
+      .get('/packages/slow')
+      .query(true)
+      .delay(500)
+      .reply(200, { name: 'slow', releases: [{ version: '1.0.0', commit_hash: 'x', platforms: [{ system: 'x86_64-linux', attribute_path: 'x' }] }] });
+    const res = await fastify.inject({ method: 'GET', url: '/api/nix/resolve?name=slow&version=1.0.0' });
+    expect(res.statusCode).toBe(504);
+    scope.done();
   });
 });

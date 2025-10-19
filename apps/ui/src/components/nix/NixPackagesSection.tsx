@@ -1,8 +1,8 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Button, Input } from '@hautech/ui';
 import type { ContainerNixConfig, NixPackageSelection } from './types';
 import { useQuery } from '@tanstack/react-query';
-import { fetchPackages, fetchVersions, fetchPackageInfo, type PackageInfoResponse } from '@/services/nix';
+import { fetchPackages, fetchVersions, resolvePackage } from '@/services/nix';
 
 // Debounce helper
 function useDebounced<T>(value: T, delay = 300) {
@@ -28,7 +28,13 @@ export function NixPackagesSection(props: ControlledProps | UncontrolledProps) {
   const [activeIndex, setActiveIndex] = useState(0);
   const [selected, setSelected] = useState<SelectedPkg[]>([]);
   const [versionsByName, setVersionsByName] = useState<Record<string, string | ''>>({});
-  const [metaByName, setMetaByName] = useState<Record<string, PackageInfoResponse | undefined>>({});
+  const [detailsByName, setDetailsByName] = useState<Record<string, { version: string; commitHash: string; attributePath: string }>>({});
+  const handleResolved = useCallback(
+    (name: string, detail: { version: string; commitHash: string; attributePath: string }) => {
+      setDetailsByName((prev) => ({ ...prev, [name]: detail }));
+    },
+    [],
+  );
   const lastPushedJson = useRef<string>('');
   const lastPushedPackagesLen = useRef<number>(0);
 
@@ -48,9 +54,10 @@ export function NixPackagesSection(props: ControlledProps | UncontrolledProps) {
         const nextKey = JSON.stringify(nextSelected);
         return prevKey === nextKey ? prev : nextSelected;
       });
+      // Hydrate chosen versions for UI from controlled value
       setVersionsByName((prev) => {
         const next: Record<string, string | ''> = { ...prev };
-        for (const p of curr) if (p.version) next[p.name] = p.version || '';
+        for (const p of curr) if (p.version) next[p.name] = String(p.version);
         return next;
       });
     } else {
@@ -63,37 +70,23 @@ export function NixPackagesSection(props: ControlledProps | UncontrolledProps) {
         const nextKey = JSON.stringify(nextSelected);
         return prevKey === nextKey ? prev : nextSelected;
       });
+      // Hydrate chosen versions for UI from existing config if present
       setVersionsByName((prev) => {
         const next: Record<string, string | ''> = { ...prev };
-        for (const p of curr) if (p.version) next[p.name] = p.version || '';
+        for (const p of curr) if (p.version) next[p.name] = String(p.version);
         return next;
       });
     }
-  }, [controlled, controlledValueKey, uncontrolledPkgsKey]);
+  }, [controlled, controlledValueKey, uncontrolledPkgsKey, props]);
 
   // Push updates into node config when selections/channels change
   useEffect(() => {
-    // Build packages array only for items with a chosen version
+    // Build packages array only for items with fully resolved details
     const packages = selected.flatMap((p) => {
-      const v = versionsByName[p.name];
-      if (!v || v.length === 0) return [];
-      const info = metaByName[p.name];
-      let attribute_path: string | undefined;
-      let commit_hash: string | undefined;
-      if (info && Array.isArray(info.releases)) {
-        const candidates = info.releases.filter((r) => r.version === v);
-        const currentPlatform = '';
-        let chosen = candidates[0];
-        if (candidates.length > 1 && currentPlatform) {
-          const match = candidates.find((r) => (r.platforms || []).includes(currentPlatform));
-          if (match) chosen = match;
-        }
-        if (chosen) {
-          attribute_path = chosen.attribute_path;
-          commit_hash = chosen.commit_hash;
-        }
-      }
-      return [{ name: p.name, version: v, attribute_path, commit_hash }];
+      const d = detailsByName[p.name];
+      return d && d.version && d.commitHash && d.attributePath
+        ? [{ name: p.name, version: d.version, commitHash: d.commitHash, attributePath: d.attributePath }]
+        : [];
     });
     // No debug logs in production
 
@@ -124,7 +117,7 @@ export function NixPackagesSection(props: ControlledProps | UncontrolledProps) {
         (props as UncontrolledProps).onUpdateConfig(next);
       }
     }
-  }, [selected, versionsByName, controlled, controlledValueKey, uncontrolledPkgsKey]);
+  }, [selected, detailsByName, controlled, controlledValueKey, uncontrolledPkgsKey]);
   const listboxRef = useRef<HTMLUListElement | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
 
@@ -175,6 +168,10 @@ export function NixPackagesSection(props: ControlledProps | UncontrolledProps) {
     setSelected((prev) => prev.filter((p) => p.name !== name));
     setVersionsByName((prev) => {
       const { [name]: _omit, ...rest } = prev;
+      return rest;
+    });
+    setDetailsByName((prev) => {
+      const { [name]: _d, ...rest } = prev;
       return rest;
     });
   };
@@ -270,14 +267,8 @@ export function NixPackagesSection(props: ControlledProps | UncontrolledProps) {
               pkg={p}
               chosen={versionsByName[p.name] || ''}
               onChoose={(v) => setVersionsByName((prev) => ({ ...prev, [p.name]: v }))}
+              onResolved={handleResolved}
               onRemove={() => removeSelected(p.name)}
-              onVersionListReady={() => {
-                if (!metaByName[p.name]) {
-                  void fetchPackageInfo(p.name)
-                    .then((res) => setMetaByName((prev) => ({ ...prev, [p.name]: res })))
-                    .catch(() => {});
-                }
-              }}
             />
           ))}
         </ul>
@@ -292,7 +283,7 @@ export function NixPackagesSection(props: ControlledProps | UncontrolledProps) {
 // Note: debounce not required; builder autosave already debounces
 export default NixPackagesSection;
 
-function SelectedPackageItem({ pkg, chosen, onChoose, onRemove, onVersionListReady }: { pkg: { name: string }; chosen: string | ''; onChoose: (v: string | '') => void; onRemove: () => void; onVersionListReady?: () => void }) {
+function SelectedPackageItem({ pkg, chosen, onChoose, onRemove, onResolved }: { pkg: { name: string }; chosen: string | ''; onChoose: (v: string | '') => void; onRemove: () => void; onResolved: (name: string, detail: { version: string; commitHash: string; attributePath: string }) => void }) {
   const qVersions = useQuery({
     queryKey: ['nix', 'versions', pkg.name],
     queryFn: ({ signal }) => fetchVersions(pkg.name, signal),
@@ -301,7 +292,6 @@ function SelectedPackageItem({ pkg, chosen, onChoose, onRemove, onVersionListRea
 
   const label = pkg.name;
   const versions = qVersions.data || [];
-  useEffect(() => { if (versions.length > 0) onVersionListReady?.(); }, [versions.length]);
 
   // Optional: auto-select only when there is a single version available
   useEffect(() => {
@@ -310,6 +300,36 @@ function SelectedPackageItem({ pkg, chosen, onChoose, onRemove, onVersionListRea
     }
   }, [chosen, versions]);
 
+  // Resolve selected version -> commitHash/attributePath with cancellation to avoid races
+  const resolveRef = useRef<AbortController | null>(null);
+
+  useEffect(() => {
+    return () => {
+      // Cancel in-flight on unmount
+      resolveRef.current?.abort();
+    };
+  }, []);
+
+  const onChangeVersion = useCallback(async (v: string) => {
+    onChoose(v);
+    // Cancel previous resolve
+    resolveRef.current?.abort();
+    if (!v) return;
+    const ac = new AbortController();
+    resolveRef.current = ac;
+    try {
+      const res = await resolvePackage(pkg.name, v, ac.signal);
+      // Only apply if not aborted
+      if (!ac.signal.aborted) {
+        onResolved(pkg.name, { version: res.version, commitHash: res.commitHash, attributePath: res.attributePath });
+      }
+    } catch (_e) {
+      // swallow errors; UI will not push unresolved entries
+    } finally {
+      if (resolveRef.current === ac) resolveRef.current = null;
+    }
+  }, [onChoose, onResolved, pkg.name]);
+
   return (
     <li className="flex items-center gap-2">
       <span className="flex-1 text-sm">{label}</span>
@@ -317,9 +337,7 @@ function SelectedPackageItem({ pkg, chosen, onChoose, onRemove, onVersionListRea
         aria-label={`Select version for ${label}`}
         className="rounded border border-input bg-background px-2 py-1 text-sm"
         value={chosen}
-        onChange={(e) => {
-          onChoose(e.target.value);
-        }}
+        onChange={(e) => onChangeVersion(e.target.value)}
       >
         <option value="">Select version…</option>
         {qVersions.isLoading ? (

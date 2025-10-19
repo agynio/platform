@@ -79,8 +79,8 @@ describe('Nix packages persistence in builder graph', () => {
       expect(node.config.image).toBe('alpine:3');
       expect(Array.isArray(node.config?.nix?.packages)).toBe(true);
       expect(node.config.nix.packages.length).toBe(1);
-      // New persistence includes attribute_path/commit_hash from package-info when available
-      expect(node.config.nix.packages[0]).toEqual({ name: 'htop', version: '1.2.3', attribute_path: 'htop.attr', commit_hash: 'abc123' });
+      // New persistence stores four fields
+      expect(node.config.nix.packages[0]).toEqual({ name: 'htop', version: '1.2.3', commitHash: 'abcd1234', attributePath: 'htop' });
     }, { timeout: 5000 });
 
     // Allow any trailing save-state timers to flush before teardown to avoid unhandled updates

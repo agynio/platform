@@ -159,7 +159,7 @@ export class ContainerProviderEntity {
 
   // Accept static configuration (image/env/initialScript). Validation performed via zod schema.
   setConfig(cfg: Record<string, unknown>): void {
-    // Let ZodError propagate so runtime can handle unknown-key stripping
+    // Validation via Zod; nix is treated as opaque (no rejection of extended shapes)
     this.cfg = ContainerProviderStaticConfigSchema.parse(cfg);
   }
 
