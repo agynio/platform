@@ -65,18 +65,15 @@ const NixhubPackageSchema = z.object({
     .array(
       z.object({
         version: z.union([z.string(), z.number()]).optional(),
-        commit_hash: z.string().optional(),
         last_updated: z.string().optional(),
         platforms_summary: z.string().optional(),
         outputs_summary: z.string().optional(),
-        platforms: z
-          .array(
-            z.object({
-              system: z.string().optional(),
-              attribute_path: z.string().optional(),
-            }),
-          )
-          .optional(),
+        platforms: z.array(
+          z.object({
+            commit_hash: z.string(),
+            attribute_path: z.string(),
+          }),
+        ),
       }),
     )
     .optional(),
@@ -240,13 +237,9 @@ export function registerNixRoutes(
       });
     const rel = parsed.data.releases.find((r) => String(r.version ?? '') === version);
     if (!rel) throw Object.assign(new Error('release_not_found'), { code: 'release_not_found' });
-    const commitHash = String(rel.commit_hash || '');
-    // Prefer x86_64-linux if available, otherwise first available platform
-    const preferred = rel.platforms?.find((p) => p.system === 'x86_64-linux') || rel.platforms?.[0];
-    const attributePath = String(preferred?.attribute_path || '');
-    if (!attributePath) throw Object.assign(new Error('missing_attribute_path'), { code: 'missing_attribute_path' });
-    if (!commitHash) throw Object.assign(new Error('missing_commit_hash'), { code: 'missing_commit_hash' });
-    return { commitHash, attributePath };
+    const { commit_hash, attribute_path } = rel.platforms[0];
+
+    return { commitHash: commit_hash, attributePath: attribute_path };
   }
 
   // GET /api/nix/resolve
