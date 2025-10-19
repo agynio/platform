@@ -1,5 +1,4 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import nock from 'nock';
+import { describe, it, expect } from 'vitest';
 import { ConfigService, configSchema } from '../services/config.service';
 import { NcpsKeyService } from '../services/ncpsKey.service';
 
@@ -12,17 +11,11 @@ describe('NcpsKeyService', () => {
     ncpsRefreshIntervalMs: '0', // disable periodic refresh for most tests
   } as const;
 
-  beforeEach(() => {
-    nock.cleanAll();
-  });
-  afterEach(() => {
-    nock.cleanAll();
-  });
-
   it('fetches key successfully on init', async () => {
-    nock('http://ncps:8501').get('/pubkey').reply(200, 'cache:AAAAAAA=');
     const cfg = new ConfigService(configSchema.parse(baseEnv));
     const svc = new NcpsKeyService(cfg);
+    // Inject mock fetch that returns a valid key
+    svc.setFetchImpl(async () => new Response('cache:AAAAAAA=', { status: 200, headers: { 'Content-Type': 'text/plain' } }));
     await svc.init();
     expect(svc.hasKey()).toBe(true);
     expect(svc.getCurrentKey()).toBe('cache:AAAAAAA=');
@@ -30,31 +23,35 @@ describe('NcpsKeyService', () => {
   });
 
   it('retries then succeeds', async () => {
-    const scope = nock('http://ncps:8501');
-    scope.get('/pubkey').reply(503, '');
-    scope.get('/pubkey').reply(200, 'name:BBBBBBB=');
     const cfg = new ConfigService(configSchema.parse({ ...baseEnv, ncpsStartupMaxRetries: '3', ncpsRetryBackoffMs: '1' }));
     const svc = new NcpsKeyService(cfg);
+    let call = 0;
+    svc.setFetchImpl(async () => {
+      call++;
+      if (call === 1) return new Response('', { status: 503 });
+      return new Response('name:BBBBBBB=', { status: 200, headers: { 'Content-Type': 'text/plain' } });
+    });
     await svc.init();
     expect(svc.getCurrentKey()).toBe('name:BBBBBBB=');
   });
 
   it('persistent failure respects allow start config', async () => {
-    nock('http://ncps:8501').get('/pubkey').times(5).reply(500, 'no');
     const cfg1 = new ConfigService(configSchema.parse({ ...baseEnv, ncpsAllowStartWithoutKey: 'true', ncpsStartupMaxRetries: '2', ncpsRetryBackoffMs: '1' }));
     const svc1 = new NcpsKeyService(cfg1);
+    svc1.setFetchImpl(async () => new Response('no', { status: 500 }));
     await svc1.init();
     expect(svc1.hasKey()).toBe(false);
 
     const cfg2 = new ConfigService(configSchema.parse({ ...baseEnv, ncpsAllowStartWithoutKey: 'false', ncpsStartupMaxRetries: '1', ncpsRetryBackoffMs: '1' }));
     const svc2 = new NcpsKeyService(cfg2);
+    svc2.setFetchImpl(async () => new Response('no', { status: 500 }));
     await expect(svc2.init()).rejects.toBeTruthy();
   });
 
   it('rejects invalid or oversize payloads', async () => {
-    nock('http://ncps:8501').get('/pubkey').reply(200, 'not a key');
     const cfg = new ConfigService(configSchema.parse({ ...baseEnv, ncpsStartupMaxRetries: '0' }));
     const svc = new NcpsKeyService(cfg);
+    svc.setFetchImpl(async () => new Response('not a key', { status: 200, headers: { 'Content-Type': 'text/plain' } }));
     await svc.init();
     expect(svc.hasKey()).toBe(false);
   });
@@ -64,14 +61,17 @@ describe('NcpsKeyService', () => {
     const cfg = new ConfigService(
       configSchema.parse({ ...baseEnv, ncpsRefreshIntervalMs: '5', ncpsRotationGraceMinutes: '1', ncpsRetryBackoffMs: '1' }),
     );
-    const scope = nock('http://ncps:8501');
-    scope.get('/pubkey').reply(200, 'rot1:CCCCCC=');
     const svc = new NcpsKeyService(cfg);
+    let c = 0;
+    svc.setFetchImpl(async () => {
+      c++;
+      if (c === 1) return new Response('rot1:CCCCCC=', { status: 200, headers: { 'Content-Type': 'text/plain' } });
+      return new Response('rot2:DDDDDD=', { status: 200, headers: { 'Content-Type': 'text/plain' } });
+    });
     await svc.init();
     expect(svc.getKeysForInjection()).toEqual(['rot1:CCCCCC=']);
 
     // Next refresh returns different key
-    scope.get('/pubkey').reply(200, 'rot2:DDDDDD=');
     // Manually trigger fetch (avoid waiting interval)
     await svc.triggerRefreshOnce();
     const keys = svc.getKeysForInjection();
