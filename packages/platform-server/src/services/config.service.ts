@@ -6,7 +6,13 @@ export const configSchema = z.object({
   githubAppId: z.string().min(1, "GitHub App ID is required"),
   githubAppPrivateKey: z.string().min(1, "GitHub App Private Key is required"),
   githubInstallationId: z.string().min(1, "GitHub Installation ID is required"),
-  openaiApiKey: z.string().min(1, "OpenAI API key is required"),
+  // Optional: OpenAI API key; when omitted, runtime may auto-provision a LiteLLM virtual key.
+  openaiApiKey: z.string().min(1).optional(),
+  // Optional LiteLLM details for auto-provisioning
+  litellmBaseUrl: z.string().optional(),
+  litellmMasterKey: z.string().optional(),
+  // Optional explicit OpenAI base URL passthrough
+  openaiBaseUrl: z.string().optional(),
   githubToken: z.string().min(1, "GitHub personal access token is required"),
   mongodbUrl: z.string().min(1, "MongoDB connection string is required"),
   // Graph persistence
@@ -137,8 +143,17 @@ export class ConfigService implements Config {
     return this.params.githubInstallationId;
   }
 
-  get openaiApiKey(): string {
+  get openaiApiKey(): string | undefined {
     return this.params.openaiApiKey;
+  }
+  get litellmBaseUrl(): string | undefined {
+    return this.params.litellmBaseUrl;
+  }
+  get litellmMasterKey(): string | undefined {
+    return this.params.litellmMasterKey;
+  }
+  get openaiBaseUrl(): string | undefined {
+    return this.params.openaiBaseUrl;
   }
   get githubToken(): string {
     return this.params.githubToken;
@@ -225,6 +240,11 @@ export class ConfigService implements Config {
       githubAppPrivateKey: process.env.GITHUB_APP_PRIVATE_KEY,
       githubInstallationId: process.env.GITHUB_INSTALLATION_ID,
       openaiApiKey: process.env.OPENAI_API_KEY,
+      // Infer LiteLLM base from OPENAI_BASE_URL if it ends with /v1
+      litellmBaseUrl:
+        process.env.LITELLM_BASE_URL || (process.env.OPENAI_BASE_URL ? process.env.OPENAI_BASE_URL.replace(/\/v1$/, '') : undefined),
+      litellmMasterKey: process.env.LITELLM_MASTER_KEY,
+      openaiBaseUrl: process.env.OPENAI_BASE_URL,
       githubToken: process.env.GH_TOKEN,
       mongodbUrl: process.env.MONGODB_URL,
       // Pass raw env; schema will validate/assign default

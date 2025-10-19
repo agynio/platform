@@ -22,24 +22,25 @@ Networking and ports
 
 Initial configuration (via UI)
 - Create a provider key: add your real OpenAI (or other) API key under Providers.
-- Create a virtual key: generate a key to hand to applications.
 - Create a model alias:
   - Name: gpt-5
   - Target: any real backend model you want the app to call (e.g., gpt-4o, gpt-4o-mini, or openai/gpt-4o)
   - Save. The app defaults to model "gpt-5" and will resolve to this alias.
 
-Route app traffic via LiteLLM
-- Important: OPENAI_BASE_URL must include the `/v1` suffix.
-- Host machine usage (outside containers):
-  - OPENAI_API_KEY=sk-<virtual-key>
-  - OPENAI_BASE_URL=http://localhost:4000/v1
-- From other compose services on agents_net:
-  - OPENAI_API_KEY=sk-<virtual-key>
-  - OPENAI_BASE_URL=http://litellm:4000/v1
+App configuration: auto-provision virtual key
+- The server can auto-provision a LiteLLM virtual key at startup when OPENAI_API_KEY is not set.
+- Provide env vars to enable auto-provisioning:
+  - LITELLM_BASE_URL=http://localhost:4000
+  - LITELLM_MASTER_KEY=sk-<master-key>
+  - Optional overrides:
+    - LITELLM_MODELS=gpt-5 (comma-separated list)
+    - LITELLM_KEY_DURATION=30d
+    - LITELLM_KEY_ALIAS=agents-${process.pid}
+    - Limits: LITELLM_MAX_BUDGET, LITELLM_RPM_LIMIT, LITELLM_TPM_LIMIT, LITELLM_TEAM_ID
+- On success, the server sets OPENAI_API_KEY and OPENAI_BASE_URL automatically (defaults to `${LITELLM_BASE_URL}/v1` if not provided).
 
 Fallback to direct OpenAI
-- Unset OPENAI_BASE_URL
-- Set OPENAI_API_KEY to your real OpenAI key
+- Unset LITELLM_* envs and set OPENAI_API_KEY to your real OpenAI key.
 
 Persistence verification
 - The LiteLLM DB persists to the named volume litellm_pgdata.

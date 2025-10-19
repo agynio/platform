@@ -31,6 +31,7 @@ import { AgentRunService } from './services/run.service.js';
 import { registerRunsRoutes } from './routes/runs.route.js';
 import { registerNixRoutes } from './routes/nix.route.js';
 import { NcpsKeyService } from './services/ncpsKey.service.js';
+import { maybeProvisionLiteLLMKey } from './services/litellm.provision.js';
 
 const logger = new LoggerService();
 const config = ConfigService.fromEnv();
@@ -55,6 +56,20 @@ async function bootstrap() {
   } catch (e) {
     logger.error('NcpsKeyService init failed: %s', (e as Error)?.message || String(e));
     process.exit(1);
+  }
+  // Attempt to auto-provision a LiteLLM virtual key if not configured with OPENAI_API_KEY
+  try {
+    const provisioned = await maybeProvisionLiteLLMKey(config, logger);
+    if (provisioned.apiKey && !process.env.OPENAI_API_KEY) process.env.OPENAI_API_KEY = provisioned.apiKey;
+    if (provisioned.baseUrl && !process.env.OPENAI_BASE_URL) process.env.OPENAI_BASE_URL = provisioned.baseUrl;
+    if (provisioned.apiKey) logger.info('OPENAI_API_KEY set via LiteLLM auto-provisioning');
+    if (provisioned.baseUrl) logger.info(`OPENAI_BASE_URL resolved to ${provisioned.baseUrl}`);
+  } catch (e) {
+    logger.error(
+      'LiteLLM auto-provisioning failed. Ensure LITELLM_BASE_URL and LITELLM_MASTER_KEY are set, or provide OPENAI_API_KEY. %s',
+      (e as Error)?.message || String(e),
+    );
+    throw e;
   }
   await mongo.connect();
   checkpointer.attachMongoClient(mongo.getClient());

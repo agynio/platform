@@ -63,11 +63,9 @@ Migration
 - Env: `MONGODB_URL` (default `mongodb://localhost:27017/agents`), `GRAPH_REPO_PATH` (default `./data/graph`), `GRAPH_BRANCH` (default `graph-state`), `GRAPH_AUTHOR_NAME`, `GRAPH_AUTHOR_EMAIL`, `GRAPH_NAME` (optional).
 
 LiteLLM proxy (optional)
-- See docs/litellm-setup.md for setup.
-- Toggle for local dev:
-  - Route via LiteLLM:
-    - OPENAI_API_KEY=sk-<virtual-key>
-    - OPENAI_BASE_URL=http://localhost:4000/v1  # note: /v1 suffix is required
-  - Direct to OpenAI:
-    - unset OPENAI_BASE_URL
-    - OPENAI_API_KEY=sk-<real-openai-key>
+- See docs/litellm-setup.md for full setup.
+- Auto-provisioning (recommended):
+  - Set LITELLM_BASE_URL and LITELLM_MASTER_KEY; leave OPENAI_API_KEY unset.
+  - Server will generate a virtual key on startup and set OPENAI_API_KEY/OPENAI_BASE_URL.
+- Direct to OpenAI:
+  - Set OPENAI_API_KEY=sk-<real-openai-key>; unset LITELLM_* envs.

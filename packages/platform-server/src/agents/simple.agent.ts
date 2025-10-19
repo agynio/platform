@@ -175,9 +175,13 @@ export class SimpleAgent extends BaseAgent {
 
     this._config = config;
 
+    // Support env/auto-provisioned credentials. Base URL can be provided via env or config passthrough.
+    const apiKey = this.configService.openaiApiKey || process.env.OPENAI_API_KEY;
+    const baseURL = this.configService.openaiBaseUrl || process.env.OPENAI_BASE_URL;
     this.llm = new ChatOpenAI({
       model: 'gpt-5',
-      apiKey: this.configService.openaiApiKey,
+      apiKey,
+      ...(baseURL ? { baseURL } : {}),
     });
 
     this.callModelNode = new CallModelNode([], this.llm);
