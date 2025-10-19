@@ -51,6 +51,8 @@ export function useBuilderState(
   const [saveState, setSaveState] = useState<UseBuilderStateResult['saveState']>('idle');
   const versionRef = useRef<number>(0);
   const debounceRef = useRef<number | null>(null);
+  // Keep latest nodes in a ref for synchronous comparisons in event handlers
+  const nodesRef = useRef<BuilderNode[]>([]);
   // Hydration and dirty gating: prevent autosave on initial load and only save on user edits
   const [hydrated, setHydrated] = useState(false);
   const [dirty, setDirty] = useState(false);
@@ -102,13 +104,40 @@ export function useBuilderState(
   const selectedNode = useMemo(() => nodes.find((n) => n.selected) ?? null, [nodes]);
 
   const onNodesChange = useCallback((changes: NodeChange[]) => {
-    setNodes((nds) => applyNodeChanges(changes, nds));
-    // Only mark dirty for graph-affecting changes (ignore selection, dimensions)
-    if (
-      changes.some((c) => c.type === 'add' || c.type === 'remove' || c.type === 'position')
-    ) {
-      setDirty(true);
+    // Use a stable snapshot of nodes to compute next and dirty synchronously
+    const prev = nodesRef.current;
+    const next = applyNodeChanges(changes, prev);
+
+    // Determine dirty changes precisely:
+    // - add/remove: always dirty
+    // - position: only when drag ended (dragging === false) or explicit move (dragging === undefined)
+    //   AND the position actually changed compared to previous state.
+    // Ignore selection-only and dimensions/measurement updates.
+    let shouldDirty = false;
+    for (const c of changes) {
+      if (c.type === 'add' || c.type === 'remove') {
+        shouldDirty = true;
+        break;
+      }
+      if (c.type === 'position') {
+        const dragging = c.dragging;
+        const dragEndedOrExplicit = dragging === false || dragging === undefined;
+        if (!dragEndedOrExplicit) continue; // ignore intermediate drag events
+        const prevNode = prev.find((n) => n.id === c.id);
+        const nextNode = next.find((n) => n.id === c.id);
+        if (prevNode && nextNode) {
+          const moved =
+            prevNode.position.x !== nextNode.position.x || prevNode.position.y !== nextNode.position.y;
+          if (moved) {
+            shouldDirty = true;
+            break;
+          }
+        }
+      }
     }
+
+    setNodes(next);
+    if (shouldDirty) setDirty(true);
   }, []);
 
   const onEdgesChange = useCallback((changes: EdgeChange[]) => {
@@ -244,6 +273,11 @@ export function useBuilderState(
     // Only autosave after initial hydration and when dirty
     if (hydrated && dirty) scheduleSave();
   }, [nodes, edges, scheduleSave, hydrated, dirty]);
+
+  // Track latest nodes in a ref for synchronous reads
+  useEffect(() => {
+    nodesRef.current = nodes;
+  }, [nodes]);
 
   // Cleanup debounce on unmount
   useEffect(() => {
