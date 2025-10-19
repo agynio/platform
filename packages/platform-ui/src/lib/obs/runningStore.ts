@@ -5,8 +5,8 @@
 
 import { useSyncExternalStore } from 'react';
 import { obsRealtime } from './socket';
-import type { SpanDoc } from './api';
-import { fetchRunningSpansFromTo } from './api';
+import type { SpanDoc } from '../tracing/api';
+import { fetchRunningSpansFromTo } from '../tracing/api';
 
 type Bucket = 'agent' | 'tool';
 
