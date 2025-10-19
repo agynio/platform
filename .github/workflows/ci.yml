@@ -201,8 +201,6 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Build @agyn/platform-ui
-        run: pnpm --filter @agyn/platform-ui build
-
-      - name: Build @agyn/obs-ui
-        run: pnpm --filter @agyn/obs-ui build
+      # Build all workspaces in topological order so library outputs exist
+      - name: Build UI workspace (topo order)
+        run: pnpm -r build
