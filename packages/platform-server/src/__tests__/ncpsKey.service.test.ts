@@ -80,14 +80,15 @@ describe('NcpsKeyService', () => {
     svc.stop();
   });
 
-  it('uses undici dispatcher with custom CA for https', async () => {
+  it('uses undici dispatcher with custom CA for https (server URL)', async () => {
     const fs = await import('node:fs/promises');
     const caPath = '/tmp/mock-ca.pem';
     await fs.writeFile(caPath, '-----BEGIN CERTIFICATE-----\nMIIB...\n-----END CERTIFICATE-----\n');
     const cfg = new ConfigService(
       configSchema.parse({
         ...baseEnv,
-        ncpsUrl: 'https://ncps:8501',
+        // Ensure server URL is https to trigger dispatcher with CA
+        ncpsUrlServer: 'https://ncps:8501',
         ncpsCaBundle: caPath,
         ncpsRefreshIntervalMs: '0',
       })
@@ -101,5 +102,27 @@ describe('NcpsKeyService', () => {
     await svc.init();
     expect(seenDispatcher).toBeTruthy();
     expect(svc.getCurrentKey()).toBe('cache:ZZZZZZZ=');
+  });
+
+  it('builds pubkey URL from server URL, not container URL', async () => {
+    const cfg = new ConfigService(
+      configSchema.parse({
+        ...baseEnv,
+        ncpsUrlServer: 'http://localhost:9999',
+        ncpsUrlContainer: 'http://ncps:8501',
+        ncpsRefreshIntervalMs: '0',
+      })
+    );
+    const svc = new NcpsKeyService(cfg);
+    let seenUrl: string | undefined;
+    svc.setFetchImpl(async (input: RequestInfo | URL) => {
+      seenUrl = String(input);
+      return new Response('cache:PPPPPPP=', { status: 200, headers: { 'Content-Type': 'text/plain' } });
+    });
+    await svc.init();
+    expect(seenUrl).toBeDefined();
+    expect(seenUrl?.startsWith('http://localhost:9999')).toBe(true);
+    expect(seenUrl).toContain('/pubkey');
+    expect(svc.getCurrentKey()).toBe('cache:PPPPPPP=');
   });
 });
