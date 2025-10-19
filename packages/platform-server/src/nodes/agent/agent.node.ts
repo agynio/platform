@@ -328,10 +328,10 @@ export class Agent extends BaseAgent {
     // Registration function now only invoked on explicit ready event to avoid triggering
     // duplicate discovery flows (removes eager listTools() call which previously raced with start()).
     const getThreadId = (config?: LangGraphRunnableConfig): string | undefined => {
-      const cfg = config?.configurable;
-      if (!cfg || typeof cfg !== 'object') return undefined;
-      const tid = (cfg as Record<string, unknown>).thread_id;
-      return typeof tid === 'string' ? tid : undefined;
+      const cfg = config?.configurable as Record<string, unknown> | undefined;
+      if (!cfg) return undefined;
+      const tid = cfg.thread_id as unknown;
+      return tid == null ? undefined : String(tid);
     };
 
     const registerTools = async () => {
