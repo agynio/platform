@@ -21,6 +21,7 @@ import { DebugToolTrigger, DebugToolTriggerStaticConfigSchema } from './triggers
 import { LocalMcpServerStaticConfigSchema } from './mcp/localMcpServer';
 import { FinishTool, FinishToolStaticConfigSchema } from './tools/finish.tool';
 import { MongoService } from './services/mongo.service';
+import { NcpsKeyService } from './services/ncpsKey.service';
 import { MemoryNode, MemoryNodeStaticConfigSchema } from './nodes/memory.node';
 import { MemoryConnectorNode, MemoryConnectorStaticConfigSchema } from './nodes/memory-connector.node';
 // Unified Memory tool
@@ -32,10 +33,11 @@ export interface TemplateRegistryDeps {
   configService: ConfigService;
   checkpointerService: CheckpointerService;
   mongoService: MongoService; // required for memory nodes
+  ncpsKeyService?: NcpsKeyService;
 }
 
 export function buildTemplateRegistry(deps: TemplateRegistryDeps): TemplateRegistry {
-  const { logger, containerService, configService, checkpointerService, mongoService } = deps;
+  const { logger, containerService, configService, checkpointerService, mongoService, ncpsKeyService } = deps;
 
   // Initialize Vault service from config (optional)
   const vault = new VaultService(
@@ -73,6 +75,7 @@ export function buildTemplateRegistry(deps: TemplateRegistryDeps): TemplateRegis
             },
             (threadId) => ({ 'hautech.ai/thread_id': `${ctx.nodeId}__${threadId}` }),
             configService,
+            ncpsKeyService,
           ),
         {
           sourcePorts: { $self: { kind: 'instance' } },

@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { PLATFORM_LABEL, SUPPORTED_PLATFORMS } from '../constants.js';
 import { VaultService } from '../services/vault.service';
 import { ConfigService } from '../services/config.service';
+import { NcpsKeyService } from '../services/ncpsKey.service';
 import { EnvService, type EnvItem } from '../services/env.service';
 import { LoggerService } from '../services/logger.service';
 
@@ -100,6 +101,7 @@ export class ContainerProviderEntity {
     opts: ContainerOpts,
     idLabels: (id: string) => Record<string, string>,
     private configService?: ConfigService,
+    private ncpsKeyService?: NcpsKeyService,
   ) {
     this.vaultService = vaultService;
     this.opts = opts || {};
@@ -250,9 +252,10 @@ export class ContainerProviderEntity {
         !!envMerged && typeof envMerged === 'object' && 'NIX_CONFIG' in (envMerged as Record<string, string>);
       const ncpsEnabled = this.configService?.ncpsEnabled === true;
       const ncpsUrl = this.configService?.ncpsUrl;
-      const ncpsPub = this.configService?.ncpsPublicKey;
-      if (!hasNixConfig && ncpsEnabled && !!ncpsUrl && !!ncpsPub) {
-        const nixConfig = `substituters = ${ncpsUrl} https://cache.nixos.org\ntrusted-public-keys = ${ncpsPub} cache.nixos.org-1:6NCHdD59X431o0gWypbMrAURkbJ16ZPMQFGspcDShjY=`;
+      const keys = this.ncpsKeyService?.getKeysForInjection() || [];
+      if (!hasNixConfig && ncpsEnabled && !!ncpsUrl && keys.length > 0) {
+        const joined = keys.join(' ');
+        const nixConfig = `substituters = ${ncpsUrl} https://cache.nixos.org\ntrusted-public-keys = ${joined} cache.nixos.org-1:6NCHdD59X431o0gWypbMrAURkbJ16ZPMQFGspcDShjY=`;
         envMerged = { ...(envMerged || {}), NIX_CONFIG: nixConfig } as Record<string, string>;
       }
 

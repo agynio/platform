@@ -12,22 +12,34 @@ Bring up services
   - ncps-init creates directories on the shared volume
   - ncps-migrate runs the one-time schema initialization with dbmate up (per volume)
 
-Configure env
+Runtime key fetch
 
+- The platform-server now fetches the ncps public key at runtime and refreshes it periodically.
 - Suggested env variables (in server process):
 
 ```sh
 export NCPS_ENABLED=true
 export NCPS_URL=http://ncps:8501
-export NCPS_PUBLIC_KEY=$(docker compose exec ncps sh -lc 'wget -qO- http://localhost:8501/pubkey')
+# Optional knobs with defaults:
+# export NCPS_PUBKEY_PATH=/pubkey
+# export NCPS_FETCH_TIMEOUT_MS=3000
+# export NCPS_REFRESH_INTERVAL_MS=600000
+# export NCPS_STARTUP_MAX_RETRIES=8
+# export NCPS_RETRY_BACKOFF_MS=500
+# export NCPS_RETRY_BACKOFF_FACTOR=2
+# export NCPS_ALLOW_START_WITHOUT_KEY=true
+# export NCPS_CA_BUNDLE=/path/to/ca.pem
+# export NCPS_ROTATION_GRACE_MINUTES=0
+# export NCPS_AUTH_HEADER=Authorization
+# export NCPS_AUTH_TOKEN="Bearer ..."
 ```
 
 Injection behavior
 
 - The server injects NIX_CONFIG into workspace containers only when all conditions are met:
   - NCPS_ENABLED=true
-  - NCPS_URL is set
-  - NCPS_PUBLIC_KEY is set
+  - NCPS_URL is set and reachable
+  - A valid public key has been fetched (NcpsKeyService.hasKey())
   - NIX_CONFIG is not already present in the container env
 
 Verify inside a workspace container:
@@ -42,4 +54,9 @@ Startup installs
   - Shape: { commitHash: <40-hex>, attributePath: <attr> }
   - Command: PATH is prefixed and a single combined `nix profile install` is attempted; on failure, per-package fallbacks run.
   - If Nix is not present in the container image, install is skipped (info-level log).
-  - When NCPS is configured (NIX_CONFIG injected), installs automatically leverage the cache.
+- When NCPS is configured (NIX_CONFIG injected), installs automatically leverage the cache.
+
+Metrics
+
+- ncps can expose Prometheus metrics when PROMETHEUS_ENABLED=true.
+- docker-compose sets this by default below; metrics are on http://ncps:8501/metrics (internal network only).

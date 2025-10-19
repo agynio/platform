@@ -162,6 +162,8 @@ services:
       - ncps-storage:/storage
     networks:
       - agents_net
+    environment:
+      - PROMETHEUS_ENABLED=true
     restart: unless-stopped
     healthcheck:
       test: ['CMD', 'wget', '-qO-', 'http://localhost:8501/nix-cache-info']
