@@ -39,6 +39,8 @@ describe('LiveGraphRuntime -> Agent config propagation', () => {
       mcpToolsStaleTimeoutMs: 0,
       ncpsEnabled: false,
       ncpsUrl: 'http://ncps:8501',
+      ncpsUrlServer: 'http://ncps:8501',
+      ncpsUrlContainer: 'http://ncps:8501',
       ncpsPubkeyPath: '/pubkey',
       ncpsFetchTimeoutMs: 3000,
       ncpsRefreshIntervalMs: 600000,

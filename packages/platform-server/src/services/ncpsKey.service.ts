@@ -126,7 +126,8 @@ export class NcpsKeyService {
   }
 
   private async fetchOnce(): Promise<string> {
-    const url = `${this.cfg.ncpsUrl}${this.cfg.ncpsPubkeyPath}`;
+    // Always use the server-reachable URL for runtime HTTP requests
+    const url = `${this.cfg.ncpsUrlServer}${this.cfg.ncpsPubkeyPath}`;
     const ac = new AbortController();
     const tid = setTimeout(() => ac.abort(), this.cfg.ncpsFetchTimeoutMs);
     try {

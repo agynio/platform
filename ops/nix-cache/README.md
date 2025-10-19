@@ -19,7 +19,15 @@ Runtime key fetch
 
 ```sh
 export NCPS_ENABLED=true
-export NCPS_URL=http://ncps:8501
+# Preferred dual-URL setup (server vs. container reachability):
+# - Server/runtime HTTP calls (NcpsKeyService): use a host-reachable URL
+#   If the platform-server runs on the host (outside Compose), expose ncps and set:
+#   docker-compose: uncomment ports on the ncps service (see compose snippet below)
+#   export NCPS_URL_SERVER=http://localhost:8501
+# - Container substituters (inside Docker network):
+export NCPS_URL_CONTAINER=http://ncps:8501
+# Backward-compat: if only NCPS_URL is set, both resolve to its value.
+# export NCPS_URL=http://ncps:8501
 # Optional knobs with defaults:
 # export NCPS_PUBKEY_PATH=/pubkey
 # export NCPS_FETCH_TIMEOUT_MS=3000
@@ -38,7 +46,7 @@ Injection behavior
 
 - The server injects NIX_CONFIG into workspace containers only when all conditions are met:
   - NCPS_ENABLED=true
-  - NCPS_URL is set and reachable
+  - NCPS_URL_CONTAINER (or legacy NCPS_URL) is set and reachable from containers
   - A valid public key has been fetched (NcpsKeyService.hasKey())
   - NIX_CONFIG is not already present in the container env
 
@@ -60,3 +68,15 @@ Metrics
 
 - ncps can expose Prometheus metrics when PROMETHEUS_ENABLED=true.
 - docker-compose sets this by default below; metrics are on http://ncps:8501/metrics (internal network only).
+
+docker-compose hint (host reachability)
+
+- By default, ncps does not expose host ports. If your platform-server runs on the host and needs to fetch the ncps pubkey (NCPS_URL_SERVER), expose the port:
+
+```yaml
+  ncps:
+    # ...
+    # Uncomment to expose to the host for NCPS_URL_SERVER=http://localhost:8501
+    # ports:
+    #   - '8501:8501'
+```

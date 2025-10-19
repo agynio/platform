@@ -74,7 +74,11 @@ export const configSchema = z.object({
     .union([z.boolean(), z.string()])
     .default('false')
     .transform((v) => (typeof v === 'string' ? v.toLowerCase() === 'true' : !!v)),
+  // Deprecated single URL; prefer ncpsUrlServer and ncpsUrlContainer
   ncpsUrl: z.string().min(1).default('http://ncps:8501'),
+  // New dual NCPS URLs with defaults
+  ncpsUrlServer: z.string().min(1).default('http://ncps:8501'),
+  ncpsUrlContainer: z.string().min(1).default('http://ncps:8501'),
   ncpsPubkeyPath: z.string().default('/pubkey'),
   ncpsFetchTimeoutMs: z
     .union([z.string(), z.number()])
@@ -219,9 +223,12 @@ export class ConfigService implements Config {
   get ncpsEnabled(): boolean {
     return this.params.ncpsEnabled;
   }
+  // Deprecated alias: map to container URL for backward-compatibility
   get ncpsUrl(): string {
-    return this.params.ncpsUrl;
+    return this.params.ncpsUrlContainer;
   }
+  get ncpsUrlServer(): string { return this.params.ncpsUrlServer; }
+  get ncpsUrlContainer(): string { return this.params.ncpsUrlContainer; }
   get ncpsPubkeyPath(): string { return this.params.ncpsPubkeyPath; }
   get ncpsFetchTimeoutMs(): number { return this.params.ncpsFetchTimeoutMs; }
   get ncpsRefreshIntervalMs(): number { return this.params.ncpsRefreshIntervalMs; }
@@ -235,6 +242,9 @@ export class ConfigService implements Config {
   get ncpsAuthToken(): string | undefined { return this.params.ncpsAuthToken; }
 
   static fromEnv(): ConfigService {
+    const legacy = process.env.NCPS_URL;
+    const urlServer = process.env.NCPS_URL_SERVER || legacy;
+    const urlContainer = process.env.NCPS_URL_CONTAINER || legacy;
     const parsed = configSchema.parse({
       githubAppId: process.env.GITHUB_APP_ID,
       githubAppPrivateKey: process.env.GITHUB_APP_PRIVATE_KEY,
@@ -263,7 +273,10 @@ export class ConfigService implements Config {
       nixCacheMax: process.env.NIX_CACHE_MAX,
       mcpToolsStaleTimeoutMs: process.env.MCP_TOOLS_STALE_TIMEOUT_MS,
       ncpsEnabled: process.env.NCPS_ENABLED,
-      ncpsUrl: process.env.NCPS_URL,
+      // Preserve legacy for backward compatibility; prefer dual URLs above
+      ncpsUrl: legacy,
+      ncpsUrlServer: urlServer,
+      ncpsUrlContainer: urlContainer,
       ncpsPubkeyPath: process.env.NCPS_PUBKEY_PATH,
       ncpsFetchTimeoutMs: process.env.NCPS_FETCH_TIMEOUT_MS,
       ncpsRefreshIntervalMs: process.env.NCPS_REFRESH_INTERVAL_MS,

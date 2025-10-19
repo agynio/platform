@@ -126,4 +126,46 @@ describe('ContainerProviderEntity parseVaultRef', () => {
     expect(c3.env?.['NIX_CONFIG']).toContain('substituters = http://ncps:8501');
     expect(c3.env?.['NIX_CONFIG']).toContain('trusted-public-keys = pub:key');
   });
+
+  it('uses container URL for NIX_CONFIG and server URL for key fetch when dual URLs provided', async () => {
+    const svc = new FakeContainerService();
+    const cfg = new ConfigService(
+      configSchema.parse({
+        githubAppId: 'x', githubAppPrivateKey: 'x', githubInstallationId: 'x', openaiApiKey: 'x', githubToken: 'x', mongodbUrl: 'x',
+        graphStore: 'mongo', graphRepoPath: './data/graph', graphBranch: 'graph-state',
+        dockerMirrorUrl: 'http://registry-mirror:5000', nixAllowedChannels: 'nixpkgs-unstable', nixHttpTimeoutMs: '5000', nixCacheTtlMs: String(300000), nixCacheMax: '500',
+        mcpToolsStaleTimeoutMs: '0', ncpsEnabled: 'true',
+        ncpsUrlServer: 'http://localhost:8501',
+        ncpsUrlContainer: 'http://ncps:8501',
+        ncpsRefreshIntervalMs: '0',
+      }),
+    );
+    const keySvc = new NcpsKeyService(cfg);
+    keySvc.setFetchImpl(async (input: RequestInfo | URL) => new Response('cache:KEY=', { status: 200, headers: { 'Content-Type': 'text/plain' } }));
+    await keySvc.init();
+    const ent = new ContainerProviderEntity(svc, undefined, {}, () => ({}), cfg, keySvc);
+    ent.setConfig({});
+    const c = (await ent.provide('t6')) as TestContainerEntity;
+    expect(c.env?.['NIX_CONFIG']).toContain('substituters = http://ncps:8501');
+  });
+
+  it('backward compat: only NCPS_URL set resolves both server and container to same value', async () => {
+    const svc = new FakeContainerService();
+    const prevEnv = { ...process.env };
+    try {
+      process.env.NCPS_URL = 'http://ncps:9999';
+      process.env.NCPS_ENABLED = 'true';
+      const cfg = ConfigService.fromEnv();
+      const keySvc = new NcpsKeyService(cfg);
+      keySvc.seedKeyForTest('legacy:key');
+      const ent = new ContainerProviderEntity(svc, undefined, {}, () => ({}), cfg, keySvc);
+      ent.setConfig({});
+      const c = (await ent.provide('t7')) as TestContainerEntity;
+      expect(cfg.ncpsUrlServer).toBe('http://ncps:9999');
+      expect(cfg.ncpsUrlContainer).toBe('http://ncps:9999');
+      expect(c.env?.['NIX_CONFIG']).toContain('substituters = http://ncps:9999');
+    } finally {
+      process.env = prevEnv;
+    }
+  });
 });
