@@ -2,31 +2,32 @@ import { AIMessage, BaseMessage } from '@langchain/core/messages';
 import { RunnableConfig } from '@langchain/core/runnables';
 import { tool as lcTool } from '@langchain/core/tools';
 import { Annotation, CompiledStateGraph, END, START, StateGraph } from '@langchain/langgraph';
+import type { LangGraphRunnableConfig } from '@langchain/langgraph';
 import { ChatOpenAI } from '@langchain/openai';
 import { last } from 'lodash-es';
-import { McpServer, McpTool } from '../mcp';
-import { isDynamicConfigurable } from '../graph/capabilities';
-import { inferArgsSchema } from '../mcp/jsonSchemaToZod';
-import { CallModelNode, type MemoryConnector } from '../lgnodes/callModel.lgnode';
-import { ToolsNode } from '../lgnodes/tools.lgnode';
-import { CheckpointerService } from '../services/checkpointer.service';
-import { ConfigService } from '../services/config.service';
-import { LoggerService } from '../services/logger.service';
-import { BaseAgent } from './base.agent';
-import { BaseTool } from '../tools/base.tool';
-import { LangChainToolAdapter } from '../tools/langchainTool.adapter';
-import { SummarizationNode } from '../lgnodes/summarization.lgnode';
-import { NodeOutput } from '../types';
+import { McpServer, McpTool } from '../../mcp';
+import { isDynamicConfigurable } from '../../graph/capabilities';
+import { inferArgsSchema } from '../../mcp/jsonSchemaToZod';
+import { CallModelNode, type MemoryConnector } from '../../lgnodes/callModel.lgnode';
+import { ToolsNode } from '../../lgnodes/tools.lgnode';
+import { CheckpointerService } from '../../services/checkpointer.service';
+import { ConfigService } from '../../services/config.service';
+import { LoggerService } from '../../services/logger.service';
+import { BaseAgent } from '../../agents/base.agent';
+import { BaseTool } from '../../tools/base.tool';
+import { LangChainToolAdapter } from '../../tools/langchainTool.adapter';
+import { SummarizationNode } from '../../lgnodes/summarization.lgnode';
+import { NodeOutput } from '../../types';
 import { z } from 'zod';
-import { EnforceRestrictionNode } from '../lgnodes/enforceRestriction.lgnode';
+import { EnforceRestrictionNode } from '../../lgnodes/enforceRestriction.lgnode';
 import { stringify as toYaml } from 'yaml';
-import { buildMcpToolError } from '../mcp/errorUtils';
+import { buildMcpToolError } from '../../mcp/errorUtils';
 
 /**
- * Zod schema describing static configuration for SimpleAgent.
+ * Zod schema describing static configuration for Agent.
  * Keep this colocated with the implementation so updates stay in sync.
  */
-export const SimpleAgentStaticConfigSchema = z
+export const AgentStaticConfigSchema = z
   .object({
     title: z
       .string()
@@ -38,7 +39,7 @@ export const SimpleAgentStaticConfigSchema = z
       .default('You are a helpful AI assistant.')
       .describe('System prompt injected at the start of each conversation turn.')
       .meta({ 'ui:widget': 'textarea', 'ui:options': { rows: 6 } }),
-    // Agent-side message buffer handling (exposed for SimpleAgent static config)
+    // Agent-side message buffer handling (exposed for Agent static config)
     debounceMs: z
       .number()
       .int()
@@ -89,8 +90,8 @@ export const SimpleAgentStaticConfigSchema = z
   })
   .strict();
 
-export type SimpleAgentStaticConfig = z.infer<typeof SimpleAgentStaticConfigSchema>;
-export class SimpleAgent extends BaseAgent {
+export type AgentStaticConfig = z.infer<typeof AgentStaticConfigSchema>;
+export class Agent extends BaseAgent {
   private callModelNode!: CallModelNode;
   private toolsNode!: ToolsNode;
   // Track tools registered per MCP server so we can remove them on detachment
@@ -111,7 +112,7 @@ export class SimpleAgent extends BaseAgent {
 
   // Lifecycle/config propagation helpers
   private lifecycleStarted = false;
-  private lifecycleConfigSnapshot: Partial<SimpleAgentStaticConfig> = {};
+  private lifecycleConfigSnapshot: Partial<AgentStaticConfig> = {};
   // Allowed config keys for propagation; keep in sync with setConfig filtering
   private static readonly allowedConfigKeysArray = [
     'title',
@@ -125,9 +126,9 @@ export class SimpleAgent extends BaseAgent {
     'restrictOutput',
     'restrictionMessage',
     'restrictionMaxInjections',
-  ] as const satisfies readonly (keyof SimpleAgentStaticConfig)[];
-  private static readonly allowedConfigKeys = new Set<typeof SimpleAgent.allowedConfigKeysArray[number]>(
-    SimpleAgent.allowedConfigKeysArray,
+  ] as const satisfies readonly (keyof AgentStaticConfig)[];
+  private static readonly allowedConfigKeys = new Set<typeof Agent.allowedConfigKeysArray[number]>(
+    Agent.allowedConfigKeysArray,
   );
 
   constructor(
@@ -171,7 +172,7 @@ export class SimpleAgent extends BaseAgent {
   }
 
   init(config: RunnableConfig = { recursionLimit: 2500 }) {
-    if (!this.agentId) throw new Error('agentId is required to initialize SimpleAgent');
+    if (!this.agentId) throw new Error('agentId is required to initialize Agent');
 
     this._config = config;
 
@@ -195,7 +196,7 @@ export class SimpleAgent extends BaseAgent {
     // Read restriction config from static config and store locally for closures
     const cfgUnknown = this._staticConfig;
     const cfg =
-      cfgUnknown && typeof cfgUnknown === 'object' ? (cfgUnknown as Partial<SimpleAgentStaticConfig>) : undefined;
+      cfgUnknown && typeof cfgUnknown === 'object' ? (cfgUnknown as Partial<AgentStaticConfig>) : undefined;
     this.restrictOutput = !!cfg?.restrictOutput;
     this.restrictionMessage =
       cfg?.restrictionMessage ||
@@ -265,35 +266,46 @@ export class SimpleAgent extends BaseAgent {
       | { getConnector?: () => MemoryConnector | undefined; createConnector?: () => MemoryConnector },
   ) {
     // Accept either a connector-like object or a provider exposing getConnector/createConnector
+    type MemoryConnectorProvider = {
+      getConnector?: () => MemoryConnector | undefined;
+      createConnector?: () => MemoryConnector | undefined;
+    };
+    const isMemoryConnector = (obj: unknown): obj is MemoryConnector => {
+      if (!obj || typeof obj !== 'object') return false;
+      const rec = obj as Record<string, unknown>;
+      return typeof rec.renderMessage === 'function' && typeof rec.getPlacement === 'function';
+    };
+    const isProvider = (obj: unknown): obj is MemoryConnectorProvider => {
+      if (!obj || typeof obj !== 'object') return false;
+      const rec = obj as Record<string, unknown>;
+      return typeof rec.getConnector === 'function' || typeof rec.createConnector === 'function';
+    };
     let connector: MemoryConnector | undefined = undefined;
-    if (mem && typeof (mem as MemoryConnector).renderMessage === 'function') {
-      connector = mem as MemoryConnector;
-    } else if (mem && 'getConnector' in mem && typeof mem.getConnector === 'function') {
-      const prov = mem;
-      connector = prov.getConnector?.();
-      if (!connector && 'createConnector' in prov && typeof prov.createConnector === 'function') {
-        connector = prov.createConnector();
-      }
+    if (isMemoryConnector(mem)) {
+      connector = mem;
+    } else if (isProvider(mem)) {
+      connector = mem.getConnector?.();
+      if (!connector) connector = mem.createConnector?.();
     }
     this.callModelNode.setMemoryConnector(connector);
-    this.loggerService.info('SimpleAgent memory connector attached');
+    this.loggerService.info('Agent memory connector attached');
   }
   detachMemoryConnector() {
     this.callModelNode.setMemoryConnector(undefined);
-    this.loggerService.info('SimpleAgent memory connector detached');
+    this.loggerService.info('Agent memory connector detached');
   }
 
   addTool(tool: BaseTool) {
     // using any to avoid circular import issues if BaseTool is extended differently later
     this.callModelNode.addTool(tool);
     this.toolsNode.addTool(tool);
-    this.loggerService.info(`Tool added to SimpleAgent: ${tool?.constructor?.name || 'UnknownTool'}`);
+    this.loggerService.info(`Tool added to Agent: ${tool?.constructor?.name || 'UnknownTool'}`);
   }
 
   removeTool(tool: BaseTool) {
     this.callModelNode.removeTool(tool);
     this.toolsNode.removeTool(tool);
-    this.loggerService.info(`Tool removed from SimpleAgent: ${tool?.constructor?.name || 'UnknownTool'}`);
+    this.loggerService.info(`Tool removed from Agent: ${tool?.constructor?.name || 'UnknownTool'}`);
   }
 
   /**
@@ -315,6 +327,13 @@ export class SimpleAgent extends BaseAgent {
 
     // Registration function now only invoked on explicit ready event to avoid triggering
     // duplicate discovery flows (removes eager listTools() call which previously raced with start()).
+    const getThreadId = (config?: LangGraphRunnableConfig): string | undefined => {
+      const cfg = config?.configurable as Record<string, unknown> | undefined;
+      if (!cfg) return undefined;
+      const tid = cfg.thread_id as unknown;
+      return tid == null ? undefined : String(tid);
+    };
+
     const registerTools = async () => {
       try {
         const tools = await server.listTools();
@@ -325,11 +344,11 @@ export class SimpleAgent extends BaseAgent {
         for (const t of tools) {
           const schema = inferArgsSchema(t.inputSchema);
           const dynamic = lcTool(
-            async (raw, config) => {
+            async (raw, config?: LangGraphRunnableConfig) => {
               this.loggerService.info(
                 `Calling MCP tool ${t.name} in namespace ${namespace} with input: ${JSON.stringify(raw)}`,
               );
-              const threadId = config?.configurable?.thread_id;
+              const threadId = getThreadId(config);
               const res = await server.callTool(t.name, raw, { threadId });
               if (res.isError) {
                 const { message, cause } = buildMcpToolError(res);
@@ -421,11 +440,11 @@ export class SimpleAgent extends BaseAgent {
             if (!existingByName.has(toolName)) {
               const schema = inferArgsSchema(t.inputSchema);
               const dynamic = lcTool(
-                async (raw, config) => {
+                async (raw, config?: LangGraphRunnableConfig) => {
                   this.loggerService.info(
                     `Calling MCP tool ${t.name} in namespace ${namespace} with input: ${JSON.stringify(raw)}`,
                   );
-                  const threadId = config?.configurable?.thread_id;
+                  const threadId = getThreadId(config);
                   const res = await server.callTool(t.name, raw, { threadId });
                   if (res.isError) {
                     const { message, cause } = buildMcpToolError(res);
@@ -460,14 +479,14 @@ export class SimpleAgent extends BaseAgent {
    * Dynamically set configuration values like the system prompt.
    */
   // Overload preserves BaseAgent signature while exposing a more precise config shape for callers.
-  setConfig(config: Partial<SimpleAgentStaticConfig> & Record<string, unknown>): void;
+  setConfig(config: Partial<AgentStaticConfig> & Record<string, unknown>): void;
   setConfig(config: Record<string, unknown>): void {
     // Filter to known keys and validate without letting defaults write missing keys
     const filteredEntries = Object.entries(config).filter(([k]) =>
-      SimpleAgent.allowedConfigKeys.has(k as (typeof SimpleAgent.allowedConfigKeysArray)[number]),
+      Agent.allowedConfigKeys.has(k as (typeof Agent.allowedConfigKeysArray)[number]),
     );
-    const filtered = Object.fromEntries(filteredEntries) as Partial<SimpleAgentStaticConfig> & Record<string, unknown>;
-    const parsedConfig = SimpleAgentStaticConfigSchema.partial().parse(filtered) as Partial<SimpleAgentStaticConfig>;
+    const filtered = Object.fromEntries(filteredEntries) as Partial<AgentStaticConfig> & Record<string, unknown>;
+    const parsedConfig = AgentStaticConfigSchema.partial().parse(filtered) as Partial<AgentStaticConfig>;
 
     // Apply agent-side scheduling config
     this.applyRuntimeConfig(config);
@@ -475,13 +494,13 @@ export class SimpleAgent extends BaseAgent {
     // Only update fields that were explicitly provided by caller
     if (Object.prototype.hasOwnProperty.call(filtered, 'systemPrompt') && typeof parsedConfig.systemPrompt === 'string') {
       this.callModelNode.setSystemPrompt(parsedConfig.systemPrompt);
-      this.loggerService.info('SimpleAgent system prompt updated');
+      this.loggerService.info('Agent system prompt updated');
     }
 
     if (Object.prototype.hasOwnProperty.call(filtered, 'model') && typeof parsedConfig.model === 'string') {
       // Update model on stored llm instance (lightweight change similar to systemPrompt logic)
       this.llm.model = parsedConfig.model;
-      this.loggerService.info(`SimpleAgent model updated to ${parsedConfig.model}`);
+      this.loggerService.info(`Agent model updated to ${parsedConfig.model}`);
     }
 
     // Extend to accept summarization options
@@ -512,7 +531,7 @@ export class SimpleAgent extends BaseAgent {
 
     if (updates.keepTokens !== undefined || updates.maxTokens !== undefined) {
       this.summarizeNode.setOptions(updates);
-      this.loggerService.info('SimpleAgent summarization options updated');
+      this.loggerService.info('Agent summarization options updated');
     }
 
     // Apply restriction-related config without altering system prompt
@@ -531,9 +550,9 @@ export class SimpleAgent extends BaseAgent {
     // Keep only allowed keys; do not inject defaults; store snapshot for start() and diff updates
     const incoming = Object.fromEntries(
       Object.entries(cfg || {}).filter(([k]) =>
-        SimpleAgent.allowedConfigKeys.has(k as (typeof SimpleAgent.allowedConfigKeysArray)[number]),
+        Agent.allowedConfigKeys.has(k as (typeof Agent.allowedConfigKeysArray)[number]),
       ),
-    ) as Partial<SimpleAgentStaticConfig> & Record<string, unknown>;
+    ) as Partial<AgentStaticConfig> & Record<string, unknown>;
     if (!this.lifecycleStarted) {
       // Before start: replace snapshot
       this.lifecycleConfigSnapshot = { ...incoming };
@@ -544,7 +563,7 @@ export class SimpleAgent extends BaseAgent {
     const prev = this.lifecycleConfigSnapshot;
     let changed = false;
     for (const [k, v] of Object.entries(incoming)) {
-      const before = (prev as Partial<SimpleAgentStaticConfig> & Record<string, unknown>)[k];
+      const before = (prev as Partial<AgentStaticConfig> & Record<string, unknown>)[k];
       const same = JSON.stringify(before) === JSON.stringify(v);
       if (!same) {
         delta[k] = v;

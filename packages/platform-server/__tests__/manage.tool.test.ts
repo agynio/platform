@@ -139,7 +139,7 @@ describe('ManageTool graph wiring', () => {
     const registry = new TemplateRegistry();
 
     registry
-      .register('simpleAgent', () => new FakeAgentWithTools(logger) as any, {
+      .register('agent', () => new FakeAgentWithTools(logger) as any, {
         sourcePorts: { tools: { kind: 'method', create: 'addTool', destroy: 'removeTool' } },
         targetPorts: { $self: { kind: 'instance' } },
       })
@@ -151,8 +151,8 @@ describe('ManageTool graph wiring', () => {
     const runtime = new LiveGraphRuntime(logger, registry);
     const graph = {
       nodes: [
-        { id: 'A', data: { template: 'simpleAgent', config: {} } },
-        { id: 'B', data: { template: 'simpleAgent', config: {} } },
+        { id: 'A', data: { template: 'agent', config: {} } },
+        { id: 'B', data: { template: 'agent', config: {} } },
         { id: 'M', data: { template: 'manageTool', config: { description: 'desc' } } },
       ],
       edges: [

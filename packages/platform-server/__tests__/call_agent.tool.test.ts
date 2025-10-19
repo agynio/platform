@@ -162,7 +162,7 @@ describe('CallAgentTool graph wiring', () => {
 
     class FakeAgent2 extends FakeAgent {}
 
-    // Minimal TemplateRegistry with simpleAgent and callAgentTool
+    // Minimal TemplateRegistry with agent and callAgentTool
     const registry = new TemplateRegistry();
     class FakeAgentWithTools extends FakeAgent2 {
       addTool(_tool: unknown) {}
@@ -170,7 +170,7 @@ describe('CallAgentTool graph wiring', () => {
     }
 
     registry
-      .register('simpleAgent', () => new FakeAgentWithTools(logger) as any, {
+      .register('agent', () => new FakeAgentWithTools(logger) as any, {
         sourcePorts: {
           tools: { kind: 'method', create: 'addTool', destroy: 'removeTool' },
         },
@@ -185,8 +185,8 @@ describe('CallAgentTool graph wiring', () => {
 
     const graph = {
       nodes: [
-        { id: 'A', data: { template: 'simpleAgent', config: {} } },
-        { id: 'B', data: { template: 'simpleAgent', config: {} } },
+        { id: 'A', data: { template: 'agent', config: {} } },
+        { id: 'B', data: { template: 'agent', config: {} } },
         { id: 'T', data: { template: 'callAgentTool', config: { description: 'desc' } } },
       ],
       edges: [

@@ -15,7 +15,7 @@ import MemoryConnectorConfigView from './MemoryConnectorConfigView';
 
 // Export an installer to avoid side-effect registration at import time
 export function installDefaultConfigViews(register: (entry: ConfigViewRegistration) => void) {
-  register({ template: 'simpleAgent', mode: 'static', component: SimpleAgentConfigView });
+  register({ template: 'agent', mode: 'static', component: SimpleAgentConfigView });
   register({ template: 'mcpServer', mode: 'dynamic', component: McpServerDynamicConfigView });
   register({ template: 'mcpServer', mode: 'static', component: McpServerStaticConfigView });
   register({ template: 'containerProvider', mode: 'static', component: ContainerProviderConfigView });

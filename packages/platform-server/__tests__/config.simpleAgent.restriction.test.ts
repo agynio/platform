@@ -2,7 +2,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { LoggerService } from '../src/services/logger.service';
 import { ConfigService } from '../src/services/config.service';
 import { CheckpointerService } from '../src/services/checkpointer.service';
-import { SimpleAgent } from '../src/agents/simple.agent';
+import { Agent } from '../src/nodes/agent/agent.node';
 
 vi.mock('@langchain/openai', () => ({ ChatOpenAI: class { withConfig() { return { invoke: async () => ({ text: 'ok' }) } as any; } async getNumTokens(t: string) { return t.length; } } }));
 vi.mock('../src/services/checkpointer.service', async (importOriginal) => {
@@ -11,12 +11,12 @@ vi.mock('../src/services/checkpointer.service', async (importOriginal) => {
   return { ...mod, CheckpointerService: Fake };
 });
 
-describe('SimpleAgent config restrictions', () => {
+describe('Agent config restrictions', () => {
   it('setConfig preserves systemPrompt and toggles restriction flags without concatenation', async () => {
     const cfg = new ConfigService({
       githubAppId: '1', githubAppPrivateKey: 'k', githubInstallationId: 'i', openaiApiKey: 'x', githubToken: 't', mongodbUrl: 'm',
     } as any);
-    const agent = new SimpleAgent(cfg, new LoggerService(), new CheckpointerService(new LoggerService()) as any, 'a1');
+    const agent = new Agent(cfg, new LoggerService(), new CheckpointerService(new LoggerService()) as any, 'a1');
     // Update system prompt
     agent.setConfig({ systemPrompt: 'Base system' });
     // Toggle restriction flags

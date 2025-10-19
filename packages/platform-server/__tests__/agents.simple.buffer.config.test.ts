@@ -1,23 +1,23 @@
 import { describe, it, expect, vi } from 'vitest';
-import { SimpleAgent, SimpleAgentStaticConfigSchema } from '../src/agents/simple.agent';
+import { Agent, AgentStaticConfigSchema } from '../src/nodes/agent/agent.node';
 
 class MockConfigService { openaiApiKey = 'sk-abc'; }
 class MockLoggerService { info = vi.fn(); debug = vi.fn(); error = vi.fn(); }
 class MockCheckpointerService { getCheckpointer = vi.fn(() => ({} as any)); }
 
-// Minimal stub: SimpleAgent requires an agentId to init
-const makeAgent = () => new SimpleAgent(new MockConfigService() as any, new MockLoggerService() as any, new MockCheckpointerService() as any, 'agent-1');
+// Minimal stub: Agent requires an agentId to init
+const makeAgent = () => new Agent(new MockConfigService() as any, new MockLoggerService() as any, new MockCheckpointerService() as any, 'agent-1');
 
-describe('SimpleAgent buffer handling config schema', () => {
+describe('Agent buffer handling config schema', () => {
   it('exposes debounceMs/whenBusy/processBuffer with defaults', () => {
-    const parsed = SimpleAgentStaticConfigSchema.parse({});
+    const parsed = AgentStaticConfigSchema.parse({});
     expect(parsed.debounceMs).toBe(0);
     expect(parsed.whenBusy).toBe('wait');
     expect(parsed.processBuffer).toBe('allTogether');
   });
 
   it('validates enum values', () => {
-    const parsed = SimpleAgentStaticConfigSchema.parse({ whenBusy: 'injectAfterTools', processBuffer: 'oneByOne' });
+    const parsed = AgentStaticConfigSchema.parse({ whenBusy: 'injectAfterTools', processBuffer: 'oneByOne' });
     expect(parsed.whenBusy).toBe('injectAfterTools');
     expect(parsed.processBuffer).toBe('oneByOne');
   });
@@ -33,15 +33,15 @@ describe('SimpleAgent buffer handling config schema', () => {
   });
 
   it('rejects invalid enum values in schema and setConfig', () => {
-    const res = SimpleAgentStaticConfigSchema.safeParse({ whenBusy: 'bogus' });
+    const res = AgentStaticConfigSchema.safeParse({ whenBusy: 'bogus' });
     expect(res.success).toBe(false);
     const a = makeAgent();
     expect(() => a.setConfig({ whenBusy: 'bogus' })).toThrowError();
   });
 
   it('rejects negative summarizationKeepTokens/maxTokens', () => {
-    const res1 = SimpleAgentStaticConfigSchema.safeParse({ summarizationKeepTokens: -1 });
-    const res2 = SimpleAgentStaticConfigSchema.safeParse({ summarizationMaxTokens: 0 });
+    const res1 = AgentStaticConfigSchema.safeParse({ summarizationKeepTokens: -1 });
+    const res2 = AgentStaticConfigSchema.safeParse({ summarizationMaxTokens: 0 });
     expect(res1.success).toBe(false);
     expect(res2.success).toBe(false);
     const a = makeAgent();

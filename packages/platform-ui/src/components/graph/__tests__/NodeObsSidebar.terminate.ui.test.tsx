@@ -23,7 +23,7 @@ describe('NodeObsSidebar terminate UI behavior', () => {
     const oldConfirm = window.confirm;
     // @ts-expect-error test override
     window.confirm = () => true;
-    const node: any = { id: 'agent-1', data: { template: 'simpleAgent' } };
+    const node: any = { id: 'agent-1', data: { template: 'agent' } };
     await act(async () => { render(<NodeObsSidebar node={node} />); });
     expect(await screen.findByText('Active Runs')).toBeInTheDocument();
     const btn = await screen.findByText('Terminate');

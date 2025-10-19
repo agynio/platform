@@ -67,7 +67,7 @@ describe('Graph MCP integration', () => {
     const graph: GraphDefinition = {
       nodes: [
         { id: 'container', data: { template: 'containerProvider' } },
-        { id: 'agent', data: { template: 'simpleAgent' } },
+        { id: 'agent', data: { template: 'agent' } },
         { id: 'mcp', data: { template: 'mcpServer', config: { namespace: 'x', command: 'echo "mock" && sleep 1' } } },
       ],
       edges: [

@@ -4,7 +4,7 @@ import { LoggerService } from '../src/services/logger.service';
 import { ConfigService } from '../src/services/config.service';
 import { CheckpointerService } from '../src/services/checkpointer.service';
 
-// Mock ChatOpenAI to avoid network; must be declared before importing SimpleAgent
+// Mock ChatOpenAI to avoid network; must be declared before importing Agent
 vi.mock('@langchain/openai', async (importOriginal) => {
   const mod = await importOriginal();
   class MockChatOpenAI extends mod.ChatOpenAI {
@@ -49,9 +49,9 @@ vi.mock('../src/services/checkpointer.service', async (importOriginal) => {
   return { ...mod, CheckpointerService: Fake };
 });
 
-import { SimpleAgent } from '../src/agents/simple.agent';
+import { Agent } from '../src/nodes/agent/agent.node';
 
-describe('SimpleAgent summarization graph', () => {
+describe('Agent summarization graph', () => {
   it('invokes successfully over several turns with summarization configured', async () => {
     const cfg = new ConfigService({
       githubAppId: '1',
@@ -61,7 +61,7 @@ describe('SimpleAgent summarization graph', () => {
       githubToken: 't',
       mongodbUrl: 'm',
     });
-    const agent = new SimpleAgent(cfg, new LoggerService(), new CheckpointerService(new LoggerService()) as any, 'agent-1');
+    const agent = new Agent(cfg, new LoggerService(), new CheckpointerService(new LoggerService()) as any, 'agent-1');
     agent.setConfig({ summarizationKeepLast: 2, summarizationMaxTokens: 200 });
 
     // Use the agent wrapper to invoke

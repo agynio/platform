@@ -4,7 +4,7 @@ import { LoggerService } from '../src/services/logger.service';
 import { ConfigService } from '../src/services/config.service';
 import { CheckpointerService } from '../src/services/checkpointer.service';
 
-// Mock ChatOpenAI to avoid network; must be declared before importing SimpleAgent
+// Mock ChatOpenAI to avoid network; must be declared before importing Agent
 vi.mock('@langchain/openai', async (importOriginal) => {
   const mod = await importOriginal();
   class MockChatOpenAI extends mod.ChatOpenAI {
@@ -45,7 +45,7 @@ vi.mock('../src/services/checkpointer.service', async (importOriginal) => {
   return { ...mod, CheckpointerService: Fake };
 });
 
-import { SimpleAgent } from '../src/agents/simple.agent';
+import { Agent } from '../src/nodes/agent/agent.node';
 import type { TriggerMessage } from '../src/triggers/base.trigger';
 
 // Helper to make a configured agent
@@ -54,10 +54,10 @@ function makeAgent() {
     githubAppId: '1', githubAppPrivateKey: 'k', githubInstallationId: 'i',
     openaiApiKey: 'x', githubToken: 't', mongodbUrl: 'm',
   });
-  return new SimpleAgent(cfg, new LoggerService(), new CheckpointerService(new LoggerService()) as any, 'agent-buf');
+  return new Agent(cfg, new LoggerService(), new CheckpointerService(new LoggerService()) as any, 'agent-buf');
 }
 
-describe('SimpleAgent buffer behavior', () => {
+describe('Agent buffer behavior', () => {
   it('debounce delays run start and batches within window', async () => {
     vi.useFakeTimers();
     const cfg = new ConfigService({
@@ -65,7 +65,7 @@ describe('SimpleAgent buffer behavior', () => {
       openaiApiKey: 'x', githubToken: 't', mongodbUrl: 'm',
     });
     const logger = { info: vi.fn(), debug: vi.fn(), error: vi.fn() } as unknown as LoggerService;
-    const agent = new SimpleAgent(cfg, logger as any, new CheckpointerService(new LoggerService()) as any, 'agent-deb');
+    const agent = new Agent(cfg, logger as any, new CheckpointerService(new LoggerService()) as any, 'agent-deb');
     agent.setConfig({ debounceMs: 50, processBuffer: 'allTogether' });
 
     const p1 = agent.invoke('td', { content: 'a', info: {} });
@@ -90,7 +90,7 @@ describe('SimpleAgent buffer behavior', () => {
       openaiApiKey: 'x', githubToken: 't', mongodbUrl: 'm',
     });
     const logger = { info: vi.fn(), debug: vi.fn(), error: vi.fn() } as unknown as LoggerService;
-    const agent = new SimpleAgent(cfg, logger as any, new CheckpointerService(new LoggerService()) as any, 'agent-one');
+    const agent = new Agent(cfg, logger as any, new CheckpointerService(new LoggerService()) as any, 'agent-one');
     agent.setConfig({ processBuffer: 'oneByOne' });
     const msgs: TriggerMessage[] = [
       { content: 'a', info: {} },
@@ -109,7 +109,7 @@ describe('SimpleAgent buffer behavior', () => {
       openaiApiKey: 'x', githubToken: 't', slackBotToken: 's', slackAppToken: 'sa', mongodbUrl: 'm',
     });
     const logger = { info: vi.fn(), debug: vi.fn(), error: vi.fn() } as unknown as LoggerService;
-    const agent = new SimpleAgent(cfg, logger as any, new CheckpointerService(new LoggerService()), 'agent-all');
+    const agent = new Agent(cfg, logger as any, new CheckpointerService(new LoggerService()), 'agent-all');
     agent.setConfig({ processBuffer: 'allTogether', debounceMs: 0 });
     const msgs: TriggerMessage[] = [
       { content: 'a', info: {} },

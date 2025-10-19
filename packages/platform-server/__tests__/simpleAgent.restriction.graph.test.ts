@@ -3,7 +3,7 @@ import { AIMessage, BaseMessage, SystemMessage } from '@langchain/core/messages'
 import { LoggerService } from '../src/services/logger.service';
 import { ConfigService } from '../src/services/config.service';
 import { CheckpointerService } from '../src/services/checkpointer.service';
-import { SimpleAgent } from '../src/agents/simple.agent';
+import { Agent } from '../src/nodes/agent/agent.node';
 
 // Mock ChatOpenAI to control responses
 vi.mock('@langchain/openai', async (importOriginal) => {
@@ -52,10 +52,10 @@ vi.mock('../src/services/checkpointer.service', async (importOriginal) => {
   return { ...mod, CheckpointerService: Fake };
 });
 
-// Patch SimpleAgent to add finish tool quickly in tests
-vi.mock('../src/agents/simple.agent', async (importOriginal) => {
+// Patch Agent to add finish tool quickly in tests
+vi.mock('../src/nodes/agent/agent.node', async (importOriginal) => {
   const mod = await importOriginal();
-  const Original = mod.SimpleAgent;
+  const Original = mod.Agent;
   class TestAgent extends Original {
     addTool(tool: any) { super.addTool(tool); }
     init(config: any) {
@@ -66,10 +66,10 @@ vi.mock('../src/agents/simple.agent', async (importOriginal) => {
       return this;
     }
   }
-  return { ...mod, SimpleAgent: TestAgent };
+  return { ...mod, Agent: TestAgent };
 });
 
-describe('SimpleAgent restriction enforcement', () => {
+describe('Agent restriction enforcement', () => {
   const cfg = new ConfigService({
     githubAppId: '1',
     githubAppPrivateKey: 'k',
@@ -80,14 +80,14 @@ describe('SimpleAgent restriction enforcement', () => {
   });
 
   it('restrictOutput=false: call_model with no tool_calls leads to END (no enforce)', async () => {
-    const agent = new SimpleAgent(cfg, new LoggerService(), new CheckpointerService(new LoggerService()) as any, 'a1');
+    const agent = new Agent(cfg, new LoggerService(), new CheckpointerService(new LoggerService()) as any, 'a1');
     agent.setConfig({ restrictOutput: false });
     const res = await agent.invoke('t', { content: 'hi', info: {} } as any);
     expect(res).toBeDefined();
   });
 
   it('restrictOutput=true & restrictionMaxInjections=0: injects and loops until tool call', async () => {
-    const agent = new SimpleAgent(cfg, new LoggerService(), new CheckpointerService(new LoggerService()) as any, 'a2');
+    const agent = new Agent(cfg, new LoggerService(), new CheckpointerService(new LoggerService()) as any, 'a2');
     agent.setConfig({ restrictOutput: true, restrictionMaxInjections: 0 });
     const res = await agent.invoke('t', { content: 'hi', info: {} } as any);
     expect(res).toBeDefined();
@@ -103,7 +103,7 @@ describe('SimpleAgent restriction enforcement', () => {
     }
     ;(openai as any).ChatOpenAI = NoToolLLM;
 
-    const agent = new SimpleAgent(cfg, new LoggerService(), new CheckpointerService(new LoggerService()) as any, 'a3');
+    const agent = new Agent(cfg, new LoggerService(), new CheckpointerService(new LoggerService()) as any, 'a3');
     agent.setConfig({ restrictOutput: true, restrictionMaxInjections: 2 });
     const res = await agent.invoke('t', { content: 'hello', info: {} } as any);
     expect(res).toBeDefined();

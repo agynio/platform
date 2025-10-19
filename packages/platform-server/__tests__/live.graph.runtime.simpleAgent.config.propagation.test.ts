@@ -12,7 +12,7 @@ import type { MongoService } from '../src/services/mongo.service';
 // Avoid any real network calls by ensuring ChatOpenAI token counting/invoke are not used in this test.
 // We don't invoke the graph; we only verify propagation of config to internal nodes/fields.
 
-describe('LiveGraphRuntime -> SimpleAgent config propagation', () => {
+describe('LiveGraphRuntime -> Agent config propagation', () => {
   function makeRuntime() {
     const logger = new LoggerService();
     const containerService = new ContainerService(logger);
@@ -90,7 +90,7 @@ describe('LiveGraphRuntime -> SimpleAgent config propagation', () => {
         {
           id: 'agent',
           data: {
-            template: 'simpleAgent',
+            template: 'agent',
             config: {
               systemPrompt,
               model,
@@ -131,7 +131,7 @@ describe('LiveGraphRuntime -> SimpleAgent config propagation', () => {
         {
           id: 'agent',
           data: {
-            template: 'simpleAgent',
+            template: 'agent',
             config: {
               systemPrompt: newSystemPrompt,
               model: newModel,

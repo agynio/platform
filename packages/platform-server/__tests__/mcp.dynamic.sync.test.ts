@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { SimpleAgent } from '../src/agents/simple.agent';
+import { Agent } from '../src/nodes/agent/agent.node';
 import { LocalMCPServer } from '../src/mcp/localMcpServer';
 import { LoggerService } from '../src/services/logger.service';
 import { ConfigService } from '../src/services/config.service';
@@ -17,7 +17,7 @@ const mockProvider = { provide: async (id: string) => ({ id: `c-${id}`, stop: as
 
 describe('MCP dynamic tool enable/disable sync', () => {
   let server: LocalMCPServer;
-  let agent: SimpleAgent;
+  let agent: Agent;
   let logger: any;
 
   beforeEach(async () => {
@@ -35,7 +35,7 @@ describe('MCP dynamic tool enable/disable sync', () => {
 
     const configService = new MockConfigService();
     const cps = new MockCheckpointerService();
-    agent = new SimpleAgent(configService as any, logger as any, cps as any, 'agent1');
+    agent = new Agent(configService as any, logger as any, cps as any, 'agent1');
     await server.provision();
     await agent.addMcpServer(server);
     // Manually emit ready since we bypassed real start events

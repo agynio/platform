@@ -1,15 +1,15 @@
 import { describe, it, expect, vi } from 'vitest';
-import { SimpleAgent } from '../src/agents/simple.agent';
+import { Agent } from '../src/nodes/agent/agent.node';
 import { BaseAgent } from '../src/agents/base.agent';
 
 class MockConfigService { openaiApiKey = 'sk-abc'; }
 class MockLoggerService { info = vi.fn(); debug = vi.fn(); error = vi.fn(); }
 class MockCheckpointerService { getCheckpointer = vi.fn(() => ({} as any)); }
 
-// Minimal stub: SimpleAgent requires an agentId to init
-const makeAgent = () => new SimpleAgent(new MockConfigService() as any, new MockLoggerService() as any, new MockCheckpointerService() as any, 'agent-1');
+// Minimal stub: Agent requires an agentId to init
+const makeAgent = () => new Agent(new MockConfigService() as any, new MockLoggerService() as any, new MockCheckpointerService() as any, 'agent-1');
 
-describe('BaseAgent.getConfigSchema / SimpleAgent.setConfig', () => {
+describe('BaseAgent.getConfigSchema / Agent.setConfig', () => {
   it('returns expected JSON schema', () => {
     const a = makeAgent();
     const schema = (a as unknown as BaseAgent).getConfigSchema() as any;
@@ -41,6 +41,6 @@ describe('BaseAgent.getConfigSchema / SimpleAgent.setConfig', () => {
   // Expect underlying llm object mutated, not replaced with a new node
   expect(anyA.llm).toBe(originalLLM);
   expect((anyA.llm as any).model).toBe('override-model');
-  expect(anyA.loggerService.info).toHaveBeenCalledWith('SimpleAgent model updated to override-model');
+  expect(anyA.loggerService.info).toHaveBeenCalledWith('Agent model updated to override-model');
   });
 });
