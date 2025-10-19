@@ -28,7 +28,8 @@ export function NixPackagesSection(props: ControlledProps | UncontrolledProps) {
   const [activeIndex, setActiveIndex] = useState(0);
   const [selected, setSelected] = useState<SelectedPkg[]>([]);
   const [versionsByName, setVersionsByName] = useState<Record<string, string | ''>>({});
-  const [detailsByName, setDetailsByName] = useState<Record<string, { version: string; commitHash: string; attributePath: string }>>({});
+  // Allow partial resolved details to support draft persistence
+  const [detailsByName, setDetailsByName] = useState<Record<string, { version?: string; commitHash?: string; attributePath?: string }>>({});
   const handleResolved = useCallback(
     (name: string, detail: { version: string; commitHash: string; attributePath: string }) => {
       setDetailsByName((prev) => ({ ...prev, [name]: detail }));
@@ -57,7 +58,7 @@ export function NixPackagesSection(props: ControlledProps | UncontrolledProps) {
       // Hydrate chosen versions for UI from controlled value
       setVersionsByName((prev) => {
         const next: Record<string, string | ''> = { ...prev };
-        for (const p of curr) if (p.version) next[p.name] = String(p.version);
+        for (const p of curr) if ((p as any).version) next[p.name] = String((p as any).version);
         return next;
       });
     } else {
@@ -66,14 +67,17 @@ export function NixPackagesSection(props: ControlledProps | UncontrolledProps) {
       const curr = (rawPkgs as NixPackageSelection[]).filter((p) => p && typeof p.name === 'string');
       const nextSelected: SelectedPkg[] = curr.map((p) => ({ name: p.name }));
       setSelected((prev) => {
+        // Preserve local draft selection when persisted config is empty
+        if (nextSelected.length === 0 && prev.length > 0) return prev;
         const prevKey = JSON.stringify(prev);
         const nextKey = JSON.stringify(nextSelected);
         return prevKey === nextKey ? prev : nextSelected;
       });
-      // Hydrate chosen versions for UI from existing config if present
+      // Hydrate chosen versions for UI from existing config if present (do not wipe when empty)
       setVersionsByName((prev) => {
+        if (curr.length === 0) return prev;
         const next: Record<string, string | ''> = { ...prev };
-        for (const p of curr) if (p.version) next[p.name] = String(p.version);
+        for (const p of curr) if ((p as any).version) next[p.name] = String((p as any).version);
         return next;
       });
     }
@@ -81,22 +85,26 @@ export function NixPackagesSection(props: ControlledProps | UncontrolledProps) {
 
   // Push updates into node config when selections/channels change
   useEffect(() => {
-    // Build packages array only for items with fully resolved details
-    const packages = selected.flatMap((p) => {
-      const d = detailsByName[p.name];
-      return d && d.version && d.commitHash && d.attributePath
-        ? [{ name: p.name, version: d.version, commitHash: d.commitHash, attributePath: d.attributePath }]
-        : [];
+    // Build packages array including partial selections to persist drafts
+    const packages = selected.map((p) => {
+      const version = versionsByName[p.name];
+      const d = detailsByName[p.name] || {};
+      const item: Record<string, unknown> = { name: p.name };
+      if (version) item.version = version;
+      if (d.commitHash && d.attributePath) {
+        (item as any).commitHash = d.commitHash;
+        (item as any).attributePath = d.attributePath;
+        if (!('version' in item) && d.version) (item as any).version = d.version;
+      }
+      return item;
     });
     // No debug logs in production
 
-    // Skip no-op early pushes when there are no chosen versions and nothing was previously pushed
-    if (packages.length === 0 && lastPushedPackagesLen.current === 0) {
-      return;
-    }
+    // Always push current draft when selection exists; prevents autosave wiping selection
+    if (packages.length === 0 && selected.length === 0 && lastPushedPackagesLen.current === 0) return;
 
     if (controlled) {
-      const next: NixPackageSelection[] = packages;
+      const next = packages as unknown as NixPackageSelection[] | any[];
       // Avoid reentrancy loops; compare shallow JSON
       const json = JSON.stringify(next);
       if (json !== lastPushedJson.current) {
@@ -117,7 +125,7 @@ export function NixPackagesSection(props: ControlledProps | UncontrolledProps) {
         (props as UncontrolledProps).onUpdateConfig(next);
       }
     }
-  }, [selected, detailsByName, controlled, controlledValueKey, uncontrolledPkgsKey]);
+  }, [selected, versionsByName, detailsByName, controlled, controlledValueKey, uncontrolledPkgsKey]);
   const listboxRef = useRef<HTMLUListElement | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
 
