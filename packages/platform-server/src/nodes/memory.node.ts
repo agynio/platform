@@ -1,7 +1,7 @@
 import { Db } from 'mongodb';
 import { z } from 'zod';
 import { MemoryService, MemoryScope } from '../services/memory.service';
-import type { NodeLifecycle } from './types';
+import type { Node } from './types';
 
 export interface MemoryNodeConfig {
   scope: MemoryScope; // 'global' | 'perThread'
@@ -23,7 +23,7 @@ export type MemoryNodeStaticConfig = z.infer<typeof MemoryNodeStaticConfigSchema
  * MemoryNode factory returns an accessor to build a MemoryService scoped to the node and thread.
  * Inject Db from MongoService.getDb() at template wiring time.
  */
-export class MemoryNode implements NodeLifecycle<Partial<MemoryNodeConfig> & Partial<MemoryNodeStaticConfig>> {
+export class MemoryNode implements Node<Partial<MemoryNodeConfig> & Partial<MemoryNodeStaticConfig>> {
   constructor(private db: Db, private nodeId: string) {}
 
   private config: MemoryNodeConfig = { scope: 'global' };

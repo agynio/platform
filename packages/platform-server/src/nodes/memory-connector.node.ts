@@ -1,7 +1,7 @@
 import { SystemMessage } from '@langchain/core/messages';
 import { z } from 'zod';
 import { MemoryService } from '../services/memory.service';
-import type { NodeLifecycle } from './types';
+import type { Node } from './types';
 
 export interface MemoryConnectorConfig {
   placement: 'after_system' | 'last_message';
@@ -19,7 +19,7 @@ export const MemoryConnectorStaticConfigSchema = z
   .strict();
 export type MemoryConnectorStaticConfig = z.infer<typeof MemoryConnectorStaticConfigSchema>;
 
-export class MemoryConnectorNode implements NodeLifecycle<Partial<MemoryConnectorConfig> & Partial<MemoryConnectorStaticConfig>> {
+export class MemoryConnectorNode implements Node<Partial<MemoryConnectorConfig> & Partial<MemoryConnectorStaticConfig>> {
   constructor(private serviceFactory: (opts: { threadId?: string }) => MemoryService) {}
 
   private config: MemoryConnectorConfig = { placement: 'after_system', content: 'tree', maxChars: 4000 };

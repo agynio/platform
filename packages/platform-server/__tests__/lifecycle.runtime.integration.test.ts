@@ -3,9 +3,9 @@ import { TemplateRegistry } from '../src/graph/templateRegistry';
 import { LiveGraphRuntime } from '../src/graph/liveGraph.manager';
 import { LoggerService } from '../src/services/logger.service';
 import type { GraphDefinition } from '../src/graph/types';
-import type { NodeLifecycle } from '../src/nodes/types';
+import type { Node } from '../src/nodes/types';
 
-class LifeNode implements NodeLifecycle<{ a?: number }> {
+class LifeNode implements Node<{ a?: number }> {
   public calls: string[] = [];
   configure(_cfg: { a?: number }) { this.calls.push('configure'); }
   start() { this.calls.push('start'); }
@@ -34,4 +34,3 @@ describe('LiveGraphRuntime lifecycle integration', () => {
     expect(inst.calls.includes('delete')).toBe(true);
   });
 });
-
