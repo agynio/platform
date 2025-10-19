@@ -118,9 +118,8 @@ describe('ContainerProviderEntity parseVaultRef', () => {
     );
     const ent3 = new ContainerProviderEntity(svc, undefined, {}, () => ({}), cfgTrue);
     ent3.setConfig({});
-    // Patch private method for success
-    // @ts-expect-error - access private for testing
-    ent3['getNcpsPublicKey'] = async () => 'pub:key';
+    // Patch private method for success (test-only); cast to access private
+    (ent3 as unknown as { getNcpsPublicKey: () => Promise<string> }).getNcpsPublicKey = async () => 'pub:key';
     const c3 = (await ent3.provide('t5')) as TestContainerEntity;
     expect(c3.env?.['NIX_CONFIG']).toContain('substituters = http://ncps:8501');
     expect(c3.env?.['NIX_CONFIG']).toContain('trusted-public-keys = pub:key');

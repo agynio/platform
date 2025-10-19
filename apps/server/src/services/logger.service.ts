@@ -18,6 +18,18 @@ export class LoggerService {
     this.obs()?.info(`${message}\n${this.serialize(optionalParams)}`);
   }
 
+  // Warn-level logging; fall back to obs.info with [WARN] prefix if warn not available
+  warn(message: string, ...optionalParams: any[]) {
+    console.warn(`[WARN] ${message}`, ...optionalParams);
+    // Some obs logger versions may not expose warn; use info as a safe fallback
+    const o: any = this.obs();
+    if (o && typeof o.warn === 'function') {
+      o.warn(`${message}\n${this.serialize(optionalParams)}`);
+    } else {
+      o?.info?.(`[WARN] ${message}\n${this.serialize(optionalParams)}`);
+    }
+  }
+
   debug(message: string, ...optionalParams: any[]) {
     console.debug(`[DEBUG] ${message}`, ...optionalParams);
     this.obs()?.debug(`${message}\n${this.serialize(optionalParams)}`);
