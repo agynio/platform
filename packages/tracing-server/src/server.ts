@@ -93,15 +93,15 @@ export async function createServer(db: Db, opts: { logger?: boolean } = {}): Pro
 
   // Heartbeat sweeper configuration (env-driven with defaults)
   const STALE_TTL_MS = (() => {
-    const v = Number(process.env.OBS_STALE_TTL_MS);
+    const v = Number(process.env.TRACING_STALE_TTL_MS);
     return Number.isFinite(v) && v > 0 ? v : 5 * 60 * 1000; // default 5 minutes
   })();
   const SWEEP_INTERVAL_MS = (() => {
-    const v = Number(process.env.OBS_SWEEP_INTERVAL_MS);
+    const v = Number(process.env.TRACING_SWEEP_INTERVAL_MS);
     return Number.isFinite(v) && v > 0 ? v : 60 * 1000; // default 60s
   })();
   const RECONCILE_ON_START = (() => {
-    const env = (process.env.OBS_RECONCILE_ON_START || 'true').toLowerCase();
+    const env = (process.env.TRACING_RECONCILE_ON_START || 'true').toLowerCase();
     return env === '1' || env === 'true' || env === 'yes';
   })();
 

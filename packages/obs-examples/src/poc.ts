@@ -12,7 +12,7 @@ import {
 } from '@agyn/tracing';
 
 async function main() {
-  const endpoint = process.env.OBS_EXTENDED_ENDPOINT || 'http://localhost:4319';
+  const endpoint = process.env.TRACING_SERVER_URL || 'http://localhost:4319';
   init({
     mode: 'extended',
     endpoints: { extended: endpoint },

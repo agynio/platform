@@ -24,6 +24,7 @@ UI linkage
 Related docs
 - docs/observability/heartbeats-and-sweeper.md
 - docs/observability/stage-1-plan.md
+- Migration: see CHANGELOG.md for OBS_* -> TRACING_* mapping.
 
 Related behavior
 - SDK initialization occurs at server startup; spans are emitted for model/tool calls.

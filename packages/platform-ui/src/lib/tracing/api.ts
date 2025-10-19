@@ -24,8 +24,7 @@ export interface SpanDoc {
 
 const TRACING_BASE: string = import.meta.env.VITE_TRACING_SERVER_URL || 'http://localhost:4319';
 
-export function getObsBaseUrl(): string {
-  // Keep function name for compatibility; returns tracing base
+export function getTracingBaseUrl(): string {
   return TRACING_BASE;
 }
 

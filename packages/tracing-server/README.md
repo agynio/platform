@@ -1,12 +1,12 @@
-# @agyn/obs-server
+# @agyn/tracing-server
 
 Fastify + Mongo service for Observability Stage 1. Dev/local only; no auth or rate limiting.
 
 Run locally (no Docker):
 - Prereqs: Node 18+, MongoDB running (default URL: mongodb://localhost:27017/obs)
-- Dev from sources: `pnpm --filter @agyn/obs-server dev`
+- Dev from sources: `pnpm --filter @agyn/tracing-server dev`
   - Env: `MONGO_URL` (default `mongodb://localhost:27017/obs`), `PORT` (default `4319`)
-- Build + start: `pnpm --filter @agyn/obs-server build && pnpm --filter @agyn/obs-server start`
+- Build + start: `pnpm --filter @agyn/tracing-server build && pnpm --filter @agyn/tracing-server start`
 
 Endpoints:
 - POST /v1/spans/upsert
@@ -22,12 +22,12 @@ Heartbeat + Sweeper
 - On completion/error, SDK sends state='completed' which stops the heartbeat and the sweeper skips it.
 
 Configuration (env)
-- OBS_STALE_TTL_MS: how long a span may go without a heartbeat before being cancelled. Default 5 minutes.
-- OBS_SWEEP_INTERVAL_MS: how often the sweeper runs. Default 60 seconds.
-- OBS_RECONCILE_ON_START: whether to run a one-time sweep at startup. Default true.
+- TRACING_STALE_TTL_MS: how long a span may go without a heartbeat before being cancelled. Default 5 minutes.
+- TRACING_SWEEP_INTERVAL_MS: how often the sweeper runs. Default 60 seconds.
+- TRACING_RECONCILE_ON_START: whether to run a one-time sweep at startup. Default true.
 
 Sweeper behavior
-- Predicate: { completed: false, lastUpdate: { $lt: now - OBS_STALE_TTL_MS } }.
+- Predicate: { completed: false, lastUpdate: { $lt: now - TRACING_STALE_TTL_MS } }.
 - Update: set completed=true, status='cancelled', endTime=now; push event { name:'terminated', attrs:{ reason:'stale_no_heartbeat' } }.
 - Indexes: { completed: 1, lastUpdate: -1 } (partial on completed=false) ensures efficient query; created on startup.
  - The terminated event includes an attrs.by field: 'periodic' or 'startup'.

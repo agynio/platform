@@ -3,7 +3,7 @@ import { init as initObs, withSystem } from '@agyn/tracing';
 
 initObs({
   mode: 'extended',
-  endpoints: { extended: process.env.OBS_ENDPOINT_EXTENDED || 'http://localhost:4319' },
+  endpoints: { extended: process.env.TRACING_SERVER_URL || 'http://localhost:4319' },
   defaultAttributes: { service: 'server' },
 });
 

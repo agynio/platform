@@ -23,7 +23,7 @@ function isSpanDoc(payload: unknown): payload is SpanDoc {
   return true;
 }
 
-class ObsRealtime {
+class TracingRealtime {
   private socket: Socket | null = null;
   private handlers = new Set<SpanUpsertHandler>();
 
@@ -50,4 +50,4 @@ class ObsRealtime {
   }
 }
 
-export const obsRealtime = new ObsRealtime();
+export const obsRealtime = new TracingRealtime();

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { Node } from 'reactflow';
-import type { SpanDoc } from '@/lib/obs/api';
-import { fetchSpansInRange } from '@/lib/obs/api';
+import type { SpanDoc } from '@/lib/tracing/api';
+import { fetchSpansInRange } from '@/lib/tracing/api';
 import { obsRealtime } from '@/lib/obs/socket';
 import { useTemplatesCache } from '@/lib/graph/templates.provider';
 import { useNodeReminders } from '@/lib/graph/hooks';

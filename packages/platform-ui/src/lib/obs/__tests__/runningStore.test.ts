@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import type { SpanDoc } from '../../obs/api';
+import type { SpanDoc } from '../../tracing/api';
 import { obsRealtime } from '../../obs/socket';
 import { useRunningCount, __resetRunningStoreForTest } from '../../obs/runningStore';
 import { renderHook, act } from '@testing-library/react';

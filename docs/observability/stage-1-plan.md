@@ -16,7 +16,7 @@ Example package
 - Example scripts are provided to exercise the observability APIs.
 - Dev: `pnpm --filter @agyn/obs-examples dev`
 - Build + run: `pnpm --filter @agyn/obs-examples build && pnpm --filter @agyn/obs-examples start`
-- Env: `OBS_EXTENDED_ENDPOINT` (default http://localhost:4319)
+- Env: `TRACING_SERVER_URL` (default http://localhost:4319)
 
 Linking from Builder UI (Activity panel)
 - The Builder UI can deep-link to the Observability UI using `VITE_TRACING_UI_BASE` (default http://localhost:4320).

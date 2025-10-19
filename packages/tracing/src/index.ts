@@ -72,12 +72,12 @@ export function init(c: InitConfig) {
   const batching: InternalConfig['batching'] = { maxBatchSize: 50, flushIntervalMs: 1000, ...(c.batching || {}) };
   const sampling: InternalConfig['sampling'] = { rate: 1, ...(c.sampling || {}) };
   const endpoints: InternalConfig['endpoints'] = { extended: c.endpoints.extended || '', otlp: c.endpoints.otlp || '' };
-  const envHbRaw = process.env.OBS_HEARTBEAT_MS;
+  const envHbRaw = process.env.TRACING_HEARTBEAT_MS;
   const envHbMs = envHbRaw !== undefined ? Number(envHbRaw) : undefined;
   let heartbeatMs = envHbMs ?? c.heartbeatMs ?? 60_000; // default 60s
   if (!Number.isFinite(heartbeatMs)) heartbeatMs = 60_000;
   heartbeatMs = Math.max(0, heartbeatMs);
-  const debug = c.debug ?? !!process.env.OBS_SDK_DEBUG;
+  const debug = c.debug ?? !!process.env.TRACING_SDK_DEBUG;
   config = {
     mode: c.mode,
     endpoints,
@@ -572,4 +572,3 @@ export class SummarizeResponse<TRaw = unknown> {
     this.newContext = params.newContext;
   }
 }
-
