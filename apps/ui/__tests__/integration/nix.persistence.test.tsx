@@ -86,4 +86,86 @@ describe('Nix packages persistence in builder graph', () => {
     // Allow any trailing save-state timers to flush before teardown to avoid unhandled updates
     await new Promise((r) => setTimeout(r, 1600));
   });
+
+  it('persists draft selection before version pick and survives autosave', async () => {
+    // Setup graph with a containerProvider node
+    server.use(
+      http.get('/api/templates', () =>
+        HttpResponse.json([
+          { name: 'containerProvider', title: 'Workspace', kind: 'service', sourcePorts: [], targetPorts: [], capabilities: { staticConfigurable: true } },
+        ]),
+      ),
+      http.get('/api/graph', () =>
+        HttpResponse.json({ name: 'g', version: 1, nodes: [{ id: 'ws', template: 'containerProvider', config: { image: 'alpine:3' } }], edges: [] }),
+      ),
+    );
+
+    let posted: any[] = [];
+    server.use(
+      http.post('/api/graph', async ({ request }) => {
+        const body = await request.json();
+        posted.push(body);
+        return HttpResponse.json({ version: (body?.version ?? 0) + 1 });
+      }),
+    );
+
+    function Harness() {
+      const state = useBuilderState(undefined, { debounceMs: 100 });
+      useEffect(() => {
+        if (!state.loading && state.nodes.length > 0) {
+          const id = state.nodes[0].id;
+          state.onNodesChange([{ id, type: 'select', selected: true } as any]);
+        }
+      }, [state.loading, state.nodes.length]);
+      return (
+        <BuilderTemplatesProvider templates={state.templates as any}>
+          <RightPropertiesPanel node={state.selectedNode as any} onChange={state.updateNodeData} />
+        </BuilderTemplatesProvider>
+      );
+    }
+
+    render(
+      <TestProviders>
+        <Harness />
+      </TestProviders>,
+    );
+
+    // Search and add package but do not choose version yet
+    const input = await screen.findByLabelText('Search Nix packages');
+    ;(input as HTMLInputElement).focus();
+    fireEvent.change(input, { target: { value: 'htop' } });
+    await waitFor(() => expect(screen.getByRole('listbox')).toBeInTheDocument());
+    fireEvent.click(await screen.findByRole('option', { name: /htop/ }));
+
+    // Trigger another config change to cause autosave (change image field in ContainerProviderConfigView)
+    const image = await screen.findByLabelText('Image');
+    fireEvent.change(image, { target: { value: 'alpine:3.19' } });
+
+    // Wait for an autosave POST and verify draft persisted
+    await waitFor(() => {
+      expect(posted.length).toBeGreaterThan(0);
+      const last = posted[posted.length - 1];
+      const node = last.nodes.find((n: any) => n.id === 'ws');
+      expect(Array.isArray(node.config?.nix?.packages)).toBe(true);
+      // Draft: at minimum stores { name }
+      expect(node.config.nix.packages[0]).toMatchObject({ name: 'htop' });
+    }, { timeout: 5000 });
+
+    // Ensure the selection is still visible in UI
+    expect(await screen.findByText('htop')).toBeInTheDocument();
+
+    // Now pick a version and ensure subsequent save includes resolved fields
+    const select = await screen.findByLabelText(/Select version for htop/);
+    await screen.findByRole('option', { name: '1.2.3' });
+    fireEvent.change(select, { target: { value: '1.2.3' } });
+
+    await waitFor(() => {
+      const last = posted[posted.length - 1];
+      const node = last.nodes.find((n: any) => n.id === 'ws');
+      const item = node.config.nix.packages.find((p: any) => p.name === 'htop');
+      expect(item).toMatchObject({ name: 'htop', version: '1.2.3' });
+      expect(item.commitHash).toBeTruthy();
+      expect(item.attributePath).toBeTruthy();
+    }, { timeout: 5000 });
+  });
 });
