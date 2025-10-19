@@ -2,6 +2,7 @@ import { LoggerService } from "./logger.service";
 import { ConfigService } from "./config.service";
 import type { Dispatcher } from "undici";
 import { Agent } from "undici";
+import { readFileSync } from "node:fs";
 
 const KEY_RE = /^[A-Za-z0-9._-]+:[A-Za-z0-9+/=]+$/;
 
@@ -102,7 +103,10 @@ export class NcpsKeyService {
     }
   }
 
-  setFetchImpl(fn: typeof fetch) { this._fetch = fn; }
+  // Allow tests to inject a fetch shim with an undici dispatcher
+  setFetchImpl(
+    fn: (input: RequestInfo | URL, init?: RequestInit & { dispatcher?: import('undici').Dispatcher }) => Promise<Response>,
+  ) { this._fetch = fn; }
   async triggerRefreshOnce(): Promise<boolean> {
     if (this.isRefreshing) return false;
     this.isRefreshing = true;
@@ -117,7 +121,6 @@ export class NcpsKeyService {
   private buildDispatcher(url: string, caPath?: string): Dispatcher | undefined {
     if (!/^https:/i.test(url)) return undefined;
     if (!caPath) return undefined;
-    import { readFileSync } from "node:fs";
     const pem = readFileSync(caPath, 'utf8');
     return new Agent({ connect: { ca: pem } });
   }

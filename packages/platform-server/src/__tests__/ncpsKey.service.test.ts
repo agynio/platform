@@ -93,8 +93,8 @@ describe('NcpsKeyService', () => {
       })
     );
     const svc = new NcpsKeyService(cfg);
-    let seenDispatcher: any;
-    svc.setFetchImpl(async (input: any, init?: any) => {
+    let seenDispatcher: import("undici").Dispatcher | undefined;
+    svc.setFetchImpl(async (input: RequestInfo | URL, init?: RequestInit & { dispatcher?: import('undici').Dispatcher }) => {
       seenDispatcher = init?.dispatcher;
       return new Response('cache:ZZZZZZZ=', { status: 200, headers: { 'Content-Type': 'text/plain' } });
     });

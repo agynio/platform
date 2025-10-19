@@ -118,8 +118,8 @@ describe('ContainerProviderEntity parseVaultRef', () => {
       }),
     );
     const keySvc = new NcpsKeyService(cfgTrue);
-    // Seed key directly for test
-    (keySvc as any).currentKey = 'pub:key';
+    // Seed key via helper for test
+    keySvc.seedKeyForTest('pub:key');
     const ent3 = new ContainerProviderEntity(svc, undefined, {}, () => ({}), cfgTrue, keySvc);
     ent3.setConfig({});
     const c3 = (await ent3.provide('t5')) as TestContainerEntity;
