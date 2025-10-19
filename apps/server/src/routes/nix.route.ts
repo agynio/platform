@@ -8,7 +8,10 @@ const NIXHUB_BASE = 'https://www.nixhub.io';
 // Simple Map-based LRU with TTL
 class LruCache<T> {
   private map = new Map<string, { at: number; value: T }>();
-  constructor(private max: number, private ttlMs: number) {}
+  constructor(
+    private max: number,
+    private ttlMs: number,
+  ) {}
   get(key: string): T | undefined {
     const ent = this.map.get(key);
     if (!ent) return undefined;
@@ -56,11 +59,21 @@ const NixhubSearchSchema = z.object({
 type NixhubSearchJSON = z.infer<typeof NixhubSearchSchema>;
 
 const NixhubPackageSchema = z.object({
-  name: z.string().optional(),
+  name: z.string(),
+  summary: z.string().optional(),
   releases: z
     .array(
       z.object({
         version: z.union([z.string(), z.number()]).optional(),
+        last_updated: z.string().optional(),
+        platforms_summary: z.string().optional(),
+        outputs_summary: z.string().optional(),
+        platforms: z.array(
+          z.object({
+            commit_hash: z.string(),
+            attribute_path: z.string(),
+          }),
+        ),
       }),
     )
     .optional(),
@@ -76,7 +89,9 @@ export function registerNixRoutes(
   // Strict query schemas (unknown params -> 400)
   const packagesQuerySchema = z.object({ query: z.string().optional() }).strict();
   const versionsQuerySchema = z.object({ name: z.string().max(200).regex(SAFE_IDENT) }).strict();
-  const resolveQuerySchema = z.object({ name: z.string().max(200).regex(SAFE_IDENT), version: z.string().max(100) }).strict();
+  const resolveQuerySchema = z
+    .object({ name: z.string().max(200).regex(SAFE_IDENT), version: z.string().max(100) })
+    .strict();
 
   async function fetchJson(url: string, signal: AbortSignal): Promise<unknown> {
     const cached = cache.get(url);
@@ -97,7 +112,12 @@ export function registerNixRoutes(
       } catch (e: any) {
         lastErr = e;
         const msg = String(e?.message || '');
-        const retriable = msg.includes('upstream_502') || msg.includes('upstream_503') || msg.includes('upstream_504') || e?.name === 'FetchError' || e?.code === 'ECONNRESET';
+        const retriable =
+          msg.includes('upstream_502') ||
+          msg.includes('upstream_503') ||
+          msg.includes('upstream_504') ||
+          e?.name === 'FetchError' ||
+          e?.code === 'ECONNRESET';
         if (attempt >= maxAttempts || !retriable) break;
         await new Promise((r) => setTimeout(r, Math.min(50 * attempt, 200)));
       }
@@ -126,7 +146,8 @@ export function registerNixRoutes(
       try {
         const json = (await fetchJson(url, ac.signal)) as unknown;
         const upstream = NixhubSearchSchema.safeParse(json);
-        const items: NonNullable<NixhubSearchJSON['results']> = upstream.success && Array.isArray(upstream.data.results) ? upstream.data.results : [];
+        const items: NonNullable<NixhubSearchJSON['results']> =
+          upstream.success && Array.isArray(upstream.data.results) ? upstream.data.results : [];
         const mapped = items
           .map((it) => ({ name: it?.name ?? '', description: it?.summary ?? null }))
           .filter((x) => typeof x.name === 'string' && x.name.length > 0);
@@ -168,7 +189,8 @@ export function registerNixRoutes(
       try {
         const json = (await fetchJson(url, ac.signal)) as unknown;
         const upstream = NixhubPackageSchema.safeParse(json);
-        const rels: NonNullable<NixhubPackageJSON['releases']> = upstream.success && Array.isArray(upstream.data.releases) ? upstream.data.releases : [];
+        const rels: NonNullable<NixhubPackageJSON['releases']> =
+          upstream.success && Array.isArray(upstream.data.releases) ? upstream.data.releases : [];
         const seen = new Set<string>();
         const withValid: string[] = [];
         const withInvalid: string[] = [];
@@ -203,40 +225,21 @@ export function registerNixRoutes(
     }
   });
 
-  // Helper: extract commitHash and attributePath for a given name+version
-  const NixhubPackageDetailsSchema = z
-    .object({
-      name: z.string().optional(),
-      releases: z
-        .array(
-          z
-            .object({
-              version: z.union([z.string(), z.number()]).optional(),
-              commit_hash: z.string().optional(),
-              platforms: z
-                .array(z.object({ system: z.string().optional(), attribute_path: z.string().optional(), attribute: z.string().optional() }).strict())
-                .optional(),
-            })
-            .strict(),
-        )
-        .optional(),
-    })
-    .strict()
-    .optional();
-
-  function extractResolvedRelease(json: unknown, name: string, version: string): { commitHash: string; attributePath: string } {
-    const parsed = NixhubPackageDetailsSchema.safeParse(json);
-    if (!parsed.success || !parsed.data || !Array.isArray(parsed.data.releases)) throw Object.assign(new Error('bad_upstream_json'), { code: 'bad_upstream_json' });
+  function extractResolvedRelease(
+    json: unknown,
+    name: string,
+    version: string,
+  ): { commitHash: string; attributePath: string } {
+    const parsed = NixhubPackageSchema.safeParse(json);
+    if (!parsed.success || !parsed.data || !Array.isArray(parsed.data.releases))
+      throw Object.assign(new Error(`bad_upstream_json ${JSON.stringify(parsed.error)}`), {
+        code: 'bad_upstream_json',
+      });
     const rel = parsed.data.releases.find((r) => String(r.version ?? '') === version);
     if (!rel) throw Object.assign(new Error('release_not_found'), { code: 'release_not_found' });
-    const commit = rel.commit_hash;
-    if (!commit) throw Object.assign(new Error('missing_commit_hash'), { code: 'missing_commit_hash' });
-    const preferred = ['x86_64-linux', 'aarch64-linux', 'x86_64-darwin', 'aarch64-darwin'];
-    const plats = Array.isArray(rel.platforms) ? rel.platforms : [];
-    const chosen = plats.find((p) => p.system && preferred.includes(p.system)) || plats[0];
-    const attr = chosen?.attribute_path || chosen?.attribute;
-    if (!attr) throw Object.assign(new Error('missing_attribute_path'), { code: 'missing_attribute_path' });
-    return { commitHash: commit, attributePath: String(attr) };
+    const { commit_hash, attribute_path } = rel.platforms[0];
+
+    return { commitHash: commit_hash, attributePath: attribute_path };
   }
 
   // GET /api/nix/resolve
@@ -274,7 +277,7 @@ export function registerNixRoutes(
       // Map known extraction errors to 502/404
       if (err.code && ['bad_upstream_json', 'missing_commit_hash', 'missing_attribute_path'].includes(err.code)) {
         reply.code(502);
-        return { error: err.code };
+        return { error: err.code, message: err.message };
       }
       if (err.code === 'release_not_found') {
         reply.code(404);
