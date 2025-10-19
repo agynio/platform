@@ -170,6 +170,61 @@ services:
       retries: 5
       start_period: 20s
 
+  # LiteLLM Postgres database
+  litellm-db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: litellm
+      POSTGRES_USER: litellm
+      POSTGRES_PASSWORD: change-me
+    volumes:
+      - litellm_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U litellm -d litellm"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      # Allow time for initial database startup & init
+      start_period: 20s
+    networks:
+      - agents_net
+
+  # LiteLLM server and UI
+  litellm:
+    image: ghcr.io/berriai/litellm:v1.77.5-stable
+    restart: unless-stopped
+    environment:
+      LITELLM_MASTER_KEY: ${LITELLM_MASTER_KEY:-sk-dev-master-1234}
+      LITELLM_SALT_KEY: ${LITELLM_SALT_KEY:-sk-dev-salt-1234}
+      DATABASE_URL: postgresql://litellm:change-me@litellm-db:5432/litellm
+      STORE_MODEL_IN_DB: "True"
+      UI_USERNAME: ${LITELLM_UI_USERNAME:-admin}
+      UI_PASSWORD: ${LITELLM_UI_PASSWORD:-admin}
+      PORT: "4000"
+      HOST: "0.0.0.0"
+    depends_on:
+      litellm-db:
+        condition: service_healthy
+    ports:
+      # Bind to loopback in dev to avoid exposing externally.
+      # Change to "0.0.0.0:4000:4000" or "4000:4000" to expose on LAN.
+      - "127.0.0.1:4000:4000"
+    healthcheck:
+      # Prefer HTTP health endpoint; fall back to UI or root if /health absent.
+      # If wget/curl are unavailable in the image, fall back to a TCP check via nc.
+      test:
+        [
+          "CMD-SHELL",
+          "wget -qO- http://localhost:4000/health || wget -qO- http://localhost:4000/ui || wget -qO- http://localhost:4000/ || (command -v curl >/dev/null 2>&1 && curl -fsS http://localhost:4000/health) || (command -v nc >/dev/null 2>&1 && nc -z localhost 4000)"
+        ]
+      interval: 15s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+    networks:
+      - agents_net
+
 volumes:
   mongo1_data:
     driver: local
@@ -177,6 +232,8 @@ volumes:
     driver: local
   pgdata:
   ncps-storage:
+    driver: local
+  litellm_pgdata:
     driver: local
 
 networks:

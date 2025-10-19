@@ -61,3 +61,13 @@ Migration
 - Idempotency: commit only when staged changes exist; reruns are no-ops.
 - Commit message: `chore(graph): migrate to single-graph root layout: <name> v<version> (+N nodes, +M edges)`.
 - Env: `MONGODB_URL` (default `mongodb://localhost:27017/agents`), `GRAPH_REPO_PATH` (default `./data/graph`), `GRAPH_BRANCH` (default `graph-state`), `GRAPH_AUTHOR_NAME`, `GRAPH_AUTHOR_EMAIL`, `GRAPH_NAME` (optional).
+
+LiteLLM proxy (optional)
+- See docs/litellm-setup.md for setup.
+- Toggle for local dev:
+  - Route via LiteLLM:
+    - OPENAI_API_KEY=sk-<virtual-key>
+    - OPENAI_BASE_URL=http://localhost:4000/v1  # note: /v1 suffix is required
+  - Direct to OpenAI:
+    - unset OPENAI_BASE_URL
+    - OPENAI_API_KEY=sk-<real-openai-key>
