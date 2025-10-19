@@ -105,8 +105,22 @@ export const ContainerProviderStaticConfigSchema = z
       .int()
       .default(86400)
       .describe('Idle TTL (seconds) before workspace cleanup; <=0 disables cleanup.'),
-    // Keep nix opaque for external configs; internal code derives a typed subset lazily
-    nix: z.unknown().optional(),
+    // Authoritative server-side nix shape; allow passthrough to not break UI/editor payloads
+    nix: z
+      .object({
+        packages: z
+          .array(ResolvedNixPackageItemSchema)
+          .optional()
+          .describe('Resolved nixpkgs refs to install.'),
+        timeoutSeconds: z
+          .number()
+          .int()
+          .min(1)
+          .optional()
+          .describe('Execution timeout in seconds for nix installs.'),
+      })
+      .passthrough()
+      .optional(),
   })
   .strict();
 
@@ -473,7 +487,12 @@ export class ContainerProviderEntity {
   }
 
   // Install Nix packages in the container profile using combined install with per-package fallback
-  private async ensureNixPackages(container: ContainerEntity, specs: NixInstallSpec[], originalCount: number): Promise<void> {
+  private async ensureNixPackages(
+    container: ContainerEntity,
+    specs: NixInstallSpec[],
+    originalCount: number,
+    timeoutSeconds?: number,
+  ): Promise<void> {
     try {
       const t0 = Date.now();
       if (!Array.isArray(specs) || specs.length === 0) {
@@ -524,7 +543,7 @@ export class ContainerProviderEntity {
         return;
       }
 
-      const timeoutSec = this.cfg?.nix?.timeoutSeconds ?? 900; // default 15m
+      const timeoutSec = typeof timeoutSeconds === 'number' && timeoutSeconds > 0 ? timeoutSeconds : 900; // default 15m
       const combined = `${PATH_PREFIX} && ${BASE} ${refs.join(' ')}`;
       this.logger.info('Nix install: %d packages (combined) container=%s', refs.length, cid);
       const combinedRes = await container.exec(['sh', '-lc', combined], { timeoutMs: timeoutSec * 1000, idleTimeoutMs: 60_000 });
