@@ -36,7 +36,7 @@ App configuration: auto-provision virtual key
     - LITELLM_MODELS=gpt-5 (comma-separated list)
     - LITELLM_KEY_DURATION=30d
     - LITELLM_KEY_ALIAS=agents-${process.pid}
-    - Limits: LITELLM_LIMIT_TPM, LITELLM_LIMIT_RPM, LITELLM_LIMIT_REQUESTS, LITELLM_HARD_LIMIT_USD, LITELLM_BUDGET_DURATION
+    - Limits: LITELLM_MAX_BUDGET, LITELLM_RPM_LIMIT, LITELLM_TPM_LIMIT, LITELLM_TEAM_ID
 - On success, the server sets OPENAI_API_KEY and OPENAI_BASE_URL automatically (defaults to `${LITELLM_BASE_URL}/v1` if not provided).
 
 Fallback to direct OpenAI
