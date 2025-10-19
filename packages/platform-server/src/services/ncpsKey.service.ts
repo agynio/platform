@@ -1,7 +1,7 @@
-import { LoggerService } from './logger.service';
-import { ConfigService } from './config.service';
-import type { Dispatcher } from 'undici';
-import { Agent } from 'undici';
+import { LoggerService } from "./logger.service";
+import { ConfigService } from "./config.service";
+import type { Dispatcher } from "undici";
+import { Agent } from "undici";
 
 const KEY_RE = /^[A-Za-z0-9._-]+:[A-Za-z0-9+/=]+$/;
 
@@ -12,7 +12,7 @@ export class NcpsKeyService {
   private timer?: NodeJS.Timeout;
   private inited = false;
   private isRefreshing = false;
-  private _fetch: typeof fetch = (...args: Parameters<typeof fetch>) => fetch(...args);
+  private _fetch: (input: RequestInfo | URL, init?: RequestInit & { dispatcher?: import('undici').Dispatcher }) => Promise<Response> = (input, init) => fetch(input, init);
 
   constructor(private cfg: ConfigService, private logger = new LoggerService()) {}
 
@@ -117,8 +117,8 @@ export class NcpsKeyService {
   private buildDispatcher(url: string, caPath?: string): Dispatcher | undefined {
     if (!/^https:/i.test(url)) return undefined;
     if (!caPath) return undefined;
-    const fs = require('node:fs');
-    const pem = fs.readFileSync(caPath, 'utf8');
+    import { readFileSync } from "node:fs";
+    const pem = readFileSync(caPath, 'utf8');
     return new Agent({ connect: { ca: pem } });
   }
 
@@ -134,7 +134,7 @@ export class NcpsKeyService {
       }
 
       const dispatcher = this.buildDispatcher(url, this.cfg.ncpsCaBundle);
-      const res = await this._fetch(url, { signal: ac.signal, headers, dispatcher } as any);
+      const res = await this._fetch(url, { signal: ac.signal, headers, dispatcher });
       if (!res.ok) {
         // Do not include response body in error to avoid leaking
         throw new Error(`http_${res.status}`);
