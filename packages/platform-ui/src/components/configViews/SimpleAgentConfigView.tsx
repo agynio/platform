@@ -3,8 +3,6 @@ import type { StaticConfigViewProps } from './types';
 // Use shared UI lib components; do not import from app alias paths.
 import { Label } from '@agyn/ui';
 
-const MODELS = ['gpt-5', 'gpt-4o-mini', 'o3-mini'];
-
 export default function SimpleAgentConfigView({
   templateName: _tpl,
   value,
@@ -14,7 +12,8 @@ export default function SimpleAgentConfigView({
   onValidate,
 }: StaticConfigViewProps) {
   const init = useMemo(() => ({ ...(value || {}) }), [value]);
-  const [model, setModel] = useState<string>((init.model as string) || MODELS[0]);
+  // Model: free-text input (LiteLLM/OpenAI). Initialize from existing config; otherwise empty.
+  const [model, setModel] = useState<string>(typeof init.model === 'string' ? (init.model as string) : '');
   const [systemPrompt, setSystemPrompt] = useState<string>((init.systemPrompt as string) || '');
   const [title, setTitle] = useState<string>((init.title as string) || '');
   const [debounceMs, setDebounceMs] = useState<number>(typeof init.debounceMs === 'number' ? (init.debounceMs as number) : 0);
@@ -34,7 +33,8 @@ export default function SimpleAgentConfigView({
 
   useEffect(() => {
     const errors: string[] = [];
-    if (!model) errors.push('Model is required');
+    // Required validation: non-empty after trim
+    if (!model || !model.trim()) errors.push('Model is required');
     if (restrictionMaxInjections < 0) errors.push('restrictionMaxInjections must be >= 0');
     if (debounceMs < 0) errors.push('debounceMs must be >= 0');
     if (!['wait', 'injectAfterTools'].includes(whenBusy)) errors.push('whenBusy must be wait|injectAfterTools');
@@ -48,7 +48,7 @@ export default function SimpleAgentConfigView({
     const next = {
       ...value,
       title: title || undefined,
-      model,
+      model: model?.trim() || model, // persist trimmed value
       systemPrompt,
       debounceMs,
       whenBusy,
@@ -80,19 +80,18 @@ export default function SimpleAgentConfigView({
       </div>
       <div>
         <Label>Model</Label>
-        <select
+        <input
+          type="text"
           className="w-full border rounded px-2 py-1 bg-background"
           value={model}
-          onChange={(e) => setModel(e.target.value)}
+          onChange={(e) => setModel(e.target.value.trim())}
           disabled={isDisabled}
           data-testid="simple-agent-model"
-        >
-          {MODELS.map((m) => (
-            <option key={m} value={m}>
-              {m}
-            </option>
-          ))}
-        </select>
+          placeholder="e.g., openai/gpt-4o-mini or claude-3-5-sonnet"
+        />
+        <div className="text-xs text-muted-foreground mt-1">
+          Enter a valid LiteLLM/OpenAI model identifier. For LiteLLM, use the configured model name (may require provider prefix).
+        </div>
       </div>
 
       <div>

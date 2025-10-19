@@ -49,6 +49,12 @@ Docs
 - Custom ConfigViews use shadcn/ui primitives and a typed registry. See docs/ui/config-views.md
 - Actions are optimistic; authoritative socket events reconcile cache.
 
+Model field (Agent)
+- The Agent static configuration view uses a free-text input for model.
+- Enter any valid OpenAI/LiteLLM model identifier or LiteLLM alias.
+- Examples: `openai/gpt-4o-mini`, `claude-3-5-sonnet`, or a custom alias like `gpt-5`.
+- The UI trims whitespace and requires a non-empty value; availability is checked at runtime by the provider.
+
 Routing (Issue #285)
 - Client routing via react-router-dom; default redirect to /agents/graph and 404 fallback to /agents/graph.
 - Root layout includes persistent left sidebar on desktop (md+) and Drawer on mobile.

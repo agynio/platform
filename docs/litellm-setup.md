@@ -22,10 +22,9 @@ Networking and ports
 
 Initial configuration (via UI)
 - Create a provider key: add your real OpenAI (or other) API key under Providers.
-- Create a model alias:
-  - Name: gpt-5
-  - Target: any real backend model you want the app to call (e.g., gpt-4o, gpt-4o-mini, or openai/gpt-4o)
-  - Save. The app defaults to model "gpt-5" and will resolve to this alias.
+- Create a model alias if desired:
+  - Choose any name you prefer (e.g., gpt-5) and point it to a real backend model target (e.g., gpt-4o, gpt-4o-mini, or openai/gpt-4o).
+  - In the Agents UI, the Model field now accepts free-text. Enter either your alias name (e.g., gpt-5) or a provider-prefixed identifier (e.g., openai/gpt-4o-mini). The UI does not validate availability; runtime will surface errors if misconfigured.
 
 App configuration: auto-provision virtual key
 - The server can auto-provision a LiteLLM virtual key at startup when OPENAI_API_KEY is not set.
@@ -38,6 +37,11 @@ App configuration: auto-provision virtual key
     - LITELLM_KEY_ALIAS=agents-${process.pid}
     - Limits: LITELLM_MAX_BUDGET, LITELLM_RPM_LIMIT, LITELLM_TPM_LIMIT, LITELLM_TEAM_ID
 - On success, the server sets OPENAI_API_KEY and OPENAI_BASE_URL automatically (defaults to `${LITELLM_BASE_URL}/v1` if not provided).
+
+Model naming guidance
+- Use the exact LiteLLM model name as configured in the LiteLLM UI. For OpenAI via LiteLLM, provider prefixes may be required (e.g., openai/gpt-4o-mini).
+- Aliases are supported; enter the alias in the UI if you created one (e.g., gpt-5).
+- The UI does not enforce a list of models; it accepts any non-empty string. Validation occurs at runtime when calling the provider.
 
 Fallback to direct OpenAI
 - Unset LITELLM_* envs and set OPENAI_API_KEY to your real OpenAI key.

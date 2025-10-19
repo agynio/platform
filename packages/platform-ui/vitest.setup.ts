@@ -1,4 +1,5 @@
-import '@testing-library/jest-dom';
+// Use Vitest-specific matchers setup
+import '@testing-library/jest-dom/vitest';
 // Polyfill ResizeObserver for Radix UI components in tests
 class RO {
 	observe() {}
