@@ -1,5 +1,5 @@
 {
-  "name": "@agyn/obs-sdk",
+  "name": "@agyn/tracing-sdk",
   "version": "0.1.0",
   "private": true,
   "type": "module",

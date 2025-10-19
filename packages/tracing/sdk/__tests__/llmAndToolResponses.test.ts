@@ -64,3 +64,4 @@ describe('ToolCallResponse & withToolCall', () => {
     // status normalized on server, but client sends 'error'
   });
 });
+

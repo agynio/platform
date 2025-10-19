@@ -1,11 +1,11 @@
 import { BaseMessage } from '@langchain/core/messages';
-import { BaseMessage as ObsBaseMessage } from '@agyn/obs-sdk';
+import { BaseMessage as ObsBaseMessage } from '@agyn/tracing-sdk';
 import { BaseStore, LangGraphRunnableConfig } from '@langchain/langgraph';
 import { ChatOpenAI } from '@langchain/openai';
 import { BaseTool } from '../tools/base.tool';
 import { BaseNode } from './base.lgnode';
 import { NodeOutput } from '../types';
-import { LLMResponse, withLLM } from '@agyn/obs-sdk';
+import { LLMResponse, withLLM } from '@agyn/tracing-sdk';
 
 export const SYSTEM_PROMPT = `You are a helpful and friendly chatbot. Get to know the user! \
 Ask questions! Be spontaneous! 
