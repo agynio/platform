@@ -37,6 +37,8 @@ export function NixPackagesSection(props: ControlledProps | UncontrolledProps) {
   );
   const lastPushedJson = useRef<string>('');
   const lastPushedPackagesLen = useRef<number>(0);
+  // Stable key of the packages array we most recently pushed upstream.
+  const lastPushedPkgsKey = useRef<string>('');
 
   // Initialize from existing config.nix.packages when mounting or when config changes externally
   const isControlled = (p: ControlledProps | UncontrolledProps): p is ControlledProps => 'value' in p && 'onChange' in p;
@@ -46,38 +48,28 @@ export function NixPackagesSection(props: ControlledProps | UncontrolledProps) {
   const controlledValueKey = controlled ? toStableKey((props as ControlledProps).value) : '';
   const uncontrolledPkgsKey = controlled ? '' : toStableKey((props as UncontrolledProps).config.nix?.packages);
   useEffect(() => {
-    if (controlled) {
-      const curr = (((props as ControlledProps).value) || []).filter((p) => p && typeof p.name === 'string');
-      const nextSelected: SelectedPkg[] = curr.map((p) => ({ name: p.name }));
-      setSelected((prev) => {
-        const prevKey = JSON.stringify(prev);
-        const nextKey = JSON.stringify(nextSelected);
-        return prevKey === nextKey ? prev : nextSelected;
-      });
-      // Hydrate chosen versions for UI from controlled value
-      setVersionsByName((prev) => {
-        const next: Record<string, string | ''> = { ...prev };
-        for (const p of curr) if (p.version) next[p.name] = String(p.version);
-        return next;
-      });
-    } else {
-      const conf = (props as UncontrolledProps).config as ConfigWithNix;
-      const rawPkgs = conf.nix?.packages ?? [];
-      const curr = (rawPkgs as NixPackageSelection[]).filter((p) => p && typeof p.name === 'string');
-      const nextSelected: SelectedPkg[] = curr.map((p) => ({ name: p.name }));
-      setSelected((prev) => {
-        const prevKey = JSON.stringify(prev);
-        const nextKey = JSON.stringify(nextSelected);
-        return prevKey === nextKey ? prev : nextSelected;
-      });
-      // Hydrate chosen versions for UI from existing config if present
-      setVersionsByName((prev) => {
-        const next: Record<string, string | ''> = { ...prev };
-        for (const p of curr) if (p.version) next[p.name] = String(p.version);
-        return next;
-      });
-    }
-  }, [controlled, controlledValueKey, uncontrolledPkgsKey, props]);
+    // Compute incoming packages from props (controlled or uncontrolled)
+    const incoming: NixPackageSelection[] = controlled
+      ? ((((props as ControlledProps).value) || []) as NixPackageSelection[])
+      : ((((props as UncontrolledProps).config as ConfigWithNix).nix?.packages) || []) as NixPackageSelection[];
+    const incomingKey = toStableKey(incoming);
+    // Guard: if props reflect exactly what we just pushed, skip rehydration
+    if (incomingKey === lastPushedPkgsKey.current) return;
+
+    const curr = incoming.filter((p) => p && typeof p.name === 'string');
+    const nextSelected: SelectedPkg[] = curr.map((p) => ({ name: p.name }));
+    setSelected((prev) => {
+      const prevKey = JSON.stringify(prev);
+      const nextKey = JSON.stringify(nextSelected);
+      return prevKey === nextKey ? prev : nextSelected;
+    });
+    // Hydrate chosen versions for UI from incoming value
+    setVersionsByName((prev) => {
+      const next: Record<string, string | ''> = { ...prev };
+      for (const p of curr) if (p.version) next[p.name] = String(p.version);
+      return next;
+    });
+  }, [controlled, controlledValueKey, uncontrolledPkgsKey]);
 
   // Push updates into node config when selections/channels change
   useEffect(() => {
@@ -102,6 +94,7 @@ export function NixPackagesSection(props: ControlledProps | UncontrolledProps) {
       if (json !== lastPushedJson.current) {
         lastPushedJson.current = json;
         lastPushedPackagesLen.current = packages.length;
+        lastPushedPkgsKey.current = toStableKey(packages);
         (props as ControlledProps).onChange(next);
       }
     } else {
@@ -114,6 +107,7 @@ export function NixPackagesSection(props: ControlledProps | UncontrolledProps) {
       if (json !== lastPushedJson.current) {
         lastPushedJson.current = json;
         lastPushedPackagesLen.current = packages.length;
+        lastPushedPkgsKey.current = toStableKey(packages);
         (props as UncontrolledProps).onUpdateConfig(next);
       }
     }
