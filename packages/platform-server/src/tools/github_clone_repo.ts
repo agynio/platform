@@ -164,7 +164,7 @@ export class GithubCloneRepoTool extends BaseTool {
 
   private async tryFetchVaultToken(v: string | undefined): Promise<string | undefined> {
     try {
-      const vr = parseVaultRef(v);
+      const vr = parseVaultRef(String(v ?? ''));
       return await this.vault!.getSecret(vr);
     } catch {
       return undefined;

@@ -343,13 +343,24 @@ export class LocalMCPServer implements McpServer, Provisionable, DynamicConfigur
         { all: true },
       );
       if (dinds.length === 0) return;
-      const results = await Promise.allSettled(dinds.map((d) => safeStopAndRemove(d)));
+      const results = await Promise.allSettled(dinds.map((d) => this.safeStopAndRemove(d)));
       const cleaned = results.reduce((acc, r) => acc + (r.status === 'fulfilled' && r.value ? 1 : 0), 0);
       if (cleaned > 0) this.logger.info(`[MCP:${this.namespace}] [disc:${discoveryId}] Cleaned ${cleaned} DinD sidecar(s) for temp container ${String(tempContainerId).substring(0, 12)}`);
       const rejected = results.filter((r) => r.status === 'rejected') as PromiseRejectedResult[];
       if (rejected.length) throw new AggregateError(rejected.map((r) => r.reason), 'One or more temp DinD cleanup tasks failed');
     } catch (e) {
       this.logger.error(`[MCP:${this.namespace}] [disc:${discoveryId}] Error cleaning DinD sidecars for temp container`, e);
+    }
+  }
+  private async safeStopAndRemove(sc: { stop: (t: number) => Promise<void>; remove: (f: boolean) => Promise<void> }): Promise<boolean> {
+    try { await sc.stop(5); } catch (e: unknown) {
+      const code = (e as { statusCode?: number } | undefined)?.statusCode;
+      if (code !== 304 && code !== 404 && code !== 409) throw e;
+    }
+    try { await sc.remove(true); return true; } catch (e: unknown) {
+      const code = (e as { statusCode?: number } | undefined)?.statusCode;
+      if (code !== 404 && code !== 409) throw e;
+      return false;
     }
   }
 

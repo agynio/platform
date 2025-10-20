@@ -406,62 +406,22 @@ function getStatusCode(e: unknown): number | undefined {
 export type NixInstallSpec = { commitHash: string; attributePath: string };
 
 // ---- Private helpers to reduce nesting and keep behavior identical ----
-export interface ContainerProviderEntity { // augment as declaration merging for private helpers
-  // TS uses class fields; we attach methods below
-}
+// Remove prototype augmentation; helpers are now private methods on the class
 
 // Determine whether existing container can be reused for requested platform
-async function isPlatformReusable(this: ContainerProviderEntity, containerId: string, requestedPlatform: string): Promise<boolean> {
-  try {
-    // @ts-expect-error access private via this
-    const containerLabels = await this.containerService.getContainerLabels(containerId);
-    const existingPlatform = containerLabels?.[PLATFORM_LABEL];
-    return !!existingPlatform && existingPlatform === requestedPlatform;
-  } catch {
-    return false;
-  }
-}
+// (removed)
 
 // Stop and remove DinD sidecars for a given parent container id
-async function stopAndRemoveDinD(this: ContainerProviderEntity, labels: Record<string, string>, parentId: string): Promise<void> {
-  try {
-    // @ts-expect-error access private via this
-    const dinds = await this.containerService.findContainersByLabels({
-      ...labels,
-      'hautech.ai/role': 'dind',
-      'hautech.ai/parent_cid': parentId,
-    });
-    await Promise.all(
-      dinds.map(async (d) => {
-        try { await d.stop(5); } catch (e: unknown) { const sc = getStatusCode(e); if (sc !== 304 && sc !== 404 && sc !== 409) throw e; }
-        try { await d.remove(true); } catch (e: unknown) { const sc = getStatusCode(e); if (sc !== 404 && sc !== 409) throw e; }
-      }),
-    );
-  } catch {}
-}
+// (removed)
 
 // Stop container safely
-async function safeStop(this: ContainerProviderEntity, container: ContainerEntity): Promise<void> {
-  try { await container.stop(); } catch (e: unknown) { const sc = getStatusCode(e); if (sc !== 304 && sc !== 404 && sc !== 409) throw e; }
-}
+// (removed)
 
 // Remove container safely
-async function safeRemove(this: ContainerProviderEntity, container: ContainerEntity): Promise<void> {
-  try { await container.remove(true); } catch (e: unknown) { const sc = getStatusCode(e); if (sc !== 404 && sc !== 409) throw e; }
-}
+// (removed)
 
 // Execute initial script and log error if it fails (previous behavior)
-async function runInitialScript(this: ContainerProviderEntity, container: ContainerEntity, script: string): Promise<void> {
-  const { exitCode, stderr } = await container.exec(script, { tty: false });
-  // @ts-expect-error access private via this
-  this.logger.error(`Initial script failed (exitCode=${exitCode}) for container ${container.id.substring(0, 12)}${stderr ? ` stderr: ${stderr}` : ''}`);
-}
+// (removed)
 
 // Bind helpers to prototype (to keep method-like usage while reducing nesting inside class)
-Object.assign(ContainerProviderEntity.prototype as any, {
-  isPlatformReusable,
-  stopAndRemoveDinD,
-  safeStop,
-  safeRemove,
-  runInitialScript,
-});
+// (removed)
