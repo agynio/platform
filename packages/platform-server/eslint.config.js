@@ -7,15 +7,15 @@ import path from 'node:path';
 const tsconfigRootDir = path.dirname(fileURLToPath(import.meta.url));
 
 export default [
+  // 1) Type-aware linting for source files only
   {
-    files: ['**/*.ts', '**/*.tsx'],
+    files: ['src/**/*.ts', 'src/**/*.tsx'],
     ignores: ['dist/**', 'node_modules/**'],
     languageOptions: {
       parser: tseslint.parser,
-      // Explicitly set tsconfigRootDir (must be a string) to disambiguate multiple tsconfig roots in the monorepo
       parserOptions: {
         tsconfigRootDir,
-        project: ['./tsconfig.json'], // ensure type-aware rules (even if many are off) use the local server tsconfig
+        project: ['./tsconfig.json'],
       },
     },
     plugins: { '@typescript-eslint': tseslint.plugin },
@@ -26,7 +26,41 @@ export default [
       '@typescript-eslint/no-unused-vars': ['warn', { argsIgnorePattern: '^_', varsIgnorePattern: '^_' }],
       '@typescript-eslint/no-unsafe-assignment': 'off',
       '@typescript-eslint/no-unsafe-member-access': 'off',
-      // Reduce noise from tests and legacy code
+      '@typescript-eslint/no-require-imports': 'off',
+      '@typescript-eslint/ban-ts-comment': 'off',
+      '@typescript-eslint/ban-types': 'off',
+      '@typescript-eslint/no-unsafe-function-type': 'off',
+      '@typescript-eslint/no-empty-object-type': 'off',
+      'no-control-regex': 'off',
+      'no-useless-escape': 'off',
+      'prefer-const': 'off',
+    },
+  },
+  // 2) Non-type-aware linting for tests and mocks
+  {
+    files: [
+      '__tests__/**/*.ts',
+      '__tests__/**/*.tsx',
+      'src/**/__tests__/**/*.ts',
+      '__tests__/**/__mocks__/**/*.ts',
+      '__tests__/__mocks__/**/*.ts',
+    ],
+    ignores: ['dist/**', 'node_modules/**'],
+    languageOptions: {
+      parser: tseslint.parser,
+      parserOptions: {
+        tsconfigRootDir,
+        // No 'project' here to avoid requiring inclusion in tsconfig.json
+      },
+    },
+    plugins: { '@typescript-eslint': tseslint.plugin },
+    rules: {
+      // Reuse relaxed defaults for tests
+      '@typescript-eslint/no-explicit-any': 'off',
+      'no-empty': 'off',
+      '@typescript-eslint/no-unused-vars': ['warn', { argsIgnorePattern: '^_', varsIgnorePattern: '^_' }],
+      '@typescript-eslint/no-unsafe-assignment': 'off',
+      '@typescript-eslint/no-unsafe-member-access': 'off',
       '@typescript-eslint/no-require-imports': 'off',
       '@typescript-eslint/ban-ts-comment': 'off',
       '@typescript-eslint/ban-types': 'off',
