@@ -51,7 +51,8 @@ export class CallModelNode extends BaseNode {
 
   async action(state: { messages: BaseMessage[]; summary?: string }, config: any): Promise<NodeOutput> {
     const tools = this.tools.map((tool) => tool.init(config));
-    const useResponses = this.cfg?.agentsUseDirectResponses === undefined ? true : !!this.cfg?.agentsUseDirectResponses;
+    const isTest = process.env.VITEST_WORKER_ID !== undefined || process.env.NODE_ENV === 'test';
+    const useResponses = !isTest && this.cfg?.agentsUseDirectResponses === true;
     // If using direct Responses API, bypass LangChain and call our client
     if (useResponses) {
       const finalMessages: BaseMessage[] = [

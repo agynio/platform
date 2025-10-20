@@ -36,14 +36,12 @@ export type ParsedResult = {
 };
 
 export class OpenAIResponsesService {
-  private client: OpenAI;
-  constructor(private logger = new LoggerService()) {
-    const apiKey = process.env.OPENAI_API_KEY;
-    this.client = new OpenAI({
-      apiKey,
-      baseURL: process.env.OPENAI_BASE_URL || undefined,
-    });
-  }
+  private client?: OpenAI;
+  constructor(
+    private logger = new LoggerService(),
+    private apiKey: string | undefined = process.env.OPENAI_API_KEY,
+    private baseURL: string | undefined = process.env.OPENAI_BASE_URL || undefined,
+  ) {}
 
   // Map LangChain/BaseMessage[] and tools to Responses API payload
   static toResponsesPayload(messages: BaseMessage[], tools: DynamicStructuredTool[]) {
@@ -98,6 +96,10 @@ export class OpenAIResponsesService {
   }
 
   async createResponse(req: CreateResponseRequest, opts?: { signal?: AbortSignal }): Promise<ParsedResult> {
+    // Lazily create client to avoid instantiation errors when not used (e.g., tests)
+    if (!this.client) {
+      this.client = new OpenAI({ apiKey: this.apiKey, baseURL: this.baseURL });
+    }
     // Add explicit tool_choice when tools are specified to ensure tool calling is enabled
     const params: CreateResponseRequest = {
       ...req,
