@@ -81,16 +81,19 @@ export class SummarizationNode {
         return messagesOrText.length;
       }
     }
-    let total = 0;
-    for (const m of messagesOrText) {
-      const content = typeof m.content === 'string' ? m.content : JSON.stringify(m.content);
-      try {
-        total += await llm.getNumTokens(content);
-      } catch {
-        total += content.length;
-      }
-    }
-    return total;
+    // Compute token counts for each message concurrently to avoid N sequential awaits.
+    const contents = messagesOrText.map((m) =>
+      typeof m.content === 'string' ? m.content : JSON.stringify(m.content),
+    );
+    const counts = await Promise.all(
+      contents.map((c) =>
+        llm.getNumTokens(c).catch(() => {
+          // Fallback to char length if tokenizer not available
+          return c.length;
+        }),
+      ),
+    );
+    return counts.reduce((a, b) => a + b, 0);
   }
 
   // Group messages so that an AIMessage with tool_calls gets grouped with its subsequent ToolMessages.

@@ -492,7 +492,12 @@ export class Agent extends BaseAgent {
       Object.prototype.hasOwnProperty.call(config, 'summarizationKeepLast') &&
       !Object.prototype.hasOwnProperty.call(config, 'summarizationKeepTokens')
     ) {
-      (filtered as any).summarizationKeepTokens = (config as any).summarizationKeepLast;
+      // Narrow types without any casts using a keyed subset
+      const cfgWithAlias = config as Record<string, unknown>;
+      const val = cfgWithAlias['summarizationKeepLast'];
+      if (typeof val === 'number') {
+        (filtered as Partial<AgentStaticConfig>)['summarizationKeepTokens'] = val;
+      }
     }
 
     // Validate using strict partial schema; throws ZodError on invalid input
