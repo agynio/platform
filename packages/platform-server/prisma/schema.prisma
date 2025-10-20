@@ -12,7 +12,7 @@ datasource db {
 model Conversation {
   id         String   @id @default(cuid())
   nodeId     String
-  status     String
+  status     ConversationStatus
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
   runs       Run[]
@@ -27,7 +27,7 @@ model Run {
   conversation   Conversation @relation(fields: [conversationId], references: [id])
   conversationId String
   nodeId         String
-  status         String
+  status         RunStatus
   startedAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
   expiresAt      DateTime?
@@ -46,8 +46,7 @@ model Message {
   run            Run?        @relation(fields: [runId], references: [id])
   runId          String?
   role           String
-  contentText    String?
-  contentJson    Json?
+  content        Json?
   toolCall       ToolCall?   @relation(fields: [toolCallId], references: [id])
   toolCallId     String?
   name           String?
@@ -66,9 +65,8 @@ model ToolCall {
   runId          String?
   name           String
   input          Json
-  outputText     String?
-  outputJson     Json?
-  status         String
+  output         Json?
+  status         ToolCallStatus
   createdAt      DateTime @default(now())
 
   @@index([conversationId, createdAt])
@@ -81,18 +79,22 @@ model NodeState {
   updatedAt DateTime @updatedAt
 }
 
-model OpenAIResponse {
-  id             String   @id @default(cuid())
-  conversation   Conversation @relation(fields: [conversationId], references: [id])
-  conversationId String
-  run            Run?        @relation(fields: [runId], references: [id])
-  runId          String?
-  model          String
-  request        Json
-  response       Json
-  createdAt      DateTime @default(now())
-
-  @@index([conversationId, createdAt])
-  @@index([runId, createdAt])
+enum ConversationStatus {
+  active
+  archived
 }
 
+enum RunStatus {
+  created
+  running
+  succeeded
+  failed
+  canceled
+}
+
+enum ToolCallStatus {
+  queued
+  running
+  succeeded
+  failed
+}
