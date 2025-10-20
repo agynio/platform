@@ -252,6 +252,19 @@ export abstract class BaseAgent implements TriggerListener, StaticConfigurable, 
     this.scheduleOrRun(thread);
   }
 
+  // Safe token resolution without increasing nesting
+  private safeResolveToken(token: InvocationToken, last: BaseMessage | undefined): void {
+    try {
+      token.resolve(last);
+    } catch {}
+  }
+
+  private safeRejectToken(token: InvocationToken, err: Error): void {
+    try {
+      token.reject(err);
+    } catch {}
+  }
+
   private async startRun(
     thread: string,
     batch: TriggerMessage[],
@@ -276,27 +289,22 @@ export abstract class BaseAgent implements TriggerListener, StaticConfigurable, 
       for (const [tokenId, included] of (inflight?.includedCounts || new Map<string, number>()).entries()) {
         const token = s.tokens.get(tokenId);
         if (!token) continue;
-        if (included >= token.total) {
-          try {
-            token.resolve(last);
-          } catch {}
-          resolved.push(tokenId);
-          s.tokens.delete(tokenId);
-        }
+        if (included < token.total) continue;
+        this.safeResolveToken(token, last);
+        resolved.push(tokenId);
+        s.tokens.delete(tokenId);
       }
       this.logger.info(`Completed run ${runId}; resolved tokens: [${resolved.join(', ')}]`);
-      } catch (e: unknown) {
-        // Failure: reject awaiters for tokens tied to this run; leave others pending
-        const run = s.inFlight;
-        const affected = run?.includedCounts ? Array.from(run.includedCounts.keys()) : [];
-        const err = e instanceof Error ? e : new Error(String(e));
-        this.logger.error(`Run ${(run && run.runId) || 'unknown'} failed for thread ${thread}: ${err.message}`);
+    } catch (e: unknown) {
+      // Failure: reject awaiters for tokens tied to this run; leave others pending
+      const run = s.inFlight;
+      const affected = run?.includedCounts ? Array.from(run.includedCounts.keys()) : [];
+      const err = e instanceof Error ? e : new Error(String(e));
+      this.logger.error(`Run ${(run && run.runId) || 'unknown'} failed for thread ${thread}: ${err.message}`);
       for (const tokenId of affected) {
         const token = s.tokens.get(tokenId);
         if (!token) continue;
-        try {
-          token.reject(err);
-        } catch {}
+        this.safeRejectToken(token, err);
         s.tokens.delete(tokenId);
       }
       // Ensure no stale parts remain for these tokens in the buffer
