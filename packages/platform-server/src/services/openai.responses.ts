@@ -1,4 +1,4 @@
-import OpenAI from 'openai';
+import OpenAI, { type Response } from 'openai';
 import { AIMessage, BaseMessage, HumanMessage, SystemMessage, ToolMessage } from '@langchain/core/messages';
 import { DynamicStructuredTool } from '@langchain/core/tools';
 import { LoggerService } from './logger.service';
@@ -23,6 +23,7 @@ export type CreateResponseRequest = {
   model: string;
   messages: ResponsesMessage[];
   tools?: ResponsesTool[];
+  tool_choice?: 'none' | 'auto';
   metadata?: Record<string, unknown>;
 };
 
@@ -49,13 +50,14 @@ export class OpenAIResponsesService {
     const mappedMessages: ResponsesMessage[] = messages.map((m) => {
       const text = String((m as any).content ?? '');
       if (m instanceof SystemMessage) {
-        return { role: 'system', content: [{ type: 'input_text', text }] } as ResponsesMessage;
+        return { role: 'system', content: [{ type: 'input_text', text }] };
       }
       if (m instanceof HumanMessage) {
-        return { role: 'user', content: [{ type: 'input_text', text }] } as ResponsesMessage;
+        return { role: 'user', content: [{ type: 'input_text', text }] };
       }
       if (m instanceof AIMessage) {
-        const toolCalls: any[] = (m as any).tool_calls || (m as any).toolCalls || [];
+        const toolCalls: Array<{ id?: string; name?: string; args?: unknown; arguments?: unknown; toolCallId?: string; toolName?: string; type?: string }> =
+          (m as any).tool_calls || (m as any).toolCalls || [];
         const items: ResponsesMessageContent[] = [];
         if (text) items.push({ type: 'output_text', text });
         for (const tc of toolCalls) {
@@ -64,7 +66,7 @@ export class OpenAIResponsesService {
           const input = tc?.args ?? tc?.arguments ?? {};
           if (id && name) items.push({ type: 'tool_use', id, name, input });
         }
-        return { role: 'assistant', content: items } as ResponsesMessage;
+        return { role: 'assistant', content: items };
       }
       if (m instanceof ToolMessage) {
         // Expect tool result content to be string or object
@@ -79,10 +81,10 @@ export class OpenAIResponsesService {
           } catch {}
           return c;
         })();
-        return { role: 'tool', content: [{ type: 'tool_result', tool_use_id: tcid, content }] } as ResponsesMessage;
+        return { role: 'tool', content: [{ type: 'tool_result', tool_use_id: tcid, content }] };
       }
       // Fallback: treat as system input
-      return { role: 'system', content: [{ type: 'input_text', text }] } as ResponsesMessage;
+      return { role: 'system', content: [{ type: 'input_text', text }] };
     });
 
     const mappedTools: ResponsesTool[] = tools.map((t) => {
@@ -95,8 +97,13 @@ export class OpenAIResponsesService {
     return { messages: mappedMessages, tools: mappedTools };
   }
 
-  async createResponse(req: CreateResponseRequest): Promise<ParsedResult> {
-    const res = await this.client.responses.create(req as any);
+  async createResponse(req: CreateResponseRequest, opts?: { signal?: AbortSignal }): Promise<ParsedResult> {
+    // Add explicit tool_choice when tools are specified to ensure tool calling is enabled
+    const params: CreateResponseRequest = {
+      ...req,
+      tool_choice: req.tools && req.tools.length > 0 ? 'auto' : req.tool_choice,
+    };
+    const res = await this.client.responses.create(params as any, { signal: opts?.signal } as any);
     const parsed = OpenAIResponsesService.parseResponse(res, this.logger);
     return parsed;
   }
@@ -117,25 +124,30 @@ export class OpenAIResponsesService {
               if (typeof seg.text === 'string' && seg.text.length) assistantTextParts.push(seg.text);
               break;
             case 'reasoning':
-              // Collect reasoning in metadata if needed, but do not throw
+              // Do not throw; warn and continue
               logger.warn?.('Responses reasoning segment without guaranteed adjacent output_text; continuing.');
               break;
             case 'tool_use':
               if (seg.id && seg.name) toolCalls.push({ id: seg.id, name: seg.name, arguments: seg.input });
               break;
             default:
-              // Skip unknown types silently or at debug level
+              // Skip unknown types at debug level
               logger.debug?.('Skipping unknown assistant content segment', seg);
           }
         }
+      } else {
+        // Unknown or unsupported top-level output item
+        logger.debug?.('Skipping unknown top-level output item', item);
       }
-      // Ignore non-assistant items at top-level output; tool_result responses are carried via ToolMessage inputs
     }
 
-    const content = assistantTextParts.join('\n');
+    let content = assistantTextParts.join('\n');
+    // Fallback: some SDKs populate top-level output_text convenience when only text is present
+    if (!content && typeof raw?.output_text === 'string') {
+      content = raw.output_text;
+    }
     const usage = raw?.usage;
     const id = raw?.id;
     return { raw, content, toolCalls, usage, id };
   }
 }
-

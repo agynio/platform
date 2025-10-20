@@ -42,6 +42,7 @@ export default [
       '__tests__/**/*.ts',
       '__tests__/**/*.tsx',
       'src/**/__tests__/**/*.ts',
+      'src/**/__mocks__/**/*.ts',
       '__tests__/**/__mocks__/**/*.ts',
       '__tests__/__mocks__/**/*.ts',
     ],

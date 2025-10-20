@@ -245,7 +245,10 @@ export class ConfigService implements Config {
   get ncpsRotationGraceMinutes(): number { return this.params.ncpsRotationGraceMinutes; }
   get ncpsAuthHeader(): string | undefined { return this.params.ncpsAuthHeader; }
   get ncpsAuthToken(): string | undefined { return this.params.ncpsAuthToken; }
-  get agentsUseDirectResponses(): boolean { return this.params.agentsUseDirectResponses as unknown as boolean; }
+  get agentsUseDirectResponses(): boolean {
+    // Ensure strict boolean; schema default is true. Avoid string leakage.
+    return this.params.agentsUseDirectResponses === undefined ? true : !!this.params.agentsUseDirectResponses;
+  }
 
   static fromEnv(): ConfigService {
     const legacy = process.env.NCPS_URL;

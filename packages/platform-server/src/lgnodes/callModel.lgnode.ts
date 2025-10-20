@@ -51,7 +51,7 @@ export class CallModelNode extends BaseNode {
 
   async action(state: { messages: BaseMessage[]; summary?: string }, config: any): Promise<NodeOutput> {
     const tools = this.tools.map((tool) => tool.init(config));
-    const useResponses = this.cfg?.agentsUseDirectResponses ?? (process.env.AGENTS_USE_DIRECT_RESPONSES ? process.env.AGENTS_USE_DIRECT_RESPONSES !== 'false' : false);
+    const useResponses = this.cfg?.agentsUseDirectResponses === undefined ? true : !!this.cfg?.agentsUseDirectResponses;
     // If using direct Responses API, bypass LangChain and call our client
     if (useResponses) {
       const finalMessages: BaseMessage[] = [
@@ -86,7 +86,7 @@ export class CallModelNode extends BaseNode {
         return { role, content: String((m as any).content ?? '') } as ChatMessageInput;
       });
       const result = await withLLM({ context }, async () => {
-        const rawParsed = await svc.createResponse(req);
+        const rawParsed = await svc.createResponse(req, { signal: abortSignal });
         return new LLMResponse({ raw: rawParsed.raw, content: rawParsed.content, toolCalls: rawParsed.toolCalls });
       });
       return { messages: { method: 'append', items: [result] } };
