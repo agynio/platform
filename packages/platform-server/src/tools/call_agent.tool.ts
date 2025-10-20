@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { LangGraphRunnableConfig } from '@langchain/langgraph';
 import { BaseTool } from './base.tool';
 import { LoggerService } from '../services/logger.service';
-import { BaseAgent } from '../agents/base.agent';
+import { BaseAgent } from '../nodes/agent/agent.node';
 import { TriggerMessage } from '../triggers/base.trigger';
 import { BaseMessage } from '@langchain/core/messages';
 

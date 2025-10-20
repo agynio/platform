@@ -1,6 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { Agent } from '../src/nodes/agent/agent.node';
-import { BaseAgent } from '../src/agents/base.agent';
+import { Agent, BaseAgent } from '../src/nodes/agent/agent.node';
 
 class MockConfigService { openaiApiKey = 'sk-abc'; }
 class MockLoggerService { info = vi.fn(); debug = vi.fn(); error = vi.fn(); }

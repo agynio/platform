@@ -2,7 +2,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { AIMessage } from '@langchain/core/messages';
 import { CallAgentTool } from '../src/tools/call_agent.tool';
 import { LoggerService } from '../src/services/logger.service';
-import { BaseAgent } from '../src/agents/base.agent';
+import { BaseAgent } from '../src/nodes/agent/agent.node';
 import { DynamicStructuredTool } from '@langchain/core/tools';
 import { TemplateRegistry } from '../src/graph/templateRegistry';
 import { LiveGraphRuntime } from '../src/graph/liveGraph.manager';
