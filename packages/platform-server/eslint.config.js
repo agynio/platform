@@ -11,6 +11,8 @@ export default [
       // Global relaxed defaults
       '@typescript-eslint/no-explicit-any': 'off',
       'no-empty': 'off',
+      // Limit nested block depth to improve readability
+      'max-depth': ['error', 3],
       '@typescript-eslint/no-unused-vars': ['warn', { argsIgnorePattern: '^_', varsIgnorePattern: '^_' }],
       '@typescript-eslint/no-unsafe-assignment': 'off',
       '@typescript-eslint/no-unsafe-member-access': 'off',
