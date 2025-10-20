@@ -212,14 +212,8 @@ export function registerNixRoutes(
     } catch (e) {
       const err = e as Error & { status?: number };
       const isAbort = (x: unknown): x is { name: string } => !!x && typeof x === 'object' && 'name' in (x as any);
-      if (isAbort(err) && err.name === 'AbortError') {
-        reply.code(504);
-        return { error: 'timeout' };
-      }
-      if (typeof err.status === 'number') {
-        reply.code(err.status === 404 ? 404 : 502);
-        return { error: err.status === 404 ? 'not_found' : 'upstream_error', status: err.status };
-      }
+      if (isAbort(err) && err.name === 'AbortError') { reply.code(504); return { error: 'timeout' }; }
+      if (typeof err.status === 'number') { reply.code(err.status === 404 ? 404 : 502); return { error: err.status === 404 ? 'not_found' : 'upstream_error', status: err.status }; }
       reply.code(500);
       return { error: 'server_error' };
     }

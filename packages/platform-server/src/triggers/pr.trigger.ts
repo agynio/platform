@@ -102,13 +102,7 @@ export class PRTrigger extends BaseTrigger {
           const updated_at = detailed.events[detailed.events.length - 1]?.created_at || new Date().toISOString();
           const checksMinimal = detailed.checks.map((c: any) => ({ name: c.name, status: c.status, conclusion: c.conclusion }));
           const eventsIds = detailed.events.map((e: any) => e.id);
-          const compositeHash = md5(JSON.stringify({
-            updated_at,
-            mergeable: detailed.mergeable,
-            mergeableState: detailed.mergeableState,
-            checks: checksMinimal,
-            events: eventsIds,
-          }));
+          const compositeHash = md5(JSON.stringify({ updated_at, mergeable: detailed.mergeable, mergeableState: detailed.mergeableState, checks: checksMinimal, events: eventsIds }));
           const snapshot: PRSnapshotMinimal = {
             number: pr.number,
             repo,

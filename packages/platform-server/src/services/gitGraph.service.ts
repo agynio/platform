@@ -324,7 +324,7 @@ export class GitGraphService {
     const lockPath = path.join(this.cfg.repoPath, '.graph.lock');
     const timeout = this.cfg.lockTimeoutMs ?? 5000;
     const start = Date.now();
-    while (true) {
+    for (;;) {
       try {
         const fd = await fs.open(lockPath, 'wx');
         // write pid and time for debugging
@@ -333,14 +333,11 @@ export class GitGraphService {
         return { lockPath };
       } catch (e: unknown) {
         const err = e as NodeJS.ErrnoException;
-        if (err && err.code === 'EEXIST') {
-          if (Date.now() - start > timeout) {
-            throw codeError('LOCK_TIMEOUT', 'Lock timeout');
-          }
-          await new Promise((r) => setTimeout(r, 50));
-          continue;
-        }
-        throw e;
+        const exists = err && err.code === 'EEXIST';
+        if (!exists) throw e;
+        if (Date.now() - start > timeout) throw codeError('LOCK_TIMEOUT', 'Lock timeout');
+        await new Promise((r) => setTimeout(r, 50));
+        continue;
       }
     }
   }

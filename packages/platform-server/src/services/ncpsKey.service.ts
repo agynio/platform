@@ -75,7 +75,7 @@ export class NcpsKeyService {
     const base = Math.max(1, this.cfg.ncpsRetryBackoffMs);
     const factor = Math.max(1, this.cfg.ncpsRetryBackoffFactor);
     let attempt = 0;
-    while (true) {
+    for (;;) {
       attempt++;
       try {
         const key = await this.fetchOnce();

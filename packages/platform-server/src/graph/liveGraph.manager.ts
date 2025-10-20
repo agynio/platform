@@ -317,38 +317,14 @@ export class LiveGraphRuntime {
       this.state.nodes.set(node.id, live);
 
       // Post-create wiring: provide state persistor and preload cached MCP tools if present
-      try {
-        const instAny = created as any;
-        // Provide per-node state persistor if instance supports it and we have a graphStateService
-        const deps = this.factoryDeps as { graphStateService?: { upsertNodeState: (nodeId: string, state: Record<string, unknown>) => Promise<void> }; configService?: { mcpToolsStaleTimeoutMs?: number } };
-        if (instAny && typeof instAny.setStatePersistor === 'function' && deps.graphStateService) {
-          const svc = deps.graphStateService;
-          instAny.setStatePersistor(async (state: Record<string, unknown>) => {
-            await svc.upsertNodeState(node.id, state);
-          });
-        }
-        // Preload cached MCP tools if instance supports it and state contains mcp tools
-        const st = node.data.state as { mcp?: { tools?: unknown[]; toolsUpdatedAt?: number | string } } | undefined;
-        if (st?.mcp && Array.isArray(st.mcp.tools) && typeof instAny?.preloadCachedTools === 'function') {
-          instAny.preloadCachedTools(st.mcp.tools, st.mcp.toolsUpdatedAt);
-        }
-        // Pass global MCP stale timeout if provided via deps.configService
-        if (typeof instAny?.setGlobalStaleTimeoutMs === 'function' && deps?.configService) {
-          const ms = Number(deps.configService.mcpToolsStaleTimeoutMs ?? 0);
-          instAny.setGlobalStaleTimeoutMs(Number.isFinite(ms) ? ms : 0);
-        }
-      } catch (e) {
-        this.logger.debug('Post-create wiring failed', e);
-      }
+      this.postCreateWiring(created, node).catch((e) => this.logger.debug('Post-create wiring failed', e));
       const { isNodeLifecycle } = await import('../nodes/types');
-      if (!isNodeLifecycle(created) && node.data.config) {
-        if (hasSetConfig(created)) {
-          try {
-            const cleaned = await this.applyConfigWithUnknownKeyStripping(created, 'setConfig', node.data.config, node.id);
-            if (cleaned) live.config = cleaned;
-          } catch (err) {
-            throw Errors.nodeInitFailure(node.id, err);
-          }
+      if (!isNodeLifecycle(created) && node.data.config && hasSetConfig(created)) {
+        try {
+          const cleaned = await this.applyConfigWithUnknownKeyStripping(created, 'setConfig', node.data.config, node.id);
+          if (cleaned) live.config = cleaned;
+        } catch (err) {
+          throw Errors.nodeInitFailure(node.id, err);
         }
       }
       // Lifecycle-aware path: configure + start
@@ -362,19 +338,40 @@ export class LiveGraphRuntime {
           throw Errors.nodeInitFailure(node.id, err);
         }
       }
-      if (node.data.dynamicConfig) {
-        if (hasSetDynamicConfig(created)) {
-          try {
-            await this.applyConfigWithUnknownKeyStripping(created, 'setDynamicConfig', node.data.dynamicConfig, node.id);
-          } catch (err) {
-            throw Errors.nodeInitFailure(node.id, err);
-          }
+      if (node.data.dynamicConfig && hasSetDynamicConfig(created)) {
+        try {
+          await this.applyConfigWithUnknownKeyStripping(created, 'setDynamicConfig', node.data.dynamicConfig, node.id);
+        } catch (err) {
+          throw Errors.nodeInitFailure(node.id, err);
         }
       }
     } catch (e) {
       // Factory creation or any init error should include nodeId
       if (e instanceof GraphError) throw e; // already enriched
       throw Errors.nodeInitFailure(node.id, e);
+    }
+  }
+
+  // Helper: perform optional post-create wiring for instances
+  private async postCreateWiring(created: unknown, node: NodeDef): Promise<void> {
+    const instAny = created as any;
+    const deps = this.factoryDeps as {
+      graphStateService?: { upsertNodeState: (nodeId: string, state: Record<string, unknown>) => Promise<void> };
+      configService?: { mcpToolsStaleTimeoutMs?: number };
+    };
+    if (instAny && typeof instAny.setStatePersistor === 'function' && deps.graphStateService) {
+      const svc = deps.graphStateService;
+      instAny.setStatePersistor(async (state: Record<string, unknown>) => {
+        await svc.upsertNodeState(node.id, state);
+      });
+    }
+    const st = node.data.state as { mcp?: { tools?: unknown[]; toolsUpdatedAt?: number | string } } | undefined;
+    if (st?.mcp && Array.isArray(st.mcp.tools) && typeof instAny?.preloadCachedTools === 'function') {
+      instAny.preloadCachedTools(st.mcp.tools, st.mcp.toolsUpdatedAt);
+    }
+    if (typeof instAny?.setGlobalStaleTimeoutMs === 'function' && deps?.configService) {
+      const ms = Number(deps.configService.mcpToolsStaleTimeoutMs ?? 0);
+      instAny.setGlobalStaleTimeoutMs(Number.isFinite(ms) ? ms : 0);
     }
   }
 
@@ -413,15 +410,12 @@ export class LiveGraphRuntime {
           });
           if (unknownRoot.length > 0) {
             const keys = new Set<string>();
-              for (const i of unknownRoot) for (const k of (i as any).keys as string[]) keys.add(k);
+            for (const i of unknownRoot) for (const k of (i as any).keys as string[]) keys.add(k);
             if (keys.size > 0) {
               const next: Record<string, unknown> = {};
               for (const [k, v] of Object.entries(current)) if (!keys.has(k)) next[k] = v;
               current = next;
-              if (attempt < MAX_RETRIES) {
-                attempt += 1;
-                continue; // retry
-              }
+              if (attempt < MAX_RETRIES) { attempt += 1; continue; }
             }
           }
         }

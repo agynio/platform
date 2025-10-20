@@ -246,36 +246,9 @@ export abstract class BaseAgent implements TriggerListener, StaticConfigurable, 
     } catch {}
     try {
       const last = await this.runGraph(thread, batch, runId, ac.signal);
-      // Success: resolve tokens fully included in this run
-      const resolved: string[] = [];
-      const inflight = s.inFlight as { includedCounts: Map<string, number> } | undefined;
-      for (const [tokenId, included] of (inflight?.includedCounts || new Map<string, number>()).entries()) {
-        const token = s.tokens.get(tokenId);
-        if (!token) continue;
-        if (included >= token.total) {
-          try {
-            token.resolve(last);
-          } catch {}
-          resolved.push(tokenId);
-          s.tokens.delete(tokenId);
-        }
-      }
-      this.logger.info(`Completed run ${runId}; resolved tokens: [${resolved.join(', ')}]`);
+      this.resolveTokensOnSuccess(s, last, runId);
       } catch (e: any) {
-        // Failure: reject awaiters for tokens tied to this run; leave others pending
-        const run = s.inFlight as { includedCounts?: Map<string, number>; runId?: string } | undefined;
-        const affected = run?.includedCounts ? Array.from(run.includedCounts.keys()) : [];
-        this.logger.error(`Run ${(run && run.runId) || 'unknown'} failed for thread ${thread}: ${e?.message || e}`);
-      for (const tokenId of affected) {
-        const token = s.tokens.get(tokenId);
-        if (!token) continue;
-        try {
-          token.reject(e);
-        } catch {}
-        s.tokens.delete(tokenId);
-      }
-      // Ensure no stale parts remain for these tokens in the buffer
-      if (affected.length) this.buffer.dropTokens(thread, affected);
+      this.handleRunFailure(s, thread, e);
     } finally {
       // Persist termination (best-effort)
       try {
@@ -307,6 +280,41 @@ export abstract class BaseAgent implements TriggerListener, StaticConfigurable, 
       },
     )) as { messages: BaseMessage[] };
     return response.messages?.[response.messages.length - 1];
+  }
+
+  // Helper to reduce nesting depth in startRun: resolve tokens on success
+  private resolveTokensOnSuccess(s: ThreadState, last: BaseMessage | undefined, runId: string) {
+    const resolved: string[] = [];
+    const inflight = s.inFlight as { includedCounts: Map<string, number> } | undefined;
+    const entries = (inflight?.includedCounts || new Map<string, number>()).entries();
+    for (const [tokenId, included] of entries) {
+      const token = s.tokens.get(tokenId);
+      if (!token) continue;
+      if (included >= token.total) {
+        try {
+          token.resolve(last);
+        } catch {}
+        resolved.push(tokenId);
+        s.tokens.delete(tokenId);
+      }
+    }
+    this.logger.info(`Completed run ${runId}; resolved tokens: [${resolved.join(', ')}]`);
+  }
+
+  // Helper to reduce nesting depth in startRun: handle run failure
+  private handleRunFailure(s: ThreadState, thread: string, e: any) {
+    const run = s.inFlight as { includedCounts?: Map<string, number>; runId?: string } | undefined;
+    const affected = run?.includedCounts ? Array.from(run.includedCounts.keys()) : [];
+    this.logger.error(`Run ${(run && run.runId) || 'unknown'} failed for thread ${thread}: ${e?.message || e}`);
+    for (const tokenId of affected) {
+      const token = s.tokens.get(tokenId);
+      if (!token) continue;
+      try {
+        token.reject(e);
+      } catch {}
+      s.tokens.delete(tokenId);
+    }
+    if (affected.length) this.buffer.dropTokens(thread, affected);
   }
 
   // Public injection surface: nodes may ask for injected messages to include in the same turn.

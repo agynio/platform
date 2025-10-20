@@ -306,34 +306,21 @@ export class LocalMCPServer implements McpServer, Provisionable, DynamicConfigur
         if (dinds.length > 0) {
           const results = await Promise.allSettled(
             dinds.map(async (d) => {
-              try {
-                await d.stop(5);
-              } catch (e: unknown) {
+              try { await d.stop(5); } catch (e: unknown) {
                 const sc = (e as { statusCode?: number } | undefined)?.statusCode;
-                // benign: already stopped / not found / conflict
                 if (sc !== 304 && sc !== 404 && sc !== 409) throw e;
               }
-              try {
-                await d.remove(true);
-                return true;
-              } catch (e: unknown) {
+              try { await d.remove(true); return true; } catch (e: unknown) {
                 const sc = (e as { statusCode?: number } | undefined)?.statusCode;
-                // benign: already removed / removal in progress
                 if (sc !== 404 && sc !== 409) throw e;
                 return false;
               }
             }),
           );
           const cleaned = results.reduce((acc, r) => acc + (r.status === 'fulfilled' && r.value ? 1 : 0), 0);
-          if (cleaned > 0) {
-            this.logger.info(
-              `[MCP:${this.namespace}] [disc:${discoveryId}] Cleaned ${cleaned} DinD sidecar(s) for temp container ${String(tempContainerId).substring(0, 12)}`,
-            );
-          }
+          if (cleaned > 0) this.logger.info(`[MCP:${this.namespace}] [disc:${discoveryId}] Cleaned ${cleaned} DinD sidecar(s) for temp container ${String(tempContainerId).substring(0, 12)}`);
           const rejected = results.filter((r) => r.status === 'rejected') as PromiseRejectedResult[];
-          if (rejected.length) {
-            throw new AggregateError(rejected.map((r) => r.reason), 'One or more temp DinD cleanup tasks failed');
-          }
+          if (rejected.length) throw new AggregateError(rejected.map((r) => r.reason), 'One or more temp DinD cleanup tasks failed');
         }
       } catch (e) {
         this.logger.error(

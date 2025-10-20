@@ -139,19 +139,17 @@ export class GithubCloneRepoTool extends BaseTool {
   private async resolveToken(): Promise<string> {
     // Preferred: token field
     if (this.token) {
-      if (this.token.source === 'vault') {
+      const isVault = this.token.source === 'vault';
+      if (!isVault && typeof this.token.value === 'string' && this.token.value) return this.token.value;
+      if (isVault) {
         const vlt = this.vault;
         if (vlt && vlt.isEnabled()) {
           try {
             const vr = parseVaultRef(this.token.value);
             const token = await vlt.getSecret(vr);
             if (token) return token;
-          } catch {
-            // ignore and continue fallbacks
-          }
+          } catch {}
         }
-      } else if (typeof this.token.value === 'string' && this.token.value) {
-        return this.token.value;
       }
     }
 
@@ -165,17 +163,8 @@ export class GithubCloneRepoTool extends BaseTool {
       } else {
         const vlt = this.vault;
         if (vlt && vlt.isEnabled()) {
-          const vr: VaultRef = {
-            mount: (ref.mount || 'secret').replace(/\/$/, ''),
-            path: ref.path || 'github',
-            key: ref.key || 'GH_TOKEN',
-          };
-          try {
-            const token = await vlt.getSecret(vr);
-            if (token) return token;
-          } catch {
-            // ignore and continue fallbacks
-          }
+          const vr: VaultRef = { mount: (ref.mount || 'secret').replace(/\/$/, ''), path: ref.path || 'github', key: ref.key || 'GH_TOKEN' };
+          try { const token = await vlt.getSecret(vr); if (token) return token; } catch {}
         }
       }
     }

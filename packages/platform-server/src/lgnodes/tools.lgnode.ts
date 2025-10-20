@@ -22,6 +22,27 @@ export class ToolsNode extends BaseNode {
     this.tools = [...tools];
   }
 
+  private async handleOversizedOutput(content: string, config: WithRuntime | undefined, pair: { base: BaseTool } | undefined) {
+    const threadId = config?.configurable?.thread_id;
+    const baseTool = pair?.base;
+    const canSave = threadId && baseTool && typeof (baseTool as any).getContainerForThread === 'function';
+    if (!canSave) return new ToolCallResponse({ raw: new ToolMessage({ content: '' }), output: `Error (output too long: ${content.length} characters).`, status: 'error' });
+    try {
+      const container = await (baseTool as any).getContainerForThread(threadId);
+      const hasPut = !!container && typeof container.putArchive === 'function';
+      if (!hasPut) return new ToolCallResponse({ raw: new ToolMessage({ content: '' }), output: `Error (output too long: ${content.length} characters).`, status: 'error' });
+      const uuid = randomUUID();
+      const filename = `${uuid}.txt`;
+      const tarBuf = await createSingleFileTar(filename, content);
+      await container.putArchive(tarBuf, { path: '/tmp' });
+      const msg = `Error: output is too long (${content.length} characters). The output has been saved to /tmp/${filename}`;
+      return new ToolCallResponse({ raw: new ToolMessage({ content: msg }), output: msg, status: 'error' });
+    } catch {
+      const msg = `Error (output too long: ${content.length} characters).`;
+      return new ToolCallResponse({ raw: new ToolMessage({ content: msg }), output: msg, status: 'error' });
+    }
+  }
+
   addTool(tool: BaseTool) {
     if (!this.tools.includes(tool)) this.tools.push(tool);
   }
@@ -91,32 +112,7 @@ export class ToolsNode extends BaseNode {
             }
             const content = typeof output === 'string' ? output : JSON.stringify(output);
             const MAX_TOOL_OUTPUT = 50_000;
-            if (content.length > MAX_TOOL_OUTPUT) {
-              // Attempt to save oversized output when tool is container-backed and thread_id is present
-              const threadId = config?.configurable?.thread_id;
-              const baseTool = pair?.base;
-              let savedOk = false;
-              let savedPath = '';
-              if (threadId && baseTool && typeof baseTool.getContainerForThread === 'function') {
-                try {
-                  const container = await baseTool.getContainerForThread(threadId);
-                  if (container && typeof container.putArchive === 'function') {
-                    const uuid = randomUUID();
-                    const filename = `${uuid}.txt`;
-                    const tarBuf = await createSingleFileTar(filename, content);
-                    await container.putArchive(tarBuf, { path: '/tmp' });
-                    savedOk = true;
-                    savedPath = `/tmp/${filename}`;
-                  }
-                } catch {
-                  savedOk = false;
-                }
-              }
-              if (savedOk) {
-                return createMessage(`Error: output is too long (${content.length} characters). The output has been saved to ${savedPath}`, false);
-              }
-              return createMessage(`Error (output too long: ${content.length} characters).`, false);
-            }
+            if (content.length > MAX_TOOL_OUTPUT) return await this.handleOversizedOutput(content, config, pair);
             return createMessage(content);
           } catch (e: unknown) {
             // Prefer readable error strings to avoid "[object Object]"; don't interpolate objects directly

@@ -308,14 +308,14 @@ async function bootstrap() {
           const prevD = beforeDynamic.get(n.id);
           const currS = JSON.stringify(n.config || {});
           const currD = JSON.stringify(n.dynamicConfig || {});
-          if (prevS !== currS || prevD !== currD) {
-            io.emit('node_config', {
-              nodeId: n.id,
-              config: n.config,
-              dynamicConfig: n.dynamicConfig,
-              version: saved.version,
-            });
-          }
+          const changed = prevS !== currS || prevD !== currD;
+          if (!changed) continue;
+          io.emit('node_config', {
+            nodeId: n.id,
+            config: n.config,
+            dynamicConfig: n.dynamicConfig,
+            version: saved.version,
+          });
         }
       }
       return saved;

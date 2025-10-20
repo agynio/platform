@@ -93,27 +93,25 @@ export class SummarizationNode {
     let i = 0;
     while (i < messages.length) {
       const m = messages[i];
-      if (m instanceof AIMessage && (m.tool_calls?.length || 0) > 0) {
-        const group: BaseMessage[] = [m];
-        i++;
-        while (i < messages.length) {
-          const next = messages[i];
-          if (next instanceof ToolMessage && (next as any).tool_call_id) {
-            group.push(next);
-            i++;
-            continue;
-          }
-          break;
-        }
-        groups.push(group);
-      } else if (m instanceof ToolMessage) {
-        // Orphan ToolMessage (no preceding AI with tool_calls) -> ignore
-        i++;
+      if (m instanceof ToolMessage) {
+        i++; // Orphan ToolMessage -> skip
         continue;
-      } else {
+      }
+      if (!(m instanceof AIMessage) || (m.tool_calls?.length || 0) === 0) {
         groups.push([m]);
         i++;
+        continue;
       }
+      const group: BaseMessage[] = [m];
+      i++;
+      while (i < messages.length) {
+        const next = messages[i];
+        const isToolForPrevAI = next instanceof ToolMessage && (next as any).tool_call_id;
+        if (!isToolForPrevAI) break;
+        group.push(next);
+        i++;
+      }
+      groups.push(group);
     }
     return groups;
   }

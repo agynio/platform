@@ -133,96 +133,17 @@ export class ContainerProviderEntity {
     let container: ContainerEntity | undefined = await this.containerService.findContainerByLabels(workspaceLabels);
 
     // Typed fallback: retry by thread_id only and exclude DinD sidecars.
-    if (!container) {
-      try {
-        console.debug('[ContainerProviderEntity] fallback lookup by thread_id only', labels);
-      } catch {}
-      const candidates = await this.containerService.findContainersByLabels(labels);
-      if (Array.isArray(candidates) && candidates.length) {
-        const results = await Promise.all(
-          candidates.map(async (c) => {
-            try {
-              const cl = await this.containerService.getContainerLabels(c.id);
-              return { c, cl };
-            } catch {
-              return { c, cl: undefined as Record<string, string> | undefined };
-            }
-          }),
-        );
-        for (const { c, cl } of results) {
-          if (cl?.['hautech.ai/role'] === 'dind') continue;
-          container = c;
-          break;
-        }
-      }
-    }
+    if (!container) container = await this.findFallbackNonDinD(labels);
     const enableDinD = this.cfg?.enableDinD ?? false;
 
     // Enforce non-reuse on platform mismatch if a platform is requested now
     const requestedPlatform = this.cfg?.platform ?? this.opts.platform;
     if (container && requestedPlatform) {
-      try {
-        const containerLabels = await this.containerService.getContainerLabels(container.id);
-        const existingPlatform = containerLabels?.[PLATFORM_LABEL];
-        if (!existingPlatform || existingPlatform !== requestedPlatform) {
-          // If DinD is enabled, remove associated DinD sidecar(s) first
-          if (enableDinD) {
-            try {
-              const dinds = await this.containerService.findContainersByLabels({
-                ...labels,
-                'hautech.ai/role': 'dind',
-                'hautech.ai/parent_cid': container.id,
-              });
-              // Stop/remove DinD sidecars concurrently
-              await Promise.all(
-                dinds.map(async (d) => {
-                  try {
-                    await d.stop(5);
-                  } catch (e: unknown) {
-                    const sc = getStatusCode(e);
-                    // benign: already stopped/removed-in-progress
-                    if (sc !== 304 && sc !== 404 && sc !== 409) throw e;
-                  }
-                  try {
-                    await d.remove(true);
-                  } catch (e: unknown) {
-                    const sc = getStatusCode(e);
-                    // benign: already removed / removal-in-progress
-                    if (sc !== 404 && sc !== 409) throw e;
-                  }
-                }),
-              );
-            } catch {}
-          }
-          // Stop and remove old container, then recreate (handle benign errors)
-          try {
-            await (container as ContainerEntity).stop();
-          } catch (e: unknown) {
-            const sc = getStatusCode(e);
-            if (sc !== 304 && sc !== 404 && sc !== 409) throw e;
-          }
-          try {
-            await (container as ContainerEntity).remove(true);
-          } catch (e: unknown) {
-            const sc = getStatusCode(e);
-            if (sc !== 404 && sc !== 409) throw e;
-          }
-          container = undefined;
-        }
-      } catch {
-        // If inspect fails, do not reuse to be safe; still attempt cleanup
-        try {
-          await (container as ContainerEntity).stop();
-        } catch (e: unknown) {
-          const sc = getStatusCode(e);
-          if (sc !== 304 && sc !== 404 && sc !== 409) throw e;
-        }
-        try {
-          await (container as ContainerEntity).remove(true);
-        } catch (e: unknown) {
-          const sc = getStatusCode(e);
-          if (sc !== 404 && sc !== 409) throw e;
-        }
+      const platformOk = await this.isPlatformReusable(container.id, requestedPlatform);
+      if (!platformOk) {
+        if (enableDinD) await this.stopAndRemoveDinD(labels, container.id);
+        await this.safeStop(container);
+        await this.safeRemove(container);
         container = undefined;
       }
     }
@@ -271,13 +192,7 @@ export class ContainerProviderEntity {
       });
       if (enableDinD) await this.ensureDinD(container, labels, DOCKER_MIRROR_URL);
 
-      if (this.cfg?.initialScript) {
-        const script = this.cfg.initialScript;
-        const { exitCode, stderr } = await container.exec(script, { tty: false });
-        this.logger.error(
-          `Initial script failed (exitCode=${exitCode}) for container ${container.id.substring(0, 12)}${stderr ? ` stderr: ${stderr}` : ''}`,
-        );
-      }
+      if (this.cfg?.initialScript) await this.runInitialScript(container, this.cfg.initialScript);
 
       // Intentional ordering: run initialScript first, then Nix install.
       // This lets the script prepare environment (e.g., user/profile) before installing packages.
@@ -313,6 +228,21 @@ export class ContainerProviderEntity {
       await this.containerService.touchLastUsed(container.id);
     } catch {}
     return container;
+  }
+
+  // Fallback: find any non-DinD container by thread labels
+  private async findFallbackNonDinD(labels: Record<string, string>): Promise<ContainerEntity | undefined> {
+    try { console.debug('[ContainerProviderEntity] fallback lookup by thread_id only', labels); } catch {}
+    const candidates = await this.containerService.findContainersByLabels(labels);
+    if (!Array.isArray(candidates) || candidates.length === 0) return undefined;
+    const results = await Promise.all(
+      candidates.map(async (c) => {
+        try { return { c, cl: await this.containerService.getContainerLabels(c.id) as Record<string, string> | undefined }; }
+        catch { return { c, cl: undefined as Record<string, string> | undefined }; }
+      }),
+    );
+    const picked = results.find(({ cl }) => cl?.['hautech.ai/role'] !== 'dind');
+    return picked?.c;
   }
 
   private async ensureDinD(workspace: ContainerEntity, baseLabels: Record<string, string>, mirrorUrl: string) {
@@ -356,37 +286,26 @@ export class ContainerProviderEntity {
         if (exitCode === 0) return;
       } catch {}
       // Early fail if DinD exited unexpectedly (best-effort; skip if low-level client not available)
-      try {
-        const maybeSvc: unknown = this.containerService;
-        // Minimal interfaces to avoid any-casts
-        interface DockerLike {
-          getContainer(id: string): { inspect(): Promise<unknown> };
-        }
-        interface DockerProvider {
-          getDocker(): DockerLike;
-        }
-        const hasGetDocker =
-          typeof maybeSvc === 'object' &&
-          maybeSvc !== null &&
-          'getDocker' in maybeSvc &&
-          typeof (maybeSvc as { getDocker?: unknown }).getDocker === 'function';
-        if (hasGetDocker) {
-          const docker = (maybeSvc as DockerProvider).getDocker();
-          const inspect = (await docker.getContainer(dind.id).inspect()) as {
-            State?: { Running?: boolean; Status?: string };
-          };
-          const state = inspect?.State;
-          if (state && state.Running === false) {
-            throw new Error(`DinD sidecar exited unexpectedly: status=${state.Status}`);
-          }
-        }
-      } catch (e) {
-        // If inspect reports not running or other error, fail fast
-        throw e instanceof Error ? e : new Error('DinD sidecar exited unexpectedly');
-      }
+      await this.ensureDinDNotExited(dind);
       await sleep(1000);
     }
     throw new Error('DinD sidecar did not become ready within timeout');
+  }
+
+  private async ensureDinDNotExited(dind: ContainerEntity): Promise<void> {
+    try {
+      const maybeSvc: unknown = this.containerService;
+      interface DockerLike { getContainer(id: string): { inspect(): Promise<unknown> } }
+      interface DockerProvider { getDocker(): DockerLike }
+      const hasGetDocker = typeof maybeSvc === 'object' && maybeSvc !== null && 'getDocker' in maybeSvc && typeof (maybeSvc as { getDocker?: unknown }).getDocker === 'function';
+      if (!hasGetDocker) return;
+      const docker = (maybeSvc as DockerProvider).getDocker();
+      const inspect = (await docker.getContainer(dind.id).inspect()) as { State?: { Running?: boolean; Status?: string } };
+      const state = inspect?.State;
+      if (state && state.Running === false) throw new Error(`DinD sidecar exited unexpectedly: status=${state.Status}`);
+    } catch (e) {
+      throw e instanceof Error ? e : new Error('DinD sidecar exited unexpectedly');
+    }
   }
 
   // ---------------------
@@ -485,3 +404,64 @@ function getStatusCode(e: unknown): number | undefined {
 // parseVaultRef now imported from ../utils/refs
 
 export type NixInstallSpec = { commitHash: string; attributePath: string };
+
+// ---- Private helpers to reduce nesting and keep behavior identical ----
+export interface ContainerProviderEntity { // augment as declaration merging for private helpers
+  // TS uses class fields; we attach methods below
+}
+
+// Determine whether existing container can be reused for requested platform
+async function isPlatformReusable(this: ContainerProviderEntity, containerId: string, requestedPlatform: string): Promise<boolean> {
+  try {
+    // @ts-expect-error access private via this
+    const containerLabels = await this.containerService.getContainerLabels(containerId);
+    const existingPlatform = containerLabels?.[PLATFORM_LABEL];
+    return !!existingPlatform && existingPlatform === requestedPlatform;
+  } catch {
+    return false;
+  }
+}
+
+// Stop and remove DinD sidecars for a given parent container id
+async function stopAndRemoveDinD(this: ContainerProviderEntity, labels: Record<string, string>, parentId: string): Promise<void> {
+  try {
+    // @ts-expect-error access private via this
+    const dinds = await this.containerService.findContainersByLabels({
+      ...labels,
+      'hautech.ai/role': 'dind',
+      'hautech.ai/parent_cid': parentId,
+    });
+    await Promise.all(
+      dinds.map(async (d) => {
+        try { await d.stop(5); } catch (e: unknown) { const sc = getStatusCode(e); if (sc !== 304 && sc !== 404 && sc !== 409) throw e; }
+        try { await d.remove(true); } catch (e: unknown) { const sc = getStatusCode(e); if (sc !== 404 && sc !== 409) throw e; }
+      }),
+    );
+  } catch {}
+}
+
+// Stop container safely
+async function safeStop(this: ContainerProviderEntity, container: ContainerEntity): Promise<void> {
+  try { await container.stop(); } catch (e: unknown) { const sc = getStatusCode(e); if (sc !== 304 && sc !== 404 && sc !== 409) throw e; }
+}
+
+// Remove container safely
+async function safeRemove(this: ContainerProviderEntity, container: ContainerEntity): Promise<void> {
+  try { await container.remove(true); } catch (e: unknown) { const sc = getStatusCode(e); if (sc !== 404 && sc !== 409) throw e; }
+}
+
+// Execute initial script and log error if it fails (previous behavior)
+async function runInitialScript(this: ContainerProviderEntity, container: ContainerEntity, script: string): Promise<void> {
+  const { exitCode, stderr } = await container.exec(script, { tty: false });
+  // @ts-expect-error access private via this
+  this.logger.error(`Initial script failed (exitCode=${exitCode}) for container ${container.id.substring(0, 12)}${stderr ? ` stderr: ${stderr}` : ''}`);
+}
+
+// Bind helpers to prototype (to keep method-like usage while reducing nesting inside class)
+Object.assign(ContainerProviderEntity.prototype as any, {
+  isPlatformReusable,
+  stopAndRemoveDinD,
+  safeStop,
+  safeRemove,
+  runInitialScript,
+});

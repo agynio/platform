@@ -97,15 +97,8 @@ export class ManageTool extends BaseTool {
           const prefix = `${parentThreadId}__`;
           const ids = new Set<string>();
           for (const w of this.workers) {
-            try {
-              const threads = w.agent.listActiveThreads(prefix) || [];
-              for (const t of threads) {
-                if (t.startsWith(prefix)) ids.add(t.slice(prefix.length));
-              }
-            } catch (err: unknown) {
-              const e = err instanceof Error ? err : new Error(String(err));
-              this.logger.error('Manage: listActiveThreads failed', { worker: w.name, error: e.message });
-            }
+            const threads = safeListActiveThreads(this, w, prefix).filter((t) => t.startsWith(prefix));
+            for (const t of threads) ids.add(t.slice(prefix.length));
           }
           const childThreadIds = Array.from(ids.values());
           return { activeTasks: childThreadIds.length, childThreadIds };
@@ -120,5 +113,14 @@ export class ManageTool extends BaseTool {
         schema: invocationSchema,
       },
     );
+  }
+}
+
+// Helper to unwrap listActiveThreads without adding nesting inside action()
+function safeListActiveThreads(self: ManageTool, w: { name: string; agent: { listActiveThreads: (prefix: string) => string[] | undefined } }, prefix: string): string[] {
+  try { return w.agent.listActiveThreads(prefix) || []; } catch (err: unknown) {
+    const e = err instanceof Error ? err : new Error(String(err));
+    self.logger.error('Manage: listActiveThreads failed', { worker: w.name, error: e.message });
+    return [] as string[];
   }
 }

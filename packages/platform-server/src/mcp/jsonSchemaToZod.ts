@@ -78,9 +78,9 @@ export function jsonSchemaToZod(schema: JSONSchema | undefined): ZodTypeAny {
         const shape: Record<string, ZodTypeAny> = {};
         const req = new Set(schema.required || []);
         for (const [k, v] of Object.entries(schema.properties)) {
-          let prop = jsonSchemaToZod(v);
-          if (!req.has(k)) prop = prop.optional();
-          shape[k] = prop;
+          const optional = !req.has(k);
+          const baseProp = jsonSchemaToZod(v);
+          shape[k] = optional ? baseProp.optional() : baseProp;
         }
         base = z.object(shape).strict();
       } else if (schema.anyOf || schema.oneOf) {
