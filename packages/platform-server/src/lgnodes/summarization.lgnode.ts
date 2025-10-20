@@ -74,25 +74,18 @@ export class SummarizationNode {
   }
 
   async countTokens(llm: ChatOpenAI, messagesOrText: BaseMessage[] | string): Promise<number> {
+    // Use approximate counter to avoid relying on deprecated getNumTokens and export-map issues in CI
+    const countTokensApprox = (text: string): number => {
+      // Very rough heuristic: 1 token ~ 4 chars
+      return Math.ceil(text.length / 4);
+    };
     if (typeof messagesOrText === 'string') {
-      try {
-        return await llm.getNumTokens(messagesOrText);
-      } catch {
-        return messagesOrText.length;
-      }
+      return countTokensApprox(messagesOrText);
     }
-    // Compute token counts for each message concurrently to avoid N sequential awaits.
     const contents = messagesOrText.map((m) =>
       typeof m.content === 'string' ? m.content : JSON.stringify(m.content),
     );
-    const counts = await Promise.all(
-      contents.map((c) =>
-        llm.getNumTokens(c).catch(() => {
-          // Fallback to char length if tokenizer not available
-          return c.length;
-        }),
-      ),
-    );
+    const counts = contents.map((c) => countTokensApprox(c));
     return counts.reduce((a, b) => a + b, 0);
   }
 
