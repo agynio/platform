@@ -1,23 +1,11 @@
 // Flat ESLint config for server (scoped rules)
 import tseslint from 'typescript-eslint';
-import { fileURLToPath } from 'node:url';
-import path from 'node:path';
-
-// Resolve directory of this config file as a plain string for tsconfigRootDir (ESLint requires a string)
-const tsconfigRootDir = path.dirname(fileURLToPath(import.meta.url));
 
 export default [
   {
     files: ['**/*.ts', '**/*.tsx'],
     ignores: ['dist/**', 'node_modules/**'],
-    languageOptions: {
-      parser: tseslint.parser,
-      // Explicitly set tsconfigRootDir (must be a string) to disambiguate multiple tsconfig roots in the monorepo
-      parserOptions: {
-        tsconfigRootDir,
-        project: ['./tsconfig.json'], // ensure type-aware rules (even if many are off) use the local server tsconfig
-      },
-    },
+    languageOptions: { parser: tseslint.parser },
     plugins: { '@typescript-eslint': tseslint.plugin },
     rules: {
       // Global relaxed defaults
