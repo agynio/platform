@@ -1,11 +1,11 @@
-import type { Reducer, ReduceResult, LoopState, LoopContext } from '../types.js';
+import type { Reducer, ReduceResult, LoopState, LeanCtx } from '../types.js';
 
 export class RouteReducer implements Reducer {
   name(): string {
     return 'route';
   }
 
-  async reduce(state: LoopState, _ctx: LoopContext, _runtime: Parameters<Reducer['reduce']>[2]): Promise<ReduceResult> {
+  async reduce(state: LoopState, _ctx: LeanCtx): Promise<ReduceResult> {
     // Termination if finish signaled
     if (state.finish) return { state: { ...state }, next: null };
 

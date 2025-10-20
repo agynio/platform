@@ -1,11 +1,11 @@
-import type { Reducer, ReduceResult, LoopState, LoopContext } from '../types.js';
+import type { Reducer, ReduceResult, LoopState, LeanCtx } from '../types.js';
 
 export class EnforceReducer implements Reducer {
   name(): string {
     return 'enforce';
   }
 
-  async reduce(state: LoopState, _ctx: LoopContext, _runtime: Parameters<Reducer['reduce']>[2]): Promise<ReduceResult> {
+  async reduce(state: LoopState, _ctx: LeanCtx): Promise<ReduceResult> {
     const cfg = state.restriction;
     if (!cfg?.enabled) return { state: { ...state }, next: 'route' };
     const injections = Math.max(1, Math.min(cfg.maxInjections ?? 1, (cfg.injections ?? 0) + 1));

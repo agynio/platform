@@ -1,30 +1,25 @@
 import type { Logger } from '../types/logger.js';
-import type { Reducer, LoopState, LoopContext, ReduceResult, LoopRuntime } from './types.js';
+import type { Reducer, LoopState, ReduceResult, LeanCtx } from './types.js';
 
 export async function invoke(args: {
-  runtime: LoopRuntime;
   reducers: Reducer[];
   state: LoopState;
-  ctx: LoopContext;
+  ctx: LeanCtx;
   logger: Logger;
 }): Promise<LoopState> {
-  const { runtime, reducers, state: initial, ctx, logger } = args;
+  const { reducers, state: initial, ctx, logger } = args;
   const map = new Map<string, Reducer>(reducers.map((r) => [r.name(), r]));
   let state: LoopState = { ...initial };
   let next = reducers[0]?.name() ?? null;
 
   while (next) {
-    if (ctx.abortSignal?.aborted) {
-      logger.error('invoke aborted');
-      break;
-    }
     const reducer = map.get(next);
     if (!reducer) {
       logger.error(`unknown reducer: ${next}`);
       break;
     }
     try {
-      const res: ReduceResult = await reducer.reduce(state, ctx, runtime);
+      const res: ReduceResult = await reducer.reduce(state, ctx);
       state = res.state;
       next = res.next;
     } catch (e: unknown) {

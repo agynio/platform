@@ -87,7 +87,6 @@ export type MemoryConnector = {
 export type ToolFinishSignal = { finish: true; reason?: string; data?: unknown };
 
 export type SummarizerConfig = { keepTokens: number; maxTokens: number; note?: string };
-export type LoopContext = { threadId?: string; runId?: string; abortSignal?: AbortSignal; summarizerConfig?: SummarizerConfig };
 
 export type RestrictionConfig = { enabled: boolean; message: string; maxInjections?: number; injections?: number };
 
@@ -106,14 +105,29 @@ export type LoopState = {
 
 export type ReduceResult = { state: LoopState; next: string | null };
 
-export interface LoopRuntime {
-  getLLM(): OpenAIClient;
-  getTools(): ToolRegistry | undefined;
-  getLogger(): Logger;
-  getMemory(): MemoryConnector | undefined;
-}
+// Minimal schema alias for response formatting options
+export type JsonSchema = object;
+
+export type ToolExecOptions = { abortSignal?: AbortSignal };
+
+// Lean context exposed to reducers
+export type LeanCtx = {
+  summarizerConfig?: SummarizerConfig;
+  memory?: MemoryConnector;
+  callModel: (input: {
+    messages: Message[];
+    tools?: Tool[];
+    toolChoice?: 'auto' | 'required' | { name: string };
+    responseFormat?: JsonSchema | 'json';
+  }) => Promise<{ assistant: Message; toolCalls?: ToolCall[]; raw?: unknown }>;
+  executeTools: (
+    calls: ToolCall[],
+    opts?: ToolExecOptions,
+  ) => Promise<{ results: Message[]; finish?: { reason?: string; data?: unknown } }>;
+  log: Logger;
+};
 
 export interface Reducer {
   name(): string;
-  reduce(state: LoopState, ctx: LoopContext, runtime: LoopRuntime): Promise<ReduceResult>;
+  reduce(state: LoopState, ctx: LeanCtx): Promise<ReduceResult>;
 }

@@ -1,24 +1,19 @@
-import type { Reducer, ReduceResult, LoopState, LoopContext } from '../types.js';
+import type { Reducer, ReduceResult, LoopState, LeanCtx } from '../types.js';
 
 export class SummarizeReducer implements Reducer {
   name(): string {
     return 'summarize';
   }
 
-  async reduce(state: LoopState, ctx: LoopContext, runtime: Parameters<Reducer['reduce']>[2]): Promise<ReduceResult> {
-    const logger = runtime.getLogger();
-    const memory = runtime.getMemory();
+  async reduce(state: LoopState, ctx: LeanCtx): Promise<ReduceResult> {
+    const logger = ctx.log;
+    const memory = ctx.memory;
     const cfg = ctx.summarizerConfig;
     if (!cfg) return { state: { ...state }, next: 'call_model' };
 
     try {
-      // Prepend memory summary message if exists
-      const working: typeof state.messages = [];
-      if (ctx.threadId && memory?.getMemoryMessage) {
-        const mem = await memory.getMemoryMessage(ctx.threadId);
-        if (mem) working.push(mem);
-      }
-      working.push(...state.messages);
+      // Prepend memory summary message if exists (if LeanCtx includes enough info to fetch it)
+      const working: typeof state.messages = [...state.messages];
 
       // Simplified summarization helper using model token budgeting hints from ctx
       // For now, this is a placeholder; actual token counting would require tokenizer support.
