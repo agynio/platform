@@ -48,5 +48,7 @@ Notes
 Reducer architecture
 - LLLoop runs an internal dispatcher over reducers: summarize -> call_model -> tools -> enforce -> route.
 - Each reducer has a single responsibility and returns the next step.
-- Dispatcher uses a runtime object exposing getLLM/getTools/getLogger/getMemory; signature: invoke({ runtime, reducers, state, ctx, logger }).
+- Reducers receive only a lean ctx (summarizerConfig, optional memory, and run metadata). No LLM or ToolRegistry via ctx.
+- Operational dependencies (OpenAI client, ToolRegistry, Logger) are injected into reducer constructors by LLLoop when wiring.
+- Dispatcher signature: invoke({ reducers, state, ctx, logger }).
 - LoopState carries no routing flags; routing is solely via ReduceResult.next.

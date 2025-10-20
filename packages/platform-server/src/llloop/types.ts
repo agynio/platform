@@ -106,25 +106,12 @@ export type LoopState = {
 export type ReduceResult = { state: LoopState; next: string | null };
 
 // Minimal schema alias for response formatting options
-export type JsonSchema = object;
-
-export type ToolExecOptions = { abortSignal?: AbortSignal };
-
-// Lean context exposed to reducers
+// Lean context exposed to reducers (no operational callbacks)
 export type LeanCtx = {
   summarizerConfig?: SummarizerConfig;
   memory?: MemoryConnector;
-  callModel: (input: {
-    messages: Message[];
-    tools?: Tool[];
-    toolChoice?: 'auto' | 'required' | { name: string };
-    responseFormat?: JsonSchema | 'json';
-  }) => Promise<{ assistant: Message; toolCalls?: ToolCall[]; raw?: unknown }>;
-  executeTools: (
-    calls: ToolCall[],
-    opts?: ToolExecOptions,
-  ) => Promise<{ results: Message[]; finish?: { reason?: string; data?: unknown } }>;
-  log: Logger;
+  threadId?: string;
+  runId?: string;
 };
 
 export interface Reducer {

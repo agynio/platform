@@ -1,6 +1,8 @@
 import type { Reducer, ReduceResult, LoopState, LeanCtx } from '../types.js';
+import type { Logger } from '../../types/logger.js';
 
 export class EnforceReducer implements Reducer {
+  constructor(private readonly logger: Logger) {}
   name(): string {
     return 'enforce';
   }

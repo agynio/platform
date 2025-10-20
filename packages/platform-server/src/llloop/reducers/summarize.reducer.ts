@@ -1,12 +1,14 @@
 import type { Reducer, ReduceResult, LoopState, LeanCtx } from '../types.js';
+import type { Logger } from '../../types/logger.js';
 
 export class SummarizeReducer implements Reducer {
+  constructor(private readonly logger: Logger) {}
   name(): string {
     return 'summarize';
   }
 
   async reduce(state: LoopState, ctx: LeanCtx): Promise<ReduceResult> {
-    const logger = ctx.log;
+    const logger = this.logger;
     const memory = ctx.memory;
     const cfg = ctx.summarizerConfig;
     if (!cfg) return { state: { ...state }, next: 'call_model' };
