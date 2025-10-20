@@ -188,21 +188,7 @@ export function registerNixRoutes(
       const tid = setTimeout(() => ac.abort(), opts.timeoutMs);
       try {
         const json = (await fetchJson(url, ac.signal)) as unknown;
-        const upstream = NixhubPackageSchema.safeParse(json);
-        const rels: NonNullable<NixhubPackageJSON['releases']> =
-          upstream.success && Array.isArray(upstream.data.releases) ? upstream.data.releases : [];
-        const seen = new Set<string>();
-        const withValid: string[] = [];
-        const withInvalid: string[] = [];
-        for (const r of rels) {
-          const v = String(r?.version ?? '');
-          if (!v || seen.has(v)) continue;
-          seen.add(v);
-          if (semver.valid(v) || semver.valid(semver.coerce(v) || '')) withValid.push(v);
-          else withInvalid.push(v);
-        }
-        withValid.sort((a, b) => semver.rcompare(semver.coerce(a) || a, semver.coerce(b) || b));
-        const versions = [...withValid, ...withInvalid];
+        const versions = extractSortedVersions(json);
         const body = VersionsResponseSchema.parse({ versions });
         reply.header('Cache-Control', 'public, max-age=60, stale-while-revalidate=300');
         return body;
@@ -281,4 +267,21 @@ export function registerNixRoutes(
       return { error: 'server_error' };
     }
   });
+}
+
+function extractSortedVersions(json: unknown): string[] {
+  const upstream = NixhubPackageSchema.safeParse(json);
+  const rels: NonNullable<NixhubPackageJSON['releases']> = upstream.success && Array.isArray(upstream.data.releases) ? upstream.data.releases : [];
+  const seen = new Set<string>();
+  const withValid: string[] = [];
+  const withInvalid: string[] = [];
+  for (const r of rels) {
+    const v = String(r?.version ?? '');
+    if (!v || seen.has(v)) continue;
+    seen.add(v);
+    if (semver.valid(v) || semver.valid(semver.coerce(v) || '')) withValid.push(v);
+    else withInvalid.push(v);
+  }
+  withValid.sort((a, b) => semver.rcompare(semver.coerce(a) || a, semver.coerce(b) || b));
+  return [...withValid, ...withInvalid];
 }

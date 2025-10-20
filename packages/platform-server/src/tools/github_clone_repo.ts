@@ -141,36 +141,34 @@ export class GithubCloneRepoTool extends BaseTool {
     if (this.token) {
       const isVault = this.token.source === 'vault';
       if (!isVault && typeof this.token.value === 'string' && this.token.value) return this.token.value;
-      if (isVault) {
-        const vlt = this.vault;
-        if (vlt && vlt.isEnabled()) {
-          try {
-            const vr = parseVaultRef(this.token.value);
-            const token = await vlt.getSecret(vr);
-            if (token) return token;
-          } catch {}
-        }
+      if (isVault && this.vault?.isEnabled()) {
+        const token = await this.tryFetchVaultToken(this.token.value);
+        if (token) return token;
       }
     }
 
     // Legacy: authRef
     const ref = this.authRef;
-    if (ref) {
-      if (ref.source === 'env') {
-        const name = ref.envVar || 'GH_TOKEN';
-        const v = process.env[name] || '';
-        if (v) return v;
-      } else {
-        const vlt = this.vault;
-        if (vlt && vlt.isEnabled()) {
-          const vr: VaultRef = { mount: (ref.mount || 'secret').replace(/\/$/, ''), path: ref.path || 'github', key: ref.key || 'GH_TOKEN' };
-          try { const token = await vlt.getSecret(vr); if (token) return token; } catch {}
-        }
-      }
+    if (ref && ref.source === 'env') {
+      const name = ref.envVar || 'GH_TOKEN';
+      const v = process.env[name] || '';
+      if (v) return v;
+    } else if (ref && this.vault?.isEnabled()) {
+      const vr: VaultRef = { mount: (ref.mount || 'secret').replace(/\/$/, ''), path: ref.path || 'github', key: ref.key || 'GH_TOKEN' };
+      try { const token = await this.vault.getSecret(vr); if (token) return token; } catch {}
     }
 
     // Fallback to ConfigService
     return this.config.githubToken;
+  }
+
+  private async tryFetchVaultToken(v: string | undefined): Promise<string | undefined> {
+    try {
+      const vr = parseVaultRef(v);
+      return await this.vault!.getSecret(vr);
+    } catch {
+      return undefined;
+    }
   }
 
   override async getContainerForThread(threadId: string) {

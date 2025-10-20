@@ -79,16 +79,7 @@ export class NcpsKeyService {
       attempt++;
       try {
         const key = await this.fetchOnce();
-        if (key && key !== this.currentKey) {
-          // rotate
-          if (this.currentKey) {
-            this.previousKey = this.currentKey;
-            const minutes = Math.max(0, this.cfg.ncpsRotationGraceMinutes);
-            this.prevUntil = minutes > 0 ? Date.now() + minutes * 60_000 : 0;
-          }
-          this.currentKey = key;
-          this.logger.info('NcpsKeyService updated key (length=%d)', key.length);
-        }
+        if (key && key !== this.currentKey) this.rotateTo(key);
         return !!key;
       } catch (e) {
         const msg = (e as Error)?.message || String(e);
@@ -152,5 +143,15 @@ export class NcpsKeyService {
     } finally {
       clearTimeout(tid);
     }
+  }
+
+  private rotateTo(key: string) {
+    if (this.currentKey) {
+      this.previousKey = this.currentKey;
+      const minutes = Math.max(0, this.cfg.ncpsRotationGraceMinutes);
+      this.prevUntil = minutes > 0 ? Date.now() + minutes * 60_000 : 0;
+    }
+    this.currentKey = key;
+    this.logger.info('NcpsKeyService updated key (length=%d)', key.length);
   }
 }

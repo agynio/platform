@@ -297,37 +297,7 @@ export class LocalMCPServer implements McpServer, Provisionable, DynamicConfigur
       } catch (e) {
         this.logger.error(`[MCP:${this.namespace}] [disc:${discoveryId}] Error cleaning up temp container`, e);
       }
-      // Ensure any DinD sidecars created for the temporary discovery container are also cleaned up
-      try {
-        const dinds = await this.containerService.findContainersByLabels(
-          { 'hautech.ai/role': 'dind', 'hautech.ai/parent_cid': tempContainerId },
-          { all: true },
-        );
-        if (dinds.length > 0) {
-          const results = await Promise.allSettled(
-            dinds.map(async (d) => {
-              try { await d.stop(5); } catch (e: unknown) {
-                const sc = (e as { statusCode?: number } | undefined)?.statusCode;
-                if (sc !== 304 && sc !== 404 && sc !== 409) throw e;
-              }
-              try { await d.remove(true); return true; } catch (e: unknown) {
-                const sc = (e as { statusCode?: number } | undefined)?.statusCode;
-                if (sc !== 404 && sc !== 409) throw e;
-                return false;
-              }
-            }),
-          );
-          const cleaned = results.reduce((acc, r) => acc + (r.status === 'fulfilled' && r.value ? 1 : 0), 0);
-          if (cleaned > 0) this.logger.info(`[MCP:${this.namespace}] [disc:${discoveryId}] Cleaned ${cleaned} DinD sidecar(s) for temp container ${String(tempContainerId).substring(0, 12)}`);
-          const rejected = results.filter((r) => r.status === 'rejected') as PromiseRejectedResult[];
-          if (rejected.length) throw new AggregateError(rejected.map((r) => r.reason), 'One or more temp DinD cleanup tasks failed');
-        }
-      } catch (e) {
-        this.logger.error(
-          `[MCP:${this.namespace}] [disc:${discoveryId}] Error cleaning DinD sidecars for temp container`,
-          e,
-        );
-      }
+      await this.cleanupDinDSidecars(tempContainerId, discoveryId);
     }
 
     return this.toolsCache ?? [];
@@ -361,10 +331,26 @@ export class LocalMCPServer implements McpServer, Provisionable, DynamicConfigur
     // Passive: Only return cached tools unless force is requested and discovery already happened.
     // We purposely avoid triggering a start/discovery from listTools to prevent dual discovery paths.
     const all = force && this.toolsDiscovered ? (this.toolsCache ?? []) : this.toolsCache || [];
-    if (!this._enabledTools) return all;
     const enabled = this._enabledTools;
     if (!enabled) return all;
     return all.filter((t) => enabled.has(t.name));
+  }
+
+  private async cleanupDinDSidecars(tempContainerId: string, discoveryId: string): Promise<void> {
+    try {
+      const dinds = await this.containerService.findContainersByLabels(
+        { 'hautech.ai/role': 'dind', 'hautech.ai/parent_cid': tempContainerId },
+        { all: true },
+      );
+      if (dinds.length === 0) return;
+      const results = await Promise.allSettled(dinds.map((d) => safeStopAndRemove(d)));
+      const cleaned = results.reduce((acc, r) => acc + (r.status === 'fulfilled' && r.value ? 1 : 0), 0);
+      if (cleaned > 0) this.logger.info(`[MCP:${this.namespace}] [disc:${discoveryId}] Cleaned ${cleaned} DinD sidecar(s) for temp container ${String(tempContainerId).substring(0, 12)}`);
+      const rejected = results.filter((r) => r.status === 'rejected') as PromiseRejectedResult[];
+      if (rejected.length) throw new AggregateError(rejected.map((r) => r.reason), 'One or more temp DinD cleanup tasks failed');
+    } catch (e) {
+      this.logger.error(`[MCP:${this.namespace}] [disc:${discoveryId}] Error cleaning DinD sidecars for temp container`, e);
+    }
   }
 
   async callTool(

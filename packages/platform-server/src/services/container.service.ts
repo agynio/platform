@@ -489,11 +489,8 @@ export class ContainerService {
                   cb();
                 },
               });
-              try {
-                const modem = this.docker.modem as unknown as { demuxStream: (s: NodeJS.ReadableStream, out: NodeJS.WritableStream, err: NodeJS.WritableStream) => void };
-                if (!modem?.demuxStream) throw new Error('demuxStream not available');
-                modem.demuxStream(stream, outStdout, outStderr);
-              } catch {
+              const usedFallback = !this.tryDockerDemux(stream, outStdout, outStderr);
+              if (usedFallback) {
                 const { stdout, stderr } = demuxDockerMultiplex(stream);
                 stdout.pipe(outStdout);
                 stderr.pipe(outStderr);
@@ -549,6 +546,18 @@ export class ContainerService {
         });
       });
     });
+  }
+
+  // Attempt to use docker.modem.demuxStream, return true if used, false if fallback needed
+  private tryDockerDemux(stream: NodeJS.ReadableStream, outStdout: NodeJS.WritableStream, outStderr: NodeJS.WritableStream): boolean {
+    try {
+      const modem = this.docker.modem as unknown as { demuxStream?: (s: NodeJS.ReadableStream, out: NodeJS.WritableStream, err: NodeJS.WritableStream) => void };
+      if (!modem?.demuxStream) return false;
+      modem.demuxStream(stream, outStdout, outStderr);
+      return true;
+    } catch {
+      return false;
+    }
   }
 
   /** Stop a container by docker id (gracefully). */

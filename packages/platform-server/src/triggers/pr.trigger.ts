@@ -89,45 +89,11 @@ export class PRTrigger extends BaseTrigger {
       let candidatePRs = 0;
 
       for (const repo of repos) {
-        // Get open PRs in repo where user is assignee (GitHubService currently only returns isAssignee variant)
-        const assigned = await this.github.listAssignedOpenPullRequestsForRepo(owner, repo);
-        const candidates = includeAuthored ? assigned.filter((p) => p.isAssignee || p.isAuthor) : assigned;
+        const { assigned, candidates } = await this.fetchRepoCandidates(owner, repo, includeAuthored);
         scannedPRs += assigned.length;
         candidatePRs += candidates.length;
         this.logger.debug(`[PRTrigger] Repo ${repo}: assigned=${assigned.length}, candidates=${candidates.length}`);
-
-        for (const pr of candidates) {
-          const key = this.prKey(repo, pr.number);
-          const detailed = await this.prService.getPRInfo(owner, repo, pr.number);
-          const updated_at = detailed.events[detailed.events.length - 1]?.created_at || new Date().toISOString();
-          const checksMinimal = detailed.checks.map((c: any) => ({ name: c.name, status: c.status, conclusion: c.conclusion }));
-          const eventsIds = detailed.events.map((e: any) => e.id);
-          const compositeHash = md5(JSON.stringify({ updated_at, mergeable: detailed.mergeable, mergeableState: detailed.mergeableState, checks: checksMinimal, events: eventsIds }));
-          const snapshot: PRSnapshotMinimal = {
-            number: pr.number,
-            repo,
-            updated_at,
-            mergeable: detailed.mergeable,
-            mergeableState: detailed.mergeableState,
-            compositeHash,
-          };
-
-          const prev = this.previous.get(key);
-          const changed = !prev || prev.compositeHash !== snapshot.compositeHash;
-          if (changed) {
-            this.logger.info(
-              `[PRTrigger] Change detected ${repo}#${pr.number}: mergeable=${detailed.mergeable} state=${detailed.mergeableState} events=${detailed.events.length} checks=${detailed.checks.length}`,
-            );
-            // Prepare a message summarizing change. Provide diff info in 'info'.
-            changedMessages.push({
-              content: `PR ${repo}#${pr.number} updated (${pr.title})`,
-              info: { key, ...detailed },
-            });
-            this.previous.set(key, snapshot);
-          } else {
-            this.logger.debug(`[PRTrigger] No change for ${repo}#${pr.number}`);
-          }
-        }
+        await this.collectChangedMessages(owner, repo, candidates, changedMessages);
       }
 
       if (changedMessages.length) {
@@ -142,6 +108,32 @@ export class PRTrigger extends BaseTrigger {
       }
     } catch (err) {
       this.logger.error("[PRTrigger] pollOnce error", err);
+    }
+  }
+
+  private async fetchRepoCandidates(owner: string, repo: string, includeAuthored?: boolean) {
+    const assigned = await this.github.listAssignedOpenPullRequestsForRepo(owner, repo);
+    const candidates = includeAuthored ? assigned.filter((p) => p.isAssignee || p.isAuthor) : assigned;
+    return { assigned, candidates };
+  }
+
+  private async collectChangedMessages(owner: string, repo: string, candidates: any[], out: TriggerMessage[]) {
+    for (const pr of candidates) {
+      const key = this.prKey(repo, pr.number);
+      const detailed = await this.prService.getPRInfo(owner, repo, pr.number);
+      const updated_at = detailed.events[detailed.events.length - 1]?.created_at || new Date().toISOString();
+      const checksMinimal = detailed.checks.map((c: any) => ({ name: c.name, status: c.status, conclusion: c.conclusion }));
+      const eventsIds = detailed.events.map((e: any) => e.id);
+      const compositeHash = md5(JSON.stringify({ updated_at, mergeable: detailed.mergeable, mergeableState: detailed.mergeableState, checks: checksMinimal, events: eventsIds }));
+      const snapshot: PRSnapshotMinimal = { number: pr.number, repo, updated_at, mergeable: detailed.mergeable, mergeableState: detailed.mergeableState, compositeHash };
+      const prev = this.previous.get(key);
+      const changed = !prev || prev.compositeHash !== snapshot.compositeHash;
+      if (!changed) { this.logger.debug(`[PRTrigger] No change for ${repo}#${pr.number}`); continue; }
+      this.logger.info(
+        `[PRTrigger] Change detected ${repo}#${pr.number}: mergeable=${detailed.mergeable} state=${detailed.mergeableState} events=${detailed.events.length} checks=${detailed.checks.length}`,
+      );
+      out.push({ content: `PR ${repo}#${pr.number} updated (${pr.title})`, info: { key, ...detailed } });
+      this.previous.set(key, snapshot);
     }
   }
 }

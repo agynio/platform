@@ -271,21 +271,15 @@ export class LiveGraphRuntime {
 
     // Nodes
     for (const n of next.nodes) {
-      if (!prevNodes.has(n.id)) {
-        addedNodes.push(n);
-      } else {
-        const prevNode = prevNodes.get(n.id)!;
-        if (prevNode.data.template !== n.data.template) {
-          recreatedNodeIds.push(n.id);
-        } else {
-          const prevCfg = prevNode.data.config || {};
-          const nextCfg = n.data.config || {};
-          if (!configsEqual(prevCfg, nextCfg)) configUpdateNodeIds.push(n.id);
-          const prevDyn = (prevNode.data as any).dynamicConfig || {};
-          const nextDyn = (n.data as any).dynamicConfig || {};
-          if (!configsEqual(prevDyn, nextDyn)) dynamicConfigUpdateNodeIds.push(n.id);
-        }
-      }
+      if (!prevNodes.has(n.id)) { addedNodes.push(n); continue; }
+      const prevNode = prevNodes.get(n.id)!;
+      if (prevNode.data.template !== n.data.template) { recreatedNodeIds.push(n.id); continue; }
+      const prevCfg = prevNode.data.config || {};
+      const nextCfg = n.data.config || {};
+      if (!configsEqual(prevCfg, nextCfg)) configUpdateNodeIds.push(n.id);
+      const prevDyn = (prevNode.data as any).dynamicConfig || {};
+      const nextDyn = (n.data as any).dynamicConfig || {};
+      if (!configsEqual(prevDyn, nextDyn)) dynamicConfigUpdateNodeIds.push(n.id);
     }
     for (const old of prev.nodes) {
       if (!nextNodes.has(old.id)) removedNodeIds.push(old.id);
@@ -316,39 +310,33 @@ export class LiveGraphRuntime {
       const live: LiveNode = { id: node.id, template: node.data.template, instance: created, config: node.data.config };
       this.state.nodes.set(node.id, live);
 
-      // Post-create wiring: provide state persistor and preload cached MCP tools if present
+      // Post-create wiring and configuration
       this.postCreateWiring(created, node).catch((e) => this.logger.debug('Post-create wiring failed', e));
-      const { isNodeLifecycle } = await import('../nodes/types');
-      if (!isNodeLifecycle(created) && node.data.config && hasSetConfig(created)) {
-        try {
-          const cleaned = await this.applyConfigWithUnknownKeyStripping(created, 'setConfig', node.data.config, node.id);
-          if (cleaned) live.config = cleaned;
-        } catch (err) {
-          throw Errors.nodeInitFailure(node.id, err);
-        }
-      }
-      // Lifecycle-aware path: configure + start
-      if (isNodeLifecycle(created)) {
-        try {
-          const cfg = (node.data.config || {}) as Record<string, unknown>;
-          await created.configure(cfg);
-          await created.start();
-          live.config = cfg;
-        } catch (err) {
-          throw Errors.nodeInitFailure(node.id, err);
-        }
-      }
-      if (node.data.dynamicConfig && hasSetDynamicConfig(created)) {
-        try {
-          await this.applyConfigWithUnknownKeyStripping(created, 'setDynamicConfig', node.data.dynamicConfig, node.id);
-        } catch (err) {
-          throw Errors.nodeInitFailure(node.id, err);
-        }
-      }
+      await this.configureCreatedInstance(created, node, live);
     } catch (e) {
       // Factory creation or any init error should include nodeId
       if (e instanceof GraphError) throw e; // already enriched
       throw Errors.nodeInitFailure(node.id, e);
+    }
+  }
+
+  private async configureCreatedInstance(created: any, node: NodeDef, live: LiveNode): Promise<void> {
+    const { isNodeLifecycle } = await import('../nodes/types');
+    try {
+      if (isNodeLifecycle(created)) {
+        const cfg = (node.data.config || {}) as Record<string, unknown>;
+        await created.configure(cfg);
+        await created.start();
+        live.config = cfg;
+      } else if (node.data.config && hasSetConfig(created)) {
+        const cleaned = await this.applyConfigWithUnknownKeyStripping(created, 'setConfig', node.data.config, node.id);
+        if (cleaned) live.config = cleaned;
+      }
+      if (node.data.dynamicConfig && hasSetDynamicConfig(created)) {
+        await this.applyConfigWithUnknownKeyStripping(created, 'setDynamicConfig', node.data.dynamicConfig, node.id);
+      }
+    } catch (err) {
+      throw Errors.nodeInitFailure(node.id, err);
     }
   }
 
@@ -388,41 +376,45 @@ export class LiveGraphRuntime {
     const fn = instance[method];
     if (typeof fn !== 'function') return cfg;
 
-    // Retry unknown-key stripping up to MAX_RETRIES times after the initial failure (total attempts = 1 + MAX_RETRIES)
-    let attempt = 0;
+    // Retry unknown-key stripping up to MAX_ATTEMPTS times
     let current = { ...(cfg || {}) } as Record<string, unknown>;
-    const MAX_RETRIES = 3; // number of retries, not total attempts
-    while (true) {
+    const MAX_ATTEMPTS = 4; // 1 try + 3 retries
+    for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
       try {
         await (fn as Function).call(instance, current);
-        return current; // success
+        return current;
       } catch (err) {
-        if (err instanceof ZodError) {
-          const issues = err.issues || [];
-          const unknownRoot = issues.filter((i: unknown) => {
-            const z: any = i as any;
-            if (!z || typeof z !== 'object') return false;
-            if (z.code !== 'unrecognized_keys') return false;
-            const hasKeys = Array.isArray(z.keys as unknown[]);
-            const path = z.path as unknown;
-            const pathOk = Array.isArray(path as unknown[]) ? (path as unknown[]).length === 0 : true;
-            return hasKeys && pathOk;
-          });
-          if (unknownRoot.length > 0) {
-            const keys = new Set<string>();
-            for (const i of unknownRoot) for (const k of (i as any).keys as string[]) keys.add(k);
-            if (keys.size > 0) {
-              const next: Record<string, unknown> = {};
-              for (const [k, v] of Object.entries(current)) if (!keys.has(k)) next[k] = v;
-              current = next;
-              if (attempt < MAX_RETRIES) { attempt += 1; continue; }
-            }
-          }
-        }
-        // Not an unknown keys case or retries exhausted
-        throw Errors.configApplyFailed(nodeId, method, err);
+        const unknownKeys = this.extractUnknownRootKeys(err);
+        const isLast = attempt === MAX_ATTEMPTS;
+        if (!unknownKeys || unknownKeys.size === 0 || isLast) throw Errors.configApplyFailed(nodeId, method, err);
+        current = this.pruneUnknownKeys(current, unknownKeys);
       }
     }
+    return current; // unreachable, satisfies TS
+  }
+
+  private extractUnknownRootKeys(err: unknown): Set<string> | null {
+    if (!(err instanceof ZodError)) return null;
+    const issues = err.issues || [];
+    const unknownRoot = issues.filter((i: unknown) => {
+      const z: any = i as any;
+      if (!z || typeof z !== 'object') return false;
+      if (z.code !== 'unrecognized_keys') return false;
+      const hasKeys = Array.isArray(z.keys as unknown[]);
+      const path = z.path as unknown;
+      const pathOk = Array.isArray(path as unknown[]) ? (path as unknown[]).length === 0 : true;
+      return hasKeys && pathOk;
+    });
+    if (unknownRoot.length === 0) return null;
+    const keys = new Set<string>();
+    for (const i of unknownRoot) for (const k of (i as any).keys as string[]) keys.add(k);
+    return keys.size > 0 ? keys : null;
+  }
+
+  private pruneUnknownKeys(current: Record<string, unknown>, unknownKeys: Set<string>): Record<string, unknown> {
+    const next: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(current)) if (!unknownKeys.has(k)) next[k] = v;
+    return next;
   }
 
   private async disposeNode(nodeId: string): Promise<void> {
@@ -433,58 +425,42 @@ export class LiveGraphRuntime {
       ...(this.state.inboundEdges.get(nodeId) || []),
       ...(this.state.outboundEdges.get(nodeId) || []),
     ]);
-    for (const k of allEdgeKeys) {
-      const rec = this.state.executedEdges.get(k);
-      if (rec) {
-        // Attempt reversal if reversible
-        try {
-          if (rec.reversible && rec.reversal) await rec.reversal();
-        } catch (e) {
-          this.logger.error('Edge reversal during node disposal failed', k, e);
-        }
-        this.unregisterEdgeRecord(rec);
-      }
-    }
+    for (const k of allEdgeKeys) this.reverseAndUnregisterEdge(k);
     // Call lifecycle teardown if present
     const inst = live.instance as unknown;
-    if (inst) {
-      try {
-        const { isNodeLifecycle } = await import('../nodes/types');
-        if (isNodeLifecycle(inst)) {
-          try { await (inst as any).stop?.(); } catch {}
-          try { await (inst as any).delete?.(); } catch {}
-        } else {
-          const destroy = (inst as Record<string, unknown>)['destroy'];
-          if (typeof destroy === 'function') {
-            try {
-              await (destroy as Function).call(inst);
-            } catch {}
-          } else {
-            // fallback legacy
-            for (const method of ['dispose', 'close', 'stop'] as const) {
-              const fn = (inst as Record<string, unknown>)[method];
-              if (typeof fn === 'function') {
-                try {
-                  await (fn as Function).call(inst);
-                } catch {}
-                break;
-              }
-            }
-          }
-        }
-      } catch {
-        // fallback to legacy behavior above if import fails
-        const destroy = (inst as Record<string, unknown>)['destroy'];
-        if (typeof destroy === 'function') {
-          try {
-            await (destroy as Function).call(inst);
-          } catch {}
-        }
-      }
-    }
+    if (inst) await this.teardownInstance(inst).catch(() => {});
     this.state.nodes.delete(nodeId);
     this.state.inboundEdges.delete(nodeId);
     this.state.outboundEdges.delete(nodeId);
+  }
+
+  private async teardownInstance(inst: unknown): Promise<void> {
+    try {
+      const { isNodeLifecycle } = await import('../nodes/types');
+      if (isNodeLifecycle(inst)) {
+        try { await (inst as any).stop?.(); } catch {}
+        try { await (inst as any).delete?.(); } catch {}
+        return;
+      }
+    } catch {
+      // fall through to legacy teardown
+    }
+    const destroy = (inst as Record<string, unknown>)['destroy'];
+    if (typeof destroy === 'function') { try { await (destroy as Function).call(inst); } catch {} return; }
+    for (const method of ['dispose', 'close', 'stop'] as const) {
+      const fn = (inst as Record<string, unknown>)[method];
+      if (typeof fn === 'function') { try { await (fn as Function).call(inst); } catch {} break; }
+    }
+  }
+
+  private reverseAndUnregisterEdge(key: string): void {
+    const rec = this.state.executedEdges.get(key);
+    if (!rec) return;
+    (async () => {
+      try { if (rec.reversible && rec.reversal) await rec.reversal(); }
+      catch (e) { this.logger.error('Edge reversal during node disposal failed', key, e); }
+      finally { this.unregisterEdgeRecord(rec); }
+    })();
   }
 
   private registerEdgeRecord(rec: ExecutedEdgeRecord) {

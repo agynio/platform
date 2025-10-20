@@ -300,24 +300,7 @@ async function bootstrap() {
         logger.debug('Failed to apply updated graph to runtime; rolling back persistence');
       }
       // Emit node_config events for any node whose static or dynamic config changed
-      if (before) {
-        const beforeStatic = new Map(before.nodes.map((n) => [n.id, JSON.stringify(n.config || {})]));
-        const beforeDynamic = new Map(before.nodes.map((n) => [n.id, JSON.stringify(n.dynamicConfig || {})]));
-        for (const n of saved.nodes) {
-          const prevS = beforeStatic.get(n.id);
-          const prevD = beforeDynamic.get(n.id);
-          const currS = JSON.stringify(n.config || {});
-          const currD = JSON.stringify(n.dynamicConfig || {});
-          const changed = prevS !== currS || prevD !== currD;
-          if (!changed) continue;
-          io.emit('node_config', {
-            nodeId: n.id,
-            config: n.config,
-            dynamicConfig: n.dynamicConfig,
-            version: saved.version,
-          });
-        }
-      }
+      if (before) emitNodeConfigChangedEvents(before, saved, io);
       return saved;
     } catch (e: any) {
       if (e.code === 'VERSION_CONFLICT') {
@@ -448,6 +431,24 @@ async function bootstrap() {
   };
   process.on('SIGINT', shutdown);
   process.on('SIGTERM', shutdown);
+}
+
+function emitNodeConfigChangedEvents(
+  before: { nodes: any[] },
+  saved: { nodes: any[]; version: number },
+  io: Server,
+) {
+  const beforeStatic = new Map(before.nodes.map((n) => [n.id, JSON.stringify(n.config || {})]));
+  const beforeDynamic = new Map(before.nodes.map((n) => [n.id, JSON.stringify(n.dynamicConfig || {})]));
+  for (const n of saved.nodes) {
+    const prevS = beforeStatic.get(n.id);
+    const prevD = beforeDynamic.get(n.id);
+    const currS = JSON.stringify(n.config || {});
+    const currD = JSON.stringify(n.dynamicConfig || {});
+    const changed = prevS !== currS || prevD !== currD;
+    if (!changed) continue;
+    io.emit('node_config', { nodeId: n.id, config: n.config, dynamicConfig: n.dynamicConfig, version: saved.version });
+  }
 }
 
 bootstrap().catch((e) => {
