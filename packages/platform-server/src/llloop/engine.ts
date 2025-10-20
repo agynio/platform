@@ -19,10 +19,13 @@ export class LLLoop {
   }): Promise<LoopState> {
     const ctx: LoopContext = args.ctx ?? {};
     const reducers = [new SummarizeReducer(), new CallModelReducer(), new ToolsReducer(), new EnforceReducer(), new RouteReducer()];
-    const finalState = await dispatchInvoke(this.deps.openai, reducers, args.state, ctx, this.logger, {
-      tools: this.deps.tools,
-      summarizer: this.deps.summarizer,
-      memory: this.deps.memory,
+    const finalState = await dispatchInvoke({
+      llm: this.deps.openai,
+      reducers,
+      state: args.state,
+      ctx,
+      logger: this.logger,
+      deps: { tools: this.deps.tools, summarizer: this.deps.summarizer, memory: this.deps.memory },
     });
     return finalState;
   }

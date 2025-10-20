@@ -48,4 +48,5 @@ Notes
 Reducer architecture
 - LLLoop runs an internal dispatcher over reducers: summarize -> call_model -> tools -> enforce -> route.
 - Each reducer has a single responsibility and returns the next step.
+- Dispatcher signature: invoke({ llm, reducers, state, ctx, logger, deps }).
 - LLLoop.invoke wires a fixed reducer sequence and returns the final LoopState.

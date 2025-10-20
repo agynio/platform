@@ -1,14 +1,16 @@
 import type { Logger } from '../types/logger.js';
 import type { OpenAIClient, Reducer, LoopState, LoopContext, ReduceResult, ToolRegistry, Summarizer, MemoryConnector } from './types.js';
 
-export async function invoke(
-  llm: OpenAIClient,
-  reducers: Reducer[],
-  initial: LoopState,
-  ctx: LoopContext,
-  logger: Logger,
-  deps: { tools?: ToolRegistry; summarizer?: Summarizer; memory?: MemoryConnector } = {},
-): Promise<LoopState> {
+export async function invoke(args: {
+  llm: OpenAIClient;
+  reducers: Reducer[];
+  state: LoopState;
+  ctx: LoopContext;
+  logger: Logger;
+  deps?: { tools?: ToolRegistry; summarizer?: Summarizer; memory?: MemoryConnector };
+}): Promise<LoopState> {
+  const { llm, reducers, state: initial, ctx, logger } = args;
+  const deps = args.deps ?? {};
   const map = new Map<string, Reducer>(reducers.map((r) => [r.name(), r]));
   let state: LoopState = { ...initial };
   let next = state.next ?? reducers[0]?.name() ?? null;
@@ -36,4 +38,3 @@ export async function invoke(
   }
   return { ...state, next: null };
 }
-
