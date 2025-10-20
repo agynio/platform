@@ -107,5 +107,6 @@ export async function callModel(params: CallModelParams): Promise<CallModelResul
     toolCalls.push(...extractToolCalls(first));
   }
 
-  return { assistant, toolCalls, rawRequest: req, rawResponse: response };
+  return { assistant, toolCalls, rawRequest: reqWire, rawResponse: response };
 }
+

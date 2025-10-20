@@ -40,12 +40,6 @@ export interface ToolRegistry {
   list(): Tool[];
 }
 
-export interface EngineOptions {
-  model: string;
-  restriction?: { enabled: boolean; message: string; maxInjections?: number };
-  streaming?: boolean;
-}
-
 export interface EngineEvents {
   onMessage?: (msg: Message) => void;
   onToolCall?: (tc: ToolCall) => void;
@@ -70,3 +64,4 @@ export interface Logger {
 export interface OpenAIClient {
   responses: OpenAI['responses'];
 }
+
