@@ -39,34 +39,72 @@ export function NixPackagesSection(props: ControlledProps | UncontrolledProps) {
   const lastPushedPackagesLen = useRef<number>(0);
   // Stable key of the packages array we most recently pushed upstream.
   const lastPushedPkgsKey = useRef<string>('');
+  // Stable key derived from names only for hydration guard (order-insensitive)
+  const lastPushedNamesKey = useRef<string>('');
 
   // Initialize from existing config.nix.packages when mounting or when config changes externally
   const isControlled = (p: ControlledProps | UncontrolledProps): p is ControlledProps => 'value' in p && 'onChange' in p;
-  const toStableKey = (arr: NixPackageSelection[] | undefined) => JSON.stringify(arr ?? []);
+  // Normalize selections to an order-insensitive stable key
+  const canonicalizeSelection = (p: NixPackageSelection) => ({
+    name: p.name,
+    version: p.version ?? '',
+    commitHash: p.commitHash ?? '',
+    attributePath: p.attributePath ?? '',
+  });
+  const stablePkgsKey = (arr: NixPackageSelection[] | undefined) => {
+    const a = (arr ?? []).map(canonicalizeSelection);
+    a.sort((x, y) => (x.name < y.name ? -1 : x.name > y.name ? 1 : 0));
+    // Ensure object key order is stable by constructing with fixed key order
+    const norm = a.map((p) => ({ name: p.name, version: p.version, commitHash: p.commitHash, attributePath: p.attributePath }));
+    return JSON.stringify(norm);
+  };
+  const stableNamesKey = (names: string[]) => JSON.stringify([...names].sort());
   // Stable discriminants derived from props to satisfy hooks deps
   const controlled = isControlled(props);
-  const controlledValueKey = controlled ? toStableKey((props as ControlledProps).value) : '';
-  const uncontrolledPkgsKey = controlled ? '' : toStableKey((props as UncontrolledProps).config.nix?.packages);
+  const controlledValueKey = controlled ? stablePkgsKey((props as ControlledProps).value) : '';
+  const uncontrolledPkgsKey = controlled ? '' : stablePkgsKey((props as UncontrolledProps).config.nix?.packages);
   useEffect(() => {
     // Compute incoming packages from props (controlled or uncontrolled)
     const incoming: NixPackageSelection[] = controlled
       ? ((((props as ControlledProps).value) || []) as NixPackageSelection[])
       : ((((props as UncontrolledProps).config as ConfigWithNix).nix?.packages) || []) as NixPackageSelection[];
-    const incomingKey = toStableKey(incoming);
-    // Guard: if props reflect exactly what we just pushed, skip rehydration
-    if (incomingKey === lastPushedPkgsKey.current) return;
-
+    const incomingPkgsKey = stablePkgsKey(incoming);
     const curr = incoming.filter((p) => p && typeof p.name === 'string');
-    const nextSelected: SelectedPkg[] = curr.map((p) => ({ name: p.name }));
+    const incomingNames = curr.map((p) => p.name);
+    const incomingNamesKey = stableNamesKey(incomingNames);
+    // Guard: if props reflect exactly what we just pushed (by pkgs or names), skip rehydration
+    if (incomingPkgsKey === lastPushedPkgsKey.current || incomingNamesKey === lastPushedNamesKey.current) return;
+
+    // Merge-based hydration: widen only, never shrink
     setSelected((prev) => {
-      const prevKey = JSON.stringify(prev);
-      const nextKey = JSON.stringify(nextSelected);
-      return prevKey === nextKey ? prev : nextSelected;
+      const prevNames = prev.map((p) => p.name);
+      const prevSet = new Set(prevNames);
+      let changed = false;
+      const appended: SelectedPkg[] = [];
+      for (const name of incomingNames) {
+        if (!prevSet.has(name)) {
+          appended.push({ name });
+          changed = true;
+        }
+      }
+      if (!changed) return prev;
+      // Preserve previous order; append new incoming names in their incoming order
+      return [...prev, ...appended];
     });
     // Hydrate chosen versions for UI from incoming value
     setVersionsByName((prev) => {
       const next: Record<string, string | ''> = { ...prev };
       for (const p of curr) if (p.version) next[p.name] = String(p.version);
+      return next;
+    });
+    // Merge incoming resolved details non-destructively
+    setDetailsByName((prev) => {
+      const next: typeof prev = { ...prev };
+      for (const p of curr) {
+        if (p.version && p.commitHash && p.attributePath) {
+          next[p.name] = { version: String(p.version), commitHash: String(p.commitHash), attributePath: String(p.attributePath) };
+        }
+      }
       return next;
     });
   }, [controlled, controlledValueKey, uncontrolledPkgsKey]);
@@ -94,7 +132,8 @@ export function NixPackagesSection(props: ControlledProps | UncontrolledProps) {
       if (json !== lastPushedJson.current) {
         lastPushedJson.current = json;
         lastPushedPackagesLen.current = packages.length;
-        lastPushedPkgsKey.current = toStableKey(packages);
+        lastPushedPkgsKey.current = stablePkgsKey(packages);
+        lastPushedNamesKey.current = stableNamesKey(packages.map((p) => p.name));
         (props as ControlledProps).onChange(next);
       }
     } else {
@@ -107,7 +146,8 @@ export function NixPackagesSection(props: ControlledProps | UncontrolledProps) {
       if (json !== lastPushedJson.current) {
         lastPushedJson.current = json;
         lastPushedPackagesLen.current = packages.length;
-        lastPushedPkgsKey.current = toStableKey(packages);
+        lastPushedPkgsKey.current = stablePkgsKey(packages);
+        lastPushedNamesKey.current = stableNamesKey(packages.map((p) => p.name));
         (props as UncontrolledProps).onUpdateConfig(next);
       }
     }
