@@ -1,0 +1,17 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "outDir": "dist",
+    "rootDir": "src",
+    "composite": true,
+    "declaration": true,
+    "declarationMap": true,
+    "moduleResolution": "Node",
+    "module": "ESNext",
+    "target": "ES2022",
+    "lib": ["ES2022"],
+    "skipLibCheck": true
+  },
+  "include": ["src/**/*"]
+}
+

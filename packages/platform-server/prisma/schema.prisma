@@ -1,0 +1,98 @@
+// Prisma schema for platform-server per issue #376
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Conversation {
+  id         String   @id @default(cuid())
+  nodeId     String
+  status     String
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  runs       Run[]
+  messages   Message[]
+  toolCalls  ToolCall[]
+
+  @@index([nodeId, updatedAt])
+}
+
+model Run {
+  id             String   @id @default(cuid())
+  conversation   Conversation @relation(fields: [conversationId], references: [id])
+  conversationId String
+  nodeId         String
+  status         String
+  startedAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  expiresAt      DateTime?
+  messages       Message[]
+  toolCalls      ToolCall[]
+
+  @@index([nodeId, status, updatedAt])
+  @@index([conversationId, startedAt])
+  @@index([expiresAt])
+}
+
+model Message {
+  id             String   @id @default(cuid())
+  conversation   Conversation @relation(fields: [conversationId], references: [id])
+  conversationId String
+  run            Run?        @relation(fields: [runId], references: [id])
+  runId          String?
+  role           String
+  contentText    String?
+  contentJson    Json?
+  toolCall       ToolCall?   @relation(fields: [toolCallId], references: [id])
+  toolCallId     String?
+  name           String?
+  seq            Int
+  createdAt      DateTime @default(now())
+
+  @@index([conversationId, seq])
+  @@index([runId, seq])
+}
+
+model ToolCall {
+  id             String   @id @default(cuid())
+  conversation   Conversation @relation(fields: [conversationId], references: [id])
+  conversationId String
+  run            Run?        @relation(fields: [runId], references: [id])
+  runId          String?
+  name           String
+  input          Json
+  outputText     String?
+  outputJson     Json?
+  status         String
+  createdAt      DateTime @default(now())
+
+  @@index([conversationId, createdAt])
+  @@index([runId, createdAt])
+}
+
+model NodeState {
+  nodeId    String   @id
+  state     Json
+  updatedAt DateTime @updatedAt
+}
+
+model OpenAIResponse {
+  id             String   @id @default(cuid())
+  conversation   Conversation @relation(fields: [conversationId], references: [id])
+  conversationId String
+  run            Run?        @relation(fields: [runId], references: [id])
+  runId          String?
+  model          String
+  request        Json
+  response       Json
+  createdAt      DateTime @default(now())
+
+  @@index([conversationId, createdAt])
+  @@index([runId, createdAt])
+}
+

@@ -1,0 +1,23 @@
+{
+  "name": "@agyn/llloop",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "openai": "^6.5.0",
+    "zod": "^4.1.12"
+  },
+  "devDependencies": {
+    "typescript": "^5.6.3"
+  }
+}
+
