@@ -7,6 +7,7 @@ import { ToolsReducer } from './reducers/tools.reducer.js';
 import { EnforceReducer } from './reducers/enforce.reducer.js';
 import { RouteReducer } from './reducers/route.reducer.js';
 import { SnapshotStore } from '../services/snapshot.service.js';
+import { withAgent, withLLM, withToolCall, withSummarize } from '@agyn/tracing';
 
 export class LLLoop {
   constructor(
@@ -59,7 +60,10 @@ export class LLLoop {
       }
     }
     const before = baseState.messages;
-    const finalState = await dispatchInvoke({ reducers, state: baseState, ctx, logger: this.logger });
+    const finalState = await withAgent(
+      { threadId: args.threadId || 'unknown', agentName: args.nodeId || 'llloop' },
+      async () => dispatchInvoke({ reducers, state: baseState, ctx, logger: this.logger }),
+    );
     if (args.snapshotStore && args.nodeId && args.threadId) {
       await args.snapshotStore.upsertSnapshot(args.nodeId, args.threadId, finalState);
     }

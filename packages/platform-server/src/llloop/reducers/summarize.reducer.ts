@@ -1,5 +1,6 @@
 import type { Reducer, ReduceResult, LoopState, LeanCtx } from '../types.js';
 import type { Logger } from '../../types/logger.js';
+import { withSummarize } from '@agyn/tracing';
 
 export class SummarizeReducer implements Reducer {
   constructor(private readonly logger: Logger) {}
@@ -21,7 +22,10 @@ export class SummarizeReducer implements Reducer {
     const { head, tail } = splitHeadTailByTokens(groups, Math.max(0, Math.floor(cfg.keepTokens)));
 
     // 3) Produce summary lines for head; rebuild messages with optional system summary + tail
-    const summary = head.length > 0 ? summarizeGroups(head, cfg.maxTokens) : state.summary;
+    const summary = await withSummarize(
+      { keepTokens: cfg.maxTokens, context: state.messages as any },
+      async () => summarizeGroups(head, cfg.maxTokens),
+    );
     const rebuilt = rebuildWithSummaryAndTail(summary, tail);
 
     const out: LoopState = { ...state, messages: rebuilt, summary: summary ?? state.summary };
