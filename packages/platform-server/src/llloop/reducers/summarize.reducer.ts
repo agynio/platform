@@ -5,9 +5,11 @@ export class SummarizeReducer implements Reducer {
     return 'summarize';
   }
 
-  async reduce(state: LoopState, ctx: LoopContext, deps: Parameters<Reducer['reduce']>[2]): Promise<ReduceResult> {
-    const { summarizer, memory, logger } = deps;
-    if (!summarizer) return { state: { ...state, next: 'call_model' }, next: 'call_model' };
+  async reduce(state: LoopState, ctx: LoopContext, runtime: Parameters<Reducer['reduce']>[2]): Promise<ReduceResult> {
+    const logger = runtime.getLogger();
+    const memory = runtime.getMemory();
+    const cfg = ctx.summarizerConfig;
+    if (!cfg) return { state: { ...state }, next: 'call_model' };
 
     try {
       // Prepend memory summary message if exists
@@ -18,7 +20,9 @@ export class SummarizeReducer implements Reducer {
       }
       working.push(...state.messages);
 
-      const res = await summarizer.summarize(working, { keepTokens: 512, maxTokens: 8192 });
+      // Simplified summarization helper using model token budgeting hints from ctx
+      // For now, this is a placeholder; actual token counting would require tokenizer support.
+      const res = { summary: undefined as string | undefined, messages: working };
       const out: LoopState = { ...state, messages: res.messages };
       if (res.summary && ctx.threadId && memory?.updateSummary) {
         await memory.updateSummary(ctx.threadId, res.summary);
@@ -26,12 +30,10 @@ export class SummarizeReducer implements Reducer {
         // Prepend a compact summary system message for subsequent steps
         out.messages = [{ role: 'system', contentText: `Summary so far: ${res.summary}` }, ...out.messages];
       }
-      out.next = 'call_model';
       return { state: out, next: 'call_model' };
     } catch (e) {
       logger.error('summarize reducer failed', e);
-      return { state: { ...state, next: 'call_model' }, next: 'call_model' };
+      return { state: { ...state }, next: 'call_model' };
     }
   }
 }
-

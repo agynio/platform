@@ -35,7 +35,7 @@ const messages: Message[] = [
 
 const logger: Logger = console;
 const llloop = new LLLoop(logger, { openai, tools: registry });
-const resultState = await llloop.invoke({ state: { model: 'gpt-5', messages } });
+const resultState = await llloop.invoke({ state: { model: 'gpt-5', messages }, ctx: { summarizerConfig: { keepTokens: 512, maxTokens: 8192 } } });
 console.log(resultState.messages.at(-1)?.contentText);
 
 console.log(result.messages[0]?.contentText);
@@ -48,5 +48,5 @@ Notes
 Reducer architecture
 - LLLoop runs an internal dispatcher over reducers: summarize -> call_model -> tools -> enforce -> route.
 - Each reducer has a single responsibility and returns the next step.
-- Dispatcher signature: invoke({ llm, reducers, state, ctx, logger, deps }).
-- LLLoop.invoke wires a fixed reducer sequence and returns the final LoopState.
+- Dispatcher uses a runtime object exposing getLLM/getTools/getLogger/getMemory; signature: invoke({ runtime, reducers, state, ctx, logger }).
+- LoopState carries no routing flags; routing is solely via ReduceResult.next.

@@ -5,8 +5,9 @@ export class ToolsReducer implements Reducer {
     return 'tools';
   }
 
-  async reduce(state: LoopState, ctx: LoopContext, deps: Parameters<Reducer['reduce']>[2]): Promise<ReduceResult> {
-    const { tools, logger } = deps;
+  async reduce(state: LoopState, ctx: LoopContext, runtime: Parameters<Reducer['reduce']>[2]): Promise<ReduceResult> {
+    const tools = runtime.getTools();
+    const logger = runtime.getLogger();
     const outMessages = [...state.messages];
     let finish = state.finish ?? false;
     let finishReason = state.finishReason;
@@ -39,7 +40,6 @@ export class ToolsReducer implements Reducer {
     }
 
     const nextState: LoopState = { ...state, messages: outMessages, pendingToolCalls: [], finish, finishReason, finishData };
-    nextState.next = 'route';
     return { state: nextState, next: 'route' };
   }
 }

@@ -6,8 +6,9 @@ export class CallModelReducer implements Reducer {
     return 'call_model';
   }
 
-  async reduce(state: LoopState, ctx: LoopContext, deps: Parameters<Reducer['reduce']>[2]): Promise<ReduceResult> {
-    const { llm, tools } = deps;
+  async reduce(state: LoopState, ctx: LoopContext, runtime: Parameters<Reducer['reduce']>[2]): Promise<ReduceResult> {
+    const llm = runtime.getLLM();
+    const tools = runtime.getTools();
     const toolDefs = tools?.list().map((t) => ({ name: t.name, description: undefined, schema: { type: 'object' } }));
     const res = await callModel({ client: llm, model: state.model, messages: state.messages, tools: toolDefs, signal: ctx.abortSignal });
     const nextState: LoopState = {
@@ -17,7 +18,6 @@ export class CallModelReducer implements Reducer {
       rawRequest: res.rawRequest,
       rawResponse: res.rawResponse,
     };
-    nextState.next = 'route';
     return { state: nextState, next: 'route' };
   }
 }
