@@ -6,8 +6,10 @@ Usage example
 
 ```ts
 import OpenAI from 'openai';
-import { runTurn } from '../llloop/engine';
-import type { Message, Tool, ToolDef, ToolRegistry } from '../llloop/types';
+import { LLLoop } from './engine';
+import { createTool } from './tools';
+import type { Message, Tool, ToolRegistry } from './types';
+import type { Logger } from '../types/logger';
 
 class SimpleRegistry implements ToolRegistry {
   private tools = new Map<string, Tool>();
@@ -16,18 +18,11 @@ class SimpleRegistry implements ToolRegistry {
   list() { return Array.from(this.tools.values()); }
 }
 
-const echoDef: ToolDef = {
-  name: 'echo',
-  description: 'Echo input back',
-  schema: { type: 'object', properties: { text: { type: 'string' } }, required: ['text'] },
-};
-const echoTool: Tool = {
-  name: 'echo',
-  async call(args) {
-    const text = (args as { text: string }).text;
-    return { outputText: `echo: ${text}` };
-  },
-};
+const echoTool: Tool = createTool(
+  'echo',
+  z.object({ text: z.string() }),
+  async ({ text }) => `echo: ${text}`,
+);
 
 const registry = new SimpleRegistry();
 registry.add(echoTool);
@@ -38,14 +33,9 @@ const messages: Message[] = [
   { role: 'user', contentText: 'Say hello and call echo with text="hi".' },
 ];
 
-const result = await runTurn(
-  { model: 'gpt-5', messages, tools: [echoDef], streaming: false },
-  { openai, tools: registry, logger: console },
-  {
-    onMessage: (m) => console.log('assistant:', m.contentText),
-    onToolCall: (tc) => console.log('tool call:', tc.name, tc.input),
-  },
-);
+const logger: Logger = console;
+const llloop = new LLLoop(logger, { openai, tools: registry });
+const result = await llloop.invoke({ model: 'gpt-5', messages, streaming: false });
 
 console.log(result.messages[0]?.contentText);
 ```
@@ -53,4 +43,3 @@ console.log(result.messages[0]?.contentText);
 Notes
 - No DB writes here; platform-server services handle persistence.
 - Only message-level events initially; hooks for streaming can be added later.
-

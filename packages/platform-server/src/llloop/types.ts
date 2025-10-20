@@ -25,7 +25,7 @@ export interface ToolDef {
 
 export interface ToolContext {
   signal?: AbortSignal;
-  logger?: Logger;
+  logger?: import('../types/logger.js').Logger;
 }
 
 export interface Tool {
@@ -53,11 +53,8 @@ export interface EngineRunResult {
   rawResponse?: unknown;
 }
 
-export interface Logger {
-  info: (msg: string, ...args: unknown[]) => void;
-  error: (msg: string, ...args: unknown[]) => void;
-  debug?: (msg: string, ...args: unknown[]) => void;
-}
+// Use central Logger type
+export type Logger = import('../types/logger.js').Logger;
 
 export interface OpenAIClient {
   responses: {
