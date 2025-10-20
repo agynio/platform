@@ -21,12 +21,8 @@ export abstract class BaseTool {
     return {
       name: this.name(),
       description: this.description(),
-      schema: this.inputSchema().toJSON(),
-      call: async (args, ctx) => {
-        const res = await this.invoke(args, { thread_id: ctx.threadId, abort_signal: ctx.signal });
-        if (typeof res === 'string') return { outputText: res };
-        return { outputJson: res };
-      },
+      schema: this.inputSchema(),
+      invoke: async (args, ctx) => this.invoke(args, { thread_id: ctx.threadId, abort_signal: ctx.signal }),
     };
   }
 }

@@ -29,17 +29,29 @@ export interface ToolContext {
   threadId?: string;
 }
 
+import type { z } from 'zod';
+
+export type ToolFinishSignal = { finish: true; reason?: string; data?: unknown };
+export type ToolResult = { outputText?: string; outputJson?: unknown } | ToolFinishSignal | string;
+
 export interface Tool {
   name: string;
   description?: string;
-  // JSON Schema object
-  schema: object;
-  call(args: unknown, ctx: ToolContext): Promise<{ outputText?: string; outputJson?: unknown } | string>;
+  schema: z.ZodTypeAny;
+  invoke(args: unknown, ctx: ToolContext): Promise<ToolResult>;
 }
 
 export interface ToolRegistry {
+  register(tool: Tool): void;
   get(name: string): Tool | undefined;
   list(): Tool[];
+}
+
+export class SimpleToolRegistry implements ToolRegistry {
+  private tools = new Map<string, Tool>();
+  register(tool: Tool): void { this.tools.set(tool.name, tool); }
+  get(name: string): Tool | undefined { return this.tools.get(name); }
+  list(): Tool[] { return Array.from(this.tools.values()); }
 }
 
 export interface EngineEvents {
@@ -88,7 +100,6 @@ export type MemoryConnector = {
 };
 
 // Tool finish signal shape and shared reducer state/context
-export type ToolFinishSignal = { finish: true; reason?: string; data?: unknown };
 
 export type SummarizerConfig = { keepTokens: number; maxTokens: number; note?: string };
 

@@ -84,7 +84,7 @@ async function bootstrap() {
 
   const templateRegistry = buildTemplateRegistry({ logger, containerService, configService: config, mongoService: mongo, ncpsKeyService });
   // Expose checkpoint_writes service globally for LLLoop to emit events
-  (globalThis as any).__checkpointWrites = new CheckpointWritesService(mongo.getDb(), logger);
+  (globalThis as unknown as { __checkpointWrites?: CheckpointWritesService }).__checkpointWrites = new CheckpointWritesService(mongo.getDb(), logger);
 
   const runtime = new LiveGraphRuntime(logger, templateRegistry);
   const runsService = new AgentRunService(mongo.getDb(), logger);

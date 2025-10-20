@@ -7,8 +7,8 @@ import { ToolsReducer } from './reducers/tools.reducer.js';
 import { EnforceReducer } from './reducers/enforce.reducer.js';
 import { RouteReducer } from './reducers/route.reducer.js';
 import { SnapshotStore } from '../services/snapshot.service.js';
-import { CheckpointWritesService } from '../services/checkpointWrites.service.js';
-import { withAgent, withLLM, withToolCall, withSummarize } from '@agyn/tracing';
+import { getCheckpointWritesGlobal } from '../services/checkpointWrites.service.js';
+import { withAgent } from '@agyn/tracing';
 
 export class LLLoop {
   constructor(
@@ -72,13 +72,13 @@ export class LLLoop {
     const appended = this.diffAppended(before, finalState.messages);
     // Emit checkpoint_writes-compatible events for UI continuity (best-effort)
     try {
-      const dbWriter = (globalThis as any).__checkpointWrites as CheckpointWritesService | undefined;
+      const dbWriter = getCheckpointWritesGlobal();
       if (dbWriter && args.threadId && args.nodeId && appended.length) {
         let idx = 0;
         for (const m of appended) {
           await dbWriter.append({
             thread_id: args.threadId,
-            checkpoint_id: args.threadId, // reuse
+            checkpoint_id: args.threadId,
             task_id: `${args.nodeId}:${Date.now()}`,
             idx: idx++,
             channel: 'messages',
@@ -89,7 +89,8 @@ export class LLLoop {
         }
       }
     } catch (e) {
-      this.logger.error('Failed to emit checkpoint_writes events', e as Error);
+      const err = e instanceof Error ? e : new Error(String(e));
+      this.logger.error('Failed to emit checkpoint_writes events', err);
     }
     return { state: finalState, appended };
   }

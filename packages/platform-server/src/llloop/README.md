@@ -7,25 +7,24 @@ Usage example
 ```ts
 import OpenAI from 'openai';
 import { LLLoop } from './engine';
-import { createTool } from './tools';
 import type { Message, Tool, ToolRegistry } from './types';
 import type { Logger } from '../types/logger';
 
 class SimpleRegistry implements ToolRegistry {
   private tools = new Map<string, Tool>();
-  add(t: Tool) { this.tools.set(t.name, t); }
+  register(t: Tool) { this.tools.set(t.name, t); }
   get(name: string) { return this.tools.get(name); }
   list() { return Array.from(this.tools.values()); }
 }
 
-const echoTool: Tool = createTool(
-  'echo',
-  z.object({ text: z.string() }),
-  async ({ text }) => `echo: ${text}`,
-);
+const echoTool: Tool = {
+  name: 'echo',
+  schema: z.object({ text: z.string() }),
+  async invoke(args) { const { text } = this.schema.parse(args); return `echo: ${text}`; },
+};
 
 const registry = new SimpleRegistry();
-registry.add(echoTool);
+registry.register(echoTool);
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
 const messages: Message[] = [

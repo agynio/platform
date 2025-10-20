@@ -65,3 +65,8 @@ export class CheckpointWritesService {
   }
 }
 
+// Accessor kept outside llloop to avoid unsafe global casts in strict modules
+export function getCheckpointWritesGlobal(): CheckpointWritesService | undefined {
+  const g = globalThis as unknown as { __checkpointWrites?: CheckpointWritesService };
+  return g.__checkpointWrites;
+}
