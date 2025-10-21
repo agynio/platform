@@ -1,14 +1,14 @@
-import { LLMFunctionTool } from '../../../llmloop/base/llmFunctionTool';
+import { FunctionTool } from '@agyn/llm';
 import z from 'zod';
+import { LLMContext } from '../../../llm/types';
+import { LoggerService } from '../../../services/logger.service';
 import {
-  ExecTimeoutError,
   ExecIdleTimeoutError,
-  isExecTimeoutError,
+  ExecTimeoutError,
   isExecIdleTimeoutError,
+  isExecTimeoutError,
 } from '../../../utils/execTimeout';
 import { ShellCommandNode, ShellToolStaticConfigSchema } from './shell_command.node';
-import { LoggerService } from '../../../services/logger.service';
-import { LLMLoopContext } from '../../../llmloop/base/types';
 
 // Schema for tool arguments
 export const bashCommandSchema = z.object({
@@ -24,7 +24,7 @@ export const bashCommandSchema = z.object({
 // Matches ESC followed by a bracket and command bytes or other OSC sequences.
 const ANSI_REGEX = /[\u001B\u009B][[[\]()#;?]*(?:[0-9]{1,4}(?:;[0-9]{0,4})*)?[0-9A-ORZcf-nq-uy=><]/g;
 
-export class ShellCommandTool extends LLMFunctionTool<typeof bashCommandSchema> {
+export class ShellCommandTool extends FunctionTool<typeof bashCommandSchema> {
   private logger = new LoggerService();
   constructor(private node: ShellCommandNode) {
     super();
@@ -44,7 +44,7 @@ export class ShellCommandTool extends LLMFunctionTool<typeof bashCommandSchema> 
     return input.replace(ANSI_REGEX, '');
   }
 
-  async execute(args: z.infer<typeof bashCommandSchema>, ctx: LLMLoopContext): Promise<string> {
+  async execute(args: z.infer<typeof bashCommandSchema>, ctx: LLMContext): Promise<string> {
     const { command } = args;
     const { threadId } = ctx;
 

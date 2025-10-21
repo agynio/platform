@@ -1,30 +1,40 @@
 import z from 'zod';
-import { LLMFunctionTool } from '../../../llmloop/base/llmFunctionTool';
+
+import { FunctionTool } from '@agyn/llm';
+import { WebClient, type ChatPostEphemeralResponse, type ChatPostMessageResponse } from '@slack/web-api';
 import { LoggerService } from '../../../services/logger.service';
 import { VaultService } from '../../../services/vault.service';
-import { ReferenceFieldSchema, normalizeTokenRef, resolveTokenRef, parseVaultRef } from '../../../utils/refs';
-import { WebClient, type ChatPostMessageResponse, type ChatPostEphemeralResponse } from '@slack/web-api';
+import { ReferenceFieldSchema, normalizeTokenRef, parseVaultRef, resolveTokenRef } from '../../../utils/refs';
 
-export const SendSlackMessageToolStaticConfigSchema = z.object({
-  bot_token: z.union([
-    z.string().min(1).startsWith('xoxb-', { message: 'Slack bot token must start with xoxb-' }),
-    ReferenceFieldSchema,
-  ]),
-  default_channel: z.string().optional().describe('Default Slack channel ID when not provided.'),
-}).strict();
+export const SendSlackMessageToolStaticConfigSchema = z
+  .object({
+    bot_token: z.union([
+      z.string().min(1).startsWith('xoxb-', { message: 'Slack bot token must start with xoxb-' }),
+      ReferenceFieldSchema,
+    ]),
+    default_channel: z.string().optional().describe('Default Slack channel ID when not provided.'),
+  })
+  .strict();
 
-export const SendSlackMessageToolExposedStaticConfigSchema = z.object({
-  bot_token: ReferenceFieldSchema.meta({ 'ui:field': 'ReferenceField', 'ui:help': 'Use "vault" to reference a secret.' }),
-  default_channel: z.string().optional(),
-}).strict();
+export const SendSlackMessageToolExposedStaticConfigSchema = z
+  .object({
+    bot_token: ReferenceFieldSchema.meta({
+      'ui:field': 'ReferenceField',
+      'ui:help': 'Use "vault" to reference a secret.',
+    }),
+    default_channel: z.string().optional(),
+  })
+  .strict();
 
-export const sendSlackInvocationSchema = z.object({
-  channel: z.string().min(1).optional().describe('Slack channel ID (C..., D... for DM).'),
-  thread_ts: z.string().optional().describe('Thread root timestamp to reply within thread.'),
-  text: z.string().min(1).describe('Message text.'),
-  broadcast: z.boolean().optional().describe('If true when replying in thread, broadcast to channel.'),
-  ephemeral_user: z.string().optional().describe('If provided, send ephemeral message only visible to this user.'),
-}).strict();
+export const sendSlackInvocationSchema = z
+  .object({
+    channel: z.string().min(1).optional().describe('Slack channel ID (C..., D... for DM).'),
+    thread_ts: z.string().optional().describe('Thread root timestamp to reply within thread.'),
+    text: z.string().min(1).describe('Message text.'),
+    broadcast: z.boolean().optional().describe('If true when replying in thread, broadcast to channel.'),
+    ephemeral_user: z.string().optional().describe('If provided, send ephemeral message only visible to this user.'),
+  })
+  .strict();
 
 type TokenRef = { value: string; source: 'static' | 'vault' };
 
@@ -34,13 +44,19 @@ interface SendSlackDeps {
   logger: LoggerService;
 }
 
-export class SendSlackMessageFunctionTool extends LLMFunctionTool<typeof sendSlackInvocationSchema> {
-  constructor(private deps: SendSlackDeps) { super(); }
-  get name() { return 'send_slack_message'; }
+export class SendSlackMessageFunctionTool extends FunctionTool<typeof sendSlackInvocationSchema> {
+  constructor(private deps: SendSlackDeps) {
+    super();
+  }
+  get name() {
+    return 'send_slack_message';
+  }
   get description() {
     return 'Send a Slack message (channel or DM). Supports thread replies, broadcast, ephemeral messages.';
   }
-  get schema() { return sendSlackInvocationSchema; }
+  get schema() {
+    return sendSlackInvocationSchema;
+  }
 
   async execute(args: z.infer<typeof sendSlackInvocationSchema>): Promise<string> {
     const { channel: channelInput, text, thread_ts, broadcast, ephemeral_user } = args;
@@ -53,10 +69,19 @@ export class SendSlackMessageFunctionTool extends LLMFunctionTool<typeof sendSla
     if (!channel) throw new Error('channel is required (or set default_channel)');
     const logger = this.deps.logger;
     try {
-      const token = await resolveTokenRef(bot, { expectedPrefix: 'xoxb-', fieldName: 'bot_token', vault: this.deps.vault });
+      const token = await resolveTokenRef(bot, {
+        expectedPrefix: 'xoxb-',
+        fieldName: 'bot_token',
+        vault: this.deps.vault,
+      });
       const client = new WebClient(token, { logLevel: undefined });
       if (ephemeral_user) {
-        const resp: ChatPostEphemeralResponse = await client.chat.postEphemeral({ channel, user: ephemeral_user, text, thread_ts });
+        const resp: ChatPostEphemeralResponse = await client.chat.postEphemeral({
+          channel,
+          user: ephemeral_user,
+          text,
+          thread_ts,
+        });
         if (!resp.ok) return JSON.stringify({ ok: false, error: resp.error });
         return JSON.stringify({ ok: true, channel, message_ts: resp.message_ts, ephemeral: true });
       }
@@ -68,8 +93,19 @@ export class SendSlackMessageFunctionTool extends LLMFunctionTool<typeof sendSla
         ...(thread_ts && broadcast ? { reply_broadcast: true } : {}),
       } as any);
       if (!resp.ok) return JSON.stringify({ ok: false, error: resp.error });
-      const thread = (resp.message && 'thread_ts' in resp.message ? (resp.message as { thread_ts?: string }).thread_ts : undefined) || thread_ts || resp.ts;
-      return JSON.stringify({ ok: true, channel: resp.channel, ts: resp.ts, thread_ts: thread, broadcast: !!broadcast });
+      const thread =
+        (resp.message && 'thread_ts' in resp.message
+          ? (resp.message as { thread_ts?: string }).thread_ts
+          : undefined) ||
+        thread_ts ||
+        resp.ts;
+      return JSON.stringify({
+        ok: true,
+        channel: resp.channel,
+        ts: resp.ts,
+        thread_ts: thread,
+        broadcast: !!broadcast,
+      });
     } catch (err: any) {
       const msg = err?.message || String(err);
       logger.error('Error sending Slack message', msg);

@@ -13,8 +13,6 @@ import { Server } from 'socket.io';
 import { ConfigService } from './services/config.service.js';
 import { LoggerService } from './services/logger.service.js';
 import { MongoService } from './services/mongo.service.js';
-import { CheckpointerService } from './services/checkpointer.service.js';
-import { SocketService } from './services/socket.service.js';
 import { buildTemplateRegistry } from './templates';
 import { LiveGraphRuntime } from './graph/liveGraph.manager.js';
 import { GraphService } from './services/graph.service.js';
@@ -32,11 +30,11 @@ import { registerRunsRoutes } from './routes/runs.route.js';
 import { registerNixRoutes } from './routes/nix.route.js';
 import { NcpsKeyService } from './services/ncpsKey.service.js';
 import { maybeProvisionLiteLLMKey } from './services/litellm.provision.js';
+import { LLMFactoryService } from './services/llmFactory.service.js';
 
 const logger = new LoggerService();
 const config = ConfigService.fromEnv();
 const mongo = new MongoService(config, logger);
-const checkpointer = new CheckpointerService(logger);
 const containerService = new ContainerService(logger);
 const vaultService = new VaultService(
   VaultConfigSchema.parse({
@@ -48,6 +46,7 @@ const vaultService = new VaultService(
   logger,
 );
 const ncpsKeyService = new NcpsKeyService(config, logger);
+const llmFactoryService = new LLMFactoryService(config);
 
 async function bootstrap() {
   // Initialize Ncps key service early
@@ -72,15 +71,7 @@ async function bootstrap() {
     throw e;
   }
   await mongo.connect();
-  checkpointer.attachMongoClient(mongo.getClient());
-  checkpointer.bindDb(mongo.getDb());
   // Initialize checkpointer (optional Postgres mode)
-  try {
-    await checkpointer.initIfNeeded();
-  } catch (e) {
-    logger.error('Checkpointer init failed: %s', (e as Error)?.message || String(e));
-    process.exit(1);
-  }
 
   // Initialize container registry and cleanup services
   const registry = new ContainerRegistryService(mongo.getDb(), logger);
@@ -94,8 +85,8 @@ async function bootstrap() {
     logger,
     containerService: containerService,
     configService: config,
-    checkpointerService: checkpointer,
     mongoService: mongo,
+    llmFactoryService,
     ncpsKeyService,
   });
 
@@ -424,8 +415,6 @@ async function bootstrap() {
   logger.info(`HTTP server listening on :${PORT}`);
 
   const io = new Server(fastify.server, { cors: { origin: '*' } });
-  const socketService = new SocketService(io, logger, checkpointer);
-  socketService.register();
 
   function emitStatus(nodeId: string) {
     const status = runtime.getNodeStatus(nodeId);

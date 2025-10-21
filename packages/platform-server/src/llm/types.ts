@@ -1,11 +1,3 @@
-import {
-  EasyInputMessage,
-  ResponseFunctionToolCall,
-  ResponseInputItem,
-  ResponseOutputMessage,
-  ResponseReasoningItem,
-} from 'openai/resources/responses/responses.mjs';
-
 // export type ResponseInputItem =
 //   | EasyInputMessage
 //   | ResponseInputItem.Message
@@ -29,6 +21,15 @@ import {
 //   | ResponseCustomToolCall
 //   | ResponseInputItem.ItemReference;
 
+import {
+  AIMessage,
+  HumanMessage,
+  ResponseMessage,
+  SystemMessage,
+  ToolCallMessage,
+  ToolCallOutputMessage,
+} from '@agyn/llm';
+
 // export type ResponseOutputItem =
 //   | ResponseOutputMessage
 //   | ResponseFileSearchToolCall
@@ -46,19 +47,13 @@ import {
 
 ///////////
 
-export type LLMMessage =
-  | EasyInputMessage
-  | ResponseInputItem.Message
-  | ResponseOutputMessage
-  | ResponseFunctionToolCall
-  | ResponseInputItem.FunctionCallOutput
-  | ResponseReasoningItem;
+export type LLMMessage = HumanMessage | SystemMessage | ResponseMessage | ToolCallOutputMessage;
 
-export type LLMLoopState = {
+export type LLMState = {
   messages: LLMMessage[];
   summary?: string;
 };
 
-export type LLMLoopContext = {
+export type LLMContext = {
   threadId: string;
 };

@@ -2,13 +2,18 @@ import z from 'zod';
 import { BaseToolNode } from '../baseToolNode';
 import { ManageFunctionTool, ManageToolStaticConfigSchema } from './manage.tool';
 import { LoggerService } from '../../../services/logger.service';
-import { BaseAgent } from '../../agent/agent.node';
+import { AgentNode } from '../../agent/agent.node';
 
 export class ManageToolNode extends BaseToolNode {
   private tool?: ManageFunctionTool;
-  private readonly workers: { name: string; agent: BaseAgent }[] = [];
+  private readonly workers: { name: string; agent: AgentNode }[] = [];
 
-  constructor(private readonly logger: LoggerService, private readonly staticConfig: z.infer<typeof ManageToolStaticConfigSchema> = {}) { super(); }
+  constructor(
+    private readonly logger: LoggerService,
+    private readonly staticConfig: z.infer<typeof ManageToolStaticConfigSchema> = {},
+  ) {
+    super();
+  }
 
   async setConfig(cfg: Record<string, unknown>): Promise<void> {
     // Accept same static config schema as tool-level schema
@@ -20,7 +25,7 @@ export class ManageToolNode extends BaseToolNode {
     this.tool = undefined;
   }
 
-  addWorker(name: string, agent: BaseAgent) {
+  addWorker(name: string, agent: AgentNode) {
     const existing = this.workers.find((w) => w.name === name);
     if (existing) throw new Error(`Worker with name ${name} already exists`);
     this.workers.push({ name, agent });
@@ -31,13 +36,16 @@ export class ManageToolNode extends BaseToolNode {
     if (idx >= 0) this.workers.splice(idx, 1);
   }
 
-  listWorkers() { return [...this.workers]; }
+  listWorkers() {
+    return [...this.workers];
+  }
 
   protected createTool() {
     return new ManageFunctionTool({
       getWorkers: () => this.listWorkers(),
       getName: () => this.staticConfig.name || 'Manage',
-      getDescription: () => this.staticConfig.description || 'Manage connected agents: list, send_message, check_status',
+      getDescription: () =>
+        this.staticConfig.description || 'Manage connected agents: list, send_message, check_status',
       logger: this.logger,
     });
   }

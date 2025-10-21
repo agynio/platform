@@ -1,10 +1,10 @@
-import { BaseMessage } from '@langchain/core/messages';
 import z from 'zod';
-import { LLMFunctionTool } from '../../../llmloop/base/llmFunctionTool';
+
 import { LoggerService } from '../../../services/logger.service';
-import { BaseAgent } from '../../agent/agent.node';
+import { AgentNode } from '../../agent/agent.node';
 import { TriggerMessage } from '../../slackTrigger';
 import { CallAgentToolStaticConfigSchema } from './call_agent.node';
+import { FunctionTool, ResponseMessage } from '@agyn/llm';
 
 export const callAgentInvocationSchema = z.object({
   input: z.string().min(1).describe('Message to forward to the target agent.'),
@@ -17,14 +17,14 @@ export const callAgentInvocationSchema = z.object({
 });
 
 interface CallAgentFunctionToolDeps {
-  getTargetAgent: () => BaseAgent | undefined;
+  getTargetAgent: () => AgentNode | undefined;
   getDescription: () => string;
   getName: () => string;
   getResponseMode: () => 'sync' | 'async' | 'ignore';
   logger: LoggerService;
 }
 
-export class CallAgentFunctionTool extends LLMFunctionTool<typeof callAgentInvocationSchema> {
+export class CallAgentFunctionTool extends FunctionTool<typeof callAgentInvocationSchema> {
   constructor(private deps: CallAgentFunctionToolDeps) {
     super();
   }
@@ -53,9 +53,8 @@ export class CallAgentFunctionTool extends LLMFunctionTool<typeof callAgentInvoc
     const triggerMessage: TriggerMessage = { content: input, info };
     try {
       if (responseMode === 'sync') {
-        const res: BaseMessage | undefined = await targetAgent.invoke(targetThreadId, [triggerMessage]);
-        if (!res) return '';
-        return res.text ?? '';
+        const res: ResponseMessage | undefined = await targetAgent.invoke(targetThreadId, [triggerMessage]);
+        return res.text;
       }
       // async / ignore: fire and forget
       void targetAgent.invoke(targetThreadId, [triggerMessage]).catch((err: any) => {

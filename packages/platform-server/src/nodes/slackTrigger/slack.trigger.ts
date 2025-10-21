@@ -1,9 +1,9 @@
 import { BaseTrigger, TriggerHumanMessage } from './base.trigger';
-import { LoggerService } from '../services/logger.service';
+import { LoggerService } from '../../services/logger.service';
 import { z } from 'zod';
 import { SocketModeClient } from '@slack/socket-mode';
-import { VaultService } from '../services/vault.service';
-import { normalizeTokenRef, resolveTokenRef, ReferenceFieldSchema, parseVaultRef } from '../utils/refs';
+import { VaultService } from '../../services/vault.service';
+import { normalizeTokenRef, resolveTokenRef, ReferenceFieldSchema, parseVaultRef } from '../../utils/refs';
 
 // Internal schema: accept either plain string or ReferenceField
 export const SlackTriggerStaticConfigSchema = z

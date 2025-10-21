@@ -1,6 +1,6 @@
 import z from 'zod';
-import { LLMFunctionTool } from '../../../llmloop/base/llmFunctionTool';
 
+import { FunctionTool } from '@agyn/llm';
 import { LoggerService } from '../../../services/logger.service';
 import { MemoryService } from '../../../services/memory.service';
 
@@ -35,7 +35,7 @@ interface UnifiedMemoryFunctionToolDeps {
   logger: LoggerService;
 }
 
-export class UnifiedMemoryFunctionTool extends LLMFunctionTool<typeof UnifiedMemoryToolStaticConfigSchema> {
+export class UnifiedMemoryFunctionTool extends FunctionTool<typeof UnifiedMemoryToolStaticConfigSchema> {
   constructor(private deps: UnifiedMemoryFunctionToolDeps) {
     super();
   }

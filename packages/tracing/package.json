@@ -9,6 +9,7 @@
     "test:watch": "vitest"
   },
   "dependencies": {
+    "@agyn/llm": "workspace:*",
     "zod": "^3.23.8"
   },
   "devDependencies": {

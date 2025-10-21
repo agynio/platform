@@ -249,21 +249,29 @@ export class LocalMCPServer implements McpServer, Provisionable, DynamicConfigur
       // Fetch tools
       const result = await tempClient.listTools({}, { timeout: cfg.requestTimeoutMs ?? 15000 });
       this.logger.debug(`[MCP:${this.namespace}] Discovered tools: ${JSON.stringify(result.tools.map((t) => t.name))}`);
-      this.toolsCache = result.tools.map((t: any) => {
+      this.toolsCache = result.tools.map((t) => {
         // Attempt minimal zod conversion: if JSONSchema has properties, treat as open object.
         let zodSchema = GenericMcpInvocationSchema; // fallback
         // Keep generic schema for now; JSONSchema->zod conversion deferred
-        return new LocalMCPServerTool({
-          getName: () => t.name,
-          getDescription: () => t.description || 'MCP tool',
-          getDelegate: () => ({
-            callTool: async (name: string, args: any) => {
-              const res = await this.callTool(name, args, { threadId: '__mcp_exec__' });
-              return { isError: res.isError, content: res.content, structuredContent: res.structuredContent, raw: res.raw };
-            },
-            getLogger: () => this.logger,
-          }),
-        }, zodSchema);
+        return new LocalMCPServerTool(
+          {
+            getName: () => t.name,
+            getDescription: () => t.description || 'MCP tool',
+            getDelegate: () => ({
+              callTool: async (name: string, args: any) => {
+                const res = await this.callTool(name, args, { threadId: '__mcp_exec__' });
+                return {
+                  isError: res.isError,
+                  content: res.content,
+                  structuredContent: res.structuredContent,
+                  raw: res.raw,
+                };
+              },
+              getLogger: () => this.logger,
+            }),
+          },
+          zodSchema,
+        );
       });
 
       this.logger.info(`[MCP:${this.namespace}] [disc:${discoveryId}] Discovered ${this.toolsCache.length} tools`);
@@ -291,7 +299,7 @@ export class LocalMCPServer implements McpServer, Provisionable, DynamicConfigur
       try {
         const state: { mcp: PersistedMcpState } = {
           mcp: {
-            tools: (this.toolsCache || []).map(t => ({ name: t.name, description: t.description })),
+            tools: (this.toolsCache || []).map((t) => ({ name: t.name, description: t.description })),
             toolsUpdatedAt: this.lastToolsUpdatedAt,
           },
         };
@@ -405,15 +413,14 @@ export class LocalMCPServer implements McpServer, Provisionable, DynamicConfigur
   }
 
   // Return legacy McpTool shape for interface compliance; callers needing function tools can access toolsCache directly.
-  async listTools(force = false): Promise<McpTool[]> {
-    // Passive: Only return cached tools unless force is requested and discovery already happened.
-    // We purposely avoid triggering a start/discovery from listTools to prevent dual discovery paths.
-    const allTools = force && this.toolsDiscovered ? (this.toolsCache ?? []) : this.toolsCache || [];
-    const metaAll: McpTool[] = allTools.map(t => ({ name: t.name, description: t.description }));
-    if (!this._enabledTools) return metaAll;
+  async listTools(_force = false): Promise<LocalMCPServerTool[]> {
+    // Passive: Only return cached tools. `force` no longer changes discovery behavior post-refactor.
+    const allTools: LocalMCPServerTool[] = this.toolsCache ? [...this.toolsCache] : [];
+    // If no dynamic config applied, return all tool instances directly.
+    if (!this._enabledTools) return allTools;
+    // Filter by enabled set and return actual instances (not metadata shims).
     const enabled = this._enabledTools;
-    const filtered = allTools.filter(t => enabled.has(t.name));
-    return filtered.map(t => ({ name: t.name, description: t.description }));
+    return allTools.filter((t) => enabled.has(t.name));
   }
 
   async callTool(

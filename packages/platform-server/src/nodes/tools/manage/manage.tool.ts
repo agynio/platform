@@ -1,8 +1,9 @@
 import z from 'zod';
-import { LLMFunctionTool } from '../../../llmloop/base/llmFunctionTool';
+
 import { LoggerService } from '../../../services/logger.service';
-import { BaseAgent } from '../../agent/agent.node';
+import { AgentNode } from '../../agent/agent.node';
 import { TriggerMessage } from '../../slackTrigger';
+import { FunctionTool } from '@agyn/llm';
 
 export const manageInvocationSchema = z
   .object({
@@ -14,13 +15,13 @@ export const manageInvocationSchema = z
   .strict();
 
 interface ManageFunctionToolDeps {
-  getWorkers: () => { name: string; agent: BaseAgent }[];
+  getWorkers: () => { name: string; agent: AgentNode }[];
   getDescription: () => string;
   getName: () => string;
   logger: LoggerService;
 }
 
-export class ManageFunctionTool extends LLMFunctionTool<typeof manageInvocationSchema> {
+export class ManageFunctionTool extends FunctionTool<typeof manageInvocationSchema> {
   constructor(private deps: ManageFunctionToolDeps) {
     super();
   }
@@ -51,7 +52,7 @@ export class ManageFunctionTool extends LLMFunctionTool<typeof manageInvocationS
       const triggerMessage: TriggerMessage = { content: message, info: {} };
       try {
         const res = await target.agent.invoke(childThreadId, [triggerMessage]);
-        return res?.text ?? '';
+        return res?.text;
       } catch (err: any) {
         logger.error('Manage: send_message failed', {
           worker: target.name,

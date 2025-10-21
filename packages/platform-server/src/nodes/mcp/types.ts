@@ -1,5 +1,5 @@
-// NOTE: SDK does not presently expose a stable top-level type for JSONRPCMessage we can import without
-// triggering resolution issues in this monorepo build setup. We define a minimal structural type here.
+import { FunctionTool } from '@agyn/llm';
+
 // If upstream exports JSONRPCMessage directly later, replace this with that import.
 export type JSONRPCMessage = {
   jsonrpc: '2.0';
@@ -49,7 +49,7 @@ export interface McpServer {
   readonly namespace: string;
   start(): Promise<void>;
   stop(): Promise<void>;
-  listTools(force?: boolean): Promise<McpTool[]>;
+  listTools(force?: boolean): Promise<FunctionTool[]>;
   callTool(name: string, args: any, options?: { timeoutMs?: number; threadId?: string }): Promise<McpToolCallResult>;
   on(event: 'ready' | 'exit' | 'error' | 'restarted', handler: (...a: any[]) => void): this;
 }

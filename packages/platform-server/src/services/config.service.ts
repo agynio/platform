@@ -1,11 +1,11 @@
-import * as dotenv from "dotenv";
-import { z } from "zod";
+import * as dotenv from 'dotenv';
+import { z } from 'zod';
 dotenv.config();
 
 export const configSchema = z.object({
-  githubAppId: z.string().min(1, "GitHub App ID is required"),
-  githubAppPrivateKey: z.string().min(1, "GitHub App Private Key is required"),
-  githubInstallationId: z.string().min(1, "GitHub Installation ID is required"),
+  githubAppId: z.string().min(1, 'GitHub App ID is required'),
+  githubAppPrivateKey: z.string().min(1, 'GitHub App Private Key is required'),
+  githubInstallationId: z.string().min(1, 'GitHub Installation ID is required'),
   // Optional: OpenAI API key; when omitted, runtime may auto-provision a LiteLLM virtual key.
   openaiApiKey: z.string().min(1).optional(),
   // Optional LiteLLM details for auto-provisioning
@@ -13,8 +13,8 @@ export const configSchema = z.object({
   litellmMasterKey: z.string().optional(),
   // Optional explicit OpenAI base URL passthrough
   openaiBaseUrl: z.string().optional(),
-  githubToken: z.string().min(1, "GitHub personal access token is required"),
-  mongodbUrl: z.string().min(1, "MongoDB connection string is required"),
+  githubToken: z.string().min(1, 'GitHub personal access token is required'),
+  mongodbUrl: z.string().min(1, 'MongoDB connection string is required'),
   // Graph persistence
   graphStore: z.enum(['mongo', 'git']).default('mongo'),
   graphRepoPath: z.string().default('./data/graph'),
@@ -227,19 +227,45 @@ export class ConfigService implements Config {
   get ncpsUrl(): string {
     return this.params.ncpsUrlContainer;
   }
-  get ncpsUrlServer(): string { return this.params.ncpsUrlServer; }
-  get ncpsUrlContainer(): string { return this.params.ncpsUrlContainer; }
-  get ncpsPubkeyPath(): string { return this.params.ncpsPubkeyPath; }
-  get ncpsFetchTimeoutMs(): number { return this.params.ncpsFetchTimeoutMs; }
-  get ncpsRefreshIntervalMs(): number { return this.params.ncpsRefreshIntervalMs; }
-  get ncpsStartupMaxRetries(): number { return this.params.ncpsStartupMaxRetries; }
-  get ncpsRetryBackoffMs(): number { return this.params.ncpsRetryBackoffMs; }
-  get ncpsRetryBackoffFactor(): number { return this.params.ncpsRetryBackoffFactor; }
-  get ncpsAllowStartWithoutKey(): boolean { return this.params.ncpsAllowStartWithoutKey; }
-  get ncpsCaBundle(): string | undefined { return this.params.ncpsCaBundle; }
-  get ncpsRotationGraceMinutes(): number { return this.params.ncpsRotationGraceMinutes; }
-  get ncpsAuthHeader(): string | undefined { return this.params.ncpsAuthHeader; }
-  get ncpsAuthToken(): string | undefined { return this.params.ncpsAuthToken; }
+  get ncpsUrlServer(): string {
+    return this.params.ncpsUrlServer;
+  }
+  get ncpsUrlContainer(): string {
+    return this.params.ncpsUrlContainer;
+  }
+  get ncpsPubkeyPath(): string {
+    return this.params.ncpsPubkeyPath;
+  }
+  get ncpsFetchTimeoutMs(): number {
+    return this.params.ncpsFetchTimeoutMs;
+  }
+  get ncpsRefreshIntervalMs(): number {
+    return this.params.ncpsRefreshIntervalMs;
+  }
+  get ncpsStartupMaxRetries(): number {
+    return this.params.ncpsStartupMaxRetries;
+  }
+  get ncpsRetryBackoffMs(): number {
+    return this.params.ncpsRetryBackoffMs;
+  }
+  get ncpsRetryBackoffFactor(): number {
+    return this.params.ncpsRetryBackoffFactor;
+  }
+  get ncpsAllowStartWithoutKey(): boolean {
+    return this.params.ncpsAllowStartWithoutKey;
+  }
+  get ncpsCaBundle(): string | undefined {
+    return this.params.ncpsCaBundle;
+  }
+  get ncpsRotationGraceMinutes(): number {
+    return this.params.ncpsRotationGraceMinutes;
+  }
+  get ncpsAuthHeader(): string | undefined {
+    return this.params.ncpsAuthHeader;
+  }
+  get ncpsAuthToken(): string | undefined {
+    return this.params.ncpsAuthToken;
+  }
 
   static fromEnv(): ConfigService {
     const legacy = process.env.NCPS_URL;
@@ -252,7 +278,8 @@ export class ConfigService implements Config {
       openaiApiKey: process.env.OPENAI_API_KEY,
       // Infer LiteLLM base from OPENAI_BASE_URL if it ends with /v1
       litellmBaseUrl:
-        process.env.LITELLM_BASE_URL || (process.env.OPENAI_BASE_URL ? process.env.OPENAI_BASE_URL.replace(/\/v1$/, '') : undefined),
+        process.env.LITELLM_BASE_URL ||
+        (process.env.OPENAI_BASE_URL ? process.env.OPENAI_BASE_URL.replace(/\/v1$/, '') : undefined),
       litellmMasterKey: process.env.LITELLM_MASTER_KEY,
       openaiBaseUrl: process.env.OPENAI_BASE_URL,
       githubToken: process.env.GH_TOKEN,

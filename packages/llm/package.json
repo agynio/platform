@@ -1,0 +1,15 @@
+{
+  "name": "@agyn/llm",
+  "version": "1.0.0",
+  "description": "",
+  "type": "module",
+  "main": "src/index.ts",
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "packageManager": "pnpm@10.5.0",
+  "dependencies": {
+    "openai": "^6.6.0",
+    "zod": "^4.1.12"
+  }
+}

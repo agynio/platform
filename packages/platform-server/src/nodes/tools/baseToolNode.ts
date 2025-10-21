@@ -1,5 +1,5 @@
-import { LLMFunctionTool } from '../../llmloop/base/llmFunctionTool';
+import { FunctionTool } from '@agyn/llm';
 
 export abstract class BaseToolNode {
-  abstract getTool(): LLMFunctionTool;
+  abstract getTool(): FunctionTool;
 }

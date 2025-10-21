@@ -1,27 +1,34 @@
 import z from 'zod';
 import { BaseToolNode } from '../baseToolNode';
 import { LoggerService } from '../../../services/logger.service';
-import { BaseAgent } from '../../agent/agent.node';
-import { CallAgentFunctionTool } from './call_agent.tool';
 
-export const CallAgentToolStaticConfigSchema = z.object({
-  description: z.string().min(1).optional(),
-  name: z
-    .string()
-    .regex(/^[a-z0-9_]{1,64}$/)
-    .optional()
-    .describe('Optional tool name (a-z, 0-9, underscore). Default: call_agent'),
-  response: z.enum(['sync', 'async', 'ignore']).default('sync'),
-}).strict();
+import { CallAgentFunctionTool } from './call_agent.tool';
+import { AgentNode } from '../../agent/agent.node';
+
+export const CallAgentToolStaticConfigSchema = z
+  .object({
+    description: z.string().min(1).optional(),
+    name: z
+      .string()
+      .regex(/^[a-z0-9_]{1,64}$/)
+      .optional()
+      .describe('Optional tool name (a-z, 0-9, underscore). Default: call_agent'),
+    response: z.enum(['sync', 'async', 'ignore']).default('sync'),
+  })
+  .strict();
 
 export class CallAgentNode extends BaseToolNode {
   private description = 'Call another agent with a message and optional context.';
   private name: string | undefined;
-  private targetAgent: BaseAgent | undefined;
+  private targetAgent: AgentNode | undefined;
   private responseMode: 'sync' | 'async' | 'ignore' = 'sync';
   private toolInstance?: CallAgentFunctionTool;
-  constructor(private logger: LoggerService) { super(); }
-  setAgent(agent: BaseAgent | undefined) { this.targetAgent = agent; }
+  constructor(private logger: LoggerService) {
+    super();
+  }
+  setAgent(agent: AgentNode | undefined) {
+    this.targetAgent = agent;
+  }
   async setConfig(cfg: Record<string, unknown>): Promise<void> {
     const parsed = CallAgentToolStaticConfigSchema.safeParse(cfg);
     if (!parsed.success) throw new Error('Invalid CallAgentTool config');

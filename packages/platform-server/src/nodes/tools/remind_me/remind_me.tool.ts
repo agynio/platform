@@ -1,33 +1,50 @@
 import z from 'zod';
-import { LLMFunctionTool } from '../../../llmloop/base/llmFunctionTool';
-import { LoggerService } from '../../../services/logger.service';
-import { v4 as uuidv4 } from 'uuid';
-import { BaseAgent } from '../../agent/agent.node';
 
-export const remindMeInvocationSchema = z.object({
-  delayMs: z.number().int().min(0).max(7 * 24 * 60 * 60 * 1000),
-  note: z.string().min(1),
-  parentThreadId: z.string().min(1).describe('Parent thread id for scheduling the reminder'),
-}).strict();
+import { FunctionTool } from '@agyn/llm';
+import { v4 as uuidv4 } from 'uuid';
+import { LoggerService } from '../../../services/logger.service';
+import { AgentNode } from '../../agent/agent.node';
+
+export const remindMeInvocationSchema = z
+  .object({
+    delayMs: z
+      .number()
+      .int()
+      .min(0)
+      .max(7 * 24 * 60 * 60 * 1000),
+    note: z.string().min(1),
+    parentThreadId: z.string().min(1).describe('Parent thread id for scheduling the reminder'),
+  })
+  .strict();
 
 export const RemindMeToolStaticConfigSchema = z.object({}).strict();
 
 interface RemindMeDeps {
-  getCallerAgent: () => BaseAgent | undefined;
+  getCallerAgent: () => AgentNode | undefined;
   logger: LoggerService;
 }
 
 type ActiveReminder = { id: string; threadId: string; note: string; at: string };
 
-export class RemindMeFunctionTool extends LLMFunctionTool<typeof remindMeInvocationSchema> {
+export class RemindMeFunctionTool extends FunctionTool<typeof remindMeInvocationSchema> {
   private active: Map<string, { timer: ReturnType<typeof setTimeout>; reminder: ActiveReminder }> = new Map();
   private destroyed = false;
   private maxActive = 1000;
-  constructor(private deps: RemindMeDeps) { super(); }
-  get name() { return 'remind_me'; }
-  get description() { return 'Schedule a reminder message after a delay (async fire-and-forget).'; }
-  get schema() { return remindMeInvocationSchema; }
-  getActiveReminders(): ActiveReminder[] { return Array.from(this.active.values()).map(v => v.reminder); }
+  constructor(private deps: RemindMeDeps) {
+    super();
+  }
+  get name() {
+    return 'remind_me';
+  }
+  get description() {
+    return 'Schedule a reminder message after a delay (async fire-and-forget).';
+  }
+  get schema() {
+    return remindMeInvocationSchema;
+  }
+  getActiveReminders(): ActiveReminder[] {
+    return Array.from(this.active.values()).map((v) => v.reminder);
+  }
   async destroy(): Promise<void> {
     this.destroyed = true;
     for (const rec of this.active.values()) clearTimeout(rec.timer);
@@ -48,7 +65,7 @@ export class RemindMeFunctionTool extends LLMFunctionTool<typeof remindMeInvocat
       if (!exists) return;
       this.active.delete(id);
       try {
-        await agent.invoke(parentThreadId, [ { kind: 'system', content: note, info: { reason: 'reminded' } } ] as any);
+        await agent.invoke(parentThreadId, [{ kind: 'system', content: note, info: { reason: 'reminded' } }] as any);
       } catch (e: any) {
         logger.error('RemindMe scheduled invoke error', e?.message || String(e));
       }

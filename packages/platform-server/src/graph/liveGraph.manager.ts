@@ -263,11 +263,11 @@ export class LiveGraphRuntime {
   private computeDiff(prev: GraphDefinition, next: GraphDefinition): InternalDiffComputation {
     const prevNodes = new Map(prev.nodes.map((n) => [n.id, n]));
     const nextNodes = new Map(next.nodes.map((n) => [n.id, n]));
-  const addedNodes: NodeDef[] = [];
-  const removedNodeIds: string[] = [];
-  const recreatedNodeIds: string[] = [];
-  const configUpdateNodeIds: string[] = [];
-  const dynamicConfigUpdateNodeIds: string[] = [];
+    const addedNodes: NodeDef[] = [];
+    const removedNodeIds: string[] = [];
+    const recreatedNodeIds: string[] = [];
+    const configUpdateNodeIds: string[] = [];
+    const dynamicConfigUpdateNodeIds: string[] = [];
 
     // Nodes
     for (const n of next.nodes) {
@@ -299,7 +299,15 @@ export class LiveGraphRuntime {
     for (const [k, e] of nextEdgeMap.entries()) if (!prevEdgeMap.has(k)) addedEdges.push(e);
     for (const [k, e] of prevEdgeMap.entries()) if (!nextEdgeMap.has(k)) removedEdges.push(e);
 
-    return { addedNodes, removedNodeIds, recreatedNodeIds, configUpdateNodeIds, dynamicConfigUpdateNodeIds, addedEdges, removedEdges } as any;
+    return {
+      addedNodes,
+      removedNodeIds,
+      recreatedNodeIds,
+      configUpdateNodeIds,
+      dynamicConfigUpdateNodeIds,
+      addedEdges,
+      removedEdges,
+    } as any;
   }
 
   private async instantiateNode(node: NodeDef): Promise<void> {
@@ -316,35 +324,16 @@ export class LiveGraphRuntime {
       const live: LiveNode = { id: node.id, template: node.data.template, instance: created, config: node.data.config };
       this.state.nodes.set(node.id, live);
 
-      // Post-create wiring: provide state persistor and preload cached MCP tools if present
-      try {
-        const instAny = created as any;
-        // Provide per-node state persistor if instance supports it and we have a graphStateService
-        const deps = this.factoryDeps as { graphStateService?: { upsertNodeState: (nodeId: string, state: Record<string, unknown>) => Promise<void> }; configService?: { mcpToolsStaleTimeoutMs?: number } };
-        if (instAny && typeof instAny.setStatePersistor === 'function' && deps.graphStateService) {
-          const svc = deps.graphStateService;
-          instAny.setStatePersistor(async (state: Record<string, unknown>) => {
-            await svc.upsertNodeState(node.id, state);
-          });
-        }
-        // Preload cached MCP tools if instance supports it and state contains mcp tools
-        const st = node.data.state as { mcp?: { tools?: unknown[]; toolsUpdatedAt?: number | string } } | undefined;
-        if (st?.mcp && Array.isArray(st.mcp.tools) && typeof instAny?.preloadCachedTools === 'function') {
-          instAny.preloadCachedTools(st.mcp.tools, st.mcp.toolsUpdatedAt);
-        }
-        // Pass global MCP stale timeout if provided via deps.configService
-        if (typeof instAny?.setGlobalStaleTimeoutMs === 'function' && deps?.configService) {
-          const ms = Number(deps.configService.mcpToolsStaleTimeoutMs ?? 0);
-          instAny.setGlobalStaleTimeoutMs(Number.isFinite(ms) ? ms : 0);
-        }
-      } catch (e) {
-        this.logger.debug('Post-create wiring failed', e);
-      }
       const { isNodeLifecycle } = await import('../nodes/types');
       if (!isNodeLifecycle(created) && node.data.config) {
         if (hasSetConfig(created)) {
           try {
-            const cleaned = await this.applyConfigWithUnknownKeyStripping(created, 'setConfig', node.data.config, node.id);
+            const cleaned = await this.applyConfigWithUnknownKeyStripping(
+              created,
+              'setConfig',
+              node.data.config,
+              node.id,
+            );
             if (cleaned) live.config = cleaned;
           } catch (err) {
             throw Errors.nodeInitFailure(node.id, err);
@@ -365,7 +354,12 @@ export class LiveGraphRuntime {
       if (node.data.dynamicConfig) {
         if (hasSetDynamicConfig(created)) {
           try {
-            await this.applyConfigWithUnknownKeyStripping(created, 'setDynamicConfig', node.data.dynamicConfig, node.id);
+            await this.applyConfigWithUnknownKeyStripping(
+              created,
+              'setDynamicConfig',
+              node.data.dynamicConfig,
+              node.id,
+            );
           } catch (err) {
             throw Errors.nodeInitFailure(node.id, err);
           }
@@ -413,7 +407,7 @@ export class LiveGraphRuntime {
           });
           if (unknownRoot.length > 0) {
             const keys = new Set<string>();
-              for (const i of unknownRoot) for (const k of (i as any).keys as string[]) keys.add(k);
+            for (const i of unknownRoot) for (const k of (i as any).keys as string[]) keys.add(k);
             if (keys.size > 0) {
               const next: Record<string, unknown> = {};
               for (const [k, v] of Object.entries(current)) if (!keys.has(k)) next[k] = v;
@@ -457,8 +451,12 @@ export class LiveGraphRuntime {
       try {
         const { isNodeLifecycle } = await import('../nodes/types');
         if (isNodeLifecycle(inst)) {
-          try { await (inst as any).stop?.(); } catch {}
-          try { await (inst as any).delete?.(); } catch {}
+          try {
+            await (inst as any).stop?.();
+          } catch {}
+          try {
+            await (inst as any).delete?.();
+          } catch {}
         } else {
           const destroy = (inst as Record<string, unknown>)['destroy'];
           if (typeof destroy === 'function') {
@@ -562,8 +560,12 @@ export class LiveGraphRuntime {
       nodes.map(async (live) => {
         const inst = live.instance as unknown;
         if (isNodeLifecycle(inst)) {
-          try { await inst.stop(); } catch {}
-          try { await inst.delete(); } catch {}
+          try {
+            await inst.stop();
+          } catch {}
+          try {
+            await inst.delete();
+          } catch {}
         }
         const inbound = this.state.inboundEdges.get(live.id) || new Set<string>();
         const outbound = this.state.outboundEdges.get(live.id) || new Set<string>();
@@ -575,9 +577,8 @@ export class LiveGraphRuntime {
         this.state.nodes.delete(live.id);
         this.state.inboundEdges.delete(live.id);
         this.state.outboundEdges.delete(live.id);
-      })
+      }),
     );
     this.state.executedEdges.clear();
   }
-
 }

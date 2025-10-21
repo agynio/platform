@@ -1,57 +1,12 @@
+import { SummarizeResponse, withSummarize } from '@agyn/tracing';
 import OpenAI from 'openai';
-import { withSummarize, SummarizeResponse } from '@agyn/tracing';
-import { LLMReducer } from '../base/llmReducer';
-import { LLMLoopContext, LLMLoopState, LLMMessage } from '../base/types';
-import { LLMUtils } from '../base/llmUtils';
+import { LLMContext, LLMMessage, LLMState } from '../types';
+
+import { HumanMessage, Reducer, SystemMessage } from '@agyn/llm';
+import { ResponseMessage, ToolCallOutputMessage } from '@agyn/llm';
 import { stringify } from 'yaml';
 
-// Map an LLMMessage (OpenAI responses API shapes) into tracing ChatMessageInput-ish objects
-// We only need role + content + tool call correlations for summarization context.
-function toTracingChatMessage(msg: LLMMessage): any {
-  // Messages
-  if (msg.type === 'message') {
-    const role = msg.role || 'assistant';
-    // content for input messages is a string or list; normalize to string for summarization
-    const c =
-      typeof msg.content === 'string'
-        ? msg.content
-        : Array.isArray(msg.content)
-          ? msg.content.map((p) => (p.type === 'input_text' || p.type === 'output_text' ? p.text : '')).join('\n')
-          : JSON.stringify(msg.content);
-    return { role: role === 'assistant' ? 'ai' : role, content: c };
-  }
-  // Function call tool invocation
-  if (msg.type === 'function_call') {
-    return {
-      role: 'ai',
-      content: msg.name + ':' + (msg.arguments || ''),
-      toolCalls: [
-        {
-          id: msg.call_id || 'call',
-          name: msg.name,
-          arguments: msg.arguments,
-        },
-      ],
-    };
-  }
-  // Function call output -> tool message
-  if (msg.type === 'function_call_output') {
-    const output = msg.output;
-    const text = typeof output === 'string' ? output : JSON.stringify(output);
-    return { role: 'tool', toolCallId: msg.call_id, content: text };
-  }
-  // Reasoning items -> treat as system meta to preserve info minimally
-  if (msg.type === 'reasoning') {
-    return { role: 'system', content: JSON.stringify(msg.summary || {}) };
-  }
-  return { role: 'system', content: JSON.stringify(msg) };
-}
-
-/**
- * Summarization reducer ports logic from SummarizationNode for folding older context
- * into a running summary while keeping a verbatim tail constrained by a token budget.
- */
-export class SummarizationLLMReducer extends LLMReducer {
+export class SummarizationLLMReducer extends Reducer<LLMState, LLMContext> {
   constructor(
     private llm: OpenAI,
     private params: { model: string; keepTokens: number; maxTokens: number; summarySystemNote?: string },
@@ -81,12 +36,19 @@ export class SummarizationLLMReducer extends LLMReducer {
     let i = 0;
     while (i < messages.length) {
       const m = messages[i];
-      if (m.type === 'function_call') {
+      if (m instanceof ResponseMessage) {
         const group: LLMMessage[] = [m];
+        // Find all subsequent ToolCallOutputMessage with matching callId
+        const callIds = Array.isArray(m.output)
+          ? m.output.filter((msg: any) => msg instanceof ToolCallOutputMessage).map((msg: any) => msg.callId)
+          : [];
         i++;
         while (i < messages.length) {
           const next = messages[i];
-          if (next.type === 'function_call_output' && next.call_id === m.call_id) {
+          if (
+            next instanceof ToolCallOutputMessage &&
+            callIds.includes(next.callId)
+          ) {
             group.push(next);
             i++;
             continue;
@@ -96,11 +58,17 @@ export class SummarizationLLMReducer extends LLMReducer {
         groups.push(group);
         continue;
       }
-      if (m.type === 'function_call_output') {
-        // Orphan output without preceding call -> ignore
+      if (m instanceof ToolCallOutputMessage) {
+        // Ignore orphan ToolCallOutputMessage
         i++;
         continue;
       }
+      if (m instanceof HumanMessage || m instanceof SystemMessage) {
+        groups.push([m]);
+        i++;
+        continue;
+      }
+      // Fallback: treat as singleton
       groups.push([m]);
       i++;
     }
@@ -111,7 +79,7 @@ export class SummarizationLLMReducer extends LLMReducer {
     return Promise.all(groups.map((g) => this.countTokensFromMessages(g)));
   }
 
-  private async shouldSummarize(state: LLMLoopState): Promise<boolean> {
+  private async shouldSummarize(state: LLMState): Promise<boolean> {
     const { maxTokens } = this.params;
     if (!(maxTokens > 0)) return false;
     const groups = this.groupMessages(state.messages);
@@ -121,7 +89,7 @@ export class SummarizationLLMReducer extends LLMReducer {
     return messagesTokens + summaryTokens > maxTokens;
   }
 
-  private async summarize(state: LLMLoopState): Promise<LLMLoopState> {
+  private async summarize(state: LLMState): Promise<LLMState> {
     const { keepTokens, model, summarySystemNote, maxTokens } = this.params;
     const groups = this.groupMessages(state.messages);
     if (!groups.length) return state;
@@ -159,26 +127,28 @@ export class SummarizationLLMReducer extends LLMReducer {
     const userPrompt = `Previous summary:\n${state.summary ?? '(none)'}\n\nFold in the following messages (grouped tool responses kept together):\n${foldLines}\n\nReturn only the updated summary.`;
 
     // Prepare tracing oldContext by mapping all current messages
-    const tracingOldContext = state.messages.map((m) => toTracingChatMessage(m));
-
     const task = await withSummarize(
       {
-        oldContext: tracingOldContext,
+        oldContext: state.messages,
       },
       async () => {
         const response = await this.llm.responses.create({
           model,
-          input: [LLMUtils.inputMessage('system', systemPrompt), LLMUtils.inputMessage('user', userPrompt)],
+          input: [
+            SystemMessage.fromText(systemPrompt).toPlain(), //
+            HumanMessage.fromText(userPrompt).toPlain(),
+          ],
         });
+
         const assistantMsg = response.output.find((o) => o.type === 'message');
         let newSummary = state.summary || '';
         if (assistantMsg) {
           const pieces = assistantMsg.content
-            .map((c: any) => (c.type === 'output_text' ? c.text : ''))
+            .map((c) => (c.type === 'output_text' ? c.text : ''))
             .filter((t: string) => t.length > 0);
           if (pieces.length) newSummary = pieces.join('\n').trim();
         }
-        const newContext = tail.flat().map((m) => toTracingChatMessage(m));
+        const newContext = tail.flat();
         return new SummarizeResponse({
           raw: { summary: newSummary, newContext: tail.flat() },
           summary: newSummary,
@@ -190,10 +160,10 @@ export class SummarizationLLMReducer extends LLMReducer {
     return { summary: task.summary, messages: tail.flat() };
   }
 
-  async invoke(state: LLMLoopState, _ctx: LLMLoopContext): Promise<LLMLoopState> {
+  async invoke(state: LLMState, _ctx: LLMContext): Promise<LLMState> {
     if (!(this.params.maxTokens > 0)) return state; // disabled summarization
 
-    let working: LLMLoopState = { ...state };
+    let working: LLMState = { ...state };
     const doSummarize = await this.shouldSummarize(working);
     if (doSummarize) {
       working = await this.summarize(working);

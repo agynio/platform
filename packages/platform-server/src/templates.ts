@@ -4,7 +4,7 @@ import {
   ContainerProviderExposedStaticConfigSchema,
 } from './entities/containerProvider.entity';
 import { TemplateRegistry } from './graph';
-import { Agent, AgentStaticConfigSchema } from './nodes/agent/agent.node';
+import { AgentNode, AgentStaticConfigSchema } from './nodes/agent/agent.node';
 
 import { LocalMCPServer, LocalMcpServerStaticConfigSchema } from './nodes/mcp/localMcpServer.node';
 import { MemoryNode, MemoryNodeStaticConfigSchema } from './nodes/memory/memory.node';
@@ -24,7 +24,6 @@ import {
   SendSlackMessageToolExposedStaticConfigSchema,
 } from './nodes/tools/send_slack_message/send_slack_message.node';
 import { ShellCommandNode, ShellToolStaticConfigSchema } from './nodes/tools/shell_command/shell_command.node';
-import { CheckpointerService } from './services/checkpointer.service';
 import { ConfigService } from './services/config.service';
 import { ContainerService } from './services/container.service';
 import { EnvService } from './services/env.service';
@@ -32,19 +31,20 @@ import { LoggerService } from './services/logger.service';
 import { MongoService } from './services/mongo.service';
 import { NcpsKeyService } from './services/ncpsKey.service';
 import { VaultConfigSchema, VaultService } from './services/vault.service';
+import { LLMFactoryService } from './services/llmFactory.service';
 // Unified Memory tool
 
 export interface TemplateRegistryDeps {
   logger: LoggerService;
   containerService: ContainerService;
   configService: ConfigService;
-  checkpointerService: CheckpointerService;
   mongoService: MongoService; // required for memory nodes
+  llmFactoryService: LLMFactoryService;
   ncpsKeyService?: NcpsKeyService;
 }
 
 export function buildTemplateRegistry(deps: TemplateRegistryDeps): TemplateRegistry {
-  const { logger, containerService, configService, checkpointerService, mongoService, ncpsKeyService } = deps;
+  const { logger, containerService, configService, mongoService, ncpsKeyService, llmFactoryService } = deps;
 
   // Initialize Vault service from config (optional)
   const vault = new VaultService(
@@ -215,7 +215,7 @@ export function buildTemplateRegistry(deps: TemplateRegistryDeps): TemplateRegis
       )
       .register(
         'agent',
-        (ctx) => new Agent(configService, logger, checkpointerService, ctx.nodeId),
+        (ctx) => new AgentNode(configService, logger, llmFactoryService, ctx.nodeId),
         {
           sourcePorts: {
             tools: { kind: 'method', create: 'addTool', destroy: 'removeTool' },

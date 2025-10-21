@@ -1,39 +1,40 @@
-import { LLMFunctionTool } from '../base/llmFunctionTool';
-
-import { ResponseFunctionToolCall } from 'openai/resources/responses/responses.mjs';
-import { LLMReducer } from '../base/llmReducer';
-import { LLMUtils } from '../base/llmUtils';
-import { LLMLoopContext, LLMLoopState, LLMMessage } from '../base/types';
 import { ToolCallResponse, withToolCall } from '@agyn/tracing';
 
-export class CallToolsLLMReducer extends LLMReducer {
-  constructor(private tools: LLMFunctionTool[]) {
+import { LLMContext, LLMMessage, LLMState } from '../types';
+import { FunctionTool, Reducer, ResponseMessage, ToolCallMessage, ToolCallOutputMessage } from '@agyn/llm';
+
+export class CallToolsLLMReducer extends Reducer<LLMState, LLMContext> {
+  constructor(private tools: FunctionTool[]) {
     super();
   }
 
   filterToolCalls(messages: LLMMessage[]) {
     const fulfilledCallIds = new Set<string>();
-    const result: ResponseFunctionToolCall[] = [];
+    const result: ToolCallMessage[] = [];
 
     messages.forEach((m) => {
-      if (m.type === 'function_call_output') {
-        fulfilledCallIds.add(m.call_id);
+      if (m instanceof ToolCallOutputMessage) {
+        fulfilledCallIds.add(m.callId);
         return;
       }
-      if (m.type === 'function_call' && !fulfilledCallIds.has(m.call_id)) {
-        result.push(m);
+      if (m instanceof ResponseMessage) {
+        m.output.forEach((o) => {
+          if (o instanceof ToolCallMessage) {
+            !fulfilledCallIds.has(o.callId) && result.push(o);
+          }
+        });
       }
     });
     return result;
   }
 
   createToolsMap() {
-    const toolsMap = new Map<string, LLMFunctionTool>();
+    const toolsMap = new Map<string, FunctionTool>();
     this.tools.forEach((t) => toolsMap.set(t.name, t));
     return toolsMap;
   }
 
-  async invoke(state: LLMLoopState, ctx: LLMLoopContext): Promise<LLMLoopState> {
+  async invoke(state: LLMState, ctx: LLMContext): Promise<LLMState> {
     const toolsToCall = this.filterToolCalls(state.messages);
     const toolsMap = this.createToolsMap();
 
@@ -41,12 +42,12 @@ export class CallToolsLLMReducer extends LLMReducer {
       toolsToCall.map(async (t) => {
         const tool = toolsMap.get(t.name);
         if (!tool) throw new Error(`Unknown tool called: ${t.name}`);
-        const input = tool.schema.parse(JSON.parse(t.arguments));
+        const input = tool.schema.parse(JSON.parse(t.args));
 
         const response = await withToolCall(
           {
             name: tool.name,
-            toolCallId: t.call_id,
+            toolCallId: t.callId,
             input,
           },
           async () => {
@@ -58,7 +59,7 @@ export class CallToolsLLMReducer extends LLMReducer {
           },
         );
 
-        return LLMUtils.functionToolCallOutput(t.call_id, response);
+        return ToolCallOutputMessage.fromResponse(t.callId, response);
       }),
     );
 
