@@ -74,7 +74,7 @@ describe('Agent restrictOutput enforcement', () => {
     expect(res instanceof ResponseMessage).toBe(true);
   });
 
-  it('AC4: per-turn counters reset on summarize; subsequent turns start clean', async () => {
+  it('AC4: counters reset after tools execute; subsequent turns start clean', async () => {
     const agent = makeAgent(new StubLLM('toolAfterRestriction'));
     agent.addTool(new FinishNode(new LoggerService()));
     agent.setConfig({ restrictOutput: true, restrictionMaxInjections: 1 });
@@ -84,4 +84,3 @@ describe('Agent restrictOutput enforcement', () => {
     expect(res2 instanceof ToolCallOutputMessage).toBe(true);
   });
 });
-

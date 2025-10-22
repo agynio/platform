@@ -141,21 +141,12 @@ export class SummarizationLLMReducer extends Reducer<LLMState, LLMContext> {
   }
 
   async invoke(state: LLMState, _ctx: LLMContext): Promise<LLMState> {
-    // Reset per-turn meta at start of summarize stage
-    const resetMeta: LLMState['meta'] = {
-      restrictionInjectionCount: 0,
-      restrictionInjected: false,
-      hasToolCallInTurn: false,
-      lastToolCallType: null,
-    };
-    const baseState: LLMState = { ...state, meta: { ...state.meta, ...resetMeta } };
+    if (!this.params.maxTokens) return state;
 
-    if (!this.params.maxTokens) return baseState;
+    const shouldSummarize = await this.shouldSummarize(state);
+    if (!shouldSummarize) return state;
 
-    const shouldSummarize = await this.shouldSummarize(baseState);
-    if (!shouldSummarize) return baseState;
-
-    const newState = await this.summarize(baseState);
+    const newState = await this.summarize(state);
 
     return newState;
   }
