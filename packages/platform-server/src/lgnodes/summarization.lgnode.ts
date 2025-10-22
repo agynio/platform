@@ -3,6 +3,7 @@ import { ChatOpenAI } from '@langchain/openai';
 import { withSummarize, SummarizeResponse, BaseMessage as ObsBaseMessage } from '@agyn/tracing';
 import { trimMessages } from '@langchain/core/messages';
 import { NodeOutput } from '../types';
+import { stringify } from 'yaml';
 
 export type ChatState = { messages: BaseMessage[]; summary?: string };
 
@@ -78,12 +79,10 @@ export class SummarizationNode {
     // relying on model tokenizers or deprecated APIs. This ensures CI-stable
     // behavior regardless of LangChain export maps.
     if (typeof messagesOrText === 'string') {
-      return messagesOrText.length;
+      return messagesOrText.length / 4; // approximate 4 chars per token
     }
-    const contents = messagesOrText.map((m) =>
-      typeof m.content === 'string' ? m.content : JSON.stringify(m.content),
-    );
-    const counts = contents.map((c) => c.length);
+    const contents = messagesOrText.map((m) => (typeof m.content === 'string' ? m.content : stringify(m.content)));
+    const counts = contents.map((c) => c.length / 4); // approximate 4 chars per token
     return counts.reduce((a, b) => a + b, 0);
   }
 
@@ -173,22 +172,22 @@ export class SummarizationNode {
 
     const olderMessages = olderGroups.flat();
     const sys = new SystemMessage(
-      'You update a running summary of a conversation. Keep key facts, goals, decisions, constraints, names, deadlines, and follow-ups. Be concise; use compact sentences; omit chit-chat.',
+      'You update a running summary of a conversation. Keep key facts, goals, decisions, constraints, names, deadlines, and follow-ups. Be concise; use compact sentences; omit chit-chat. Structure summary with 3 high level sections: initial task, plan (if any), context (progress, findings, observations).',
     );
 
     const foldLines = olderMessages
-      .map(
-        (m) =>
-          `${m._getType().toUpperCase()}: ${typeof m.content === 'string' ? m.content : JSON.stringify(m.content)}`,
-      )
+      .map((m) => `${m._getType().toUpperCase()}: ${typeof m.content === 'string' ? m.content : stringify(m.content)}`)
       .join('\n');
 
     const human = new HumanMessage(
-      `Previous summary:\n${state.summary ?? '(none)'}\n\nFold in the following messages (grouped tool responses kept together):\n${foldLines}\n\nReturn only the updated summary.`,
+      `Previous summary:\n${state.summary ?? '(none)'}\n\nFold in the following messages:\n${foldLines}\n\nReturn only the updated summary.`,
     );
 
     const task = await withSummarize(
-      { oldContext: state.messages.map((m) => ObsBaseMessage.fromLangChain(m)) },
+      {
+        oldContext: state.messages.map((m) => ObsBaseMessage.fromLangChain(m)),
+        oldContextTokensCount: await this.countTokens(llm, state.messages),
+      },
       async () => {
         const invocation = (await llm.invoke([sys, human])) as AIMessage;
         const summary =
