@@ -1,7 +1,15 @@
 import { SummarizeResponse, withSummarize } from '@agyn/tracing';
 import { LLMContext, LLMMessage, LLMState } from '../types';
 
-import { HumanMessage, LLM, Reducer, ResponseMessage, SystemMessage, ToolCallOutputMessage } from '@agyn/llm';
+import {
+  HumanMessage,
+  LLM,
+  Reducer,
+  ResponseMessage,
+  SystemMessage,
+  ToolCallMessage,
+  ToolCallOutputMessage,
+} from '@agyn/llm';
 import { stringify } from 'yaml';
 
 export class SummarizationLLMReducer extends Reducer<LLMState, LLMContext> {
@@ -14,114 +22,49 @@ export class SummarizationLLMReducer extends Reducer<LLMState, LLMContext> {
 
   // Token counting for raw string summary text.
   private countTokensFromString(text: string): number {
-    return text.length;
+    return text.length / 4;
   }
 
   // Token counting for arrays of LLMMessage objects.
   private async countTokensFromMessages(messages: LLMMessage[]): Promise<number> {
     const contents = messages.map((m) => {
-      return JSON.stringify(m);
+      return stringify(m);
     });
-    return contents.reduce((acc, cur) => acc + cur.length, 0);
-  }
-
-  /**
-   * Group messages: assistant function_call grouped with subsequent function_call_output items.
-   * We rely on shape from OpenAI responses API: type === 'function_call' / 'function_call_output'.
-   */
-  private groupMessages(messages: LLMMessage[]): LLMMessage[][] {
-    const groups: LLMMessage[][] = [];
-    let i = 0;
-    while (i < messages.length) {
-      const m = messages[i];
-      if (m instanceof ResponseMessage) {
-        const group: LLMMessage[] = [m];
-        // Find all subsequent ToolCallOutputMessage with matching callId
-        const callIds = Array.isArray(m.output)
-          ? m.output.filter((msg: any) => msg instanceof ToolCallOutputMessage).map((msg: any) => msg.callId)
-          : [];
-        i++;
-        while (i < messages.length) {
-          const next = messages[i];
-          if (next instanceof ToolCallOutputMessage && callIds.includes(next.callId)) {
-            group.push(next);
-            i++;
-            continue;
-          }
-          break;
-        }
-        groups.push(group);
-        continue;
-      }
-      if (m instanceof ToolCallOutputMessage) {
-        // Ignore orphan ToolCallOutputMessage
-        i++;
-        continue;
-      }
-      if (m instanceof HumanMessage || m instanceof SystemMessage) {
-        groups.push([m]);
-        i++;
-        continue;
-      }
-      // Fallback: treat as singleton
-      groups.push([m]);
-      i++;
-    }
-    return groups;
-  }
-
-  private async groupsTokenCounts(groups: LLMMessage[][]): Promise<number[]> {
-    return Promise.all(groups.map((g) => this.countTokensFromMessages(g)));
+    return contents.reduce((acc, cur) => acc + cur.length / 4, 0);
   }
 
   private async shouldSummarize(state: LLMState): Promise<boolean> {
     const { maxTokens } = this.params;
-    if (!(maxTokens > 0)) return false;
-    const groups = this.groupMessages(state.messages);
-    if (groups.length <= 1) return false;
+
     const messagesTokens = await this.countTokensFromMessages(state.messages);
     const summaryTokens = state.summary ? this.countTokensFromString(state.summary) : 0;
+
     return messagesTokens + summaryTokens > maxTokens;
   }
 
   private async summarize(state: LLMState): Promise<LLMState> {
     const { keepTokens, model, systemPrompt } = this.params;
-    const groups = this.groupMessages(state.messages);
-    if (!groups.length) return state;
+    const messages = state.messages;
+    if (!messages.length) return state;
 
-    // Tail selection based on token budget (mirrors lgnode impl)
-    const tail: LLMMessage[][] = [];
-    if (keepTokens > 0) {
-      const counts = await this.groupsTokenCounts(groups);
-      let used = 0;
-      for (let i = groups.length - 1; i >= 0; i--) {
-        const g = groups[i];
-        const cost = counts[i];
-        if (used + cost > keepTokens && tail.length) break;
-        if (used + cost > keepTokens && !tail.length) {
-          tail.unshift(g);
-          break;
-        }
-        used += cost;
-        tail.unshift(g);
-      }
-    }
-    const tailStartIndex = groups.length - tail.length;
-    const olderGroups = groups.slice(0, tailStartIndex);
-    if (!olderGroups.length) {
-      return { ...state, messages: tail.flat() };
+    // 1. Split messages into head (latest, minimal to reach keepTokens) and tail (older)
+    let [tail, head] = await this.splitHeadTailByTokens(messages, keepTokens);
+
+    // 2. Move all tool outputs without tool calls from head to tail
+    [head, tail] = this.moveOrphanToolOutputsToTail(head, tail);
+
+    // 3. Summarize tail
+    if (!tail.length) {
+      return { ...state, messages: head };
     }
 
-    const olderMessages = olderGroups.flat();
-
-    const foldLines = stringify(olderMessages);
-
+    const foldLines = stringify(tail);
     const userPrompt = `Previous summary:\n${state.summary ?? '(none)'}\n\nFold in the following messages (grouped tool responses kept together):\n${foldLines}\n\nReturn only the updated summary.`;
 
-    // Prepare tracing oldContext by mapping all current messages
     const task = await withSummarize(
       {
         oldContext: state.messages,
+        oldContextTokensCount: await this.countTokensFromMessages(state.messages),
       },
       async () => {
         const response = await this.llm.call({
@@ -131,30 +74,80 @@ export class SummarizationLLMReducer extends Reducer<LLMState, LLMContext> {
             HumanMessage.fromText(userPrompt),
           ],
         });
-
         const newSummary = response.text.trim();
-        const newContext = tail.flat();
-        
         return new SummarizeResponse({
-          raw: { summary: newSummary, newContext: tail.flat() },
+          raw: { summary: newSummary, newContext: head },
           summary: newSummary,
-          newContext,
+          newContext: head,
         });
       },
     );
 
-    return { summary: task.summary, messages: tail.flat() };
+    return { summary: task.summary, messages: head };
+  }
+
+  /**
+   * Splits messages into [tail, head] where head is the minimal suffix of messages such that
+   * the total token count of head >= keepTokens. Tail is the rest (older messages).
+   */
+  private async splitHeadTailByTokens(
+    messages: LLMMessage[],
+    keepTokens: number,
+  ): Promise<[LLMMessage[], LLMMessage[]]> {
+    const tokenCounts = await Promise.all(messages.map((m) => this.countTokensFromMessages([m])));
+    let total = 0;
+    let splitIdx = messages.length;
+    for (let i = messages.length - 1; i >= 0; i--) {
+      total += tokenCounts[i];
+      if (total >= keepTokens) {
+        splitIdx = i;
+        break;
+      }
+    }
+    const head = messages.slice(splitIdx);
+    const tail = messages.slice(0, splitIdx);
+    return [tail, head];
+  }
+
+  /**
+   * Moves orphan ToolCallOutputMessages (those without a matching ToolCallMessage in head) from head to tail.
+   * Returns [newHead, newTail].
+   */
+  private moveOrphanToolOutputsToTail(head: LLMMessage[], tail: LLMMessage[]): [LLMMessage[], LLMMessage[]] {
+    const callIds = new Set<string>();
+    for (const m of head) {
+      if (m instanceof ResponseMessage) {
+        m.output.forEach((o) => {
+          if (o instanceof ToolCallMessage) {
+            callIds.add(o.callId);
+          }
+        });
+      }
+    }
+    const newHead: LLMMessage[] = [];
+    const newTail = [...tail];
+    for (const m of head) {
+      if (m instanceof ToolCallOutputMessage) {
+        if (callIds.has(m.callId)) {
+          newHead.push(m);
+        } else {
+          newTail.push(m);
+        }
+      } else {
+        newHead.push(m);
+      }
+    }
+    return [newHead, newTail];
   }
 
   async invoke(state: LLMState, _ctx: LLMContext): Promise<LLMState> {
-    if (!(this.params.maxTokens > 0)) return state; // disabled summarization
+    if (!this.params.maxTokens) return state;
 
-    let working: LLMState = { ...state };
-    const doSummarize = await this.shouldSummarize(working);
-    if (doSummarize) {
-      working = await this.summarize(working);
-    }
+    const shouldSummarize = await this.shouldSummarize(state);
+    if (!shouldSummarize) return state;
 
-    return working;
+    const newState = await this.summarize(state);
+
+    return newState;
   }
 }

@@ -10,9 +10,8 @@ import {
   HumanMessage,
   Loop,
   ResponseMessage,
-  SystemMessage,
   ToolCallMessage,
-  ToolCallOutputMessage,
+  ToolCallOutputMessage
 } from '@agyn/llm';
 import { withAgent } from '@agyn/tracing';
 
@@ -23,11 +22,11 @@ import { StaticLLMRouter } from '../../llm/routers/static.llm.router';
 import { LLMContext, LLMState } from '../../llm/types';
 import { LLMFactoryService } from '../../services/llmFactory.service';
 
-import { TriggerListener, TriggerMessage } from '../slackTrigger';
-import { MessagesBuffer } from './messagesBuffer';
-import { BaseToolNode } from '../tools/baseToolNode';
-import { Signal } from '../../signal';
 import { SummarizationLLMReducer } from '../../llm/reducers/summarization.llm.reducer';
+import { Signal } from '../../signal';
+import { TriggerListener, TriggerMessage } from '../slackTrigger';
+import { BaseToolNode } from '../tools/baseToolNode';
+import { MessagesBuffer } from './messagesBuffer';
 
 /**
  * Zod schema describing static configuration for Agent.
@@ -131,7 +130,7 @@ export class AgentNode implements TriggerListener {
           keepTokens: this.config.summarizationKeepTokens ?? 1000,
           maxTokens: this.config.summarizationMaxTokens ?? 10000,
           systemPrompt:
-            'You update a running summary of a conversation. Keep key facts, goals, decisions, constraints, names, deadlines, and follow-ups. Be concise; use compact sentences; omit chit-chat.',
+            'You update a running summary of a conversation. Keep key facts, goals, decisions, constraints, names, deadlines, and follow-ups. Be concise; use compact sentences; omit chit-chat. Structure summary with 3 high level sections: initial task, plan (if any), context (progress, findings, observations).',
         }),
         'call_model',
       ),
