@@ -180,6 +180,31 @@ function now() {
   return new Date().toISOString();
 }
 
+function messageToAttributes(msg: ContextMessage): Record<string, unknown> {
+  if (msg instanceof HumanMessage || msg instanceof SystemMessage) {
+    return {
+      role: msg.role,
+      content: msg.text,
+    };
+  }
+
+  if (msg instanceof ResponseMessage) {
+    return {
+      role: 'ai',
+      content: msg.text,
+      toolCalls: msg.output
+        .filter((m) => m instanceof ToolCallMessage)
+        .map((m) => ({
+          id: m.callId,
+          name: m.name,
+          arguments: m.args,
+        })),
+    };
+  }
+
+  return { ...msg.toPlain() };
+}
+
 // Internal low-level span creator. Accepts optional computeEndAttrs to add attributes/status at completion.
 export async function withSpan<T>(
   input: SpanInput,
@@ -365,7 +390,7 @@ export function withLLM<T>(
    * and the raw value is still passed through (but instrumentation data for content/toolCalls will be absent).
    */
   const { context: rawContext, ...rest } = attributes;
-  const context = rawContext.map((m) => m.toPlain());
+  const context = rawContext.map(messageToAttributes);
 
   return withSpan({ label: 'llm', kind: 'llm', attributes: { kind: 'llm', context, ...rest } }, fn, (result) => {
     if (!(result instanceof LLMResponse)) {
@@ -436,7 +461,7 @@ export function withSummarize<TRaw = unknown>(
    * This mirrors withLLM to keep instrumentation deterministic.
    */
   const { oldContext: rawOldContext, ...rest } = attributes;
-  const oldContext = rawOldContext.map((m) => m.toPlain());
+  const oldContext = rawOldContext.map(messageToAttributes);
   return withSpan(
     { label: 'summarize', kind: 'summarize', attributes: { kind: 'summarize', oldContext, ...rest } },
     fn,
