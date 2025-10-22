@@ -168,6 +168,11 @@ export class LocalMCPServer implements McpServer, Provisionable, DynamicConfigur
             : Date.parse(String(updatedAt));
       if (Number.isFinite(ts)) this.lastToolsUpdatedAt = ts;
     }
+    // Emit cache loaded event for listeners
+    const payload = { tools: this.toolsCache || [], updatedAt: this.lastToolsUpdatedAt, source: 'cache' } as any;
+    try {
+      this.emitter.emit('mcp.tools_cache_loaded', payload);
+    } catch {}
   }
 
   setGlobalStaleTimeoutMs(ms: number) {
@@ -307,6 +312,11 @@ export class LocalMCPServer implements McpServer, Provisionable, DynamicConfigur
       } catch (e) {
         this.logger.error(`[MCP:${this.namespace}] Failed to persist state`, e);
       }
+      // Emit tools discovered event
+      try {
+        const payload = { tools: this.toolsCache || [], updatedAt: this.lastToolsUpdatedAt, source: 'discovery' } as any;
+        this.emitter.emit('mcp.tools_discovered', payload);
+      } catch {}
     } catch (err) {
       this.logger.error(`[MCP:${this.namespace}] [disc:${discoveryId}] Tool discovery failed`, err);
     } finally {
@@ -588,7 +598,18 @@ export class LocalMCPServer implements McpServer, Provisionable, DynamicConfigur
     this.pendingStart = undefined;
   }
 
-  on(event: 'ready' | 'exit' | 'error' | 'restarted', handler: (...a: any[]) => void): this {
+  // Unified event subscription supporting core and MCP-specific events
+  on(
+    event:
+      | 'ready'
+      | 'exit'
+      | 'error'
+      | 'restarted'
+      | 'mcp.tools_cache_loaded'
+      | 'mcp.tools_discovered'
+      | 'mcp.tools_dynamic_config_changed',
+    handler: (...a: any[]) => void,
+  ): this {
     this.emitter.on(event, handler);
     return this;
   }
@@ -759,6 +780,13 @@ export class LocalMCPServer implements McpServer, Provisionable, DynamicConfigur
         this.logger.error(`[MCP:${this.namespace}] dynamic config listener error`, e);
       }
     }
+    // Emit event for external listeners (agent) as well
+    try {
+      this.emitter.emit('mcp.tools_dynamic_config_changed', {
+        enabled: cfg,
+        updatedAt: Date.now(),
+      } as any);
+    } catch {}
   }
 
   private currentNormalizedDynamicConfig(): Record<string, boolean> {

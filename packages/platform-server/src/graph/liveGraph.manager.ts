@@ -351,6 +351,14 @@ export class LiveGraphRuntime {
           throw Errors.nodeInitFailure(node.id, err);
         }
       }
+      // Preload cached MCP tools into LocalMCPServer before config application
+      const state = node.data.state as Record<string, unknown> | undefined;
+      if (state && (state as any).mcp && typeof (created as any).preloadCachedTools === 'function') {
+        try {
+          const mcp = (state as any).mcp as { tools?: any[]; toolsUpdatedAt?: number | string | Date };
+          (created as any).preloadCachedTools?.(mcp.tools, mcp.toolsUpdatedAt);
+        } catch {}
+      }
       if (node.data.dynamicConfig) {
         if (hasSetDynamicConfig(created)) {
           try {

@@ -4,6 +4,7 @@ import { McpServerConfig } from '../src/mcp/types.js';
 import { LoggerService } from '../src/services/logger.service.js';
 import { PassThrough } from 'node:stream';
 import { ContainerService } from '../src/services/container.service.js';
+import { describe, vi } from 'vitest';
 
 /**
  * In-process mock MCP server (no subprocess) using PassThrough streams.
@@ -150,5 +151,21 @@ describe('LocalMCPServer (mock)', () => {
   it('calls tool', async () => {
     const result = await server.callTool('echo', { text: 'hello' }, { threadId: 'test-thread' });
     expect(result.content).toContain('echo:hello');
+  });
+
+  it('emits cache/discovery/dynamic-config events', async () => {
+    const events: string[] = [];
+    (server as any).on('mcp.tools_cache_loaded', (p: any) => events.push(`cache:${Array.isArray(p?.tools) ? p.tools.length : 0}`));
+    (server as any).on('mcp.tools_discovered', (p: any) => events.push(`disc:${Array.isArray(p?.tools) ? p.tools.length : 0}`));
+    (server as any).on('mcp.tools_dynamic_config_changed', (p: any) => events.push(`dyn:${Object.keys(p?.enabled||{}).length}`));
+    // Preload and emit cache
+    (server as any).preloadCachedTools([{ name: 'pre' }], Date.now());
+    // Apply dynamic config to trigger event
+    (server as any).setDynamicConfig?.({ echo: true });
+    // Re-discovery via manual call
+    await (server as any).discoverTools();
+    expect(events.some((e) => e.startsWith('cache:'))).toBeTruthy();
+    expect(events.some((e) => e.startsWith('disc:'))).toBeTruthy();
+    expect(events.some((e) => e.startsWith('dyn:'))).toBeTruthy();
   });
 });

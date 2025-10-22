@@ -357,6 +357,23 @@ async function bootstrap() {
           // Stop any watcher if node is deprovisioned
           readinessWatcher?.stop(nodeId);
           break;
+        case 'refresh_mcp_tools': {
+          // Manual refresh: re-run discovery regardless of staleness
+          const inst = runtime.getNodeInstance<any>(nodeId);
+          if (!inst || typeof inst.discoverTools !== 'function') {
+            reply.code(400);
+            return { error: 'not_mcp_node' };
+          }
+          try {
+            await inst.discoverTools();
+            // Emit ready to trigger agent resyncs if applicable
+            if (typeof inst.on === 'function') inst.on('ready', () => {});
+          } catch (e: any) {
+            reply.code(500);
+            return { error: e?.message || 'refresh_failed' };
+          }
+          break;
+        }
         default:
           reply.code(400);
           return { error: 'unknown_action' };
