@@ -78,6 +78,13 @@ export class CallToolsLLMReducer extends Reducer<LLMState, LLMContext> {
       }),
     );
 
-    return { ...state, messages: [...state.messages, ...results] };
+    // Reset enforcement counters after successful tool execution
+    const meta = {
+      ...state.meta,
+      restrictionInjectionCount: 0,
+      restrictionInjected: false,
+    };
+
+    return { ...state, messages: [...state.messages, ...results], meta };
   }
 }

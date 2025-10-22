@@ -54,6 +54,11 @@ export type LLMMessage = HumanMessage | SystemMessage | ResponseMessage | ToolCa
 export type LLMState = {
   messages: LLMMessage[];
   summary?: string;
+  // Per-turn meta used for restriction enforcement and telemetry
+  meta?: {
+    restrictionInjectionCount?: number;
+    restrictionInjected?: boolean;
+  };
 };
 
 export type LLMContext = {

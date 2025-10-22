@@ -16,6 +16,7 @@ import { LLMContext, LLMState } from '../../llm/types';
 import { LLMFactoryService } from '../../services/llmFactory.service';
 
 import { SummarizationLLMReducer } from '../../llm/reducers/summarization.llm.reducer';
+import { EnforceToolsLLMReducer } from '../../llm/reducers/enforceTools.llm.reducer';
 import { Signal } from '../../signal';
 import { TriggerListener, TriggerMessage } from '../slackTrigger';
 import { BaseToolNode } from '../tools/baseToolNode';
@@ -141,10 +142,25 @@ export class AgentNode implements TriggerListener {
           if (last instanceof ResponseMessage && last.output.find((o) => o instanceof ToolCallMessage)) {
             return 'call_tools';
           }
-          return null;
+          // Route to enforce only when restrictOutput is enabled; else end turn
+          return this.config.restrictOutput ? 'enforceTools' : null;
         },
       ),
     );
+
+    if (this.config.restrictOutput) {
+      routers.set(
+        'enforceTools',
+        new ConditionalLLMRouter(
+          new EnforceToolsLLMReducer(this.logger),
+          (state) => {
+            // If restrictionInjected=true, go back to call_model to try again
+            const injected = !!state.meta?.restrictionInjected;
+            return injected ? 'call_model' : null;
+          },
+        ),
+      );
+    }
 
     routers.set(
       'call_tools', //
