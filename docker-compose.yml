@@ -43,6 +43,41 @@ services:
       timeout: 5s
       retries: 5
 
+  # Dedicated Postgres for agents persistence
+  agents-db:
+    image: postgres:16-alpine
+    container_name: agents-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${AGENTS_DB_USER:-agents}
+      POSTGRES_PASSWORD: ${AGENTS_DB_PASSWORD:-agents}
+      POSTGRES_DB: ${AGENTS_DB_NAME:-agents}
+    ports:
+      - "5443:5432"
+    volumes:
+      - agents_pgdata:/var/lib/postgresql/data
+    command:
+      [
+        "postgres",
+        "-c",
+        "shared_buffers=128MB",
+        "-c",
+        "work_mem=4MB",
+        "-c",
+        "maintenance_work_mem=64MB",
+        "-c",
+        "max_connections=50",
+        "-c",
+        "wal_buffers=4MB",
+        "-c",
+        "effective_cache_size=256MB",
+      ]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${AGENTS_DB_USER:-agents} -d ${AGENTS_DB_NAME:-agents}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
   mongo-setup:
     image: mongo:latest
     container_name: mongo-setup
@@ -251,6 +286,8 @@ volumes:
   ncps-storage:
     driver: local
   litellm_pgdata:
+    driver: local
+  agents_pgdata:
     driver: local
 
 networks:
