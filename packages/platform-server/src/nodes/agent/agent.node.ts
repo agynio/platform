@@ -252,49 +252,32 @@ export class AgentNode implements TriggerListener {
   async delete(): Promise<void> {}
 
   // Sync MCP tools from the given server and reconcile add/remove
-  private _syncInFlight = new Map<McpServer, Promise<void>>();
-  private _syncDebounceTimers = new Map<McpServer, NodeJS.Timeout>();
   private async syncMcpToolsFromServer(server: McpServer): Promise<void> {
     try {
-      // Debounce bursts of events for the same server
-      const existingTimer = this._syncDebounceTimers.get(server);
-      if (existingTimer) clearTimeout(existingTimer);
-      await new Promise<void>((resolve) => {
-        const t = setTimeout(() => {
-          resolve();
-        }, 50);
-        this._syncDebounceTimers.set(server, t);
-      });
-      // Prevent overlapping syncs for the same server
-      const inFlight = this._syncInFlight.get(server);
-      if (inFlight) {
-        await inFlight.catch(() => {});
-      }
-      const run = (async () => {
       const namespace = server.namespace;
-      const latest = await server.listTools();
-      const prev = this.mcpServerTools.get(server) || [];
+      const latest: FunctionTool[] = await server.listTools();
+      const prev: FunctionTool[] = this.mcpServerTools.get(server) || [];
 
       const latestNames = new Set(latest.map((t) => t.name));
+      // Remove tools no longer present
       for (const t of prev) {
         if (!latestNames.has(t.name)) {
           this.tools.delete(t);
-          this.logger.info?.(`Agent: MCP tool removed (${namespace}/${t.name})`);
+          this.logger.debug?.(`Agent: MCP tool removed (${namespace}/${t.name})`);
         }
       }
 
       const prevNames = new Set(prev.map((t) => t.name));
+      // Add new tools
       for (const t of latest) {
         if (!prevNames.has(t.name)) {
           this.tools.add(t);
-          this.logger.info?.(`Agent: MCP tool added (${namespace}/${t.name})`);
+          this.logger.debug?.(`Agent: MCP tool added (${namespace}/${t.name})`);
         }
       }
 
+      // Update snapshot
       this.mcpServerTools.set(server, latest);
-      })();
-      this._syncInFlight.set(server, run);
-      await run.finally(() => this._syncInFlight.delete(server));
     } catch (e) {
       this.logger.error?.('Agent: syncMcpToolsFromServer error', e);
     }
