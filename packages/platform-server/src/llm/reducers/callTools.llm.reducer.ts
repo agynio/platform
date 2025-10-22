@@ -79,10 +79,11 @@ export class CallToolsLLMReducer extends Reducer<LLMState, LLMContext> {
     );
 
     // Telemetry: mark tool call and reset enforcement counters after successful tool execution
+    const lastTool = toolsToCall.length ? toolsToCall[toolsToCall.length - 1] : undefined;
     const meta = {
       ...state.meta,
       hasToolCallInTurn: toolsToCall.length > 0,
-      lastToolCallType: toolsToCall.length ? toolsToCall[0].name : state.meta?.lastToolCallType ?? null,
+      lastToolCallType: lastTool ? lastTool.name : state.meta?.lastToolCallType ?? null,
       restrictionInjectionCount: 0,
       restrictionInjected: false,
     };

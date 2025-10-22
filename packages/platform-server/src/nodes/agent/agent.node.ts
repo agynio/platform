@@ -152,7 +152,7 @@ export class AgentNode implements TriggerListener {
       routers.set(
         'enforce',
         new ConditionalLLMRouter(
-          new RestrictEnforceLLMReducer(),
+          new RestrictEnforceLLMReducer(this.logger),
           (state) => {
             // If restrictionInjected=true, go back to call_model to try again
             const injected = !!state.meta?.restrictionInjected;
