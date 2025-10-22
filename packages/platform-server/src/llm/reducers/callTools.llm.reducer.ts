@@ -9,22 +9,17 @@ export class CallToolsLLMReducer extends Reducer<LLMState, LLMContext> {
   }
 
   filterToolCalls(messages: LLMMessage[]) {
-    const fulfilledCallIds = new Set<string>();
     const result: ToolCallMessage[] = [];
 
-    messages.forEach((m) => {
-      if (m instanceof ToolCallOutputMessage) {
-        fulfilledCallIds.add(m.callId);
-        return;
-      }
-      if (m instanceof ResponseMessage) {
-        m.output.forEach((o) => {
-          if (o instanceof ToolCallMessage) {
-            !fulfilledCallIds.has(o.callId) && result.push(o);
-          }
-        });
-      }
-    });
+    const m = messages.at(-1);
+    if (m instanceof ResponseMessage) {
+      m.output.forEach((o) => {
+        if (o instanceof ToolCallMessage) {
+          result.push(o);
+        }
+      });
+    }
+
     return result;
   }
 
@@ -54,6 +49,7 @@ export class CallToolsLLMReducer extends Reducer<LLMState, LLMContext> {
             const raw = await tool.execute(input, ctx);
             return new ToolCallResponse({
               raw,
+              output: raw,
               status: 'success',
             });
           },

@@ -22,7 +22,7 @@ export type LLMInput =
 export class LLM {
   constructor(private openAI: OpenAI) {}
 
-  async call(params: { model: string; input: Array<LLMInput>; tools: Array<FunctionTool> }) {
+  async call(params: { model: string; input: Array<LLMInput>; tools?: Array<FunctionTool> }) {
     const flattenInput = params.input
       .map((m) => {
         if (m instanceof ResponseMessage) {
@@ -31,13 +31,14 @@ export class LLM {
         }
         return m.toPlain();
       })
-      .flat()
-      .filter((o) => !(o instanceof ReasoningMessage)); // Exclude ReasoningMessage from flattened input due to it's redundant nature in calls.;
+      .flat();
+
+    console.log(JSON.stringify(flattenInput, null, 2));
 
     const response = await this.openAI.responses.create({
       model: params.model,
       input: flattenInput,
-      tools: params.tools.map((tool) => tool.definition()),
+      tools: params.tools?.map((tool) => tool.definition()),
     });
 
     return new ResponseMessage(response);

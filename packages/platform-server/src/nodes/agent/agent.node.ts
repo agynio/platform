@@ -5,7 +5,15 @@ import { LoggerService } from '../../services/logger.service';
 
 import { z } from 'zod';
 
-import { FunctionTool, HumanMessage, Loop, ResponseMessage, SystemMessage, ToolCallMessage } from '@agyn/llm';
+import {
+  FunctionTool,
+  HumanMessage,
+  Loop,
+  ResponseMessage,
+  SystemMessage,
+  ToolCallMessage,
+  ToolCallOutputMessage,
+} from '@agyn/llm';
 import { withAgent } from '@agyn/tracing';
 
 import { CallModelLLMReducer } from '../../llm/reducers/callModel.llm.reducer';
@@ -18,6 +26,8 @@ import { LLMFactoryService } from '../../services/llmFactory.service';
 import { TriggerListener, TriggerMessage } from '../slackTrigger';
 import { MessagesBuffer } from './messagesBuffer';
 import { BaseToolNode } from '../tools/baseToolNode';
+import { Signal } from '../../signal';
+import { SummarizationLLMReducer } from '../../llm/reducers/summarization.llm.reducer';
 
 /**
  * Zod schema describing static configuration for Agent.
@@ -112,7 +122,20 @@ export class AgentNode implements TriggerListener {
     const llm = this.llmFactoryService.createLLM();
     const routers = new Map();
     const tools = Array.from(this.tools);
-    console.log(tools);
+
+    routers.set(
+      'summarize',
+      new StaticLLMRouter(
+        new SummarizationLLMReducer(llm, {
+          model: this.config.model ?? 'gpt-5',
+          keepTokens: this.config.summarizationKeepTokens ?? 1000,
+          maxTokens: this.config.summarizationMaxTokens ?? 10000,
+          systemPrompt:
+            'You update a running summary of a conversation. Keep key facts, goals, decisions, constraints, names, deadlines, and follow-ups. Be concise; use compact sentences; omit chit-chat.',
+        }),
+        'call_model',
+      ),
+    );
 
     routers.set(
       'call_model', //
@@ -133,37 +156,44 @@ export class AgentNode implements TriggerListener {
 
     routers.set(
       'call_tools', //
-      new StaticLLMRouter(new CallToolsLLMReducer(tools), 'call_model'),
+      new ConditionalLLMRouter(new CallToolsLLMReducer(tools), (_, ctx) =>
+        ctx.finishSignal.isActive ? null : 'summarize',
+      ),
     );
 
     const loop = new Loop<LLMState, LLMContext>(routers);
     return loop;
   }
 
-  async invoke(thread: string, messages: TriggerMessage[] | TriggerMessage): Promise<ResponseMessage> {
+  async invoke(
+    thread: string,
+    messages: TriggerMessage[] | TriggerMessage,
+  ): Promise<ResponseMessage | ToolCallOutputMessage> {
     return await withAgent(
       { threadId: thread, nodeId: this.getNodeId(), inputParameters: [{ thread }, { messages }] },
       async () => {
         const loop = this.prepareLoop();
         const history = [
-          SystemMessage.fromText('You are Rowan - AI assistant.'),
           ...(Array.isArray(messages) ? messages : [messages]).map((msg) => HumanMessage.fromText(JSON.stringify(msg))),
         ];
+        const finishSignal = new Signal();
+
         const newState = await loop.invoke(
           { messages: history },
-          { threadId: 'test' },
+          { threadId: 'test', finishSignal },
           {
-            route: 'call_model',
+            route: 'summarize',
           },
         );
 
         const result = newState.messages.at(-1);
-        if (!(result instanceof ResponseMessage)) {
-          throw new Error('Agent did not produce a valid response message.');
+
+        if ((finishSignal.isActive && result instanceof ToolCallOutputMessage) || result instanceof ResponseMessage) {
+          this.logger.info(`Agent response in thread ${thread}: ${result?.text}`);
+          return result;
         }
 
-        this.logger.info(`Agent response in thread ${thread}: ${result?.text}`);
-        return result;
+        throw new Error('Agent did not produce a valid response message.');
       },
     );
   }

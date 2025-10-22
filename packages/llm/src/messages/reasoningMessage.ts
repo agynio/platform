@@ -1,7 +1,12 @@
 import { ResponseReasoningItem } from 'openai/resources/responses/responses.mjs';
 
 export class ReasoningMessage {
-  constructor(private _source: ResponseReasoningItem) {}
+  private _source: ResponseReasoningItem;
+
+  constructor(_source: ResponseReasoningItem) {
+    const { status: _status, ...rest } = _source;
+    this._source = rest;
+  }
 
   get type(): 'reasoning' {
     return this._source.type;

@@ -28,11 +28,13 @@ export const SendSlackMessageToolExposedStaticConfigSchema = z
 
 export const sendSlackInvocationSchema = z
   .object({
-    channel: z.string().min(1).optional().describe('Slack channel ID (C..., D... for DM).'),
-    thread_ts: z.string().optional().describe('Thread root timestamp to reply within thread.'),
     text: z.string().min(1).describe('Message text.'),
-    broadcast: z.boolean().optional().describe('If true when replying in thread, broadcast to channel.'),
-    ephemeral_user: z.string().optional().describe('If provided, send ephemeral message only visible to this user.'),
+    channel: z.string().min(1).describe('Slack channel ID (C..., D... for DM).'),
+    thread_ts: z.string().describe('Thread root timestamp to reply within thread.'),
+    broadcast: z.union([z.boolean(), z.null()]).describe('If true when replying in thread, broadcast to channel.'),
+    ephemeral_user: z
+      .union([z.string(), z.null()])
+      .describe('If provided, send ephemeral message only visible to this user.'),
   })
   .strict();
 

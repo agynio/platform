@@ -1,15 +1,13 @@
 import { SummarizeResponse, withSummarize } from '@agyn/tracing';
-import OpenAI from 'openai';
 import { LLMContext, LLMMessage, LLMState } from '../types';
 
-import { HumanMessage, Reducer, SystemMessage } from '@agyn/llm';
-import { ResponseMessage, ToolCallOutputMessage } from '@agyn/llm';
+import { HumanMessage, LLM, Reducer, ResponseMessage, SystemMessage, ToolCallOutputMessage } from '@agyn/llm';
 import { stringify } from 'yaml';
 
 export class SummarizationLLMReducer extends Reducer<LLMState, LLMContext> {
   constructor(
-    private llm: OpenAI,
-    private params: { model: string; keepTokens: number; maxTokens: number; summarySystemNote?: string },
+    private llm: LLM,
+    private params: { model: string; keepTokens: number; maxTokens: number; systemPrompt: string },
   ) {
     super();
   }
@@ -45,10 +43,7 @@ export class SummarizationLLMReducer extends Reducer<LLMState, LLMContext> {
         i++;
         while (i < messages.length) {
           const next = messages[i];
-          if (
-            next instanceof ToolCallOutputMessage &&
-            callIds.includes(next.callId)
-          ) {
+          if (next instanceof ToolCallOutputMessage && callIds.includes(next.callId)) {
             group.push(next);
             i++;
             continue;
@@ -90,7 +85,7 @@ export class SummarizationLLMReducer extends Reducer<LLMState, LLMContext> {
   }
 
   private async summarize(state: LLMState): Promise<LLMState> {
-    const { keepTokens, model, summarySystemNote, maxTokens } = this.params;
+    const { keepTokens, model, systemPrompt } = this.params;
     const groups = this.groupMessages(state.messages);
     if (!groups.length) return state;
 
@@ -118,9 +113,6 @@ export class SummarizationLLMReducer extends Reducer<LLMState, LLMContext> {
     }
 
     const olderMessages = olderGroups.flat();
-    const systemPrompt =
-      summarySystemNote ||
-      'You update a running summary of a conversation. Keep key facts, goals, decisions, constraints, names, deadlines, and follow-ups. Be concise; use compact sentences; omit chit-chat.';
 
     const foldLines = stringify(olderMessages);
 
@@ -132,23 +124,17 @@ export class SummarizationLLMReducer extends Reducer<LLMState, LLMContext> {
         oldContext: state.messages,
       },
       async () => {
-        const response = await this.llm.responses.create({
+        const response = await this.llm.call({
           model,
           input: [
-            SystemMessage.fromText(systemPrompt).toPlain(), //
-            HumanMessage.fromText(userPrompt).toPlain(),
+            SystemMessage.fromText(systemPrompt), //
+            HumanMessage.fromText(userPrompt),
           ],
         });
 
-        const assistantMsg = response.output.find((o) => o.type === 'message');
-        let newSummary = state.summary || '';
-        if (assistantMsg) {
-          const pieces = assistantMsg.content
-            .map((c) => (c.type === 'output_text' ? c.text : ''))
-            .filter((t: string) => t.length > 0);
-          if (pieces.length) newSummary = pieces.join('\n').trim();
-        }
+        const newSummary = response.text.trim();
         const newContext = tail.flat();
+        
         return new SummarizeResponse({
           raw: { summary: newSummary, newContext: tail.flat() },
           summary: newSummary,

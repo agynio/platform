@@ -7,7 +7,9 @@ export const FinishToolStaticConfigSchema = z.object({}).strict();
 
 export class FinishNode extends BaseToolNode {
   private toolInstance?: FinishFunctionTool;
-  constructor(private logger: LoggerService) { super(); }
+  constructor(private logger: LoggerService) {
+    super();
+  }
   async setConfig(_cfg: Record<string, unknown>): Promise<void> {
     // Validation retained even if empty
     const parsed = FinishToolStaticConfigSchema.safeParse(_cfg);

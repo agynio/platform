@@ -11,6 +11,13 @@ export class ToolCallOutputMessage {
     return this._source.call_id;
   }
 
+  get text(): string {
+    if (typeof this._source.output === 'string') {
+      return this._source.output;
+    }
+    return JSON.stringify(this._source.output);
+  }
+
   static fromResponse(callId: string, response: string | ResponseFunctionCallOutputItemList) {
     return new ToolCallOutputMessage({
       type: 'function_call_output',

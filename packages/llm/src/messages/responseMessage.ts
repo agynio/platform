@@ -5,7 +5,11 @@ import { ToolCallMessage } from './toolCallMessage';
 import { ReasoningMessage } from './reasoningMessage';
 
 export class ResponseMessage {
-  constructor(private _source: { output: Response['output'] }) {}
+  private _source: { output: Response['output'] };
+
+  constructor(_source: { output: Response['output'] }) {
+    this._source = { output: _source.output };
+  }
 
   get type(): 'output' {
     return 'output';

@@ -4,12 +4,11 @@ import { LoggerService } from '../../../services/logger.service';
 import { AgentNode } from '../../agent/agent.node';
 import { TriggerMessage } from '../../slackTrigger';
 import { CallAgentToolStaticConfigSchema } from './call_agent.node';
-import { FunctionTool, ResponseMessage } from '@agyn/llm';
+import { FunctionTool } from '@agyn/llm';
+import { LLMContext } from '../../../llm/types';
 
 export const callAgentInvocationSchema = z.object({
   input: z.string().min(1).describe('Message to forward to the target agent.'),
-  context: z.any().optional().describe('Optional structured metadata; forwarded into TriggerMessage.info'),
-  parentThreadId: z.string().min(1).describe('Parent thread id owning the child conversation.'),
   childThreadId: z
     .string()
     .min(1)
@@ -38,22 +37,23 @@ export class CallAgentFunctionTool extends FunctionTool<typeof callAgentInvocati
     return this.deps.getDescription();
   }
 
-  async execute(args: z.infer<typeof callAgentInvocationSchema>): Promise<string> {
-    const { input, context, parentThreadId, childThreadId } = args;
+  async execute(args: z.infer<typeof callAgentInvocationSchema>, ctx: LLMContext): Promise<string> {
+    const { input, childThreadId } = args;
     const targetAgent = this.deps.getTargetAgent();
     const responseMode = this.deps.getResponseMode();
     const logger = this.deps.logger;
-    const hasContext = !!context;
-    logger.info('call_agent invoked', { targetAttached: !!targetAgent, hasContext, responseMode });
+
+    const parentThreadId = ctx.threadId;
+
+    logger.info('call_agent invoked', { targetAttached: !!targetAgent, responseMode });
     if (!targetAgent) return 'Target agent is not connected';
 
     const targetThreadId = `${parentThreadId}__${childThreadId}`;
-    const info =
-      context && typeof context === 'object' && !Array.isArray(context) ? (context as Record<string, unknown>) : {};
-    const triggerMessage: TriggerMessage = { content: input, info };
+
+    const triggerMessage: TriggerMessage = { content: input, info: {} };
     try {
       if (responseMode === 'sync') {
-        const res: ResponseMessage | undefined = await targetAgent.invoke(targetThreadId, [triggerMessage]);
+        const res= await targetAgent.invoke(targetThreadId, [triggerMessage]);
         return res.text;
       }
       // async / ignore: fire and forget

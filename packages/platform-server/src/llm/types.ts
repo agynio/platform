@@ -29,6 +29,7 @@ import {
   ToolCallMessage,
   ToolCallOutputMessage,
 } from '@agyn/llm';
+import { Signal } from '../signal';
 
 // export type ResponseOutputItem =
 //   | ResponseOutputMessage
@@ -56,4 +57,5 @@ export type LLMState = {
 
 export type LLMContext = {
   threadId: string;
+  finishSignal: Signal;
 };

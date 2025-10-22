@@ -1,4 +1,4 @@
-import { HumanMessage, ResponseMessage, SystemMessage, ToolCallOutputMessage } from '@agyn/llm';
+import { HumanMessage, ResponseMessage, SystemMessage, ToolCallMessage, ToolCallOutputMessage } from '@agyn/llm';
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { randomBytes } from 'node:crypto';
 
@@ -461,13 +461,6 @@ export function withSystem<T>(attributes: { label: string; [k: string]: unknown 
 // New message & response types (Stage 1 API evolution)
 // ---------------------------------------------------------------------------
 
-// Tool call descriptor used within AIMessage toolCalls
-export type ToolCall = {
-  id: string;
-  name: string;
-  arguments: unknown;
-};
-
 export type ContextMessage =
   | SystemMessage //
   | HumanMessage
@@ -478,8 +471,8 @@ export type ContextMessage =
 export class LLMResponse<TRaw = unknown> {
   readonly raw: TRaw;
   readonly content?: string;
-  readonly toolCalls?: ToolCall[];
-  constructor(params: { raw: TRaw; content?: string; toolCalls?: ToolCall[] }) {
+  readonly toolCalls?: ToolCallMessage[];
+  constructor(params: { raw: TRaw; content?: string; toolCalls?: ToolCallMessage[] }) {
     this.raw = params.raw;
     this.content = params.content;
     this.toolCalls = params.toolCalls;

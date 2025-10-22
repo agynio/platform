@@ -1,7 +1,12 @@
 import { ResponseFunctionToolCall } from 'openai/resources/responses/responses.mjs';
 
 export class ToolCallMessage {
-  constructor(private _source: ResponseFunctionToolCall) {}
+  private _source: ResponseFunctionToolCall;
+
+  constructor(_source: ResponseFunctionToolCall) {
+    const { status: _status, ...rest } = _source;
+    this._source = rest;
+  }
 
   get type(): 'function_call' {
     return this._source.type;

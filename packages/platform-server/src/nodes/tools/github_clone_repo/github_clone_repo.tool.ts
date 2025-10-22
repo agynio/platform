@@ -6,15 +6,15 @@ import { ConfigService } from '../../../services/config.service';
 import { LoggerService } from '../../../services/logger.service';
 import { VaultService, type VaultRef } from '../../../services/vault.service';
 import { parseVaultRef } from '../../../utils/refs';
+import { LLMContext } from '../../../llm/types';
 
 export const githubCloneSchema = z
   .object({
     owner: z.string().min(1).describe('GitHub organization or user that owns the repository.'),
     repo: z.string().min(1).describe('Repository name (without .git).'),
     path: z.string().min(1).describe('Destination directory path inside the container.'),
-    branch: z.string().optional().describe('Optional branch or tag to checkout.'),
-    depth: z.number().int().positive().optional().describe('Shallow clone depth (omit for full clone).'),
-    thread_id: z.string().min(1).describe('Workspace thread id where clone should run.'),
+    branch: z.union([z.string(), z.null()]).describe('Optional branch or tag to checkout.'),
+    depth: z.union([z.number().int().positive(), z.null()]).describe('Shallow clone depth (omit for full clone).'),
   })
   .strict();
 
@@ -82,12 +82,12 @@ export class GithubCloneRepoFunctionTool extends FunctionTool<typeof githubClone
     return this.deps.config.githubToken;
   }
 
-  async execute(args: z.infer<typeof githubCloneSchema>): Promise<string> {
-    const { owner, repo, path, branch, depth, thread_id } = args;
+  async execute(args: z.infer<typeof githubCloneSchema>, ctx: LLMContext): Promise<string> {
+    const { owner, repo, path, branch, depth } = args;
     const provider = this.deps.containerProvider;
     if (!provider)
       throw new Error('GithubCloneRepoTool: containerProvider not set. Connect via graph edge before use.');
-    const container = await provider.provide(thread_id);
+    const container = await provider.provide(ctx.threadId);
     this.deps.logger.info('Tool called', 'github_clone_repo', { owner, repo, path, branch, depth });
     const token = await this.resolveToken();
     const username = 'oauth2';
