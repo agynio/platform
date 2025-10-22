@@ -232,9 +232,8 @@ export class AgentNode implements TriggerListener {
 
     // Subscribe to server lifecycle and MCP-specific events
     server.on('ready', sync);
-    // These events are emitted by LocalMCPServer; cast to any for type-compat if external servers
-    server.on('mcp.tools_cache_loaded' as any, sync);
-    server.on('mcp.tools_discovered' as any, sync);
+    server.on('mcp.tools_cache_loaded', sync);
+    server.on('mcp.tools_discovered', sync);
     // Dynamic config updates may enable/disable tools
     const anyServer = server as unknown as {
       onDynamicConfigChanged?: (l: (cfg: Record<string, boolean>) => void) => () => void;
@@ -242,7 +241,7 @@ export class AgentNode implements TriggerListener {
     if (typeof anyServer.onDynamicConfigChanged === 'function') {
       anyServer.onDynamicConfigChanged?.(() => sync());
     } else {
-      server.on('mcp.tools_dynamic_config_changed' as any, sync);
+      server.on('mcp.tools_dynamic_config_changed', sync);
     }
 
     // Trigger initial sync so agent catches up if server is already ready/cached
@@ -263,8 +262,25 @@ export class AgentNode implements TriggerListener {
   async delete(): Promise<void> {}
 
   // Sync MCP tools from the given server and reconcile add/remove
+  private _syncInFlight = new Map<McpServer, Promise<void>>();
+  private _syncDebounceTimers = new Map<McpServer, NodeJS.Timeout>();
   private async syncMcpToolsFromServer(server: McpServer): Promise<void> {
     try {
+      // Debounce bursts of events for the same server
+      const existingTimer = this._syncDebounceTimers.get(server);
+      if (existingTimer) clearTimeout(existingTimer);
+      await new Promise<void>((resolve) => {
+        const t = setTimeout(() => {
+          resolve();
+        }, 50);
+        this._syncDebounceTimers.set(server, t);
+      });
+      // Prevent overlapping syncs for the same server
+      const inFlight = this._syncInFlight.get(server);
+      if (inFlight) {
+        await inFlight.catch(() => {});
+      }
+      const run = (async () => {
       const namespace = server.namespace;
       const latest = await server.listTools();
       const prev = this.mcpServerTools.get(server) || [];
@@ -286,6 +302,9 @@ export class AgentNode implements TriggerListener {
       }
 
       this.mcpServerTools.set(server, latest);
+      })();
+      this._syncInFlight.set(server, run);
+      await run.finally(() => this._syncInFlight.delete(server));
     } catch (e) {
       this.logger.error?.('Agent: syncMcpToolsFromServer error', e);
     }

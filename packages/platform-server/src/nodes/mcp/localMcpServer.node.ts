@@ -169,7 +169,7 @@ export class LocalMCPServer implements McpServer, Provisionable, DynamicConfigur
       if (Number.isFinite(ts)) this.lastToolsUpdatedAt = ts;
     }
     // Emit cache loaded event for listeners
-    const payload = { tools: this.toolsCache || [], updatedAt: this.lastToolsUpdatedAt, source: 'cache' } as any;
+    const payload = { tools: this.toolsCache || [], updatedAt: this.lastToolsUpdatedAt, source: 'cache' } as const;
     try {
       this.emitter.emit('mcp.tools_cache_loaded', payload);
     } catch {}
@@ -314,7 +314,7 @@ export class LocalMCPServer implements McpServer, Provisionable, DynamicConfigur
       }
       // Emit tools discovered event
       try {
-        const payload = { tools: this.toolsCache || [], updatedAt: this.lastToolsUpdatedAt, source: 'discovery' } as any;
+        const payload = { tools: this.toolsCache || [], updatedAt: this.lastToolsUpdatedAt, source: 'discovery' } as const;
         this.emitter.emit('mcp.tools_discovered', payload);
       } catch {}
     } catch (err) {
@@ -785,7 +785,7 @@ export class LocalMCPServer implements McpServer, Provisionable, DynamicConfigur
       this.emitter.emit('mcp.tools_dynamic_config_changed', {
         enabled: cfg,
         updatedAt: Date.now(),
-      } as any);
+      } as const);
     } catch {}
   }
 

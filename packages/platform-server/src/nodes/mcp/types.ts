@@ -51,17 +51,13 @@ export interface McpServer {
   stop(): Promise<void>;
   listTools(force?: boolean): Promise<FunctionTool[]>;
   callTool(name: string, args: any, options?: { timeoutMs?: number; threadId?: string }): Promise<McpToolCallResult>;
-  on(
-    event:
-      | 'ready'
-      | 'exit'
-      | 'error'
-      | 'restarted'
-      | 'mcp.tools_cache_loaded'
-      | 'mcp.tools_discovered'
-      | 'mcp.tools_dynamic_config_changed',
-    handler: (...a: any[]) => void,
-  ): this;
+  on(event: 'ready', handler: (...a: any[]) => void): this;
+  on(event: 'exit', handler: (...a: any[]) => void): this;
+  on(event: 'error', handler: (...a: any[]) => void): this;
+  on(event: 'restarted', handler: (...a: any[]) => void): this;
+  on(event: 'mcp.tools_cache_loaded', handler: (payload: { tools: FunctionTool[]; updatedAt?: number; source: 'cache' }) => void): this;
+  on(event: 'mcp.tools_discovered', handler: (payload: { tools: FunctionTool[]; updatedAt?: number; source: 'discovery' }) => void): this;
+  on(event: 'mcp.tools_dynamic_config_changed', handler: (payload: { enabled: Record<string, boolean>; updatedAt: number }) => void): this;
 }
 
 export interface DockerExecStreams {

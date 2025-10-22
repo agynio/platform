@@ -364,6 +364,11 @@ async function bootstrap() {
             reply.code(400);
             return { error: 'not_mcp_node' };
           }
+          // Avoid refresh if discovery/start is in-flight
+          if (inst.pendingStart) {
+            reply.code(409);
+            return { error: 'discovery_in_flight' };
+          }
           try {
             await inst.discoverTools();
             // Emit ready to trigger agent resyncs if applicable

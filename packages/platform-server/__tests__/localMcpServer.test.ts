@@ -155,9 +155,9 @@ describe('LocalMCPServer (mock)', () => {
 
   it('emits cache/discovery/dynamic-config events', async () => {
     const events: string[] = [];
-    (server as any).on('mcp.tools_cache_loaded', (p: any) => events.push(`cache:${Array.isArray(p?.tools) ? p.tools.length : 0}`));
-    (server as any).on('mcp.tools_discovered', (p: any) => events.push(`disc:${Array.isArray(p?.tools) ? p.tools.length : 0}`));
-    (server as any).on('mcp.tools_dynamic_config_changed', (p: any) => events.push(`dyn:${Object.keys(p?.enabled||{}).length}`));
+    (server as any).on('mcp.tools_cache_loaded', (p: { tools: any[] }) => events.push(`cache:${Array.isArray(p?.tools) ? p.tools.length : 0}`));
+    (server as any).on('mcp.tools_discovered', (p: { tools: any[] }) => events.push(`disc:${Array.isArray(p?.tools) ? p.tools.length : 0}`));
+    (server as any).on('mcp.tools_dynamic_config_changed', (p: { enabled: Record<string, boolean> }) => events.push(`dyn:${Object.keys(p?.enabled||{}).length}`));
     // Preload and emit cache
     (server as any).preloadCachedTools([{ name: 'pre' }], Date.now());
     // Apply dynamic config to trigger event
