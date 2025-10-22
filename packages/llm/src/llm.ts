@@ -9,7 +9,6 @@ import {
   ResponseMessage,
 } from './messages';
 import { FunctionTool } from './functionTool';
-import { ReasoningMessage } from './messages/reasoningMessage';
 
 export type LLMInput =
   | HumanMessage
@@ -33,10 +32,12 @@ export class LLM {
       })
       .flat();
 
+    const toolDefinitions = params.tools?.map((tool) => tool.definition());
+
     const response = await this.openAI.responses.create({
       model: params.model,
       input: flattenInput,
-      tools: params.tools?.map((tool) => tool.definition()),
+      tools: toolDefinitions,
     });
 
     return new ResponseMessage(response);

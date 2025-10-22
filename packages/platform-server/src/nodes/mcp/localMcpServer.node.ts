@@ -2,18 +2,18 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { EventEmitter } from 'events';
 import { v4 as uuidv4 } from 'uuid';
 import { toJSONSchema, z } from 'zod';
+import { convertJsonSchemaToZod } from 'zod-from-json-schema';
+import { JSONSchema } from 'zod/v4/core';
 import { ContainerProviderEntity } from '../../entities/containerProvider.entity.js';
 import type { DynamicConfigurable, ProvisionStatus, Provisionable } from '../../graph/capabilities.js';
-import { ContainerService } from '../../services/container.service.js';
-import { LoggerService } from '../../services/logger.service.js';
-import { DockerExecTransport } from './dockerExecTransport.js';
-import { DEFAULT_MCP_COMMAND, McpError, McpServer, McpToolCallResult, PersistedMcpState, McpTool } from './types.js';
-import { LocalMCPServerTool, GenericMcpInvocationSchema } from './localMcpServer.tool';
-import { VaultService } from '../../services/vault.service.js';
-import { EnvService, type EnvItem } from '../../services/env.service.js';
-import { JSONSchema } from 'zod/v4/core';
 import { ConfigService } from '../../services/config.service.js';
-import { GraphService } from '../../services/graph.service.js';
+import { ContainerService } from '../../services/container.service.js';
+import { EnvService, type EnvItem } from '../../services/env.service.js';
+import { LoggerService } from '../../services/logger.service.js';
+import { VaultService } from '../../services/vault.service.js';
+import { DockerExecTransport } from './dockerExecTransport.js';
+import { LocalMCPServerTool } from './localMcpServer.tool';
+import { DEFAULT_MCP_COMMAND, McpError, McpServer, McpTool, McpToolCallResult } from './types.js';
 
 const EnvItemSchema = z
   .object({
@@ -166,7 +166,7 @@ export class LocalMCPServer implements McpServer, Provisionable, DynamicConfigur
           getLogger: () => this.logger,
         }),
       },
-      GenericMcpInvocationSchema,
+      convertJsonSchemaToZod({ ...tool.inputSchema, strict: false, additionalProperties: false }) as z.ZodObject,
     );
   }
 
@@ -263,7 +263,7 @@ export class LocalMCPServer implements McpServer, Provisionable, DynamicConfigur
       // Fetch tools
       const result = await tempClient.listTools({}, { timeout: cfg.requestTimeoutMs ?? 15000 });
       this.logger.debug(`[MCP:${this.namespace}] Discovered tools: ${JSON.stringify(result.tools.map((t) => t.name))}`);
-      this.toolsCache = result.tools.map((t) => this.createLocalTool(t));
+      this.toolsCache = result.tools.map((t) => this.createLocalTool(t as McpTool));
 
       this.logger.info(`[MCP:${this.namespace}] [disc:${discoveryId}] Discovered ${this.toolsCache.length} tools`);
       this.toolsDiscovered = true;
@@ -288,15 +288,13 @@ export class LocalMCPServer implements McpServer, Provisionable, DynamicConfigur
       }
       // Persist state using graphService
       try {
-        const state: { mcp: PersistedMcpState } = {
-          mcp: {
-            tools: (this.toolsCache || []).map((t) => ({ name: t.name, description: t.description })),
-            toolsUpdatedAt: this.lastToolsUpdatedAt,
-          },
-        };
-
-        const nodeId = this.namespace;
-
+        // const state: { mcp: PersistedMcpState } = {
+        //   mcp: {
+        //     tools: (this.toolsCache || []).map((t) => ({ name: t.name, description: t.description })),
+        //     toolsUpdatedAt: this.lastToolsUpdatedAt,
+        //   },
+        // };
+        // const nodeId = this.namespace;
         // TODO: fix persistency
         // await this.graphStateService.upsertNodeState(this.namespace, nodeId, state);
       } catch (e) {

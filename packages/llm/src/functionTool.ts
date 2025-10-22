@@ -15,7 +15,7 @@ export abstract class FunctionTool<A extends z.ZodType = z.ZodType, C = {}> {
       name: this.name,
       parameters: z.toJSONSchema(this.schema),
       type: 'function',
-      strict: true,
+      strict: false,
       description: this.description,
     };
   }

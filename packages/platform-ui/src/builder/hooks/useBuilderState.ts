@@ -40,10 +40,7 @@ interface UseBuilderStateResult {
 
 type BuilderOptions = { debounceMs?: number };
 
-export function useBuilderState(
-  serverBase = getApiBase(),
-  options?: BuilderOptions,
-): UseBuilderStateResult {
+export function useBuilderState(serverBase = getApiBase(), options?: BuilderOptions): UseBuilderStateResult {
   const [nodes, setNodes] = useState<BuilderNode[]>([]);
   const [edges, setEdges] = useState<Edge[]>([]);
   const [templates, setTemplates] = useState<TemplateNodeSchema[]>([]);
@@ -126,8 +123,7 @@ export function useBuilderState(
         const prevNode = prev.find((n) => n.id === c.id);
         const nextNode = next.find((n) => n.id === c.id);
         if (prevNode && nextNode) {
-          const moved =
-            prevNode.position.x !== nextNode.position.x || prevNode.position.y !== nextNode.position.y;
+          const moved = prevNode.position.x !== nextNode.position.x || prevNode.position.y !== nextNode.position.y;
           if (moved) {
             shouldDirty = true;
             break;

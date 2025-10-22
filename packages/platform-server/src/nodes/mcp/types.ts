@@ -1,4 +1,6 @@
 import { FunctionTool } from '@agyn/llm';
+import z from 'zod';
+import { JSONSchema } from 'zod/v4/core';
 
 // If upstream exports JSONRPCMessage directly later, replace this with that import.
 export type JSONRPCMessage = {
@@ -16,8 +18,8 @@ export type JSONRPCMessage = {
 export interface McpTool {
   name: string;
   description?: string;
-  inputSchema?: any; // JSON Schema for arguments
-  outputSchema?: any; // Optional schema for structuredContent
+  inputSchema: JSONSchema.BaseSchema; // JSON Schema for arguments
+  outputSchema: JSONSchema.BaseSchema; // JSON Schema for output
 }
 
 export interface McpToolCallResult {

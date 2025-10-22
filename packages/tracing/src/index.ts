@@ -180,7 +180,7 @@ function now() {
   return new Date().toISOString();
 }
 
-function messageToAttributes(msg: ContextMessage): Record<string, unknown> {
+function messageToAttributes(msg: ContextMessage | ToolCallMessage): Record<string, unknown> {
   if (msg instanceof HumanMessage || msg instanceof SystemMessage) {
     return {
       role: msg.role,
@@ -199,6 +199,21 @@ function messageToAttributes(msg: ContextMessage): Record<string, unknown> {
           name: m.name,
           arguments: m.args,
         })),
+    };
+  }
+
+  if (msg instanceof ToolCallOutputMessage) {
+    return {
+      role: 'tool',
+      content: msg.text,
+    };
+  }
+
+  if (msg instanceof ToolCallMessage) {
+    return {
+      id: msg.callId,
+      name: msg.name,
+      arguments: msg.args,
     };
   }
 
@@ -397,16 +412,11 @@ export function withLLM<T>(
       return { attributes: { error: 'llm.response.missingWrapper' }, status: 'error' };
     }
     const content = result.content;
-    const toolCalls = result.toolCalls;
-    const attr: Record<string, unknown> = {};
-    if (content !== undefined) {
-      attr.output = { ...(attr.output as any), content };
-      attr['llm.content'] = content;
-    }
-    if (toolCalls && toolCalls.length) {
-      attr.output = { ...(attr.output as any), toolCalls };
-      attr['llm.toolCalls'] = toolCalls;
-    }
+    const toolCalls = result.toolCalls?.map((t) => messageToAttributes(t));
+    const attr: Record<string, unknown> = {
+      content,
+      toolCalls,
+    };
     return { attributes: attr };
   }).then((res) => (res as LLMResponse<T>).raw);
 }

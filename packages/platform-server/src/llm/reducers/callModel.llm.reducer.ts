@@ -13,20 +13,25 @@ export class CallModelLLMReducer extends Reducer<LLMState, LLMContext> {
 
   async invoke(state: LLMState): Promise<LLMState> {
     const response = await withLLM({ context: state.messages }, async () => {
-      const raw = await this.llm.call({
-        model: this.params.model,
-        input: [
-          SystemMessage.fromText(this.params.systemPrompt), //
-          ...state.messages,
-        ],
-        tools: this.tools,
-      });
+      try {
+        const raw = await this.llm.call({
+          model: this.params.model,
+          input: [
+            SystemMessage.fromText(this.params.systemPrompt), //
+            ...state.messages,
+          ],
+          tools: this.tools,
+        });
 
-      return new LLMResponse({
-        raw,
-        content: raw.text,
-        toolCalls: raw.output.filter((m) => m instanceof ToolCallMessage),
-      });
+        return new LLMResponse({
+          raw,
+          content: raw.text,
+          toolCalls: raw.output.filter((m) => m instanceof ToolCallMessage),
+        });
+      } catch (error) {
+        console.error(error);
+        throw error;
+      }
     });
 
     return {

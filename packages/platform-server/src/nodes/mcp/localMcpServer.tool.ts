@@ -10,23 +10,16 @@ export interface McpExecDelegate {
   getLogger: () => { debug: (...a: any[]) => void; error: (...a: any[]) => void }; // minimal logger surface
 }
 
-// We keep schema open (any args) because remote MCP tools provide JSONSchema, not zod. Conversion can be added later.
-export const GenericMcpInvocationSchema = z
-  .object({
-    arguments: z.any().optional().describe('Arguments passed to the MCP tool (shape defined by remote tool schema).'),
-  })
-  .strict();
-
 interface LocalMCPServerToolDeps {
   getName: () => string;
   getDescription: () => string;
   getDelegate: () => McpExecDelegate | undefined;
 }
 
-export class LocalMCPServerTool extends FunctionTool<typeof GenericMcpInvocationSchema> {
+export class LocalMCPServerTool extends FunctionTool<z.ZodObject> {
   constructor(
     private deps: LocalMCPServerToolDeps,
-    private inputSchema?: z.ZodObject<any>,
+    private inputSchema: z.ZodObject<any>,
   ) {
     super();
   }
@@ -37,13 +30,12 @@ export class LocalMCPServerTool extends FunctionTool<typeof GenericMcpInvocation
     return this.deps.getDescription();
   }
   get schema() {
-    return this.inputSchema || GenericMcpInvocationSchema;
+    return this.inputSchema;
   }
-  async execute(args: z.infer<typeof GenericMcpInvocationSchema>): Promise<string> {
+  async execute(args: z.infer<z.ZodObject>): Promise<string> {
     const delegate = this.deps.getDelegate();
     if (!delegate) throw new Error('MCP delegate not connected');
-    const payload = (args && typeof args === 'object' ? (args as any).arguments : undefined) ?? args;
-    const res = await delegate.callTool(this.name, payload);
+    const res = await delegate.callTool(this.name, args);
     if (res.isError) {
       return JSON.stringify({ ok: false, error: res.content || 'error' });
     }
