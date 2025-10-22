@@ -217,7 +217,7 @@ function messageToAttributes(msg: ContextMessage | ToolCallMessage): Record<stri
     };
   }
 
-  return { ...msg.toPlain() };
+  return { unknownMessageType: true };
 }
 
 // Internal low-level span creator. Accepts optional computeEndAttrs to add attributes/status at completion.
