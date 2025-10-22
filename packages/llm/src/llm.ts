@@ -33,8 +33,6 @@ export class LLM {
       })
       .flat();
 
-    console.log(JSON.stringify(flattenInput, null, 2));
-
     const response = await this.openAI.responses.create({
       model: params.model,
       input: flattenInput,
