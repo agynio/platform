@@ -58,8 +58,6 @@ export type LLMState = {
   meta?: {
     restrictionInjectionCount?: number;
     restrictionInjected?: boolean;
-    hasToolCallInTurn?: boolean;
-    lastToolCallType?: string | null;
   };
 };
 
