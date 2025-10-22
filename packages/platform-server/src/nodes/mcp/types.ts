@@ -49,7 +49,7 @@ export interface McpServer {
   readonly namespace: string;
   start(): Promise<void>;
   stop(): Promise<void>;
-  listTools(force?: boolean): Promise<FunctionTool[]>;
+  listTools(force?: boolean): FunctionTool[];
   callTool(name: string, args: any, options?: { timeoutMs?: number; threadId?: string }): Promise<McpToolCallResult>;
   on(event: 'ready', handler: (...a: any[]) => void): this;
   on(event: 'exit', handler: (...a: any[]) => void): this;

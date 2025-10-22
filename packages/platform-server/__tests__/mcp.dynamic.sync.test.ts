@@ -44,17 +44,17 @@ describe('MCP dynamic tool enable/disable sync', () => {
 
   it('removes disabled tools and adds re-enabled tools', async () => {
     // Initially both tools
-    let tools = await server.listTools();
+    let tools = server.listTools();
     expect(tools.map(t=>t.name).sort()).toEqual(['a','b']);
 
     // Disable 'b'
     server.setDynamicConfig({ a: true, b: false });
-    tools = await server.listTools();
+    tools = server.listTools();
     expect(tools.map(t=>t.name)).toEqual(['a']);
 
     // Re-enable 'b'
     server.setDynamicConfig({ a: true, b: true });
-    tools = await server.listTools();
+    tools = server.listTools();
     expect(tools.map(t=>t.name).sort()).toEqual(['a','b']);
   });
 });

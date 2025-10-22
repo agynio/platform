@@ -24,7 +24,7 @@ describe('LocalMCPServer preload + staleness + persist', () => {
     // Stub discoverTools to avoid docker
     (server as any).discoverTools = async function() { (this as any).toolsCache = [{ name: 'fresh' }]; (this as any).toolsDiscovered = true; (this as any).lastToolsUpdatedAt = Date.now(); await (this as any).statePersistor?.({ mcp: { tools: (this as any).toolsCache, toolsUpdatedAt: (this as any).lastToolsUpdatedAt } }); return (this as any).toolsCache; };
     await (server as any).provision();
-    const tools = await server.listTools();
+    const tools = server.listTools();
     expect(tools.find((t) => t.name === 'fresh')).toBeTruthy();
     expect(persisted?.mcp?.tools?.[0]?.name).toBe('fresh');
     expect(typeof persisted?.mcp?.toolsUpdatedAt).toBe('number');

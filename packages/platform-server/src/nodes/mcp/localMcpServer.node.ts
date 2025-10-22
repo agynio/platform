@@ -417,12 +417,10 @@ export class LocalMCPServer implements McpServer, Provisionable, DynamicConfigur
   }
 
   // Return legacy McpTool shape for interface compliance; callers needing function tools can access toolsCache directly.
-  async listTools(_force = false): Promise<LocalMCPServerTool[]> {
+  listTools(_force = false): LocalMCPServerTool[] {
     // Passive: Only return cached tools. `force` no longer changes discovery behavior post-refactor.
     const allTools: LocalMCPServerTool[] = this.toolsCache ? [...this.toolsCache] : [];
-    // If no dynamic config applied, return all tool instances directly.
     if (!this._enabledTools) return allTools;
-    // Filter by enabled set and return actual instances (not metadata shims).
     const enabled = this._enabledTools;
     return allTools.filter((t) => enabled.has(t.name));
   }

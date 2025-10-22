@@ -94,11 +94,11 @@ describe('LocalMCPServer Provisionable + DynamicConfigurable', () => {
     });
     await server.setConfig({ namespace: 'ns', command: 'cmd' } as McpServerConfig);
     await server.provision();
-    let tools = await server.listTools();
+    let tools = server.listTools();
     expect(tools.map(t => t.name).sort()).toEqual(['toolA', 'toolB']);
 
     server.setDynamicConfig({ toolA: true, toolB: false });
-    tools = await server.listTools();
+    tools = server.listTools();
     expect(tools.map(t => t.name)).toEqual(['toolA']);
   });
 });

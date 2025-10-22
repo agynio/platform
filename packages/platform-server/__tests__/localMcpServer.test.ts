@@ -144,7 +144,7 @@ describe('LocalMCPServer (mock)', () => {
   });
 
   it('lists tools', async () => {
-    const tools = await server.listTools();
+    const tools = server.listTools();
     expect(tools.find((t) => t.name === 'echo')).toBeTruthy();
   });
 

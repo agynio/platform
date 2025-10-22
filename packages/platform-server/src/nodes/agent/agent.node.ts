@@ -252,10 +252,10 @@ export class AgentNode implements TriggerListener {
   async delete(): Promise<void> {}
 
   // Sync MCP tools from the given server and reconcile add/remove
-  private async syncMcpToolsFromServer(server: McpServer): Promise<void> {
+  private syncMcpToolsFromServer(server: McpServer): void {
     try {
       const namespace = server.namespace;
-      const latest: FunctionTool[] = await server.listTools();
+      const latest: FunctionTool[] = server.listTools();
       const prev: FunctionTool[] = this.mcpServerTools.get(server) || [];
 
       const latestNames = new Set(latest.map((t) => t.name));
