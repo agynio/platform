@@ -7,11 +7,6 @@ export class PrismaService {
 
   private constructor(private logger: LoggerService) {}
 
-  static getInstance(logger: LoggerService) {
-    if (!this.instance) this.instance = new PrismaService(logger);
-    return this.instance;
-  }
-
   getClient(): PrismaClient | null {
     try {
       if (!this.prisma) {
@@ -29,4 +24,3 @@ export class PrismaService {
     }
   }
 }
-

@@ -1,7 +1,7 @@
 import { Reducer } from '@agyn/llm';
 import type { LLMContext, LLMState } from '../types';
-import { PrismaService } from '../../services/prisma.service';
-import { ConversationStateRepository } from '../../services/conversationState.repository';
+import { PrismaService } from '../../core/services/prisma.service';
+import { ConversationStateRepository } from '../repositories/conversationState.repository';
 import { LoggerService } from '../../services/logger.service';
 import { serializeState } from '../utils/serialization';
 

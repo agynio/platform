@@ -3,7 +3,7 @@ import { BaseToolNode } from '../baseToolNode';
 import { WorkspaceNode } from '../../workspace/workspace.node';
 import { ConfigService } from '../../../core/services/config.service';
 import { LoggerService } from '../../../core/services/logger.service';
-import { VaultService } from '../../../core/services/vault.service';
+import { VaultService } from '../../../infra/vault/vault.service';
 import { GithubCloneRepoFunctionTool } from './github_clone_repo.tool';
 
 const TokenRefSchema = z

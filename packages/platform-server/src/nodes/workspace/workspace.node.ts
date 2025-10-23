@@ -1,8 +1,8 @@
-import { ContainerOpts, ContainerService } from '../../core/services/container.service';
+import { ContainerOpts, ContainerService } from '../../infra/container/container.service';
 import { ContainerHandle } from '../../core/handles/container.handle';
 import { z } from 'zod';
 import { PLATFORM_LABEL, SUPPORTED_PLATFORMS } from '../../constants';
-import { VaultService } from '../../core/services/vault.service';
+import { VaultService } from '../../infra/vault/vault.service';
 import { ConfigService } from '../../core/services/config.service';
 import { NcpsKeyService } from '../../core/services/ncpsKey.service';
 import { EnvService, type EnvItem } from '../../core/env.resolver';

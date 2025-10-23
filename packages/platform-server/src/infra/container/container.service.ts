@@ -1,8 +1,8 @@
 import { Injectable } from '@nestjs/common';
 import Docker, { ContainerCreateOptions, Exec } from 'dockerode';
 import { PassThrough, Writable } from 'node:stream';
-import { ContainerHandle } from '../handles/container.handle';
-import { LoggerService } from './logger.service';
+import { ContainerHandle } from '../../core/handles/container.handle';
+import { LoggerService } from '../../core/services/logger.service';
 import { PLATFORM_LABEL, type Platform } from '../constants';
 import {
   isExecTimeoutError,

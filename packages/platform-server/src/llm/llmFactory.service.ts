@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import OpenAI from 'openai';
-import { ConfigService } from './config.service';
+import { ConfigService } from '../core/services/config.service';
 import { LLM } from '@agyn/llm';
 
 @Injectable()

@@ -13,7 +13,7 @@ import { CallToolsLLMReducer } from '../../llm/reducers/callTools.llm.reducer';
 import { ConditionalLLMRouter } from '../../llm/routers/conditional.llm.router';
 import { StaticLLMRouter } from '../../llm/routers/static.llm.router';
 import { LLMContext, LLMState } from '../../llm/types';
-import { LLMFactoryService } from '../../core/services/llmFactory.service';
+import { LLMFactoryService } from '../../llm/llmFactory.service';
 
 import { SummarizationLLMReducer } from '../../llm/reducers/summarization.llm.reducer';
 import { LoadLLMReducer } from '../../llm/reducers/load.llm.reducer';

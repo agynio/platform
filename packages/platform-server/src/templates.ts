@@ -24,13 +24,13 @@ import {
 } from './nodes/tools/send_slack_message/send_slack_message.node';
 import { ShellCommandNode, ShellToolStaticConfigSchema } from './nodes/tools/shell_command/shell_command.node';
 import { ConfigService } from './core/services/config.service';
-import { ContainerService } from './core/services/container.service';
+import { ContainerService } from './infra/container/container.service';
 import { EnvService } from './core/env.resolver';
-import { LLMFactoryService } from './core/services/llmFactory.service';
+import { LLMFactoryService } from './llm/llmFactory.service';
 import { LoggerService } from './core/services/logger.service';
 import { MongoService } from './core/services/mongo.service';
 import { NcpsKeyService } from './core/services/ncpsKey.service';
-import { VaultService } from './core/services/vault.service';
+import { VaultService } from './infra/vault/vault.service';
 // Unified Memory tool
 
 export interface TemplateRegistryDeps {

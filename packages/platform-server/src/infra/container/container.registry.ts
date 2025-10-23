@@ -19,10 +19,13 @@ export interface ContainerDoc {
   metadata?: Record<string, any>;
 }
 
-export class ContainerRegistryService {
+export class ContainerRegistry {
   private col: Collection<ContainerDoc>;
 
-  constructor(db: Db, private logger: LoggerService) {
+  constructor(
+    db: Db,
+    private logger: LoggerService,
+  ) {
     this.col = db.collection<ContainerDoc>('containers');
   }
 
@@ -144,10 +147,7 @@ export class ContainerRegistryService {
         { status: 'running', kill_after_at: { $ne: null, $lte: iso } },
         {
           status: 'terminating',
-          $or: [
-            { 'metadata.retryAfter': { $exists: false } },
-            { 'metadata.retryAfter': { $lte: iso } },
-          ],
+          $or: [{ 'metadata.retryAfter': { $exists: false } }, { 'metadata.retryAfter': { $lte: iso } }],
         },
       ],
     } as unknown as Filter<ContainerDoc>;
@@ -188,9 +188,13 @@ export class ContainerRegistryService {
     ) => Promise<Array<{ id: string }>>;
     getContainerLabels!: (id: string) => Promise<Record<string, string> | undefined>;
     getDocker!: () => {
-      getContainer: (
-        id: string,
-      ) => { inspect: () => Promise<{ Created?: string; State?: { Running?: boolean } | undefined; Config?: { Image?: string } | undefined }> };
+      getContainer: (id: string) => {
+        inspect: () => Promise<{
+          Created?: string;
+          State?: { Running?: boolean } | undefined;
+          Config?: { Image?: string } | undefined;
+        }>;
+      };
     };
   };
 
@@ -201,9 +205,9 @@ export class ContainerRegistryService {
     ) => Promise<Array<{ id: string }>>;
     getContainerLabels: (id: string) => Promise<Record<string, string> | undefined>;
     getDocker: () => {
-      getContainer: (
-        id: string,
-      ) => { inspect: () => Promise<{ Created?: string; State?: { Running?: boolean }; Config?: { Image?: string } }> };
+      getContainer: (id: string) => {
+        inspect: () => Promise<{ Created?: string; State?: { Running?: boolean }; Config?: { Image?: string } }>;
+      };
     };
   }): Promise<void> {
     this.logger.info('ContainerRegistry: backfilling from Docker');
