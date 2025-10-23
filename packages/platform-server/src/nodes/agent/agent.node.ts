@@ -86,7 +86,7 @@ export type WhenBusyMode = 'wait' | 'injectAfterTools';
 // Consolidated Agent class (merges previous BaseAgent + Agent into single AgentNode)
 import Node from "../base/Node";
 
-export class AgentNode extends Node implements TriggerListener {
+export class AgentNode extends Node<AgentStaticConfig | undefined> implements TriggerListener {
   protected _config?: AgentStaticConfig;
   protected buffer = new MessagesBuffer({ debounceMs: 0 });
 
@@ -96,8 +96,11 @@ export class AgentNode extends Node implements TriggerListener {
   constructor(
     protected configService: ConfigService,
     protected logger: LoggerService,
-    protected llmFactoryService: LLMFactoryService
-  ) {}
+    protected llmFactoryService: LLMFactoryService,
+    protected agentId?: string,
+  ) {
+    super();
+  }
 
   get config() {
     if (!this._config) throw new Error('Agent not configured.');
@@ -112,9 +115,9 @@ export class AgentNode extends Node implements TriggerListener {
     return this.getNodeId();
   }
 
-  private prepareLoop() {
+  private prepareLoop(): Loop<LLMState, LLMContext> {
     const llm = this.llmFactoryService.createLLM();
-    const routers = new Map();
+    const routers = new Map<string, ConditionalLLMRouter | StaticLLMRouter>();
     const tools = Array.from(this.tools);
 
     routers.set(
@@ -182,9 +185,8 @@ export class AgentNode extends Node implements TriggerListener {
       { threadId: thread, nodeId: this.getNodeId(), inputParameters: [{ thread }, { messages }] },
       async () => {
         const loop = this.prepareLoop();
-        const history = [
-          ...(Array.isArray(messages) ? messages : [messages]).map((msg) => HumanMessage.fromText(JSON.stringify(msg))),
-        ];
+        const incoming: TriggerMessage[] = Array.isArray(messages) ? messages : [messages];
+        const history: HumanMessage[] = incoming.map((msg) => HumanMessage.fromText(JSON.stringify(msg)));
         const finishSignal = new Signal();
 
         const newState = await loop.invoke(
@@ -215,12 +217,14 @@ export class AgentNode extends Node implements TriggerListener {
     return 'not_running';
   }
 
-  addTool(toolNode: BaseToolNode) {
-    this.tools.add(toolNode.getTool());
+  addTool(toolNode: BaseToolNode): void {
+    const tool: FunctionTool = toolNode.getTool();
+    this.tools.add(tool);
     this.logger.info(`Tool added to Agent: ${toolNode?.constructor?.name || 'UnknownTool'}`);
   }
-  removeTool(toolNode: BaseToolNode) {
-    this.tools.delete(toolNode.getTool());
+  removeTool(toolNode: BaseToolNode): void {
+    const tool: FunctionTool = toolNode.getTool();
+    this.tools.delete(tool);
     this.logger.info(`Tool removed from Agent: ${toolNode?.constructor?.name || 'UnknownTool'}`);
   }
 
@@ -233,13 +237,14 @@ export class AgentNode extends Node implements TriggerListener {
     // Track server with empty tools initially; sync on events
     this.mcpServerTools.set(server, []);
 
-    const sync = () => {
+    const sync = (): void => {
       void this.syncMcpToolsFromServer(server);
     };
 
     // Subscribe to server lifecycle and unified MCP tools update event
-    (server as any).on?.('status_changed', (ev: any) => { if (ev?.next === 'ready') sync(); });
-    (server as any).on?.('mcp.tools_updated', sync);
+    server.on('ready', sync);
+    // For typed tools update event
+    server.on('mcp.tools_updated', sync);
 
     // Trigger initial sync so agent catches up if server is already ready/cached
     sync();
@@ -251,10 +256,9 @@ export class AgentNode extends Node implements TriggerListener {
     this.mcpServerTools.delete(server);
   }
 
-  setConfig(config: Record<string, unknown>): void {
-    const parsedConfig = AgentStaticConfigSchema.parse(config) as Partial<AgentStaticConfig>;
+  setConfig(config: AgentStaticConfig): void {
+    const parsedConfig = AgentStaticConfigSchema.parse(config);
     this._config = parsedConfig;
-    if ((config as any)?.agentId) { (this as any).agentId = (config as any).agentId as string; }
   }
 
 
@@ -286,7 +290,7 @@ export class AgentNode extends Node implements TriggerListener {
 
       // Update snapshot
       this.mcpServerTools.set(server, latest);
-    } catch (e) {
+    } catch (e: unknown) {
       this.logger.error?.('Agent: syncMcpToolsFromServer error', e);
     }
   }
