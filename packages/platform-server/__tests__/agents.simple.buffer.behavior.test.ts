@@ -46,7 +46,7 @@ vi.mock('../src/services/checkpointer.service', async (importOriginal) => {
 });
 
 import { Agent } from '../src/nodes/agent/agent.node';
-import type { TriggerMessage } from '../src/triggers/base.trigger';
+type TriggerMessage = { content: string; info: Record<string, unknown> };
 
 // Helper to make a configured agent
 function makeAgent() {

@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { SendSlackMessageToolStaticConfigSchema } from '../src/tools/send_slack_message.tool';
-import { SlackTriggerStaticConfigSchema } from '../src/triggers/slack.trigger';
+import { SlackTriggerStaticConfigSchema } from '../src/nodes/slackTrigger/slack.trigger';
 
 describe('Slack static config schemas', () => {
   it('SendSlackMessageToolStaticConfigSchema: accepts xoxb- tokens or reference field', () => {

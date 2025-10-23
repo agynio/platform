@@ -64,7 +64,6 @@ export class SlackTrigger extends Node<SlackTriggerConfig> {
       }
     }
     this.cfg = { app_token: { value: appToken.value, source: appToken.source } };
-    void this.start();
   }
 
   private async resolveAppToken(): Promise<string> {

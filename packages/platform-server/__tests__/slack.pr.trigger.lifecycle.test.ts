@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { SlackTrigger } from '../src/triggers/slack.trigger';
+import { SlackTrigger } from '../src/nodes/slackTrigger/slack.trigger';
 
 // Mock @slack/socket-mode to avoid network/real client
 vi.mock('@slack/socket-mode', () => {
@@ -42,8 +42,8 @@ describe('SlackTrigger and PRTrigger lifecycle', () => {
     const logger = new MockLogger() as any;
     const trigger = new SlackTrigger(logger);
     await trigger.setConfig({ app_token: 'xapp-test' });
-    await trigger.start();
-    await trigger.stop();
+    await trigger.provision();
+    await trigger.deprovision();
     expect(logger.info).toHaveBeenCalled();
   });
 
@@ -53,10 +53,10 @@ describe('SlackTrigger and PRTrigger lifecycle', () => {
     const logger = new MockLogger() as any;
     const trigger = new PRTrigger(gh as any, prs as any, logger, { owner: 'o', repos: ['r'] });
 
-    await trigger.start();
+    await trigger.provision();
     // Immediately stop to avoid scheduling timers long term
     await nextTick();
-    await trigger.stop();
+    await trigger.deprovision();
 
     // No assert on internal provision hooks since they are no-op; this just ensures start/stop path is exercised
     expect(logger.info).toHaveBeenCalled();
