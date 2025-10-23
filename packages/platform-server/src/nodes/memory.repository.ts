@@ -29,6 +29,7 @@ export interface ListEntry {
  * One Mongo document per { nodeId, scope[, threadId] } in the `memories` collection.
  * Paths map to dotted keys in doc.data: "/a/b/c" -> data["a.b.c"].
  */
+@Injectable()
 export class MemoryService {
   private collection: Collection<MemoryDoc>;
 
@@ -406,3 +407,4 @@ export class MemoryService {
       await this.collection.updateOne(this.filter, { $set: updates }, { upsert: true });
   }
 }
+import { Injectable } from '@nestjs/common';

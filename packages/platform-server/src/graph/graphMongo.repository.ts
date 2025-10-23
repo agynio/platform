@@ -1,8 +1,8 @@
 import { Collection, Db } from 'mongodb';
-import { LoggerService } from './logger.service';
-import { TemplateRegistry } from '../graph/templateRegistry';
+import { LoggerService } from '../core/services/logger.service';
+import { TemplateRegistry } from './templateRegistry';
 import { PersistedGraph, PersistedGraphEdge, PersistedGraphNode, PersistedGraphUpsertRequest, PersistedGraphUpsertResponse } from '../graph/types';
-import { validatePersistedGraph } from './graph.validation';
+import { validatePersistedGraph } from './graphSchema.validator';
 
 interface GraphDocument {
   _id: string; // name

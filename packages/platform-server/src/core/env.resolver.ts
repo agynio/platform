@@ -1,4 +1,5 @@
-import { VaultService, type VaultRef } from './vault.service';
+import { Injectable } from '@nestjs/common';
+import { VaultService, type VaultRef } from '../infra/vault/vault.service';
 import { parseVaultRef } from '../utils/refs';
 
 export class EnvError extends Error {
@@ -14,6 +15,7 @@ export class EnvError extends Error {
 
 export type EnvItem = { key: string; value: string; source?: 'static' | 'vault' };
 
+@Injectable()
 export class EnvService {
   constructor(private vault?: VaultService) {}
 

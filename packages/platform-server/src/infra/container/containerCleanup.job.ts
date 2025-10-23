@@ -1,8 +1,10 @@
 import { randomUUID } from 'node:crypto';
 import type { ContainerRegistryService } from './containerRegistry.service';
 import type { ContainerService } from './container.service';
-import { LoggerService } from './logger.service';
+import { Injectable } from '@nestjs/common';
+import { LoggerService } from '../../core/services/logger.service';
 
+@Injectable()
 export class ContainerCleanupService {
   private timer?: NodeJS.Timeout;
   private enabled: boolean;

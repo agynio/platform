@@ -2,6 +2,7 @@ import { FunctionTool, LLM, Reducer, ResponseMessage, SystemMessage, ToolCallMes
 import { LLMContext, LLMState } from '../types';
 import { LLMResponse, withLLM } from '@agyn/tracing';
 
+@Injectable()
 export class CallModelLLMReducer extends Reducer<LLMState, LLMContext> {
   constructor(
     private llm: LLM,
@@ -43,3 +44,4 @@ export class CallModelLLMReducer extends Reducer<LLMState, LLMContext> {
     return updated;
   }
 }
+import { Injectable } from '@nestjs/common';

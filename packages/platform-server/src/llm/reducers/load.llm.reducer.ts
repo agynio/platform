@@ -1,10 +1,12 @@
 import { Reducer } from '@agyn/llm';
 import type { LLMContext, LLMState } from '../types';
+import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../core/services/prisma.service';
 import { ConversationStateRepository } from '../repositories/conversationState.repository';
 import { LoggerService } from '../../services/logger.service';
 import { deserializeState } from '../utils/serialization';
 
+@Injectable()
 export class LoadLLMReducer extends Reducer<LLMState, LLMContext> {
   constructor(private logger: LoggerService) {
     super();

@@ -1,5 +1,6 @@
 import { Collection, Db, IndexSpecification, WithId } from 'mongodb';
-import { LoggerService } from './logger.service';
+import { Injectable } from '@nestjs/common';
+import { LoggerService } from '../core/services/logger.service';
 
 export type AgentRunStatus = 'running' | 'terminating' | 'terminated';
 
@@ -14,6 +15,7 @@ export type AgentRunDoc = {
   expiresAt?: Date;
 };
 
+@Injectable()
 export class AgentRunService {
   private col: Collection<AgentRunDoc>;
 

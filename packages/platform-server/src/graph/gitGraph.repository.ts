@@ -1,10 +1,10 @@
 import { promises as fs } from 'fs';
 import path from 'path';
 import { spawn } from 'child_process';
-import { LoggerService } from './logger.service';
-import { TemplateRegistry } from '../graph/templateRegistry';
+import { LoggerService } from '../core/services/logger.service';
+import { TemplateRegistry } from './templateRegistry';
 import { PersistedGraph, PersistedGraphEdge, PersistedGraphNode, PersistedGraphUpsertRequest, PersistedGraphUpsertResponse } from '../graph/types';
-import { validatePersistedGraph } from './graph.validation';
+import { validatePersistedGraph } from './graphSchema.validator';
 
 export interface GitGraphConfig {
   repoPath: string;

@@ -6,6 +6,7 @@ export type ConversationStateRecord = {
   state: unknown;
 };
 
+@Injectable()
 export class ConversationStateRepository {
   constructor(private prisma: PrismaClient) {}
 
@@ -23,3 +24,4 @@ export class ConversationStateRepository {
     });
   }
 }
+import { Injectable } from '@nestjs/common';

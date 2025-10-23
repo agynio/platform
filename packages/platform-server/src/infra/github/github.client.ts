@@ -1,10 +1,12 @@
+import { Injectable } from "@nestjs/common";
 import { Octokit } from "@octokit/rest";
 import { createAppAuth } from "@octokit/auth-app";
-import { ConfigService } from "./config.service";
+import { ConfigService } from "../../core/services/config.service";
 import { spawn } from "child_process";
 import { promises as fs } from "fs";
 import * as path from "path";
 
+@Injectable()
 export class GithubService {
   private octokit: Octokit;
   private personalOctokit: Octokit;

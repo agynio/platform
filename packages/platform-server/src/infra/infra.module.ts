@@ -1,9 +1,13 @@
 import { Module } from '@nestjs/common';
 import { ContainerService } from './container/container.service';
 import { VaultService } from './vault/vault.service';
+import { ContainerCleanupService } from './container/containerCleanup.job';
+import { NcpsKeyService } from './ncps/ncpsKey.service';
+import { GithubService } from './github/github.client';
+import { PRService } from './github/pr.usecase';
 
 @Module({
-  providers: [ContainerService, VaultService],
-  exports: [ContainerService, VaultService],
+  providers: [ContainerService, VaultService, ContainerCleanupService, NcpsKeyService, GithubService, PRService],
+  exports: [],
 })
 export class InfraModule {}
