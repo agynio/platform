@@ -1,10 +1,10 @@
-import { ContainerService } from '../core/services/container.service';
+import { ContainerService } from '../services/container.service';
 
 /**
  * Lightweight entity wrapper representing a running (or created) container.
  * Provides convenience methods delegating to ContainerService while binding the docker id.
  */
-export class ContainerEntity {
+export class ContainerHandle {
   constructor(
     private service: ContainerService,
     public readonly id: string,
