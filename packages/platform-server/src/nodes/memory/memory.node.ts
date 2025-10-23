@@ -23,20 +23,20 @@ export type MemoryNodeStaticConfig = z.infer<typeof MemoryNodeStaticConfigSchema
  * MemoryNode factory returns an accessor to build a MemoryService scoped to the node and thread.
  * Inject Db from MongoService.getDb() at template wiring time.
  */
-export class MemoryNode implements Node<Partial<MemoryNodeConfig> & Partial<MemoryNodeStaticConfig>> {
+import Node from "../base/Node";
+
+export class MemoryNode extends Node {
   constructor(private db: Db, private nodeId: string) {}
 
   private config: MemoryNodeConfig = { scope: 'global' };
 
   // Accept either internal config shape or static schema shape; map 'thread' -> 'perThread'.
-  setConfig(config: Partial<MemoryNodeConfig> & Partial<MemoryNodeStaticConfig>) {
-    this.configure(config);
-  }
+  
 
-  configure(config: Partial<MemoryNodeConfig> & Partial<MemoryNodeStaticConfig>) {
+  setConfig(config: Partial<MemoryNodeConfig> & Partial<MemoryNodeStaticConfig>) {
     const next: Partial<MemoryNodeConfig> = { ...this.config };
     if (config.scope !== undefined) {
-      const scopeVal = (config as any).scope;
+      const scopeVal = config.scope as MemoryScope | 'thread';
       next.scope = scopeVal === 'thread' ? 'perThread' : scopeVal;
     }
     if (config.collectionPrefix !== undefined) next.collectionPrefix = config.collectionPrefix;
@@ -44,9 +44,9 @@ export class MemoryNode implements Node<Partial<MemoryNodeConfig> & Partial<Memo
     this.config = { ...this.config, ...next } as MemoryNodeConfig;
   }
 
-  async start(): Promise<void> { /* no-op */ }
-  async stop(): Promise<void> { /* no-op */ }
-  async delete(): Promise<void> { /* no-op */ }
+  async provision(): Promise<void> { /* no-op */ }
+  async deprovision(): Promise<void> { /* no-op */ }
+  
 
   getMemoryService(opts: { threadId?: string }): MemoryService {
     const threadId = this.config.scope === 'perThread' ? opts.threadId : undefined;

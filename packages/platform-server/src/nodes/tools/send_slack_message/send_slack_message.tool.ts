@@ -64,7 +64,7 @@ export class SendSlackMessageFunctionTool extends FunctionTool<typeof sendSlackI
     const { channel: channelInput, text, thread_ts, broadcast, ephemeral_user } = args;
     const cfg = this.deps.getConfig();
     if (!cfg) throw new Error('SendSlackMessageTool not configured: bot_token is required');
-    const bot = normalizeTokenRef(cfg.bot_token as any) as TokenRef;
+    const bot = normalizeTokenRef(cfg.bot_token) as TokenRef;
     if ((bot.source || 'static') === 'vault') parseVaultRef(bot.value);
     else if (!bot.value.startsWith('xoxb-')) throw new Error('Slack bot token must start with xoxb-');
     const channel = channelInput || cfg.default_channel;
@@ -93,7 +93,7 @@ export class SendSlackMessageFunctionTool extends FunctionTool<typeof sendSlackI
         attachments: [],
         ...(thread_ts ? { thread_ts } : {}),
         ...(thread_ts && broadcast ? { reply_broadcast: true } : {}),
-      } as any);
+      });
       if (!resp.ok) return JSON.stringify({ ok: false, error: resp.error });
       const thread =
         (resp.message && 'thread_ts' in resp.message
@@ -108,8 +108,8 @@ export class SendSlackMessageFunctionTool extends FunctionTool<typeof sendSlackI
         thread_ts: thread,
         broadcast: !!broadcast,
       });
-    } catch (err: any) {
-      const msg = err?.message || String(err);
+    } catch (err: unknown) {
+      const msg = (err as { message?: string })?.message || String(err);
       logger.error('Error sending Slack message', msg);
       return JSON.stringify({ ok: false, error: msg });
     }

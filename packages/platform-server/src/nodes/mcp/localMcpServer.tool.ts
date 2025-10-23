@@ -5,9 +5,9 @@ import z from 'zod';
 export interface McpExecDelegate {
   callTool: (
     name: string,
-    args: any,
+    args: unknown,
   ) => Promise<{ isError?: boolean; content?: string; structuredContent?: unknown; raw?: unknown }>;
-  getLogger: () => { debug: (...a: any[]) => void; error: (...a: any[]) => void }; // minimal logger surface
+  getLogger: () => { debug: (...a: unknown[]) => void; error: (...a: unknown[]) => void }; // minimal logger surface
 }
 
 interface LocalMCPServerToolDeps {

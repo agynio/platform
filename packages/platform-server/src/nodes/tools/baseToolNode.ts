@@ -1,5 +1,7 @@
 import { FunctionTool } from '@agyn/llm';
 
-export abstract class BaseToolNode {
+import Node from "../base/Node";
+
+export abstract class BaseToolNode extends Node {
   abstract getTool(): FunctionTool;
 }

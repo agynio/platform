@@ -57,13 +57,15 @@ export class CallAgentFunctionTool extends FunctionTool<typeof callAgentInvocati
         return res.text;
       }
       // async / ignore: fire and forget
-      void targetAgent.invoke(targetThreadId, [triggerMessage]).catch((err: any) => {
-        logger.error('Error calling agent (async/ignore mode)', err?.message || err, err?.stack);
+      void targetAgent.invoke(targetThreadId, [triggerMessage]).catch((err: unknown) => {
+        const e = err as { message?: string; stack?: string } | string | undefined;
+        logger.error('Error calling agent (async/ignore mode)', (e as { message?: string } | string | undefined)?.message || e, (e as { stack?: string } | string | undefined)?.stack);
       });
       return JSON.stringify({ status: 'sent' });
-    } catch (err: any) {
-      logger.error('Error calling agent', err?.message || err, err?.stack);
-      return `Error calling agent: ${err?.message || String(err)}`;
+    } catch (err: unknown) {
+      const e = err as { message?: string; stack?: string } | string | undefined;
+      logger.error('Error calling agent', (e as { message?: string } | string | undefined)?.message || e, (e as { stack?: string } | string | undefined)?.stack);
+      return `Error calling agent: ${(e as { message?: string } | string | undefined)?.message || String(e)}`;
     }
   }
 }

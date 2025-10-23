@@ -30,8 +30,8 @@ export class MemoryToolNode extends BaseToolNode {
       | { getMemoryService: (opts: { threadId?: string }) => MemoryService },
   ) {
     if (typeof source === 'function') this.memoryFactory = source as (opts: { threadId?: string }) => MemoryService;
-    else if (source && typeof (source as any).getMemoryService === 'function')
-      this.memoryFactory = (opts) => (source as any).getMemoryService(opts);
+    else if (source && typeof (source as { getMemoryService?: unknown }).getMemoryService === 'function')
+      this.memoryFactory = (opts) => source.getMemoryService!(opts);
     else throw new Error('Invalid memory source');
     this.toolInstance = undefined;
   }

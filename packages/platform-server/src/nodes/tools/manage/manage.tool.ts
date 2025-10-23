@@ -53,11 +53,11 @@ export class ManageFunctionTool extends FunctionTool<typeof manageInvocationSche
       try {
         const res = await target.agent.invoke(childThreadId, [triggerMessage]);
         return res?.text;
-      } catch (err: any) {
+      } catch (err: unknown) {
         logger.error('Manage: send_message failed', {
           worker: target.name,
           childThreadId,
-          error: err?.message || String(err),
+          error: (err as { message?: string })?.message || String(err),
         });
         throw err;
       }
@@ -70,8 +70,8 @@ export class ManageFunctionTool extends FunctionTool<typeof manageInvocationSche
         try {
           const threads = w.agent.listActiveThreads(prefix) || [];
           for (const t of threads) if (t.startsWith(prefix)) ids.add(t.slice(prefix.length));
-        } catch (err: any) {
-          logger.error('Manage: listActiveThreads failed', { worker: w.name, error: err?.message || String(err) });
+        } catch (err: unknown) {
+          logger.error('Manage: listActiveThreads failed', { worker: w.name, error: (err as { message?: string })?.message || String(err) });
         }
       }
       return JSON.stringify({ activeTasks: ids.size, childThreadIds: Array.from(ids.values()) });

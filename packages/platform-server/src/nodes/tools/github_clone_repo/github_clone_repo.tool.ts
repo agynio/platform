@@ -40,7 +40,7 @@ export class GithubCloneRepoFunctionTool extends FunctionTool<typeof githubClone
   private async resolveToken(): Promise<string> {
     const staticCfg = this.node.config();
     const tokenRef = staticCfg?.token;
-    const authRef = staticCfg?.authRef as any; // legacy optional
+    const authRef = staticCfg?.authRef as string | { value: string; source?: 'static' | 'vault' } | undefined; // legacy optional
     // Preferred new token field
     if (tokenRef) {
       if (tokenRef.source === 'vault') {

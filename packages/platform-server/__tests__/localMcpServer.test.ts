@@ -136,11 +136,11 @@ describe('LocalMCPServer (mock)', () => {
     (server as any).setContainerProvider(mockProvider);
     const cfg: McpServerConfig = { namespace: 'mock', command: 'ignored' } as any;
     await server.setConfig(cfg);
-    await server.start();
+    await server.provision();
   }, 10000);
 
   afterAll(async () => {
-    await server.stop();
+    await server.deprovision();
   });
 
   it('lists tools', async () => {

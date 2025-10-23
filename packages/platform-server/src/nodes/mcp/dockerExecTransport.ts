@@ -28,7 +28,7 @@ const serializeMessageInline = (msg: JSONRPCMessage) => JSON.stringify(msg) + '\
 
 export class DockerExecTransport {
   onmessage?: (msg: JSONRPCMessage) => void;
-  onerror?: (err: any) => void;
+  onerror?: (err: unknown) => void;
   onclose?: () => void;
 
   private _readBuffer = new ReadBufferInline();
@@ -44,10 +44,10 @@ export class DockerExecTransport {
     private docker: Docker,
     private logger: LoggerService,
     private startExec: () => Promise<{
-      stream?: any;
-      stdin?: any;
-      stdout?: any;
-      stderr?: any;
+      stream?: unknown;
+      stdin?: unknown;
+      stdout?: unknown;
+      stderr?: unknown;
       inspect: () => Promise<{ ExitCode?: number }>;
     }>,
     private options: { demux: boolean },
@@ -113,7 +113,7 @@ export class DockerExecTransport {
 
   async send(message: JSONRPCMessage): Promise<void> {
     if (this._closed) throw new Error('Transport closed');
-    if (!this._stdin || (this._stdin as any).writableEnded || (this._stdin as any).destroyed) {
+    if (!this._stdin || (this._stdin as NodeJS.WritableStream).writableEnded || (this._stdin as NodeJS.WritableStream).destroyed) {
       throw new Error('Transport closed');
     }
     const payload = serializeMessageInline(message);

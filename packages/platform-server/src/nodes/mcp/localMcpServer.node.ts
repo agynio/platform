@@ -112,7 +112,7 @@ export class LocalMCPServer implements McpServer, Provisionable, DynamicConfigur
   private toolsDiscovered = false; // tracks if we've done initial tool discovery
   // Resilient start state
   private wantStart = false; // intent flag indicating someone requested start
-  private startWaiters: { resolve: () => void; reject: (e: any) => void }[] = [];
+  private startWaiters: { resolve: () => void; reject: (e: unknown) => void }[] = [];
   private startRetryTimer?: NodeJS.Timeout;
   private dependencyTimeoutTimer?: NodeJS.Timeout;
   private emitter = new EventEmitter();
@@ -154,7 +154,7 @@ export class LocalMCPServer implements McpServer, Provisionable, DynamicConfigur
         getName: () => tool.name,
         getDescription: () => tool.description || 'MCP tool',
         getDelegate: () => ({
-          callTool: async (name: string, args: any) => {
+          callTool: async (name: string, args: unknown) => {
             const res = await this.callTool(name, args, { threadId: '__mcp_exec__' });
             return {
               isError: res.isError,
@@ -237,7 +237,7 @@ export class LocalMCPServer implements McpServer, Provisionable, DynamicConfigur
             WorkingDir: workdir,
             Env: envArr,
           });
-          const stream: any = await new Promise((resolve, reject) => {
+          const stream: unknown = await new Promise((resolve, reject) => {
             exec.start({ hijack: true, stdin: true }, (err, s) => {
               if (err) return reject(err);
               if (!s) return reject(new Error('No stream from exec.start'));
@@ -418,7 +418,7 @@ export class LocalMCPServer implements McpServer, Provisionable, DynamicConfigur
 
   async callTool(
     name: string,
-    args: any,
+    args: unknown,
     options?: { timeoutMs?: number; threadId?: string },
   ): Promise<McpToolCallResult> {
     if (!this.cfg) throw new Error('LocalMCPServer: config not yet set via setConfig');
@@ -462,7 +462,7 @@ export class LocalMCPServer implements McpServer, Provisionable, DynamicConfigur
             WorkingDir: workdir,
             Env: envArr,
           });
-          const stream: any = await new Promise((resolve, reject) => {
+          const stream: unknown = await new Promise((resolve, reject) => {
             exec.start({ hijack: true, stdin: true }, (err, s) => {
               if (err) return reject(err);
               if (!s) return reject(new Error('No stream from exec.start'));
@@ -582,7 +582,7 @@ export class LocalMCPServer implements McpServer, Provisionable, DynamicConfigur
   }
 
   // Unified event subscription supporting core and MCP-specific events
-  on(event: 'ready' | 'exit' | 'error' | 'restarted' | 'mcp.tools_updated', handler: (...a: any[]) => void): this {
+  on(event: 'ready' | 'exit' | 'error' | 'restarted' | 'mcp.tools_updated', handler: (...a: unknown[]) => void): this {
     this.emitter.on(event, handler);
     return this;
   }
@@ -793,7 +793,7 @@ export class LocalMCPServer implements McpServer, Provisionable, DynamicConfigur
   }
 
   // ----------------- Resilient start internals -----------------
-  private flushStartWaiters(err?: any) {
+  private flushStartWaiters(err?: unknown) {
     const waiters = this.startWaiters;
     this.startWaiters = [];
     for (const w of waiters) {
@@ -883,7 +883,7 @@ export class LocalMCPServer implements McpServer, Provisionable, DynamicConfigur
         this.started = true;
         this.logger.info(`[MCP:${this.namespace}] Started successfully with ${this.toolsCache?.length || 0} tools`);
         this.flushStartWaiters();
-      } catch (e: any) {
+      } catch (e: unknown) {
         this.logger.error(`[MCP:${this.namespace}] Start attempt failed`, e);
         this.restartAttempts++;
         // Immediately reject any pending starters so callers of provision() can observe the error

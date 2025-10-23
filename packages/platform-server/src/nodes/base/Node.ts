@@ -1,0 +1,147 @@
+import { EventEmitter } from 'events';
+import type { ProvisionStatus } from '../../graph/capabilities.js';
+
+export type NodeStatusState =
+  | 'created'
+  | 'provisioning'
+  | 'ready'
+  | 'deprovisioning'
+  | 'provisioning_error'
+  | 'deprovisioning_error';
+
+export type StatusChangedEvent = { prev: NodeStatusState; next: NodeStatusState; at: number };
+export type ConfigChangedEvent<TConfig = unknown> = { config: TConfig; at: number };
+
+export class Node<TConfig = unknown> extends EventEmitter {
+  private _status: NodeStatusState = 'created';
+  private _pending: 'provision' | 'deprovision' | null = null;
+  protected _config: TConfig = {} as TConfig;
+
+  protected emitStatusChanged(prev: NodeStatusState, next: NodeStatusState): void {
+    const at = Date.now();
+    this.emit('status_changed', { prev, next, at } satisfies StatusChangedEvent);
+  }
+  protected emitConfigChanged(): void {
+    const at = Date.now();
+    const cfg = (this._config && typeof this._config === 'object') ? { ...(this._config as object) } : this._config;
+    this.emit('config_changed', { config: cfg as TConfig, at } satisfies ConfigChangedEvent<TConfig>);
+  }
+
+  protected setStatus(next: NodeStatusState): void {
+    if (this._status === next) return;
+    const prev = this._status;
+    this._status = next;
+    this.emitStatusChanged(prev, next);
+  }
+  get status(): NodeStatusState {
+    return this._status;
+  }
+
+  getProvisionStatus(): ProvisionStatus<{ phase?: 'provision' | 'deprovision' }> {
+    const s = this._status;
+    if (s === 'provisioning_error') return { state: 'error', details: { phase: 'provision' } };
+    if (s === 'deprovisioning_error') return { state: 'error', details: { phase: 'deprovision' } };
+    if (s === 'created') return { state: 'not_ready' };
+    if (s === 'provisioning') return { state: 'provisioning' };
+    if (s === 'ready') return { state: 'ready' };
+    if (s === 'deprovisioning') return { state: 'deprovisioning' };
+    return { state: 'error' };
+  }
+
+  onProvisionStatusChange(listener: (s: ProvisionStatus) => void): () => void {
+    const h = () => listener(this.getProvisionStatus());
+    this.on('status_changed', h);
+    return () => this.off('status_changed', h);
+  }
+
+  async setConfig(cfg: TConfig): Promise<void> {
+    if (this._pending || this._status === 'provisioning' || this._status === 'deprovisioning') return;
+    this._config = (cfg ?? ({} as TConfig));
+    this.emitConfigChanged();
+  }
+
+  /* removed start */
+  // start() removed; use provision(): Promise<void> { await this.provision(); }
+  /* removed stop */
+  // stop() removed; use deprovision(): Promise<void> { await this.deprovision(); }
+  /* removed delete */
+  // delete() removed: Promise<void> { /* no-op */ }
+
+  async provision(): Promise<void> {
+    if (this._pending || this._status === 'provisioning' || this._status === 'deprovisioning') return;
+    if (this._status === 'ready') return;
+    this._pending = 'provision';
+    this.setStatus('provisioning');
+    try {
+      await this.doProvision();
+      this.setStatus('ready');
+    } catch {
+      this.setStatus('provisioning_error');
+    } finally {
+      this._pending = null;
+    }
+  }
+
+  async deprovision(): Promise<void> {
+    if (this._pending || this._status === 'provisioning' || this._status === 'deprovisioning') return;
+    if (this._status === 'created') return;
+    this._pending = 'deprovision';
+    this.setStatus('deprovisioning');
+    try {
+      await this.doDeprovision();
+      this.setStatus('created');
+    } catch {
+      this.setStatus('deprovisioning_error');
+    } finally {
+      this._pending = null;
+    }
+  }
+
+  protected async doProvision(): Promise<void> { /* override */ }
+  protected async doDeprovision(): Promise<void> { /* override */ }
+
+  static async wait(
+    target: {
+      on(event: 'status_changed', handler: (ev: StatusChangedEvent) => void): void;
+      off(event: 'status_changed', handler: (ev: StatusChangedEvent) => void): void;
+      status?: NodeStatusState;
+    },
+    status: NodeStatusState,
+    timeoutMs = 60000,
+  ): Promise<void> {
+    const get = () => target.status as NodeStatusState | undefined;
+    if (get && get() === status) return;
+    return await new Promise<void>((resolve, reject) => {
+      const cleanup = () => {
+        clearTimeout(to);
+        target.off('status_changed', onChange);
+      };
+      const onChange = (ev: StatusChangedEvent) => {
+        if (ev.next === status) {
+          cleanup();
+          resolve();
+        }
+      };
+      const to = setTimeout(() => {
+        cleanup();
+        const err = new Error(`wait timeout after ${timeoutMs}ms`) as Error & { code: 'TimeoutError' };
+        err.code = 'TimeoutError';
+        reject(err);
+      }, timeoutMs);
+      target.on('status_changed', onChange);
+    });
+  }
+
+  async reprovision(mutator: (cfg: TConfig) => TConfig | void): Promise<void> {
+    if (this._pending || this._status === 'provisioning' || this._status === 'deprovisioning') return;
+    await this.deprovision();
+    try {
+      const next = mutator(this._config as TConfig);
+      if (next && typeof next === 'object') this._config = next as TConfig;
+      this.emitConfigChanged();
+    } catch {}
+    await this.provision();
+  }
+}
+
+export default Node;

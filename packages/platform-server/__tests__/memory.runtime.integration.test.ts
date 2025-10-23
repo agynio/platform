@@ -60,7 +60,7 @@ function makeRuntime(db: Db, placement: 'after_system'|'last_message') {
       const MemoryConnectorNode = mod.MemoryConnectorNode;
       const factory = (opts: { threadId?: string }) => new MemoryService(db, ctx.nodeId, opts.threadId ? 'perThread' : 'global', opts.threadId);
       const n = new MemoryConnectorNode(factory);
-      n.configure({ placement, content: 'tree', maxChars: 4000 });
+      n.setConfig({ placement, content: 'tree', maxChars: 4000 });
       return n as any;
     },
     { sourcePorts: { $self: { kind: 'instance' } } },
@@ -161,7 +161,7 @@ describe.skipIf(!RUN_MONGOMS)('Runtime integration: memory injection via LiveGra
         const MemoryConnectorNode = mod.MemoryConnectorNode;
         const factory = (opts: { threadId?: string }) => new MemoryService(db, ctx.nodeId, opts.threadId ? 'perThread' : 'global', opts.threadId);
         const n = new MemoryConnectorNode(factory);
-        n.configure({ placement: 'after_system', content: 'full', maxChars: 20 });
+        n.setConfig({ placement: 'after_system', content: 'full', maxChars: 20 });
         return n as any;
       },
       { sourcePorts: { $self: { kind: 'instance' } } },

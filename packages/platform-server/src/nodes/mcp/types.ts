@@ -7,9 +7,9 @@ export type JSONRPCMessage = {
   jsonrpc: '2.0';
   id?: number | string | null;
   method?: string;
-  params?: any;
-  result?: any;
-  error?: { code: number; message: string; data?: any };
+  params?: unknown;
+  result?: unknown;
+  error?: { code: number; message: string; data?: unknown };
 };
 
 /**
@@ -25,8 +25,8 @@ export interface McpTool {
 export interface McpToolCallResult {
   isError?: boolean;
   content?: string; // textual fallback
-  structuredContent?: any; // object validated by outputSchema if provided
-  raw?: any; // full raw SDK result
+  structuredContent?: unknown; // object validated by outputSchema if provided
+  raw?: unknown; // full raw SDK result
 }
 
 // Minimal internal type for persisted MCP state
@@ -52,11 +52,11 @@ export interface McpServer {
   start(): Promise<void>;
   stop(): Promise<void>;
   listTools(force?: boolean): FunctionTool[];
-  callTool(name: string, args: any, options?: { timeoutMs?: number; threadId?: string }): Promise<McpToolCallResult>;
-  on(event: 'ready', handler: (...a: any[]) => void): this;
-  on(event: 'exit', handler: (...a: any[]) => void): this;
-  on(event: 'error', handler: (...a: any[]) => void): this;
-  on(event: 'restarted', handler: (...a: any[]) => void): this;
+  callTool(name: string, args: unknown, options?: { timeoutMs?: number; threadId?: string }): Promise<McpToolCallResult>;
+  on(event: 'ready', handler: (...a: unknown[]) => void): this;
+  on(event: 'exit', handler: (...a: unknown[]) => void): this;
+  on(event: 'error', handler: (...a: unknown[]) => void): this;
+  on(event: 'restarted', handler: (...a: unknown[]) => void): this;
   on(event: 'mcp.tools_updated', handler: (payload: { tools: FunctionTool[]; updatedAt: number }) => void): this;
 }
 
@@ -73,7 +73,7 @@ export interface DockerExecStreams {
  */
 export interface JsonRpcTransport {
   onmessage?: (msg: JSONRPCMessage) => void;
-  onerror?: (err: any) => void;
+  onerror?: (err: unknown) => void;
   onclose?: () => void;
   start(): Promise<void>;
   send(msg: JSONRPCMessage): Promise<void>;

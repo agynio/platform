@@ -6,14 +6,14 @@ interface JSONSchema {
   properties?: Record<string, JSONSchema>;
   required?: string[];
   items?: JSONSchema | JSONSchema[];
-  enum?: any[];
+  enum?: unknown[];
   description?: string;
   anyOf?: JSONSchema[];
   oneOf?: JSONSchema[];
   allOf?: JSONSchema[];
   nullable?: boolean;
   $ref?: string; // Not resolved in this lightweight implementation
-  default?: any;
+  default?: unknown;
 }
 
 /**
@@ -29,7 +29,7 @@ export function jsonSchemaToZod(schema: JSONSchema | undefined): ZodTypeAny {
     // If mixed types, fallback to union of literals; if single type, z.enum when all strings
     const allStrings = schema.enum.every((e) => typeof e === 'string');
     if (allStrings) return z.enum([...new Set(schema.enum)] as [string, ...string[]]);
-    return z.union(schema.enum.map((v) => z.literal(v)) as [any, ...any[]]);
+    return z.union(schema.enum.map((v) => z.literal(v)) as [z.ZodTypeAny, ...z.ZodTypeAny[]]);
   }
 
   // Support type arrays (anyOf semantics over primitive types)
@@ -106,7 +106,7 @@ export function jsonSchemaToZod(schema: JSONSchema | undefined): ZodTypeAny {
   }
 
   if (schema.default !== undefined) {
-  try { (base as any).default?.(schema.default); } catch { /* ignore */ }
+    try { (base as unknown as z.ZodTypeAny).default?.(schema.default as unknown); } catch { /* ignore */ }
   }
 
   return base;

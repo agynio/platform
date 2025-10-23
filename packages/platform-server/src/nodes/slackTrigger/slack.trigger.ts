@@ -1,4 +1,5 @@
-import { BaseTrigger, TriggerHumanMessage } from './base.trigger';
+import { TriggerHumanMessage, TriggerListener } from './base.trigger';
+import Node from '../base/Node';
 import { LoggerService } from '../../core/services/logger.service';
 import { z } from 'zod';
 import { SocketModeClient } from '@slack/socket-mode';
@@ -34,22 +35,25 @@ export const SlackTriggerExposedStaticConfigSchema = z
  * Starts a Socket Mode connection to Slack and relays inbound user messages
  * (non-bot, non-thread broadcast) to subscribers via notify().
  */
-export class SlackTrigger extends BaseTrigger {
-  private cfg: { app_token: { value: string; source: 'static' | 'vault' } } | null = null;
+type SlackTokenRef = { value: string; source: 'static' | 'vault' };
+type SlackTriggerConfig = { app_token: SlackTokenRef };
+
+export class SlackTrigger extends Node<SlackTriggerConfig> {
+  private cfg: SlackTriggerConfig | null = null;
   private client: SocketModeClient | null = null;
   private vault?: VaultService;
 
-  constructor(logger: LoggerService, vault?: VaultService) {
-    super(logger);
+  constructor(private readonly logger: LoggerService, vault?: VaultService) {
+    super();
     this.vault = vault;
   }
 
   async setConfig(cfg: Record<string, unknown>): Promise<void> {
     const parsed = SlackTriggerStaticConfigSchema.parse(cfg || {});
     // Normalize to { value, source }
-    const appToken = normalizeTokenRef(parsed.app_token as any);
+    const appToken = normalizeTokenRef(parsed.app_token);
     // Early validation: keep fail-fast semantics
-    if ((appToken.source || 'static') === 'vault') {
+    if (appToken.source === 'vault') {
       if (!this.vault || !this.vault.isEnabled()) {
         throw new Error('Vault is disabled but a vault reference was provided for app_token');
       }
@@ -59,8 +63,7 @@ export class SlackTrigger extends BaseTrigger {
         throw new Error('Slack app-level token must start with xapp-');
       }
     }
-    this.cfg = { app_token: { value: appToken.value, source: (appToken.source || 'static') as 'static' | 'vault' } };
-    void this.start();
+    this.cfg = { app_token: { value: appToken.value, source: appToken.source } };
   }
 
   private async resolveAppToken(): Promise<string> {
@@ -160,15 +163,22 @@ export class SlackTrigger extends BaseTrigger {
     this.logger.info('SlackTrigger stopped');
   }
 
-  // Backward-compatible public API
-  async start(): Promise<void> {
-    await this.provision();
-  }
-  async stop(): Promise<void> {
-    await this.deprovision();
-  }
 
   async setDynamicConfig(_cfg: Record<string, unknown>): Promise<void> {
     /* no dynamic config */
   }
+
+  // Fan-out of trigger messages
+  private listeners: TriggerListener[] = [];
+  async subscribe(listener: TriggerListener): Promise<void> {
+    this.listeners.push(listener);
+  }
+  async unsubscribe(listener: TriggerListener): Promise<void> {
+    this.listeners = this.listeners.filter((l) => l !== listener);
+  }
+  protected async notify(thread: string, messages: TriggerHumanMessage[]): Promise<void> {
+    if (!messages.length) return;
+    await Promise.all(this.listeners.map(async (listener) => listener.invoke(thread, messages)));
+  }
+
 }

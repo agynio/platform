@@ -1,7 +1,7 @@
 import { SystemMessage } from '@langchain/core/messages';
 import { z } from 'zod';
 import { MemoryService } from '../../services/memory.service';
-import type { Node } from '../types';
+import Node from '../base/Node';
 
 export interface MemoryConnectorConfig {
   placement: 'after_system' | 'last_message';
@@ -19,8 +19,7 @@ export const MemoryConnectorStaticConfigSchema = z
   .strict();
 export type MemoryConnectorStaticConfig = z.infer<typeof MemoryConnectorStaticConfigSchema>;
 
-export class MemoryConnectorNode
-  implements Node<Partial<MemoryConnectorConfig> & Partial<MemoryConnectorStaticConfig>>
+export class MemoryConnectorNode extends Node
 {
   constructor(private serviceFactory: (opts: { threadId?: string }) => MemoryService) {}
 
@@ -34,8 +33,8 @@ export class MemoryConnectorNode
   ) {
     if (typeof factoryOrNode === 'function') {
       this.serviceFactory = factoryOrNode as (opts: { threadId?: string }) => MemoryService;
-    } else if (factoryOrNode && typeof (factoryOrNode as any).getMemoryService === 'function') {
-      this.serviceFactory = (opts: { threadId?: string }) => (factoryOrNode as any).getMemoryService(opts);
+    } else if (factoryOrNode && typeof (factoryOrNode as { getMemoryService?: unknown }).getMemoryService === 'function') {
+      this.serviceFactory = (opts: { threadId?: string }) => factoryOrNode.getMemoryService(opts);
     } else {
       throw new Error('Invalid argument to setServiceFactory');
     }
@@ -51,26 +50,19 @@ export class MemoryConnectorNode
   }
 
   setConfig(config: Partial<MemoryConnectorConfig> & Partial<MemoryConnectorStaticConfig>) {
-    this.configure(config);
+    this.setConfig(config);
   }
 
-  configure(config: Partial<MemoryConnectorConfig> & Partial<MemoryConnectorStaticConfig>) {
+  setConfig(config: Partial<MemoryConnectorConfig> & Partial<MemoryConnectorStaticConfig>) {
     const next: Partial<MemoryConnectorConfig> = { ...this.config };
-    if (config.placement !== undefined) next.placement = config.placement as any;
-    if (config.content !== undefined) next.content = config.content as any;
+    if (config.placement !== undefined) next.placement = config.placement as MemoryConnectorConfig['placement'];
+    if (config.content !== undefined) next.content = config.content as MemoryConnectorConfig['content'];
     if (config.maxChars !== undefined) next.maxChars = config.maxChars;
     this.config = { ...this.config, ...next } as MemoryConnectorConfig;
   }
 
-  async start(): Promise<void> {
-    /* no-op */
-  }
-  async stop(): Promise<void> {
-    /* no-op */
-  }
-  async delete(): Promise<void> {
-    /* no-op */
-  }
+  async provision(): Promise<void> { /* no-op */ }
+  async deprovision(): Promise<void> { /* no-op */ }
 
   getPlacement(): MemoryConnectorConfig['placement'] {
     return this.config.placement;
