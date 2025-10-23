@@ -15,7 +15,8 @@ export class LoadLLMReducer extends Reducer<LLMState, LLMContext> {
       const prisma = PrismaService.getInstance(this.logger).getClient();
       if (!prisma) return state; // persistence disabled
       const repo = new ConversationStateRepository(prisma);
-      const existing = await repo.get(ctx.threadId, ctx.callerAgent.getAgentNodeId?.());
+      const nodeId = ctx.callerAgent.getAgentNodeId?.() || 'agent';
+      const existing = await repo.get(ctx.threadId, nodeId);
       if (!existing?.state) return state;
       // Merge: existing.messages + incoming messages; keep latest summary
       const persisted = deserializeState(existing.state as any);
@@ -23,6 +24,8 @@ export class LoadLLMReducer extends Reducer<LLMState, LLMContext> {
         summary: persisted.summary,
         messages: [...persisted.messages, ...state.messages],
       };
+      // Record the start index of the current turn for deterministic routing
+      ctx.turnStartIndex = merged.messages.length;
       return merged;
     } catch (e) {
       this.logger.error('LoadLLMReducer error: %s', (e as Error)?.message || String(e));
@@ -30,4 +33,3 @@ export class LoadLLMReducer extends Reducer<LLMState, LLMContext> {
     }
   }
 }
-

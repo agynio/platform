@@ -182,20 +182,20 @@ export class AgentNode extends Node<AgentStaticConfig | undefined> implements Tr
     );
 
 // Save state after tools, non-branching, then summarize
-routers.set('tools_save', new StaticLLMRouter(new SaveLLMReducer(this.logger), 'summarize'));
+    routers.set('tools_save', new StaticLLMRouter(new SaveLLMReducer(this.logger), 'summarize'));
 
-// Save state on no-tools path, non-branching, then decide to enforce or end
-routers.set('save', new StaticLLMRouter(new SaveLLMReducer(this.logger), 'after_save'));
+    // Save state on no-tools path, non-branching, then decide to enforce or end
+    routers.set('save', new StaticLLMRouter(new SaveLLMReducer(this.logger), 'after_save'));
 
-// After save: enforce if enabled, else end
-routers.set(
-  'after_save',
-  new ConditionalLLMRouter(
-    // Use EnforceToolsLLMReducer only for routing decision; it does not mutate ctx
-    new EnforceToolsLLMReducer(this.logger),
-    (state) => (this.config.restrictOutput ? 'enforceTools' : null),
-  ),
-);
+    // After save: enforce if enabled, else end
+    routers.set(
+      'after_save',
+      new ConditionalLLMRouter(
+        // Use EnforceToolsLLMReducer only for routing decision; it does not mutate ctx
+        new EnforceToolsLLMReducer(this.logger),
+        () => (this.config.restrictOutput ? 'enforceTools' : null),
+      ),
+    
     );
 
     const loop = new Loop<LLMState, LLMContext>(routers);

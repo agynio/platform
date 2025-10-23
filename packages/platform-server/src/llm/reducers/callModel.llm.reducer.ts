@@ -11,7 +11,7 @@ export class CallModelLLMReducer extends Reducer<LLMState, LLMContext> {
     super();
   }
 
-  async invoke(state: LLMState): Promise<LLMState> {
+  async invoke(state: LLMState, ctx: LLMContext): Promise<LLMState> {
     const input = [
       SystemMessage.fromText(this.params.systemPrompt), //
       ...state.messages,
@@ -36,9 +36,12 @@ export class CallModelLLMReducer extends Reducer<LLMState, LLMContext> {
       }
     });
 
-    return {
+    const updated: LLMState = {
       ...state,
       messages: [...state.messages, response],
     };
+    // Track last model index for routing decisions after save
+    ctx.lastModelIndex = updated.messages.length - 1;
+    return updated;
   }
 }

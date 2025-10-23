@@ -65,4 +65,7 @@ export type LLMContext = {
   threadId: string;
   finishSignal: Signal;
   callerAgent: AgentNode;
+  // Deterministic routing helpers
+  turnStartIndex?: number; // index in state.messages at start of current turn
+  lastModelIndex?: number; // index of last ResponseMessage produced by model
 };
