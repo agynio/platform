@@ -9,13 +9,13 @@ export class MongoService {
   private db?: Db;
 
   constructor(
-    private config: ConfigService,
+    private configService: ConfigService,
     private logger: LoggerService,
   ) {}
 
   async connect() {
     if (this.client) return; // already connected
-    this.client = new MongoClient(this.config.mongodbUrl, {
+    this.client = new MongoClient(this.configService.mongodbUrl, {
       maxPoolSize: 20,
       minPoolSize: 2,
       serverSelectionTimeoutMS: 8000,

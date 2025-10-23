@@ -30,11 +30,14 @@ export type VaultRef = { mount: string; path: string; key: string };
 @Injectable()
 export class VaultService {
   private cfg: VaultConfig;
-  constructor(private cfgService: ConfigService, private logger?: LoggerService) {
+  constructor(
+    private configService: ConfigService,
+    private logger: LoggerService,
+  ) {
     this.cfg = VaultConfigSchema.parse({
-      enabled: this.cfgService.vaultEnabled,
-      addr: this.cfgService.vaultAddr,
-      token: this.cfgService.vaultToken,
+      enabled: this.configService.vaultEnabled,
+      addr: this.configService.vaultAddr,
+      token: this.configService.vaultToken,
       defaultMounts: ['secret'],
     });
   }
