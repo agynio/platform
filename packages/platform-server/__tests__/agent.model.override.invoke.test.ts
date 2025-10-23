@@ -2,30 +2,13 @@ import { describe, it, expect, vi } from 'vitest';
 import { AIMessage } from '@langchain/core/messages';
 import { LoggerService } from '../src/core/services/logger.service.js';
 import { ConfigService } from '../src/core/services/config.service.js';
-import { CheckpointerService } from '../src/services/checkpointer.service';
+import { LLMFactoryService } from '../src/core/services/llmFactory.service';
 
 // Mock ChatOpenAI to capture the model used at invoke time
-vi.mock('@langchain/openai', async (importOriginal) => {
-  const mod = await importOriginal();
-  class MockChatOpenAI extends mod.ChatOpenAI {
-    public model: string;
-    constructor(config: any) {
-      super(config);
-      this.model = config?.model || 'unknown';
-    }
-    withConfig(_cfg: any) {
-      const self = this;
-      return { invoke: async () => new AIMessage(`model:${self.model}`) } as any;
-    }
-    async invoke(_msgs: any[]) {
-      return new AIMessage(`model:${this.model}`);
-    }
-    async getNumTokens(text: string): Promise<number> {
-      return text.length;
-    }
-  }
-  return { ...mod, ChatOpenAI: MockChatOpenAI };
-});
+// Spy LLMFactoryService to return a stub LLM that reports model name in output
+vi.spyOn(LLMFactoryService.prototype, 'createLLM').mockReturnValue({
+  call: async ({ model }: any) => ({ text: `model:${model}`, output: [] }),
+} as any);
 
 // Mock CheckpointerService to avoid Mongo dependency
 vi.mock('../src/services/checkpointer.service', async (importOriginal) => {
@@ -50,7 +33,7 @@ vi.mock('../src/services/checkpointer.service', async (importOriginal) => {
   return { ...mod, CheckpointerService: Fake };
 });
 
-import { Agent } from '../src/nodes/agent/agent.node';
+import { AgentNode as Agent } from '../src/nodes/agent/agent.node';
 
 describe('Agent model override at runtime', () => {
   it('uses override model at invoke after setConfig', async () => {
@@ -62,7 +45,7 @@ describe('Agent model override at runtime', () => {
       githubToken: 't',
       mongodbUrl: 'm',
     });
-    const agent = new Agent(cfg, new LoggerService(), new CheckpointerService(new LoggerService()) as any, 'agent-1');
+    const agent = new Agent(cfg, new LoggerService(), new LLMFactoryService(cfg) as any, 'agent-1');
     // Initial default should be gpt-5
     const anyA: any = agent as any;
     expect(anyA.llm.model).toBe('gpt-5');
@@ -73,4 +56,3 @@ describe('Agent model override at runtime', () => {
     expect(res?.content).toBe(`model:override-model`);
   });
 });
-

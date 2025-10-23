@@ -1,12 +1,18 @@
 import { describe, it, expect, vi } from 'vitest';
-import { Agent, BaseAgent } from '../src/nodes/agent/agent.node';
+import { AgentNode as Agent, BaseAgent } from '../src/nodes/agent/agent.node';
 
 class MockConfigService { openaiApiKey = 'sk-abc'; }
 class MockLoggerService { info = vi.fn(); debug = vi.fn(); error = vi.fn(); }
-class MockCheckpointerService { getCheckpointer = vi.fn(() => ({} as any)); }
+// CheckpointerService removed; use LLMFactoryService for Agent construction
+import { LLMFactoryService } from '../src/core/services/llmFactory.service';
 
 // Minimal stub: Agent requires an agentId to init
-const makeAgent = () => new Agent(new MockConfigService() as any, new MockLoggerService() as any, new MockCheckpointerService() as any, 'agent-1');
+const makeAgent = () => {
+  const cfg = new (MockConfigService as any)();
+  const logger = new (MockLoggerService as any)();
+  const llmFactory = new LLMFactoryService(cfg);
+  return new Agent(cfg, logger, llmFactory, 'agent-1');
+};
 
 describe('BaseAgent.getConfigSchema / Agent.setConfig', () => {
   it('returns expected JSON schema', () => {

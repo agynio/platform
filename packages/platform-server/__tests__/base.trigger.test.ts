@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { BaseTrigger, TriggerMessage } from '../src/triggers/base.trigger';
+import { BaseTrigger, TriggerMessage } from '../src/nodes/slackTrigger/base.trigger';
 
 // Concrete test subclass exposing protected notify
 class TestTrigger extends BaseTrigger {

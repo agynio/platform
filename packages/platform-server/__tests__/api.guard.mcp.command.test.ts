@@ -4,7 +4,7 @@ import { buildTemplateRegistry } from '../src/templates';
 import { LoggerService } from '../src/core/services/logger.service.js';
 import { ContainerService } from '../src/core/services/container.service.js';
 import { ConfigService } from '../src/core/services/config.service.js';
-import { CheckpointerService } from '../src/services/checkpointer.service';
+// CheckpointerService removed in refactor; tests relying on it should drop usage.
 // Avoid real Mongo connections; stub minimal service
 import { LiveGraphRuntime } from '../src/graph/liveGraph.manager';
 import { GitGraphService } from '../src/services/gitGraph.service';

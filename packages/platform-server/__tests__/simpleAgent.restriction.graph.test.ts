@@ -2,8 +2,8 @@ import { describe, it, expect, vi } from 'vitest';
 import { AIMessage, BaseMessage, SystemMessage } from '@langchain/core/messages';
 import { LoggerService } from '../src/core/services/logger.service.js';
 import { ConfigService } from '../src/core/services/config.service.js';
-import { CheckpointerService } from '../src/services/checkpointer.service';
-import { Agent } from '../src/nodes/agent/agent.node';
+import { LLMFactoryService } from '../src/core/services/llmFactory.service';
+import { AgentNode as Agent } from '../src/nodes/agent/agent.node';
 
 // Mock ChatOpenAI to control responses
 vi.mock('@langchain/openai', async (importOriginal) => {
@@ -32,8 +32,8 @@ vi.mock('@langchain/openai', async (importOriginal) => {
   return { ...mod, ChatOpenAI: MockChatOpenAI };
 });
 
-// Mock ToolsNode to include the finish tool
-import { FinishTool } from '../src/tools/finish.tool';
+// Include finish FunctionTool via Agent wiring
+import { FinishFunctionTool } from '../src/nodes/tools/finish/finish.tool';
 
 // Mock CheckpointerService to avoid Mongo requirements
 vi.mock('../src/services/checkpointer.service', async (importOriginal) => {
@@ -55,18 +55,18 @@ vi.mock('../src/services/checkpointer.service', async (importOriginal) => {
 // Patch Agent to add finish tool quickly in tests
 vi.mock('../src/nodes/agent/agent.node', async (importOriginal) => {
   const mod = await importOriginal();
-  const Original = mod.Agent;
+  const Original = mod.AgentNode;
   class TestAgent extends Original {
     addTool(tool: any) { super.addTool(tool); }
     init(config: any) {
       super.init(config);
       // add finish tool so model can call it
       // @ts-ignore private access for tests
-      this.addTool(new FinishTool());
+      this.addTool(new FinishFunctionTool());
       return this;
     }
   }
-  return { ...mod, Agent: TestAgent };
+  return { ...mod, AgentNode: TestAgent };
 });
 
 describe('Agent restriction enforcement', () => {
@@ -80,14 +80,14 @@ describe('Agent restriction enforcement', () => {
   });
 
   it('restrictOutput=false: call_model with no tool_calls leads to END (no enforce)', async () => {
-    const agent = new Agent(cfg, new LoggerService(), new CheckpointerService(new LoggerService()) as any, 'a1');
+    const agent = new Agent(cfg, new LoggerService(), new LLMFactoryService(cfg) as any, 'a1');
     agent.setConfig({ restrictOutput: false });
     const res = await agent.invoke('t', { content: 'hi', info: {} } as any);
     expect(res).toBeDefined();
   });
 
   it('restrictOutput=true & restrictionMaxInjections=0: injects and loops until tool call', async () => {
-    const agent = new Agent(cfg, new LoggerService(), new CheckpointerService(new LoggerService()) as any, 'a2');
+    const agent = new Agent(cfg, new LoggerService(), new LLMFactoryService(cfg) as any, 'a2');
     agent.setConfig({ restrictOutput: true, restrictionMaxInjections: 0 });
     const res = await agent.invoke('t', { content: 'hi', info: {} } as any);
     expect(res).toBeDefined();
@@ -103,7 +103,7 @@ describe('Agent restriction enforcement', () => {
     }
     ;(openai as any).ChatOpenAI = NoToolLLM;
 
-    const agent = new Agent(cfg, new LoggerService(), new CheckpointerService(new LoggerService()) as any, 'a3');
+    const agent = new Agent(cfg, new LoggerService(), new LLMFactoryService(cfg) as any, 'a3');
     agent.setConfig({ restrictOutput: true, restrictionMaxInjections: 2 });
     const res = await agent.invoke('t', { content: 'hello', info: {} } as any);
     expect(res).toBeDefined();

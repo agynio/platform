@@ -1,8 +1,8 @@
 import { describe, it, expect, vi } from 'vitest';
 import { AIMessage } from '@langchain/core/messages';
-import { ToolsNode } from '../src/lgnodes/tools.lgnode';
-import { BaseTool } from '../src/tools/base.tool';
 import { tool, DynamicStructuredTool } from '@langchain/core/tools';
+import { CallToolsLLMReducer } from '../src/llm/reducers/callTools.llm.reducer';
+import { LoggerService } from '../src/core/services/logger.service.js';
 
 // Mock tracing-sdk to capture attributes passed to withToolCall
 vi.mock('@agyn/tracing', () => {
@@ -26,7 +26,7 @@ vi.mock('@agyn/tracing', () => {
   return { withToolCall, ToolCallResponse, __test: { captured } } as any;
 });
 
-class EchoTool extends BaseTool {
+class EchoTool /* extends BaseTool (legacy) */ {
   init(): DynamicStructuredTool {
     return tool(async (raw) => `echo:${JSON.stringify(raw)}`,
       { name: 'echo', description: 'echo tool', schema: ({} as any) },
@@ -36,10 +36,10 @@ class EchoTool extends BaseTool {
 
 describe('ToolsNode tool_call span attribution', () => {
   it('stamps nodeId=Tool id when provided (no toolNodeId attribute)', async () => {
-    const node = new ToolsNode([new EchoTool()], 'agent-node-id'); // agent id should NOT be used for tool_call spans
+    const reducer = new CallToolsLLMReducer(new LoggerService(), [new EchoTool().init()] as any);
     const ai = new AIMessage({ content: '', tool_calls: [{ id: '1', name: 'echo', args: { x: 1 } }] } as any);
     const config = { configurable: { thread_id: 't1', nodeId: 'tool-node-id' } } as any;
-    const res = await node.action({ messages: [ai] } as any, config);
+    await reducer.invoke({ messages: [ai], meta: {} } as any, config);
     expect(res.done).toBeFalsy();
     const obs: any = await import('@agyn/tracing');
     const captured = (obs as any).__test.captured as Array<{ nodeId?: string; toolNodeId?: string }>;
@@ -54,9 +54,9 @@ describe('ToolsNode tool_call span attribution', () => {
     const obs: any = await import('@agyn/tracing');
     (obs as any).__test.captured.length = 0; // reset captured
 
-    const node = new ToolsNode([new EchoTool()], 'agent-node-id');
+    const reducer = new CallToolsLLMReducer(new LoggerService(), [new EchoTool().init()] as any);
     const ai = new AIMessage({ content: '', tool_calls: [{ id: '2', name: 'echo', args: { y: 2 } }] } as any);
-    const res = await node.action({ messages: [ai] } as any, { configurable: { thread_id: 't2' } } as any);
+    await reducer.invoke({ messages: [ai], meta: {} } as any, { configurable: { thread_id: 't2' } } as any);
     expect(res.done).toBeFalsy();
     const captured = (obs as any).__test.captured as Array<{ nodeId?: string; toolNodeId?: string }>;
     expect(captured.length).toBeGreaterThan(0);

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { BaseTrigger, TriggerMessage } from '../src/triggers/base.trigger';
+import { BaseTrigger, TriggerMessage } from '../src/nodes/slackTrigger/base.trigger';
 
 class TestTrigger extends BaseTrigger {
   constructor() { super(); }
