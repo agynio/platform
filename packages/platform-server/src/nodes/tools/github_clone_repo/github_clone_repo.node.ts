@@ -1,6 +1,6 @@
 import z from 'zod';
 import { BaseToolNode } from '../baseToolNode';
-import { ContainerProviderEntity } from '../../../entities/containerProvider.entity';
+import { WorkspaceNode } from '../../workspace/workspace.node';
 import { ConfigService } from '../../../core/services/config.service';
 import { LoggerService } from '../../../core/services/logger.service';
 import { VaultService } from '../../../core/services/vault.service';
@@ -31,7 +31,7 @@ export const GithubCloneRepoToolExposedStaticConfigSchema = z
   .strict();
 
 export class GithubCloneRepoNode extends BaseToolNode {
-  private _containerProvider?: ContainerProviderEntity;
+  private _containerProvider?: WorkspaceNode;
   private _config?: z.infer<typeof GithubCloneRepoToolStaticConfigSchema>;
   private toolInstance?: GithubCloneRepoFunctionTool;
   constructor(
@@ -41,7 +41,7 @@ export class GithubCloneRepoNode extends BaseToolNode {
   ) {
     super();
   }
-  setContainerProvider(provider: ContainerProviderEntity | undefined) {
+  setContainerProvider(provider: WorkspaceNode | undefined) {
     this._containerProvider = provider;
   }
   containerProvider() {

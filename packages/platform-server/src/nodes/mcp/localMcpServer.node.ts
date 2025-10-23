@@ -4,7 +4,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { toJSONSchema, z } from 'zod';
 import { convertJsonSchemaToZod } from 'zod-from-json-schema';
 import { JSONSchema } from 'zod/v4/core';
-import { ContainerProviderEntity } from '../../entities/containerProvider.entity';
+import { WorkspaceNode } from '../workspace/workspace.node';
 import type { DynamicConfigurable, ProvisionStatus, Provisionable } from '../../graph/capabilities';
 import { ConfigService } from '../../core/services/config.service';
 import { ContainerService } from '../../core/services/container.service';
@@ -106,7 +106,7 @@ export class LocalMCPServer implements McpServer, Provisionable, DynamicConfigur
   private lastToolsUpdatedAt?: number; // ms epoch
   private heartbeatTimer?: NodeJS.Timeout;
   private restartAttempts = 0;
-  private containerProvider?: ContainerProviderEntity;
+  private containerProvider?: WorkspaceNode;
   private pendingStart?: Promise<void>; // ensure single in-flight start
   private cfg?: z.infer<typeof LocalMcpServerStaticConfigSchema>;
   private toolsDiscovered = false; // tracks if we've done initial tool discovery
@@ -389,7 +389,7 @@ export class LocalMCPServer implements McpServer, Provisionable, DynamicConfigur
   }
 
   /** Inject a container provider (graph edge). If server already started with a different container, no action taken. */
-  setContainerProvider(provider: ContainerProviderEntity | undefined): void {
+  setContainerProvider(provider: WorkspaceNode | undefined): void {
     this.containerProvider = provider;
   }
 

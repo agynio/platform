@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { ContainerProviderEntity } from '../../../entities/containerProvider.entity';
+import { WorkspaceNode } from '../../workspace/workspace.node';
 import { EnvService, type EnvItem } from '../../../services/env.service';
 import { BaseToolNode } from '../baseToolNode';
 import { ShellCommandTool } from './shell_command.tool';
@@ -35,7 +35,7 @@ export const ShellToolStaticConfigSchema = z
   .strict();
 
 export class ShellCommandNode extends BaseToolNode {
-  private containerProvider?: ContainerProviderEntity;
+  private containerProvider?: WorkspaceNode;
   private cfg?: z.infer<typeof ShellToolStaticConfigSchema>;
   private toolInstance?: ShellCommandTool;
 
@@ -43,7 +43,7 @@ export class ShellCommandNode extends BaseToolNode {
     super();
   }
 
-  setContainerProvider(provider: ContainerProviderEntity | undefined): void {
+  setContainerProvider(provider: WorkspaceNode | undefined): void {
     this.containerProvider = provider;
   }
 

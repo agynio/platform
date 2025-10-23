@@ -1,8 +1,5 @@
 import { toJSONSchema } from 'zod';
-import {
-  ContainerProviderEntity,
-  ContainerProviderExposedStaticConfigSchema,
-} from './entities/containerProvider.entity';
+import { WorkspaceNode, ContainerProviderExposedStaticConfigSchema } from './nodes/workspace/workspace.node';
 import { TemplateRegistry } from './graph';
 import { AgentNode, AgentStaticConfigSchema } from './nodes/agent/agent.node';
 
@@ -57,7 +54,7 @@ export function buildTemplateRegistry(deps: TemplateRegistryDeps): TemplateRegis
       .register(
         'workspace',
         (ctx) =>
-          new ContainerProviderEntity(
+          new WorkspaceNode(
             containerService,
             vault,
             {

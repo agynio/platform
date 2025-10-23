@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import Docker, { ContainerCreateOptions, Exec } from 'dockerode';
 import { PassThrough, Writable } from 'node:stream';
-import { ContainerEntity } from '../handles/container.handle';
+import { ContainerHandle } from '../handles/container.handle';
 import { LoggerService } from './logger.service';
 import { PLATFORM_LABEL, type Platform } from '../constants';
 import {
@@ -124,8 +124,8 @@ export class ContainerService {
   }
 
   /**
-   * Start a new container and return a ContainerEntity representing it.
-   */
+   * Start a new container and return a ContainerHandle representing it.
+  */
   async start(opts?: ContainerOpts): Promise<ContainerHandle> {
     const defaults: Partial<ContainerOpts> = { image: DEFAULT_IMAGE, autoRemove: true, tty: false };
     const optsWithDefaults = { ...defaults, ...opts };

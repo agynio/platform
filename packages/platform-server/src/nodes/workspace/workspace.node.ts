@@ -1,12 +1,13 @@
-import { ContainerOpts, ContainerService } from '../core/services/container.service';
-import { ContainerEntity } from './container.entity';
+import { ContainerOpts, ContainerService } from '../../core/services/container.service';
+import { ContainerHandle } from '../../core/handles/container.handle';
 import { z } from 'zod';
-import { PLATFORM_LABEL, SUPPORTED_PLATFORMS } from '../constants';
-import { VaultService } from '../core/services/vault.service';
-import { ConfigService } from '../core/services/config.service';
-import { NcpsKeyService } from '../core/services/ncpsKey.service';
-import { EnvService, type EnvItem } from '../services/env.service';
-import { LoggerService } from '../core/services/logger.service';
+import { PLATFORM_LABEL, SUPPORTED_PLATFORMS } from '../../constants';
+import { VaultService } from '../../core/services/vault.service';
+import { ConfigService } from '../../core/services/config.service';
+import { NcpsKeyService } from '../../core/services/ncpsKey.service';
+import { EnvService, type EnvItem } from '../../services/env.service';
+import { LoggerService } from '../../core/services/logger.service';
+import { Node } from '../base/Node';
 
 // Static configuration schema for ContainerProviderEntity
 // Allows overriding the base image and supplying environment variables.
@@ -83,7 +84,7 @@ export const ContainerProviderExposedStaticConfigSchema = z
 
 export type ContainerProviderStaticConfig = z.infer<typeof ContainerProviderStaticConfigSchema>;
 
-export class ContainerProviderEntity {
+export class WorkspaceNode extends Node<ContainerProviderStaticConfig> {
   // Keep cfg loosely typed; normalize before use to ContainerOpts at boundaries
   private cfg?: ContainerProviderStaticConfig;
   // Local logger instance for concise, redact-safe logs (override in tests via setLogger)
@@ -103,6 +104,7 @@ export class ContainerProviderEntity {
     private configService?: ConfigService,
     private ncpsKeyService?: NcpsKeyService,
   ) {
+    super();
     this.vaultService = vaultService;
     this.opts = opts || {};
     this.idLabels = idLabels;
@@ -115,12 +117,12 @@ export class ContainerProviderEntity {
   }
 
   // Accept static configuration (image/env/initialScript). Validation performed via zod schema.
-  setConfig(cfg: Record<string, unknown>): void {
-    // Validation via Zod; nix is treated as opaque (no rejection of extended shapes)
+  async setConfig(cfg: Record<string, unknown>): Promise<void> {
     this.cfg = ContainerProviderStaticConfigSchema.parse(cfg);
+    await super.setConfig(cfg);
   }
 
-  async provide(threadId: string): Promise<ContainerEntity> {
+  async provide(threadId: string): Promise<ContainerHandle> {
     // Build base thread labels and workspace-specific labels
     const labels = this.idLabels(threadId);
     const workspaceLabels = { ...labels, 'hautech.ai/role': 'workspace' } as Record<string, string>;
@@ -130,7 +132,7 @@ export class ContainerProviderEntity {
     try {
       console.debug('[ContainerProviderEntity] lookup labels (workspace)', workspaceLabels);
     } catch {}
-    let container: ContainerEntity | undefined = await this.containerService.findContainerByLabels(workspaceLabels);
+    let container: ContainerHandle | undefined = await this.containerService.findContainerByLabels(workspaceLabels);
 
     // Typed fallback: retry by thread_id only and exclude DinD sidecars.
     if (!container) {
@@ -196,13 +198,13 @@ export class ContainerProviderEntity {
           }
           // Stop and remove old container, then recreate (handle benign errors)
           try {
-            await (container as ContainerEntity).stop();
+            await container.stop();
           } catch (e: unknown) {
             const sc = getStatusCode(e);
             if (sc !== 304 && sc !== 404 && sc !== 409) throw e;
           }
           try {
-            await (container as ContainerEntity).remove(true);
+            await container.remove(true);
           } catch (e: unknown) {
             const sc = getStatusCode(e);
             if (sc !== 404 && sc !== 409) throw e;
@@ -212,13 +214,13 @@ export class ContainerProviderEntity {
       } catch {
         // If inspect fails, do not reuse to be safe; still attempt cleanup
         try {
-          await (container as ContainerEntity).stop();
+          await container.stop();
         } catch (e: unknown) {
           const sc = getStatusCode(e);
           if (sc !== 304 && sc !== 404 && sc !== 409) throw e;
         }
         try {
-          await (container as ContainerEntity).remove(true);
+          await container.remove(true);
         } catch (e: unknown) {
           const sc = getStatusCode(e);
           if (sc !== 404 && sc !== 409) throw e;
@@ -315,7 +317,7 @@ export class ContainerProviderEntity {
     return container;
   }
 
-  private async ensureDinD(workspace: ContainerEntity, baseLabels: Record<string, string>, mirrorUrl: string) {
+  private async ensureDinD(workspace: ContainerHandle, baseLabels: Record<string, string>, mirrorUrl: string) {
     // Check existing
     let dind = await this.containerService.findContainerByLabels({
       ...baseLabels,
@@ -342,7 +344,7 @@ export class ContainerProviderEntity {
     await this.waitForDinDReady(dind);
   }
 
-  private async waitForDinDReady(dind: ContainerEntity) {
+  private async waitForDinDReady(dind: ContainerHandle) {
     const deadline = Date.now() + 60_000; // 60s timeout
     // Helper sleep
     const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -417,7 +419,7 @@ export class ContainerProviderEntity {
 
   // Install Nix packages in the container profile using combined install with per-package fallback
   private async ensureNixPackages(
-    container: ContainerEntity,
+    container: ContainerHandle,
     specs: NixInstallSpec[],
     originalCount: number,
   ): Promise<void> {
