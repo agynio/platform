@@ -84,7 +84,9 @@ export type AgentStaticConfig = z.infer<typeof AgentStaticConfigSchema>;
 export type WhenBusyMode = 'wait' | 'injectAfterTools';
 
 // Consolidated Agent class (merges previous BaseAgent + Agent into single AgentNode)
-export class AgentNode implements TriggerListener {
+import Node from "../base/Node";
+
+export class AgentNode extends Node implements TriggerListener {
   protected _config?: AgentStaticConfig;
   protected buffer = new MessagesBuffer({ debounceMs: 0 });
 
@@ -94,8 +96,7 @@ export class AgentNode implements TriggerListener {
   constructor(
     protected configService: ConfigService,
     protected logger: LoggerService,
-    protected llmFactoryService: LLMFactoryService,
-    protected agentId?: string,
+    protected llmFactoryService: LLMFactoryService
   ) {}
 
   get config() {
@@ -253,9 +254,10 @@ export class AgentNode implements TriggerListener {
   setConfig(config: Record<string, unknown>): void {
     const parsedConfig = AgentStaticConfigSchema.parse(config) as Partial<AgentStaticConfig>;
     this._config = parsedConfig;
+    if ((config as any)?.agentId) { (this as any).agentId = (config as any).agentId as string; }
   }
 
-  async delete(): Promise<void> {}
+
 
   // Sync MCP tools from the given server and reconcile add/remove
   private syncMcpToolsFromServer(server: McpServer): void {
