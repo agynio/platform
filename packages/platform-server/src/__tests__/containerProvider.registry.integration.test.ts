@@ -1,8 +1,8 @@
 import { describe, it, expect, vi } from 'vitest';
 import { ContainerProviderEntity } from '../entities/containerProvider.entity';
-import { ContainerService } from '../core/services/container.service.js';
+import { ContainerService } from '../core/services/container.service';
 import { ContainerEntity } from '../entities/container.entity';
-import { LoggerService } from '../core/services/logger.service.js';
+import { LoggerService } from '../core/services/logger.service';
 import type { ContainerRegistryService } from '../services/containerRegistry.service';
 
 class FakeRegistry implements Pick<ContainerRegistryService, 'updateLastUsed' | 'registerStart'> {

@@ -1,3 +1,3 @@
-export * from './types.js';
-export * from './dockerExecTransport.js';
-export * from './localMcpServer.node.js';
+export * from './types';
+export * from './dockerExecTransport';
+export * from './localMcpServer.node';

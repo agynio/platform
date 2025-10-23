@@ -1,7 +1,7 @@
 import z from 'zod';
 import { BaseToolNode } from '../baseToolNode';
 import { ManageFunctionTool, ManageToolStaticConfigSchema } from './manage.tool';
-import { LoggerService } from '../../../core/services/logger.service.js';
+import { LoggerService } from '../../../core/services/logger.service';
 import { AgentNode } from '../../agent/agent.node';
 
 export class ManageToolNode extends BaseToolNode {

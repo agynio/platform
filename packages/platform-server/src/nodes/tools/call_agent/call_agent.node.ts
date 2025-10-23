@@ -1,6 +1,6 @@
 import z from 'zod';
 import { BaseToolNode } from '../baseToolNode';
-import { LoggerService } from '../../../core/services/logger.service.js';
+import { LoggerService } from '../../../core/services/logger.service';
 
 import { CallAgentFunctionTool } from './call_agent.tool';
 import { AgentNode } from '../../agent/agent.node';

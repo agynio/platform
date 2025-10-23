@@ -1,9 +1,9 @@
 import z from 'zod';
 import { BaseToolNode } from '../baseToolNode';
 import { ContainerProviderEntity } from '../../../entities/containerProvider.entity';
-import { ConfigService } from '../../../core/services/config.service.js';
-import { LoggerService } from '../../../core/services/logger.service.js';
-import { VaultService } from '../../../core/services/vault.service.js';
+import { ConfigService } from '../../../core/services/config.service';
+import { LoggerService } from '../../../core/services/logger.service';
+import { VaultService } from '../../../core/services/vault.service';
 import { GithubCloneRepoFunctionTool } from './github_clone_repo.tool';
 
 const TokenRefSchema = z

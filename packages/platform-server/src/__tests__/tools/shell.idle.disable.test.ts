@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
-import { ContainerService } from '../../core/services/container.service.js';
-import { LoggerService } from '../../core/services/logger.service.js';
+import { ContainerService } from '../../core/services/container.service';
+import { LoggerService } from '../../core/services/logger.service';
 
 describe('ContainerService idle timeout disable', () => {
   it('does not trigger idle timeout when idleTimeoutMs=0', async () => {

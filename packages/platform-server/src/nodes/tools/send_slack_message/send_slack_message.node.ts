@@ -1,7 +1,7 @@
 import z from 'zod';
 import { BaseToolNode } from '../baseToolNode';
-import { LoggerService } from '../../../core/services/logger.service.js';
-import { VaultService } from '../../../core/services/vault.service.js';
+import { LoggerService } from '../../../core/services/logger.service';
+import { VaultService } from '../../../core/services/vault.service';
 import {
   SendSlackMessageFunctionTool,
   SendSlackMessageToolStaticConfigSchema,

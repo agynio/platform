@@ -1,6 +1,6 @@
 import z from 'zod';
 
-import { LoggerService } from '../../../core/services/logger.service.js';
+import { LoggerService } from '../../../core/services/logger.service';
 import { AgentNode } from '../../agent/agent.node';
 import { TriggerMessage } from '../../slackTrigger';
 import { CallAgentToolStaticConfigSchema } from './call_agent.node';

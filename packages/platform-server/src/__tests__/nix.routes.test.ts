@@ -1,7 +1,7 @@
 import Fastify, { type FastifyInstance } from 'fastify';
 import nock from 'nock';
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { registerNixRoutes } from '../routes/nix.route.js';
+import { registerNixRoutes } from '../routes/nix.route';
 
 const BASE = 'https://www.nixhub.io';
 

@@ -1,5 +1,5 @@
 import type { FastifyInstance } from 'fastify';
-import type { LoggerService } from '../core/services/logger.service.js';
+import type { LoggerService } from '../core/services/logger.service';
 import type { ActiveReminder, RemindMeInspectable } from '../nodes/tools/remind_me.tool';
 
 // Minimal interface to look up live node instances

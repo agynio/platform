@@ -12,7 +12,7 @@ import { ZodError } from 'zod';
 import { LocalMCPServer } from '../nodes/mcp';
 import type { PersistedMcpState } from '../nodes/mcp/types';
 import { isNodeLifecycle } from '../nodes/types';
-import { LoggerService } from '../core/services/logger.service.js';
+import { LoggerService } from '../core/services/logger.service';
 import type { DynamicConfigurable, Pausable, ProvisionStatus, Provisionable } from './capabilities';
 import { hasSetConfig, hasSetDynamicConfig, isDynamicConfigurable } from './capabilities';
 import { Errors } from './errors';

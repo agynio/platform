@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { LoggerService } from '../../core/services/logger.service.js';
+import { LoggerService } from '../../core/services/logger.service';
 import { ShellTool } from '../../nodes/tools/shell_command/shell_command.node';
 
 class FakeContainer {

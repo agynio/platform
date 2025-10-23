@@ -1,7 +1,7 @@
-import type { JSONRPCMessage } from './types.js';
+import type { JSONRPCMessage } from './types';
 import type Docker from 'dockerode';
 import { PassThrough } from 'node:stream';
-import { LoggerService } from '../core/services/logger.service.js';
+import { LoggerService } from '../core/services/logger.service';
 
 class ReadBufferInline {
   private _buffer?: Buffer;

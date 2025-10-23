@@ -2,8 +2,8 @@ import z from 'zod';
 
 import { FunctionTool } from '@agyn/llm';
 import { WebClient, type ChatPostEphemeralResponse, type ChatPostMessageResponse } from '@slack/web-api';
-import { LoggerService } from '../../../core/services/logger.service.js';
-import { VaultService } from '../../../core/services/vault.service.js';
+import { LoggerService } from '../../../core/services/logger.service';
+import { VaultService } from '../../../core/services/vault.service';
 import { ReferenceFieldSchema, normalizeTokenRef, parseVaultRef, resolveTokenRef } from '../../../utils/refs';
 
 export const SendSlackMessageToolStaticConfigSchema = z

@@ -3,7 +3,7 @@ import Docker, { ContainerCreateOptions, Exec } from 'dockerode';
 import { PassThrough, Writable } from 'node:stream';
 import { ContainerEntity } from '../entities/container.entity';
 import { LoggerService } from './logger.service';
-import { PLATFORM_LABEL, type Platform } from '../constants.js';
+import { PLATFORM_LABEL, type Platform } from '../constants';
 import {
   isExecTimeoutError,
   ExecTimeoutError,
@@ -11,7 +11,7 @@ import {
   isExecIdleTimeoutError,
 } from '../utils/execTimeout';
 import type { ContainerRegistryService } from './containerRegistry.service';
-import { createUtf8Collector, demuxDockerMultiplex } from './container.stream.js';
+import { createUtf8Collector, demuxDockerMultiplex } from './container.stream';
 
 const DEFAULT_IMAGE = 'mcr.microsoft.com/vscode/devcontainers/base';
 

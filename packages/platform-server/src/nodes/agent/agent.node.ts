@@ -1,7 +1,7 @@
 import { McpServer } from '../mcp';
 
-import { ConfigService } from '../../core/services/config.service.js';
-import { LoggerService } from '../../core/services/logger.service.js';
+import { ConfigService } from '../../core/services/config.service';
+import { LoggerService } from '../../core/services/logger.service';
 
 import { z } from 'zod';
 
@@ -13,7 +13,7 @@ import { CallToolsLLMReducer } from '../../llm/reducers/callTools.llm.reducer';
 import { ConditionalLLMRouter } from '../../llm/routers/conditional.llm.router';
 import { StaticLLMRouter } from '../../llm/routers/static.llm.router';
 import { LLMContext, LLMState } from '../../llm/types';
-import { LLMFactoryService } from '../../core/services/llmFactory.service.js';
+import { LLMFactoryService } from '../../core/services/llmFactory.service';
 
 import { SummarizationLLMReducer } from '../../llm/reducers/summarization.llm.reducer';
 import { EnforceToolsLLMReducer } from '../../llm/reducers/enforceTools.llm.reducer';

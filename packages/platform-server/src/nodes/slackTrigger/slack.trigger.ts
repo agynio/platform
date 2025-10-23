@@ -1,8 +1,8 @@
 import { BaseTrigger, TriggerHumanMessage } from './base.trigger';
-import { LoggerService } from '../../core/services/logger.service.js';
+import { LoggerService } from '../../core/services/logger.service';
 import { z } from 'zod';
 import { SocketModeClient } from '@slack/socket-mode';
-import { VaultService } from '../../core/services/vault.service.js';
+import { VaultService } from '../../core/services/vault.service';
 import { normalizeTokenRef, resolveTokenRef, ReferenceFieldSchema, parseVaultRef } from '../../utils/refs';
 
 // Internal schema: accept either plain string or ReferenceField

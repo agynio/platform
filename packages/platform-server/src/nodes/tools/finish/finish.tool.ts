@@ -2,7 +2,7 @@ import z from 'zod';
 
 import { FunctionTool } from '@agyn/llm';
 import { LLMContext } from '../../../llm/types';
-import { LoggerService } from '../../../core/services/logger.service.js';
+import { LoggerService } from '../../../core/services/logger.service';
 
 export const finishSchema = z.object({ note: z.string() }).strict();
 

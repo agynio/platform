@@ -3,7 +3,7 @@ import { MongoMemoryServer } from 'mongodb-memory-server';
 import { MongoClient } from 'mongodb';
 import { ContainerRegistryService } from '../services/containerRegistry.service';
 import { ContainerCleanupService } from '../services/containerCleanup.service';
-import { LoggerService } from '../core/services/logger.service.js';
+import { LoggerService } from '../core/services/logger.service';
 
 class FakeContainerService {
   stopped: string[] = [];

@@ -2,7 +2,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { ToolsNode } from '../../lgnodes/tools.lgnode';
 import { AIMessage } from '@langchain/core/messages';
 import { ShellTool } from '../../nodes/tools/shell_command/shell_command.node';
-import { LoggerService } from '../../core/services/logger.service.js';
+import { LoggerService } from '../../core/services/logger.service';
 
 describe('shell_command oversize output e2e (mocked putArchive)', () => {
   it('returns saved path message when output exceeds limit', async () => {

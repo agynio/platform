@@ -1,7 +1,7 @@
 import { FunctionTool } from '@agyn/llm';
 import z from 'zod';
 import { LLMContext } from '../../../llm/types';
-import { LoggerService } from '../../../core/services/logger.service.js';
+import { LoggerService } from '../../../core/services/logger.service';
 import {
   ExecIdleTimeoutError,
   ExecTimeoutError,

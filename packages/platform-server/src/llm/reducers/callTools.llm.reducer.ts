@@ -2,7 +2,7 @@ import { ToolCallResponse, withToolCall } from '@agyn/tracing';
 
 import { LLMContext, LLMMessage, LLMState } from '../types';
 import { FunctionTool, Reducer, ResponseMessage, ToolCallMessage, ToolCallOutputMessage } from '@agyn/llm';
-import { LoggerService } from '../../core/services/logger.service.js';
+import { LoggerService } from '../../core/services/logger.service';
 
 export class CallToolsLLMReducer extends Reducer<LLMState, LLMContext> {
   constructor(

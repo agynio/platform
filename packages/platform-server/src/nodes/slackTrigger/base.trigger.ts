@@ -1,5 +1,5 @@
 import type { Pausable, ProvisionStatus, Provisionable } from '../../graph/capabilities';
-import { LoggerService } from '../../core/services/logger.service.js';
+import { LoggerService } from '../../core/services/logger.service';
 
 // Base trigger message. Backward-compatible: no 'kind' field required.
 export interface TriggerMessage {

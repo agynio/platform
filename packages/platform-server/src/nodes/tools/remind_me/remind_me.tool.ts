@@ -2,7 +2,7 @@ import z from 'zod';
 
 import { FunctionTool } from '@agyn/llm';
 import { v4 as uuidv4 } from 'uuid';
-import { LoggerService } from '../../../core/services/logger.service.js';
+import { LoggerService } from '../../../core/services/logger.service';
 import { LLMContext } from '../../../llm/types';
 
 export const remindMeInvocationSchema = z

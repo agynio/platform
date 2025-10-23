@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import Fastify from 'fastify';
 import { registerRemindersRoute } from '../routes/reminders.route';
 import { RemindMeTool } from '../nodes/tools/remind_me.tool';
-import { LoggerService } from '../core/services/logger.service.js';
+import { LoggerService } from '../core/services/logger.service';
 
 describe('GET /graph/nodes/:nodeId/reminders', () => {
   beforeEach(() => { vi.useFakeTimers(); });

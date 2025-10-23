@@ -4,7 +4,7 @@ import { ToolsNode } from '../../lgnodes/tools.lgnode';
 import { BaseTool } from '../../nodes/tools/base.tool';
 import { tool } from '@langchain/core/tools';
 import { z } from 'zod';
-import { LoggerService } from '../../core/services/logger.service.js';
+import { LoggerService } from '../../core/services/logger.service';
 
 class MockContainer {
   constructor(public id = 'cid') {}

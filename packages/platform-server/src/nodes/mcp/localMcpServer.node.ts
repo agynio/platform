@@ -4,16 +4,16 @@ import { v4 as uuidv4 } from 'uuid';
 import { toJSONSchema, z } from 'zod';
 import { convertJsonSchemaToZod } from 'zod-from-json-schema';
 import { JSONSchema } from 'zod/v4/core';
-import { ContainerProviderEntity } from '../../entities/containerProvider.entity.js';
-import type { DynamicConfigurable, ProvisionStatus, Provisionable } from '../../graph/capabilities.js';
-import { ConfigService } from '../../core/services/config.service.js';
-import { ContainerService } from '../../core/services/container.service.js';
-import { EnvService, type EnvItem } from '../../services/env.service.js';
-import { LoggerService } from '../../core/services/logger.service.js';
-import { VaultService } from '../../core/services/vault.service.js';
-import { DockerExecTransport } from './dockerExecTransport.js';
+import { ContainerProviderEntity } from '../../entities/containerProvider.entity';
+import type { DynamicConfigurable, ProvisionStatus, Provisionable } from '../../graph/capabilities';
+import { ConfigService } from '../../core/services/config.service';
+import { ContainerService } from '../../core/services/container.service';
+import { EnvService, type EnvItem } from '../../services/env.service';
+import { LoggerService } from '../../core/services/logger.service';
+import { VaultService } from '../../core/services/vault.service';
+import { DockerExecTransport } from './dockerExecTransport';
 import { LocalMCPServerTool } from './localMcpServer.tool';
-import { DEFAULT_MCP_COMMAND, McpError, McpServer, McpTool, McpToolCallResult } from './types.js';
+import { DEFAULT_MCP_COMMAND, McpError, McpServer, McpTool, McpToolCallResult } from './types';
 
 const EnvItemSchema = z
   .object({

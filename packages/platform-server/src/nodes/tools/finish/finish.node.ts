@@ -1,6 +1,6 @@
 import z from 'zod';
 import { BaseToolNode } from '../baseToolNode';
-import { LoggerService } from '../../../core/services/logger.service.js';
+import { LoggerService } from '../../../core/services/logger.service';
 import { FinishFunctionTool } from './finish.tool';
 
 export const FinishToolStaticConfigSchema = z.object({}).strict();

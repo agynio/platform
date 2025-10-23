@@ -2,7 +2,7 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { MongoMemoryServer } from 'mongodb-memory-server';
 import { MongoClient } from 'mongodb';
 import { ContainerRegistryService } from '../services/containerRegistry.service';
-import { LoggerService } from '../core/services/logger.service.js';
+import { LoggerService } from '../core/services/logger.service';
 
 describe('ContainerRegistryService backfill last_used behavior', () => {
   let mongod: MongoMemoryServer;

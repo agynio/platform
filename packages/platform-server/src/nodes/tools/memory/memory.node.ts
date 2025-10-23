@@ -1,5 +1,5 @@
 import z from 'zod';
-import { LoggerService } from '../../../core/services/logger.service.js';
+import { LoggerService } from '../../../core/services/logger.service';
 import { MemoryService } from '../../../services/memory.service';
 import { BaseToolNode } from '../baseToolNode';
 import { UnifiedMemoryFunctionTool } from './memory.tool';

@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { LoggerService } from '../../src/core/services/logger.service.js';
-import { ContainerService } from '../../src/core/services/container.service.js';
+import { LoggerService } from '../../src/core/services/logger.service';
+import { ContainerService } from '../../src/core/services/container.service';
 
 describe('ContainerService last_used updates', () => {
   let svc: ContainerService;

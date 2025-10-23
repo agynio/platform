@@ -1,5 +1,5 @@
 import { BaseToolNode } from '../baseToolNode';
-import { LoggerService } from '../../../core/services/logger.service.js';
+import { LoggerService } from '../../../core/services/logger.service';
 import { RemindMeFunctionTool, RemindMeToolStaticConfigSchema } from './remind_me.tool';
 import z from 'zod';
 import { AgentNode } from '../../agent/agent.node';

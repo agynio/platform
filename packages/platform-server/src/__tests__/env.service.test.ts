@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import { EnvService, EnvError, type EnvItem } from '../services/env.service';
-import { VaultService, type VaultConfig } from '../core/services/vault.service.js';
+import { VaultService, type VaultConfig } from '../core/services/vault.service';
 
 // Helper to build a real VaultService with desired enabled state
 function makeVault(cfg: Partial<VaultConfig>): VaultService {

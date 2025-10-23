@@ -1,6 +1,6 @@
 import 'reflect-metadata';
 import { NestFactory } from '@nestjs/core';
-import { AppModule } from './app.module.js';
+import { AppModule } from './app.module';
 import type { INestApplicationContext } from '@nestjs/common';
 
 let appRef: INestApplicationContext | null = null;
