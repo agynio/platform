@@ -15,11 +15,8 @@ export class SaveLLMReducer extends Reducer<LLMState, LLMContext> {
       const prisma = PrismaService.getInstance(this.logger).getClient();
       if (!prisma) return state; // persistence disabled
       const repo = new ConversationStateRepository(prisma);
-      await repo.upsert({
-        threadId: ctx.threadId,
-        nodeId: ctx.callerAgent.getAgentNodeId?.() ?? null,
-        state: serializeState(state),
-      });
+      const nodeId = ctx.callerAgent.getAgentNodeId?.() || 'agent';
+      await repo.upsert({ threadId: ctx.threadId, nodeId, state: serializeState(state) });
       return state;
     } catch (e) {
       this.logger.error('SaveLLMReducer error: %s', (e as Error)?.message || String(e));
@@ -27,4 +24,3 @@ export class SaveLLMReducer extends Reducer<LLMState, LLMContext> {
     }
   }
 }
-

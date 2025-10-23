@@ -24,8 +24,6 @@ export class LoadLLMReducer extends Reducer<LLMState, LLMContext> {
         summary: persisted.summary,
         messages: [...persisted.messages, ...state.messages],
       };
-      // Record the start index of the current turn for deterministic routing
-      ctx.turnStartIndex = merged.messages.length;
       return merged;
     } catch (e) {
       this.logger.error('LoadLLMReducer error: %s', (e as Error)?.message || String(e));
