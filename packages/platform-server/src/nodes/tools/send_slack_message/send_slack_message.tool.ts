@@ -93,7 +93,7 @@ export class SendSlackMessageFunctionTool extends FunctionTool<typeof sendSlackI
         attachments: [],
         ...(thread_ts ? { thread_ts } : {}),
         ...(thread_ts && broadcast ? { reply_broadcast: true } : {}),
-      } as unknown as Record<string, unknown>;
+      });
       if (!resp.ok) return JSON.stringify({ ok: false, error: resp.error });
       const thread =
         (resp.message && 'thread_ts' in resp.message
