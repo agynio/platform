@@ -31,3 +31,12 @@ Enabling Memory
 Examples
 - Set connector defaults programmatically: `mem.createConnector({ placement: 'after_system', content: 'tree', maxChars: 4000 })`.
 - The CallModel injects a SystemMessage either after the system prompt or as the last message depending on placement.
+Persistent conversation state (Prisma)
+- Optional Postgres-backed persistence for LLM conversation state per thread/node.
+- Set AGENTS_DATABASE_URL to a Postgres connection string. docker-compose provides a local Postgres at 5442:
+  - Example: postgresql://postgres:postgres@localhost:5442/postgres
+- Prisma schema lives under prisma/schema.prisma. Scripts:
+  - pnpm --filter @agyn/platform-server prisma:generate
+  - pnpm --filter @agyn/platform-server prisma:migrate
+  - pnpm --filter @agyn/platform-server prisma:studio
+- Best-effort: if AGENTS_DATABASE_URL is not set or DB errors occur, reducers fall back to in-memory only.

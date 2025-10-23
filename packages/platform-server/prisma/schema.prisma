@@ -1,0 +1,23 @@
+// Prisma schema for platform-server persistence
+// ConversationState persists per-thread and optional node-specific LLM state
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("AGENTS_DATABASE_URL")
+}
+
+model ConversationState {
+  id        Int      @id @default(autoincrement())
+  threadId  String
+  nodeId    String?
+  state     Json
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([threadId, nodeId])
+}
+

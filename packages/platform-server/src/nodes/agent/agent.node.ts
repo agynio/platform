@@ -17,6 +17,8 @@ import { LLMFactoryService } from '../../core/services/llmFactory.service';
 
 import { SummarizationLLMReducer } from '../../llm/reducers/summarization.llm.reducer';
 import { EnforceToolsLLMReducer } from '../../llm/reducers/enforceTools.llm.reducer';
+import { LoadLLMReducer } from '../../llm/reducers/load.llm.reducer';
+import { SaveLLMReducer } from '../../llm/reducers/save.llm.reducer';
 import { Signal } from '../../signal';
 import { TriggerListener, TriggerMessage } from '../slackTrigger';
 import { BaseToolNode } from '../tools/baseToolNode';
@@ -120,6 +122,9 @@ export class AgentNode extends Node<AgentStaticConfig | undefined> implements Tr
     const routers = new Map<string, ConditionalLLMRouter | StaticLLMRouter>();
     const tools = Array.from(this.tools);
 
+    // Load persisted state first, then summarize per approved sequence
+    routers.set('load', new StaticLLMRouter(new LoadLLMReducer(this.logger), 'summarize'));
+
     routers.set(
       'summarize',
       new StaticLLMRouter(
@@ -130,6 +135,7 @@ export class AgentNode extends Node<AgentStaticConfig | undefined> implements Tr
           systemPrompt:
             'You update a running summary of a conversation. Keep key facts, goals, decisions, constraints, names, deadlines, and follow-ups. Be concise; use compact sentences; omit chit-chat. Structure summary with 3 high level sections: initial task, plan (if any), context (progress, findings, observations).',
         }),
+        // After summarize, proceed to model call
         'call_model',
       ),
     );
@@ -146,21 +152,22 @@ export class AgentNode extends Node<AgentStaticConfig | undefined> implements Tr
           if (last instanceof ResponseMessage && last.output.find((o) => o instanceof ToolCallMessage)) {
             return 'call_tools';
           }
-          // Route to enforce only when restrictOutput is enabled; else end turn
-          return this.config.restrictOutput ? 'enforceTools' : null;
+          // No tools path: persist state first
+          return 'save';
         },
       ),
     );
 
+    // Optional enforcement stage wired only when restrictOutput=true
     if (this.config.restrictOutput) {
       routers.set(
         'enforceTools',
         new ConditionalLLMRouter(
           new EnforceToolsLLMReducer(this.logger),
           (state) => {
-            // If restrictionInjected=true, go back to call_model to try again
+            // If we injected a restriction, summarize then continue; else end
             const injected = !!state.meta?.restrictionInjected;
-            return injected ? 'call_model' : null;
+            return injected ? 'summarize' : null;
           },
         ),
       );
@@ -168,8 +175,31 @@ export class AgentNode extends Node<AgentStaticConfig | undefined> implements Tr
 
     routers.set(
       'call_tools', //
-      new ConditionalLLMRouter(new CallToolsLLMReducer(this.logger, tools), (_, ctx) =>
-        ctx.finishSignal.isActive ? null : 'summarize',
+      new ConditionalLLMRouter(
+        new CallToolsLLMReducer(this.logger, tools),
+        (_, ctx) => (ctx.finishSignal.isActive ? null : 'tools_save'),
+      ),
+    );
+
+    // Save state after tools, non-branching, then summarize
+    routers.set('tools_save', new StaticLLMRouter(new SaveLLMReducer(this.logger), 'summarize'));
+
+    // Save state on no-tools path, non-branching, then decide to enforce or end
+    routers.set('save', new StaticLLMRouter(new SaveLLMReducer(this.logger), 'after_save'));
+
+    // After save: enforce if enabled, else end
+    routers.set(
+      'after_save',
+      new ConditionalLLMRouter(
+        // Identity reducer (no state change) to support conditional routing
+        new SummarizationLLMReducer(llm, {
+          model: this.config.model ?? 'gpt-5',
+          keepTokens: this.config.summarizationKeepTokens ?? 1000,
+          maxTokens: this.config.summarizationMaxTokens ?? 10000,
+          systemPrompt: '',
+        }),
+        // Route decides based on config; if enforcement enabled, go there, else end
+        () => (this.config.restrictOutput ? 'enforceTools' : null),
       ),
     );
 
@@ -193,7 +223,7 @@ export class AgentNode extends Node<AgentStaticConfig | undefined> implements Tr
           { messages: history },
           { threadId: thread, finishSignal, callerAgent: this },
           {
-            route: 'summarize',
+            route: 'load',
           },
         );
 

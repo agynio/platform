@@ -8,7 +8,10 @@
     "dev": "tsx src/index.ts",
     "test": "cross-env MONGOMS_VERSION=7.0.14 vitest run",
     "test:watch": "vitest",
-    "lint": "eslint ."
+    "lint": "eslint .",
+    "prisma:generate": "prisma generate",
+    "prisma:migrate": "prisma migrate dev --name init",
+    "prisma:studio": "prisma studio"
   },
   "dependencies": {
     "@agyn/llm": "workspace:*",
@@ -38,6 +41,7 @@
     "tar-stream": "^3.1.7",
     "undici": "^6.19.8",
     "uuid": "^13.0.0",
+    "@prisma/client": "^5.20.0",
     "yaml": "^2.8.1",
     "zod": "^4.1.9",
     "@nestjs/common": "^10.4.7",
@@ -61,6 +65,7 @@
     "mongodb-memory-server": "^10.2.1",
     "nock": "^14.0.10",
     "prettier": "^3.6.2",
+    "prisma": "^5.20.0",
     "ts-node": "^10.0.0",
     "tsx": "^4.20.5",
     "typescript": "^5.0.0",
