@@ -17,7 +17,7 @@ import { LoggerService } from '../core/services/logger.service';
 import { ContainerService } from '../infra/container/container.service';
 import { ConfigService } from '../core/services/config.service';
 import { MongoService } from '../core/services/mongo.service';
-import { LLMFactoryService } from '../llm/llmFactory.service';
+import { LLMProvisioner } from '../llm/llm.provisioner';
 import { NcpsKeyService } from '../core/services/ncpsKey.service';
 import { Provider } from '@nestjs/common';
 
@@ -32,7 +32,7 @@ import { Provider } from '@nestjs/common';
         containerService: ContainerService,
         configService: ConfigService,
         mongoService: MongoService,
-        llmFactoryService: LLMFactoryService,
+        provisioner: LLMProvisioner,
         ncpsKeyService: NcpsKeyService,
       ) =>
         buildTemplateRegistry({
@@ -40,10 +40,10 @@ import { Provider } from '@nestjs/common';
           containerService,
           configService,
           mongoService,
-          llmFactoryService,
+          provisioner,
           ncpsKeyService,
         }),
-      inject: [LoggerService, ContainerService, ConfigService, MongoService, LLMFactoryService, NcpsKeyService],
+      inject: [LoggerService, ContainerService, ConfigService, MongoService, LLMProvisioner, NcpsKeyService],
     },
     PortsRegistry,
     {
