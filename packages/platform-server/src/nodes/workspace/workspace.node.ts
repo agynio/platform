@@ -5,7 +5,7 @@ import { z } from 'zod';
 import { PLATFORM_LABEL, SUPPORTED_PLATFORMS } from '../../constants';
 import { VaultService } from '../../infra/vault/vault.service';
 import { ConfigService } from '../../core/services/config.service';
-import { NcpsKeyService } from '../../core/services/ncpsKey.service';
+import { NcpsKeyService } from '../../infra/ncps/ncpsKey.service';
 import { EnvService, type EnvItem } from '../../graph/env.service';
 import { LoggerService } from '../../core/services/logger.service';
 

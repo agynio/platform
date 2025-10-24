@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { MongoService } from '../core/services/mongo.service';
 import { LoggerService } from '../core/services/logger.service';
+import { ConfigService } from '../core/services/config.service';
 import { NixController } from './ncps/nix.controller';
 import { ContainerService } from './container/container.service';
 import { VaultModule } from './vault/vault.module';
@@ -37,7 +38,22 @@ import { PRService } from './github/pr.usecase';
       inject: [ContainerRegistry, ContainerService, LoggerService],
     },
     ContainerService,
-    NcpsKeyService,
+    {
+      provide: NcpsKeyService,
+      useFactory: async (config: ConfigService, logger: LoggerService) => {
+        const svc = new NcpsKeyService(config, logger);
+        try {
+          await svc.init();
+        } catch (e) {
+          // Maintain logging semantics equivalent to index.ts
+          logger.error('NcpsKeyService init failed: %s', (e as Error)?.message || String(e));
+          // Propagate failure to abort startup when disallowed by config
+          throw e;
+        }
+        return svc;
+      },
+      inject: [ConfigService, LoggerService],
+    },
     GithubService,
     PRService,
   ],
