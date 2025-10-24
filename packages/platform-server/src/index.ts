@@ -23,7 +23,6 @@ import { GraphRepository } from './graph/graph.repository';
 import { GraphDefinition, GraphError, PersistedGraphUpsertRequest } from './graph/types';
 import { GraphErrorCode } from './graph/errors';
 import { ContainerService } from './infra/container/container.service';
-import { ReadinessWatcher } from './utils/readinessWatcher';
 import { VaultService } from './infra/vault/vault.service';
 import { ContainerRegistry as ContainerRegistryService } from './infra/container/container.registry';
 import { ContainerCleanupService } from './infra/container/containerCleanup.job';
@@ -153,7 +152,7 @@ async function bootstrap() {
 
   // Load and apply existing persisted graph BEFORE starting server
   try {
-  const existing = await graphService.get('main');
+    const existing = await graphService.get('main');
     if (existing) {
       logger.info(
         'Applying persisted graph to live runtime (version=%s, nodes=%d, edges=%d)',
@@ -186,9 +185,6 @@ async function bootstrap() {
     setAppRef(app);
   } catch {}
 
-  // Background watcher reference (initialized after socket is attached)
-  let readinessWatcher: ReadinessWatcher | null = null;
-
   // Existing endpoints (namespaced under /api)
   // Moved graph-related routes to Nest controllers
 
@@ -198,7 +194,6 @@ async function bootstrap() {
 
   // Register routes that need runtime on fastify instance (non-Nest legacy)
   const fastify = adapter.getInstance();
-  registerRemindersRoute(fastify, runtime, logger);
   // Runs routes are handled by Nest RunsController
   // Nix proxy routes are now handled by Nest NixController; legacy Fastify wiring removed
 
@@ -214,7 +209,6 @@ async function bootstrap() {
 
   const shutdown = async () => {
     logger.info('Shutting down...');
-    readinessWatcher?.stopAll();
     await mongo.close();
     try {
       await fastify.close();
