@@ -26,13 +26,11 @@ export const GithubCloneRepoToolStaticConfigSchema = z
   })
   .strict();
 
-export const GithubCloneRepoToolExposedStaticConfigSchema = z
-  .object({ token: TokenRefSchema.optional().meta({ 'ui:field': 'ReferenceField' }) })
-  .strict();
+type StaticConfigType = z.infer<typeof GithubCloneRepoToolStaticConfigSchema>;
 
-export class GithubCloneRepoNode extends BaseToolNode {
+export class GithubCloneRepoNode extends BaseToolNode<StaticConfigType> {
   private _containerProvider?: WorkspaceNode;
-  private _config?: z.infer<typeof GithubCloneRepoToolStaticConfigSchema>;
+
   private toolInstance?: GithubCloneRepoFunctionTool;
   constructor(
     private configService: ConfigService,
@@ -41,18 +39,12 @@ export class GithubCloneRepoNode extends BaseToolNode {
   ) {
     super();
   }
+
   setContainerProvider(provider: WorkspaceNode | undefined) {
     this._containerProvider = provider;
   }
   containerProvider() {
     return this._containerProvider;
-  }
-
-  async setConfig(cfg: Record<string, unknown>): Promise<void> {
-    this._config = GithubCloneRepoToolStaticConfigSchema.parse(cfg || {});
-  }
-  config() {
-    return this._config;
   }
 
   getTool(): GithubCloneRepoFunctionTool {

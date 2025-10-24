@@ -38,9 +38,9 @@ export class GithubCloneRepoFunctionTool extends FunctionTool<typeof githubClone
   }
 
   private async resolveToken(): Promise<string> {
-    const staticCfg = this.node.config();
+    const staticCfg = this.node.config;
     const tokenRef = staticCfg?.token;
-    const authRef = staticCfg?.authRef as string | { value: string; source?: 'static' | 'vault' } | undefined; // legacy optional
+
     // Preferred new token field
     if (tokenRef) {
       if (tokenRef.source === 'vault') {
@@ -54,29 +54,7 @@ export class GithubCloneRepoFunctionTool extends FunctionTool<typeof githubClone
         }
       } else if (tokenRef.value) return tokenRef.value;
     }
-    // Legacy path
-    if (authRef) {
-      if (authRef.source === 'env') {
-        const name = authRef.envVar || 'GH_TOKEN';
-        const v = process.env[name] || '';
-        if (v) return v;
-      } else {
-        const vlt = this.vault;
-        if (vlt?.isEnabled()) {
-          const vr: VaultRef = {
-            mount: (authRef.mount || 'secret').replace(/\/$/, ''),
-            path: authRef.path || 'github',
-            key: authRef.key || 'GH_TOKEN',
-          };
-          try {
-            const token = await vlt.getSecret(vr);
-            if (token) return token;
-          } catch {}
-        }
-      }
-    }
-    // Fallback to config service
-    return this.configService.githubToken;
+    return '';
   }
 
   async execute(args: z.infer<typeof githubCloneSchema>, ctx: LLMContext): Promise<string> {

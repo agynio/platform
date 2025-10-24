@@ -5,7 +5,7 @@ import { FinishFunctionTool } from './finish.tool';
 
 export const FinishToolStaticConfigSchema = z.object({}).strict();
 
-export class FinishNode extends BaseToolNode {
+export class FinishNode extends BaseToolNode<z.infer<typeof FinishToolStaticConfigSchema>> {
   private toolInstance?: FinishFunctionTool;
   constructor(private logger: LoggerService) {
     super();

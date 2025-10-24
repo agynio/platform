@@ -46,6 +46,9 @@ export class Node<TConfig = unknown> extends EventEmitter {
     return this._status;
   }
 
+  get config(): TConfig {
+    return this._config;
+  }
   async setConfig(cfg: TConfig): Promise<void> {
     this._config = cfg ?? ({} as TConfig);
     this.emitConfigChanged();

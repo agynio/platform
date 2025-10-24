@@ -2,10 +2,11 @@ import z from 'zod';
 
 import { LoggerService } from '../../../core/services/logger.service';
 import { AgentNode } from '../../agent/agent.node';
-import { TriggerMessage } from '../../slackTrigger';
+
 import { CallAgentToolStaticConfigSchema } from './call_agent.node';
 import { FunctionTool } from '@agyn/llm';
 import { LLMContext } from '../../../llm/types';
+import { TriggerMessage } from '../../slackTrigger/base.trigger';
 
 export const callAgentInvocationSchema = z.object({
   input: z.string().min(1).describe('Message to forward to the target agent.'),
@@ -53,19 +54,19 @@ export class CallAgentFunctionTool extends FunctionTool<typeof callAgentInvocati
     const triggerMessage: TriggerMessage = { content: input, info: {} };
     try {
       if (responseMode === 'sync') {
-        const res= await targetAgent.invoke(targetThreadId, [triggerMessage]);
+        const res = await targetAgent.invoke(targetThreadId, [triggerMessage]);
         return res.text;
       }
       // async / ignore: fire and forget
       void targetAgent.invoke(targetThreadId, [triggerMessage]).catch((err: unknown) => {
         const e = err as { message?: string; stack?: string } | string | undefined;
-        logger.error('Error calling agent (async/ignore mode)', (e as { message?: string } | string | undefined)?.message || e, (e as { stack?: string } | string | undefined)?.stack);
+        logger.error('Error calling agent (async/ignore mode)', e);
       });
       return JSON.stringify({ status: 'sent' });
     } catch (err: unknown) {
       const e = err as { message?: string; stack?: string } | string | undefined;
-      logger.error('Error calling agent', (e as { message?: string } | string | undefined)?.message || e, (e as { stack?: string } | string | undefined)?.stack);
-      return `Error calling agent: ${(e as { message?: string } | string | undefined)?.message || String(e)}`;
+      logger.error('Error calling agent', e);
+      return `Error calling agent: ${e}`;
     }
   }
 }

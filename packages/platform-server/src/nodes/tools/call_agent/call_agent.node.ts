@@ -17,7 +17,7 @@ export const CallAgentToolStaticConfigSchema = z
   })
   .strict();
 
-export class CallAgentNode extends BaseToolNode {
+export class CallAgentNode extends BaseToolNode<z.infer<typeof CallAgentToolStaticConfigSchema>> {
   private description = 'Call another agent with a message and optional context.';
   private name: string | undefined;
   private targetAgent: AgentNode | undefined;
@@ -26,16 +26,11 @@ export class CallAgentNode extends BaseToolNode {
   constructor(private logger: LoggerService) {
     super();
   }
+
   setAgent(agent: AgentNode | undefined) {
     this.targetAgent = agent;
   }
-  async setConfig(cfg: Record<string, unknown>): Promise<void> {
-    const parsed = CallAgentToolStaticConfigSchema.safeParse(cfg);
-    if (!parsed.success) throw new Error('Invalid CallAgentTool config');
-    this.description = parsed.data.description ?? this.description;
-    this.name = parsed.data.name ?? this.name;
-    this.responseMode = parsed.data.response ?? this.responseMode;
-  }
+
   getTool(): CallAgentFunctionTool {
     if (!this.toolInstance) {
       this.toolInstance = new CallAgentFunctionTool({
