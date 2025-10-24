@@ -1,7 +1,7 @@
 // Observability SDK initialization (replaces traceloop)
-import { init as initObs } from '@agyn/tracing';
+import { init as initTracing } from '@agyn/tracing';
 
-initObs({
+initTracing({
   mode: 'extended',
   endpoints: { extended: process.env.TRACING_SERVER_URL || 'http://localhost:4319' },
   defaultAttributes: { service: 'server' },
@@ -16,7 +16,6 @@ import { LoggerService } from './core/services/logger.service';
 import { MongoService } from './core/services/mongo.service';
 import { LiveGraphRuntime } from './graph/liveGraph.manager';
 import { NodeStateService } from './graph/nodeState.service';
-import { setNodeStateService } from './graph/nodeState.provider';
 import { GraphDefinition, GraphError } from './graph/types';
 import { GraphRepository } from './graph/graph.repository';
 import { ContainerCleanupService } from './infra/container/containerCleanup.job';
@@ -26,7 +25,7 @@ import { ContainerCleanupService } from './infra/container/containerCleanup.job'
 // Removed unused AgentRunService import
 // Nix routes are served via Nest controller; keep import if legacy route file exists
 // import { registerNixRoutes } from './routes/nix.route';
-import { initDI, closeDI, resolve } from './bootstrap/di';
+import { initDI, closeDI } from './bootstrap/di';
 import { AppModule } from './bootstrap/app.module';
 import { NcpsKeyService } from './infra/ncps/ncpsKey.service';
 // Remove central platform.services.factory usage; rely on DI providers
@@ -68,15 +67,20 @@ async function bootstrap() {
   const graphRepository = app.get(GraphRepository, { strict: false });
 
   const runtime = app.get(LiveGraphRuntime, { strict: false });
-  // Construct NodeStateService for state persistence and runtime snapshot updates
-  nodeStateService = new NodeStateService(graphRepository, runtime, logger);
-  // Expose via lightweight provider for template factories
-  setNodeStateService(nodeStateService);
 
   // Graph service initialized via DI
 
   // Helper to convert persisted graph to runtime GraphDefinition
-  const toRuntimeGraph = (saved: { nodes: Array<{ id: string; template: string; config?: Record<string, unknown>; dynamicConfig?: Record<string, unknown>; state?: Record<string, unknown> }>; edges: Array<{ source: string; sourceHandle: string; target: string; targetHandle: string }> }) =>
+  const toRuntimeGraph = (saved: {
+    nodes: Array<{
+      id: string;
+      template: string;
+      config?: Record<string, unknown>;
+      dynamicConfig?: Record<string, unknown>;
+      state?: Record<string, unknown>;
+    }>;
+    edges: Array<{ source: string; sourceHandle: string; target: string; targetHandle: string }>;
+  }) =>
     ({
       nodes: saved.nodes.map((n) => ({
         id: n.id,
@@ -136,22 +140,6 @@ async function bootstrap() {
     try {
       await closeDI();
     } catch {}
-    process.exit(0);
-  };
-  process.on('SIGINT', shutdown);
-  process.on('SIGTERM', shutdown);
-=======
-  // Graph-related routes migrated to Nest controllers; legacy Fastify wiring removed
-  const fastify = adapter.getInstance();
-  const PORT = Number(process.env.PORT) || 3010;
-  await fastify.listen({ port: PORT, host: '0.0.0.0' });
-  logger.info(`HTTP server listening on :${PORT}`);
-
-  const shutdown = async () => {
-    logger.info('Shutting down...');
-    await mongo.close();
-    try { await fastify.close(); } catch {}
-    try { await closeDI(); } catch {}
     process.exit(0);
   };
   process.on('SIGINT', shutdown);
