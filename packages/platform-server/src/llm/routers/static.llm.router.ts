@@ -1,15 +1,15 @@
-import { Reducer, Router } from '@agyn/llm';
+import { Router } from '@agyn/llm';
 import { LLMContext, LLMState } from '../types';
+import { Injectable } from '@nestjs/common';
 
+// StaticRouter: returns fixed next; does not own reducer
+@Injectable()
 export class StaticLLMRouter extends Router<LLMState, LLMContext> {
-  constructor(
-    private reducer: Reducer<LLMState, LLMContext>,
-    private next: string | null,
-  ) {
+  constructor(private nextId: string | null) {
     super();
   }
 
-  async invoke(state: LLMState, ctx: LLMContext) {
-    return { state: await this.reducer.invoke(state, ctx), next: this.next };
+  async route(state: LLMState, _ctx: LLMContext) {
+    return { state, next: this.nextId };
   }
 }

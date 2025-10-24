@@ -36,7 +36,7 @@ class EchoTool /* extends BaseTool (legacy) */ {
 
 describe('ToolsNode tool_call span attribution', () => {
   it('stamps nodeId=Tool id when provided (no toolNodeId attribute)', async () => {
-    const reducer = new CallToolsLLMReducer(new LoggerService(), [{ name: 'echo', schema: { parse: (v: any) => v }, execute: async (i: any) => `echo:${JSON.stringify(i)}` }] as any);
+    const reducer = new CallToolsLLMReducer(new LoggerService()).init({ tools: [{ name: 'echo', schema: { parse: (v: any) => v }, execute: async (i: any) => `echo:${JSON.stringify(i)}` }] as any });
     // Build ResponseMessage with one ToolCallMessage
     const response = new ResponseMessage({ output: [new ToolCallMessage({ type: 'function_call', call_id: '1', name: 'echo', arguments: JSON.stringify({ x: 1 }) } as any).toPlain() as any] as any });
     const config = { configurable: { thread_id: 't1', nodeId: 'tool-node-id' } } as any;
@@ -55,7 +55,7 @@ describe('ToolsNode tool_call span attribution', () => {
   it('omits nodeId when Tool id not provided (no agent fallback)', async () => {
     const obs: any = await import('@agyn/tracing');
     (obs as any).__test.captured.length = 0; // reset captured
-    const reducer = new CallToolsLLMReducer(new LoggerService(), [{ name: 'echo', schema: { parse: (v: any) => v }, execute: async (i: any) => `echo:${JSON.stringify(i)}` }] as any);
+    const reducer = new CallToolsLLMReducer(new LoggerService()).init({ tools: [{ name: 'echo', schema: { parse: (v: any) => v }, execute: async (i: any) => `echo:${JSON.stringify(i)}` }] as any });
     const response = new ResponseMessage({ output: [new ToolCallMessage({ type: 'function_call', call_id: '2', name: 'echo', arguments: JSON.stringify({ y: 2 }) } as any).toPlain() as any] as any });
     await reducer.invoke({ messages: [response], meta: {} } as any, { configurable: { thread_id: 't2' } } as any);
     const captured = (obs as any).__test.captured as Array<{ nodeId?: string; toolNodeId?: string }>;
