@@ -529,14 +529,14 @@ export class GitGraphRepository extends GraphRepository {
         const id = String(e.id ?? this.edgeId(e));
         const payload = JSON.stringify({ ...e, id });
         return [id, payload];
-      }),
+      })
     );
     const ai = new Map<string, string>(
       after.map((e) => {
         const id = String(e.id ?? this.edgeId(e));
         const payload = JSON.stringify({ ...e, id });
         return [id, payload];
-      }),
+      })
     );
     const edgeAdds: string[] = [];
     const edgeUpdates: string[] = [];
