@@ -1,9 +1,9 @@
 import { Module } from '@nestjs/common';
 import { TemplateRegistry } from './templateRegistry';
 import { PortsRegistry } from './ports.registry';
-import { GraphService } from './graph.service';
-import { MongoGraphService } from './graphMongo.repository';
-import { GitGraphService } from './gitGraph.repository';
+import { GraphRepository } from './graph.repository';
+import { MongoGraphRepository } from './graphMongo.repository';
+import { GitGraphRepository } from './gitGraph.repository';
 import { LiveGraphRuntime } from './liveGraph.manager';
 import { RunsController } from './controllers/runs.controller';
 import { NodesModule } from '../nodes/nodes.module';
@@ -17,6 +17,7 @@ import { ConfigService } from '../core/services/config.service';
 import { MongoService } from '../core/services/mongo.service';
 import { LLMFactoryService } from '../llm/llmFactory.service';
 import { NcpsKeyService } from '../core/services/ncpsKey.service';
+import { Provider } from '@nestjs/common';
 
 @Module({
   imports: [CoreModule, InfraModule, NodesModule],
@@ -44,7 +45,7 @@ import { NcpsKeyService } from '../core/services/ncpsKey.service';
     },
     PortsRegistry,
     {
-      provide: GraphService,
+      provide: GraphRepository,
       useFactory: async (
         config: ConfigService,
         logger: LoggerService,
@@ -52,19 +53,11 @@ import { NcpsKeyService } from '../core/services/ncpsKey.service';
         templateRegistry: TemplateRegistry,
       ) => {
         if (config.graphStore === 'git') {
-          const svc = new GitGraphService(
-            {
-              repoPath: config.graphRepoPath,
-              branch: config.graphBranch,
-              defaultAuthor: { name: config.graphAuthorName, email: config.graphAuthorEmail },
-            },
-            logger,
-            templateRegistry,
-          );
+          const svc = new GitGraphRepository(config, logger, templateRegistry);
           await svc.initIfNeeded();
           return svc;
         } else {
-          const svc = new MongoGraphService(mongo.getDb(), logger, templateRegistry);
+          const svc = new MongoGraphRepository(mongo.getDb(), logger, templateRegistry);
           await svc.initIfNeeded();
           return svc;
         }
@@ -76,6 +69,6 @@ import { NcpsKeyService } from '../core/services/ncpsKey.service';
     // Guards (functions are not providers; list here for visibility if later wrapped)
     // enforceMcpCommandMutationGuard is a pure function and intentionally not registered
   ],
-  exports: [LiveGraphRuntime, TemplateRegistry, PortsRegistry, GraphService, AgentRunService],
+  exports: [LiveGraphRuntime, TemplateRegistry, PortsRegistry, GraphRepository, AgentRunService],
 })
 export class GraphModule {}

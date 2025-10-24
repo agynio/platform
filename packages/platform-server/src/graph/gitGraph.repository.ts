@@ -5,14 +5,8 @@ import { LoggerService } from '../core/services/logger.service';
 import { TemplateRegistry } from './templateRegistry';
 import { PersistedGraph, PersistedGraphEdge, PersistedGraphNode, PersistedGraphUpsertRequest, PersistedGraphUpsertResponse } from '../graph/types';
 import { validatePersistedGraph } from './graphSchema.validator';
-import { GraphService } from './graph.service';
-
-export interface GitGraphConfig {
-  repoPath: string;
-  branch: string; // e.g. graph-state
-  defaultAuthor?: { name?: string; email?: string };
-  lockTimeoutMs?: number; // advisory lock wait timeout
-}
+import { GraphRepository } from './graph.repository';
+import { ConfigService } from '../core/services/config.service';
 
 // Narrow meta persisted at repo root
 interface GraphMeta {
@@ -31,9 +25,9 @@ function codeError<T = unknown>(code: string, message: string, current?: T): Cod
   return e;
 }
 
-export class GitGraphService extends GraphService {
+export class GitGraphRepository extends GraphRepository {
   constructor(
-    private readonly cfg: GitGraphConfig,
+    private readonly config: ConfigService,
     private readonly logger: LoggerService,
     private readonly templateRegistry: TemplateRegistry,
   ) { super(); }
@@ -43,32 +37,32 @@ export class GitGraphService extends GraphService {
 
   // Repo/bootstrap helpers
   async initIfNeeded(): Promise<void> {
-    await fs.mkdir(this.cfg.repoPath, { recursive: true });
-    const gitDir = path.join(this.cfg.repoPath, '.git');
+    await fs.mkdir(this.config.graphRepoPath, { recursive: true });
+    const gitDir = path.join(this.config.graphRepoPath, '.git');
     const exists = await this.pathExists(gitDir);
     if (!exists) {
-      await this.runGit(['init', '-b', this.cfg.branch], this.cfg.repoPath);
+      await this.runGit(['init', '-b', this.config.graphBranch], this.config.graphRepoPath);
       // Basic .gitignore
-      const gi = path.join(this.cfg.repoPath, '.gitignore');
+      const gi = path.join(this.config.graphRepoPath, '.gitignore');
       const ignore = ['node_modules/', '*.tmp', '*.lock', '.DS_Store'];
       await fs.writeFile(gi, ignore.join('\n') + '\n', 'utf8');
       // Seed root-level single-graph layout (format:2)
-      await fs.mkdir(path.join(this.cfg.repoPath, 'nodes'), { recursive: true });
-      await fs.mkdir(path.join(this.cfg.repoPath, 'edges'), { recursive: true });
+      await fs.mkdir(path.join(this.config.graphRepoPath, 'nodes'), { recursive: true });
+      await fs.mkdir(path.join(this.config.graphRepoPath, 'edges'), { recursive: true });
       const meta = { name: 'main', version: 0, updatedAt: new Date().toISOString(), format: 2 };
-      await this.atomicWriteFile(path.join(this.cfg.repoPath, 'graph.meta.json'), JSON.stringify(meta, null, 2));
-      await this.runGit(['add', '.'], this.cfg.repoPath);
-      await this.commit('chore(graph): init repository (format:2)', this.cfg.defaultAuthor);
+      await this.atomicWriteFile(path.join(this.config.graphRepoPath, 'graph.meta.json'), JSON.stringify(meta, null, 2));
+      await this.runGit(['add', '.'], this.config.graphRepoPath);
+      await this.commit('chore(graph): init repository (format:2)', this.defaultAuthor());
     } else {
       // Ensure branch exists and checked out
-      await this.ensureBranch(this.cfg.branch);
+      await this.ensureBranch(this.config.graphBranch);
     }
   }
 
   async get(name: string): Promise<PersistedGraph | null> {
     // Prefer root-level per-entity layout in working tree; recover from HEAD if corrupt
     try {
-      const metaPath = path.join(this.cfg.repoPath, 'graph.meta.json');
+      const metaPath = path.join(this.config.graphRepoPath, 'graph.meta.json');
       if (await this.pathExists(metaPath)) {
         return await this.readFromWorkingTreeRoot(name);
       }
@@ -139,7 +133,7 @@ export class GitGraphService extends GraphService {
       const { nodeAdds, nodeUpdates, nodeDeletes } = this.diffNodes(current.nodes, target.nodes);
       const { edgeAdds, edgeUpdates, edgeDeletes } = this.diffEdges(current.edges, target.edges);
 
-      const root = this.cfg.repoPath;
+      const root = this.config.graphRepoPath;
       const nodesDir = path.join(root, 'nodes');
       const edgesDir = path.join(root, 'edges');
       await fs.mkdir(nodesDir, { recursive: true });
@@ -189,7 +183,7 @@ export class GitGraphService extends GraphService {
 
       const deltaMsg = this.deltaSummaryDetailed({ before: current, after: target });
       try {
-        await this.commit(`chore(graph): v${target.version} ${deltaMsg}`, author ?? this.cfg.defaultAuthor);
+        await this.commit(`chore(graph): v${target.version} ${deltaMsg}`, author ?? this.defaultAuthor());
         // Update in-memory snapshot after successful commit
         this.lastCommitted = JSON.parse(JSON.stringify(target));
       } catch (e: unknown) {
@@ -269,21 +263,30 @@ export class GitGraphService extends GraphService {
   private async ensureBranch(branch: string) {
     // Try to checkout branch; if missing, create
     try {
-      await this.runGit(['rev-parse', '--verify', branch], this.cfg.repoPath);
+      await this.runGit(['rev-parse', '--verify', branch], this.config.graphRepoPath);
     } catch {
-      await this.runGit(['branch', branch], this.cfg.repoPath);
+      await this.runGit(['branch', branch], this.config.graphRepoPath);
     }
-    await this.runGit(['checkout', branch], this.cfg.repoPath);
+    await this.runGit(['checkout', branch], this.config.graphRepoPath);
   }
 
   private commit(message: string, author?: { name?: string; email?: string }): Promise<void> {
-    const env = { ...process.env };
-    if (author?.name) env.GIT_AUTHOR_NAME = author.name;
-    if (author?.email) env.GIT_AUTHOR_EMAIL = author.email;
-    if (author?.name) env.GIT_COMMITTER_NAME = author.name;
-    if (author?.email) env.GIT_COMMITTER_EMAIL = author.email;
+    // Prefer CLI args over env: --author and -c user.name/email for committer
+    const args: string[] = [];
+    // Configure committer when defaults are present (graphAuthorName/Email)
+    const committerName = this.config.graphAuthorName;
+    const committerEmail = this.config.graphAuthorEmail;
+    if (committerName) args.push('-c', `user.name=${committerName}`);
+    if (committerEmail) args.push('-c', `user.email=${committerEmail}`);
+    args.push('commit');
+    if (author?.name || author?.email) {
+      const aName = author?.name || committerName || '';
+      const aEmail = author?.email || committerEmail || '';
+      if (aName || aEmail) args.push('--author', `${aName} <${aEmail}>`);
+    }
+    args.push('-m', message);
     return new Promise((resolve, reject) => {
-      const child = spawn('git', ['commit', '-m', message], { cwd: this.cfg.repoPath, env });
+      const child = spawn('git', args, { cwd: this.config.graphRepoPath });
       let stderr = '';
       child.stderr.on('data', (d) => (stderr += d.toString()));
       child.on('error', reject);
@@ -322,8 +325,8 @@ export class GitGraphService extends GraphService {
 
   // Advisory lock: repo-root .graph.lock
   private async acquireLock() {
-    const lockPath = path.join(this.cfg.repoPath, '.graph.lock');
-    const timeout = this.cfg.lockTimeoutMs ?? 5000;
+    const lockPath = path.join(this.config.graphRepoPath, '.graph.lock');
+    const timeout = this.config.graphLockTimeoutMs ?? 5000;
     const start = Date.now();
     while (true) {
       try {
@@ -355,12 +358,12 @@ export class GitGraphService extends GraphService {
 
   // Root-level readers and fallbacks
   private async readFromWorkingTreeRoot(name: string): Promise<PersistedGraph> {
-    const metaPath = path.join(this.cfg.repoPath, 'graph.meta.json');
+    const metaPath = path.join(this.config.graphRepoPath, 'graph.meta.json');
     try {
       const parsed = JSON.parse(await fs.readFile(metaPath, 'utf8')) as Partial<GraphMeta>;
       const meta: GraphMeta = { name: (parsed.name ?? name) as string, version: Number(parsed.version ?? 0), updatedAt: (parsed.updatedAt ?? new Date().toISOString()) as string, format: 2 };
-      const nodesRes = await this.readEntitiesFromDir<PersistedGraphNode>(path.join(this.cfg.repoPath, 'nodes'));
-      const edgesRes = await this.readEntitiesFromDir<PersistedGraphEdge>(path.join(this.cfg.repoPath, 'edges'));
+      const nodesRes = await this.readEntitiesFromDir<PersistedGraphNode>(path.join(this.config.graphRepoPath, 'nodes'));
+      const edgesRes = await this.readEntitiesFromDir<PersistedGraphEdge>(path.join(this.config.graphRepoPath, 'edges'));
       if (nodesRes.hadError || edgesRes.hadError) {
         // Prefer lastCommitted snapshot if available; otherwise fall back to HEAD
         if (this.lastCommitted) return this.lastCommitted;
@@ -402,22 +405,22 @@ export class GitGraphService extends GraphService {
 
   private async readFromHeadRoot(name: string): Promise<PersistedGraph | null> {
     try {
-      const metaRaw = await this.runGitCapture(['show', 'HEAD:graph.meta.json'], this.cfg.repoPath);
+      const metaRaw = await this.runGitCapture(['show', 'HEAD:graph.meta.json'], this.config.graphRepoPath);
       const parsed = JSON.parse(metaRaw) as Partial<GraphMeta>;
       const meta: GraphMeta = { name: (parsed.name ?? name) as string, version: Number(parsed.version ?? 0), updatedAt: (parsed.updatedAt ?? new Date().toISOString()) as string, format: 2 };
-      const list = await this.runGitCapture(['ls-tree', '-r', '--name-only', 'HEAD'], this.cfg.repoPath);
+      const list = await this.runGitCapture(['ls-tree', '-r', '--name-only', 'HEAD'], this.config.graphRepoPath);
       const paths = list.split('\n').filter(Boolean);
       const nodePaths = paths.filter((p) => p.startsWith('nodes/') && p.endsWith('.json'));
       const edgePaths = paths.filter((p) => p.startsWith('edges/') && p.endsWith('.json'));
       const nodes = await Promise.all(nodePaths.map(async (p) => {
-        const raw = await this.runGitCapture(['show', `HEAD:${p}`], this.cfg.repoPath);
+        const raw = await this.runGitCapture(['show', `HEAD:${p}`], this.config.graphRepoPath);
         const obj = JSON.parse(raw);
         if (!obj.id) obj.id = decodeURIComponent(path.basename(p, '.json'));
         obj.id = String(obj.id);
         return obj as PersistedGraphNode;
       }));
       const edges = await Promise.all(edgePaths.map(async (p) => {
-        const raw = await this.runGitCapture(['show', `HEAD:${p}`], this.cfg.repoPath);
+        const raw = await this.runGitCapture(['show', `HEAD:${p}`], this.config.graphRepoPath);
         const obj = JSON.parse(raw);
         if (!obj.id) obj.id = decodeURIComponent(path.basename(p, '.json'));
         obj.id = String(obj.id);
@@ -432,20 +435,20 @@ export class GitGraphService extends GraphService {
   private async readFromHeadPerGraph(name: string): Promise<PersistedGraph | null> {
     try {
       const relMeta = path.posix.join('graphs', name, 'graph.meta.json');
-      const rawMeta = await this.runGitCapture(['show', `HEAD:${relMeta}`], this.cfg.repoPath);
+      const rawMeta = await this.runGitCapture(['show', `HEAD:${relMeta}`], this.config.graphRepoPath);
       const parsed = JSON.parse(rawMeta) as Partial<GraphMeta>;
       const meta: GraphMeta = { name: (parsed.name ?? name) as string, version: Number(parsed.version ?? 0), updatedAt: (parsed.updatedAt ?? new Date().toISOString()) as string, format: 2 };
       const base = path.posix.join('graphs', name);
-      const list = await this.runGitCapture(['ls-tree', '-r', '--name-only', 'HEAD', base], this.cfg.repoPath);
+      const list = await this.runGitCapture(['ls-tree', '-r', '--name-only', 'HEAD', base], this.config.graphRepoPath);
       const paths = list.split('\n').filter(Boolean);
       const nodes = await Promise.all(paths.filter((p) => p.startsWith(`${base}/nodes/`) && p.endsWith('.json')).map(async (p) => {
-        const raw = await this.runGitCapture(['show', `HEAD:${p}`], this.cfg.repoPath);
+        const raw = await this.runGitCapture(['show', `HEAD:${p}`], this.config.graphRepoPath);
         const obj = JSON.parse(raw) as PersistedGraphNode;
         (obj as any).id = String((obj as any).id ?? decodeURIComponent(path.basename(p, '.json')));
         return obj;
       }));
       const edges = await Promise.all(paths.filter((p) => p.startsWith(`${base}/edges/`) && p.endsWith('.json')).map(async (p) => {
-        const raw = await this.runGitCapture(['show', `HEAD:${p}`], this.cfg.repoPath);
+        const raw = await this.runGitCapture(['show', `HEAD:${p}`], this.config.graphRepoPath);
         const obj = JSON.parse(raw) as PersistedGraphEdge;
         (obj as any).id = String((obj as any).id ?? decodeURIComponent(path.basename(p, '.json')));
         return obj;
@@ -459,7 +462,7 @@ export class GitGraphService extends GraphService {
   private async readFromHeadMonolith(name: string): Promise<PersistedGraph | null> {
     try {
       const rel = path.posix.join('graphs', name, 'graph.json');
-      const out = await this.runGitCapture(['show', `HEAD:${rel}`], this.cfg.repoPath);
+      const out = await this.runGitCapture(['show', `HEAD:${rel}`], this.config.graphRepoPath);
       return JSON.parse(out) as PersistedGraph;
     } catch {
       return null;
@@ -500,3 +503,9 @@ export class GitGraphService extends GraphService {
     return { edgeAdds, edgeUpdates, edgeDeletes };
   }
 }
+  private defaultAuthor(): { name?: string; email?: string } | undefined {
+    const name = this.config.graphAuthorName;
+    const email = this.config.graphAuthorEmail;
+    if (!name && !email) return undefined;
+    return { name, email };
+  }

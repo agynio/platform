@@ -18,7 +18,7 @@ import { MongoService } from './core/services/mongo.service';
 // TemplateRegistry is provided via GraphModule factory provider
 import { TemplateRegistry } from './graph/templateRegistry';
 import { LiveGraphRuntime } from './graph/liveGraph.manager';
-import { GraphService } from './graph/graph.service';
+import { GraphRepository } from './graph/graph.repository';
 // import { GitGraphService } from './graph/gitGraph.repository';
 import { GraphDefinition, GraphError, PersistedGraphUpsertRequest } from './graph/types';
 import { GraphErrorCode } from './graph/errors';
@@ -94,7 +94,7 @@ async function bootstrap() {
   const runtime = app.get(LiveGraphRuntime, { strict: false });
   const runsService = app.get(AgentRunService, { strict: false });
   await runsService.ensureIndexes();
-  const graphService = await resolve<GraphService>(GraphService);
+  const graphService = await resolve<GraphRepository>(GraphRepository);
   await graphService.initIfNeeded();
 
   // Provide deps to factories/runtime for state persistence and config access
@@ -153,7 +153,7 @@ async function bootstrap() {
 
   // Load and apply existing persisted graph BEFORE starting server
   try {
-    const existing = await graphService.get('main');
+  const existing = await graphService.get('main');
     if (existing) {
       logger.info(
         'Applying persisted graph to live runtime (version=%s, nodes=%d, edges=%d)',

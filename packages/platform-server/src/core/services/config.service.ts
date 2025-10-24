@@ -22,6 +22,14 @@ export const configSchema = z.object({
   graphBranch: z.string().default('graph-state'),
   graphAuthorName: z.string().optional(),
   graphAuthorEmail: z.string().optional(),
+  graphLockTimeoutMs: z
+    .union([z.string(), z.number()])
+    .default('5000')
+    .transform((v) => {
+      const n = typeof v === 'number' ? v : Number(v);
+      return Number.isFinite(n) ? n : 5000;
+    }),
+  graphMongoCollectionName: z.string().default('graphs'),
   // Optional Vault flags (disabled by default)
   vaultEnabled: z
     .union([z.boolean(), z.string()])
@@ -185,6 +193,12 @@ export class ConfigService implements Config {
   get graphAuthorEmail(): string | undefined {
     return this.params.graphAuthorEmail;
   }
+  get graphLockTimeoutMs(): number {
+    return this.params.graphLockTimeoutMs;
+  }
+  get graphMongoCollectionName(): string {
+    return this.params.graphMongoCollectionName;
+  }
 
   // Vault getters (optional)
   get vaultEnabled(): boolean {
@@ -292,6 +306,8 @@ export class ConfigService implements Config {
       graphBranch: process.env.GRAPH_BRANCH,
       graphAuthorName: process.env.GRAPH_AUTHOR_NAME,
       graphAuthorEmail: process.env.GRAPH_AUTHOR_EMAIL,
+      graphLockTimeoutMs: process.env.GRAPH_LOCK_TIMEOUT_MS,
+      graphMongoCollectionName: process.env.GRAPH_MONGO_COLLECTION_NAME,
       vaultEnabled: process.env.VAULT_ENABLED,
       vaultAddr: process.env.VAULT_ADDR,
       vaultToken: process.env.VAULT_TOKEN,

@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { mkdtempSync, rmSync } from 'fs';
 import os from 'os';
 import path from 'path';
-import { GitGraphService } from '../src/graph/gitGraph.repository';
+import { GitGraphRepository } from '../src/graph/gitGraph.repository';
 import { LoggerService } from '../src/core/services/logger.service.js';
 import { TemplateRegistry } from '../src/graph/templateRegistry';
 
@@ -12,9 +12,9 @@ class NoopLogger extends LoggerService {
   error() {}
 }
 
-describe('GitGraphService', () => {
+describe('GitGraphRepository', () => {
   let tmp: string;
-  let svc: GitGraphService;
+  let svc: GitGraphRepository;
   let registry: TemplateRegistry;
 
   beforeEach(async () => {
@@ -28,7 +28,12 @@ describe('GitGraphService', () => {
       { sourcePorts: { out: { kind: 'instance' } }, targetPorts: { in: { kind: 'instance' } } },
       { title: 'Noop', kind: 'tool' },
     );
-    svc = new GitGraphService({ repoPath: tmp, branch: 'graph-state', defaultAuthor: { name: 'Test', email: 't@example.com' } }, new NoopLogger(), registry as any);
+    // Use minimal ConfigService stub and env
+    const { ConfigService } = await import('../src/core/services/config.service');
+    const cfg = new ConfigService({
+      githubAppId: '1', githubAppPrivateKey: 'k', githubInstallationId: 'i', githubToken: 't', mongodbUrl: 'mongodb://x', graphStore: 'git', graphRepoPath: tmp, graphBranch: 'graph-state', graphAuthorName: 'Test', graphAuthorEmail: 't@example.com', nixAllowedChannels: ['x'], nixHttpTimeoutMs: 1, nixCacheTtlMs: 1, nixCacheMax: 1, dockerMirrorUrl: 'http://x', mcpToolsStaleTimeoutMs: 0,
+    } as any);
+    svc = new GitGraphRepository(cfg as any, new NoopLogger(), registry as any);
     await svc.initIfNeeded();
   });
 
@@ -73,7 +78,11 @@ describe('GitGraphService', () => {
 
   it('advisory lock times out when held by another writer', async () => {
     // Create a service with short lock timeout
-    const short = new GitGraphService({ repoPath: tmp, branch: 'graph-state', lockTimeoutMs: 200, defaultAuthor: { name: 'T', email: 't@example.com' } }, new NoopLogger(), registry as any);
+    const { ConfigService } = await import('../src/core/services/config.service');
+    const cfg2 = new ConfigService({
+      githubAppId: '1', githubAppPrivateKey: 'k', githubInstallationId: 'i', githubToken: 't', mongodbUrl: 'mongodb://x', graphStore: 'git', graphRepoPath: tmp, graphBranch: 'graph-state', graphAuthorName: 'T', graphAuthorEmail: 't@example.com', graphLockTimeoutMs: 200, nixAllowedChannels: ['x'], nixHttpTimeoutMs: 1, nixCacheTtlMs: 1, nixCacheMax: 1, dockerMirrorUrl: 'http://x', mcpToolsStaleTimeoutMs: 0,
+    } as any);
+    const short = new GitGraphRepository(cfg2 as any, new NoopLogger(), registry as any);
     await short.initIfNeeded();
     // Simulate another holder by manually creating lock file
     const fs = await import('fs/promises');

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { GitGraphService } from '../src/graph/gitGraph.repository';
+import { GitGraphRepository } from '../src/graph/gitGraph.repository';
 import { LoggerService } from '../src/core/services/logger.service.js';
 import { TemplateRegistry } from '../src/graph/templateRegistry';
 import os from 'os';
@@ -17,7 +17,11 @@ describe('Graph node.state round-trip (git)', () => {
       { targetPorts: { $self: { kind: 'instance' } } },
       { title: 'MCP Server', kind: 'mcp' as const },
     );
-    const svc = new GitGraphService({ repoPath: dir, branch: 'graph-state', defaultAuthor: { name: 'Test', email: 't@example.com' } }, logger, tr as any);
+    const { ConfigService } = await import('../src/core/services/config.service');
+    const cfg = new ConfigService({
+      githubAppId: '1', githubAppPrivateKey: 'k', githubInstallationId: 'i', githubToken: 't', mongodbUrl: 'mongodb://x', graphStore: 'git', graphRepoPath: dir, graphBranch: 'graph-state', graphAuthorName: 'Test', graphAuthorEmail: 't@example.com', nixAllowedChannels: ['x'], nixHttpTimeoutMs: 1, nixCacheTtlMs: 1, nixCacheMax: 1, dockerMirrorUrl: 'http://x', mcpToolsStaleTimeoutMs: 0,
+    } as any);
+    const svc = new GitGraphRepository(cfg as any, logger, tr as any);
     await svc.initIfNeeded();
     const saved = await svc.upsert({
       name: 'main',
@@ -42,7 +46,11 @@ describe('Graph node.state round-trip (git)', () => {
       { targetPorts: { $self: { kind: 'instance' } } },
       { title: 'MCP Server', kind: 'mcp' as const },
     );
-    const svc = new GitGraphService({ repoPath: dir, branch: 'graph-state', defaultAuthor: { name: 'Test', email: 't@example.com' } }, logger, tr as any);
+    const { ConfigService } = await import('../src/core/services/config.service');
+    const cfg = new ConfigService({
+      githubAppId: '1', githubAppPrivateKey: 'k', githubInstallationId: 'i', githubToken: 't', mongodbUrl: 'mongodb://x', graphStore: 'git', graphRepoPath: dir, graphBranch: 'graph-state', graphAuthorName: 'Test', graphAuthorEmail: 't@example.com', nixAllowedChannels: ['x'], nixHttpTimeoutMs: 1, nixCacheTtlMs: 1, nixCacheMax: 1, dockerMirrorUrl: 'http://x', mcpToolsStaleTimeoutMs: 0,
+    } as any);
+    const svc = new GitGraphRepository(cfg as any, logger, tr as any);
     await svc.initIfNeeded();
     const initial = await svc.upsert({
       name: 'main',
@@ -74,7 +82,11 @@ describe('Graph node.state round-trip (git)', () => {
       { targetPorts: { $self: { kind: 'instance' } } },
       { title: 'MCP Server', kind: 'mcp' as const },
     );
-    const svc = new GitGraphService({ repoPath: dir, branch: 'graph-state', defaultAuthor: { name: 'Test', email: 't@example.com' } }, logger, tr as any);
+    const { ConfigService } = await import('../src/core/services/config.service');
+    const cfg = new ConfigService({
+      githubAppId: '1', githubAppPrivateKey: 'k', githubInstallationId: 'i', githubToken: 't', mongodbUrl: 'mongodb://x', graphStore: 'git', graphRepoPath: dir, graphBranch: 'graph-state', graphAuthorName: 'Test', graphAuthorEmail: 't@example.com', nixAllowedChannels: ['x'], nixHttpTimeoutMs: 1, nixCacheTtlMs: 1, nixCacheMax: 1, dockerMirrorUrl: 'http://x', mcpToolsStaleTimeoutMs: 0,
+    } as any);
+    const svc = new GitGraphRepository(cfg as any, logger, tr as any);
     await svc.initIfNeeded();
     const first = await svc.upsert({
       name: 'main',
@@ -105,7 +117,11 @@ describe('Graph node.state round-trip (git)', () => {
       { targetPorts: { $self: { kind: 'instance' } } },
       { title: 'MCP Server', kind: 'mcp' as const },
     );
-    const svc = new GitGraphService({ repoPath: dir, branch: 'graph-state', defaultAuthor: { name: 'Test', email: 't@example.com' } }, logger, tr as any);
+    const { ConfigService } = await import('../src/core/services/config.service');
+    const cfg = new ConfigService({
+      githubAppId: '1', githubAppPrivateKey: 'k', githubInstallationId: 'i', githubToken: 't', mongodbUrl: 'mongodb://x', graphStore: 'git', graphRepoPath: dir, graphBranch: 'graph-state', graphAuthorName: 'Test', graphAuthorEmail: 't@example.com', nixAllowedChannels: ['x'], nixHttpTimeoutMs: 1, nixCacheTtlMs: 1, nixCacheMax: 1, dockerMirrorUrl: 'http://x', mcpToolsStaleTimeoutMs: 0,
+    } as any);
+    const svc = new GitGraphRepository(cfg as any, logger, tr as any);
     await svc.initIfNeeded();
     const initial = await svc.upsert({
       name: 'main',
