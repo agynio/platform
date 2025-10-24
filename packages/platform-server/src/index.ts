@@ -34,6 +34,7 @@ import { AgentRunService } from './nodes/agentRun.repository';
 import { initDI, closeDI } from './bootstrap/di';
 import { AppModule } from './bootstrap/app.module';
 import { NcpsKeyService } from './infra/ncps/ncpsKey.service';
+import { createPlatformServices } from './bootstrap/platform.services.factory';
 
 await initDI();
 
@@ -69,20 +70,12 @@ async function bootstrap() {
   await mongo.connect();
   // Initialize checkpointer (optional Postgres mode)
 
-  // Initialize container registry and cleanup services
-  const registry = app.get(ContainerRegistryService, { strict: false });
-  await registry.ensureIndexes();
-  await registry.backfillFromDocker(containerService);
-  const cleanup = new ContainerCleanupService(registry, containerService, logger);
-  cleanup.start();
+  // Initialize and wire platform services via factory
+  const { graphRepository, agentRunService, containerCleanupService, containerRegistryService } = await createPlatformServices(app);
 
   const runtime = app.get(LiveGraphRuntime, { strict: false });
-  const runsService = app.get(AgentRunService, { strict: false });
-  await runsService.ensureIndexes();
-  const graphService = await resolve<GraphRepository>(GraphRepository);
-  await graphService.initIfNeeded();
   // Construct NodeStateService for state persistence and runtime snapshot updates
-  nodeStateService = new NodeStateService(graphService as any, runtime, logger);
+  nodeStateService = new NodeStateService(graphRepository as any, runtime, logger);
   // Expose via lightweight provider for template factories
   setNodeStateService(nodeStateService);
 
@@ -105,7 +98,7 @@ async function bootstrap() {
 
   // Load and apply existing persisted graph BEFORE starting server
   try {
-    const existing = await graphService.get('main');
+    const existing = await graphRepository.get('main');
     if (existing) {
       logger.info(
         'Applying persisted graph to live runtime (version=%s, nodes=%d, edges=%d)',
@@ -136,6 +129,10 @@ async function bootstrap() {
 
   const shutdown = async () => {
     logger.info('Shutting down...');
+    try {
+      // Stop background cleanup before closing app
+      containerCleanupService.stop();
+    } catch {}
     await mongo.close();
     try {
       await fastify.close();
