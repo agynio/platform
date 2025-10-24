@@ -8,7 +8,7 @@ import type { MongoService } from '../src/core/services/mongo.service.js';
 
 // Build a registry and assert memory templates and agent memory port wiring are present.
 describe('templates: memory registration and agent memory port', () => {
-  it('registers memory and memoryConnector templates and exposes Agent memory target port', () => {
+  it('registers memory and memoryConnector templates and exposes Agent memory target port', async () => {
     const deps = {
       logger: {} as unknown as LoggerService,
       containerService: {} as unknown as ContainerService,

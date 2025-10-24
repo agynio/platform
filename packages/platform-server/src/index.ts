@@ -52,7 +52,6 @@ async function bootstrap() {
   // Resolve optional services via DI as needed
   const ncpsKeyService = app.get(NcpsKeyService, { strict: false });
   let nodeStateService: NodeStateService | undefined;
-  // Register routes that need runtime on fastify instance (non-Nest legacy)
   const fastify = adapter.getInstance();
   // Initialize Ncps key service early
   try {
@@ -112,9 +111,7 @@ async function bootstrap() {
     }
     logger.error('Failed to apply initial persisted graph: %s', String(e));
   }
-  // Globals already set above; reuse adapter/app
-
-  // Fastify instance already initialized above
+  // Fastify instance is initialized via Nest adapter; routes are handled by Nest controllers only.
 
   // Start Fastify then attach Socket.io
   const PORT = Number(process.env.PORT) || 3010;

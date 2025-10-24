@@ -22,9 +22,13 @@ describe('TemplateRegistry.toSchema with capabilities/staticConfigSchema', () =>
         dynamicConfigurable: false,
         provisionable: true,
       },
-      DummyNode as any,
-    );
-=======
+      staticConfigSchema: {
+        type: 'object',
+        properties: { foo: { type: 'string' } },
+        required: ['foo'],
+      } as any,
+    }, DummyNode as any);
+
       staticConfigSchema: {
         type: 'object',
         properties: {
@@ -53,7 +57,10 @@ describe('TemplateRegistry.toSchema with capabilities/staticConfigSchema', () =>
   it('defaults to undefined when not provided in meta', async () => {
     const reg = new TemplateRegistry();
     reg.register('noMeta', { title: 'No Meta', kind: 'service' as TemplateKind }, DummyNode as any);
-=======
+
+
+
+
 
     const schema = await reg.toSchema();
     const entry = schema.find((s) => s.name === 'noMeta') as TemplateNodeSchema;
