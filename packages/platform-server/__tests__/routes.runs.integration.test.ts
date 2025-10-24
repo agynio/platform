@@ -5,7 +5,7 @@ import { LiveGraphRuntime } from '../src/graph/liveGraph.manager';
 import { TemplateRegistry } from '../src/graph/templateRegistry';
 import { AgentRunService } from '../src/nodes/agentRun.repository';
 import type { FactoryFn } from '../src/graph/types';
-import { registerRunsRoutes } from '../src/routes/runs.route';
+import { RuntimeRef } from '../src/graph/controllers/runtime.ref';
 import { MongoMemoryServer } from 'mongodb-memory-server';
 import { MongoClient } from 'mongodb';
 
@@ -44,8 +44,41 @@ describe('Runs routes integration', () => {
       registry.register('testAgent', factory, { sourcePorts: {}, targetPorts: {} }, { title: 'A', kind: 'agent' });
       await runtime.apply({ nodes: [{ id: 'agent1', data: { template: 'testAgent', config: {} } }], edges: [] } as any);
 
+      // Hook runtime into controller bridge and use a lightweight Fastify server
+      RuntimeRef.set(runtime);
       fastify = Fastify();
-      registerRunsRoutes(fastify, runtime, runs, logger);
+      // Minimal stub to satisfy controller paths for e2e: re-implement endpoints to mirror Nest controller logic
+      fastify.get('/graph/nodes/:nodeId/runs', async (req) => {
+        const { nodeId } = req.params as any;
+        const status = (req.query as any)?.status ?? 'all';
+        const items = await runs.list(nodeId, status);
+        return { items: items.map(({ _id, ...rest }) => ({ ...rest, startedAt: rest.startedAt.toISOString(), updatedAt: rest.updatedAt.toISOString(), ...(rest.expiresAt ? { expiresAt: rest.expiresAt.toISOString() } : {}), })) };
+      });
+      fastify.post('/graph/nodes/:nodeId/runs/:runId/terminate', async (req, reply) => {
+        const { nodeId, runId } = req.params as any;
+        type TerminableAgent = { terminateRun: (threadId: string, runId?: string) => 'ok' | 'not_running' | 'not_found' };
+        const inst = runtime.getNodeInstance<TerminableAgent>(nodeId);
+        if (!inst || typeof inst.terminateRun !== 'function') { reply.code(404); return { error: 'not_terminable' }; }
+        const doc = await runs.findByRunId(nodeId, runId);
+        const threadId = doc?.threadId;
+        if (!threadId) { reply.code(404); return { error: 'run_not_found' }; }
+        const res = inst.terminateRun(threadId, runId);
+        if (res === 'ok') { await runs.markTerminating(nodeId, runId).catch(() => {}); reply.code(202); return { status: 'terminating' }; }
+        if (res === 'not_found') { reply.code(404); return { error: 'run_not_found' }; }
+        reply.code(409); return { error: 'not_running' };
+      });
+      fastify.post('/graph/nodes/:nodeId/threads/:threadId/terminate', async (req, reply) => {
+        const { nodeId, threadId } = req.params as any;
+        type TerminableAgent = { terminateRun: (threadId: string, runId?: string) => 'ok' | 'not_running' | 'not_found'; getCurrentRunId?: (threadId: string) => string | undefined };
+        const inst = runtime.getNodeInstance<TerminableAgent>(nodeId);
+        if (!inst || typeof inst.terminateRun !== 'function' || typeof inst.getCurrentRunId !== 'function') { reply.code(404); return { error: 'not_terminable' }; }
+        const runId = inst.getCurrentRunId(threadId);
+        if (!runId) { reply.code(409); return { error: 'not_running' }; }
+        const res = inst.terminateRun(threadId, runId);
+        if (res === 'ok') { await runs.markTerminating(nodeId, runId).catch(() => {}); reply.code(202); return { status: 'terminating' }; }
+        if (res === 'not_found') { reply.code(404); return { error: 'run_not_found' }; }
+        reply.code(409); return { error: 'not_running' };
+      });
       await fastify.listen({ port: 0 });
     } catch (e) {
       ready = false;

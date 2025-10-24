@@ -47,7 +47,6 @@ import { RemindersController } from './tools/remind_me/reminders.controller';
     GithubCloneRepoNode,
     RemindMeNode,
   ],
-  exports: [],
+  exports: [AgentRunService],
 })
 export class NodesModule {}
-

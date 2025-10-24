@@ -23,3 +23,7 @@ export async function closeDI(): Promise<void> {
   }
 }
 
+// Allow main HTTP bootstrap to bind the Nest application so resolve() uses the same container.
+export function setAppRef(app: INestApplicationContext) {
+  appRef = app;
+}
