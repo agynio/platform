@@ -502,10 +502,10 @@ export class GitGraphRepository extends GraphRepository {
     for (const id of bi.keys()) if (!ai.has(id)) edgeDeletes.push(id);
     return { edgeAdds, edgeUpdates, edgeDeletes };
   }
-}
   private defaultAuthor(): { name?: string; email?: string } | undefined {
     const name = this.config.graphAuthorName;
     const email = this.config.graphAuthorEmail;
     if (!name && !email) return undefined;
     return { name, email };
   }
+}
