@@ -23,7 +23,9 @@ type CodeError<T = unknown> = Error & { code: string; current?: T };
 function codeError<T = unknown>(code: string, message: string, current?: T): CodeError<T> {
   const e = new Error(message) as CodeError<T>;
   e.code = code;
-  if (current !== undefined) e.current = current;
+  if (current !== undefined) {
+    e.current = current;
+  }
   return e;
 }
 
@@ -72,13 +74,21 @@ export class GitGraphRepository extends GraphRepository {
       // ignore and try HEAD fallbacks
     }
     // If working tree failed or absent, prefer the last committed snapshot if available (should match HEAD)
-    if (this.lastCommitted) return this.lastCommitted;
+    if (this.lastCommitted) {
+      return this.lastCommitted;
+    }
     const headRoot = await this.readFromHeadRoot(name);
-    if (headRoot) return headRoot;
+    if (headRoot) {
+      return headRoot;
+    }
     const headPerGraph = await this.readFromHeadPerGraph(name);
-    if (headPerGraph) return headPerGraph;
+    if (headPerGraph) {
+      return headPerGraph;
+    }
     const headMonolith = await this.readFromHeadMonolith(name);
-    if (headMonolith) return headMonolith;
+    if (headMonolith) {
+      return headMonolith;
+    }
     return null;
   }
 
@@ -109,7 +119,9 @@ export class GitGraphRepository extends GraphRepository {
         const out = this.stripInternalNode(n);
         if (out.state === undefined && existing) {
           const prev = existing.nodes.find((p) => p.id === out.id);
-          if (prev && prev.state !== undefined) out.state = prev.state;
+          if (prev && prev.state !== undefined) {
+            out.state = prev.state;
+          }
         }
         return out;
       });
@@ -174,7 +186,9 @@ export class GitGraphRepository extends GraphRepository {
 
       // Stage changes
       const toStage = Array.from(new Set([...touched.added, ...touched.updated, ...touched.deleted, 'graph.meta.json']));
-      if (toStage.length) await this.runGit(['add', '--all', ...toStage], root);
+      if (toStage.length) {
+        await this.runGit(['add', '--all', ...toStage], root);
+      }
 
       // Remove legacy graphs/ directory if exists
       if (await this.pathExists(path.join(root, 'graphs'))) {
@@ -205,8 +219,11 @@ export class GitGraphRepository extends GraphRepository {
     const base = current ?? { name, version: 0, updatedAt: new Date().toISOString(), nodes: [], edges: [] };
     const nodes = Array.from(base.nodes || []);
     const idx = nodes.findIndex((n) => n.id === nodeId);
-    if (idx >= 0) nodes[idx] = { ...nodes[idx], state: patch } as PersistedGraphNode;
-    else nodes.push({ id: nodeId, template: 'unknown', state: patch } as PersistedGraphNode);
+    if (idx >= 0) {
+      nodes[idx] = { ...nodes[idx], state: patch } as PersistedGraphNode;
+    } else {
+      nodes.push({ id: nodeId, template: 'unknown', state: patch } as PersistedGraphNode);
+    }
     await this.upsert({ name, version: base.version, nodes, edges: base.edges }, undefined);
   }
 
@@ -241,8 +258,11 @@ export class GitGraphRepository extends GraphRepository {
       child.stderr.on('data', (d) => { stderr += d.toString(); });
       child.on('error', reject);
       child.on('exit', (code) => {
-        if (code === 0) resolve();
-        else reject(new Error(`git ${args.join(' ')} failed: ${stderr}`));
+        if (code === 0) {
+          resolve();
+        } else {
+          reject(new Error(`git ${args.join(' ')} failed: ${stderr}`));
+        }
       });
     });
   }
@@ -256,8 +276,11 @@ export class GitGraphRepository extends GraphRepository {
       child.stderr.on('data', (d) => (stderr += d.toString()));
       child.on('error', reject);
       child.on('exit', (code) => {
-        if (code === 0) resolve(stdout);
-        else reject(new Error(`git ${args.join(' ')} failed: ${stderr}`));
+        if (code === 0) {
+          resolve(stdout);
+        } else {
+          reject(new Error(`git ${args.join(' ')} failed: ${stderr}`));
+        }
       });
     });
   }
@@ -278,13 +301,19 @@ export class GitGraphRepository extends GraphRepository {
     // Configure committer when defaults are present (graphAuthorName/Email)
     const committerName = this.config.graphAuthorName;
     const committerEmail = this.config.graphAuthorEmail;
-    if (committerName) args.push('-c', `user.name=${committerName}`);
-    if (committerEmail) args.push('-c', `user.email=${committerEmail}`);
+    if (committerName) {
+      args.push('-c', `user.name=${committerName}`);
+    }
+    if (committerEmail) {
+      args.push('-c', `user.email=${committerEmail}`);
+    }
     args.push('commit');
     if (author?.name || author?.email) {
       const aName = author?.name || committerName || '';
       const aEmail = author?.email || committerEmail || '';
-      if (aName || aEmail) args.push('--author', `${aName} <${aEmail}>`);
+      if (aName || aEmail) {
+        args.push('--author', `${aName} <${aEmail}>`);
+      }
     }
     args.push('-m', message);
     return new Promise((resolve, reject) => {
@@ -293,8 +322,11 @@ export class GitGraphRepository extends GraphRepository {
       child.stderr.on('data', (d) => (stderr += d.toString()));
       child.on('error', reject);
       child.on('exit', (code) => {
-        if (code === 0) resolve();
-        else reject(new Error(`git commit failed: ${stderr}`));
+        if (code === 0) {
+          resolve();
+        } else {
+          reject(new Error(`git commit failed: ${stderr}`));
+        }
       });
     });
   }
@@ -360,7 +392,9 @@ export class GitGraphRepository extends GraphRepository {
   }
 
   private async releaseLock(handle: { lockPath: string } | null | undefined) {
-    if (!handle) return;
+    if (!handle) {
+      return;
+    }
     try {
       await fs.unlink(handle.lockPath);
     } catch {}
@@ -376,14 +410,20 @@ export class GitGraphRepository extends GraphRepository {
       const edgesRes = await this.readEntitiesFromDir<PersistedGraphEdge>(path.join(this.config.graphRepoPath, 'edges'));
       if (nodesRes.hadError || edgesRes.hadError) {
         // Prefer lastCommitted snapshot if available; otherwise fall back to HEAD
-        if (this.lastCommitted) return this.lastCommitted;
+        if (this.lastCommitted) {
+          return this.lastCommitted;
+        }
         const head = await this.readFromHeadRoot(name);
-        if (head) return head;
+        if (head) {
+          return head;
+        }
       }
       return { name: meta.name ?? name, version: meta.version ?? 0, updatedAt: meta.updatedAt ?? new Date().toISOString(), nodes: nodesRes.items, edges: edgesRes.items };
     } catch {
       const head = await this.readFromHeadRoot(name);
-      if (head) return head;
+      if (head) {
+        return head;
+      }
       throw new Error('Failed to read working tree root layout');
     }
   }
@@ -429,14 +469,18 @@ export class GitGraphRepository extends GraphRepository {
       const nodes = await Promise.all(nodePaths.map(async (p) => {
         const raw = await this.runGitCapture(['show', `HEAD:${p}`], this.config.graphRepoPath);
         const obj = JSON.parse(raw);
-        if (!obj.id) obj.id = decodeURIComponent(path.basename(p, '.json'));
+        if (!obj.id) {
+          obj.id = decodeURIComponent(path.basename(p, '.json'));
+        }
         obj.id = String(obj.id);
         return obj as PersistedGraphNode;
       }));
       const edges = await Promise.all(edgePaths.map(async (p) => {
         const raw = await this.runGitCapture(['show', `HEAD:${p}`], this.config.graphRepoPath);
         const obj = JSON.parse(raw);
-        if (!obj.id) obj.id = decodeURIComponent(path.basename(p, '.json'));
+        if (!obj.id) {
+          obj.id = decodeURIComponent(path.basename(p, '.json'));
+        }
         obj.id = String(obj.id);
         return obj as PersistedGraphEdge;
       }));
@@ -538,6 +582,8 @@ export class GitGraphRepository extends GraphRepository {
   private defaultAuthor(): { name?: string; email?: string } | undefined {
     const name = this.config.graphAuthorName;
     const email = this.config.graphAuthorEmail;
-    if (!name && !email) return undefined;
+    if (!name && !email) {
+      return undefined;
+    }
     return { name, email };
   }
