@@ -4,19 +4,20 @@ import { z } from 'zod';
 dotenv.config();
 
 export const configSchema = z.object({
-  githubAppId: z.string().min(1, 'GitHub App ID is required'),
-  githubAppPrivateKey: z.string().min(1, 'GitHub App Private Key is required'),
-  githubInstallationId: z.string().min(1, 'GitHub Installation ID is required'),
+  // GitHub settings are optional to allow dev boot without GitHub
+  githubAppId: z.string().min(1).optional(),
+  githubAppPrivateKey: z.string().min(1).optional(),
+  githubInstallationId: z.string().min(1).optional(),
   // Optional: OpenAI API key; when omitted, runtime may auto-provision a LiteLLM virtual key.
   openaiApiKey: z.string().min(1).optional(),
-  // LLM provider selection: 'openai' | 'litellm' | 'auto'
-  llmProvider: z.enum(['openai', 'litellm', 'auto']).default('auto'),
+  // LLM provider selection: must be explicit; no default
+  llmProvider: z.enum(['openai', 'litellm']),
   // Optional LiteLLM details for auto-provisioning
   litellmBaseUrl: z.string().optional(),
   litellmMasterKey: z.string().optional(),
   // Optional explicit OpenAI base URL passthrough
   openaiBaseUrl: z.string().optional(),
-  githubToken: z.string().min(1, 'GitHub personal access token is required'),
+  githubToken: z.string().min(1).optional(),
   mongodbUrl: z.string().min(1, 'MongoDB connection string is required'),
   // Graph persistence
   graphStore: z.enum(['mongo', 'git']).default('mongo'),
@@ -161,21 +162,21 @@ export class ConfigService implements Config {
     return this;
   }
 
-  get githubAppId(): string {
+  get githubAppId(): string | undefined {
     return this.params.githubAppId;
   }
 
-  get githubAppPrivateKey(): string {
+  get githubAppPrivateKey(): string | undefined {
     return this.params.githubAppPrivateKey;
   }
-  get githubInstallationId(): string {
+  get githubInstallationId(): string | undefined {
     return this.params.githubInstallationId;
   }
 
   get openaiApiKey(): string | undefined {
     return this.params.openaiApiKey;
   }
-  get llmProvider(): 'openai' | 'litellm' | 'auto' {
+  get llmProvider(): 'openai' | 'litellm' {
     return this.params.llmProvider;
   }
   get litellmBaseUrl(): string | undefined {
@@ -187,7 +188,7 @@ export class ConfigService implements Config {
   get openaiBaseUrl(): string | undefined {
     return this.params.openaiBaseUrl;
   }
-  get githubToken(): string {
+  get githubToken(): string | undefined {
     return this.params.githubToken;
   }
 
@@ -313,7 +314,7 @@ export class ConfigService implements Config {
       githubAppPrivateKey: process.env.GITHUB_APP_PRIVATE_KEY,
       githubInstallationId: process.env.GITHUB_INSTALLATION_ID,
       openaiApiKey: process.env.OPENAI_API_KEY,
-      llmProvider: (process.env.LLM_PROVIDER as any) || 'auto',
+      llmProvider: process.env.LLM_PROVIDER,
       // Infer LiteLLM base from OPENAI_BASE_URL if it ends with /v1
       litellmBaseUrl:
         process.env.LITELLM_BASE_URL ||

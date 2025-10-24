@@ -1,3 +1,4 @@
+import 'reflect-metadata';
 // Observability SDK initialization (replaces traceloop)
 import { init as initTracing } from '@agyn/tracing';
 initTracing({

@@ -1,47 +1,67 @@
 import { Injectable } from "@nestjs/common";
 import { Octokit } from "@octokit/rest";
 import { createAppAuth } from "@octokit/auth-app";
-import { ConfigService } from "../../core/services/config.service";
 import { spawn } from "child_process";
 import { promises as fs } from "fs";
 import * as path from "path";
+import { LoggerService } from "../../core/services/logger.service";
+import { ConfigService } from "../../core/services/config.service";
 
 @Injectable()
 export class GithubService {
-  private octokit: Octokit;
-  private personalOctokit: Octokit;
+  private octokit?: Octokit;
+  private personalOctokit?: Octokit;
 
-  constructor(private config: ConfigService) {
-    this.octokit = this.initOctokit();
-    this.personalOctokit = this.initPersonalOctokit();
+  constructor(
+    private config: ConfigService,
+    private logger: LoggerService,
+  ) {
+    if (!this.isEnabled()) {
+      this.logger.info('GithubService: integration disabled (no credentials)');
+    }
   }
 
-  private initOctokit(): Octokit {
-    const appId = this.config.githubAppId;
-    const privateKey = this.config.githubAppPrivateKey;
-    const installationId = this.config.githubInstallationId;
-    if (!appId || !privateKey || !installationId) {
-      throw new Error("Missing GitHub App credentials in config");
-    }
-    return new Octokit({
-      authStrategy: createAppAuth,
-      auth: {
-        appId,
-        privateKey,
-        installationId,
-      },
-    });
+  isEnabled(): boolean {
+    const appOk = !!(this.config.githubAppId && this.config.githubAppPrivateKey && this.config.githubInstallationId);
+    const tokenOk = !!this.config.githubToken;
+    return appOk || tokenOk;
   }
 
-  private initPersonalOctokit(): Octokit {
-    if (!this.config.githubToken) {
-      throw new Error("Missing githubToken in config for personalOctokit");
+  private ensureInitialized(kind: 'app' | 'token'): void {
+    if (!this.isEnabled()) {
+      throw new Error('GitHub integration is disabled: no credentials configured');
     }
-    return new Octokit({ auth: this.config.githubToken });
+    if (kind === 'app') {
+      if (!this.octokit) {
+        const appId = this.config.githubAppId;
+        const privateKey = this.config.githubAppPrivateKey;
+        const installationId = this.config.githubInstallationId;
+        if (!appId || !privateKey || !installationId) {
+          throw new Error('GitHub integration is disabled: missing App credentials');
+        }
+        this.octokit = new Octokit({
+          authStrategy: createAppAuth,
+          auth: {
+            appId,
+            privateKey,
+            installationId,
+          },
+        });
+        this.logger.info('GithubService: initialized App Octokit');
+      }
+    } else {
+      if (!this.personalOctokit) {
+        const token = this.config.githubToken;
+        if (!token) throw new Error('GitHub integration is disabled: missing personal access token');
+        this.personalOctokit = new Octokit({ auth: token });
+        this.logger.info('GithubService: initialized PAT Octokit');
+      }
+    }
   }
 
   async fetchPullRequestComments(owner: string, repo: string, pull_number: number) {
-    const { data: comments } = await this.octokit.rest.issues.listComments({
+    this.ensureInitialized('app');
+    const { data: comments } = await this.octokit!.rest.issues.listComments({
       owner,
       repo,
       issue_number: pull_number,
@@ -50,7 +70,8 @@ export class GithubService {
   }
 
   async fetchPullRequestEvents(owner: string, repo: string, pull_number: number) {
-    const { data: events } = await this.octokit.rest.issues.listEvents({
+    this.ensureInitialized('app');
+    const { data: events } = await this.octokit!.rest.issues.listEvents({
       owner,
       repo,
       issue_number: pull_number,
@@ -60,7 +81,8 @@ export class GithubService {
   }
 
   async fetchPullRequestReviewComments(owner: string, repo: string, pull_number: number) {
-    const { data: comments } = await this.octokit.rest.pulls.listReviewComments({
+    this.ensureInitialized('app');
+    const { data: comments } = await this.octokit!.rest.pulls.listReviewComments({
       owner,
       repo,
       pull_number,
@@ -69,7 +91,8 @@ export class GithubService {
   }
 
   async fetchPullRequestReviews(owner: string, repo: string, pull_number: number) {
-    const { data: reviews } = await this.octokit.rest.pulls.listReviews({
+    this.ensureInitialized('app');
+    const { data: reviews } = await this.octokit!.rest.pulls.listReviews({
       owner,
       repo,
       pull_number,
@@ -78,7 +101,8 @@ export class GithubService {
   }
 
   async fetchPullRequestCommits(owner: string, repo: string, pull_number: number) {
-    const { data: commits } = await this.octokit.rest.pulls.listCommits({
+    this.ensureInitialized('app');
+    const { data: commits } = await this.octokit!.rest.pulls.listCommits({
       owner,
       repo,
       pull_number,
@@ -87,7 +111,8 @@ export class GithubService {
   }
 
   async getPullRequestBranch(owner: string, repo: string, pull_number: number) {
-    const { data: pr } = await this.octokit.rest.pulls.get({
+    this.ensureInitialized('app');
+    const { data: pr } = await this.octokit!.rest.pulls.get({
       owner,
       repo,
       pull_number,
@@ -97,14 +122,15 @@ export class GithubService {
 
   async getPullRequestStatus(owner: string, repo: string, pull_number: number) {
     // Get PR to find head SHA
-    const { data: pr } = await this.octokit.rest.pulls.get({
+    this.ensureInitialized('app');
+    const { data: pr } = await this.octokit!.rest.pulls.get({
       owner,
       repo,
       pull_number,
     });
     const sha = pr.head.sha;
     // Get all check runs for the commit (includes GitHub Actions)
-    const { data: checks } = await this.octokit.rest.checks.listForRef({
+    const { data: checks } = await this.octokit!.rest.checks.listForRef({
       owner,
       repo,
       ref: sha,
@@ -116,7 +142,8 @@ export class GithubService {
    * Write a comment to a pull request (issue).
    */
   async writePRComment(owner: string, repo: string, pull_number: number, message: string) {
-    await this.personalOctokit.rest.issues.createComment({
+    this.ensureInitialized('token');
+    await this.personalOctokit!.rest.issues.createComment({
       owner,
       repo,
       issue_number: pull_number,
@@ -126,7 +153,8 @@ export class GithubService {
   }
 
   async fetchRequestedReviewers(owner: string, repo: string, pull_number: number) {
-    const { data } = await this.octokit.rest.pulls.listRequestedReviewers({
+    this.ensureInitialized('app');
+    const { data } = await this.octokit!.rest.pulls.listRequestedReviewers({
       owner,
       repo,
       pull_number,
@@ -139,7 +167,8 @@ export class GithubService {
    * List open pull requests for a repository.
    */
   async listOpenPullRequests(owner: string, repo: string) {
-    const { data } = await this.octokit.rest.pulls.list({
+    this.ensureInitialized('app');
+    const { data } = await this.octokit!.rest.pulls.list({
       owner,
       repo,
       state: "open",
@@ -175,7 +204,8 @@ export class GithubService {
 
   /** Get the login of the user associated with the personal access token */
   async getAuthenticatedUserLogin() {
-    const { data } = await this.personalOctokit.rest.users.getAuthenticated();
+    this.ensureInitialized('token');
+    const { data } = await this.personalOctokit!.rest.users.getAuthenticated();
     return data.login;
   }
 
@@ -199,7 +229,8 @@ export class GithubService {
 
     for (const repo of repos) {
       // Retrieve open PRs
-      const { data: pulls } = await this.octokit.rest.pulls.list({
+      this.ensureInitialized('app');
+      const { data: pulls } = await this.octokit!.rest.pulls.list({
         owner,
         repo,
         state: "open",
@@ -229,7 +260,8 @@ export class GithubService {
   /** Single-repository variant: get open PRs where the authenticated user is author or requested reviewer */
   async listAssignedOpenPullRequestsForRepo(owner: string, repo: string) {
     const login = await this.getAuthenticatedUserLogin();
-    const { data: pulls } = await this.octokit.rest.pulls.list({
+    this.ensureInitialized('app');
+    const { data: pulls } = await this.octokit!.rest.pulls.list({
       owner,
       repo,
       state: "open",
@@ -295,8 +327,9 @@ export class GithubService {
       } else {
         await fs.mkdir(absTarget, { recursive: true });
       }
-    } catch (e: any) {
-      throw new Error(`Failed to prepare target directory: ${e.message}`);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      throw new Error(`Failed to prepare target directory: ${msg}`);
     }
 
     if (!username) {
@@ -308,6 +341,7 @@ export class GithubService {
     }
 
     const token = this.config.githubToken;
+    if (!token) throw new Error('GitHub integration is disabled: missing personal access token for cloneRepo');
     const remote = `https://${encodeURIComponent(username)}:${encodeURIComponent(token)}@github.com/${owner}/${repo}.git`;
     
     const gitArgs = ["clone", "-b", branch];
