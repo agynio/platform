@@ -8,7 +8,7 @@ import { WorkspaceNode } from '../workspace/workspace.node';
 import type { DynamicConfigurable, ProvisionStatus, Provisionable } from '../../graph/capabilities';
 import { ConfigService } from '../../core/services/config.service';
 import { ContainerService } from '../../infra/container/container.service';
-import { EnvService, type EnvItem } from '../../core/env.resolver';
+import { EnvService, type EnvItem } from '../../graph/env.service';
 import { LoggerService } from '../../core/services/logger.service';
 import { VaultService } from '../../infra/vault/vault.service';
 import { DockerExecTransport } from './dockerExecTransport';
