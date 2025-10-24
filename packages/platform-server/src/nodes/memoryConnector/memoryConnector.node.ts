@@ -3,12 +3,6 @@ import { z } from 'zod';
 import { MemoryService } from '../../nodes/memory.repository';
 import Node from '../base/Node';
 
-export interface MemoryConnectorConfig {
-  placement: 'after_system' | 'last_message';
-  content: 'full' | 'tree';
-  maxChars?: number;
-}
-
 // Static config exposed to UI for MemoryConnectorNode
 export const MemoryConnectorStaticConfigSchema = z
   .object({
@@ -19,52 +13,14 @@ export const MemoryConnectorStaticConfigSchema = z
   .strict();
 export type MemoryConnectorStaticConfig = z.infer<typeof MemoryConnectorStaticConfigSchema>;
 
-export class MemoryConnectorNode extends Node
-{
-  constructor(private serviceFactory: (opts: { threadId?: string }) => MemoryService) {}
-
-  private config: MemoryConnectorConfig = { placement: 'after_system', content: 'tree', maxChars: 4000 };
-
-  // Allow late injection of a MemoryService source from a MemoryNode instance or a direct factory function.
-  setServiceFactory(
-    factoryOrNode:
-      | ((opts: { threadId?: string }) => MemoryService)
-      | { getMemoryService: (opts: { threadId?: string }) => MemoryService },
-  ) {
-    if (typeof factoryOrNode === 'function') {
-      this.serviceFactory = factoryOrNode as (opts: { threadId?: string }) => MemoryService;
-    } else if (factoryOrNode && typeof (factoryOrNode as { getMemoryService?: unknown }).getMemoryService === 'function') {
-      this.serviceFactory = (opts: { threadId?: string }) => factoryOrNode.getMemoryService(opts);
-    } else {
-      throw new Error('Invalid argument to setServiceFactory');
-    }
+export class MemoryConnectorNode extends Node<MemoryConnectorStaticConfig> {
+  constructor(private memoryService: MemoryService) {
+    super();
   }
 
-  // Preferred alias for UI wiring: accepts either MemoryNode-like or factory function.
-  setMemorySource(
-    source:
-      | ((opts: { threadId?: string }) => MemoryService)
-      | { getMemoryService: (opts: { threadId?: string }) => MemoryService },
-  ) {
-    this.setServiceFactory(source);
-  }
+  private config: MemoryConnectorStaticConfig = { placement: 'after_system', content: 'tree', maxChars: 4000 };
 
-  setConfig(config: Partial<MemoryConnectorConfig> & Partial<MemoryConnectorStaticConfig>) {
-    this.setConfig(config);
-  }
-
-  setConfig(config: Partial<MemoryConnectorConfig> & Partial<MemoryConnectorStaticConfig>) {
-    const next: Partial<MemoryConnectorConfig> = { ...this.config };
-    if (config.placement !== undefined) next.placement = config.placement as MemoryConnectorConfig['placement'];
-    if (config.content !== undefined) next.content = config.content as MemoryConnectorConfig['content'];
-    if (config.maxChars !== undefined) next.maxChars = config.maxChars;
-    this.config = { ...this.config, ...next } as MemoryConnectorConfig;
-  }
-
-  async provision(): Promise<void> { /* no-op */ }
-  async deprovision(): Promise<void> { /* no-op */ }
-
-  getPlacement(): MemoryConnectorConfig['placement'] {
+  getPlacement(): MemoryConnectorStaticConfig['placement'] {
     return this.config.placement;
   }
 
@@ -81,13 +37,13 @@ export class MemoryConnectorNode extends Node
     return lines.join('\n');
   }
 
-  private async buildFull(service: MemoryService): Promise<string> {
-    const data = await service.getAll();
+  private async buildFull(): Promise<string> {
+    const data = await this.memoryService.getAll();
     return this.flattenAll(data);
   }
 
-  private async buildTree(service: MemoryService, path: string = '/'): Promise<string> {
-    const children = await service.list(path);
+  private async buildTree(path: string = '/'): Promise<string> {
+    const children = await this.memoryService.list(path);
     const lines = children
       .sort((a, b) => a.name.localeCompare(b.name))
       .map((c) => `${c.kind === 'dir' ? '[D]' : '[F]'} ${c.name}`);
@@ -98,34 +54,27 @@ export class MemoryConnectorNode extends Node
     const path = opts.path || '/';
     const max = this.config.maxChars ?? 4000;
 
-    // Primary service scoped to thread if provided
-    const service = this.serviceFactory({ threadId: opts.threadId });
-
     let text: string = '';
     if (this.config.content === 'full') {
-      text = await this.buildFull(service);
+      text = await this.buildFull();
       if (!text || text.length === 0) {
         // Fallback to global scope when per-thread memory is empty
         if (opts.threadId) {
-          const globalSvc = this.serviceFactory({});
-          const fallback = await this.buildFull(globalSvc);
+          const fallback = await this.buildFull();
           text = fallback;
         }
       }
       if (text.length > max) {
-        text = await this.buildTree(service, path);
+        text = await this.buildTree(path);
         if (text === `${path}\n` && opts.threadId) {
           // Per-thread tree empty (no children); fallback to global tree
-          const globalSvc = this.serviceFactory({});
-          text = await this.buildTree(globalSvc, path);
+          text = await this.buildTree(path);
         }
       }
     } else {
-      text = await this.buildTree(service, path);
+      text = await this.buildTree(path);
       if (text === `${path}\n` && opts.threadId) {
-        // Per-thread tree empty (no children); fallback to global tree
-        const globalSvc = this.serviceFactory({});
-        text = await this.buildTree(globalSvc, path);
+        text = await this.buildTree(path);
       }
     }
 
