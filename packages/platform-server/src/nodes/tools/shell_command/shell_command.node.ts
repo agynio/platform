@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { WorkspaceNode } from '../../workspace/workspace.node';
-import { EnvService, type EnvItem } from '../../graph/env.service';
+import { EnvService, type EnvItem } from '../../../graph/env.service';
 import { BaseToolNode } from '../baseToolNode';
 import { ShellCommandTool } from './shell_command.tool';
 
@@ -41,6 +41,14 @@ export class ShellCommandNode extends BaseToolNode {
 
   constructor(private envService: EnvService) {
     super();
+  }
+  getPortConfig() {
+    return {
+      targetPorts: {
+        $self: { kind: 'instance' },
+        workspace: { kind: 'method', create: 'setContainerProvider' },
+      },
+    };
   }
 
   setContainerProvider(provider: WorkspaceNode | undefined): void {

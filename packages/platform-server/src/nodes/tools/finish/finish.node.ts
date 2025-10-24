@@ -21,6 +21,10 @@ export class FinishNode extends BaseToolNode {
     }
     return this.toolInstance;
   }
+
+  getPortConfig() {
+    return { targetPorts: { $self: { kind: 'instance' } } } as const;
+  }
 }
 
 // Backwards compatibility export

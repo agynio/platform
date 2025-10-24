@@ -36,4 +36,8 @@ export class MemoryNode extends Node<MemoryNodeStaticConfig> {
     const threadId = this.config.scope === 'perThread' ? opts.threadId : undefined;
     return new MemoryService(this.db, this.nodeId, this.config.scope, threadId);
   }
+
+  getPortConfig() {
+    return { sourcePorts: { $self: { kind: 'instance' } } } as const;
+  }
 }

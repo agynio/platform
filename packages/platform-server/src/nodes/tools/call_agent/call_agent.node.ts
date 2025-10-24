@@ -48,6 +48,13 @@ export class CallAgentNode extends BaseToolNode {
     }
     return this.toolInstance;
   }
+
+  getPortConfig() {
+    return {
+      targetPorts: { $self: { kind: 'instance' } },
+      sourcePorts: { agent: { kind: 'method', create: 'setAgent' } },
+    } as const;
+  }
 }
 
 // Backwards compatibility export

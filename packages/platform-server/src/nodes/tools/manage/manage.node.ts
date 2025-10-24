@@ -54,6 +54,13 @@ export class ManageToolNode extends BaseToolNode {
     if (!this.tool) this.tool = this.createTool();
     return this.tool;
   }
+
+  getPortConfig() {
+    return {
+      targetPorts: { $self: { kind: 'instance' } },
+      sourcePorts: { agent: { kind: 'method', create: 'addWorker', destroy: 'removeWorker' } },
+    } as const;
+  }
 }
 
 // Backward compatibility export

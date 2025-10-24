@@ -146,6 +146,15 @@ export class LocalMCPServer implements McpServer, Provisionable, DynamicConfigur
     private nodeStateService?: NodeStateService,
   ) {}
 
+  getPortConfig() {
+    return {
+      targetPorts: {
+        $self: { kind: 'instance' },
+        workspace: { kind: 'method', create: 'setContainerProvider' },
+      },
+    } as const;
+  }
+
   /**
    * Create a LocalMCPServerTool instance from a McpTool.
    * If a delegate is provided, it is used (for discovered tools); otherwise, a fallback delegate is used (for preloaded tools).

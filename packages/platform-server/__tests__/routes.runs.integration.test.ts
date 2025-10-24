@@ -7,7 +7,8 @@ import { LiveGraphRuntime } from '../src/graph/liveGraph.manager';
 import { TemplateRegistry } from '../src/graph/templateRegistry';
 import { GraphModule } from '../src/graph/graph.module';
 import { AgentRunService } from '../src/nodes/agentRun.repository';
-import type { FactoryFn } from '../src/graph/types';
+import type Node from '../src/nodes/base/Node';
+import { registerRunsRoutes } from '../src/routes/runs.route';
 import { MongoMemoryServer } from 'mongodb-memory-server';
 import { MongoClient } from 'mongodb';
 
@@ -55,9 +56,8 @@ describe('RunsController (Nest + FastifyAdapter) integration', () => {
       registry = app.get(TemplateRegistry, { strict: false });
       runtime = app.get(LiveGraphRuntime, { strict: false });
 
-      // Register a simple agent node in runtime and apply a minimal graph
-      const factory: FactoryFn = async () => new TestAgent() as any;
-      registry.register('testAgent', factory, { sourcePorts: {}, targetPorts: {} }, { title: 'A', kind: 'agent' });
+      // Register a simple agent node class in runtime
+      registry.register('testAgent', { title: 'A', kind: 'agent' }, TestAgent as any as new () => Node, { sourcePorts: {}, targetPorts: {} });
       await runtime.apply({ nodes: [{ id: 'agent1', data: { template: 'testAgent', config: {} } }], edges: [] } as any);
     } catch (e) {
       ready = false;

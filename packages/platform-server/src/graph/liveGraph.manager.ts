@@ -18,6 +18,10 @@ import { hasSetConfig, hasSetDynamicConfig, isDynamicConfigurable } from './capa
 import { Errors } from './errors';
 import { PortsRegistry } from './ports.registry';
 import { TemplateRegistry } from './templateRegistry';
+import { resolve } from '../bootstrap/di';
+import type Node from '../nodes/base/Node';
+import type { PortsProvider, TemplatePortConfig } from './ports.types';
+import type { RuntimeContext, RuntimeContextAware } from './runtimeContext';
 
 const configsEqual = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b); // unchanged
 
@@ -42,7 +46,7 @@ export class LiveGraphRuntime {
     private readonly logger: LoggerService,
     private readonly templateRegistry: TemplateRegistry,
   ) {
-    this.portsRegistry = new PortsRegistry(this.templateRegistry.getPortsMap());
+    this.portsRegistry = new PortsRegistry();
   }
 
   // factoryDeps removed; factories should rely on FactoryContext primitives only
@@ -321,13 +325,30 @@ export class LiveGraphRuntime {
 
   private async instantiateNode(node: NodeDef): Promise<void> {
     try {
-      const factory = this.templateRegistry.get(node.data.template);
-      if (!factory) throw Errors.unknownTemplate(node.data.template, node.id);
-      // Factories receive a minimal context
-      const created = await factory({
-        get: (id: string) => this.state.nodes.get(id)?.instance,
-        nodeId: node.id,
-      });
+      const nodeClass = this.templateRegistry.getClass(node.data.template);
+      if (!nodeClass) throw Errors.unknownTemplate(node.data.template, node.id);
+      // Instantiate via DI container (transient scope expected)
+      const created = await resolve<Node>(nodeClass as any);
+
+      // If node supports runtime context, provide it
+      const maybeAware = created as unknown as Partial<RuntimeContextAware>;
+      if (maybeAware && typeof maybeAware.setRuntimeContext === 'function') {
+        const ctx: RuntimeContext = {
+          nodeId: node.id,
+          get: (id: string) => this.state.nodes.get(id)?.instance,
+        };
+        maybeAware.setRuntimeContext(ctx);
+      }
+
+      // If node provides port config, register it and validate instance shape
+      const maybePorts = created as unknown as Partial<PortsProvider>;
+      if (maybePorts && typeof maybePorts.getPortConfig === 'function') {
+        const cfg = maybePorts.getPortConfig() as TemplatePortConfig;
+        if (cfg) {
+          this.portsRegistry.registerTemplatePorts(node.data.template, cfg);
+          this.portsRegistry.validateTemplateInstance(node.data.template, created);
+        }
+      }
       // NOTE: setGraphNodeId reflection removed; prefer factories to leverage ctx.nodeId directly.
       const live: LiveNode = { id: node.id, template: node.data.template, instance: created, config: node.data.config };
       this.state.nodes.set(node.id, live);

@@ -1,9 +1,23 @@
+import { Injectable } from '@nestjs/common';
 import { EdgeDef } from './types';
-import { TemplatePortsRegistry, ResolvedEdgePorts, PortResolutionError, PortConfig, MethodPortConfig } from './ports.types';
+import {
+  TemplatePortsRegistry,
+  ResolvedEdgePorts,
+  PortResolutionError,
+  PortConfig,
+  MethodPortConfig,
+  TemplatePortConfig,
+} from './ports.types';
 
 @Injectable()
 export class PortsRegistry {
-  constructor(private readonly templates: TemplatePortsRegistry) {}
+  private templates: TemplatePortsRegistry = {};
+
+  constructor() {}
+
+  registerTemplatePorts(template: string, cfg: TemplatePortConfig): void {
+    this.templates[template] = cfg;
+  }
 
   getTemplateConfig(template: string) {
     return this.templates[template];
@@ -11,19 +25,19 @@ export class PortsRegistry {
 
   validateTemplateInstance(template: string, instance: any) {  
     const cfg = this.templates[template];
-    if (!cfg) return; // no ports defined; legacy fallback elsewhere
+    if (!cfg) return; // no ports defined
     const checkPorts = (ports?: Record<string, PortConfig>) => {
       if (!ports) return;
       for (const [handle, port] of Object.entries(ports)) {
         if (port.kind === 'method') {
           const m = port as MethodPortConfig;
-            if (typeof instance[m.create] !== 'function') {
-              throw new Error(`Template ${template} port ${handle} expected method '${m.create}' on instance`);
-            }
-            if (m.destroy && typeof instance[m.destroy] !== 'function') {
-              throw new Error(`Template ${template} port ${handle} expected destroy method '${m.destroy}' on instance`);
-            }
+          if (typeof instance[m.create] !== 'function') {
+            throw new Error(`Template ${template} port ${handle} expected method '${m.create}' on instance`);
           }
+          if (m.destroy && typeof instance[m.destroy] !== 'function') {
+            throw new Error(`Template ${template} port ${handle} expected destroy method '${m.destroy}' on instance`);
+          }
+        }
       }
     };
     checkPorts(cfg.sourcePorts);
@@ -54,12 +68,11 @@ export class PortsRegistry {
       : { role: 'source' as const, handle: edge.sourceHandle, config: sourcePort });
 
     return {
-  source: { role: 'source' as const, handle: edge.sourceHandle, config: sourcePort },
-  target: { role: 'target' as const, handle: edge.targetHandle, config: targetPort },
+      source: { role: 'source' as const, handle: edge.sourceHandle, config: sourcePort },
+      target: { role: 'target' as const, handle: edge.targetHandle, config: targetPort },
       callableSide,
       methodPort,
       instancePort,
     };
   }
 }
-import { Injectable } from '@nestjs/common';

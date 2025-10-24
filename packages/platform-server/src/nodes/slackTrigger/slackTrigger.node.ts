@@ -160,4 +160,8 @@ export class SlackTrigger extends Node<SlackTriggerConfig> {
     if (!messages.length) return;
     await Promise.all(this.listeners.map(async (listener) => listener.invoke(thread, messages)));
   }
+
+  getPortConfig() {
+    return { sourcePorts: { subscribe: { kind: 'method', create: 'subscribe', destroy: 'unsubscribe' } } } as const;
+  }
 }

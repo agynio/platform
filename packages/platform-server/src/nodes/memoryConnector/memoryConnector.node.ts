@@ -20,6 +20,15 @@ export class MemoryConnectorNode extends Node<MemoryConnectorStaticConfig> {
 
   private config: MemoryConnectorStaticConfig = { placement: 'after_system', content: 'tree', maxChars: 4000 };
 
+  async setConfig(cfg: Record<string, unknown>): Promise<void> {
+    const next: Partial<MemoryConnectorStaticConfig> = {};
+    const o = (cfg || {}) as Partial<MemoryConnectorStaticConfig>;
+    if (o.placement !== undefined) next.placement = o.placement;
+    if (o.content !== undefined) next.content = o.content as any;
+    if (o.maxChars !== undefined) next.maxChars = o.maxChars as any;
+    this.config = { ...this.config, ...next } as MemoryConnectorStaticConfig;
+  }
+
   getPlacement(): MemoryConnectorStaticConfig['placement'] {
     return this.config.placement;
   }
@@ -67,5 +76,12 @@ export class MemoryConnectorNode extends Node<MemoryConnectorStaticConfig> {
 
     if (!text || text.trim().length === 0) return null;
     return this.toSystemMessage(`Memory\n${text}`);
+  }
+
+  getPortConfig() {
+    return {
+      targetPorts: { $memory: { kind: 'method', create: 'setMemorySource' } },
+      sourcePorts: { $self: { kind: 'instance' } },
+    } as const;
   }
 }

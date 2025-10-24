@@ -61,4 +61,13 @@ export class GithubCloneRepoNode extends BaseToolNode {
     }
     return this.toolInstance;
   }
+
+  getPortConfig() {
+    return {
+      targetPorts: {
+        $self: { kind: 'instance' },
+        workspace: { kind: 'method', create: 'setContainerProvider' },
+      },
+    } as const;
+  }
 }

@@ -111,6 +111,10 @@ export class WorkspaceNode extends Node<ContainerProviderStaticConfig> {
     this.envService = new EnvService(vaultService);
   }
 
+  getPortConfig() {
+    return { sourcePorts: { $self: { kind: 'instance' } } };
+  }
+
   // Allow tests to inject a mock logger
   setLogger(logger: LoggerService) {
     this.logger = logger || this.logger;

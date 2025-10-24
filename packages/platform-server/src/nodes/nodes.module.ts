@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Module, Scope } from '@nestjs/common';
 import { MongoService } from '../core/services/mongo.service';
 import { LoggerService } from '../core/services/logger.service';
 import { LLMModule } from '../llm/llm.module';
@@ -42,23 +42,23 @@ import { RemindersController } from './tools/remind_me/reminders.controller';
     },
     MemoryService,
     // nodes
-    AgentNode,
-    MemoryNode,
-    MemoryConnectorNode,
-    WorkspaceNode,
-    SlackTrigger,
+    { provide: AgentNode, useClass: AgentNode, scope: Scope.TRANSIENT },
+    { provide: MemoryNode, useClass: MemoryNode, scope: Scope.TRANSIENT },
+    { provide: MemoryConnectorNode, useClass: MemoryConnectorNode, scope: Scope.TRANSIENT },
+    { provide: WorkspaceNode, useClass: WorkspaceNode, scope: Scope.TRANSIENT },
+    { provide: SlackTrigger, useClass: SlackTrigger, scope: Scope.TRANSIENT },
     // mcp
-    LocalMCPServer,
+    { provide: LocalMCPServer, useClass: LocalMCPServer, scope: Scope.TRANSIENT },
     // tools
-    BaseToolNode,
-    ManageTool,
-    CallAgentTool,
-    FinishTool,
-    MemoryToolNode,
-    SendSlackMessageTool,
-    ShellCommandNode,
-    GithubCloneRepoNode,
-    RemindMeNode,
+    { provide: BaseToolNode, useClass: BaseToolNode, scope: Scope.TRANSIENT },
+    { provide: ManageTool, useClass: ManageTool, scope: Scope.TRANSIENT },
+    { provide: CallAgentTool, useClass: CallAgentTool, scope: Scope.TRANSIENT },
+    { provide: FinishTool, useClass: FinishTool, scope: Scope.TRANSIENT },
+    { provide: MemoryToolNode, useClass: MemoryToolNode, scope: Scope.TRANSIENT },
+    { provide: SendSlackMessageTool, useClass: SendSlackMessageTool, scope: Scope.TRANSIENT },
+    { provide: ShellCommandNode, useClass: ShellCommandNode, scope: Scope.TRANSIENT },
+    { provide: GithubCloneRepoNode, useClass: GithubCloneRepoNode, scope: Scope.TRANSIENT },
+    { provide: RemindMeNode, useClass: RemindMeNode, scope: Scope.TRANSIENT },
   ],
   exports: [AgentRunService],
 })

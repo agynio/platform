@@ -52,4 +52,10 @@ export class MemoryToolNode extends BaseToolNode {
     }
     return this.toolInstance;
   }
+
+  getPortConfig() {
+    return {
+      targetPorts: { $self: { kind: 'instance' }, $memory: { kind: 'method', create: 'setMemorySource' } },
+    } as const;
+  }
 }

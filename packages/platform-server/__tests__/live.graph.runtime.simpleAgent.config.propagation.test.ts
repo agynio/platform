@@ -71,8 +71,9 @@ describe('LiveGraphRuntime -> Agent config propagation', () => {
       logger,
       containerService,
       configService,
-      checkpointerService,
       mongoService: testMongoService as unknown as MongoService,
+      llmFactoryService: new (class extends LLMFactoryService { constructor() { super(logger); } })(),
+      ncpsKeyService: undefined,
     });
     const runtime = new LiveGraphRuntime(logger, registry);
     return { runtime };

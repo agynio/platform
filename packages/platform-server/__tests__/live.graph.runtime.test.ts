@@ -37,11 +37,11 @@ class B {
 const makeRuntime = () => {
   const templates = new TemplateRegistry();
   templates
-    .register('A', () => new A(), {
+    .register('A', { title: 'A', kind: 'service' as any }, A as any, {
       sourcePorts: { self: { kind: 'instance' } },
       targetPorts: { self: { kind: 'instance' }, link: { kind: 'method', create: 'attach', destroy: 'detach' } },
     })
-    .register('B', () => new B(), {
+    .register('B', { title: 'B', kind: 'service' as any }, B as any, {
       sourcePorts: { self: { kind: 'instance' } },
       targetPorts: {
         self: { kind: 'instance' },
