@@ -55,9 +55,14 @@ export function buildTemplateRegistry(deps: TemplateRegistryDeps): TemplateRegis
   const registry = new TemplateRegistry();
   registry.register(
     'workspace',
+<<<<<<< HEAD
     { title: 'Workspace', kind: 'service' },
     WorkspaceNode,
     { sourcePorts: { $self: { kind: 'instance' } } },
+=======
+    { title: 'Workspace', kind: 'service', capabilities: { staticConfigurable: true }, staticConfigSchema: toJSONSchema(ContainerProviderExposedStaticConfigSchema) },
+    WorkspaceNode,
+>>>>>>> 1e059aa (test(platform-server): update templates.memory.registration to async toSchema; remove getPortsMap usage)
   );
   registry.register(
     'shellTool',
@@ -160,6 +165,7 @@ export function buildTemplateRegistry(deps: TemplateRegistryDeps): TemplateRegis
     MemoryConnectorNode as any,
     { targetPorts: { $memory: { kind: 'method', create: 'setMemorySource' } }, sourcePorts: { $self: { kind: 'instance' } } },
   );
+  
 
   return registry;
 }

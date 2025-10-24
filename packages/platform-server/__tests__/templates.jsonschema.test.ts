@@ -5,14 +5,26 @@ import type { JSONSchema7 } from 'json-schema';
 type JsonSchemaWithUi = JSONSchema7 & { 'ui:field'?: string };
 import { ShellToolStaticConfigSchema } from '../src/nodes/tools/shell_command/shell_command.node';
 <<<<<<< HEAD
+<<<<<<< HEAD
 import { LocalMcpServerStaticConfigSchema } from "../src/nodes/mcp/localMcpServer.node";
 =======
+=======
+>>>>>>> 97093c1 (test(platform-server): normalize async TemplateRegistry usage and class-based registrations; remove conflict markers)
 <<<<<<< HEAD
 import { LocalMcpServerStaticConfigSchema } from '../src/mcp/localMcpServer';
 =======
 import { LocalMcpServerStaticConfigSchema } from '../src/nodes/mcp/localMcpServer.node';
 >>>>>>> 9157620 (Refactor: move graph routes to Nest controllers (packages/platform-server) [#432] (#433))
+<<<<<<< HEAD
 >>>>>>> 3836410 (fix: resolve rebase conflicts in tests and index.ts; prefer node-local import paths and keep Nest graph routes)
+=======
+=======
+import { LocalMcpServerStaticConfigSchema } from '../src/nodes/mcp/localMcpServer.node';
+=======
+import { LocalMcpServerStaticConfigSchema } from '../src/mcp/localMcpServer';
+>>>>>>> 08061e3 (test(platform-server): update imports to new DI-based structure; fix templates.jsonschema to reference ShellToolStaticConfigSchema path)
+>>>>>>> dd1050b (refactor(platform-server): make TemplateRegistry.register class-only; ports sourced from nodes via getPortConfig(); toSchema/getPortsMap async; update templates.ts to class-based registrations and fix tests accordingly)
+>>>>>>> 97093c1 (test(platform-server): normalize async TemplateRegistry usage and class-based registrations; remove conflict markers)
 import { AgentStaticConfigSchema } from '../src/nodes/agent/agent.node';
 
 describe('template schemas: env ui:field', () => {

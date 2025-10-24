@@ -43,6 +43,8 @@ describe('Runtime helpers and GraphRepository API surfaces', () => {
 
     const factory: FactoryFn = async () => new MockNode() as any;
     registry.register('mock', { title: 'Mock', kind: 'tool' }, factory as any);
+=======
+    registry.register('mock', { title: 'Mock', kind: 'tool' }, (class {} as any));
 
     // Apply a simple graph with one node
     await runtime.apply({ nodes: [{ id: 'n1', data: { template: 'mock', config: {} } }], edges: [] });
@@ -68,6 +70,10 @@ describe('Runtime helpers and GraphRepository API surfaces', () => {
     // Expand template with capabilities and static schema
     registry.register('dyn', { title: 'Dyn', kind: 'tool', capabilities: { pausable: true, provisionable: true, dynamicConfigurable: true, staticConfigurable: false },
       staticConfigSchema: { type: 'object', properties: {} } as any }, (async () => ({ setConfig: async () => {} } as any)) as any);
+=======
+    class Dyn1 { setConfig = async () => {}; }
+    registry.register('dyn', { title: 'Dyn', kind: 'tool', capabilities: { pausable: true, provisionable: true, dynamicConfigurable: true, staticConfigurable: false },
+      staticConfigSchema: { type: 'object', properties: {} } as any }, Dyn1 as any);
 
     // Create a mock dyn-configurable node instance
     class DynNode implements DynamicConfigurable<Record<string, unknown>> {
@@ -77,6 +83,8 @@ describe('Runtime helpers and GraphRepository API surfaces', () => {
       setConfig = vi.fn(async (_cfg: Record<string, unknown>) => {});
     }
     registry.register('dyn2', { title: 'Dyn2', kind: 'tool' }, (async () => new DynNode() as any) as any);
+=======
+    registry.register('dyn2', { title: 'Dyn2', kind: 'tool' }, DynNode as any);
 
     // Runtime graph
     await runtime.apply({ nodes: [

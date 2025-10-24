@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { JSONSchema } from 'zod/v4/core';
+import type { TemplatePortConfig, TemplatePortsRegistry } from './ports.types';
 import type { TemplateKind, TemplateNodeSchema } from './types';
 import type Node from '../nodes/base/Node';
 import { resolve } from '../bootstrap/di';
@@ -50,11 +51,13 @@ export class TemplateRegistry {
           } catch {}
         }
         if (inst && typeof inst.getPortConfig === 'function') {
-          const cfg = inst.getPortConfig();
+          const cfg = (inst.getPortConfig?.() || {}) as TemplatePortConfig;
           sourcePorts = cfg?.sourcePorts ? Object.keys(cfg.sourcePorts) : [];
           targetPorts = cfg?.targetPorts ? Object.keys(cfg.targetPorts) : [];
         }
-      } catch {}
+      } catch {
+        // ignore instance creation errors for schema generation; fall back to no ports
+      }
       const meta = this.meta.get(name) ?? { title: name, kind: 'tool' as TemplateKind };
       const clsAny = this.classes.get(name)! as any;
       const caps = (clsAny && clsAny.capabilities)

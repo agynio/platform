@@ -19,6 +19,14 @@ describe('Runtime dynamicConfig first-class support', () => {
       isDynamicConfigReady: () => true,
       getDynamicConfigSchema: () => ({ type: 'object', properties: { a: { type: 'boolean' } } }),
     } as any)) as any);
+=======
+    class DynNodeImpl {
+      setConfig = vi.fn();
+      setDynamicConfig = (cfg: Record<string, unknown>) => { instSetDynamic(cfg); dynStore.push(cfg); };
+      isDynamicConfigReady = () => true;
+      getDynamicConfigSchema = () => ({ type: 'object', properties: { a: { type: 'boolean' } } });
+    }
+    registry.register('dynNode', { title: 'Dyn', kind: 'tool', capabilities: { dynamicConfigurable: true } }, DynNodeImpl as any);
 
     await runtime.apply({ nodes: [{ id: 'n1', data: { template: 'dynNode', dynamicConfig: { a: true } } }], edges: [] });
     expect(instSetDynamic).toHaveBeenCalledWith({ a: true });
