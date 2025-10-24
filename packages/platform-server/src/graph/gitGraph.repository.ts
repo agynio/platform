@@ -476,39 +476,77 @@ export class GitGraphRepository extends GraphRepository {
 
   private diffNodes(before: PersistedGraphNode[], after: PersistedGraphNode[]) {
     // Include position and state so both cause updates; encode template/config/dynamicConfig/state/position
-    const normalize = (n: PersistedGraphNode) => JSON.stringify({ id: n.id, template: n.template, config: n.config, dynamicConfig: n.dynamicConfig, state: n.state, position: n.position });
-    const b = new Map(before.map((n) => [n.id, normalize(n)]));
-    const a = new Map(after.map((n) => [n.id, normalize(n)]));
+    const normalize = (n: PersistedGraphNode): string => {
+      return JSON.stringify({
+        id: n.id,
+        template: n.template,
+        config: n.config,
+        dynamicConfig: n.dynamicConfig,
+        state: n.state,
+        position: n.position,
+      });
+    };
+    const b = new Map<string, string>(before.map((n) => [n.id, normalize(n)]));
+    const a = new Map<string, string>(after.map((n) => [n.id, normalize(n)]));
     const nodeAdds: string[] = [];
     const nodeUpdates: string[] = [];
     const nodeDeletes: string[] = [];
     for (const id of a.keys()) {
       if (!b.has(id)) {
         nodeAdds.push(id);
-      } else if (b.get(id) !== a.get(id)) {
-        nodeUpdates.push(id);
+      } else {
+        const bVal = b.get(id);
+        const aVal = a.get(id);
+        if (bVal !== aVal) {
+          nodeUpdates.push(id);
+        }
       }
     }
     for (const id of b.keys()) {
-      if (!a.has(id)) nodeDeletes.push(id);
+      if (!a.has(id)) {
+        nodeDeletes.push(id);
+      }
     }
-    return { nodeAdds, nodeUpdates, nodeDeletes };
+    const result = { nodeAdds, nodeUpdates, nodeDeletes };
+    return result;
   }
 
   private diffEdges(before: PersistedGraphEdge[], after: PersistedGraphEdge[]) {
-    const bi = new Map(before.map((e) => [String(e.id ?? this.edgeId(e)), JSON.stringify({ ...e, id: String(e.id ?? this.edgeId(e)) })]));
-    const ai = new Map(after.map((e) => [String(e.id ?? this.edgeId(e)), JSON.stringify({ ...e, id: String(e.id ?? this.edgeId(e)) })]));
+    const bi = new Map<string, string>(
+      before.map((e) => {
+        const id = String(e.id ?? this.edgeId(e));
+        const payload = JSON.stringify({ ...e, id });
+        return [id, payload];
+      }),
+    );
+    const ai = new Map<string, string>(
+      after.map((e) => {
+        const id = String(e.id ?? this.edgeId(e));
+        const payload = JSON.stringify({ ...e, id });
+        return [id, payload];
+      }),
+    );
     const edgeAdds: string[] = [];
     const edgeUpdates: string[] = [];
     const edgeDeletes: string[] = [];
     for (const id of ai.keys()) {
-      if (!bi.has(id)) edgeAdds.push(id);
-      else if (bi.get(id) !== ai.get(id)) edgeUpdates.push(id);
+      if (!bi.has(id)) {
+        edgeAdds.push(id);
+      } else {
+        const bVal = bi.get(id);
+        const aVal = ai.get(id);
+        if (bVal !== aVal) {
+          edgeUpdates.push(id);
+        }
+      }
     }
     for (const id of bi.keys()) {
-      if (!ai.has(id)) edgeDeletes.push(id);
+      if (!ai.has(id)) {
+        edgeDeletes.push(id);
+      }
     }
-    return { edgeAdds, edgeUpdates, edgeDeletes };
+    const result = { edgeAdds, edgeUpdates, edgeDeletes };
+    return result;
   }
 }
   private defaultAuthor(): { name?: string; email?: string } | undefined {
