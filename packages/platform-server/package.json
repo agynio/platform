@@ -5,9 +5,9 @@
   "main": "src/index.ts",
   "type": "module",
   "scripts": {
-    "dev": "tsx src/index.ts",
+    "dev": "node --loader ts-node/esm src/index.ts",
     "dev:deps": "docker compose up -d mongo1 mongo-setup agents-db vault vault-auto-init registry-mirror ncps-init ncps",
-    "dev:start": "tsx src/index.ts",
+    "dev:start": "node --loader ts-node/esm src/index.ts",
     "dev:all": "pnpm dev:deps && pnpm dev:start",
     "test": "cross-env MONGOMS_VERSION=7.0.14 vitest run",
     "test:watch": "vitest",

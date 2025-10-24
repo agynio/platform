@@ -1,5 +1,4 @@
-import pkgPrisma from '@prisma/client';
-const { PrismaClient } = pkgPrisma as unknown as { PrismaClient: new (...args: unknown[]) => unknown };
+import { PrismaClient } from '@prisma/client';
 import { LoggerService } from './logger.service';
 import { ConfigService } from './config.service';
 
