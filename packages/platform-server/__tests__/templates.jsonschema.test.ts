@@ -4,24 +4,7 @@ import type { JSONSchema7 } from 'json-schema';
 
 type JsonSchemaWithUi = JSONSchema7 & { 'ui:field'?: string };
 import { ShellToolStaticConfigSchema } from '../src/nodes/tools/shell_command/shell_command.node';
-=======
 import { LocalMcpServerStaticConfigSchema } from '../src/nodes/mcp/localMcpServer.node';
-=======
-import { LocalMcpServerStaticConfigSchema } from '../src/nodes/mcp/localMcpServer.node';
-=======
-=======
-import { LocalMcpServerStaticConfigSchema } from '../src/nodes/mcp/localMcpServer.node';
-
-import { LocalMcpServerStaticConfigSchema } from '../src/nodes/mcp/localMcpServer.node';
-
-import { LocalMcpServerStaticConfigSchema } from '../src/nodes/mcp/localMcpServer.node';
-
-import { LocalMcpServerStaticConfigSchema } from '../src/nodes/mcp/localMcpServer.node';
-
-
-
-import { LocalMcpServerStaticConfigSchema } from '../src/nodes/mcp/localMcpServer.node';
-
 import { AgentStaticConfigSchema } from '../src/nodes/agent/agent.node';
 
 describe('template schemas: env ui:field', () => {

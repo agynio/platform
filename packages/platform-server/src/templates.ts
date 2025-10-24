@@ -57,6 +57,7 @@ export function buildTemplateRegistry(deps: TemplateRegistryDeps): TemplateRegis
     'workspace',
     { title: 'Workspace', kind: 'service', capabilities: { staticConfigurable: true }, staticConfigSchema: toJSONSchema(ContainerProviderExposedStaticConfigSchema) },
     WorkspaceNode,
+    { sourcePorts: { $self: { kind: 'instance' } } },
   );
   registry.register(
     'shellTool',
