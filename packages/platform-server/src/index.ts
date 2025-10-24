@@ -101,7 +101,7 @@ async function bootstrap() {
   // Graph service initialized via DI
 
   // Helper to convert persisted graph to runtime GraphDefinition
-  const toRuntimeGraph = (saved: { nodes: any[]; edges: any[] }) =>
+  const toRuntimeGraph = (saved: { nodes: Array<{ id: string; template: string; config?: Record<string, unknown>; dynamicConfig?: Record<string, unknown>; state?: Record<string, unknown> }>; edges: Array<{ source: string; sourceHandle: string; target: string; targetHandle: string }> }) =>
     ({
       nodes: saved.nodes.map((n) => ({
         id: n.id,
@@ -127,18 +127,7 @@ async function bootstrap() {
       );
       await runtime.apply(toRuntimeGraph(existing));
       // Attach NodeStateService to any existing MCP servers (post-apply)
-      try {
-        if (nodeStateService) {
-          const nodes = runtime.getNodes();
-          for (const ln of nodes) {
-            const inst = runtime.getNodeInstance<any>(ln.id);
-            const isMcp = !!inst && typeof inst?.discoverTools === 'function' && typeof inst?.callTool === 'function';
-            if (isMcp && (inst as any).nodeStateService === undefined) {
-              (inst as any).nodeStateService = nodeStateService;
-            }
-          }
-        }
-      } catch {}
+      // Wiring is deterministic via templates; no post-hoc assignment
     } else {
       logger.info('No persisted graph found; starting with empty runtime graph.');
     }

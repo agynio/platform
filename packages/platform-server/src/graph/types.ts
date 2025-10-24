@@ -23,13 +23,12 @@ export interface EdgeDef {
   targetHandle: string; // handle name on target instance
 }
 
-export interface DependencyBag {
-  // Deprecated: legacy dependency bag previously passed to factories via runtime.
-  // Prefer explicit wiring through template factories and constructor params.
-  // Kept for backward-compat of type signatures; will be removed in a future release.
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  [k: string]: any;
-}
+/**
+ * Deprecated: legacy dependency bag previously passed to factories via runtime.
+ * Prefer explicit wiring through template factories and constructor params.
+ * Kept for backward-compat of type signatures; will be removed in a future release.
+ */
+export type DependencyBag = Record<string, unknown>;
 
 export interface FactoryContext {
   // Deprecated: deps were previously injected globally; avoid relying on this.
@@ -44,6 +43,11 @@ export interface Configurable {
 }
 
 export type FactoryFn = (ctx: FactoryContext) => Configurable | Promise<Configurable>;
+
+// Minimal persistence interface used by NodeStateService to upsert per-node state
+export interface GraphStateUpsertService {
+  upsertNodeState(name: string, nodeId: string, patch: Record<string, unknown>): Promise<void>;
+}
 
 export interface TemplateRegistryLike {
   get(template: string): FactoryFn | undefined;

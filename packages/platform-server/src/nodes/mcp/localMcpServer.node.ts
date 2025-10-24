@@ -13,7 +13,7 @@ import { LoggerService } from '../../core/services/logger.service';
 import { VaultService } from '../../infra/vault/vault.service';
 import { DockerExecTransport } from './dockerExecTransport';
 import { LocalMCPServerTool } from './localMcpServer.tool';
-import { DEFAULT_MCP_COMMAND, McpError, McpServer, McpTool, McpToolCallResult } from './types';
+import { DEFAULT_MCP_COMMAND, McpError, McpServer, McpTool, McpToolCallResult, PersistedMcpState, PersistedMcpToolSummary } from './types';
 import { NodeStateService } from '../../graph/nodeState.service';
 
 const EnvItemSchema = z
@@ -172,9 +172,32 @@ export class LocalMCPServer implements McpServer, Provisionable, DynamicConfigur
     );
   }
 
-  preloadCachedTools(tools: McpTool[] | undefined | null, updatedAt?: number | string | Date): void {
+  /** Create a LocalMCPServerTool from a persisted summary without schemas. Accept any object input. */
+  private createLocalToolFromSummary(summary: PersistedMcpToolSummary): LocalMCPServerTool {
+    return new LocalMCPServerTool(
+      {
+        getName: () => summary.name,
+        getDescription: () => summary.description || 'MCP tool',
+        getDelegate: () => ({
+          callTool: async (name: string, args: unknown) => {
+            const res = await this.callTool(name, args, { threadId: '__mcp_exec__' });
+            return {
+              isError: res.isError,
+              content: res.content,
+              structuredContent: res.structuredContent,
+              raw: res.raw,
+            };
+          },
+          getLogger: () => this.logger,
+        }),
+      },
+      z.object({}).catchall(z.any()).strict(),
+    );
+  }
+
+  preloadCachedTools(tools: Array<McpTool | PersistedMcpToolSummary> | undefined | null, updatedAt?: number | string | Date): void {
     if (tools && Array.isArray(tools) && tools.length > 0) {
-      this.toolsCache = tools.map((t) => this.createLocalTool(t));
+      this.toolsCache = tools.map((t) => (('inputSchema' in (t as McpTool)) ? this.createLocalTool(t as McpTool) : this.createLocalToolFromSummary(t as PersistedMcpToolSummary)));
       this.toolsDiscovered = true; // consider discovered for initial dynamic schema availability
     }
     if (updatedAt !== undefined) {
@@ -292,7 +315,7 @@ export class LocalMCPServer implements McpServer, Provisionable, DynamicConfigur
       try {
         const state: { mcp: PersistedMcpState } = {
           mcp: {
-            tools: (this.toolsCache || []).map((t) => ({ name: t.name, description: t.description } as any)),
+            tools: (this.toolsCache || []).map((t) => ({ name: t.name, description: t.description })),
             toolsUpdatedAt: this.lastToolsUpdatedAt,
           },
         };

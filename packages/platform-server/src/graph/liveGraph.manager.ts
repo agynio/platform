@@ -67,6 +67,15 @@ export class LiveGraphRuntime {
     }
   }
 
+  // Update persisted runtime snapshot state for a node (typed helper)
+  updateNodeState(id: string, state: Record<string, unknown>): void {
+    if (!this.state.lastGraph) return;
+    const node = this.state.lastGraph.nodes.find((n) => n.id === id);
+    if (node) {
+      node.data.state = state;
+    }
+  }
+
   // Return the live node instance (if present). Authoritative API used by routes (no any casts).
   getNodeInstance<T = unknown>(id: string): T | undefined {
     return this.state.nodes.get(id)?.instance as T | undefined;
@@ -251,7 +260,7 @@ export class LiveGraphRuntime {
       removedNodes: diff.removedNodeIds,
       recreatedNodes: diff.recreatedNodeIds,
       updatedConfigNodes: diff.configUpdateNodeIds,
-      updatedDynamicConfigNodes: (diff as any).dynamicConfigUpdateNodeIds || [],
+      updatedDynamicConfigNodes: diff.dynamicConfigUpdateNodeIds || [],
       addedEdges: diff.addedEdges.map(edgeKey),
       removedEdges: diff.removedEdges.map(edgeKey),
       errors,
@@ -281,8 +290,8 @@ export class LiveGraphRuntime {
           const prevCfg = prevNode.data.config || {};
           const nextCfg = n.data.config || {};
           if (!configsEqual(prevCfg, nextCfg)) configUpdateNodeIds.push(n.id);
-          const prevDyn = (prevNode.data as any).dynamicConfig || {};
-          const nextDyn = (n.data as any).dynamicConfig || {};
+          const prevDyn = prevNode.data.dynamicConfig || {};
+          const nextDyn = n.data.dynamicConfig || {};
           if (!configsEqual(prevDyn, nextDyn)) dynamicConfigUpdateNodeIds.push(n.id);
         }
       }
@@ -307,7 +316,7 @@ export class LiveGraphRuntime {
       dynamicConfigUpdateNodeIds,
       addedEdges,
       removedEdges,
-    } as any;
+    } as InternalDiffComputation;
   }
 
   private async instantiateNode(node: NodeDef): Promise<void> {
@@ -318,7 +327,7 @@ export class LiveGraphRuntime {
       const created = await factory({
         get: (id: string) => this.state.nodes.get(id)?.instance,
         nodeId: node.id,
-      } as any);
+      });
       // NOTE: setGraphNodeId reflection removed; prefer factories to leverage ctx.nodeId directly.
       const live: LiveNode = { id: node.id, template: node.data.template, instance: created, config: node.data.config };
       this.state.nodes.set(node.id, live);

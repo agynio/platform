@@ -29,9 +29,13 @@ export interface McpToolCallResult {
   raw?: unknown; // full raw SDK result
 }
 
-// Minimal internal type for persisted MCP state
+// Persisted state summary for MCP tools (used in LocalMcpServer and runtime snapshots)
+export interface PersistedMcpToolSummary {
+  name: string;
+  description?: string;
+}
 export interface PersistedMcpState {
-  tools?: McpTool[];
+  tools?: PersistedMcpToolSummary[];
   toolsUpdatedAt?: string | number; // ISO string or epoch ms
   toolsEtag?: string;
 }

@@ -41,11 +41,12 @@ export interface TemplateRegistryDeps {
   mongoService: MongoService; // required for memory nodes
   llmFactoryService: LLMFactoryService;
   ncpsKeyService?: NcpsKeyService;
-  nodeStateService?: NodeStateService;
+  // Provide NodeStateService deterministically; prefer provider to avoid construction cycles
+  nodeStateServiceProvider?: () => NodeStateService | undefined;
 }
 
 export function buildTemplateRegistry(deps: TemplateRegistryDeps): TemplateRegistry {
-  const { logger, containerService, configService, mongoService, ncpsKeyService, llmFactoryService, nodeStateService } = deps;
+  const { logger, containerService, configService, mongoService, ncpsKeyService, llmFactoryService, nodeStateServiceProvider } = deps;
 
   // Initialize Vault service from config (optional)
   const vault = new VaultService(configService, logger);
@@ -242,11 +243,14 @@ export function buildTemplateRegistry(deps: TemplateRegistryDeps): TemplateRegis
       .register(
         'mcpServer',
         () => {
-          const server = new LocalMCPServer(containerService, logger, vault, envService, configService);
-          // Optional: provide NodeStateService for state persistence from MCP server
-          if (nodeStateService) {
-            (server as any).nodeStateService = nodeStateService;
-          }
+          const server = new LocalMCPServer(
+            containerService,
+            logger,
+            vault,
+            envService,
+            configService,
+            nodeStateServiceProvider ? nodeStateServiceProvider() : undefined,
+          );
           void server.start();
           return server;
         },
