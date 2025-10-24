@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Headers, Body, HttpCode } from '@nestjs/common';
+import { Controller, Get, Post, Headers, Body } from '@nestjs/common';
 import type { FastifyReply } from 'fastify';
 import { LoggerService } from '../../core/services/logger.service';
 import { TemplateRegistry } from '../templateRegistry';
@@ -43,7 +43,6 @@ export class GraphPersistController {
   }
 
   @Post('graph')
-  @HttpCode(200)
   async upsertGraph(
     @Body() body: PersistedGraphUpsertRequest,
     @Headers() headers: Record<string, string | string[] | undefined>,
@@ -119,3 +118,4 @@ export class GraphPersistController {
     }
   }
 }
+
