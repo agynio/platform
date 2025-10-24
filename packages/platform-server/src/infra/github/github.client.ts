@@ -15,11 +15,7 @@ export class GithubService {
   constructor(
     private readonly config: ConfigService,
     private readonly logger: LoggerService,
-  ) {
-    if (!this.isEnabled()) {
-      this.logger.info('GithubService: integration disabled (no credentials)');
-    }
-  }
+  ) {}
 
   isEnabled(): boolean {
     const appOk = !!(this.config.githubAppId && this.config.githubAppPrivateKey && this.config.githubInstallationId);
