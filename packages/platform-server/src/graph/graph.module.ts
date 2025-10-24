@@ -20,11 +20,21 @@ import { ConfigService } from '../core/services/config.service';
 import { MongoService } from '../core/services/mongo.service';
 import { LLMProvisioner } from '../llm/provisioners/llm.provisioner';
 import { NcpsKeyService } from '../infra/ncps/ncpsKey.service';
+import { GraphDefinition, GraphError } from './types';
 
 @Module({
   imports: [CoreModule, InfraModule, NodesModule, LLMModule],
   controllers: [RunsController, GraphPersistController, GraphController],
   providers: [
+    // Ensure Mongo connects before repository access
+    {
+      provide: 'GraphModuleBootstrap',
+      useFactory: async (mongo: MongoService) => {
+        await mongo.connect();
+        return true;
+      },
+      inject: [MongoService],
+    },
     {
       provide: TemplateRegistry,
       useFactory: (
@@ -53,6 +63,7 @@ import { NcpsKeyService } from '../infra/ncps/ncpsKey.service';
         logger: LoggerService,
         mongo: MongoService,
         templateRegistry: TemplateRegistry,
+        _bootstrap: unknown,
       ) => {
         if (config.graphStore === 'git') {
           const svc = new GitGraphRepository(config, logger, templateRegistry);
@@ -64,9 +75,60 @@ import { NcpsKeyService } from '../infra/ncps/ncpsKey.service';
           return svc;
         }
       },
-      inject: [ConfigService, LoggerService, MongoService, TemplateRegistry],
+      inject: [ConfigService, LoggerService, MongoService, TemplateRegistry, 'GraphModuleBootstrap'],
     },
     LiveGraphRuntime,
+    // Load and apply persisted graph to runtime at startup
+    {
+      provide: 'LiveGraphRuntimeInitializer',
+      useFactory: async (logger: LoggerService, graphs: GraphRepository, runtime: LiveGraphRuntime) => {
+        const toRuntimeGraph = (saved: {
+          nodes: Array<{
+            id: string;
+            template: string;
+            config?: Record<string, unknown>;
+            dynamicConfig?: Record<string, unknown>;
+            state?: Record<string, unknown>;
+          }>;
+          edges: Array<{ source: string; sourceHandle: string; target: string; targetHandle: string }>;
+        }) =>
+          ({
+            nodes: saved.nodes.map((n) => ({
+              id: n.id,
+              data: { template: n.template, config: n.config, dynamicConfig: n.dynamicConfig, state: n.state },
+            })),
+            edges: saved.edges.map((e) => ({
+              source: e.source,
+              sourceHandle: e.sourceHandle,
+              target: e.target,
+              targetHandle: e.targetHandle,
+            })),
+          }) as GraphDefinition;
+
+        try {
+          const existing = await graphs.get('main');
+          if (existing) {
+            logger.info(
+              'Applying persisted graph to live runtime (version=%s, nodes=%d, edges=%d)',
+              existing.version,
+              existing.nodes.length,
+              existing.edges.length,
+            );
+            await runtime.apply(toRuntimeGraph(existing));
+            logger.info('Initial persisted graph applied successfully');
+          } else {
+            logger.info('No persisted graph found; starting with empty runtime graph.');
+          }
+        } catch (e) {
+          if (e instanceof GraphError) {
+            logger.error('Failed to apply initial persisted graph: %s. Cause: %s', e.message, (e as any)?.cause);
+          }
+          logger.error('Failed to apply initial persisted graph: %s', String(e));
+        }
+        return true;
+      },
+      inject: [LoggerService, GraphRepository, LiveGraphRuntime],
+    },
     AgentRunService,
   ],
   exports: [LiveGraphRuntime, TemplateRegistry, PortsRegistry, GraphRepository, AgentRunService],

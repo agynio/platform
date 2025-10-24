@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
-import { LoggerService } from './logger.service';
-import { ConfigService } from './config.service';
+import { LoggerService } from '../../core/services/logger.service';
+import { ConfigService } from '../../core/services/config.service';
 import type { Dispatcher } from 'undici';
 import { Agent } from 'undici';
 import { readFileSync } from 'node:fs';
