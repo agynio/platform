@@ -4,7 +4,6 @@ import { ConfigService } from '../../core/services/config.service';
 import { LoggerService } from '../../core/services/logger.service';
 
 import { z } from 'zod';
-import { toJSONSchema } from 'zod';
 
 import { FunctionTool, HumanMessage, Loop, ResponseMessage, ToolCallMessage, ToolCallOutputMessage, Reducer } from '@agyn/llm';
 import { withAgent } from '@agyn/tracing';
@@ -312,7 +311,5 @@ export class AgentNode extends Node<AgentStaticConfig | undefined> implements Tr
     }
   }
 
-  // Static introspection for TemplateRegistry
-  static capabilities = { pausable: true, staticConfigurable: true } as const;
-  static staticConfigSchema = toJSONSchema(AgentStaticConfigSchema);
+  // Static introspection removed per hotfix; rely on TemplateRegistry meta.
 }
