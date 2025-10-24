@@ -4,7 +4,7 @@ import { LoggerService } from '../../core/services/logger.service';
 import { z } from 'zod';
 import { SocketModeClient } from '@slack/socket-mode';
 import { VaultService } from '../../infra/vault/vault.service';
-import { resolveTokenRef, ReferenceFieldSchema } from '../../utils/refs';
+import { normalizeTokenRef, resolveTokenRef, ReferenceFieldSchema, parseVaultRef } from '../../utils/refs';
 
 // Internal schema: accept either plain string or ReferenceField
 export const SlackTriggerStaticConfigSchema = z

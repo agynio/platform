@@ -6,7 +6,7 @@ import {
   LiveNode,
   edgeKey,
 } from './liveGraph.types';
-import { EdgeDef, GraphDefinition, NodeDef } from './types';
+import { EdgeDef, GraphDefinition, GraphError, NodeDef } from './types';
 // Ports based reversible universal edges
 import { ZodError } from 'zod';
 import { LocalMCPServer } from '../nodes/mcp';
