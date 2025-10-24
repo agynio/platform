@@ -1,14 +1,19 @@
-import OpenAI from 'openai';
 import { LLM } from '@agyn/llm';
-import { LLMProvisioner } from '../llm.provisioner';
+import { Injectable } from '@nestjs/common';
+import OpenAI from 'openai';
 import { ConfigService } from '../../core/services/config.service';
+import { LLMProvisioner } from './llm.provisioner';
 
+@Injectable()
 export class OpenAILLMProvisioner extends LLMProvisioner {
-  private llm: LLM | null = null;
-  constructor(private cfg: ConfigService) { super(); }
+  private llm?: LLM;
+  constructor(private cfg: ConfigService) {
+    super();
+  }
 
   async getLLM(): Promise<LLM> {
     if (this.llm) return this.llm;
+
     const apiKey = this.cfg.openaiApiKey;
     if (!apiKey) throw new Error('openai_provider_missing_key');
     const baseUrl = this.cfg.openaiBaseUrl;

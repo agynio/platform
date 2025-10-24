@@ -1,7 +1,7 @@
 import { Reducer, ResponseMessage, SystemMessage, ToolCallMessage } from '@agyn/llm';
 import { LLMContext, LLMState } from '../types';
 import { LoggerService } from '../../core/services/logger.service';
-import { Injectable } from '@nestjs/common';
+import { Injectable, Scope } from '@nestjs/common';
 
 /**
  * EnforceToolsLLMReducer injects a restriction message when the model

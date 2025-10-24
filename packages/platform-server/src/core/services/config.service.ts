@@ -140,6 +140,7 @@ export const configSchema = z.object({
     }),
   ncpsAuthHeader: z.string().optional(),
   ncpsAuthToken: z.string().optional(),
+  agentsDatabaseUrl: z.string().min(1, 'Agents database connection string is required'),
 });
 
 export type Config = z.infer<typeof configSchema>;
@@ -299,6 +300,9 @@ export class ConfigService implements Config {
   get ncpsAuthToken(): string | undefined {
     return this.params.ncpsAuthToken;
   }
+  get agentsDatabaseUrl(): string {
+    return this.params.agentsDatabaseUrl;
+  }
 
   static fromEnv(): ConfigService {
     const legacy = process.env.NCPS_URL;
@@ -351,6 +355,7 @@ export class ConfigService implements Config {
       ncpsRotationGraceMinutes: process.env.NCPS_ROTATION_GRACE_MINUTES,
       ncpsAuthHeader: process.env.NCPS_AUTH_HEADER,
       ncpsAuthToken: process.env.NCPS_AUTH_TOKEN,
+      agentsDatabaseUrl: process.env.AGENTS_DATABASE_URL,
     });
     return new ConfigService().init(parsed);
   }

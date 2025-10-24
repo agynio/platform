@@ -1,9 +1,9 @@
-import { FunctionTool, LLM, Reducer, ResponseMessage, SystemMessage, ToolCallMessage } from '@agyn/llm';
-import { LLMContext, LLMState } from '../types';
+import { FunctionTool, LLM, Reducer, SystemMessage, ToolCallMessage } from '@agyn/llm';
 import { LLMResponse, withLLM } from '@agyn/tracing';
-import { Injectable } from '@nestjs/common';
+import { Injectable, Scope } from '@nestjs/common';
+import { LLMContext, LLMState } from '../types';
 
-@Injectable()
+@Injectable({ scope: Scope.TRANSIENT })
 export class CallModelLLMReducer extends Reducer<LLMState, LLMContext> {
   constructor(private llm: LLM) {
     super();

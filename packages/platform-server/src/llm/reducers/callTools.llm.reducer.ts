@@ -3,9 +3,9 @@ import { ToolCallResponse, withToolCall } from '@agyn/tracing';
 import { LLMContext, LLMMessage, LLMState } from '../types';
 import { FunctionTool, Reducer, ResponseMessage, ToolCallMessage, ToolCallOutputMessage } from '@agyn/llm';
 import { LoggerService } from '../../core/services/logger.service';
-import { Injectable } from '@nestjs/common';
+import { Injectable, Scope } from '@nestjs/common';
 
-@Injectable()
+@Injectable({ scope: Scope.TRANSIENT })
 export class CallToolsLLMReducer extends Reducer<LLMState, LLMContext> {
   constructor(private logger: LoggerService) {
     super();
@@ -82,7 +82,7 @@ export class CallToolsLLMReducer extends Reducer<LLMState, LLMContext> {
         );
 
         // Emit raw output payload for FunctionCallOutput
-        return ToolCallOutputMessage.fromResponse(t.callId, response.raw);
+        return ToolCallOutputMessage.fromResponse(t.callId, response);
       }),
     );
 

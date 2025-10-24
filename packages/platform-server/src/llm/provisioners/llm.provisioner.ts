@@ -1,9 +1,7 @@
 import type { LLM } from '@agyn/llm';
+import { Injectable } from '@nestjs/common';
 
-export type LLMProvider = 'openai' | 'litellm' | 'auto';
-
-// Simplified abstract provisioner: only expose LLM
+@Injectable()
 export abstract class LLMProvisioner {
   abstract getLLM(): Promise<LLM>;
 }
-
