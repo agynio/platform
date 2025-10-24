@@ -7,6 +7,7 @@ import { PersistedGraph, PersistedGraphEdge, PersistedGraphNode, PersistedGraphU
 import { validatePersistedGraph } from './graphSchema.validator';
 import { GraphRepository } from './graph.repository';
 import { ConfigService } from '../core/services/config.service';
+import { diffNodes as diffNodesMap, diffEdges as diffEdgesMap, Edge as DiffEdge } from './gitGraph.diff';
 
 // Narrow meta persisted at repo root
 interface GraphMeta {
@@ -487,7 +488,6 @@ export class GitGraphRepository extends GraphRepository {
   }
 
   private diffNodes(before: PersistedGraphNode[], after: PersistedGraphNode[]) {
-    // Include position and state so both cause updates; encode template/config/dynamicConfig/state/position
     const normalize = (n: PersistedGraphNode): string => {
       return JSON.stringify({
         id: n.id,
@@ -500,65 +500,39 @@ export class GitGraphRepository extends GraphRepository {
     };
     const b = new Map<string, string>(before.map((n) => [n.id, normalize(n)]));
     const a = new Map<string, string>(after.map((n) => [n.id, normalize(n)]));
+    const res = diffNodesMap(a, b);
+    // Convert map of updates to arrays of ids to keep behavior consistent with callers
     const nodeAdds: string[] = [];
-    const nodeUpdates: string[] = [];
-    const nodeDeletes: string[] = [];
+    const nodeUpdates: string[] = Array.from(res.updates.keys());
+    const nodeDeletes: string[] = res.deletes;
     for (const id of a.keys()) {
       if (!b.has(id)) {
         nodeAdds.push(id);
-      } else {
-        const bVal = b.get(id);
-        const aVal = a.get(id);
-        if (bVal !== aVal) {
-          nodeUpdates.push(id);
-        }
       }
     }
-    for (const id of b.keys()) {
-      if (!a.has(id)) {
-        nodeDeletes.push(id);
-      }
-    }
-    const result = { nodeAdds, nodeUpdates, nodeDeletes };
-    return result;
+    return { nodeAdds, nodeUpdates, nodeDeletes };
   }
 
   private diffEdges(before: PersistedGraphEdge[], after: PersistedGraphEdge[]) {
-    const bi = new Map<string, string>(
-      before.map((e) => {
-        const id = String(e.id ?? this.edgeId(e));
-        const payload = JSON.stringify({ ...e, id });
-        return [id, payload];
-      })
-    );
-    const ai = new Map<string, string>(
-      after.map((e) => {
-        const id = String(e.id ?? this.edgeId(e));
-        const payload = JSON.stringify({ ...e, id });
-        return [id, payload];
-      })
-    );
+    const toEdge = (e: PersistedGraphEdge): DiffEdge => ({ id: String(e.id ?? this.edgeId(e)), ...e });
+    const bi = new Map<string, DiffEdge>(before.map((e) => {
+      const edge = toEdge(e);
+      return [edge.id, edge];
+    }));
+    const ai = new Map<string, DiffEdge>(after.map((e) => {
+      const edge = toEdge(e);
+      return [edge.id, edge];
+    }));
+    const res = diffEdgesMap(ai, bi);
     const edgeAdds: string[] = [];
-    const edgeUpdates: string[] = [];
-    const edgeDeletes: string[] = [];
+    const edgeUpdates: string[] = Array.from(res.updates.keys());
+    const edgeDeletes: string[] = res.deletes;
     for (const id of ai.keys()) {
       if (!bi.has(id)) {
         edgeAdds.push(id);
-      } else {
-        const bVal = bi.get(id);
-        const aVal = ai.get(id);
-        if (bVal !== aVal) {
-          edgeUpdates.push(id);
-        }
       }
     }
-    for (const id of bi.keys()) {
-      if (!ai.has(id)) {
-        edgeDeletes.push(id);
-      }
-    }
-    const result = { edgeAdds, edgeUpdates, edgeDeletes };
-    return result;
+    return { edgeAdds, edgeUpdates, edgeDeletes };
   }
 }
   private defaultAuthor(): { name?: string; email?: string } | undefined {
