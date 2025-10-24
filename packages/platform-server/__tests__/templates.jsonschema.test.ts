@@ -4,7 +4,15 @@ import type { JSONSchema7 } from 'json-schema';
 
 type JsonSchemaWithUi = JSONSchema7 & { 'ui:field'?: string };
 import { ShellToolStaticConfigSchema } from '../src/nodes/tools/shell_command/shell_command.node';
+<<<<<<< HEAD
 import { LocalMcpServerStaticConfigSchema } from "../src/nodes/mcp/localMcpServer.node";
+=======
+<<<<<<< HEAD
+import { LocalMcpServerStaticConfigSchema } from '../src/mcp/localMcpServer';
+=======
+import { LocalMcpServerStaticConfigSchema } from '../src/nodes/mcp/localMcpServer.node';
+>>>>>>> 9157620 (Refactor: move graph routes to Nest controllers (packages/platform-server) [#432] (#433))
+>>>>>>> 3836410 (fix: resolve rebase conflicts in tests and index.ts; prefer node-local import paths and keep Nest graph routes)
 import { AgentStaticConfigSchema } from '../src/nodes/agent/agent.node';
 
 describe('template schemas: env ui:field', () => {

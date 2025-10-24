@@ -1,6 +1,8 @@
 import { describe, it, expect, vi } from 'vitest';
 import { ContainerService } from '../../src/infra/container/container.service';
 import { LoggerService } from '../../src/core/services/logger.service';
+import { ExecIdleTimeoutError } from "../../src/utils/execTimeout";
+import { ExecIdleTimeoutError } from "../../src/utils/execTimeout";
 
 describe('ContainerService idle timeout with killOnTimeout=false', () => {
   it('does not stop container on idle timeout when killOnTimeout=false', async () => {
