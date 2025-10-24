@@ -24,4 +24,11 @@ export class RemindMeNode extends BaseToolNode {
     }
     return this.toolInstance;
   }
+
+  getPortConfig() {
+    return {
+      targetPorts: { $self: { kind: 'instance' } },
+      sourcePorts: { caller: { kind: 'method', create: 'setCallerAgent' } },
+    } as const;
+  }
 }

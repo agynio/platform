@@ -29,15 +29,6 @@ describe('TemplateRegistry.toSchema with capabilities/staticConfigSchema', () =>
       } as any,
     }, DummyNode as any);
 
-      staticConfigSchema: {
-        type: 'object',
-        properties: {
-          foo: { type: 'string' },
-        },
-        required: ['foo'],
-      } as any,
-    }, DummyNode as any);
-
     const schema = await reg.toSchema();
     const entry = schema.find((s) => s.name === 'withMeta') as TemplateNodeSchema;
     expect(entry).toBeTruthy();
