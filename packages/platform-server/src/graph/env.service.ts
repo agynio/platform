@@ -17,7 +17,7 @@ export type EnvItem = { key: string; value: string; source?: 'static' | 'vault' 
 
 @Injectable()
 export class EnvService {
-  constructor(private vault?: VaultService) {}
+  constructor(private vault: VaultService) {}
 
   mergeEnv(base?: Record<string, string>, overlay?: Record<string, string>): Record<string, string> {
     return { ...(base || {}), ...(overlay || {}) };

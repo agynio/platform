@@ -4,7 +4,7 @@ import { LoggerService } from './logger.service';
 export class PrismaService {
   private prisma: PrismaClient | null = null;
 
-  private constructor(private logger: LoggerService) {}
+  constructor(private logger: LoggerService) {}
 
   getClient(): PrismaClient | null {
     try {
