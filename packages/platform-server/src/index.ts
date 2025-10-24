@@ -195,6 +195,11 @@ async function bootstrap() {
   const app = await NestFactory.create(AppModule, adapter, { logger: false });
   app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
   await app.init();
+  // Ensure global DI helpers use the same Nest container
+  try {
+    const { setAppRef } = await import('./bootstrap/di');
+    setAppRef(app);
+  } catch {}
 
   // Background watcher reference (initialized after socket is attached)
   let readinessWatcher: ReadinessWatcher | null = null;
@@ -409,7 +414,6 @@ async function bootstrap() {
     }
   });
 
-<<<<<<< HEAD
   // Register routes that need runtime on fastify instance (non-Nest legacy)
   const fastify = adapter.getInstance();
   registerRemindersRoute(fastify, runtime, logger);
@@ -425,23 +429,6 @@ async function bootstrap() {
     const err = e as Error;
     logger.error('Failed to register Nix routes: %s', err?.message || String(e));
   }
-=======
-  // Register routes that need runtime on fastify instance (non-Nest legacy)
-  const fastify = adapter.getInstance();
-  registerRemindersRoute(fastify, runtime, logger);
-  // Runs routes migrated to Nest controller; remove legacy registration
-  // Nix proxy routes
-  try {
-    registerNixRoutes(fastify, {
-      timeoutMs: config.nixHttpTimeoutMs,
-      cacheTtlMs: config.nixCacheTtlMs,
-      cacheMax: config.nixCacheMax,
-    });
-  } catch (e) {
-    const err = e as Error;
-    logger.error('Failed to register Nix routes: %s', err?.message || String(e));
-  }
->>>>>>> b26d52e (feat(server): migrate runs routes to NestJS controller and bootstrap Nest FastifyAdapter)
 
   // Start Fastify then attach Socket.io
   const PORT = Number(process.env.PORT) || 3010;

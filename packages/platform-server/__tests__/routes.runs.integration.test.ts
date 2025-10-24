@@ -5,7 +5,7 @@ import { LiveGraphRuntime } from '../src/graph/liveGraph.manager';
 import { TemplateRegistry } from '../src/graph/templateRegistry';
 import { AgentRunService } from '../src/nodes/agentRun.repository';
 import type { FactoryFn } from '../src/graph/types';
-import { RuntimeRef } from '../src/graph/controllers/runtime.ref';
+// RuntimeRef removed; directly use runtime instance within test
 import { MongoMemoryServer } from 'mongodb-memory-server';
 import { MongoClient } from 'mongodb';
 
@@ -45,7 +45,7 @@ describe('Runs routes integration', () => {
       await runtime.apply({ nodes: [{ id: 'agent1', data: { template: 'testAgent', config: {} } }], edges: [] } as any);
 
       // Hook runtime into controller bridge and use a lightweight Fastify server
-      RuntimeRef.set(runtime);
+      // No RuntimeRef; controller in app uses DI. For this test we wire lightweight Fastify routes directly.
       fastify = Fastify();
       // Minimal stub to satisfy controller paths for e2e: re-implement endpoints to mirror Nest controller logic
       fastify.get('/graph/nodes/:nodeId/runs', async (req) => {

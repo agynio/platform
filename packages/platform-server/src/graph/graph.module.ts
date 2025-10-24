@@ -7,6 +7,8 @@ import { LiveGraphRuntime } from './liveGraph.manager';
 import { enforceMcpCommandMutationGuard } from './graph.guard';
 import { RunsController } from './controllers/runs.controller';
 import { NodesModule } from '../nodes/nodes.module';
+import { CoreModule } from '../core/core.module';
+import { InfraModule } from '../infra/infra.module';
 import { AgentRunService } from '../nodes/agentRun.repository';
 import { CoreModule } from '../core/core.module';
 import { InfraModule } from '../infra/infra.module';

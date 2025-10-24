@@ -10,7 +10,7 @@ import {
 } from '@nestjs/common';
 import { IsEnum, IsOptional, IsString } from 'class-validator';
 import { AgentRunService } from '../../nodes/agentRun.repository';
-import { RuntimeRef } from './runtime.ref';
+import { LiveGraphRuntime } from '../liveGraph.manager';
 
 // DTOs
 export class ListRunsParamsDto {
@@ -40,7 +40,7 @@ export class TerminateByThreadParamsDto {
 
 @Controller('graph/nodes')
 export class RunsController {
-  constructor(private readonly runs: AgentRunService) {}
+  constructor(private readonly runs: AgentRunService, private readonly runtime: LiveGraphRuntime) {}
 
   @Get(':nodeId/runs')
   async listRuns(
@@ -62,7 +62,7 @@ export class RunsController {
   @Post(':nodeId/runs/:runId/terminate')
   @HttpCode(202)
   async terminateByRun(@Param() params: TerminateByRunParamsDto): Promise<{ status: 'terminating' }> {
-    const runtime = RuntimeRef.get();
+    const runtime = this.runtime;
     type TerminableAgent = {
       terminateRun: (threadId: string, runId?: string) => 'ok' | 'not_running' | 'not_found';
     };
@@ -83,7 +83,7 @@ export class RunsController {
   @Post(':nodeId/threads/:threadId/terminate')
   @HttpCode(202)
   async terminateByThread(@Param() params: TerminateByThreadParamsDto): Promise<{ status: 'terminating' }> {
-    const runtime = RuntimeRef.get();
+    const runtime = this.runtime;
     type TerminableAgent = {
       terminateRun: (threadId: string, runId?: string) => 'ok' | 'not_running' | 'not_found';
       getCurrentRunId?: (threadId: string) => string | undefined;
@@ -103,4 +103,3 @@ export class RunsController {
     throw new ConflictException('not_running');
   }
 }
-
