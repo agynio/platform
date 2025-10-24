@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import Fastify from 'fastify';
-import { RemindersController } from '../src/nodes/tools/remind_me/reminders.controller';
+import { registerRemindersRoute } from '../src/routes/reminders.route';
 import { RemindMeTool } from '../src/nodes/tools/remind_me.tool';
 import { LoggerService } from '../src/core/services/logger.service';
 
@@ -19,7 +19,7 @@ describe('GET /graph/nodes/:nodeId/reminders', () => {
     await dyn.invoke({ delayMs: 10_000, note: 'Soon' }, { configurable: { thread_id: 't-1', caller_agent } });
 
     const runtime = { getNodeInstance: (id: string) => (id === 'node-rem' ? (tool as unknown) : undefined) } as any;
-    new RemindersController(logger as any, { getNodeInstance: runtime.getNodeInstance.bind(runtime) } as any).register(fastify as any);
+    registerRemindersRoute(fastify as any, runtime, logger);
 
     const res = await fastify.inject({ method: 'GET', url: '/graph/nodes/node-rem/reminders' });
     expect(res.statusCode).toBe(200);
@@ -40,7 +40,7 @@ describe('GET /graph/nodes/:nodeId/reminders', () => {
     const fastify = Fastify({ logger: false });
     const logger = new LoggerService();
     const runtime = { getNodeInstance: (_: string) => undefined } as any;
-    new RemindersController(logger as any, { getNodeInstance: runtime.getNodeInstance.bind(runtime) } as any).register(fastify as any);
+    registerRemindersRoute(fastify as any, runtime, logger);
     const res = await fastify.inject({ method: 'GET', url: '/graph/nodes/missing/reminders' });
     expect(res.statusCode).toBe(404);
     await fastify.close();
@@ -50,7 +50,7 @@ describe('GET /graph/nodes/:nodeId/reminders', () => {
     const fastify = Fastify({ logger: false });
     const logger = new LoggerService();
     const runtime = { getNodeInstance: (_: string) => ({}) } as any;
-    new RemindersController(logger as any, { getNodeInstance: runtime.getNodeInstance.bind(runtime) } as any).register(fastify as any);
+    registerRemindersRoute(fastify as any, runtime, logger);
     const res = await fastify.inject({ method: 'GET', url: '/graph/nodes/n/reminders' });
     expect(res.statusCode).toBe(404);
     expect(res.json()).toHaveProperty('error', 'not_remindme_node');

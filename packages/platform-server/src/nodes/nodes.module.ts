@@ -20,8 +20,10 @@ import { SendSlackMessageTool } from './tools/send_slack_message/send_slack_mess
 import { ShellCommandNode } from './tools/shell_command/shell_command.node';
 import { GithubCloneRepoNode } from './tools/github_clone_repo/github_clone_repo.node';
 import { RemindMeNode } from './tools/remind_me/remind_me.node';
+import { RemindersController } from './tools/remind_me/reminders.controller';
 
 @Module({
+  controllers: [RemindersController],
   providers: [
     // repositories/services
     AgentRunService,
