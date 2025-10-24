@@ -13,6 +13,7 @@ import { PrismaService } from './services/prisma.service';
       useFactory: (configService: ConfigService, logger: LoggerService) => {
         // Construct service only; avoid connecting at provider time.
         const mongo = new MongoService(configService, logger);
+        await mongo.connect();
         return mongo;
       },
       inject: [ConfigService, LoggerService],

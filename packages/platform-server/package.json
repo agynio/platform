@@ -5,14 +5,13 @@
   "main": "src/index.ts",
   "type": "module",
   "scripts": {
-    "dev": "tsc -p tsconfig.json && node dist/index.js",
+    "dev": "tsx src/index.ts",
     "test": "cross-env MONGOMS_VERSION=7.0.14 vitest run",
     "test:watch": "vitest",
     "lint": "eslint .",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev --name init",
-    "prisma:studio": "prisma studio",
-    "dev:start": "node --loader ts-node/esm src/index.ts"
+    "prisma:studio": "prisma studio"
   },
   "dependencies": {
     "@agyn/llm": "workspace:*",
