@@ -18,6 +18,11 @@ import { AppModule } from './bootstrap/app.module';
 import { MongoService } from './core/services/mongo.service';
 // Remove central platform.services.factory usage; rely on DI providers
 
+// Graceful shutdown after 60 seconds
+setTimeout(() => {
+  process.exit(0);
+}, 60000);
+
 async function bootstrap() {
   // NestJS HTTP bootstrap using FastifyAdapter and resolve services via DI
   const adapter = new FastifyAdapter();
