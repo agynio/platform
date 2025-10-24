@@ -6,7 +6,7 @@ import {
   LiveNode,
   edgeKey,
 } from './liveGraph.types';
-import { DependencyBag, EdgeDef, GraphDefinition, GraphError, NodeDef } from './types';
+import { EdgeDef, GraphDefinition, GraphError, NodeDef } from './types';
 // Ports based reversible universal edges
 import { ZodError } from 'zod';
 import { LocalMCPServer } from '../nodes/mcp';
@@ -45,11 +45,7 @@ export class LiveGraphRuntime {
     this.portsRegistry = new PortsRegistry(this.templateRegistry.getPortsMap());
   }
 
-  // Optional global deps bag exposed to factories and post-instantiation hooks
-  private factoryDeps: DependencyBag = {};
-  setFactoryDeps(deps: DependencyBag) {
-    this.factoryDeps = deps || {};
-  }
+  // factoryDeps removed; factories should rely on FactoryContext primitives only
 
   get version() {
     return this.state.version;
@@ -318,12 +314,11 @@ export class LiveGraphRuntime {
     try {
       const factory = this.templateRegistry.get(node.data.template);
       if (!factory) throw Errors.unknownTemplate(node.data.template, node.id);
-      // Factories receive a minimal context (deps deprecated -> empty object)
+      // Factories receive a minimal context
       const created = await factory({
-        deps: this.factoryDeps,
         get: (id: string) => this.state.nodes.get(id)?.instance,
         nodeId: node.id,
-      });
+      } as any);
       // NOTE: setGraphNodeId reflection removed; prefer factories to leverage ctx.nodeId directly.
       const live: LiveNode = { id: node.id, template: node.data.template, instance: created, config: node.data.config };
       this.state.nodes.set(node.id, live);

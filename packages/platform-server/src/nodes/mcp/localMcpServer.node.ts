@@ -14,6 +14,7 @@ import { VaultService } from '../../infra/vault/vault.service';
 import { DockerExecTransport } from './dockerExecTransport';
 import { LocalMCPServerTool } from './localMcpServer.tool';
 import { DEFAULT_MCP_COMMAND, McpError, McpServer, McpTool, McpToolCallResult } from './types';
+import { NodeStateService } from '../../graph/nodeState.service';
 
 const EnvItemSchema = z
   .object({
@@ -142,6 +143,7 @@ export class LocalMCPServer implements McpServer, Provisionable, DynamicConfigur
     private vault: VaultService,
     private envService: EnvService,
     private configService: ConfigService,
+    private nodeStateService?: NodeStateService,
   ) {}
 
   /**
@@ -286,19 +288,19 @@ export class LocalMCPServer implements McpServer, Provisionable, DynamicConfigur
           this.emitDynamicConfigChanged();
         }
       }
-      // Persist state using graphService
+      // Persist state using NodeStateService (if available)
       try {
-        // const state: { mcp: PersistedMcpState } = {
-        //   mcp: {
-        //     tools: (this.toolsCache || []).map((t) => ({ name: t.name, description: t.description })),
-        //     toolsUpdatedAt: this.lastToolsUpdatedAt,
-        //   },
-        // };
-        // const nodeId = this.namespace;
-        // TODO: fix persistency
-        // await this.graphStateService.upsertNodeState(this.namespace, nodeId, state);
+        const state: { mcp: PersistedMcpState } = {
+          mcp: {
+            tools: (this.toolsCache || []).map((t) => ({ name: t.name, description: t.description } as any)),
+            toolsUpdatedAt: this.lastToolsUpdatedAt,
+          },
+        };
+        if (this.nodeStateService) {
+          await this.nodeStateService.upsertNodeState(this.namespace, state);
+        }
       } catch (e) {
-        this.logger.error(`[MCP:${this.namespace}] Failed to persist state via graphService`, e);
+        this.logger.error(`[MCP:${this.namespace}] Failed to persist state`, e);
       }
       // Notify listeners with unified tools update event
       this.notifyToolsUpdated(this.lastToolsUpdatedAt || Date.now());

@@ -24,13 +24,16 @@ export interface EdgeDef {
 }
 
 export interface DependencyBag {
-  // Arbitrary shared services / singletons instanced outside the builder
-  // (e.g., logger, configService, slackService, containerProvider, checkpointerService, etc.)
-  [k: string]: any;  
+  // Deprecated: legacy dependency bag previously passed to factories via runtime.
+  // Prefer explicit wiring through template factories and constructor params.
+  // Kept for backward-compat of type signatures; will be removed in a future release.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  [k: string]: any;
 }
 
 export interface FactoryContext {
-  deps: DependencyBag;
+  // Deprecated: deps were previously injected globally; avoid relying on this.
+  deps?: DependencyBag;
   get: (id: string) => unknown; // access previously instantiated node (must exist already)
   nodeId: string; // id of the node currently being instantiated (for namespacing / awareness)
 }

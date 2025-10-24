@@ -19,7 +19,7 @@ import { MongoService } from './core/services/mongo.service';
 import { TemplateRegistry } from './graph/templateRegistry';
 import { LiveGraphRuntime } from './graph/liveGraph.manager';
 import { GraphRepository } from './graph/graph.repository';
-// import { GitGraphService } from './graph/gitGraph.repository';
+import { NodeStateService } from './graph/nodeState.service';
 import { GraphDefinition, GraphError, PersistedGraphUpsertRequest } from './graph/types';
 import { GraphErrorCode } from './graph/errors';
 import { ContainerService } from './infra/container/container.service';
@@ -57,7 +57,7 @@ async function bootstrap() {
   const containerService = app.get(ContainerService, { strict: false });
   const vaultService = app.get(VaultService, { strict: false });
   const ncpsKeyService = app.get(NcpsKeyService, { strict: false });
-
+  let nodeStateService: NodeStateService | undefined;
   // Initialize Ncps key service early
   try {
     await ncpsKeyService.init();
@@ -95,43 +95,8 @@ async function bootstrap() {
   await runsService.ensureIndexes();
   const graphService = await resolve<GraphRepository>(GraphRepository);
   await graphService.initIfNeeded();
-
-  // Provide deps to factories/runtime for state persistence and config access
-  runtime.setFactoryDeps?.({
-    configService: config,
-    graphStateService: {
-      // Centralized per-node state upsert helper
-      upsertNodeState: async (nodeId: string, state: Record<string, unknown>) => {
-        try {
-          await graphService.upsertNodeState('main', nodeId, state);
-          /* else {
-            // Fallback if not implemented
-            const current = await graphService.get('main');
-            const base = current ?? {
-              name: 'main',
-              version: 0,
-              updatedAt: new Date().toISOString(),
-              nodes: [],
-              edges: [],
-            };
-            const nodes = Array.from(base.nodes || []);
-            const idx = nodes.findIndex((n) => n.id === nodeId);
-            if (idx >= 0) nodes[idx] = { ...nodes[idx], state };
-            else nodes.push({ id: nodeId, template: 'unknown', state });
-            await graphService.upsert({ name: 'main', version: base.version, nodes, edges: base.edges });
-          } */
-          // Also update live runtime snapshot
-          const last = runtime?.state?.lastGraph as GraphDefinition | undefined;
-          if (last) {
-            const ln = last.nodes.find((n) => n.id === nodeId);
-            if (ln) ln.data.state = state;
-          }
-        } catch (e: unknown) {
-          logger.error('Failed to upsert node state for %s: %s', nodeId, JSON.stringify(e));
-        }
-      },
-    },
-  });
+  // Construct NodeStateService for state persistence and runtime snapshot updates
+  nodeStateService = new NodeStateService(graphService as any, runtime, logger);
 
   // Graph service initialized via DI
 
@@ -161,6 +126,19 @@ async function bootstrap() {
         existing.edges.length,
       );
       await runtime.apply(toRuntimeGraph(existing));
+      // Attach NodeStateService to any existing MCP servers (post-apply)
+      try {
+        if (nodeStateService) {
+          const nodes = runtime.getNodes();
+          for (const ln of nodes) {
+            const inst = runtime.getNodeInstance<any>(ln.id);
+            const isMcp = !!inst && typeof inst?.discoverTools === 'function' && typeof inst?.callTool === 'function';
+            if (isMcp && (inst as any).nodeStateService === undefined) {
+              (inst as any).nodeStateService = nodeStateService;
+            }
+          }
+        }
+      } catch {}
     } else {
       logger.info('No persisted graph found; starting with empty runtime graph.');
     }
@@ -171,19 +149,7 @@ async function bootstrap() {
     logger.error('Failed to apply initial persisted graph: %s', String(e));
   }
 
-  // Globals already set above
-  // NestJS HTTP bootstrap using FastifyAdapter
-  const adapter = new FastifyAdapter({ logger: false });
-  // Register CORS directly on underlying fastify instance for permissive origin
-  await adapter.getInstance().register(cors, { origin: true });
-  const app = await NestFactory.create(AppModule, adapter, { logger: false });
-  app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
-  await app.init();
-  // Ensure global DI helpers use the same Nest container
-  try {
-    const { setAppRef } = await import('./bootstrap/di');
-    setAppRef(app);
-  } catch {}
+  // Globals already set above; reuse adapter/app
 
   // Existing endpoints (namespaced under /api)
   // Moved graph-related routes to Nest controllers
@@ -204,6 +170,12 @@ async function bootstrap() {
   // RuntimeRef removed; runtime is available via DI
 
   const io = new Server(fastify.server, { cors: { origin: '*' } });
+  const emitStatus = (nodeId: string) => {
+    try {
+      const status = runtime.getNodeStatus(nodeId);
+      io.emit('node_status', { nodeId, ...status });
+    } catch {}
+  };
 
   // Routes registered above
 
