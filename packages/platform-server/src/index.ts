@@ -27,7 +27,7 @@ import { GraphDefinition, GraphError } from './graph/types';
 import { initDI, closeDI } from './bootstrap/di';
 import { AppModule } from './bootstrap/app.module';
 import { NcpsKeyService } from './infra/ncps/ncpsKey.service';
-import { createPlatformServices } from './bootstrap/platform.services.factory';
+// Remove central platform.services.factory usage; rely on DI providers
 
 await initDI();
 
@@ -63,7 +63,9 @@ async function bootstrap() {
   // Initialize checkpointer (optional Postgres mode)
 
   // Initialize and wire platform services via factory
-  const { graphRepository, containerCleanupService } = await createPlatformServices(app);
+  // Resolve services via DI; providers handle init/start via factories
+  const graphRepository = app.get(GraphRepository, { strict: false });
+  const containerCleanupService = app.get(ContainerCleanupService, { strict: false });
 
   const runtime = app.get(LiveGraphRuntime, { strict: false });
   // Construct NodeStateService for state persistence and runtime snapshot updates
@@ -125,7 +127,9 @@ async function bootstrap() {
     logger.info('Shutting down...');
     try {
       // Stop background cleanup before closing app
-      containerCleanupService.stop();
+      // Resolve and stop cleanup service idempotently
+      const cleanup = app.get(ContainerCleanupService, { strict: false });
+      cleanup?.stop();
     } catch {}
     await mongo.close();
     try {

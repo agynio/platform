@@ -1,4 +1,6 @@
 import { Module } from '@nestjs/common';
+import { MongoService } from '../core/services/mongo.service';
+import { LoggerService } from '../core/services/logger.service';
 import { LLMModule } from '../llm/llm.module';
 // Agent and memory
 import { AgentRunService } from './agentRun.repository';
@@ -28,7 +30,15 @@ import { RemindersController } from './tools/remind_me/reminders.controller';
   controllers: [RemindersController],
   providers: [
     // repositories/services
-    AgentRunService,
+    {
+      provide: AgentRunService,
+      useFactory: async (mongo: MongoService, logger: LoggerService) => {
+        const svc = new AgentRunService(mongo.getDb(), logger);
+        await svc.ensureIndexes();
+        return svc;
+      },
+      inject: [MongoService, LoggerService],
+    },
     MemoryService,
     // nodes
     AgentNode,

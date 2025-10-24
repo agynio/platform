@@ -58,7 +58,7 @@ export class LiteLLMProvisioner extends LLMProvisioner {
     const master = this.cfg.litellmMasterKey;
     if (!base || !master) return {};
 
-    const models = this.csvOrDefault(process.env.LITELLM_MODELS, ['all-team-models']);
+    const models = this.toList(process.env.LITELLM_MODELS, ['all-team-models']);
     const duration = process.env.LITELLM_KEY_DURATION || '30d';
     const keyAlias = process.env.LITELLM_KEY_ALIAS || `agents-${process.pid}`;
     const maxBudget = this.toNumber(process.env.LITELLM_MAX_BUDGET);
@@ -112,8 +112,7 @@ export class LiteLLMProvisioner extends LLMProvisioner {
     }
     return {};
   }
-
-  private csvOrDefault(v: string | undefined, dflt: string[]): string[] {
+  private toList(v: string | undefined, dflt: string[]): string[] {
     const parts = (v || '')
       .split(',')
       .map((x) => x.trim())
