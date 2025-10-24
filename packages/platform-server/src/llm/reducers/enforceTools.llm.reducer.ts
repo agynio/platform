@@ -1,12 +1,14 @@
 import { Reducer, ResponseMessage, SystemMessage, ToolCallMessage } from '@agyn/llm';
 import { LLMContext, LLMState } from '../types';
 import { LoggerService } from '../../core/services/logger.service';
+import { Injectable } from '@nestjs/common';
 
 /**
  * EnforceToolsLLMReducer injects a restriction message when the model
  * attempts to finish a turn without calling any tools. It also manages
  * per-turn enforcement counters via state.meta.
  */
+@Injectable()
 export class EnforceToolsLLMReducer extends Reducer<LLMState, LLMContext> {
   constructor(private logger?: LoggerService) {
     super();

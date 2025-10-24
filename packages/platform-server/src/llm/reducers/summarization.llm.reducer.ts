@@ -11,13 +11,24 @@ import {
   ToolCallOutputMessage,
 } from '@agyn/llm';
 import { stringify } from 'yaml';
+import { Injectable } from '@nestjs/common';
 
+@Injectable()
 export class SummarizationLLMReducer extends Reducer<LLMState, LLMContext> {
-  constructor(
-    private llm: LLM,
-    private params: { model: string; keepTokens: number; maxTokens: number; systemPrompt: string },
-  ) {
+  constructor(private llm: LLM) {
     super();
+  }
+
+  private params: { model: string; keepTokens: number; maxTokens: number; systemPrompt: string } = {
+    model: '',
+    keepTokens: 0,
+    maxTokens: 0,
+    systemPrompt: '',
+  };
+
+  init(params: { model: string; keepTokens: number; maxTokens: number; systemPrompt: string }) {
+    this.params = params;
+    return this;
   }
 
   // Token counting for raw string summary text.
