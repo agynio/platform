@@ -3,13 +3,19 @@ import { ToolCallResponse, withToolCall } from '@agyn/tracing';
 import { LLMContext, LLMMessage, LLMState } from '../types';
 import { FunctionTool, Reducer, ResponseMessage, ToolCallMessage, ToolCallOutputMessage } from '@agyn/llm';
 import { LoggerService } from '../../core/services/logger.service';
+import { Injectable } from '@nestjs/common';
 
-export class CallToolsLLMReducer extends Reducer<LLMState, LLMContext> {
-  constructor(
-    private logger: LoggerService,
-    private tools: FunctionTool[],
-  ) {
+@Injectable()
+export class CallToolsLLMReducer extends Reducer<LLMState, LLMContext, { tools: FunctionTool[] }> {
+  constructor(private logger: LoggerService) {
     super();
+  }
+
+  private tools: FunctionTool[] = [];
+
+  init(params: { tools: FunctionTool[] }) {
+    this.tools = params.tools || [];
+    return this;
   }
 
   filterToolCalls(messages: LLMMessage[]) {
@@ -76,7 +82,7 @@ export class CallToolsLLMReducer extends Reducer<LLMState, LLMContext> {
         );
 
         // Emit raw output payload for FunctionCallOutput
-        return ToolCallOutputMessage.fromResponse(t.callId, response.raw);
+        return ToolCallOutputMessage.fromResponse(t.callId, response);
       }),
     );
 

@@ -1,18 +1,24 @@
 import { FunctionTool, LLM, Reducer, ResponseMessage, SystemMessage, ToolCallMessage } from '@agyn/llm';
 import { LLMContext, LLMState } from '../types';
 import { LLMResponse, withLLM } from '@agyn/tracing';
+import { Injectable } from '@nestjs/common';
 
 @Injectable()
-export class CallModelLLMReducer extends Reducer<LLMState, LLMContext> {
-  constructor(
-    private llm: LLM,
-    private tools: FunctionTool[],
-    private params: { model: string; systemPrompt: string },
-  ) {
+export class CallModelLLMReducer extends Reducer<LLMState, LLMContext, { model: string; systemPrompt: string; tools: FunctionTool[] }> {
+  constructor(private llm: LLM) {
     super();
   }
 
-  async invoke(state: LLMState): Promise<LLMState> {
+  private tools: FunctionTool[] = [];
+  private params: { model: string; systemPrompt: string } = { model: '', systemPrompt: '' };
+
+  init(params: { model: string; systemPrompt: string; tools: FunctionTool[] }) {
+    this.params = { model: params.model, systemPrompt: params.systemPrompt };
+    this.tools = params.tools || [];
+    return this;
+  }
+
+  async invoke(state: LLMState, _ctx: LLMContext): Promise<LLMState> {
     const input = [
       SystemMessage.fromText(this.params.systemPrompt), //
       ...state.messages,
@@ -44,4 +50,3 @@ export class CallModelLLMReducer extends Reducer<LLMState, LLMContext> {
     return updated;
   }
 }
-import { Injectable } from '@nestjs/common';
