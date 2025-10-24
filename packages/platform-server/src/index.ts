@@ -50,7 +50,7 @@ async function bootstrap() {
   const mongo = app.get(MongoService, { strict: false });
   // Resolve optional services via DI as needed
   const ncpsKeyService = app.get(NcpsKeyService, { strict: false });
-  let nodeStateService: NodeStateService | undefined;
+
   const fastify = adapter.getInstance();
   // Initialize Ncps key service early
   try {

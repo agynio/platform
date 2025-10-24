@@ -62,7 +62,3 @@ export class ManageToolNode extends BaseToolNode {
     } as const;
   }
 }
-
-// Backward compatibility export
-export { ManageToolNode as ManageTool };
-export { ManageToolStaticConfigSchema };
