@@ -17,6 +17,7 @@ import { ContainerCleanupService } from './infra/container/containerCleanup.job'
 
 import { initDI, closeDI } from './bootstrap/di';
 import { AppModule } from './bootstrap/app.module';
+import { MongoService } from './core/services/mongo.service';
 // Remove central platform.services.factory usage; rely on DI providers
 
 await initDI();
@@ -25,6 +26,7 @@ async function bootstrap() {
   // NestJS HTTP bootstrap using FastifyAdapter and resolve services via DI
   const adapter = new FastifyAdapter({ logger: false });
   await adapter.getInstance().register(cors, { origin: true });
+
   const app = await NestFactory.create(AppModule, adapter, { logger: false });
   app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
   await app.init();
@@ -32,33 +34,21 @@ async function bootstrap() {
   const logger = app.get(LoggerService, { strict: false });
   const fastify = adapter.getInstance();
 
-  // Initialize checkpointer (optional Postgres mode)
-
-  // Fastify instance is initialized via Nest adapter; routes are handled by Nest controllers only.
-
   // Start Fastify then attach Socket.io
   const PORT = Number(process.env.PORT) || 3010;
   await fastify.listen({ port: PORT, host: '0.0.0.0' });
   logger.info(`HTTP server listening on :${PORT}`);
-  // RuntimeRef removed; runtime is available via DI
-
-  // Routes registered above
 
   const shutdown = async () => {
     logger.info('Shutting down...');
-    try {
-      // Stop background cleanup before closing app
-      // Resolve and stop cleanup service idempotently
-      const cleanup = app.get(ContainerCleanupService, { strict: false });
-      cleanup?.stop();
-    } catch {}
-    await mongo.close();
-    try {
-      await fastify.close();
-    } catch {}
-    try {
-      await closeDI();
-    } catch {}
+
+    const cleanup = app.get(ContainerCleanupService, { strict: false });
+    cleanup?.stop();
+
+    await app.get(MongoService).close();
+    await fastify.close();
+    await closeDI();
+
     process.exit(0);
   };
   process.on('SIGINT', shutdown);

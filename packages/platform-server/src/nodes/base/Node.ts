@@ -1,3 +1,4 @@
+import { Injectable, Scope } from '@nestjs/common';
 import { EventEmitter } from 'events';
 
 export type NodeStatusState =
@@ -11,6 +12,7 @@ export type NodeStatusState =
 export type StatusChangedEvent = { prev: NodeStatusState; next: NodeStatusState; at: number };
 export type ConfigChangedEvent<TConfig = unknown> = { config: TConfig; at: number };
 
+@Injectable({ scope: Scope.TRANSIENT })
 export class Node<TConfig = unknown> extends EventEmitter {
   private _status: NodeStatusState = 'not_ready';
   private _pending: 'provision' | 'deprovision' | null = null;

@@ -19,10 +19,8 @@ import { PRService } from './github/pr.usecase';
       useFactory: async (mongo: MongoService, logger: LoggerService, containers: ContainerService) => {
         const svc = new ContainerRegistry(mongo.getDb(), logger);
         await svc.ensureIndexes();
-        // Backfill registry from Docker on startup; safe to run repeatedly
-        try {
-          await svc.backfillFromDocker(containers);
-        } catch {}
+        await svc.backfillFromDocker(containers);
+
         return svc;
       },
       inject: [MongoService, LoggerService, ContainerService],
@@ -31,8 +29,8 @@ import { PRService } from './github/pr.usecase';
       provide: ContainerCleanupService,
       useFactory: (registry: ContainerRegistry, containers: ContainerService, logger: LoggerService) => {
         const svc = new ContainerCleanupService(registry, containers, logger);
-        // idempotent start; service tracks its own timer
-        try { svc.start(); } catch {}
+        svc.start();
+
         return svc;
       },
       inject: [ContainerRegistry, ContainerService, LoggerService],
@@ -42,14 +40,8 @@ import { PRService } from './github/pr.usecase';
       provide: NcpsKeyService,
       useFactory: async (config: ConfigService, logger: LoggerService) => {
         const svc = new NcpsKeyService(config, logger);
-        try {
-          await svc.init();
-        } catch (e) {
-          // Maintain logging semantics equivalent to index.ts
-          logger.error('NcpsKeyService init failed: %s', (e as Error)?.message || String(e));
-          // Propagate failure to abort startup when disallowed by config
-          throw e;
-        }
+        await svc.init();
+
         return svc;
       },
       inject: [ConfigService, LoggerService],
@@ -58,6 +50,14 @@ import { PRService } from './github/pr.usecase';
     PRService,
   ],
   controllers: [NixController],
-  exports: [VaultModule, ContainerService, ContainerCleanupService, NcpsKeyService, GithubService, PRService, ContainerRegistry],
+  exports: [
+    VaultModule,
+    ContainerService,
+    ContainerCleanupService,
+    NcpsKeyService,
+    GithubService,
+    PRService,
+    ContainerRegistry,
+  ],
 })
 export class InfraModule {}

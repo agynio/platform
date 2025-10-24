@@ -5,20 +5,28 @@ import { LoggerService } from '../../core/services/logger.service';
 
 import { z } from 'zod';
 
-import { FunctionTool, HumanMessage, Loop, ResponseMessage, ToolCallMessage, ToolCallOutputMessage, Reducer } from '@agyn/llm';
+import {
+  FunctionTool,
+  HumanMessage,
+  Loop,
+  Reducer,
+  ResponseMessage,
+  ToolCallMessage,
+  ToolCallOutputMessage,
+} from '@agyn/llm';
 import { withAgent } from '@agyn/tracing';
 
+import { LLMProvisioner } from '../../llm/provisioners/llm.provisioner';
 import { CallModelLLMReducer } from '../../llm/reducers/callModel.llm.reducer';
 import { CallToolsLLMReducer } from '../../llm/reducers/callTools.llm.reducer';
 import { ConditionalLLMRouter } from '../../llm/routers/conditional.llm.router';
 import { StaticLLMRouter } from '../../llm/routers/static.llm.router';
 import { LLMContext, LLMState } from '../../llm/types';
-import { LLMProvisioner } from '../../llm/provisioners/llm.provisioner';
 
-import { SummarizationLLMReducer } from '../../llm/reducers/summarization.llm.reducer';
+import { EnforceToolsLLMReducer } from '../../llm/reducers/enforceTools.llm.reducer';
 import { LoadLLMReducer } from '../../llm/reducers/load.llm.reducer';
 import { SaveLLMReducer } from '../../llm/reducers/save.llm.reducer';
-import { EnforceToolsLLMReducer } from '../../llm/reducers/enforceTools.llm.reducer';
+import { SummarizationLLMReducer } from '../../llm/reducers/summarization.llm.reducer';
 import { Signal } from '../../signal';
 import { TriggerListener, TriggerMessage } from '../slackTrigger';
 import { BaseToolNode } from '../tools/baseToolNode';
@@ -86,13 +94,14 @@ export type AgentStaticConfig = z.infer<typeof AgentStaticConfigSchema>;
 export type WhenBusyMode = 'wait' | 'injectAfterTools';
 
 // Consolidated Agent class (merges previous BaseAgent + Agent into single AgentNode)
-import Node from "../base/Node";
-import type { PortsProvider, TemplatePortConfig } from '../../graph/ports.types';
-import type { RuntimeContext, RuntimeContextAware } from '../../graph/runtimeContext';
+import { Injectable, Scope } from '@nestjs/common';
+import type { TemplatePortConfig } from '../../graph/ports.types';
+import type { RuntimeContext } from '../../graph/runtimeContext';
+import Node from '../base/Node';
 import { MemoryConnectorNode } from '../memoryConnector/memoryConnector.node';
 
-export class AgentNode extends Node<AgentStaticConfig | undefined> implements TriggerListener, PortsProvider, RuntimeContextAware {
-  protected _config?: AgentStaticConfig;
+@Injectable({ scope: Scope.TRANSIENT })
+export class AgentNode extends Node<AgentStaticConfig> implements TriggerListener {
   protected buffer = new MessagesBuffer({ debounceMs: 0 });
 
   private mcpServerTools: Map<McpServer, FunctionTool[]> = new Map();
@@ -155,17 +164,23 @@ export class AgentNode extends Node<AgentStaticConfig | undefined> implements Tr
     reducers['load'] = new LoadLLMReducer(this.logger).next(new StaticLLMRouter('summarize'));
 
     // summarize -> call_model
-    reducers['summarize'] = new SummarizationLLMReducer(llm).init({
-      model: this.config.model ?? 'gpt-5',
-      keepTokens: this.config.summarizationKeepTokens ?? 1000,
-      maxTokens: this.config.summarizationMaxTokens ?? 10000,
-      systemPrompt:
-        'You update a running summary of a conversation. Keep key facts, goals, decisions, constraints, names, deadlines, and follow-ups. Be concise; use compact sentences; omit chit-chat. Structure summary with 3 high level sections: initial task, plan (if any), context (progress, findings, observations).',
-    }).next(new StaticLLMRouter('call_model'));
+    reducers['summarize'] = new SummarizationLLMReducer(llm)
+      .init({
+        model: this.config.model ?? 'gpt-5',
+        keepTokens: this.config.summarizationKeepTokens ?? 1000,
+        maxTokens: this.config.summarizationMaxTokens ?? 10000,
+        systemPrompt:
+          'You update a running summary of a conversation. Keep key facts, goals, decisions, constraints, names, deadlines, and follow-ups. Be concise; use compact sentences; omit chit-chat. Structure summary with 3 high level sections: initial task, plan (if any), context (progress, findings, observations).',
+      })
+      .next(new StaticLLMRouter('call_model'));
 
     // call_model -> branch (call_tools | save)
     reducers['call_model'] = new CallModelLLMReducer(llm)
-      .init({ model: this.config.model ?? 'gpt-5', systemPrompt: this.config.systemPrompt ?? 'You are a helpful AI assistant.', tools })
+      .init({
+        model: this.config.model ?? 'gpt-5',
+        systemPrompt: this.config.systemPrompt ?? 'You are a helpful AI assistant.',
+        tools,
+      })
       .next(
         new ConditionalLLMRouter((state) => {
           const last = state.messages.at(-1);
@@ -177,12 +192,16 @@ export class AgentNode extends Node<AgentStaticConfig | undefined> implements Tr
       );
 
     // call_tools -> tools_save (static)
-    reducers['call_tools'] = new CallToolsLLMReducer(this.logger).init({ tools }).next(new StaticLLMRouter('tools_save'));
+    reducers['call_tools'] = new CallToolsLLMReducer(this.logger)
+      .init({ tools })
+      .next(new StaticLLMRouter('tools_save'));
     // tools_save -> summarize (static)
     reducers['tools_save'] = new SaveLLMReducer(this.logger).next(new StaticLLMRouter('summarize'));
 
     // save -> enforceTools (if enabled) or end (static)
-    reducers['save'] = new SaveLLMReducer(this.logger).next(new StaticLLMRouter(this.config.restrictOutput ? 'enforceTools' : null));
+    reducers['save'] = new SaveLLMReducer(this.logger).next(
+      new StaticLLMRouter(this.config.restrictOutput ? 'enforceTools' : null),
+    );
 
     // enforceTools -> summarize OR end (conditional) if enabled
     if (this.config.restrictOutput) {
@@ -275,9 +294,6 @@ export class AgentNode extends Node<AgentStaticConfig | undefined> implements Tr
     if (tools && tools.length) for (const tool of tools) this.tools.delete(tool);
     this.mcpServerTools.delete(server);
   }
-
-
-
 
   // Sync MCP tools from the given server and reconcile add/remove
   private syncMcpToolsFromServer(server: McpServer): void {
