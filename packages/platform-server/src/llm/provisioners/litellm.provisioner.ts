@@ -13,23 +13,6 @@ export class LiteLLMProvisioner extends LLMProvisioner {
   }
 
   async getLLM(): Promise<LLM> {
-<<<<<<< HEAD
-    if (!this.client) {
-      const apiKey = this.cfg.openaiApiKey ?? this.cfg.litellmMasterKey;
-      let baseURL = this.cfg.openaiBaseUrl;
-      if (!this.cfg.openaiApiKey) {
-        const { apiKey: provKey, baseUrl } = await this.provisionWithRetry();
-        if (provKey) {
-          this.logger.info('LiteLLM provisioned virtual key for OpenAI client');
-          this.client = new OpenAI({ apiKey: provKey, baseURL: baseUrl });
-          return new LLM(this.client as any);
-        }
-        if (!baseURL) baseURL = this.cfg.litellmBaseUrl ? `${this.cfg.litellmBaseUrl.replace(/\/$/, '')}/v1` : undefined;
-      }
-      this.client = new OpenAI({ apiKey: apiKey as string, baseURL });
-    }
-    return new LLM(this.client as any);
-=======
     if (this.llm) return this.llm;
     const { apiKey, baseUrl } = await this.fetchOrCreateKeysInternal();
     const client = new OpenAI({ apiKey, baseURL: baseUrl });
@@ -55,7 +38,6 @@ export class LiteLLMProvisioner extends LLMProvisioner {
     const fallbackKey = this.cfg.litellmMasterKey as string; // ensureKeys guarantees presence
     const base = this.cfg.openaiBaseUrl || (this.cfg.litellmBaseUrl ? `${this.cfg.litellmBaseUrl.replace(/\/$/, '')}/v1` : undefined);
     return { apiKey: fallbackKey, baseUrl: base };
->>>>>>> ffaf5ae (refactor(platform-server): simplify LLMProvisioner to getLLM(); update provisioners; remove LLMFactoryService; inject provisioner in consumers; keep DI factory provider (Issue #423)})
   }
 
   private async provisionWithRetry(): Promise<ProvisionResult> {

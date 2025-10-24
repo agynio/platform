@@ -10,15 +10,6 @@ export class OpenAILLMProvisioner extends LLMProvisioner {
   }
 
   async getLLM(): Promise<LLM> {
-<<<<<<< HEAD
-    if (!this.client) {
-      const apiKey = this.cfg.openaiApiKey;
-      const baseURL = this.cfg.openaiBaseUrl;
-      if (!apiKey) throw new Error('openai_provider_missing_key');
-      this.client = new OpenAI({ apiKey, baseURL });
-    }
-    return new LLM(this.client as any);
-=======
     if (this.llm) return this.llm;
     const apiKey = this.cfg.openaiApiKey;
     if (!apiKey) throw new Error('openai_provider_missing_key');
@@ -26,6 +17,5 @@ export class OpenAILLMProvisioner extends LLMProvisioner {
     const client = new OpenAI({ apiKey, baseURL: baseUrl });
     this.llm = new LLM(client);
     return this.llm;
->>>>>>> ffaf5ae (refactor(platform-server): simplify LLMProvisioner to getLLM(); update provisioners; remove LLMFactoryService; inject provisioner in consumers; keep DI factory provider (Issue #423)})
   }
 }
