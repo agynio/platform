@@ -124,7 +124,7 @@ async function bootstrap() {
     }
     logger.error('Failed to apply initial persisted graph: %s', String(e));
   }
-  // Globals already set above; reuse adapter/app
+  // Graph-related routes migrated to Nest controllers; legacy Fastify wiring removed
 
   // Start Fastify then attach Socket.io
   const PORT = Number(process.env.PORT) || 3010;
