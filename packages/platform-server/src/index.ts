@@ -18,8 +18,8 @@ import { MongoService } from './core/services/mongo.service';
 // TemplateRegistry is provided via GraphModule factory provider
 import { TemplateRegistry } from './graph/templateRegistry';
 import { LiveGraphRuntime } from './graph/liveGraph.manager';
-import { GraphService } from './graph/graphMongo.repository';
-import { GitGraphService } from './graph/gitGraph.repository';
+import { GraphService } from './graph/graph.service';
+// import { GitGraphService } from './graph/gitGraph.repository';
 import { GraphDefinition, GraphError, PersistedGraphUpsertRequest } from './graph/types';
 import { GraphErrorCode } from './graph/errors';
 import { ContainerService } from './infra/container/container.service';
@@ -94,18 +94,8 @@ async function bootstrap() {
   const runtime = app.get(LiveGraphRuntime, { strict: false });
   const runsService = app.get(AgentRunService, { strict: false });
   await runsService.ensureIndexes();
-  const graphService =
-    config.graphStore === 'git'
-      ? new GitGraphService(
-          {
-            repoPath: config.graphRepoPath,
-            branch: config.graphBranch,
-            defaultAuthor: { name: config.graphAuthorName, email: config.graphAuthorEmail },
-          },
-          logger,
-          templateRegistry,
-        )
-      : new GraphService(mongo.getDb(), logger, templateRegistry);
+  const graphService = await resolve<GraphService>(GraphService);
+  await graphService.initIfNeeded();
 
   // Provide deps to factories/runtime for state persistence and config access
   runtime.setFactoryDeps?.({
@@ -114,9 +104,8 @@ async function bootstrap() {
       // Centralized per-node state upsert helper
       upsertNodeState: async (nodeId: string, state: Record<string, unknown>) => {
         try {
-          if ('upsertNodeState' in graphService && typeof graphService.upsertNodeState === 'function') {
-            await graphService.upsertNodeState('main', nodeId, state);
-          } else {
+          await graphService.upsertNodeState('main', nodeId, state);
+          /* else {
             // Fallback if not implemented
             const current = await graphService.get('main');
             const base = current ?? {
@@ -130,15 +119,8 @@ async function bootstrap() {
             const idx = nodes.findIndex((n) => n.id === nodeId);
             if (idx >= 0) nodes[idx] = { ...nodes[idx], state };
             else nodes.push({ id: nodeId, template: 'unknown', state });
-            await (graphService instanceof GitGraphService
-              ? graphService.upsert({ name: 'main', version: base.version, nodes, edges: base.edges })
-              : (graphService as GraphService).upsert({
-                  name: 'main',
-                  version: base.version,
-                  nodes,
-                  edges: base.edges,
-                }));
-          }
+            await graphService.upsert({ name: 'main', version: base.version, nodes, edges: base.edges });
+          } */
           // Also update live runtime snapshot
           const last = runtime?.state?.lastGraph as GraphDefinition | undefined;
           if (last) {
@@ -152,14 +134,7 @@ async function bootstrap() {
     },
   });
 
-  if (graphService instanceof GitGraphService) {
-    try {
-      await graphService.initIfNeeded();
-    } catch (e: any) {
-      logger.error('Failed to initialize git graph repo: %s', e?.message || e);
-      process.exit(1);
-    }
-  }
+  // Graph service initialized via DI
 
   // Helper to convert persisted graph to runtime GraphDefinition
   const toRuntimeGraph = (saved: { nodes: any[]; edges: any[] }) =>
@@ -284,11 +259,7 @@ async function bootstrap() {
         throw e;
       }
 
-      // Support both GraphService and GitGraphService signatures
-      const saved =
-        graphService instanceof GitGraphService
-          ? await graphService.upsert(parsed, author)
-          : await (graphService as GraphService).upsert(parsed);
+      const saved = await graphService.upsert(parsed, author);
       try {
         await runtime.apply(toRuntimeGraph(saved));
       } catch {

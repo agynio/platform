@@ -5,6 +5,7 @@ import { LoggerService } from '../core/services/logger.service';
 import { TemplateRegistry } from './templateRegistry';
 import { PersistedGraph, PersistedGraphEdge, PersistedGraphNode, PersistedGraphUpsertRequest, PersistedGraphUpsertResponse } from '../graph/types';
 import { validatePersistedGraph } from './graphSchema.validator';
+import { GraphService } from './graph.service';
 
 export interface GitGraphConfig {
   repoPath: string;
@@ -30,12 +31,12 @@ function codeError<T = unknown>(code: string, message: string, current?: T): Cod
   return e;
 }
 
-export class GitGraphService {
+export class GitGraphService extends GraphService {
   constructor(
     private readonly cfg: GitGraphConfig,
     private readonly logger: LoggerService,
     private readonly templateRegistry: TemplateRegistry,
-  ) {}
+  ) { super(); }
 
   // Cache of last successfully committed snapshot to tolerate partial/corrupt working tree reads
   private lastCommitted?: PersistedGraph;

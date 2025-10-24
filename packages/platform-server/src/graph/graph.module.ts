@@ -1,7 +1,8 @@
 import { Module } from '@nestjs/common';
 import { TemplateRegistry } from './templateRegistry';
 import { PortsRegistry } from './ports.registry';
-import { GraphService } from './graphMongo.repository';
+import { GraphService } from './graph.service';
+import { MongoGraphService } from './graphMongo.repository';
 import { GitGraphService } from './gitGraph.repository';
 import { LiveGraphRuntime } from './liveGraph.manager';
 import { RunsController } from './controllers/runs.controller';
@@ -42,13 +43,39 @@ import { NcpsKeyService } from '../core/services/ncpsKey.service';
       inject: [LoggerService, ContainerService, ConfigService, MongoService, LLMFactoryService, NcpsKeyService],
     },
     PortsRegistry,
-    GraphService,
-    GitGraphService,
+    {
+      provide: GraphService,
+      useFactory: async (
+        config: ConfigService,
+        logger: LoggerService,
+        mongo: MongoService,
+        templateRegistry: TemplateRegistry,
+      ) => {
+        if (config.graphStore === 'git') {
+          const svc = new GitGraphService(
+            {
+              repoPath: config.graphRepoPath,
+              branch: config.graphBranch,
+              defaultAuthor: { name: config.graphAuthorName, email: config.graphAuthorEmail },
+            },
+            logger,
+            templateRegistry,
+          );
+          await svc.initIfNeeded();
+          return svc;
+        } else {
+          const svc = new MongoGraphService(mongo.getDb(), logger, templateRegistry);
+          await svc.initIfNeeded();
+          return svc;
+        }
+      },
+      inject: [ConfigService, LoggerService, MongoService, TemplateRegistry],
+    },
     LiveGraphRuntime,
     AgentRunService,
     // Guards (functions are not providers; list here for visibility if later wrapped)
     // enforceMcpCommandMutationGuard is a pure function and intentionally not registered
   ],
-  exports: [LiveGraphRuntime, TemplateRegistry, PortsRegistry, GraphService, GitGraphService, AgentRunService],
+  exports: [LiveGraphRuntime, TemplateRegistry, PortsRegistry, GraphService, AgentRunService],
 })
 export class GraphModule {}
