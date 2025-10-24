@@ -18,7 +18,7 @@ export const githubCloneSchema = z
   })
   .strict();
 
-export class GithubCloneRepoTool extends FunctionTool<typeof githubCloneSchema> {
+export class GithubCloneRepoFunctionTool extends FunctionTool<typeof githubCloneSchema> {
   constructor(
     private logger: LoggerService,
     private configService: ConfigService,

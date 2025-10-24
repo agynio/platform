@@ -1,10 +1,22 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { tool, DynamicStructuredTool } from '@langchain/core/tools';
 import { ResponseMessage } from '@agyn/llm';
 import type { ResponseFunctionToolCall } from 'openai/resources/responses/responses.mjs';
 import { FinishFunctionTool } from '../src/nodes/tools/finish/finish.tool';
 import { CallToolsLLMReducer } from '../src/llm/reducers/callTools.llm.reducer';
 import { LoggerService } from '../src/core/services/logger.service.js';
+
+// Remove legacy TerminatingTool; FinishFunctionTool covers finish behavior
+
+class EchoTool /* extends BaseTool (legacy) */ {
+  init(): DynamicStructuredTool {
+    return tool(async (raw) => `echo:${JSON.stringify(raw)}`, {
+      name: 'echo',
+      description: 'echo tool',
+      schema: ({} as any),
+    });
+  }
+}
 
 describe('CallToolsLLMReducer finish tool output handling', () => {
   it('includes note from finish tool output in ToolCallOutputMessage', async () => {

@@ -11,10 +11,8 @@ interface FinishFunctionToolDeps {
 }
 
 export class FinishFunctionTool extends FunctionTool<typeof finishSchema> {
-  private deps: FinishFunctionToolDeps;
-  constructor(deps?: FinishFunctionToolDeps) {
+  constructor(private deps: FinishFunctionToolDeps) {
     super();
-    this.deps = deps ?? { logger: new LoggerService() };
   }
   get name() {
     return 'finish';

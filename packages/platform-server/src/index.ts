@@ -20,6 +20,7 @@ import { TemplateRegistry } from './graph/templateRegistry';
 import { LiveGraphRuntime } from './graph/liveGraph.manager';
 import { GraphRepository } from './graph/graph.repository';
 import { NodeStateService } from './graph/nodeState.service';
+import { setNodeStateService } from './graph/nodeState.provider';
 import { GraphDefinition, GraphError, PersistedGraphUpsertRequest } from './graph/types';
 import { GraphErrorCode } from './graph/errors';
 import { ContainerService } from './infra/container/container.service';
@@ -99,6 +100,8 @@ async function bootstrap() {
   await graphService.initIfNeeded();
   // Construct NodeStateService for state persistence and runtime snapshot updates
   nodeStateService = new NodeStateService(graphService as any, runtime, logger);
+  // Expose via lightweight provider for template factories
+  setNodeStateService(nodeStateService);
 
   // Graph service initialized via DI
 

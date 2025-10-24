@@ -4,7 +4,6 @@
   "description": "",
   "private": true,
   "scripts": {
-    "lint": "pnpm -r run lint",
     "build": "pnpm -r --filter ./packages/* run build",
     "test": "vitest run",
     "deps:up:podman": "podman compose up -d"
@@ -24,7 +23,6 @@
     "@vitejs/plugin-react": "^5.0.4",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
-    "cross-env": "^7.0.3",
     "tailwind-merge": "^3.3.1",
     "tsx": "^4.19.2",
     "vitest": "^3.2.4"

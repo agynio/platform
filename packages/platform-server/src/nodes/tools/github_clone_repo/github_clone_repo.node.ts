@@ -4,7 +4,7 @@ import { WorkspaceNode } from '../../workspace/workspace.node';
 import { ConfigService } from '../../../core/services/config.service';
 import { LoggerService } from '../../../core/services/logger.service';
 import { VaultService } from '../../../infra/vault/vault.service';
-import { GithubCloneRepoTool } from './github_clone_repo.tool';
+import { GithubCloneRepoFunctionTool } from './github_clone_repo.tool';
 
 const TokenRefSchema = z
   .object({ value: z.string(), source: z.enum(['static', 'vault']).optional().default('static') })
@@ -33,7 +33,7 @@ export const GithubCloneRepoToolExposedStaticConfigSchema = z
 export class GithubCloneRepoNode extends BaseToolNode {
   private _containerProvider?: WorkspaceNode;
   private _config?: z.infer<typeof GithubCloneRepoToolStaticConfigSchema>;
-  private toolInstance?: GithubCloneRepoTool;
+  private toolInstance?: GithubCloneRepoFunctionTool;
   constructor(
     private configService: ConfigService,
     private vault: VaultService | undefined,
@@ -55,9 +55,9 @@ export class GithubCloneRepoNode extends BaseToolNode {
     return this._config;
   }
 
-  getTool(): GithubCloneRepoTool {
+  getTool(): GithubCloneRepoFunctionTool {
     if (!this.toolInstance) {
-      this.toolInstance = new GithubCloneRepoTool(this.logger, this.configService, this.vault, this);
+      this.toolInstance = new GithubCloneRepoFunctionTool(this.logger, this.configService, this.vault, this);
     }
     return this.toolInstance;
   }

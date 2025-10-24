@@ -1,8 +1,4 @@
-// Re-export legacy-friendly message classes for SDK tests
-// Lightweight internal classes matching expected constructor shapes in tests
-// Remove legacy message class re-exports; rely on @agyn/llm types directly
-// Import selected types from llm for internal attribute mapping only
-import type { ResponseMessage as LlmResponseMessage, ToolCallMessage as LlmToolCallMessage, ToolCallOutputMessage as LlmToolCallOutputMessage } from '@agyn/llm';
+import { HumanMessage, ResponseMessage, SystemMessage, ToolCallMessage, ToolCallOutputMessage } from '@agyn/llm';
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { randomBytes } from 'node:crypto';
 
@@ -168,7 +164,7 @@ async function retryingPost(url: string, body: unknown, idempotencyKey: string) 
             return '[unserializable body]';
           }
         })();
-        // Use console.debug for optional dev logging (kept under debug flag)
+        // eslint-disable-next-line no-console
         console.debug('[tracing-sdk] POST', url, 'attempt', attempt, 'body<=', preview);
       }
       await httpPost(url, body, idempotencyKey);
@@ -184,43 +180,40 @@ function now() {
   return new Date().toISOString();
 }
 
-function messageToAttributes(msg: ContextMessage | LlmToolCallMessage): Record<string, unknown> {
-  // Accept both SDK-local classes and raw-like objects
-  const role = (msg as any)?.role;
-  const text = (msg as any)?.text;
-  if (role === 'human' || role === 'system') {
+function messageToAttributes(msg: ContextMessage | ToolCallMessage): Record<string, unknown> {
+  if (msg instanceof HumanMessage || msg instanceof SystemMessage) {
     return {
-      role,
-      content: text,
+      role: msg.role,
+      content: msg.text,
     };
   }
 
-  if ((msg as any)?.type === 'output') {
+  if (msg instanceof ResponseMessage) {
     return {
       role: 'ai',
-      content: (msg as any)?.text,
-      toolCalls: (msg as any)?.output
-        ?.filter((m: any) => (m?.type === 'function_call'))
+      content: msg.text,
+      toolCalls: msg.output
+        .filter((m) => m instanceof ToolCallMessage)
         .map((m) => ({
-          id: m?.callId || m?.id,
-          name: m?.name || m?.function?.name,
-          arguments: m?.args || m?.function?.arguments,
+          id: m.callId,
+          name: m.name,
+          arguments: m.args,
         })),
     };
   }
 
-  if ((msg as any)?.type === 'function_call_output') {
+  if (msg instanceof ToolCallOutputMessage) {
     return {
       role: 'tool',
-      content: (msg as any)?.text,
+      content: msg.text,
     };
   }
 
-  if ((msg as any)?.type === 'function_call') {
+  if (msg instanceof ToolCallMessage) {
     return {
-      id: (msg as any)?.callId || (msg as any)?.id,
-      name: (msg as any)?.name || (msg as any)?.function?.name,
-      arguments: (msg as any)?.args || (msg as any)?.function?.arguments,
+      id: msg.callId,
+      name: msg.name,
+      arguments: msg.args,
     };
   }
 
@@ -419,12 +412,11 @@ export function withLLM<T>(
       return { attributes: { error: 'llm.response.missingWrapper' }, status: 'error' };
     }
     const content = result.content;
-    const toolCalls = result.toolCalls?.map((t) => messageToAttributes(t as any));
+    const toolCalls = result.toolCalls?.map((t) => messageToAttributes(t));
     const output = {
       content,
       toolCalls,
     };
-    // Only emit structured output; remove legacy dotted attributes
     return { attributes: { output } };
   }).then((res) => (res as LLMResponse<T>).raw);
 }
@@ -507,8 +499,8 @@ export function withSystem<T>(attributes: { label: string; [k: string]: unknown 
 export type ContextMessage =
   | SystemMessage //
   | HumanMessage
-  | LlmResponseMessage
-  | LlmToolCallOutputMessage;
+  | ResponseMessage
+  | ToolCallOutputMessage;
 
 // LLMResponse wrapper to extract standardized attributes while returning raw provider output
 export class LLMResponse<TRaw = unknown> {
@@ -547,5 +539,4 @@ export class SummarizeResponse<TRaw = unknown> {
 }
 
 // Re-export LLM message classes for convenience in SDK consumers/tests
-// Use a single export list without duplicate aliases to satisfy bundlers
-export { Message, SystemMessage, HumanMessage, AIMessage, ToolCallMessage, ToolCallOutputMessage } from '@agyn/llm';
+export { Message, SystemMessage as SystemMessage, HumanMessage as HumanMessage, AIMessage as AIMessage, ToolCallMessage as ToolCallMessage, ToolCallOutputMessage as ToolCallOutputMessage } from '@agyn/llm';

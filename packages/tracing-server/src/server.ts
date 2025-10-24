@@ -485,15 +485,21 @@ export async function createServer(db: Db, opts: { logger?: boolean } = {}): Pro
 // ---------------- Attribute merge helpers ----------------
 /**
  * Merge incoming completed-event attributes into existing attributes while normalizing
- * Normalizes dotted keys in legacy payloads, and deep-merges
+ * dotted keys such as "llm.content" -> attributes.llm.content. Also deep-merges
  * `output` object and preserves existing keys unless explicitly overwritten.
  */
 function mergeCompletedAttributes(existing: Record<string, any>, incoming: Record<string, any>): Record<string, any> {
   const out: Record<string, any> = { ...existing };
   for (const [key, value] of Object.entries(incoming)) {
-    // Legacy llm.* keys no longer produced by SDK; keep handling for backward-compat inputs
-    if (key === 'llm.content') { out.output = { ...(out.output || {}), content: value }; continue; }
-    if (key === 'llm.toolCalls') { out.output = { ...(out.output || {}), toolCalls: value }; continue; }
+    // Consolidate llm.* flattened keys into output.* only (no separate llm object persisted)
+    if (key === 'llm.content') {
+      out.output = { ...(out.output || {}), content: value };
+      continue;
+    }
+    if (key === 'llm.toolCalls') {
+      out.output = { ...(out.output || {}), toolCalls: value };
+      continue;
+    }
     if (key === 'output' && value && typeof value === 'object' && !Array.isArray(value)) {
       out.output = { ...(out.output || {}), ...value };
       continue;
