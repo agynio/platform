@@ -893,7 +893,8 @@ export class LocalMCPServer implements McpServer, Provisionable, DynamicConfigur
       try {
         // SINGLE DISCOVERY PATH: Only perform tool discovery here during the resilient start sequence.
         // listTools() no longer triggers discovery; SimpleAgent waits for 'ready'.
-        const staleTimeout = (this.cfg?.staleTimeoutMs ?? this.configService.mcpToolsStaleTimeoutMs ?? 0) as number;
+        // Guard configService access; default to 0 (never stale by time)
+        const staleTimeout = (this.cfg?.staleTimeoutMs ?? this.configService?.mcpToolsStaleTimeoutMs ?? 0) as number;
         const isStale = (() => {
           if (!staleTimeout) return false;
           const last = this.lastToolsUpdatedAt || 0;

@@ -46,7 +46,7 @@ interface SendSlackDeps {
   logger: LoggerService;
 }
 
-export class SendSlackMessageFunctionTool extends FunctionTool<typeof sendSlackInvocationSchema> {
+export class SendSlackMessageTool extends FunctionTool<typeof sendSlackInvocationSchema> {
   constructor(private deps: SendSlackDeps) {
     super();
   }
