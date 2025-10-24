@@ -25,7 +25,7 @@ describe('API guard: MCP command mutation forbidden', () => {
     const mongoStub = { getDb: () => ({}) } as any;
     const templateRegistry = buildTemplateRegistry({ logger, containerService, configService: config, checkpointerService: checkpointer, mongoService: mongoStub });
     const runtime = new LiveGraphRuntime(logger, templateRegistry);
-    const graphService = new GitGraphRepository(config, logger, templateRegistry, {});
+    const graphService = new GitGraphRepository(config, logger, templateRegistry);
     await graphService.initIfNeeded();
     // Seed graph with mcp node
     await graphService.upsert({ name: 'main', version: 0, nodes: [{ id: 'm1', template: 'mcpServer', config: { command: 'a' } } as any], edges: [] });

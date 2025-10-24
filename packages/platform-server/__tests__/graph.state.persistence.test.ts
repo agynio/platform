@@ -21,7 +21,7 @@ describe('Graph node.state round-trip (git)', () => {
     const cfg = new ConfigService({
       githubAppId: '1', githubAppPrivateKey: 'k', githubInstallationId: 'i', githubToken: 't', mongodbUrl: 'mongodb://x', graphStore: 'git', graphRepoPath: dir, graphBranch: 'graph-state', graphAuthorName: 'Test', graphAuthorEmail: 't@example.com', nixAllowedChannels: ['x'], nixHttpTimeoutMs: 1, nixCacheTtlMs: 1, nixCacheMax: 1, dockerMirrorUrl: 'http://x', mcpToolsStaleTimeoutMs: 0,
     } as any);
-    const svc = new GitGraphRepository(cfg as any, logger, tr as any, {});
+    const svc = new GitGraphRepository(cfg as any, logger, tr as any);
     await svc.initIfNeeded();
     const saved = await svc.upsert({
       name: 'main',
@@ -50,7 +50,7 @@ describe('Graph node.state round-trip (git)', () => {
     const cfg = new ConfigService({
       githubAppId: '1', githubAppPrivateKey: 'k', githubInstallationId: 'i', githubToken: 't', mongodbUrl: 'mongodb://x', graphStore: 'git', graphRepoPath: dir, graphBranch: 'graph-state', graphAuthorName: 'Test', graphAuthorEmail: 't@example.com', nixAllowedChannels: ['x'], nixHttpTimeoutMs: 1, nixCacheTtlMs: 1, nixCacheMax: 1, dockerMirrorUrl: 'http://x', mcpToolsStaleTimeoutMs: 0,
     } as any);
-    const svc = new GitGraphRepository(cfg as any, logger, tr as any, {});
+    const svc = new GitGraphRepository(cfg as any, logger, tr as any);
     await svc.initIfNeeded();
     const initial = await svc.upsert({
       name: 'main',
@@ -86,7 +86,7 @@ describe('Graph node.state round-trip (git)', () => {
     const cfg = new ConfigService({
       githubAppId: '1', githubAppPrivateKey: 'k', githubInstallationId: 'i', githubToken: 't', mongodbUrl: 'mongodb://x', graphStore: 'git', graphRepoPath: dir, graphBranch: 'graph-state', graphAuthorName: 'Test', graphAuthorEmail: 't@example.com', nixAllowedChannels: ['x'], nixHttpTimeoutMs: 1, nixCacheTtlMs: 1, nixCacheMax: 1, dockerMirrorUrl: 'http://x', mcpToolsStaleTimeoutMs: 0,
     } as any);
-    const svc = new GitGraphRepository(cfg as any, logger, tr as any, {});
+    const svc = new GitGraphRepository(cfg as any, logger, tr as any);
     await svc.initIfNeeded();
     const first = await svc.upsert({
       name: 'main',
@@ -121,7 +121,7 @@ describe('Graph node.state round-trip (git)', () => {
     const cfg = new ConfigService({
       githubAppId: '1', githubAppPrivateKey: 'k', githubInstallationId: 'i', githubToken: 't', mongodbUrl: 'mongodb://x', graphStore: 'git', graphRepoPath: dir, graphBranch: 'graph-state', graphAuthorName: 'Test', graphAuthorEmail: 't@example.com', nixAllowedChannels: ['x'], nixHttpTimeoutMs: 1, nixCacheTtlMs: 1, nixCacheMax: 1, dockerMirrorUrl: 'http://x', mcpToolsStaleTimeoutMs: 0,
     } as any);
-    const svc = new GitGraphRepository(cfg as any, logger, tr as any, {});
+    const svc = new GitGraphRepository(cfg as any, logger, tr as any);
     await svc.initIfNeeded();
     const initial = await svc.upsert({
       name: 'main',

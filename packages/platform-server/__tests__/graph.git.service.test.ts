@@ -33,7 +33,7 @@ describe('GitGraphRepository', () => {
     const cfg = new ConfigService({
       githubAppId: '1', githubAppPrivateKey: 'k', githubInstallationId: 'i', githubToken: 't', mongodbUrl: 'mongodb://x', graphStore: 'git', graphRepoPath: tmp, graphBranch: 'graph-state', graphAuthorName: 'Test', graphAuthorEmail: 't@example.com', nixAllowedChannels: ['x'], nixHttpTimeoutMs: 1, nixCacheTtlMs: 1, nixCacheMax: 1, dockerMirrorUrl: 'http://x', mcpToolsStaleTimeoutMs: 0,
     } as any);
-    svc = new GitGraphRepository(cfg as any, new NoopLogger(), registry as any, {});
+    svc = new GitGraphRepository(cfg as any, new NoopLogger(), registry as any);
     await svc.initIfNeeded();
   });
 
@@ -82,7 +82,7 @@ describe('GitGraphRepository', () => {
     const cfg2 = new ConfigService({
       githubAppId: '1', githubAppPrivateKey: 'k', githubInstallationId: 'i', githubToken: 't', mongodbUrl: 'mongodb://x', graphStore: 'git', graphRepoPath: tmp, graphBranch: 'graph-state', graphAuthorName: 'T', graphAuthorEmail: 't@example.com', graphLockTimeoutMs: 200, nixAllowedChannels: ['x'], nixHttpTimeoutMs: 1, nixCacheTtlMs: 1, nixCacheMax: 1, dockerMirrorUrl: 'http://x', mcpToolsStaleTimeoutMs: 0,
     } as any);
-    const short = new GitGraphRepository(cfg2 as any, new NoopLogger(), registry as any, {});
+    const short = new GitGraphRepository(cfg2 as any, new NoopLogger(), registry as any);
     await short.initIfNeeded();
     // Simulate another holder by manually creating lock file
     const fs = await import('fs/promises');

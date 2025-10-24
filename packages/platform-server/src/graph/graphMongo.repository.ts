@@ -4,6 +4,7 @@ import { TemplateRegistry } from './templateRegistry';
 import { PersistedGraph, PersistedGraphEdge, PersistedGraphNode, PersistedGraphUpsertRequest, PersistedGraphUpsertResponse } from '../graph/types';
 import { validatePersistedGraph } from './graphSchema.validator';
 import { GraphRepository } from './graph.repository';
+import { ConfigService } from '../core/services/config.service';
 
 interface GraphDocument {
   _id: string; // name
@@ -19,14 +20,15 @@ export class MongoGraphRepository extends GraphRepository {
     private readonly db: Db,
     private readonly logger: LoggerService,
     private readonly templateRegistry: TemplateRegistry,
+    private readonly config: ConfigService,
   ) {
     super();
   }
 
   async initIfNeeded(): Promise<void> {
     // Lazily initialize collection to avoid constructor side effects.
-    // Use collection name from configuration via ConfigService if available in future.
-    this.collection = this.db.collection<GraphDocument>('graphs');
+    const coll = this.config?.graphMongoCollectionName || 'graphs';
+    this.collection = this.db.collection<GraphDocument>(coll);
   }
 
   async get(name: string): Promise<PersistedGraph | null> {

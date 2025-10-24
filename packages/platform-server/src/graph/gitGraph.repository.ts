@@ -8,8 +8,6 @@ import { validatePersistedGraph } from './graphSchema.validator';
 import { GraphRepository } from './graph.repository';
 import { ConfigService } from '../core/services/config.service';
 
-export type ProcessEnv = Record<string, string | undefined>;
-
 // Narrow meta persisted at repo root
 interface GraphMeta {
   name: string;
@@ -32,7 +30,6 @@ export class GitGraphRepository extends GraphRepository {
     private readonly config: ConfigService,
     private readonly logger: LoggerService,
     private readonly templateRegistry: TemplateRegistry,
-    private readonly env: ProcessEnv,
   ) { super(); }
 
   // Cache of last successfully committed snapshot to tolerate partial/corrupt working tree reads
@@ -274,13 +271,22 @@ export class GitGraphRepository extends GraphRepository {
   }
 
   private commit(message: string, author?: { name?: string; email?: string }): Promise<void> {
-    const env = { ...(this.env || {}) };
-    if (author?.name) env.GIT_AUTHOR_NAME = author.name;
-    if (author?.email) env.GIT_AUTHOR_EMAIL = author.email;
-    if (author?.name) env.GIT_COMMITTER_NAME = author.name;
-    if (author?.email) env.GIT_COMMITTER_EMAIL = author.email;
+    // Prefer CLI args over env: --author and -c user.name/email for committer
+    const args: string[] = [];
+    // Configure committer when defaults are present (graphAuthorName/Email)
+    const committerName = this.config.graphAuthorName;
+    const committerEmail = this.config.graphAuthorEmail;
+    if (committerName) args.push('-c', `user.name=${committerName}`);
+    if (committerEmail) args.push('-c', `user.email=${committerEmail}`);
+    args.push('commit');
+    if (author?.name || author?.email) {
+      const aName = author?.name || committerName || '';
+      const aEmail = author?.email || committerEmail || '';
+      if (aName || aEmail) args.push('--author', `${aName} <${aEmail}>`);
+    }
+    args.push('-m', message);
     return new Promise((resolve, reject) => {
-      const child = spawn('git', ['commit', '-m', message], { cwd: this.config.graphRepoPath, env });
+      const child = spawn('git', args, { cwd: this.config.graphRepoPath });
       let stderr = '';
       child.stderr.on('data', (d) => (stderr += d.toString()));
       child.on('error', reject);
@@ -497,3 +503,9 @@ export class GitGraphRepository extends GraphRepository {
     return { edgeAdds, edgeUpdates, edgeDeletes };
   }
 }
+  private defaultAuthor(): { name?: string; email?: string } | undefined {
+    const name = this.config.graphAuthorName;
+    const email = this.config.graphAuthorEmail;
+    if (!name && !email) return undefined;
+    return { name, email };
+  }

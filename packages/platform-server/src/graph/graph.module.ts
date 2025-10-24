@@ -3,7 +3,7 @@ import { TemplateRegistry } from './templateRegistry';
 import { PortsRegistry } from './ports.registry';
 import { GraphRepository } from './graph.repository';
 import { MongoGraphRepository } from './graphMongo.repository';
-import { GitGraphRepository, ProcessEnv } from './gitGraph.repository';
+import { GitGraphRepository } from './gitGraph.repository';
 import { LiveGraphRuntime } from './liveGraph.manager';
 import { RunsController } from './controllers/runs.controller';
 import { NodesModule } from '../nodes/nodes.module';
@@ -23,8 +23,6 @@ import { Provider } from '@nestjs/common';
   imports: [CoreModule, InfraModule, NodesModule],
   controllers: [RunsController],
   providers: [
-    // ProcessEnv token to avoid direct process.env usage in repos
-    { provide: 'ProcessEnv', useFactory: () => ({ ...process.env }) } as Provider,
     {
       provide: TemplateRegistry,
       useFactory: (
@@ -53,10 +51,9 @@ import { Provider } from '@nestjs/common';
         logger: LoggerService,
         mongo: MongoService,
         templateRegistry: TemplateRegistry,
-        env: ProcessEnv,
       ) => {
         if (config.graphStore === 'git') {
-          const svc = new GitGraphRepository(config, logger, templateRegistry, env);
+          const svc = new GitGraphRepository(config, logger, templateRegistry);
           await svc.initIfNeeded();
           return svc;
         } else {
@@ -65,7 +62,7 @@ import { Provider } from '@nestjs/common';
           return svc;
         }
       },
-      inject: [ConfigService, LoggerService, MongoService, TemplateRegistry, 'ProcessEnv'],
+      inject: [ConfigService, LoggerService, MongoService, TemplateRegistry],
     },
     LiveGraphRuntime,
     AgentRunService,
