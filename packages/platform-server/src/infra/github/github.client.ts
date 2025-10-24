@@ -1,4 +1,4 @@
-import { Injectable } from "@nestjs/common";
+import { Injectable, Inject } from "@nestjs/common";
 import { Octokit } from "@octokit/rest";
 import { createAppAuth } from "@octokit/auth-app";
 import { spawn } from "child_process";
@@ -13,8 +13,8 @@ export class GithubService {
   private personalOctokit?: Octokit;
 
   constructor(
-    private config: ConfigService,
-    private logger: LoggerService,
+    @Inject(ConfigService) private readonly config: ConfigService,
+    @Inject(LoggerService) private readonly logger: LoggerService,
   ) {
     if (!this.isEnabled()) {
       this.logger.info('GithubService: integration disabled (no credentials)');
