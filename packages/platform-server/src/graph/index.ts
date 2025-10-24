@@ -5,3 +5,6 @@ export * from './liveGraph.types';
 export * from './liveGraph.manager';
 export * from './ports.types';
 export * from './ports.registry';
+export * from './graph.service';
+export * from './gitGraph.repository';
+export * from './graphMongo.repository';

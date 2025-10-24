@@ -3,6 +3,7 @@ import { LoggerService } from '../core/services/logger.service';
 import { TemplateRegistry } from './templateRegistry';
 import { PersistedGraph, PersistedGraphEdge, PersistedGraphNode, PersistedGraphUpsertRequest, PersistedGraphUpsertResponse } from '../graph/types';
 import { validatePersistedGraph } from './graphSchema.validator';
+import { GraphService } from './graph.service';
 
 interface GraphDocument {
   _id: string; // name
@@ -12,7 +13,7 @@ interface GraphDocument {
   edges: PersistedGraphEdge[];
 }
 
-export class GraphService {
+export class MongoGraphService extends GraphService {
   // Kept for backward-compat when GRAPH_STORE=mongo
   private collection?: Collection<GraphDocument>;
   // Stateless service: persistence only and template exposure.
@@ -23,9 +24,11 @@ export class GraphService {
     private readonly logger: LoggerService,
     private readonly templateRegistry: TemplateRegistry,
   ) {
+    super();
     this.collection = this.db.collection<GraphDocument>('graphs');
   }
 
+  async initIfNeeded(): Promise<void> {}
 
   async get(name: string): Promise<PersistedGraph | null> {
     const doc = await this.collection!.findOne({ _id: name });
@@ -33,7 +36,7 @@ export class GraphService {
     return this.toPersisted(doc);
   }
 
-  async upsert(req: PersistedGraphUpsertRequest): Promise<PersistedGraphUpsertResponse> {
+  async upsert(req: PersistedGraphUpsertRequest, _author?: { name?: string; email?: string }): Promise<PersistedGraphUpsertResponse> {
     validatePersistedGraph(req, this.templateRegistry.toSchema());
     const now = new Date();
     const name = req.name;

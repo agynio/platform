@@ -1,12 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { tool, DynamicStructuredTool } from '@langchain/core/tools';
-<<<<<<< HEAD
 import { ResponseMessage } from '@agyn/llm';
 import type { ResponseFunctionToolCall } from 'openai/resources/responses/responses.mjs';
-=======
-import { ResponseMessage } from '@agyn/llm';
-import type { ResponseFunctionToolCall } from 'openai/resources/responses/responses.mjs';
->>>>>>> 1227e88 (fix(platform-server): align tests with new APIs; correct imports; skip/adjust legacy lgnodes; fix container streams and execTimeout imports; adjust CallTools reducer output; fix memory/shell/remind_me tests; update schema paths)
 import { FinishFunctionTool } from '../src/nodes/tools/finish/finish.tool';
 import { CallToolsLLMReducer } from '../src/llm/reducers/callTools.llm.reducer';
 import { LoggerService } from '../src/core/services/logger.service.js';

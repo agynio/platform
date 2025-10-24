@@ -40,12 +40,7 @@ describe('ToolsNode tool_call span attribution', () => {
     // Build ResponseMessage with one ToolCallMessage
     const response = new ResponseMessage({ output: [new ToolCallMessage({ type: 'function_call', call_id: '1', name: 'echo', arguments: JSON.stringify({ x: 1 }) } as any).toPlain() as any] as any });
     const config = { configurable: { thread_id: 't1', nodeId: 'tool-node-id' } } as any;
-<<<<<<< HEAD
     await reducer.invoke({ messages: [response], meta: {} } as any, config);
-=======
-    const out = await reducer.invoke({ messages: [ai], meta: {} } as any, config);
-    expect(out?.meta?.restrictionInjected).toBeFalsy();
->>>>>>> 1227e88 (fix(platform-server): align tests with new APIs; correct imports; skip/adjust legacy lgnodes; fix container streams and execTimeout imports; adjust CallTools reducer output; fix memory/shell/remind_me tests; update schema paths)
     const obs: any = await import('@agyn/tracing');
     const captured = (obs as any).__test.captured as Array<{ nodeId?: string; toolNodeId?: string }>;
     expect(captured.length).toBeGreaterThan(0);
@@ -60,17 +55,9 @@ describe('ToolsNode tool_call span attribution', () => {
   it('omits nodeId when Tool id not provided (no agent fallback)', async () => {
     const obs: any = await import('@agyn/tracing');
     (obs as any).__test.captured.length = 0; // reset captured
-
-<<<<<<< HEAD
     const reducer = new CallToolsLLMReducer(new LoggerService(), [{ name: 'echo', schema: { parse: (v: any) => v }, execute: async (i: any) => `echo:${JSON.stringify(i)}` }] as any);
     const response = new ResponseMessage({ output: [new ToolCallMessage({ type: 'function_call', call_id: '2', name: 'echo', arguments: JSON.stringify({ y: 2 }) } as any).toPlain() as any] as any });
     await reducer.invoke({ messages: [response], meta: {} } as any, { configurable: { thread_id: 't2' } } as any);
-=======
-    const reducer = new CallToolsLLMReducer(new LoggerService(), [new EchoTool().init()] as any);
-    const ai = new AIMessage({ content: '', tool_calls: [{ id: '2', name: 'echo', args: { y: 2 } }] } as any);
-    const out2 = await reducer.invoke({ messages: [ai], meta: {} } as any, { configurable: { thread_id: 't2' } } as any);
-    expect(out2?.meta?.restrictionInjected).toBeFalsy();
->>>>>>> 1227e88 (fix(platform-server): align tests with new APIs; correct imports; skip/adjust legacy lgnodes; fix container streams and execTimeout imports; adjust CallTools reducer output; fix memory/shell/remind_me tests; update schema paths)
     const captured = (obs as any).__test.captured as Array<{ nodeId?: string; toolNodeId?: string }>;
     expect(captured.length).toBeGreaterThan(0);
     // No nodeId should be set when tool id is missing
