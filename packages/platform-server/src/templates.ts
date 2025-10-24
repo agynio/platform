@@ -29,7 +29,7 @@ import { EnvService } from './graph/env.service';
 import { LLMProvisioner } from './llm/provisioners/llm.provisioner';
 import { LoggerService } from './core/services/logger.service';
 import { MongoService } from './core/services/mongo.service';
-import { NcpsKeyService } from './core/services/ncpsKey.service';
+import { NcpsKeyService } from './infra/ncps/ncpsKey.service';
 import { VaultService } from './infra/vault/vault.service';
 import { NodeStateService } from './graph/nodeState.service';
 // Unified Memory tool
