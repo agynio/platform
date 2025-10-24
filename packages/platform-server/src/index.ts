@@ -34,6 +34,13 @@ async function bootstrap() {
   await app.init();
 
   const logger = app.get(LoggerService);
+  // Attempt lazy Mongo connect after app init; do not crash if unavailable
+  try {
+    await app.get(MongoService).connect();
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    logger.warn?.(`Mongo connect skipped: ${msg}`);
+  }
   const fastify = adapter.getInstance();
 
   // Start Fastify then attach Socket.io

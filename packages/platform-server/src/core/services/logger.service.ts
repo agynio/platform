@@ -8,6 +8,11 @@ export class LoggerService {
     tracingLogger().info(`${message}\n${this.serialize(optionalParams)}`);
   }
 
+  warn(message: string, ...optionalParams: any[]) {
+    console.warn(`[WARN] ${message}`, ...optionalParams);
+    tracingLogger().warn?.(`${message}\n${this.serialize(optionalParams)}`);
+  }
+
   debug(message: string, ...optionalParams: any[]) {
     console.debug(`[DEBUG] ${message}`, ...optionalParams);
     tracingLogger().debug(`${message}\n${this.serialize(optionalParams)}`);
