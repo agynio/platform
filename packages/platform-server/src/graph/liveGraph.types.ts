@@ -36,8 +36,6 @@ export interface EdgeBehavior {
 
 export type EdgeBehaviorKey = string; // e.g. `${template}.${handle}` (from callable side)
 
-export type EdgeBehaviorRegistry = Record<EdgeBehaviorKey, EdgeBehavior>;
-
 export interface GraphDiffResult {
   addedNodes: string[];
   removedNodes: string[];
