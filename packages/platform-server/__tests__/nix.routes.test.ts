@@ -1,9 +1,7 @@
 import Fastify, { type FastifyInstance } from 'fastify';
 import nock from 'nock';
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { registerNixRoutesFromController } from '../src/infra/ncps/nix.adapter';
-import { NixController } from '../src/infra/ncps/nix.controller';
-import { ConfigService, configSchema } from '../src/core/services/config.service';
+import { registerNixRoutes } from '../src/routes/nix.route';
 
 const BASE = 'https://www.nixhub.io';
 
@@ -11,18 +9,11 @@ describe('nix routes', () => {
   let fastify: FastifyInstance;
   beforeEach(() => {
     fastify = Fastify({ logger: false });
-    const cfg = new ConfigService(
-      configSchema.parse({
-        githubAppId: 'x', githubAppPrivateKey: 'x', githubInstallationId: 'x', githubToken: 'x', mongodbUrl: 'x',
-        graphStore: 'mongo', graphRepoPath: './data/graph', graphBranch: 'graph-state',
-        dockerMirrorUrl: 'http://registry-mirror:5000', nixAllowedChannels: 'nixpkgs-unstable',
-        nixHttpTimeoutMs: String(200), nixCacheTtlMs: String(5 * 60_000), nixCacheMax: String(500),
-        mcpToolsStaleTimeoutMs: '0', ncpsEnabled: 'false', ncpsUrl: 'http://ncps:8501',
-        ncpsRefreshIntervalMs: '0',
-      })
-    );
-    const controller = new NixController(cfg);
-    registerNixRoutesFromController(fastify, controller);
+    registerNixRoutes(fastify, {
+      timeoutMs: 200,
+      cacheTtlMs: 5 * 60_000,
+      cacheMax: 500,
+    });
   });
   afterEach(async () => {
     await fastify.close();
