@@ -2,7 +2,6 @@ import { PrismaClient } from '@prisma/client';
 import { LoggerService } from './logger.service';
 
 export class PrismaService {
-  private static instance: PrismaService | null = null;
   private prisma: PrismaClient | null = null;
 
   private constructor(private logger: LoggerService) {}

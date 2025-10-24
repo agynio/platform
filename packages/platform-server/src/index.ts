@@ -169,13 +169,6 @@ async function bootstrap() {
       })),
     }) as GraphDefinition;
 
-  // Expose selected runtime services globally for diagnostics and agent wiring
-  // Important: set globals BEFORE applying any persisted graph so that
-  // agent nodes created during runtime.apply() can see __agentRunsService
-  // in their constructors/init() and wire persistence correctly.
-  globalThis.liveGraphRuntime = runtime;
-  globalThis.__agentRunsService = runsService;
-
   // Load and apply existing persisted graph BEFORE starting server
   try {
     const existing = await graphService.get('main');
@@ -453,7 +446,9 @@ async function bootstrap() {
     try {
       await fastify.close();
     } catch {}
-    try { await closeDI(); } catch {}
+    try {
+      await closeDI();
+    } catch {}
     process.exit(0);
   };
   process.on('SIGINT', shutdown);
