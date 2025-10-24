@@ -1,7 +1,7 @@
 import { Db } from 'mongodb';
 import { z } from 'zod';
 import { MemoryService, MemoryScope } from '../../nodes/memory.repository';
-import type { Node } from '../types';
+import Node from '../base/Node';
 
 export interface MemoryNodeConfig {
   scope: MemoryScope; // 'global' | 'perThread'
@@ -23,30 +23,14 @@ export type MemoryNodeStaticConfig = z.infer<typeof MemoryNodeStaticConfigSchema
  * MemoryNode factory returns an accessor to build a MemoryService scoped to the node and thread.
  * Inject Db from MongoService.getDb() at template wiring time.
  */
-import Node from "../base/Node";
 
-export class MemoryNode extends Node {
-  constructor(private db: Db, private nodeId: string) {}
+export class MemoryNode extends Node<MemoryNodeStaticConfig> {
+  constructor(
+    private db: Db,
+    private nodeId: string,
+  ) {}
 
   private config: MemoryNodeConfig = { scope: 'global' };
-
-  // Accept either internal config shape or static schema shape; map 'thread' -> 'perThread'.
-  
-
-  setConfig(config: Partial<MemoryNodeConfig> & Partial<MemoryNodeStaticConfig>) {
-    const next: Partial<MemoryNodeConfig> = { ...this.config };
-    if (config.scope !== undefined) {
-      const scopeVal = config.scope as MemoryScope | 'thread';
-      next.scope = scopeVal === 'thread' ? 'perThread' : scopeVal;
-    }
-    if (config.collectionPrefix !== undefined) next.collectionPrefix = config.collectionPrefix;
-    // title is UI-only; accept and ignore for runtime behavior
-    this.config = { ...this.config, ...next } as MemoryNodeConfig;
-  }
-
-  async provision(): Promise<void> { /* no-op */ }
-  async deprovision(): Promise<void> { /* no-op */ }
-  
 
   getMemoryService(opts: { threadId?: string }): MemoryService {
     const threadId = this.config.scope === 'perThread' ? opts.threadId : undefined;

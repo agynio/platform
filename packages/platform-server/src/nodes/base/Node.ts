@@ -2,7 +2,7 @@ import { EventEmitter } from 'events';
 import type { ProvisionStatus } from '../../graph/capabilities.js';
 
 export type NodeStatusState =
-  | 'created'
+  | 'not_ready'
   | 'provisioning'
   | 'ready'
   | 'deprovisioning'
@@ -13,9 +13,19 @@ export type StatusChangedEvent = { prev: NodeStatusState; next: NodeStatusState;
 export type ConfigChangedEvent<TConfig = unknown> = { config: TConfig; at: number };
 
 export class Node<TConfig = unknown> extends EventEmitter {
-  private _status: NodeStatusState = 'created';
+  private _status: NodeStatusState = 'not_ready';
   private _pending: 'provision' | 'deprovision' | null = null;
   protected _config: TConfig = {} as TConfig;
+  protected _nodeId?: string;
+
+  init(params: { nodeId: string }) {
+    this._nodeId = params.nodeId;
+  }
+
+  get nodeId() {
+    if (!this._nodeId) throw new Error('Node not initialized');
+    return this._nodeId;
+  }
 
   protected emitStatusChanged(prev: NodeStatusState, next: NodeStatusState): void {
     const at = Date.now();
@@ -23,7 +33,7 @@ export class Node<TConfig = unknown> extends EventEmitter {
   }
   protected emitConfigChanged(): void {
     const at = Date.now();
-    const cfg = (this._config && typeof this._config === 'object') ? { ...(this._config as object) } : this._config;
+    const cfg = this._config && typeof this._config === 'object' ? { ...(this._config as object) } : this._config;
     this.emit('config_changed', { config: cfg as TConfig, at } satisfies ConfigChangedEvent<TConfig>);
   }
 
@@ -41,7 +51,7 @@ export class Node<TConfig = unknown> extends EventEmitter {
     const s = this._status;
     if (s === 'provisioning_error') return { state: 'error', details: { phase: 'provision' } };
     if (s === 'deprovisioning_error') return { state: 'error', details: { phase: 'deprovision' } };
-    if (s === 'created') return { state: 'not_ready' };
+    if (s === 'not_ready') return { state: 'not_ready' };
     if (s === 'provisioning') return { state: 'provisioning' };
     if (s === 'ready') return { state: 'ready' };
     if (s === 'deprovisioning') return { state: 'deprovisioning' };
@@ -55,17 +65,9 @@ export class Node<TConfig = unknown> extends EventEmitter {
   }
 
   async setConfig(cfg: TConfig): Promise<void> {
-    if (this._pending || this._status === 'provisioning' || this._status === 'deprovisioning') return;
-    this._config = (cfg ?? ({} as TConfig));
+    this._config = cfg ?? ({} as TConfig);
     this.emitConfigChanged();
   }
-
-  /* removed start */
-  // start() removed; use provision(): Promise<void> { await this.provision(); }
-  /* removed stop */
-  // stop() removed; use deprovision(): Promise<void> { await this.deprovision(); }
-  /* removed delete */
-  // delete() removed: Promise<void> { /* no-op */ }
 
   async provision(): Promise<void> {
     if (this._pending || this._status === 'provisioning' || this._status === 'deprovisioning') return;
@@ -84,12 +86,12 @@ export class Node<TConfig = unknown> extends EventEmitter {
 
   async deprovision(): Promise<void> {
     if (this._pending || this._status === 'provisioning' || this._status === 'deprovisioning') return;
-    if (this._status === 'created') return;
+    if (this._status === 'not_ready') return;
     this._pending = 'deprovision';
     this.setStatus('deprovisioning');
     try {
       await this.doDeprovision();
-      this.setStatus('created');
+      this.setStatus('not_ready');
     } catch {
       this.setStatus('deprovisioning_error');
     } finally {
@@ -97,8 +99,12 @@ export class Node<TConfig = unknown> extends EventEmitter {
     }
   }
 
-  protected async doProvision(): Promise<void> { /* override */ }
-  protected async doDeprovision(): Promise<void> { /* override */ }
+  protected async doProvision(): Promise<void> {
+    /* override */
+  }
+  protected async doDeprovision(): Promise<void> {
+    /* override */
+  }
 
   static async wait(
     target: {

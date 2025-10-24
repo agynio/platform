@@ -43,27 +43,12 @@ export class SlackTrigger extends Node<SlackTriggerConfig> {
   private client: SocketModeClient | null = null;
   private vault?: VaultService;
 
-  constructor(private readonly logger: LoggerService, vault?: VaultService) {
+  constructor(
+    private readonly logger: LoggerService,
+    vault?: VaultService,
+  ) {
     super();
     this.vault = vault;
-  }
-
-  async setConfig(cfg: Record<string, unknown>): Promise<void> {
-    const parsed = SlackTriggerStaticConfigSchema.parse(cfg || {});
-    // Normalize to { value, source }
-    const appToken = normalizeTokenRef(parsed.app_token);
-    // Early validation: keep fail-fast semantics
-    if (appToken.source === 'vault') {
-      if (!this.vault || !this.vault.isEnabled()) {
-        throw new Error('Vault is disabled but a vault reference was provided for app_token');
-      }
-      parseVaultRef(appToken.value);
-    } else {
-      if (!appToken.value?.startsWith('xapp-')) {
-        throw new Error('Slack app-level token must start with xapp-');
-      }
-    }
-    this.cfg = { app_token: { value: appToken.value, source: appToken.source } };
   }
 
   private async resolveAppToken(): Promise<string> {
@@ -163,11 +148,6 @@ export class SlackTrigger extends Node<SlackTriggerConfig> {
     this.logger.info('SlackTrigger stopped');
   }
 
-
-  async setDynamicConfig(_cfg: Record<string, unknown>): Promise<void> {
-    /* no dynamic config */
-  }
-
   // Fan-out of trigger messages
   private listeners: TriggerListener[] = [];
   async subscribe(listener: TriggerListener): Promise<void> {
@@ -180,5 +160,4 @@ export class SlackTrigger extends Node<SlackTriggerConfig> {
     if (!messages.length) return;
     await Promise.all(this.listeners.map(async (listener) => listener.invoke(thread, messages)));
   }
-
 }

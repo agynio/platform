@@ -4,7 +4,7 @@ import { LLMContext, LLMState } from '../types';
 export class StaticLLMRouter extends Router<LLMState, LLMContext> {
   constructor(
     private reducer: Reducer<LLMState, LLMContext>,
-    private next: string,
+    private next: string | null,
   ) {
     super();
   }

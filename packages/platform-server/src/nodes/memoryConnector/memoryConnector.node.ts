@@ -1,7 +1,7 @@
-import { SystemMessage } from '@langchain/core/messages';
 import { z } from 'zod';
 import { MemoryService } from '../../nodes/memory.repository';
 import Node from '../base/Node';
+import { SystemMessage } from '@agyn/llm';
 
 // Static config exposed to UI for MemoryConnectorNode
 export const MemoryConnectorStaticConfigSchema = z
@@ -25,7 +25,7 @@ export class MemoryConnectorNode extends Node<MemoryConnectorStaticConfig> {
   }
 
   private toSystemMessage(text: string | null) {
-    return text ? new SystemMessage(text) : null;
+    return text ? SystemMessage.fromText(text) : null;
   }
 
   private flattenAll(data: Record<string, string>): string {
@@ -57,25 +57,12 @@ export class MemoryConnectorNode extends Node<MemoryConnectorStaticConfig> {
     let text: string = '';
     if (this.config.content === 'full') {
       text = await this.buildFull();
-      if (!text || text.length === 0) {
-        // Fallback to global scope when per-thread memory is empty
-        if (opts.threadId) {
-          const fallback = await this.buildFull();
-          text = fallback;
-        }
-      }
+
       if (text.length > max) {
         text = await this.buildTree(path);
-        if (text === `${path}\n` && opts.threadId) {
-          // Per-thread tree empty (no children); fallback to global tree
-          text = await this.buildTree(path);
-        }
       }
     } else {
       text = await this.buildTree(path);
-      if (text === `${path}\n` && opts.threadId) {
-        text = await this.buildTree(path);
-      }
     }
 
     if (!text || text.trim().length === 0) return null;

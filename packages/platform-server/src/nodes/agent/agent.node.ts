@@ -89,7 +89,6 @@ export type WhenBusyMode = 'wait' | 'injectAfterTools';
 import Node from "../base/Node";
 
 export class AgentNode extends Node<AgentStaticConfig | undefined> implements TriggerListener {
-  protected _config?: AgentStaticConfig;
   protected buffer = new MessagesBuffer({ debounceMs: 0 });
 
   private mcpServerTools: Map<McpServer, FunctionTool[]> = new Map();
@@ -267,10 +266,6 @@ export class AgentNode extends Node<AgentStaticConfig | undefined> implements Tr
     this.mcpServerTools.delete(server);
   }
 
-  setConfig(config: AgentStaticConfig): void {
-    const parsedConfig = AgentStaticConfigSchema.parse(config);
-    this._config = parsedConfig;
-  }
 
 
 
