@@ -13,7 +13,8 @@ interface GraphMeta {
   name: string;
   version: number;
   updatedAt: string;
-  format: 2;
+  // Use a broad numeric type to avoid parser issues with literal types
+  format: number;
 }
 
 // Typed error helper to avoid any
