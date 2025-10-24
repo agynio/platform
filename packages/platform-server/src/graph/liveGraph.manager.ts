@@ -13,8 +13,7 @@ import { LocalMCPServer } from '../nodes/mcp';
 import type { PersistedMcpState } from '../nodes/mcp/types';
 import { isNodeLifecycle } from '../nodes/types';
 import { LoggerService } from '../core/services/logger.service';
-import type { DynamicConfigurable, Pausable, ProvisionStatus, Provisionable } from './capabilities';
-import { hasSetConfig, hasSetDynamicConfig, isDynamicConfigurable } from './capabilities';
+
 import { Errors } from './errors';
 import { PortsRegistry } from './ports.registry';
 import { TemplateRegistry } from './templateRegistry';
@@ -24,7 +23,7 @@ const configsEqual = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stri
 @Injectable()
 export class LiveGraphRuntime {
   private state: GraphRuntimeState = {
-    nodes: new Map(),
+    nodes: new Map<string, LiveNode>(),
     executedEdges: new Map(),
     inboundEdges: new Map(),
     outboundEdges: new Map(),
@@ -86,62 +85,17 @@ export class LiveGraphRuntime {
     return this.applying as Promise<GraphDiffResult>;
   }
 
-  // Runtime helpers for Pausable/Provisionable
-  private hasMethod(o: unknown, name: string): boolean {
-    return !!o && typeof (o as Record<string, unknown>)[name] === 'function';
-  }
-  private isPausable(o: unknown): o is Pausable {
-    return this.hasMethod(o, 'pause') && this.hasMethod(o, 'resume');
-  }
-  private isProvisionable(o: unknown): o is Provisionable {
-    return (
-      this.hasMethod(o, 'getProvisionStatus') && this.hasMethod(o, 'provision') && this.hasMethod(o, 'deprovision')
-    );
-  }
-  private isDynConfigurable(o: unknown): o is DynamicConfigurable {
-    return isDynamicConfigurable(o);
-  }
-
-  async pauseNode(id: string): Promise<void> {
-    const inst = this.state.nodes.get(id)?.instance as unknown;
-    if (this.isPausable(inst)) await inst.pause();
-    else this.pausedFallback.add(id);
-  }
-  async resumeNode(id: string): Promise<void> {
-    const inst = this.state.nodes.get(id)?.instance as unknown;
-    if (this.isPausable(inst)) await inst.resume();
-    else this.pausedFallback.delete(id);
-  }
   async provisionNode(id: string): Promise<void> {
-    const inst = this.state.nodes.get(id)?.instance as unknown;
-    if (this.isProvisionable(inst)) await inst.provision();
+    await this.state.nodes.get(id)?.instance?.provision();
   }
   async deprovisionNode(id: string): Promise<void> {
-    const inst = this.state.nodes.get(id)?.instance as unknown;
-    if (this.isProvisionable(inst)) await inst.deprovision();
+    await this.state.nodes.get(id)?.instance?.deprovision();
   }
-  getNodeStatus(id: string): { isPaused?: boolean; provisionStatus?: ProvisionStatus; dynamicConfigReady?: boolean } {
-    const inst = this.state.nodes.get(id)?.instance as unknown;
-    const out: { isPaused?: boolean; provisionStatus?: ProvisionStatus; dynamicConfigReady?: boolean } = {};
-    if (inst) {
-      if (this.hasMethod(inst, 'isPaused')) {
-        const fn = (inst as any)['isPaused'] as () => unknown; // dynamic reflection
-        out.isPaused = !!fn.call(inst);
-      } else {
-        out.isPaused = this.pausedFallback.has(id);
-      }
-      if (this.isProvisionable(inst)) {
-        const fn = (inst as any)['getProvisionStatus'] as () => unknown;
-        out.provisionStatus = fn.call(inst) as ProvisionStatus;
-      }
-      if (this.isDynConfigurable(inst)) {
-        const fn = (inst as any)['isDynamicConfigReady'] as () => unknown;
-        out.dynamicConfigReady = !!fn.call(inst);
-      }
-    } else {
-      out.isPaused = this.pausedFallback.has(id);
-    }
-    return out;
+
+  getNodeStatus(id: string): { provisionStatus?: NodeStatusState } {
+    const inst = this.state.nodes.get(id)?.instance;
+
+    return { provisionStatus: inst?.status };
   }
 
   private async _applyGraphInternal(next: GraphDefinition): Promise<GraphDiffResult> {
@@ -187,40 +141,37 @@ export class LiveGraphRuntime {
       const live = this.state.nodes.get(nodeId);
       if (!live) continue;
       try {
-        const { isNodeLifecycle } = await import('../nodes/types');
-        if (isNodeLifecycle(live.instance)) {
-          const cfg = nodeDef.data.config || {};
-          await (live.instance as any).configure(cfg);
-          live.config = cfg;
-        } else if (hasSetConfig(live.instance)) {
-          const cfg = nodeDef.data.config || {};
-          const cleaned = await this.applyConfigWithUnknownKeyStripping(live.instance, 'setConfig', cfg, nodeId);
-          // set live.config to cleaned object only on success
-          live.config = cleaned;
-        }
+        const cfg = nodeDef.data.config || {};
+        await (live.instance as any).configure(cfg);
+        live.config = cfg;
+
+        const cleaned = await this.applyConfigWithUnknownKeyStripping(live.instance, 'setConfig', cfg, nodeId);
+        // set live.config to cleaned object only on success
+        live.config = cleaned;
       } catch (e) {
         logger?.error?.('Config update failed (setConfig)', nodeId, e);
         // non-fatal
       }
     }
-    // 2b. Dynamic config updates
-    for (const nodeId of diff.dynamicConfigUpdateNodeIds || []) {
-      const nodeDef = next.nodes.find((n) => n.id === nodeId)!;
-      const live = this.state.nodes.get(nodeId);
-      if (!live) continue;
-      try {
-        if (hasSetDynamicConfig(live.instance)) {
-          await this.applyConfigWithUnknownKeyStripping(
-            live.instance,
-            'setDynamicConfig',
-            nodeDef.data.dynamicConfig || {},
-            nodeId,
-          );
-        }
-      } catch (e) {
-        logger?.error?.('Config update failed (setDynamicConfig)', nodeId, e);
-      }
-    }
+    // // 2b. Dynamic config updates
+    // TODO: should be replaced with state manipulation. No dedicated dynamicConfig after all.
+    // for (const nodeId of diff.dynamicConfigUpdateNodeIds || []) {
+    //   const nodeDef = next.nodes.find((n) => n.id === nodeId)!;
+    //   const live = this.state.nodes.get(nodeId);
+    //   if (!live) continue;
+    //   try {
+    //     if (hasSetDynamicConfig(live.instance)) {
+    //       await this.applyConfigWithUnknownKeyStripping(
+    //         live.instance,
+    //         'setDynamicConfig',
+    //         nodeDef.data.dynamicConfig || {},
+    //         nodeId,
+    //       );
+    //     }
+    //   } catch (e) {
+    //     logger?.error?.('Config update failed (setDynamicConfig)', nodeId, e);
+    //   }
+    // }
 
     // 3. Remove edges (reverse if needed) BEFORE removing nodes
     for (const rem of diff.removedEdges) {
@@ -606,3 +557,4 @@ export class LiveGraphRuntime {
   }
 }
 import { Injectable } from '@nestjs/common';
+import { NodeStatusState } from '../nodes/base/Node';

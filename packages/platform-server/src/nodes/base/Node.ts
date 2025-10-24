@@ -1,5 +1,4 @@
 import { EventEmitter } from 'events';
-import type { ProvisionStatus } from '../../graph/capabilities.js';
 
 export type NodeStatusState =
   | 'not_ready'
@@ -45,23 +44,6 @@ export class Node<TConfig = unknown> extends EventEmitter {
   }
   get status(): NodeStatusState {
     return this._status;
-  }
-
-  getProvisionStatus(): ProvisionStatus<{ phase?: 'provision' | 'deprovision' }> {
-    const s = this._status;
-    if (s === 'provisioning_error') return { state: 'error', details: { phase: 'provision' } };
-    if (s === 'deprovisioning_error') return { state: 'error', details: { phase: 'deprovision' } };
-    if (s === 'not_ready') return { state: 'not_ready' };
-    if (s === 'provisioning') return { state: 'provisioning' };
-    if (s === 'ready') return { state: 'ready' };
-    if (s === 'deprovisioning') return { state: 'deprovisioning' };
-    return { state: 'error' };
-  }
-
-  onProvisionStatusChange(listener: (s: ProvisionStatus) => void): () => void {
-    const h = () => listener(this.getProvisionStatus());
-    this.on('status_changed', h);
-    return () => this.off('status_changed', h);
   }
 
   async setConfig(cfg: TConfig): Promise<void> {

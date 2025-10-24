@@ -1,9 +1,10 @@
 import { Configurable, EdgeDef, GraphDefinition, GraphError, NodeDef } from './types';
+import { Node } from '../nodes/base/Node';
 
 export interface LiveNode {
   id: string;
   template: string;
-  instance: Configurable;
+  instance: Node;
   config?: Record<string, unknown>;
 }
 
