@@ -3,16 +3,27 @@ import { BaseToolNode } from '../baseToolNode';
 import { ManageFunctionTool, ManageToolStaticConfigSchema } from './manage.tool';
 import { LoggerService } from '../../../core/services/logger.service';
 import { AgentNode } from '../../agent/agent.node';
+import { Injectable, Scope } from '@nestjs/common';
 
+@Injectable({ scope: Scope.TRANSIENT })
 export class ManageToolNode extends BaseToolNode {
   private tool?: ManageFunctionTool;
   private readonly workers: { name: string; agent: AgentNode }[] = [];
 
   constructor(
     private readonly logger: LoggerService,
-    private readonly staticConfig: z.infer<typeof ManageToolStaticConfigSchema> = {},
   ) {
     super();
+  }
+
+  // runtime setter for static config
+  async setConfig(cfg: Record<string, unknown>): Promise<void> {
+    const parsed = ManageToolStaticConfigSchema.safeParse(cfg);
+    if (!parsed.success) throw new Error('Invalid ManageTool static config');
+    this.staticConfig = this.staticConfig || {};
+    this.staticConfig.name = parsed.data.name || this.staticConfig.name;
+    this.staticConfig.description = parsed.data.description || this.staticConfig.description;
+    this.tool = undefined;
   }
 
   async setConfig(cfg: Record<string, unknown>): Promise<void> {

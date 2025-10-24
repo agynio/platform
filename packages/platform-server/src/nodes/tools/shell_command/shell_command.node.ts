@@ -3,6 +3,7 @@ import { WorkspaceNode } from '../../workspace/workspace.node';
 import { EnvService, type EnvItem } from '../../../graph/env.service';
 import { BaseToolNode } from '../baseToolNode';
 import { ShellCommandTool } from './shell_command.tool';
+import { Injectable, Scope } from '@nestjs/common';
 
 // NOTE: ANSI stripping now handled in ShellCommandTool; keep schema exports here only.
 
@@ -34,6 +35,7 @@ export const ShellToolStaticConfigSchema = z
   })
   .strict();
 
+@Injectable({ scope: Scope.TRANSIENT })
 export class ShellCommandNode extends BaseToolNode {
   private containerProvider?: WorkspaceNode;
   private cfg?: z.infer<typeof ShellToolStaticConfigSchema>;

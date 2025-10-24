@@ -2,9 +2,11 @@ import z from 'zod';
 import { BaseToolNode } from '../baseToolNode';
 import { LoggerService } from '../../../core/services/logger.service';
 import { FinishFunctionTool } from './finish.tool';
+import { Injectable, Scope } from '@nestjs/common';
 
 export const FinishToolStaticConfigSchema = z.object({}).strict();
 
+@Injectable({ scope: Scope.TRANSIENT })
 export class FinishNode extends BaseToolNode<z.infer<typeof FinishToolStaticConfigSchema>> {
   private toolInstance?: FinishFunctionTool;
   constructor(private logger: LoggerService) {

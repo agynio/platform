@@ -15,6 +15,7 @@ import { DockerExecTransport } from './dockerExecTransport';
 import { LocalMCPServerTool } from './localMcpServer.tool';
 import { DEFAULT_MCP_COMMAND, McpError, McpServer, McpTool, McpToolCallResult, PersistedMcpState } from './types';
 import { NodeStateService } from '../../graph/nodeState.service';
+import { Injectable, Scope } from '@nestjs/common';
 
 const EnvItemSchema = z
   .object({
@@ -52,6 +53,7 @@ export const LocalMcpServerStaticConfigSchema = z.object({
 });
 // .strict();
 
+@Injectable({ scope: Scope.TRANSIENT })
 export class LocalMCPServer implements McpServer, Provisionable, DynamicConfigurable<Record<string, boolean>> {
   private async resolveEnvOverlay(): Promise<Record<string, string> | undefined> {
     const items: EnvItem[] = (this.cfg?.env || []) as EnvItem[];

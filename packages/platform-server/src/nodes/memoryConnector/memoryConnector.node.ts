@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { MemoryService } from '../../nodes/memory.repository';
 import Node from '../base/Node';
 import { SystemMessage } from '@agyn/llm';
+import { Injectable, Scope } from '@nestjs/common';
 
 // Static config exposed to UI for MemoryConnectorNode
 export const MemoryConnectorStaticConfigSchema = z
@@ -13,9 +14,16 @@ export const MemoryConnectorStaticConfigSchema = z
   .strict();
 export type MemoryConnectorStaticConfig = z.infer<typeof MemoryConnectorStaticConfigSchema>;
 
+@Injectable({ scope: Scope.TRANSIENT })
 export class MemoryConnectorNode extends Node<MemoryConnectorStaticConfig> {
-  constructor(private memoryService: MemoryService) {
+  private getMemoryServiceFn?: (opts: { threadId?: string }) => MemoryService;
+
+  constructor() {
     super();
+  }
+
+  init(params: { getMemoryService: (opts: { threadId?: string }) => MemoryService }): void {
+    this.getMemoryServiceFn = params.getMemoryService;
   }
 
   private config: MemoryConnectorStaticConfig = { placement: 'after_system', content: 'tree', maxChars: 4000 };
@@ -47,12 +55,16 @@ export class MemoryConnectorNode extends Node<MemoryConnectorStaticConfig> {
   }
 
   private async buildFull(): Promise<string> {
-    const data = await this.memoryService.getAll();
+    const svc = this.getMemoryServiceFn?.({});
+    if (!svc) return '';
+    const data = await svc.getAll();
     return this.flattenAll(data);
   }
 
   private async buildTree(path: string = '/'): Promise<string> {
-    const children = await this.memoryService.list(path);
+    const svc = this.getMemoryServiceFn?.({});
+    if (!svc) return '';
+    const children = await svc.list(path);
     const lines = children
       .sort((a, b) => a.name.localeCompare(b.name))
       .map((c) => `${c.kind === 'dir' ? '[D]' : '[F]'} ${c.name}`);

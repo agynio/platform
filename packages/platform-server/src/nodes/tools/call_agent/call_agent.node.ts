@@ -4,6 +4,7 @@ import { LoggerService } from '../../../core/services/logger.service';
 
 import { CallAgentFunctionTool } from './call_agent.tool';
 import { AgentNode } from '../../agent/agent.node';
+import { Injectable, Scope } from '@nestjs/common';
 
 export const CallAgentToolStaticConfigSchema = z
   .object({
@@ -17,6 +18,7 @@ export const CallAgentToolStaticConfigSchema = z
   })
   .strict();
 
+@Injectable({ scope: Scope.TRANSIENT })
 export class CallAgentNode extends BaseToolNode<z.infer<typeof CallAgentToolStaticConfigSchema>> {
   private description = 'Call another agent with a message and optional context.';
   private name: string | undefined;

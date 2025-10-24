@@ -1,4 +1,5 @@
 import type { Db, Collection, Document, WithId } from 'mongodb';
+import { Injectable, Scope } from '@nestjs/common';
 
 export type MemoryScope = 'global' | 'perThread';
 
@@ -29,13 +30,21 @@ export interface ListEntry {
  * One Mongo document per { nodeId, scope[, threadId] } in the `memories` collection.
  * Paths map to dotted keys in doc.data: "/a/b/c" -> data["a.b.c"].
  */
-@Injectable()
+@Injectable({ scope: Scope.TRANSIENT })
 export class MemoryService {
-  private collection: Collection<MemoryDoc>;
+  private collection!: Collection<MemoryDoc>;
+  private nodeId!: string;
+  private scope!: MemoryScope;
+  private threadId?: string;
 
-  constructor(private db: Db, private nodeId: string, private scope: MemoryScope, private threadId?: string) {
-    if (scope === 'perThread' && !threadId) throw new Error('threadId is required for perThread scope');
-    this.collection = db.collection<MemoryDoc>('memories');
+  constructor(private db: Db) {}
+
+  init(params: { nodeId: string; scope: MemoryScope; threadId?: string }): void {
+    this.nodeId = params.nodeId;
+    this.scope = params.scope;
+    this.threadId = params.threadId;
+    if (this.scope === 'perThread' && !this.threadId) throw new Error('threadId is required for perThread scope');
+    this.collection = this.db.collection<MemoryDoc>('memories');
   }
 
   /** Collapse multiple slashes, require leading slash, forbid ".." and "$", and allow [A-Za-z0-9_ -] only in segments. */
@@ -407,4 +416,3 @@ export class MemoryService {
       await this.collection.updateOne(this.filter, { $set: updates }, { upsert: true });
   }
 }
-import { Injectable } from '@nestjs/common';

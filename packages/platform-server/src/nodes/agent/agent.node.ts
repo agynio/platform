@@ -90,8 +90,12 @@ import Node from "../base/Node";
 import type { PortsProvider, TemplatePortConfig } from '../../graph/ports.types';
 import type { RuntimeContext, RuntimeContextAware } from '../../graph/runtimeContext';
 import { MemoryConnectorNode } from '../memoryConnector/memoryConnector.node';
+import { Injectable, Scope } from '@nestjs/common';
 
-export class AgentNode extends Node<AgentStaticConfig | undefined> implements TriggerListener, PortsProvider, RuntimeContextAware {
+@Injectable({ scope: Scope.TRANSIENT })
+export class AgentNode extends Node<AgentStaticConfig | undefined>
+  implements TriggerListener, PortsProvider, RuntimeContextAware
+{
   protected _config?: AgentStaticConfig;
   protected buffer = new MessagesBuffer({ debounceMs: 0 });
 
@@ -102,7 +106,6 @@ export class AgentNode extends Node<AgentStaticConfig | undefined> implements Tr
     protected configService: ConfigService,
     protected logger: LoggerService,
     protected llmProvisioner: LLMProvisioner,
-    protected agentId?: string,
   ) {
     super();
   }
@@ -113,15 +116,17 @@ export class AgentNode extends Node<AgentStaticConfig | undefined> implements Tr
   }
 
   // ---- Node identity ----
-  protected getNodeId(): string | undefined {
-    return this.agentId;
-  }
   public getAgentNodeId(): string | undefined {
-    return this.getNodeId();
+    try {
+      return this.nodeId;
+    } catch {
+      return undefined;
+    }
   }
 
   setRuntimeContext(ctx: RuntimeContext): void {
-    this.agentId = ctx.nodeId;
+    // initialize identity via base init
+    this.init({ nodeId: ctx.nodeId });
   }
 
   // Minimal memory connector attachment to satisfy port validation and future use
@@ -204,7 +209,7 @@ export class AgentNode extends Node<AgentStaticConfig | undefined> implements Tr
     messages: TriggerMessage[] | TriggerMessage,
   ): Promise<ResponseMessage | ToolCallOutputMessage> {
     return await withAgent(
-      { threadId: thread, nodeId: this.getNodeId(), inputParameters: [{ thread }, { messages }] },
+      { threadId: thread, nodeId: this.nodeId, inputParameters: [{ thread }, { messages }] },
       async () => {
         const loop = await this.prepareLoop();
         const incoming: TriggerMessage[] = Array.isArray(messages) ? messages : [messages];

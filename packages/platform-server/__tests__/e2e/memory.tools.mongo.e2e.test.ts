@@ -32,7 +32,8 @@ describe.skipIf(!RUN_MONGOMS)('E2E: memory tools with real MongoDB (mongodb-memo
   describe('append', () => {
     it('should store data for new path', async () => {
       const db = client.db('test');
-      const memNode = new MemoryNode(db as any, 'node-1');
+      const memNode = new MemoryNode(db as any, undefined as any as any);
+      memNode.init({ nodeId: 'node-1' });
 
       const node = new (await import('../../src/nodes/tools/memory/memory.node')).MemoryToolNode(logger);
       node.setMemorySource(memNode);
@@ -49,7 +50,8 @@ describe.skipIf(!RUN_MONGOMS)('E2E: memory tools with real MongoDB (mongodb-memo
 
     it('should append and not overwrite existing data', async () => {
       const db = client.db('test');
-      const memNode = new MemoryNode(db as any, 'node-1');
+      const memNode = new MemoryNode(db as any, undefined as any as any);
+      memNode.init({ nodeId: 'node-1' });
 
       const node = new (await import('../../src/nodes/tools/memory/memory.node')).MemoryToolNode(logger);
       node.setMemorySource(memNode);
@@ -70,7 +72,8 @@ describe.skipIf(!RUN_MONGOMS)('E2E: memory tools with real MongoDB (mongodb-memo
   describe('list/read/update/delete', () => {
     it('should list directory entries after multiple appends', async () => {
       const db = client.db('test');
-      const memNode = new MemoryNode(db as any, 'node-lrud-1');
+      const memNode = new MemoryNode(db as any, undefined as any as any);
+      memNode.init({ nodeId: 'node-lrud-1' });
 
       const node = new (await import('../../src/nodes/tools/memory/memory.node')).MemoryToolNode(logger); node.setMemorySource(memNode); const unified = node.getTool();
       const cfg = { threadId: 'debug' } as any;
@@ -86,7 +89,8 @@ describe.skipIf(!RUN_MONGOMS)('E2E: memory tools with real MongoDB (mongodb-memo
 
     it('should read, update occurrences, and then delete a file', async () => {
       const db = client.db('test');
-      const memNode = new MemoryNode(db as any, 'node-lrud-2');
+      const memNode = new MemoryNode(db as any, undefined as any as any);
+      memNode.init({ nodeId: 'node-lrud-2' });
       const unifiedInst = new UnifiedMemoryTool(logger); unifiedInst.setMemorySource(memNode); const unified = unifiedInst.init();
 
       const cfg = { configurable: { thread_id: 'debug' } } as any;

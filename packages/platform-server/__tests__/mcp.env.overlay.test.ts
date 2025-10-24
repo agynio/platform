@@ -29,7 +29,7 @@ describe('LocalMCPServer env overlay and workdir', () => {
       }),
     };
     const cs: any = { getDocker: () => docker };
-    server = new LocalMCPServer(cs, logger as any);
+    server = new LocalMCPServer(cs as any, logger as any, undefined as any, undefined as any, undefined as any);
     // Inject EnvService using fake vault for overlay
     (server as any).envService = { resolveEnvItems: async (items: any[]) => {
       const out: Record<string, string> = {};
