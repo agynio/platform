@@ -11,8 +11,6 @@ export class LoadLLMReducer extends Reducer<LLMState, LLMContext> {
   constructor(private logger: LoggerService) {
     super();
   }
-  // Optional no-op init to match base
-  init(): this { return this; }
 
   async invoke(state: LLMState, ctx: LLMContext): Promise<LLMState> {
     try {

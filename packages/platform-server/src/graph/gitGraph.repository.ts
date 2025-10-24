@@ -482,10 +482,17 @@ export class GitGraphRepository extends GraphRepository {
     const nodeUpdates: string[] = [];
     const nodeDeletes: string[] = [];
     for (const id of a.keys()) {
-      if (!b.has(id)) nodeAdds.push(id);
-      else if (b.get(id) !== a.get(id)) nodeUpdates.push(id);
+      if (!b.has(id)) {
+        nodeAdds.push(id);
+      } else if (b.get(id) !== a.get(id)) {
+        nodeUpdates.push(id);
+      }
     }
-    for (const id of b.keys()) if (!a.has(id)) nodeDeletes.push(id);
+    for (const id of b.keys()) {
+      if (!a.has(id)) {
+        nodeDeletes.push(id);
+      }
+    }
     return { nodeAdds, nodeUpdates, nodeDeletes };
   }
 
@@ -496,16 +503,24 @@ export class GitGraphRepository extends GraphRepository {
     const edgeUpdates: string[] = [];
     const edgeDeletes: string[] = [];
     for (const id of ai.keys()) {
-      if (!bi.has(id)) edgeAdds.push(id);
-      else if (bi.get(id) !== ai.get(id)) edgeUpdates.push(id);
+      if (!bi.has(id)) {
+        edgeAdds.push(id);
+      } else if (bi.get(id) !== ai.get(id)) {
+        edgeUpdates.push(id);
+      }
     }
-    for (const id of bi.keys()) if (!ai.has(id)) edgeDeletes.push(id);
+    for (const id of bi.keys()) {
+      if (!ai.has(id)) {
+        edgeDeletes.push(id);
+      }
+    }
     return { edgeAdds, edgeUpdates, edgeDeletes };
   }
-}
   private defaultAuthor(): { name?: string; email?: string } | undefined {
     const name = this.config.graphAuthorName;
     const email = this.config.graphAuthorEmail;
-    if (!name && !email) return undefined;
+    if (!name && !email) {
+      return undefined;
+    }
     return { name, email };
   }

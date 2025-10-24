@@ -65,6 +65,4 @@ export type LLMContext = {
   threadId: string;
   finishSignal: Signal;
   callerAgent: AgentNode;
-  /** Optional node id for attribution (tool node or agent node) */
-  nodeId?: string;
 };

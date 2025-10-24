@@ -54,7 +54,7 @@ export class CallToolsLLMReducer extends Reducer<LLMState, LLMContext> {
             name: tool.name,
             toolCallId: t.callId,
             input,
-            nodeId: ctx.nodeId ?? ctx.callerAgent.getAgentNodeId?.(),
+            nodeId: ctx.callerAgent.getAgentNodeId?.(),
           },
           async () => {
             try {

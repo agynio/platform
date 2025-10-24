@@ -182,7 +182,7 @@ export class AgentNode extends Node<AgentStaticConfig | undefined> implements Tr
 
         const newState = await loop.invoke(
           { messages: history },
-          { threadId: thread, finishSignal, callerAgent: this, nodeId: this.getAgentNodeId?.() },
+          { threadId: thread, finishSignal, callerAgent: this },
           { start: 'load' },
         );
 
