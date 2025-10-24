@@ -19,9 +19,17 @@ import { ConfigService } from '../core/services/config.service';
 import { LoggerService } from '../core/services/logger.service';
 import { OpenAILLMProvisioner } from './provisioners/openai.provisioner';
 import { LiteLLMProvisioner } from './provisioners/litellm.provisioner';
+import { ConfigService } from '../core/services/config.service';
+import { LoggerService } from '../core/services/logger.service';
+import { LiteLLMProvisioner } from './provisioners/litellm.provisioner';
+import { OpenAILLMProvisioner } from './provisioners/openai.provisioner';
 
 @Module({
+<<<<<<< HEAD
   imports: [CoreModule],
+=======
+  imports: [],
+>>>>>>> 6999373 (merge: resolve conflicts per new LLMProvisioner design (lazy getLLM, llm.module provider), remove factory service, no startup provisioning)
   providers: [
     {
       provide: LLMProvisioner,
@@ -37,6 +45,13 @@ import { LiteLLMProvisioner } from './provisioners/litellm.provisioner';
       },
       inject: [ConfigService, LoggerService],
     },
+      useFactory: (cfg: ConfigService, logger: LoggerService) => {
+        const provider = (cfg.llmProvider or 'auto')
+        
+        return new LiteLLMProvisioner(cfg, logger)
+      },
+      inject: [ConfigService, LoggerService],
+    },
     ConversationStateRepository,
     LoadLLMReducer,
     SaveLLMReducer,
@@ -47,6 +62,7 @@ import { LiteLLMProvisioner } from './provisioners/litellm.provisioner';
     StaticLLMRouter,
     ConditionalLLMRouter,
   ],
+  exports: [LLMProvisioner],
   exports: [LLMProvisioner],
 })
 export class LLMModule {}
