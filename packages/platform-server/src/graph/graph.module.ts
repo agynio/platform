@@ -4,6 +4,7 @@ import { PortsRegistry } from './ports.registry';
 import { GraphService } from './graphMongo.repository';
 import { GitGraphService } from './gitGraph.repository';
 import { LiveGraphRuntime } from './liveGraph.manager';
+import { enforceMcpCommandMutationGuard } from './graph.guard';
 
 @Module({
   providers: [
@@ -12,6 +13,8 @@ import { LiveGraphRuntime } from './liveGraph.manager';
     GraphService,
     GitGraphService,
     LiveGraphRuntime,
+    // Guards (functions are not providers; list here for visibility if later wrapped)
+    // enforceMcpCommandMutationGuard is a pure function and intentionally not registered
   ],
   exports: [],
 })

@@ -21,6 +21,7 @@ import { TemplateRegistry } from './templateRegistry';
 
 const configsEqual = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b); // unchanged
 
+@Injectable()
 export class LiveGraphRuntime {
   private state: GraphRuntimeState = {
     nodes: new Map(),
@@ -604,3 +605,4 @@ export class LiveGraphRuntime {
     this.state.executedEdges.clear();
   }
 }
+import { Injectable } from '@nestjs/common';

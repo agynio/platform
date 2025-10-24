@@ -9,6 +9,7 @@ export interface TemplateMeta {
   staticConfigSchema?: JSONSchema.BaseSchema;
 }
 
+@Injectable()
 export class TemplateRegistry {
   private factories = new Map<string, FactoryFn>();
   private ports = new Map<string, TemplatePortConfig>();
@@ -54,3 +55,4 @@ export class TemplateRegistry {
     return schemas.sort((a, b) => a.name.localeCompare(b.name));
   }
 }
+import { Injectable } from '@nestjs/common';

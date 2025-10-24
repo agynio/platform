@@ -1,6 +1,7 @@
 import { EdgeDef } from './types';
 import { TemplatePortsRegistry, ResolvedEdgePorts, PortResolutionError, PortConfig, MethodPortConfig } from './ports.types';
 
+@Injectable()
 export class PortsRegistry {
   constructor(private readonly templates: TemplatePortsRegistry) {}
 
@@ -61,3 +62,4 @@ export class PortsRegistry {
     };
   }
 }
+import { Injectable } from '@nestjs/common';
