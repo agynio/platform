@@ -148,7 +148,7 @@ export class GitGraphRepository extends GraphRepository {
         (isNew ? touched.added : touched.updated).push(rel);
       };
       const writeEdge = async (e: PersistedGraphEdge, isNew: boolean) => {
-        const id = e.id!;
+        const id = String(e.id ?? this.edgeId(e));
         const rel = path.posix.join('edges', `${encodeURIComponent(id)}.json`);
         await this.atomicWriteFile(path.join(root, rel), JSON.stringify({ ...e, id }, null, 2));
         (isNew ? touched.added : touched.updated).push(rel);
@@ -168,7 +168,7 @@ export class GitGraphRepository extends GraphRepository {
       await Promise.all(edgeDeletes.map((id) => delRel(path.posix.join('edges', `${encodeURIComponent(id)}.json`))));
 
       // Update meta last
-      const meta = { name, version: target.version, updatedAt: target.updatedAt, format: 2 } as const;
+      const meta = { name, version: target.version, updatedAt: target.updatedAt, format: 2 };
       await this.atomicWriteFile(path.join(root, 'graph.meta.json'), JSON.stringify(meta, null, 2));
 
       // Stage changes
