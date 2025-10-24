@@ -144,7 +144,19 @@ export type Config = z.infer<typeof configSchema>;
 
 @Injectable()
 export class ConfigService implements Config {
-  constructor(private params: Config) {}
+  private _params?: Config;
+
+  private get params(): Config {
+    if (!this._params) {
+      throw new Error('ConfigService not initialized with parameters');
+    }
+    return this._params;
+  }
+
+  init(params: Config): this {
+    this._params = params;
+    return this;
+  }
 
   get githubAppId(): string {
     return this.params.githubAppId;
@@ -334,6 +346,6 @@ export class ConfigService implements Config {
       ncpsAuthHeader: process.env.NCPS_AUTH_HEADER,
       ncpsAuthToken: process.env.NCPS_AUTH_TOKEN,
     });
-    return new ConfigService(parsed);
+    return new ConfigService().init(parsed);
   }
 }

@@ -56,7 +56,7 @@ async function bootstrap() {
   const config = app.get(ConfigService, { strict: false });
   const mongo = app.get(MongoService, { strict: false });
   const containerService = app.get(ContainerService, { strict: false });
-  const vaultService = app.get(VaultService, { strict: false });
+
   const ncpsKeyService = app.get(NcpsKeyService, { strict: false });
   let nodeStateService: NodeStateService | undefined;
   // Register routes that need runtime on fastify instance (non-Nest legacy)

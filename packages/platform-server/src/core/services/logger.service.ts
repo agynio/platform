@@ -1,31 +1,21 @@
 import { Injectable } from '@nestjs/common';
-import { logger as obsLogger } from '@agyn/tracing';
+import { logger as tracingLogger } from '@agyn/tracing';
 
 @Injectable()
 export class LoggerService {
-  private obs() {
-    // Obtain contextual logger (bound to active span if any)
-    try {
-      return obsLogger();
-    } catch {
-      // SDK not initialized yet
-      return null;
-    }
-  }
-
   info(message: string, ...optionalParams: any[]) {
     console.info(`[INFO] ${message}`, ...optionalParams);
-    this.obs()?.info(`${message}\n${this.serialize(optionalParams)}`);
+    tracingLogger().info(`${message}\n${this.serialize(optionalParams)}`);
   }
 
   debug(message: string, ...optionalParams: any[]) {
     console.debug(`[DEBUG] ${message}`, ...optionalParams);
-    this.obs()?.debug(`${message}\n${this.serialize(optionalParams)}`);
+    tracingLogger().debug(`${message}\n${this.serialize(optionalParams)}`);
   }
 
   error(message: string, ...optionalParams: any[]) {
     console.error(`[ERROR] ${message}`, ...optionalParams);
-    this.obs()?.error(`${message}\n${this.serialize(optionalParams)}`);
+    tracingLogger().error(`${message}\n${this.serialize(optionalParams)}`);
   }
 
   private serialize(params: any[]) {
