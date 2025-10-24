@@ -3,7 +3,9 @@ import { LoggerService } from '../../../core/services/logger.service';
 import { RemindMeFunctionTool, RemindMeToolStaticConfigSchema } from './remind_me.tool';
 import z from 'zod';
 import { AgentNode } from '../../agent/agent.node';
+import { Injectable, Scope } from '@nestjs/common';
 
+@Injectable({ scope: Scope.TRANSIENT })
 export class RemindMeNode extends BaseToolNode {
   private toolInstance?: RemindMeFunctionTool;
   private callerAgent?: AgentNode; // set via port wiring

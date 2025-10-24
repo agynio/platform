@@ -13,7 +13,7 @@ import {
   GithubCloneRepoNode,
   GithubCloneRepoToolExposedStaticConfigSchema,
 } from './nodes/tools/github_clone_repo/github_clone_repo.node';
-import { ManageTool, ManageToolStaticConfigSchema } from './nodes/tools/manage/manage.node';
+import { ManageToolNode, ManageToolStaticConfigSchema } from './nodes/tools/manage/manage.node';
 import { MemoryToolNode, MemoryToolNodeStaticConfigSchema } from './nodes/tools/memory/memory.node';
 
 import { RemindMeNode } from './nodes/tools/remind_me/remind_me.node';
@@ -87,7 +87,7 @@ export function buildTemplateRegistry(deps: TemplateRegistryDeps): TemplateRegis
   registry.register(
     'manageTool',
     { title: 'Manage', kind: 'tool', capabilities: { staticConfigurable: true }, staticConfigSchema: toJSONSchema(ManageToolStaticConfigSchema) },
-    ManageTool as any,
+    ManageToolNode as any,
   );
   registry.register(
     'remindMeTool',

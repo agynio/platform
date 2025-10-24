@@ -62,7 +62,7 @@ function unsetByPathFlat(doc: any, path: string) { const [root, ...rest] = path.
 describe('memory_append tool: path normalization and validation', () => {
   const mkTools = () => {
     const db = new FakeDb() as unknown as Db;
-    const factory = (opts: { threadId?: string }) => new MemoryService(db, 'nodeT', opts.threadId ? 'perThread' : 'global', opts.threadId);
+    const factory = (opts: { threadId?: string }) => { const svc = new MemoryService(db); svc.init({ nodeId: 'nodeT', scope: opts.threadId ? 'perThread' : 'global', threadId: opts.threadId }); return svc; };
     const logger = new LoggerService();
     const node = new (await import('../../src/nodes/tools/memory/memory.node')).MemoryToolNode(logger);
     node.setMemorySource(factory);

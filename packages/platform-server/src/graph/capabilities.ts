@@ -14,11 +14,11 @@
 //   return !!obj && typeof (obj as any).isDynamicConfigReady === 'function';
 // }
 
-// // Named guards used by runtime (no default export)
-// export function hasSetConfig(x: unknown): x is { setConfig: (cfg: Record<string, unknown>) => unknown } {
-//   return !!x && typeof (x as any).setConfig === 'function';
-// }
+// Named guards used by runtime (no default export)
+export function hasSetConfig(x: unknown): x is { setConfig: (cfg: Record<string, unknown>) => unknown } {
+  return !!x && typeof (x as any).setConfig === 'function';
+}
 
-// export function hasSetDynamicConfig(x: unknown): x is { setDynamicConfig: (cfg: Record<string, unknown>) => unknown } {
-//   return !!x && typeof (x as any).setDynamicConfig === 'function';
-// }
+export function hasSetDynamicConfig(x: unknown): x is { setDynamicConfig: (cfg: Record<string, unknown>) => unknown } {
+  return !!x && typeof (x as any).setDynamicConfig === 'function';
+}

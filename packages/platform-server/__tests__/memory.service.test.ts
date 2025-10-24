@@ -123,7 +123,8 @@ function unsetByPathFlat(doc: any, path: string) {
 describe('MemoryService', () => {
   it("normalizes paths and forbids .. and $", async () => {
     const db = new FakeDb() as unknown as Db;
-    const svc = new MemoryService(db, 'n1', 'global');
+    const svc = new MemoryService(db);
+    svc.init({ nodeId: 'n1', scope: 'global' });
     expect(svc.normalizePath('a/b')).toBe('/a/b');
     expect(svc.normalizePath('/a//b/')).toBe('/a/b');
     expect(() => svc.normalizePath('../x')).toThrow();
@@ -132,7 +133,8 @@ describe('MemoryService', () => {
 
   it('append/read/update/delete with string-only semantics', async () => {
     const db = new FakeDb() as unknown as Db;
-    const svc = new MemoryService(db, 'n1', 'global');
+    const svc = new MemoryService(db);
+    svc.init({ nodeId: 'n1', scope: 'global' });
     await svc.ensureIndexes();
 
     await svc.append('/notes/today', 'hello');
@@ -158,9 +160,9 @@ describe('MemoryService', () => {
 
   it('perThread and global scoping', async () => {
     const db = new FakeDb() as unknown as Db;
-    const g = new MemoryService(db, 'nodeA', 'global');
-    const t1 = new MemoryService(db, 'nodeA', 'perThread', 't1');
-    const t2 = new MemoryService(db, 'nodeA', 'perThread', 't2');
+    const g = new MemoryService(db); g.init({ nodeId: 'nodeA', scope: 'global' });
+    const t1 = new MemoryService(db); t1.init({ nodeId: 'nodeA', scope: 'perThread', threadId: 't1' });
+    const t2 = new MemoryService(db); t2.init({ nodeId: 'nodeA', scope: 'perThread', threadId: 't2' });
 
     await g.append('/x', 'G');
     await t1.append('/x', 'T1');

@@ -5,6 +5,7 @@ import { VaultService } from '../../infra/vault/vault.service';
 import { ReferenceFieldSchema, resolveTokenRef } from '../../utils/refs';
 import Node from '../base/Node';
 import { TriggerHumanMessage, TriggerListener } from './base.trigger';
+import { Injectable, Scope } from '@nestjs/common';
 
 // Internal schema: accept either plain string or ReferenceField
 export const SlackTriggerStaticConfigSchema = z
@@ -38,6 +39,7 @@ export const SlackTriggerExposedStaticConfigSchema = z
 type SlackTokenRef = { value: string; source: 'static' | 'vault' };
 type SlackTriggerConfig = { app_token: SlackTokenRef };
 
+@Injectable({ scope: Scope.TRANSIENT })
 export class SlackTrigger extends Node<SlackTriggerConfig> {
   private cfg: SlackTriggerConfig | null = null;
   private client: SocketModeClient | null = null;

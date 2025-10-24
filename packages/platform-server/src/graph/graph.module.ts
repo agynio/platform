@@ -65,16 +65,20 @@ import { GraphDefinition, GraphError } from './types';
           return svc;
         }
       },
-      inject: [ConfigService, LoggerService, MongoService, TemplateRegistry, 'GraphModuleBootstrap'],
+      inject: [ConfigService, LoggerService, MongoService, TemplateRegistry],
     },
     {
       provide: LiveGraphRuntime,
-      useFactory: (logger: LoggerService, graphs: GraphRepository, templateRegistry: TemplateRegistry) => {
-        const runtime = new LiveGraphRuntime(logger, templateRegistry);
+      useFactory: async (
+        logger: LoggerService,
+        graphs: GraphRepository,
+        templateRegistry: TemplateRegistry,
+      ) => {
+        const runtime = new LiveGraphRuntime(logger, templateRegistry, graphs);
         await runtime.load();
         return runtime;
       },
-      inject: [LoggerService, GraphRepository],
+      inject: [LoggerService, GraphRepository, TemplateRegistry],
     },
     // Load and apply persisted graph to runtime at startup
     // {

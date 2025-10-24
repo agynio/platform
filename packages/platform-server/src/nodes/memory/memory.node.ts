@@ -2,6 +2,8 @@ import { Db } from 'mongodb';
 import { z } from 'zod';
 import { MemoryService, MemoryScope } from '../../nodes/memory.repository';
 import Node from '../base/Node';
+import { Injectable, Scope } from '@nestjs/common';
+import { ModuleRef } from '@nestjs/core';
 
 export interface MemoryNodeConfig {
   scope: MemoryScope; // 'global' | 'perThread'
@@ -24,17 +26,23 @@ export type MemoryNodeStaticConfig = z.infer<typeof MemoryNodeStaticConfigSchema
  * Inject Db from MongoService.getDb() at template wiring time.
  */
 
+@Injectable({ scope: Scope.TRANSIENT })
 export class MemoryNode extends Node<MemoryNodeStaticConfig> {
-  constructor(
-    private db: Db,
-    private nodeId: string,
-  ) {}
+  constructor(private db: Db, private moduleRef: ModuleRef) {
+    super();
+  }
 
   private config: MemoryNodeConfig = { scope: 'global' };
 
+  init(params: { nodeId: string }): void {
+    super.init(params);
+  }
+
   getMemoryService(opts: { threadId?: string }): MemoryService {
     const threadId = this.config.scope === 'perThread' ? opts.threadId : undefined;
-    return new MemoryService(this.db, this.nodeId, this.config.scope, threadId);
+    const svc = this.moduleRef.create(MemoryService);
+    svc.init({ nodeId: this.nodeId, scope: this.config.scope, threadId });
+    return svc;
   }
 
   getPortConfig() {

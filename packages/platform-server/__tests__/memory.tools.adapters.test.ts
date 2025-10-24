@@ -61,7 +61,11 @@ function unsetByPathFlat(doc: any, path: string) { const [root, ...rest] = path.
 describe('Memory tool adapters', () => {
   it('wrap LangChain tools and operate on MemoryService via config.thread_id', async () => {
     const db = new FakeDb() as unknown as Db;
-    const serviceFactory = (opts: { threadId?: string }) => new MemoryService(db, 'nodeX', opts.threadId ? 'perThread' : 'global', opts.threadId);
+    const serviceFactory = (opts: { threadId?: string }) => {
+      const svc = new MemoryService(db);
+      svc.init({ nodeId: 'nodeX', scope: opts.threadId ? 'perThread' : 'global', threadId: opts.threadId });
+      return svc;
+    };
     const logger = new LoggerService();
     const adapter = new UnifiedMemoryTool({ getDescription: () => '', getName: () => 'memory', getMemoryFactory: () => serviceFactory, logger });
     const name = adapter.name;
@@ -87,7 +91,11 @@ describe('Memory tool adapters', () => {
 
   it('negative cases: ENOENT, EISDIR, EINVAL, ENOTMEM, list empty path', async () => {
     const db = new FakeDb() as unknown as Db;
-    const serviceFactory = (opts: { threadId?: string }) => new MemoryService(db, 'nodeX', opts.threadId ? 'perThread' : 'global', opts.threadId);
+    const serviceFactory = (opts: { threadId?: string }) => {
+      const svc = new MemoryService(db);
+      svc.init({ nodeId: 'nodeX', scope: opts.threadId ? 'perThread' : 'global', threadId: opts.threadId });
+      return svc;
+    };
     const logger = new LoggerService();
 
     // ENOTMEM: do not wire memory

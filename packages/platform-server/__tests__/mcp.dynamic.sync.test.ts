@@ -22,7 +22,7 @@ describe('MCP dynamic tool enable/disable sync', () => {
 
   beforeEach(async () => {
     logger = new MockLogger();
-    server = new LocalMCPServer(new MockContainerService() as any, logger as any);
+    server = new LocalMCPServer(new MockContainerService() as any, logger as any, undefined as any, undefined as any, undefined as any);
     (server as any).setContainerProvider(mockProvider as any);
   await server.setConfig({ namespace: 'ns', command: 'cmd' } as any);
 

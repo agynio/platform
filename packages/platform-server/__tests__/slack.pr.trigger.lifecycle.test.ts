@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { SlackTrigger } from '../src/nodes/slackTrigger/slack.trigger';
+import { SlackTrigger } from '../src/nodes/slackTrigger/slackTrigger.node';
 
 // Mock @slack/socket-mode to avoid network/real client
 vi.mock('@slack/socket-mode', () => {
@@ -40,7 +40,7 @@ describe('SlackTrigger and PRTrigger lifecycle', () => {
 
   it('SlackTrigger start/stop manages socket-mode lifecycle', async () => {
     const logger = new MockLogger() as any;
-    const trigger = new SlackTrigger(logger);
+    const trigger = new SlackTrigger(logger as any);
     await trigger.setConfig({ app_token: 'xapp-test' });
     await trigger.provision();
     await trigger.deprovision();

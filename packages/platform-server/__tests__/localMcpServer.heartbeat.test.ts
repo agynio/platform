@@ -82,7 +82,7 @@ describe('LocalMCPServer heartbeat behavior', () => {
       }),
     });
 
-    const server = new LocalMCPServer(containerService, logger);
+    const server = new LocalMCPServer(containerService as any, logger as any, undefined as any, undefined as any, undefined as any);
     server.setContainerProvider({ provide: async (t: string) => ({ id: `cid-${t}` }) } as any);
     await server.setConfig({ namespace: 'mock', command: 'ignored', heartbeatIntervalMs: 100 } as any);
 

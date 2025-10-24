@@ -37,7 +37,7 @@ describe('Mixed Shell + MCP overlay isolation', () => {
       }),
     };
     const cs: any = { getDocker: () => docker };
-    const mcp = new LocalMCPServer(cs, logger as any);
+    const mcp = new LocalMCPServer(cs as any, logger as any, undefined as any, undefined as any, undefined as any);
     // Inject EnvService to resolve array into map for overlay
     ;(mcp as any).envService = { resolveEnvItems: async (items: any[]) => Object.fromEntries(items.map((i: any) => [i.key, i.value])) };
     (mcp as any).setContainerProvider(provider);

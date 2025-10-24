@@ -99,6 +99,7 @@ import type { TemplatePortConfig } from '../../graph/ports.types';
 import type { RuntimeContext } from '../../graph/runtimeContext';
 import Node from '../base/Node';
 import { MemoryConnectorNode } from '../memoryConnector/memoryConnector.node';
+import { Injectable, Scope } from '@nestjs/common';
 
 @Injectable({ scope: Scope.TRANSIENT })
 export class AgentNode extends Node<AgentStaticConfig> implements TriggerListener {
@@ -111,7 +112,6 @@ export class AgentNode extends Node<AgentStaticConfig> implements TriggerListene
     protected configService: ConfigService,
     protected logger: LoggerService,
     protected llmProvisioner: LLMProvisioner,
-    protected agentId?: string,
   ) {
     super();
   }
@@ -122,15 +122,17 @@ export class AgentNode extends Node<AgentStaticConfig> implements TriggerListene
   }
 
   // ---- Node identity ----
-  protected getNodeId(): string | undefined {
-    return this.agentId;
-  }
   public getAgentNodeId(): string | undefined {
-    return this.getNodeId();
+    try {
+      return this.nodeId;
+    } catch {
+      return undefined;
+    }
   }
 
   setRuntimeContext(ctx: RuntimeContext): void {
-    this.agentId = ctx.nodeId;
+    // initialize identity via base init
+    this.init({ nodeId: ctx.nodeId });
   }
 
   // Minimal memory connector attachment to satisfy port validation and future use
@@ -223,7 +225,7 @@ export class AgentNode extends Node<AgentStaticConfig> implements TriggerListene
     messages: TriggerMessage[] | TriggerMessage,
   ): Promise<ResponseMessage | ToolCallOutputMessage> {
     return await withAgent(
-      { threadId: thread, nodeId: this.getNodeId(), inputParameters: [{ thread }, { messages }] },
+      { threadId: thread, nodeId: this.nodeId, inputParameters: [{ thread }, { messages }] },
       async () => {
         const loop = await this.prepareLoop();
         const incoming: TriggerMessage[] = Array.isArray(messages) ? messages : [messages];

@@ -24,7 +24,8 @@ class StrictNode {
 const makeRuntime = () => {
   const templates = new TemplateRegistry();
   templates.register('Strict', () => new StrictNode());
-  const runtime = new LiveGraphRuntime(new LoggerService(), templates);
+  class StubRepo extends GraphRepository { async initIfNeeded(): Promise<void> {} async get(): Promise<any> { return null; } async upsert(): Promise<any> { throw new Error('not-implemented'); } async upsertNodeState(): Promise<void> {} }
+  const runtime = new LiveGraphRuntime(new LoggerService(), templates, new StubRepo());
   return runtime;
 };
 

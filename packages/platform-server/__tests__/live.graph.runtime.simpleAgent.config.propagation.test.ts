@@ -75,7 +75,8 @@ describe('LiveGraphRuntime -> Agent config propagation', () => {
       llmFactoryService: new (class extends LLMFactoryService { constructor() { super(logger); } })(),
       ncpsKeyService: undefined,
     });
-    const runtime = new LiveGraphRuntime(logger, registry);
+    class StubRepo extends GraphRepository { async initIfNeeded(): Promise<void> {} async get(): Promise<any> { return null; } async upsert(): Promise<any> { throw new Error('not-implemented'); } async upsertNodeState(): Promise<void> {} }
+    const runtime = new LiveGraphRuntime(logger, registry, new StubRepo());
     return { runtime };
   }
 

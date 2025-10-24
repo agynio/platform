@@ -173,7 +173,8 @@ describe('CallAgentTool graph wiring', () => {
       .register('agent', { title: 'Agent', kind: 'agent' }, (() => new FakeAgentWithTools(logger) as any) as any)
       .register('callAgentTool', { title: 'Call agent', kind: 'tool' }, (() => new CallAgentTool(logger)) as any);
 
-    const runtime = new LiveGraphRuntime(logger, registry);
+    class StubRepo2 extends GraphRepository { async initIfNeeded(): Promise<void> {} async get(): Promise<any> { return null; } async upsert(): Promise<any> { throw new Error('not-implemented'); } async upsertNodeState(): Promise<void> {} }
+    const runtime = new LiveGraphRuntime(logger, registry, new StubRepo2());
 
     const graph = {
       nodes: [

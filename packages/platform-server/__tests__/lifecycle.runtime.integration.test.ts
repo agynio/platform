@@ -17,7 +17,8 @@ describe('LiveGraphRuntime lifecycle integration', () => {
   it('calls configure+start on create and stop+delete on removal', async () => {
     const templates = new TemplateRegistry();
     templates.register('Life', () => new LifeNode());
-    const runtime = new LiveGraphRuntime(new LoggerService(), templates);
+    class StubRepo extends GraphRepository { async initIfNeeded(): Promise<void> {} async get(): Promise<any> { return null; } async upsert(): Promise<any> { throw new Error('not-implemented'); } async upsertNodeState(): Promise<void> {} }
+    const runtime = new LiveGraphRuntime(new LoggerService(), templates, new StubRepo());
 
     const g1: GraphDefinition = { nodes: [{ id: 'n1', data: { template: 'Life', config: { a: 1 } } }], edges: [] };
     await runtime.apply(g1);

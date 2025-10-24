@@ -7,7 +7,9 @@ import {
   SendSlackMessageToolStaticConfigSchema,
   SendSlackMessageToolExposedStaticConfigSchema,
 } from './send_slack_message.tool';
+import { Injectable, Scope } from '@nestjs/common';
 
+@Injectable({ scope: Scope.TRANSIENT })
 export class SendSlackMessageNode extends BaseToolNode {
   private toolInstance?: SendSlackMessageFunctionTool;
   private staticCfg: z.infer<typeof SendSlackMessageToolStaticConfigSchema> | null = null;

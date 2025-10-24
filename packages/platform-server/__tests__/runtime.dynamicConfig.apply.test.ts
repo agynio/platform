@@ -9,7 +9,8 @@ describe('Runtime dynamicConfig first-class support', () => {
   it('applies dynamicConfig on instantiate and update', async () => {
     const registry = new TemplateRegistry();
     const logger = new MockLogger() as any as LoggerService;
-    const runtime = new LiveGraphRuntime(logger, registry);
+    class StubRepo2 extends GraphRepository { async initIfNeeded(): Promise<void> {} async get(): Promise<any> { return null; } async upsert(): Promise<any> { throw new Error('not-implemented'); } async upsertNodeState(): Promise<void> {} }
+    const runtime = new LiveGraphRuntime(logger, registry, new StubRepo2());
 
     const instSetDynamic = vi.fn();
     const dynStore: any[] = [];
