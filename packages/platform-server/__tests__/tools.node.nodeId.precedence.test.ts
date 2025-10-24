@@ -55,23 +55,9 @@ describe('ToolsNode tool_call span attribution', () => {
   it('omits nodeId when Tool id not provided (no agent fallback)', async () => {
     const obs: any = await import('@agyn/tracing');
     (obs as any).__test.captured.length = 0; // reset captured
-<<<<<<< HEAD
     const reducer = new CallToolsLLMReducer(new LoggerService()).init({ tools: [{ name: 'echo', schema: { parse: (v: any) => v }, execute: async (i: any) => `echo:${JSON.stringify(i)}` }] as any });
     const response = new ResponseMessage({ output: [new ToolCallMessage({ type: 'function_call', call_id: '2', name: 'echo', arguments: JSON.stringify({ y: 2 }) } as any).toPlain() as any] as any });
     await reducer.invoke({ messages: [response], meta: {} } as any, { configurable: { thread_id: 't2' } } as any);
-=======
-<<<<<<< HEAD
-
-    const reducer = new CallToolsLLMReducer(new LoggerService(), [new EchoTool().init()] as any);
-    const ai = new AIMessage({ content: '', tool_calls: [{ id: '2', name: 'echo', args: { y: 2 } }] } as any);
-    await reducer.invoke({ messages: [ai], meta: {} } as any, { configurable: { thread_id: 't2' } } as any);
-    await reducer.invoke({ messages: [ai], meta: {} } as any, { configurable: { thread_id: 't2' } } as any);
-=======
-    const reducer = new CallToolsLLMReducer(new LoggerService(), [{ name: 'echo', schema: { parse: (v: any) => v }, execute: async (i: any) => `echo:${JSON.stringify(i)}` }] as any);
-    const response = new ResponseMessage({ output: [new ToolCallMessage({ type: 'function_call', call_id: '2', name: 'echo', arguments: JSON.stringify({ y: 2 }) } as any).toPlain() as any] as any });
-    await reducer.invoke({ messages: [response], meta: {} } as any, { configurable: { thread_id: 't2' } } as any);
->>>>>>> 27a3d97 (refactor(graph): abstract GraphService + DI unification (#421))
->>>>>>> c216e13 (merge(platform-server): resolve conflicts against origin/main for index.ts and tools.node.nodeId.precedence.test; preserve GraphService abstraction and NodeStateService wiring)
     const captured = (obs as any).__test.captured as Array<{ nodeId?: string; toolNodeId?: string }>;
     expect(captured.length).toBeGreaterThan(0);
     // No nodeId should be set when tool id is missing
