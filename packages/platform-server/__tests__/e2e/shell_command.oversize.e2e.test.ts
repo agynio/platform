@@ -3,8 +3,8 @@ import { describe, it, expect, vi } from 'vitest';
 import { describe, it, expect, vi } from 'vitest';
 it.skip('legacy ToolsNode oversize behavior (removed)', () => {});
 import { AIMessage } from '@langchain/core/messages';
-import { ShellTool } from '../../nodes/tools/shell_command/shell_command.node';
-import { LoggerService } from '../../core/services/logger.service';
+import { ShellCommandNode } from '../../src/nodes/tools/shell_command/shell_command.node';
+import { LoggerService } from '../../src/core/services/logger.service';
 
 describe('shell_command oversize output e2e (mocked putArchive)', () => {
   it('returns saved path message when output exceeds limit', async () => {

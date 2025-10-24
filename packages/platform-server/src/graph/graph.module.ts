@@ -6,6 +6,8 @@ import { MongoGraphRepository } from './graphMongo.repository';
 import { GitGraphRepository } from './gitGraph.repository';
 import { LiveGraphRuntime } from './liveGraph.manager';
 import { RunsController } from './controllers/runs.controller';
+import { GraphPersistController } from './controllers/graphPersist.controller';
+import { GraphController } from './controllers/graph.controller';
 import { NodesModule } from '../nodes/nodes.module';
 import { CoreModule } from '../core/core.module';
 import { InfraModule } from '../infra/infra.module';
@@ -21,7 +23,7 @@ import { Provider } from '@nestjs/common';
 
 @Module({
   imports: [CoreModule, InfraModule, NodesModule],
-  controllers: [RunsController],
+  controllers: [RunsController, GraphPersistController, GraphController],
   providers: [
     {
       provide: TemplateRegistry,

@@ -1,4 +1,5 @@
 import { ContainerOpts, ContainerService } from '../../infra/container/container.service';
+import Node from '../base/Node';
 import { ContainerHandle } from '../../core/handles/container.handle';
 import { z } from 'zod';
 import { PLATFORM_LABEL, SUPPORTED_PLATFORMS } from '../../constants';
@@ -128,16 +129,21 @@ export class WorkspaceNode extends Node<ContainerProviderStaticConfig> {
     // Primary lookup: thread-scoped workspace container only
     // Debug note: ContainerService logs the exact filters as well.
     // Optional local debug:
-    try {
-      console.debug('[ContainerProviderEntity] lookup labels (workspace)', workspaceLabels);
-    } catch {}
+    // Avoid requiring DOM globals in server tests; guard console access
+    if (typeof console !== 'undefined' && typeof console.debug === 'function') {
+      try {
+        console.debug('[ContainerProviderEntity] lookup labels (workspace)', workspaceLabels);
+      } catch {}
+    }
     let container: ContainerHandle | undefined = await this.containerService.findContainerByLabels(workspaceLabels);
 
     // Typed fallback: retry by thread_id only and exclude DinD sidecars.
     if (!container) {
-      try {
-        console.debug('[ContainerProviderEntity] fallback lookup by thread_id only', labels);
-      } catch {}
+      if (typeof console !== 'undefined' && typeof console.debug === 'function') {
+        try {
+          console.debug('[ContainerProviderEntity] fallback lookup by thread_id only', labels);
+        } catch {}
+      }
       const candidates = await this.containerService.findContainersByLabels(labels);
       if (Array.isArray(candidates) && candidates.length) {
         const results = await Promise.all(

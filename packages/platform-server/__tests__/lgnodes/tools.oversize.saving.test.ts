@@ -6,7 +6,7 @@ it.skip('legacy lgnodes tools oversize saving (removed)', () => {});
 // Legacy base tool removed
 import { tool } from '@langchain/core/tools';
 import { z } from 'zod';
-import { LoggerService } from '../../core/services/logger.service';
+import { LoggerService } from '../../src/core/services/logger.service';
 
 class MockContainer {
   constructor(public id = 'cid') {}

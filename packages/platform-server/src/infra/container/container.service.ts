@@ -1,8 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import Docker, { ContainerCreateOptions, Exec } from 'dockerode';
 import { PassThrough, Writable } from 'node:stream';
-// ContainerHandle moved to infra; inline minimal type for tests
-type ContainerHandle = { id: string; exec: (cmd: string | string[], opts?: any) => Promise<{ stdout: string; stderr: string; exitCode: number }> };
+import { ContainerHandle } from './container.handle';
 import { LoggerService } from '../../core/services/logger.service';
 import { PLATFORM_LABEL, type Platform } from '../../constants';
 import {
@@ -10,9 +9,9 @@ import {
   ExecTimeoutError,
   ExecIdleTimeoutError,
   isExecIdleTimeoutError,
-} from '../utils/execTimeout';
-import type { ContainerRegistryService } from './containerRegistry.service';
-import { createUtf8Collector, demuxDockerMultiplex } from './container.stream';
+} from '../../utils/execTimeout';
+import type { ContainerRegistry as ContainerRegistryService } from './container.registry';
+import { createUtf8Collector, demuxDockerMultiplex } from './containerStream.util';
 
 const DEFAULT_IMAGE = 'mcr.microsoft.com/vscode/devcontainers/base';
 
