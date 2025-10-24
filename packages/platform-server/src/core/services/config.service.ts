@@ -9,6 +9,8 @@ export const configSchema = z.object({
   githubInstallationId: z.string().min(1, 'GitHub Installation ID is required'),
   // Optional: OpenAI API key; when omitted, runtime may auto-provision a LiteLLM virtual key.
   openaiApiKey: z.string().min(1).optional(),
+  // LLM provider selection: 'openai' | 'litellm' | 'auto'
+  llmProvider: z.enum(['openai', 'litellm', 'auto']).default('auto'),
   // Optional LiteLLM details for auto-provisioning
   litellmBaseUrl: z.string().optional(),
   litellmMasterKey: z.string().optional(),
@@ -160,6 +162,9 @@ export class ConfigService implements Config {
   get openaiApiKey(): string | undefined {
     return this.params.openaiApiKey;
   }
+  get llmProvider(): 'openai' | 'litellm' | 'auto' {
+    return this.params.llmProvider;
+  }
   get litellmBaseUrl(): string | undefined {
     return this.params.litellmBaseUrl;
   }
@@ -292,6 +297,7 @@ export class ConfigService implements Config {
       githubAppPrivateKey: process.env.GITHUB_APP_PRIVATE_KEY,
       githubInstallationId: process.env.GITHUB_INSTALLATION_ID,
       openaiApiKey: process.env.OPENAI_API_KEY,
+      llmProvider: (process.env.LLM_PROVIDER as any) || 'auto',
       // Infer LiteLLM base from OPENAI_BASE_URL if it ends with /v1
       litellmBaseUrl:
         process.env.LITELLM_BASE_URL ||

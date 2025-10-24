@@ -1,19 +1,30 @@
 import { Injectable } from '@nestjs/common';
-import OpenAI from 'openai';
 import { ConfigService } from '../core/services/config.service';
 import { LLM } from '@agyn/llm';
+import { LLMProvisionerFactory } from './provisioners/factory';
+import { LoggerService } from '../core/services/logger.service';
 
 @Injectable()
 export class LLMFactoryService {
-  constructor(private configService: ConfigService) {}
+  private provisionerFactory: LLMProvisionerFactory;
+  constructor(private configService: ConfigService) {
+    // LoggerService is lightweight; create local instance to avoid changing constructor signature
+    const logger = new LoggerService();
+    this.provisionerFactory = new LLMProvisionerFactory(this.configService, logger);
+  }
 
   createLLM() {
-    if (this.configService.openaiApiKey) {
-      return new LLM(new OpenAI({ apiKey: this.configService.openaiApiKey }));
-    }
-
-    const apiKey = this.configService.openaiApiKey ?? this.configService.litellmMasterKey;
-    const baseURL = this.configService.openaiBaseUrl;
-    return new LLM(new OpenAI({ baseURL, apiKey }));
+    const provisioner = this.provisionerFactory.getProvisioner();
+    // Provide a lazy OpenAI-like shim that forwards to provisioned client on first use.
+    const clientPromise = provisioner.getOpenAIClient();
+    const lazyClient: any = {
+      responses: {
+        create: async (args: any) => {
+          const c = await clientPromise;
+          return c.responses.create(args);
+        },
+      },
+    };
+    return new LLM(lazyClient);
   }
 }
