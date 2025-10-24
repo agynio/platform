@@ -1,5 +1,4 @@
 import { Module } from '@nestjs/common';
-import { LLMFactoryService } from './llmFactory.service';
 import { ConversationStateRepository } from './repositories/conversationState.repository';
 import { LoadLLMReducer } from './reducers/load.llm.reducer';
 import { SaveLLMReducer } from './reducers/save.llm.reducer';
@@ -9,7 +8,7 @@ import { EnforceToolsLLMReducer } from './reducers/enforceTools.llm.reducer';
 import { SummarizationLLMReducer } from './reducers/summarization.llm.reducer';
 import { StaticLLMRouter } from './routers/static.llm.router';
 import { ConditionalLLMRouter } from './routers/conditional.llm.router';
-import { LLMProvisioner } from './provisioners/types';
+import { LLMProvisioner } from './provisioners/llm.provisioner';
 import { ConfigService } from '../core/services/config.service';
 import { LoggerService } from '../core/services/logger.service';
 import { LiteLLMProvisioner } from './provisioners/litellm.provisioner';
@@ -25,7 +24,6 @@ import { CoreModule } from '../core/core.module';
         cfg.llmProvider === 'litellm' ? new LiteLLMProvisioner(cfg, logger) : new OpenAILLMProvisioner(cfg),
       inject: [ConfigService, LoggerService],
     },
-    LLMFactoryService,
     ConversationStateRepository,
     LoadLLMReducer,
     SaveLLMReducer,
@@ -36,6 +34,6 @@ import { CoreModule } from '../core/core.module';
     StaticLLMRouter,
     ConditionalLLMRouter,
   ],
-  exports: [LLMFactoryService],
+  exports: [LLMProvisioner],
 })
 export class LLMModule {}

@@ -13,7 +13,7 @@ import { CallToolsLLMReducer } from '../../llm/reducers/callTools.llm.reducer';
 import { ConditionalLLMRouter } from '../../llm/routers/conditional.llm.router';
 import { StaticLLMRouter } from '../../llm/routers/static.llm.router';
 import { LLMContext, LLMState } from '../../llm/types';
-import { LLMFactoryService } from '../../llm/llmFactory.service';
+import { LLMProvisioner } from '../../llm/provisioners/llm.provisioner';
 
 import { SummarizationLLMReducer } from '../../llm/reducers/summarization.llm.reducer';
 import { LoadLLMReducer } from '../../llm/reducers/load.llm.reducer';
@@ -97,7 +97,7 @@ export class AgentNode extends Node<AgentStaticConfig | undefined> implements Tr
   constructor(
     protected configService: ConfigService,
     protected logger: LoggerService,
-    protected llmFactoryService: LLMFactoryService,
+    protected provisioner: LLMProvisioner,
     protected agentId?: string,
   ) {
     super();
@@ -117,7 +117,7 @@ export class AgentNode extends Node<AgentStaticConfig | undefined> implements Tr
   }
 
   private async prepareLoop(): Promise<Loop<LLMState, LLMContext>> {
-    const llm = await this.llmFactoryService.createLLM();
+    const llm = await this.provisioner.getLLM();
     const routers = new Map<string, ConditionalLLMRouter | StaticLLMRouter>();
     const tools = Array.from(this.tools);
     // load -> summarize
