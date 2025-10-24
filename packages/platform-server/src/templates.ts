@@ -26,7 +26,7 @@ import { ShellCommandNode, ShellToolStaticConfigSchema } from './nodes/tools/she
 import { ConfigService } from './core/services/config.service';
 import { ContainerService } from './infra/container/container.service';
 import { EnvService } from './graph/env.service';
-import { LLMFactoryService } from './llm/llmFactory.service';
+import { LLMProvisioner } from './llm/llm.provisioner';
 import { LoggerService } from './core/services/logger.service';
 import { MongoService } from './core/services/mongo.service';
 import { NcpsKeyService } from './core/services/ncpsKey.service';
@@ -39,14 +39,14 @@ export interface TemplateRegistryDeps {
   containerService: ContainerService;
   configService: ConfigService;
   mongoService: MongoService; // required for memory nodes
-  llmFactoryService: LLMFactoryService;
+  provisioner: LLMProvisioner;
   ncpsKeyService?: NcpsKeyService;
   // Provide NodeStateService deterministically; prefer provider to avoid construction cycles
   nodeStateServiceProvider?: () => NodeStateService | undefined;
 }
 
 export function buildTemplateRegistry(deps: TemplateRegistryDeps): TemplateRegistry {
-  const { logger, containerService, configService, mongoService, ncpsKeyService, llmFactoryService, nodeStateServiceProvider } = deps;
+  const { logger, containerService, configService, mongoService, ncpsKeyService, provisioner, nodeStateServiceProvider } = deps;
 
   // Initialize Vault service from config (optional)
   const vault = new VaultService(configService, logger);
@@ -209,7 +209,7 @@ export function buildTemplateRegistry(deps: TemplateRegistryDeps): TemplateRegis
       )
       .register(
         'agent',
-        (ctx) => new AgentNode(configService, logger, llmFactoryService, ctx.nodeId),
+        (ctx) => new AgentNode(configService, logger, provisioner, ctx.nodeId),
         {
           sourcePorts: {
             tools: { kind: 'method', create: 'addTool', destroy: 'removeTool' },

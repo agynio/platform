@@ -31,8 +31,6 @@ import { ContainerCleanupService } from './infra/container/containerCleanup.job'
 import { AgentRunService } from './nodes/agentRun.repository';
 // Nix routes are served via Nest controller; keep import if legacy route file exists
 // import { registerNixRoutes } from './routes/nix.route';
-
-import { maybeProvisionLiteLLMKey } from './llm/litellm.provisioner';
 import { initDI, closeDI } from './bootstrap/di';
 import { AppModule } from './bootstrap/app.module';
 import { NcpsKeyService } from './infra/ncps/ncpsKey.service';
@@ -67,20 +65,6 @@ async function bootstrap() {
   } catch (e) {
     logger.error('NcpsKeyService init failed: %s', (e as Error)?.message || String(e));
     process.exit(1);
-  }
-  // Attempt to auto-provision a LiteLLM virtual key if not configured with OPENAI_API_KEY
-  try {
-    const provisioned = await maybeProvisionLiteLLMKey(config, logger);
-    if (provisioned.apiKey && !process.env.OPENAI_API_KEY) process.env.OPENAI_API_KEY = provisioned.apiKey;
-    if (provisioned.baseUrl && !process.env.OPENAI_BASE_URL) process.env.OPENAI_BASE_URL = provisioned.baseUrl;
-    if (provisioned.apiKey) logger.info('OPENAI_API_KEY set via LiteLLM auto-provisioning');
-    if (provisioned.baseUrl) logger.info(`OPENAI_BASE_URL resolved to ${provisioned.baseUrl}`);
-  } catch (e) {
-    logger.error(
-      'LiteLLM auto-provisioning failed. Ensure LITELLM_BASE_URL and LITELLM_MASTER_KEY are set, or provide OPENAI_API_KEY. %s',
-      (e as Error)?.message || String(e),
-    );
-    throw e;
   }
   await mongo.connect();
   // Initialize checkpointer (optional Postgres mode)
@@ -140,10 +124,7 @@ async function bootstrap() {
     }
     logger.error('Failed to apply initial persisted graph: %s', String(e));
   }
-
-  // Globals already set above; reuse adapter/app
-
-  const fastify = adapter.getInstance();
+  // Graph-related routes migrated to Nest controllers; legacy Fastify wiring removed
 
   // Start Fastify then attach Socket.io
   const PORT = Number(process.env.PORT) || 3010;

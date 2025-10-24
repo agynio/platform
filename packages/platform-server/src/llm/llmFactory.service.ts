@@ -1,19 +1,14 @@
 import { Injectable } from '@nestjs/common';
-import OpenAI from 'openai';
 import { ConfigService } from '../core/services/config.service';
 import { LLM } from '@agyn/llm';
+import { LLMProvisioner } from './llm.provisioner';
 
 @Injectable()
 export class LLMFactoryService {
-  constructor(private configService: ConfigService) {}
+  constructor(private configService: ConfigService, private provisioner: LLMProvisioner) {}
 
-  createLLM() {
-    if (this.configService.openaiApiKey) {
-      return new LLM(new OpenAI({ apiKey: this.configService.openaiApiKey }));
-    }
-
-    const apiKey = this.configService.openaiApiKey ?? this.configService.litellmMasterKey;
-    const baseURL = this.configService.openaiBaseUrl;
-    return new LLM(new OpenAI({ baseURL, apiKey }));
+  async createLLM() {
+    // Deprecated: prefer injecting provisioner directly and calling getLLM()
+    return await this.provisioner.getLLM();
   }
 }
