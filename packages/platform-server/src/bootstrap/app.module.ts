@@ -1,6 +1,6 @@
 import { Module } from '@nestjs/common';
 import { CoreModule } from '../core/core.module';
-import { NcpsModule } from '../infra/ncps/nix.module';
+import { InfraModule } from '../infra/infra.module';
 
-@Module({ imports: [CoreModule, NcpsModule] })
+@Module({ imports: [CoreModule, InfraModule] })
 export class AppModule {}

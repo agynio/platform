@@ -27,7 +27,6 @@ import { ContainerCleanupService } from './infra/container/containerCleanup.job'
 import { registerRemindersRoute } from './routes/reminders.route';
 import { AgentRunService } from './nodes/agentRun.repository';
 import { registerRunsRoutes } from './routes/runs.route';
-import { registerNixRoutes } from './routes/nix.route';
 import { NcpsKeyService } from './core/services/ncpsKey.service';
 import { maybeProvisionLiteLLMKey } from './llm/litellm.provisioner';
 import { LLMFactoryService } from './llm/llmFactory.service';
@@ -410,17 +409,7 @@ async function bootstrap() {
   // Register routes that need runtime
   registerRemindersRoute(fastify, runtime, logger);
   registerRunsRoutes(fastify, runtime, runsService, logger);
-  // Nix proxy routes
-  try {
-    registerNixRoutes(fastify, {
-      timeoutMs: config.nixHttpTimeoutMs,
-      cacheTtlMs: config.nixCacheTtlMs,
-      cacheMax: config.nixCacheMax,
-    });
-  } catch (e) {
-    const err = e as Error;
-    logger.error('Failed to register Nix routes: %s', err?.message || String(e));
-  }
+  // Nix routes will be provided via Nest FastifyAdapter in a future task.
 
   // Start Fastify then attach Socket.io
   const PORT = Number(process.env.PORT) || 3010;
