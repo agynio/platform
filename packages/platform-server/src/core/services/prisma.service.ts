@@ -1,21 +1,19 @@
+import { PrismaClient } from '@prisma/client';
 import { LoggerService } from './logger.service';
 import { ConfigService } from './config.service';
 
 export class PrismaService {
-  // Type imported for compile-time only; runtime loaded lazily
-  private prisma: import('@prisma/client').PrismaClient | null = null;
+  private prisma: PrismaClient | null = null;
 
   constructor(
     private logger: LoggerService,
     private cfg: ConfigService,
   ) {}
 
-  async getClient(): Promise<import('@prisma/client').PrismaClient | null> {
+  getClient(): PrismaClient | null {
     try {
       if (!this.prisma) {
         const url = this.cfg.agentsDatabaseUrl;
-        const mod = await import('@prisma/client');
-        const PrismaClient = (mod as { PrismaClient: new (...args: any[]) => import('@prisma/client').PrismaClient }).PrismaClient;
         this.prisma = new PrismaClient({ datasources: { db: { url } } });
       }
       return this.prisma;

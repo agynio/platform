@@ -1,11 +1,11 @@
-import { Inject, Injectable } from "@nestjs/common";
+import { Injectable } from "@nestjs/common";
 import { Octokit } from "@octokit/rest";
 import { createAppAuth } from "@octokit/auth-app";
 import { spawn } from "child_process";
 import { promises as fs } from "fs";
 import * as path from "path";
-import { GithubConfigToken, type GithubConfig } from "./github.config";
 import { LoggerService } from "../../core/services/logger.service";
+import { ConfigService } from "../../core/services/config.service";
 
 @Injectable()
 export class GithubService {
@@ -13,15 +13,19 @@ export class GithubService {
   private personalOctokit?: Octokit;
 
   constructor(
-    @Inject(GithubConfigToken) private cfg: GithubConfig,
+    private config: ConfigService,
     private logger: LoggerService,
   ) {
-    if (!this.cfg?.enabled) {
+    if (!this.isEnabled()) {
       this.logger.info('GithubService: integration disabled (no credentials)');
     }
   }
 
-  isEnabled(): boolean { return !!this.cfg?.enabled; }
+  isEnabled(): boolean {
+    const appOk = !!(this.config.githubAppId && this.config.githubAppPrivateKey && this.config.githubInstallationId);
+    const tokenOk = !!this.config.githubToken;
+    return appOk || tokenOk;
+  }
 
   private ensureInitialized(kind: 'app' | 'token'): void {
     if (!this.isEnabled()) {
@@ -29,24 +33,27 @@ export class GithubService {
     }
     if (kind === 'app') {
       if (!this.octokit) {
-        const app = this.cfg.app;
-        if (!app) throw new Error('GitHub integration is disabled: missing App credentials');
+        const appId = this.config.githubAppId;
+        const privateKey = this.config.githubAppPrivateKey;
+        const installationId = this.config.githubInstallationId;
+        if (!appId || !privateKey || !installationId) {
+          throw new Error('GitHub integration is disabled: missing App credentials');
+        }
         this.octokit = new Octokit({
           authStrategy: createAppAuth,
           auth: {
-            appId: app.appId,
-            privateKey: app.privateKey,
-            installationId: app.installationId,
+            appId,
+            privateKey,
+            installationId,
           },
-          baseUrl: this.cfg.baseUrl,
         });
         this.logger.info('GithubService: initialized App Octokit');
       }
     } else {
       if (!this.personalOctokit) {
-        const token = this.cfg.token;
+        const token = this.config.githubToken;
         if (!token) throw new Error('GitHub integration is disabled: missing personal access token');
-        this.personalOctokit = new Octokit({ auth: token, baseUrl: this.cfg.baseUrl });
+        this.personalOctokit = new Octokit({ auth: token });
         this.logger.info('GithubService: initialized PAT Octokit');
       }
     }
@@ -333,7 +340,7 @@ export class GithubService {
       }
     }
 
-    const token = this.cfg.token;
+    const token = this.config.githubToken;
     if (!token) throw new Error('GitHub integration is disabled: missing personal access token for cloneRepo');
     const remote = `https://${encodeURIComponent(username)}:${encodeURIComponent(token)}@github.com/${owner}/${repo}.git`;
     
