@@ -1,5 +1,5 @@
 // Observability SDK initialization (replaces traceloop)
-import { init as initObs, withSystem } from '@agyn/tracing';
+import { init as initObs } from '@agyn/tracing';
 
 initObs({
   mode: 'extended',
@@ -15,11 +15,7 @@ import { Server } from 'socket.io';
 import { ConfigService } from './core/services/config.service';
 import { LoggerService } from './core/services/logger.service';
 import { MongoService } from './core/services/mongo.service';
-<<<<<<< HEAD
-// TemplateRegistry built via GraphModule factory provider
-=======
 // TemplateRegistry is provided via GraphModule factory provider
->>>>>>> a391d7d (refactor(bootstrap): resolve providers via Nest DI; use DI-provided TemplateRegistry/LiveGraphRuntime/ContainerRegistry)
 import { TemplateRegistry } from './graph/templateRegistry';
 import { LiveGraphRuntime } from './graph/liveGraph.manager';
 import { GraphService } from './graph/graphMongo.repository';
@@ -33,10 +29,10 @@ import { ContainerRegistry as ContainerRegistryService } from './infra/container
 import { ContainerCleanupService } from './infra/container/containerCleanup.job';
 
 import { AgentRunService } from './nodes/agentRun.repository';
-import { registerNixRoutes } from './routes/nix.route';
+// Nix routes are served via Nest controller; keep import if legacy route file exists
+// import { registerNixRoutes } from './routes/nix.route';
 import { NcpsKeyService } from './core/services/ncpsKey.service';
 import { maybeProvisionLiteLLMKey } from './llm/litellm.provisioner';
-import { LLMFactoryService } from './llm/llmFactory.service';
 import { initDI, closeDI } from './bootstrap/di';
 import { AppModule } from './bootstrap/app.module';
 
@@ -61,7 +57,6 @@ async function bootstrap() {
   const containerService = app.get(ContainerService, { strict: false });
   const vaultService = app.get(VaultService, { strict: false });
   const ncpsKeyService = app.get(NcpsKeyService, { strict: false });
-  const llmFactoryService = app.get(LLMFactoryService, { strict: false });
 
   // Initialize Ncps key service early
   try {
@@ -400,7 +395,7 @@ async function bootstrap() {
       reply.code(204);
       return null;
     } catch (e: any) {
-      // eslint-disable-line @typescript-eslint/no-explicit-any
+       
       reply.code(500);
       return { error: e.message || 'action_failed' };
     }
@@ -423,7 +418,7 @@ async function bootstrap() {
           : undefined;
       return { ready, schema };
     } catch (e: any) {
-      // eslint-disable-line @typescript-eslint/no-explicit-any
+       
       reply.code(500);
       return { error: e.message || 'dynamic_config_schema_error' };
     }
@@ -433,17 +428,7 @@ async function bootstrap() {
   const fastify = adapter.getInstance();
   registerRemindersRoute(fastify, runtime, logger);
   // Runs routes are handled by Nest RunsController
-  // Nix proxy routes
-  try {
-    registerNixRoutes(fastify, {
-      timeoutMs: config.nixHttpTimeoutMs,
-      cacheTtlMs: config.nixCacheTtlMs,
-      cacheMax: config.nixCacheMax,
-    });
-  } catch (e) {
-    const err = e as Error;
-    logger.error('Failed to register Nix routes: %s', err?.message || String(e));
-  }
+  // Nix proxy routes are now handled by Nest NixController; legacy Fastify wiring removed
 
   // Start Fastify then attach Socket.io
   const PORT = Number(process.env.PORT) || 3010;

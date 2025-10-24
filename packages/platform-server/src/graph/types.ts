@@ -26,7 +26,7 @@ export interface EdgeDef {
 export interface DependencyBag {
   // Arbitrary shared services / singletons instanced outside the builder
   // (e.g., logger, configService, slackService, containerProvider, checkpointerService, etc.)
-  [k: string]: any; // eslint-disable-line @typescript-eslint/no-explicit-any
+  [k: string]: any;  
 }
 
 export interface FactoryContext {
@@ -56,18 +56,18 @@ export interface MethodEndpoint extends EndpointBase {
   type: 'method';
   key: string;
   fn: Function;
-  owner: any; // eslint-disable-line @typescript-eslint/no-explicit-any
+  owner: any;  
 }
 
 export interface PropertyEndpoint extends EndpointBase {
   type: 'property';
   key: string;
-  owner: any; // eslint-disable-line @typescript-eslint/no-explicit-any
+  owner: any;  
 }
 
 export interface SelfEndpoint extends EndpointBase {
   type: 'self';
-  owner: any; // eslint-disable-line @typescript-eslint/no-explicit-any
+  owner: any;  
 }
 
 export type Endpoint = MethodEndpoint | PropertyEndpoint | SelfEndpoint;

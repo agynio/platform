@@ -20,7 +20,7 @@ export type Configurable = StaticConfigurable;
 export type ProvisionState = 'not_ready' | 'provisioning' | 'ready' | 'error' | 'deprovisioning';
 
 export interface ProvisionStatus<Details = any> {
-  // eslint-disable-line @typescript-eslint/no-explicit-any
+   
   state: ProvisionState;
   details?: Details;
 }

@@ -28,9 +28,9 @@ describe('Server bootstrap wiring timing', () => {
     // Emulate server code: set globals BEFORE runtime.apply
     declare global {
       // Limit test-global shape to what we assert on
-      // eslint-disable-next-line no-var
+       
       var liveGraphRuntime: LiveGraphRuntime | undefined;
-      // eslint-disable-next-line no-var
+       
       var __agentRunsService: { ensureIndexes: () => Promise<void> } | undefined;
     }
     globalThis.liveGraphRuntime = runtime;

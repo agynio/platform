@@ -19,7 +19,7 @@ describe('ContainerRegistryService backfill last_used behavior', () => {
       await registry.ensureIndexes();
     } catch (e: unknown) {
       setupOk = false;
-      // eslint-disable-next-line no-console
+       
       const msg = (e as { message?: string } | null | undefined)?.message ?? String(e);
       console.warn('Skipping backfill last_used tests: mongodb-memory-server unavailable:', msg);
     }

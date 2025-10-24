@@ -82,7 +82,7 @@ describe('Runs routes integration', () => {
       await fastify.listen({ port: 0 });
     } catch (e) {
       ready = false;
-      // eslint-disable-next-line no-console
+       
       console.warn('Skipping runs routes integration tests, mongo unavailable', (e as Error)?.message || String(e));
     }
   });

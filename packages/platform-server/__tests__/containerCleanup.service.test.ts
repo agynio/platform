@@ -31,7 +31,7 @@ describe('ContainerCleanupService', () => {
     } catch (e: any) {
       // common in environments without AVX support
       setupOk = false;
-      // eslint-disable-next-line no-console
+       
       console.warn('Skipping ContainerCleanupService tests: mongodb-memory-server unavailable:', e?.message || e);
     }
   });

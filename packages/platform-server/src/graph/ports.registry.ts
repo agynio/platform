@@ -9,7 +9,7 @@ export class PortsRegistry {
     return this.templates[template];
   }
 
-  validateTemplateInstance(template: string, instance: any) { // eslint-disable-line @typescript-eslint/no-explicit-any
+  validateTemplateInstance(template: string, instance: any) {  
     const cfg = this.templates[template];
     if (!cfg) return; // no ports defined; legacy fallback elsewhere
     const checkPorts = (ports?: Record<string, PortConfig>) => {

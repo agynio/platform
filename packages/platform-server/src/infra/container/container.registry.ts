@@ -179,7 +179,7 @@ export class ContainerRegistry {
 
   // Minimal adapter used for backfill. ContainerService satisfies this structurally.
   // Keeping it local enables strongly-typed fakes in tests without any casts.
-  // eslint-disable-next-line @typescript-eslint/consistent-type-definitions
+   
   static BackfillAdapter = class {
     // This class is used only for its shape; do not instantiate at runtime.
     // Use protected constructor to avoid 'private ctor' generic constraint issues in tests.

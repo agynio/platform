@@ -21,7 +21,7 @@ describe('AgentRunService', () => {
       await runs.ensureIndexes();
     } catch (e) {
       setupOk = false;
-      // eslint-disable-next-line no-console
+       
       console.warn('Skipping AgentRunService tests, mongo unavailable', (e as Error)?.message || String(e));
     }
   });
