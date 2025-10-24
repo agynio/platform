@@ -3,7 +3,7 @@ import { LoggerService } from '../core/services/logger.service';
 import { TemplateRegistry } from './templateRegistry';
 import { PersistedGraph, PersistedGraphEdge, PersistedGraphNode, PersistedGraphUpsertRequest, PersistedGraphUpsertResponse } from '../graph/types';
 import { validatePersistedGraph } from './graphSchema.validator';
-import { GraphService } from './graph.service';
+import { GraphRepository } from './graph.repository';
 
 interface GraphDocument {
   _id: string; // name
@@ -13,22 +13,21 @@ interface GraphDocument {
   edges: PersistedGraphEdge[];
 }
 
-export class MongoGraphService extends GraphService {
-  // Kept for backward-compat when GRAPH_STORE=mongo
+export class MongoGraphRepository extends GraphRepository {
   private collection?: Collection<GraphDocument>;
-  // Stateless service: persistence only and template exposure.
-  // Single-graph endpoint shape expected at /graph/nodes/:nodeId for runtime actions (handled elsewhere).
-
   constructor(
     private readonly db: Db,
     private readonly logger: LoggerService,
     private readonly templateRegistry: TemplateRegistry,
   ) {
     super();
-    this.collection = this.db.collection<GraphDocument>('graphs');
   }
 
-  async initIfNeeded(): Promise<void> {}
+  async initIfNeeded(): Promise<void> {
+    // Lazily initialize collection to avoid constructor side effects.
+    // Use collection name from configuration via ConfigService if available in future.
+    this.collection = this.db.collection<GraphDocument>('graphs');
+  }
 
   async get(name: string): Promise<PersistedGraph | null> {
     const doc = await this.collection!.findOne({ _id: name });
@@ -95,7 +94,7 @@ export class MongoGraphService extends GraphService {
     return this.templateRegistry.toSchema();
   }
 
-  // Validation moved to graph.validation.ts to share with GitGraphService
+  // Validation moved to graph.validation.ts to share with GitGraphRepository
 
   private stripInternalNode(n: PersistedGraphNode): PersistedGraphNode {
     // Preserve dynamicConfig so it round-trips through persistence.

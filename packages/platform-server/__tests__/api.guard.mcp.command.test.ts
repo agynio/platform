@@ -7,7 +7,7 @@ import { ConfigService } from '../src/core/services/config.service.js';
 // CheckpointerService removed in refactor; tests relying on it should drop usage.
 // Avoid real Mongo connections; stub minimal service
 import { LiveGraphRuntime } from '../src/graph/liveGraph.manager';
-import { GitGraphService } from '../src/graph/gitGraph.repository';
+import { GitGraphRepository } from '../src/graph/gitGraph.repository';
 import os from 'os';
 import path from 'path';
 import { promises as fs } from 'fs';
@@ -25,7 +25,7 @@ describe('API guard: MCP command mutation forbidden', () => {
     const mongoStub = { getDb: () => ({}) } as any;
     const templateRegistry = buildTemplateRegistry({ logger, containerService, configService: config, checkpointerService: checkpointer, mongoService: mongoStub });
     const runtime = new LiveGraphRuntime(logger, templateRegistry);
-    const graphService = new GitGraphService({ repoPath: config.graphRepoPath, branch: config.graphBranch, defaultAuthor: { name: 'Test', email: 't@example.com' } }, logger, templateRegistry);
+    const graphService = new GitGraphRepository(config, logger, templateRegistry, {});
     await graphService.initIfNeeded();
     // Seed graph with mcp node
     await graphService.upsert({ name: 'main', version: 0, nodes: [{ id: 'm1', template: 'mcpServer', config: { command: 'a' } } as any], edges: [] });

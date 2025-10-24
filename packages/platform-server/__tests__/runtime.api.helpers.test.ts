@@ -18,7 +18,7 @@ function makeRuntimeAndRegistry() {
   return { registry, runtime, logger };
 }
 
-describe('Runtime helpers and GraphService API surfaces', () => {
+describe('Runtime helpers and GraphRepository API surfaces', () => {
   it('pause/resume/provision/deprovision + status work against live nodes', async () => {
     const { registry, runtime } = makeRuntimeAndRegistry();
 
@@ -86,7 +86,7 @@ describe('Runtime helpers and GraphService API surfaces', () => {
       { id: 'b', data: { template: 'dyn2', config: {} } },
     ], edges: []});
 
-    // Template schema via registry directly (GraphService now stateless for templates only)
+    // Template schema via registry directly (GraphRepository now stateless for templates only)
     const templates = registry.toSchema();
     const dynEntry = templates.find(t => t.name === 'dyn');
     expect(dynEntry?.capabilities?.dynamicConfigurable).toBe(true);
