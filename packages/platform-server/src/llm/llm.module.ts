@@ -15,29 +15,16 @@ import { LoggerService } from '../core/services/logger.service';
 import { LiteLLMProvisioner } from './provisioners/litellm.provisioner';
 import { OpenAILLMProvisioner } from './provisioners/openai.provisioner';
 import { CoreModule } from '../core/core.module';
-import { ConfigService } from '../core/services/config.service';
-import { LoggerService } from '../core/services/logger.service';
-import { OpenAILLMProvisioner } from './provisioners/openai.provisioner';
-import { LiteLLMProvisioner } from './provisioners/litellm.provisioner';
 
 @Module({
   imports: [CoreModule],
   providers: [
     {
       provide: LLMProvisioner,
-<<<<<<< HEAD
-=======
-      useFactory: (cfg: ConfigService, logger: LoggerService) =>
-        cfg.llmProvider === 'litellm' ? new LiteLLMProvisioner(cfg, logger) : new OpenAILLMProvisioner(cfg),
->>>>>>> 184fcae (merge: finalize conflict cleanup; ensure single LLMProvisioner abstraction usage across modules)
       useFactory: (cfg: ConfigService, logger: LoggerService) => {
         const provider = (cfg.llmProvider || 'auto') as 'openai' | 'litellm' | 'auto';
         if (provider === 'openai') return new OpenAILLMProvisioner(cfg);
         if (provider === 'litellm') return new LiteLLMProvisioner(cfg, logger);
-<<<<<<< HEAD
-=======
-        // auto: prefer direct OpenAI if key present; otherwise LiteLLM
->>>>>>> 184fcae (merge: finalize conflict cleanup; ensure single LLMProvisioner abstraction usage across modules)
         if (cfg.openaiApiKey) return new OpenAILLMProvisioner(cfg);
         return new LiteLLMProvisioner(cfg, logger);
       },
