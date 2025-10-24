@@ -237,7 +237,7 @@ export class GitGraphRepository extends GraphRepository {
     return new Promise((resolve, reject) => {
       const child = spawn('git', args, { cwd });
       let stderr = '';
-      child.stderr.on('data', (d) => (stderr += d.toString()))
+      child.stderr.on('data', (d) => { stderr += d.toString(); });
       child.on('error', reject);
       child.on('exit', (code) => {
         if (code === 0) resolve();
@@ -315,12 +315,20 @@ export class GitGraphRepository extends GraphRepository {
   private async rollbackPaths(touched: { added: string[]; updated: string[]; deleted: string[] }) {
     const toRestore = [...touched.updated, ...touched.deleted, 'graph.meta.json'];
     await Promise.all(toRestore.map(async (rel) => {
-      try { await this.runGit(['restore', '--worktree', '--source', 'HEAD', rel], this.cfg.repoPath); } catch {}
-      try { await this.runGit(['restore', '--staged', '--source', 'HEAD', rel], this.cfg.repoPath); } catch {}
+      try {
+        await this.runGit(['restore', '--worktree', '--source', 'HEAD', rel], this.cfg.repoPath);
+      } catch {}
+      try {
+        await this.runGit(['restore', '--staged', '--source', 'HEAD', rel], this.cfg.repoPath);
+      } catch {}
     }));
     await Promise.all(touched.added.map(async (rel) => {
-      try { await this.runGit(['restore', '--staged', '--source', 'HEAD', rel], this.cfg.repoPath); } catch {}
-      try { await fs.unlink(path.join(this.cfg.repoPath, rel)); } catch {}
+      try {
+        await this.runGit(['restore', '--staged', '--source', 'HEAD', rel], this.cfg.repoPath);
+      } catch {}
+      try {
+        await fs.unlink(path.join(this.cfg.repoPath, rel));
+      } catch {}
     }));
   }
 
@@ -397,7 +405,11 @@ export class GitGraphRepository extends GraphRepository {
           return null;
         }
       }));
-      for (const r of reads) if (r) items.push(r);
+      for (const r of reads) {
+        if (r) {
+          items.push(r);
+        }
+      }
     } catch {
       // directory may not exist
     }
