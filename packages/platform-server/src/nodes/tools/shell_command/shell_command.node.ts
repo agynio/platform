@@ -68,14 +68,12 @@ export class ShellCommandNode extends BaseToolNode {
     this.cfg = parsed.data;
   }
 
-  async resolveEnv(): Promise<Record<string, string> | undefined> {
+  async resolveEnv(base?: Record<string, string>): Promise<Record<string, string> | undefined> {
     const items: EnvItem[] = (this.cfg?.env || []) as EnvItem[];
-    if (!items.length) return undefined;
     try {
-      const r = await this.envService.resolveEnvItems(items);
-      return Object.keys(r).length ? r : undefined;
+      return await this.envService.resolveProviderEnv(items, undefined, base);
     } catch {
-      return undefined;
+      return base && Object.keys(base).length ? { ...base } : undefined;
     }
   }
 

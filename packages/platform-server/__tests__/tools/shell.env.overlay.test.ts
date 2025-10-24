@@ -1,10 +1,12 @@
 import { describe, it, expect, vi } from 'vitest';
 import { LoggerService } from '../../src/core/services/logger.service';
 import { ShellCommandNode } from '../../src/nodes/tools/shell_command/shell_command.node';
+import { EnvService } from '../../src/graph/env.service';
 
 class FakeContainer {
   public lastExec: { cmd: string; env?: Record<string, string>; workdir?: string } | null = null;
   constructor(private baseEnv: Record<string, string>, private baseWd: string) {}
+  async getEnv() { return { ...this.baseEnv }; }
   async exec(command: string, options?: { env?: Record<string, string>; workdir?: string }) {
     this.lastExec = { cmd: command, env: options?.env, workdir: options?.workdir };
     // Simulate env effects for validation
@@ -30,10 +32,11 @@ describe('ShellTool env/workdir isolation with vault-backed overlay', () => {
     const provider: any = new FakeProvider();
 
     const fakeVault = { isEnabled: () => true, getSecret: vi.fn(async () => 'VAULTED') } as any;
+    const envSvc = new EnvService(fakeVault as any);
 
-    const a = new ShellCommandNode(fakeVault as any); a.setContainerProvider(provider as any);
+    const a = new ShellCommandNode(envSvc as any); a.setContainerProvider(provider as any);
     await a.setConfig({ env: [ { key: 'FOO', value: 'A' }, { key: 'BAR', value: 'secret/path/key', source: 'vault' } ], workdir: '/w/a' });
-    const b = new ShellCommandNode(undefined as any); b.setContainerProvider(provider as any);
+    const b = new ShellCommandNode(new EnvService(undefined as any) as any); b.setContainerProvider(provider as any);
     await b.setConfig({ env: [ { key: 'FOO', value: 'B' } ], workdir: '/w/b' });
 
     const at = a.getTool();

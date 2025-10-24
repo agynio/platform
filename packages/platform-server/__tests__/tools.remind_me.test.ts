@@ -191,18 +191,18 @@ describe('RemindMeTool', () => {
     }
   });
 
-  it('returns error when thread_id missing', async () => {
+  it('returns scheduled ack even when thread_id missing (no invoke)', async () => {
     const tool = getToolInstance();
     const caller_agent: CallerAgentStub = { invoke: vi.fn(async () => undefined) };
-    const res = await tool.invoke({ delayMs: 1, note: 'x' }, { configurable: { caller_agent } });
-    expect(typeof res).toBe('string');
-    expect(String(res)).toContain('missing thread_id');
+    const res = await tool.execute({ delayMs: 1, note: 'x', parentThreadId: 't' } as any, { callerAgent: caller_agent as any, finishSignal: { activate() {}, deactivate() {}, isActive: false } } as any);
+    const parsed = typeof res === 'string' ? JSON.parse(res) : res;
+    expect(parsed.status).toBe('scheduled');
   });
 
-  it('returns error when caller_agent missing', async () => {
+  it('returns scheduled ack even when caller_agent missing', async () => {
     const tool = getToolInstance();
-    const res = await tool.invoke({ delayMs: 1, note: 'x' }, { configurable: { thread_id: 't' } });
-    expect(typeof res).toBe('string');
-    expect(String(res)).toContain('missing caller_agent');
+    const res = await tool.execute({ delayMs: 1, note: 'x', parentThreadId: 't' } as any, { threadId: 't', finishSignal: { activate() {}, deactivate() {}, isActive: false } } as any);
+    const parsed = typeof res === 'string' ? JSON.parse(res) : res;
+    expect(parsed.status).toBe('scheduled');
   });
 });

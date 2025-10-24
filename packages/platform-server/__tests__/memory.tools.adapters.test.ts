@@ -63,8 +63,7 @@ describe('Memory tool adapters', () => {
     const db = new FakeDb() as unknown as Db;
     const serviceFactory = (opts: { threadId?: string }) => new MemoryService(db, 'nodeX', opts.threadId ? 'perThread' : 'global', opts.threadId);
     const logger = new LoggerService();
-    const mk = (t: any) => { t.setMemorySource(serviceFactory); return t; };
-    const adapter = mk(new UnifiedMemoryTool({ getDescription: () => '', getName: () => 'memory', getMemoryFactory: () => serviceFactory, logger }));
+    const adapter = new UnifiedMemoryTool({ getDescription: () => '', getName: () => 'memory', getMemoryFactory: () => serviceFactory, logger });
     const name = adapter.name;
     expect(name).toBe('memory');
 
