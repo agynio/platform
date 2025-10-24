@@ -52,7 +52,7 @@ const makeRuntime = () => {
     .register('A', { title: 'A', kind: 'service' as any }, A as any)
     .register('B', { title: 'B', kind: 'service' as any }, B as any);
   const logger = new TestLogger();
-  const runtime = new LiveGraphRuntime(logger as any, templates as any);
+  const runtime = new LiveGraphRuntime(logger as any, templates as any, stubRepo as any);
   return { runtime, logger };
 };
 

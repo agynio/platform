@@ -23,7 +23,7 @@ import type { PortsProvider, TemplatePortConfig } from './ports.types';
 import type { RuntimeContext, RuntimeContextAware } from './runtimeContext';
 import { hasSetConfig } from './capabilities';
 // hasSetDynamicConfig guard is optional; check presence inline to avoid hard dependency
-import type { GraphRepository } from './graph.repository';
+import { GraphRepository } from './graph.repository';
 
 const configsEqual = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b); // unchanged
 
@@ -47,6 +47,7 @@ export class LiveGraphRuntime {
   constructor(
     private readonly logger: LoggerService,
     private readonly templateRegistry: TemplateRegistry,
+    private readonly graphs: GraphRepository,
   ) {
     this.portsRegistry = new PortsRegistry();
   }
@@ -67,11 +68,8 @@ export class LiveGraphRuntime {
    * Load and apply a persisted graph from the provided repository.
    * Does not throw on failure; logs and returns { applied: false }.
    */
-  public async load(
-    graphs: GraphRepository,
-    opts?: { graphName?: string },
-  ): Promise<{ applied: boolean; version?: number }> {
-    const name = opts?.graphName ?? 'main';
+  public async load(): Promise<{ applied: boolean; version?: number }> {
+    const name = 'main';
     const toRuntimeGraph = (saved: {
       nodes: Array<{
         id: string;
@@ -97,7 +95,7 @@ export class LiveGraphRuntime {
       }) as GraphDefinition;
 
     try {
-      const existing = await graphs.get(name);
+      const existing = await this.graphs.get(name);
       if (existing) {
         this.logger.info(
           'Applying persisted graph to live runtime (version=%s, nodes=%d, edges=%d)',
@@ -336,16 +334,11 @@ export class LiveGraphRuntime {
   }
 
   private async instantiateNode(node: NodeDef): Promise<void> {
-    try {
-      const nodeClass = this.templateRegistry.getClass(node.data.template);
-      if (!nodeClass) throw Errors.unknownTemplate(node.data.template, node.id);
-      // Instantiate via DI container (transient scope expected); fallback to direct construction in tests
-      let created: Node;
       try {
-        created = await resolve<Node>(nodeClass as any);
-      } catch {
-        created = new (nodeClass as any)();
-      }
+        const nodeClass = this.templateRegistry.getClass(node.data.template);
+        if (!nodeClass) throw Errors.unknownTemplate(node.data.template, node.id);
+        // Instantiate via DI container (transient scope expected)
+        const created: Node = await resolve<Node>(nodeClass as any);
 
       // If node supports runtime context, provide it
       const maybeAware = created as unknown as Partial<RuntimeContextAware>;

@@ -20,7 +20,8 @@ describe('Server bootstrap wiring timing', () => {
   it('sets globals before applying persisted graph so factories see them', async () => {
     const registry = new TemplateRegistry();
     const logger = new LoggerService();
-    const runtime = new LiveGraphRuntime(logger, registry);
+    class StubRepo extends GraphRepository { async initIfNeeded(): Promise<void> {} async get(): Promise<any> { return null; } async upsert(): Promise<any> { throw new Error('not-implemented'); } async upsertNodeState(): Promise<void> {} }
+    const runtime = new LiveGraphRuntime(logger, registry, new StubRepo());
     // Register a factory that captures globals at instantiation time
     const factory: FactoryFn = async () => new WiringProbeAgent();
     registry.register('wiringProbe', { title: 'Probe', kind: 'agent' }, factory as any);

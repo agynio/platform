@@ -50,7 +50,8 @@ function makeRuntime() {
     mongoService: new StubMongo(),
   };
   const registry = buildTemplateRegistry(deps);
-  const runtime = new LiveGraphRuntime(logger, registry);
+  class StubRepo extends GraphRepository { async initIfNeeded(): Promise<void> {} async get(): Promise<any> { return null; } async upsert(): Promise<any> { throw new Error('not-implemented'); } async upsertNodeState(): Promise<void> {} }
+  const runtime = new LiveGraphRuntime(logger, registry, new StubRepo());
   return { registry, runtime };
 }
 

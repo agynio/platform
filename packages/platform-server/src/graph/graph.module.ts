@@ -74,8 +74,8 @@ import { GraphDefinition, GraphError } from './types';
         graphs: GraphRepository,
         templateRegistry: TemplateRegistry,
       ) => {
-        const runtime = new LiveGraphRuntime(logger, templateRegistry);
-        await runtime.load(graphs);
+        const runtime = new LiveGraphRuntime(logger, templateRegistry, graphs);
+        await runtime.load();
         return runtime;
       },
       inject: [LoggerService, GraphRepository, TemplateRegistry],

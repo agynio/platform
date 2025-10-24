@@ -67,7 +67,8 @@ function makeRuntime(db: Db, placement: 'after_system'|'last_message') {
     { title: 'Memory', kind: 'tool' },
   );
 
-  const runtime = new LiveGraphRuntime(logger, templates);
+  class StubRepo extends GraphRepository { async initIfNeeded(): Promise<void> {} async get(): Promise<any> { return null; } async upsert(): Promise<any> { throw new Error('not-implemented'); } async upsertNodeState(): Promise<void> {} }
+  const runtime = new LiveGraphRuntime(logger, templates, new StubRepo());
   return runtime;
 }
 
@@ -168,7 +169,8 @@ describe.skipIf(!RUN_MONGOMS)('Runtime integration: memory injection via LiveGra
       { title: 'Memory', kind: 'tool' },
     );
 
-    const runtime = new LiveGraphRuntime(logger, templates);
+    class StubRepo2 extends GraphRepository { async initIfNeeded(): Promise<void> {} async get(): Promise<any> { return null; } async upsert(): Promise<any> { throw new Error('not-implemented'); } async upsertNodeState(): Promise<void> {} }
+    const runtime = new LiveGraphRuntime(logger, templates, new StubRepo2());
     const graph: GraphDefinition = {
       nodes: [ { id: 'cm', data: { template: 'callModel', config: {} } }, { id: 'mem', data: { template: 'memory', config: {} } } ],
       edges: [ { source: 'mem', sourceHandle: '$self', target: 'cm', targetHandle: 'setMemoryConnector' } ],
