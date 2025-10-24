@@ -2,9 +2,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { ShellCommandNode } from '../../src/nodes/tools/shell_command/shell_command.node';
 import { LoggerService } from '../../src/core/services/logger.service';
 import { ExecTimeoutError } from '../../src/utils/execTimeout';
-import { ContainerHandle } from '../../src/infra/container/container.handle';
-import { ContainerProviderEntity } from '../../src/entities/containerProvider.entity';
-import { ContainerService } from '../../src/infra/container/container.service';
+// ContainerProviderEntity and ContainerHandle removed; use stub provider.
 
 // ANSI sequences should be stripped, but otherwise content preserved when <=10k
 const ANSI_GREEN = '\u001b[32m';
