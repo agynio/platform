@@ -56,10 +56,11 @@ function makeRuntime(db: Db, placement: 'after_system'|'last_message') {
   templates.register(
     'memory',
     async (ctx) => {
-      const mod = await import('../src/nodes/memory-connector.node');
+      const mod = await import('../src/nodes/memoryConnector/memoryConnector.node');
       const MemoryConnectorNode = mod.MemoryConnectorNode;
-      const factory = (opts: { threadId?: string }) => new MemoryService(db, ctx.nodeId, opts.threadId ? 'perThread' : 'global', opts.threadId);
-      const n = new MemoryConnectorNode(factory);
+      const factory = (opts: { threadId?: string }) => { const s = new MemoryService(db); s.init({ nodeId: ctx.nodeId, scope: opts.threadId ? 'perThread' : 'global', threadId: opts.threadId }); return s; };
+      const n = new MemoryConnectorNode();
+      n.init({ getMemoryService: factory });
       n.setConfig({ placement, content: 'tree', maxChars: 4000 });
       return n as any;
     },
@@ -107,7 +108,7 @@ describe.skipIf(!RUN_MONGOMS)('Runtime integration: memory injection via LiveGra
     await runtime.apply(graph);
 
     // Pre-populate memory under mem nodeId in global scope
-    const svc = new MemoryService(db, 'mem', 'global');
+    const svc = new MemoryService(db); svc.init({ nodeId: 'mem', scope: 'global' });
     await svc.append('/notes/today', 'hello');
 
     const msgs = await getLastMessages(runtime, 'cm');
@@ -126,7 +127,7 @@ describe.skipIf(!RUN_MONGOMS)('Runtime integration: memory injection via LiveGra
     await runtime.apply(graph);
 
     // Pre-populate memory
-    const svc = new MemoryService(db, 'mem', 'global');
+    const svc = new MemoryService(db); svc.init({ nodeId: 'mem', scope: 'global' });
     await svc.append('/alpha', 'a');
 
     const msgs = await getLastMessages(runtime, 'cm');
@@ -157,10 +158,11 @@ describe.skipIf(!RUN_MONGOMS)('Runtime integration: memory injection via LiveGra
     templates.register(
       'memory',
       async (ctx) => {
-        const mod = await import('../src/nodes/memory-connector.node');
-        const MemoryConnectorNode = mod.MemoryConnectorNode;
-        const factory = (opts: { threadId?: string }) => new MemoryService(db, ctx.nodeId, opts.threadId ? 'perThread' : 'global', opts.threadId);
-        const n = new MemoryConnectorNode(factory);
+      const mod = await import('../src/nodes/memoryConnector/memoryConnector.node');
+      const MemoryConnectorNode = mod.MemoryConnectorNode;
+      const factory = (opts: { threadId?: string }) => { const s = new MemoryService(db); s.init({ nodeId: ctx.nodeId, scope: opts.threadId ? 'perThread' : 'global', threadId: opts.threadId }); return s; };
+      const n = new MemoryConnectorNode();
+      n.init({ getMemoryService: factory });
         n.setConfig({ placement: 'after_system', content: 'full', maxChars: 20 });
         return n as any;
       },
@@ -176,7 +178,7 @@ describe.skipIf(!RUN_MONGOMS)('Runtime integration: memory injection via LiveGra
     await runtime.apply(graph);
 
     // Populate global memory with a file whose full content would exceed 20 chars.
-    const globalSvc = new MemoryService(db, 'mem', 'global');
+    const globalSvc = new MemoryService(db); globalSvc.init({ nodeId: 'mem', scope: 'global' });
     await globalSvc.append('/long/file', 'aaaaaaaaaaaaaaaaaaaa-long');
 
     // Per-thread scope is empty; connector should fallback to global and render a tree instead of full content

@@ -5,6 +5,7 @@ import { ConfigService } from '../../../core/services/config.service';
 import { LoggerService } from '../../../core/services/logger.service';
 import { VaultService } from '../../../infra/vault/vault.service';
 import { GithubCloneRepoFunctionTool } from './github_clone_repo.tool';
+import { Injectable, Scope } from '@nestjs/common';
 
 const TokenRefSchema = z
   .object({ value: z.string(), source: z.enum(['static', 'vault']).optional().default('static') })
@@ -28,6 +29,7 @@ export const GithubCloneRepoToolStaticConfigSchema = z
 
 type StaticConfigType = z.infer<typeof GithubCloneRepoToolStaticConfigSchema>;
 
+@Injectable({ scope: Scope.TRANSIENT })
 export class GithubCloneRepoNode extends BaseToolNode<StaticConfigType> {
   private _containerProvider?: WorkspaceNode;
 

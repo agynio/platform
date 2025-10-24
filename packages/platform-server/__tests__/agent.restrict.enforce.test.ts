@@ -72,7 +72,9 @@ function makeAgent(llm: LLM, logger?: LoggerService) {
   } as any);
   const testLogger = logger ?? new TestLogger();
   const factory = new TestLLMFactoryService(llm, cfg);
-  return new AgentNode(cfg, testLogger, factory, 'agent-1');
+  const agent = new AgentNode(cfg, testLogger, factory);
+  agent.init({ nodeId: 'agent-1' });
+  return agent;
 }
 
 describe('Agent restrictOutput enforcement', () => {

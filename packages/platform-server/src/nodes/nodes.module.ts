@@ -16,11 +16,11 @@ import { SlackTrigger } from './slackTrigger/slackTrigger.node';
 import { LocalMCPServer } from './mcp/localMcpServer.node';
 // Tool nodes and tools
 import { BaseToolNode } from './tools/baseToolNode';
-import { ManageTool } from './tools/manage/manage.node';
-import { CallAgentTool } from './tools/call_agent/call_agent.node';
-import { FinishTool } from './tools/finish/finish.node';
+import { ManageToolNode } from './tools/manage/manage.node';
+import { CallAgentNode } from './tools/call_agent/call_agent.node';
+import { FinishNode } from './tools/finish/finish.node';
 import { MemoryToolNode } from './tools/memory/memory.node';
-import { SendSlackMessageTool } from './tools/send_slack_message/send_slack_message.node';
+import { SendSlackMessageNode } from './tools/send_slack_message/send_slack_message.node';
 import { ShellCommandNode } from './tools/shell_command/shell_command.node';
 import { GithubCloneRepoNode } from './tools/github_clone_repo/github_clone_repo.node';
 import { RemindMeNode } from './tools/remind_me/remind_me.node';
@@ -40,25 +40,25 @@ import { RemindersController } from './tools/remind_me/reminders.controller';
       },
       inject: [MongoService, LoggerService],
     },
-    MemoryService,
+    // MemoryService removed from providers; created transiently via ModuleRef
     // nodes
-    { provide: AgentNode, useClass: AgentNode, scope: Scope.TRANSIENT },
-    { provide: MemoryNode, useClass: MemoryNode, scope: Scope.TRANSIENT },
-    { provide: MemoryConnectorNode, useClass: MemoryConnectorNode, scope: Scope.TRANSIENT },
-    { provide: WorkspaceNode, useClass: WorkspaceNode, scope: Scope.TRANSIENT },
-    { provide: SlackTrigger, useClass: SlackTrigger, scope: Scope.TRANSIENT },
+    AgentNode,
+    MemoryNode,
+    MemoryConnectorNode,
+    WorkspaceNode,
+    SlackTrigger,
     // mcp
-    { provide: LocalMCPServer, useClass: LocalMCPServer, scope: Scope.TRANSIENT },
+    LocalMCPServer,
     // tools
-    { provide: BaseToolNode, useClass: BaseToolNode, scope: Scope.TRANSIENT },
-    { provide: ManageTool, useClass: ManageTool, scope: Scope.TRANSIENT },
-    { provide: CallAgentTool, useClass: CallAgentTool, scope: Scope.TRANSIENT },
-    { provide: FinishTool, useClass: FinishTool, scope: Scope.TRANSIENT },
-    { provide: MemoryToolNode, useClass: MemoryToolNode, scope: Scope.TRANSIENT },
-    { provide: SendSlackMessageTool, useClass: SendSlackMessageTool, scope: Scope.TRANSIENT },
-    { provide: ShellCommandNode, useClass: ShellCommandNode, scope: Scope.TRANSIENT },
-    { provide: GithubCloneRepoNode, useClass: GithubCloneRepoNode, scope: Scope.TRANSIENT },
-    { provide: RemindMeNode, useClass: RemindMeNode, scope: Scope.TRANSIENT },
+    // Do not provide abstract BaseToolNode
+    ManageToolNode,
+    CallAgentNode,
+    FinishNode,
+    MemoryToolNode,
+    SendSlackMessageNode,
+    ShellCommandNode,
+    GithubCloneRepoNode,
+    RemindMeNode,
   ],
   exports: [AgentRunService],
 })

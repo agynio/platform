@@ -8,6 +8,7 @@ import { ConfigService } from '../../core/services/config.service';
 import { NcpsKeyService } from '../../infra/ncps/ncpsKey.service';
 import { EnvService, type EnvItem } from '../../graph/env.service';
 import { LoggerService } from '../../core/services/logger.service';
+import { Injectable, Scope } from '@nestjs/common';
 
 // Static configuration schema for ContainerProviderEntity
 // Allows overriding the base image and supplying environment variables.
@@ -84,6 +85,7 @@ export const ContainerProviderExposedStaticConfigSchema = z
 
 export type ContainerProviderStaticConfig = z.infer<typeof ContainerProviderStaticConfigSchema>;
 
+@Injectable({ scope: Scope.TRANSIENT })
 export class WorkspaceNode extends Node<ContainerProviderStaticConfig> {
   // Keep cfg loosely typed; normalize before use to ContainerOpts at boundaries
   private cfg?: ContainerProviderStaticConfig;
@@ -95,20 +97,26 @@ export class WorkspaceNode extends Node<ContainerProviderStaticConfig> {
   private idLabels: (id: string) => Record<string, string>;
 
   private envService: EnvService;
-  // New constructor only
   constructor(
     private containerService: ContainerService,
-    vaultService: VaultService | undefined,
-    opts: ContainerOpts,
-    idLabels: (id: string) => Record<string, string>,
     private configService?: ConfigService,
     private ncpsKeyService?: NcpsKeyService,
   ) {
     super();
-    this.vaultService = vaultService;
-    this.opts = opts || {};
-    this.idLabels = idLabels;
-    this.envService = new EnvService(vaultService);
+    this.opts = {} as any;
+    this.idLabels = (id: string) => ({ 'hautech.ai/thread_id': `node__${id}` });
+    this.envService = new EnvService(undefined as any);
+  }
+
+  init(params?: {
+    vaultService?: VaultService;
+    opts?: ContainerOpts;
+    idLabels?: (id: string) => Record<string, string>;
+  }): void {
+    this.vaultService = params?.vaultService;
+    this.envService = new EnvService(this.vaultService as any);
+    this.opts = params?.opts || {};
+    this.idLabels = params?.idLabels || this.idLabels;
   }
 
   getPortConfig() {

@@ -29,7 +29,7 @@ describe('LocalMCPServer.discoverTools DinD sidecar cleanup (finally)', () => {
       touchLastUsed: vi.fn(),
     };
 
-    const server = new LocalMCPServer(containerService, logger);
+    const server = new LocalMCPServer(containerService as any, logger as any, undefined as any, undefined as any, undefined as any);
 
     // Provide a container provider that returns a well-known temp id
     const tempId = 'temp-discovery-id';
