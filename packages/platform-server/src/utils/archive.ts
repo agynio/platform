@@ -25,7 +25,7 @@ export async function createSingleFileTar(filename: string, content: string): Pr
     // Node.js Readable.from returns NodeJS.ReadableStream in CommonJS; here ensure listener methods exist.
     (stream as unknown as NodeJS.ReadableStream)
       .on('data', (c: Buffer) => chunks.push(Buffer.isBuffer(c) ? c : Buffer.from(c)))
-      .on('error', (e: unknown) => reject(e as Error))
+      .on('error', (e: unknown) => reject(e instanceof Error ? e : new Error(String(e))))
       .on('end', () => resolve(Buffer.concat(chunks)));
   });
 

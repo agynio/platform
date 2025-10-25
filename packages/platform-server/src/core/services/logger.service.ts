@@ -56,11 +56,12 @@ export class LoggerService {
     const toSafe = (v: unknown, depth = 0): unknown => {
       if (v instanceof Error) {
         // Redact and truncate error fields, guard cause depth
-        const cause: unknown = (v as any).cause;
+        const cause = 'cause' in v ? (v as { cause?: unknown }).cause : undefined;
         const safe: Record<string, unknown> = {
           name: v.name,
-          message: redactString(String(v.message || '')),
+          message: redactString(String(v.message ?? '')),
           stack: v.stack ? redactString(String(v.stack)) : undefined,
+          cause: undefined,
         };
         if (cause !== undefined) {
           if (depth + 1 >= MAX_DEPTH) safe.cause = '[Truncated]';
@@ -71,9 +72,9 @@ export class LoggerService {
         return safe;
       }
       if (v && typeof v === 'object') {
-        const obj = v as Record<string, unknown>;
-        if (seen.has(obj)) return '[Circular]';
-        seen.add(obj);
+        const obj: Record<string, unknown> = v as Record<string, unknown>;
+        if (seen.has(obj as object)) return '[Circular]';
+        seen.add(obj as object);
         if (Array.isArray(v)) return (v as unknown[]).slice(0, MAX_KEYS).map((x) => toSafe(x, depth + 1));
         const out: Record<string, unknown> = {};
         let count = 0;
@@ -95,9 +96,9 @@ export class LoggerService {
       const json = JSON.stringify(params.map((p) => toSafe(p, 0)));
       if (json.length > MAX_JSON) return json.slice(0, MAX_JSON) + `…(+${json.length - MAX_JSON} chars)`;
       return json;
-    } catch (err) {
+    } catch (_err) {
       try {
-        const s = String(params as unknown as string);
+        const s = String(params);
         return s.length > MAX_JSON ? s.slice(0, MAX_JSON) + '…' : s;
       } catch {
         return '[unserializable]';

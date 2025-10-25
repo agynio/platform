@@ -33,13 +33,18 @@ export class GraphController {
       const parsed = ActionSchema.safeParse(body);
       if (!parsed.success) throw new HttpException({ error: 'bad_action_payload' }, HttpStatus.BAD_REQUEST);
       const action = parsed.data.action;
-      switch (body?.action) {
-        case 'pause':
-          await this.runtime.pauseNode(nodeId);
+      switch (action) {
+        case 'pause': {
+          // Prefer pausable interface if implemented; otherwise use fallback set
+          const inst = this.runtime.getNodeInstance<{ pause?: () => Promise<void> }>(nodeId);
+          if (inst && typeof inst.pause === 'function') await inst.pause();
           break;
-        case 'resume':
-          await this.runtime.resumeNode(nodeId);
+        }
+        case 'resume': {
+          const inst = this.runtime.getNodeInstance<{ resume?: () => Promise<void> }>(nodeId);
+          if (inst && typeof inst.resume === 'function') await inst.resume();
           break;
+        }
         case 'provision':
           await this.runtime.provisionNode(nodeId);
           // readinessWatcher omitted per scope
@@ -62,9 +67,10 @@ export class GraphController {
             const fn = (inst as Record<string, unknown>)['discoverTools'] as () => Promise<unknown>;
             await fn.call(inst);
             const onFn = (inst as Record<string, unknown>)['on'];
-            if (typeof onFn === 'function') (onFn as Function).call(inst, 'ready', () => {});
-          } catch (e: any) {
-            throw new HttpException({ error: e?.message || 'refresh_failed' }, HttpStatus.INTERNAL_SERVER_ERROR);
+            if (typeof onFn === 'function') onFn.call(inst as object, 'ready', () => {});
+          } catch (e: unknown) {
+            const msg = e instanceof Error ? e.message : String(e);
+            throw new HttpException({ error: msg || 'refresh_failed' }, HttpStatus.INTERNAL_SERVER_ERROR);
           }
           break;
         }
@@ -74,25 +80,31 @@ export class GraphController {
       }
       // emitStatus omitted; return 204 with null body
       return null;
-    } catch (e: any) {
+    } catch (e: unknown) {
       // Preserve 500 { error: 'action_failed' } on unexpected errors
-      if (e && e instanceof Error && (e as any).status) throw e; // already HttpException with a status
-      throw new HttpException({ error: e?.message || 'action_failed' }, HttpStatus.INTERNAL_SERVER_ERROR);
+      if (e instanceof HttpException) throw e; // already HttpException
+      const msg = e instanceof Error ? e.message : String(e);
+      throw new HttpException({ error: msg || 'action_failed' }, HttpStatus.INTERNAL_SERVER_ERROR);
     }
   }
 
   @Get('nodes/:nodeId/dynamic-config/schema')
   async getDynamicConfigSchema(@Param('nodeId') nodeId: string): Promise<{ ready: boolean; schema?: unknown } | { error: string }> {
     try {
-      const inst = (this.runtime as any).getNodeInstance?.(nodeId) || (this.runtime as any)['getNodeInstance']?.(nodeId);
+      const inst = (this.runtime as unknown as { getNodeInstance?: (id: string) => unknown }).getNodeInstance?.(nodeId);
       if (!inst) {
         throw new HttpException({ error: 'node_not_found' }, HttpStatus.NOT_FOUND);
       }
-      const ready = typeof (inst as any).isDynamicConfigReady === 'function' ? !!(inst as any).isDynamicConfigReady() : false;
-      const schema = ready && typeof (inst as any).getDynamicConfigSchema === 'function' ? (inst as any).getDynamicConfigSchema() : undefined;
+      const ready = typeof (inst as Record<string, unknown>)['isDynamicConfigReady'] === 'function'
+        ? !!(inst as { isDynamicConfigReady: () => boolean }).isDynamicConfigReady()
+        : false;
+      const schema = ready && typeof (inst as Record<string, unknown>)['getDynamicConfigSchema'] === 'function'
+        ? (inst as { getDynamicConfigSchema: () => unknown }).getDynamicConfigSchema()
+        : undefined;
       return { ready, schema } as const;
-    } catch (e: any) {
-      throw new HttpException({ error: e?.message || 'dynamic_config_schema_error' }, HttpStatus.INTERNAL_SERVER_ERROR);
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e);
+      throw new HttpException({ error: msg || 'dynamic_config_schema_error' }, HttpStatus.INTERNAL_SERVER_ERROR);
     }
   }
 }

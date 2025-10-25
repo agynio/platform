@@ -12,15 +12,18 @@ export interface TemplateMeta {
   staticConfigSchema?: JSONSchema.BaseSchema;
 }
 
+type TemplateCtor = new (...args: unknown[]) => Node;
+interface TemplateStatic { capabilities?: TemplateNodeSchema['capabilities']; staticConfigSchema?: JSONSchema.BaseSchema }
+
 @Injectable()
 export class TemplateRegistry {
-  private classes = new Map<string, new (...args: unknown[]) => Node>();
+  private classes = new Map<string, TemplateCtor & TemplateStatic>();
   private meta = new Map<string, TemplateMeta>();
 
   constructor(private readonly moduleRef: ModuleRef) {}
 
   // Register associates template -> node class and meta (ports are read from instance via getPortConfig)
-  register(template: string, meta: TemplateMeta, nodeClass: new (...args: unknown[]) => Node): this {
+  register(template: string, meta: TemplateMeta, nodeClass: TemplateCtor & TemplateStatic): this {
     if (this.classes.has(template)) {
       // Allow override deliberately; could warn here if desired
     }
@@ -30,7 +33,7 @@ export class TemplateRegistry {
   }
 
   // Provide class lookup for runtime
-  getClass(template: string): (new (...args: unknown[]) => Node) | undefined {
+  getClass(template: string): TemplateCtor | undefined {
     return this.classes.get(template);
   }
 
@@ -58,13 +61,9 @@ export class TemplateRegistry {
         // ignore instance creation errors for schema generation; fall back to no ports
       }
       const meta = this.meta.get(name) ?? { title: name, kind: 'tool' as TemplateKind };
-      const clsAny = this.classes.get(name)! as unknown as Record<string, unknown>;
-      const caps = (clsAny && clsAny['capabilities'])
-        ? (clsAny['capabilities'] as TemplateNodeSchema['capabilities'])
-        : undefined;
-      const staticSchema = (clsAny && clsAny['staticConfigSchema'])
-        ? (clsAny['staticConfigSchema'] as JSONSchema.BaseSchema)
-        : undefined;
+      const clsAny = this.classes.get(name)!;
+      const caps = clsAny.capabilities;
+      const staticSchema = clsAny.staticConfigSchema;
       schemas.push({
         name,
         title: meta.title,

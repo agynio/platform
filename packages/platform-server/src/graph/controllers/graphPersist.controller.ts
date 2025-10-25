@@ -49,14 +49,14 @@ export class GraphPersistController {
     return graph;
   }
 
-  @Post('graph')
-  @HttpCode(200)
-  async upsertGraph(
-    @Body() body: PersistedGraphUpsertRequest,
-    @Headers() headers: Record<string, string | string[] | undefined>,
-  ): Promise<PersistedGraphUpsertResponse | { error: string; current?: unknown }> {
+@Post('graph')
+@HttpCode(200)
+async upsertGraph(
+  @Body() body: unknown,
+  @Headers() headers: Record<string, string | string[] | undefined>,
+): Promise<PersistedGraphUpsertResponse | { error: string; current?: unknown }> {
     try {
-      const parsedResult = GraphPersistController.UpsertSchema.safeParse(body);
+      const parsedResult = UpsertSchema.safeParse(body);
       if (!parsedResult.success) {
         throw new HttpException({ error: 'BAD_SCHEMA', current: parsedResult.error.format() }, HttpStatus.BAD_REQUEST);
       }
@@ -105,48 +105,50 @@ export class GraphPersistController {
         }
       }
       return saved;
-    } catch (e: any) {
+    } catch (e: unknown) {
       // Map known repository errors to status codes and bodies
-      if (e?.code === 'VERSION_CONFLICT') {
-        throw new HttpException({ error: 'VERSION_CONFLICT', current: e.current }, HttpStatus.CONFLICT);
+      const err = e as { code?: string; current?: unknown; message?: string };
+      if (err?.code === 'VERSION_CONFLICT') {
+        throw new HttpException({ error: 'VERSION_CONFLICT', current: err.current }, HttpStatus.CONFLICT);
       }
-      if (e?.code === 'LOCK_TIMEOUT') {
+      if (err?.code === 'LOCK_TIMEOUT') {
         throw new HttpException({ error: 'LOCK_TIMEOUT' }, HttpStatus.CONFLICT);
       }
-      if (e?.code === 'COMMIT_FAILED') {
+      if (err?.code === 'COMMIT_FAILED') {
         throw new HttpException({ error: 'COMMIT_FAILED' }, HttpStatus.INTERNAL_SERVER_ERROR);
       }
-      throw new HttpException({ error: e?.message || 'Bad Request' }, HttpStatus.BAD_REQUEST);
+      const msg = e instanceof Error ? e.message : String(e);
+      throw new HttpException({ error: msg || 'Bad Request' }, HttpStatus.BAD_REQUEST);
     }
   }
 }
-  // Zod schema for upsert body
-  private static readonly UpsertSchema = z
-    .object({
-      name: z.string().min(1),
-      version: z.number().int().nonnegative().optional(),
-      nodes: z
-        .array(
-          z.object({
-            id: z.string().min(1),
-            template: z.string().min(1),
-            config: z.record(z.any()).optional(),
-            dynamicConfig: z.record(z.any()).optional(),
-            state: z.record(z.any()).optional(),
-            position: z.object({ x: z.number(), y: z.number() }).optional(),
-          }),
-        )
-        .max(1000),
-      edges: z
-        .array(
-          z.object({
-            id: z.string().optional(),
-            source: z.string().min(1),
-            sourceHandle: z.string().min(1),
-            target: z.string().min(1),
-            targetHandle: z.string().min(1),
-          }),
-        )
-        .max(2000),
-    })
-    .strict();
+// Zod schema for upsert body (controller boundary schema)
+const UpsertSchema = z
+  .object({
+    name: z.string().min(1),
+    version: z.number().int().nonnegative().optional(),
+    nodes: z
+      .array(
+        z.object({
+          id: z.string().min(1),
+          template: z.string().min(1),
+          config: z.record(z.unknown()).optional(),
+          dynamicConfig: z.record(z.unknown()).optional(),
+          state: z.record(z.unknown()).optional(),
+          position: z.object({ x: z.number(), y: z.number() }).optional(),
+        }),
+      )
+      .max(1000),
+    edges: z
+      .array(
+        z.object({
+          id: z.string().optional(),
+          source: z.string().min(1),
+          sourceHandle: z.string().min(1),
+          target: z.string().min(1),
+          targetHandle: z.string().min(1),
+        }),
+      )
+      .max(2000),
+  })
+  .strict();

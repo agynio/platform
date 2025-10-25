@@ -11,7 +11,7 @@ export class CallToolsLLMReducer extends Reducer<LLMState, LLMContext> {
     super();
   }
 
-  private tools: FunctionTool[] = [];
+  private tools?: FunctionTool[];
 
   init(params: { tools: FunctionTool[] }) {
     this.tools = params.tools || [];
@@ -34,6 +34,7 @@ export class CallToolsLLMReducer extends Reducer<LLMState, LLMContext> {
   }
 
   createToolsMap() {
+    if (!this.tools) throw new Error('CallToolsLLMReducer not initialized');
     const toolsMap = new Map<string, FunctionTool>();
     this.tools.forEach((t) => toolsMap.set(t.name, t));
     return toolsMap;
