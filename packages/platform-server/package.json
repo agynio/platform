@@ -5,7 +5,27 @@
   "main": "src/index.ts",
   "type": "module",
   "scripts": {
-    "dev": "node --import 'data:text/javascript,import { register } from \"node:module\"; import { pathToFileURL } from \"node:url\"; register(\"ts-node/esm\", pathToFileURL(\"./\"));' src/index.ts",
+    "dev": "node --loader ts-node/esm src/index.ts",
+    "dev:deps": "docker compose up -d mongo1 mongo-setup agents-db vault vault-auto-init registry-mirror ncps-init ncps",
+    "dev:start": "node --loader ts-node/esm src/index.ts",
+    "dev:all": "pnpm dev:deps && pnpm dev:start",
+    "start": "nest start --entryFile index",
+    "start:dev": "nest start --entryFile index --watch",
+    "test": "cross-env MONGOMS_VERSION=7.0.14 vitest run",
+    "test:watch": "vitest",
+    "lint": "eslint .",
+    "prisma:generate": "prisma generate",
+    "prisma:migrate": "prisma migrate dev --name init",
+    "prisma:studio": "prisma studio"
+  } from \"node:module\"; import { pathToFileURL } from \"node:url\"; register(\"ts-node/esm\", pathToFileURL(\"./\"));' src/index.ts",
+=======
+    "dev": "node --loader ts-node/esm src/index.ts",
+    "dev:deps": "docker compose up -d mongo1 mongo-setup agents-db vault vault-auto-init registry-mirror ncps-init ncps",
+    "dev:start": "node --loader ts-node/esm src/index.ts",
+    "dev:all": "pnpm dev:deps && pnpm dev:start",
+    "start": "nest start --entryFile index",
+    "start:dev": "nest start --entryFile index --watch",
+>>>>>>> 95c8551 (chore(platform-server): add Nest CLI scripts and restrict tsconfig to core+infra+bootstrap for minimal DI boot\n\n- Add @nestjs/cli and scripts: start, start:dev\n- Limit tsconfig include to src/index.ts, src/bootstrap, src/core, src/infra; exclude graph/llm/nodes/templates.ts\n- Keep reflect-metadata at index.ts top; no service code changes\n\nUpdates PR #447 (fix/prisma-esm-boot))
     "test": "cross-env MONGOMS_VERSION=7.0.14 vitest run",
     "test:watch": "vitest",
     "lint": "eslint .",
@@ -54,6 +74,7 @@
     "zod-from-json-schema": "^0.5.0"
   },
   "devDependencies": {
+    "@nestjs/cli": "^11.0.2",
     "@eslint/js": "^9.13.0",
     "@langchain/langgraph-cli": "0.0.66",
     "@types/dockerode": "^3.3.44",

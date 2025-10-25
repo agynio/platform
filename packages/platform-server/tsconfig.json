@@ -16,9 +16,18 @@
     ]
   },
   "include": [
-    "src"
+
+    "src/index.ts",
+    "src/bootstrap/**/*.ts",
+    "src/core/**/*.ts",
+    "src/infra/**/*.ts"
   ],
   "exclude": [
-    "node_modules"
+    "node_modules",
+    "src/graph/**",
+    "src/llm/**",
+    "src/nodes/**",
+    "src/templates.ts"
   ]
 }
+>>>>>>> 95c8551 (chore(platform-server): add Nest CLI scripts and restrict tsconfig to core+infra+bootstrap for minimal DI boot\n\n- Add @nestjs/cli and scripts: start, start:dev\n- Limit tsconfig include to src/index.ts, src/bootstrap, src/core, src/infra; exclude graph/llm/nodes/templates.ts\n- Keep reflect-metadata at index.ts top; no service code changes\n\nUpdates PR #447 (fix/prisma-esm-boot))
