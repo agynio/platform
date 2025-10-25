@@ -5,7 +5,7 @@
   "main": "src/index.ts",
   "type": "module",
   "scripts": {
-    "dev": "tsx src/index.ts",
+    "dev": "node --loader ts-node/esm src/index.ts",
     "test": "cross-env MONGOMS_VERSION=7.0.14 vitest run",
     "test:watch": "vitest",
     "lint": "eslint .",
