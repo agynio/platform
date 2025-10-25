@@ -8,7 +8,7 @@ initTracing({
 });
 
 import { NestFactory } from '@nestjs/core';
-import { FastifyAdapter } from '@nestjs/platform-fastify';
+import { FastifyAdapter, type NestFastifyApplication } from '@nestjs/platform-fastify';
 import { ValidationPipe } from '@nestjs/common';
 import cors from '@fastify/cors';
 
@@ -27,9 +27,8 @@ setTimeout(() => {
 async function bootstrap() {
   // NestJS HTTP bootstrap using FastifyAdapter and resolve services via DI
   const adapter = new FastifyAdapter();
-  await adapter.getInstance().register(cors, { origin: true });
-
-  const app = await NestFactory.create(AppModule, adapter);
+  const app = await NestFactory.create<NestFastifyApplication>(AppModule, adapter);
+  await app.register(cors, { origin: true });
   app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
   await app.init();
 const logger = app.get(LoggerService);
@@ -40,11 +39,9 @@ const logger = app.get(LoggerService);
     const msg = e instanceof Error ? e.message : String(e);
     logger.warn?.(`Mongo connect skipped: ${msg}`);
   }
-  const fastify = adapter.getInstance();
-
-  // Start Fastify then attach Socket.io
+  // Start Fastify
   const PORT = Number(process.env.PORT) || 3010;
-  await fastify.listen({ port: PORT, host: '0.0.0.0' });
+  await app.listen(PORT, '0.0.0.0');
   logger.info(`HTTP server listening on :${PORT}`);
 
   const shutdown = async () => {
@@ -54,7 +51,7 @@ const logger = app.get(LoggerService);
     cleanup?.stop();
 
     await app.get(MongoService).close();
-    await fastify.close();
+    await app.close();
 
     process.exit(0);
   };

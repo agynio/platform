@@ -57,7 +57,9 @@ export class GithubService {
 
   async fetchPullRequestComments(owner: string, repo: string, pull_number: number) {
     this.ensureInitialized('app');
-    const { data: comments } = await this.octokit!.rest.issues.listComments({
+    const client = this.octokit;
+    if (!client) throw new Error('GitHub client not initialized');
+    const { data: comments } = await client.rest.issues.listComments({
       owner,
       repo,
       issue_number: pull_number,
@@ -67,7 +69,9 @@ export class GithubService {
 
   async fetchPullRequestEvents(owner: string, repo: string, pull_number: number) {
     this.ensureInitialized('app');
-    const { data: events } = await this.octokit!.rest.issues.listEvents({
+    const client = this.octokit;
+    if (!client) throw new Error('GitHub client not initialized');
+    const { data: events } = await client.rest.issues.listEvents({
       owner,
       repo,
       issue_number: pull_number,
@@ -78,7 +82,9 @@ export class GithubService {
 
   async fetchPullRequestReviewComments(owner: string, repo: string, pull_number: number) {
     this.ensureInitialized('app');
-    const { data: comments } = await this.octokit!.rest.pulls.listReviewComments({
+    const client = this.octokit;
+    if (!client) throw new Error('GitHub client not initialized');
+    const { data: comments } = await client.rest.pulls.listReviewComments({
       owner,
       repo,
       pull_number,
@@ -88,7 +94,9 @@ export class GithubService {
 
   async fetchPullRequestReviews(owner: string, repo: string, pull_number: number) {
     this.ensureInitialized('app');
-    const { data: reviews } = await this.octokit!.rest.pulls.listReviews({
+    const client = this.octokit;
+    if (!client) throw new Error('GitHub client not initialized');
+    const { data: reviews } = await client.rest.pulls.listReviews({
       owner,
       repo,
       pull_number,
@@ -98,7 +106,9 @@ export class GithubService {
 
   async fetchPullRequestCommits(owner: string, repo: string, pull_number: number) {
     this.ensureInitialized('app');
-    const { data: commits } = await this.octokit!.rest.pulls.listCommits({
+    const client = this.octokit;
+    if (!client) throw new Error('GitHub client not initialized');
+    const { data: commits } = await client.rest.pulls.listCommits({
       owner,
       repo,
       pull_number,
@@ -108,7 +118,9 @@ export class GithubService {
 
   async getPullRequestBranch(owner: string, repo: string, pull_number: number) {
     this.ensureInitialized('app');
-    const { data: pr } = await this.octokit!.rest.pulls.get({
+    const client = this.octokit;
+    if (!client) throw new Error('GitHub client not initialized');
+    const { data: pr } = await client.rest.pulls.get({
       owner,
       repo,
       pull_number,
@@ -119,14 +131,16 @@ export class GithubService {
   async getPullRequestStatus(owner: string, repo: string, pull_number: number) {
     // Get PR to find head SHA
     this.ensureInitialized('app');
-    const { data: pr } = await this.octokit!.rest.pulls.get({
+    const client = this.octokit;
+    if (!client) throw new Error('GitHub client not initialized');
+    const { data: pr } = await client.rest.pulls.get({
       owner,
       repo,
       pull_number,
     });
     const sha = pr.head.sha;
     // Get all check runs for the commit (includes GitHub Actions)
-    const { data: checks } = await this.octokit!.rest.checks.listForRef({
+    const { data: checks } = await client.rest.checks.listForRef({
       owner,
       repo,
       ref: sha,
@@ -139,7 +153,9 @@ export class GithubService {
    */
   async writePRComment(owner: string, repo: string, pull_number: number, message: string) {
     this.ensureInitialized('token');
-    await this.personalOctokit!.rest.issues.createComment({
+    const client = this.personalOctokit;
+    if (!client) throw new Error('GitHub PAT client not initialized');
+    await client.rest.issues.createComment({
       owner,
       repo,
       issue_number: pull_number,
@@ -150,7 +166,9 @@ export class GithubService {
 
   async fetchRequestedReviewers(owner: string, repo: string, pull_number: number) {
     this.ensureInitialized('app');
-    const { data } = await this.octokit!.rest.pulls.listRequestedReviewers({
+    const client = this.octokit;
+    if (!client) throw new Error('GitHub client not initialized');
+    const { data } = await client.rest.pulls.listRequestedReviewers({
       owner,
       repo,
       pull_number,
@@ -164,7 +182,9 @@ export class GithubService {
    */
   async listOpenPullRequests(owner: string, repo: string) {
     this.ensureInitialized('app');
-    const { data } = await this.octokit!.rest.pulls.list({
+    const client = this.octokit;
+    if (!client) throw new Error('GitHub client not initialized');
+    const { data } = await client.rest.pulls.list({
       owner,
       repo,
       state: "open",
@@ -201,7 +221,9 @@ export class GithubService {
   /** Get the login of the user associated with the personal access token */
   async getAuthenticatedUserLogin() {
     this.ensureInitialized('token');
-    const { data } = await this.personalOctokit!.rest.users.getAuthenticated();
+    const client = this.personalOctokit;
+    if (!client) throw new Error('GitHub PAT client not initialized');
+    const { data } = await client.rest.users.getAuthenticated();
     return data.login;
   }
 
@@ -226,7 +248,9 @@ export class GithubService {
     for (const repo of repos) {
       // Retrieve open PRs
       this.ensureInitialized('app');
-      const { data: pulls } = await this.octokit!.rest.pulls.list({
+      const client = this.octokit;
+      if (!client) throw new Error('GitHub client not initialized');
+      const { data: pulls } = await client.rest.pulls.list({
         owner,
         repo,
         state: "open",
@@ -257,7 +281,9 @@ export class GithubService {
   async listAssignedOpenPullRequestsForRepo(owner: string, repo: string) {
     const login = await this.getAuthenticatedUserLogin();
     this.ensureInitialized('app');
-    const { data: pulls } = await this.octokit!.rest.pulls.list({
+    const client = this.octokit;
+    if (!client) throw new Error('GitHub client not initialized');
+    const { data: pulls } = await client.rest.pulls.list({
       owner,
       repo,
       state: "open",
