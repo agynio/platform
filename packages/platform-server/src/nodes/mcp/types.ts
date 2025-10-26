@@ -28,14 +28,8 @@ export interface McpToolCallResult {
   raw?: unknown; // full raw SDK result
 }
 
-// Persisted state summary for MCP tools (used in LocalMcpServer and runtime snapshots)
-export interface PersistedMcpToolSummary {
-  name: string;
-  description?: string;
-}
-
 export interface PersistedMcpState {
-  tools?: PersistedMcpToolSummary[];
+  tools?: McpTool[];
   toolsUpdatedAt?: string | number; // ISO string or epoch ms
   toolsEtag?: string;
 }
@@ -56,7 +50,11 @@ export interface McpServer {
   start(): Promise<void>;
   stop(): Promise<void>;
   listTools(force?: boolean): FunctionTool[];
-  callTool(name: string, args: unknown, options?: { timeoutMs?: number; threadId?: string }): Promise<McpToolCallResult>;
+  callTool(
+    name: string,
+    args: unknown,
+    options?: { timeoutMs?: number; threadId?: string },
+  ): Promise<McpToolCallResult>;
   on(event: 'ready', handler: (...a: unknown[]) => void): this;
   on(event: 'exit', handler: (...a: unknown[]) => void): this;
   on(event: 'error', handler: (...a: unknown[]) => void): this;

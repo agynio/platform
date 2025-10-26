@@ -12,7 +12,7 @@ describe('graph hooks', () => {
   beforeEach(() => {
     g.fetch = vi.fn(async (input: RequestInfo) => {
       const url = String(input);
-      if (url.endsWith('/graph/templates')) return new Response(JSON.stringify([{ name: 'x', title: 'X', kind: 'tool', sourcePorts: {}, targetPorts: {} }]));
+      if (url.endsWith('/api/graph/templates')) return new Response(JSON.stringify([{ name: 'x', title: 'X', kind: 'tool', sourcePorts: {}, targetPorts: {} }]));
       if (url.includes('/status')) return new Response(JSON.stringify({ isPaused: false }));
       if (url.includes('/reminders')) return new Response(JSON.stringify({ items: [{ id: '1', threadId: 't', note: 'n', at: new Date().toISOString() }] }));
       return new Response('', { status: 204 });

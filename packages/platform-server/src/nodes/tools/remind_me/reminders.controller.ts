@@ -3,12 +3,14 @@ import { LoggerService } from '../../../core/services/logger.service';
 import { LiveGraphRuntime as RuntimeService } from '../../../graph/liveGraph.manager';
 import type { ActiveReminder } from './remind_me.tool';
 
-interface RemindMeInspectable { getActiveReminders(): ActiveReminder[] }
+interface RemindMeInspectable {
+  getActiveReminders(): ActiveReminder[];
+}
 function isRemindMeInspectable(x: unknown): x is RemindMeInspectable {
   return !!x && typeof (x as Record<string, unknown>)['getActiveReminders'] === 'function';
 }
 
-@Controller('graph/nodes')
+@Controller('api/graph/nodes')
 export class RemindersController {
   constructor(
     @Inject(LoggerService) private readonly logger: LoggerService,
@@ -21,7 +23,8 @@ export class RemindersController {
     @Query('limit') limit?: string,
   ): Promise<{ items: ActiveReminder[] }> {
     try {
-      const inst = this.runtimeService.getNodeInstance(nodeId) as unknown;
+      const inst = this.runtimeService.getNodeInstance(nodeId);
+      console.log(inst);
       if (!inst) throw new HttpException({ error: 'node_not_found' }, HttpStatus.NOT_FOUND);
       if (!isRemindMeInspectable(inst)) throw new HttpException({ error: 'not_remindme_node' }, HttpStatus.NOT_FOUND);
       const items = (inst as RemindMeInspectable).getActiveReminders();
@@ -30,7 +33,9 @@ export class RemindersController {
       return { items: typeof bounded === 'number' ? items.slice(0, bounded) : items };
     } catch (e: unknown) {
       if (e instanceof HttpException) throw e;
-      try { this.logger.error('reminders controller', e as unknown); } catch {}
+      try {
+        this.logger.error('reminders controller', e as unknown);
+      } catch {}
       throw new HttpException({ error: 'server_error' }, HttpStatus.INTERNAL_SERVER_ERROR);
     }
   }

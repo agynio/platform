@@ -350,9 +350,7 @@ export class LiveGraphRuntime {
       if (node.data.config) {
         await created.setConfig(node.data.config);
       }
-      await created.provision();
 
-      // Fix: Preload MCP tool summaries if present in state; avoid unsafe casts
       if (created instanceof LocalMCPServer) {
         const state = node.data.state as { mcp?: PersistedMcpState } | undefined;
 
@@ -360,19 +358,14 @@ export class LiveGraphRuntime {
           const summaries = state.mcp.tools;
           const updatedAt = state.mcp.toolsUpdatedAt;
           try {
-            if (typeof (created as unknown as { preloadCachedToolSummaries?: (s: Array<{ name: string; description?: string }>, u?: number | string | Date) => void }).preloadCachedToolSummaries === 'function') {
-              (created as unknown as { preloadCachedToolSummaries: (s: Array<{ name: string; description?: string }>, u?: number | string | Date) => void }).preloadCachedToolSummaries(
-                summaries,
-                updatedAt,
-              );
-            } else {
-              // TODO: add typed preloadCachedToolSummaries method on LocalMCPServer to avoid unsafe casts
-            }
+            created.preloadCachedToolSummaries(summaries, updatedAt);
           } catch (e) {
             this.logger.error('Error during MCP cache preload for node %s', node.id, e);
           }
         }
       }
+      // TODO: move preloadCachedToolSummaries logic completely inside localMcpServer provision
+      void created.provision();
     } catch (e) {
       // Factory creation or any init error should include nodeId
       if (e instanceof GraphError) throw e; // already enriched

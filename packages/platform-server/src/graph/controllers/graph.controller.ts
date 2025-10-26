@@ -5,7 +5,7 @@ import { LiveGraphRuntime } from '../liveGraph.manager';
 import { LoggerService } from '../../core/services/logger.service';
 import type { NodeStatusState } from '../../nodes/base/Node';
 
-@Controller('graph')
+@Controller('api/graph')
 export class GraphController {
   constructor(
     @Inject(TemplateRegistry) private readonly templateRegistry: TemplateRegistry,
@@ -19,18 +19,13 @@ export class GraphController {
   }
 
   @Get('nodes/:nodeId/status')
-  async getNodeStatus(
-    @Param('nodeId') nodeId: string,
-  ): Promise<{ provisionStatus?: NodeStatusState }> {
+  async getNodeStatus(@Param('nodeId') nodeId: string): Promise<{ provisionStatus?: NodeStatusState }> {
     return this.runtime.getNodeStatus(nodeId);
   }
 
   @Post('nodes/:nodeId/actions')
   @HttpCode(204)
-  async postNodeAction(
-    @Param('nodeId') nodeId: string,
-    @Body() body: unknown,
-  ): Promise<null | { error: string }> {
+  async postNodeAction(@Param('nodeId') nodeId: string, @Body() body: unknown): Promise<null | { error: string }> {
     try {
       const ActionSchema = z.object({ action: z.enum(['provision', 'deprovision']) });
       const parsed = ActionSchema.safeParse(body);

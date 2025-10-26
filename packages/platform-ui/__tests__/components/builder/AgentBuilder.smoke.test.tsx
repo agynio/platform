@@ -14,7 +14,7 @@ describe('AgentBuilder smoke render', () => {
   it('renders without crashing and shows basic UI', async () => {
     // Provide builder API endpoints used by useBuilderState
     server.use(
-      http.get('/api/templates', () =>
+      http.get('/api/graph/templates', () =>
         HttpResponse.json([
           { name: 'agent.basic', title: 'Agent', kind: 'agent', sourcePorts: [], targetPorts: [] },
           { name: 'tool.basic', title: 'Tool', kind: 'tool', sourcePorts: [], targetPorts: [] },

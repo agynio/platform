@@ -29,7 +29,7 @@ describe('Builder autosave hydration gating', () => {
   it('does not POST on initial hydration; posts once after edit (debounced) under StrictMode', async () => {
     // Ensure endpoints used by builder exist
     server.use(
-      http.get('http://localhost:3010/api/templates', () =>
+      http.get('http://localhost:3010/api/graph/templates', () =>
         HttpResponse.json([{ name: 'mock', title: 'Mock', kind: 'tool', sourcePorts: [], targetPorts: [] }]),
       ),
       http.get('http://localhost:3010/api/graph', () =>

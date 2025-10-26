@@ -182,10 +182,19 @@ export class LocalMCPServer extends Node<z.infer<typeof LocalMcpServerStaticConf
     );
   }
 
-  preloadCachedToolSummaries(tools: Array<{ name: string; description?: string }> | undefined | null, updatedAt?: number | string | Date): void {
+  preloadCachedToolSummaries(
+    tools: Array<{ name: string; description?: string }> | undefined | null,
+    updatedAt?: number | string | Date,
+  ): void {
     if (tools && Array.isArray(tools) && tools.length > 0) {
       // Create tool shells without schemas; discovery will rebuild with full schemas later
-      this.toolsCache = tools.map((t) => this.createLocalTool({ name: t.name, description: t.description, inputSchema: { type: 'object', properties: {}, additionalProperties: false } as any } as McpTool));
+      this.toolsCache = tools.map((t) =>
+        this.createLocalTool({
+          name: t.name,
+          description: t.description,
+          inputSchema: { type: 'object', properties: {}, additionalProperties: false } as any,
+        } as McpTool),
+      );
       this.toolsDiscovered = true; // consider discovered for initial dynamic schema availability
     }
     if (updatedAt !== undefined) {
@@ -512,9 +521,7 @@ export class LocalMCPServer extends Node<z.infer<typeof LocalMcpServerStaticConf
         })
         .join('\n');
       const structured =
-        rawResult &&
-        typeof rawResult === 'object' &&
-        'structuredContent' in (rawResult as Record<string, unknown>)
+        rawResult && typeof rawResult === 'object' && 'structuredContent' in (rawResult as Record<string, unknown>)
           ? ((rawResult as Record<string, unknown>).structuredContent as Record<string, unknown>)
           : undefined;
       return {
@@ -586,7 +593,8 @@ export class LocalMCPServer extends Node<z.infer<typeof LocalMcpServerStaticConf
   async provision(): Promise<void> {
     if (this.status === 'ready') return;
     if (this._provInFlight) return this._provInFlight;
-    // mirror previous start() behavior but emit provision states
+
+    // TODO: Refactor provisioning
     const startCallId = ++this._startInvocationSeq;
     this.logger.debug(
       `[MCP:${this.namespace}] [start:${startCallId}] provision() invoked (started=${this.started} wantStart=${this.wantStart})`,

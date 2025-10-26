@@ -16,7 +16,7 @@ describe('Nix packages multiple persistence in builder graph', () => {
   it('persists two selected packages in order and updates on removal', async () => {
     // Provide a minimal graph with a single Workspace node
     server.use(
-      http.get('/api/templates', () =>
+      http.get('/api/graph/templates', () =>
         HttpResponse.json([
           { name: 'containerProvider', title: 'Workspace', kind: 'service', sourcePorts: [], targetPorts: [], capabilities: { staticConfigurable: true } },
         ]),

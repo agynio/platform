@@ -25,7 +25,7 @@ describe('Builder dirty detection for graph edits', () => {
   function setupServerCounters() {
     const counters = { posts: 0 };
     server.use(
-      http.get('http://localhost:3010/api/templates', () =>
+      http.get('http://localhost:3010/api/graph/templates', () =>
         HttpResponse.json([
           { name: 'mock', title: 'Mock', kind: 'tool', sourcePorts: ['out'], targetPorts: ['in'] },
         ]),
