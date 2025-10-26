@@ -76,7 +76,7 @@ describe('Graph MCP integration', () => {
       ],
     };
 
-    const runtime = new LiveGraphRuntime(logger, templateRegistry);
+    const runtime = new LiveGraphRuntime(logger, templateRegistry as any, { initIfNeeded: async()=>{}, get: async()=>null, upsert: async()=>{ throw new Error('not-implemented'); }, upsertNodeState: async()=>{} } as any);
     const result = await runtime.apply(graph);
     expect(result.addedNodes).toContain('mcp');
   }, 60000);
