@@ -14,7 +14,8 @@ class MockLogger extends LoggerService {
 function makeRuntimeAndRegistry() {
   const registry = new TemplateRegistry();
   const logger = new MockLogger() as any as LoggerService;
-  const runtime = new LiveGraphRuntime(logger, registry);
+  const moduleRef = { create: <T>(cls: new (...a: any[]) => T) => new cls() } as any;
+  const runtime = new LiveGraphRuntime(logger, registry as any, { initIfNeeded: async()=>{}, get: async()=>null, upsert: async()=>{ throw new Error('not-implemented'); }, upsertNodeState: async()=>{} } as any);
   return { registry, runtime, logger };
 }
 

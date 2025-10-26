@@ -2,36 +2,10 @@ import { describe, it, expect, vi } from 'vitest';
 import { AIMessage } from '@langchain/core/messages';
 import { LoggerService } from '../src/core/services/logger.service.js';
 import { ConfigService } from '../src/core/services/config.service.js';
-import { LLMFactoryService } from '../src/core/services/llmFactory.service';
+// Replace LLMFactoryService usage with provisioner stub per Issue #451
 
 // Mock ChatOpenAI to capture the model used at invoke time
-// Spy LLMFactoryService to return a stub LLM that reports model name in output
-vi.spyOn(LLMFactoryService.prototype, 'createLLM').mockReturnValue({
-  call: async ({ model }: any) => ({ text: `model:${model}`, output: [] }),
-} as any);
-
-// Mock CheckpointerService to avoid Mongo dependency
-vi.mock('../src/services/checkpointer.service', async (importOriginal) => {
-  const mod = await importOriginal();
-  class Fake extends mod.CheckpointerService {
-    getCheckpointer() {
-      return {
-        async getTuple() {
-          return undefined;
-        },
-        async *list() {},
-        async put(_config: any, _checkpoint: any, _metadata: any) {
-          return { configurable: { thread_id: 't', checkpoint_ns: '', checkpoint_id: '1' } } as any;
-        },
-        async putWrites() {},
-        getNextVersion() {
-          return '1';
-        },
-      } as any;
-    }
-  }
-  return { ...mod, CheckpointerService: Fake };
-});
+// No CheckpointerService or LLMFactoryService; use provisioner stub
 
 import { AgentNode as Agent } from '../src/nodes/agent/agent.node';
 
@@ -45,7 +19,9 @@ describe('Agent model override at runtime', () => {
       githubToken: 't',
       mongodbUrl: 'm',
     });
-    const agent = new Agent(cfg, new LoggerService(), new LLMFactoryService(cfg) as any, 'agent-1');
+    const provisioner = { getLLM: async () => ({ call: async ({ model }: any) => ({ text: `model:${model}`, output: [] }) }) };
+    const agent = new Agent(new LoggerService(), provisioner as any);
+    agent.init({ nodeId: 'agent-1' });
     // Initial default should be gpt-5
     const anyA: any = agent as any;
     expect(anyA.llm.model).toBe('gpt-5');
