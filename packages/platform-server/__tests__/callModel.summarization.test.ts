@@ -1,41 +1,41 @@
-import { describe, it, expect, vi } from 'vitest';
-import { AIMessage, BaseMessage, HumanMessage } from '@langchain/core/messages';
+import { describe, it, expect, beforeEach } from 'vitest';
 import { CallModelLLMReducer } from '../src/llm/reducers/callModel.llm.reducer';
-import { SummarizationLLMReducer } from '../src/llm/reducers/summarization.llm.reducer';
-import { LoggerService } from '../src/core/services/logger.service.js';
+import { HumanMessage, ResponseMessage } from '@agyn/llm';
 
-// Mock OpenAI LLM to avoid network
-vi.mock('@langchain/openai', () => {
-  class MockChatOpenAI {
-    constructor(_config: any) {}
-    withConfig() {
-      return { invoke: async () => new AIMessage('ok') };
-    }
+// Minimal fake LLM to avoid network; returns a single assistant output text
+class FakeLLM {
+  async call(_params: { model: string; input: Array<any>; tools?: Array<any> }) {
+    return new ResponseMessage({
+      output: [
+        {
+          type: 'message',
+          role: 'assistant',
+          content: [{ type: 'output_text', text: 'ok' }],
+        },
+      ],
+    } as any);
   }
-  return { ChatOpenAI: MockChatOpenAI } as any;
-});
+}
 
 describe('CallModel reducers behavior', () => {
-  beforeEach(() => {
-    // Ensure reducers are initialized with tracing-compatible minimal config before each test
-    // Keep tokens/maxTokens at 0 to disable summarization unless explicitly tested
-    // Note: Each test creates its own reducer instance and init() call.
-  });
-  it('invokes LLM using provided messages and system prompt', async () => {
-    const reducer = new CallModelLLMReducer(new LoggerService() as any);
-    reducer.init({ model: 'gpt-4o-mini', systemPrompt: '', keepTokens: 0, maxTokens: 0 } as any);
-    const state = { messages: [new HumanMessage('a')], summary: 'sum' } as any;
-    const ctx = { callerAgent: { config: { systemPrompt: 'SYS' } } } as any;
-    const res = await reducer.invoke(state, ctx);
-    expect(res.messages.at(-1)).toBeInstanceOf(AIMessage);
+  let reducer: CallModelLLMReducer;
+
+  beforeEach(async () => {
+    reducer = new CallModelLLMReducer();
+    reducer.init({ llm: new FakeLLM() as any, model: 'gpt-4o-mini', systemPrompt: 'SYS', tools: [] });
   });
 
-  it('without summary in state, still returns one AI message', async () => {
-    const reducer = new CallModelLLMReducer(new LoggerService() as any);
-    reducer.init({ model: 'gpt-4o-mini', systemPrompt: '', keepTokens: 0, maxTokens: 0 } as any);
-    const state = { messages: [new HumanMessage('a')] } as any;
-    const ctx = { callerAgent: { config: { systemPrompt: 'SYS' } } } as any;
-    const res = await reducer.invoke(state, ctx);
-    expect(res.messages.at(-1)).toBeInstanceOf(AIMessage);
+  it('invokes LLM using provided messages and system prompt', async () => {
+    const state = { messages: [HumanMessage.fromText('a')], summary: 'sum' } as any;
+    const res = await reducer.invoke(state, {} as any);
+    expect(res.messages.at(-1)).toBeInstanceOf(ResponseMessage);
+    expect((res.messages.at(-1) as ResponseMessage).text).toBe('ok');
+  });
+
+  it('without summary in state, still returns one assistant output message', async () => {
+    const state = { messages: [HumanMessage.fromText('a')] } as any;
+    const res = await reducer.invoke(state, {} as any);
+    expect(res.messages.at(-1)).toBeInstanceOf(ResponseMessage);
+    expect((res.messages.at(-1) as ResponseMessage).text).toBe('ok');
   });
 });

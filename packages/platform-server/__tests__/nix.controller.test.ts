@@ -13,7 +13,9 @@ describe('nix controller', () => {
   beforeEach(() => {
     const cfg = new ConfigService(
       configSchema.parse({
+        llmProvider: 'openai',
         githubAppId: 'x', githubAppPrivateKey: 'x', githubInstallationId: 'x', githubToken: 'x', mongodbUrl: 'x',
+        agentsDatabaseUrl: 'postgres://localhost:5432/agents',
         graphStore: 'mongo', graphRepoPath: './data/graph', graphBranch: 'graph-state',
         dockerMirrorUrl: 'http://registry-mirror:5000', nixAllowedChannels: 'nixpkgs-unstable',
         nixHttpTimeoutMs: String(200), nixCacheTtlMs: String(5 * 60_000), nixCacheMax: String(500),
