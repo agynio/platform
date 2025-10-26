@@ -24,24 +24,45 @@ export const mockTemplates: TemplateSchema[] = [
     sourcePorts: {},
     targetPorts: {},
     capabilities: { pausable: true, staticConfigurable: true, dynamicConfigurable: true },
-    staticConfigSchema: { type: 'object', properties: { systemPrompt: { type: 'string', title: 'systemPrompt' } } } as any,
+    staticConfigSchema: {
+      type: 'object',
+      properties: { systemPrompt: { type: 'string', title: 'systemPrompt' } },
+    } as any,
   },
 ];
 
 // MSW server setup (MSW v2 http handlers)
 export const handlers = [
-  _http.get('/graph/templates', () => _HttpResponse.json(mockTemplates)),
-  _http.get('/graph/nodes/:nodeId/status', ({ params }) => {
+  _http.get('/api/graph/templates', () => _HttpResponse.json(mockTemplates)),
+  _http.get('/api/graph/nodes/:nodeId/status', ({ params }) => {
     const nodeId = params.nodeId as string;
-    return _HttpResponse.json({ nodeId, isPaused: false, provisionStatus: { state: 'not_ready' }, dynamicConfigReady: false });
+    return _HttpResponse.json({
+      nodeId,
+      isPaused: false,
+      provisionStatus: { state: 'not_ready' },
+      dynamicConfigReady: false,
+    });
   }),
-  _http.post('/graph/nodes/:nodeId/actions', () => new _HttpResponse(null, { status: 204 })),
-  _http.get('/graph/nodes/:nodeId/dynamic-config-schema', () =>
-    _HttpResponse.json({ type: 'object', properties: { toolA: { type: 'boolean', title: 'toolA' }, toolB: { type: 'boolean', title: 'toolB' } } }),
+  _http.post('/api/graph/nodes/:nodeId/actions', () => new _HttpResponse(null, { status: 204 })),
+  _http.get('/api/graph/nodes/:nodeId/dynamic-config-schema', () =>
+    _HttpResponse.json({
+      type: 'object',
+      properties: { toolA: { type: 'boolean', title: 'toolA' }, toolB: { type: 'boolean', title: 'toolB' } },
+    }),
   ),
   // Full graph endpoints used by setNodeConfig / dynamic set mutation
   _http.get('/api/graph', () =>
-    _HttpResponse.json({ name: 'g', version: 1, nodes: [{ id: 'n4', template: 'mock', config: {} }, { id: 'n3', template: 'mock', config: {} }, { id: 'n2', template: 'mock', config: {} }, { id: 'n1', template: 'mock', config: {} }], edges: [] }),
+    _HttpResponse.json({
+      name: 'g',
+      version: 1,
+      nodes: [
+        { id: 'n4', template: 'mock', config: {} },
+        { id: 'n3', template: 'mock', config: {} },
+        { id: 'n2', template: 'mock', config: {} },
+        { id: 'n1', template: 'mock', config: {} },
+      ],
+      edges: [],
+    }),
   ),
   _http.post('/api/graph', async ({ request }) => {
     await request.json().catch(() => ({}));

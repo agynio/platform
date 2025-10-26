@@ -1,7 +1,8 @@
-import { Inject, Injectable } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import type { PersistedGraph, PersistedGraphUpsertRequest } from './types';
 import { GraphErrorCode } from './errors';
 import type { LiveGraphRuntime } from './liveGraph.manager';
+import type { NodeStatusState } from '../nodes/base/Node';
 
 export type GuardError = Error & { code?: string };
 
@@ -32,8 +33,8 @@ export class GraphGuard {
       const nextCmd = n.config?.command;
       if (prevCmd === nextCmd) continue;
       const status = runtime.getNodeStatus(n.id);
-      const st = status?.provisionStatus;
-      const state = typeof st === 'string' ? st : (st && 'state' in st ? (st as any).state : 'not_ready');
+      const st: NodeStatusState | undefined = status?.provisionStatus;
+      const state: NodeStatusState = st ?? 'not_ready';
       if (state !== 'not_ready') {
         throw makeError(
           GraphErrorCode.McpCommandMutationForbidden,

@@ -1,22 +1,18 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import { LoggerService } from '../src/core/services/logger.service.js';
 import { ConfigService } from '../src/core/services/config.service.js';
-import { CheckpointerService } from '../src/services/checkpointer.service';
-import { Agent } from '../src/nodes/agent/agent.node';
-
-vi.mock('@langchain/openai', () => ({ ChatOpenAI: class { withConfig() { return { invoke: async () => ({ text: 'ok' }) } as any; } async getNumTokens(t: string) { return t.length; } } }));
-vi.mock('../src/services/checkpointer.service', async (importOriginal) => {
-  const mod = await importOriginal();
-  class Fake extends mod.CheckpointerService { getCheckpointer() { return { async getTuple() {}, async *list() {}, async put() { return { configurable: { thread_id: 't' } } as any; }, async putWrites() {}, getNextVersion() { return '1'; } } as any; } }
-  return { ...mod, CheckpointerService: Fake };
-});
+import { AgentNode as Agent } from '../src/nodes/agent/agent.node';
+import { PrismaService } from '../src/core/services/prisma.service';
+import { LLMProvisioner } from '../src/llm/provisioners/llm.provisioner';
 
 describe('Agent config restrictions', () => {
   it('setConfig preserves systemPrompt and toggles restriction flags without concatenation', async () => {
     const cfg = new ConfigService({
       githubAppId: '1', githubAppPrivateKey: 'k', githubInstallationId: 'i', openaiApiKey: 'x', githubToken: 't', mongodbUrl: 'm',
     } as any);
-    const agent = new Agent(cfg, new LoggerService(), new CheckpointerService(new LoggerService()) as any, 'a1');
+    const provisioner = { getLLM: async () => ({ call: async ({ model }: any) => ({ text: `model:${model}`, output: [] }) }) };
+    const agent = new Agent(new LoggerService(), provisioner as any);
+    agent.init({ nodeId: 'a1' });
     // Update system prompt
     agent.setConfig({ systemPrompt: 'Base system' });
     // Toggle restriction flags

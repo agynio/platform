@@ -1,9 +1,9 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { LocalMCPServer } from '../src/mcp/localMcpServer.js';
+import { LocalMCPServer } from '../src/nodes/mcp/localMcpServer.node';
 import { McpServerConfig } from '../src/mcp/types.js';
 import { LoggerService } from '../src/core/services/logger.service.js';
 import { PassThrough } from 'node:stream';
-import { ContainerService } from '../src/core/services/container.service.js';
+import { ContainerService } from '../src/infra/container/container.service';
 // no extra imports
 
 /**
@@ -159,12 +159,10 @@ describe('LocalMCPServer (mock)', () => {
       lastPayload = p;
     });
     // Preload cached tools -> should emit tools_updated
-    (server as any).preloadCachedTools([{ name: 'pre' }], Date.now());
+    (server as any).preloadCachedToolSummaries([{ name: 'pre' }], Date.now());
     expect(lastPayload).toBeTruthy();
     expect(Array.isArray(lastPayload!.tools)).toBe(true);
-    // Apply dynamic config -> should emit tools_updated
-    (server as any).setDynamicConfig?.({ echo: true });
-    expect(lastPayload).toBeTruthy();
+    // Dynamic config path removed; ensure discover emits update
     // Re-discovery via manual call -> should emit tools_updated
     await (server as any).discoverTools();
     expect(lastPayload).toBeTruthy();

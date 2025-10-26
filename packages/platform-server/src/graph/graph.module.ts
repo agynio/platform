@@ -144,6 +144,6 @@ import { NodeStateService } from './nodeState.service';
     // },
     AgentRunService,
   ],
-  exports: [LiveGraphRuntime, TemplateRegistry, PortsRegistry, GraphRepository, AgentRunService],
+  exports: [LiveGraphRuntime, TemplateRegistry, PortsRegistry, GraphRepository, AgentRunService, NodeStateService],
 })
 export class GraphModule {}

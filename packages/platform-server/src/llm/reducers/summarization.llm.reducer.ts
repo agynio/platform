@@ -11,11 +11,14 @@ import {
   ToolCallOutputMessage,
 } from '@agyn/llm';
 import { stringify } from 'yaml';
-import { Injectable, Scope } from '@nestjs/common';
+import { Inject, Injectable, Scope } from '@nestjs/common';
+import { LLMProvisioner } from '../provisioners/llm.provisioner';
 
 @Injectable({ scope: Scope.TRANSIENT })
 export class SummarizationLLMReducer extends Reducer<LLMState, LLMContext> {
-  constructor() {
+  constructor(
+    @Inject(LLMProvisioner) private readonly provisioner: LLMProvisioner,
+  ) {
     super();
   }
 
@@ -25,16 +28,21 @@ export class SummarizationLLMReducer extends Reducer<LLMState, LLMContext> {
     maxTokens: 0,
     systemPrompt: '',
   };
-  private llm?: LLM;
+  private _llm?: LLM;
 
-  init(params: { llm: LLM; model: string; keepTokens: number; maxTokens: number; systemPrompt: string }) {
-    this.llm = params.llm;
+  get llm(): LLM {
+    if (!this._llm) throw new Error('Reducer not initialized: call init() first');
+    return this._llm;
+  }
+
+  async init(params: { model: string; keepTokens: number; maxTokens: number; systemPrompt: string }) {
     this.params = {
       model: params.model,
       keepTokens: params.keepTokens,
       maxTokens: params.maxTokens,
       systemPrompt: params.systemPrompt,
     };
+    this._llm = await this.provisioner.getLLM();
     return this;
   }
 
@@ -85,7 +93,6 @@ export class SummarizationLLMReducer extends Reducer<LLMState, LLMContext> {
         oldContextTokensCount: await this.countTokensFromMessages(state.messages),
       },
       async () => {
-        if (!this.llm) throw new Error('SummarizationLLMReducer not initialized');
         const response = await this.llm.call({
           model,
           input: [

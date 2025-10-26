@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import { LoggerService } from '../src/core/services/logger.service';
-import { ContainerService } from '../src/core/services/container.service';
+import { ContainerService } from '../src/infra/container/container.service';
 import { PassThrough } from 'node:stream';
 
 function makeFrame(type: number, payload: Buffer) {

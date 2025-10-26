@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { SystemMessage, HumanMessage, ResponseMessage, ToolCallMessage, withLLM, init, LLMResponse } from '../src';
+import { SystemMessage, HumanMessage, ToolCallMessage, withLLM, init, LLMResponse } from '../src';
+import { ResponseMessage } from '@agyn/llm';
 
 // mock fetch
 // @ts-ignore

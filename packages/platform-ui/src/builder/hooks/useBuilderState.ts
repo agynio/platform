@@ -60,7 +60,7 @@ export function useBuilderState(serverBase = getApiBase(), options?: BuilderOpti
     (async () => {
       try {
         const [tplRes, graphRes] = await Promise.all([
-          fetch(`${serverBase}/api/templates`).then((r) => r.json()),
+          fetch(`${serverBase}/api/graph/templates`).then((r) => r.json()),
           fetch(`${serverBase}/api/graph`).then((r) => r.json()),
         ]);
         if (cancelled) return;

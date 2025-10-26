@@ -25,9 +25,10 @@ import { RemindMeNode } from './tools/remind_me/remind_me.node';
 import { RemindersController } from './tools/remind_me/reminders.controller';
 import { SendSlackMessageNode } from './tools/send_slack_message/send_slack_message.node';
 import { ShellCommandNode } from './tools/shell_command/shell_command.node';
+import { GraphModule } from '../graph/graph.module';
 
 @Module({
-  imports: [CoreModule, LLMModule, InfraModule, EnvModule],
+  imports: [CoreModule, LLMModule, InfraModule, EnvModule, GraphModule],
   controllers: [RemindersController],
   providers: [
     // repositories/services

@@ -21,12 +21,11 @@ export async function createSingleFileTar(filename: string, content: string): Pr
   });
 
   const collectPromise = new Promise<Buffer>((resolve, reject) => {
-    const stream = Readable.from(tar);
-    // Node.js Readable.from returns NodeJS.ReadableStream in CommonJS; here ensure listener methods exist.
-    (stream as unknown as NodeJS.ReadableStream)
-      .on('data', (c: Buffer) => chunks.push(Buffer.isBuffer(c) ? c : Buffer.from(c)))
-      .on('error', (e: unknown) => reject(e instanceof Error ? e : new Error(String(e))))
-      .on('end', () => resolve(Buffer.concat(chunks)));
+    const stream: NodeJS.ReadableStream = Readable.from(tar);
+    stream
+      .on('data', (c: Buffer | string) => chunks.push(Buffer.isBuffer(c) ? c : Buffer.from(String(c))) )
+      .on('error', (e: unknown) => reject(e instanceof Error ? e : new Error(String(e))) )
+      .on('end', () => resolve(Buffer.concat(chunks)) );
   });
 
   await entryPromise;

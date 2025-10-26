@@ -1,4 +1,4 @@
-import { Configurable, EdgeDef, GraphDefinition, GraphError, NodeDef } from './types';
+import { EdgeDef, GraphDefinition, GraphError, NodeDef } from './types';
 import { Node } from '../nodes/base/Node';
 
 export interface LiveNode {

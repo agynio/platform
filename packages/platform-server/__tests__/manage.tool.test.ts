@@ -142,7 +142,7 @@ describe('ManageTool graph wiring', () => {
       .register('agent', { title: 'Agent', kind: 'agent' }, (() => new FakeAgentWithTools(logger) as any) as any)
       .register('manageTool', { title: 'Manage', kind: 'tool' }, (() => new ManageTool(logger)) as any);
 
-    const runtime = new LiveGraphRuntime(logger, registry);
+    const runtime = new LiveGraphRuntime(logger, registry as any, { initIfNeeded: async()=>{}, get: async()=>null, upsert: async()=>{ throw new Error('not-implemented'); }, upsertNodeState: async()=>{} } as any, { create: (Cls: any) => new Cls() } as any);
     const graph = {
       nodes: [
         { id: 'A', data: { template: 'agent', config: {} } },

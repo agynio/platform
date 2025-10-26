@@ -8,7 +8,7 @@ import { TemplateRegistry } from '../src/graph/templateRegistry';
 import type { GraphDefinition } from '../src/graph/types';
 import { LoggerService } from '../src/core/services/logger.service.js';
 import { MemoryService } from '../src/nodes/memory.repository';
-import { CallModelNode } from '../src/lgnodes/callModel.lgnode';
+// Updated tests should not use legacy lgnodes; adjust to reducers/AgentNode patterns if needed.
 import { BaseTool } from '../src/tools/base.tool';
 
 // Fake LLM: replace ChatOpenAI to avoid network and capture messages
@@ -69,7 +69,7 @@ function makeRuntime(db: Db, placement: 'after_system'|'last_message') {
   );
 
   class StubRepo extends GraphRepository { async initIfNeeded(): Promise<void> {} async get(): Promise<any> { return null; } async upsert(): Promise<any> { throw new Error('not-implemented'); } async upsertNodeState(): Promise<void> {} }
-  const runtime = new LiveGraphRuntime(logger, templates, new StubRepo());
+  const runtime = new LiveGraphRuntime(logger, templates, new StubRepo(), { create: (Cls: any) => new Cls() } as any);
   return runtime;
 }
 
@@ -172,7 +172,7 @@ describe.skipIf(!RUN_MONGOMS)('Runtime integration: memory injection via LiveGra
     );
 
     class StubRepo2 extends GraphRepository { async initIfNeeded(): Promise<void> {} async get(): Promise<any> { return null; } async upsert(): Promise<any> { throw new Error('not-implemented'); } async upsertNodeState(): Promise<void> {} }
-    const runtime = new LiveGraphRuntime(logger, templates, new StubRepo2());
+    const runtime = new LiveGraphRuntime(logger, templates, new StubRepo2(), { create: (Cls: any) => new Cls() } as any);
     const graph: GraphDefinition = {
       nodes: [ { id: 'cm', data: { template: 'callModel', config: {} } }, { id: 'mem', data: { template: 'memory', config: {} } } ],
       edges: [ { source: 'mem', sourceHandle: '$self', target: 'cm', targetHandle: 'setMemoryConnector' } ],

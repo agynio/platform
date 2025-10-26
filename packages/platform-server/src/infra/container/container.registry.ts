@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import type { Db, Collection, WithId, UpdateFilter, Filter } from 'mongodb';
+import type { Db, Collection, UpdateFilter, Filter } from 'mongodb';
 import { LoggerService } from '../../core/services/logger.service';
 
 export type ContainerStatus = 'running' | 'stopped' | 'terminating' | 'failed';
@@ -153,7 +153,7 @@ export class ContainerRegistry {
           $or: [{ 'metadata.retryAfter': { $exists: false } }, { 'metadata.retryAfter': { $lte: iso } }],
         },
       ],
-    } as unknown as Filter<ContainerDoc>;
+    } as Filter<ContainerDoc>;
     return await this.col.find(filter).toArray();
   }
 

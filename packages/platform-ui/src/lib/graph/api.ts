@@ -35,13 +35,18 @@ type TemplateName =
 type ReferenceValue = { value: string; source?: 'static' | 'vault' };
 type EnvItem = { key: string; value: string; source?: 'static' | 'vault' };
 
-function normalizeConfigByTemplate(template: TemplateName | string, cfg?: Record<string, unknown>): Record<string, unknown> | undefined {
+function normalizeConfigByTemplate(
+  template: TemplateName | string,
+  cfg?: Record<string, unknown>,
+): Record<string, unknown> | undefined {
   if (!cfg || typeof cfg !== 'object') return cfg;
   const c = { ...(cfg as Record<string, unknown>) };
   switch (template) {
     case 'containerProvider': {
       if (c.env && !Array.isArray(c.env) && typeof c.env === 'object') {
-        c.env = Object.entries(c.env as Record<string, string>).map(([k, v]) => ({ key: k, value: v, source: 'static' } as EnvItem));
+        c.env = Object.entries(c.env as Record<string, string>).map(
+          ([k, v]) => ({ key: k, value: v, source: 'static' }) as EnvItem,
+        );
       }
       if ('workingDir' in c) delete (c as Record<string, unknown>).workingDir;
       // Remove fields no longer in schema
@@ -62,7 +67,9 @@ function normalizeConfigByTemplate(template: TemplateName | string, cfg?: Record
         delete rc.workingDir;
       }
       if (c.env && !Array.isArray(c.env) && typeof c.env === 'object') {
-        c.env = Object.entries(c.env as Record<string, string>).map(([k, v]) => ({ key: k, value: v, source: 'static' } as EnvItem));
+        c.env = Object.entries(c.env as Record<string, string>).map(
+          ([k, v]) => ({ key: k, value: v, source: 'static' }) as EnvItem,
+        );
       }
       return c;
     }
@@ -74,14 +81,16 @@ function normalizeConfigByTemplate(template: TemplateName | string, cfg?: Record
     }
     case 'sendSlackMessageTool': {
       const t = (c as Record<string, unknown>)['bot_token'];
-      if (typeof t === 'string') (c as Record<string, unknown>)['bot_token'] = { value: t, source: 'static' } as ReferenceValue;
+      if (typeof t === 'string')
+        (c as Record<string, unknown>)['bot_token'] = { value: t, source: 'static' } as ReferenceValue;
       // Remove extras
       delete (c as Record<string, unknown>).note;
       return c;
     }
     case 'slackTrigger': {
       const at = (c as Record<string, unknown>)['app_token'];
-      if (typeof at === 'string') (c as Record<string, unknown>)['app_token'] = { value: at, source: 'static' } as ReferenceValue;
+      if (typeof at === 'string')
+        (c as Record<string, unknown>)['app_token'] = { value: at, source: 'static' } as ReferenceValue;
       // Remove fields not in staticConfig
       delete (c as Record<string, unknown>).bot_token;
       delete (c as Record<string, unknown>).default_channel;
@@ -89,7 +98,8 @@ function normalizeConfigByTemplate(template: TemplateName | string, cfg?: Record
     }
     case 'githubCloneRepoTool': {
       const token = (c as Record<string, unknown>)['token'];
-      if (typeof token === 'string') (c as Record<string, unknown>)['token'] = { value: token, source: 'static' } as ReferenceValue;
+      if (typeof token === 'string')
+        (c as Record<string, unknown>)['token'] = { value: token, source: 'static' } as ReferenceValue;
       delete (c as Record<string, unknown>).repoUrl;
       delete (c as Record<string, unknown>).destPath;
       delete (c as Record<string, unknown>).authToken;
@@ -97,7 +107,9 @@ function normalizeConfigByTemplate(template: TemplateName | string, cfg?: Record
     }
     case 'mcpServer': {
       if (c.env && !Array.isArray(c.env) && typeof c.env === 'object') {
-        c.env = Object.entries(c.env as Record<string, string>).map(([k, v]) => ({ key: k, value: v, source: 'static' } as EnvItem));
+        c.env = Object.entries(c.env as Record<string, string>).map(
+          ([k, v]) => ({ key: k, value: v, source: 'static' }) as EnvItem,
+        );
       }
       // Remove omitted fields per review
       delete (c as Record<string, unknown>).image;
@@ -118,7 +130,8 @@ function normalizeConfigByTemplate(template: TemplateName | string, cfg?: Record
     }
     case 'memoryConnector': {
       const placement = (c as Record<string, unknown>).placement as string | undefined;
-      if (placement && !['after_system', 'last_message'].includes(placement)) (c as Record<string, unknown>).placement = 'after_system';
+      if (placement && !['after_system', 'last_message'].includes(placement))
+        (c as Record<string, unknown>).placement = 'after_system';
       const content = (c as Record<string, unknown>).content as string | undefined;
       if (content && !['full', 'tree'].includes(content)) (c as Record<string, unknown>).content = 'tree';
       const mc = (c as Record<string, unknown>).maxChars as number | undefined;
@@ -131,49 +144,71 @@ function normalizeConfigByTemplate(template: TemplateName | string, cfg?: Record
 }
 
 export const api = {
-  getTemplates: () => httpJson<TemplateSchema[]>(`/graph/templates`),
+  getTemplates: () => httpJson<TemplateSchema[]>(`/api/graph/templates`),
   // Runs: list and termination controls (no auth/gates)
   listNodeRuns: async (nodeId: string, status: 'running' | 'terminating' | 'all' = 'all') => {
-    const res = await httpJson<{ items: Array<{ nodeId: string; threadId: string; runId: string; status: string; startedAt: string; updatedAt: string }> }>(
-      `/graph/nodes/${encodeURIComponent(nodeId)}/runs?status=${encodeURIComponent(status)}`,
-    );
+    const res = await httpJson<{
+      items: Array<{
+        nodeId: string;
+        threadId: string;
+        runId: string;
+        status: string;
+        startedAt: string;
+        updatedAt: string;
+      }>;
+    }>(`/api/graph/nodes/${encodeURIComponent(nodeId)}/runs?status=${encodeURIComponent(status)}`);
     return res ?? { items: [] };
   },
   terminateRun: (nodeId: string, runId: string) =>
-    httpJson<{ status: string }>(`/graph/nodes/${encodeURIComponent(nodeId)}/runs/${encodeURIComponent(runId)}/terminate`, { method: 'POST' }),
+    httpJson<{ status: string }>(
+      `/api/graph/nodes/${encodeURIComponent(nodeId)}/runs/${encodeURIComponent(runId)}/terminate`,
+      { method: 'POST' },
+    ),
   terminateThread: (nodeId: string, threadId: string) =>
-    httpJson<{ status: string }>(`/graph/nodes/${encodeURIComponent(nodeId)}/threads/${encodeURIComponent(threadId)}/terminate`, { method: 'POST' }),
+    httpJson<{ status: string }>(
+      `/api/graph/nodes/${encodeURIComponent(nodeId)}/threads/${encodeURIComponent(threadId)}/terminate`,
+      { method: 'POST' },
+    ),
   // Reminders for RemindMe tool node
   getNodeReminders: async (nodeId: string) => {
-    const res = await httpJson<{ items: ReminderDTO[] }>(`/graph/nodes/${encodeURIComponent(nodeId)}/reminders`);
+    const res = await httpJson<{ items: ReminderDTO[] }>(`/api/graph/nodes/${encodeURIComponent(nodeId)}/reminders`);
     return res ?? { items: [] };
   },
   // Vault autocomplete endpoints (only available when enabled server-side)
   listVaultMounts: () => httpJson<{ items: string[] }>(`/api/vault/mounts`).catch(() => ({ items: [] })),
   listVaultPaths: (mount: string, prefix = '') =>
-    httpJson<{ items: string[] }>(`/api/vault/kv/${encodeURIComponent(mount)}/paths?prefix=${encodeURIComponent(prefix)}`).catch(() => ({ items: [] })),
+    httpJson<{ items: string[] }>(
+      `/api/vault/kv/${encodeURIComponent(mount)}/paths?prefix=${encodeURIComponent(prefix)}`,
+    ).catch(() => ({ items: [] })),
   listVaultKeys: (mount: string, path = '', opts?: { maskErrors?: boolean }) =>
-    (opts?.maskErrors === false
-      ? httpJson<{ items: string[] }>(`/api/vault/kv/${encodeURIComponent(mount)}/keys?path=${encodeURIComponent(path)}`)
-      : httpJson<{ items: string[] }>(`/api/vault/kv/${encodeURIComponent(mount)}/keys?path=${encodeURIComponent(path)}`).catch(() => ({ items: [] }))
-    ),
+    opts?.maskErrors === false
+      ? httpJson<{ items: string[] }>(
+          `/api/vault/kv/${encodeURIComponent(mount)}/keys?path=${encodeURIComponent(path)}`,
+        )
+      : httpJson<{ items: string[] }>(
+          `/api/vault/kv/${encodeURIComponent(mount)}/keys?path=${encodeURIComponent(path)}`,
+        ).catch(() => ({ items: [] })),
   writeVaultKey: (mount: string, body: { path: string; key: string; value: string }) =>
     httpJson<{ mount: string; path: string; key: string; version: number }>(
       `/api/vault/kv/${encodeURIComponent(mount)}/write`,
       { method: 'POST', body: JSON.stringify(body) },
     ),
-  getNodeStatus: (nodeId: string) => httpJson<NodeStatus>(`/graph/nodes/${encodeURIComponent(nodeId)}/status`),
+  getNodeStatus: (nodeId: string) => httpJson<NodeStatus>(`/api/graph/nodes/${encodeURIComponent(nodeId)}/status`),
   // Dynamic config schema endpoint: try the newer '/dynamic-config/schema' first, fallback to legacy '/dynamic-config-schema'
   getDynamicConfigSchema: async (nodeId: string): Promise<Record<string, unknown> | null> => {
     // Prefer legacy path first (currently implemented server / tests), then new structured path
-    const legacy = buildUrl(`/graph/nodes/${encodeURIComponent(nodeId)}/dynamic-config-schema`);
-    const structured = buildUrl(`/graph/nodes/${encodeURIComponent(nodeId)}/dynamic-config/schema`);
+    const legacy = buildUrl(`/api/graph/nodes/${encodeURIComponent(nodeId)}/dynamic-config-schema`);
+    const structured = buildUrl(`/api/graph/nodes/${encodeURIComponent(nodeId)}/dynamic-config/schema`);
     async function tryFetch(url: string) {
       try {
         const res = await fetch(url, { headers: { 'Content-Type': 'application/json' } });
         if (res.status === 404) return undefined;
         if (!res.ok) return undefined; // treat non-2xx as miss so we can fallback
-        try { return await res.json(); } catch { return undefined; }
+        try {
+          return await res.json();
+        } catch {
+          return undefined;
+        }
       } catch {
         return undefined;
       }
@@ -197,7 +232,10 @@ export const api = {
     return isLikelyJsonSchemaRoot(data) ? (data as Record<string, unknown>) : null;
   },
   postNodeAction: (nodeId: string, action: 'pause' | 'resume' | 'provision' | 'deprovision') =>
-    httpJson<void>(`/graph/nodes/${encodeURIComponent(nodeId)}/actions`, { method: 'POST', body: JSON.stringify({ action }) }),
+    httpJson<void>(`/api/graph/nodes/${encodeURIComponent(nodeId)}/actions`, {
+      method: 'POST',
+      body: JSON.stringify({ action }),
+    }),
   saveFullGraph: (graph: PersistedGraphUpsertRequestUI) => {
     const normalized = {
       ...graph,

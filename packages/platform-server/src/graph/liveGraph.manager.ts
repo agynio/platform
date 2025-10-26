@@ -8,7 +8,7 @@ import {
 } from './liveGraph.types';
 import { EdgeDef, GraphDefinition, GraphError, NodeDef } from './types';
 // Ports based reversible universal edges
-import { ZodError } from 'zod';
+import { ZodError, type ZodIssue } from 'zod';
 import { LoggerService } from '../core/services/logger.service';
 import { LocalMCPServer } from '../nodes/mcp';
 import type { PersistedMcpState, McpTool } from '../nodes/mcp/types';
@@ -22,7 +22,7 @@ import { Errors } from './errors';
 import { PortsRegistry } from './ports.registry';
 import type { TemplatePortConfig } from './ports.types';
 import { TemplateRegistry } from './templateRegistry';
-import { isNodeLifecycle } from '../nodes/types';
+// Legacy lifecycle guard removed; rely on Node class lifecycle only.
 // hasSetDynamicConfig guard is optional; check presence inline to avoid hard dependency
 import { GraphRepository } from './graph.repository';
 
@@ -39,8 +39,7 @@ export class LiveGraphRuntime {
     lastGraph: undefined,
   };
 
-  // Track paused state for nodes that don't implement isPaused()
-  private pausedFallback = new Set<string>();
+  // Paused fallback removed; pause/resume not supported in strict lifecycle.
 
   private applying: Promise<unknown> = Promise.resolve(); // serialize updates
   private portsRegistry: PortsRegistry;
@@ -140,9 +139,9 @@ export class LiveGraphRuntime {
     }
   }
 
-  // Return the live node instance (if present). Authoritative API used by routes (no any casts).
-  getNodeInstance<T = unknown>(id: string): T | undefined {
-    return this.state.nodes.get(id)?.instance as T | undefined;
+  // Return the live node instance (if present).
+  getNodeInstance(id: string): Node | undefined {
+    return this.state.nodes.get(id)?.instance;
   }
 
   async apply(graph: GraphDefinition): Promise<GraphDiffResult> {
@@ -159,7 +158,6 @@ export class LiveGraphRuntime {
 
   getNodeStatus(id: string): { provisionStatus?: NodeStatusState } {
     const inst = this.state.nodes.get(id)?.instance;
-
     return { provisionStatus: inst?.status };
   }
 
@@ -207,9 +205,6 @@ export class LiveGraphRuntime {
       if (!live) continue;
       try {
         const cfg = nodeDef.data.config || {};
-        await (live.instance as any).configure(cfg);
-        live.config = cfg;
-
         const cleaned = await this.applyConfigWithUnknownKeyStripping(live.instance, 'setConfig', cfg, nodeId);
         // set live.config to cleaned object only on success
         live.config = cleaned;
@@ -352,24 +347,25 @@ export class LiveGraphRuntime {
       const live: LiveNode = { id: node.id, template: node.data.template, instance: created, config: node.data.config };
       this.state.nodes.set(node.id, live);
 
-      await created.setConfig(node.data.config);
-      await created.provision();
+      if (node.data.config) {
+        await created.setConfig(node.data.config);
+      }
 
-      // Fix: Create LocalMCPServerTool instances from McpTool if present in state.mcp.tools
       if (created instanceof LocalMCPServer) {
         const state = node.data.state as { mcp?: PersistedMcpState } | undefined;
 
         if (state?.mcp && state.mcp.tools) {
-          const tools = state.mcp.tools;
+          const summaries = state.mcp.tools;
           const updatedAt = state.mcp.toolsUpdatedAt;
           try {
-            // Tools may be stored as summaries; guard conversion if needed.
-            created.preloadCachedTools((tools as any) as McpTool[], updatedAt);
+            created.preloadCachedToolSummaries(summaries, updatedAt);
           } catch (e) {
             this.logger.error('Error during MCP cache preload for node %s', node.id, e);
           }
         }
       }
+      // TODO: move preloadCachedToolSummaries logic completely inside localMcpServer provision
+      void created.provision();
     } catch (e) {
       // Factory creation or any init error should include nodeId
       if (e instanceof GraphError) throw e; // already enriched
@@ -400,19 +396,21 @@ export class LiveGraphRuntime {
         return current; // success
       } catch (err) {
         if (err instanceof ZodError) {
-          const issues = err.issues || [];
-          const unknownRoot = issues.filter((i: unknown) => {
-            const z: any = i as any;
-            if (!z || typeof z !== 'object') return false;
-            if (z.code !== 'unrecognized_keys') return false;
-            const hasKeys = Array.isArray(z.keys as unknown[]);
-            const path = z.path as unknown;
+          const issues: ZodIssue[] = err.issues || [];
+          const unknownRoot = issues.filter((i: ZodIssue) => {
+            if (!i || typeof i !== 'object') return false;
+            if (i.code !== 'unrecognized_keys') return false;
+            const hasKeys = Array.isArray((i as { keys?: unknown }).keys);
+            const path = (i as { path?: unknown }).path;
             const pathOk = Array.isArray(path as unknown[]) ? (path as unknown[]).length === 0 : true;
             return hasKeys && pathOk;
           });
           if (unknownRoot.length > 0) {
             const keys = new Set<string>();
-            for (const i of unknownRoot) for (const k of (i as any).keys as string[]) keys.add(k);
+            for (const i of unknownRoot) {
+              const ks = (i as { keys?: string[] }).keys;
+              if (Array.isArray(ks)) for (const k of ks) keys.add(k);
+            }
             if (keys.size > 0) {
               const next: Record<string, unknown> = {};
               for (const [k, v] of Object.entries(current)) if (!keys.has(k)) next[k] = v;
@@ -451,44 +449,11 @@ export class LiveGraphRuntime {
       }
     }
     // Call lifecycle teardown if present
-    const inst = live.instance as unknown;
-    if (inst) {
+    const inst = live.instance;
+    if (inst && typeof inst.deprovision === 'function') {
       try {
-        if (isNodeLifecycle(inst)) {
-          try {
-            await inst.stop();
-          } catch {}
-          try {
-            await inst.delete();
-          } catch {}
-        } else {
-          const destroy = (inst as Record<string, unknown>)['destroy'];
-          if (typeof destroy === 'function') {
-            try {
-              await (destroy as Function).call(inst);
-            } catch {}
-          } else {
-            // fallback legacy
-            for (const method of ['dispose', 'close', 'stop'] as const) {
-              const fn = (inst as Record<string, unknown>)[method];
-              if (typeof fn === 'function') {
-                try {
-                  await (fn as Function).call(inst);
-                } catch {}
-                break;
-              }
-            }
-          }
-        }
-      } catch {
-        // fallback to legacy behavior above if type guard fails
-        const destroy = (inst as Record<string, unknown>)['destroy'];
-        if (typeof destroy === 'function') {
-          try {
-            await (destroy as Function).call(inst);
-          } catch {}
-        }
-      }
+        await inst.deprovision();
+      } catch {}
     }
     this.state.nodes.delete(nodeId);
     this.state.inboundEdges.delete(nodeId);
@@ -508,7 +473,7 @@ export class LiveGraphRuntime {
     this.state.inboundEdges.get(rec.target)?.delete(rec.key);
   }
 
-  private async executeEdge(edge: EdgeDef, graph: GraphDefinition): Promise<void> {
+  private async executeEdge(edge: EdgeDef, _graph: GraphDefinition): Promise<void> {
     const sourceLive = this.state.nodes.get(edge.source);
     const targetLive = this.state.nodes.get(edge.target);
     if (!sourceLive || !targetLive) return; // node creation error previously logged
@@ -526,10 +491,17 @@ export class LiveGraphRuntime {
     const argValue = instanceSide.instance; // basic rule: pass the other instance
     const key = edgeKey(edge);
 
-    {
-      const createFn = (methodSide.instance as any)[methodCfg.create];
-      if (typeof createFn === 'function') await (createFn as Function).call(methodSide.instance, argValue);
-    }
+    type Callable = (arg: unknown) => unknown | Promise<unknown>;
+    type InstanceMethodMap = Record<string, Callable>;
+    const getMethod = (inst: object, name?: string): Callable | undefined => {
+      if (!name) return undefined;
+      const map = inst as unknown as InstanceMethodMap;
+      const fn = map[name];
+      return typeof fn === 'function' ? fn : undefined;
+    };
+
+    const createFn = getMethod(methodSide.instance, methodCfg.create);
+    if (createFn) await createFn.call(methodSide.instance, argValue);
 
     const record: ExecutedEdgeRecord = {
       key,
@@ -540,13 +512,11 @@ export class LiveGraphRuntime {
       reversible: true,
       argumentSnapshot: argValue,
       reversal: async () => {
-        if (methodCfg.destroy) {
-          const destroyFn = (methodSide.instance as any)[methodCfg.destroy];
-          if (typeof destroyFn === 'function') await (destroyFn as Function).call(methodSide.instance, argValue);
-        } else {
-          // Fallback: call create with undefined to signal disconnection
-          const createFn = (methodSide.instance as any)[methodCfg.create];
-          if (typeof createFn === 'function') await (createFn as Function).call(methodSide.instance, undefined);
+        const destroyFn = getMethod(methodSide.instance, methodCfg.destroy);
+        if (destroyFn) await destroyFn.call(methodSide.instance, argValue);
+        else {
+          const c = getMethod(methodSide.instance, methodCfg.create);
+          if (c) await c.call(methodSide.instance, undefined);
         }
       },
     };
@@ -559,16 +529,12 @@ export class LiveGraphRuntime {
   // Stop and delete all live nodes that implement lifecycle; ignore errors and always clear state
   async shutdown(): Promise<void> {
     const nodes = Array.from(this.state.nodes.values());
-    // imported at top: isNodeLifecycle
     await Promise.all(
       nodes.map(async (live) => {
-        const inst = live.instance;
-        if (isNodeLifecycle(inst)) {
+        const inst = live.instance as any;
+        if (inst && typeof inst.deprovision === 'function') {
           try {
-            await inst.stop();
-          } catch {}
-          try {
-            await inst.delete();
+            await inst.deprovision();
           } catch {}
         }
         const inbound = this.state.inboundEdges.get(live.id) || new Set<string>();

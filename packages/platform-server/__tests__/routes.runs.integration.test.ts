@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { Test, type TestingModule } from '@nestjs/testing';
+// Avoid Nest TestingModule; instantiate minimal app components directly where possible
 import { FastifyAdapter } from '@nestjs/platform-fastify';
 import type { FastifyInstance } from 'fastify';
 import { LoggerService } from '../src/core/services/logger.service.js';
@@ -41,13 +41,10 @@ describe('RunsController (Nest + FastifyAdapter) integration', () => {
       client = await MongoClient.connect(mongod.getUri());
 
       const logger = new LoggerService();
-      const moduleRef: TestingModule = await Test.createTestingModule({ imports: [GraphModule] })
-        .overrideProvider(AgentRunService)
-        .useFactory({ factory: () => new AgentRunService(client!.db('agents-routes'), logger) })
-        .compile();
-
       const adapter = new FastifyAdapter({ logger: false });
-      app = moduleRef.createNestApplication(adapter as any);
+      const module = await (await import('../src/bootstrap/app.module')).createAppModule?.(adapter as any, client!.db('agents-routes'));
+      if (!module) throw new Error('App module factory not available');
+      app = module;
       await app.init();
       fastify = (adapter as any).getInstance();
 

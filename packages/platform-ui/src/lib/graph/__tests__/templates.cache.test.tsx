@@ -11,11 +11,18 @@ describe('Templates cache provider', () => {
   beforeEach(() => {
     g.fetch = vi.fn(async (input: RequestInfo) => {
       const url = String(input);
-      if (url.endsWith('/graph/templates')) {
+      if (url.endsWith('/api/graph/templates')) {
         return new Response(
           JSON.stringify([
             { name: 'a', title: 'A', kind: 'tool', sourcePorts: {}, targetPorts: {}, capabilities: { pausable: true } },
-            { name: 'b', title: 'B', kind: 'tool', sourcePorts: {}, targetPorts: {}, capabilities: { dynamicConfigurable: true } },
+            {
+              name: 'b',
+              title: 'B',
+              kind: 'tool',
+              sourcePorts: {},
+              targetPorts: {},
+              capabilities: { dynamicConfigurable: true },
+            },
           ]),
         );
       }

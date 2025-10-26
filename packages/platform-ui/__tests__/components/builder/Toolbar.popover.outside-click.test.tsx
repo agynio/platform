@@ -9,7 +9,7 @@ import { TooltipProvider } from '@agyn/ui';
 // Shared API mocks
 function mockApi() {
   server.use(
-    http.get('/api/templates', () =>
+    http.get('/api/graph/templates', () =>
       HttpResponse.json([
         { name: 'agent.basic', title: 'Agent', kind: 'agent', sourcePorts: [], targetPorts: [] },
         { name: 'tool.basic', title: 'Tool', kind: 'tool', sourcePorts: [], targetPorts: [] },

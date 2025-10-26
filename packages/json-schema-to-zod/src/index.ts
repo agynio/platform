@@ -1,7 +1,7 @@
 import { z, ZodTypeAny } from 'zod';
 
 // Minimal JSON Schema subset interface
-interface JSONSchema {
+export interface JSONSchema {
   type?: string | string[];
   properties?: Record<string, JSONSchema>;
   required?: string[];
@@ -26,14 +26,12 @@ export function jsonSchemaToZod(schema: JSONSchema | undefined): ZodTypeAny {
 
   // Handle enum
   if (schema.enum && schema.enum.length) {
-    // If mixed types, fallback to union of literals; if single type, z.enum when all strings
     const allStrings = schema.enum.every((e) => typeof e === 'string');
     if (allStrings) return z.enum([...(new Set(schema.enum) as Set<string>)] as [string, ...string[]]);
-    const lits = schema.enum.map((v) => z.literal(v as any)) as unknown as [ZodTypeAny, ...ZodTypeAny[]];
-    return z.union(lits);
+    const literals = schema.enum.map((v) => z.literal(v as never));
+    return z.union(literals as [ZodTypeAny, ...ZodTypeAny[]]);
   }
 
-  // Support type arrays (anyOf semantics over primitive types)
   const types = Array.isArray(schema.type) ? schema.type : schema.type ? [schema.type] : [];
   if (types.length > 1) {
     return z.union(types.map((t) => jsonSchemaToZod({ ...schema, type: t })) as [ZodTypeAny, ...ZodTypeAny[]]);
@@ -54,7 +52,6 @@ export function jsonSchemaToZod(schema: JSONSchema | undefined): ZodTypeAny {
       break;
     case 'array': {
       if (Array.isArray(schema.items)) {
-        // tuple style
         const tupleItems = schema.items.map((it) => jsonSchemaToZod(it));
         base = z.tuple(tupleItems as [ZodTypeAny, ...ZodTypeAny[]]);
       } else {
@@ -74,9 +71,8 @@ export function jsonSchemaToZod(schema: JSONSchema | undefined): ZodTypeAny {
       break;
     }
     default: {
-      // Try structural cues
       if (schema.properties) {
-      const shape: Record<string, ZodTypeAny> = {};
+        const shape: Record<string, ZodTypeAny> = {};
         const req = new Set(schema.required || []);
         for (const [k, v] of Object.entries(schema.properties)) {
           let prop = jsonSchemaToZod(v);
@@ -86,8 +82,7 @@ export function jsonSchemaToZod(schema: JSONSchema | undefined): ZodTypeAny {
         base = z.object(shape).strict();
       } else if (schema.anyOf || schema.oneOf) {
         const alts = (schema.anyOf || schema.oneOf)!.map((s) => jsonSchemaToZod(s));
-        if (alts.length === 1) base = alts[0];
-        else base = z.union(alts as [ZodTypeAny, ...ZodTypeAny[]]);
+        base = alts.length === 1 ? alts[0] : z.union(alts as [ZodTypeAny, ...ZodTypeAny[]]);
       } else {
         base = z.any();
       }
@@ -95,20 +90,13 @@ export function jsonSchemaToZod(schema: JSONSchema | undefined): ZodTypeAny {
   }
 
   if (schema.allOf && schema.allOf.length) {
-    // Reduce intersections; if any part becomes any(), skip intersection
     const parts = schema.allOf.map((s) => jsonSchemaToZod(s));
     if (parts.length) {
       base = parts.reduce((acc, cur) => (acc === z.any() ? cur : cur === z.any() ? acc : acc.and(cur)), base);
     }
   }
 
-  if (schema.nullable) {
-    base = base.nullable();
-  }
-
-  if (schema.default !== undefined) {
-    try { (base as unknown as z.ZodTypeAny).default?.(schema.default as unknown); } catch { /* ignore */ }
-  }
+  if (schema.nullable) base = base.nullable();
 
   return base;
 }

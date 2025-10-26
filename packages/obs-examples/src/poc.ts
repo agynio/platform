@@ -26,21 +26,21 @@ async function main() {
   await withAgent({ threadId: 'demo-thread', agentName: 'demo-agent' }, async () => {
       // Loop 1: existing rich context -> tool
       const weatherToolCallId1 = 'tc_weather_1';
-      const richContext: any[] = [
+      const richContext = [
         { role: 'system', content: 'You are a helpful assistant specializing in weather and reminders.' },
-        { role: 'human', content: 'Hi assistant!' },
-        { role: 'ai', content: 'Hello! How can I help you today?' },
-        { role: 'human', content: 'What is the weather in NYC?' },
+        { role: 'user', content: 'Hi assistant!' },
+        { role: 'assistant', content: 'Hello! How can I help you today?' },
+        { role: 'user', content: 'What is the weather in NYC?' },
         { role: 'system', content: 'Ensure responses are concise.' },
-        { role: 'human', content: 'Also, set a reminder to check humidity.' },
-        { role: 'ai', content: 'I can fetch the weather and set a reminder. One moment.' },
+        { role: 'user', content: 'Also, set a reminder to check humidity.' },
+        { role: 'assistant', content: 'I can fetch the weather and set a reminder. One moment.' },
         { role: 'tool', toolCallId: 'memory_lookup_1', content: 'No prior weather queries stored.' },
-        { role: 'human', content: 'Add Brooklyn specifically.' },
-        { role: 'ai', content: 'Got it. Will include Brooklyn specifics.' },
-        { role: 'human', content: 'And include temperature in Celsius.' },
+        { role: 'user', content: 'Add Brooklyn specifically.' },
+        { role: 'assistant', content: 'Got it. Will include Brooklyn specifics.' },
+        { role: 'user', content: 'And include temperature in Celsius.' },
         { role: 'system', content: 'Do not include sensitive data.' },
-        { role: 'human', content: 'What about sunrise time?' },
-        { role: 'ai', content: 'I will retrieve current conditions and sunrise time.' },
+        { role: 'user', content: 'What about sunrise time?' },
+        { role: 'assistant', content: 'I will retrieve current conditions and sunrise time.' },
         {
           role: 'system',
           content:
@@ -72,11 +72,11 @@ async function main() {
           content: 'Prefetch complete: sources=[noaa, open-meteo]\nlat=40.7128 lon=-74.0060',
         },
         { role: 'tool', toolCallId: 'prior_summary_1', content: 'Previous summary: greeting only.' },
-        { role: 'human', content: 'Thanks!' },
-        { role: 'ai', content: 'You are welcome. Proceeding with weather lookup.' },
-        { role: 'human', content: 'Can you also estimate UV index?' },
+        { role: 'user', content: 'Thanks!' },
+        { role: 'assistant', content: 'You are welcome. Proceeding with weather lookup.' },
+        { role: 'user', content: 'Can you also estimate UV index?' },
         { role: 'system', content: 'If multiple tool calls needed, batch them.' },
-        { role: 'human', content: 'Let me know if you need clarification.' },
+        { role: 'user', content: 'Let me know if you need clarification.' },
       ];
 
       let llmResult1Content: string | undefined;
@@ -86,7 +86,9 @@ async function main() {
         const resp = new LLMResponse({
           raw,
           content: 'I will look up the weather for NYC including Brooklyn details.',
-          toolCalls: [{ id: weatherToolCallId1, name: 'weather', arguments: { city: 'NYC' } }],
+          toolCalls: [
+            { type: 'function_call', call_id: weatherToolCallId1, name: 'weather', arguments: JSON.stringify({ city: 'NYC' }) } as any,
+          ],
         });
         llmResult1Content = resp.content;
         return resp;
@@ -114,7 +116,7 @@ async function main() {
         {
           context: [
             { role: 'system', content: 'You are an assistant generating human-friendly advisories.' },
-            { role: 'human', content: 'Provide clothing and UV advice given current conditions.' },
+            { role: 'user', content: 'Provide clothing and UV advice given current conditions.' },
             { role: 'tool', toolCallId: weatherToolCallId1, content: JSON.stringify(weather1) },
           ],
         },
@@ -124,11 +126,7 @@ async function main() {
             raw: { text: 'Computing advisories.' },
             content: 'Based on current conditions I will compute advisory.',
             toolCalls: [
-              {
-                id: advisoryToolCallId,
-                name: 'advisory',
-                arguments: { tempC: weather1.tempC, humidity: weather1.humidity },
-              },
+              { type: 'function_call', call_id: advisoryToolCallId, name: 'advisory', arguments: JSON.stringify({ tempC: weather1.tempC, humidity: weather1.humidity }) } as any,
             ],
           });
           llmResult2Content = resp.content;
@@ -155,7 +153,7 @@ async function main() {
           {
             context: [
               { role: 'system', content: 'Assistant deciding whether to invoke unreliable tool.' },
-              { role: 'human', content: 'Please run the unreliable step.' },
+              { role: 'user', content: 'Please run the unreliable step.' },
             ],
           },
           async () => {
@@ -163,11 +161,7 @@ async function main() {
               raw: { text: 'About to invoke failing tool.' },
               content: 'Attempting failing tool call now.',
               toolCalls: [
-                {
-                  id: failingToolCallId,
-                  name: 'unstable_tool',
-                  arguments: { simulate: 'failure' },
-                },
+                { type: 'function_call', call_id: failingToolCallId, name: 'unstable_tool', arguments: JSON.stringify({ simulate: 'failure' }) } as any,
               ],
             });
           },
@@ -195,7 +189,7 @@ async function main() {
         {
           context: [
             { role: 'system', content: 'Assistant planning an explicit error tool call.' },
-            { role: 'human', content: 'Invoke the checker tool even if it will report an error.' },
+            { role: 'user', content: 'Invoke the checker tool even if it will report an error.' },
           ],
         },
         async () =>
@@ -203,11 +197,7 @@ async function main() {
             raw: { text: 'Preparing explicit error tool call' },
             content: 'Calling checker tool which will return an error structure.',
             toolCalls: [
-              {
-                id: explicitErrorToolCallId,
-                name: 'checker',
-                arguments: { mode: 'validate', payloadSize: 0 },
-              },
+              { type: 'function_call', call_id: explicitErrorToolCallId, name: 'checker', arguments: JSON.stringify({ mode: 'validate', payloadSize: 0 }) } as any,
             ],
           }),
       );
@@ -240,7 +230,7 @@ async function main() {
             { role: 'tool', toolCallId: advisoryToolCallId, content: JSON.stringify(advisory) },
             // Include failing tool call reference as a tool message so it appears in summary context (optional)
             { role: 'tool', toolCallId: 'tc_fail_demo_1', content: 'Tool failed intentionally (no output).' },
-            { role: 'human', content: 'Provide a concise final weather + advisory summary.' },
+            { role: 'user', content: 'Provide a concise final weather + advisory summary.' },
           ],
         },
         async () => {
@@ -259,14 +249,14 @@ async function main() {
       await withSummarize(
         {
           oldContext: [
-            { role: 'system', content: 'Conversation recap preparation.' },
-            { role: 'ai', content: llmResult1Content || 'No first response' },
-            { role: 'tool', toolCallId: weatherToolCallId1, content: JSON.stringify(weather1) },
-            { role: 'ai', content: llmResult2Content || 'No second response' },
-            { role: 'tool', toolCallId: advisoryToolCallId, content: JSON.stringify(advisory) },
-            { role: 'ai', content: llmResult3Content || 'No third response' },
-          ] as any,
-        },
+              { role: 'system', content: 'Conversation recap preparation.' },
+              { role: 'assistant', content: llmResult1Content || 'No first response' },
+              { role: 'tool', toolCallId: weatherToolCallId1, content: JSON.stringify(weather1) },
+              { role: 'assistant', content: llmResult2Content || 'No second response' },
+              { role: 'tool', toolCallId: advisoryToolCallId, content: JSON.stringify(advisory) },
+              { role: 'assistant', content: llmResult3Content || 'No third response' },
+            ] as any,
+          },
         async () => {
           await new Promise((r) => setTimeout(r, 300));
           return new SummarizeResponse({
@@ -276,7 +266,7 @@ async function main() {
               { role: 'system', content: 'Conversation summary context' },
               { role: 'tool', toolCallId: weatherToolCallId1, content: JSON.stringify(weather1) },
               { role: 'tool', toolCallId: advisoryToolCallId, content: JSON.stringify(advisory) },
-              { role: 'ai', content: llmResult3Content ?? 'No final content' },
+              { role: 'assistant', content: llmResult3Content ?? 'No final content' },
             ] as any,
           });
         },

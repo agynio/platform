@@ -1,8 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import { buildTemplateRegistry } from '../src/templates';
-import { LocalMCPServer } from '../src/mcp/localMcpServer';
+import { LocalMCPServer } from '../src/nodes/mcp/localMcpServer.node';
 import { LoggerService } from '../src/core/services/logger.service.js';
-import { ContainerService } from '../src/core/services/container.service.js';
+import { ContainerService } from '../src/infra/container/container.service';
 import { ConfigService } from '../src/core/services/config.service.js';
 import { CheckpointerService } from '../src/services/checkpointer.service';
 import { LiveGraphRuntime, GraphDefinition } from '../src/graph';
@@ -76,7 +76,7 @@ describe('Graph MCP integration', () => {
       ],
     };
 
-    const runtime = new LiveGraphRuntime(logger, templateRegistry);
+    const runtime = new LiveGraphRuntime(logger, templateRegistry as any, { initIfNeeded: async()=>{}, get: async()=>null, upsert: async()=>{ throw new Error('not-implemented'); }, upsertNodeState: async()=>{} } as any, { create: (Cls: any) => new Cls() } as any);
     const result = await runtime.apply(graph);
     expect(result.addedNodes).toContain('mcp');
   }, 60000);

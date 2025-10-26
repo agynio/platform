@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import Docker from 'dockerode';
-import { ContainerService } from '../src/core/services/container.service.js';
+import { ContainerService } from '../src/infra/container/container.service';
 import { LoggerService } from '../src/core/services/logger.service.js';
 import { PLATFORM_LABEL } from '../src/constants.js';
 

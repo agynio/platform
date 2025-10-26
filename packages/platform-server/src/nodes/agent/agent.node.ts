@@ -169,16 +169,15 @@ export class AgentNode extends Node<AgentStaticConfig> {
     );
 
     // summarize -> call_model
-    reducers['summarize'] = (await this.moduleRef.create(SummarizationLLMReducer))
-      .init({
-        llm,
+    const summarize = await this.moduleRef.create(SummarizationLLMReducer);
+    await summarize.init({
         model: this.config.model ?? 'gpt-5',
         keepTokens: this.config.summarizationKeepTokens ?? 1000,
         maxTokens: this.config.summarizationMaxTokens ?? 10000,
         systemPrompt:
           'You update a running summary of a conversation. Keep key facts, goals, decisions, constraints, names, deadlines, and follow-ups. Be concise; use compact sentences; omit chit-chat. Structure summary with 3 high level sections: initial task, plan (if any), context (progress, findings, observations).',
-      })
-      .next((await this.moduleRef.create(StaticLLMRouter)).init('call_model'));
+      });
+    reducers['summarize'] = summarize.next((await this.moduleRef.create(StaticLLMRouter)).init('call_model'));
 
     // call_model -> branch (call_tools | save)
     reducers['call_model'] = (await this.moduleRef.create(CallModelLLMReducer))

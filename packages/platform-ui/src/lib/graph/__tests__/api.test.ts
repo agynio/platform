@@ -8,7 +8,7 @@ describe('graph api client', () => {
   beforeEach(() => {
     g.fetch = vi.fn(async (input: RequestInfo) => {
       const url = String(input);
-      if (url.endsWith('/graph/templates')) {
+      if (url.endsWith('/api/graph/templates')) {
         return new Response(JSON.stringify([{ name: 'x', title: 'X', kind: 'tool', sourcePorts: {}, targetPorts: {} }]));
       }
       if (url.includes('/status')) {

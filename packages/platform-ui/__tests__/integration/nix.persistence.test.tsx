@@ -18,7 +18,7 @@ describe('Nix packages persistence in builder graph', () => {
   it('stores selected packages under Workspace config.nix.packages and posts immutably', async () => {
     // Setup one containerProvider node as initial graph
     server.use(
-      http.get('/api/templates', () =>
+      http.get('/api/graph/templates', () =>
         HttpResponse.json([
           { name: 'containerProvider', title: 'Workspace', kind: 'service', sourcePorts: [], targetPorts: [], capabilities: { staticConfigurable: true } },
         ]),

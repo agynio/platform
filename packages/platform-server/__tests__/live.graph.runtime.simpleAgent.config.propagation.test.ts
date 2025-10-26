@@ -3,10 +3,11 @@ import { LiveGraphRuntime } from '../src/graph/liveGraph.manager';
 import type { GraphDefinition } from '../src/graph/types';
 import { buildTemplateRegistry } from '../src/templates';
 import { LoggerService } from '../src/core/services/logger.service.js';
-import { ContainerService } from '../src/core/services/container.service.js';
+import { ContainerService } from '../src/infra/container/container.service';
 import { ConfigService } from '../src/core/services/config.service.js';
 import type { Config } from '../src/core/services/config.service.js';
-import { CheckpointerService } from '../src/services/checkpointer.service';
+import { PrismaService } from '../src/core/services/prisma.service';
+import { LLMProvisioner } from '../src/llm/provisioners/llm.provisioner';
 import type { MongoService } from '../src/core/services/mongo.service.js';
 
 // Avoid any real network calls by ensuring ChatOpenAI token counting/invoke are not used in this test.
@@ -54,29 +55,17 @@ describe('LiveGraphRuntime -> Agent config propagation', () => {
       ncpsAuthToken: undefined,
     };
     const configService = new ConfigService(cfg);
-    const checkpointerService = new CheckpointerService(logger);
-    // Typed fake checkpointer via vi.spyOn
-    const fakeCheckpointer = {
-      async getTuple() { return undefined; },
-      async *list() { /* no-op */ },
-      async put(_config: unknown, _checkpoint: unknown, _metadata: unknown) { return { configurable: { thread_id: 't' } }; },
-      async putWrites() { /* no-op */ },
-      getNextVersion() { return '1'; },
-    };
-    vi.spyOn(checkpointerService, 'getCheckpointer').mockImplementation(
-      () => fakeCheckpointer as unknown as ReturnType<CheckpointerService['getCheckpointer']>,
-    );
     const testMongoService: Pick<MongoService, 'getDb'> = { getDb: () => ({}) };
     const registry = buildTemplateRegistry({
       logger,
       containerService,
       configService,
       mongoService: testMongoService as unknown as MongoService,
-      llmFactoryService: new (class extends LLMFactoryService { constructor() { super(logger); } })(),
-      ncpsKeyService: undefined,
+      provisioner: { getLLM: async () => ({ call: async ({ model }: any) => ({ text: `model:${model}`, output: [] }) }) },
+      moduleRef: {} as any,
     });
     class StubRepo extends GraphRepository { async initIfNeeded(): Promise<void> {} async get(): Promise<any> { return null; } async upsert(): Promise<any> { throw new Error('not-implemented'); } async upsertNodeState(): Promise<void> {} }
-    const runtime = new LiveGraphRuntime(logger, registry, new StubRepo());
+    const runtime = new LiveGraphRuntime(logger, registry, new StubRepo(), { create: (Cls: any) => new Cls() } as any);
     return { runtime };
   }
 

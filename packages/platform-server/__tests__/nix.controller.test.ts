@@ -1,6 +1,6 @@
 import nock from 'nock';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { TestingModule, Test } from '@nestjs/testing';
+// Avoid Nest TestingModule; instantiate controller with DI stubs
 import { NixController } from '../src/infra/ncps/nix.controller';
 import { ConfigService, configSchema } from '../src/core/services/config.service';
 import type { FastifyReply } from 'fastify';
@@ -10,26 +10,20 @@ const BASE = 'https://www.nixhub.io';
 describe('nix controller', () => {
   let controller: NixController;
   let reply: FastifyReply;
-  beforeEach(async () => {
-    const module: TestingModule = await Test.createTestingModule({
-      providers: [
-        {
-          provide: ConfigService,
-          useValue: new ConfigService(
-            configSchema.parse({
-              githubAppId: 'x', githubAppPrivateKey: 'x', githubInstallationId: 'x', githubToken: 'x', mongodbUrl: 'x',
-              graphStore: 'mongo', graphRepoPath: './data/graph', graphBranch: 'graph-state',
-              dockerMirrorUrl: 'http://registry-mirror:5000', nixAllowedChannels: 'nixpkgs-unstable',
-              nixHttpTimeoutMs: String(200), nixCacheTtlMs: String(5 * 60_000), nixCacheMax: String(500),
-              mcpToolsStaleTimeoutMs: '0', ncpsEnabled: 'false', ncpsUrl: 'http://ncps:8501',
-              ncpsRefreshIntervalMs: '0',
-            })
-          ),
-        },
-      ],
-      controllers: [NixController],
-    }).compile();
-    controller = module.get<NixController>(NixController);
+  beforeEach(() => {
+    const cfg = new ConfigService(
+      configSchema.parse({
+        llmProvider: 'openai',
+        githubAppId: 'x', githubAppPrivateKey: 'x', githubInstallationId: 'x', githubToken: 'x', mongodbUrl: 'x',
+        agentsDatabaseUrl: 'postgres://localhost:5432/agents',
+        graphStore: 'mongo', graphRepoPath: './data/graph', graphBranch: 'graph-state',
+        dockerMirrorUrl: 'http://registry-mirror:5000', nixAllowedChannels: 'nixpkgs-unstable',
+        nixHttpTimeoutMs: String(200), nixCacheTtlMs: String(5 * 60_000), nixCacheMax: String(500),
+        mcpToolsStaleTimeoutMs: '0', ncpsEnabled: 'false', ncpsUrl: 'http://ncps:8501',
+        ncpsRefreshIntervalMs: '0',
+      })
+    );
+    controller = new NixController(cfg);
     reply = {
       code: vi.fn(() => reply) as any,
       header: vi.fn(() => reply) as any,
@@ -170,4 +164,3 @@ describe('nix controller', () => {
     scope.done();
   });
 });
-

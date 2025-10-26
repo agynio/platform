@@ -2,7 +2,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { AIMessage, BaseMessage } from '@langchain/core/messages';
 import { LoggerService } from '../src/core/services/logger.service.js';
 import { ConfigService } from '../src/core/services/config.service.js';
-import { CheckpointerService } from '../src/services/checkpointer.service';
+// Use direct DI stubs; avoid Nest TestingModule dependency
 
 // Mock ChatOpenAI to avoid network; must be declared before importing Agent
 vi.mock('@langchain/openai', async (importOriginal) => {
@@ -24,37 +24,15 @@ vi.mock('@langchain/openai', async (importOriginal) => {
   return { ...mod, ChatOpenAI: MockChatOpenAI };
 });
 
-// Mock CheckpointerService to avoid needing Mongo
-vi.mock('../src/services/checkpointer.service', async (importOriginal) => {
-  const mod = await importOriginal();
-  class Fake extends mod.CheckpointerService {
-    getCheckpointer() {
-      return {
-        async getTuple() {
-          return undefined;
-        },
-        async *list() {},
-        async put(_config: any, _checkpoint: any, _metadata: any) {
-          return { configurable: { thread_id: 't', checkpoint_ns: '', checkpoint_id: '1' } } as any;
-        },
-        async putWrites() {},
-        getNextVersion() { return '1'; },
-      } as any;
-    }
-  }
-  return { ...mod, CheckpointerService: Fake };
-});
-
-import { Agent } from '../src/nodes/agent/agent.node';
+import { AgentNode as Agent } from '../src/nodes/agent/agent.node';
 type TriggerMessage = { content: string; info: Record<string, unknown> };
 
 // Helper to make a configured agent
-function makeAgent() {
-  const cfg = new ConfigService({
-    githubAppId: '1', githubAppPrivateKey: 'k', githubInstallationId: 'i',
-    openaiApiKey: 'x', githubToken: 't', mongodbUrl: 'm',
-  });
-  return new Agent(cfg, new LoggerService(), new CheckpointerService(new LoggerService()) as any, 'agent-buf');
+async function makeAgent() {
+  const provisioner = { getLLM: async () => ({ call: async () => ({ text: 'ok', output: [] }) }) };
+  const agent = new Agent(new LoggerService(), provisioner as any);
+  agent.init({ nodeId: 'agent-buf' });
+  return agent;
 }
 
 describe('Agent buffer behavior', () => {
@@ -65,7 +43,9 @@ describe('Agent buffer behavior', () => {
       openaiApiKey: 'x', githubToken: 't', mongodbUrl: 'm',
     });
     const logger = { info: vi.fn(), debug: vi.fn(), error: vi.fn() } as unknown as LoggerService;
-    const agent = new Agent(cfg, logger as any, new CheckpointerService(new LoggerService()) as any, 'agent-deb');
+    const provisioner = { getLLM: async () => ({ call: async () => ({ text: 'ok', output: [] }) }) };
+    const agent = new Agent(new LoggerService(), provisioner as any);
+    agent.init({ nodeId: 'agent-deb' });
     agent.setConfig({ debounceMs: 50, processBuffer: 'allTogether' });
 
     const p1 = agent.invoke('td', { content: 'a', info: {} });
@@ -90,7 +70,9 @@ describe('Agent buffer behavior', () => {
       openaiApiKey: 'x', githubToken: 't', mongodbUrl: 'm',
     });
     const logger = { info: vi.fn(), debug: vi.fn(), error: vi.fn() } as unknown as LoggerService;
-    const agent = new Agent(cfg, logger as any, new CheckpointerService(new LoggerService()) as any, 'agent-one');
+    const provisioner = { getLLM: async () => ({ call: async () => ({ text: 'ok', output: [] }) }) };
+    const agent = new Agent(new LoggerService(), provisioner as any);
+    agent.init({ nodeId: 'agent-one' });
     agent.setConfig({ processBuffer: 'oneByOne' });
     const msgs: TriggerMessage[] = [
       { content: 'a', info: {} },
@@ -109,7 +91,9 @@ describe('Agent buffer behavior', () => {
       openaiApiKey: 'x', githubToken: 't', slackBotToken: 's', slackAppToken: 'sa', mongodbUrl: 'm',
     });
     const logger = { info: vi.fn(), debug: vi.fn(), error: vi.fn() } as unknown as LoggerService;
-    const agent = new Agent(cfg, logger as any, new CheckpointerService(new LoggerService()), 'agent-all');
+    const provisioner = { getLLM: async () => ({ call: async () => ({ text: 'ok', output: [] }) }) };
+    const agent = new Agent(new LoggerService(), provisioner as any);
+    agent.init({ nodeId: 'agent-all' });
     agent.setConfig({ processBuffer: 'allTogether', debounceMs: 0 });
     const msgs: TriggerMessage[] = [
       { content: 'a', info: {} },
@@ -123,7 +107,7 @@ describe('Agent buffer behavior', () => {
   });
 
   it("whenBusy='injectAfterTools' injects messages during in-flight run", async () => {
-    const agent = makeAgent();
+    const agent = await makeAgent();
     agent.setConfig({ whenBusy: 'injectAfterTools', debounceMs: 0 });
     // Kick off a run with one message
     const p = agent.invoke('t2', { content: 'start', info: {} });
