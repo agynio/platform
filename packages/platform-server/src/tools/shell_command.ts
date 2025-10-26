@@ -120,7 +120,7 @@ export class ShellTool extends BaseTool {
       },
       {
         name: 'shell_command',
-        description: 'Execute a shell command and return the output. There is no TTY/stdin, so avoid commands requiring user inputs or running in watch mode. Always use single quotes in the command to avoid variable interpolation. The command is executed with /bin/sh -lc.',
+        description: 'Execute a shell command and return the output. There is no TTY/stdin, so avoid commands requiring user inputs or running in watch mode. Always wrap arguments in single quotes to avoid variable interpolation. The command is executed with /bin/sh -lc.',
         schema: bashCommandSchema,
       },
     );
