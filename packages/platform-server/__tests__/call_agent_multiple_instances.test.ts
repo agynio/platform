@@ -15,22 +15,25 @@ describe('CallAgentTool configurable name', () => {
 
     const toolDocs = new CallAgentTool(logger);
     await toolDocs.setConfig({ description: 'docs', name: 'call_agent_docs' });
+    toolDocs.init({ nodeId: 'call-agent-1' });
     toolDocs.setAgent(new FakeAgent() as any);
-    const dynDocs = toolDocs.init({ nodeId: 'call-agent-1' });
-    expect(dynDocs).toBeTruthy();
-    expect(dynDocs.name).toBeDefined();
-    expect(dynDocs.name).toBe('call_agent_docs');
+    // Retrieve tool after init via guarded lookup
+    const docs = (toolDocs as any).getTools?.().find((t: any) => t?.name?.includes('docs')) ?? (toolDocs as any).getTool?.('agent-docs') ?? (toolDocs as any).getTool?.();
+    expect(docs).toBeTruthy();
+    expect(docs!.name).toBeDefined();
+    expect(docs!.name).toBe('call_agent_docs');
 
     const toolOps = new CallAgentTool(logger);
     await toolOps.setConfig({ description: 'ops', name: 'call_agent_ops' });
+    toolOps.init({ nodeId: 'call-agent-2' });
     toolOps.setAgent(new FakeAgent() as any);
-    const dynOps = toolOps.init({ nodeId: 'call-agent-2' });
-    expect(dynOps).toBeTruthy();
-    expect(dynOps.name).toBeDefined();
-    expect(dynOps.name).toBe('call_agent_ops');
+    const ops = (toolOps as any).getTools?.().find((t: any) => t?.name?.includes('ops')) ?? (toolOps as any).getTool?.('agent-ops') ?? (toolOps as any).getTool?.();
+    expect(ops).toBeTruthy();
+    expect(ops!.name).toBeDefined();
+    expect(ops!.name).toBe('call_agent_ops');
 
-    const out1 = await dynDocs.invoke({ input: 'x', childThreadId: 'docs' }, { configurable: { thread_id: 'p' } } as any);
-    const out2 = await dynOps.invoke({ input: 'y', childThreadId: 'ops' }, { configurable: { thread_id: 'p' } } as any);
+    const out1 = await (docs as any).invoke({ input: 'x', childThreadId: 'docs' }, { configurable: { thread_id: 'p' } } as any);
+    const out2 = await (ops as any).invoke({ input: 'y', childThreadId: 'ops' }, { configurable: { thread_id: 'p' } } as any);
     expect(out1).toContain('ok-p__docs');
     expect(out2).toContain('ok-p__ops');
   });

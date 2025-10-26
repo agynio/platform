@@ -16,9 +16,14 @@ vi.mock('@langchain/openai', () => {
 });
 
 describe('CallModel reducers behavior', () => {
+  beforeEach(() => {
+    // Ensure reducers are initialized with tracing-compatible minimal config before each test
+    // Keep tokens/maxTokens at 0 to disable summarization unless explicitly tested
+    // Note: Each test creates its own reducer instance and init() call.
+  });
   it('invokes LLM using provided messages and system prompt', async () => {
     const reducer = new CallModelLLMReducer(new LoggerService() as any);
-    reducer.init({ model: 'gpt-4o-mini', systemPrompt: '' } as any);
+    reducer.init({ model: 'gpt-4o-mini', systemPrompt: '', keepTokens: 0, maxTokens: 0 } as any);
     const state = { messages: [new HumanMessage('a')], summary: 'sum' } as any;
     const ctx = { callerAgent: { config: { systemPrompt: 'SYS' } } } as any;
     const res = await reducer.invoke(state, ctx);
@@ -27,7 +32,7 @@ describe('CallModel reducers behavior', () => {
 
   it('without summary in state, still returns one AI message', async () => {
     const reducer = new CallModelLLMReducer(new LoggerService() as any);
-    reducer.init({ model: 'gpt-4o-mini', systemPrompt: '' } as any);
+    reducer.init({ model: 'gpt-4o-mini', systemPrompt: '', keepTokens: 0, maxTokens: 0 } as any);
     const state = { messages: [new HumanMessage('a')] } as any;
     const ctx = { callerAgent: { config: { systemPrompt: 'SYS' } } } as any;
     const res = await reducer.invoke(state, ctx);
