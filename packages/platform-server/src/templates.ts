@@ -1,7 +1,6 @@
 import { toJSONSchema } from 'zod';
 import { TemplateRegistry } from './graph';
 import { ModuleRef } from '@nestjs/core';
-import type { TemplateCtor } from './graph/templateRegistry';
 import { AgentNode, AgentStaticConfigSchema } from './nodes/agent/agent.node';
 import { ContainerProviderExposedStaticConfigSchema, WorkspaceNode } from './nodes/workspace/workspace.node';
 
@@ -49,37 +48,34 @@ export function buildTemplateRegistry(deps: TemplateRegistryDeps): TemplateRegis
     {
       title: 'Workspace',
       kind: 'service',
-      capabilities: { staticConfigurable: true },
-      staticConfigSchema: toJSONSchema(ContainerProviderExposedStaticConfigSchema),
+      // capabilities/staticConfigSchema removed from palette per Issue #451
     },
-    WorkspaceNode as unknown as TemplateCtor & (typeof WorkspaceNode),
+    WorkspaceNode as any,
   );
   registry.register(
     'shellTool',
     {
       title: 'Shell',
       kind: 'tool',
-      capabilities: { staticConfigurable: true },
-      staticConfigSchema: toJSONSchema(ShellToolStaticConfigSchema),
+      // capabilities/staticConfigSchema removed from palette per Issue #451
     },
-    ShellCommandNode as unknown as TemplateCtor & (typeof ShellCommandNode),
+    ShellCommandNode as any,
   );
   registry.register(
     'githubCloneRepoTool',
     {
       title: 'Github clone',
       kind: 'tool',
-      capabilities: { staticConfigurable: true },
+      // capabilities/staticConfigSchema removed from palette per Issue #451
     },
-    GithubCloneRepoNode as unknown as TemplateCtor & (typeof GithubCloneRepoNode),
+    GithubCloneRepoNode as any,
   );
   registry.register(
     'sendSlackMessageTool',
     {
       title: 'Send Slack message',
       kind: 'tool',
-      capabilities: { staticConfigurable: true },
-      staticConfigSchema: toJSONSchema(SendSlackMessageToolExposedStaticConfigSchema),
+      // capabilities/staticConfigSchema removed from palette per Issue #451
     },
     SendSlackMessageTool as any,
   );
@@ -88,8 +84,7 @@ export function buildTemplateRegistry(deps: TemplateRegistryDeps): TemplateRegis
     {
       title: 'Finish',
       kind: 'tool',
-      capabilities: { staticConfigurable: true },
-      staticConfigSchema: toJSONSchema(FinishToolStaticConfigSchema),
+      // capabilities/staticConfigSchema removed from palette per Issue #451
     },
     FinishTool as any,
   );
@@ -98,8 +93,7 @@ export function buildTemplateRegistry(deps: TemplateRegistryDeps): TemplateRegis
     {
       title: 'Call agent',
       kind: 'tool',
-      capabilities: { staticConfigurable: true },
-      staticConfigSchema: toJSONSchema(CallAgentToolStaticConfigSchema),
+      // capabilities/staticConfigSchema removed from palette per Issue #451
     },
     CallAgentTool as any,
   );
@@ -108,8 +102,7 @@ export function buildTemplateRegistry(deps: TemplateRegistryDeps): TemplateRegis
     {
       title: 'Manage',
       kind: 'tool',
-      capabilities: { staticConfigurable: true },
-      staticConfigSchema: toJSONSchema(ManageToolStaticConfigSchema),
+      // capabilities/staticConfigSchema removed from palette per Issue #451
     },
     ManageToolNode as any,
   );
@@ -118,8 +111,7 @@ export function buildTemplateRegistry(deps: TemplateRegistryDeps): TemplateRegis
     {
       title: 'Remind Me',
       kind: 'tool',
-      capabilities: { staticConfigurable: true },
-      staticConfigSchema: toJSONSchema(RemindMeToolStaticConfigSchema),
+      // capabilities/staticConfigSchema removed from palette per Issue #451
     },
     RemindMeNode as any,
   );
@@ -128,8 +120,7 @@ export function buildTemplateRegistry(deps: TemplateRegistryDeps): TemplateRegis
     {
       title: 'Slack (Socket Mode)',
       kind: 'trigger',
-      capabilities: { provisionable: true, pausable: true, staticConfigurable: true },
-      staticConfigSchema: toJSONSchema(SlackTriggerExposedStaticConfigSchema),
+      // capabilities/staticConfigSchema removed from palette per Issue #451
     },
     SlackTrigger as any,
   );
@@ -138,10 +129,9 @@ export function buildTemplateRegistry(deps: TemplateRegistryDeps): TemplateRegis
     {
       title: 'Agent',
       kind: 'agent',
-      capabilities: { pausable: true, staticConfigurable: true },
-      staticConfigSchema: toJSONSchema(AgentStaticConfigSchema),
+      // capabilities/staticConfigSchema removed from palette per Issue #451
     },
-    AgentNode as unknown as TemplateCtor & (typeof AgentNode),
+    AgentNode as any,
   );
   // Register a single unified Memory tool
   registry.register(
@@ -149,8 +139,7 @@ export function buildTemplateRegistry(deps: TemplateRegistryDeps): TemplateRegis
     {
       title: 'Memory Tool',
       kind: 'tool',
-      capabilities: {},
-      staticConfigSchema: toJSONSchema(MemoryToolNodeStaticConfigSchema),
+      // capabilities/staticConfigSchema removed from palette per Issue #451
     },
     MemoryToolNode as any,
   );
@@ -159,8 +148,7 @@ export function buildTemplateRegistry(deps: TemplateRegistryDeps): TemplateRegis
     {
       title: 'MCP Server',
       kind: 'mcp',
-      capabilities: { provisionable: true, dynamicConfigurable: true, staticConfigurable: true },
-      staticConfigSchema: toJSONSchema(LocalMcpServerStaticConfigSchema),
+      // capabilities/staticConfigSchema removed from palette per Issue #451
     },
     LocalMCPServer as any,
   );
@@ -170,8 +158,7 @@ export function buildTemplateRegistry(deps: TemplateRegistryDeps): TemplateRegis
     {
       title: 'Memory',
       kind: 'service',
-      capabilities: { provisionable: true, staticConfigurable: true },
-      staticConfigSchema: toJSONSchema(MemoryNodeStaticConfigSchema),
+      // capabilities/staticConfigSchema removed from palette per Issue #451
     },
     MemoryNode as any,
   );
@@ -180,8 +167,7 @@ export function buildTemplateRegistry(deps: TemplateRegistryDeps): TemplateRegis
     {
       title: 'Memory Connector',
       kind: 'service',
-      capabilities: { provisionable: true, staticConfigurable: true },
-      staticConfigSchema: toJSONSchema(MemoryConnectorStaticConfigSchema),
+      // capabilities/staticConfigSchema removed from palette per Issue #451
     },
     MemoryConnectorNode as any,
   );

@@ -10,39 +10,19 @@ const dummyPorts = {
   targetPorts: { inp: { kind: 'instance' as const } },
 };
 
-describe('TemplateRegistry.toSchema with capabilities/staticConfigSchema', () => {
-  it('includes capabilities and staticConfigSchema when provided in meta', async () => {
+describe('TemplateRegistry.toSchema without legacy capabilities/staticConfigSchema', () => {
+  it('ignores capabilities/staticConfigSchema even when provided in meta', async () => {
     const reg = new TemplateRegistry();
     reg.register('withMeta', {
       title: 'With Meta',
       kind: 'service' as TemplateKind,
-      capabilities: {
-        pausable: true,
-        staticConfigurable: true,
-        dynamicConfigurable: false,
-        provisionable: true,
-      },
-      staticConfigSchema: {
-        type: 'object',
-        properties: { foo: { type: 'string' } },
-        required: ['foo'],
-      } as any,
     }, DummyNode as any);
 
     const schema = await reg.toSchema();
     const entry = schema.find((s) => s.name === 'withMeta') as TemplateNodeSchema;
     expect(entry).toBeTruthy();
-    expect(entry.capabilities).toEqual({
-      pausable: true,
-      staticConfigurable: true,
-      dynamicConfigurable: false,
-      provisionable: true,
-    });
-    expect(entry.staticConfigSchema).toEqual({
-      type: 'object',
-      properties: { foo: { type: 'string' } },
-      required: ['foo'],
-    });
+    expect((entry as any).capabilities).toBeUndefined();
+    expect((entry as any).staticConfigSchema).toBeUndefined();
   });
 
   it('defaults to undefined when not provided in meta', async () => {

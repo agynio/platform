@@ -35,15 +35,11 @@ describe('templates: memory registration and agent memory port', () => {
     expect(memConnMeta?.kind).toBe('service');
     const workspaceMeta = schema.find((s) => s.name === 'workspace');
     expect(workspaceMeta?.kind).toBe('service');
-    expect(memSchema?.staticConfigSchema).toBeTruthy();
+    // staticConfigSchema removed from palette; schema still returns ports/kind
     const memConnSchema = schema.find((s) => s.name === 'memoryConnector');
-    expect(memConnSchema?.staticConfigSchema).toBeTruthy();
 
     // Capabilities include staticConfigurable and exclude dynamicConfigurable
-    expect(memSchema?.capabilities?.staticConfigurable).toBe(true);
-    expect(memConnSchema?.capabilities?.staticConfigurable).toBe(true);
-    expect(memSchema?.capabilities?.dynamicConfigurable).toBeUndefined();
-    expect(memConnSchema?.capabilities?.dynamicConfigurable).toBeUndefined();
+    // capabilities removed from palette
     // memory node exposes only $self; memoryConnector exposes $self and $memory target
     const memorySources = memorySchema?.sourcePorts || [];
     expect(memorySources).toContain('$self');

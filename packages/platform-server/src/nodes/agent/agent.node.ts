@@ -171,7 +171,6 @@ export class AgentNode extends Node<AgentStaticConfig> {
     // summarize -> call_model
     reducers['summarize'] = (await this.moduleRef.create(SummarizationLLMReducer))
       .init({
-        llm,
         model: this.config.model ?? 'gpt-5',
         keepTokens: this.config.summarizationKeepTokens ?? 1000,
         maxTokens: this.config.summarizationMaxTokens ?? 10000,

@@ -72,7 +72,8 @@ export class ContainerService {
   }
 
   async init() {
-    await this.registry.backfillFromDocker(this); // TODO: move backfillFromDocker into ContainerService in order to fully eliminate circular dependency
+    // Move backfillFromDocker into ContainerService to eliminate circular dependency
+    await this.backfillFromDocker();
   }
 
   /** Public helper to touch last-used timestamp for a container */
@@ -672,6 +673,47 @@ export class ContainerService {
 
   getDocker(): Docker {
     return this.docker;
+  }
+
+  /** Backfill container registry from current Docker state (workspaces only). */
+  private async backfillFromDocker(): Promise<void> {
+    this.logger.info('ContainerService: backfilling registry from Docker');
+    try {
+      const list = await this.findContainersByLabels({ 'hautech.ai/role': 'workspace' }, { all: true });
+      const nowIso = new Date().toISOString();
+      const concurrency = 5;
+      let index = 0;
+      const runNext = async (): Promise<void> => {
+        const i = index++;
+        const item = list[i];
+        if (!item) return;
+        try {
+          const labels = await this.getContainerLabels(item.id);
+          if (labels && labels['hautech.ai/role'] !== 'workspace') return;
+          const thread = labels?.['hautech.ai/thread_id'] || '';
+          const [nodeId, threadId] = thread.includes('__') ? thread.split('__', 2) : ['unknown', thread];
+          const inspect = await this.docker.getContainer(item.id).inspect();
+          const created = inspect?.Created ? new Date(inspect.Created).toISOString() : nowIso;
+          const running = !!inspect?.State?.Running;
+          await this.registry.registerStart({
+            containerId: item.id,
+            nodeId,
+            threadId,
+            image: inspect?.Config?.Image || 'unknown',
+            ttlSeconds: 86400,
+            labels,
+            platform: labels?.['hautech.ai/platform'],
+          });
+          if (!running) await this.registry.markStopped(item.id, 'backfill');
+        } catch (e) {
+          this.logger.error('ContainerService: backfill error for container', item.id, e);
+        }
+        await runNext();
+      };
+      await Promise.all(Array.from({ length: Math.min(concurrency, list.length) }, () => runNext()));
+    } catch (e) {
+      this.logger.error('ContainerService: backfill listing error', e);
+    }
   }
 
   /**

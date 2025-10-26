@@ -289,9 +289,11 @@ export class WorkspaceNode extends Node<ContainerProviderStaticConfig> {
       if (this.cfg?.initialScript) {
         const script = this.cfg.initialScript;
         const { exitCode, stderr } = await container.exec(script, { tty: false });
-        this.logger.error(
-          `Initial script failed (exitCode=${exitCode}) for container ${container.id.substring(0, 12)}${stderr ? ` stderr: ${stderr}` : ''}`,
-        );
+        if (exitCode !== 0) {
+          this.logger.error(
+            `Initial script failed (exitCode=${exitCode}) for container ${container.id.substring(0, 12)}${stderr ? ` stderr: ${stderr}` : ''}`,
+          );
+        }
       }
 
       // Intentional ordering: run initialScript first, then Nix install.

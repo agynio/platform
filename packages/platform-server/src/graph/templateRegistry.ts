@@ -1,5 +1,4 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { JSONSchema } from 'zod/v4/core';
 import type { TemplatePortConfig } from './ports.types';
 import type { TemplateKind, TemplateNodeSchema } from './types';
 import Node from '../nodes/base/Node';
@@ -8,25 +7,19 @@ import { ModuleRef } from '@nestjs/core';
 export interface TemplateMeta {
   title: string;
   kind: TemplateKind;
-  capabilities?: TemplateNodeSchema['capabilities'];
-  staticConfigSchema?: JSONSchema.BaseSchema;
 }
 
 export type TemplateCtor = new (...args: unknown[]) => Node<any>;
-interface TemplateStatic {
-  capabilities?: TemplateNodeSchema['capabilities'];
-  staticConfigSchema?: JSONSchema.BaseSchema;
-}
 
 @Injectable()
 export class TemplateRegistry {
-  private classes = new Map<string, TemplateCtor & TemplateStatic>();
+  private classes = new Map<string, TemplateCtor>();
   private meta = new Map<string, TemplateMeta>();
 
   constructor(@Inject(ModuleRef) private readonly moduleRef: ModuleRef) {}
 
   // Register associates template -> node class and meta (ports are read from instance via getPortConfig)
-  register(template: string, meta: TemplateMeta, nodeClass: TemplateCtor & TemplateStatic): this {
+  register(template: string, meta: TemplateMeta, nodeClass: TemplateCtor): this {
     if (this.classes.has(template)) {
       // Allow override deliberately; could warn here if desired
     }
@@ -64,17 +57,12 @@ export class TemplateRegistry {
         // ignore instance creation errors for schema generation; fall back to no ports
       }
       const meta = this.meta.get(name) ?? { title: name, kind: 'tool' as TemplateKind };
-      const clsAny = this.classes.get(name)!;
-      const caps = clsAny.capabilities;
-      const staticSchema = clsAny.staticConfigSchema;
       schemas.push({
         name,
         title: meta.title,
         kind: meta.kind,
         sourcePorts,
         targetPorts,
-        capabilities: caps ?? meta.capabilities,
-        staticConfigSchema: staticSchema ?? meta.staticConfigSchema,
       });
     }
     return schemas.sort((a, b) => a.name.localeCompare(b.name));

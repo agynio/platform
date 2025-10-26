@@ -22,7 +22,7 @@ import { Errors } from './errors';
 import { PortsRegistry } from './ports.registry';
 import type { TemplatePortConfig } from './ports.types';
 import { TemplateRegistry } from './templateRegistry';
-import { isNodeLifecycle } from '../nodes/types';
+// Legacy lifecycle guard removed; rely on Node class lifecycle only.
 // hasSetDynamicConfig guard is optional; check presence inline to avoid hard dependency
 import { GraphRepository } from './graph.repository';
 
@@ -39,8 +39,7 @@ export class LiveGraphRuntime {
     lastGraph: undefined,
   };
 
-  // Track paused state for nodes that don't implement isPaused()
-  private pausedFallback = new Set<string>();
+  // Paused fallback removed; pause/resume not supported in strict lifecycle.
 
   private applying: Promise<unknown> = Promise.resolve(); // serialize updates
   private portsRegistry: PortsRegistry;
@@ -159,7 +158,6 @@ export class LiveGraphRuntime {
 
   getNodeStatus(id: string): { provisionStatus?: NodeStatusState } {
     const inst = this.state.nodes.get(id)?.instance;
-
     return { provisionStatus: inst?.status };
   }
 
@@ -352,7 +350,9 @@ export class LiveGraphRuntime {
       const live: LiveNode = { id: node.id, template: node.data.template, instance: created, config: node.data.config };
       this.state.nodes.set(node.id, live);
 
-      await created.setConfig(node.data.config);
+      if (node.data.config) {
+        await created.setConfig(node.data.config);
+      }
       await created.provision();
 
       // Fix: Create LocalMCPServerTool instances from McpTool if present in state.mcp.tools
@@ -451,44 +451,11 @@ export class LiveGraphRuntime {
       }
     }
     // Call lifecycle teardown if present
-    const inst = live.instance as unknown;
-    if (inst) {
+    const inst = live.instance;
+    if (inst && typeof (inst as any).deprovision === 'function') {
       try {
-        if (isNodeLifecycle(inst)) {
-          try {
-            await inst.stop();
-          } catch {}
-          try {
-            await inst.delete();
-          } catch {}
-        } else {
-          const destroy = (inst as Record<string, unknown>)['destroy'];
-          if (typeof destroy === 'function') {
-            try {
-              await (destroy as Function).call(inst);
-            } catch {}
-          } else {
-            // fallback legacy
-            for (const method of ['dispose', 'close', 'stop'] as const) {
-              const fn = (inst as Record<string, unknown>)[method];
-              if (typeof fn === 'function') {
-                try {
-                  await (fn as Function).call(inst);
-                } catch {}
-                break;
-              }
-            }
-          }
-        }
-      } catch {
-        // fallback to legacy behavior above if type guard fails
-        const destroy = (inst as Record<string, unknown>)['destroy'];
-        if (typeof destroy === 'function') {
-          try {
-            await (destroy as Function).call(inst);
-          } catch {}
-        }
-      }
+        await (inst as any).deprovision();
+      } catch {}
     }
     this.state.nodes.delete(nodeId);
     this.state.inboundEdges.delete(nodeId);
@@ -559,16 +526,12 @@ export class LiveGraphRuntime {
   // Stop and delete all live nodes that implement lifecycle; ignore errors and always clear state
   async shutdown(): Promise<void> {
     const nodes = Array.from(this.state.nodes.values());
-    // imported at top: isNodeLifecycle
     await Promise.all(
       nodes.map(async (live) => {
-        const inst = live.instance;
-        if (isNodeLifecycle(inst)) {
+        const inst = live.instance as any;
+        if (inst && typeof inst.deprovision === 'function') {
           try {
-            await inst.stop();
-          } catch {}
-          try {
-            await inst.delete();
+            await inst.deprovision();
           } catch {}
         }
         const inbound = this.state.inboundEdges.get(live.id) || new Set<string>();

@@ -5,7 +5,7 @@ import { toJSONSchema, z } from 'zod';
 import { convertJsonSchemaToZod } from 'zod-from-json-schema';
 import { JSONSchema } from 'zod/v4/core';
 import { WorkspaceNode } from '../workspace/workspace.node';
-import type { DynamicConfigurable, ProvisionStatus, Provisionable } from '../../graph/capabilities';
+// Legacy capabilities removed; rely on Node lifecycle/state
 import { ConfigService } from '../../core/services/config.service';
 import { ContainerService } from '../../infra/container/container.service';
 import { EnvService, type EnvItem } from '../../env/env.service';
@@ -126,9 +126,7 @@ export class LocalMCPServer extends Node<z.infer<typeof LocalMcpServerStaticConf
   private _tryStartSeq = 0;
   private _maybeStartSeq = 0;
 
-  // Provisionable state
-  private _provStatus: ProvisionStatus = { state: 'not_ready' };
-  private _provListeners: Array<(s: ProvisionStatus) => void> = [];
+  // Node lifecycle state driven by base Node
   private _provInFlight: Promise<void> | null = null;
 
   // Dynamic config: enabled tools (if undefined => all enabled by default)
@@ -609,29 +607,8 @@ export class LocalMCPServer extends Node<z.infer<typeof LocalMcpServerStaticConf
     return this;
   }
 
-  // -------- Provisionable implementation --------
-  getProvisionStatus(): ProvisionStatus {
-    return this._provStatus;
-  }
-
-  onProvisionStatusChange(listener: (s: ProvisionStatus) => void): () => void {
-    this._provListeners.push(listener);
-    return () => {
-      this._provListeners = this._provListeners.filter((l) => l !== listener);
-    };
-  }
-
-  private setProvisionStatus(s: ProvisionStatus) {
-    this._provStatus = s;
-    for (const l of this._provListeners) {
-      try {
-        l(s);
-      } catch {}
-    }
-  }
-
   async provision(): Promise<void> {
-    if (this._provStatus.state === 'ready') return;
+    if (this.status === 'ready') return;
     if (this._provInFlight) return this._provInFlight;
     // mirror previous start() behavior but emit provision states
     const startCallId = ++this._startInvocationSeq;
@@ -640,7 +617,7 @@ export class LocalMCPServer extends Node<z.infer<typeof LocalMcpServerStaticConf
     );
     this.wantStart = true;
     if (this.started) {
-      this.setProvisionStatus({ state: 'ready' });
+      this.setStatus('ready');
       return;
     }
     if (!this.pendingStart) {
@@ -650,15 +627,15 @@ export class LocalMCPServer extends Node<z.infer<typeof LocalMcpServerStaticConf
       this.logger.debug(`[MCP:${this.namespace}] [start:${startCallId}] Created pendingStart promise`);
     }
     const hasAllDeps = !!(this.cfg && this.containerProvider && this.cfg.command);
-    this.setProvisionStatus({ state: 'provisioning' });
+    this.setStatus('provisioning');
     this.maybeStart();
     this._provInFlight = (async () => {
       try {
         if (hasAllDeps) await this.pendingStart;
         else await this.pendingStart?.catch(() => {});
-        if (this.started) this.setProvisionStatus({ state: 'ready' });
+        if (this.started) this.setStatus('ready');
       } catch (err) {
-        this.setProvisionStatus({ state: 'provisioning_error' });
+        this.setStatus('provisioning_error');
       } finally {
         this._provInFlight = null;
       }
@@ -667,8 +644,8 @@ export class LocalMCPServer extends Node<z.infer<typeof LocalMcpServerStaticConf
   }
 
   async deprovision(): Promise<void> {
-    if (this._provStatus.state === 'not_ready') return;
-    this.setProvisionStatus({ state: 'deprovisioning' });
+    if (this.status === 'not_ready') return;
+    this.setStatus('deprovisioning');
     // Stop timers and clear state
     if (this.heartbeatTimer) clearInterval(this.heartbeatTimer);
     if (this.startRetryTimer) clearTimeout(this.startRetryTimer);
@@ -680,10 +657,10 @@ export class LocalMCPServer extends Node<z.infer<typeof LocalMcpServerStaticConf
     this.restartAttempts = 0;
     this.pendingStart = undefined;
     this._enabledTools = undefined;
-    this.setProvisionStatus({ state: 'not_ready' });
+    this.setStatus('not_ready');
   }
 
-  // -------- DynamicConfigurable implementation --------
+  // -------- DynamicConfig (internal, no external capability) --------
   isDynamicConfigReady(): boolean {
     return this.toolsDiscovered;
   }
