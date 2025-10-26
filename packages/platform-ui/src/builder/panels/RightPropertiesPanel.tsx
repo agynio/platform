@@ -6,7 +6,6 @@ import { useTemplates } from '../useTemplates';
 // Removed NodeDetailsPanel wrapper; using granular components directly
 // Custom config views only; legacy RJSF forms removed
 import { useTemplatesCache } from '@/lib/graph/templates.provider';
-import { hasStaticConfigByName, hasDynamicConfigByName } from '@/lib/graph/capabilities';
 import { NodeStatusBadges } from '@/components/graph/NodeStatusBadges';
 import { NodeActionButtons } from '@/components/graph/NodeActionButtons';
 import { useNodeAction, useNodeStatus } from '@/lib/graph/hooks';
@@ -65,9 +64,6 @@ function RightPropertiesPanelBody({
     [cfg, dynamicConfig, data.name, data.template, node.id, onChange],
   );
 
-  // Runtime capabilities (may be absent if backend templates not yet loaded)
-  const runtimeStaticCap = hasStaticConfigByName(data.template, runtimeTemplates.getTemplate);
-  const runtimeDynamicCap = hasDynamicConfigByName(data.template, runtimeTemplates.getTemplate);
   const runtimeTemplate = runtimeTemplates.getTemplate(data.template);
   const hasRuntimeCaps = runtimeTemplate ? canProvision(runtimeTemplate) || canPause(runtimeTemplate) : false;
 
@@ -136,42 +132,38 @@ function RightPropertiesPanelBody({
           <RuntimeNodeSection nodeId={node.id} templateName={data.template} />
         </div>
       )}
-      {runtimeStaticCap && (
-        <div className="space-y-2">
-          <div className="text-[10px] uppercase text-muted-foreground">Static Configuration</div>
-          {StaticView ? (
-            <StaticView
-              key={`static-${node.id}`}
-              templateName={data.template}
-              value={cfg}
-              onChange={(next) => update({ config: next })}
-              readOnly={readOnly}
-              disabled={!!disableAll}
-              onValidate={handleValidate}
-            />
-          ) : (
-            <div className="text-xs text-muted-foreground">No custom view registered for {data.template} (static)</div>
-          )}
-        </div>
-      )}
-      {runtimeDynamicCap && (
-        <div className="space-y-2">
-          <div className="text-[10px] uppercase text-muted-foreground">Dynamic Configuration</div>
-          {DynamicView ? (
-            <DynamicView
-              key={`dynamic-${node.id}`}
-              nodeId={node.id}
-              templateName={data.template}
-              value={dynamicConfig}
-              onChange={(next) => update({ dynamicConfig: next })}
-              readOnly={readOnly}
-              disabled={!!disableAll}
-            />
-          ) : (
-            <div className="text-xs text-muted-foreground">No custom view registered for {data.template} (dynamic)</div>
-          )}
-        </div>
-      )}
+      <div className="space-y-2">
+        <div className="text-[10px] uppercase text-muted-foreground">Static Configuration</div>
+        {StaticView ? (
+          <StaticView
+            key={`static-${node.id}`}
+            templateName={data.template}
+            value={cfg}
+            onChange={(next) => update({ config: next })}
+            readOnly={readOnly}
+            disabled={!!disableAll}
+            onValidate={handleValidate}
+          />
+        ) : (
+          <div className="text-xs text-muted-foreground">No custom view registered for {data.template} (static)</div>
+        )}
+      </div>
+      <div className="space-y-2">
+        <div className="text-[10px] uppercase text-muted-foreground">Dynamic Configuration</div>
+        {DynamicView ? (
+          <DynamicView
+            key={`dynamic-${node.id}`}
+            nodeId={node.id}
+            templateName={data.template}
+            value={dynamicConfig}
+            onChange={(next) => update({ dynamicConfig: next })}
+            readOnly={readOnly}
+            disabled={!!disableAll}
+          />
+        ) : (
+          <div className="text-xs text-muted-foreground">No custom view registered for {data.template} (dynamic)</div>
+        )}
+      </div>
       {data.template === 'containerProvider' && (
         <div className="space-y-2">
           <NixPackagesSection config={cfg} onUpdateConfig={(next) => update({ config: next })} />
