@@ -231,7 +231,7 @@ export const api = {
     // If plain object, validate it's likely a schema; otherwise null
     return isLikelyJsonSchemaRoot(data) ? (data as Record<string, unknown>) : null;
   },
-  postNodeAction: (nodeId: string, action: 'pause' | 'resume' | 'provision' | 'deprovision') =>
+  postNodeAction: (nodeId: string, action: 'provision' | 'deprovision') =>
     httpJson<void>(`/api/graph/nodes/${encodeURIComponent(nodeId)}/actions`, {
       method: 'POST',
       body: JSON.stringify({ action }),

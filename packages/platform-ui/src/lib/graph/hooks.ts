@@ -21,6 +21,8 @@ export function useNodeStatus(nodeId: string) {
     queryKey: ['graph', 'node', nodeId, 'status'],
     queryFn: () => api.getNodeStatus(nodeId),
     staleTime: Infinity,
+    // Poll periodically since server may not emit socket events for all cases
+    refetchInterval: 2000,
   });
 
   useEffect(() => {
@@ -62,7 +64,7 @@ export function useNodeReminders(nodeId: string, enabled: boolean = true) {
 export function useNodeAction(nodeId: string) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (action: 'pause' | 'resume' | 'provision' | 'deprovision') => api.postNodeAction(nodeId, action),
+    mutationFn: (action: 'provision' | 'deprovision') => api.postNodeAction(nodeId, action),
     onMutate: async (action) => {
       await qc.cancelQueries({ queryKey: ['graph', 'node', nodeId, 'status'] });
       const key = ['graph', 'node', nodeId, 'status'] as const;
@@ -72,8 +74,6 @@ export function useNodeAction(nodeId: string) {
       if (action === 'provision') optimistic = { provisionStatus: { state: 'provisioning' as const }, isPaused: false };
       if (action === 'deprovision')
         optimistic = { provisionStatus: { state: 'deprovisioning' as const }, isPaused: false };
-      if (action === 'pause') optimistic = { isPaused: true };
-      if (action === 'resume') optimistic = { isPaused: false };
       qc.setQueryData(key, { ...(prev || {}), ...optimistic });
       return { prev };
     },

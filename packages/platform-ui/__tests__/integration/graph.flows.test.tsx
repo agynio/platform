@@ -32,28 +32,7 @@ describe('Integration flows: Node actions, dynamic/static config', () => {
     expect(screen.getByText('Stop')).not.toBeDisabled();
   });
 
-  it('Pause/Resume with reconcile', async () => {
-    render(
-      <TestProviders>
-        <NodeDetailsPanel nodeId="n2" templateName="mock" />
-      </TestProviders>,
-    );
-
-    // Ensure initial subscription/effect is set
-    await waitFor(() => expect(screen.getByText('not_ready')).toBeInTheDocument());
-
-    // Move to ready
-    emitNodeStatus({ nodeId: 'n2', provisionStatus: { state: 'ready' } });
-    await waitFor(() => expect(screen.getByText('ready')).toBeInTheDocument());
-
-    // Pause -> optimistic paused
-    fireEvent.click(screen.getByText('Pause'));
-    await waitFor(() => expect(screen.getByText('paused')).toBeInTheDocument());
-
-    // Reconcile to unpaused
-    emitNodeStatus({ nodeId: 'n2', isPaused: false });
-    await waitFor(() => expect(screen.queryByText('paused')).not.toBeInTheDocument());
-  });
+  // Pause/Resume removed; no test for paused reconcile
 
   // Schema-driven forms removed; covered by custom views tests elsewhere
 });

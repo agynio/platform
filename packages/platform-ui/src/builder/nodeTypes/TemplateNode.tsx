@@ -26,7 +26,10 @@ function TemplateNodeComponent({ id, data }: NodeProps<BuilderNodeData>) {
   const nodeStatus = useNodeStatus(id);
   const vaultAgg = useNodeVaultStatus(data?.config);
 
-  const provisionError = nodeStatus.data?.provisionStatus?.state === 'error';
+  const provisionError =
+    nodeStatus.data?.provisionStatus?.state === 'error' ||
+    nodeStatus.data?.provisionStatus?.state === 'provisioning_error' ||
+    nodeStatus.data?.provisionStatus?.state === 'deprovisioning_error';
   const hasVaultError = (vaultAgg?.error || 0) > 0;
   const hasMissing = (vaultAgg?.missing || 0) > 0;
   const borderClasses = provisionError || hasVaultError

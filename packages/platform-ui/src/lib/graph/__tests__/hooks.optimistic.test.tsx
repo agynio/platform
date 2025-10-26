@@ -45,23 +45,9 @@ describe('optimistic actions with socket reconciliation', () => {
     await waitFor(() => expect(statusQ.current.data?.provisionStatus?.state).toBe('ready'));
   });
 
-  it('pause optimistic then reconciles to false', async () => {
-    const { wrapper } = createWrapper();
-    const { result: statusQ } = renderHook(() => useNodeStatus('n2'), { wrapper });
-    await waitFor(() => expect(statusQ.current.data).toBeTruthy());
-    const { result: act } = renderHook(() => useNodeAction('n2'), { wrapper });
-    await act.current.mutateAsync('pause');
-    await waitFor(() => expect(statusQ.current.data?.isPaused).toBe(true));
+  // Pause/Resume removed; optimistic pause test dropped
 
-    // socket says not paused
-    const anySock: any = graphSocket as any;
-    for (const [nodeId, set] of anySock.listeners as Map<string, Set<(...args: unknown[]) => unknown>>) {
-      if (nodeId === 'n2') for (const fn of set) fn({ nodeId: 'n2', isPaused: false } as NodeStatusEvent);
-    }
-    await waitFor(() => expect(statusQ.current.data?.isPaused).toBe(false));
-  });
-
-  it('rollback on error and notify', async () => {
+  it('rollback on error and notify (provision)', async () => {
     const { wrapper } = createWrapper();
     const { api } = await import('../../graph/api');
     (api.postNodeAction as any).mockImplementationOnce(async () => { throw new Error('boom'); });
@@ -69,7 +55,7 @@ describe('optimistic actions with socket reconciliation', () => {
     await waitFor(() => expect(statusQ.current.data).toBeTruthy());
     const before = statusQ.current.data;
     const { result: act } = renderHook(() => useNodeAction('n3'), { wrapper });
-    await expect(act.current.mutateAsync('pause')).rejects.toThrow();
+    await expect(act.current.mutateAsync('provision')).rejects.toThrow();
     await waitFor(() => expect(statusQ.current.data).toEqual(before));
     expect(notify).toHaveBeenCalled();
   });
