@@ -1,6 +1,5 @@
-import { describe, it } from 'vitest';
-// Skipped per Issue #451: container entities/jobs moved/out-of-scope.
-describe.skip('ContainerProviderEntity nix install', () => { it('skipped', () => {}); });
+/* Issue #451: out-of-scope legacy container/entity/cleanup tests skipped for NestJS refactor */
+describe.skip('skipped (Issue #451)', () => { it('noop', () => { /* noop */ }); });
 import { ContainerProviderEntity, type ContainerProviderStaticConfig } from '../src/entities/containerProvider.entity';
 import { ContainerService } from '../src/core/services/container.service';
 import { LoggerService } from '../src/core/services/logger.service';
