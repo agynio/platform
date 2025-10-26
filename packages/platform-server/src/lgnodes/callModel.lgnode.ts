@@ -58,7 +58,7 @@ export class CallModelNode extends BaseNode {
 
     const finalMessages: BaseMessage[] = [
       new SystemMessage(this.systemPrompt),
-      ...(state.summary ? [new SystemMessage(`Summary of the previous conversation:\n${state.summary}`)] : []),
+      ...(state.summary ? [new AIMessage(`Summary of the previous conversation:\n${state.summary}`)] : []),
       ...(state.messages as BaseMessage[]),
     ];
 

@@ -9,7 +9,10 @@ const MAX_DELAY_MS = 7 * 24 * 60 * 60 * 1000; // 7 days safety cap
 
 // Minimal interface for the caller agent used by this tool
 interface CallerAgentLike {
-  invoke(thread: string, messages: Array<{ kind: 'system' | 'human'; content: string; info: Record<string, unknown> }>): Promise<unknown>;
+  invoke(
+    thread: string,
+    messages: Array<{ kind: 'system' | 'human' | 'id'; content: string; info: Record<string, unknown> }>,
+  ): Promise<unknown>;
 }
 
 export type ActiveReminder = { id: string; threadId: string; note: string; at: string };
@@ -37,7 +40,9 @@ export class RemindMeTool extends BaseTool {
   async destroy(): Promise<void> {
     this.destroyed = true;
     for (const [id, rec] of Array.from(this.active.entries())) {
-      try { clearTimeout(rec.timer); } catch {}
+      try {
+        clearTimeout(rec.timer);
+      } catch {}
       this.active.delete(id);
     }
   }
@@ -49,9 +54,9 @@ export class RemindMeTool extends BaseTool {
         // Clamp excessive delays to avoid long-lived timers retaining memory
         const boundedDelay = Math.min(delayMs, MAX_DELAY_MS);
         // Guarded extraction of configurable context
-        const cfg = (config && typeof config === 'object'
-          ? (config as Record<string, unknown>).configurable
-          : undefined) as Record<string, unknown> | undefined;
+        const cfg = (
+          config && typeof config === 'object' ? (config as Record<string, unknown>).configurable : undefined
+        ) as Record<string, unknown> | undefined;
 
         // Narrow thread id from generic configurable bag
         const threadId = (() => {
@@ -97,9 +102,7 @@ export class RemindMeTool extends BaseTool {
           // Remove first to avoid double-removal in race scenarios
           this.active.delete(id);
           try {
-            await callerAgent.invoke(threadId, [
-              { kind: 'system', content: note, info: { reason: 'reminded' } },
-            ]);
+            await callerAgent.invoke(threadId, [{ kind: 'id', content: note, info: { reason: 'reminded' } }]);
           } catch (e) {
             const err = e instanceof Error ? e : new Error(typeof e === 'string' ? e : 'Unknown error');
             this.logger.error('RemindMeTool scheduled invoke error', err);

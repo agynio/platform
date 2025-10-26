@@ -24,7 +24,7 @@ export class EnforceRestrictionNode {
       return { restrictionInjected: false };
     }
 
-    const msg = new SystemMessage(this.getRestrictionMessage());
+    const msg = new AIMessage(this.getRestrictionMessage());
     return {
       messages: { method: 'append', items: [msg] },
       restrictionInjectionCount: count + 1,
