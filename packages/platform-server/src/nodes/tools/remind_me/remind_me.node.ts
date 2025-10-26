@@ -8,23 +8,21 @@ import { Inject, Injectable, Scope } from '@nestjs/common';
 @Injectable({ scope: Scope.TRANSIENT })
 export class RemindMeNode extends BaseToolNode<z.infer<typeof RemindMeToolStaticConfigSchema>> {
   private toolInstance?: RemindMeFunctionTool;
-  private callerAgent?: AgentNode; // set via port wiring
-  private staticCfg: z.infer<typeof RemindMeToolStaticConfigSchema> = {};
+  private callerAgent?: AgentNode;
+
   constructor(@Inject(LoggerService) private logger: LoggerService) {
     super();
   }
 
-  async setConfig(cfg: Record<string, unknown>): Promise<void> {
-    const parsed = RemindMeToolStaticConfigSchema.safeParse(cfg || {});
-    if (!parsed.success) throw new Error('Invalid RemindMe config');
-    this.staticCfg = parsed.data;
-    this.toolInstance = undefined;
-  }
   getTool(): RemindMeFunctionTool {
     if (!this.toolInstance) {
       this.toolInstance = new RemindMeFunctionTool(this.logger);
     }
     return this.toolInstance;
+  }
+
+  setCallerAgent(agent: AgentNode) {
+    this.callerAgent = agent;
   }
 
   getPortConfig() {

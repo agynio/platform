@@ -5,6 +5,7 @@ import { MongoMemoryServer } from 'mongodb-memory-server';
 import { BaseMessage, SystemMessage, AIMessage } from '@langchain/core/messages';
 import { LiveGraphRuntime } from '../src/graph/liveGraph.manager';
 import { TemplateRegistry } from '../src/graph/templateRegistry';
+import type { ModuleRef } from '@nestjs/core';
 import type { GraphDefinition } from '../src/graph/types';
 import { LoggerService } from '../src/core/services/logger.service.js';
 import { MemoryService } from '../src/nodes/memory.repository';
@@ -33,7 +34,8 @@ class DummyTool extends BaseTool { init(): any { return { name: 'dummy', invoke:
 
 // Build a tiny runtime with two templates: callModel and memory
 function makeRuntime(db: Db, placement: 'after_system'|'last_message') {
-  const templates = new TemplateRegistry();
+  const moduleRef = { create: (Cls: any) => new Cls() } as ModuleRef;
+  const templates = new TemplateRegistry(moduleRef as unknown as any);
   const logger = new LoggerService();
   // Register callModel template; exposes a target port method to attach a memory connector
   templates.register(
@@ -69,7 +71,7 @@ function makeRuntime(db: Db, placement: 'after_system'|'last_message') {
   );
 
   class StubRepo extends GraphRepository { async initIfNeeded(): Promise<void> {} async get(): Promise<any> { return null; } async upsert(): Promise<any> { throw new Error('not-implemented'); } async upsertNodeState(): Promise<void> {} }
-  const runtime = new LiveGraphRuntime(logger, templates, new StubRepo(), { create: (Cls: any) => new Cls() } as any);
+  const runtime = new LiveGraphRuntime(logger, templates as any, new StubRepo(), { create: (Cls: any) => new Cls() } as any);
   return runtime;
 }
 
@@ -140,7 +142,8 @@ describe.skipIf(!RUN_MONGOMS)('Runtime integration: memory injection via LiveGra
 
   it('maxChars fallback: full -> tree when exceeded; per-thread empty falls back to global', async () => {
     // Configure memory connector with content=full and small maxChars so it triggers tree fallback
-    const templates = new TemplateRegistry();
+    const moduleRef = { create: (Cls: any) => new Cls() } as any;
+    const templates = new TemplateRegistry(moduleRef);
     const logger = new LoggerService();
 
     templates.register(
@@ -172,7 +175,7 @@ describe.skipIf(!RUN_MONGOMS)('Runtime integration: memory injection via LiveGra
     );
 
     class StubRepo2 extends GraphRepository { async initIfNeeded(): Promise<void> {} async get(): Promise<any> { return null; } async upsert(): Promise<any> { throw new Error('not-implemented'); } async upsertNodeState(): Promise<void> {} }
-    const runtime = new LiveGraphRuntime(logger, templates, new StubRepo2(), { create: (Cls: any) => new Cls() } as any);
+    const runtime = new LiveGraphRuntime(logger, templates as any, new StubRepo2(), { create: (Cls: any) => new Cls() } as any);
     const graph: GraphDefinition = {
       nodes: [ { id: 'cm', data: { template: 'callModel', config: {} } }, { id: 'mem', data: { template: 'memory', config: {} } } ],
       edges: [ { source: 'mem', sourceHandle: '$self', target: 'cm', targetHandle: 'setMemoryConnector' } ],

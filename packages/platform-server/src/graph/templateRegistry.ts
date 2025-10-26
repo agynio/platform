@@ -41,23 +41,17 @@ export class TemplateRegistry {
       let sourcePorts: string[] = [];
       let targetPorts: string[] = [];
       // Attempt DI instantiation to read ports from instance
-      try {
-        const cls = this.classes.get(name)!;
-        let inst: Node | undefined;
-        try {
-          inst = this.moduleRef.get<Node>(cls, { strict: false });
-        } catch {
-          // Do not fallback to non-DI instantiation; ports discovery requires DI-only
-        }
-        if (inst && typeof (inst as Node).getPortConfig === 'function') {
-          const cfg = (inst.getPortConfig?.() || {}) as TemplatePortConfig;
-          sourcePorts = cfg?.sourcePorts ? Object.keys(cfg.sourcePorts) : [];
-          targetPorts = cfg?.targetPorts ? Object.keys(cfg.targetPorts) : [];
-        }
-      } catch {
-        // ignore instance creation errors for schema generation; fall back to no ports
+
+      const cls = this.classes.get(name)!;
+      let inst = await this.moduleRef.create<Node>(cls);
+
+      if (inst) {
+        const cfg: TemplatePortConfig = inst.getPortConfig();
+        sourcePorts = cfg.sourcePorts ? Object.keys(cfg.sourcePorts) : [];
+        targetPorts = cfg.targetPorts ? Object.keys(cfg.targetPorts) : [];
       }
-      const meta = this.meta.get(name) ?? { title: name, kind: 'tool' as TemplateKind };
+
+      const meta: TemplateMeta = this.meta.get(name) ?? { title: name, kind: 'tool' };
       schemas.push({
         name,
         title: meta.title,

@@ -23,7 +23,7 @@ describe('API guard: MCP command mutation forbidden', () => {
     const checkpointer = new CheckpointerService(logger);
     const containerService = new ContainerService(logger);
     const mongoStub = { getDb: () => ({}) } as any;
-    const templateRegistry = buildTemplateRegistry({ logger, containerService, configService: config, checkpointerService: checkpointer, mongoService: mongoStub });
+    const templateRegistry = buildTemplateRegistry({ logger, containerService, configService: config, mongoService: mongoStub, provisioner: { getLLM: async () => ({ call: async ({ model }: any) => ({ text: `model:${model}`, output: [] }) }) }, moduleRef: { create: (Cls: any) => new Cls() } as any });
     class StubRepo extends GraphRepository { async initIfNeeded(): Promise<void> {} async get(): Promise<any> { return null; } async upsert(): Promise<any> { throw new Error('not-implemented'); } async upsertNodeState(): Promise<void> {} }
     const runtime = new LiveGraphRuntime(logger, templateRegistry as any, new StubRepo(), { create: (Cls: any) => new Cls() } as any);
     const graphService = new GitGraphRepository(config, logger, templateRegistry);

@@ -62,7 +62,7 @@ describe('LiveGraphRuntime -> Agent config propagation', () => {
       configService,
       mongoService: testMongoService as unknown as MongoService,
       provisioner: { getLLM: async () => ({ call: async ({ model }: any) => ({ text: `model:${model}`, output: [] }) }) },
-      moduleRef: {} as any,
+      moduleRef: { create: (Cls: any) => new Cls() } as any,
     });
     class StubRepo extends GraphRepository { async initIfNeeded(): Promise<void> {} async get(): Promise<any> { return null; } async upsert(): Promise<any> { throw new Error('not-implemented'); } async upsertNodeState(): Promise<void> {} }
     const runtime = new LiveGraphRuntime(logger, registry, new StubRepo(), { create: (Cls: any) => new Cls() } as any);
