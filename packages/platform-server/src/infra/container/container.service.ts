@@ -335,7 +335,7 @@ export class ContainerService {
       exec.start({ hijack: true, stdin: true }, (err, stream) => {
         if (err) return reject(err);
         if (!stream) return reject(new Error('No stream returned from exec.start'));
-        resolve(stream as unknown as NodeJS.ReadWriteStream);
+        resolve(stream as NodeJS.ReadWriteStream);
       });
     })) as NodeJS.ReadWriteStream;
 
@@ -343,7 +343,8 @@ export class ContainerService {
       // Prefer docker modem demux; fall back to manual demux if unavailable or throws
       try {
         // Narrow modem type to expected shape for demux
-        const modem = this.docker.modem as unknown as {
+        const modemObj = this.docker.modem as unknown;
+        const modem = modemObj as { demuxStream?: (s: NodeJS.ReadableStream, out: NodeJS.WritableStream, err: NodeJS.WritableStream) => void };
           demuxStream: (s: NodeJS.ReadableStream, out: NodeJS.WritableStream, err: NodeJS.WritableStream) => void;
         };
         if (!modem?.demuxStream) throw new Error('demuxStream not available');
@@ -505,13 +506,8 @@ export class ContainerService {
                 },
               });
               try {
-                const modem = this.docker.modem as unknown as {
-                  demuxStream: (
-                    s: NodeJS.ReadableStream,
-                    out: NodeJS.WritableStream,
-                    err: NodeJS.WritableStream,
-                  ) => void;
-                };
+                const modemObj = this.docker.modem as unknown;
+                const modem = modemObj as { demuxStream?: (s: NodeJS.ReadableStream, out: NodeJS.WritableStream, err: NodeJS.WritableStream) => void };
                 if (!modem?.demuxStream) throw new Error('demuxStream not available');
                 modem.demuxStream(stream, outStdout, outStderr);
               } catch {

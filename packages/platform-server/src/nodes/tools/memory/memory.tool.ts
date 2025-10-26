@@ -121,7 +121,12 @@ export class UnifiedMemoryFunctionTool extends FunctionTool<typeof UnifiedMemory
     try {
       const factory = this.deps.getMemoryFactory();
       if (!factory) throw new Error('Memory not connected');
-      service = factory({ threadId }) as unknown as MemoryToolService;
+      const created = factory({ threadId });
+      // Enforce MemoryToolService shape via runtime guard
+      if (!created || typeof (created as MemoryToolService).read !== 'function') {
+        throw new Error('Invalid memory service');
+      }
+      service = created as MemoryToolService;
     } catch (e) {
       const err = this.extractError(e);
       return this.makeEnvelope(command, path, false, undefined, {

@@ -153,7 +153,7 @@ export class ContainerRegistry {
           $or: [{ 'metadata.retryAfter': { $exists: false } }, { 'metadata.retryAfter': { $lte: iso } }],
         },
       ],
-    } as unknown as Filter<ContainerDoc>;
+    } as Filter<ContainerDoc>;
     return await this.col.find(filter).toArray();
   }
 

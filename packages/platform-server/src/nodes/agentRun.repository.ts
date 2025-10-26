@@ -88,7 +88,7 @@ export class AgentRunService {
 
     if (doc.status === 'terminating') return 'already';
 
-    if (doc.status === 'terminated' || (doc as unknown as { status?: string }).status === 'completed') {
+    if (doc.status === 'terminated' || (doc as { status?: string }).status === 'completed') {
       return 'not_running';
     }
 

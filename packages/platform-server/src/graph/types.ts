@@ -1,4 +1,4 @@
-import { JSONSchema } from 'zod/v4/core';
+// Palette schema types (capabilities/staticConfigSchema removed per Issue #451)
 
 // Core type declarations for JSON-driven agent/tool/trigger graph construction
 export interface GraphDefinition {
@@ -126,13 +126,6 @@ export interface TemplateNodeSchema {
   kind: TemplateKind; // node kind for UI badges and grouping
   sourcePorts: string[]; // names of source handles (emitters / publishers / tool collections)
   targetPorts: string[]; // names of target handles (accept dependencies / tools / instances)
-  capabilities?: {
-    pausable?: boolean;
-    staticConfigurable?: boolean;
-    dynamicConfigurable?: boolean;
-    provisionable?: boolean;
-  };
-  staticConfigSchema?: JSONSchema.BaseSchema;
 }
 
 // Persistence layer graph representation (includes optimistic locking fields)

@@ -29,8 +29,8 @@ export function jsonSchemaToZod(schema: JSONSchema | undefined): ZodTypeAny {
     // If mixed types, fallback to union of literals; if single type, z.enum when all strings
     const allStrings = schema.enum.every((e) => typeof e === 'string');
     if (allStrings) return z.enum([...(new Set(schema.enum) as Set<string>)] as [string, ...string[]]);
-    const lits = schema.enum.map((v) => z.literal(v as any)) as unknown as [ZodTypeAny, ...ZodTypeAny[]];
-    return z.union(lits);
+    const literals = schema.enum.map((v) => z.literal(v as never));
+    return z.union(literals as [ZodTypeAny, ...ZodTypeAny[]]);
   }
 
   // Support type arrays (anyOf semantics over primitive types)
@@ -107,7 +107,11 @@ export function jsonSchemaToZod(schema: JSONSchema | undefined): ZodTypeAny {
   }
 
   if (schema.default !== undefined) {
-    try { (base as unknown as z.ZodTypeAny).default?.(schema.default as unknown); } catch { /* ignore */ }
+    try {
+      const zAny = base as ZodTypeAny;
+      // @ts-expect-error default may not exist on all Zod types
+      zAny.default?.(schema.default as unknown);
+    } catch { /* ignore */ }
   }
 
   return base;

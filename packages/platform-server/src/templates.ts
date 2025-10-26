@@ -1,18 +1,17 @@
-import { toJSONSchema } from 'zod';
 import { TemplateRegistry } from './graph';
 import { ModuleRef } from '@nestjs/core';
-import { AgentNode, AgentStaticConfigSchema } from './nodes/agent/agent.node';
-import { ContainerProviderExposedStaticConfigSchema, WorkspaceNode } from './nodes/workspace/workspace.node';
+import { AgentNode } from './nodes/agent/agent.node';
+import { WorkspaceNode } from './nodes/workspace/workspace.node';
 
-import { LocalMCPServer, LocalMcpServerStaticConfigSchema } from './nodes/mcp/localMcpServer.node';
-import { MemoryNode, MemoryNodeStaticConfigSchema } from './nodes/memory/memory.node';
-import { MemoryConnectorNode, MemoryConnectorStaticConfigSchema } from './nodes/memoryConnector/memoryConnector.node';
-import { SlackTrigger, SlackTriggerExposedStaticConfigSchema } from './nodes/slackTrigger/slackTrigger.node';
-import { CallAgentTool, CallAgentToolStaticConfigSchema } from './nodes/tools/call_agent/call_agent.node';
-import { FinishTool, FinishToolStaticConfigSchema } from './nodes/tools/finish/finish.node';
+import { LocalMCPServer } from './nodes/mcp/localMcpServer.node';
+import { MemoryNode } from './nodes/memory/memory.node';
+import { MemoryConnectorNode } from './nodes/memoryConnector/memoryConnector.node';
+import { SlackTrigger } from './nodes/slackTrigger/slackTrigger.node';
+import { CallAgentTool } from './nodes/tools/call_agent/call_agent.node';
+import { FinishTool } from './nodes/tools/finish/finish.node';
 import { GithubCloneRepoNode } from './nodes/tools/github_clone_repo/github_clone_repo.node';
-import { ManageToolNode, ManageToolStaticConfigSchema } from './nodes/tools/manage/manage.node';
-import { MemoryToolNode, MemoryToolNodeStaticConfigSchema } from './nodes/tools/memory/memory.node';
+import { ManageToolNode } from './nodes/tools/manage/manage.node';
+import { MemoryToolNode } from './nodes/tools/memory/memory.node';
 
 import { ConfigService } from './core/services/config.service';
 import { LoggerService } from './core/services/logger.service';
@@ -23,12 +22,8 @@ import { ContainerService } from './infra/container/container.service';
 import { NcpsKeyService } from './infra/ncps/ncpsKey.service';
 import { LLMProvisioner } from './llm/provisioners/llm.provisioner';
 import { RemindMeNode } from './nodes/tools/remind_me/remind_me.node';
-import { RemindMeToolStaticConfigSchema } from './nodes/tools/remind_me/remind_me.tool';
-import {
-  SendSlackMessageTool,
-  SendSlackMessageToolExposedStaticConfigSchema,
-} from './nodes/tools/send_slack_message/send_slack_message.node';
-import { ShellCommandNode, ShellToolStaticConfigSchema } from './nodes/tools/shell_command/shell_command.node';
+import { SendSlackMessageTool } from './nodes/tools/send_slack_message/send_slack_message.node';
+import { ShellCommandNode } from './nodes/tools/shell_command/shell_command.node';
 // Unified Memory tool
 
 export interface TemplateRegistryDeps {
@@ -50,7 +45,7 @@ export function buildTemplateRegistry(deps: TemplateRegistryDeps): TemplateRegis
       kind: 'service',
       // capabilities/staticConfigSchema removed from palette per Issue #451
     },
-    WorkspaceNode as any,
+    WorkspaceNode,
   );
   registry.register(
     'shellTool',
@@ -59,7 +54,7 @@ export function buildTemplateRegistry(deps: TemplateRegistryDeps): TemplateRegis
       kind: 'tool',
       // capabilities/staticConfigSchema removed from palette per Issue #451
     },
-    ShellCommandNode as any,
+    ShellCommandNode,
   );
   registry.register(
     'githubCloneRepoTool',
@@ -68,7 +63,7 @@ export function buildTemplateRegistry(deps: TemplateRegistryDeps): TemplateRegis
       kind: 'tool',
       // capabilities/staticConfigSchema removed from palette per Issue #451
     },
-    GithubCloneRepoNode as any,
+    GithubCloneRepoNode,
   );
   registry.register(
     'sendSlackMessageTool',
@@ -77,7 +72,7 @@ export function buildTemplateRegistry(deps: TemplateRegistryDeps): TemplateRegis
       kind: 'tool',
       // capabilities/staticConfigSchema removed from palette per Issue #451
     },
-    SendSlackMessageTool as any,
+    SendSlackMessageTool,
   );
   registry.register(
     'finishTool',
@@ -86,7 +81,7 @@ export function buildTemplateRegistry(deps: TemplateRegistryDeps): TemplateRegis
       kind: 'tool',
       // capabilities/staticConfigSchema removed from palette per Issue #451
     },
-    FinishTool as any,
+    FinishTool,
   );
   registry.register(
     'callAgentTool',
@@ -95,7 +90,7 @@ export function buildTemplateRegistry(deps: TemplateRegistryDeps): TemplateRegis
       kind: 'tool',
       // capabilities/staticConfigSchema removed from palette per Issue #451
     },
-    CallAgentTool as any,
+    CallAgentTool,
   );
   registry.register(
     'manageTool',
@@ -104,7 +99,7 @@ export function buildTemplateRegistry(deps: TemplateRegistryDeps): TemplateRegis
       kind: 'tool',
       // capabilities/staticConfigSchema removed from palette per Issue #451
     },
-    ManageToolNode as any,
+    ManageToolNode,
   );
   registry.register(
     'remindMeTool',
@@ -113,7 +108,7 @@ export function buildTemplateRegistry(deps: TemplateRegistryDeps): TemplateRegis
       kind: 'tool',
       // capabilities/staticConfigSchema removed from palette per Issue #451
     },
-    RemindMeNode as any,
+    RemindMeNode,
   );
   registry.register(
     'slackTrigger',
@@ -122,7 +117,7 @@ export function buildTemplateRegistry(deps: TemplateRegistryDeps): TemplateRegis
       kind: 'trigger',
       // capabilities/staticConfigSchema removed from palette per Issue #451
     },
-    SlackTrigger as any,
+    SlackTrigger,
   );
   registry.register(
     'agent',
@@ -131,7 +126,7 @@ export function buildTemplateRegistry(deps: TemplateRegistryDeps): TemplateRegis
       kind: 'agent',
       // capabilities/staticConfigSchema removed from palette per Issue #451
     },
-    AgentNode as any,
+    AgentNode,
   );
   // Register a single unified Memory tool
   registry.register(
@@ -141,7 +136,7 @@ export function buildTemplateRegistry(deps: TemplateRegistryDeps): TemplateRegis
       kind: 'tool',
       // capabilities/staticConfigSchema removed from palette per Issue #451
     },
-    MemoryToolNode as any,
+    MemoryToolNode,
   );
   registry.register(
     'mcpServer',
@@ -150,7 +145,7 @@ export function buildTemplateRegistry(deps: TemplateRegistryDeps): TemplateRegis
       kind: 'mcp',
       // capabilities/staticConfigSchema removed from palette per Issue #451
     },
-    LocalMCPServer as any,
+    LocalMCPServer,
   );
   // Memory: provide MemoryNode and MemoryConnectorNode as explicit templates with ports
   registry.register(
@@ -160,7 +155,7 @@ export function buildTemplateRegistry(deps: TemplateRegistryDeps): TemplateRegis
       kind: 'service',
       // capabilities/staticConfigSchema removed from palette per Issue #451
     },
-    MemoryNode as any,
+    MemoryNode,
   );
   registry.register(
     'memoryConnector',
@@ -169,7 +164,7 @@ export function buildTemplateRegistry(deps: TemplateRegistryDeps): TemplateRegis
       kind: 'service',
       // capabilities/staticConfigSchema removed from palette per Issue #451
     },
-    MemoryConnectorNode as any,
+    MemoryConnectorNode,
   );
 
   return registry;
