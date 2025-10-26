@@ -344,8 +344,8 @@ export class ContainerService {
       try {
         // Narrow modem type to expected shape for demux
         const modemObj = this.docker.modem as unknown;
-        const modem = modemObj as { demuxStream?: (s: NodeJS.ReadableStream, out: NodeJS.WritableStream, err: NodeJS.WritableStream) => void };
-          demuxStream: (s: NodeJS.ReadableStream, out: NodeJS.WritableStream, err: NodeJS.WritableStream) => void;
+        const modem = modemObj as {
+          demuxStream?: (s: NodeJS.ReadableStream, out: NodeJS.WritableStream, err: NodeJS.WritableStream) => void;
         };
         if (!modem?.demuxStream) throw new Error('demuxStream not available');
         modem.demuxStream(hijackStream, stdoutStream, stderrStream);

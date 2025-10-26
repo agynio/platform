@@ -13,7 +13,7 @@ import { LoggerService } from '../../core/services/logger.service';
 import { VaultService } from '../../vault/vault.service';
 import { DockerExecTransport } from './dockerExecTransport';
 import { LocalMCPServerTool } from './localMcpServer.tool';
-import { DEFAULT_MCP_COMMAND, McpError, McpServer, type McpTool, McpToolCallResult, PersistedMcpState } from './types';
+import { DEFAULT_MCP_COMMAND, McpError, type McpTool, McpToolCallResult, PersistedMcpState } from './types';
 import { NodeStateService } from '../../graph/nodeState.service';
 import Node from '../base/Node';
 import { Inject, Injectable, Scope } from '@nestjs/common';

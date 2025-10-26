@@ -1,5 +1,5 @@
 import { FunctionTool } from '@agyn/llm';
-import z from 'zod';
+// z is not used here
 import { JSONSchema } from 'zod/v4/core';
 
 // If upstream exports JSONRPCMessage directly later, replace this with that import.

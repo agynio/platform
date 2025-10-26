@@ -17,7 +17,6 @@ import { ConfigService } from './core/services/config.service';
 import { LoggerService } from './core/services/logger.service';
 import { MongoService } from './core/services/mongo.service';
 
-import { NodeStateService } from './graph/nodeState.service';
 import { ContainerService } from './infra/container/container.service';
 import { NcpsKeyService } from './infra/ncps/ncpsKey.service';
 import { LLMProvisioner } from './llm/provisioners/llm.provisioner';

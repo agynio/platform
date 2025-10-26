@@ -475,7 +475,7 @@ export class LiveGraphRuntime {
     this.state.inboundEdges.get(rec.target)?.delete(rec.key);
   }
 
-  private async executeEdge(edge: EdgeDef, graph: GraphDefinition): Promise<void> {
+  private async executeEdge(edge: EdgeDef, _graph: GraphDefinition): Promise<void> {
     const sourceLive = this.state.nodes.get(edge.source);
     const targetLive = this.state.nodes.get(edge.target);
     if (!sourceLive || !targetLive) return; // node creation error previously logged

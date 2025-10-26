@@ -1,5 +1,5 @@
 import { LLM } from '@agyn/llm';
-import { Inject, Injectable } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import OpenAI from 'openai';
 import { ConfigService } from '../../core/services/config.service';
 import { LLMProvisioner } from './llm.provisioner';
