@@ -138,6 +138,7 @@ export class UnifiedMemoryFunctionTool extends FunctionTool<typeof UnifiedMemory
         message: err.message || 'memory not connected',
         code: 'ENOTMEM',
       });
+    }
     })() as unknown as MemoryToolService;
     const logger = this.deps.logger;
     if (isMemoryDebugEnabled()) {
