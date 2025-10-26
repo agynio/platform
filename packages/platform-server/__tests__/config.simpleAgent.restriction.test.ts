@@ -1,5 +1,4 @@
 import { describe, it, expect } from 'vitest';
-import { Test } from '@nestjs/testing';
 import { LoggerService } from '../src/core/services/logger.service.js';
 import { ConfigService } from '../src/core/services/config.service.js';
 import { AgentNode as Agent } from '../src/nodes/agent/agent.node';
@@ -11,15 +10,8 @@ describe('Agent config restrictions', () => {
     const cfg = new ConfigService({
       githubAppId: '1', githubAppPrivateKey: 'k', githubInstallationId: 'i', openaiApiKey: 'x', githubToken: 't', mongodbUrl: 'm',
     } as any);
-    const moduleRef = await Test.createTestingModule({
-      providers: [
-        { provide: PrismaService, useValue: { getClient: () => null } },
-        { provide: LLMProvisioner, useValue: { getLLM: async () => ({ call: async ({ model }: any) => ({ text: `model:${model}`, output: [] }) }) } },
-        Agent,
-        LoggerService,
-      ],
-    }).compile();
-    const agent = moduleRef.get(Agent);
+    const provisioner = { getLLM: async () => ({ call: async ({ model }: any) => ({ text: `model:${model}`, output: [] }) }) };
+    const agent = new Agent(new LoggerService(), provisioner as any);
     agent.init({ nodeId: 'a1' });
     // Update system prompt
     agent.setConfig({ systemPrompt: 'Base system' });

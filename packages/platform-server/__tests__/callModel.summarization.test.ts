@@ -2,6 +2,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { AIMessage, BaseMessage, HumanMessage } from '@langchain/core/messages';
 import { CallModelLLMReducer } from '../src/llm/reducers/callModel.llm.reducer';
 import { SummarizationLLMReducer } from '../src/llm/reducers/summarization.llm.reducer';
+import { LoggerService } from '../src/core/services/logger.service.js';
 
 // Mock OpenAI LLM to avoid network
 vi.mock('@langchain/openai', () => {

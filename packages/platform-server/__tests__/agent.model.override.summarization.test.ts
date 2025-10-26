@@ -2,9 +2,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { AIMessage, HumanMessage } from '@langchain/core/messages';
 import { LoggerService } from '../src/core/services/logger.service.js';
 import { ConfigService } from '../src/core/services/config.service.js';
-import { Test } from '@nestjs/testing';
-import { PrismaService } from '../src/core/services/prisma.service';
-import { LLMProvisioner } from '../src/llm/provisioners/llm.provisioner';
+// Avoid Nest TestingModule; directly stub DI deps
 
 // Mock ChatOpenAI to capture the model used during summarization
 vi.mock('@langchain/openai', async (importOriginal) => {
@@ -41,16 +39,8 @@ describe('Agent summarization uses overridden model', () => {
       githubToken: 't',
       mongodbUrl: 'm',
     });
-    const moduleRef = await Test.createTestingModule({
-      providers: [
-        { provide: PrismaService, useValue: { getClient: () => null } },
-        { provide: LLMProvisioner, useValue: { getLLM: async () => ({ call: async ({ model }: any) => ({ text: `model:${model}`, output: [] }) }) } },
-        Agent,
-        LoggerService,
-        { provide: ConfigService, useValue: cfg },
-      ],
-    }).compile();
-    const agent = moduleRef.get(Agent);
+    const provisioner = { getLLM: async () => ({ call: async ({ model }: any) => ({ text: `model:${model}`, output: [] }) }) };
+    const agent = new Agent(new LoggerService(), provisioner as any);
     agent.init({ nodeId: 'agent-1' });
     // Default llm model should be gpt-5
     const anyA: any = agent as any;

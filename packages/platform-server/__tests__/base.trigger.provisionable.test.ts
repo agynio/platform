@@ -1,7 +1,9 @@
 import { describe, it, expect, vi } from 'vitest';
 // Skipped due to removal of legacy BaseTrigger provisionable behavior; see Issue #451
-import { it } from 'vitest';
-it.skip('BaseTrigger provisionable removed; behavior validated in SlackTrigger integration', () => {});
+import { describe, it } from 'vitest';
+describe.skip('BaseTrigger provisionable', () => {
+  it('legacy behavior removed; covered by SlackTrigger integration', () => {});
+});
 import type { NodeStatusState } from '../src/graph';
 import type { LoggerService } from '../src/core/services/logger.service.js';
 

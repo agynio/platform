@@ -2,9 +2,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { AIMessage, BaseMessage } from '@langchain/core/messages';
 import { LoggerService } from '../src/core/services/logger.service.js';
 import { ConfigService } from '../src/core/services/config.service.js';
-import { Test } from '@nestjs/testing';
-import { PrismaService } from '../src/core/services/prisma.service';
-import { LLMProvisioner } from '../src/llm/provisioners/llm.provisioner';
+// Use direct DI stubs; avoid Nest TestingModule dependency
 
 // Mock ChatOpenAI to avoid network; must be declared before importing Agent
 vi.mock('@langchain/openai', async (importOriginal) => {
@@ -31,16 +29,8 @@ type TriggerMessage = { content: string; info: Record<string, unknown> };
 
 // Helper to make a configured agent
 async function makeAgent() {
-  const moduleRef = await Test.createTestingModule({
-    providers: [
-      { provide: PrismaService, useValue: { getClient: () => null } },
-      { provide: LLMProvisioner, useValue: { getLLM: async () => ({ call: async () => ({ text: 'ok', output: [] }) }) } },
-      Agent,
-      LoggerService,
-      ConfigService,
-    ],
-  }).compile();
-  const agent = moduleRef.get(Agent);
+  const provisioner = { getLLM: async () => ({ call: async () => ({ text: 'ok', output: [] }) }) };
+  const agent = new Agent(new LoggerService(), provisioner as any);
   agent.init({ nodeId: 'agent-buf' });
   return agent;
 }
@@ -53,16 +43,8 @@ describe('Agent buffer behavior', () => {
       openaiApiKey: 'x', githubToken: 't', mongodbUrl: 'm',
     });
     const logger = { info: vi.fn(), debug: vi.fn(), error: vi.fn() } as unknown as LoggerService;
-    const moduleRef = await Test.createTestingModule({
-      providers: [
-        { provide: PrismaService, useValue: { getClient: () => null } },
-        { provide: LLMProvisioner, useValue: { getLLM: async () => ({ call: async () => ({ text: 'ok', output: [] }) }) } },
-        Agent,
-        LoggerService,
-        { provide: ConfigService, useValue: cfg },
-      ],
-    }).compile();
-    const agent = moduleRef.get(Agent);
+    const provisioner = { getLLM: async () => ({ call: async () => ({ text: 'ok', output: [] }) }) };
+    const agent = new Agent(new LoggerService(), provisioner as any);
     agent.init({ nodeId: 'agent-deb' });
     agent.setConfig({ debounceMs: 50, processBuffer: 'allTogether' });
 
@@ -88,16 +70,8 @@ describe('Agent buffer behavior', () => {
       openaiApiKey: 'x', githubToken: 't', mongodbUrl: 'm',
     });
     const logger = { info: vi.fn(), debug: vi.fn(), error: vi.fn() } as unknown as LoggerService;
-    const moduleRef = await Test.createTestingModule({
-      providers: [
-        { provide: PrismaService, useValue: { getClient: () => null } },
-        { provide: LLMProvisioner, useValue: { getLLM: async () => ({ call: async () => ({ text: 'ok', output: [] }) }) } },
-        Agent,
-        LoggerService,
-        { provide: ConfigService, useValue: cfg },
-      ],
-    }).compile();
-    const agent = moduleRef.get(Agent);
+    const provisioner = { getLLM: async () => ({ call: async () => ({ text: 'ok', output: [] }) }) };
+    const agent = new Agent(new LoggerService(), provisioner as any);
     agent.init({ nodeId: 'agent-one' });
     agent.setConfig({ processBuffer: 'oneByOne' });
     const msgs: TriggerMessage[] = [
@@ -117,16 +91,8 @@ describe('Agent buffer behavior', () => {
       openaiApiKey: 'x', githubToken: 't', slackBotToken: 's', slackAppToken: 'sa', mongodbUrl: 'm',
     });
     const logger = { info: vi.fn(), debug: vi.fn(), error: vi.fn() } as unknown as LoggerService;
-    const moduleRef = await Test.createTestingModule({
-      providers: [
-        { provide: PrismaService, useValue: { getClient: () => null } },
-        { provide: LLMProvisioner, useValue: { getLLM: async () => ({ call: async () => ({ text: 'ok', output: [] }) }) } },
-        Agent,
-        LoggerService,
-        { provide: ConfigService, useValue: cfg },
-      ],
-    }).compile();
-    const agent = moduleRef.get(Agent);
+    const provisioner = { getLLM: async () => ({ call: async () => ({ text: 'ok', output: [] }) }) };
+    const agent = new Agent(new LoggerService(), provisioner as any);
     agent.init({ nodeId: 'agent-all' });
     agent.setConfig({ processBuffer: 'allTogether', debounceMs: 0 });
     const msgs: TriggerMessage[] = [

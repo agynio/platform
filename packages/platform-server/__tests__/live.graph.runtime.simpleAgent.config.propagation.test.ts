@@ -8,7 +8,6 @@ import { ConfigService } from '../src/core/services/config.service.js';
 import type { Config } from '../src/core/services/config.service.js';
 import { PrismaService } from '../src/core/services/prisma.service';
 import { LLMProvisioner } from '../src/llm/provisioners/llm.provisioner';
-import { Test } from '@nestjs/testing';
 import type { MongoService } from '../src/core/services/mongo.service.js';
 
 // Avoid any real network calls by ensuring ChatOpenAI token counting/invoke are not used in this test.
