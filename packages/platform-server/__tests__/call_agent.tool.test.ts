@@ -4,8 +4,9 @@ import { CallAgentTool } from '../src/nodes/tools/call_agent/call_agent.node';
 import { LoggerService } from '../src/core/services/logger.service.js';
 import { BaseAgent } from '../src/nodes/agent/agent.node';
 import { DynamicStructuredTool } from '@langchain/core/tools';
-import { TemplateRegistry, type ModuleRefLike } from '../src/graph/templateRegistry';
+import { TemplateRegistry } from '../src/graph/templateRegistry';
 import { LiveGraphRuntime } from '../src/graph/liveGraph.manager';
+import { ModuleRef } from '@nestjs/core';
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
@@ -46,10 +47,7 @@ describe('CallAgentTool unit', () => {
     const tool = new CallAgentTool(new LoggerService());
     await expect(tool.setConfig({ description: 'desc' })).resolves.toBeUndefined();
     const dynamic: DynamicStructuredTool = tool.init();
-    const out = await dynamic.invoke(
-      { input: 'hi', childThreadId: 'x' },
-      { configurable: { thread_id: 't1' } } as any,
-    );
+    const out = await dynamic.invoke({ input: 'hi', childThreadId: 'x' }, { configurable: { thread_id: 't1' } } as any);
     expect(out).toBe('Target agent is not connected');
   });
 
@@ -62,10 +60,9 @@ describe('CallAgentTool unit', () => {
     });
     tool.setAgent(agent);
     const dynamic = tool.init();
-    const out = await dynamic.invoke(
-      { input: 'ping', childThreadId: 'sub' },
-      { configurable: { thread_id: 't2' } } as any,
-    );
+    const out = await dynamic.invoke({ input: 'ping', childThreadId: 'sub' }, {
+      configurable: { thread_id: 't2' },
+    } as any);
     expect(out).toBe('OK');
   });
 
@@ -78,10 +75,9 @@ describe('CallAgentTool unit', () => {
     });
     tool.setAgent(agent);
     const dynamic = tool.init();
-    const out = await dynamic.invoke(
-      { input: 'x', context: { deep: 42 }, childThreadId: 'c' },
-      { configurable: { thread_id: 't3' } } as any,
-    );
+    const out = await dynamic.invoke({ input: 'x', context: { deep: 42 }, childThreadId: 'c' }, {
+      configurable: { thread_id: 't3' },
+    } as any);
     expect(out).toBe('OK');
   });
 
@@ -102,10 +98,9 @@ describe('CallAgentTool unit', () => {
     });
     tool.setAgent(agent);
     const dynamic = tool.init();
-    const out = await dynamic.invoke(
-      { input: 'ping', childThreadId: 'sub' },
-      { configurable: { thread_id: 'parent' } } as any,
-    );
+    const out = await dynamic.invoke({ input: 'ping', childThreadId: 'sub' }, {
+      configurable: { thread_id: 'parent' },
+    } as any);
     expect(out).toBe('OK');
   });
 
@@ -121,16 +116,18 @@ describe('CallAgentTool unit', () => {
     tool.setAgent(child);
     const parent = new FakeParentAgent(new LoggerService());
     const dynamic = tool.init();
-    const res = await dynamic.invoke(
-      { input: 'do work', childThreadId: 'c1' },
-      { configurable: { thread_id: 'p', caller_agent: parent } } as any,
-    );
+    const res = await dynamic.invoke({ input: 'do work', childThreadId: 'c1' }, {
+      configurable: { thread_id: 'p', caller_agent: parent },
+    } as any);
     expect(typeof res).toBe('object');
     expect((res as any).status).toBe('sent');
     await sleep(15);
     expect(parent.calls.length).toBe(1);
     expect(parent.calls[0]?.thread).toBe('p');
-    expect(parent.calls[0]?.messages?.[0]).toEqual({ content: 'child-complete', info: { from: 'agent', childThreadId: 'c1' } });
+    expect(parent.calls[0]?.messages?.[0]).toEqual({
+      content: 'child-complete',
+      info: { from: 'agent', childThreadId: 'c1' },
+    });
   });
 
   it('ignore mode returns sent and does not trigger parent', async () => {
@@ -143,10 +140,9 @@ describe('CallAgentTool unit', () => {
     tool.setAgent(child);
     const parent = new FakeParentAgent(new LoggerService());
     const dynamic = tool.init();
-    const res = await dynamic.invoke(
-      { input: 'do work', childThreadId: 'c2' },
-      { configurable: { thread_id: 'p2', caller_agent: parent } } as any,
-    );
+    const res = await dynamic.invoke({ input: 'do work', childThreadId: 'c2' }, {
+      configurable: { thread_id: 'p2', caller_agent: parent },
+    } as any);
     expect(typeof res).toBe('object');
     expect((res as any).status).toBe('sent');
     await sleep(15);
@@ -163,7 +159,7 @@ describe('CallAgentTool graph wiring', () => {
     class FakeAgent2 extends FakeAgent {}
 
     // Minimal TemplateRegistry with agent and callAgentTool
-    const moduleRef: ModuleRefLike = { create: (Cls: any) => new Cls() };
+    const moduleRef: ModuleRef = { create: (Cls: any) => new Cls() };
     const registry = new TemplateRegistry(moduleRef);
     class FakeAgentWithTools extends FakeAgent2 {
       addTool(_tool: unknown) {}
@@ -174,8 +170,19 @@ describe('CallAgentTool graph wiring', () => {
       .register('agent', { title: 'Agent', kind: 'agent' }, (() => new FakeAgentWithTools(logger) as any) as any)
       .register('callAgentTool', { title: 'Call agent', kind: 'tool' }, (() => new CallAgentTool(logger)) as any);
 
-    class StubRepo2 extends GraphRepository { async initIfNeeded(): Promise<void> {} async get(): Promise<any> { return null; } async upsert(): Promise<any> { throw new Error('not-implemented'); } async upsertNodeState(): Promise<void> {} }
-    const runtime = new LiveGraphRuntime(logger, registry as any, new StubRepo2(), { create: (Cls: any) => new Cls() } as any);
+    class StubRepo2 extends GraphRepository {
+      async initIfNeeded(): Promise<void> {}
+      async get(): Promise<any> {
+        return null;
+      }
+      async upsert(): Promise<any> {
+        throw new Error('not-implemented');
+      }
+      async upsertNodeState(): Promise<void> {}
+    }
+    const runtime = new LiveGraphRuntime(logger, registry as any, new StubRepo2(), {
+      create: (Cls: any) => new Cls(),
+    } as any);
 
     const graph = {
       nodes: [

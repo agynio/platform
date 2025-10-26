@@ -5,11 +5,6 @@ import Node from '../nodes/base/Node';
 import type { Constructor } from 'type-fest';
 import { ModuleRef } from '@nestjs/core';
 
-// Minimal interface required from Nest ModuleRef for our usage (creation only)
-export interface ModuleRefLike {
-  create<T>(type: new (...args: never[]) => T): Promise<T> | T;
-}
-
 export interface TemplateMeta {
   title: string;
   kind: TemplateKind;
@@ -22,7 +17,7 @@ export class TemplateRegistry {
   private classes = new Map<string, TemplateCtor>();
   private meta = new Map<string, TemplateMeta>();
 
-  constructor(@Inject(ModuleRef) private readonly moduleRef: ModuleRefLike) {}
+  constructor(@Inject(ModuleRef) private readonly moduleRef: ModuleRef) {}
 
   // Register associates template -> node class and meta (ports are read from instance via getPortConfig)
   register(template: string, meta: TemplateMeta, nodeClass: TemplateCtor): this {
@@ -46,22 +41,16 @@ export class TemplateRegistry {
       let sourcePorts: string[] = [];
       let targetPorts: string[] = [];
       // Attempt DI instantiation to read ports from instance
-      try {
-        const cls = this.classes.get(name)!;
-        let inst: Node | undefined;
-        try {
-          inst = await this.moduleRef.create<Node>(cls);
-        } catch {
-          // If DI creation fails, safely continue with empty ports
-        }
-        if (inst) {
-          const cfg: TemplatePortConfig = inst.getPortConfig();
-          sourcePorts = cfg.sourcePorts ? Object.keys(cfg.sourcePorts) : [];
-          targetPorts = cfg.targetPorts ? Object.keys(cfg.targetPorts) : [];
-        }
-      } catch {
-        // ignore instance creation errors for schema generation; fall back to no ports
+
+      const cls = this.classes.get(name)!;
+      let inst = await this.moduleRef.create<Node>(cls);
+
+      if (inst) {
+        const cfg: TemplatePortConfig = inst.getPortConfig();
+        sourcePorts = cfg.sourcePorts ? Object.keys(cfg.sourcePorts) : [];
+        targetPorts = cfg.targetPorts ? Object.keys(cfg.targetPorts) : [];
       }
+
       const meta: TemplateMeta = this.meta.get(name) ?? { title: name, kind: 'tool' };
       schemas.push({
         name,

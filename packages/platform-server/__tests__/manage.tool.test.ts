@@ -4,7 +4,7 @@ import { LoggerService } from '../src/core/services/logger.service.js';
 import { BaseAgent } from '../src/nodes/agent/agent.node';
 import { ManageTool } from '../src/tools/manage.tool';
 import { DynamicStructuredTool } from '@langchain/core/tools';
-import { TemplateRegistry, type ModuleRefLike } from '../src/graph/templateRegistry';
+import { TemplateRegistry } from '../src/graph/templateRegistry';
 import type { ModuleRef } from '@nestjs/core';
 import { LiveGraphRuntime } from '../src/graph/liveGraph.manager';
 
@@ -20,7 +20,9 @@ class FakeAgent extends BaseAgent {
     this._config = { configurable: {} } as any;
     this.id = id;
   }
-  protected getNodeId(): string | undefined { return this.id; }
+  protected getNodeId(): string | undefined {
+    return this.id;
+  }
   async setConfig(_: Record<string, unknown>): Promise<void> {}
   async invoke(thread: string, _messages: Msg[]): Promise<AIMessage> {
     this.active.add(thread);
@@ -28,7 +30,9 @@ class FakeAgent extends BaseAgent {
     return new AIMessage(`ok-${thread}`);
   }
   // expose a way to mark a given thread as running for status tests
-  markRunning(thread: string) { this.active.add(thread); }
+  markRunning(thread: string) {
+    this.active.add(thread);
+  }
   override listActiveThreads(prefix?: string): string[] {
     return Array.from(this.active).filter((t) => (prefix ? t.startsWith(prefix) : true));
   }
@@ -64,10 +68,9 @@ describe('ManageTool unit', () => {
     const a = new FakeAgent(logger, 'child-1');
     tool.addAgent(a);
     const dyn = tool.init();
-    const res = await dyn.invoke(
-      { command: 'send_message', worker: 'child-1', message: 'hello' },
-      { configurable: { thread_id: 'parent' } } as any,
-    );
+    const res = await dyn.invoke({ command: 'send_message', worker: 'child-1', message: 'hello' }, {
+      configurable: { thread_id: 'parent' },
+    } as any);
     expect(res).toBe('ok-parent__child-1');
   });
 
@@ -75,10 +78,16 @@ describe('ManageTool unit', () => {
     const tool = new ManageTool(new LoggerService());
     await tool.setConfig({ description: 'd' });
     const dyn = tool.init();
-    await expect(dyn.invoke({ command: 'send_message', worker: 'x' }, { configurable: { thread_id: 'p' } } as any)).rejects.toBeTruthy();
+    await expect(
+      dyn.invoke({ command: 'send_message', worker: 'x' }, { configurable: { thread_id: 'p' } } as any),
+    ).rejects.toBeTruthy();
     const a = new FakeAgent(new LoggerService(), 'w1');
     tool.addAgent(a);
-    await expect(dyn.invoke({ command: 'send_message', worker: 'unknown', message: 'm' }, { configurable: { thread_id: 'p' } } as any)).rejects.toBeTruthy();
+    await expect(
+      dyn.invoke({ command: 'send_message', worker: 'unknown', message: 'm' }, {
+        configurable: { thread_id: 'p' },
+      } as any),
+    ).rejects.toBeTruthy();
   });
 
   it('check_status: aggregates active child threads scoped to current thread', async () => {
@@ -136,8 +145,11 @@ describe('ManageTool graph wiring', () => {
   it('connect ManageTool to two agents via agent port; list returns their ids', async () => {
     const logger = new LoggerService();
     class FakeAgent2 extends FakeAgent {}
-    class FakeAgentWithTools extends FakeAgent2 { addTool(_: unknown) {}; removeTool(_: unknown) {} }
-    const moduleRef: ModuleRefLike = { create: (Cls: any) => new Cls() };
+    class FakeAgentWithTools extends FakeAgent2 {
+      addTool(_: unknown) {}
+      removeTool(_: unknown) {}
+    }
+    const moduleRef: ModuleRef = { create: (Cls: any) => new Cls() };
     const registry = new TemplateRegistry(moduleRef);
 
     registry
@@ -147,7 +159,14 @@ describe('ManageTool graph wiring', () => {
     const runtime = new LiveGraphRuntime(
       logger,
       registry,
-      { initIfNeeded: async () => {}, get: async () => null, upsert: async () => { throw new Error('not-implemented'); }, upsertNodeState: async () => {} } as any,
+      {
+        initIfNeeded: async () => {},
+        get: async () => null,
+        upsert: async () => {
+          throw new Error('not-implemented');
+        },
+        upsertNodeState: async () => {},
+      } as any,
       { create: (Cls: any) => new Cls() } as any,
     );
     const graph = {
@@ -168,10 +187,9 @@ describe('ManageTool graph wiring', () => {
     const toolInst: ManageTool = toolNode?.instance as ManageTool;
 
     const dyn = toolInst.init();
-    const list: string[] = (await dyn.invoke(
-      { command: 'list' },
-      { configurable: { thread_id: 'p' } } as any,
-    )) as string[];
+    const list: string[] = (await dyn.invoke({ command: 'list' }, {
+      configurable: { thread_id: 'p' },
+    } as any)) as string[];
     expect(Array.isArray(list)).toBe(true);
   });
 });

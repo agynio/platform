@@ -1,10 +1,11 @@
 import { describe, it, expect, vi } from 'vitest';
 import { LiveGraphRuntime } from '../src/graph/liveGraph.manager';
-import { TemplateRegistry, type ModuleRefLike } from '../src/graph/templateRegistry';
+import { TemplateRegistry } from '../src/graph/templateRegistry';
 import type { FactoryFn } from '../src/graph/types';
 import Node from '../src/nodes/base/Node';
 // Capabilities removed; test updated to use Node lifecycle
 import { LoggerService } from '../src/core/services/logger.service.js';
+import { ModuleRef } from '@nestjs/core';
 
 class MockLogger extends LoggerService {
   info = vi.fn();
@@ -13,13 +14,20 @@ class MockLogger extends LoggerService {
 }
 
 function makeRuntimeAndRegistry() {
-  const moduleRef: ModuleRefLike = { create: (Cls: any) => new Cls() };
+  const moduleRef: ModuleRef = { create: (Cls: any) => new Cls() };
   const registry = new TemplateRegistry(moduleRef);
   const logger = new MockLogger() as any as LoggerService;
   const runtime = new LiveGraphRuntime(
     logger,
     registry,
-    { initIfNeeded: async()=>{}, get: async()=>null, upsert: async()=>{ throw new Error('not-implemented'); }, upsertNodeState: async()=>{} } as any,
+    {
+      initIfNeeded: async () => {},
+      get: async () => null,
+      upsert: async () => {
+        throw new Error('not-implemented');
+      },
+      upsertNodeState: async () => {},
+    } as any,
     { create: (Cls: any) => new Cls() } as any,
   );
   return { registry, runtime, logger };
@@ -31,7 +39,9 @@ describe('Runtime helpers and GraphRepository API surfaces', () => {
 
     // Mock node impl
     class MockNode extends Node<Record<string, unknown>> {
-      getPortConfig() { return {}; }
+      getPortConfig() {
+        return {};
+      }
     }
 
     const factory: FactoryFn = async () => new MockNode() as any;
@@ -54,26 +64,36 @@ describe('Runtime helpers and GraphRepository API surfaces', () => {
     const { registry, runtime } = makeRuntimeAndRegistry();
 
     // Expand template with capabilities and static schema
-    class Dyn1 extends Node<Record<string, unknown>> { setConfig = async () => {}; getPortConfig() { return {}; } }
+    class Dyn1 extends Node<Record<string, unknown>> {
+      setConfig = async () => {};
+      getPortConfig() {
+        return {};
+      }
+    }
     registry.register('dyn', { title: 'Dyn', kind: 'tool' }, Dyn1 as any);
 
     // Create a mock dyn-configurable node instance
     class DynNode extends Node<Record<string, unknown>> {
       setDynamicConfig = vi.fn((_cfg: Record<string, unknown>) => {});
       setConfig = vi.fn(async (_cfg: Record<string, unknown>) => {});
-      getPortConfig() { return {}; }
+      getPortConfig() {
+        return {};
+      }
     }
     registry.register('dyn2', { title: 'Dyn2', kind: 'tool' }, DynNode as any);
 
     // Runtime graph
-    await runtime.apply({ nodes: [
-      { id: 'a', data: { template: 'dyn', config: {} } },
-      { id: 'b', data: { template: 'dyn2', config: {} } },
-    ], edges: []});
+    await runtime.apply({
+      nodes: [
+        { id: 'a', data: { template: 'dyn', config: {} } },
+        { id: 'b', data: { template: 'dyn2', config: {} } },
+      ],
+      edges: [],
+    });
 
     // Template schema via registry directly (GraphRepository now stateless for templates only)
     const templates = await registry.toSchema();
-    const dynEntry = templates.find(t => t.name === 'dyn');
+    const dynEntry = templates.find((t) => t.name === 'dyn');
     expect(dynEntry).toBeTruthy();
 
     // Node pause via runtime directly
