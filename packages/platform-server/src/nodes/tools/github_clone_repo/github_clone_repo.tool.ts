@@ -4,7 +4,7 @@ import { FunctionTool } from '@agyn/llm';
 import { LLMContext } from '../../../llm/types';
 import { ConfigService } from '../../../core/services/config.service';
 import { LoggerService } from '../../../core/services/logger.service';
-import { VaultService, type VaultRef } from '../../../infra/vault/vault.service';
+import { VaultService, type VaultRef } from '../../../vault/vault.service';
 import { parseVaultRef } from '../../../utils/refs';
 import { GithubCloneRepoNode } from './github_clone_repo.node';
 

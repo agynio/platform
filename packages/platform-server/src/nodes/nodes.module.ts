@@ -14,6 +14,8 @@ import { WorkspaceNode } from './workspace/workspace.node';
 // MCP
 import { LocalMCPServer } from './mcp/localMcpServer.node';
 // Tool nodes and tools
+import { EnvModule } from '../env/env.module';
+import { InfraModule } from '../infra/infra.module';
 import { CallAgentNode } from './tools/call_agent/call_agent.node';
 import { FinishNode } from './tools/finish/finish.node';
 import { GithubCloneRepoNode } from './tools/github_clone_repo/github_clone_repo.node';
@@ -25,14 +27,14 @@ import { SendSlackMessageNode } from './tools/send_slack_message/send_slack_mess
 import { ShellCommandNode } from './tools/shell_command/shell_command.node';
 
 @Module({
-  imports: [CoreModule, LLMModule],
+  imports: [CoreModule, LLMModule, InfraModule, EnvModule],
   controllers: [RemindersController],
   providers: [
     // repositories/services
     {
       provide: AgentRunService,
       useFactory: async (mongo: MongoService, logger: LoggerService) => {
-        const svc = new AgentRunService(mongo.getDb(), logger);
+        const svc = new AgentRunService(mongo, logger);
         await svc.ensureIndexes();
         return svc;
       },
@@ -57,6 +59,12 @@ import { ShellCommandNode } from './tools/shell_command/shell_command.node';
     ShellCommandNode,
     GithubCloneRepoNode,
     RemindMeNode,
+    {
+      provide: 'NODES_REGISTER',
+      useFactory: () => {
+        throw new Error('NODES_REGISTER provider is deprecated');
+      },
+    },
   ],
   exports: [AgentRunService],
 })

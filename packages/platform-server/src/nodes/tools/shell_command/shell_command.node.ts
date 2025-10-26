@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { WorkspaceNode } from '../../workspace/workspace.node';
-import { EnvService, type EnvItem } from '../../../graph/env.service';
+import { EnvService, type EnvItem } from '../../../env/env.service';
 import { BaseToolNode } from '../baseToolNode';
 import { ShellCommandTool } from './shell_command.tool';
 import { Inject, Injectable, Scope } from '@nestjs/common';

@@ -231,13 +231,17 @@ export class AgentNode extends Node<AgentStaticConfig> {
   }
   async invoke(
     thread: string,
-    messages: Array<{ content: string; info?: Record<string, unknown> }> | { content: string; info?: Record<string, unknown> },
+    messages:
+      | Array<{ content: string; info?: Record<string, unknown> }>
+      | { content: string; info?: Record<string, unknown> },
   ): Promise<ResponseMessage | ToolCallOutputMessage> {
     return await withAgent(
       { threadId: thread, nodeId: this.nodeId, inputParameters: [{ thread }, { messages }] },
       async () => {
         const loop = await this.prepareLoop();
-        const incoming: Array<{ content: string; info?: Record<string, unknown> }> = Array.isArray(messages) ? messages : [messages];
+        const incoming: Array<{ content: string; info?: Record<string, unknown> }> = Array.isArray(messages)
+          ? messages
+          : [messages];
         const history: HumanMessage[] = incoming.map((msg) => HumanMessage.fromText(JSON.stringify(msg)));
         const finishSignal = new Signal();
 

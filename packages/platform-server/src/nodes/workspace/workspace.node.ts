@@ -3,10 +3,10 @@ import Node from '../base/Node';
 import { ContainerHandle } from '../../infra/container/container.handle';
 import { z } from 'zod';
 import { PLATFORM_LABEL, SUPPORTED_PLATFORMS } from '../../constants';
-import { VaultService } from '../../infra/vault/vault.service';
+import { VaultService } from '../../vault/vault.service';
 import { ConfigService } from '../../core/services/config.service';
 import { NcpsKeyService } from '../../infra/ncps/ncpsKey.service';
-import { EnvService, type EnvItem } from '../../graph/env.service';
+import { EnvService, type EnvItem } from '../../env/env.service';
 import { LoggerService } from '../../core/services/logger.service';
 import { Injectable, Scope } from '@nestjs/common';
 

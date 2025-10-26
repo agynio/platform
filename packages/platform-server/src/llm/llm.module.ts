@@ -8,7 +8,7 @@ import { EnforceToolsLLMReducer } from './reducers/enforceTools.llm.reducer';
 import { SummarizationLLMReducer } from './reducers/summarization.llm.reducer';
 import { StaticLLMRouter } from './routers/static.llm.router';
 import { ConditionalLLMRouter } from './routers/conditional.llm.router';
-import { LLMProvisioner } from './llm.provisioner';
+import { LLMProvisioner } from './provisioners/llm.provisioner';
 import { ConfigService } from '../core/services/config.service';
 import { LoggerService } from '../core/services/logger.service';
 import { LiteLLMProvisioner } from './provisioners/litellm.provisioner';

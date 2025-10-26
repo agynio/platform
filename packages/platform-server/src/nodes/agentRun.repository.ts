@@ -1,6 +1,7 @@
 import { Collection, Db, IndexSpecification, WithId } from 'mongodb';
-import { Injectable } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
 import { LoggerService } from '../core/services/logger.service';
+import { MongoService } from '../core/services/mongo.service';
 
 export type AgentRunStatus = 'running' | 'terminating' | 'terminated';
 
@@ -19,8 +20,11 @@ export type AgentRunDoc = {
 export class AgentRunService {
   private col: Collection<AgentRunDoc>;
 
-  constructor(private db: Db, private logger: LoggerService) {
-    this.col = this.db.collection<AgentRunDoc>('agent_runs');
+  constructor(
+    @Inject(MongoService) private mongo: MongoService,
+    @Inject(LoggerService) private logger: LoggerService,
+  ) {
+    this.col = this.mongo.getDb().collection<AgentRunDoc>('agent_runs');
   }
 
   async ensureIndexes(): Promise<void> {
@@ -34,7 +38,10 @@ export class AgentRunService {
     const idx3Key: IndexSpecification = { expiresAt: 1 };
     const idx3Opts = { name: 'ttl_expires', expireAfterSeconds: 0 } as const;
 
-    const plan: Array<{ key: IndexSpecification; opts: { name?: string; unique?: boolean; expireAfterSeconds?: number } }> = [
+    const plan: Array<{
+      key: IndexSpecification;
+      opts: { name?: string; unique?: boolean; expireAfterSeconds?: number };
+    }> = [
       { key: idx1Key, opts: idx1Opts },
       { key: idx2Key, opts: idx2Opts },
       { key: idx3Key, opts: idx3Opts },
@@ -61,15 +68,16 @@ export class AgentRunService {
     const now = new Date();
     await this.col.updateOne(
       { nodeId, runId },
-      { $setOnInsert: { nodeId, threadId, runId, startedAt: now }, $set: { status: 'running' as AgentRunStatus, updatedAt: now }, $unset: { expiresAt: true } },
+      {
+        $setOnInsert: { nodeId, threadId, runId, startedAt: now },
+        $set: { status: 'running' as AgentRunStatus, updatedAt: now },
+        $unset: { expiresAt: true },
+      },
       { upsert: true },
     );
   }
 
-  async markTerminating(
-    nodeId: string,
-    runId: string,
-  ): Promise<'ok' | 'not_found' | 'already' | 'not_running'> {
+  async markTerminating(nodeId: string, runId: string): Promise<'ok' | 'not_found' | 'already' | 'not_running'> {
     // Idempotent transition to 'terminating' with explicit state checks.
     // 1) not found -> 'not_found'
     // 2) already 'terminating' -> 'already'

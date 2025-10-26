@@ -1,37 +1,38 @@
 import { Module } from '@nestjs/common';
 import { ModuleRef } from '@nestjs/core';
-import { TemplateRegistry } from './templateRegistry';
-import { PortsRegistry } from './ports.registry';
-import { GraphRepository } from './graph.repository';
-import { MongoGraphRepository } from './graphMongo.repository';
-import { GitGraphRepository } from './gitGraph.repository';
-import { LiveGraphRuntime } from './liveGraph.manager';
-import { RunsController } from './controllers/runs.controller';
-import { GraphPersistController } from './controllers/graphPersist.controller';
-import { GraphController } from './controllers/graph.controller';
-import { NodesModule } from '../nodes/nodes.module';
-import { LLMModule } from '../llm/llm.module';
 import { CoreModule } from '../core/core.module';
+import { ConfigService } from '../core/services/config.service';
+import { LoggerService } from '../core/services/logger.service';
+import { MongoService } from '../core/services/mongo.service';
+import { ContainerService } from '../infra/container/container.service';
 import { InfraModule } from '../infra/infra.module';
+import { NcpsKeyService } from '../infra/ncps/ncpsKey.service';
+import { LLMModule } from '../llm/llm.module';
+import { LLMProvisioner } from '../llm/provisioners/llm.provisioner';
 import { AgentRunService } from '../nodes/agentRun.repository';
 import { buildTemplateRegistry } from '../templates';
-import { LoggerService } from '../core/services/logger.service';
-import { ContainerService } from '../infra/container/container.service';
-import { ConfigService } from '../core/services/config.service';
-import { MongoService } from '../core/services/mongo.service';
-import { LLMProvisioner } from '../llm/provisioners/llm.provisioner';
-import { NcpsKeyService } from '../infra/ncps/ncpsKey.service';
-import { GraphDefinition, GraphError } from './types';
+import { GraphController } from './controllers/graph.controller';
+import { GraphPersistController } from './controllers/graphPersist.controller';
+import { RunsController } from './controllers/runs.controller';
+import { GitGraphRepository } from './gitGraph.repository';
 import { GraphGuard } from './graph.guard';
+import { GraphRepository } from './graph.repository';
+import { MongoGraphRepository } from './graphMongo.repository';
+import { LiveGraphRuntime } from './liveGraph.manager';
+import { PortsRegistry } from './ports.registry';
+import { TemplateRegistry } from './templateRegistry';
+import { EnvModule } from '../env/env.module';
+import { NodeStateService } from './nodeState.service';
 
 @Module({
-  imports: [CoreModule, InfraModule, NodesModule, LLMModule],
+  imports: [CoreModule, InfraModule, LLMModule, EnvModule],
   controllers: [RunsController, GraphPersistController, GraphController],
   providers: [
     {
       provide: GraphGuard,
       useClass: GraphGuard,
     },
+    TemplateRegistry,
     {
       provide: TemplateRegistry,
       useFactory: (
@@ -41,7 +42,7 @@ import { GraphGuard } from './graph.guard';
         mongoService: MongoService,
         provisioner: LLMProvisioner,
         ncpsKeyService: NcpsKeyService,
-      module: ModuleRef,
+        module: ModuleRef,
       ) =>
         buildTemplateRegistry({
           logger,
@@ -89,6 +90,7 @@ import { GraphGuard } from './graph.guard';
       },
       inject: [LoggerService, TemplateRegistry, GraphRepository, ModuleRef],
     },
+    NodeStateService,
     // Load and apply persisted graph to runtime at startup
     // {
     //   provide: 'LiveGraphRuntimeInitializer',

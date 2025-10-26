@@ -1,7 +1,7 @@
-import { Injectable } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
 import { z } from 'zod';
-import { LoggerService } from '../../core/services/logger.service';
-import { ConfigService } from '../../core/services/config.service';
+import { LoggerService } from '../core/services/logger.service';
+import { ConfigService } from '../core/services/config.service';
 
 // Typed KV v2 response shapes
 type KvV2MountsResponse = Record<string, { type?: string; options?: { version?: string | number } }>;
@@ -31,8 +31,8 @@ export type VaultRef = { mount: string; path: string; key: string };
 export class VaultService {
   private cfg: VaultConfig;
   constructor(
-    private configService: ConfigService,
-    private logger: LoggerService,
+    @Inject(ConfigService) private configService: ConfigService,
+    @Inject(LoggerService) private logger: LoggerService,
   ) {
     this.cfg = VaultConfigSchema.parse({
       enabled: this.configService.vaultEnabled,

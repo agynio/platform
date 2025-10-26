@@ -1,9 +1,8 @@
-import { Db } from 'mongodb';
-import { z } from 'zod';
-import { MemoryService, MemoryScope } from '../../nodes/memory.repository';
-import Node from '../base/Node';
 import { Inject, Injectable, Scope } from '@nestjs/common';
 import { ModuleRef } from '@nestjs/core';
+import { z } from 'zod';
+import { MemoryScope, MemoryService } from '../../nodes/memory.repository';
+import Node from '../base/Node';
 
 export interface MemoryNodeConfig {
   scope: MemoryScope; // 'global' | 'perThread'
@@ -23,15 +22,11 @@ export type MemoryNodeStaticConfig = z.infer<typeof MemoryNodeStaticConfigSchema
 
 /**
  * MemoryNode factory returns an accessor to build a MemoryService scoped to the node and thread.
- * Inject Db from MongoService.getDb() at template wiring time.
  */
 
 @Injectable({ scope: Scope.TRANSIENT })
 export class MemoryNode extends Node<MemoryNodeStaticConfig> {
-  constructor(
-    @Inject(Db as any) private db: Db,
-    private moduleRef: ModuleRef,
-  ) {
+  constructor(@Inject(ModuleRef) private moduleRef: ModuleRef) {
     super();
   }
 

@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { VaultService, type VaultRef } from '../infra/vault/vault.service';
+import { VaultService, type VaultRef } from '../vault/vault.service';
 import { parseVaultRef } from '../utils/refs';
 
 export class EnvError extends Error {

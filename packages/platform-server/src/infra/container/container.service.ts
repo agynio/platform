@@ -10,7 +10,7 @@ import {
   ExecIdleTimeoutError,
   isExecIdleTimeoutError,
 } from '../../utils/execTimeout';
-import { ContainerRegistry as ContainerRegistryService } from './container.registry';
+import { ContainerRegistry } from './container.registry';
 import { createUtf8Collector, demuxDockerMultiplex } from './containerStream.util';
 
 const DEFAULT_IMAGE = 'mcr.microsoft.com/vscode/devcontainers/base';
@@ -60,7 +60,7 @@ export class ContainerService {
 
   constructor(
     @Inject(LoggerService) private logger: LoggerService,
-    @Inject(ContainerRegistryService) private registry: ContainerRegistryService,
+    @Inject(ContainerRegistry) private registry: ContainerRegistry,
   ) {
     this.docker = new Docker({
       ...(process.env.DOCKER_SOCKET
@@ -69,6 +69,10 @@ export class ContainerService {
           }
         : {}),
     });
+  }
+
+  async init() {
+    await this.registry.backfillFromDocker(this); // TODO: move backfillFromDocker into ContainerService in order to fully eliminate circular dependency
   }
 
   /** Public helper to touch last-used timestamp for a container */

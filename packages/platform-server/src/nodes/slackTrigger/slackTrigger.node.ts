@@ -1,7 +1,7 @@
 import { SocketModeClient } from '@slack/socket-mode';
 import { z } from 'zod';
 import { LoggerService } from '../../core/services/logger.service';
-import { VaultService } from '../../infra/vault/vault.service';
+import { VaultService } from '../../vault/vault.service';
 import { ReferenceFieldSchema, resolveTokenRef } from '../../utils/refs';
 import Node from '../base/Node';
 type TriggerHumanMessage = { kind: 'human'; content: string; info?: Record<string, unknown> };
@@ -44,14 +44,12 @@ type SlackTriggerConfig = { app_token: SlackTokenRef };
 export class SlackTrigger extends Node<SlackTriggerConfig> {
   private cfg: SlackTriggerConfig | null = null;
   private client: SocketModeClient | null = null;
-  private vault?: VaultService;
 
   constructor(
     @Inject(LoggerService) private readonly logger: LoggerService,
-    @Inject(VaultService) vault?: VaultService,
+    @Inject(VaultService) private readonly vault: VaultService,
   ) {
     super();
-    this.vault = vault;
   }
 
   private async resolveAppToken(): Promise<string> {
