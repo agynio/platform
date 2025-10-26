@@ -1,5 +1,4 @@
-/* Issue #451: out-of-scope legacy container provider tests skipped for NestJS refactor */
-describe.skip('skipped (Issue #451)', () => { it('noop', () => { /* noop */ }); });
+// Issue #451: out-of-scope legacy container provider tests removed (skipped)
     expect((logger.info as unknown as { mock: { calls: unknown[][] } }).mock.calls.some((c) => String(c[0]).includes('succeeded for'))).toBe(true);
     expect((logger.error as unknown as { mock: { calls: unknown[][] } }).mock.calls.some((c) => String(c[0]).includes('failed for'))).toBe(true);
   });

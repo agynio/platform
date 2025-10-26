@@ -1,5 +1,4 @@
-/* Issue #451: out-of-scope legacy container provider tests skipped for NestJS refactor */
-describe.skip('skipped (Issue #451)', () => { it('noop', () => { /* noop */ }); });
+// Issue #451: out-of-scope legacy container provider tests removed (skipped)
     const container = (await ent.provide('t')) as TestContainerEntity;
     expect(container.env['A']).toBe('x');
     expect(container.env['B']).toBe('VAL');
