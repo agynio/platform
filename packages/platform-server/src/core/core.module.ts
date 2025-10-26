@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { Db } from 'mongodb';
 import { ConfigService } from './services/config.service';
 import { LoggerService } from './services/logger.service';
 import { MongoService } from './services/mongo.service';
@@ -17,12 +18,19 @@ import { PrismaService } from './services/prisma.service';
       },
       inject: [ConfigService, LoggerService],
     },
+    {
+      // Provide raw Mongo Db token for direct injection (e.g., MemoryNode)
+      provide: Db as any,
+      useFactory: (mongo: MongoService) => mongo.getDb(),
+      inject: [MongoService],
+    },
     PrismaService,
   ],
   exports: [
     ConfigService, //
     LoggerService,
     MongoService,
+    Db as any,
     PrismaService,
   ],
 })

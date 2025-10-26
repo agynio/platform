@@ -24,7 +24,7 @@ export class ManageToolNode extends BaseToolNode<z.infer<typeof ManageToolStatic
 
   constructor(
     @Inject(LoggerService) private readonly logger: LoggerService,
-    private readonly module: ModuleRef,
+    @Inject(ModuleRef) private readonly module: ModuleRef,
   ) {
     super();
   }

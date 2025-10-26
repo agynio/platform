@@ -112,7 +112,7 @@ export class AgentNode extends Node<AgentStaticConfig> {
     @Inject(ConfigService) protected configService: ConfigService,
     @Inject(LoggerService) protected logger: LoggerService,
     @Inject(LLMProvisioner) protected llmProvisioner: LLMProvisioner,
-    private readonly moduleRef: ModuleRef,
+    @Inject(ModuleRef) private readonly moduleRef: ModuleRef,
   ) {
     super();
   }

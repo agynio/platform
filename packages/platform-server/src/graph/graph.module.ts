@@ -22,12 +22,20 @@ import { MongoService } from '../core/services/mongo.service';
 import { LLMProvisioner } from '../llm/provisioners/llm.provisioner';
 import { NcpsKeyService } from '../infra/ncps/ncpsKey.service';
 import { GraphDefinition, GraphError } from './types';
+import { NodeStateService } from './nodeState.service';
 import { GraphGuard } from './graph.guard';
 
 @Module({
   imports: [CoreModule, InfraModule, NodesModule, LLMModule],
   controllers: [RunsController, GraphPersistController, GraphController],
   providers: [
+    // Provide NodeStateService via factory to wire concrete dependencies explicitly
+    {
+      provide: NodeStateService,
+      useFactory: (graphs: GraphRepository, runtime: LiveGraphRuntime, logger: LoggerService) =>
+        new NodeStateService(graphs, runtime, logger),
+      inject: [GraphRepository, LiveGraphRuntime, LoggerService],
+    },
     {
       provide: GraphGuard,
       useClass: GraphGuard,

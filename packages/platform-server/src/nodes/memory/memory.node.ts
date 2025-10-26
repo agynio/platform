@@ -30,7 +30,7 @@ export type MemoryNodeStaticConfig = z.infer<typeof MemoryNodeStaticConfigSchema
 export class MemoryNode extends Node<MemoryNodeStaticConfig> {
   constructor(
     @Inject(Db as any) private db: Db,
-    private moduleRef: ModuleRef,
+    @Inject(ModuleRef) private moduleRef: ModuleRef,
   ) {
     super();
   }

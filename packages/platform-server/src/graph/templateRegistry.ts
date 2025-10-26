@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
 import { JSONSchema } from 'zod/v4/core';
 import type { TemplatePortConfig } from './ports.types';
 import type { TemplateKind, TemplateNodeSchema } from './types';
@@ -20,7 +20,7 @@ export class TemplateRegistry {
   private classes = new Map<string, TemplateCtor & TemplateStatic>();
   private meta = new Map<string, TemplateMeta>();
 
-  constructor(private readonly moduleRef: ModuleRef) {}
+  constructor(@Inject(ModuleRef) private readonly moduleRef: ModuleRef) {}
 
   // Register associates template -> node class and meta (ports are read from instance via getPortConfig)
   register(template: string, meta: TemplateMeta, nodeClass: TemplateCtor & TemplateStatic): this {
