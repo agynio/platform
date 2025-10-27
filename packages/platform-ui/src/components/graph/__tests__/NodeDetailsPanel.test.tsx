@@ -49,13 +49,7 @@ describe('NodeDetailsPanel', () => {
     expect(mockMutate).toHaveBeenCalledWith('provision');
   });
 
-  it('shows Pause/Resume appropriately when ready and paused state changes', () => {
-    mockStatus = { isPaused: true, provisionStatus: { state: 'ready' } };
-    renderPanel();
-    expect(screen.getByText('Resume')).not.toBeDisabled();
-    fireEvent.click(screen.getByText('Resume'));
-    expect(mockMutate).toHaveBeenCalledWith('resume');
-  });
+  // Pause/Resume removed; Start/Stop only per server API alignment
 
   it('enables Stop when ready', () => {
     mockStatus = { isPaused: false, provisionStatus: { state: 'ready' } };

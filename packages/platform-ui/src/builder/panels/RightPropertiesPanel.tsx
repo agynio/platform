@@ -65,38 +65,42 @@ function RightPropertiesPanelBody({
   );
 
   const runtimeTemplate = runtimeTemplates.getTemplate(data.template);
-  const hasRuntimeCaps = runtimeTemplate ? canProvision(runtimeTemplate) || canPause(runtimeTemplate) : false;
+  const kind = runtimeTemplate?.kind as string | undefined;
+  // Show Runtime Status if lifecycle-managed kinds or if status has provisionStatus
+  const lifecycleKinds = new Set(['agent', 'mcp', 'service', 'trigger']);
+  const { data: statusForGate } = useNodeStatus(node.id);
+  const hasRuntimeCaps = lifecycleKinds.has(kind || '') || !!statusForGate?.provisionStatus;
 
   function RuntimeNodeSection({ nodeId, templateName }: { nodeId: string; templateName: string }) {
     const { data: status } = useNodeStatus(nodeId);
     const action = useNodeAction(nodeId);
     const { getTemplate } = useTemplatesCache();
     const tmpl = getTemplate(templateName);
-    const pausable = tmpl ? canPause(tmpl) : false;
-    const provisionable = tmpl ? canProvision(tmpl) : false;
-    if (!pausable && !provisionable) return null; // Should be gated by parent but double-safety
+    const pausable = false; // Pause/resume removed per server alignment
+    const provisionable = tmpl ? canProvision(tmpl) : true;
+    // Show block whenever lifecycle-managed kinds or provision status exists (parent gate handles kinds)
     const state = status?.provisionStatus?.state ?? 'not_ready';
     const isPaused = !!status?.isPaused;
     const detail = status?.provisionStatus?.details;
     const disableAll = state === 'deprovisioning';
-    const canStart = provisionable && state === 'not_ready' && !disableAll;
+    const canStart = provisionable && ['not_ready', 'error', 'provisioning_error', 'deprovisioning_error'].includes(state) && !disableAll;
     const canStop = provisionable && (state === 'ready' || state === 'provisioning') && !disableAll;
-    const canPauseBtn = pausable && state === 'ready' && !isPaused && !disableAll;
-    const canResumeBtn = pausable && state === 'ready' && isPaused && !disableAll;
+    const canPauseBtn = false;
+    const canResumeBtn = false;
     return (
       <div className="space-y-3 text-xs">
         <NodeStatusBadges state={state} isPaused={isPaused} detail={detail} />
         <NodeActionButtons
           provisionable={provisionable}
-          pausable={pausable}
+          pausable={false}
           canStart={canStart}
           canStop={canStop}
-          canPauseBtn={canPauseBtn}
-          canResumeBtn={canResumeBtn}
+          canPauseBtn={false}
+          canResumeBtn={false}
           onStart={() => action.mutate('provision')}
           onStop={() => action.mutate('deprovision')}
-          onPause={() => action.mutate('pause')}
-          onResume={() => action.mutate('resume')}
+          onPause={() => {}}
+          onResume={() => {}}
         />
       </div>
     );

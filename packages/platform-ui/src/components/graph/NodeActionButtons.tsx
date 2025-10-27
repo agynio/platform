@@ -41,16 +41,7 @@ export function NodeActionButtons({
             </Button>
           </>
         )}
-        {pausable && (
-          <>
-            <Button size="sm" variant="outline" onClick={onPause} disabled={!canPauseBtn}>
-              Pause
-            </Button>
-            <Button size="sm" variant="outline" onClick={onResume} disabled={!canResumeBtn}>
-              Resume
-            </Button>
-          </>
-        )}
+        {/* Pause/Resume removed; buttons gated off */}
       </div>
     </div>
   );

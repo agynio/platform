@@ -25,6 +25,8 @@ function statusColor(state: ProvisionState | undefined): 'gray' | 'blue' | 'gree
     case 'ready':
       return 'green';
     case 'error':
+    case 'provisioning_error':
+    case 'deprovisioning_error':
       return 'red';
     case 'deprovisioning':
       return 'yellow';
@@ -39,7 +41,7 @@ export function NodeStatusBadges({ state, isPaused, detail }: { state: Provision
     <div className="flex items-center gap-2 text-xs">
       <Badge variant={badgeVariantFor(statusColor(state as ProvisionState))}>{state}</Badge>
       {isPaused && <Badge variant={badgeVariantFor('yellow')}>paused</Badge>}
-      {state === 'error' && detail ? (
+      {(state === 'error' || state === 'provisioning_error' || state === 'deprovisioning_error') && detail ? (
         <span className="text-[10px] text-red-600" title={typeof detail === 'string' ? detail : JSON.stringify(detail)}>
           details
         </span>
