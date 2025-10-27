@@ -1,16 +1,20 @@
+import { Inject, Injectable, Scope } from '@nestjs/common';
 import { LoggerService } from '../core/services/logger.service';
 import { LiveGraphRuntime } from './liveGraph.manager';
 import { GraphStateUpsertService } from './types';
+import { GraphSocketGateway } from '../gateway/graph.socket.gateway';
 
 /**
  * Centralized service to persist per-node runtime state and reflect changes in the in-memory runtime snapshot.
  * Minimal, non-Nest class to avoid broader DI changes for now.
  */
+@Injectable({ scope: Scope.DEFAULT })
 export class NodeStateService {
   constructor(
-    private readonly graphService: GraphStateUpsertService,
-    private readonly runtime: LiveGraphRuntime,
-    private readonly logger: LoggerService,
+    @Inject('GraphStateUpsertService') private readonly graphService: GraphStateUpsertService,
+    @Inject(LiveGraphRuntime) private readonly runtime: LiveGraphRuntime,
+    @Inject(LoggerService) private readonly logger: LoggerService,
+    @Inject(GraphSocketGateway) private readonly gateway?: GraphSocketGateway,
   ) {}
 
   async upsertNodeState(nodeId: string, state: Record<string, unknown>, name = 'main'): Promise<void> {
@@ -19,6 +23,8 @@ export class NodeStateService {
       await this.graphService.upsertNodeState(name, nodeId, state);
       // Reflect into runtime snapshot via typed helper
       this.runtime.updateNodeState(nodeId, state);
+      // Emit strictly-typed node_state event
+      this.gateway?.emitNodeState(nodeId, state);
     } catch (e) {
       this.logger.error('NodeStateService: upsertNodeState failed for %s: %s', nodeId, String(e));
     }

@@ -23,6 +23,7 @@ import { PortsRegistry } from './ports.registry';
 import { TemplateRegistry } from './templateRegistry';
 import { EnvModule } from '../env/env.module';
 import { NodeStateService } from './nodeState.service';
+import { GraphSocketGateway } from '../gateway/graph.socket.gateway';
 
 @Module({
   imports: [CoreModule, InfraModule, LLMModule, EnvModule],
@@ -76,6 +77,11 @@ import { NodeStateService } from './nodeState.service';
       },
       inject: [ConfigService, LoggerService, MongoService, TemplateRegistry],
     },
+    // Bridge for NodeStateService to persist per-node state via repository interface
+    {
+      provide: 'GraphStateUpsertService',
+      useExisting: GraphRepository,
+    },
     {
       provide: LiveGraphRuntime,
       useFactory: async (
@@ -91,6 +97,7 @@ import { NodeStateService } from './nodeState.service';
       inject: [LoggerService, TemplateRegistry, GraphRepository, ModuleRef],
     },
     NodeStateService,
+    GraphSocketGateway,
     // Load and apply persisted graph to runtime at startup
     // {
     //   provide: 'LiveGraphRuntimeInitializer',
