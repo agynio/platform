@@ -45,6 +45,7 @@ export class ManageFunctionTool extends FunctionTool<typeof ManageInvocationSche
 
   async execute(args: z.infer<typeof ManageInvocationSchema>): Promise<string> {
     const { command, worker, message, parentThreadId } = args;
+    if (!parentThreadId) throw new Error('parentThreadId is required');
     const workers = this.node.listWorkers();
 
     if (command === 'list') {

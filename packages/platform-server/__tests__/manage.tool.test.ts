@@ -15,6 +15,10 @@ class FakeAgent {
   constructor(id?: string) {
     this.id = id;
   }
+  async setConfig(_: Record<string, unknown>): Promise<void> {}
+  async provision(): Promise<void> {}
+  async deprovision(): Promise<void> {}
+  getPortConfig() { return { sourcePorts: {}, targetPorts: { $self: { kind: 'instance' } } } as const; }
   getAgentNodeId(): string | undefined {
     return this.id;
   }
@@ -35,7 +39,7 @@ class FakeAgent {
 describe('ManageTool unit', () => {
   it('list: empty then after connecting multiple agents (use node ids when available)', async () => {
     const logger = new LoggerService();
-    const node = new ManageToolNode(logger, { get: () => undefined } as any);
+    const node = new ManageToolNode(logger, { get: (_: any) => new ManageFunctionTool(logger), create: (_: any) => new ManageFunctionTool(logger) } as any);
     await node.setConfig({ description: 'desc' });
     const tool: ManageFunctionTool = node.getTool();
 
@@ -58,7 +62,7 @@ describe('ManageTool unit', () => {
 
   it('send_message: routes to `${parent}__${worker}` and returns text', async () => {
     const logger = new LoggerService();
-    const node = new ManageToolNode(logger, { get: () => undefined } as any);
+    const node = new ManageToolNode(logger, { get: (_: any) => new ManageFunctionTool(logger), create: (_: any) => new ManageFunctionTool(logger) } as any);
     await node.setConfig({ description: 'desc' });
     const a = new FakeAgent('child-1');
     node.addWorker('child-1', a as any);
@@ -68,7 +72,7 @@ describe('ManageTool unit', () => {
   });
 
   it('send_message: parameter validation and unknown worker', async () => {
-    const node = new ManageToolNode(new LoggerService(), { get: () => undefined } as any);
+    const node = new ManageToolNode(new LoggerService(), { get: (_: any) => new ManageFunctionTool(new LoggerService()), create: (_: any) => new ManageFunctionTool(new LoggerService()) } as any);
     await node.setConfig({ description: 'd' });
     const tool = node.getTool();
     await expect(tool.execute({ command: 'send_message', worker: 'x', parentThreadId: 'p' } as any)).rejects.toBeTruthy();
@@ -78,7 +82,7 @@ describe('ManageTool unit', () => {
   });
 
   it('check_status: aggregates active child threads scoped to current thread', async () => {
-    const node = new ManageToolNode(new LoggerService(), { get: () => undefined } as any);
+    const node = new ManageToolNode(new LoggerService(), { get: (_: any) => new ManageFunctionTool(new LoggerService()), create: (_: any) => new ManageFunctionTool(new LoggerService()) } as any);
     await node.setConfig({ description: 'desc' });
     const a1 = new FakeAgent('A');
     const a2 = new FakeAgent('B');
@@ -104,7 +108,7 @@ describe('ManageTool unit', () => {
   });
 
   it('throws when runtime configurable.thread_id is missing', async () => {
-    const node = new ManageToolNode(new LoggerService(), { get: () => undefined } as any);
+    const node = new ManageToolNode(new LoggerService(), { get: (_: any) => new ManageFunctionTool(new LoggerService()), create: (_: any) => new ManageFunctionTool(new LoggerService()) } as any);
     await node.setConfig({ description: 'desc' });
     const tool = node.getTool();
     await expect(tool.execute({ command: 'list' } as any)).rejects.toBeTruthy();
@@ -112,7 +116,7 @@ describe('ManageTool unit', () => {
 
   it('throws when child agent invoke fails (send_message)', async () => {
     const logger = new LoggerService();
-    const node = new ManageToolNode(logger, { get: () => undefined } as any);
+    const node = new ManageToolNode(logger, { get: (_: any) => new ManageFunctionTool(logger), create: (_: any) => new ManageFunctionTool(logger) } as any);
     await node.setConfig({ description: 'desc' });
     class ThrowingAgent extends FakeAgent {
       override async invoke(_thread: string, _messages: Msg[]): Promise<{ text: string }> {
@@ -132,12 +136,16 @@ describe('ManageTool graph wiring', () => {
     class FakeAgentWithTools extends FakeAgent {
       addTool(_: unknown) {}
       removeTool(_: unknown) {}
+      getPortConfig() { return { sourcePorts: { tools: { kind: 'method', create: 'addTool', destroy: 'removeTool' } }, targetPorts: { $self: { kind: 'instance' } } } as const; }
     }
-    const moduleRef: ModuleRef = { create: (Cls: any) => new Cls() };
+    const moduleRef: ModuleRef = {
+      create: (Cls: any) => new (Cls as any)(logger, { get: (_t: any) => new ManageFunctionTool(logger), create: (_: any) => new ManageFunctionTool(logger) }),
+      get: (_token: any) => new ManageFunctionTool(logger),
+    } as any;
     const registry = new TemplateRegistry(moduleRef);
 
     registry
-      .register('agent', { title: 'Agent', kind: 'agent' }, (() => new FakeAgentWithTools('X') as any) as any)
+      .register('agent', { title: 'Agent', kind: 'agent' }, (FakeAgentWithTools as any))
       .register('manageTool', { title: 'Manage', kind: 'tool' }, (ManageToolNode as any));
 
     const runtime = new LiveGraphRuntime(
@@ -151,7 +159,7 @@ describe('ManageTool graph wiring', () => {
         },
         upsertNodeState: async () => {},
       } as any,
-      { create: (Cls: any) => new (Cls as any)(logger, { get: () => undefined }) } as any,
+      { create: (Cls: any) => new (Cls as any)(logger, { get: (_t: any) => new ManageFunctionTool(logger), create: (_: any) => new ManageFunctionTool(logger) }), get: (_token: any) => new ManageFunctionTool(logger) } as any,
     );
     const graph = {
       nodes: [
@@ -160,7 +168,7 @@ describe('ManageTool graph wiring', () => {
         { id: 'M', data: { template: 'manageTool', config: { description: 'desc' } } },
       ],
       edges: [
-        { source: 'A', sourceHandle: 'tools', target: 'M', targetHandle: '$self' },
+        { source: 'M', sourceHandle: 'agent', target: 'A', targetHandle: '$self' },
         { source: 'M', sourceHandle: 'agent', target: 'B', targetHandle: '$self' },
       ],
     } as any;

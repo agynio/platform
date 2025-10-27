@@ -45,7 +45,9 @@ export class ManageToolNode extends BaseToolNode<z.infer<typeof ManageToolStatic
   }
 
   protected createTool() {
-    return this.module.get(ManageFunctionTool).init(this);
+    const tool = this.module.get(ManageFunctionTool, { strict: false } as any);
+    if (!tool) throw new Error('ManageFunctionTool provider not found');
+    return tool.init(this);
   }
 
   getTool() {
