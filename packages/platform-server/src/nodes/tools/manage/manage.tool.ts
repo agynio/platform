@@ -3,6 +3,7 @@ import z from 'zod';
 import { FunctionTool } from '@agyn/llm';
 import { ManageToolNode } from './manage.node';
 import { LoggerService } from '../../../core/services/logger.service';
+import { Inject, Injectable, Scope } from '@nestjs/common';
 type TriggerMessage = { content: string; info?: Record<string, unknown> };
 
 export const ManageInvocationSchema = z
@@ -14,10 +15,11 @@ export const ManageInvocationSchema = z
   })
   .strict();
 
+@Injectable({ scope: Scope.TRANSIENT })
 export class ManageFunctionTool extends FunctionTool<typeof ManageInvocationSchema> {
   private _node?: ManageToolNode;
 
-  constructor(private logger: LoggerService) {
+  constructor(@Inject(LoggerService) private readonly logger: LoggerService) {
     super();
   }
 

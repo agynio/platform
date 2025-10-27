@@ -20,6 +20,7 @@ import { CallAgentNode } from './tools/call_agent/call_agent.node';
 import { FinishNode } from './tools/finish/finish.node';
 import { GithubCloneRepoNode } from './tools/github_clone_repo/github_clone_repo.node';
 import { ManageToolNode } from './tools/manage/manage.node';
+import { ManageFunctionTool } from './tools/manage/manage.tool';
 import { MemoryToolNode } from './tools/memory/memory.node';
 import { RemindMeNode } from './tools/remind_me/remind_me.node';
 import { RemindersController } from './tools/remind_me/reminders.controller';
@@ -53,6 +54,7 @@ import { GraphModule } from '../graph/graph.module';
     // tools
     // Do not provide abstract BaseToolNode
     ManageToolNode,
+    ManageFunctionTool,
     CallAgentNode,
     FinishNode,
     MemoryToolNode,
