@@ -12,6 +12,7 @@ import {
 } from 'reactflow';
 import { v4 as uuid } from 'uuid';
 import { getApiBase } from '../../lib/apiClient';
+import type { PersistedGraphUpsertRequestUI } from '../../lib/graph/api';
 import type { TemplateNodeSchema, PersistedGraph } from '@agyn/shared';
 import { deepEqual } from '../../lib/utils';
 
@@ -50,6 +51,8 @@ export function useBuilderState(serverBase = getApiBase(), options?: BuilderOpti
   const debounceRef = useRef<number | null>(null);
   // Keep latest nodes in a ref for synchronous comparisons in event handlers
   const nodesRef = useRef<BuilderNode[]>([]);
+  // Keep latest edges in a ref for building payload at save-time
+  const edgesRef = useRef<Edge[]>([]);
   // Hydration and dirty gating: prevent autosave on initial load and only save on user edits
   const [hydrated, setHydrated] = useState(false);
   const [dirty, setDirty] = useState(false);
@@ -219,27 +222,27 @@ export function useBuilderState(serverBase = getApiBase(), options?: BuilderOpti
   }, [nodes]);
 
   // Autosave (debounced)
+  // Build payload from refs at timer fire-time to capture latest state, and avoid resetting the debounce on non-dirty updates.
   const scheduleSave = useCallback(() => {
     if (debounceRef.current) window.clearTimeout(debounceRef.current);
     const delay = options?.debounceMs ?? 1000;
     debounceRef.current = window.setTimeout(async () => {
       try {
         setSaveState('saving');
-        const payload = {
+        const payload: PersistedGraphUpsertRequestUI = {
           name: 'main',
           version: versionRef.current,
-          nodes: nodes.map((n) => ({
+          nodes: nodesRef.current.map((n) => ({
             id: n.id,
             template: n.type,
             config: n.data.config,
-            dynamicConfig: n.data.dynamicConfig,
             position: n.position,
           })),
-          edges: edges.map((e) => ({
+          edges: edgesRef.current.map((e) => ({
             source: e.source,
-            sourceHandle: e.sourceHandle!,
+            sourceHandle: e.sourceHandle,
             target: e.target,
-            targetHandle: e.targetHandle!,
+            targetHandle: e.targetHandle,
           })),
         };
         const res = await fetch(`${serverBase}/api/graph`, {
@@ -263,17 +266,22 @@ export function useBuilderState(serverBase = getApiBase(), options?: BuilderOpti
         setSaveState('error');
       }
     }, delay);
-  }, [nodes, edges, serverBase, options?.debounceMs]);
+  }, [serverBase, options?.debounceMs]);
 
   useEffect(() => {
-    // Only autosave after initial hydration and when dirty
+    // Only autosave after initial hydration and when dirty. Do not depend on nodes/edges to avoid resets from selection updates.
     if (hydrated && dirty) scheduleSave();
-  }, [nodes, edges, scheduleSave, hydrated, dirty]);
+  }, [scheduleSave, hydrated, dirty]);
 
   // Track latest nodes in a ref for synchronous reads
   useEffect(() => {
     nodesRef.current = nodes;
   }, [nodes]);
+
+  // Track latest edges in a ref for synchronous reads
+  useEffect(() => {
+    edgesRef.current = edges;
+  }, [edges]);
 
   // Cleanup debounce on unmount
   useEffect(() => {
