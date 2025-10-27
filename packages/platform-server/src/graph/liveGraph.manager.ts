@@ -15,7 +15,7 @@ import type { PersistedMcpState, McpTool } from '../nodes/mcp/types';
 
 import { Inject, Injectable } from '@nestjs/common';
 import { ModuleRef } from '@nestjs/core';
-import type { NodeStatusState } from '../nodes/base/Node';
+import type { NodeStatusState, StatusChangedEvent } from '../nodes/base/Node';
 
 import type Node from '../nodes/base/Node';
 import { Errors } from './errors';
@@ -43,6 +43,10 @@ export class LiveGraphRuntime {
 
   private applying: Promise<unknown> = Promise.resolve(); // serialize updates
   private portsRegistry: PortsRegistry;
+  private statusListeners = new Set<
+    (ev: { nodeId: string; prev: NodeStatusState; next: NodeStatusState; at: number }) => void
+  >();
+  private nodeStatusHandlers = new Map<string, (ev: StatusChangedEvent) => void>();
 
   constructor(
     @Inject(LoggerService) private readonly logger: LoggerService,
@@ -63,6 +67,13 @@ export class LiveGraphRuntime {
   }
   getExecutedEdges() {
     return Array.from(this.state.executedEdges.values());
+  }
+  /** Subscribe to node status changes across all nodes managed by the runtime. */
+  subscribe(
+    listener: (ev: { nodeId: string; prev: NodeStatusState; next: NodeStatusState; at: number }) => void,
+  ): () => void {
+    this.statusListeners.add(listener);
+    return () => this.statusListeners.delete(listener);
   }
 
   /**
@@ -346,6 +357,8 @@ export class LiveGraphRuntime {
       // NOTE: setGraphNodeId reflection removed; prefer factories to leverage ctx.nodeId directly.
       const live: LiveNode = { id: node.id, template: node.data.template, instance: created, config: node.data.config };
       this.state.nodes.set(node.id, live);
+      // Attach status_changed forwarder
+      this.attachNodeStatusForwarder(node.id, created);
 
       if (node.data.config) {
         await created.setConfig(node.data.config);
@@ -371,6 +384,14 @@ export class LiveGraphRuntime {
       if (e instanceof GraphError) throw e; // already enriched
       throw Errors.nodeInitFailure(node.id, e);
     }
+  }
+
+  private attachNodeStatusForwarder(nodeId: string, instance: Node) {
+    const handler = (ev: StatusChangedEvent) => {
+      for (const l of this.statusListeners) l({ nodeId, prev: ev.prev, next: ev.next, at: ev.at });
+    };
+    this.nodeStatusHandlers.set(nodeId, handler);
+    instance.on('status_changed', handler);
   }
 
   // Attempt to apply config via setter; if ZodError contains only unrecognized_keys at top-level, strip and retry.
@@ -431,6 +452,14 @@ export class LiveGraphRuntime {
   private async disposeNode(nodeId: string): Promise<void> {
     const live = this.state.nodes.get(nodeId);
     if (!live) return;
+    // Detach status handler
+    const handler = this.nodeStatusHandlers.get(nodeId);
+    if (handler) {
+      try {
+        live.instance.off('status_changed', handler);
+      } catch {}
+      this.nodeStatusHandlers.delete(nodeId);
+    }
     // Remove outbound & inbound edges referencing this node
     const allEdgeKeys = new Set<string>([
       ...(this.state.inboundEdges.get(nodeId) || []),

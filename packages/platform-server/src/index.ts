@@ -17,6 +17,7 @@ import { ContainerCleanupService } from './infra/container/containerCleanup.job'
 
 import { AppModule } from './bootstrap/app.module';
 import { MongoService } from './core/services/mongo.service';
+import { GraphSocketGateway } from './gateway/graph.socket.gateway';
 // Remove central platform.services.factory usage; rely on DI providers
 
 // Graceful shutdown after 60 seconds
@@ -41,6 +42,10 @@ async function bootstrap() {
   const PORT = Number(process.env.PORT) || 3010;
   await fastifyInstance.listen({ port: PORT, host: '0.0.0.0' });
   logger.info(`HTTP server listening on :${PORT}`);
+
+  // Attach Socket.IO gateway via DI and explicit init
+  const gateway = app.get(GraphSocketGateway);
+  gateway.init({ server: fastify.server });
 
   const shutdown = async () => {
     logger.info('Shutting down...');
