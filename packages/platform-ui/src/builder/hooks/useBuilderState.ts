@@ -20,6 +20,7 @@ interface BuilderNodeData {
   template: string;
   name?: string;
   config?: Record<string, unknown>;
+  state?: Record<string, unknown>;
   // dynamicConfig removed; use state at runtime
 }
 export type BuilderNode = Node<BuilderNodeData>;
@@ -73,8 +74,8 @@ export function useBuilderState(serverBase = getApiBase(), options?: BuilderOpti
         const rfNodes: BuilderNode[] = graph.nodes.map((n: PersistedGraph['nodes'][number]) => ({
           id: n.id,
           type: n.template, // reactflow node type equals template name for now
-          position: n.position || { x: Math.random() * 400, y: Math.random() * 300 },
-          data: { template: n.template, name: n.template, config: n.config, state: n.state },
+          position: n.position ?? { x: 0, y: 0 },
+          data: { template: n.template, name: n.template, config: n.config, state: (n as any).state },
           dragHandle: '.drag-handle',
         }));
         const rfEdges: Edge[] = graph.edges.map((e: PersistedGraph['edges'][number]) => ({

@@ -17,6 +17,11 @@ export class NodeStateService {
     @Inject(GraphSocketGateway) private readonly gateway?: GraphSocketGateway,
   ) {}
 
+  /** Return last known runtime snapshot for a node (for filtering). */
+  getSnapshot(nodeId: string): Record<string, unknown> | undefined {
+    return this.runtime.getNodeStateSnapshot(nodeId);
+  }
+
   async upsertNodeState(nodeId: string, state: Record<string, unknown>, name = 'main'): Promise<void> {
     try {
       // Persist via repository through shared interface

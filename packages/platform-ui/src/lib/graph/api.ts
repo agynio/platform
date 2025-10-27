@@ -194,6 +194,12 @@ export const api = {
       { method: 'POST', body: JSON.stringify(body) },
     ),
   getNodeStatus: (nodeId: string) => httpJson<NodeStatus>(`/api/graph/nodes/${encodeURIComponent(nodeId)}/status`),
+  getNodeState: (nodeId: string) => httpJson<{ state: Record<string, unknown> }>(`/api/graph/nodes/${encodeURIComponent(nodeId)}/state`),
+  putNodeState: (nodeId: string, state: Record<string, unknown>) =>
+    httpJson<{ state: Record<string, unknown> }>(`/api/graph/nodes/${encodeURIComponent(nodeId)}/state`, {
+      method: 'PUT',
+      body: JSON.stringify({ state }),
+    }),
   // Dynamic config schema endpoint: try the newer '/dynamic-config/schema' first, fallback to legacy '/dynamic-config-schema'
   getDynamicConfigSchema: async (nodeId: string): Promise<Record<string, unknown> | null> => {
     // Prefer legacy path first (currently implemented server / tests), then new structured path

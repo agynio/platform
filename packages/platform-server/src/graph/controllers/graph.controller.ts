@@ -1,10 +1,11 @@
-import { Controller, Get, Post, Param, Body, HttpCode, HttpException, HttpStatus, Inject } from '@nestjs/common';
+import { Controller, Get, Post, Put, Param, Body, HttpCode, HttpException, HttpStatus, Inject } from '@nestjs/common';
 import { z } from 'zod';
 import { TemplateRegistry } from '../templateRegistry';
 import type { TemplateNodeSchema } from '../types';
 import { LiveGraphRuntime } from '../liveGraph.manager';
 import { LoggerService } from '../../core/services/logger.service';
 import type { NodeStatusState } from '../../nodes/base/Node';
+import { NodeStateService } from '../nodeState.service';
 
 @Controller('api/graph')
 export class GraphController {
@@ -12,6 +13,7 @@ export class GraphController {
     @Inject(TemplateRegistry) private readonly templateRegistry: TemplateRegistry,
     @Inject(LiveGraphRuntime) private readonly runtime: LiveGraphRuntime,
     @Inject(LoggerService) private readonly logger: LoggerService,
+    @Inject(NodeStateService) private readonly nodeState: NodeStateService,
   ) {}
 
   @Get('templates')
@@ -20,8 +22,34 @@ export class GraphController {
   }
 
   @Get('nodes/:nodeId/status')
-  async getNodeStatus(@Param('nodeId') nodeId: string): Promise<{ provisionStatus?: NodeStatusState }> {
+  async getNodeStatus(
+    @Param('nodeId') nodeId: string,
+  ): Promise<{ provisionStatus?: { state: NodeStatusState; details?: unknown } }> {
     return this.runtime.getNodeStatus(nodeId);
+  }
+
+  // Node state endpoints (strict schemas)
+  @Get('nodes/:nodeId/state')
+  async getNodeState(@Param('nodeId') nodeId: string): Promise<{ state: Record<string, unknown> }> {
+    const state = this.runtime.getNodeStateSnapshot(nodeId) || {};
+    return { state };
+  }
+
+  @Put('nodes/:nodeId/state')
+  async putNodeState(
+    @Param('nodeId') nodeId: string,
+    @Body() body: unknown,
+  ): Promise<{ state: Record<string, unknown> }> {
+    const BodySchema = z
+      .object({ state: z.record(z.string(), z.unknown()) })
+      .strict();
+    const parsed = BodySchema.safeParse(body);
+    if (!parsed.success) {
+      throw new HttpException({ error: 'bad_state_payload' }, HttpStatus.BAD_REQUEST);
+    }
+    const next = parsed.data.state;
+    await this.nodeState.upsertNodeState(nodeId, next);
+    return { state: next };
   }
 
   @Post('nodes/:nodeId/actions')
