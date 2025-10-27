@@ -20,7 +20,10 @@ interface BuilderNodeData {
   template: string;
   name?: string;
   config?: Record<string, unknown>;
+<<<<<<< HEAD
   // Runtime node state stored by UI; dynamicConfig removed
+=======
+>>>>>>> d2c25e7 (fix(platform-ui): align UI with node state and remove dynamic config; cleanup unused vars; tighten hooks deps; simplify NodeActionButtons; fix lint across UI; prepare CI to run tests)
   state?: Record<string, unknown>;
   // dynamicConfig removed; use state at runtime
 }
