@@ -1,4 +1,4 @@
-import { Collection, Db, IndexSpecification, WithId } from 'mongodb';
+import { Collection, IndexSpecification, WithId } from 'mongodb';
 import { Inject, Injectable } from '@nestjs/common';
 import { LoggerService } from '../core/services/logger.service';
 import { MongoService } from '../core/services/mongo.service';

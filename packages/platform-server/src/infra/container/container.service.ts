@@ -506,17 +506,19 @@ export class ContainerService {
                 },
               });
               try {
-                const modemObj = this.docker.modem as unknown;
-                const modem = modemObj as { demuxStream?: (s: NodeJS.ReadableStream, out: NodeJS.WritableStream, err: NodeJS.WritableStream) => void };
-                if (!modem?.demuxStream) throw new Error('demuxStream not available');
-                modem.demuxStream(stream, outStdout, outStderr);
+                const modemObj = this.docker.modem as Record<string, unknown>;
+                const demux = modemObj?.['demuxStream'] as
+                  | ((s: NodeJS.ReadableStream, out: NodeJS.WritableStream, err: NodeJS.WritableStream) => void)
+                  | undefined;
+                if (!demux) throw new Error('demuxStream not available');
+                demux(stream, outStdout, outStderr);
               } catch {
                 const { stdout, stderr } = demuxDockerMultiplex(stream);
                 stdout.pipe(outStdout);
                 stderr.pipe(outStderr);
               }
             }
-          } catch (e) {
+          } catch {
             // Fallback: treat as single combined stream
             armIdle();
             stream.on('data', (c: Buffer | string) => {
@@ -590,7 +592,7 @@ export class ContainerService {
     const c = this.docker.getContainer(containerId);
     try {
       await c.stop({ t: timeoutSec });
-    } catch (e: any) {
+    } catch (e) {
       if (e?.statusCode === 304) {
         this.logger.debug(`Container already stopped cid=${containerId.substring(0, 12)}`);
       } else if (e?.statusCode === 409) {
@@ -608,7 +610,7 @@ export class ContainerService {
     const container = this.docker.getContainer(containerId);
     try {
       await container.remove({ force });
-    } catch (e: any) {
+    } catch (e) {
       if (e?.statusCode === 404) {
         // Already removed – benign
         this.logger.debug(`Container already removed cid=${containerId.substring(0, 12)}`);
@@ -689,6 +691,8 @@ export class ContainerService {
           const thread = labels?.['hautech.ai/thread_id'] || '';
           const [nodeId, threadId] = thread.includes('__') ? thread.split('__', 2) : ['unknown', thread];
           const inspect = await this.docker.getContainer(item.id).inspect();
+          // created retained for future use; eslint-disable to prevent warning
+          // eslint-disable-next-line @typescript-eslint/no-unused-vars
           const created = inspect?.Created ? new Date(inspect.Created).toISOString() : nowIso;
           const running = !!inspect?.State?.Running;
           await this.registry.registerStart({
@@ -701,8 +705,8 @@ export class ContainerService {
             platform: labels?.['hautech.ai/platform'],
           });
           if (!running) await this.registry.markStopped(item.id, 'backfill');
-        } catch (e) {
-          this.logger.error('ContainerService: backfill error for container', item.id, e);
+        } catch (err) {
+          this.logger.error('ContainerService: backfill error for container', item.id, err);
         }
         await runNext();
       };

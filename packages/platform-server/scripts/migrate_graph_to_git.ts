@@ -21,13 +21,14 @@ interface PersistedGraphEdge {
   target: string;
   targetHandle: string;
 }
-interface PersistedGraph {
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+type PersistedGraph = {
   name: string;
   version: number;
   updatedAt: string;
   nodes: PersistedGraphNode[];
   edges: PersistedGraphEdge[];
-}
+};
 interface GraphDocument {
   _id: string;
   version: number;

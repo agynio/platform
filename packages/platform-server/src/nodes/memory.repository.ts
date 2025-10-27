@@ -95,7 +95,7 @@ export class MemoryService {
             unique: s.unique,
             partialFilterExpression: s.partialFilterExpression,
           });
-        } catch (e) {
+        } catch {
           // ignore if already exists (race conditions)
         }
       }
@@ -103,7 +103,7 @@ export class MemoryService {
   }
 
   private get filter() {
-    const base: any = { nodeId: this.nodeId, scope: this.scope };
+    const base: Record<string, unknown> = { nodeId: this.nodeId, scope: this.scope };
     if (this.scope === 'perThread') base.threadId = this.threadId;
     return base;
   }

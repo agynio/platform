@@ -11,7 +11,7 @@ import { EdgeDef, GraphDefinition, GraphError, NodeDef } from './types';
 import { ZodError, type ZodIssue } from 'zod';
 import { LoggerService } from '../core/services/logger.service';
 import { LocalMCPServer } from '../nodes/mcp';
-import type { PersistedMcpState, McpTool } from '../nodes/mcp/types';
+import type { PersistedMcpState } from '../nodes/mcp/types';
 
 import { Inject, Injectable } from '@nestjs/common';
 import { ModuleRef } from '@nestjs/core';
@@ -471,12 +471,11 @@ export class LiveGraphRuntime {
     const key = edgeKey(edge);
 
     type Callable = (arg: unknown) => unknown | Promise<unknown>;
-    type InstanceMethodMap = Record<string, Callable>;
     const getMethod = (inst: object, name?: string): Callable | undefined => {
       if (!name) return undefined;
-      const map = inst as unknown as InstanceMethodMap;
-      const fn = map[name];
-      return typeof fn === 'function' ? fn : undefined;
+      const rec = inst as Record<string, unknown>;
+      const cand = rec[name];
+      return typeof cand === 'function' ? (cand as Callable) : undefined;
     };
 
     const createFn = getMethod(methodSide.instance, methodCfg.create);
@@ -510,10 +509,11 @@ export class LiveGraphRuntime {
     const nodes = Array.from(this.state.nodes.values());
     await Promise.all(
       nodes.map(async (live) => {
-        const inst = live.instance as any;
-        if (inst && typeof inst.deprovision === 'function') {
+        const inst = live.instance as Record<string, unknown>;
+        const deprov = inst?.['deprovision'];
+        if (typeof deprov === 'function') {
           try {
-            await inst.deprovision();
+            await (deprov as () => Promise<void>)();
           } catch {}
         }
         const inbound = this.state.inboundEdges.get(live.id) || new Set<string>();

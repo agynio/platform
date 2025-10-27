@@ -29,6 +29,14 @@ export default [
     },
   },
   {
+    files: ['__tests__/**/*.ts', '__tests__/**/*.tsx'],
+    languageOptions: { parser: tseslint.parser },
+    plugins: { '@typescript-eslint': tseslint.plugin },
+    rules: {
+      '@typescript-eslint/no-unused-vars': 'off',
+    },
+  },
+  {
     files: [
       'src/entities/containerProvider.entity.ts',
       'src/core/env.resolver.ts',

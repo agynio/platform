@@ -96,7 +96,7 @@ export class LoggerService {
       const json = JSON.stringify(params.map((p) => toSafe(p, 0)));
       if (json.length > MAX_JSON) return json.slice(0, MAX_JSON) + `…(+${json.length - MAX_JSON} chars)`;
       return json;
-    } catch (_err) {
+    } catch {
       try {
         const s = String(params);
         return s.length > MAX_JSON ? s.slice(0, MAX_JSON) + '…' : s;

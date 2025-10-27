@@ -1,9 +1,7 @@
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { EventEmitter } from 'events';
 import { v4 as uuidv4 } from 'uuid';
-import { toJSONSchema, z } from 'zod';
-import { jsonSchemaToZod } from '@agyn/json-schema-to-zod';
-import { JSONSchema } from 'zod/v4/core';
+import { z } from 'zod';
 import { WorkspaceNode } from '../workspace/workspace.node';
 // Legacy capabilities removed; rely on Node lifecycle/state
 import { ConfigService } from '../../core/services/config.service';
@@ -618,7 +616,7 @@ export class LocalMCPServer extends Node<z.infer<typeof LocalMcpServerStaticConf
         if (hasAllDeps) await this.pendingStart;
         else await this.pendingStart?.catch(() => {});
         if (this.started) this.setStatus('ready');
-      } catch (err) {
+      } catch {
         this.setStatus('provisioning_error');
       } finally {
         this._provInFlight = null;

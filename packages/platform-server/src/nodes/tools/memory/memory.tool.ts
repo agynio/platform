@@ -139,7 +139,7 @@ export class UnifiedMemoryFunctionTool extends FunctionTool<typeof UnifiedMemory
         code: 'ENOTMEM',
       });
     }
-    })() as unknown as MemoryToolService;
+    })() as MemoryToolService;
     const logger = this.deps.logger;
     if (isMemoryDebugEnabled()) {
       const dbg = service.getDebugInfo?.();

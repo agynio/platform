@@ -183,12 +183,12 @@ export class AgentNode extends Node<AgentStaticConfig> {
 
     // call_model -> branch (call_tools | save)
     const callModel = await this.moduleRef.create(CallModelLLMReducer);
-    await callModel.init({
+    callModel.init({
       llm,
       model: this.config.model ?? 'gpt-5',
       systemPrompt: this.config.systemPrompt ?? 'You are a helpful AI assistant.',
       tools,
-      memoryProvider: async (ctx, state) => {
+      memoryProvider: async (ctx) => {
         if (!this.memoryConnector) return null;
         const msg = await this.memoryConnector.renderMessage({ threadId: ctx.threadId });
         if (!msg) return null;

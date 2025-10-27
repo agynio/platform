@@ -1,5 +1,5 @@
 import { Controller, Get, Post, Headers, Body, HttpCode, HttpException, HttpStatus, Inject } from '@nestjs/common';
-import type { FastifyReply } from 'fastify';
+// import type { FastifyReply } from 'fastify';
 import { LoggerService } from '../../core/services/logger.service';
 import { TemplateRegistry } from '../templateRegistry';
 import { LiveGraphRuntime } from '../liveGraph.manager';
