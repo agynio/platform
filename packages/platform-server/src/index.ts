@@ -10,7 +10,7 @@ initTracing({
 import { NestFactory } from '@nestjs/core';
 import { FastifyAdapter } from '@nestjs/platform-fastify';
 import { ValidationPipe } from '@nestjs/common';
-import cors from '@fastify/cors';
+import fastifyCors, { FastifyCorsOptions } from '@fastify/cors';
 
 import { LoggerService } from './core/services/logger.service';
 import { ContainerCleanupService } from './infra/container/containerCleanup.job';
@@ -28,7 +28,8 @@ async function bootstrap() {
   // NestJS HTTP bootstrap using FastifyAdapter and resolve services via DI
   const adapter = new FastifyAdapter();
   const fastify = adapter.getInstance();
-  await fastify.register(cors as any, { origin: true } as any);
+  const corsOptions: FastifyCorsOptions = { origin: true };
+  await fastify.register(fastifyCors, corsOptions);
 
   const app = await NestFactory.create(AppModule, adapter);
   app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));

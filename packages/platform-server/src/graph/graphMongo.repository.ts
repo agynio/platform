@@ -99,8 +99,8 @@ export class MongoGraphRepository extends GraphRepository {
   // Validation moved to graph.validation.ts to share with GitGraphRepository
 
   private stripInternalNode(n: PersistedGraphNode): PersistedGraphNode {
-    // Preserve dynamicConfig so it round-trips through persistence.
-    return { id: n.id, template: n.template, config: n.config, dynamicConfig: n.dynamicConfig, state: n.state, position: n.position };
+    // dynamicConfig removed; persist known fields only.
+    return { id: n.id, template: n.template, config: n.config, state: n.state, position: n.position };
   }
   private stripInternalEdge(e: PersistedGraphEdge): PersistedGraphEdge {
     return { source: e.source, sourceHandle: e.sourceHandle, target: e.target, targetHandle: e.targetHandle, id: e.id };

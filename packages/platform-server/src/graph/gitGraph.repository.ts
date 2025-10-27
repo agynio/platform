@@ -594,13 +594,12 @@ export class GitGraphRepository extends GraphRepository {
   }
 
   private diffNodes(before: PersistedGraphNode[], after: PersistedGraphNode[]) {
-    // Include position and state so both cause updates; encode template/config/dynamicConfig/state/position
+    // Include position and state so both cause updates; encode template/config/state/position
     const normalize = (n: PersistedGraphNode) =>
       JSON.stringify({
         id: n.id,
         template: n.template,
         config: n.config,
-        dynamicConfig: n.dynamicConfig,
         state: n.state,
         position: n.position,
       });

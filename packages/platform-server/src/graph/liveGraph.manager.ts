@@ -76,7 +76,6 @@ export class LiveGraphRuntime {
         id: string;
         template: string;
         config?: Record<string, unknown>;
-        dynamicConfig?: Record<string, unknown>;
         state?: Record<string, unknown>;
       }>;
       edges: Array<{ source: string; sourceHandle: string; target: string; targetHandle: string }>;
@@ -85,7 +84,7 @@ export class LiveGraphRuntime {
       ({
         nodes: saved.nodes.map((n) => ({
           id: n.id,
-          data: { template: n.template, config: n.config, dynamicConfig: n.dynamicConfig, state: n.state },
+          data: { template: n.template, config: n.config, state: n.state },
         })),
         edges: saved.edges.map((e) => ({
           source: e.source,
@@ -213,25 +212,7 @@ export class LiveGraphRuntime {
         // non-fatal
       }
     }
-    // // 2b. Dynamic config updates
-    // TODO: should be replaced with state manipulation. No dedicated dynamicConfig after all.
-    // for (const nodeId of diff.dynamicConfigUpdateNodeIds || []) {
-    //   const nodeDef = next.nodes.find((n) => n.id === nodeId)!;
-    //   const live = this.state.nodes.get(nodeId);
-    //   if (!live) continue;
-    //   try {
-    //     if (hasSetDynamicConfig(live.instance)) {
-    //       await this.applyConfigWithUnknownKeyStripping(
-    //         live.instance,
-    //         'setDynamicConfig',
-    //         nodeDef.data.dynamicConfig || {},
-    //         nodeId,
-    //       );
-    //     }
-    //   } catch (e) {
-    //     logger?.error?.('Config update failed (setDynamicConfig)', nodeId, e);
-    //   }
-    // }
+    // 2b. Dynamic config removed: use node state mutations in future.
 
     // 3. Remove edges (reverse if needed) BEFORE removing nodes
     for (const rem of diff.removedEdges) {
@@ -271,7 +252,7 @@ export class LiveGraphRuntime {
       removedNodes: diff.removedNodeIds,
       recreatedNodes: diff.recreatedNodeIds,
       updatedConfigNodes: diff.configUpdateNodeIds,
-      updatedDynamicConfigNodes: diff.dynamicConfigUpdateNodeIds || [],
+      updatedDynamicConfigNodes: [],
       addedEdges: diff.addedEdges.map(edgeKey),
       removedEdges: diff.removedEdges.map(edgeKey),
       errors,
@@ -287,7 +268,7 @@ export class LiveGraphRuntime {
     const removedNodeIds: string[] = [];
     const recreatedNodeIds: string[] = [];
     const configUpdateNodeIds: string[] = [];
-    const dynamicConfigUpdateNodeIds: string[] = [];
+    // dynamicConfig removed
 
     // Nodes
     for (const n of next.nodes) {
@@ -301,9 +282,7 @@ export class LiveGraphRuntime {
           const prevCfg = prevNode.data.config || {};
           const nextCfg = n.data.config || {};
           if (!configsEqual(prevCfg, nextCfg)) configUpdateNodeIds.push(n.id);
-          const prevDyn = prevNode.data.dynamicConfig || {};
-          const nextDyn = n.data.dynamicConfig || {};
-          if (!configsEqual(prevDyn, nextDyn)) dynamicConfigUpdateNodeIds.push(n.id);
+          // dynamicConfig removed
         }
       }
     }
@@ -324,7 +303,7 @@ export class LiveGraphRuntime {
       removedNodeIds,
       recreatedNodeIds,
       configUpdateNodeIds,
-      dynamicConfigUpdateNodeIds,
+      dynamicConfigUpdateNodeIds: [],
       addedEdges,
       removedEdges,
     } as InternalDiffComputation;

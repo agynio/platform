@@ -73,7 +73,7 @@ export class RunsController {
     type TerminableAgent = {
       terminateRun: (threadId: string, runId?: string) => 'ok' | 'not_running' | 'not_found';
     };
-    const inst = runtime.getNodeInstance<TerminableAgent>(params.nodeId);
+    const inst = runtime.getNodeInstance(params.nodeId) as unknown as TerminableAgent | undefined;
     if (!inst || typeof inst.terminateRun !== 'function') throw new NotFoundException('not_terminable');
     const doc = await this.runs.findByRunId(params.nodeId, params.runId);
     const threadId = doc?.threadId;
@@ -95,7 +95,7 @@ export class RunsController {
       terminateRun: (threadId: string, runId?: string) => 'ok' | 'not_running' | 'not_found';
       getCurrentRunId?: (threadId: string) => string | undefined;
     };
-    const inst = runtime.getNodeInstance<TerminableAgent>(params.nodeId);
+    const inst = runtime.getNodeInstance(params.nodeId) as unknown as TerminableAgent | undefined;
     if (!inst || typeof inst.terminateRun !== 'function' || typeof inst.getCurrentRunId !== 'function') {
       throw new NotFoundException('not_terminable');
     }
