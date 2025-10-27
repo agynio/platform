@@ -2,9 +2,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { ShellCommandNode } from '../../src/nodes/tools/shell_command/shell_command.node';
 import { LoggerService } from '../../src/core/services/logger.service';
 import { ExecTimeoutError } from '../../src/utils/execTimeout';
-import { ContainerEntity } from '../../src/entities/container.entity';
-import { ContainerProviderEntity } from '../../src/entities/containerProvider.entity';
-import { ContainerService } from '../../src/infra/container/container.service';
+import { ContainerHandle, ContainerService } from '../../src/infra/container/container.service';
 
 // ANSI colored output to verify stripping; include more than 10k and ensure we only keep tail
 const ANSI_RED = '\u001b[31m';
@@ -18,11 +16,8 @@ describe('ShellTool timeout tail inclusion and ANSI stripping', () => {
     const stderr = `${ANSI_RED}ERR-SECTION${ANSI_RESET}`;
     const err = new ExecTimeoutError(3600000, stdout, stderr);
 
-    class FakeContainer extends ContainerEntity { override async exec(): Promise<never> { throw err; } }
-    class FakeProvider extends ContainerProviderEntity {
-      constructor(logger: LoggerService) { super(new ContainerService(logger), undefined, {}, () => ({})); }
-      override async provide(): Promise<ContainerEntity> { return new FakeContainer(new ContainerService(logger), 'fake'); }
-    }
+    class FakeContainer extends ContainerHandle { override async exec(): Promise<never> { throw err; } }
+    class FakeProvider { constructor(private logger: LoggerService) {} async provide(): Promise<ContainerHandle> { return new FakeContainer(new ContainerService(this.logger), 'fake'); } }
     const provider = new FakeProvider(logger);
     const node = new ShellCommandNode(undefined as any);
     node.setContainerProvider(provider as any);

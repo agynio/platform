@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeAll, afterAll } from 'vitest';
 import type { Db } from 'mongodb';
 import { MongoClient } from 'mongodb';
 import { MongoMemoryServer } from 'mongodb-memory-server';
-import { BaseMessage, SystemMessage, AIMessage } from '@langchain/core/messages';
+import { SystemMessage, ResponseMessage } from '@agyn/llm';
 import { LiveGraphRuntime } from '../src/graph/liveGraph.manager';
 import { TemplateRegistry } from '../src/graph/templateRegistry';
 import type { ModuleRef } from '@nestjs/core';
@@ -10,27 +10,13 @@ import type { GraphDefinition } from '../src/graph/types';
 import { LoggerService } from '../src/core/services/logger.service.js';
 import { MemoryService } from '../src/nodes/memory.repository';
 // Updated tests should not use legacy lgnodes; adjust to reducers/AgentNode patterns if needed.
-import { BaseTool } from '../src/tools/base.tool';
+// Legacy BaseTool removed; adjust tests to reducers and FunctionTool replacements
 
 // Fake LLM: replace ChatOpenAI to avoid network and capture messages
-vi.mock('@langchain/openai', async (importOriginal) => {
-  const mod: any = await importOriginal();
-  class MockChatOpenAI extends mod.ChatOpenAI {
-    lastMessages: BaseMessage[] = [];
-    withConfig(_cfg: any) {
-      return {
-        invoke: async (msgs: BaseMessage[]) => {
-          this.lastMessages = msgs;
-          return new AIMessage('ok');
-        },
-      } as any;
-    }
-  }
-  return { ...(mod as any), ChatOpenAI: MockChatOpenAI } as any;
-});
+// Remove LangChain dependencies from integration test; focus on reducer-level wiring
 
 // Minimal tool stub (unused but CallModelNode expects tools BaseTool[])
-class DummyTool extends BaseTool { init(): any { return { name: 'dummy', invoke: async () => 'x' }; } }
+class DummyTool { name = 'dummy'; async invoke() { return 'x'; } }
 
 // Build a tiny runtime with two templates: callModel and memory
 function makeRuntime(db: Db, placement: 'after_system'|'last_message') {
@@ -41,11 +27,10 @@ function makeRuntime(db: Db, placement: 'after_system'|'last_message') {
   templates.register(
     'callModel',
     async () => {
-      const { ChatOpenAI } = await import('@langchain/openai');
-      const llm = new ChatOpenAI({ model: 'x', apiKey: 'k' }) as any;
-      const node = new CallModelNode([new DummyTool()] as any, llm);
-      node.setSystemPrompt('SYS');
-      return node as any;
+      const { CallModelLLMReducer } = await import('../src/llm/reducers/callModel.llm.reducer');
+      const reducer = new CallModelLLMReducer();
+      reducer.init({ llm: { call: async ({ input }: { input: unknown[] }) => ({ text: 'ok', output: [] }) } as any, model: 'x', systemPrompt: 'SYS', tools: [] });
+      return reducer as any;
     },
     {
       targetPorts: { setMemoryConnector: { kind: 'method', create: 'setMemoryConnector' }, $self: { kind: 'instance' } },
@@ -75,11 +60,10 @@ function makeRuntime(db: Db, placement: 'after_system'|'last_message') {
   return runtime;
 }
 
-async function getLastMessages(runtime: LiveGraphRuntime, nodeId: string): Promise<BaseMessage[]> {
+async function getLastMessages(runtime: LiveGraphRuntime, nodeId: string): Promise<SystemMessage[]> {
   const cm: any = runtime.getNodeInstance(nodeId);
-  const res = await cm.action({ messages: [] as BaseMessage[] }, { configurable: { thread_id: 'T' } });
-  const llm = (cm as any).llm as any;
-  return (llm.lastMessages || []) as BaseMessage[];
+  const out = await cm.invoke({ messages: [] } as any, { threadId: 'T' } as any);
+  return out.messages as unknown as SystemMessage[];
 }
 
 const RUN_MONGOMS = process.env.RUN_MONGOMS === '1';
