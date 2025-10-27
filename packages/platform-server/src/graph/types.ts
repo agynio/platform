@@ -150,11 +150,14 @@ export interface PersistedGraph {
   updatedAt: string; // ISO timestamp
   nodes: PersistedGraphNode[];
   edges: PersistedGraphEdge[];
+  // Optional variables registry persisted alongside graph (format:2)
+  variables?: { items: { key: string; source: 'vault' | 'graph' | 'local'; value?: string; vaultRef?: string }[] };
 }
 export interface PersistedGraphUpsertRequest {
   name: string;
   version?: number; // expected version (undefined => create)
   nodes: PersistedGraphNode[];
   edges: PersistedGraphEdge[];
+  variables?: { items: { key: string; source: 'vault' | 'graph' | 'local'; value?: string; vaultRef?: string }[] };
 }
 export interface PersistedGraphUpsertResponse extends PersistedGraph {}

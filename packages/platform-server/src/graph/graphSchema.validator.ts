@@ -1,4 +1,5 @@
 import { PersistedGraphUpsertRequest, TemplateNodeSchema } from '../graph/types';
+import { variableKeyRegex } from '../variables/variables.types';
 
 export function validatePersistedGraph(req: PersistedGraphUpsertRequest, schema: TemplateNodeSchema[]): void {
   const templateSet = new Set(schema.map((s) => s.name));
@@ -24,5 +25,22 @@ export function validatePersistedGraph(req: PersistedGraphUpsertRequest, schema:
       throw new Error(`Invalid target handle ${e.targetHandle} on template ${targetNode.template}`);
     }
   }
-}
 
+  // Variables validation: optional; enforce unique keys and source invariants
+  if (req.variables?.items) {
+    const seen = new Set<string>();
+    for (const v of req.variables.items) {
+      if (seen.has(v.key)) throw new Error(`Duplicate variable key ${v.key}`);
+      seen.add(v.key);
+      if (!variableKeyRegex.test(v.key)) throw new Error(`Invalid variable key ${v.key}`);
+      // Invariants per source
+      if (v.source === 'graph') {
+        // value/vaultRef can be empty strings; do not require presence; normalize later in service
+      } else if (v.source === 'vault') {
+        // vaultRef may be empty or absent; service will normalize
+      } else if (v.source === 'local') {
+        // local has neither stored in graph
+      }
+    }
+  }
+}

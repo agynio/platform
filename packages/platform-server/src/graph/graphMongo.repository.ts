@@ -12,6 +12,7 @@ interface GraphDocument {
   updatedAt: Date;
   nodes: PersistedGraphNode[];
   edges: PersistedGraphEdge[];
+  variables?: { items: { key: string; source: 'vault' | 'graph' | 'local'; value?: string; vaultRef?: string }[] };
 }
 
 export class MongoGraphRepository extends GraphRepository {
@@ -49,6 +50,7 @@ export class MongoGraphRepository extends GraphRepository {
         updatedAt: now,
         nodes: req.nodes.map(this.stripInternalNode),
         edges: req.edges.map(this.stripInternalEdge),
+        variables: req.variables,
       };
       await this.collection!.insertOne(doc);
       return this.toPersisted(doc);
@@ -74,6 +76,7 @@ export class MongoGraphRepository extends GraphRepository {
         return out;
       }),
       edges: req.edges.map(this.stripInternalEdge),
+      variables: req.variables ?? existing.variables,
     };
     await this.collection!.replaceOne({ _id: name }, updated);
     return this.toPersisted(updated);
@@ -113,6 +116,24 @@ export class MongoGraphRepository extends GraphRepository {
       updatedAt: doc.updatedAt.toISOString(),
       nodes: doc.nodes,
       edges: doc.edges,
+      variables: doc.variables,
     };
+  }
+
+  async getVariables(name: string): Promise<{
+    items: { key: string; source: 'vault' | 'graph' | 'local'; value?: string; vaultRef?: string }[];
+  } | null> {
+    const g = await this.get(name);
+    return g?.variables ?? null;
+  }
+
+  async upsertVariables(
+    name: string,
+    items: { key: string; source: 'vault' | 'graph' | 'local'; value?: string; vaultRef?: string }[],
+    expectedVersion?: number,
+  ): Promise<PersistedGraphUpsertResponse> {
+    const current = await this.get(name);
+    const base = current ?? { name, version: 0, updatedAt: new Date().toISOString(), nodes: [], edges: [] };
+    return await this.upsert({ name, version: expectedVersion ?? base.version, nodes: base.nodes, edges: base.edges, variables: { items } });
   }
 }

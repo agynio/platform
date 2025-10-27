@@ -20,3 +20,14 @@ model ConversationState {
 
   @@unique([threadId, nodeId])
 }
+
+model Variable {
+  id        Int      @id @default(autoincrement())
+  graphName String
+  key       String
+  value     String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([graphName, key])
+}

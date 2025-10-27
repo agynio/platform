@@ -91,6 +91,23 @@ export class GitGraphRepository extends GraphRepository {
     return null;
   }
 
+  // Variables stubs: delegate to upsert/get for now
+  async getVariables(name: string): Promise<{
+    items: { key: string; source: 'vault' | 'graph' | 'local'; value?: string; vaultRef?: string }[];
+  } | null> {
+    const g = await this.get(name);
+    return g?.variables ?? null;
+  }
+
+  async upsertVariables(
+    name: string,
+    items: { key: string; source: 'vault' | 'graph' | 'local'; value?: string; vaultRef?: string }[],
+    expectedVersion?: number,
+  ): Promise<PersistedGraphUpsertResponse> {
+    const current = (await this.get(name)) ?? { name, version: 0, updatedAt: new Date().toISOString(), nodes: [], edges: [] };
+    return await this.upsert({ name, version: expectedVersion ?? current.version, nodes: current.nodes, edges: current.edges, variables: { items } }, undefined);
+  }
+
   async upsert(
     req: PersistedGraphUpsertRequest,
     author?: { name?: string; email?: string },
