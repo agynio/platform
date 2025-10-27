@@ -33,7 +33,7 @@ export class GraphGuard {
       const nextCmd = n.config?.command;
       if (prevCmd === nextCmd) continue;
       const status = runtime.getNodeStatus(n.id);
-      const st: NodeStatusState | undefined = status?.provisionStatus;
+      const st: NodeStatusState | undefined = status?.provisionStatus?.state as NodeStatusState | undefined;
       const state: NodeStatusState = st ?? 'not_ready';
       if (state !== 'not_ready') {
         throw makeError(

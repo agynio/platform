@@ -96,7 +96,16 @@ import { GraphSocketGateway } from '../gateway/graph.socket.gateway';
       },
       inject: [LoggerService, TemplateRegistry, GraphRepository, ModuleRef],
     },
-    NodeStateService,
+    {
+      provide: NodeStateService,
+      useFactory: (
+        graphs: GraphRepository,
+        runtime: LiveGraphRuntime,
+        logger: LoggerService,
+        gateway: GraphSocketGateway,
+      ) => new NodeStateService(graphs as any, runtime, logger, gateway),
+      inject: [GraphRepository, LiveGraphRuntime, LoggerService, GraphSocketGateway],
+    },
     GraphSocketGateway,
     // Load and apply persisted graph to runtime at startup
     // {

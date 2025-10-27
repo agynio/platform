@@ -73,7 +73,7 @@ export function useBuilderState(serverBase = getApiBase(), options?: BuilderOpti
         const rfNodes: BuilderNode[] = graph.nodes.map((n: PersistedGraph['nodes'][number]) => ({
           id: n.id,
           type: n.template, // reactflow node type equals template name for now
-          position: n.position || { x: Math.random() * 400, y: Math.random() * 300 },
+          position: n.position ?? { x: 0, y: 0 },
           data: { template: n.template, name: n.template, config: n.config, dynamicConfig: n.dynamicConfig },
           dragHandle: '.drag-handle',
         }));

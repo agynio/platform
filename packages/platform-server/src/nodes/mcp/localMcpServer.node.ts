@@ -299,7 +299,7 @@ export class LocalMCPServer extends Node<z.infer<typeof LocalMcpServerStaticConf
           },
         };
         if (this.nodeStateService) {
-          await this.nodeStateService.upsertNodeState(this.namespace, state);
+          await this.nodeStateService.upsertNodeState(this.nodeId, state as unknown as Record<string, unknown>);
         }
       } catch (e) {
         this.logger.error(`[MCP:${this.namespace}] Failed to persist state`, e);
@@ -413,8 +413,13 @@ export class LocalMCPServer extends Node<z.infer<typeof LocalMcpServerStaticConf
 
   // Return legacy McpTool shape for interface compliance; callers needing function tools can access toolsCache directly.
   listTools(_force = false): LocalMCPServerTool[] {
-    // Passive: Only return cached tools. `force` no longer changes discovery behavior post-refactor.
+    // Passive: Only return cached tools filtered by NodeState enabledTools if present.
     const allTools: LocalMCPServerTool[] = this.toolsCache ? [...this.toolsCache] : [];
+    try {
+      const snap = this.nodeStateService?.getSnapshot(this.nodeId) as { mcp?: { enabledTools?: string[] } } | undefined;
+      const enabled = Array.isArray(snap?.mcp?.enabledTools) ? new Set<string>(snap!.mcp!.enabledTools!) : null;
+      if (enabled && enabled.size > 0) return allTools.filter((t) => enabled.has(t.name));
+    } catch {}
     return allTools;
   }
 

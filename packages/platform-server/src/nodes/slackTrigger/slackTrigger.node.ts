@@ -61,6 +61,7 @@ export class SlackTrigger extends Node<SlackTriggerConfig> {
   }
 
   private async ensureClient(): Promise<SocketModeClient> {
+    this.logger.info('SlackTrigger.ensureClient: entering');
     if (this.client) return this.client;
     const appToken = await this.resolveAppToken();
     const client = new SocketModeClient({ appToken, logLevel: undefined });
@@ -136,15 +137,27 @@ export class SlackTrigger extends Node<SlackTriggerConfig> {
   }
 
   protected async doProvision(): Promise<void> {
+    this.logger.info('SlackTrigger.doProvision: starting');
     const client = await this.ensureClient();
     this.logger.info('Starting SlackTrigger (socket mode)');
-    await client.start();
-    this.logger.info('SlackTrigger started');
+    try {
+      await client.start();
+      this.logger.info('SlackTrigger started');
+    } catch (e) {
+      this.logger.error('SlackTrigger.start failed', e);
+      this.setStatus('provisioning_error');
+      throw e;
+    }
   }
   protected async doDeprovision(): Promise<void> {
+    this.logger.info('SlackTrigger.doDeprovision: stopping');
     try {
       await this.client?.disconnect();
-    } catch {}
+    } catch (e) {
+      this.logger.error('SlackTrigger.disconnect error', e);
+      this.setStatus('deprovisioning_error');
+      throw e;
+    }
     this.client = null;
     this.logger.info('SlackTrigger stopped');
   }

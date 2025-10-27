@@ -67,7 +67,7 @@ function RightPropertiesPanelBody({
   const runtimeTemplate = runtimeTemplates.getTemplate(data.template);
   const kind = runtimeTemplate?.kind as string | undefined;
   // Show Runtime Status if lifecycle-managed kinds or if status has provisionStatus
-  const lifecycleKinds = new Set(['agent', 'mcp', 'service', 'trigger']);
+  const lifecycleKinds = new Set(['mcp', 'trigger', 'service']);
   const { data: statusForGate } = useNodeStatus(node.id);
   const hasRuntimeCaps = lifecycleKinds.has(kind || '') || !!statusForGate?.provisionStatus;
 

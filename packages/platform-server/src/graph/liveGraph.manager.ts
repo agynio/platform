@@ -167,9 +167,16 @@ export class LiveGraphRuntime {
     await this.state.nodes.get(id)?.instance?.deprovision();
   }
 
-  getNodeStatus(id: string): { provisionStatus?: NodeStatusState } {
+  getNodeStatus(id: string): { provisionStatus?: { state: NodeStatusState; details?: unknown } } {
     const inst = this.state.nodes.get(id)?.instance;
-    return { provisionStatus: inst?.status };
+    const st = inst?.status;
+    return st ? { provisionStatus: { state: st } } : {};
+  }
+
+  /** Return the last known persisted runtime state snapshot for a node. */
+  getNodeStateSnapshot(id: string): Record<string, unknown> | undefined {
+    const node = this.state.lastGraph?.nodes.find((n) => n.id === id);
+    return node?.data?.state as Record<string, unknown> | undefined;
   }
 
   private async _applyGraphInternal(next: GraphDefinition): Promise<GraphDiffResult> {
@@ -357,6 +364,12 @@ export class LiveGraphRuntime {
       // NOTE: setGraphNodeId reflection removed; prefer factories to leverage ctx.nodeId directly.
       const live: LiveNode = { id: node.id, template: node.data.template, instance: created, config: node.data.config };
       this.state.nodes.set(node.id, live);
+      // Provide nodeId to instance (explicit init per project rules)
+      try {
+        created.init({ nodeId: node.id });
+      } catch (e) {
+        this.logger.error('Failed to init node instance with nodeId=%s', node.id, e);
+      }
       // Attach status_changed forwarder
       this.attachNodeStatusForwarder(node.id, created);
 
