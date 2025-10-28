@@ -3,7 +3,6 @@ import Node from '../base/Node';
 import { ContainerHandle } from '../../../infra/container/container.handle';
 import { z } from 'zod';
 import { PLATFORM_LABEL, SUPPORTED_PLATFORMS } from '../../../constants';
-import { VaultService } from '../../../vault/vault.service';
 import { ConfigService } from '../../../core/services/config.service';
 import { NcpsKeyService } from '../../../infra/ncps/ncpsKey.service';
 import { EnvService, type EnvItem } from '../../../env/env.service';
@@ -25,7 +24,7 @@ const EnvItemSchema = z
 export const ContainerProviderStaticConfigSchema = z
   .object({
     image: z.string().min(1).optional().describe('Optional container image override.'),
-    env: z.union([z.record(z.string().min(1), z.string()), z.array(EnvItemSchema)]).optional(),
+    env: z.array(EnvItemSchema).optional().describe('Environment variables (static or vault references).'),
     initialScript: z
       .string()
       .optional()
@@ -50,48 +49,15 @@ export const ContainerProviderStaticConfigSchema = z
   })
   .strict();
 
-// Exposed schema for UI/templates: advertise only the new env array
-export const ContainerProviderExposedStaticConfigSchema = z
-  .object({
-    image: z.string().min(1).optional().describe('Optional container image override.'),
-    env: z
-      .array(EnvItemSchema)
-      .optional()
-      .describe('Environment variables (static or vault references).')
-      .meta({ 'ui:field': 'ReferenceEnvField' }),
-    initialScript: z
-      .string()
-      .optional()
-      .describe('Shell script (executed with /bin/sh -lc) to run immediately after creating the container.')
-      .meta({ 'ui:widget': 'textarea', 'ui:options': { rows: 6 } }),
-    platform: z
-      .enum(SUPPORTED_PLATFORMS)
-      .optional()
-      .describe('Docker platform selector for the workspace container')
-      .meta({ 'ui:widget': 'select' }),
-    enableDinD: z
-      .boolean()
-      .default(false)
-      .describe('Enable per-workspace Docker-in-Docker sidecar; defaults to disabled for tests/CI.'),
-    ttlSeconds: z
-      .number()
-      .int()
-      .default(86400)
-      .describe('Idle TTL (seconds) before workspace cleanup; <=0 disables cleanup.'),
-    // Expose nix as opaque; builder custom UI component handles editing
-    nix: z.unknown().optional(),
-  })
-  .strict();
-
 export type ContainerProviderStaticConfig = z.infer<typeof ContainerProviderStaticConfigSchema>;
+
+const DEFAULTS: ContainerOpts = {
+  platform: 'linux/arm64',
+  workingDir: '/workspace',
+};
 
 @Injectable({ scope: Scope.TRANSIENT })
 export class WorkspaceNode extends Node<ContainerProviderStaticConfig> {
-  // Keep cfg loosely typed; normalize before use to ContainerOpts at boundaries
-  private cfg?: ContainerProviderStaticConfig;
-  // Local logger instance for concise, redact-safe logs (override in tests via setLogger)
-
-  private opts: ContainerOpts;
   private idLabels: (id: string) => Record<string, string>;
 
   constructor(
@@ -102,7 +68,6 @@ export class WorkspaceNode extends Node<ContainerProviderStaticConfig> {
     @Inject(EnvService) protected envService: EnvService,
   ) {
     super(logger);
-    this.opts = {} as any;
     this.idLabels = (id: string) => ({ 'hautech.ai/thread_id': `node__${id}` });
   }
 
@@ -112,19 +77,6 @@ export class WorkspaceNode extends Node<ContainerProviderStaticConfig> {
 
   getPortConfig() {
     return { sourcePorts: { $self: { kind: 'instance' as const } } } as const;
-  }
-
-  // Allow tests to inject a mock logger
-  setLogger(logger: LoggerService) {
-    this.logger = logger || this.logger;
-  }
-
-  // Accept static configuration (image/env/initialScript). Validation performed via zod schema.
-  async setConfig(cfg: Record<string, unknown>): Promise<void> {
-    const parsed = ContainerProviderStaticConfigSchema.safeParse(cfg || {});
-    if (!parsed.success) throw new Error('Invalid Workspace config');
-    this.cfg = parsed.data;
-    await super.setConfig(this.cfg);
   }
 
   async provide(threadId: string): Promise<ContainerHandle> {
@@ -168,10 +120,10 @@ export class WorkspaceNode extends Node<ContainerProviderStaticConfig> {
         }
       }
     }
-    const enableDinD = this.cfg?.enableDinD ?? false;
+    const enableDinD = this.config?.enableDinD ?? false;
 
     // Enforce non-reuse on platform mismatch if a platform is requested now
-    const requestedPlatform = this.cfg?.platform ?? this.opts.platform;
+    const requestedPlatform = this.config?.platform ?? DEFAULTS.platform;
     if (container && requestedPlatform) {
       try {
         const containerLabels = await this.containerService.getContainerLabels(container.id);
@@ -243,19 +195,19 @@ export class WorkspaceNode extends Node<ContainerProviderStaticConfig> {
       const DOCKER_HOST_ENV = 'tcp://localhost:2375';
       const DOCKER_MIRROR_URL =
         this.configService?.dockerMirrorUrl || process.env.DOCKER_MIRROR_URL || 'http://registry-mirror:5000';
-      const enableDinD = this.cfg?.enableDinD ?? false;
+      const enableDinD = this.config?.enableDinD ?? false;
       let envMerged: Record<string, string> | undefined = await (async () => {
-        const base: Record<string, string> = Array.isArray(this.opts.env)
+        const base: Record<string, string> = Array.isArray(this.config.env)
           ? Object.fromEntries(
-              (this.opts.env || [])
+              (this.config.env || [])
                 .map((s) => String(s))
                 .map((pair) => {
                   const idx = pair.indexOf('=');
                   return idx > -1 ? [pair.slice(0, idx), pair.slice(idx + 1)] : [pair, ''];
                 }),
             )
-          : (this.opts.env as Record<string, string>) || {};
-        const cfgEnv = this.cfg?.env as Record<string, string> | EnvItem[] | undefined;
+          : {};
+        const cfgEnv = this.config?.env as Record<string, string> | EnvItem[] | undefined;
         return this.envService.resolveProviderEnv(cfgEnv, undefined, base);
       })();
       // Inject NIX_CONFIG only when not present and ncps is explicitly enabled and fully configured
@@ -273,18 +225,18 @@ export class WorkspaceNode extends Node<ContainerProviderStaticConfig> {
 
       const normalizedEnv: Record<string, string> | undefined = envMerged;
       container = await this.containerService.start({
-        ...this.opts,
-        image: this.cfg?.image ?? this.opts.image,
+        ...DEFAULTS,
+        image: this.config?.image ?? DEFAULTS.image,
         // Ensure env is in a format ContainerService understands (Record or string[]). envService returns Record.
         env: enableDinD ? { ...(normalizedEnv || {}), DOCKER_HOST: DOCKER_HOST_ENV } : normalizedEnv,
-        labels: { ...(this.opts.labels || {}), ...workspaceLabels },
+        labels: { ...workspaceLabels },
         platform: requestedPlatform,
-        ttlSeconds: this.cfg?.ttlSeconds ?? 86400,
+        ttlSeconds: this.config?.ttlSeconds ?? 86400,
       });
       if (enableDinD) await this.ensureDinD(container, labels, DOCKER_MIRROR_URL);
 
-      if (this.cfg?.initialScript) {
-        const script = this.cfg.initialScript;
+      if (this.config?.initialScript) {
+        const script = this.config.initialScript;
         const { exitCode, stderr } = await container.exec(script, { tty: false });
         if (exitCode !== 0) {
           this.logger.error(
@@ -297,7 +249,7 @@ export class WorkspaceNode extends Node<ContainerProviderStaticConfig> {
       // This lets the script prepare environment (e.g., user/profile) before installing packages.
       // Install Nix packages when resolved specs are provided (best-effort)
       try {
-        const nixAny = this.cfg?.nix as any as { packages?: unknown } | undefined;
+        const nixAny = this.config?.nix as any as { packages?: unknown } | undefined;
         const pkgsUnknown = nixAny && (nixAny as any).packages;
         const pkgsArr: unknown[] = Array.isArray(pkgsUnknown) ? (pkgsUnknown as unknown[]) : [];
         const specs = this.normalizeToInstallSpecs(pkgsArr);
@@ -310,10 +262,10 @@ export class WorkspaceNode extends Node<ContainerProviderStaticConfig> {
     } else {
       const DOCKER_MIRROR_URL =
         this.configService?.dockerMirrorUrl || process.env.DOCKER_MIRROR_URL || 'http://registry-mirror:5000';
-      if (this.cfg?.enableDinD && container) await this.ensureDinD(container, labels, DOCKER_MIRROR_URL);
+      if (this.config?.enableDinD && container) await this.ensureDinD(container, labels, DOCKER_MIRROR_URL);
       // Also attempt install on reuse (idempotent)
       try {
-        const nixAny = this.cfg?.nix as any as { packages?: unknown } | undefined;
+        const nixAny = this.config?.nix as any as { packages?: unknown } | undefined;
         const pkgsUnknown = nixAny && (nixAny as any).packages;
         const pkgsArr: unknown[] = Array.isArray(pkgsUnknown) ? (pkgsUnknown as unknown[]) : [];
         const specs = this.normalizeToInstallSpecs(pkgsArr);
