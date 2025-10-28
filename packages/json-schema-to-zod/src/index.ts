@@ -29,12 +29,12 @@ export function jsonSchemaToZod(schema: JSONSchema | undefined): ZodTypeAny {
     const allStrings = schema.enum.every((e) => typeof e === 'string');
     if (allStrings) return z.enum([...(new Set(schema.enum) as Set<string>)] as [string, ...string[]]);
     const literals = schema.enum.map((v) => z.literal(v as never));
-    return z.union(literals as [ZodTypeAny, ...ZodTypeAny[]]);
+    return z.union(literals);
   }
 
   const types = Array.isArray(schema.type) ? schema.type : schema.type ? [schema.type] : [];
   if (types.length > 1) {
-    return z.union(types.map((t) => jsonSchemaToZod({ ...schema, type: t })) as [ZodTypeAny, ...ZodTypeAny[]]);
+    return z.union(types.map((t) => jsonSchemaToZod({ ...schema, type: t })));
   }
 
   const t = types[0];
