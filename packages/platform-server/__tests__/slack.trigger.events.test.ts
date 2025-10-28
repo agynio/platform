@@ -95,6 +95,6 @@ describe('SlackTrigger events', () => {
     const trig = new SlackTrigger(logger as unknown as LoggerService, vault as unknown as any);
     await trig.setConfig({ app_token: { value: 'secret/slack/APP', source: 'vault' } });
     await trig.provision();
-    expect(trig.getProvisionStatus().state).toBe('error');
+    expect(trig.status).toBe('provisioning_error');
   });
 });
