@@ -4,7 +4,6 @@ import { Server as SocketIOServer, type Socket } from 'socket.io';
 import { z } from 'zod';
 import { LoggerService } from '../core/services/logger.service';
 import { LiveGraphRuntime } from '../graph/liveGraph.manager';
-import type Node from '../nodes/base/Node';
 
 // Strict outbound event payloads
 export const NodeStatusEventSchema = z
@@ -22,10 +21,7 @@ export const NodeStatusEventSchema = z
         ]),
         details: z.unknown().optional(),
       })
-      .partial()
-      .optional(),
-    isPaused: z.boolean().optional(),
-    dynamicConfigReady: z.boolean().optional(),
+      .partial(),
     updatedAt: z.string().datetime().optional(),
   })
   .strict();
