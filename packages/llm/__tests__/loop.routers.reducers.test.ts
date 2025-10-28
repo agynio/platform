@@ -8,18 +8,31 @@ type C = {};
 
 class IncReducer extends Reducer<S, C> {
   private by = 1;
-  init(p?: { by?: number }) { this.by = p?.by ?? 1; return this; }
-  async invoke(state: S): Promise<S> { return { n: state.n + this.by }; }
+  init(p?: { by?: number }) {
+    this.by = p?.by ?? 1;
+    return this;
+  }
+  async invoke(state: S): Promise<S> {
+    return { n: state.n + this.by };
+  }
 }
 
 class StaticRouter extends Router<S, C> {
-  constructor(private nextId: string | null) { super(); }
-  async route(state: S) { return { state, next: this.nextId }; }
+  constructor(private nextId: string | null) {
+    super();
+  }
+  async route(state: S) {
+    return { state, next: this.nextId };
+  }
 }
 
 class ConditionalRouter extends Router<S, C> {
-  constructor(private fn: (s: S) => string | null) { super(); }
-  async route(state: S) { return { state, next: this.fn(state) }; }
+  constructor(private fn: (s: S) => string | null) {
+    super();
+  }
+  async route(state: S) {
+    return { state, next: this.fn(state) };
+  }
 }
 
 describe('Loop and Routers', () => {
@@ -54,13 +67,5 @@ describe('Loop and Routers', () => {
     } as Record<string, Reducer<S, C>>;
     const loop = new Loop<S, C>(reducers);
     await expect(loop.invoke({ n: 0 }, {}, { start: 'a' })).rejects.toThrow(/No reducer found for next id: b/);
-  });
-
-  it('detects cycles', async () => {
-    const reducers = {
-      a: new IncReducer().next(new StaticRouter('a')),
-    } as Record<string, Reducer<S, C>>;
-    const loop = new Loop<S, C>(reducers);
-    await expect(loop.invoke({ n: 0 }, {}, { start: 'a' })).rejects.toThrow(/Cycle detected/);
   });
 });

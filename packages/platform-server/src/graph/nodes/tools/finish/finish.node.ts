@@ -9,8 +9,8 @@ export const FinishToolStaticConfigSchema = z.object({}).strict();
 @Injectable({ scope: Scope.TRANSIENT })
 export class FinishNode extends BaseToolNode<z.infer<typeof FinishToolStaticConfigSchema>> {
   private toolInstance?: FinishFunctionTool;
-  constructor(@Inject(LoggerService) private logger: LoggerService) {
-    super();
+  constructor(@Inject(LoggerService) protected logger: LoggerService) {
+    super(logger);
   }
   async setConfig(_cfg: Record<string, unknown>): Promise<void> {
     // Validation retained even if empty

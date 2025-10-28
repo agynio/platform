@@ -4,7 +4,7 @@ import { TemplateRegistry } from '../templateRegistry';
 import type { TemplateNodeSchema } from '../types';
 import { LiveGraphRuntime } from '../liveGraph.manager';
 import { LoggerService } from '../../core/services/logger.service';
-import type { NodeStatusState } from '../../nodes/base/Node';
+import type { NodeStatusState } from '../../graph/nodes/base/Node';
 import { NodeStateService } from '../nodeState.service';
 
 @Controller('api/graph')
@@ -40,9 +40,7 @@ export class GraphController {
     @Param('nodeId') nodeId: string,
     @Body() body: unknown,
   ): Promise<{ state: Record<string, unknown> }> {
-    const BodySchema = z
-      .object({ state: z.record(z.string(), z.unknown()) })
-      .strict();
+    const BodySchema = z.object({ state: z.record(z.string(), z.unknown()) }).strict();
     const parsed = BodySchema.safeParse(body);
     if (!parsed.success) {
       throw new HttpException({ error: 'bad_state_payload' }, HttpStatus.BAD_REQUEST);

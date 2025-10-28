@@ -12,17 +12,6 @@ export const SendSlackMessageToolStaticConfigSchema = z
       z.string().min(1).startsWith('xoxb-', { message: 'Slack bot token must start with xoxb-' }),
       ReferenceFieldSchema,
     ]),
-    default_channel: z.string().optional().describe('Default Slack channel ID when not provided.'),
-  })
-  .strict();
-
-export const SendSlackMessageToolExposedStaticConfigSchema = z
-  .object({
-    bot_token: ReferenceFieldSchema.meta({
-      'ui:field': 'ReferenceField',
-      'ui:help': 'Use "vault" to reference a secret.',
-    }),
-    default_channel: z.string().optional(),
   })
   .strict();
 
@@ -67,8 +56,8 @@ export class SendSlackMessageFunctionTool extends FunctionTool<typeof sendSlackI
     const bot = normalizeTokenRef(cfg.bot_token) as TokenRef;
     if ((bot.source || 'static') === 'vault') parseVaultRef(bot.value);
     else if (!bot.value.startsWith('xoxb-')) throw new Error('Slack bot token must start with xoxb-');
-    const channel = channelInput || cfg.default_channel;
-    if (!channel) throw new Error('channel is required (or set default_channel)');
+    const channel = channelInput;
+    if (!channel) throw new Error('channel is required');
     const logger = this.deps.logger;
     try {
       const token = await resolveTokenRef(bot, {

@@ -21,11 +21,6 @@ import { GraphSocketGateway } from './gateway/graph.socket.gateway';
 import { LiveGraphRuntime } from './graph';
 // Remove central platform.services.factory usage; rely on DI providers
 
-// Graceful shutdown after 60 seconds
-setTimeout(() => {
-  process.exit(0);
-}, 60000);
-
 async function bootstrap() {
   // NestJS HTTP bootstrap using FastifyAdapter and resolve services via DI
   const adapter = new FastifyAdapter();

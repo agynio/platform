@@ -5,7 +5,16 @@ import { LoggerService } from '../../../core/services/logger.service';
 
 import { z } from 'zod';
 
-import { FunctionTool, HumanMessage, Loop, Reducer, ResponseMessage, ToolCallMessage, ToolCallOutputMessage, Router } from '@agyn/llm';
+import {
+  FunctionTool,
+  HumanMessage,
+  Loop,
+  Reducer,
+  ResponseMessage,
+  ToolCallMessage,
+  ToolCallOutputMessage,
+  Router,
+} from '@agyn/llm';
 import { withAgent } from '@agyn/tracing';
 
 import { LLMProvisioner } from '../../../llm/provisioners/llm.provisioner';
@@ -87,8 +96,8 @@ export type WhenBusyMode = 'wait' | 'injectAfterTools';
 
 // Consolidated Agent class (merges previous BaseAgent + Agent into single AgentNode)
 import { Inject, Injectable, Scope } from '@nestjs/common';
-import type { TemplatePortConfig } from '../../graph/ports.types';
-import type { RuntimeContext } from '../../graph/runtimeContext';
+import type { TemplatePortConfig } from '../../../graph/ports.types';
+import type { RuntimeContext } from '../../../graph/runtimeContext';
 import Node from '../base/Node';
 import { MemoryConnectorNode } from '../memoryConnector/memoryConnector.node';
 import { ModuleRef } from '@nestjs/core';
@@ -105,10 +114,10 @@ export class AgentNode extends Node<AgentStaticConfig> {
     @Inject(ConfigService) protected configService: ConfigService,
     @Inject(LoggerService) protected logger: LoggerService,
     @Inject(LLMProvisioner) protected llmProvisioner: LLMProvisioner,
-    @Inject(AgentRunService) private readonly runs: AgentRunService,
-    private readonly moduleRef: ModuleRef,
+    @Inject(AgentRunService) protected readonly runs: AgentRunService,
+    @Inject(ModuleRef) protected readonly moduleRef: ModuleRef,
   ) {
-    super();
+    super(logger);
   }
 
   get config() {
@@ -165,12 +174,12 @@ export class AgentNode extends Node<AgentStaticConfig> {
     // summarize -> call_model
     const summarize = await this.moduleRef.create(SummarizationLLMReducer);
     await summarize.init({
-        model: this.config.model ?? 'gpt-5',
-        keepTokens: this.config.summarizationKeepTokens ?? 1000,
-        maxTokens: this.config.summarizationMaxTokens ?? 10000,
-        systemPrompt:
-          'You update a running summary of a conversation. Keep key facts, goals, decisions, constraints, names, deadlines, and follow-ups. Be concise; use compact sentences; omit chit-chat. Structure summary with 3 high level sections: initial task, plan (if any), context (progress, findings, observations).',
-      });
+      model: this.config.model ?? 'gpt-5',
+      keepTokens: this.config.summarizationKeepTokens ?? 1000,
+      maxTokens: this.config.summarizationMaxTokens ?? 10000,
+      systemPrompt:
+        'You update a running summary of a conversation. Keep key facts, goals, decisions, constraints, names, deadlines, and follow-ups. Be concise; use compact sentences; omit chit-chat. Structure summary with 3 high level sections: initial task, plan (if any), context (progress, findings, observations).',
+    });
     reducers['summarize'] = summarize.next((await this.moduleRef.create(StaticLLMRouter)).init('call_model'));
 
     // call_model -> branch (call_tools | save)
@@ -188,16 +197,15 @@ export class AgentNode extends Node<AgentStaticConfig> {
         return { msg, place };
       },
     });
-    reducers['call_model'] = callModel
-      .next(
-        (await this.moduleRef.create(ConditionalLLMRouter)).init((state) => {
-          const last = state.messages.at(-1);
-          if (last instanceof ResponseMessage && last.output.find((o) => o instanceof ToolCallMessage)) {
-            return 'call_tools';
-          }
-          return 'save';
-        }),
-      );
+    reducers['call_model'] = callModel.next(
+      (await this.moduleRef.create(ConditionalLLMRouter)).init((state) => {
+        const last = state.messages.at(-1);
+        if (last instanceof ResponseMessage && last.output.find((o) => o instanceof ToolCallMessage)) {
+          return 'call_tools';
+        }
+        return 'save';
+      }),
+    );
 
     // call_tools -> tools_save (static)
     const callTools = await this.moduleRef.create(CallToolsLLMReducer);
@@ -206,14 +214,16 @@ export class AgentNode extends Node<AgentStaticConfig> {
     const toolsRouter = await this.moduleRef.create(StaticLLMRouter);
     toolsRouter.init('tools_save');
     callTools.next(toolsRouter);
-    // tools_save -> summarize (static)
+    reducers['call_tools'] = callTools;
+
+    // tools_save -> branch (summarize | exit)
     const toolsSave = await this.moduleRef.create(SaveLLMReducer);
-    const toSummarize = await this.moduleRef.create(StaticLLMRouter);
-    toSummarize.init('summarize');
-    // Wrap tools_save to inject after-tools messages into state before summarization
     const self = this;
     class AfterToolsRouter extends Router<LLMState, LLMContext> {
       async route(state: LLMState, ctx: LLMContext): Promise<{ state: LLMState; next: string | null }> {
+        if (ctx.finishSignal.isActive) {
+          return { state, next: null };
+        }
         if (self.config.whenBusy === 'injectAfterTools') {
           const drained = self.buffer.tryDrain(ctx.threadId, ProcessBuffer.AllTogether);
           if (drained.length > 0) {
@@ -225,6 +235,7 @@ export class AgentNode extends Node<AgentStaticConfig> {
       }
     }
     toolsSave.next(new AfterToolsRouter());
+    reducers['tools_save'] = toolsSave;
 
     // save -> enforceTools (if enabled) or end (static)
     reducers['save'] = (await this.moduleRef.create(SaveLLMReducer)).next(
@@ -259,7 +270,10 @@ export class AgentNode extends Node<AgentStaticConfig> {
       ? messages
       : [messages];
     this.buffer.setDebounceMs(this.config.debounceMs ?? 0);
-    this.buffer.enqueue(thread, incoming.map((m) => ({ kind: 'human', content: m.content, info: m.info })));
+    this.buffer.enqueue(
+      thread,
+      incoming.map((m) => ({ kind: 'human', content: m.content, info: m.info })),
+    );
     // Generate run id for persistence
     const runId = `${thread}/${Date.now()}`;
     await this.runs.startRun(this.nodeId, thread, runId);

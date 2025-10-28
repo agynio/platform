@@ -2,11 +2,7 @@ import z from 'zod';
 import { BaseToolNode } from '../baseToolNode';
 import { LoggerService } from '../../../../core/services/logger.service';
 import { VaultService } from '../../../../vault/vault.service';
-import {
-  SendSlackMessageFunctionTool,
-  SendSlackMessageToolStaticConfigSchema,
-  SendSlackMessageToolExposedStaticConfigSchema,
-} from './send_slack_message.tool';
+import { SendSlackMessageFunctionTool, SendSlackMessageToolStaticConfigSchema } from './send_slack_message.tool';
 import { Inject, Injectable, Scope } from '@nestjs/common';
 
 @Injectable({ scope: Scope.TRANSIENT })
@@ -14,10 +10,10 @@ export class SendSlackMessageNode extends BaseToolNode<z.infer<typeof SendSlackM
   private toolInstance?: SendSlackMessageFunctionTool;
   private staticCfg: z.infer<typeof SendSlackMessageToolStaticConfigSchema> | null = null;
   constructor(
-    @Inject(LoggerService) private logger: LoggerService,
-    @Inject(VaultService) private vault?: VaultService,
+    @Inject(LoggerService) protected logger: LoggerService,
+    @Inject(VaultService) protected vault: VaultService,
   ) {
-    super();
+    super(logger);
   }
   async setConfig(cfg: Record<string, unknown>): Promise<void> {
     const parsed = SendSlackMessageToolStaticConfigSchema.safeParse(cfg || {});
@@ -40,7 +36,3 @@ export class SendSlackMessageNode extends BaseToolNode<z.infer<typeof SendSlackM
     return { targetPorts: { $self: { kind: 'instance' } } } as const;
   }
 }
-
-// Backwards compatibility export name
-export { SendSlackMessageNode as SendSlackMessageTool };
-export { SendSlackMessageToolStaticConfigSchema, SendSlackMessageToolExposedStaticConfigSchema };

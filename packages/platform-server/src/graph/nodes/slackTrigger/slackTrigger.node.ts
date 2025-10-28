@@ -42,21 +42,21 @@ type SlackTriggerConfig = { app_token: SlackTokenRef };
 
 @Injectable({ scope: Scope.TRANSIENT })
 export class SlackTrigger extends Node<SlackTriggerConfig> {
-  private cfg: SlackTriggerConfig | null = null;
   private client: SocketModeClient | null = null;
 
   constructor(
-    @Inject(LoggerService) private readonly logger: LoggerService,
-    @Inject(VaultService) private readonly vault: VaultService,
+    @Inject(LoggerService) protected readonly logger: LoggerService,
+    @Inject(VaultService) protected readonly vault: VaultService,
   ) {
-    super();
+    super(logger);
   }
 
   private async resolveAppToken(): Promise<string> {
-    const cfg = this.cfg;
-    if (!cfg) throw new Error('SlackTrigger not configured: app_token is required');
-    const t = cfg.app_token;
-    const resolved = await resolveTokenRef(t, { expectedPrefix: 'xapp-', fieldName: 'app_token', vault: this.vault });
+    const resolved = await resolveTokenRef(this.config.app_token, {
+      expectedPrefix: 'xapp-',
+      fieldName: 'app_token',
+      vault: this.vault,
+    });
     return resolved;
   }
 

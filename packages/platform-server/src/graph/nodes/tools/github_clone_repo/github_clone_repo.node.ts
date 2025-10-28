@@ -35,11 +35,10 @@ export class GithubCloneRepoNode extends BaseToolNode<StaticConfigType> {
 
   private toolInstance?: GithubCloneRepoFunctionTool;
   constructor(
-    @Inject(ConfigService) private configService: ConfigService,
-    @Inject(VaultService) private vault: VaultService | undefined,
-    @Inject(LoggerService) private logger: LoggerService,
+    @Inject(VaultService) private vault: VaultService,
+    @Inject(LoggerService) protected logger: LoggerService,
   ) {
-    super();
+    super(logger);
   }
 
   setContainerProvider(provider: WorkspaceNode | undefined) {
@@ -51,7 +50,7 @@ export class GithubCloneRepoNode extends BaseToolNode<StaticConfigType> {
 
   getTool(): GithubCloneRepoFunctionTool {
     if (!this.toolInstance) {
-      this.toolInstance = new GithubCloneRepoFunctionTool(this.logger, this.configService, this.vault, this);
+      this.toolInstance = new GithubCloneRepoFunctionTool(this.logger, this.vault, this);
     }
     return this.toolInstance;
   }

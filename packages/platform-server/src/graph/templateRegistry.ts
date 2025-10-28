@@ -1,7 +1,7 @@
 import { Inject, Injectable } from '@nestjs/common';
 import type { TemplatePortConfig } from './ports.types';
 import type { TemplateKind, TemplateNodeSchema } from './types';
-import Node from '../nodes/base/Node';
+import Node from '../graph/nodes/base/Node';
 import type { Constructor } from 'type-fest';
 import { ModuleRef } from '@nestjs/core';
 

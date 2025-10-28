@@ -1,11 +1,9 @@
-import { Controller, Get, HttpCode, Param, Post, Query, Body, UseGuards, HttpException, Inject } from '@nestjs/common';
-import { VaultService } from './vault.service';
-import { VaultEnabledGuard } from './vault-enabled.guard';
-import { KvPathsQueryDto } from './dto/kv-paths.query.dto';
+import { Body, Controller, Get, HttpCode, HttpException, Inject, Param, Post, Query } from '@nestjs/common';
 import { KvKeysQueryDto } from './dto/kv-keys.query.dto';
+import { KvPathsQueryDto } from './dto/kv-paths.query.dto';
 import { KvWriteDto } from './dto/kv-write.dto';
+import { VaultService } from './vault.service';
 
-@UseGuards(VaultEnabledGuard)
 @Controller('api/vault')
 export class VaultController {
   constructor(@Inject(VaultService) private vaultService: VaultService) {}

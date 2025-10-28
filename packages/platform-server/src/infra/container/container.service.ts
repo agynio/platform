@@ -506,7 +506,7 @@ export class ContainerService {
                 },
               });
               try {
-                const modemObj = this.docker.modem as Record<string, unknown>;
+                const modemObj = this.docker.modem;
                 const demux = modemObj?.['demuxStream'] as
                   | ((s: NodeJS.ReadableStream, out: NodeJS.WritableStream, err: NodeJS.WritableStream) => void)
                   | undefined;

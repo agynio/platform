@@ -1,5 +1,5 @@
 import { EdgeDef, GraphDefinition, GraphError, NodeDef } from './types';
-import { Node } from '../nodes/base/Node';
+import { Node } from '../graph/nodes/base/Node';
 
 export interface LiveNode {
   id: string;

@@ -25,8 +25,9 @@ export class CallAgentNode extends BaseToolNode<z.infer<typeof CallAgentToolStat
   private targetAgent: AgentNode | undefined;
   private responseMode: 'sync' | 'async' | 'ignore' = 'sync';
   private toolInstance?: CallAgentFunctionTool;
-  constructor(@Inject(LoggerService) private logger: LoggerService) {
-    super();
+
+  constructor(@Inject(LoggerService) protected logger: LoggerService) {
+    super(logger);
   }
 
   setAgent(agent: AgentNode | undefined) {

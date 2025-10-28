@@ -4,6 +4,7 @@ import { EnvService, type EnvItem } from '../../../../env/env.service';
 import { BaseToolNode } from '../baseToolNode';
 import { ShellCommandTool } from './shell_command.tool';
 import { Inject, Injectable, Scope } from '@nestjs/common';
+import { LoggerService } from '../../../../core/services/logger.service';
 
 // NOTE: ANSI stripping now handled in ShellCommandTool; keep schema exports here only.
 
@@ -41,8 +42,11 @@ export class ShellCommandNode extends BaseToolNode<z.infer<typeof ShellToolStati
   private cfg?: z.infer<typeof ShellToolStaticConfigSchema>;
   private toolInstance?: ShellCommandTool;
 
-  constructor(@Inject(EnvService) private envService: EnvService) {
-    super();
+  constructor(
+    @Inject(EnvService) protected envService: EnvService,
+    @Inject(LoggerService) protected logger: LoggerService,
+  ) {
+    super(logger);
   }
   getPortConfig() {
     return {

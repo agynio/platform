@@ -10,8 +10,8 @@ export class RemindMeNode extends BaseToolNode<z.infer<typeof RemindMeToolStatic
   private toolInstance?: RemindMeFunctionTool;
   private callerAgent?: AgentNode;
 
-  constructor(@Inject(LoggerService) private logger: LoggerService) {
-    super();
+  constructor(@Inject(LoggerService) protected logger: LoggerService) {
+    super(logger);
   }
 
   getTool(): RemindMeFunctionTool {

@@ -8,7 +8,7 @@ import { ConfigService } from '../../../core/services/config.service';
 import { NcpsKeyService } from '../../../infra/ncps/ncpsKey.service';
 import { EnvService, type EnvItem } from '../../../env/env.service';
 import { LoggerService } from '../../../core/services/logger.service';
-import { Injectable, Scope } from '@nestjs/common';
+import { Inject, Injectable, Scope } from '@nestjs/common';
 
 // Static configuration schema for ContainerProviderEntity
 // Allows overriding the base image and supplying environment variables.
@@ -90,27 +90,24 @@ export class WorkspaceNode extends Node<ContainerProviderStaticConfig> {
   // Keep cfg loosely typed; normalize before use to ContainerOpts at boundaries
   private cfg?: ContainerProviderStaticConfig;
   // Local logger instance for concise, redact-safe logs (override in tests via setLogger)
-  private logger = new LoggerService();
 
-  private vaultService: VaultService | undefined;
   private opts: ContainerOpts;
   private idLabels: (id: string) => Record<string, string>;
 
-  private envService: EnvService;
   constructor(
-    private containerService: ContainerService,
-    private configService?: ConfigService,
-    private ncpsKeyService?: NcpsKeyService,
+    @Inject(ContainerService) protected containerService: ContainerService,
+    @Inject(ConfigService) protected configService: ConfigService,
+    @Inject(NcpsKeyService) protected ncpsKeyService: NcpsKeyService,
+    @Inject(LoggerService) protected logger: LoggerService,
+    @Inject(EnvService) protected envService: EnvService,
   ) {
-    super();
+    super(logger);
     this.opts = {} as any;
     this.idLabels = (id: string) => ({ 'hautech.ai/thread_id': `node__${id}` });
-    this.envService = new EnvService(undefined as any);
   }
 
   init(params: { nodeId: string }): void {
     super.init(params);
-    // envService stays as constructed; advanced injection happens in factory wiring
   }
 
   getPortConfig() {

@@ -36,7 +36,6 @@ export class EnvService {
       seen.add(k);
       const source = it?.source || 'static';
       if (source === 'vault') {
-        if (!this.vault || !this.vault.isEnabled()) throw new EnvError('vault unavailable', 'vault_unavailable');
         try {
           lookups.push({ key: k, ref: parseVaultRef(it.value) });
         } catch (e) {
@@ -49,7 +48,6 @@ export class EnvService {
 
     if (lookups.length) {
       const vlt = this.vault;
-      if (!vlt || !vlt.isEnabled()) throw new EnvError('vault unavailable', 'vault_unavailable');
       try {
         const resolved = await Promise.all(
           lookups.map(async ({ key, ref }) => {

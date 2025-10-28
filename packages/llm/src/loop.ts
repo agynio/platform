@@ -7,14 +7,8 @@ export class Loop<S, C> {
   async invoke(state: S, ctx: C, params: { start: string }): Promise<S> {
     let workingState: S = state;
     let currentId: string | null = params.start;
-    const visited = new Set<string>();
 
     while (currentId) {
-      if (visited.has(currentId)) {
-        throw new Error(`Cycle detected at reducer id: ${currentId}`);
-      }
-      visited.add(currentId);
-
       const reducer: Reducer<S, C> | undefined = this.reducers[currentId];
       if (!reducer) {
         throw new Error(`No reducer found for id: ${currentId}`);

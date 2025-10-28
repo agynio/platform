@@ -2,7 +2,7 @@ import { Injectable } from '@nestjs/common';
 import type { PersistedGraph, PersistedGraphUpsertRequest } from './types';
 import { GraphErrorCode } from './errors';
 import type { LiveGraphRuntime } from './liveGraph.manager';
-import type { NodeStatusState } from '../nodes/base/Node';
+import type { NodeStatusState } from '../graph/nodes/base/Node';
 
 export type GuardError = Error & { code?: string };
 

@@ -3,6 +3,7 @@ import { ModuleRef } from '@nestjs/core';
 import { z } from 'zod';
 import { MemoryScope, MemoryService } from '../../nodes/memory.repository';
 import Node from '../base/Node';
+import { LoggerService } from '../../../core/services/logger.service';
 
 export interface MemoryNodeConfig {
   scope: MemoryScope; // 'global' | 'perThread'
@@ -26,8 +27,11 @@ export type MemoryNodeStaticConfig = z.infer<typeof MemoryNodeStaticConfigSchema
 
 @Injectable({ scope: Scope.TRANSIENT })
 export class MemoryNode extends Node<MemoryNodeStaticConfig> {
-  constructor(@Inject(ModuleRef) private moduleRef: ModuleRef) {
-    super();
+  constructor(
+    @Inject(ModuleRef) private moduleRef: ModuleRef,
+    @Inject(LoggerService) protected logger: LoggerService,
+  ) {
+    super(logger);
   }
 
   init(params: { nodeId: string }): void {

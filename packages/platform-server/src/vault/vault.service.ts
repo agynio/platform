@@ -29,38 +29,27 @@ export type VaultRef = { mount: string; path: string; key: string };
 // - getSecret returns a single key's value for server-side injection only.
 @Injectable()
 export class VaultService {
-  private cfg: VaultConfig;
   constructor(
     @Inject(ConfigService) private configService: ConfigService,
     @Inject(LoggerService) private logger: LoggerService,
-  ) {
-    this.cfg = VaultConfigSchema.parse({
-      enabled: this.configService.vaultEnabled,
-      addr: this.configService.vaultAddr,
-      token: this.configService.vaultToken,
-      defaultMounts: ['secret'],
-    });
-  }
-
-  isEnabled(): boolean {
-    return !!(this.cfg.enabled && this.cfg.addr && this.cfg.token);
-  }
+  ) {}
 
   private get base(): string {
-    const addr = (this.cfg.addr || '').replace(/\/$/, '');
-    return addr;
+    if (!this.configService.vaultAddr) throw new Error('Vault address not configured');
+    return this.configService.vaultAddr;
   }
 
   private get headers(): Record<string, string> {
+    if (!this.configService.vaultToken) throw new Error('Vault token not configured');
     const h: Record<string, string> = { 'Content-Type': 'application/json' };
-    if (this.cfg.token) h['X-Vault-Token'] = this.cfg.token;
+    h['X-Vault-Token'] = this.configService.vaultToken;
     return h;
   }
 
   private async http<T>(path: string, init?: RequestInit): Promise<T> {
     const url = `${this.base}${path}`;
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), this.cfg.timeoutMs || 5000);
+    const timer = setTimeout(() => controller.abort(), 5000);
     try {
       const res = await fetch(url, {
         ...init,
@@ -84,7 +73,6 @@ export class VaultService {
 
   // List KV v2 mounts by inspecting sys/mounts
   async listKvV2Mounts(): Promise<string[]> {
-    if (!this.isEnabled()) return [];
     try {
       const resp = await this.http<KvV2MountsResponse>('/v1/sys/mounts', { method: 'GET' });
       const items: string[] = [];
@@ -94,10 +82,6 @@ export class VaultService {
         const type = meta?.type;
         const version = meta?.options?.version;
         if (type === 'kv' && String(version) === '2') items.push(n);
-      }
-      // If configured, include defaults that may not show up yet (best-effort)
-      for (const d of this.cfg.defaultMounts || []) {
-        if (!items.includes(d)) items.push(d);
       }
       items.sort();
       return items;
@@ -110,7 +94,6 @@ export class VaultService {
 
   // List metadata paths under a KV v2 mount. Returns folder-like names as Vault emits them (may end with '/').
   async listPaths(mount: string, prefix: string): Promise<string[]> {
-    if (!this.isEnabled()) return [];
     const m = (mount || 'secret').replace(/\/$/, '');
     const p = (prefix || '').replace(/^\//, '');
     try {
@@ -134,7 +117,6 @@ export class VaultService {
 
   // List key names within a specific secret object without returning values.
   async listKeys(mount: string, path: string): Promise<string[]> {
-    if (!this.isEnabled()) return [];
     const m = (mount || 'secret').replace(/\/$/, '');
     const p = (path || '').replace(/^\//, '');
     try {
@@ -154,7 +136,6 @@ export class VaultService {
 
   // Resolve a single key value for server-side use only.
   async getSecret(ref: VaultRef): Promise<string | undefined> {
-    if (!this.isEnabled()) return undefined;
     const m = (ref.mount || 'secret').replace(/\/$/, '');
     const p = (ref.path || '').replace(/^\//, '');
     try {
@@ -175,7 +156,6 @@ export class VaultService {
 
   // Write-only update for a single key in a KV v2 secret object. Returns metadata version.
   async setSecret(ref: VaultRef, value: string): Promise<{ version: number }> {
-    if (!this.isEnabled()) throw new Error('Vault is not enabled');
     const m = (ref.mount || 'secret').replace(/\/$/, '');
     const p = (ref.path || '').replace(/^\//, '');
     let existing: Record<string, unknown> = {};

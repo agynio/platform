@@ -1,6 +1,7 @@
-import { Injectable, Scope } from '@nestjs/common';
+import { Inject, Injectable, Scope } from '@nestjs/common';
 import { EventEmitter } from 'events';
-import { TemplatePortConfig } from '../../graph';
+import { TemplatePortConfig } from '../../../graph';
+import { LoggerService } from '../../../core/services/logger.service';
 
 export type NodeStatusState =
   | 'not_ready'
@@ -21,6 +22,10 @@ export abstract class Node<TConfig = unknown> extends EventEmitter {
   protected _nodeId?: string;
 
   abstract getPortConfig(): TemplatePortConfig;
+
+  constructor(@Inject(LoggerService) protected logger: LoggerService) {
+    super();
+  }
 
   init(params: { nodeId: string }) {
     this._nodeId = params.nodeId;
@@ -71,7 +76,8 @@ export abstract class Node<TConfig = unknown> extends EventEmitter {
     try {
       await this.doProvision();
       this.setStatus('ready');
-    } catch {
+    } catch (err) {
+      this.logger.error('Node provision failed', { nodeId: this._nodeId, err });
       this.setStatus('provisioning_error');
     } finally {
       this._pending = null;

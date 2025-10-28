@@ -13,9 +13,9 @@ import { LoggerService } from '../core/services/logger.service';
 
 import { Inject, Injectable } from '@nestjs/common';
 import { ModuleRef } from '@nestjs/core';
-import type { NodeStatusState, StatusChangedEvent } from '../nodes/base/Node';
+import type { NodeStatusState, StatusChangedEvent } from '../graph/nodes/base/Node';
 
-import type Node from '../nodes/base/Node';
+import type Node from '../graph/nodes/base/Node';
 import { Errors } from './errors';
 import { PortsRegistry } from './ports.registry';
 import type { TemplatePortConfig } from './ports.types';

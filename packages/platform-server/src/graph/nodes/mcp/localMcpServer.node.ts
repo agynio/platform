@@ -58,24 +58,9 @@ export class LocalMCPServer extends Node<z.infer<typeof LocalMcpServerStaticConf
   private async resolveEnvOverlay(): Promise<Record<string, string> | undefined> {
     const items: EnvItem[] = (this.cfg?.env || []) as EnvItem[];
     if (!items.length) return undefined;
-    // Prefer injected EnvService; fallback to local via Vault if available
-    const svc = this.envService || (this.vault ? new EnvService(this.vault) : undefined);
-    if (svc) {
-      try {
-        const r = await svc.resolveEnvItems(items);
-        return Object.keys(r).length ? r : undefined;
-      } catch {
-        // fall through to static-only fallback
-      }
-    }
-    // Fallback: include only static entries when resolver is unavailable
-    const staticOnly = items
-      .filter((i) => (i.source ?? 'static') === 'static')
-      .reduce<Record<string, string>>((acc, it) => {
-        acc[it.key] = it.value;
-        return acc;
-      }, {});
-    return Object.keys(staticOnly).length ? staticOnly : undefined;
+
+    const r = await this.envService.resolveEnvItems(items);
+    return Object.keys(r).length ? r : undefined;
   }
 
   private buildExecConfig(command: string, envOverlay?: Record<string, string>) {
@@ -103,7 +88,6 @@ export class LocalMCPServer extends Node<z.infer<typeof LocalMcpServerStaticConf
   get namespace(): string {
     return this.cfg?.namespace || 'mcp';
   }
-  private client?: Client;
   private started = false;
   private toolsCache: LocalMCPServerTool[] | null = null;
   private lastToolsUpdatedAt?: number; // ms epoch
@@ -133,14 +117,14 @@ export class LocalMCPServer extends Node<z.infer<typeof LocalMcpServerStaticConf
   private _globalStaleTimeoutMs = 0;
 
   constructor(
-    @Inject(ContainerService) private containerService: ContainerService,
-    @Inject(LoggerService) private logger: LoggerService,
-    @Inject(VaultService) private vault: VaultService,
-    @Inject(EnvService) private envService: EnvService,
-    @Inject(ConfigService) private configService: ConfigService,
-    @Inject(NodeStateService) private nodeStateService?: NodeStateService,
+    @Inject(ContainerService) protected containerService: ContainerService,
+    @Inject(LoggerService) protected logger: LoggerService,
+    @Inject(VaultService) protected vault: VaultService,
+    @Inject(EnvService) protected envService: EnvService,
+    @Inject(ConfigService) protected configService: ConfigService,
+    @Inject(NodeStateService) protected nodeStateService?: NodeStateService,
   ) {
-    super();
+    super(logger);
   }
 
   getPortConfig() {
@@ -305,7 +289,15 @@ export class LocalMCPServer extends Node<z.infer<typeof LocalMcpServerStaticConf
       try {
         const state: { mcp: PersistedMcpState } = {
           mcp: {
-            tools: (this.toolsCache || []).map((t) => ({ name: t.name, description: t.description })),
+            tools: result.tools.map(
+              (t) =>
+                ({
+                  name: t.name,
+                  description: t.description,
+                  inputSchema: t.inputSchema,
+                  outputSchema: t.outputSchema,
+                }) as McpTool,
+            ),
             toolsUpdatedAt: this.lastToolsUpdatedAt,
           },
         };

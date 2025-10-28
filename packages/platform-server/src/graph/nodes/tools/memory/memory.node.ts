@@ -23,8 +23,8 @@ export class MemoryToolNode extends BaseToolNode<z.infer<typeof MemoryToolNodeSt
   private toolInstance?: UnifiedMemoryFunctionTool;
   private staticCfg: z.infer<typeof MemoryToolNodeStaticConfigSchema> = {};
   private memoryFactory?: (opts: { threadId?: string }) => MemoryService;
-  constructor(@Inject(LoggerService) private logger: LoggerService) {
-    super();
+  constructor(@Inject(LoggerService) protected logger: LoggerService) {
+    super(logger);
   }
   setMemorySource(
     source:

@@ -30,13 +30,10 @@ export function normalizeTokenRef(input: string | ReferenceValue): ReferenceValu
 // Resolve a token reference, validating expected prefix and handling vault semantics
 export async function resolveTokenRef(
   ref: ReferenceValue,
-  opts: { expectedPrefix: string; fieldName: string; vault?: VaultService },
+  opts: { expectedPrefix: string; fieldName: string; vault: VaultService },
 ): Promise<string> {
   const { expectedPrefix, fieldName, vault } = opts;
   if ((ref.source || 'static') === 'vault') {
-    if (!vault || !vault.isEnabled()) {
-      throw new Error(`Vault is disabled but a vault reference was provided for ${fieldName}`);
-    }
     const vr = parseVaultRef(ref.value);
     const secret = await vault.getSecret(vr);
     if (!secret) throw new Error(`Vault secret for ${fieldName} not found`);

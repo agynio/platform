@@ -7,6 +7,7 @@ import { LoggerService } from '../../../../core/services/logger.service';
 import { VaultService } from '../../../../vault/vault.service';
 import { parseVaultRef } from '../../../../utils/refs';
 import { GithubCloneRepoNode } from './github_clone_repo.node';
+import { Inject, Injectable, Scope } from '@nestjs/common';
 
 export const githubCloneSchema = z
   .object({
@@ -18,11 +19,11 @@ export const githubCloneSchema = z
   })
   .strict();
 
+@Injectable({ scope: Scope.TRANSIENT })
 export class GithubCloneRepoFunctionTool extends FunctionTool<typeof githubCloneSchema> {
   constructor(
     private logger: LoggerService,
-    private configService: ConfigService,
-    private vault: VaultService | undefined,
+    private vault: VaultService,
     private node: GithubCloneRepoNode,
   ) {
     super();
@@ -44,14 +45,9 @@ export class GithubCloneRepoFunctionTool extends FunctionTool<typeof githubClone
     // Preferred new token field
     if (tokenRef) {
       if (tokenRef.source === 'vault') {
-        const vlt = this.vault;
-        if (vlt?.isEnabled()) {
-          try {
-            const vr = parseVaultRef(tokenRef.value);
-            const token = await vlt.getSecret(vr);
-            if (token) return token;
-          } catch {}
-        }
+        const vr = parseVaultRef(tokenRef.value);
+        const token = await this.vault.getSecret(vr);
+        if (token) return token;
       } else if (tokenRef.value) return tokenRef.value;
     }
     return '';
@@ -62,6 +58,7 @@ export class GithubCloneRepoFunctionTool extends FunctionTool<typeof githubClone
     const provider = this.node.containerProvider();
     if (!provider)
       throw new Error('GithubCloneRepoTool: containerProvider not set. Connect via graph edge before use.');
+
     const container = await provider.provide(ctx.threadId);
     this.logger.info('Tool called', 'github_clone_repo', { owner, repo, path, branch, depth });
     const token = await this.resolveToken();

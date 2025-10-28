@@ -24,7 +24,6 @@ export class RemindersController {
   ): Promise<{ items: ActiveReminder[] }> {
     try {
       const inst = this.runtimeService.getNodeInstance(nodeId);
-      console.log(inst);
       if (!inst) throw new HttpException({ error: 'node_not_found' }, HttpStatus.NOT_FOUND);
       if (!isRemindMeInspectable(inst)) throw new HttpException({ error: 'not_remindme_node' }, HttpStatus.NOT_FOUND);
       const items = (inst as RemindMeInspectable).getActiveReminders();
