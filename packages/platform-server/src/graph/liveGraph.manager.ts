@@ -10,8 +10,6 @@ import { EdgeDef, GraphDefinition, GraphError, NodeDef } from './types';
 // Ports based reversible universal edges
 import { ZodError, type ZodIssue } from 'zod';
 import { LoggerService } from '../core/services/logger.service';
-import { LocalMCPServer } from '../nodes/mcp';
-import type { PersistedMcpState } from '../nodes/mcp/types';
 
 import { Inject, Injectable } from '@nestjs/common';
 import { ModuleRef } from '@nestjs/core';
@@ -52,7 +50,7 @@ export class LiveGraphRuntime {
     @Inject(LoggerService) private readonly logger: LoggerService,
     @Inject(TemplateRegistry) private readonly templateRegistry: TemplateRegistry,
     @Inject(GraphRepository) private readonly graphs: GraphRepository,
-    private readonly moduleRef: ModuleRef,
+    @Inject(ModuleRef) private readonly moduleRef: ModuleRef,
   ) {
     this.portsRegistry = new PortsRegistry();
   }
@@ -204,6 +202,7 @@ export class LiveGraphRuntime {
         pushError(e as GraphError);
       }
     }
+
     for (const nodeId of diff.recreatedNodeIds) {
       const old = this.state.nodes.get(nodeId);
       if (old) await this.disposeNode(nodeId); // ignore errors for now
@@ -270,7 +269,6 @@ export class LiveGraphRuntime {
       removedNodes: diff.removedNodeIds,
       recreatedNodes: diff.recreatedNodeIds,
       updatedConfigNodes: diff.configUpdateNodeIds,
-      updatedDynamicConfigNodes: [],
       addedEdges: diff.addedEdges.map(edgeKey),
       removedEdges: diff.removedEdges.map(edgeKey),
       errors,
@@ -331,9 +329,7 @@ export class LiveGraphRuntime {
     try {
       const nodeClass = this.templateRegistry.getClass(node.data.template);
       if (!nodeClass) throw Errors.unknownTemplate(node.data.template, node.id);
-
       const created: Node = await this.moduleRef.create<Node>(nodeClass);
-
       const cfg = created.getPortConfig() as TemplatePortConfig;
       if (cfg) {
         this.portsRegistry.registerTemplatePorts(node.data.template, cfg);
@@ -355,21 +351,7 @@ export class LiveGraphRuntime {
       if (node.data.config) {
         await created.setConfig(node.data.config);
       }
-
-      if (created instanceof LocalMCPServer) {
-        const state = node.data.state as { mcp?: PersistedMcpState } | undefined;
-
-        if (state?.mcp && state.mcp.tools) {
-          const summaries = state.mcp.tools;
-          const updatedAt = state.mcp.toolsUpdatedAt;
-          try {
-            created.preloadCachedToolSummaries(summaries, updatedAt);
-          } catch (e) {
-            this.logger.error('Error during MCP cache preload for node %s', node.id, e);
-          }
-        }
-      }
-      // TODO: move preloadCachedToolSummaries logic completely inside localMcpServer provision
+      await created.setState(node.data.state ?? {});
       void created.provision();
     } catch (e) {
       // Factory creation or any init error should include nodeId
@@ -551,13 +533,9 @@ export class LiveGraphRuntime {
     const nodes = Array.from(this.state.nodes.values());
     await Promise.all(
       nodes.map(async (live) => {
-        const inst = live.instance as Record<string, unknown>;
-        const deprov = inst?.['deprovision'];
-        if (typeof deprov === 'function') {
-          try {
-            await (deprov as () => Promise<void>)();
-          } catch {}
-        }
+        const inst = live.instance;
+        await inst.deprovision();
+
         const inbound = this.state.inboundEdges.get(live.id) || new Set<string>();
         const outbound = this.state.outboundEdges.get(live.id) || new Set<string>();
         const all = new Set<string>([...inbound, ...outbound]);

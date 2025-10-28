@@ -18,6 +18,7 @@ import { ContainerCleanupService } from './infra/container/containerCleanup.job'
 import { AppModule } from './bootstrap/app.module';
 import { MongoService } from './core/services/mongo.service';
 import { GraphSocketGateway } from './gateway/graph.socket.gateway';
+import { LiveGraphRuntime } from './graph';
 // Remove central platform.services.factory usage; rely on DI providers
 
 // Graceful shutdown after 60 seconds
@@ -47,6 +48,11 @@ async function bootstrap() {
   // Attach Socket.IO gateway via DI and explicit init
   const gateway = app.get(GraphSocketGateway);
   gateway.init({ server: fastify.server });
+
+  // Load graph
+  const liveGraphRuntime = app.get(LiveGraphRuntime);
+  logger.info('Loading live graph runtime...');
+  await liveGraphRuntime.load();
 
   const shutdown = async () => {
     logger.info('Shutting down...');

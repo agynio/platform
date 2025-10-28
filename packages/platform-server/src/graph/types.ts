@@ -43,11 +43,6 @@ export interface Configurable {
 
 export type FactoryFn = (ctx: FactoryContext) => Configurable | Promise<Configurable>;
 
-// Minimal persistence interface used by NodeStateService to upsert per-node state
-export interface GraphStateUpsertService {
-  upsertNodeState(name: string, nodeId: string, patch: Record<string, unknown>): Promise<void>;
-}
-
 export interface TemplateRegistryLike {
   get(template: string): FactoryFn | undefined;
 }
@@ -62,18 +57,18 @@ export interface MethodEndpoint extends EndpointBase {
   type: 'method';
   key: string;
   fn: Function;
-  owner: unknown;  
+  owner: unknown;
 }
 
 export interface PropertyEndpoint extends EndpointBase {
   type: 'property';
   key: string;
-  owner: unknown;  
+  owner: unknown;
 }
 
 export interface SelfEndpoint extends EndpointBase {
   type: 'self';
-  owner: unknown;  
+  owner: unknown;
 }
 
 export type Endpoint = MethodEndpoint | PropertyEndpoint | SelfEndpoint;

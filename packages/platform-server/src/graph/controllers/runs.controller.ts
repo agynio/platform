@@ -1,6 +1,6 @@
 import { Controller, Get, Post, Param, Query, HttpCode, NotFoundException, ConflictException, Inject } from '@nestjs/common';
 import { IsEnum, IsOptional, IsString } from 'class-validator';
-import { AgentRunService } from '../../nodes/agentRun.repository';
+import { AgentRunService } from '../nodes/agentRun.repository';
 import { LiveGraphRuntime } from '../liveGraph.manager';
 
 // DTOs

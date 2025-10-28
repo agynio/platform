@@ -9,7 +9,7 @@ import { InfraModule } from '../infra/infra.module';
 import { NcpsKeyService } from '../infra/ncps/ncpsKey.service';
 import { LLMModule } from '../llm/llm.module';
 import { LLMProvisioner } from '../llm/provisioners/llm.provisioner';
-import { AgentRunService } from '../nodes/agentRun.repository';
+
 import { buildTemplateRegistry } from '../templates';
 import { GraphController } from './controllers/graph.controller';
 import { GraphPersistController } from './controllers/graphPersist.controller';
@@ -24,10 +24,27 @@ import { TemplateRegistry } from './templateRegistry';
 import { EnvModule } from '../env/env.module';
 import { NodeStateService } from './nodeState.service';
 import { GraphSocketGateway } from '../gateway/graph.socket.gateway';
+import { RemindersController } from './nodes/tools/remind_me/reminders.controller';
+import { AgentNode } from './nodes/agent/agent.node';
+import { MemoryNode } from './nodes/memory/memory.node';
+import { MemoryConnectorNode } from './nodes/memoryConnector/memoryConnector.node';
+import { WorkspaceNode } from './nodes/workspace/workspace.node';
+import { SlackTrigger } from './nodes/slackTrigger/slackTrigger.node';
+import { LocalMCPServer } from './nodes/mcp';
+import { ManageToolNode } from './nodes/tools/manage/manage.node';
+import { ManageFunctionTool } from './nodes/tools/manage/manage.tool';
+import { CallAgentNode } from './nodes/tools/call_agent/call_agent.node';
+import { FinishNode } from './nodes/tools/finish/finish.node';
+import { MemoryToolNode } from './nodes/tools/memory/memory.node';
+import { SendSlackMessageNode } from './nodes/tools/send_slack_message/send_slack_message.node';
+import { ShellCommandNode } from './nodes/tools/shell_command/shell_command.node';
+import { GithubCloneRepoNode } from './nodes/tools/github_clone_repo/github_clone_repo.node';
+import { RemindMeNode } from './nodes/tools/remind_me/remind_me.node';
+import { AgentRunService } from './nodes/agentRun.repository';
 
 @Module({
   imports: [CoreModule, InfraModule, LLMModule, EnvModule],
-  controllers: [RunsController, GraphPersistController, GraphController],
+  controllers: [RunsController, GraphPersistController, GraphController, RemindersController],
   providers: [
     {
       provide: GraphGuard,
@@ -77,87 +94,42 @@ import { GraphSocketGateway } from '../gateway/graph.socket.gateway';
       },
       inject: [ConfigService, LoggerService, MongoService, TemplateRegistry],
     },
-    // Bridge for NodeStateService to persist per-node state via repository interface
-    {
-      provide: 'GraphStateUpsertService',
-      useExisting: GraphRepository,
-    },
-    {
-      provide: LiveGraphRuntime,
-      useFactory: async (
-        logger: LoggerService,
-        templateRegistry: TemplateRegistry,
-        graphs: GraphRepository,
-        moduleRef: ModuleRef,
-      ) => {
-        const runtime = new LiveGraphRuntime(logger, templateRegistry, graphs, moduleRef);
-        await runtime.load();
-        return runtime;
-      },
-      inject: [LoggerService, TemplateRegistry, GraphRepository, ModuleRef],
-    },
-    {
-      provide: NodeStateService,
-      useFactory: (
-        graphs: GraphRepository,
-        runtime: LiveGraphRuntime,
-        logger: LoggerService,
-        gateway: GraphSocketGateway,
-      ) => new NodeStateService(graphs as any, runtime, logger, gateway),
-      inject: [GraphRepository, LiveGraphRuntime, LoggerService, GraphSocketGateway],
-    },
+    LiveGraphRuntime,
+    NodeStateService,
     GraphSocketGateway,
-    // Load and apply persisted graph to runtime at startup
-    // {
-    //   provide: 'LiveGraphRuntimeInitializer',
-    //   useFactory: async (logger: LoggerService, graphs: GraphRepository, runtime: LiveGraphRuntime) => {
-    //     const toRuntimeGraph = (saved: {
-    //       nodes: Array<{
-    //         id: string;
-    //         template: string;
-    //         config?: Record<string, unknown>;
-    //         state?: Record<string, unknown>;
-    //       }>;
-    //       edges: Array<{ source: string; sourceHandle: string; target: string; targetHandle: string }>;
-    //     }) =>
-    //       ({
-    //         nodes: saved.nodes.map((n) => ({
-    //           id: n.id,
-    //           data: { template: n.template, config: n.config, state: n.state },
-    //         })),
-    //         edges: saved.edges.map((e) => ({
-    //           source: e.source,
-    //           sourceHandle: e.sourceHandle,
-    //           target: e.target,
-    //           targetHandle: e.targetHandle,
-    //         })),
-    //       }) as GraphDefinition;
 
-    //     try {
-    //       const existing = await graphs.get('main');
-    //       if (existing) {
-    //         logger.info(
-    //           'Applying persisted graph to live runtime (version=%s, nodes=%d, edges=%d)',
-    //           existing.version,
-    //           existing.nodes.length,
-    //           existing.edges.length,
-    //         );
-    //         await runtime.apply(toRuntimeGraph(existing));
-    //         logger.info('Initial persisted graph applied successfully');
-    //       } else {
-    //         logger.info('No persisted graph found; starting with empty runtime graph.');
-    //       }
-    //     } catch (e) {
-    //       if (e instanceof GraphError) {
-    //         logger.error('Failed to apply initial persisted graph: %s. Cause: %s', e.message, (e as any)?.cause);
-    //       }
-    //       logger.error('Failed to apply initial persisted graph: %s', String(e));
-    //     }
-    //     return true;
-    //   },
-    //   inject: [LoggerService, GraphRepository, LiveGraphRuntime],
-    // },
-    AgentRunService,
+    //////// Nodes
+
+    // repositories/services
+    {
+      provide: AgentRunService,
+      useFactory: async (mongo: MongoService, logger: LoggerService) => {
+        const svc = new AgentRunService(mongo, logger);
+        await svc.ensureIndexes();
+        return svc;
+      },
+      inject: [MongoService, LoggerService],
+    },
+    // MemoryService removed from providers; created transiently via ModuleRef
+    // nodes
+    AgentNode,
+    MemoryNode,
+    MemoryConnectorNode,
+    WorkspaceNode,
+    SlackTrigger,
+    // mcp
+    LocalMCPServer,
+    // tools
+    // Do not provide abstract BaseToolNode
+    ManageToolNode,
+    ManageFunctionTool,
+    CallAgentNode,
+    FinishNode,
+    MemoryToolNode,
+    SendSlackMessageNode,
+    ShellCommandNode,
+    GithubCloneRepoNode,
+    RemindMeNode,
   ],
   exports: [LiveGraphRuntime, TemplateRegistry, PortsRegistry, GraphRepository, AgentRunService, NodeStateService],
 })

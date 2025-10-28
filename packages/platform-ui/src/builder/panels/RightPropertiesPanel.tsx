@@ -1,5 +1,5 @@
 import type { Node } from 'reactflow';
-import { useCallback, useEffect, useState, memo } from 'react';
+import { useCallback, useEffect, useState, memo, useMemo } from 'react';
 import type { TemplateNodeSchema } from '@agyn/shared';
 import { useTemplates } from '../useTemplates';
 // Runtime graph components & hooks
@@ -82,7 +82,10 @@ function RightPropertiesPanelBody({
     const isPaused = !!status?.isPaused;
     const detail = status?.provisionStatus?.details;
     const disableAll = state === 'deprovisioning';
-    const canStart = provisionable && ['not_ready', 'error', 'provisioning_error', 'deprovisioning_error'].includes(state) && !disableAll;
+    const canStart =
+      provisionable &&
+      ['not_ready', 'error', 'provisioning_error', 'deprovisioning_error'].includes(state) &&
+      !disableAll;
     const canStop = provisionable && (state === 'ready' || state === 'provisioning') && !disableAll;
     return (
       <div className="space-y-3 text-xs">

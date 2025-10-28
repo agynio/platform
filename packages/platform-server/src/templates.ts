@@ -1,17 +1,17 @@
 import { TemplateRegistry } from './graph';
 import { ModuleRef } from '@nestjs/core';
-import { AgentNode } from './nodes/agent/agent.node';
-import { WorkspaceNode } from './nodes/workspace/workspace.node';
+import { AgentNode } from './graph/nodes/agent/agent.node';
+import { WorkspaceNode } from './graph/nodes/workspace/workspace.node';
 
-import { LocalMCPServer } from './nodes/mcp/localMcpServer.node';
-import { MemoryNode } from './nodes/memory/memory.node';
-import { MemoryConnectorNode } from './nodes/memoryConnector/memoryConnector.node';
-import { SlackTrigger } from './nodes/slackTrigger/slackTrigger.node';
-import { CallAgentTool } from './nodes/tools/call_agent/call_agent.node';
-import { FinishTool } from './nodes/tools/finish/finish.node';
-import { GithubCloneRepoNode } from './nodes/tools/github_clone_repo/github_clone_repo.node';
-import { ManageToolNode } from './nodes/tools/manage/manage.node';
-import { MemoryToolNode } from './nodes/tools/memory/memory.node';
+import { LocalMCPServer } from './graph/nodes/mcp/localMcpServer.node';
+import { MemoryNode } from './graph/nodes/memory/memory.node';
+import { MemoryConnectorNode } from './graph/nodes/memoryConnector/memoryConnector.node';
+import { SlackTrigger } from './graph/nodes/slackTrigger/slackTrigger.node';
+import { CallAgentTool } from './graph/nodes/tools/call_agent/call_agent.node';
+import { FinishTool } from './graph/nodes/tools/finish/finish.node';
+import { GithubCloneRepoNode } from './graph/nodes/tools/github_clone_repo/github_clone_repo.node';
+import { ManageToolNode } from './graph/nodes/tools/manage/manage.node';
+import { MemoryToolNode } from './graph/nodes/tools/memory/memory.node';
 
 import { ConfigService } from './core/services/config.service';
 import { LoggerService } from './core/services/logger.service';
@@ -20,9 +20,9 @@ import { MongoService } from './core/services/mongo.service';
 import { ContainerService } from './infra/container/container.service';
 import { NcpsKeyService } from './infra/ncps/ncpsKey.service';
 import { LLMProvisioner } from './llm/provisioners/llm.provisioner';
-import { RemindMeNode } from './nodes/tools/remind_me/remind_me.node';
-import { SendSlackMessageTool } from './nodes/tools/send_slack_message/send_slack_message.node';
-import { ShellCommandNode } from './nodes/tools/shell_command/shell_command.node';
+import { RemindMeNode } from './graph/nodes/tools/remind_me/remind_me.node';
+import { SendSlackMessageTool } from './graph/nodes/tools/send_slack_message/send_slack_message.node';
+import { ShellCommandNode } from './graph/nodes/tools/shell_command/shell_command.node';
 // Unified Memory tool
 
 export interface TemplateRegistryDeps {
