@@ -30,7 +30,7 @@ import { SummarizationLLMReducer } from '../../llm/reducers/summarization.llm.re
 import { Signal } from '../../signal';
 
 import { BaseToolNode } from '../tools/baseToolNode';
-import { MessagesBuffer } from './messagesBuffer';
+import { MessagesBuffer, type TriggerMessage, ProcessBuffer } from './messagesBuffer';
 
 /**
  * Zod schema describing static configuration for Agent.
@@ -219,20 +219,19 @@ export class AgentNode extends Node<AgentStaticConfig> {
     const toSummarize = await this.moduleRef.create(StaticLLMRouter);
     toSummarize.init('summarize');
     // Wrap tools_save to inject after-tools messages into state before summarization
-    toolsSave.next({
-      async route(state, ctx) {
-        if ((this as any).agent?.config?.whenBusy === 'injectAfterTools') {
-          const drained = (this as any).agent?.buffer?.tryDrain(ctx.threadId, ProcessBuffer.AllTogether) || [];
+    const self = this;
+    toolsSave.next(new (class extends (await import('../../llm/router')).Router<LLMState, LLMContext> {
+      async route(state: LLMState, ctx: LLMContext): Promise<{ state: LLMState; next: string | null }> {
+        if (self.config.whenBusy === 'injectAfterTools') {
+          const drained = self.buffer.tryDrain(ctx.threadId, ProcessBuffer.AllTogether);
           if (drained.length > 0) {
             const injected = drained.map((d) => HumanMessage.fromText(JSON.stringify(d)));
             state = { ...state, messages: [...state.messages, ...injected] };
           }
         }
         return { state, next: 'summarize' };
-      },
-      hasNext() { return true; },
-      getNextRouter() { return toSummarize; },
-    } as any);
+      }
+    })());
 
     // save -> enforceTools (if enabled) or end (static)
     reducers['save'] = (await this.moduleRef.create(SaveLLMReducer)).next(
@@ -278,8 +277,14 @@ export class AgentNode extends Node<AgentStaticConfig> {
         const loop = await this.prepareLoop();
         // Drain buffer per config
         const mode = (this.config.processBuffer ?? 'allTogether') === 'allTogether' ? 'allTogether' : 'oneByOne';
-        const drained = this.buffer.tryDrain(thread, mode === 'allTogether' ? ProcessBuffer.AllTogether : ProcessBuffer.OneByOne);
-        const toProcess = drained.length > 0 ? drained : incoming.map((msg) => ({ kind: 'human', content: msg.content, info: msg.info }));
+        const drained: TriggerMessage[] = this.buffer.tryDrain(
+          thread,
+          mode === 'allTogether' ? ProcessBuffer.AllTogether : ProcessBuffer.OneByOne,
+        );
+        const toProcess: TriggerMessage[] =
+          drained.length > 0
+            ? drained
+            : incoming.map((msg) => ({ kind: 'human', content: msg.content, info: msg.info }));
         const history: HumanMessage[] = toProcess.map((msg) => HumanMessage.fromText(JSON.stringify(msg)));
         const finishSignal = new Signal();
 

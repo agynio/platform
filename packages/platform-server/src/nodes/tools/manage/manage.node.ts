@@ -4,7 +4,7 @@ import { ManageFunctionTool } from './manage.tool';
 import { LoggerService } from '../../../core/services/logger.service';
 import { AgentNode } from '../../agent/agent.node';
 import { Inject, Injectable, Scope } from '@nestjs/common';
-import { ModuleRef } from '@nestjs/core';
+import type { ModuleRef } from '@nestjs/core';
 
 export const ManageToolStaticConfigSchema = z
   .object({
@@ -17,19 +17,26 @@ export const ManageToolStaticConfigSchema = z
   })
   .strict();
 
+export interface ManageableAgent {
+  // minimal surface used by ManageFunctionTool
+  invoke: (thread: string, messages: Array<{ content: string; info?: Record<string, unknown> }> | { content: string; info?: Record<string, unknown> }) => Promise<unknown>;
+  listActiveThreads: (prefix?: string) => Promise<string[]> | string[];
+  getAgentNodeId?: () => string | undefined;
+}
+
 @Injectable({ scope: Scope.TRANSIENT })
 export class ManageToolNode extends BaseToolNode<z.infer<typeof ManageToolStaticConfigSchema>> {
   private tool?: ManageFunctionTool;
-  private readonly workers: { name: string; agent: AgentNode }[] = [];
+  private readonly workers: { name: string; agent: ManageableAgent }[] = [];
 
   constructor(
     @Inject(LoggerService) private readonly logger: LoggerService,
-    private readonly module: ModuleRef,
+    @Inject(ManageFunctionTool) private readonly manageTool: ManageFunctionTool,
   ) {
     super();
   }
 
-  addWorker(name: string, agent: AgentNode) {
+  addWorker(name: string, agent: ManageableAgent) {
     const existing = this.workers.find((w) => w.name === name);
     if (existing) throw new Error(`Worker with name ${name} already exists`);
     this.workers.push({ name, agent });
@@ -45,9 +52,7 @@ export class ManageToolNode extends BaseToolNode<z.infer<typeof ManageToolStatic
   }
 
   protected createTool() {
-    const tool = this.module.get(ManageFunctionTool, { strict: false } as any);
-    if (!tool) throw new Error('ManageFunctionTool provider not found');
-    return tool.init(this);
+    return this.manageTool.init(this);
   }
 
   getTool() {

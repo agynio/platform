@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { LoggerService } from '../src/core/services/logger.service.js';
-import { ManageToolNode } from '../src/nodes/tools/manage/manage.node';
+import { ManageToolNode, type ManageableAgent } from '../src/nodes/tools/manage/manage.node';
 import { ManageFunctionTool } from '../src/nodes/tools/manage/manage.tool';
 import { TemplateRegistry } from '../src/graph/templateRegistry';
 import type { ModuleRef } from '@nestjs/core';
@@ -8,7 +8,7 @@ import { LiveGraphRuntime } from '../src/graph/liveGraph.manager';
 
 type Msg = { content: string; info?: Record<string, unknown> };
 
-class FakeAgent {
+class FakeAgent implements ManageableAgent {
   public name?: string;
   private active: Set<string> = new Set();
   private id?: string;
@@ -22,7 +22,7 @@ class FakeAgent {
   getAgentNodeId(): string | undefined {
     return this.id;
   }
-  async invoke(thread: string, _messages: Msg[]): Promise<{ text: string }> {
+  async invoke(thread: string, _messages: Msg[] | Msg): Promise<{ text: string }> {
     this.active.add(thread);
     // simulate work done
     return { text: `ok-${thread}` };
@@ -39,20 +39,20 @@ class FakeAgent {
 describe('ManageTool unit', () => {
   it('list: empty then after connecting multiple agents (use node ids when available)', async () => {
     const logger = new LoggerService();
-    const node = new ManageToolNode(logger, { get: (_: any) => new ManageFunctionTool(logger), create: (_: any) => new ManageFunctionTool(logger) } as any);
+    const node = new ManageToolNode(logger, new ManageFunctionTool(logger));
     await node.setConfig({ description: 'desc' });
     const tool: ManageFunctionTool = node.getTool();
 
-    const empty = JSON.parse(await tool.execute({ command: 'list', parentThreadId: 'p' } as any));
+    const empty = JSON.parse(await tool.execute({ command: 'list', parentThreadId: 'p' }));
     expect(Array.isArray(empty)).toBe(true);
     expect(empty.length).toBe(0);
 
     const a1 = new FakeAgent('agent-A');
     const a2 = new FakeAgent();
-    node.addWorker('agent-A', a1 as any);
-    node.addWorker('agent_1', a2 as any);
+    node.addWorker('agent-A', a1);
+    node.addWorker('agent_1', a2);
 
-    const after = JSON.parse(await tool.execute({ command: 'list', parentThreadId: 'p' } as any));
+    const after = JSON.parse(await tool.execute({ command: 'list', parentThreadId: 'p' }));
     const names: string[] = after;
     expect(names).toContain('agent-A');
     // either agent_1 or agent_2 depending on ordering, ensure one fallback exists
@@ -62,32 +62,32 @@ describe('ManageTool unit', () => {
 
   it('send_message: routes to `${parent}__${worker}` and returns text', async () => {
     const logger = new LoggerService();
-    const node = new ManageToolNode(logger, { get: (_: any) => new ManageFunctionTool(logger), create: (_: any) => new ManageFunctionTool(logger) } as any);
+    const node = new ManageToolNode(logger, new ManageFunctionTool(logger));
     await node.setConfig({ description: 'desc' });
     const a = new FakeAgent('child-1');
-    node.addWorker('child-1', a as any);
+    node.addWorker('child-1', a);
     const tool = node.getTool();
-    const res = await tool.execute({ command: 'send_message', worker: 'child-1', message: 'hello', parentThreadId: 'parent' } as any);
+    const res = await tool.execute({ command: 'send_message', worker: 'child-1', message: 'hello', parentThreadId: 'parent' });
     expect(res).toBe('ok-parent__child-1');
   });
 
   it('send_message: parameter validation and unknown worker', async () => {
-    const node = new ManageToolNode(new LoggerService(), { get: (_: any) => new ManageFunctionTool(new LoggerService()), create: (_: any) => new ManageFunctionTool(new LoggerService()) } as any);
+    const node = new ManageToolNode(new LoggerService(), new ManageFunctionTool(new LoggerService()));
     await node.setConfig({ description: 'd' });
     const tool = node.getTool();
-    await expect(tool.execute({ command: 'send_message', worker: 'x', parentThreadId: 'p' } as any)).rejects.toBeTruthy();
+    await expect(tool.execute({ command: 'send_message', worker: 'x', parentThreadId: 'p' })).rejects.toBeTruthy();
     const a = new FakeAgent('w1');
-    node.addWorker('w1', a as any);
-    await expect(tool.execute({ command: 'send_message', worker: 'unknown', message: 'm', parentThreadId: 'p' } as any)).rejects.toBeTruthy();
+    node.addWorker('w1', a);
+    await expect(tool.execute({ command: 'send_message', worker: 'unknown', message: 'm', parentThreadId: 'p' })).rejects.toBeTruthy();
   });
 
   it('check_status: aggregates active child threads scoped to current thread', async () => {
-    const node = new ManageToolNode(new LoggerService(), { get: (_: any) => new ManageFunctionTool(new LoggerService()), create: (_: any) => new ManageFunctionTool(new LoggerService()) } as any);
+    const node = new ManageToolNode(new LoggerService(), new ManageFunctionTool(new LoggerService()));
     await node.setConfig({ description: 'desc' });
     const a1 = new FakeAgent('A');
     const a2 = new FakeAgent('B');
-    node.addWorker('A', a1 as any);
-    node.addWorker('B', a2 as any);
+    node.addWorker('A', a1);
+    node.addWorker('B', a2);
     // Mark some running threads
     a1.markRunning('p__A');
     a1.markRunning('p__A-task2'); // not strictly matching naming, but includes prefix
@@ -95,7 +95,7 @@ describe('ManageTool unit', () => {
     a2.markRunning('q__B'); // different parent, should be ignored
 
     const tool = node.getTool();
-    const status = JSON.parse(await tool.execute({ command: 'check_status', parentThreadId: 'p' } as any)) as {
+    const status = JSON.parse(await tool.execute({ command: 'check_status', parentThreadId: 'p' })) as {
       activeTasks: number;
       childThreadIds: string[];
     };
@@ -108,15 +108,15 @@ describe('ManageTool unit', () => {
   });
 
   it('throws when runtime configurable.thread_id is missing', async () => {
-    const node = new ManageToolNode(new LoggerService(), { get: (_: any) => new ManageFunctionTool(new LoggerService()), create: (_: any) => new ManageFunctionTool(new LoggerService()) } as any);
+    const node = new ManageToolNode(new LoggerService(), new ManageFunctionTool(new LoggerService()));
     await node.setConfig({ description: 'desc' });
     const tool = node.getTool();
-    await expect(tool.execute({ command: 'list' } as any)).rejects.toBeTruthy();
+    await expect(tool.execute({ command: 'list' })).rejects.toBeTruthy();
   });
 
   it('throws when child agent invoke fails (send_message)', async () => {
     const logger = new LoggerService();
-    const node = new ManageToolNode(logger, { get: (_: any) => new ManageFunctionTool(logger), create: (_: any) => new ManageFunctionTool(logger) } as any);
+    const node = new ManageToolNode(logger, new ManageFunctionTool(logger));
     await node.setConfig({ description: 'desc' });
     class ThrowingAgent extends FakeAgent {
       override async invoke(_thread: string, _messages: Msg[]): Promise<{ text: string }> {
@@ -124,9 +124,9 @@ describe('ManageTool unit', () => {
       }
     }
     const a = new ThrowingAgent('W');
-    node.addWorker('W', a as any);
+    node.addWorker('W', a);
     const tool = node.getTool();
-    await expect(tool.execute({ command: 'send_message', worker: 'W', message: 'go', parentThreadId: 'p' } as any)).rejects.toBeTruthy();
+    await expect(tool.execute({ command: 'send_message', worker: 'W', message: 'go', parentThreadId: 'p' })).rejects.toBeTruthy();
   });
 });
 
@@ -139,9 +139,9 @@ describe('ManageTool graph wiring', () => {
       getPortConfig() { return { sourcePorts: { tools: { kind: 'method', create: 'addTool', destroy: 'removeTool' } }, targetPorts: { $self: { kind: 'instance' } } } as const; }
     }
     const moduleRef: ModuleRef = {
-      create: (Cls: any) => new (Cls as any)(logger, { get: (_t: any) => new ManageFunctionTool(logger), create: (_: any) => new ManageFunctionTool(logger) }),
+      create: (Cls: any) => new (Cls as any)(logger, new ManageFunctionTool(logger)),
       get: (_token: any) => new ManageFunctionTool(logger),
-    } as any;
+    } as unknown as ModuleRef;
     const registry = new TemplateRegistry(moduleRef);
 
     registry
@@ -159,7 +159,7 @@ describe('ManageTool graph wiring', () => {
         },
         upsertNodeState: async () => {},
       } as any,
-      { create: (Cls: any) => new (Cls as any)(logger, { get: (_t: any) => new ManageFunctionTool(logger), create: (_: any) => new ManageFunctionTool(logger) }), get: (_token: any) => new ManageFunctionTool(logger) } as any,
+      { create: (Cls: any) => new (Cls as any)(logger, new ManageFunctionTool(logger)), get: (_token: any) => new ManageFunctionTool(logger) } as unknown as ModuleRef,
     );
     const graph = {
       nodes: [
@@ -179,7 +179,7 @@ describe('ManageTool graph wiring', () => {
     const toolInst: ManageToolNode = toolNode?.instance as ManageToolNode;
 
     const tool = toolInst.getTool();
-    const list = JSON.parse(await tool.execute({ command: 'list', parentThreadId: 'p' } as any));
+    const list = JSON.parse(await tool.execute({ command: 'list', parentThreadId: 'p' }));
     expect(Array.isArray(list)).toBe(true);
   });
 });

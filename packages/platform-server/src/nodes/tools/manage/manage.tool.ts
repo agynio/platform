@@ -74,9 +74,10 @@ export class ManageFunctionTool extends FunctionTool<typeof ManageInvocationSche
       if (!workers.length) return JSON.stringify({ activeTasks: 0, childThreadIds: [] });
       const prefix = `${parentThreadId}__`;
       const ids = new Set<string>();
-      for (const w of workers) {
+      const promises = workers.map(async (w) => {
         try {
-          const threads = (await Promise.resolve(w.agent.listActiveThreads(prefix))) || [];
+          const res = await Promise.resolve(w.agent.listActiveThreads(prefix));
+          const threads = Array.isArray(res) ? res : [];
           for (const t of threads) if (t.startsWith(prefix)) ids.add(t.slice(prefix.length));
         } catch (err: unknown) {
           this.logger.error('Manage: listActiveThreads failed', {
@@ -84,7 +85,8 @@ export class ManageFunctionTool extends FunctionTool<typeof ManageInvocationSche
             error: (err as { message?: string })?.message || String(err),
           });
         }
-      }
+      });
+      await Promise.all(promises);
       return JSON.stringify({ activeTasks: ids.size, childThreadIds: Array.from(ids.values()) });
     }
     return '';
