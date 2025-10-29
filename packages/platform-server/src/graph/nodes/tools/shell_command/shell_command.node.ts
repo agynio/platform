@@ -39,7 +39,6 @@ export const ShellToolStaticConfigSchema = z
 @Injectable({ scope: Scope.TRANSIENT })
 export class ShellCommandNode extends BaseToolNode<z.infer<typeof ShellToolStaticConfigSchema>> {
   private containerProvider?: WorkspaceNode;
-  private cfg?: z.infer<typeof ShellToolStaticConfigSchema>;
   private toolInstance?: ShellCommandTool;
 
   constructor(
@@ -68,14 +67,8 @@ export class ShellCommandNode extends BaseToolNode<z.infer<typeof ShellToolStati
     return this.toolInstance;
   }
 
-  async setConfig(_cfg: Record<string, unknown>): Promise<void> {
-    const parsed = ShellToolStaticConfigSchema.safeParse(_cfg);
-    if (!parsed.success) throw new Error(`Invalid Shell tool config: ${parsed.error.message}`);
-    this.cfg = parsed.data;
-  }
-
   async resolveEnv(base?: Record<string, string>): Promise<Record<string, string> | undefined> {
-    const items: EnvItem[] = (this.cfg?.env || []) as EnvItem[];
+    const items: EnvItem[] = (this.config?.env || []) as EnvItem[];
     try {
       return await this.envService.resolveProviderEnv(items, undefined, base);
     } catch {
@@ -92,12 +85,6 @@ export class ShellCommandNode extends BaseToolNode<z.infer<typeof ShellToolStati
     }
   }
 
-  // Expose config for tool
-  get config(): z.infer<typeof ShellToolStaticConfigSchema> {
-    return (this.cfg || { executionTimeoutMs: 60 * 60 * 1000, idleTimeoutMs: 60 * 1000 }) as z.infer<
-      typeof ShellToolStaticConfigSchema
-    >;
-  }
   get provider(): WorkspaceNode | undefined {
     return this.containerProvider;
   }

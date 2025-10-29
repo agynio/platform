@@ -64,11 +64,9 @@ export class LocalMCPServerNode extends Node<z.infer<typeof LocalMcpServerStatic
   }
 
   private buildExecConfig(command: string, envOverlay?: Record<string, string>) {
-    const cfg = this.config;
-    if (!cfg) throw new Error('LocalMCPServer: config not yet set via setConfig');
     const cmdToRun = command;
     const envArr = envOverlay ? Object.entries(envOverlay).map(([k, v]) => `${k}=${v}`) : undefined;
-    return { cmdToRun, envArr, workdir: cfg.workdir };
+    return { cmdToRun, envArr, workdir: this.config.workdir };
   }
   /**
    * Lifecycle (post-refactor single discovery path):
@@ -202,9 +200,8 @@ export class LocalMCPServerNode extends Node<z.infer<typeof LocalMcpServerStatic
     const tempContainer = await this.containerProvider.provide(`_discovery_temp_${uuidv4()}`);
     const tempContainerId = tempContainer.id;
 
-    const cfg = this.config;
-    if (!cfg) throw new Error('LocalMCPServer: config not yet set via setConfig');
-    const command = cfg.command ?? DEFAULT_MCP_COMMAND;
+    if (!this.config) throw new Error('LocalMCPServer: config not yet set via setConfig');
+    const command = this.config.command ?? DEFAULT_MCP_COMMAND;
     const envOverlay = await this.resolveEnvOverlay();
     const { cmdToRun, envArr, workdir } = this.buildExecConfig(command, envOverlay);
     const docker = this.containerService.getDocker();
@@ -248,11 +245,11 @@ export class LocalMCPServerNode extends Node<z.infer<typeof LocalMcpServerStatic
 
       tempClient = new Client({ name: 'local-agent-discovery', version: '0.1.0' });
       this.logger.info(`[MCP:${this.config.namespace}] [disc:${discoveryId}] Connecting for tool discovery`);
-      await tempClient.connect(tempTransport, { timeout: cfg.startupTimeoutMs ?? 15000 });
+      await tempClient.connect(tempTransport, { timeout: this.config.startupTimeoutMs ?? 15000 });
       this.logger.info(`[MCP:${this.config.namespace}] [disc:${discoveryId}] Handshake complete`);
 
       // Fetch tools
-      const result = await tempClient.listTools({}, { timeout: cfg.requestTimeoutMs ?? 15000 });
+      const result = await tempClient.listTools({}, { timeout: this.config.requestTimeoutMs ?? 15000 });
       this.logger.debug(
         `[MCP:${this.config.namespace}] Discovered tools: ${JSON.stringify(result.tools.map((t) => t.name))}`,
       );
@@ -404,9 +401,8 @@ export class LocalMCPServerNode extends Node<z.infer<typeof LocalMcpServerStatic
     } catch {}
     const containerId = container.id;
 
-    const cfg = this.config;
-    if (!cfg) throw new Error('LocalMCPServer: config not yet set via setConfig');
-    const command = cfg.command ?? DEFAULT_MCP_COMMAND;
+    if (!this.config) throw new Error('LocalMCPServer: config not yet set via setConfig');
+    const command = this.config.command ?? DEFAULT_MCP_COMMAND;
     const envOverlay = await this.resolveEnvOverlay();
     const { cmdToRun, envArr, workdir } = this.buildExecConfig(command, envOverlay);
     const docker = this.containerService.getDocker();
@@ -451,9 +447,9 @@ export class LocalMCPServerNode extends Node<z.infer<typeof LocalMcpServerStatic
       await transport.start();
 
       client = new Client({ name: `local-agent-${threadId}`, version: '0.1.0' });
-      await client.connect(transport, { timeout: cfg.startupTimeoutMs ?? 15000 });
+      await client.connect(transport, { timeout: this.config.startupTimeoutMs ?? 15000 });
       // Heartbeat: keep last_used_at fresh during the session
-      const hbInterval = Math.max(60_000, cfg.heartbeatIntervalMs ?? 300_000);
+      const hbInterval = Math.max(60_000, this.config.heartbeatIntervalMs ?? 300_000);
       hbTimer = setInterval(() => {
         this.containerService.touchLastUsed(containerId).catch(() => {});
       }, hbInterval);
@@ -461,7 +457,7 @@ export class LocalMCPServerNode extends Node<z.infer<typeof LocalMcpServerStatic
       // Call the tool
       const argObj: Record<string, unknown> = args && typeof args === 'object' ? (args as Record<string, unknown>) : {};
       const result = await client.callTool({ name, arguments: argObj }, undefined, {
-        timeout: options?.timeoutMs ?? cfg.requestTimeoutMs ?? 30000,
+        timeout: options?.timeoutMs ?? this.config.requestTimeoutMs ?? 30000,
       });
 
       const rawResult: unknown = result as unknown;
@@ -641,8 +637,7 @@ export class LocalMCPServerNode extends Node<z.infer<typeof LocalMcpServerStatic
       this.logger.debug(`[MCP:${this.config.namespace}] [try:${seq}] already started; aborting try.`);
       return;
     }
-    const cfg = this.config;
-    if (!cfg || !this.containerProvider || !cfg.command) {
+    if (!this.config || !this.containerProvider || !this.config.command) {
       // Poll for dependencies until a timeout
       const depTimeoutMs = 30000;
       if (!this.dependencyTimeoutTimer) {
@@ -656,7 +651,7 @@ export class LocalMCPServerNode extends Node<z.infer<typeof LocalMcpServerStatic
         }, depTimeoutMs);
       }
       this.logger.debug(
-        `[MCP:${this.config.namespace}] [try:${seq}] Waiting for dependencies (cfg=${!!cfg} provider=${!!this.containerProvider} command=${!!cfg?.command})`,
+        `[MCP:${this.config.namespace}] [try:${seq}] Waiting for dependencies (cfg=${!!this.config} provider=${!!this.containerProvider} command=${!!this.config?.command})`,
       );
       this.startRetryTimer = setTimeout(() => {
         this.startRetryTimer = undefined;
@@ -672,7 +667,7 @@ export class LocalMCPServerNode extends Node<z.infer<typeof LocalMcpServerStatic
       this.dependencyTimeoutTimer = undefined;
     }
 
-    const restartCfg = cfg.restart || { maxAttempts: 5, backoffMs: 2000 };
+    const restartCfg = this.config.restart || { maxAttempts: 5, backoffMs: 2000 };
     const attempt = this.restartAttempts + 1;
     this.logger.info(
       `[MCP:${this.config.namespace}] Start attempt ${attempt}/${restartCfg.maxAttempts} (trySeq=${seq})`,

@@ -21,7 +21,7 @@ export const MemoryToolNodeStaticConfigSchema = z
 @Injectable({ scope: Scope.TRANSIENT })
 export class MemoryToolNode extends BaseToolNode<z.infer<typeof MemoryToolNodeStaticConfigSchema>> {
   private toolInstance?: UnifiedMemoryFunctionTool;
-  private staticCfg: z.infer<typeof MemoryToolNodeStaticConfigSchema> = {};
+
   private memoryFactory?: (opts: { threadId?: string }) => MemoryService;
   constructor(@Inject(LoggerService) protected logger: LoggerService) {
     super(logger);
@@ -37,17 +37,12 @@ export class MemoryToolNode extends BaseToolNode<z.infer<typeof MemoryToolNodeSt
     else throw new Error('Invalid memory source');
     this.toolInstance = undefined;
   }
-  async setConfig(cfg: Record<string, unknown>): Promise<void> {
-    const parsed = MemoryToolNodeStaticConfigSchema.safeParse(cfg || {});
-    if (!parsed.success) throw new Error('Invalid Memory node config');
-    this.staticCfg = parsed.data;
-    this.toolInstance = undefined;
-  }
+
   getTool(): UnifiedMemoryFunctionTool {
     if (!this.toolInstance) {
       this.toolInstance = new UnifiedMemoryFunctionTool({
-        getDescription: () => this.staticCfg.description || 'Unified Memory tool: read, list, append, update, delete',
-        getName: () => this.staticCfg.name || 'memory',
+        getDescription: () => this.config.description || 'Unified Memory tool: read, list, append, update, delete',
+        getName: () => this.config.name || 'memory',
         getMemoryFactory: () => this.memoryFactory,
         logger: this.logger,
       });

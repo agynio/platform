@@ -2,7 +2,8 @@ import { z } from 'zod';
 import { MemoryService } from '../../nodes/memory.repository';
 import Node from '../base/Node';
 import { SystemMessage } from '@agyn/llm';
-import { Injectable, Scope } from '@nestjs/common';
+import { Inject, Injectable, Scope } from '@nestjs/common';
+import { LoggerService } from '../../../core/services/logger.service';
 
 // Static config exposed to UI for MemoryConnectorNode
 export const MemoryConnectorStaticConfigSchema = z
@@ -18,24 +19,19 @@ export type MemoryConnectorStaticConfig = z.infer<typeof MemoryConnectorStaticCo
 export class MemoryConnectorNode extends Node<MemoryConnectorStaticConfig> {
   private getMemoryServiceFn?: (opts: { threadId?: string }) => MemoryService;
 
-  constructor() {
-    super();
+  constructor(@Inject(LoggerService) protected logger: LoggerService) {
+    super(logger);
   }
 
   init(params: { nodeId: string }): void {
     super.init(params);
   }
 
-  protected _config: MemoryConnectorStaticConfig = { placement: 'after_system', content: 'tree', maxChars: 4000 } as MemoryConnectorStaticConfig;
-
-  async setConfig(cfg: Record<string, unknown>): Promise<void> {
-    const next: Partial<MemoryConnectorStaticConfig> = {};
-    const o = (cfg || {}) as Partial<MemoryConnectorStaticConfig>;
-    if (o.placement !== undefined) next.placement = o.placement;
-    if (o.content !== undefined) next.content = o.content as any;
-    if (o.maxChars !== undefined) next.maxChars = o.maxChars as any;
-    this._config = { ...this._config, ...next } as MemoryConnectorStaticConfig;
-  }
+  protected _config: MemoryConnectorStaticConfig = {
+    placement: 'after_system',
+    content: 'tree',
+    maxChars: 4000,
+  } as MemoryConnectorStaticConfig;
 
   getPlacement(): MemoryConnectorStaticConfig['placement'] {
     return this._config.placement;
@@ -96,9 +92,15 @@ export class MemoryConnectorNode extends Node<MemoryConnectorStaticConfig> {
       sourcePorts: { $self: { kind: 'instance' } },
     } as const;
   }
-  setMemorySource(source: { getMemoryService: (opts: { threadId?: string }) => MemoryService } | ((opts: { threadId?: string }) => MemoryService)) {
-    if (typeof source === 'function') this.getMemoryServiceFn = source as (opts: { threadId?: string }) => MemoryService;
-    else if (source && typeof source.getMemoryService === 'function') this.getMemoryServiceFn = (opts) => source.getMemoryService(opts);
+  setMemorySource(
+    source:
+      | { getMemoryService: (opts: { threadId?: string }) => MemoryService }
+      | ((opts: { threadId?: string }) => MemoryService),
+  ) {
+    if (typeof source === 'function')
+      this.getMemoryServiceFn = source as (opts: { threadId?: string }) => MemoryService;
+    else if (source && typeof source.getMemoryService === 'function')
+      this.getMemoryServiceFn = (opts) => source.getMemoryService(opts);
     else throw new Error('Invalid memory source');
   }
 }

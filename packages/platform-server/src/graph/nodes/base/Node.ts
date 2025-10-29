@@ -42,8 +42,7 @@ export abstract class Node<TConfig = unknown> extends EventEmitter {
   }
   protected emitConfigChanged(): void {
     const at = Date.now();
-    const cfg = this._config && typeof this._config === 'object' ? { ...(this._config as object) } : this._config;
-    this.emit('config_changed', { config: cfg as TConfig, at } satisfies ConfigChangedEvent<TConfig>);
+    this.emit('config_changed', { config: this.config, at } satisfies ConfigChangedEvent<TConfig>);
   }
 
   protected setStatus(next: NodeStatusState): void {
