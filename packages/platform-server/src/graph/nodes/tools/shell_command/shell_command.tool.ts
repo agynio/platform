@@ -9,6 +9,8 @@ import {
   isExecTimeoutError,
 } from '../../../../utils/execTimeout';
 import { ShellCommandNode, ShellToolStaticConfigSchema } from './shell_command.node';
+import { randomUUID } from 'node:crypto';
+import { promises as fs } from 'node:fs';
 
 // Schema for tool arguments
 export const bashCommandSchema = z.object({
@@ -94,6 +96,14 @@ export class ShellCommandTool extends FunctionTool<typeof bashCommandSchema> {
 
     const cleanedStdout = this.stripAnsi(response.stdout);
     const cleanedStderr = this.stripAnsi(response.stderr);
+    const combined = `${cleanedStdout}${cleanedStderr}`;
+    const limit = typeof cfg.outputLimitChars === 'number' ? cfg.outputLimitChars : 0;
+    if (limit > 0 && combined.length > limit) {
+      const id = randomUUID();
+      const path = `/tmp/${id}.txt`;
+      await fs.writeFile(path, combined, { mode: 0o600 });
+      return `Error: output length exceeds ${limit} characters. It was saved on disk: ${path}`;
+    }
     if (response.exitCode !== 0) {
       return `Error (exit code ${response.exitCode}):\n${cleanedStdout}\n${cleanedStderr}`;
     }
