@@ -1,4 +1,4 @@
-import { McpServer } from '../mcp';
+import { LocalMCPServerNode } from '../mcp';
 
 import { ConfigService } from '../../../core/services/config.service';
 import { LoggerService } from '../../../core/services/logger.service';
@@ -107,7 +107,7 @@ import { AgentRunService } from '../agentRun.repository';
 export class AgentNode extends Node<AgentStaticConfig> {
   protected buffer = new MessagesBuffer({ debounceMs: 0 });
 
-  private mcpServerTools: Map<McpServer, FunctionTool[]> = new Map();
+  private mcpServerTools: Map<LocalMCPServerNode, FunctionTool[]> = new Map();
   private tools: Set<FunctionTool> = new Set();
 
   constructor(
@@ -350,7 +350,7 @@ export class AgentNode extends Node<AgentStaticConfig> {
     this.logger.info(`Tool removed from Agent: ${toolNode?.constructor?.name || 'UnknownTool'}`);
   }
 
-  async addMcpServer(server: McpServer): Promise<void> {
+  async addMcpServer(server: LocalMCPServerNode): Promise<void> {
     const namespace = server.namespace;
     if (this.mcpServerTools.has(server)) {
       this.logger.debug?.(`MCP server ${namespace} already added; skipping duplicate add.`);
@@ -372,14 +372,14 @@ export class AgentNode extends Node<AgentStaticConfig> {
     sync();
   }
 
-  async removeMcpServer(server: McpServer): Promise<void> {
+  async removeMcpServer(server: LocalMCPServerNode): Promise<void> {
     const tools = this.mcpServerTools.get(server);
     if (tools && tools.length) for (const tool of tools) this.tools.delete(tool);
     this.mcpServerTools.delete(server);
   }
 
   // Sync MCP tools from the given server and reconcile add/remove
-  private syncMcpToolsFromServer(server: McpServer): void {
+  private syncMcpToolsFromServer(server: LocalMCPServerNode): void {
     try {
       const namespace = server.namespace;
       const latest: FunctionTool[] = server.listTools();
@@ -399,7 +399,7 @@ export class AgentNode extends Node<AgentStaticConfig> {
       for (const t of latest) {
         if (!prevNames.has(t.name)) {
           this.tools.add(t);
-          this.logger.debug?.(`Agent: MCP tool added (${namespace}/${t.name})`);
+          this.logger.debug(`Agent: MCP tool added (${namespace}/${t.name})`);
         }
       }
 

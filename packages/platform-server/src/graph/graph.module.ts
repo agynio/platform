@@ -30,7 +30,7 @@ import { MemoryNode } from './nodes/memory/memory.node';
 import { MemoryConnectorNode } from './nodes/memoryConnector/memoryConnector.node';
 import { WorkspaceNode } from './nodes/workspace/workspace.node';
 import { SlackTrigger } from './nodes/slackTrigger/slackTrigger.node';
-import { LocalMCPServer } from './nodes/mcp';
+import { LocalMCPServerNode } from './nodes/mcp';
 import { ManageToolNode } from './nodes/tools/manage/manage.node';
 import { ManageFunctionTool } from './nodes/tools/manage/manage.tool';
 import { CallAgentNode } from './nodes/tools/call_agent/call_agent.node';
@@ -118,7 +118,7 @@ import { AgentRunService } from './nodes/agentRun.repository';
     WorkspaceNode,
     SlackTrigger,
     // mcp
-    LocalMCPServer,
+    LocalMCPServerNode,
     // tools
     // Do not provide abstract BaseToolNode
     ManageToolNode,

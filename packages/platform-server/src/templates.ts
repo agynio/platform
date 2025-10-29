@@ -3,7 +3,7 @@ import { ModuleRef } from '@nestjs/core';
 import { AgentNode } from './graph/nodes/agent/agent.node';
 import { WorkspaceNode } from './graph/nodes/workspace/workspace.node';
 
-import { LocalMCPServer } from './graph/nodes/mcp/localMcpServer.node';
+import { LocalMCPServerNode } from './graph/nodes/mcp/localMcpServer.node';
 import { MemoryNode } from './graph/nodes/memory/memory.node';
 import { MemoryConnectorNode } from './graph/nodes/memoryConnector/memoryConnector.node';
 import { SlackTrigger } from './graph/nodes/slackTrigger/slackTrigger.node';
@@ -144,7 +144,7 @@ export function buildTemplateRegistry(deps: TemplateRegistryDeps): TemplateRegis
       kind: 'mcp',
       // capabilities/staticConfigSchema removed from palette per Issue #451
     },
-    LocalMCPServer,
+    LocalMCPServerNode,
   );
   // Memory: provide MemoryNode and MemoryConnectorNode as explicit templates with ports
   registry.register(

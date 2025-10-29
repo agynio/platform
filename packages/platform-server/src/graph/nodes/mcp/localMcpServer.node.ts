@@ -14,7 +14,7 @@ import { LocalMCPServerTool } from './localMcpServer.tool';
 import { DEFAULT_MCP_COMMAND, McpError, type McpTool, McpToolCallResult, PersistedMcpState } from './types';
 import { NodeStateService } from '../../../graph/nodeState.service';
 import Node from '../base/Node';
-import { Inject, Injectable, Scope } from '@nestjs/common';
+import { ConsoleLogger, Inject, Injectable, Scope } from '@nestjs/common';
 import { jsonSchemaToZod } from '@agyn/json-schema-to-zod';
 
 const EnvItemSchema = z
@@ -54,9 +54,9 @@ export const LocalMcpServerStaticConfigSchema = z.object({
 // .strict();
 
 @Injectable({ scope: Scope.TRANSIENT })
-export class LocalMCPServer extends Node<z.infer<typeof LocalMcpServerStaticConfigSchema>> {
+export class LocalMCPServerNode extends Node<z.infer<typeof LocalMcpServerStaticConfigSchema>> {
   private async resolveEnvOverlay(): Promise<Record<string, string> | undefined> {
-    const items: EnvItem[] = (this.cfg?.env || []) as EnvItem[];
+    const items: EnvItem[] = (this.config?.env || []) as EnvItem[];
     if (!items.length) return undefined;
 
     const r = await this.envService.resolveEnvItems(items);
@@ -64,7 +64,7 @@ export class LocalMCPServer extends Node<z.infer<typeof LocalMcpServerStaticConf
   }
 
   private buildExecConfig(command: string, envOverlay?: Record<string, string>) {
-    const cfg = this.cfg;
+    const cfg = this.config;
     if (!cfg) throw new Error('LocalMCPServer: config not yet set via setConfig');
     const cmdToRun = command;
     const envArr = envOverlay ? Object.entries(envOverlay).map(([k, v]) => `${k}=${v}`) : undefined;
@@ -85,9 +85,7 @@ export class LocalMCPServer extends Node<z.infer<typeof LocalMcpServerStaticConf
    */
   // Namespace is now derived from config dynamically. If not yet configured, falls back to 'mcp'.
   // Once first non-default namespace is observed, further attempts to change it are ignored (warned).
-  get namespace(): string {
-    return this.cfg?.namespace || 'mcp';
-  }
+
   private started = false;
   private toolsCache: LocalMCPServerTool[] | null = null;
   private lastToolsUpdatedAt?: number; // ms epoch
@@ -95,7 +93,6 @@ export class LocalMCPServer extends Node<z.infer<typeof LocalMcpServerStaticConf
   private restartAttempts = 0;
   private containerProvider?: WorkspaceNode;
   private pendingStart?: Promise<void>; // ensure single in-flight start
-  private cfg?: z.infer<typeof LocalMcpServerStaticConfigSchema>;
   private toolsDiscovered = false; // tracks if we've done initial tool discovery
   // Resilient start state
   private wantStart = false; // intent flag indicating someone requested start
@@ -127,6 +124,10 @@ export class LocalMCPServer extends Node<z.infer<typeof LocalMcpServerStaticConf
     super(logger);
   }
 
+  get namespace(): string {
+    return this.config.namespace ?? 'mcp';
+  }
+
   getPortConfig() {
     return {
       targetPorts: {
@@ -142,44 +143,17 @@ export class LocalMCPServer extends Node<z.infer<typeof LocalMcpServerStaticConf
    */
   private createLocalTool(tool: McpTool): LocalMCPServerTool {
     return new LocalMCPServerTool(
-      {
-        getName: () => tool.name,
-        getDescription: () => tool.description || 'MCP tool',
-        getDelegate: () => ({
-          callTool: async (name: string, args: unknown) => {
-            const res = await this.callTool(name, args, { threadId: '__mcp_exec__' });
-            return {
-              isError: res.isError,
-              content: res.content,
-              structuredContent: res.structuredContent,
-              raw: res.raw,
-            };
-          },
-          getLogger: () => ({
-            debug: (...a: unknown[]) => this.logger.debug(String(a[0] ?? ''), ...a.slice(1)),
-            error: (...a: unknown[]) => this.logger.error(String(a[0] ?? ''), ...a.slice(1)),
-          }),
-        }),
-      },
+      tool.name,
+      tool.description || 'MCP tool',
       jsonSchemaToZod({ ...(tool.inputSchema as any), strict: false, additionalProperties: false }) as z.ZodObject,
+      this,
     );
   }
 
-  preloadCachedToolSummaries(
-    tools: Array<{ name: string; description?: string }> | undefined | null,
-    updatedAt?: number | string | Date,
-  ): void {
-    if (tools && Array.isArray(tools) && tools.length > 0) {
-      // Create tool shells without schemas; discovery will rebuild with full schemas later
-      this.toolsCache = tools.map((t) =>
-        this.createLocalTool({
-          name: t.name,
-          description: t.description,
-          inputSchema: { type: 'object', properties: {}, additionalProperties: false } as any,
-        } as McpTool),
-      );
-      this.toolsDiscovered = true; // consider discovered for initial dynamic schema availability
-    }
+  preloadCachedTools(tools: McpTool[], updatedAt?: number | string | Date): void {
+    this.toolsCache = tools.map((t) => this.createLocalTool(t));
+    this.toolsDiscovered = true; // consider discovered for initial dynamic schema availability
+
     if (updatedAt !== undefined) {
       const ts =
         typeof updatedAt === 'number'
@@ -193,12 +167,12 @@ export class LocalMCPServer extends Node<z.infer<typeof LocalMcpServerStaticConf
     this.notifyToolsUpdated(Date.now());
   }
 
-  async setState(state: { mcp?: PersistedMcpState } | undefined) {
+  async setState(state: { mcp?: PersistedMcpState }) {
     if (state?.mcp && state.mcp.tools) {
       const summaries = state.mcp.tools;
       const updatedAt = state.mcp.toolsUpdatedAt;
       try {
-        this.preloadCachedToolSummaries(summaries, updatedAt);
+        this.preloadCachedTools(summaries, updatedAt);
       } catch (e) {
         this.logger.error('Error during MCP cache preload for node %s', this.nodeId, e);
       }
@@ -210,9 +184,9 @@ export class LocalMCPServer extends Node<z.infer<typeof LocalMcpServerStaticConf
    * This is called during agent registration to discover available tools.
    */
   async discoverTools(): Promise<LocalMCPServerTool[]> {
-    if (!this.cfg) throw new Error('LocalMCPServer: config not yet set via setConfig');
+    if (!this.config) throw new Error('LocalMCPServer: config not yet set via setConfig');
     if (!this.containerProvider) throw new Error('LocalMCPServer: no containerProvider set; cannot discover tools');
-    if (!this.cfg.command) throw new Error('LocalMCPServer: config.command is required for tool discovery');
+    if (!this.config.command) throw new Error('LocalMCPServer: config.command is required for tool discovery');
 
     if (this.toolsDiscovered && this.toolsCache) {
       return this.toolsCache;
@@ -221,14 +195,14 @@ export class LocalMCPServer extends Node<z.infer<typeof LocalMcpServerStaticConf
     const discoveryId = ++this._discoverySeq;
     const t0 = Date.now();
     this.logger.info(
-      `[MCP:${this.namespace}] [disc:${discoveryId}] Starting tool discovery (toolsDiscovered=${this.toolsDiscovered})`,
+      `[MCP:${this.config.namespace}] [disc:${discoveryId}] Starting tool discovery (toolsDiscovered=${this.toolsDiscovered})`,
     );
 
     // Use temporary container for tool discovery
     const tempContainer = await this.containerProvider.provide(`_discovery_temp_${uuidv4()}`);
     const tempContainerId = tempContainer.id;
 
-    const cfg = this.cfg;
+    const cfg = this.config;
     if (!cfg) throw new Error('LocalMCPServer: config not yet set via setConfig');
     const command = cfg.command ?? DEFAULT_MCP_COMMAND;
     const envOverlay = await this.resolveEnvOverlay();
@@ -244,7 +218,7 @@ export class LocalMCPServer extends Node<z.infer<typeof LocalMcpServerStaticConf
         docker,
         this.logger,
         async () => {
-          this.logger.debug(`[MCP:${this.namespace}] [disc:${discoveryId}] launching docker exec`);
+          this.logger.debug(`[MCP:${this.config.namespace}] [disc:${discoveryId}] launching docker exec`);
           const exec = await docker.getContainer(tempContainerId).exec({
             Cmd: ['sh', '-lc', cmdToRun],
             AttachStdout: true,
@@ -273,16 +247,20 @@ export class LocalMCPServer extends Node<z.infer<typeof LocalMcpServerStaticConf
       );
 
       tempClient = new Client({ name: 'local-agent-discovery', version: '0.1.0' });
-      this.logger.info(`[MCP:${this.namespace}] [disc:${discoveryId}] Connecting for tool discovery`);
+      this.logger.info(`[MCP:${this.config.namespace}] [disc:${discoveryId}] Connecting for tool discovery`);
       await tempClient.connect(tempTransport, { timeout: cfg.startupTimeoutMs ?? 15000 });
-      this.logger.info(`[MCP:${this.namespace}] [disc:${discoveryId}] Handshake complete`);
+      this.logger.info(`[MCP:${this.config.namespace}] [disc:${discoveryId}] Handshake complete`);
 
       // Fetch tools
       const result = await tempClient.listTools({}, { timeout: cfg.requestTimeoutMs ?? 15000 });
-      this.logger.debug(`[MCP:${this.namespace}] Discovered tools: ${JSON.stringify(result.tools.map((t) => t.name))}`);
+      this.logger.debug(
+        `[MCP:${this.config.namespace}] Discovered tools: ${JSON.stringify(result.tools.map((t) => t.name))}`,
+      );
       this.toolsCache = result.tools.map((t) => this.createLocalTool(t as McpTool));
 
-      this.logger.info(`[MCP:${this.namespace}] [disc:${discoveryId}] Discovered ${this.toolsCache.length} tools`);
+      this.logger.info(
+        `[MCP:${this.config.namespace}] [disc:${discoveryId}] Discovered ${this.toolsCache.length} tools`,
+      );
       this.toolsDiscovered = true;
       this.lastToolsUpdatedAt = Date.now();
       // Persist state using NodeStateService (if available)
@@ -305,26 +283,26 @@ export class LocalMCPServer extends Node<z.infer<typeof LocalMcpServerStaticConf
           await this.nodeStateService.upsertNodeState(this.nodeId, state as unknown as Record<string, unknown>);
         }
       } catch (e) {
-        this.logger.error(`[MCP:${this.namespace}] Failed to persist state`, e);
+        this.logger.error(`[MCP:${this.config.namespace}] Failed to persist state`, e);
       }
       // Notify listeners with unified tools update event
       this.notifyToolsUpdated(this.lastToolsUpdatedAt || Date.now());
     } catch (err) {
-      this.logger.error(`[MCP:${this.namespace}] [disc:${discoveryId}] Tool discovery failed`, err);
+      this.logger.error(`[MCP:${this.config.namespace}] [disc:${discoveryId}] Tool discovery failed`, err);
     } finally {
       // Clean up temporary resources
       if (tempClient) {
         try {
           await tempClient.close();
         } catch (e) {
-          this.logger.error(`[MCP:${this.namespace}] Error closing temp client`, e);
+          this.logger.error(`[MCP:${this.config.namespace}] Error closing temp client`, e);
         }
       }
       if (tempTransport) {
         try {
           await tempTransport.close();
         } catch (e) {
-          this.logger.error(`[MCP:${this.namespace}] Error closing temp transport`, e);
+          this.logger.error(`[MCP:${this.config.namespace}] Error closing temp transport`, e);
         }
       }
       // Stop the temporary container
@@ -333,10 +311,10 @@ export class LocalMCPServer extends Node<z.infer<typeof LocalMcpServerStaticConf
         await tempContainer.remove(true);
         const ms = Date.now() - t0;
         this.logger.info(
-          `[MCP:${this.namespace}] [disc:${discoveryId}] Temporary discovery container stopped and removed (duration=${ms}ms)`,
+          `[MCP:${this.config.namespace}] [disc:${discoveryId}] Temporary discovery container stopped and removed (duration=${ms}ms)`,
         );
       } catch (e) {
-        this.logger.error(`[MCP:${this.namespace}] [disc:${discoveryId}] Error cleaning up temp container`, e);
+        this.logger.error(`[MCP:${this.config.namespace}] [disc:${discoveryId}] Error cleaning up temp container`, e);
       }
       // Ensure any DinD sidecars created for the temporary discovery container are also cleaned up
       try {
@@ -368,7 +346,7 @@ export class LocalMCPServer extends Node<z.infer<typeof LocalMcpServerStaticConf
           const cleaned = results.reduce((acc, r) => acc + (r.status === 'fulfilled' && r.value ? 1 : 0), 0);
           if (cleaned > 0) {
             this.logger.info(
-              `[MCP:${this.namespace}] [disc:${discoveryId}] Cleaned ${cleaned} DinD sidecar(s) for temp container ${String(tempContainerId).substring(0, 12)}`,
+              `[MCP:${this.config.namespace}] [disc:${discoveryId}] Cleaned ${cleaned} DinD sidecar(s) for temp container ${String(tempContainerId).substring(0, 12)}`,
             );
           }
           const rejected = results.filter((r) => r.status === 'rejected') as PromiseRejectedResult[];
@@ -381,7 +359,7 @@ export class LocalMCPServer extends Node<z.infer<typeof LocalMcpServerStaticConf
         }
       } catch (e) {
         this.logger.error(
-          `[MCP:${this.namespace}] [disc:${discoveryId}] Error cleaning DinD sidecars for temp container`,
+          `[MCP:${this.config.namespace}] [disc:${discoveryId}] Error cleaning DinD sidecars for temp container`,
           e,
         );
       }
@@ -390,28 +368,9 @@ export class LocalMCPServer extends Node<z.infer<typeof LocalMcpServerStaticConf
     return this.toolsCache ?? [];
   }
 
-  async start(): Promise<void> {
-    // Backward-compat: delegate to provision()
-    return this.provision();
-  }
-
   /** Inject a container provider (graph edge). If server already started with a different container, no action taken. */
   setContainerProvider(provider: WorkspaceNode | undefined): void {
     this.containerProvider = provider;
-  }
-
-  /** Update runtime configuration (only env/workdir/command currently applied to next restart). */
-  async setConfig(cfg: Record<string, unknown>): Promise<void> {
-    const parsed = LocalMcpServerStaticConfigSchema.safeParse(cfg);
-    if (!parsed.success) {
-      this.logger.error(
-        `LocalMCPServer: invalid config: ${JSON.stringify(parsed.error.issues)} @ ${JSON.stringify(cfg)}`,
-      );
-      throw new Error('Invalid MCP server config');
-    }
-    // Cast to McpServerConfig (schema is stricter than interface; compatible subset)
-    this.cfg = parsed.data;
-    // TODO: react to namespace changes (re-register tools) if needed
   }
 
   // Return legacy McpTool shape for interface compliance; callers needing function tools can access toolsCache directly.
@@ -431,12 +390,12 @@ export class LocalMCPServer extends Node<z.infer<typeof LocalMcpServerStaticConf
     args: unknown,
     options?: { timeoutMs?: number; threadId?: string },
   ): Promise<McpToolCallResult> {
-    if (!this.cfg) throw new Error('LocalMCPServer: config not yet set via setConfig');
+    if (!this.config) throw new Error('LocalMCPServer: config not yet set via setConfig');
     if (!this.containerProvider) throw new Error('LocalMCPServer: no containerProvider set; cannot call tool');
 
     const threadId = options?.threadId;
     if (!threadId) throw new Error('LocalMCPServer: threadId option is required to call tool');
-    this.logger.info(`[MCP:${this.namespace}] Calling tool ${name} for thread ${threadId}`);
+    this.logger.info(`[MCP:${this.config.namespace}] Calling tool ${name} for thread ${threadId}`);
 
     // Get thread-specific container
     const container = await this.containerProvider.provide(threadId);
@@ -446,7 +405,7 @@ export class LocalMCPServer extends Node<z.infer<typeof LocalMcpServerStaticConf
     } catch {}
     const containerId = container.id;
 
-    const cfg = this.cfg;
+    const cfg = this.config;
     if (!cfg) throw new Error('LocalMCPServer: config not yet set via setConfig');
     const command = cfg.command ?? DEFAULT_MCP_COMMAND;
     const envOverlay = await this.resolveEnvOverlay();
@@ -559,37 +518,18 @@ export class LocalMCPServer extends Node<z.infer<typeof LocalMcpServerStaticConf
         try {
           await client.close();
         } catch (e) {
-          this.logger.error(`[MCP:${this.namespace}] Error closing client after tool call`, e);
+          this.logger.error(`[MCP:${this.config.namespace}] Error closing client after tool call`, e);
         }
       }
       if (transport) {
         try {
           await transport.close();
         } catch (e) {
-          this.logger.error(`[MCP:${this.namespace}] Error closing transport after tool call`, e);
+          this.logger.error(`[MCP:${this.config.namespace}] Error closing transport after tool call`, e);
         }
       }
       if (hbTimer) clearInterval(hbTimer);
     }
-  }
-
-  async stop(): Promise<void> {
-    // Backward-compat: delegate to deprovision()
-    return this.deprovision();
-  }
-
-  /**
-   * Full teardown invoked by graph runtime when node removed. Ensures no further retries
-   * or background timers are left running and clears intent flags so the server will not
-   * auto-start again due to late dependency resolution events.
-   */
-  async destroy(): Promise<void> {
-    this.wantStart = false; // cancel intent so maybeStart() does nothing further
-    await this.stop();
-    this.toolsCache = null;
-    this.toolsDiscovered = false;
-    this.restartAttempts = 0;
-    this.pendingStart = undefined;
   }
 
   // Unified event subscription supporting core and MCP-specific events
@@ -605,7 +545,7 @@ export class LocalMCPServer extends Node<z.infer<typeof LocalMcpServerStaticConf
     // TODO: Refactor provisioning
     const startCallId = ++this._startInvocationSeq;
     this.logger.debug(
-      `[MCP:${this.namespace}] [start:${startCallId}] provision() invoked (started=${this.started} wantStart=${this.wantStart})`,
+      `[MCP:${this.config.namespace}] [start:${startCallId}] provision() invoked (started=${this.started} wantStart=${this.wantStart})`,
     );
     this.wantStart = true;
     if (this.started) {
@@ -616,9 +556,9 @@ export class LocalMCPServer extends Node<z.infer<typeof LocalMcpServerStaticConf
       this.pendingStart = new Promise<void>((resolve, reject) => {
         this.startWaiters.push({ resolve, reject });
       });
-      this.logger.debug(`[MCP:${this.namespace}] [start:${startCallId}] Created pendingStart promise`);
+      this.logger.debug(`[MCP:${this.config.namespace}] [start:${startCallId}] Created pendingStart promise`);
     }
-    const hasAllDeps = !!(this.cfg && this.containerProvider && this.cfg.command);
+    const hasAllDeps = !!(this.config && this.containerProvider && this.config.command);
     this.setStatus('provisioning');
     this.maybeStart();
     this._provInFlight = (async () => {
@@ -661,7 +601,7 @@ export class LocalMCPServer extends Node<z.infer<typeof LocalMcpServerStaticConf
     try {
       this.emitter.emit('mcp.tools_updated', { tools, updatedAt: ts });
     } catch (e) {
-      this.logger.error(`[MCP:${this.namespace}] Error emitting tools_updated`, e);
+      this.logger.error(`[MCP:${this.config.namespace}] Error emitting tools_updated`, e);
     }
   }
 
@@ -677,19 +617,19 @@ export class LocalMCPServer extends Node<z.infer<typeof LocalMcpServerStaticConf
     if (err) {
       // Only emit 'error' if there are registered listeners to avoid unhandled error events
       if (this.emitter.listenerCount('error') > 0) this.emitter.emit('error', err);
-      else this.logger.error(`[MCP:${this.namespace}] Unhandled start error`, err);
+      else this.logger.error(`[MCP:${this.config.namespace}] Unhandled start error`, err);
     } else this.emitter.emit('ready');
   }
 
   private maybeStart() {
     const id = ++this._maybeStartSeq;
     this.logger.debug(
-      `[MCP:${this.namespace}] [maybe:${id}] maybeStart() check wantStart=${this.wantStart} started=${this.started} retryTimer=${!!this.startRetryTimer}`,
+      `[MCP:${this.config.namespace}] [maybe:${id}] maybeStart() check wantStart=${this.wantStart} started=${this.started} retryTimer=${!!this.startRetryTimer}`,
     );
     if (!this.wantStart || this.started) return;
     // Avoid stacking multiple timers
     if (this.startRetryTimer) {
-      this.logger.debug(`[MCP:${this.namespace}] [maybe:${id}] retry timer already scheduled; skipping`);
+      this.logger.debug(`[MCP:${this.config.namespace}] [maybe:${id}] retry timer already scheduled; skipping`);
       return;
     }
     this.tryStartOnce();
@@ -697,12 +637,12 @@ export class LocalMCPServer extends Node<z.infer<typeof LocalMcpServerStaticConf
 
   private tryStartOnce() {
     const seq = ++this._tryStartSeq;
-    this.logger.debug(`[MCP:${this.namespace}] [try:${seq}] tryStartOnce invoked (started=${this.started})`);
+    this.logger.debug(`[MCP:${this.config.namespace}] [try:${seq}] tryStartOnce invoked (started=${this.started})`);
     if (this.started) {
-      this.logger.debug(`[MCP:${this.namespace}] [try:${seq}] already started; aborting try.`);
+      this.logger.debug(`[MCP:${this.config.namespace}] [try:${seq}] already started; aborting try.`);
       return;
     }
-    const cfg = this.cfg;
+    const cfg = this.config;
     if (!cfg || !this.containerProvider || !cfg.command) {
       // Poll for dependencies until a timeout
       const depTimeoutMs = 30000;
@@ -710,18 +650,18 @@ export class LocalMCPServer extends Node<z.infer<typeof LocalMcpServerStaticConf
         this.dependencyTimeoutTimer = setTimeout(() => {
           if (!this.started) {
             this.logger.error(
-              `[MCP:${this.namespace}] Dependency wait timeout (cfg=${!!this.cfg} provider=${!!this.containerProvider} command=${!!this.cfg?.command})`,
+              `[MCP:${this.config.namespace}] Dependency wait timeout (cfg=${!!this.config} provider=${!!this.containerProvider} command=${!!this.config?.command})`,
             );
             this.flushStartWaiters(new Error('MCP start dependency timeout'));
           }
         }, depTimeoutMs);
       }
       this.logger.debug(
-        `[MCP:${this.namespace}] [try:${seq}] Waiting for dependencies (cfg=${!!cfg} provider=${!!this.containerProvider} command=${!!cfg?.command})`,
+        `[MCP:${this.config.namespace}] [try:${seq}] Waiting for dependencies (cfg=${!!cfg} provider=${!!this.containerProvider} command=${!!cfg?.command})`,
       );
       this.startRetryTimer = setTimeout(() => {
         this.startRetryTimer = undefined;
-        this.logger.debug(`[MCP:${this.namespace}] [try:${seq}] dependency re-check timer fired`);
+        this.logger.debug(`[MCP:${this.config.namespace}] [try:${seq}] dependency re-check timer fired`);
         this.tryStartOnce();
       }, 5000);
       return;
@@ -735,14 +675,16 @@ export class LocalMCPServer extends Node<z.infer<typeof LocalMcpServerStaticConf
 
     const restartCfg = cfg.restart || { maxAttempts: 5, backoffMs: 2000 };
     const attempt = this.restartAttempts + 1;
-    this.logger.info(`[MCP:${this.namespace}] Start attempt ${attempt}/${restartCfg.maxAttempts} (trySeq=${seq})`);
+    this.logger.info(
+      `[MCP:${this.config.namespace}] Start attempt ${attempt}/${restartCfg.maxAttempts} (trySeq=${seq})`,
+    );
 
     (async () => {
       try {
         // SINGLE DISCOVERY PATH: Only perform tool discovery here during the resilient start sequence.
         // listTools() no longer triggers discovery; SimpleAgent waits for 'ready'.
         // Guard configService access; default to 0 (never stale by time)
-        const staleTimeout = (this.cfg?.staleTimeoutMs ?? this.configService?.mcpToolsStaleTimeoutMs ?? 0) as number;
+        const staleTimeout = (this.config?.staleTimeoutMs ?? this.configService?.mcpToolsStaleTimeoutMs ?? 0) as number;
         const isStale = (() => {
           if (!staleTimeout) return false;
           const last = this.lastToolsUpdatedAt || 0;
@@ -752,13 +694,15 @@ export class LocalMCPServer extends Node<z.infer<typeof LocalMcpServerStaticConf
           const tDisc0 = Date.now();
           await this.discoverTools();
           const tDiscMs = Date.now() - tDisc0;
-          this.logger.debug(`[MCP:${this.namespace}] Discovery phase duration ${tDiscMs}ms`);
+          this.logger.debug(`[MCP:${this.config.namespace}] Discovery phase duration ${tDiscMs}ms`);
         }
         this.started = true;
-        this.logger.info(`[MCP:${this.namespace}] Started successfully with ${this.toolsCache?.length || 0} tools`);
+        this.logger.info(
+          `[MCP:${this.config.namespace}] Started successfully with ${this.toolsCache?.length || 0} tools`,
+        );
         this.flushStartWaiters();
       } catch (e: unknown) {
-        this.logger.error(`[MCP:${this.namespace}] Start attempt failed`, e);
+        this.logger.error(`[MCP:${this.config.namespace}] Start attempt failed`, e);
         this.restartAttempts++;
         // Immediately reject any pending starters so callers of provision() can observe the error
         this.flushStartWaiters(e);
@@ -767,11 +711,13 @@ export class LocalMCPServer extends Node<z.infer<typeof LocalMcpServerStaticConf
         }
         const backoff = restartCfg.backoffMs * Math.pow(2, this.restartAttempts - 1);
         this.logger.info(
-          `[MCP:${this.namespace}] Scheduling retry in ${backoff}ms (attempt=${this.restartAttempts + 1})`,
+          `[MCP:${this.config.namespace}] Scheduling retry in ${backoff}ms (attempt=${this.restartAttempts + 1})`,
         );
         this.startRetryTimer = setTimeout(() => {
           this.startRetryTimer = undefined;
-          this.logger.debug(`[MCP:${this.namespace}] Retry timer fired (next attempt=${this.restartAttempts + 1})`);
+          this.logger.debug(
+            `[MCP:${this.config.namespace}] Retry timer fired (next attempt=${this.restartAttempts + 1})`,
+          );
           this.tryStartOnce();
           this.emitter.emit('restarted', this.restartAttempts);
         }, backoff);

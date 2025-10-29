@@ -45,23 +45,6 @@ export interface McpServerConfig {
   restart?: { maxAttempts: number; backoffMs: number };
 }
 
-export interface McpServer {
-  readonly namespace: string;
-  start(): Promise<void>;
-  stop(): Promise<void>;
-  listTools(force?: boolean): FunctionTool[];
-  callTool(
-    name: string,
-    args: unknown,
-    options?: { timeoutMs?: number; threadId?: string },
-  ): Promise<McpToolCallResult>;
-  on(event: 'ready', handler: (...a: unknown[]) => void): this;
-  on(event: 'exit', handler: (...a: unknown[]) => void): this;
-  on(event: 'error', handler: (...a: unknown[]) => void): this;
-  on(event: 'restarted', handler: (...a: unknown[]) => void): this;
-  on(event: 'mcp.tools_updated', handler: (payload: { tools: FunctionTool[]; updatedAt: number }) => void): this;
-}
-
 export interface DockerExecStreams {
   stdin: NodeJS.WritableStream;
   stdout: NodeJS.ReadableStream;

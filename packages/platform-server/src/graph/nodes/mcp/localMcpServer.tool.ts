@@ -1,41 +1,45 @@
 import { FunctionTool } from '@agyn/llm';
 import z from 'zod';
+import { LocalMCPServerNode } from './localMcpServer.node';
 
 // Runtime execution delegate provided by LocalMCPServer node
 export interface McpExecDelegate {
   callTool: (
     name: string,
     args: unknown,
-  ) => Promise<{ isError?: boolean; content?: string; structuredContent?: { [x: string]: unknown } | undefined; raw?: unknown }>;
+  ) => Promise<{
+    isError?: boolean;
+    content?: string;
+    structuredContent?: { [x: string]: unknown } | undefined;
+    raw?: unknown;
+  }>;
   getLogger: () => { debug: (...a: unknown[]) => void; error: (...a: unknown[]) => void }; // minimal logger surface
-}
-
-interface LocalMCPServerToolDeps {
-  getName: () => string;
-  getDescription: () => string;
-  getDelegate: () => McpExecDelegate | undefined;
 }
 
 export class LocalMCPServerTool extends FunctionTool<z.ZodObject> {
   constructor(
-    private deps: LocalMCPServerToolDeps,
-    private inputSchema: z.ZodObject<any>,
+    private _name: string,
+    private _description: string,
+    private _inputSchema: z.ZodObject<any>,
+    private _node: LocalMCPServerNode,
   ) {
     super();
   }
   get name() {
-    return this.deps.getName();
+    return this._name;
   }
   get description() {
-    return this.deps.getDescription();
+    return this._description;
   }
   get schema() {
-    return this.inputSchema;
+    return this._inputSchema;
   }
+  get node() {
+    return this._node;
+  }
+
   async execute(args: z.infer<z.ZodObject>): Promise<string> {
-    const delegate = this.deps.getDelegate();
-    if (!delegate) throw new Error('MCP delegate not connected');
-    const res = await delegate.callTool(this.name, args);
+    const res = await this.node.callTool(this.name, args);
     if (res.isError) {
       return JSON.stringify({ ok: false, error: res.content || 'error' });
     }
