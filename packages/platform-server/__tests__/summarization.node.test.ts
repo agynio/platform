@@ -8,7 +8,7 @@ let reducer: SummarizationLLMReducer;
 
 beforeEach(async () => {
   const provisioner: Pick<LLMProvisioner, 'getLLM'> = {
-    getLLM: async () => ({ call: async () => new ResponseMessage({ output: [AIMessage.fromText('SUMMARY').toPlain()] }) } as any),
+    getLLM: async () => ({ call: async () => new ResponseMessage({ output: [] }) } as any),
   };
   reducer = new SummarizationLLMReducer(provisioner as LLMProvisioner);
   await reducer.init({ model: 'gpt-5', keepTokens: 10, maxTokens: 30, systemPrompt: 'summarize' });
@@ -23,9 +23,14 @@ describe('SummarizationLLMReducer', () => {
   });
 
   it('summarizes when token count exceeds maxTokens', async () => {
+    const prov: Pick<LLMProvisioner, 'getLLM'> = {
+      getLLM: async () => ({ call: async () => new ResponseMessage({ output: [AIMessage.fromText('SUMMARY').toPlain()] }) } as any),
+    };
+    const r = new SummarizationLLMReducer(prov as LLMProvisioner);
+    await r.init({ model: 'gpt-5', keepTokens: 10, maxTokens: 30, systemPrompt: 'summarize' });
     const msgs = Array.from({ length: 50 }).map((_, i) => HumanMessage.fromText(`m${i}`));
     const state: LLMState = { messages: msgs, summary: '' };
-    const out = await reducer.invoke(state, { threadId: 't', finishSignal: { isActive: false } as any });
+    const out = await r.invoke(state, { threadId: 't', finishSignal: { isActive: false } as any });
     expect((out.summary ?? '').length).toBeGreaterThan(0);
   });
 
@@ -35,5 +40,46 @@ describe('SummarizationLLMReducer', () => {
     const state: LLMState = { messages: [HumanMessage.fromText('h1'), resp], summary: '' };
     const out = await reducer.invoke(state, { threadId: 't', finishSignal: { isActive: false } as any });
     expect(out.messages.length).toBeGreaterThan(0);
+  });
+
+  it('no-op when maxTokens=0 (skip)', async () => {
+    const provisioner: Pick<LLMProvisioner, 'getLLM'> = { getLLM: async () => ({ call: async () => new ResponseMessage({ output: [] }) } as any) };
+    const r = new SummarizationLLMReducer(provisioner as LLMProvisioner);
+    await r.init({ model: 'gpt-5', keepTokens: 10, maxTokens: 0, systemPrompt: 'summarize' });
+    const state: LLMState = { messages: [HumanMessage.fromText('a')], summary: '' };
+    const out = await r.invoke(state, { threadId: 't', finishSignal: { isActive: false } as any });
+    expect(out.messages.map((m) => (m as any).type)).toEqual(state.messages.map((m) => (m as any).type));
+    expect(out.summary ?? '').toBe(state.summary ?? '');
+  });
+
+  it('no-op when under budget', async () => {
+    const provisioner: Pick<LLMProvisioner, 'getLLM'> = { getLLM: async () => ({ call: async () => new ResponseMessage({ output: [] }) } as any) };
+    const r = new SummarizationLLMReducer(provisioner as LLMProvisioner);
+    await r.init({ model: 'gpt-5', keepTokens: 1000, maxTokens: 2000, systemPrompt: 'summarize' });
+    const state: LLMState = { messages: [HumanMessage.fromText('short')], summary: 'S' };
+    const out = await r.invoke(state, { threadId: 't', finishSignal: { isActive: false } as any });
+    expect(out.summary ?? '').toBe('S');
+    expect(out.messages.length).toBe(state.messages.length);
+  });
+
+  it('no-op when no messages', async () => {
+    const provisioner: Pick<LLMProvisioner, 'getLLM'> = { getLLM: async () => ({ call: async () => new ResponseMessage({ output: [] }) } as any) };
+    const r = new SummarizationLLMReducer(provisioner as LLMProvisioner);
+    await r.init({ model: 'gpt-5', keepTokens: 10, maxTokens: 30, systemPrompt: 'summarize' });
+    const state: LLMState = { messages: [], summary: 'S' };
+    const out = await r.invoke(state, { threadId: 't', finishSignal: { isActive: false } as any });
+    expect(out.summary ?? '').toBe('S');
+    expect(out.messages.length).toBe(0);
+  });
+
+  it('no-op when keepTokens large yields empty tail', async () => {
+    const provisioner: Pick<LLMProvisioner, 'getLLM'> = { getLLM: async () => ({ call: async () => new ResponseMessage({ output: [] }) } as any) };
+    const r = new SummarizationLLMReducer(provisioner as LLMProvisioner);
+    await r.init({ model: 'gpt-5', keepTokens: 1000, maxTokens: 1000, systemPrompt: 'summarize' });
+    const messages = Array.from({ length: 5 }).map((_, i) => HumanMessage.fromText(`m${i}`));
+    const state: LLMState = { messages, summary: '' };
+    const out = await r.invoke(state, { threadId: 't', finishSignal: { isActive: false } as any });
+    expect(out.messages.length).toBe(messages.length);
+    expect(out.summary ?? '').toBe('');
   });
 });

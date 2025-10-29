@@ -43,7 +43,8 @@ describe('SlackTrigger events', () => {
 
   it('relays message events from socket-mode client', async () => {
     const logger = makeLogger();
-    const trig = new SlackTrigger(logger as unknown as LoggerService);
+    const vault = { getSecret: async () => 'xapp-abc' } as any;
+    const trig = new SlackTrigger(logger as unknown as LoggerService, vault as any);
     await trig.setConfig({ app_token: { value: 'xapp-abc', source: 'static' } });
     // Subscribe a listener
     const received: TriggerMessage[] = [];
@@ -67,11 +68,15 @@ describe('SlackTrigger events', () => {
     expect(ack).toHaveBeenCalledTimes(1);
   });
 
-  it('fails during provision when vault ref provided but vault disabled', async () => {
+  it('sets status to provisioning_error when vault ref but vault disabled', async () => {
     const logger = makeLogger();
-    const trig = new SlackTrigger(logger as unknown as LoggerService, undefined);
+    const vault: { getSecret: (ref: any) => Promise<string> } = {
+      getSecret: vi.fn(async () => { throw new Error('vault disabled'); }),
+    } as any;
+    const trig = new SlackTrigger(logger as unknown as LoggerService, vault as any);
     await trig.setConfig({ app_token: { value: 'secret/slack/APP', source: 'vault' } });
-    await expect(trig.provision()).rejects.toThrow();
+    await trig.provision();
+    expect(trig.status).toBe('provisioning_error');
   });
 
   it('resolves app token via vault during provision', async () => {

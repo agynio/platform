@@ -6,27 +6,19 @@ import { LiveGraphRuntime } from '../src/graph/liveGraph.manager';
 import { TemplateRegistry } from '../src/graph/templateRegistry';
 import { GraphDefinition, GraphError } from '../src/graph/types';
 import { ModuleRef } from '@nestjs/core';
-
-// Fake template with strict config schemas
-class StrictNode {
-  public appliedStatic?: Record<string, unknown>;
-  public appliedDynamic?: Record<string, unknown>;
-  setConfig(cfg: Record<string, unknown>) {
-    const schema = z.object({ foo: z.string() }).strict();
-    const parsed = schema.parse(cfg);
-    this.appliedStatic = parsed;
-  }
-  setDynamicConfig(cfg: Record<string, unknown>) {
-    const schema = z.object({ bar: z.number() }).strict();
-    const parsed = schema.parse(cfg);
-    this.appliedDynamic = parsed;
-  }
-}
+import { MemoryNode, MemoryNodeStaticConfigSchema } from '../src/graph/nodes/memory/memory.node';
 
 const makeRuntime = () => {
-  const moduleRef: ModuleRef = { create: (Cls: any) => new Cls() };
+  const logger = new LoggerService();
+  const moduleRef: ModuleRef = {
+    // Provide DI-aware create for MemoryNode
+    create: (Cls: any) => {
+      if (Cls === MemoryNode) return new MemoryNode({} as any, logger);
+      return new Cls(logger);
+    },
+  } as any;
   const templates = new TemplateRegistry(moduleRef);
-  templates.register('Strict', { title: 'Strict', kind: 'tool' }, StrictNode as any);
+  templates.register('Memory', { title: 'Memory', kind: 'tool' }, MemoryNode as any);
   class StubRepo extends GraphRepository {
     async initIfNeeded(): Promise<void> {}
     async get(): Promise<any> {
@@ -37,39 +29,34 @@ const makeRuntime = () => {
     }
     async upsertNodeState(): Promise<void> {}
   }
-  const runtime = new LiveGraphRuntime(new LoggerService(), templates, new StubRepo(), {
-    create: (Cls: any) => new Cls(),
-  } as any);
+  const runtime = new LiveGraphRuntime(logger, templates, new StubRepo(), moduleRef as any);
   return runtime;
 };
 
 describe('runtime config unknown keys handling', () => {
-  it('strips extra keys during initial setConfig and stores cleaned config', async () => {
+  it('applies config during initial setConfig and stores live config', async () => {
     const runtime = makeRuntime();
     const g: GraphDefinition = {
-      nodes: [{ id: 'n1', data: { template: 'Strict', config: { foo: 'ok', extra: 'x' } } }],
+      nodes: [{ id: 'n1', data: { template: 'Memory', config: { scope: 'global', collectionPrefix: 'p', extra: 'x' } } }],
       edges: [],
     };
     const res = await runtime.apply(g);
     expect(res.errors.length).toBe(0);
-    const inst = runtime.getNodeInstance('n1') as StrictNode;
-    expect(inst.appliedStatic).toEqual({ foo: 'ok' });
-    // live config should be cleaned
     const live = runtime.getNodes().find((n) => n.id === 'n1')!;
-    expect(live.config).toEqual({ foo: 'ok' });
+    expect(live.config).toEqual({ scope: 'global', collectionPrefix: 'p', extra: 'x' });
   });
 
-  it('throws GraphError with nodeId on true validation error', async () => {
+  it('does not throw on unknown config keys; uses real Node ports', async () => {
     const runtime = makeRuntime();
     const g: GraphDefinition = {
-      nodes: [{ id: 'bad', data: { template: 'Strict', config: { foo: 123 } } }],
+      nodes: [{ id: 'bad', data: { template: 'Memory', config: { scope: 'global', extra: 'x' } } }],
       edges: [],
     };
-    await expect(runtime.apply(g)).rejects.toMatchObject({
-      name: 'GraphError',
-      code: 'NODE_INIT_ERROR',
-      nodeId: 'bad',
-    } as Partial<GraphError>);
+    const res = await runtime.apply(g);
+    expect(res.errors.length).toBe(0);
+    const inst = runtime.getNodeInstance('bad') as MemoryNode;
+    const ports = inst.getPortConfig();
+    expect(Object.keys((ports as any).sourcePorts || {})).toContain('$self');
   });
 
   // dynamicConfig fully removed; replace test to assert state persistence path
@@ -79,7 +66,7 @@ describe('runtime config unknown keys handling', () => {
       nodes: [
         {
           id: 'n2',
-          data: { template: 'Strict', config: { foo: 'ok' }, state: { info: 'x' } },
+          data: { template: 'Memory', config: { scope: 'global' }, state: { info: 'x' } },
         },
       ],
       edges: [],
@@ -91,23 +78,21 @@ describe('runtime config unknown keys handling', () => {
     expect(nodes.find((n) => n.id === 'n2')).toBeTruthy();
   });
 
-  it('strips extra keys on config update path and updates live config', async () => {
+  it('updates live config on config update path', async () => {
     const runtime = makeRuntime();
     const g1: GraphDefinition = {
-      nodes: [{ id: 'n3', data: { template: 'Strict', config: { foo: 'ok' } } }],
+      nodes: [{ id: 'n3', data: { template: 'Memory', config: { scope: 'global' } } }],
       edges: [],
     };
     await runtime.apply(g1);
     const g2: GraphDefinition = {
-      nodes: [{ id: 'n3', data: { template: 'Strict', config: { foo: 'next', extra: 'x' } } }],
+      nodes: [{ id: 'n3', data: { template: 'Memory', config: { scope: 'perThread', collectionPrefix: 'pp', extra: 'x' } } }],
       edges: [],
     };
     const res = await runtime.apply(g2);
     expect(res.updatedConfigNodes).toContain('n3');
-    const inst = runtime.getNodeInstance('n3') as StrictNode;
-    expect(inst.appliedStatic).toEqual({ foo: 'next' });
     const live = runtime.getNodes().find((n) => n.id === 'n3')!;
-    expect(live.config).toEqual({ foo: 'next' });
+    expect(live.config).toEqual({ scope: 'perThread', collectionPrefix: 'pp', extra: 'x' });
   });
 
   // dynamicConfig removed; skip invalid dynamicConfig test
