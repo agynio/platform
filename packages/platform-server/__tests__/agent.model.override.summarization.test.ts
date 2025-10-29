@@ -1,60 +1,25 @@
-import { describe, it, expect, vi } from 'vitest';
-import { AIMessage, HumanMessage } from '@langchain/core/messages';
-import { LoggerService } from '../src/core/services/logger.service.js';
-import { ConfigService } from '../src/core/services/config.service.js';
-// Avoid Nest TestingModule; directly stub DI deps
-
-// Mock ChatOpenAI to capture the model used during summarization
-vi.mock('@langchain/openai', async (importOriginal) => {
-  const mod = await importOriginal();
-  class MockChatOpenAI extends mod.ChatOpenAI {
-    public model: string;
-    constructor(config: any) {
-      super(config);
-      this.model = config?.model || 'unknown';
-    }
-    withConfig(_cfg: any) {
-      const self = this;
-      return { invoke: async () => new AIMessage(`model:${self.model}`) } as any;
-    }
-    async invoke(_msgs: any[]) {
-      return new AIMessage(`model:${this.model}`);
-    }
-    async getNumTokens(text: string): Promise<number> {
-      return text.length;
-    }
-  }
-  return { ...mod, ChatOpenAI: MockChatOpenAI };
-});
-
-import { AgentNode as Agent } from '../src/nodes/agent/agent.node';
+import { describe, it, expect } from 'vitest';
+import { HumanMessage } from '@agyn/llm';
+import { SummarizationLLMReducer } from '../src/llm/reducers/summarization.llm.reducer';
+import type { LLMProvisioner } from '../src/llm/provisioners/llm.provisioner';
 
 describe('Agent summarization uses overridden model', () => {
-  it('summarization path honors setConfig({ model })', async () => {
-    const cfg = new ConfigService({
-      githubAppId: '1',
-      githubAppPrivateKey: 'k',
-      githubInstallationId: 'i',
-      openaiApiKey: 'x',
-      githubToken: 't',
-      mongodbUrl: 'm',
+  it('summarization path honors overridden model in reducer', async () => {
+    class ProvisionerStub implements LLMProvisioner {
+      async getLLM() {
+        return {
+          call: async ({ model }: { model: string; input: unknown }) => ({ text: `model:${model}`, output: [] }),
+        } as any;
+      }
+    }
+    const reducer = await new SummarizationLLMReducer(new ProvisionerStub()).init({
+      model: 'override-model',
+      keepTokens: 1,
+      maxTokens: 3,
+      systemPrompt: 'Summarize',
     });
-    const provisioner = { getLLM: async () => ({ call: async ({ model }: any) => ({ text: `model:${model}`, output: [] }) }) };
-    const agent = new Agent(new LoggerService(), provisioner as any);
-    agent.init({ nodeId: 'agent-1' });
-    // Default llm model should be gpt-5
-    const anyA: any = agent as any;
-    expect(anyA.llm.model).toBe('gpt-5');
-
-    // Configure summarization to trigger for small budgets and override the model
-    agent.setConfig({ summarizationKeepTokens: 1, summarizationMaxTokens: 3 });
-    agent.setConfig({ model: 'override-model' });
-
-    // Create a chat state that exceeds the maxTokens threshold to force summarization
-    const state = { messages: [new HumanMessage('AAAA'), new HumanMessage('BBBB')], summary: '' };
-
-    // Call summarization node directly to inspect summary content
-    const out = await (anyA.summarizeNode as any).action(state);
+    const state = { messages: [HumanMessage.fromText('AAAA'), HumanMessage.fromText('BBBB')], summary: '' };
+    const out = await reducer.invoke(state, { threadId: 't', finishSignal: { isActive: false } as any, callerAgent: {} as any });
     expect(out.summary).toBe('model:override-model');
   });
 });

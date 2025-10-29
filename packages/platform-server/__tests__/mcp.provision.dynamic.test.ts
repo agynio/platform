@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { LocalMCPServer } from '../src/nodes/mcp/localMcpServer.node';
+import { LocalMCPServerNode } from '../src/graph/nodes/mcp/localMcpServer.node';
 import type { McpServerConfig, McpTool } from '../src/mcp/types';
 
 class MockLogger { info=vi.fn(); debug=vi.fn(); error=vi.fn(); }
@@ -11,12 +11,12 @@ const mockProvider = {
 };
 
 describe.skip('LocalMCPServer Provisionable + DynamicConfigurable', () => {
-  let server: LocalMCPServer;
+  let server: LocalMCPServerNode;
   let logger: any;
 
   beforeEach(() => {
     logger = new MockLogger();
-    server = new LocalMCPServer(new MockContainerService() as any, logger as any);
+    server = new LocalMCPServerNode(new MockContainerService() as any, logger as any);
     (server as any).setContainerProvider(mockProvider as any);
   });
 

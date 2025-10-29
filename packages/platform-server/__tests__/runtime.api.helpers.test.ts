@@ -2,7 +2,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { LiveGraphRuntime } from '../src/graph/liveGraph.manager';
 import { TemplateRegistry } from '../src/graph/templateRegistry';
 import type { FactoryFn } from '../src/graph/types';
-import Node from '../src/nodes/base/Node';
+import Node from '../src/graph/nodes/base/Node';
 // Capabilities removed; test updated to use Node lifecycle
 import { LoggerService } from '../src/core/services/logger.service.js';
 import { ModuleRef } from '@nestjs/core';
@@ -13,22 +13,27 @@ class MockLogger extends LoggerService {
   error = vi.fn();
 }
 
+class ModuleRefStub {
+  create<T>(Cls: new (...args: any[]) => T): T {
+    return new Cls();
+  }
+}
+import { GraphRepository } from '../src/graph/graph.repository';
+class StubRepo extends GraphRepository {
+  async initIfNeeded(): Promise<void> {}
+  async get(): Promise<null> { return null; }
+  async upsert(): Promise<never> { throw new Error('not-implemented'); }
+  async upsertNodeState(): Promise<void> {}
+}
 function makeRuntimeAndRegistry() {
-  const moduleRef: ModuleRef = { create: (Cls: any) => new Cls() };
+  const moduleRef = new ModuleRefStub() as ModuleRef;
   const registry = new TemplateRegistry(moduleRef);
-  const logger = new MockLogger() as any as LoggerService;
+  const logger = new MockLogger();
   const runtime = new LiveGraphRuntime(
     logger,
     registry,
-    {
-      initIfNeeded: async () => {},
-      get: async () => null,
-      upsert: async () => {
-        throw new Error('not-implemented');
-      },
-      upsertNodeState: async () => {},
-    } as any,
-    { create: (Cls: any) => new Cls() } as any,
+    new StubRepo(),
+    moduleRef,
   );
   return { registry, runtime, logger };
 }
@@ -44,9 +49,9 @@ describe('Runtime helpers and GraphRepository API surfaces', () => {
       }
     }
 
-    const factory: FactoryFn = async () => new MockNode() as any;
+    const factory: FactoryFn = async () => new MockNode();
     class MockNodeClass extends MockNode {}
-    registry.register('mock', { title: 'Mock', kind: 'tool' }, MockNodeClass as any);
+    registry.register('mock', { title: 'Mock', kind: 'tool' }, MockNodeClass);
 
     // Apply a simple graph with one node
     await runtime.apply({ nodes: [{ id: 'n1', data: { template: 'mock', config: {} } }], edges: [] });
@@ -70,7 +75,7 @@ describe('Runtime helpers and GraphRepository API surfaces', () => {
         return {};
       }
     }
-    registry.register('dyn', { title: 'Dyn', kind: 'tool' }, Dyn1 as any);
+    registry.register('dyn', { title: 'Dyn', kind: 'tool' }, Dyn1);
 
     // Create a mock dyn-configurable node instance
     class DynNode extends Node<Record<string, unknown>> {
@@ -80,7 +85,7 @@ describe('Runtime helpers and GraphRepository API surfaces', () => {
         return {};
       }
     }
-    registry.register('dyn2', { title: 'Dyn2', kind: 'tool' }, DynNode as any);
+    registry.register('dyn2', { title: 'Dyn2', kind: 'tool' }, DynNode);
 
     // Runtime graph
     await runtime.apply({

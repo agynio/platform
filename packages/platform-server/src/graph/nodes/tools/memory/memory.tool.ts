@@ -117,29 +117,31 @@ export class UnifiedMemoryFunctionTool extends FunctionTool<typeof UnifiedMemory
     }
     // threadId now derived from args if provided; memory operations generally thread-scoped by node injection
     const threadId = undefined; // leaving undefined; factory may still scope
-    const service: MemoryToolService = (() => {
-    try {
-      const factory = this.deps.getMemoryFactory();
-      if (!factory) throw new Error('Memory not connected');
-      const created: MemoryService = factory({ threadId }) as MemoryService;
-      // Strictly assert expected interface
-      const svc: MemoryToolService = {
-        getDebugInfo: created.getDebugInfo?.bind(created),
-        read: created.read.bind(created),
-        list: created.list.bind(created),
-        append: created.append.bind(created),
-        update: created.update.bind(created),
-        delete: created.delete.bind(created),
-      };
-      return svc;
-    } catch (e) {
-      const err = this.extractError(e);
-      return this.makeEnvelope(command, path, false, undefined, {
-        message: err.message || 'memory not connected',
-        code: 'ENOTMEM',
-      });
-    }
-    })() as MemoryToolService;
+    const serviceOrEnvelope: MemoryToolService | string = (() => {
+      try {
+        const factory = this.deps.getMemoryFactory();
+        if (!factory) throw new Error('Memory not connected');
+        const created: MemoryService = factory({ threadId }) as MemoryService;
+        // Strictly assert expected interface
+        const svc: MemoryToolService = {
+          getDebugInfo: created.getDebugInfo?.bind(created),
+          read: created.read.bind(created),
+          list: created.list.bind(created),
+          append: created.append.bind(created),
+          update: created.update.bind(created),
+          delete: created.delete.bind(created),
+        };
+        return svc;
+      } catch (e) {
+        const err = this.extractError(e);
+        return this.makeEnvelope(command, path, false, undefined, {
+          message: err.message || 'memory not connected',
+          code: 'ENOTMEM',
+        });
+      }
+    })();
+    if (typeof serviceOrEnvelope === 'string') return serviceOrEnvelope;
+    const service = serviceOrEnvelope as MemoryToolService;
     const logger = this.deps.logger;
     if (isMemoryDebugEnabled()) {
       const dbg = service.getDebugInfo?.();

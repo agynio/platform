@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { LocalMCPServer } from '../src/nodes/mcp/localMcpServer.node';
+import { LocalMCPServerNode } from '../src/graph/nodes/mcp/localMcpServer.node';
 import { LoggerService } from '../src/core/services/logger.service.js';
 import { ContainerService } from '../src/infra/container/container.service';
 import { PassThrough } from 'node:stream';
@@ -82,7 +82,7 @@ describe('LocalMCPServer heartbeat behavior', () => {
       }),
     });
 
-    const server = new LocalMCPServer(containerService as any, logger as any, undefined as any, undefined as any, undefined as any);
+    const server = new LocalMCPServerNode(containerService as any, logger as any, undefined as any, undefined as any, undefined as any);
     server.setContainerProvider({ provide: async (t: string) => ({ id: `cid-${t}` }) } as any);
     await server.setConfig({ namespace: 'mock', command: 'ignored', heartbeatIntervalMs: 100 } as any);
 

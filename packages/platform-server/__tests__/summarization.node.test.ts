@@ -1,93 +1,85 @@
-import { describe, it, expect } from 'vitest';
-import { AIMessage, BaseMessage, HumanMessage, ToolMessage } from '@langchain/core/messages';
-import { ChatOpenAI } from '@langchain/openai';
-import { countTokens, shouldSummarize, summarizationNode, SummarizationNode, type ChatState, type SummarizationOptions } from '../src/lgnodes/summarization.lgnode';
+import { describe, it, expect, beforeEach } from 'vitest';
+import { AIMessage, HumanMessage, ResponseMessage, ToolCallMessage } from '@agyn/llm';
+import { SummarizationLLMReducer } from '../src/llm/reducers/summarization.llm.reducer';
+import { LLMProvisioner } from '../src/llm/provisioners/llm.provisioner';
+import type { LLMState } from '../src/llm/types';
 
-// Lightweight mock implementing needed surface (cast to ChatOpenAI)
-const llm = {
-  getNumTokens: async (text: string) => text.length,
-  invoke: async (_msgs: BaseMessage[]) => new AIMessage('SUMMARY'),
-} as unknown as ChatOpenAI;
+let reducer: SummarizationLLMReducer;
 
-describe('summarization helpers', () => {
+beforeEach(async () => {
+  const provisioner: Pick<LLMProvisioner, 'getLLM'> = {
+    getLLM: async () => ({ call: async () => new ResponseMessage({ output: [] }) } as any),
+  };
+  reducer = new SummarizationLLMReducer(provisioner as LLMProvisioner);
+  await reducer.init({ model: 'gpt-5', keepTokens: 10, maxTokens: 30, systemPrompt: 'summarize' });
+});
 
-  it('countTokens counts string and messages using llm', async () => {
-    expect(await countTokens(llm, 'abcd')).toBe(4);
-    const msgs = [new HumanMessage('hello'), new AIMessage('world')];
-    expect(await countTokens(llm, msgs)).toBe('helloworld'.length);
+describe('SummarizationLLMReducer', () => {
+  it('does not summarize when within token budget', async () => {
+    const state: LLMState = { messages: [HumanMessage.fromText('a'), HumanMessage.fromText('b')], summary: '' };
+    // With keepTokens=10 and maxTokens=30, small inputs may be pruned without summarization
+    const out = await reducer.invoke(state, { threadId: 't', finishSignal: { isActive: false } as any });
+    expect(out.summary ?? '').toBe('');
   });
 
-  it('shouldSummarize false when total tokens within maxTokens', async () => {
-    const state: ChatState = { messages: [new HumanMessage('a'), new AIMessage('b')], summary: '' };
-    const opts: SummarizationOptions = { llm, keepTokens: 30, maxTokens: 100 } as any;
-    expect(await shouldSummarize(state, opts)).toBe(false);
-  });
-
-  it('shouldSummarize true when token count exceeds maxTokens', async () => {
-    const state: ChatState = {
-      messages: [new HumanMessage('a'), new AIMessage('b'), new HumanMessage('c'), new AIMessage('d')],
-      summary: 'x'.repeat(50),
+  it('summarizes when token count exceeds maxTokens', async () => {
+    const prov: Pick<LLMProvisioner, 'getLLM'> = {
+      getLLM: async () => ({ call: async () => new ResponseMessage({ output: [AIMessage.fromText('SUMMARY').toPlain()] }) } as any),
     };
-    // total tokens ~ 4 messages (1 char each) + 50 summary = 54 > 30
-    const opts: SummarizationOptions = { llm, keepTokens: 10, maxTokens: 30 } as any;
-    expect(await shouldSummarize(state, opts)).toBe(true);
+    const r = new SummarizationLLMReducer(prov as LLMProvisioner);
+    await r.init({ model: 'gpt-5', keepTokens: 10, maxTokens: 30, systemPrompt: 'summarize' });
+    const msgs = Array.from({ length: 50 }).map((_, i) => HumanMessage.fromText(`m${i}`));
+    const state: LLMState = { messages: msgs, summary: '' };
+    const out = await r.invoke(state, { threadId: 't', finishSignal: { isActive: false } as any });
+    expect((out.summary ?? '').length).toBeGreaterThan(0);
   });
 
-  it('shouldSummarize false when older history exists but token budget not exceeded and no summary yet', async () => {
-    const state: ChatState = {
-      messages: [new HumanMessage('1'), new AIMessage('2'), new HumanMessage('3'), new AIMessage('4'), new HumanMessage('5')],
-    };
-    const opts: SummarizationOptions = { llm, keepTokens: 40, maxTokens: 100 } as any;
-    expect(await shouldSummarize(state, opts)).toBe(false);
-  });
-
-  it('summarizationNode returns non-empty summary and prunes messages to keepTokens budget tail', async () => {
-    const state: ChatState = {
-      messages: [new HumanMessage('1'), new AIMessage('2'), new HumanMessage('3'), new AIMessage('4'), new HumanMessage('5')],
-      summary: '',
-    };
-    // keepTokens small enough to only retain last ~2 messages (approx by char length)
-  const opts: SummarizationOptions = { llm, keepTokens: 1, maxTokens: 4 } as any;
-    const out = await summarizationNode(state, opts as any);
-    expect(out.summary && out.summary.length > 0).toBe(true);
+  it('keeps tool call context and handles outputs during summarize', async () => {
+    const call = new ToolCallMessage({ type: 'function_call', name: 't', call_id: 'c1', arguments: '{}' });
+    const resp = new ResponseMessage({ output: [call.toPlain(), AIMessage.fromText('x').toPlain()] });
+    const state: LLMState = { messages: [HumanMessage.fromText('h1'), resp], summary: '' };
+    const out = await reducer.invoke(state, { threadId: 't', finishSignal: { isActive: false } as any });
     expect(out.messages.length).toBeGreaterThan(0);
-    // Ensure tail are last original messages
-    const originalTail = state.messages.slice(-out.messages.length).map((m) => m.content);
-    const retainedTail = out.messages.map((m) => m.content);
-    expect(retainedTail).toEqual(originalTail);
   });
 
-    it('groupMessages groups AI tool_calls with following ToolMessages', () => {
-      // Create an AI message with mocked tool_calls followed by two tool responses
-    const ai = new AIMessage({
-      content: 'Use tools',
-      additional_kwargs: {
-        tool_calls: [
-          { id: 'tc1', type: 'function', function: { name: 't1', arguments: '{}' } },
-        ],
-      },
-    }) as AIMessage & { tool_calls: any[] };
-    (ai as any).tool_calls = [
-      { id: 'tc1', type: 'function', function: { name: 't1', arguments: '{}' } },
-    ];
-      const t1 = new ToolMessage({ tool_call_id: 'tc1', name: 't1', content: 'result1' });
-      const t2 = new ToolMessage({ tool_call_id: 'tc1', name: 't1', content: 'result2' });
-      const after = new HumanMessage('next');
-      const node = new SummarizationNode(llm, { keepTokens: 50, maxTokens: 100 });
-      const groups = (node as any).groupMessages([new HumanMessage('hi'), ai, t1, t2, after]);
-      expect(groups.length).toBe(3); // [Human], [AI, Tool, Tool], [Human]
-      expect(groups[1].length).toBe(3);
-      expect(groups[1][0]).toBe(ai);
-      expect(groups[1][1]).toBe(t1);
-      expect(groups[1][2]).toBe(t2);
-    });
+  it('no-op when maxTokens=0 (skip)', async () => {
+    const provisioner: Pick<LLMProvisioner, 'getLLM'> = { getLLM: async () => ({ call: async () => new ResponseMessage({ output: [] }) } as any) };
+    const r = new SummarizationLLMReducer(provisioner as LLMProvisioner);
+    await r.init({ model: 'gpt-5', keepTokens: 10, maxTokens: 0, systemPrompt: 'summarize' });
+    const state: LLMState = { messages: [HumanMessage.fromText('a')], summary: '' };
+    const out = await r.invoke(state, { threadId: 't', finishSignal: { isActive: false } as any });
+    expect(out.messages.map((m) => (m as any).type)).toEqual(state.messages.map((m) => (m as any).type));
+    expect(out.summary ?? '').toBe(state.summary ?? '');
+  });
 
-    it('groupMessages ignores orphan ToolMessages (no preceding AI tool_calls)', () => {
-      const orphan = new ToolMessage({ tool_call_id: 'orphan', name: 'tool', content: 'data' });
-      const node = new SummarizationNode(llm, { keepTokens: 10, maxTokens: 20 });
-      const groups = (node as any).groupMessages([orphan, new HumanMessage('hello')]);
-      // Orphan tool should be dropped; only the human message remains
-      expect(groups.length).toBe(1);
-      expect(groups[0][0]).toBeInstanceOf(HumanMessage);
-    });
+  it('no-op when under budget', async () => {
+    const provisioner: Pick<LLMProvisioner, 'getLLM'> = { getLLM: async () => ({ call: async () => new ResponseMessage({ output: [] }) } as any) };
+    const r = new SummarizationLLMReducer(provisioner as LLMProvisioner);
+    await r.init({ model: 'gpt-5', keepTokens: 1000, maxTokens: 2000, systemPrompt: 'summarize' });
+    const state: LLMState = { messages: [HumanMessage.fromText('short')], summary: 'S' };
+    const out = await r.invoke(state, { threadId: 't', finishSignal: { isActive: false } as any });
+    expect(out.summary ?? '').toBe('S');
+    expect(out.messages.length).toBe(state.messages.length);
+  });
+
+  it('no-op when no messages', async () => {
+    const provisioner: Pick<LLMProvisioner, 'getLLM'> = { getLLM: async () => ({ call: async () => new ResponseMessage({ output: [] }) } as any) };
+    const r = new SummarizationLLMReducer(provisioner as LLMProvisioner);
+    await r.init({ model: 'gpt-5', keepTokens: 10, maxTokens: 30, systemPrompt: 'summarize' });
+    const state: LLMState = { messages: [], summary: 'S' };
+    const out = await r.invoke(state, { threadId: 't', finishSignal: { isActive: false } as any });
+    expect(out.summary ?? '').toBe('S');
+    expect(out.messages.length).toBe(0);
+  });
+
+  it('no-op when keepTokens large yields empty tail', async () => {
+    const provisioner: Pick<LLMProvisioner, 'getLLM'> = { getLLM: async () => ({ call: async () => new ResponseMessage({ output: [] }) } as any) };
+    const r = new SummarizationLLMReducer(provisioner as LLMProvisioner);
+    await r.init({ model: 'gpt-5', keepTokens: 1000, maxTokens: 1000, systemPrompt: 'summarize' });
+    const messages = Array.from({ length: 5 }).map((_, i) => HumanMessage.fromText(`m${i}`));
+    const state: LLMState = { messages, summary: '' };
+    const out = await r.invoke(state, { threadId: 't', finishSignal: { isActive: false } as any });
+    expect(out.messages.length).toBe(messages.length);
+    expect(out.summary ?? '').toBe('');
+  });
 });

@@ -1,8 +1,9 @@
 import { describe, it, expect } from 'vitest';
 import type { Db } from 'mongodb';
-import { MemoryService, type MemoryDoc } from '../../src/nodes/memory.repository';
-import { UnifiedMemoryFunctionTool as UnifiedMemoryTool } from '../../src/nodes/tools/memory/memory.tool';
-import { LoggerService } from '../../src/core/services/logger.service.js';
+import { MemoryService, type MemoryDoc } from '../../src/graph/nodes/memory.repository';
+import { UnifiedMemoryFunctionTool as UnifiedMemoryTool } from '../../src/graph/nodes/tools/memory/memory.tool';
+import { LoggerService } from '../../src/core/services/logger.service';
+import { MemoryToolNode } from '../../src/graph/nodes/tools/memory/memory.node';
 
 // In-memory fake Db compatible with MemoryService for deterministic tests
 class FakeCollection<T extends MemoryDoc> {
@@ -64,7 +65,7 @@ describe('memory_append tool: path normalization and validation', () => {
     const db = new FakeDb() as unknown as Db;
     const factory = (opts: { threadId?: string }) => { const svc = new MemoryService(db); svc.init({ nodeId: 'nodeT', scope: opts.threadId ? 'perThread' : 'global', threadId: opts.threadId }); return svc; };
     const logger = new LoggerService();
-    const node = new (await import('../../src/nodes/tools/memory/memory.node')).MemoryToolNode(logger);
+    const node = new MemoryToolNode(logger);
     node.setMemorySource(factory);
     const tool = node.getTool();
     const cfg = { threadId: 'T1' } as any;

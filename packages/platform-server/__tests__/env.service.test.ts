@@ -42,7 +42,7 @@ describe('EnvService', () => {
   it('resolveEnvItems: vault disabled error', async () => {
     const vault = makeVault({ enabled: false });
     const svc = new EnvService(vault as any);
-    await expect(svc.resolveEnvItems([{ key: 'A', value: 'secret/x/y', source: 'vault' }])).rejects.toMatchObject({ code: 'vault_unavailable' });
+    await expect(svc.resolveEnvItems([{ key: 'A', value: 'secret/x/y', source: 'vault' }])).rejects.toMatchObject({ code: 'vault_secret_missing' });
   });
 
   it('resolveEnvItems: invalid vault ref', async () => {

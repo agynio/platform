@@ -1,7 +1,10 @@
 import { describe, it, expect, vi } from 'vitest';
 import { LoggerService } from '../src/core/services/logger.service';
-import { ShellTool } from '../src/nodes/tools/shell_command/shell_command.node';
-import { LocalMCPServer } from '../src/mcp/localMcpServer.node';
+import { ConfigService, configSchema } from '../src/core/services/config.service';
+import { EnvService } from '../src/env/env.service';
+import { VaultService } from '../src/vault/vault.service';
+import { ShellCommandNode } from '../src/graph/nodes/tools/shell_command/shell_command.node';
+import { LocalMCPServerNode } from '../src/graph/nodes/mcp/localMcpServer.node';
 
 class FakeContainer {
   last: any;
@@ -24,8 +27,17 @@ describe('Mixed Shell + MCP overlay isolation', () => {
   it('does not leak env between Shell and MCP nodes', async () => {
     const logger = new LoggerService();
     const provider: any = new SharedProvider();
+    const cfg = new ConfigService().init(
+      configSchema.parse({
+        llmProvider: 'openai', mongodbUrl: 'mongodb://localhost/test', agentsDatabaseUrl: 'mongodb://localhost/agents',
+      }),
+    );
+    const vault = new VaultService(cfg, logger);
+    const envService = new EnvService(vault);
 
-    const shell = new ShellTool(undefined as any, logger); shell.setContainerProvider(provider);
+    const shell = new ShellCommandNode(envService, logger);
+    shell.init({ nodeId: 'shell' });
+    shell.setContainerProvider(provider);
     await shell.setConfig({ env: [ { key: 'S_VAR', value: 's' } ] });
 
     // Mock docker for MCP
@@ -37,15 +49,14 @@ describe('Mixed Shell + MCP overlay isolation', () => {
       }),
     };
     const cs: any = { getDocker: () => docker };
-    const mcp = new LocalMCPServer(cs as any, logger as any, undefined as any, undefined as any, undefined as any);
-    // Inject EnvService to resolve array into map for overlay
-    ;(mcp as any).envService = { resolveEnvItems: async (items: any[]) => Object.fromEntries(items.map((i: any) => [i.key, i.value])) };
+    const mcp = new LocalMCPServerNode(cs, logger, vault, envService, cfg);
+    mcp.init({ nodeId: 'mcp' });
     (mcp as any).setContainerProvider(provider);
     await mcp.setConfig({ namespace: 'n', command: 'mcp start --stdio', env: [ { key: 'M_VAR', value: 'm' } ], startupTimeoutMs: 10 } as any);
 
     // Shell exec
-    const tool = shell.init();
-    const out = String(await tool.invoke({ command: 'printenv' }, { configurable: { thread_id: 't' } } as any));
+    const tool = shell.getTool();
+    const out = String(await tool.execute({ command: 'printenv' }, { threadId: 't' } as any));
     expect(out).toContain('S_VAR=s');
     expect(out).not.toContain('M_VAR=m');
 

@@ -1,73 +1,44 @@
-import { describe, it, expect, vi } from 'vitest';
-import { AIMessage, BaseMessage } from '@langchain/core/messages';
-import { LoggerService } from '../src/core/services/logger.service.js';
-import { ConfigService } from '../src/core/services/config.service.js';
-import { CheckpointerService } from '../src/services/checkpointer.service';
+import { describe, it, expect } from 'vitest';
+import { ResponseMessage, AIMessage, HumanMessage } from '@agyn/llm';
+import { LoggerService } from '../src/core/services/logger.service';
+import { ConfigService } from '../src/core/services/config.service';
 
-// Mock ChatOpenAI to avoid network; must be declared before importing Agent
-vi.mock('@langchain/openai', async (importOriginal) => {
-  const mod = await importOriginal();
-  class MockChatOpenAI extends mod.ChatOpenAI {
-    constructor(config: any) {
-      super({ ...config, apiKey: 'mock' });
-    }
-    withConfig(_cfg: any) {
-      return { invoke: async () => new AIMessage('ok') } as any;
-    }
-    async invoke(_msgs: BaseMessage[], _opts?: any) {
-      return new AIMessage('ok');
-    }
-    async getNumTokens(text: string): Promise<number> {
-      return text.length;
-    }
-  }
-  return { ...mod, ChatOpenAI: MockChatOpenAI };
-});
-
-// Mock CheckpointerService to avoid needing Mongo
-vi.mock('../src/services/checkpointer.service', async (importOriginal) => {
-  const mod = await importOriginal();
-  class Fake extends mod.CheckpointerService {
-    getCheckpointer() {
-      return {
-        async getTuple() {
-          return undefined;
-        },
-        async *list() {
-          // empty iterator
-        },
-        async put(_config: any, _checkpoint: any, _metadata: any) {
-          return { configurable: { thread_id: 't', checkpoint_ns: '', checkpoint_id: '1' } } as any;
-        },
-        async putWrites() {},
-        getNextVersion() {
-          return '1';
-        },
-      } as any;
-    }
-  }
-  return { ...mod, CheckpointerService: Fake };
-});
-
-import { Agent } from '../src/nodes/agent/agent.node';
+import { AgentNode as Agent } from '../src/graph/nodes/agent/agent.node';
+import { Test } from '@nestjs/testing';
+import { LLMProvisioner } from '../src/llm/provisioners/llm.provisioner';
+import { AgentRunService } from '../src/graph/nodes/agentRun.repository';
 
 describe('Agent summarization graph', () => {
   it('invokes successfully over several turns with summarization configured', async () => {
-    const cfg = new ConfigService({
-      githubAppId: '1',
-      githubAppPrivateKey: 'k',
-      githubInstallationId: 'i',
-      openaiApiKey: 'x',
-      githubToken: 't',
-      mongodbUrl: 'm',
-    });
-    const agent = new Agent(cfg, new LoggerService(), new CheckpointerService(new LoggerService()) as any, 'agent-1');
-    agent.setConfig({ summarizationKeepTokens: 2, summarizationMaxTokens: 200 });
+    const provisioner = { getLLM: async () => ({ call: async () => new ResponseMessage({ output: [AIMessage.fromText('ok').toPlain()] }) }) };
+    const runsStub: AgentRunService = {
+      ensureIndexes: async () => {},
+      startRun: async () => {},
+      markTerminating: async () => 'not_running',
+      markTerminated: async () => {},
+      clear: async () => {},
+      list: async () => [],
+      findByRunId: async () => null,
+    } as AgentRunService;
 
-    // Use the agent wrapper to invoke
-    const r1 = await agent.invoke('t', { content: 'hi', info: {} } as any);
-    const r2 = await agent.invoke('t', { content: 'there', info: {} } as any);
-    const r3 = await agent.invoke('t', { content: 'friend', info: {} } as any);
+    const module = await Test.createTestingModule({
+      providers: [
+        LoggerService,
+        { provide: ConfigService, useValue: new ConfigService({ githubAppId: '1', githubAppPrivateKey: 'k', githubInstallationId: 'i', openaiApiKey: 'x', githubToken: 't', mongodbUrl: 'm' }) },
+        { provide: LLMProvisioner, useValue: provisioner },
+        { provide: AgentRunService, useValue: runsStub },
+        Agent,
+      ],
+    }).compile();
+
+    const agent = module.get(Agent);
+    agent.init({ nodeId: 'agent-1' });
+    await agent.setConfig({ summarizationKeepTokens: 2, summarizationMaxTokens: 200 });
+
+    const msg = (text: string) => HumanMessage.fromText(text);
+    const r1 = await agent.invoke('t', [msg('hi')]);
+    const r2 = await agent.invoke('t', [msg('there')]);
+    const r3 = await agent.invoke('t', [msg('friend')]);
 
     expect(r1).toBeDefined();
     expect(r2).toBeDefined();

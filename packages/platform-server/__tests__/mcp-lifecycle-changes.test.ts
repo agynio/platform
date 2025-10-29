@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { LocalMCPServer } from '../src/nodes/mcp/localMcpServer.node';
+import { LocalMCPServerNode } from '../src/graph/nodes/mcp/localMcpServer.node';
 import { McpServerConfig } from '../src/mcp/types.js';
 import { LoggerService } from '../src/core/services/logger.service.js';
 import { ContainerService } from '../src/infra/container/container.service';
@@ -9,7 +9,7 @@ describe('MCP Lifecycle Changes', () => {
   
   it('supports threadId parameter in callTool method', async () => {
     const containerService = new ContainerService(logger);
-    const server = new LocalMCPServer(containerService as any, logger as any, undefined as any, undefined as any, undefined as any);
+    const server = new LocalMCPServerNode(containerService as any, logger as any, undefined as any, undefined as any, undefined as any);
     
     // Test that the interface accepts threadId parameter
     const mockProvider = {
@@ -34,7 +34,7 @@ describe('MCP Lifecycle Changes', () => {
   
   it('has discoverTools method for initial tool discovery', async () => {
     const containerService = new ContainerService(logger);
-    const server = new LocalMCPServer(containerService as any, logger as any, undefined as any, undefined as any, undefined as any);
+    const server = new LocalMCPServerNode(containerService as any, logger as any, undefined as any, undefined as any, undefined as any);
     
     // Test that discoverTools method exists and can be called
     expect(typeof server.discoverTools).toBe('function');
@@ -55,7 +55,7 @@ describe('MCP Lifecycle Changes', () => {
     // 3. callTool() creates container per thread on-demand
     
     const containerService = new ContainerService(logger);
-    const server = new LocalMCPServer(containerService as any, logger as any, undefined as any, undefined as any, undefined as any);
+    const server = new LocalMCPServerNode(containerService as any, logger as any, undefined as any, undefined as any, undefined as any);
     
     // Key behavior changes:
     // 1. Server has discoverTools method

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { ShellToolStaticConfigSchema } from '../../src/nodes/tools/shell_command/shell_command.node';
+import { ShellToolStaticConfigSchema } from '../../src/graph/nodes/tools/shell_command/shell_command.node';
 
 describe('ShellToolStaticConfigSchema validation', () => {
   it('accepts 0 for both timeouts', () => {

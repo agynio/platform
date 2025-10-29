@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import type { Db } from 'mongodb';
-import { MemoryService, type MemoryDoc } from '../src/nodes/memory.repository';
+import { MemoryService, type MemoryDoc } from '../src/graph/nodes/memory.repository';
 
 // Minimal in-memory fakes for MongoDb used by MemoryService. Deterministic and fast.
 class FakeCollection<T extends MemoryDoc> {

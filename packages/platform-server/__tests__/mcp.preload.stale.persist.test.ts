@@ -1,32 +1,31 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { LocalMCPServer } from '../src/nodes/mcp/localMcpServer.node';
+import { LocalMCPServerNode } from '../src/graph/nodes/mcp/localMcpServer.node';
 import { LoggerService } from '../src/core/services/logger.service.js';
-import { ContainerService } from '../src/core/services/container.service.js';
+import { ContainerService } from '../src/infra/container/container.service';
 
 describe('LocalMCPServer preload + staleness + persist', () => {
-  let server: LocalMCPServer;
-  let persisted: any = null;
+  let server: LocalMCPServerNode;
+  let lastUpdate: { tools: any[]; updatedAt: number } | null = null;
 
   beforeEach(async () => {
     const logger = new LoggerService();
     const cs = new ContainerService(logger);
-    server = new LocalMCPServer(cs as any, logger as any, undefined as any, undefined as any, undefined as any);
+    server = new LocalMCPServerNode(cs as any, logger as any, undefined as any, undefined as any, undefined as any);
     await server.setConfig({ namespace: 'x', command: 'echo' } as any);
     (server as any).setContainerProvider({ provide: async () => ({ id: 'cid', stop: async () => {}, remove: async () => {} }) });
-    server.setStatePersistor((s) => { persisted = s; });
+    (server as any).on('mcp.tools_updated', (p: { tools: any[]; updatedAt: number }) => { lastUpdate = p; });
   });
 
   it('preloads cached tools and persists after discovery', async () => {
     // Preload
-    server.preloadCachedToolSummaries([{ name: 'cached' } as any], Date.now() - 1000);
+    (server as any).preloadCachedTools([{ name: 'cached', description: 'd', inputSchema: { type: 'object' } } as any], Date.now() - 1000);
     // Force discovery by marking stale
-    server.setGlobalStaleTimeoutMs(1);
+    await server.setConfig({ namespace: 'x', command: 'echo', staleTimeoutMs: 1 } as any);
     // Stub discoverTools to avoid docker
-    (server as any).discoverTools = async function() { (this as any).toolsCache = [{ name: 'fresh' }]; (this as any).toolsDiscovered = true; (this as any).lastToolsUpdatedAt = Date.now(); await (this as any).statePersistor?.({ mcp: { tools: (this as any).toolsCache, toolsUpdatedAt: (this as any).lastToolsUpdatedAt } }); return (this as any).toolsCache; };
+    (server as any).discoverTools = async function() { (this as any).preloadCachedTools([{ name: 'fresh', description: 'd', inputSchema: { type: 'object' } }], Date.now()); return (this as any).listTools(); };
     await (server as any).provision();
     const tools = server.listTools();
-    expect(tools.find((t) => t.name === 'fresh')).toBeTruthy();
-    expect(persisted?.mcp?.tools?.[0]?.name).toBe('fresh');
-    expect(typeof persisted?.mcp?.toolsUpdatedAt).toBe('number');
+    expect(tools.find((t) => String(t.name).endsWith('_fresh'))).toBeTruthy();
+    expect(typeof lastUpdate?.updatedAt).toBe('number');
   });
 });

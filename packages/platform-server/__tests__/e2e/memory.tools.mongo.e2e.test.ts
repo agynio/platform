@@ -1,9 +1,9 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { MongoMemoryServer } from 'mongodb-memory-server';
 import { MongoClient } from 'mongodb';
-import { MemoryNode } from '../../src/nodes/memory/memory.node';
-import { LoggerService } from '../../src/core/services/logger.service.js';
-import { UnifiedMemoryFunctionTool as UnifiedMemoryTool } from '../../src/nodes/tools/memory/memory.tool';
+import { MemoryNode } from '../../src/graph/nodes/memory/memory.node';
+import { LoggerService } from '../../src/core/services/logger.service';
+import { UnifiedMemoryFunctionTool as UnifiedMemoryTool } from '../../src/graph/nodes/tools/memory/memory.tool';
 
 const RUN_MONGOMS = process.env.RUN_MONGOMS === '1';
 
@@ -35,7 +35,8 @@ describe.skipIf(!RUN_MONGOMS)('E2E: memory tools with real MongoDB (mongodb-memo
       const memNode = new MemoryNode(db as any, undefined as any as any);
       memNode.init({ nodeId: 'node-1' });
 
-      const node = new (await import('../../src/nodes/tools/memory/memory.node')).MemoryToolNode(logger);
+      const { MemoryToolNode } = require('../../src/graph/nodes/tools/memory/memory.node');
+      const node = new MemoryToolNode(logger);
       node.setMemorySource(memNode);
       const unified = node.getTool();
 
@@ -53,7 +54,8 @@ describe.skipIf(!RUN_MONGOMS)('E2E: memory tools with real MongoDB (mongodb-memo
       const memNode = new MemoryNode(db as any, undefined as any as any);
       memNode.init({ nodeId: 'node-1' });
 
-      const node = new (await import('../../src/nodes/tools/memory/memory.node')).MemoryToolNode(logger);
+      const { MemoryToolNode } = require('../../src/graph/nodes/tools/memory/memory.node');
+      const node = new MemoryToolNode(logger);
       node.setMemorySource(memNode);
       const unified = node.getTool();
 
@@ -75,7 +77,7 @@ describe.skipIf(!RUN_MONGOMS)('E2E: memory tools with real MongoDB (mongodb-memo
       const memNode = new MemoryNode(db as any, undefined as any as any);
       memNode.init({ nodeId: 'node-lrud-1' });
 
-      const node = new (await import('../../src/nodes/tools/memory/memory.node')).MemoryToolNode(logger); node.setMemorySource(memNode); const unified = node.getTool();
+      const { MemoryToolNode } = require('../../src/graph/nodes/tools/memory/memory.node'); const node = new MemoryToolNode(logger); node.setMemorySource(memNode); const unified = node.getTool();
       const cfg = { threadId: 'debug' } as any;
 
       await unified.invoke({ path: 'projects/p1', command: 'append', content: '{"name":"Alpha"}' }, cfg);

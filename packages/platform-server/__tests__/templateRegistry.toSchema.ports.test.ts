@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest';
 import type { TemplatePortConfig } from '../src/graph/ports.types';
 import { TemplateRegistry } from '../src/graph/templateRegistry';
 import type { TemplateNodeSchema } from '../src/graph/types';
-import Node from '../src/nodes/base/Node';
+import Node from '../src/graph/nodes/base/Node';
 
 // Define a minimal DummyNode class matching Node contract
 @Injectable({ scope: Scope.TRANSIENT })

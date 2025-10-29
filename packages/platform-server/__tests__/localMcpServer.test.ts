@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { LocalMCPServer } from '../src/nodes/mcp/localMcpServer.node';
+import { LocalMCPServerNode } from '../src/graph/nodes/mcp/localMcpServer.node';
 import { McpServerConfig } from '../src/mcp/types.js';
 import { LoggerService } from '../src/core/services/logger.service.js';
 import { PassThrough } from 'node:stream';
@@ -100,7 +100,7 @@ function createInProcessMock() {
 
 describe('LocalMCPServer (mock)', () => {
   const logger = new LoggerService();
-  let server: LocalMCPServer;
+  let server: LocalMCPServerNode;
   let containerService: ContainerService;
 
   beforeAll(async () => {
@@ -124,7 +124,7 @@ describe('LocalMCPServer (mock)', () => {
         inspect: async () => ({ ExitCode: 0 }),
       }),
     });
-    server = new LocalMCPServer(containerService as any, logger as any, undefined as any, undefined as any, undefined as any);
+    server = new LocalMCPServerNode(containerService as any, logger as any, undefined as any, undefined as any, undefined as any);
     // Provide a dummy container provider to satisfy start precondition (reuse mocked docker above)
     const mockProvider = {
       provide: async (threadId: string) => ({ 
@@ -145,7 +145,7 @@ describe('LocalMCPServer (mock)', () => {
 
   it('lists tools', async () => {
     const tools = server.listTools();
-    expect(tools.find((t) => t.name === 'echo')).toBeTruthy();
+    expect(tools.find((t) => String(t.name).endsWith('_echo'))).toBeTruthy();
   });
 
   it('calls tool', async () => {
@@ -159,7 +159,7 @@ describe('LocalMCPServer (mock)', () => {
       lastPayload = p;
     });
     // Preload cached tools -> should emit tools_updated
-    (server as any).preloadCachedToolSummaries([{ name: 'pre' }], Date.now());
+    (server as any).preloadCachedTools([{ name: 'pre' }], Date.now());
     expect(lastPayload).toBeTruthy();
     expect(Array.isArray(lastPayload!.tools)).toBe(true);
     // Dynamic config path removed; ensure discover emits update

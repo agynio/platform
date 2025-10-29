@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { toJSONSchema } from 'zod';
-import { UnifiedMemoryToolStaticConfigSchema } from '../../src/nodes/tools/memory/memory.tool';
+import { UnifiedMemoryToolStaticConfigSchema } from '../../src/graph/nodes/tools/memory/memory.tool';
 
 // Ensure that converting tool schemas to JSON Schema does not throw and produces expected keys
 

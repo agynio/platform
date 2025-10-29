@@ -11,7 +11,7 @@ describe('nix controller', () => {
   let controller: NixController;
   let reply: FastifyReply;
   beforeEach(() => {
-    const cfg = new ConfigService(
+    const cfg = new ConfigService().init(
       configSchema.parse({
         llmProvider: 'openai',
         githubAppId: 'x', githubAppPrivateKey: 'x', githubInstallationId: 'x', githubToken: 'x', mongodbUrl: 'x',

@@ -1,16 +1,16 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { Agent } from '../src/nodes/agent/agent.node';
-import { LocalMCPServer } from '../src/nodes/mcp/localMcpServer.node';
+// Avoid importing AgentNode to prevent prisma client load in skipped test
+class Agent {}
+import { LocalMCPServerNode as LocalMCPServer } from '../src/graph/nodes/mcp/localMcpServer.node';
 import { LoggerService } from '../src/core/services/logger.service.js';
 import { ConfigService } from '../src/core/services/config.service.js';
-import { CheckpointerService } from '../src/services/checkpointer.service';
 import type { McpTool, McpServerConfig } from '../src/mcp/types';
 
 // Mocks
 class MockLogger extends LoggerService { info=vi.fn(); debug=vi.fn(); error=vi.fn(); }
 class MockContainerService { getDocker(){ return {}; } }
 class MockConfigService extends ConfigService { constructor(){ super({ openaiApiKey: 'test' } as any); } }
-class MockCheckpointerService extends CheckpointerService { constructor(){ super(new MockLogger()); } getCheckpointer(){ return { get: async ()=>undefined, put: async ()=>undefined } as any; } }
+class MockCheckpointerService { constructor(){} getCheckpointer(){ return { get: async ()=>undefined, put: async ()=>undefined } as any; } }
 
 // Minimal mock provider
 const mockProvider = { provide: async (id: string) => ({ id: `c-${id}`, stop: async () => {}, remove: async () => {} }) };

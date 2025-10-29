@@ -1,10 +1,12 @@
 import { describe, it, expect } from 'vitest';
 import { ConfigService, configSchema } from '../src/core/services/config.service';
-import { NcpsKeyService } from '../src/core/services/ncpsKey.service';
+import { LoggerService } from '../src/core/services/logger.service';
+import { NcpsKeyService } from '../src/infra/ncps/ncpsKey.service';
 
 describe('NcpsKeyService', () => {
   const baseEnv = {
     githubAppId: 'x', githubAppPrivateKey: 'x', githubInstallationId: 'x', openaiApiKey: 'x', githubToken: 'x', mongodbUrl: 'x',
+    llmProvider: 'openai', agentsDatabaseUrl: 'mongodb://localhost/agents',
     graphStore: 'mongo', graphRepoPath: './data/graph', graphBranch: 'graph-state',
     dockerMirrorUrl: 'http://registry-mirror:5000', nixAllowedChannels: 'nixpkgs-unstable', nixHttpTimeoutMs: '5000', nixCacheTtlMs: String(300000), nixCacheMax: '500',
     mcpToolsStaleTimeoutMs: '0', ncpsEnabled: 'true', ncpsUrl: 'http://ncps:8501',
@@ -12,8 +14,8 @@ describe('NcpsKeyService', () => {
   } as const;
 
   it('fetches key successfully on init', async () => {
-    const cfg = new ConfigService(configSchema.parse(baseEnv));
-    const svc = new NcpsKeyService(cfg);
+    const cfg = new ConfigService().init(configSchema.parse(baseEnv));
+    const svc = new NcpsKeyService(cfg, new LoggerService());
     // Inject mock fetch that returns a valid key
     svc.setFetchImpl(async () => new Response('cache:AAAAAAA=', { status: 200, headers: { 'Content-Type': 'text/plain' } }));
     await svc.init();
@@ -23,8 +25,8 @@ describe('NcpsKeyService', () => {
   });
 
   it('retries then succeeds', async () => {
-    const cfg = new ConfigService(configSchema.parse({ ...baseEnv, ncpsStartupMaxRetries: '3', ncpsRetryBackoffMs: '1' }));
-    const svc = new NcpsKeyService(cfg);
+    const cfg = new ConfigService().init(configSchema.parse({ ...baseEnv, ncpsStartupMaxRetries: '3', ncpsRetryBackoffMs: '1' }));
+    const svc = new NcpsKeyService(cfg, new LoggerService());
     let call = 0;
     svc.setFetchImpl(async () => {
       call++;
@@ -36,21 +38,21 @@ describe('NcpsKeyService', () => {
   });
 
   it('persistent failure respects allow start config', async () => {
-    const cfg1 = new ConfigService(configSchema.parse({ ...baseEnv, ncpsAllowStartWithoutKey: 'true', ncpsStartupMaxRetries: '2', ncpsRetryBackoffMs: '1' }));
-    const svc1 = new NcpsKeyService(cfg1);
+    const cfg1 = new ConfigService().init(configSchema.parse({ ...baseEnv, ncpsAllowStartWithoutKey: 'true', ncpsStartupMaxRetries: '2', ncpsRetryBackoffMs: '1' }));
+    const svc1 = new NcpsKeyService(cfg1, new LoggerService());
     svc1.setFetchImpl(async () => new Response('no', { status: 500 }));
     await svc1.init();
     expect(svc1.hasKey()).toBe(false);
 
-    const cfg2 = new ConfigService(configSchema.parse({ ...baseEnv, ncpsAllowStartWithoutKey: 'false', ncpsStartupMaxRetries: '1', ncpsRetryBackoffMs: '1' }));
-    const svc2 = new NcpsKeyService(cfg2);
+    const cfg2 = new ConfigService().init(configSchema.parse({ ...baseEnv, ncpsAllowStartWithoutKey: 'false', ncpsStartupMaxRetries: '1', ncpsRetryBackoffMs: '1' }));
+    const svc2 = new NcpsKeyService(cfg2, new LoggerService());
     svc2.setFetchImpl(async () => new Response('no', { status: 500 }));
     await expect(svc2.init()).rejects.toBeTruthy();
   });
 
   it('rejects invalid or oversize payloads', async () => {
-    const cfg = new ConfigService(configSchema.parse({ ...baseEnv, ncpsStartupMaxRetries: '0' }));
-    const svc = new NcpsKeyService(cfg);
+    const cfg = new ConfigService().init(configSchema.parse({ ...baseEnv, ncpsStartupMaxRetries: '0' }));
+    const svc = new NcpsKeyService(cfg, new LoggerService());
     svc.setFetchImpl(async () => new Response('not a key', { status: 200, headers: { 'Content-Type': 'text/plain' } }));
     await svc.init();
     expect(svc.hasKey()).toBe(false);
@@ -58,10 +60,10 @@ describe('NcpsKeyService', () => {
 
   it('refresh picks up new key and keeps dual keys during rotation grace', async () => {
     // Enable short refresh interval
-    const cfg = new ConfigService(
+    const cfg = new ConfigService().init(
       configSchema.parse({ ...baseEnv, ncpsRefreshIntervalMs: '5', ncpsRotationGraceMinutes: '1', ncpsRetryBackoffMs: '1' }),
     );
-    const svc = new NcpsKeyService(cfg);
+    const svc = new NcpsKeyService(cfg, new LoggerService());
     let c = 0;
     svc.setFetchImpl(async () => {
       c++;
@@ -84,7 +86,7 @@ describe('NcpsKeyService', () => {
     const fs = await import('node:fs/promises');
     const caPath = '/tmp/mock-ca.pem';
     await fs.writeFile(caPath, '-----BEGIN CERTIFICATE-----\nMIIB...\n-----END CERTIFICATE-----\n');
-    const cfg = new ConfigService(
+    const cfg = new ConfigService().init(
       configSchema.parse({
         ...baseEnv,
         // Ensure server URL is https to trigger dispatcher with CA
@@ -93,7 +95,7 @@ describe('NcpsKeyService', () => {
         ncpsRefreshIntervalMs: '0',
       })
     );
-    const svc = new NcpsKeyService(cfg);
+    const svc = new NcpsKeyService(cfg, new LoggerService());
     let seenDispatcher: import("undici").Dispatcher | undefined;
     svc.setFetchImpl(async (input: RequestInfo | URL, init?: RequestInit & { dispatcher?: import('undici').Dispatcher }) => {
       seenDispatcher = init?.dispatcher;
@@ -105,7 +107,7 @@ describe('NcpsKeyService', () => {
   });
 
   it('builds pubkey URL from server URL, not container URL', async () => {
-    const cfg = new ConfigService(
+    const cfg = new ConfigService().init(
       configSchema.parse({
         ...baseEnv,
         ncpsUrlServer: 'http://localhost:9999',
@@ -113,7 +115,7 @@ describe('NcpsKeyService', () => {
         ncpsRefreshIntervalMs: '0',
       })
     );
-    const svc = new NcpsKeyService(cfg);
+    const svc = new NcpsKeyService(cfg, new LoggerService());
     let seenUrl: string | undefined;
     svc.setFetchImpl(async (input: RequestInfo | URL) => {
       seenUrl = String(input);

@@ -74,19 +74,20 @@ async function bootstrap() {
   logger.info('Loading live graph runtime...');
   await liveGraphRuntime.load();
 
-  const shutdown = async () => {
-    logger.info('Shutting down...');
+  // Tmp disable graceful shutdown because shutdown signal needs to be passed to all async jobs
+  //   const shutdown = async () => {
+  //     logger.info('Shutting down...');
 
-    const cleanup = app.get(ContainerCleanupService);
-    cleanup?.stop();
+  //     const cleanup = app.get(ContainerCleanupService);
+  //     cleanup?.stop();
 
-    await app.get(MongoService).close();
-    await fastifyInstance.close();
+  //     await app.get(MongoService).close();
+  //     await fastifyInstance.close();
 
-    process.exit(0);
-  };
-  process.on('SIGINT', shutdown);
-  process.on('SIGTERM', shutdown);
+  //     process.exit(0);
+  //   };
+  //   process.on('SIGINT', shutdown);
+  //   process.on('SIGTERM', shutdown);
 }
 
 bootstrap().catch((e) => {

@@ -1,8 +1,9 @@
 import { describe, it, expect, vi } from 'vitest';
-import { ShellCommandNode } from '../../src/nodes/tools/shell_command/shell_command.node';
+import { ShellCommandNode } from '../../src/graph/nodes/tools/shell_command/shell_command.node';
 import { LoggerService } from '../../src/core/services/logger.service';
 import { ExecTimeoutError } from '../../src/utils/execTimeout';
-import { ContainerHandle, ContainerService } from '../../src/infra/container/container.service';
+import { ContainerHandle } from '../../src/infra/container/container.handle';
+import { ContainerService } from '../../src/infra/container/container.service';
 
 // ANSI colored output to verify stripping; include more than 10k and ensure we only keep tail
 const ANSI_RED = '\u001b[31m';
@@ -19,7 +20,9 @@ describe('ShellTool timeout tail inclusion and ANSI stripping', () => {
     class FakeContainer extends ContainerHandle { override async exec(): Promise<never> { throw err; } }
     class FakeProvider { constructor(private logger: LoggerService) {} async provide(): Promise<ContainerHandle> { return new FakeContainer(new ContainerService(this.logger), 'fake'); } }
     const provider = new FakeProvider(logger);
-    const node = new ShellCommandNode(undefined as any);
+    const archiveStub = { createSingleFileTar: async () => Buffer.from('tar') } as const;
+    const moduleRefStub = { create: (cls: any) => new (cls as any)(archiveStub) } as const;
+    const node = new ShellCommandNode(undefined as any, logger as any, moduleRefStub as any);
     node.setContainerProvider(provider as any);
     await node.setConfig({});
     const t = node.getTool();
