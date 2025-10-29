@@ -1,8 +1,8 @@
 import { describe, it, expect, vi } from 'vitest';
 import { AIMessage } from '@langchain/core/messages';
-import { CallAgentTool } from '../src/nodes/tools/call_agent/call_agent.node';
+import { CallAgentTool } from '../src/graph/nodes/tools/call_agent/call_agent.node';
 import { LoggerService } from '../src/core/services/logger.service.js';
-import { BaseAgent } from '../src/nodes/agent/agent.node';
+import { BaseAgent } from '../src/graph/nodes/agent/agent.node';
 import { DynamicStructuredTool } from '@langchain/core/tools';
 import { TemplateRegistry } from '../src/graph/templateRegistry';
 import { LiveGraphRuntime } from '../src/graph/liveGraph.manager';

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { LocalMCPServer } from '../src/nodes/mcp/localMcpServer.node';
+import { LocalMCPServerNode as LocalMCPServer } from '../src/graph/nodes/mcp/localMcpServer.node';
 import type { McpServerConfig, McpTool } from '../src/mcp/types';
 
 class MockLogger { info=vi.fn(); debug=vi.fn(); error=vi.fn(); }

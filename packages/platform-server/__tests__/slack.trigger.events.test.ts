@@ -21,7 +21,7 @@ vi.mock('@slack/socket-mode', () => {
 declare module '@slack/socket-mode' {
   export function __getLastSocketClient(): { handlers: Record<string, Function[]> } | null;
 }
-import { SlackTrigger } from '../src/nodes/slackTrigger/slackTrigger.node';
+import { SlackTrigger } from '../src/graph/nodes/slackTrigger/slackTrigger.node';
 import { __getLastSocketClient } from '@slack/socket-mode';
 
 describe('SlackTrigger events', () => {

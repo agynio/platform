@@ -2,7 +2,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { LiveGraphRuntime } from '../src/graph/liveGraph.manager';
 import { TemplateRegistry } from '../src/graph/templateRegistry';
 import type { FactoryFn } from '../src/graph/types';
-import Node from '../src/nodes/base/Node';
+import Node from '../src/graph/nodes/base/Node';
 // Capabilities removed; test updated to use Node lifecycle
 import { LoggerService } from '../src/core/services/logger.service.js';
 import { ModuleRef } from '@nestjs/core';

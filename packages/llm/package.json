@@ -10,6 +10,7 @@
   "packageManager": "pnpm@10.5.0",
   "dependencies": {
     "openai": "^6.6.0",
-    "zod": "^4.1.12"
+    "zod": "^4.1.12",
+    "uuid": "^9.0.1"
   }
 }

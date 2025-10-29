@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { AgentNode as Agent } from '../src/nodes/agent/agent.node';
+import { AgentNode as Agent } from '../src/graph/nodes/agent/agent.node';
 import { LoggerService } from '../src/core/services/logger.service.js';
 import type { ModuleRef } from '@nestjs/core';
 

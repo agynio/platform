@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { MessagesBuffer, ProcessBuffer } from '../src/agents/messagesBuffer';
+import { MessagesBuffer, ProcessBuffer } from '../src/graph/nodes/agent/messagesBuffer';
 
 describe('MessagesBuffer', () => {
   it('drains immediately when debounce=0', () => {

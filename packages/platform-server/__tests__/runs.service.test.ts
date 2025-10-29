@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { MongoMemoryServer } from 'mongodb-memory-server';
 import { MongoClient, Db } from 'mongodb';
-import { AgentRunService } from '../src/nodes/agentRun.repository';
+import { AgentRunService } from '../src/graph/nodes/agentRun.repository';
 import { LoggerService } from '../src/core/services/logger.service.js';
 
 describe('AgentRunService', () => {

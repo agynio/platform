@@ -1,8 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import type { Db } from 'mongodb';
-import { MemoryService, type MemoryDoc } from '../src/nodes/memory.repository';
-import { UnifiedMemoryFunctionTool as UnifiedMemoryTool } from '../src/nodes/tools/memory/memory.tool';
-import { LoggerService } from '../src/core/services/logger.service.js';
+import { MemoryService, type MemoryDoc } from '../src/graph/nodes/memory.repository';
+import { UnifiedMemoryFunctionTool as UnifiedMemoryTool } from '../src/graph/nodes/tools/memory/memory.tool';
+import { LoggerService } from '../src/core/services/logger.service';
 
 // In-memory fake Db compatible with MemoryService for deterministic tests
 class FakeCollection<T extends MemoryDoc> {

@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { LoggerService } from '../src/core/services/logger.service.js';
-import { ManageToolNode, type ManageableAgent } from '../src/nodes/tools/manage/manage.node';
-import { ManageFunctionTool } from '../src/nodes/tools/manage/manage.tool';
+import { ManageToolNode, type ManageableAgent } from '../src/graph/nodes/tools/manage/manage.node';
+import { ManageFunctionTool } from '../src/graph/nodes/tools/manage/manage.tool';
 import { TemplateRegistry } from '../src/graph/templateRegistry';
 import type { ModuleRef } from '@nestjs/core';
 import { LiveGraphRuntime } from '../src/graph/liveGraph.manager';

@@ -3,7 +3,7 @@ import { NestFactory } from '@nestjs/core';
 import { FastifyAdapter } from '@nestjs/platform-fastify';
 import { AppModule } from '../src/bootstrap/app.module';
 import { GraphSocketGateway } from '../src/gateway/graph.socket.gateway';
-import Node from '../src/nodes/base/Node';
+import Node from '../src/graph/nodes/base/Node';
 
 class DummyNode extends Node<Record<string, unknown>> { getPortConfig() { return { sourcePorts: { $self: { kind: 'instance' } } } as const; } }
 
@@ -22,4 +22,3 @@ describe('Gateway node_status integration', () => {
     expect(true).toBe(true);
   });
 });
-

@@ -1,10 +1,10 @@
 import { describe, it, expect, vi } from 'vitest';
-import { AgentNode } from '../src/nodes/agent/agent.node';
+import { AgentNode } from '../src/graph/nodes/agent/agent.node';
 import { ConfigService } from '../src/core/services/config.service';
 import { LoggerService } from '../src/core/services/logger.service';
 import { LLM } from '@agyn/llm';
 import { ResponseMessage, SystemMessage, ToolCallMessage, ToolCallOutputMessage } from '@agyn/llm';
-import { FinishNode } from '../src/nodes/tools/finish/finish.node';
+import { FinishNode } from '../src/graph/nodes/tools/finish/finish.node';
 import OpenAI from 'openai';
 import type { Response as OpenAIResponse, ResponseFunctionToolCall } from 'openai/resources/responses/responses.mjs';
 
