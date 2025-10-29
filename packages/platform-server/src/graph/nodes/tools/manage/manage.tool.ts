@@ -1,6 +1,6 @@
 import z from 'zod';
 
-import { FunctionTool } from '@agyn/llm';
+import { FunctionTool, HumanMessage } from '@agyn/llm';
 import { ManageToolNode } from './manage.node';
 import { LoggerService } from '../../../../core/services/logger.service';
 import { Inject, Injectable, Scope } from '@nestjs/common';
@@ -57,9 +57,8 @@ export class ManageFunctionTool extends FunctionTool<typeof ManageInvocationSche
       const target = workers.find((w) => w.name === worker);
       if (!target) throw new Error(`Unknown worker: ${worker}`);
       const childThreadId = `${parentThreadId}__${target.name}`;
-      const triggerMessage: TriggerMessage = { content: message, info: {} };
       try {
-        const res = await target.agent.invoke(childThreadId, [triggerMessage]);
+        const res = await target.agent.invoke(childThreadId, [HumanMessage.fromText(message)]);
         return res?.text;
       } catch (err: unknown) {
         this.logger.error('Manage: send_message failed', {

@@ -22,7 +22,7 @@ export const CallAgentToolStaticConfigSchema = z
 export class CallAgentNode extends BaseToolNode<z.infer<typeof CallAgentToolStaticConfigSchema>> {
   private description = 'Call another agent with a message and optional context.';
   private name: string | undefined;
-  private targetAgent: AgentNode | undefined;
+  private _agent?: AgentNode;
   private responseMode: 'sync' | 'async' | 'ignore' = 'sync';
   private toolInstance?: CallAgentFunctionTool;
 
@@ -31,18 +31,18 @@ export class CallAgentNode extends BaseToolNode<z.infer<typeof CallAgentToolStat
   }
 
   setAgent(agent: AgentNode | undefined) {
-    this.targetAgent = agent;
+    this._agent = agent;
+  }
+  get agent(): AgentNode {
+    if (!this._agent) {
+      throw new Error('Agent not set');
+    }
+    return this._agent;
   }
 
   getTool(): CallAgentFunctionTool {
     if (!this.toolInstance) {
-      this.toolInstance = new CallAgentFunctionTool({
-        getTargetAgent: () => this.targetAgent,
-        getDescription: () => this.description,
-        getName: () => this.name || 'call_agent',
-        getResponseMode: () => this.responseMode,
-        logger: this.logger,
-      });
+      this.toolInstance = new CallAgentFunctionTool(this.logger, this);
     }
     return this.toolInstance;
   }

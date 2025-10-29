@@ -8,26 +8,16 @@ import { Inject, Injectable, Scope } from '@nestjs/common';
 @Injectable({ scope: Scope.TRANSIENT })
 export class SendSlackMessageNode extends BaseToolNode<z.infer<typeof SendSlackMessageToolStaticConfigSchema>> {
   private toolInstance?: SendSlackMessageFunctionTool;
-  private staticCfg: z.infer<typeof SendSlackMessageToolStaticConfigSchema> | null = null;
   constructor(
     @Inject(LoggerService) protected logger: LoggerService,
     @Inject(VaultService) protected vault: VaultService,
   ) {
     super(logger);
   }
-  async setConfig(cfg: Record<string, unknown>): Promise<void> {
-    const parsed = SendSlackMessageToolStaticConfigSchema.safeParse(cfg || {});
-    if (!parsed.success) throw new Error('Invalid SendSlackMessageTool config');
-    this.staticCfg = parsed.data;
-    this.toolInstance = undefined; // reset so new config applies
-  }
+
   getTool(): SendSlackMessageFunctionTool {
     if (!this.toolInstance) {
-      this.toolInstance = new SendSlackMessageFunctionTool({
-        getConfig: () => this.staticCfg,
-        vault: this.vault,
-        logger: this.logger,
-      });
+      this.toolInstance = new SendSlackMessageFunctionTool(this, this.logger, this.vault);
     }
     return this.toolInstance;
   }

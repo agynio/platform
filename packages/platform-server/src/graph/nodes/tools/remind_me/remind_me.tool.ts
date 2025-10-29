@@ -1,9 +1,9 @@
 import z from 'zod';
 
-import { FunctionTool, SystemMessage } from '@agyn/llm';
+import { AIMessage, FunctionTool, SystemMessage } from '@agyn/llm';
 import { v4 as uuidv4 } from 'uuid';
-import { LoggerService } from '../../../core/services/logger.service';
-import { LLMContext } from '../../../llm/types';
+import { LoggerService } from '../../../../core/services/logger.service';
+import { LLMContext } from '../../../../llm/types';
 
 export const remindMeInvocationSchema = z
   .object({
@@ -13,7 +13,6 @@ export const remindMeInvocationSchema = z
       .min(0)
       .max(7 * 24 * 60 * 60 * 1000),
     note: z.string().min(1),
-    parentThreadId: z.string().min(1).describe('Parent thread id for scheduling the reminder'),
   })
   .strict();
 
@@ -46,31 +45,29 @@ export class RemindMeFunctionTool extends FunctionTool<typeof remindMeInvocation
     this.active.clear();
   }
   async execute(args: z.infer<typeof remindMeInvocationSchema>, ctx: LLMContext): Promise<string> {
-    const { delayMs, note, parentThreadId } = args;
+    const { delayMs, note } = args;
+    const { threadId } = ctx;
 
     if (this.destroyed) throw new Error('RemindMe tool destroyed');
     if (this.active.size >= this.maxActive) throw new Error(`Too many active reminders (max ${this.maxActive})`);
-    const boundedDelay = delayMs; // already clamped by schema max
-    const eta = new Date(Date.now() + boundedDelay).toISOString();
-    const id = `${parentThreadId}:${uuidv4()}`;
+
+    const eta = new Date(Date.now() + delayMs).toISOString();
+    const id = `${threadId}:${uuidv4()}`;
     const logger = this.logger;
     const timer = setTimeout(async () => {
       const exists = this.active.has(id);
       if (!exists) return;
       this.active.delete(id);
       try {
-        const msg = SystemMessage.fromText(note);
-        const raw = msg.toPlain();
-        // Ensure info.reason="reminded"
-        if (!raw.info || typeof raw.info !== 'object') raw.info = {} as Record<string, unknown>;
-        (raw.info as Record<string, unknown>)['reason'] = 'reminded';
-        await ctx.callerAgent.invoke(parentThreadId, [raw as { kind: 'system'; content: string; info: Record<string, unknown> }]);
+        const msg = AIMessage.fromText(JSON.stringify(`Reminder: ${note}`));
+
+        await ctx.callerAgent.invoke(threadId, [msg]);
       } catch (e: unknown) {
         const msg = e instanceof Error ? e.message : JSON.stringify(e);
         logger.error('RemindMe scheduled invoke error', msg);
       }
-    }, boundedDelay);
-    this.active.set(id, { timer, reminder: { id, threadId: parentThreadId, note, at: eta } });
-    return JSON.stringify({ status: 'scheduled', etaMs: boundedDelay, at: eta, id });
+    }, delayMs);
+    this.active.set(id, { timer, reminder: { id, threadId: threadId, note, at: eta } });
+    return JSON.stringify({ status: 'scheduled', etaMs: delayMs, at: eta, id });
   }
 }

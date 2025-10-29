@@ -388,13 +388,12 @@ export class LocalMCPServerNode extends Node<z.infer<typeof LocalMcpServerStatic
   async callTool(
     name: string,
     args: unknown,
-    options?: { timeoutMs?: number; threadId?: string },
+    options: { threadId: string; timeoutMs?: number },
   ): Promise<McpToolCallResult> {
     if (!this.config) throw new Error('LocalMCPServer: config not yet set via setConfig');
     if (!this.containerProvider) throw new Error('LocalMCPServer: no containerProvider set; cannot call tool');
 
-    const threadId = options?.threadId;
-    if (!threadId) throw new Error('LocalMCPServer: threadId option is required to call tool');
+    const threadId = options.threadId;
     this.logger.info(`[MCP:${this.config.namespace}] Calling tool ${name} for thread ${threadId}`);
 
     // Get thread-specific container

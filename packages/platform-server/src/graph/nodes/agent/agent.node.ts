@@ -31,7 +31,7 @@ import { SummarizationLLMReducer } from '../../../llm/reducers/summarization.llm
 import { Signal } from '../../../signal';
 
 import { BaseToolNode } from '../tools/baseToolNode';
-import { MessagesBuffer, type TriggerMessage, ProcessBuffer } from './messagesBuffer';
+import { MessagesBuffer, ProcessBuffer, BufferMessage } from './messagesBuffer';
 
 /**
  * Zod schema describing static configuration for Agent.
@@ -259,21 +259,11 @@ export class AgentNode extends Node<AgentStaticConfig> {
     const loop = new Loop<LLMState, LLMContext>(reducers);
     return loop;
   }
-  async invoke(
-    thread: string,
-    messages:
-      | Array<{ content: string; info?: Record<string, unknown> }>
-      | { content: string; info?: Record<string, unknown> },
-  ): Promise<ResponseMessage | ToolCallOutputMessage> {
+  async invoke(thread: string, messages: BufferMessage[]): Promise<ResponseMessage | ToolCallOutputMessage> {
     // Buffering & run tracking: enqueue and drain respecting config
-    const incoming: Array<{ content: string; info?: Record<string, unknown> }> = Array.isArray(messages)
-      ? messages
-      : [messages];
+
     this.buffer.setDebounceMs(this.config.debounceMs ?? 0);
-    this.buffer.enqueue(
-      thread,
-      incoming.map((m) => ({ kind: 'human', content: m.content, info: m.info })),
-    );
+    this.buffer.enqueue(thread, messages);
     // Generate run id for persistence
     const runId = `${thread}/${Date.now()}`;
     await this.runs.startRun(this.nodeId, thread, runId);
@@ -284,14 +274,11 @@ export class AgentNode extends Node<AgentStaticConfig> {
         const loop = await this.prepareLoop();
         // Drain buffer per config
         const mode = (this.config.processBuffer ?? 'allTogether') === 'allTogether' ? 'allTogether' : 'oneByOne';
-        const drained: TriggerMessage[] = this.buffer.tryDrain(
+        const drained: BufferMessage[] = this.buffer.tryDrain(
           thread,
           mode === 'allTogether' ? ProcessBuffer.AllTogether : ProcessBuffer.OneByOne,
         );
-        const toProcess: TriggerMessage[] =
-          drained.length > 0
-            ? drained
-            : incoming.map((msg) => ({ kind: 'human', content: msg.content, info: msg.info }));
+        const toProcess: BufferMessage[] = drained.length > 0 ? drained : messages;
         const history: HumanMessage[] = toProcess.map((msg) => HumanMessage.fromText(JSON.stringify(msg)));
         const finishSignal = new Signal();
 
@@ -342,12 +329,12 @@ export class AgentNode extends Node<AgentStaticConfig> {
   addTool(toolNode: BaseToolNode<any>): void {
     const tool: FunctionTool = toolNode.getTool();
     this.tools.add(tool);
-    this.logger.info(`Tool added to Agent: ${toolNode?.constructor?.name || 'UnknownTool'}`);
+    this.logger.info(`Tool added to Agent: ${tool.name} (${toolNode.constructor.name})`);
   }
   removeTool(toolNode: BaseToolNode<any>): void {
     const tool: FunctionTool = toolNode.getTool();
     this.tools.delete(tool);
-    this.logger.info(`Tool removed from Agent: ${toolNode?.constructor?.name || 'UnknownTool'}`);
+    this.logger.info(`Tool removed from Agent: ${tool.name} (${toolNode.constructor.name})`);
   }
 
   async addMcpServer(server: LocalMCPServerNode): Promise<void> {
@@ -399,7 +386,7 @@ export class AgentNode extends Node<AgentStaticConfig> {
       for (const t of latest) {
         if (!prevNames.has(t.name)) {
           this.tools.add(t);
-          this.logger.debug(`Agent: MCP tool added (${namespace}/${t.name})`);
+          this.logger.debug(`Agent: MCP tool added ${t.name}`);
         }
       }
 

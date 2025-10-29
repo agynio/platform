@@ -5,6 +5,8 @@ import { WebClient, type ChatPostEphemeralResponse, type ChatPostMessageResponse
 import { LoggerService } from '../../../../core/services/logger.service';
 import { VaultService } from '../../../../vault/vault.service';
 import { ReferenceFieldSchema, normalizeTokenRef, parseVaultRef, resolveTokenRef } from '../../../../utils/refs';
+import { ConfigService } from '../../../../core/services/config.service';
+import { SendSlackMessageNode } from './send_slack_message.node';
 
 export const SendSlackMessageToolStaticConfigSchema = z
   .object({
@@ -29,14 +31,12 @@ export const sendSlackInvocationSchema = z
 
 type TokenRef = { value: string; source: 'static' | 'vault' };
 
-interface SendSlackDeps {
-  getConfig: () => z.infer<typeof SendSlackMessageToolStaticConfigSchema> | null;
-  vault?: VaultService;
-  logger: LoggerService;
-}
-
 export class SendSlackMessageFunctionTool extends FunctionTool<typeof sendSlackInvocationSchema> {
-  constructor(private deps: SendSlackDeps) {
+  constructor(
+    private node: SendSlackMessageNode,
+    private logger: LoggerService,
+    private vault: VaultService,
+  ) {
     super();
   }
   get name() {
@@ -51,19 +51,17 @@ export class SendSlackMessageFunctionTool extends FunctionTool<typeof sendSlackI
 
   async execute(args: z.infer<typeof sendSlackInvocationSchema>): Promise<string> {
     const { channel: channelInput, text, thread_ts, broadcast, ephemeral_user } = args;
-    const cfg = this.deps.getConfig();
-    if (!cfg) throw new Error('SendSlackMessageTool not configured: bot_token is required');
-    const bot = normalizeTokenRef(cfg.bot_token) as TokenRef;
+
+    const bot = normalizeTokenRef(this.node.config.bot_token) as TokenRef;
     if ((bot.source || 'static') === 'vault') parseVaultRef(bot.value);
     else if (!bot.value.startsWith('xoxb-')) throw new Error('Slack bot token must start with xoxb-');
     const channel = channelInput;
     if (!channel) throw new Error('channel is required');
-    const logger = this.deps.logger;
     try {
       const token = await resolveTokenRef(bot, {
         expectedPrefix: 'xoxb-',
         fieldName: 'bot_token',
-        vault: this.deps.vault,
+        vault: this.vault,
       });
       const client = new WebClient(token, { logLevel: undefined });
       if (ephemeral_user) {
@@ -98,7 +96,7 @@ export class SendSlackMessageFunctionTool extends FunctionTool<typeof sendSlackI
       });
     } catch (err: unknown) {
       const msg = (err as { message?: string })?.message || String(err);
-      logger.error('Error sending Slack message', msg);
+      this.logger.error('Error sending Slack message', msg);
       return JSON.stringify({ ok: false, error: msg });
     }
   }

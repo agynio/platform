@@ -5,30 +5,15 @@ import { VaultService } from '../../../vault/vault.service';
 import { ReferenceFieldSchema, resolveTokenRef } from '../../../utils/refs';
 import Node from '../base/Node';
 type TriggerHumanMessage = { kind: 'human'; content: string; info?: Record<string, unknown> };
-type TriggerListener = { invoke: (thread: string, messages: TriggerHumanMessage[]) => Promise<void> };
+type TriggerListener = { invoke: (thread: string, messages: BufferMessage[]) => Promise<void> };
 import { Inject, Injectable, Scope } from '@nestjs/common';
+import { BufferMessage } from '../agent/messagesBuffer';
+import { HumanMessage } from '@agyn/llm';
 
 // Internal schema: accept either plain string or ReferenceField
 export const SlackTriggerStaticConfigSchema = z
   .object({
-    app_token: z.union([
-      z
-        .string()
-        .min(1)
-        .startsWith('xapp-', { message: 'Slack app-level token must start with xapp-' })
-        .describe('Slack App-level token (xapp-...) for Socket Mode.'),
-      ReferenceFieldSchema,
-    ]),
-  })
-  .strict();
-
-// Exposed UI schema: always show as ReferenceField with help
-export const SlackTriggerExposedStaticConfigSchema = z
-  .object({
-    app_token: ReferenceFieldSchema.meta({
-      'ui:field': 'ReferenceField',
-      'ui:help': 'Use "vault" to reference a secret as mount/path/key.',
-    }),
+    app_token: ReferenceFieldSchema,
   })
   .strict();
 
@@ -172,7 +157,14 @@ export class SlackTrigger extends Node<SlackTriggerConfig> {
   }
   protected async notify(thread: string, messages: TriggerHumanMessage[]): Promise<void> {
     if (!messages.length) return;
-    await Promise.all(this._listeners.map(async (listener) => listener.invoke(thread, messages)));
+    await Promise.all(
+      this._listeners.map(async (listener) =>
+        listener.invoke(
+          thread,
+          messages.map((m) => HumanMessage.fromText(JSON.stringify({ content: m.content, info: m.info }))),
+        ),
+      ),
+    );
   }
 
   // Expose listeners for base type compatibility via function

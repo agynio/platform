@@ -1,4 +1,6 @@
-export type TriggerMessage = { kind: 'human'; content: string; info?: Record<string, unknown> };
+import { AIMessage, HumanMessage, SystemMessage } from '@agyn/llm';
+
+export type BufferMessage = AIMessage | HumanMessage | SystemMessage;
 
 export enum ProcessBuffer {
   OneByOne = 'oneByOne',
@@ -9,7 +11,7 @@ export interface MessagesBufferOptions {
   debounceMs?: number;
 }
 
-type QueuedItem = { msg: TriggerMessage; tokenId?: string };
+type QueuedItem = { msg: BufferMessage; tokenId?: string };
 
 type ThreadState = {
   queue: QueuedItem[];
@@ -32,7 +34,7 @@ export class MessagesBuffer {
     this.debounceMs = Math.max(0, Math.trunc(ms));
   }
 
-  enqueue(thread: string, msgs: TriggerMessage[] | TriggerMessage, now = Date.now()): void {
+  enqueue(thread: string, msgs: BufferMessage[], now = Date.now()): void {
     // Backwards-compatible helper: enqueues messages without token association.
     const batch = Array.isArray(msgs) ? msgs : [msgs];
     if (!batch.length) return;
@@ -41,7 +43,7 @@ export class MessagesBuffer {
     s.lastEnqueueAt = now;
   }
 
-  enqueueWithToken(thread: string, tokenId: string, msgs: TriggerMessage[] | TriggerMessage, now = Date.now()): void {
+  enqueueWithToken(thread: string, tokenId: string, msgs: BufferMessage[] | BufferMessage, now = Date.now()): void {
     const batch = Array.isArray(msgs) ? msgs : [msgs];
     if (!batch.length) return;
     const s = this.ensure(thread);
@@ -49,7 +51,7 @@ export class MessagesBuffer {
     s.lastEnqueueAt = now;
   }
 
-  tryDrain(thread: string, mode: ProcessBuffer, now = Date.now()): TriggerMessage[] {
+  tryDrain(thread: string, mode: ProcessBuffer, now = Date.now()): BufferMessage[] {
     const s = this.threads.get(thread);
     if (!s || s.queue.length === 0) return [];
     if (this.debounceMs > 0 && now - s.lastEnqueueAt < this.debounceMs) return [];
@@ -67,7 +69,7 @@ export class MessagesBuffer {
     thread: string,
     mode: ProcessBuffer,
     now = Date.now(),
-  ): { messages: TriggerMessage[]; tokenParts: { tokenId: string; count: number }[] } {
+  ): { messages: BufferMessage[]; tokenParts: { tokenId: string; count: number }[] } {
     const s = this.threads.get(thread);
     if (!s || s.queue.length === 0) return { messages: [], tokenParts: [] };
     if (this.debounceMs > 0 && now - s.lastEnqueueAt < this.debounceMs) return { messages: [], tokenParts: [] };
