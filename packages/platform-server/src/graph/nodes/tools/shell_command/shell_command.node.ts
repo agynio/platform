@@ -6,6 +6,7 @@ import { ShellCommandTool } from './shell_command.tool';
 import { Inject, Injectable, Scope } from '@nestjs/common';
 import { LoggerService } from '../../../../core/services/logger.service';
 import { ModuleRef } from '@nestjs/core';
+import { ArchiveService } from '../../../../infra/archive/archive.service';
 
 // NOTE: ANSI stripping now handled in ShellCommandTool; keep schema exports here only.
 
@@ -37,7 +38,9 @@ export const ShellToolStaticConfigSchema = z
     outputLimitChars: z
       .union([z.literal(0), z.number().int().positive().max(500000)])
       .default(50000)
-      .describe('Maximum combined cleaned stdout+stderr length. If >0 and exceeded, output is saved to /tmp/<uuid>.txt and a short error message is returned.'),
+      .describe(
+        'Maximum combined cleaned stdout+stderr length. If >0 and exceeded, output is saved to /tmp/<uuid>.txt and a short error message is returned.',
+      ),
   })
   .strict();
 
@@ -50,6 +53,7 @@ export class ShellCommandNode extends BaseToolNode<z.infer<typeof ShellToolStati
     @Inject(EnvService) protected envService: EnvService,
     @Inject(LoggerService) protected logger: LoggerService,
     @Inject(ModuleRef) protected readonly moduleRef: ModuleRef,
+    @Inject(ArchiveService) private readonly archive: ArchiveService,
   ) {
     super(logger);
   }
@@ -68,7 +72,7 @@ export class ShellCommandNode extends BaseToolNode<z.infer<typeof ShellToolStati
 
   getTool(): ShellCommandTool {
     if (!this.toolInstance) {
-      const tool = this.moduleRef.create(ShellCommandTool);
+      const tool = new ShellCommandTool(this.archive);
       tool.init(this);
       this.toolInstance = tool;
     }
@@ -96,5 +100,4 @@ export class ShellCommandNode extends BaseToolNode<z.infer<typeof ShellToolStati
   get provider(): WorkspaceNode | undefined {
     return this.containerProvider;
   }
-
 }
