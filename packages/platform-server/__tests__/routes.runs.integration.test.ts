@@ -6,7 +6,7 @@ import { LoggerService } from '../src/core/services/logger.service.js';
 import { LiveGraphRuntime } from '../src/graph/liveGraph.manager';
 import { TemplateRegistry } from '../src/graph/templateRegistry';
 import { GraphModule } from '../src/graph/graph.module';
-import { AgentRunService } from '../src/nodes/agentRun.repository';
+import { AgentRunService } from '../src/graph/nodes/agentRun.repository';
 import type Node from '../src/nodes/base/Node';
 import { registerRunsRoutes } from '../src/routes/runs.route';
 import { MongoMemoryServer } from 'mongodb-memory-server';
