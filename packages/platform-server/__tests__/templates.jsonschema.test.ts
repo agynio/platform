@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { toJSONSchema } from 'zod';
 import type { JSONSchema7 } from 'json-schema';
 
@@ -6,6 +6,9 @@ type JsonSchemaWithUi = JSONSchema7 & { 'ui:field'?: string };
 import { ShellToolStaticConfigSchema } from '../src/graph/nodes/tools/shell_command/shell_command.node';
 import { LocalMcpServerStaticConfigSchema } from '../src/graph/nodes/mcp/localMcpServer.node';
 import { AgentStaticConfigSchema } from '../src/graph/nodes/agent/agent.node';
+
+// Mock Prisma client as agent node imports reducers that reference Prisma service
+vi.mock('@prisma/client', () => ({ PrismaClient: class {} }));
 
 describe('template schemas: env ui:field', () => {
   it('ShellToolStaticConfigSchema.env includes ui:field ReferenceEnvField', () => {

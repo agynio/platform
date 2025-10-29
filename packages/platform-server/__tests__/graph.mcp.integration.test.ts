@@ -1,11 +1,13 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { buildTemplateRegistry } from '../src/templates';
-import { LocalMCPServer } from '../src/nodes/mcp/localMcpServer.node';
+import { LocalMCPServer } from '../src/graph/nodes/mcp/localMcpServer.node';
 import { LoggerService } from '../src/core/services/logger.service.js';
 import { ContainerService } from '../src/infra/container/container.service';
 import { ConfigService } from '../src/core/services/config.service.js';
-import { CheckpointerService } from '../src/services/checkpointer.service';
 import { LiveGraphRuntime, GraphDefinition } from '../src/graph';
+
+// Mock Prisma client to avoid requiring generated client
+vi.mock('@prisma/client', () => ({ PrismaClient: class {} }));
 
 // This test only validates that the graph can wire the mcpServer node without throwing.
 // It does not attempt to start a real filesystem MCP server (would require network/npm). Instead, we configure
@@ -48,12 +50,10 @@ describe('Graph MCP integration', () => {
     } as any);
 
     const containerService = new ContainerService(logger);
-    const checkpointerService = new CheckpointerService(logger);
-    // Patch to bypass Mongo requirement for this lightweight integration test
-    (checkpointerService as any).getCheckpointer = () => ({
-      get: async () => undefined,
-      put: async () => undefined,
-    });
+    // Minimal stub checkpointer for this wiring test
+    const checkpointerService = {
+      getCheckpointer: () => ({ get: async () => undefined, put: async () => undefined }),
+    } as any;
 
     const templateRegistry = buildTemplateRegistry({
       logger,

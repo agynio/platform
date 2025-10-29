@@ -1,10 +1,13 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { buildTemplateRegistry } from '../src/templates';
 import type { LoggerService } from '../src/core/services/logger.service.js';
 import type { ContainerService } from '../src/core/services/container.service.js';
 import type { ConfigService } from '../src/core/services/config.service.js';
 import type { CheckpointerService } from '../src/services/checkpointer.service';
 import type { MongoService } from '../src/core/services/mongo.service.js';
+
+// Mock Prisma client to avoid requiring generated client in tests
+vi.mock('@prisma/client', () => ({ PrismaClient: class {} }));
 
 // Build a registry and assert memory templates and agent memory port wiring are present.
 describe('templates: memory registration and agent memory port', () => {
@@ -15,7 +18,7 @@ describe('templates: memory registration and agent memory port', () => {
       configService: {} as unknown as ConfigService,
       mongoService: { getDb: () => ({} as any) } as unknown as MongoService,
       provisioner: {} as any,
-      moduleRef: {} as any,
+      moduleRef: { create: (Cls: any) => new Cls() } as any,
     };
 
     const reg = buildTemplateRegistry(deps);
