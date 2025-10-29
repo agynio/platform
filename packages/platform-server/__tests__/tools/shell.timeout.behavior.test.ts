@@ -27,7 +27,9 @@ describe('ShellTool timeout error message', () => {
     }
     const provider = new FakeProvider(logger);
 
-    const node = new ShellCommandNode(undefined as any);
+    const archiveStub = { createSingleFileTar: async () => Buffer.from('tar') } as const;
+    const moduleRefStub = { create: (cls: any) => new (cls as any)(archiveStub) } as const;
+    const node = new ShellCommandNode(undefined as any, logger as any, moduleRefStub as any);
     node.setContainerProvider(provider as any);
     await node.setConfig({});
     const t = node.getTool();
@@ -48,7 +50,9 @@ describe('ShellTool timeout error message', () => {
     class FakeContainer extends ContainerEntity { override async exec(): Promise<never> { throw idleErr; } }
     class FakeProvider extends ContainerProviderEntity { constructor(logger: LoggerService) { super(new ContainerService(logger), undefined, {}, () => ({})); } override async provide(): Promise<ContainerEntity> { return new FakeContainer(new ContainerService(logger), 'fake'); } }
     const provider = new FakeProvider(logger);
-    const node = new ShellCommandNode(undefined as any);
+    const archiveStub = { createSingleFileTar: async () => Buffer.from('tar') } as const;
+    const moduleRefStub = { create: (cls: any) => new (cls as any)(archiveStub) } as const;
+    const node = new ShellCommandNode(undefined as any, logger as any, moduleRefStub as any);
     node.setContainerProvider(provider as any);
     await node.setConfig({});
     const t = node.getTool();
@@ -65,7 +69,9 @@ describe('ShellTool timeout error message', () => {
     class FakeContainer extends ContainerEntity { override async exec(): Promise<never> { throw idleErr; } }
     class FakeProvider extends ContainerProviderEntity { constructor(logger: LoggerService) { super(new ContainerService(logger), undefined, {}, () => ({})); } override async provide(): Promise<ContainerEntity> { return new FakeContainer(new ContainerService(logger), 'fake'); } }
     const provider = new FakeProvider(logger);
-    const node = new ShellCommandNode(undefined as any);
+    const archiveStub = { createSingleFileTar: async () => Buffer.from('tar') } as const;
+    const moduleRefStub = { create: (cls: any) => new (cls as any)(archiveStub) } as const;
+    const node = new ShellCommandNode(undefined as any, logger as any, moduleRefStub as any);
     node.setContainerProvider(provider as any);
     await node.setConfig({ idleTimeoutMs: 60000 });
     const t = node.getTool();
@@ -203,7 +209,9 @@ describe('ShellTool non-timeout error propagation', () => {
     }
     const provider = new FakeProvider(logger);
 
-    const node = new ShellCommandNode(undefined as any);
+    const archiveStub = { createSingleFileTar: async () => Buffer.from('tar') } as const;
+    const moduleRefStub = { create: (cls: any) => new (cls as any)(archiveStub) } as const;
+    const node = new ShellCommandNode(undefined as any, logger as any, moduleRefStub as any);
     node.setContainerProvider(provider as any);
     await node.setConfig({});
     const t = node.getTool();

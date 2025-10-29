@@ -9,6 +9,10 @@ import {
   isExecTimeoutError,
 } from '../../../../utils/execTimeout';
 import { ShellCommandNode, ShellToolStaticConfigSchema } from './shell_command.node';
+import { randomUUID } from 'node:crypto';
+import { Inject, Injectable, Scope } from '@nestjs/common';
+import { ArchiveService } from '../../../../infra/archive/archive.service';
+import { ContainerHandle } from '../../../../infra/container/container.handle';
 
 // Schema for tool arguments
 export const bashCommandSchema = z.object({
@@ -24,10 +28,23 @@ export const bashCommandSchema = z.object({
 // Matches ESC followed by a bracket and command bytes or other OSC sequences.
 const ANSI_REGEX = /[\u001B\u009B][[[\]()#;?]*(?:[0-9]{1,4}(?:;[0-9]{0,4})*)?[0-9A-ORZcf-nq-uy=><]/g;
 
+@Injectable({ scope: Scope.TRANSIENT })
 export class ShellCommandTool extends FunctionTool<typeof bashCommandSchema> {
   private logger = new LoggerService();
-  constructor(private node: ShellCommandNode) {
+  private _node?: ShellCommandNode;
+
+  constructor(@Inject(ArchiveService) private readonly archive: ArchiveService) {
     super();
+  }
+
+  init(node: ShellCommandNode): this {
+    this._node = node;
+    return this;
+  }
+
+  get node(): ShellCommandNode {
+    if (!this._node) throw new Error('ShellCommandTool: node not initialized; call init() first');
+    return this._node;
   }
 
   get name() {
@@ -42,6 +59,16 @@ export class ShellCommandTool extends FunctionTool<typeof bashCommandSchema> {
 
   private stripAnsi(input: string): string {
     return input.replace(ANSI_REGEX, '');
+  }
+
+  private async saveOversizedOutputInContainer(
+    container: ContainerHandle,
+    filename: string,
+    content: string,
+  ): Promise<string> {
+    const tar = await this.archive.createSingleFileTar(filename, content, 0o644);
+    await container.putArchive(tar, { path: '/tmp' });
+    return `/tmp/${filename}`;
   }
 
   async execute(args: z.infer<typeof bashCommandSchema>, ctx: LLMContext): Promise<string> {
@@ -94,6 +121,14 @@ export class ShellCommandTool extends FunctionTool<typeof bashCommandSchema> {
 
     const cleanedStdout = this.stripAnsi(response.stdout);
     const cleanedStderr = this.stripAnsi(response.stderr);
+    const combined = `${cleanedStdout}${cleanedStderr}`;
+    const limit = typeof cfg.outputLimitChars === 'number' ? cfg.outputLimitChars : 0;
+    if (limit > 0 && combined.length > limit) {
+      const id = randomUUID();
+      const file = `${id}.txt`;
+      const path = await this.saveOversizedOutputInContainer(container, file, combined);
+      return `Error: output length exceeds ${limit} characters. It was saved on disk: ${path}`;
+    }
     if (response.exitCode !== 0) {
       return `Error (exit code ${response.exitCode}):\n${cleanedStdout}\n${cleanedStderr}`;
     }

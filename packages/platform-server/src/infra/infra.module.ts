@@ -11,10 +11,12 @@ import { GithubService } from './github/github.client';
 import { PRService } from './github/pr.usecase';
 import { NcpsKeyService } from './ncps/ncpsKey.service';
 import { NixController } from './ncps/nix.controller';
+import { ArchiveService } from './archive/archive.service';
 
 @Module({
   imports: [CoreModule, VaultModule],
   providers: [
+    ArchiveService,
     {
       provide: ContainerRegistry,
       useFactory: async (mongo: MongoService, logger: LoggerService) => {
@@ -66,6 +68,7 @@ import { NixController } from './ncps/nix.controller';
     GithubService,
     PRService,
     ContainerRegistry,
+    ArchiveService,
   ],
 })
 export class InfraModule {}

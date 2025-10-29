@@ -34,9 +34,11 @@ describe('ShellTool env/workdir isolation with vault-backed overlay', () => {
     const fakeVault = { isEnabled: () => true, getSecret: vi.fn(async () => 'VAULTED') } as any;
     const envSvc = new EnvService(fakeVault as any);
 
-    const a = new ShellCommandNode(envSvc as any); a.setContainerProvider(provider as any);
+    const archiveStub = { createSingleFileTar: async () => Buffer.from('tar') } as const;
+    const moduleRefStub = { create: (cls: any) => new (cls as any)(archiveStub) } as const;
+    const a = new ShellCommandNode(envSvc as any, new LoggerService() as any, moduleRefStub as any); a.setContainerProvider(provider as any);
     await a.setConfig({ env: [ { key: 'FOO', value: 'A' }, { key: 'BAR', value: 'secret/path/key', source: 'vault' } ], workdir: '/w/a' });
-    const b = new ShellCommandNode(new EnvService(undefined as any) as any); b.setContainerProvider(provider as any);
+    const b = new ShellCommandNode(new EnvService(undefined as any) as any, new LoggerService() as any, moduleRefStub as any); b.setContainerProvider(provider as any);
     await b.setConfig({ env: [ { key: 'FOO', value: 'B' } ], workdir: '/w/b' });
 
     const at = a.getTool();
