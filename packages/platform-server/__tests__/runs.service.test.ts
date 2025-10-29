@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { MongoMemoryServer } from 'mongodb-memory-server';
 import { MongoClient, Db } from 'mongodb';
-import { AgentRunService } from '../src/nodes/agentRun.repository';
+import { AgentRunService } from '../src/graph/nodes/agentRun.repository';
 import { LoggerService } from '../src/core/services/logger.service.js';
 
 describe('AgentRunService', () => {
@@ -17,7 +17,11 @@ describe('AgentRunService', () => {
       mongod = await MongoMemoryServer.create({ binary: { version: process.env.MONGOMS_VERSION || '7.0.14' } });
       client = await MongoClient.connect(mongod.getUri());
       db = client.db('agents-tests');
-      runs = new AgentRunService(db, logger);
+      class TestMongoService {
+        constructor(private _db: Db) {}
+        getDb(): Db { return this._db; }
+      }
+      runs = new AgentRunService(new TestMongoService(db), logger);
       await runs.ensureIndexes();
     } catch (e) {
       setupOk = false;
