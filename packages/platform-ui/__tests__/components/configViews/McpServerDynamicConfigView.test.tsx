@@ -6,7 +6,6 @@ import McpServerDynamicConfigView from '@/components/configViews/McpServerDynami
 const g: any = globalThis;
 
 vi.mock('@/lib/graph/hooks', () => {
-  const React = require('react');
   return {
     useMcpNodeState: (nodeId: string) => {
       const [enabledTools, setEnabledToolsState] = React.useState<string[] | undefined>(undefined);
