@@ -37,7 +37,7 @@
     "@types/json-schema": "^7.0.15",
     "dockerode": "^4.0.8",
     "dotenv": "^17.2.2",
-  "fastify": "^4.28.0",
+    "fastify": "^4.28.0",
     "socket.io": "^4.8.1",
     "lodash-es": "^4.17.21",
     "md5": "^2.3.0",
@@ -52,7 +52,8 @@
     "uuid": "^13.0.0",
     "yaml": "^2.8.1",
     "zod": "^4.1.9",
-    "@agyn/json-schema-to-zod": "workspace:*"
+    "@agyn/json-schema-to-zod": "workspace:*",
+    "deepmerge": "^4.3.1"
   },
   "devDependencies": {
     "@eslint/js": "^9.13.0",

@@ -3,6 +3,7 @@ import { LoggerService } from '../core/services/logger.service';
 import { LiveGraphRuntime } from './liveGraph.manager';
 import { GraphSocketGateway } from '../gateway/graph.socket.gateway';
 import { GraphRepository } from './graph.repository';
+import deepmerge from 'deepmerge';
 
 /**
  * Centralized service to persist per-node runtime state && reflect changes in the in-memory runtime snapshot.
@@ -22,18 +23,18 @@ export class NodeStateService {
     return this.runtime.getNodeStateSnapshot(nodeId);
   }
 
-  async upsertNodeState(nodeId: string, state: Record<string, unknown>, name = 'main'): Promise<void> {
+  async upsertNodeState(nodeId: string, patch: Record<string, unknown>, name = 'main'): Promise<void> {
     try {
-      // Deep-merge previous snapshot with incoming patch
-      const prev = this.runtime.getNodeStateSnapshot(nodeId);
-      const merged = deepMerge(prev, state);
-      // Persist patch via repository (stored as-is), update runtime with merged
-      await this.graphRepository.upsertNodeState(name, nodeId, state);
+      // Deep-merge previous snapshot with incoming patch (arrays replace)
+      const prev = this.runtime.getNodeStateSnapshot(nodeId) || {};
+      const merged = deepmerge(prev, patch, { arrayMerge: (_dest, source) => source });
+      // Persist merged via repository, update runtime with merged
+      await this.graphRepository.upsertNodeState(name, nodeId, merged);
       this.runtime.updateNodeState(nodeId, merged);
       // Invoke node instance setState with merged snapshot for runtime reactions
       const inst = this.runtime.getNodeInstance(nodeId);
       try {
-        await inst?.setState?.(merged);
+        await inst?.setState?.(merged as Record<string, unknown>);
       } catch (e) {
         this.logger.error('NodeStateService: instance.setState failed for %s: %s', nodeId, String(e));
       }
@@ -43,22 +44,4 @@ export class NodeStateService {
       this.logger.error('NodeStateService: upsertNodeState failed for %s: %s', nodeId, String(e));
     }
   }
-}
-
-function isPlainObject(v: unknown): v is Record<string, unknown> {
-  return !!v && typeof v === 'object' && !Array.isArray(v);
-}
-function deepMerge(
-  prev: Record<string, unknown> | undefined,
-  patch: Record<string, unknown> | undefined,
-): Record<string, unknown> {
-  if (!prev) return { ...(patch || {}) };
-  if (!patch) return { ...prev };
-  const out: Record<string, unknown> = { ...prev };
-  for (const [k, v] of Object.entries(patch)) {
-    const existing = out[k];
-    if (isPlainObject(existing) && isPlainObject(v)) out[k] = deepMerge(existing, v);
-    else out[k] = v;
-  }
-  return out;
 }
