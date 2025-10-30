@@ -1,21 +1,60 @@
 import { describe, it, expect } from 'vitest';
 import { buildTemplateRegistry } from '../src/templates';
-import type { LoggerService } from '../src/core/services/logger.service.js';
-import type { ContainerService } from '../src/core/services/container.service.js';
-import type { ConfigService } from '../src/core/services/config.service.js';
-import type { CheckpointerService } from '../src/services/checkpointer.service';
-import type { MongoService } from '../src/core/services/mongo.service.js';
+import { ModuleRef } from '@nestjs/core';
+import { LoggerService } from '../src/core/services/logger.service';
+import { ContainerService } from '../src/infra/container/container.service';
+import { ConfigService } from '../src/core/services/config.service';
+import type { MongoService } from '../src/core/services/mongo.service';
+import { LLMProvisioner } from '../src/llm/provisioners/llm.provisioner';
+import { WorkspaceNode } from '../src/graph/nodes/workspace/workspace.node';
+import { ShellCommandNode } from '../src/graph/nodes/tools/shell_command/shell_command.node';
+import { MemoryNode } from '../src/graph/nodes/memory/memory.node';
+import { MemoryConnectorNode } from '../src/graph/nodes/memoryConnector/memoryConnector.node';
+import { EnvService } from '../src/env/env.service';
+import { ArchiveService } from '../src/infra/archive/archive.service';
+import { NcpsKeyService } from '../src/infra/ncps/ncpsKey.service';
+import { MemoryService } from '../src/nodes/memory.repository';
 
 // Build a registry and assert memory templates and agent memory port wiring are present.
 describe('templates: memory registration and agent memory port', () => {
   it('registers memory and memoryConnector templates and exposes Agent memory target port', async () => {
+    const logger = new LoggerService();
+    const configService = new ConfigService({ githubAppId: '1', githubAppPrivateKey: 'k', githubInstallationId: 'i', openaiApiKey: 'x', githubToken: 't', mongodbUrl: 'm' });
+    const containerService = new ContainerService(logger);
+    const mongoService = { getDb: () => ({}) } as unknown as MongoService;
+    const provisioner = { getLLM: async () => ({ call: async () => ({ text: 'ok', output: [] }) }) } as unknown as LLMProvisioner;
+    const envService = new EnvService(configService);
+    const archiveService = new ArchiveService();
+    const ncpsKeyService = new NcpsKeyService(logger, configService);
+    const memoryService = new MemoryService({ getDb: () => ({}) } as any, logger);
+
+    class MinimalModuleRef implements Pick<ModuleRef, 'create' | 'get'> {
+      create<T = any>(cls: new (...args: any[]) => T): T {
+        // Provide minimal constructor args for known node classes
+        if (cls === WorkspaceNode) return new WorkspaceNode(containerService, configService, ncpsKeyService, logger, envService) as unknown as T;
+        if (cls === ShellCommandNode) return new ShellCommandNode(envService, logger, this as unknown as ModuleRef, archiveService) as unknown as T;
+        if (cls === MemoryConnectorNode) return new MemoryConnectorNode(logger) as unknown as T;
+        if (cls === MemoryNode) return new MemoryNode(this as unknown as ModuleRef, logger) as unknown as T;
+        // Reducers/routers/tools not needed for schema introspection; construct without args
+        return new (cls as any)();
+      }
+      get<TInput = any, TResult = TInput>(token: TInput): TResult {
+        // Provide MemoryService for MemoryNode.getMemoryService
+        if (token === MemoryService) return memoryService as unknown as TResult;
+        // Return undefined for others (not used in schema tests)
+        return undefined as unknown as TResult;
+      }
+    }
+
+    const moduleRef = new MinimalModuleRef();
+
     const deps = {
-      logger: {} as unknown as LoggerService,
-      containerService: {} as unknown as ContainerService,
-      configService: {} as unknown as ConfigService,
-      mongoService: { getDb: () => ({} as any) } as unknown as MongoService,
-      provisioner: {} as any,
-      moduleRef: {} as any,
+      logger,
+      containerService,
+      configService,
+      mongoService,
+      provisioner,
+      moduleRef: moduleRef as unknown as ModuleRef,
     };
 
     const reg = buildTemplateRegistry(deps);
@@ -27,19 +66,13 @@ describe('templates: memory registration and agent memory port', () => {
     expect(memorySchema).toBeTruthy();
     expect(memoryConnectorSchema).toBeTruthy();
     expect(agentSchema).toBeTruthy();
-    // Schema contains static config for memory and memoryConnector
-    const memSchema = schema.find((s) => s.name === 'memory');
+
     // Memory and MemoryConnector are services
-    expect(memSchema?.kind).toBe('service');
-    const memConnMeta = schema.find((s) => s.name === 'memoryConnector');
-    expect(memConnMeta?.kind).toBe('service');
+    expect(memorySchema?.kind).toBe('service');
+    expect(memoryConnectorSchema?.kind).toBe('service');
     const workspaceMeta = schema.find((s) => s.name === 'workspace');
     expect(workspaceMeta?.kind).toBe('service');
-    // staticConfigSchema removed from palette; schema still returns ports/kind
-    const memConnSchema = schema.find((s) => s.name === 'memoryConnector');
 
-    // Capabilities include staticConfigurable and exclude dynamicConfigurable
-    // capabilities removed from palette
     // memory node exposes only $self; memoryConnector exposes $self and $memory target
     const memorySources = memorySchema?.sourcePorts || [];
     expect(memorySources).toContain('$self');
@@ -56,7 +89,7 @@ describe('templates: memory registration and agent memory port', () => {
     expect(entry?.kind).toBe('tool');
     const memToolPorts = schema.find((s) => s.name === t);
     expect(memToolPorts).toBeTruthy();
-    expect(memToolPorts?.targetPorts).toEqual(expect.arrayContaining(['$self','$memory']));
+    expect(memToolPorts?.targetPorts).toEqual(expect.arrayContaining(['$self', '$memory']));
 
     // palette no longer surfaces staticConfigSchema or capabilities
     expect((entry as any)?.staticConfigSchema).toBeUndefined();
