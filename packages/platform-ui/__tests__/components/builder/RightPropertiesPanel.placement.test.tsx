@@ -56,10 +56,10 @@ describe('RightPropertiesPanel placement and enablement', () => {
     expect(runtimeHeader.parentElement?.contains(actionsHeader)).toBe(false);
   });
 
-  it('enables Start on not_ready and disables Stop', () => {
+  it('enables Provision on not_ready and disables Deprovision', () => {
     // statusMock starts as not_ready
     render(<RightPropertiesPanel node={makeNode('t')} onChange={onChange} />);
-    expect(screen.getByRole('button', { name: 'Start' })).not.toBeDisabled();
-    expect(screen.getByRole('button', { name: 'Stop' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Provision' })).not.toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Deprovision' })).toBeDisabled();
   });
 });

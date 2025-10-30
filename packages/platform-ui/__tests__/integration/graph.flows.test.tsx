@@ -20,8 +20,8 @@ describe('Integration flows: Node actions, dynamic/static config', () => {
     // initial state not_ready
     await waitFor(() => expect(screen.getByText('not_ready')).toBeInTheDocument());
 
-    // click start -> optimistic provisioning
-    fireEvent.click(screen.getByText('Start'));
+    // click provision -> optimistic provisioning
+    fireEvent.click(screen.getByText('Provision'));
     await waitFor(() => expect(screen.getByText('provisioning')).toBeInTheDocument());
 
     // socket emits ready
@@ -29,7 +29,7 @@ describe('Integration flows: Node actions, dynamic/static config', () => {
     await waitFor(() => expect(screen.getByText('ready')).toBeInTheDocument());
 
     // buttons adjust
-    expect(screen.getByText('Stop')).not.toBeDisabled();
+    expect(screen.getByText('Deprovision')).not.toBeDisabled();
   });
 
   // Pause/Resume removed; no test for paused reconcile

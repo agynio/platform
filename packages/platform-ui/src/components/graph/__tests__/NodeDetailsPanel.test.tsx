@@ -40,10 +40,10 @@ describe('NodeDetailsPanel', () => {
     expect(screen.getByText('not_ready')).toBeInTheDocument();
   });
 
-  it('enables Start on not_ready and calls provision', () => {
+  it('enables Provision on not_ready and calls provision', () => {
     mockStatus = { isPaused: false, provisionStatus: { state: 'not_ready' } };
     renderPanel();
-    const start = screen.getByText('Start');
+    const start = screen.getByText('Provision');
     expect(start).not.toBeDisabled();
     fireEvent.click(start);
     expect(mockMutate).toHaveBeenCalledWith('provision');
@@ -51,10 +51,10 @@ describe('NodeDetailsPanel', () => {
 
   // Pause/Resume removed; Start/Stop only per server API alignment
 
-  it('enables Stop when ready', () => {
+  it('enables Deprovision when ready', () => {
     mockStatus = { isPaused: false, provisionStatus: { state: 'ready' } };
     renderPanel();
-    const stop = screen.getByText('Stop');
+    const stop = screen.getByText('Deprovision');
     expect(stop).not.toBeDisabled();
     fireEvent.click(stop);
     expect(mockMutate).toHaveBeenCalledWith('deprovision');

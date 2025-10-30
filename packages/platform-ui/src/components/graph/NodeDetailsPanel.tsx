@@ -34,7 +34,7 @@ export default function NodeDetailsPanel({ nodeId, templateName }: Props) {
           variant="outline"
           disabled={!canStart}
           onClick={() => action.mutate('provision')}
-        >Start</Button>
+        >Provision</Button>
         {/* Pause/Resume removed; only Start/Stop */}
         <Button
           type="button"
@@ -42,7 +42,7 @@ export default function NodeDetailsPanel({ nodeId, templateName }: Props) {
           variant="outline"
           disabled={!canStop}
           onClick={() => action.mutate('deprovision')}
-        >Stop</Button>
+        >Deprovision</Button>
       </div>
     </div>
   );

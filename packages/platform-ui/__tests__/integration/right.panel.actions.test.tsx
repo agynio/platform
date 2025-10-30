@@ -18,12 +18,12 @@ function makeNode(template: string, id = 'n1'): RFNode<TestNodeData> {
   };
 }
 
-describe('Right panel actions: Start/Stop optimistic and reconcile', () => {
+describe('Right panel actions: Provision/Deprovision optimistic and reconcile', () => {
   beforeAll(() => server.listen());
   afterEach(() => server.resetHandlers());
   afterAll(() => server.close());
 
-  it('clicking Start moves status to provisioning then ready; Stop moves to deprovisioning then not_ready', async () => {
+  it('clicking Provision moves status to provisioning then ready; Deprovision moves to deprovisioning then not_ready', async () => {
     // Ensure template is provisionable for actions
     server.use(
       _http.get('/api/graph/templates', () =>
@@ -40,21 +40,21 @@ describe('Right panel actions: Start/Stop optimistic and reconcile', () => {
     await waitFor(() => expect(screen.getByText('not_ready')).toBeInTheDocument());
 
     // click start -> optimistic provisioning
-    fireEvent.click(screen.getByText('Start'));
+    fireEvent.click(screen.getByText('Provision'));
     await waitFor(() => expect(screen.getByText('provisioning')).toBeInTheDocument());
 
     // socket emits ready
     emitNodeStatus({ nodeId: 'n1', provisionStatus: { state: 'ready' } });
     await waitFor(() => expect(screen.getByText('ready')).toBeInTheDocument());
-    expect(screen.getByText('Stop')).not.toBeDisabled();
+    expect(screen.getByText('Deprovision')).not.toBeDisabled();
 
     // click stop -> optimistic deprovisioning
-    fireEvent.click(screen.getByText('Stop'));
+    fireEvent.click(screen.getByText('Deprovision'));
     await waitFor(() => expect(screen.getByText('deprovisioning')).toBeInTheDocument());
 
     // socket emits not_ready
     emitNodeStatus({ nodeId: 'n1', provisionStatus: { state: 'not_ready' } });
     await waitFor(() => expect(screen.getByText('not_ready')).toBeInTheDocument());
-    expect(screen.getByText('Start')).not.toBeDisabled();
+    expect(screen.getByText('Provision')).not.toBeDisabled();
   });
 });
