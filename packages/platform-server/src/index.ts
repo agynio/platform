@@ -9,7 +9,7 @@ initTracing({
 
 import { NestFactory } from '@nestjs/core';
 import { FastifyAdapter } from '@nestjs/platform-fastify';
-import type { FastifyTypeProviderDefault } from '@fastify/type-provider-default';
+import type { FastifyTypeProviderDefault } from 'fastify';
 import { ValidationPipe } from '@nestjs/common';
 import fastifyCors, { FastifyCorsOptions } from '@fastify/cors';
 
