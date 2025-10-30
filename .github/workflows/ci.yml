@@ -1,4 +1,5 @@
 name: CI
+# Trigger CI rerun: small comment update
 
 on:
   pull_request:
