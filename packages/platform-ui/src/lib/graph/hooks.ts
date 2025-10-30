@@ -4,6 +4,7 @@ import { api } from './api';
 import type { PersistedGraphUpsertRequestUI } from './api';
 import { graphSocket } from './socket';
 import type { NodeStatus, NodeStatusEvent, ReminderDTO } from './types';
+import { z } from 'zod';
 
 export function useTemplates() {
   return useQuery({
@@ -103,4 +104,81 @@ export function useSaveGraph() {
       notifyError(`Save graph failed: ${message}`);
     },
   });
+}
+
+// Typed MCP node state accessors
+const McpToolSchema = z.object({
+  name: z.string(),
+  title: z.string().optional(),
+  description: z.string().optional(),
+  inputSchema: z.unknown().optional(),
+  outputSchema: z.unknown().optional(),
+});
+
+const McpStateSchema = z.object({
+  mcp: z
+    .object({
+      tools: z.array(McpToolSchema).default([]).optional(),
+      enabledTools: z.array(z.string()).optional(),
+      toolsUpdatedAt: z.union([z.string(), z.number()]).optional(),
+    })
+    .partial()
+    .optional(),
+});
+
+type McpTool = z.infer<typeof McpToolSchema>;
+
+export function useMcpNodeState(nodeId: string) {
+  const qc = useQueryClient();
+  const q = useQuery<{ tools: McpTool[]; enabledTools?: string[] }>({
+    queryKey: ['graph', 'node', nodeId, 'state', 'mcp'],
+    queryFn: async () => {
+      const res = await api.getNodeState(nodeId);
+      const state = (res?.state ?? {}) as Record<string, unknown>;
+      const parsed = McpStateSchema.safeParse(state);
+      if (!parsed.success) return { tools: [], enabledTools: undefined };
+      return { tools: parsed.data.mcp?.tools ?? [], enabledTools: parsed.data.mcp?.enabledTools };
+    },
+    staleTime: 2000,
+  });
+
+  useEffect(() => {
+    graphSocket.connect();
+    const off = graphSocket.onNodeState(nodeId, (ev) => {
+      const s = (ev?.state ?? {}) as Record<string, unknown>;
+      const parsed = McpStateSchema.safeParse(s);
+      if (!parsed.success) return;
+      qc.setQueryData<{ tools: McpTool[]; enabledTools?: string[] }>(
+        ['graph', 'node', nodeId, 'state', 'mcp'],
+        { tools: parsed.data.mcp?.tools ?? [], enabledTools: parsed.data.mcp?.enabledTools },
+      );
+    });
+    return () => off();
+  }, [nodeId, qc]);
+
+  const m = useMutation({
+    mutationFn: async (enabledTools: string[]) => {
+      await api.putNodeState(nodeId, { mcp: { enabledTools } });
+      return enabledTools;
+    },
+    onMutate: async (enabledTools) => {
+      await qc.cancelQueries({ queryKey: ['graph', 'node', nodeId, 'state', 'mcp'] });
+      const key = ['graph', 'node', nodeId, 'state', 'mcp'] as const;
+      const prev = qc.getQueryData<{ tools: McpTool[]; enabledTools?: string[] }>(key);
+      qc.setQueryData(key, { tools: prev?.tools ?? [], enabledTools });
+      return { prev };
+    },
+    onError: (err: unknown, _vars, ctx) => {
+      if (ctx?.prev) qc.setQueryData(['graph', 'node', nodeId, 'state', 'mcp'], ctx.prev);
+      const message = err instanceof Error ? err.message : String(err);
+      notifyError(`Failed to update MCP tools: ${message}`);
+    },
+  });
+
+  return {
+    tools: q.data?.tools ?? [],
+    enabledTools: q.data?.enabledTools,
+    setEnabledTools: (next: string[]) => m.mutate(next),
+    isLoading: q.isPending,
+  } as const;
 }

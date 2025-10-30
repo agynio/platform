@@ -5,6 +5,28 @@ import { GraphSocketGateway } from '../gateway/graph.socket.gateway';
 import { GraphRepository } from './graph.repository';
 import { mergeWith, isArray } from 'lodash-es';
 
+export function deepMergeNodeState(
+  prev: Record<string, unknown>,
+  patch: Record<string, unknown>,
+): Record<string, unknown> {
+  const isPlainObject = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
+
+  const result: Record<string, unknown> = { ...prev };
+  for (const key of Object.keys(patch)) {
+    const nextVal: unknown = patch[key];
+    if (typeof nextVal === 'undefined') continue; // avoid introducing undefined keys
+    const prevVal: unknown = result[key];
+    if (Array.isArray(nextVal)) {
+      result[key] = nextVal as unknown[];
+    } else if (isPlainObject(nextVal) && isPlainObject(prevVal)) {
+      result[key] = deepMergeNodeState(prevVal, nextVal);
+    } else {
+      result[key] = nextVal as Exclude<unknown, undefined>;
+    }
+  }
+  return result;
+}
+
 /**
  * Centralized service to persist per-node runtime state && reflect changes in the in-memory runtime snapshot.
  * Minimal, non-Nest class to avoid broader DI changes for now.

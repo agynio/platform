@@ -1,61 +1,74 @@
-import { describe, it, expect, vi } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import React from 'react';
 import McpServerDynamicConfigView from '@/components/configViews/McpServerDynamicConfigView';
 
-vi.mock('@/lib/graph/hooks', () => ({
-  useNodeStatus: () => ({ data: { dynamicConfigReady: true } }),
-  useDynamicConfig: () => ({ schema: { data: { properties: { a: { type: 'boolean' }, b: { type: 'boolean' } } } } }),
-}));
+const g: any = globalThis;
 
-describe('McpServerDynamicConfigView', () => {
-  it('initializes boolean keys and respects disabled', () => {
-    const onChange = vi.fn();
-    render(
-      <McpServerDynamicConfigView
-        nodeId="n1"
-        templateName="mcpServer"
-        value={{}}
-        onChange={onChange}
-        readOnly={false}
-        disabled={true}
-      />,
-    );
-    expect(screen.getByTestId('mcp-dyn-view')).toBeInTheDocument();
-    // Seeds missing boolean keys via initial onChange
-    expect(onChange).toHaveBeenCalledWith({ a: false, b: false });
-    const checkA = screen.getByLabelText('a') as HTMLInputElement;
-    expect(checkA.disabled).toBe(true);
+vi.mock('@/lib/graph/hooks', () => {
+  return {
+    useMcpNodeState: (nodeId: string) => {
+      const [enabledTools, setEnabledToolsState] = React.useState<string[] | undefined>(undefined);
+      const tools = [
+        { name: 't1', description: 'Tool 1' },
+        { name: 't2', description: 'Tool 2' },
+      ];
+      return {
+        tools,
+        enabledTools,
+        isLoading: false,
+        setEnabledTools: (next: string[]) => {
+          setEnabledToolsState(next);
+          // simulate API call for assertion
+          fetch(`/api/graph/nodes/${nodeId}/state`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ state: { mcp: { enabledTools: next } } }),
+          });
+        },
+      } as const;
+    },
+  };
+});
+
+describe('MCP tools management via node state', () => {
+  const origFetch = g.fetch;
+  const nodeId = 'n1';
+
+  beforeEach(() => {
+    g.fetch = vi.fn(async (input: RequestInfo, init?: RequestInit) => {
+      const url = typeof input === 'string' ? input : (input as Request).url;
+      if (url.includes(`/api/graph/nodes/${nodeId}/state`) && init?.method === 'PUT') {
+        const body = init.body ? JSON.parse(String(init.body)) : {};
+        expect(body).toEqual({ state: { mcp: { enabledTools: ['t1'] } } });
+        return new Response(JSON.stringify({ ok: true }));
+      }
+      return new Response('', { status: 204 });
+    }) as any;
+  });
+  afterEach(() => {
+    g.fetch = origFetch;
   });
 
-  it('emits onChange when toggled', () => {
-    const onChange = vi.fn();
-    render(
-      <McpServerDynamicConfigView
-        nodeId="n1"
-        templateName="mcpServer"
-        value={{ a: false, b: false }}
-        onChange={onChange}
-      />,
-    );
-    const checkA = screen.getByLabelText('a') as HTMLInputElement;
-    fireEvent.click(checkA);
-    expect(onChange).toHaveBeenCalledWith({ a: true, b: false });
+  it('renders tools from state and derives enabled when enabledTools undefined', () => {
+    render(<McpServerDynamicConfigView nodeId={nodeId} templateName="mcpServer" value={{}} onChange={() => {}} />);
+    expect(screen.getByTestId('tool-t1')).toBeInTheDocument();
+    const c1 = screen.getByRole('checkbox', { name: /t1/ }) as HTMLInputElement;
+    const c2 = screen.getByRole('checkbox', { name: /t2/ }) as HTMLInputElement;
+    // All enabled by default when enabledTools is undefined
+    expect(c1.checked).toBe(true);
+    expect(c2.checked).toBe(true);
   });
 
-  it('disables inputs when readOnly=true (even if disabled=false)', () => {
-    const onChange = vi.fn();
-    render(
-      <McpServerDynamicConfigView
-        nodeId="n1"
-        templateName="mcpServer"
-        value={{ a: false, b: false }}
-        onChange={onChange}
-        readOnly={true}
-        disabled={false}
-      />,
-    );
-    const checkA = screen.getByLabelText('a') as HTMLInputElement;
-    expect(checkA.disabled).toBe(true);
+  it('toggle writes enabledTools and updates UI', async () => {
+    render(<McpServerDynamicConfigView nodeId={nodeId} templateName="mcpServer" value={{}} onChange={() => {}} />);
+    expect(screen.getByTestId('tool-t1')).toBeInTheDocument();
+    const c1 = screen.getByRole('checkbox', { name: /t1/ }) as HTMLInputElement;
+    // Disable t2 -> PUT with ['t1']
+    const c2 = screen.getByRole('checkbox', { name: /t2/ }) as HTMLInputElement;
+    fireEvent.click(c2);
+    await waitFor(() => expect(g.fetch).toHaveBeenCalled());
+    await waitFor(() => expect(c2.checked).toBe(false));
+    expect(c1.checked).toBe(true);
   });
 });

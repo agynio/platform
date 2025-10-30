@@ -142,6 +142,16 @@ export const configSchema = z.object({
   ncpsAuthHeader: z.string().optional(),
   ncpsAuthToken: z.string().optional(),
   agentsDatabaseUrl: z.string().min(1, 'Agents database connection string is required'),
+  // CORS origins (comma-separated in env; parsed to string[])
+  corsOrigins: z
+    .string()
+    .default("")
+    .transform((s) =>
+      s
+        .split(",")
+        .map((x) => x.trim())
+        .filter((x) => !!x),
+    ),
 });
 
 export type Config = z.infer<typeof configSchema>;
@@ -304,6 +314,9 @@ export class ConfigService implements Config {
   get agentsDatabaseUrl(): string {
     return this.params.agentsDatabaseUrl;
   }
+  get corsOrigins(): string[] {
+    return this.params.corsOrigins ?? [];
+  }
 
   static fromEnv(): ConfigService {
     const legacy = process.env.NCPS_URL;
@@ -357,6 +370,7 @@ export class ConfigService implements Config {
       ncpsAuthHeader: process.env.NCPS_AUTH_HEADER,
       ncpsAuthToken: process.env.NCPS_AUTH_TOKEN,
       agentsDatabaseUrl: process.env.AGENTS_DATABASE_URL,
+      corsOrigins: process.env.CORS_ORIGINS,
     });
     return new ConfigService().init(parsed);
   }
