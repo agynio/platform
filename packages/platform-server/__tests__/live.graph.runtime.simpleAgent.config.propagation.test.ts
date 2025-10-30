@@ -12,7 +12,6 @@ import { ConfigService } from '../src/core/services/config.service.js';
 import type { Config } from '../src/core/services/config.service.js';
 // PrismaService removed from test harness; use minimal DI stubs
 import { LLMProvisioner } from '../src/llm/provisioners/llm.provisioner';
-import { AgentRunService } from '../src/graph/nodes/agentRun.repository';
 import { MongoService } from '../src/core/services/mongo.service.js';
 
 // Avoid any real network calls by ensuring ChatOpenAI token counting/invoke are not used in this test.
@@ -25,7 +24,7 @@ describe('LiveGraphRuntime -> Agent config propagation', () => {
     }
     class StubMongoService { getDb() { return {}; } }
     class StubLLMProvisioner extends LLMProvisioner { async getLLM() { return { call: async ({ model }: any) => ({ text: `model:${model}`, output: [] }) }; } }
-    class StubAgentRunService { async startRun() {} async markTerminated() {} async list() { return []; } }
+    // No AgentRunService needed for this test
 
     const cfg: Config = {
       githubAppId: 'test', githubAppPrivateKey: 'test', githubInstallationId: 'test', openaiApiKey: 'test', githubToken: 'test',
@@ -45,7 +44,6 @@ describe('LiveGraphRuntime -> Agent config propagation', () => {
         { provide: ConfigService, useValue: new ConfigService(cfg) },
         { provide: MongoService, useClass: StubMongoService },
         { provide: LLMProvisioner, useClass: StubLLMProvisioner },
-        { provide: AgentRunService, useClass: StubAgentRunService },
         { provide: ContainerRegistry, useValue: { updateLastUsed: async () => {}, registerStart: async () => {}, markStopped: async () => {} } },
       ],
     })

@@ -6,8 +6,17 @@ import { ConfigService } from '../src/core/services/config.service';
 import { AgentNode as Agent } from '../src/graph/nodes/agent/agent.node';
 import { Test } from '@nestjs/testing';
 import { LLMProvisioner } from '../src/llm/provisioners/llm.provisioner';
-import { AgentRunService } from '../src/graph/nodes/agentRun.repository';
 import { PrismaService } from '../src/core/services/prisma.service';
+// Local type to avoid importing removed/renamed file
+type AgentRunService = {
+  ensureIndexes: () => Promise<void>;
+  startRun: (...args: any[]) => Promise<void>;
+  markTerminating: (...args: any[]) => Promise<'ok' | 'already' | 'not_found'>;
+  markTerminated: (...args: any[]) => Promise<void>;
+  clear: () => Promise<void>;
+  list: (...args: any[]) => Promise<any[]>;
+  findByRunId: (...args: any[]) => Promise<any>;
+};
 
 describe('Agent summarization graph', () => {
   it('invokes successfully over several turns with summarization configured', async () => {
@@ -27,7 +36,7 @@ describe('Agent summarization graph', () => {
         LoggerService,
         { provide: ConfigService, useValue: new ConfigService({ githubAppId: '1', githubAppPrivateKey: 'k', githubInstallationId: 'i', openaiApiKey: 'x', githubToken: 't', mongodbUrl: 'm' }) },
         { provide: LLMProvisioner, useValue: provisioner },
-        { provide: AgentRunService, useValue: runsStub },
+        { provide: 'AgentRunService', useValue: runsStub },
         Agent,
         { provide: PrismaService, useValue: { getClient: () => null } },
       ],
