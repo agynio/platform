@@ -17,19 +17,6 @@ type Msg = { content: string; info?: Record<string, unknown> };
 
 class StubMongoService extends MongoService { override getDb(): Record<string,unknown> { return {}; } }
 class StubLLMProvisioner extends LLMProvisioner { async getLLM(): Promise<{ call: (messages: unknown) => Promise<{ text: string; output: unknown[] }> }> { return { call: async () => ({ text: 'ok', output: [] }) }; } }
-class StubAgentRunService {
-  private runs = new Map<string, string[]>();
-  async startRun(nodeId: string, threadId: string): Promise<void> {
-    const arr = this.runs.get(nodeId) || [];
-    arr.push(threadId);
-    this.runs.set(nodeId, arr);
-  }
-  async list(nodeId: string): Promise<Array<{ threadId: string }>> {
-    const arr = this.runs.get(nodeId) || [];
-    return arr.map((t) => ({ threadId: t }));
-  }
-  async markTerminated(): Promise<void> {}
-}
 
 class FakeAgent extends AgentNode {
   private active: Set<string> = new Set();
