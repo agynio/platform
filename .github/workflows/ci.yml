@@ -39,11 +39,14 @@ jobs:
         with:
           node-version: '20'
 
-      - name: Approve necessary build scripts
-        run: pnpm approve-builds @prisma/client prisma esbuild mongodb-memory-server @nestjs/core msw
-
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+
+      - name: Approve necessary build scripts
+        run: pnpm approve-builds @prisma/client esbuild mongodb-memory-server msw
+
+      - name: Rebuild native deps
+        run: pnpm -r rebuild
 
       - name: Lint (recursive where available)
         run: pnpm -r run lint
@@ -80,11 +83,14 @@ jobs:
         with:
           node-version: '20'
 
-      - name: Approve necessary build scripts
-        run: pnpm approve-builds @prisma/client prisma esbuild mongodb-memory-server @nestjs/core msw
-
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+
+      - name: Approve necessary build scripts
+        run: pnpm approve-builds @prisma/client esbuild mongodb-memory-server msw
+
+      - name: Rebuild native deps
+        run: pnpm -r rebuild
 
       - name: Prisma generate (platform-server)
         run: pnpm --filter @agyn/platform-server run prisma:generate
@@ -124,11 +130,14 @@ jobs:
         with:
           node-version: '20'
 
-      - name: Approve necessary build scripts
-        run: pnpm approve-builds @prisma/client prisma esbuild mongodb-memory-server @nestjs/core msw
-
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+
+      - name: Approve necessary build scripts
+        run: pnpm approve-builds @prisma/client esbuild mongodb-memory-server msw
+
+      - name: Rebuild native deps
+        run: pnpm -r rebuild
 
       - name: Run UI tests (@agyn/platform-ui)
         run: pnpm --filter @agyn/platform-ui test
@@ -171,11 +180,14 @@ jobs:
         with:
           node-version: '20'
 
-      - name: Approve necessary build scripts
-        run: pnpm approve-builds @prisma/client prisma esbuild mongodb-memory-server @nestjs/core msw
-
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+
+      - name: Approve necessary build scripts
+        run: pnpm approve-builds @prisma/client esbuild mongodb-memory-server msw
+
+      - name: Rebuild native deps
+        run: pnpm -r rebuild
 
       # No explicit build script for server; perform type-check as build-equivalent
       - name: Type-check server (noEmit)
@@ -215,6 +227,12 @@ jobs:
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+
+      - name: Approve necessary build scripts
+        run: pnpm approve-builds @prisma/client esbuild mongodb-memory-server msw
+
+      - name: Rebuild native deps
+        run: pnpm -r rebuild
 
       # Build all workspaces in topological order so library outputs exist
       - name: Build UI workspace (topo order)

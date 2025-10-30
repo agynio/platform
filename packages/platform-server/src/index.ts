@@ -9,7 +9,7 @@ initTracing({
 
 import { NestFactory } from '@nestjs/core';
 import { FastifyAdapter } from '@nestjs/platform-fastify';
-import type { FastifyTypeProviderDefault } from '@fastify/type-provider-default';
+import type { FastifyTypeProviderDefault } from 'fastify';
 import { ValidationPipe } from '@nestjs/common';
 import fastifyCors, { FastifyCorsOptions } from '@fastify/cors';
 
@@ -33,7 +33,7 @@ async function bootstrap() {
   const cfg = ConfigService.fromEnv();
   const allowedOrigins = cfg.corsOrigins;
 
-  const corsOptions: FastifyCorsOptions = {
+  const corsOptions = {
     origin: allowedOrigins.length ? allowedOrigins : true,
     methods: [
       'GET',
@@ -51,7 +51,7 @@ async function bootstrap() {
       'Accept',
     ],
     credentials: false,
-  };
+  } satisfies FastifyCorsOptions;
   // Type-safe CORS registration on the Fastify instance
   await fastify.register(fastifyCors, corsOptions);
 
