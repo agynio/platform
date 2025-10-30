@@ -4,7 +4,7 @@ import type { StaticConfigViewProps } from './types';
 import ReferenceEnvField, { type EnvItem } from './shared/ReferenceEnvField';
 
 export default function ShellToolConfigView({ value, onChange, readOnly, disabled, onValidate }: StaticConfigViewProps) {
-  const init = useMemo(() => ({ ...(value || {}) }), [value]);
+  const init = useMemo<Record<string, unknown>>(() => ({ ...(value || {}) }), [value]);
   const [workdir, setWorkdir] = useState<string>((init.workdir as string) || (init.workingDir as string) || '/workspace');
   const [env, setEnv] = useState<EnvItem[]>((init.env as EnvItem[]) || []);
   const [executionTimeoutMs, setExecutionTimeoutMs] = useState<number>(
@@ -13,9 +13,10 @@ export default function ShellToolConfigView({ value, onChange, readOnly, disable
   const [idleTimeoutMs, setIdleTimeoutMs] = useState<number>(
     typeof init.idleTimeoutMs === 'number' ? (init.idleTimeoutMs as number) : 60 * 1000,
   );
-  const [outputLimitChars, setOutputLimitChars] = useState<number>(
-    typeof (init as any).outputLimitChars === 'number' ? ((init as any).outputLimitChars as number) : 50000,
-  );
+  const [outputLimitChars, setOutputLimitChars] = useState<number>(() => {
+    const v = init['outputLimitChars'];
+    return typeof v === 'number' ? v : 50000;
+  });
 
   const isDisabled = !!readOnly || !!disabled;
 
