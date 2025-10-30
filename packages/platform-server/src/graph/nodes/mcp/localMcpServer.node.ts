@@ -16,6 +16,7 @@ import { NodeStateService } from '../../../graph/nodeState.service';
 import Node from '../base/Node';
 import { ConsoleLogger, Inject, Injectable, Scope } from '@nestjs/common';
 import { jsonSchemaToZod } from '@agyn/json-schema-to-zod';
+import { isEqual } from 'lodash-es';
 
 const EnvItemSchema = z
   .object({
@@ -110,6 +111,8 @@ export class LocalMCPServerNode extends Node<z.infer<typeof LocalMcpServerStatic
   // Dynamic config: enabled tools (if undefined => all enabled by default)
   // Dynamic tool filtering removed per strictness spec; always expose all cached tools
   private _globalStaleTimeoutMs = 0;
+  // Last seen enabled tools from state for change detection
+  private _lastEnabledTools?: string[];
 
   constructor(
     @Inject(ContainerService) protected containerService: ContainerService,
@@ -165,7 +168,8 @@ export class LocalMCPServerNode extends Node<z.infer<typeof LocalMcpServerStatic
     this.notifyToolsUpdated(Date.now());
   }
 
-  async setState(state: { mcp?: PersistedMcpState }) {
+  async setState(state: { mcp?: PersistedMcpState }): Promise<void> {
+    // Preload cached tools if present in state
     if (state?.mcp && state.mcp.tools) {
       const summaries = state.mcp.tools;
       const updatedAt = state.mcp.toolsUpdatedAt;
@@ -174,6 +178,16 @@ export class LocalMCPServerNode extends Node<z.infer<typeof LocalMcpServerStatic
       } catch (e) {
         this.logger.error('Error during MCP cache preload for node %s', this.nodeId, e);
       }
+    }
+    // Detect enabledTools changes in state.mcp (optional field)
+    const mcpState = state?.mcp as Record<string, unknown> | undefined;
+    const rawEnabled: unknown = mcpState ? (mcpState['enabledTools'] as unknown) : undefined;
+    const nextEnabled = Array.isArray(rawEnabled) && rawEnabled.every((v) => typeof v === 'string')
+      ? (rawEnabled as string[])
+      : undefined;
+    if (!isEqual(this._lastEnabledTools, nextEnabled)) {
+      this._lastEnabledTools = nextEnabled ? [...nextEnabled] : undefined;
+      this.notifyToolsUpdated(Date.now());
     }
   }
 
@@ -376,8 +390,11 @@ export class LocalMCPServerNode extends Node<z.infer<typeof LocalMcpServerStatic
     const allTools: LocalMCPServerTool[] = this.toolsCache ? [...this.toolsCache] : [];
     try {
       const snap = this.nodeStateService?.getSnapshot(this.nodeId) as { mcp?: { enabledTools?: string[] } } | undefined;
-      const enabled = Array.isArray(snap?.mcp?.enabledTools) ? new Set<string>(snap!.mcp!.enabledTools!) : null;
-      if (enabled && enabled.size > 0) return allTools.filter((t) => enabled.has(t.name));
+      // Treat presence of enabledTools (even empty) as authoritative; undefined => all
+      const enabled = Array.isArray(snap?.mcp?.enabledTools)
+        ? new Set<string>(snap!.mcp!.enabledTools!)
+        : undefined;
+      if (enabled !== undefined) return allTools.filter((t) => enabled.has(t.name));
     } catch {}
     return allTools;
   }
@@ -599,6 +616,8 @@ export class LocalMCPServerNode extends Node<z.infer<typeof LocalMcpServerStatic
       this.logger.error(`[MCP:${this.config.namespace}] Error emitting tools_updated`, e);
     }
   }
+  // no additional hooks; runtime reactions are handled via setState()
+
 
   // ----------------- Resilient start internals -----------------
   private flushStartWaiters(err?: unknown) {
