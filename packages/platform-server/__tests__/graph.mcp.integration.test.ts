@@ -1,11 +1,10 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import { Test } from '@nestjs/testing';
 import { buildTemplateRegistry } from '../src/templates';
-import { LocalMCPServerNode } from '../src/graph/nodes/mcp/localMcpServer.node';
 import { LoggerService } from '../src/core/services/logger.service.js';
-import { ContainerService } from '../src/infra/container/container.service';
+import { ContainerService, type ContainerOpts } from '../src/infra/container/container.service';
+import { ContainerHandle } from '../src/infra/container/container.handle';
 import { ConfigService } from '../src/core/services/config.service.js';
-import { LiveGraphRuntime, GraphDefinition } from '../src/graph';
 import { EnvService } from '../src/env/env.service';
 import { VaultService } from '../src/vault/vault.service';
 import { NodeStateService } from '../src/graph/nodeState.service';
@@ -15,29 +14,81 @@ import { NcpsKeyService } from '../src/infra/ncps/ncpsKey.service';
 import { LLMProvisioner } from '../src/llm/provisioners/llm.provisioner';
 import { ModuleRef } from '@nestjs/core';
 import { AgentRunService } from '../src/graph/nodes/agentRun.repository';
+import { TemplateRegistry } from '../src/graph/templateRegistry';
+import { LiveGraphRuntime } from '../src/graph/liveGraph.manager';
+import { GraphRepository } from '../src/graph/graph.repository';
+import type { GraphDefinition } from '../src/graph/types';
 
-class StubContainerService extends ContainerService {
-  override async start(): Promise<any> {
-    return { id: 'cid', exec: vi.fn(async () => ({ stdout: '', stderr: '', exitCode: 0 })) } as any;
+class StubContainerService {
+  constructor(private readonly logger: LoggerService, private readonly registry: ContainerRegistry) {}
+  async start(_opts?: ContainerOpts): Promise<ContainerHandle> {
+    return new ContainerHandle((this as unknown) as ContainerService, 'cid');
   }
+  async execContainer(_id: string, _command: string[] | string, _options?: { workdir?: string; env?: Record<string,string> | string[]; timeoutMs?: number; idleTimeoutMs?: number; tty?: boolean; killOnTimeout?: boolean; signal?: AbortSignal }): Promise<{ stdout: string; stderr: string; exitCode: number }> {
+    return { stdout: '', stderr: '', exitCode: 0 };
+  }
+  async findContainerByLabels(_labels: Record<string,string>, _opts?: { all?: boolean }): Promise<ContainerHandle | undefined> { return undefined; }
+  async findContainersByLabels(_labels: Record<string,string>, _opts?: { all?: boolean }): Promise<ContainerHandle[]> { return []; }
+  async getContainerLabels(_id: string): Promise<Record<string,string> | undefined> { return undefined; }
+  async touchLastUsed(_id: string): Promise<void> {}
+  async stopContainer(_id: string, _timeoutSec = 10): Promise<void> {}
+  async removeContainer(_id: string, _force = false): Promise<void> {}
+  async putArchive(_id: string, _data: Buffer | NodeJS.ReadableStream, _options: { path: string }): Promise<void> {}
 }
 class StubConfigService extends ConfigService {
   constructor() {
-    super({
+    super();
+    this.init({
       githubAppId: 'test',
       githubAppPrivateKey: 'test',
       githubInstallationId: 'test',
       openaiApiKey: 'test',
+      llmProvider: 'openai',
+      litellmBaseUrl: undefined,
+      litellmMasterKey: undefined,
+      openaiBaseUrl: undefined,
       githubToken: 'test',
-      slackBotToken: 'xoxb-test',
-      slackAppToken: 'xapp-test',
       mongodbUrl: 'mongodb://localhost:27017/?replicaSet=rs0',
-    } as any);
+      graphStore: 'mongo',
+      graphRepoPath: './data/graph',
+      graphBranch: 'graph-state',
+      graphAuthorName: undefined,
+      graphAuthorEmail: undefined,
+      graphLockTimeoutMs: 5000,
+      graphMongoCollectionName: 'graphs',
+      vaultEnabled: false,
+      vaultAddr: undefined,
+      vaultToken: undefined,
+      dockerMirrorUrl: 'http://registry-mirror:5000',
+      nixAllowedChannels: ['nixpkgs-unstable', 'nixos-24.11'],
+      nixHttpTimeoutMs: 5000,
+      nixCacheTtlMs: 300000,
+      nixCacheMax: 500,
+      mcpToolsStaleTimeoutMs: 0,
+      ncpsEnabled: false,
+      ncpsUrl: 'http://ncps:8501',
+      ncpsUrlServer: 'http://ncps:8501',
+      ncpsUrlContainer: 'http://ncps:8501',
+      ncpsPubkeyPath: '/pubkey',
+      ncpsFetchTimeoutMs: 3000,
+      ncpsRefreshIntervalMs: 600000,
+      ncpsStartupMaxRetries: 8,
+      ncpsRetryBackoffMs: 500,
+      ncpsRetryBackoffFactor: 2,
+      ncpsAllowStartWithoutKey: true,
+      ncpsCaBundle: undefined,
+      ncpsRotationGraceMinutes: 0,
+      ncpsAuthHeader: undefined,
+      ncpsAuthToken: undefined,
+      agentsDatabaseUrl: 'postgres://localhost:5432/agents',
+      corsOrigins: [],
+    });
   }
 }
 class StubVaultService extends VaultService { override async getSecret(): Promise<string | undefined> { return undefined; } }
-class StubMongoService extends MongoService { override getDb(): any { return {}; } }
-class StubLLMProvisioner extends LLMProvisioner { async getLLM(): Promise<any> { return { call: async () => ({ text: 'ok', output: [] }) }; } }
+class StubMongoService extends MongoService { override getDb(): Record<string,unknown> { return {}; } }
+class StubLLMProvisioner extends LLMProvisioner { async getLLM(): Promise<{ call: (messages: unknown) => Promise<{ text: string; output: unknown[] }> }> { return { call: async () => ({ text: 'ok', output: [] }) }; } }
+
 
 describe('Graph MCP integration', () => {
   it('constructs graph with mcpServer template without error (deferred start)', async () => {
@@ -54,6 +105,9 @@ describe('Graph MCP integration', () => {
         { provide: ContainerRegistry, useValue: { updateLastUsed: async () => {}, registerStart: async () => {}, markStopped: async () => {} } },
         { provide: NodeStateService, useValue: { upsertNodeState: async () => {}, getSnapshot: () => undefined } },
         { provide: AgentRunService, useValue: { startRun: async () => {}, markTerminated: async () => {}, list: async () => [] } },
+        TemplateRegistry,
+        LiveGraphRuntime,
+        GraphRepository,
       ],
     }).compile();
 
@@ -65,6 +119,14 @@ describe('Graph MCP integration', () => {
     const moduleRef = module.get(ModuleRef);
 
     const templateRegistry = buildTemplateRegistry({ logger, containerService, configService, mongoService, provisioner, moduleRef });
+    class GraphRepoStub implements Pick<GraphRepository, 'initIfNeeded' | 'get' | 'upsert' | 'upsertNodeState'> {
+      async initIfNeeded(): Promise<void> {}
+      async get(): Promise<null> { return null; }
+      async upsert(): Promise<never> { throw new Error('not-implemented'); }
+      async upsertNodeState(): Promise<void> {}
+    }
+
+    const runtime = new LiveGraphRuntime(logger, templateRegistry, new GraphRepoStub(), moduleRef);
 
     const graph: GraphDefinition = {
       nodes: [
@@ -78,12 +140,6 @@ describe('Graph MCP integration', () => {
       ],
     };
 
-    const runtime = new LiveGraphRuntime(
-      logger,
-      templateRegistry as any,
-      { initIfNeeded: async () => {}, get: async () => null, upsert: async () => { throw new Error('not-implemented'); }, upsertNodeState: async () => {} } as any,
-      moduleRef,
-    );
     const result = await runtime.apply(graph);
     expect(result.addedNodes).toContain('mcp');
   }, 60000);

@@ -11,20 +11,21 @@ import { ConfigService } from '../src/core/services/config.service';
 import { MongoService } from '../src/core/services/mongo.service';
 import { LLMProvisioner } from '../src/llm/provisioners/llm.provisioner';
 import { AgentRunService } from '../src/graph/nodes/agentRun.repository';
+import { GraphRepository } from '../src/graph/graph.repository';
+import type { LiveNode } from '../src/graph/liveGraph.types';
 
 type Msg = { content: string; info?: Record<string, unknown> };
 
-class StubMongoService extends MongoService { override getDb(): any { return {}; } }
-class StubLLMProvisioner extends LLMProvisioner { async getLLM(): Promise<any> { return { call: async () => ({ text: 'ok', output: [] }) }; } }
+class StubMongoService extends MongoService { override getDb(): Record<string,unknown> { return {}; } }
+class StubLLMProvisioner extends LLMProvisioner { async getLLM(): Promise<{ call: (messages: unknown) => Promise<{ text: string; output: unknown[] }> }> { return { call: async () => ({ text: 'ok', output: [] }) }; } }
 class StubAgentRunService {
   private runs = new Map<string, string[]>();
   async startRun(nodeId: string, threadId: string): Promise<void> {
-    const key = nodeId;
-    const arr = this.runs.get(key) || [];
+    const arr = this.runs.get(nodeId) || [];
     arr.push(threadId);
-    this.runs.set(key, arr);
+    this.runs.set(nodeId, arr);
   }
-  async list(nodeId: string): Promise<any[]> {
+  async list(nodeId: string): Promise<Array<{ threadId: string }>> {
     const arr = this.runs.get(nodeId) || [];
     return arr.map((t) => ({ threadId: t }));
   }
@@ -60,7 +61,6 @@ describe('ManageTool unit', () => {
         FakeAgent,
       ],
     }).compile();
-    const logger = module.get(LoggerService);
     const node = await module.resolve(ManageToolNode);
     await node.setConfig({ description: 'desc' });
     const tool: ManageFunctionTool = node.getTool();
@@ -153,32 +153,36 @@ describe('ManageTool graph wiring', () => {
     const module = await Test.createTestingModule({ providers: [LoggerService, ConfigService, { provide: MongoService, useClass: StubMongoService }, { provide: LLMProvisioner, useClass: StubLLMProvisioner }, { provide: AgentRunService, useClass: StubAgentRunService }, ManageFunctionTool, ManageToolNode, FakeAgent] }).compile();
     const logger = module.get(LoggerService);
     class FakeAgentWithTools extends FakeAgent {
-      addTool(_: unknown) {}
-      removeTool(_: unknown) {}
+      addTool(_tool: unknown) {}
+      removeTool(_tool: unknown) {}
       override getPortConfig() { return { sourcePorts: { tools: { kind: 'method', create: 'addTool', destroy: 'removeTool' } }, targetPorts: { $self: { kind: 'instance' } } } as const; }
     }
     const moduleRef = module.get(ModuleRef);
     const registry = new TemplateRegistry(moduleRef);
+
     class ManageToolNodeCompat extends ManageToolNode {
-      override addWorker(agent: any) {
-        const name = agent?.getAgentNodeId?.() || `agent_${Math.random().toString(36).slice(2, 6)}`;
-        // Call base with resolved name
-        // Type narrowing: agent is expected AgentNode
-        super.addWorker(name as string, agent as any);
+      override addWorker(agent: AgentNode): void {
+        const id = agent.getAgentNodeId();
+        const name = id && id.length > 0 ? id : `agent_${Math.random().toString(36).slice(2, 6)}`;
+        super.addWorker(name, agent);
       }
     }
 
-
     registry
-      .register('agent', { title: 'Agent', kind: 'agent' }, (FakeAgentWithTools as any))
-      .register('manageTool', { title: 'Manage', kind: 'tool' }, (ManageToolNodeCompat as any));
+      .register('agent', { title: 'Agent', kind: 'agent' }, FakeAgentWithTools)
+      .register('manageTool', { title: 'Manage', kind: 'tool' }, ManageToolNodeCompat);
 
-    const runtime = new LiveGraphRuntime(
-      logger,
-      registry,
-      { initIfNeeded: async () => {}, get: async () => null, upsert: async () => { throw new Error('not-implemented'); }, upsertNodeState: async () => {} } as { initIfNeeded: () => Promise<void>; get: () => Promise<unknown>; upsert: () => Promise<never>; upsertNodeState: () => Promise<void> },
-      moduleRef,
-    );
+    const runtimeModule = await Test.createTestingModule({
+      providers: [
+        LiveGraphRuntime,
+        LoggerService,
+        { provide: TemplateRegistry, useValue: registry },
+        { provide: GraphRepository, useValue: { initIfNeeded: async () => {}, get: async () => null, upsert: async () => { throw new Error('not-implemented'); }, upsertNodeState: async () => {} } },
+        { provide: ModuleRef, useValue: moduleRef },
+      ],
+    }).compile();
+    const runtime = await runtimeModule.resolve(LiveGraphRuntime);
+
     const graph = {
       nodes: [
         { id: 'A', data: { template: 'agent', config: {} } },
@@ -189,14 +193,16 @@ describe('ManageTool graph wiring', () => {
         { source: 'M', sourceHandle: 'agent', target: 'A', targetHandle: '$self' },
         { source: 'M', sourceHandle: 'agent', target: 'B', targetHandle: '$self' },
       ],
-    } as any;
+    };
 
     await runtime.apply(graph);
     const nodes = runtime.getNodes();
-    const toolNode = nodes.find((n: any) => n.id === 'M') as unknown as { instance: ManageToolNode };
-    const toolInst: ManageToolNode = toolNode.instance;
-
-    const tool = toolInst.getTool();
+    const toolNode = (nodes as LiveNode[]).find((n) => n.id === 'M');
+    if (!toolNode) throw new Error('Manage tool node not found');
+    const inst = toolNode.instance;
+    const isManage = inst instanceof ManageToolNode;
+    if (!isManage) throw new Error('Instance is not ManageToolNode');
+    const tool = (inst as ManageToolNode).getTool();
     const list = JSON.parse(await tool.execute({ command: 'list', parentThreadId: 'p' }));
     expect(Array.isArray(list)).toBe(true);
   });
