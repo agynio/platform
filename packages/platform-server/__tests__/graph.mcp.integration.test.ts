@@ -1,42 +1,29 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
+import { Test } from '@nestjs/testing';
 import { buildTemplateRegistry } from '../src/templates';
-import { LocalMCPServer } from '../src/nodes/mcp/localMcpServer.node';
+import { LocalMCPServerNode } from '../src/graph/nodes/mcp/localMcpServer.node';
 import { LoggerService } from '../src/core/services/logger.service.js';
 import { ContainerService } from '../src/infra/container/container.service';
 import { ConfigService } from '../src/core/services/config.service.js';
-import { CheckpointerService } from '../src/services/checkpointer.service';
 import { LiveGraphRuntime, GraphDefinition } from '../src/graph';
+import { EnvService } from '../src/env/env.service';
+import { VaultService } from '../src/vault/vault.service';
+import { NodeStateService } from '../src/graph/nodeState.service';
+import { MongoService } from '../src/core/services/mongo.service';
+import { ContainerRegistry } from '../src/infra/container/container.registry';
+import { NcpsKeyService } from '../src/infra/ncps/ncpsKey.service';
+import { LLMProvisioner } from '../src/llm/provisioners/llm.provisioner';
+import { ModuleRef } from '@nestjs/core';
+import { AgentRunService } from '../src/graph/nodes/agentRun.repository';
 
-// This test only validates that the graph can wire the mcpServer node without throwing.
-// It does not attempt to start a real filesystem MCP server (would require network/npm). Instead, we configure
-// a trivially invalid command and assert start() defers until first addMcpServer call (which the edge triggers).
-// Given start() will attempt to exec within container, we skip if docker not available.
-
-function dockerAvailable() {
-  // naive check: docker socket on mac
-  return process.platform === 'darwin';
+class StubContainerService extends ContainerService {
+  override async start(): Promise<any> {
+    return { id: 'cid', exec: vi.fn(async () => ({ stdout: '', stderr: '', exitCode: 0 })) } as any;
+  }
 }
-
-describe('Graph MCP integration', () => {
-  it('constructs graph with mcpServer template without error (deferred start)', async () => {
-    if (!dockerAvailable()) {
-      return; // skip silently when Docker likely unavailable
-    }
-
-    // Stub MCP server start & listTools to avoid requiring a real MCP server process for this wiring test.
-    // We only care that the graph can connect ports without throwing.
-    (LocalMCPServer as any).prototype.start = async function mockedStart() {
-      this.started = true;
-      // simulate minimal client presence expected by downstream code if accessed
-      this.client = {};
-    };
-    (LocalMCPServer as any).prototype.listTools = async function mockedListTools() {
-      return [];
-    };
-    const logger = new LoggerService();
-
-    // Build a test ConfigService instance directly; no reliance on process.env
-    const configService = new ConfigService({
+class StubConfigService extends ConfigService {
+  constructor() {
+    super({
       githubAppId: 'test',
       githubAppPrivateKey: 'test',
       githubInstallationId: 'test',
@@ -46,23 +33,38 @@ describe('Graph MCP integration', () => {
       slackAppToken: 'xapp-test',
       mongodbUrl: 'mongodb://localhost:27017/?replicaSet=rs0',
     } as any);
+  }
+}
+class StubVaultService extends VaultService { override async getSecret(): Promise<string | undefined> { return undefined; } }
+class StubMongoService extends MongoService { override getDb(): any { return {}; } }
+class StubLLMProvisioner extends LLMProvisioner { async getLLM(): Promise<any> { return { call: async () => ({ text: 'ok', output: [] }) }; } }
 
-    const containerService = new ContainerService(logger);
-    const checkpointerService = new CheckpointerService(logger);
-    // Patch to bypass Mongo requirement for this lightweight integration test
-    (checkpointerService as any).getCheckpointer = () => ({
-      get: async () => undefined,
-      put: async () => undefined,
-    });
+describe('Graph MCP integration', () => {
+  it('constructs graph with mcpServer template without error (deferred start)', async () => {
+    const module = await Test.createTestingModule({
+      providers: [
+        LoggerService,
+        { provide: ContainerService, useClass: StubContainerService },
+        { provide: ConfigService, useClass: StubConfigService },
+        EnvService,
+        { provide: VaultService, useClass: StubVaultService },
+        { provide: MongoService, useClass: StubMongoService },
+        { provide: LLMProvisioner, useClass: StubLLMProvisioner },
+        { provide: NcpsKeyService, useValue: { getKeysForInjection: () => [] } },
+        { provide: ContainerRegistry, useValue: { updateLastUsed: async () => {}, registerStart: async () => {}, markStopped: async () => {} } },
+        { provide: NodeStateService, useValue: { upsertNodeState: async () => {}, getSnapshot: () => undefined } },
+        { provide: AgentRunService, useValue: { startRun: async () => {}, markTerminated: async () => {}, list: async () => [] } },
+      ],
+    }).compile();
 
-    const templateRegistry = buildTemplateRegistry({
-      logger,
-      containerService,
-      configService,
-      checkpointerService,
-      // memory templates require mongoService in registry deps
-      mongoService: { getDb: () => ({} as any) } as any,
-    });
+    const logger = module.get(LoggerService);
+    const containerService = module.get(ContainerService);
+    const configService = module.get(ConfigService);
+    const mongoService = module.get(MongoService);
+    const provisioner = module.get(LLMProvisioner);
+    const moduleRef = module.get(ModuleRef);
+
+    const templateRegistry = buildTemplateRegistry({ logger, containerService, configService, mongoService, provisioner, moduleRef });
 
     const graph: GraphDefinition = {
       nodes: [
@@ -76,7 +78,12 @@ describe('Graph MCP integration', () => {
       ],
     };
 
-    const runtime = new LiveGraphRuntime(logger, templateRegistry as any, { initIfNeeded: async()=>{}, get: async()=>null, upsert: async()=>{ throw new Error('not-implemented'); }, upsertNodeState: async()=>{} } as any, { create: (Cls: any) => new Cls() } as any);
+    const runtime = new LiveGraphRuntime(
+      logger,
+      templateRegistry as any,
+      { initIfNeeded: async () => {}, get: async () => null, upsert: async () => { throw new Error('not-implemented'); }, upsertNodeState: async () => {} } as any,
+      moduleRef,
+    );
     const result = await runtime.apply(graph);
     expect(result.addedNodes).toContain('mcp');
   }, 60000);

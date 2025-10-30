@@ -1,45 +1,67 @@
 import { describe, it, expect } from 'vitest';
+import { Test } from '@nestjs/testing';
 import { LoggerService } from '../src/core/services/logger.service.js';
-import { ManageToolNode, type ManageableAgent } from '../src/nodes/tools/manage/manage.node';
-import { ManageFunctionTool } from '../src/nodes/tools/manage/manage.tool';
+import { ManageToolNode } from '../src/graph/nodes/tools/manage/manage.node';
+import { ManageFunctionTool } from '../src/graph/nodes/tools/manage/manage.tool';
 import { TemplateRegistry } from '../src/graph/templateRegistry';
-import type { ModuleRef } from '@nestjs/core';
+import { ModuleRef } from '@nestjs/core';
 import { LiveGraphRuntime } from '../src/graph/liveGraph.manager';
+import { AgentNode } from '../src/graph/nodes/agent/agent.node';
+import { ConfigService } from '../src/core/services/config.service';
+import { MongoService } from '../src/core/services/mongo.service';
+import { LLMProvisioner } from '../src/llm/provisioners/llm.provisioner';
+import { AgentRunService } from '../src/graph/nodes/agentRun.repository';
 
 type Msg = { content: string; info?: Record<string, unknown> };
 
-class FakeAgent implements ManageableAgent {
-  public name?: string;
+class StubMongoService extends MongoService { override getDb(): any { return {}; } }
+class StubLLMProvisioner extends LLMProvisioner { async getLLM(): Promise<any> { return { call: async () => ({ text: 'ok', output: [] }) }; } }
+class StubAgentRunService {
+  private runs = new Map<string, string[]>();
+  async startRun(nodeId: string, threadId: string): Promise<void> {
+    const key = nodeId;
+    const arr = this.runs.get(key) || [];
+    arr.push(threadId);
+    this.runs.set(key, arr);
+  }
+  async list(nodeId: string): Promise<any[]> {
+    const arr = this.runs.get(nodeId) || [];
+    return arr.map((t) => ({ threadId: t }));
+  }
+  async markTerminated(): Promise<void> {}
+}
+
+class FakeAgent extends AgentNode {
   private active: Set<string> = new Set();
-  private id?: string;
-  constructor(id?: string) {
-    this.id = id;
+  constructor(cfg: ConfigService, logger: LoggerService, llm: LLMProvisioner, runs: AgentRunService, mod: ModuleRef) {
+    super(cfg, logger, llm, runs, mod);
   }
-  async setConfig(_: Record<string, unknown>): Promise<void> {}
-  async provision(): Promise<void> {}
-  async deprovision(): Promise<void> {}
-  getPortConfig() { return { sourcePorts: {}, targetPorts: { $self: { kind: 'instance' } } } as const; }
-  getAgentNodeId(): string | undefined {
-    return this.id;
-  }
-  async invoke(thread: string, _messages: Msg[] | Msg): Promise<{ text: string }> {
+  override getPortConfig() { return { sourcePorts: {}, targetPorts: { $self: { kind: 'instance' } } } as const; }
+  override getAgentNodeId(): string | undefined { return 'agent-' + Math.random().toString(36).slice(2, 6); }
+  override async invoke(thread: string, _messages: Msg[] | Msg): Promise<{ text: string }> {
     this.active.add(thread);
-    // simulate work done
-    return { text: `ok-${thread}` };
+    return { text: `ok-${thread}` } as { text: string };
   }
-  // expose a way to mark a given thread as running for status tests
-  markRunning(thread: string) {
-    this.active.add(thread);
-  }
-  listActiveThreads(prefix?: string): string[] {
-    return Array.from(this.active).filter((t) => (prefix ? t.startsWith(prefix) : true));
-  }
+  markRunning(thread: string) { this.active.add(thread); }
+  override async listActiveThreads(prefix?: string): Promise<string[]> { return Array.from(this.active).filter((t) => (prefix ? t.startsWith(prefix) : true)); }
 }
 
 describe('ManageTool unit', () => {
   it('list: empty then after connecting multiple agents (use node ids when available)', async () => {
-    const logger = new LoggerService();
-    const node = new ManageToolNode(logger, new ManageFunctionTool(logger));
+    const module = await Test.createTestingModule({
+      providers: [
+        LoggerService,
+        { provide: MongoService, useClass: StubMongoService },
+        { provide: LLMProvisioner, useClass: StubLLMProvisioner },
+        { provide: AgentRunService, useClass: StubAgentRunService },
+        ConfigService,
+        ManageFunctionTool,
+        ManageToolNode,
+        FakeAgent,
+      ],
+    }).compile();
+    const logger = module.get(LoggerService);
+    const node = await module.resolve(ManageToolNode);
     await node.setConfig({ description: 'desc' });
     const tool: ManageFunctionTool = node.getTool();
 
@@ -47,24 +69,23 @@ describe('ManageTool unit', () => {
     expect(Array.isArray(empty)).toBe(true);
     expect(empty.length).toBe(0);
 
-    const a1 = new FakeAgent('agent-A');
-    const a2 = new FakeAgent();
+    const a1 = await module.resolve(FakeAgent);
+    const a2 = await module.resolve(FakeAgent);
     node.addWorker('agent-A', a1);
     node.addWorker('agent_1', a2);
 
     const after = JSON.parse(await tool.execute({ command: 'list', parentThreadId: 'p' }));
     const names: string[] = after;
     expect(names).toContain('agent-A');
-    // either agent_1 or agent_2 depending on ordering, ensure one fallback exists
     const hasFallback = names.some((n) => /^agent_\d+$/.test(n));
     expect(hasFallback).toBe(true);
   });
 
   it('send_message: routes to `${parent}__${worker}` and returns text', async () => {
-    const logger = new LoggerService();
-    const node = new ManageToolNode(logger, new ManageFunctionTool(logger));
+    const module = await Test.createTestingModule({ providers: [LoggerService, ConfigService, { provide: MongoService, useClass: StubMongoService }, { provide: LLMProvisioner, useClass: StubLLMProvisioner }, { provide: AgentRunService, useClass: StubAgentRunService }, ManageFunctionTool, ManageToolNode, FakeAgent] }).compile();
+    const node = await module.resolve(ManageToolNode);
     await node.setConfig({ description: 'desc' });
-    const a = new FakeAgent('child-1');
+    const a = await module.resolve(FakeAgent);
     node.addWorker('child-1', a);
     const tool = node.getTool();
     const res = await tool.execute({ command: 'send_message', worker: 'child-1', message: 'hello', parentThreadId: 'parent' });
@@ -72,58 +93,55 @@ describe('ManageTool unit', () => {
   });
 
   it('send_message: parameter validation and unknown worker', async () => {
-    const node = new ManageToolNode(new LoggerService(), new ManageFunctionTool(new LoggerService()));
+    const module = await Test.createTestingModule({ providers: [LoggerService, ConfigService, { provide: MongoService, useClass: StubMongoService }, { provide: LLMProvisioner, useClass: StubLLMProvisioner }, { provide: AgentRunService, useClass: StubAgentRunService }, ManageFunctionTool, ManageToolNode, FakeAgent] }).compile();
+    const node = await module.resolve(ManageToolNode);
     await node.setConfig({ description: 'd' });
     const tool = node.getTool();
     await expect(tool.execute({ command: 'send_message', worker: 'x', parentThreadId: 'p' })).rejects.toBeTruthy();
-    const a = new FakeAgent('w1');
+    const a = await module.resolve(FakeAgent);
     node.addWorker('w1', a);
     await expect(tool.execute({ command: 'send_message', worker: 'unknown', message: 'm', parentThreadId: 'p' })).rejects.toBeTruthy();
   });
 
   it('check_status: aggregates active child threads scoped to current thread', async () => {
-    const node = new ManageToolNode(new LoggerService(), new ManageFunctionTool(new LoggerService()));
+    const module = await Test.createTestingModule({ providers: [LoggerService, ConfigService, { provide: MongoService, useClass: StubMongoService }, { provide: LLMProvisioner, useClass: StubLLMProvisioner }, { provide: AgentRunService, useClass: StubAgentRunService }, ManageFunctionTool, ManageToolNode, FakeAgent] }).compile();
+    const node = await module.resolve(ManageToolNode);
     await node.setConfig({ description: 'desc' });
-    const a1 = new FakeAgent('A');
-    const a2 = new FakeAgent('B');
+    const a1 = await module.resolve(FakeAgent);
+    const a2 = await module.resolve(FakeAgent);
     node.addWorker('A', a1);
     node.addWorker('B', a2);
-    // Mark some running threads
     a1.markRunning('p__A');
-    a1.markRunning('p__A-task2'); // not strictly matching naming, but includes prefix
+    a1.markRunning('p__A-task2');
     a2.markRunning('p__B');
-    a2.markRunning('q__B'); // different parent, should be ignored
+    a2.markRunning('q__B');
 
     const tool = node.getTool();
-    const status = JSON.parse(await tool.execute({ command: 'check_status', parentThreadId: 'p' })) as {
-      activeTasks: number;
-      childThreadIds: string[];
-    };
+    const status = JSON.parse(await tool.execute({ command: 'check_status', parentThreadId: 'p' })) as { activeTasks: number; childThreadIds: string[] };
     expect(status.activeTasks).toBe(status.childThreadIds.length);
-    // ensure only children of parent 'p' are reported (suffixes only)
     const allPrefixed = status.childThreadIds.every((s: string) => typeof s === 'string' && !s.includes('__'));
     expect(allPrefixed).toBe(true);
-    // should include at least 'A' and 'B' if present
     expect(status.childThreadIds).toContain('A');
   });
 
   it('throws when runtime configurable.thread_id is missing', async () => {
-    const node = new ManageToolNode(new LoggerService(), new ManageFunctionTool(new LoggerService()));
+    const module = await Test.createTestingModule({ providers: [LoggerService, ConfigService, { provide: MongoService, useClass: StubMongoService }, { provide: LLMProvisioner, useClass: StubLLMProvisioner }, { provide: AgentRunService, useClass: StubAgentRunService }, ManageFunctionTool, ManageToolNode] }).compile();
+    const node = await module.resolve(ManageToolNode);
     await node.setConfig({ description: 'desc' });
     const tool = node.getTool();
     await expect(tool.execute({ command: 'list' })).rejects.toBeTruthy();
   });
 
   it('throws when child agent invoke fails (send_message)', async () => {
-    const logger = new LoggerService();
-    const node = new ManageToolNode(logger, new ManageFunctionTool(logger));
+    const module = await Test.createTestingModule({ providers: [LoggerService, ConfigService, { provide: MongoService, useClass: StubMongoService }, { provide: LLMProvisioner, useClass: StubLLMProvisioner }, { provide: AgentRunService, useClass: StubAgentRunService }, ManageFunctionTool, ManageToolNode, FakeAgent] }).compile();
+    const node = await module.resolve(ManageToolNode);
     await node.setConfig({ description: 'desc' });
     class ThrowingAgent extends FakeAgent {
       override async invoke(_thread: string, _messages: Msg[]): Promise<{ text: string }> {
         throw new Error('child failure');
       }
     }
-    const a = new ThrowingAgent('W');
+    const a = new ThrowingAgent(module.get(ConfigService), module.get(LoggerService), module.get(LLMProvisioner), module.get(AgentRunService), module.get(ModuleRef));
     node.addWorker('W', a);
     const tool = node.getTool();
     await expect(tool.execute({ command: 'send_message', worker: 'W', message: 'go', parentThreadId: 'p' })).rejects.toBeTruthy();
@@ -132,39 +150,33 @@ describe('ManageTool unit', () => {
 
 describe('ManageTool graph wiring', () => {
   it('connect ManageTool to two agents via agent port; list returns their ids', async () => {
-    const logger = new LoggerService();
+    const module = await Test.createTestingModule({ providers: [LoggerService, ConfigService, { provide: MongoService, useClass: StubMongoService }, { provide: LLMProvisioner, useClass: StubLLMProvisioner }, { provide: AgentRunService, useClass: StubAgentRunService }, ManageFunctionTool, ManageToolNode, FakeAgent] }).compile();
+    const logger = module.get(LoggerService);
     class FakeAgentWithTools extends FakeAgent {
       addTool(_: unknown) {}
       removeTool(_: unknown) {}
-      getPortConfig() { return { sourcePorts: { tools: { kind: 'method', create: 'addTool', destroy: 'removeTool' } }, targetPorts: { $self: { kind: 'instance' } } } as const; }
+      override getPortConfig() { return { sourcePorts: { tools: { kind: 'method', create: 'addTool', destroy: 'removeTool' } }, targetPorts: { $self: { kind: 'instance' } } } as const; }
     }
-    const moduleRefLike = {
-      create: (Cls: unknown) => {
-        const C = Cls as new (...args: unknown[]) => unknown;
-        if (C === ManageToolNode) return new ManageToolNode(logger, new ManageFunctionTool(logger));
-        // Default construct without DI for FakeAgentWithTools
-        return new C();
-      },
-      get: (_token: unknown) => new ManageFunctionTool(logger),
-    } satisfies Pick<ModuleRef, 'create' | 'get'>;
-    const moduleRef = moduleRefLike as unknown as ModuleRef;
+    const moduleRef = module.get(ModuleRef);
     const registry = new TemplateRegistry(moduleRef);
+    class ManageToolNodeCompat extends ManageToolNode {
+      override addWorker(agent: any) {
+        const name = agent?.getAgentNodeId?.() || `agent_${Math.random().toString(36).slice(2, 6)}`;
+        // Call base with resolved name
+        // Type narrowing: agent is expected AgentNode
+        super.addWorker(name as string, agent as any);
+      }
+    }
+
 
     registry
       .register('agent', { title: 'Agent', kind: 'agent' }, (FakeAgentWithTools as any))
-      .register('manageTool', { title: 'Manage', kind: 'tool' }, (ManageToolNode as any));
+      .register('manageTool', { title: 'Manage', kind: 'tool' }, (ManageToolNodeCompat as any));
 
     const runtime = new LiveGraphRuntime(
       logger,
       registry,
-      {
-        initIfNeeded: async () => {},
-        get: async () => null,
-        upsert: async () => {
-          throw new Error('not-implemented');
-        },
-        upsertNodeState: async () => {},
-      } as { initIfNeeded: () => Promise<void>; get: () => Promise<unknown>; upsert: () => Promise<never>; upsertNodeState: () => Promise<void> },
+      { initIfNeeded: async () => {}, get: async () => null, upsert: async () => { throw new Error('not-implemented'); }, upsertNodeState: async () => {} } as { initIfNeeded: () => Promise<void>; get: () => Promise<unknown>; upsert: () => Promise<never>; upsertNodeState: () => Promise<void> },
       moduleRef,
     );
     const graph = {
