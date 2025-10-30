@@ -9,9 +9,9 @@ initTracing({
 
 import { NestFactory } from '@nestjs/core';
 import { FastifyAdapter } from '@nestjs/platform-fastify';
-import type { FastifyTypeProviderDefault } from 'fastify';
 import { ValidationPipe } from '@nestjs/common';
-import fastifyCors, { FastifyCorsOptions } from '@fastify/cors';
+import type { FastifyTypeProviderDefault } from 'fastify';
+// CORS is enabled via Nest's app.enableCors to avoid type-provider mismatches
 
 import { LoggerService } from './core/services/logger.service';
 import { ContainerCleanupService } from './infra/container/containerCleanup.job';
@@ -33,7 +33,7 @@ async function bootstrap() {
   const cfg = ConfigService.fromEnv();
   const allowedOrigins = cfg.corsOrigins;
 
-  const corsOptions: FastifyCorsOptions = {
+  const corsOptions = {
     origin: allowedOrigins.length ? allowedOrigins : true,
     methods: [
       'GET',
@@ -52,11 +52,11 @@ async function bootstrap() {
     ],
     credentials: false,
   };
-  // Type-safe CORS registration on the Fastify instance
-  await fastify.register(fastifyCors, corsOptions);
+  // Enable CORS via Nest to avoid Fastify type-provider generic mismatches
 
   const app = await NestFactory.create(AppModule, adapter);
   app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
+  app.enableCors(corsOptions);
   await app.init();
 
   const logger = app.get(LoggerService);
