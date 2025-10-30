@@ -7,7 +7,6 @@ import { z } from 'zod';
 
 import {
   FunctionTool,
-  HumanMessage,
   Loop,
   Reducer,
   ResponseMessage,
@@ -235,7 +234,6 @@ export class AgentNode extends Node<AgentStaticConfig> {
           return { state, next: null };
         }
         if (self.config.whenBusy === 'injectAfterTools') {
-          const mode = (self.config.processBuffer ?? 'allTogether') === 'oneByOne' ? ProcessBuffer.OneByOne : ProcessBuffer.AllTogether;
           const desc = self.buffer.tryDrainDescriptor(ctx.threadId, ProcessBuffer.AllTogether);
           if (desc.messages.length > 0) {
             const nextMeta = {
