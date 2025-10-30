@@ -1,7 +1,7 @@
 import type { JSONRPCMessage } from './types';
 import type Docker from 'dockerode';
 import { PassThrough } from 'node:stream';
-import { LoggerService } from '../../core/services/logger.service';
+import { LoggerService } from '../../../core/services/logger.service';
 
 class ReadBufferInline {
   private _buffer?: Buffer;
@@ -63,8 +63,7 @@ export class DockerExecTransport {
     this.logger.info(`[DockerExecTransport#${this._id}] START initiating exec`);
     const started = await this.startExec();
     const stream = (started as { stream?: NodeJS.ReadWriteStream }).stream;
-    const stdin: NodeJS.WritableStream | undefined =
-      (started as { stdin?: NodeJS.WritableStream }).stdin || stream;
+    const stdin: NodeJS.WritableStream | undefined = (started as { stdin?: NodeJS.WritableStream }).stdin || stream;
     const stdout: NodeJS.ReadableStream | undefined = (started as { stdout?: NodeJS.ReadableStream }).stdout;
     const stderr: NodeJS.ReadableStream | undefined = (started as { stderr?: NodeJS.ReadableStream }).stderr;
     if (!stdin) throw new Error('No stdin stream provided');

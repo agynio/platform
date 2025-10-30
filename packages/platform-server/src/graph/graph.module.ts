@@ -40,7 +40,6 @@ import { SendSlackMessageNode } from './nodes/tools/send_slack_message/send_slac
 import { ShellCommandNode } from './nodes/tools/shell_command/shell_command.node';
 import { GithubCloneRepoNode } from './nodes/tools/github_clone_repo/github_clone_repo.node';
 import { RemindMeNode } from './nodes/tools/remind_me/remind_me.node';
-import { AgentRunService } from './nodes/agentRun.repository';
 
 @Module({
   imports: [CoreModule, InfraModule, LLMModule, EnvModule],
@@ -100,16 +99,6 @@ import { AgentRunService } from './nodes/agentRun.repository';
 
     //////// Nodes
 
-    // repositories/services
-    {
-      provide: AgentRunService,
-      useFactory: async (mongo: MongoService, logger: LoggerService) => {
-        const svc = new AgentRunService(mongo, logger);
-        await svc.ensureIndexes();
-        return svc;
-      },
-      inject: [MongoService, LoggerService],
-    },
     // MemoryService removed from providers; created transiently via ModuleRef
     // nodes
     AgentNode,
@@ -131,6 +120,6 @@ import { AgentRunService } from './nodes/agentRun.repository';
     GithubCloneRepoNode,
     RemindMeNode,
   ],
-  exports: [LiveGraphRuntime, TemplateRegistry, PortsRegistry, GraphRepository, AgentRunService, NodeStateService],
+  exports: [LiveGraphRuntime, TemplateRegistry, PortsRegistry, GraphRepository, NodeStateService],
 })
 export class GraphModule {}

@@ -1,7 +1,7 @@
 import { FunctionTool, LLM, Reducer, SystemMessage, ToolCallMessage } from '@agyn/llm';
 import { LLMResponse, withLLM } from '@agyn/tracing';
 import { Injectable, Scope } from '@nestjs/common';
-import { LLMContext, LLMState } from '../types';
+import { LLMContext, LLMMessage, LLMState } from '../types';
 
 @Injectable({ scope: Scope.TRANSIENT })
 export class CallModelLLMReducer extends Reducer<LLMState, LLMContext> {
@@ -12,9 +12,21 @@ export class CallModelLLMReducer extends Reducer<LLMState, LLMContext> {
   private tools: FunctionTool[] = [];
   private params: { model: string; systemPrompt: string } = { model: '', systemPrompt: '' };
   private llm?: LLM;
-  private memoryProvider?: (ctx: LLMContext, state: LLMState) => Promise<{ msg: SystemMessage | null; place: 'after_system' | 'last_message' } | null>;
+  private memoryProvider?: (
+    ctx: LLMContext,
+    state: LLMState,
+  ) => Promise<{ msg: SystemMessage | null; place: 'after_system' | 'last_message' } | null>;
 
-  init(params: { llm: LLM; model: string; systemPrompt: string; tools: FunctionTool[]; memoryProvider?: (ctx: LLMContext, state: LLMState) => Promise<{ msg: SystemMessage | null; place: 'after_system' | 'last_message' } | null> }) {
+  init(params: {
+    llm: LLM;
+    model: string;
+    systemPrompt: string;
+    tools: FunctionTool[];
+    memoryProvider?: (
+      ctx: LLMContext,
+      state: LLMState,
+    ) => Promise<{ msg: SystemMessage | null; place: 'after_system' | 'last_message' } | null>;
+  }) {
     this.llm = params.llm;
     this.params = { model: params.model, systemPrompt: params.systemPrompt };
     this.tools = params.tools || [];

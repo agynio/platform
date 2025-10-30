@@ -4,11 +4,13 @@ import { LoggerService } from '../../../core/services/logger.service';
 import { VaultService } from '../../../vault/vault.service';
 import { ReferenceFieldSchema, resolveTokenRef } from '../../../utils/refs';
 import Node from '../base/Node';
-type TriggerHumanMessage = { kind: 'human'; content: string; info?: Record<string, unknown> };
-type TriggerListener = { invoke: (thread: string, messages: BufferMessage[]) => Promise<void> };
 import { Inject, Injectable, Scope } from '@nestjs/common';
 import { BufferMessage } from '../agent/messagesBuffer';
 import { HumanMessage } from '@agyn/llm';
+import { stringify as YamlStringify } from 'yaml';
+
+type TriggerHumanMessage = { kind: 'human'; content: string; info?: Record<string, unknown> };
+type TriggerListener = { invoke: (thread: string, messages: BufferMessage[]) => Promise<void> };
 
 // Internal schema: accept either plain string or ReferenceField
 export const SlackTriggerStaticConfigSchema = z
@@ -161,7 +163,9 @@ export class SlackTrigger extends Node<SlackTriggerConfig> {
       this._listeners.map(async (listener) =>
         listener.invoke(
           thread,
-          messages.map((m) => HumanMessage.fromText(JSON.stringify({ content: m.content, info: m.info }))),
+          messages.map((m) =>
+            HumanMessage.fromText(`${YamlStringify({ from: m.info })}\n---\n${YamlStringify({ content: m.content })}`),
+          ),
         ),
       ),
     );

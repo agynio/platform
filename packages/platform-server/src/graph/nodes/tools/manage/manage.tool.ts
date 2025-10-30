@@ -75,14 +75,14 @@ export class ManageFunctionTool extends FunctionTool<typeof ManageInvocationSche
       const ids = new Set<string>();
       const promises = workers.map(async (w) => {
         try {
-          const res = await Promise.resolve(w.agent.listActiveThreads(prefix));
-          const threads = Array.isArray(res) ? res : [];
-          for (const t of threads) if (t.startsWith(prefix)) ids.add(t.slice(prefix.length));
+          // const res = await Promise.resolve(w.agent.listActiveThreads(prefix));
+          // const threads = Array.isArray(res) ? res : [];
+          // for (const t of threads) if (t.startsWith(prefix)) ids.add(t.slice(prefix.length));
         } catch (err: unknown) {
-          this.logger.error('Manage: listActiveThreads failed', {
-            worker: w.name,
-            error: (err as { message?: string })?.message || String(err),
-          });
+          // this.logger.error('Manage: listActiveThreads failed', {
+          //   worker: w.name,
+          //   error: (err as { message?: string })?.message || String(err),
+          // });
         }
       });
       await Promise.all(promises);

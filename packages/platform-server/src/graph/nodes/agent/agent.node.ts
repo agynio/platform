@@ -6,7 +6,9 @@ import { LoggerService } from '../../../core/services/logger.service';
 import { z } from 'zod';
 
 import {
-  FunctionTool, HumanMessage, AIMessage,
+  FunctionTool,
+  HumanMessage,
+  AIMessage,
   Loop,
   Reducer,
   ResponseMessage,
@@ -100,7 +102,6 @@ import type { RuntimeContext } from '../../../graph/runtimeContext';
 import Node from '../base/Node';
 import { MemoryConnectorNode } from '../memoryConnector/memoryConnector.node';
 import { ModuleRef } from '@nestjs/core';
-import { AgentRunService } from '../agentRun.repository';
 
 @Injectable({ scope: Scope.TRANSIENT })
 export class AgentNode extends Node<AgentStaticConfig> {
@@ -109,13 +110,11 @@ export class AgentNode extends Node<AgentStaticConfig> {
   private mcpServerTools: Map<LocalMCPServerNode, FunctionTool[]> = new Map();
   private tools: Set<FunctionTool> = new Set();
   private runningThreads: Set<string> = new Set();
-  private currentRunIds: Map<string, string> = new Map();
 
   constructor(
     @Inject(ConfigService) protected configService: ConfigService,
     @Inject(LoggerService) protected logger: LoggerService,
     @Inject(LLMProvisioner) protected llmProvisioner: LLMProvisioner,
-    @Inject(AgentRunService) protected readonly runs: AgentRunService,
     @Inject(ModuleRef) protected readonly moduleRef: ModuleRef,
   ) {
     super(logger);
@@ -262,21 +261,16 @@ export class AgentNode extends Node<AgentStaticConfig> {
       return new ResponseMessage({ output: [AIMessage.fromText('queued').toPlain()] });
     }
 
-    // Idle: record run, buffer inputs (pre-run, no token), and start loop
-    const runId = `${thread}/${Date.now()}`;
     this.runningThreads.add(thread);
-    this.currentRunIds.set(thread, runId);
-    if (messages && messages.length) this.buffer.enqueue(thread, messages);
-    await this.runs.startRun(this.nodeId, thread, runId);
 
-    const mode = (this.config.processBuffer ?? 'allTogether') === 'oneByOne' ? ProcessBuffer.OneByOne : ProcessBuffer.AllTogether;
-    return await withAgent(
+    const mode =
+      (this.config.processBuffer ?? 'allTogether') === 'oneByOne' ? ProcessBuffer.OneByOne : ProcessBuffer.AllTogether;
+    const result = await withAgent(
       { threadId: thread, nodeId: this.nodeId, inputParameters: [{ thread }, { messages }] },
       async () => {
         const loop = await this.prepareLoop();
         // Process provided messages immediately; if none provided (auto-run), drain the queue
-        let toProcess: BufferMessage[] = (messages && messages.length > 0) ? messages : this.buffer.tryDrain(thread, mode);
-        const history: HumanMessage[] = toProcess.map((msg) => HumanMessage.fromText(JSON.stringify(msg)));
+        const history: HumanMessage[] = messages.map((msg) => HumanMessage.fromText(JSON.stringify(msg)));
         const finishSignal = new Signal();
 
         const newState = await loop.invoke(
@@ -289,48 +283,21 @@ export class AgentNode extends Node<AgentStaticConfig> {
 
         if ((finishSignal.isActive && result instanceof ToolCallOutputMessage) || result instanceof ResponseMessage) {
           this.logger.info(`Agent response in thread ${thread}: ${result?.text}`);
-          await this.runs.markTerminated(this.nodeId, runId);
-          // Clear busy and schedule next run if buffer has messages
           this.runningThreads.delete(thread);
-          this.currentRunIds.delete(thread);
-          const readyAt = this.buffer.nextReadyAt(thread);
-          if (typeof readyAt === 'number') {
-            const delay = Math.max(0, readyAt - Date.now());
-            setTimeout(() => void this.invoke(thread, []), delay);
-          }
           return result;
         }
 
         this.runningThreads.delete(thread);
-          this.currentRunIds.delete(thread);
         throw new Error('Agent did not produce a valid response message.');
       },
     );
-  }
 
-  public async listActiveThreads(prefix?: string): Promise<string[]> {
-    const items = await this.runs.list(this.nodeId, 'running');
-    const ids = new Set<string>(items.map((i) => i.threadId));
-    const out = Array.from(ids.values());
-    return prefix ? out.filter((t) => t.startsWith(prefix)) : out;
-  }
+    const nextMessages = this.buffer.tryDrain(thread, mode);
+    if (nextMessages.length > 0) {
+      void this.invoke(thread, nextMessages);
+    }
 
-  async terminateRun(thread: string, runId?: string): Promise<'terminated' | 'not_running' | 'queued_canceled'> {
-    // Cancel queued items
-    const queuedBefore = this.buffer.tryDrain(thread, ProcessBuffer.AllTogether);
-    if (queuedBefore.length > 0) {
-      this.buffer.clearThread(thread);
-      return 'queued_canceled';
-    }
-    if (runId) {
-      const m = await this.runs.markTerminating(this.nodeId, runId);
-      if (m === 'ok' || m === 'already') {
-        await this.runs.markTerminated(this.nodeId, runId);
-        return 'terminated';
-      }
-      return 'not_running';
-    }
-    return 'not_running';
+    return result;
   }
 
   addTool(toolNode: BaseToolNode<any>): void {
@@ -402,16 +369,6 @@ export class AgentNode extends Node<AgentStaticConfig> {
     } catch (e: unknown) {
       this.logger.error?.('Agent: syncMcpToolsFromServer error', e);
     }
-  }
-
-
-  isThreadRunning(threadId: string): boolean {
-    return this.runningThreads.has(threadId);
-  }
-
-
-  getCurrentRunId(threadId: string): string | undefined {
-    return this.currentRunIds.get(threadId);
   }
 
   // Static introspection removed per hotfix; rely on TemplateRegistry meta.
