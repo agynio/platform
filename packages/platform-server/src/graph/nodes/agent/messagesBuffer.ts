@@ -11,15 +11,14 @@ export interface MessagesBufferOptions {
   debounceMs?: number;
 }
 
-type QueuedItem = { msg: BufferMessage; tokenId?: string };
-
 type ThreadState = {
-  queue: QueuedItem[];
+  queue: BufferMessage[];
   lastEnqueueAt: number;
 };
 
 /**
- * Pull-based buffer owned by Agent. Triggers enqueue, Agent drains.
+ * Single-queue, pull-based buffer owned by Agent.
+ * External inputs are validated upstream; this buffer stores strictly typed messages.
  */
 export class MessagesBuffer {
   private debounceMs: number;
@@ -30,64 +29,44 @@ export class MessagesBuffer {
   }
 
   setDebounceMs(ms: number) {
-    // Use Math.trunc to avoid bitwise coercion pitfalls and preserve large values
     this.debounceMs = Math.max(0, Math.trunc(ms));
   }
 
-  enqueue(thread: string, msgs: BufferMessage[], now = Date.now()): void {
-    // Backwards-compatible helper: enqueues messages without token association.
+  enqueue(thread: string, msgs: BufferMessage[] | BufferMessage, now = Date.now()): void {
     const batch = Array.isArray(msgs) ? msgs : [msgs];
-    if (!batch.length) return;
+    if (batch.length === 0) return;
     const s = this.ensure(thread);
-    s.queue.push(...batch.map((m) => ({ msg: m })));
+    s.queue.push(...batch);
     s.lastEnqueueAt = now;
   }
 
-  enqueueWithToken(thread: string, tokenId: string, msgs: BufferMessage[] | BufferMessage, now = Date.now()): void {
-    const batch = Array.isArray(msgs) ? msgs : [msgs];
-    if (!batch.length) return;
-    const s = this.ensure(thread);
-    s.queue.push(...batch.map((m) => ({ msg: m, tokenId })));
-    s.lastEnqueueAt = now;
+  hasPending(thread: string, now = Date.now()): boolean {
+    const s = this.threads.get(thread);
+    if (!s || s.queue.length === 0) return false;
+    if (this.debounceMs > 0 && now - s.lastEnqueueAt < this.debounceMs) return false;
+    return s.queue.length > 0;
   }
 
-  tryDrain(thread: string, mode: ProcessBuffer, now = Date.now()): BufferMessage[] {
+  size(thread: string): number {
+    const s = this.threads.get(thread);
+    return s ? s.queue.length : 0;
+  }
+
+  drainAll(thread: string, maxBatchSize?: number, now = Date.now()): BufferMessage[] {
     const s = this.threads.get(thread);
     if (!s || s.queue.length === 0) return [];
     if (this.debounceMs > 0 && now - s.lastEnqueueAt < this.debounceMs) return [];
-    if (mode === ProcessBuffer.AllTogether) {
-      const out = s.queue.slice();
-      s.queue.length = 0;
-      return out.map((q) => q.msg);
-    } else {
-      const item = s.queue.shift()!;
-      return [item.msg];
-    }
+    const n = typeof maxBatchSize === 'number' && maxBatchSize > 0 ? Math.min(maxBatchSize, s.queue.length) : s.queue.length;
+    const out = s.queue.splice(0, n);
+    return out;
   }
 
-  tryDrainDescriptor(
-    thread: string,
-    mode: ProcessBuffer,
-    now = Date.now(),
-  ): { messages: BufferMessage[]; tokenParts: { tokenId: string; count: number }[] } {
+  drainOne(thread: string, now = Date.now()): BufferMessage[] {
     const s = this.threads.get(thread);
-    if (!s || s.queue.length === 0) return { messages: [], tokenParts: [] };
-    if (this.debounceMs > 0 && now - s.lastEnqueueAt < this.debounceMs) return { messages: [], tokenParts: [] };
-    const consumed: QueuedItem[] = [];
-    if (mode === ProcessBuffer.AllTogether) {
-      consumed.push(...s.queue);
-      s.queue.length = 0;
-    } else {
-      consumed.push(s.queue.shift()!);
-    }
-    const messages = consumed.map((q) => q.msg);
-    const partsMap = new Map<string, number>();
-    for (const q of consumed) {
-      if (!q.tokenId) continue;
-      partsMap.set(q.tokenId, (partsMap.get(q.tokenId) || 0) + 1);
-    }
-    const tokenParts = Array.from(partsMap.entries()).map(([tokenId, count]) => ({ tokenId, count }));
-    return { messages, tokenParts };
+    if (!s || s.queue.length === 0) return [];
+    if (this.debounceMs > 0 && now - s.lastEnqueueAt < this.debounceMs) return [];
+    const item = s.queue.shift();
+    return item ? [item] : [];
   }
 
   nextReadyAt(thread: string, now = Date.now()): number | undefined {
@@ -97,7 +76,6 @@ export class MessagesBuffer {
     return s.lastEnqueueAt + this.debounceMs;
   }
 
-  /** Clear queued items for a thread. */
   clearThread(thread: string): void {
     const s = this.threads.get(thread);
     if (!s) return;
@@ -107,13 +85,6 @@ export class MessagesBuffer {
 
   destroy(): void {
     this.threads.clear();
-  }
-
-  dropTokens(thread: string, tokenIds: string[]): void {
-    const s = this.threads.get(thread);
-    if (!s || s.queue.length === 0) return;
-    const drop = new Set(tokenIds);
-    s.queue = s.queue.filter((q) => !q.tokenId || !drop.has(q.tokenId));
   }
 
   private ensure(thread: string): ThreadState {
