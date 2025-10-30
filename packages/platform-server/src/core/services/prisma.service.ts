@@ -1,4 +1,5 @@
 import { PrismaClient } from '@prisma/client';
+export type ConversationStateClient = Pick<PrismaClient, 'conversationState'>;
 import { LoggerService } from './logger.service';
 import { ConfigService } from './config.service';
 import { Inject, Injectable } from '@nestjs/common';
