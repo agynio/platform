@@ -9,7 +9,6 @@ import { useTemplatesCache } from '@/lib/graph/templates.provider';
 import { NodeStatusBadges } from '@/components/graph/NodeStatusBadges';
 import { NodeActionButtons } from '@/components/graph/NodeActionButtons';
 import { useNodeAction, useNodeStatus } from '@/lib/graph/hooks';
-import { canProvision } from '@/lib/graph/capabilities';
 import { NixPackagesSection } from '@/components/nix/NixPackagesSection';
 import { getConfigView } from '@/components/configViews/registry';
 // Registry is initialized once in main.tsx via initConfigViewsRegistry()
@@ -145,20 +144,17 @@ function RightPropertiesPanelBody({
         ) : (
           <div className="text-xs text-muted-foreground">No custom view registered for {data.template} (state)</div>
         )}
-        {/* Start/Stop actions relocated under Node State per issue #519 */}
+        {/* Provision/Deprovision actions under Node State per issue #519 */}
         {(() => {
-          const tmpl = runtimeTemplates.getTemplate(data.template);
-          const provisionable = tmpl ? canProvision(tmpl) : false;
           const state = status?.provisionStatus?.state ?? 'not_ready';
           const disableActions = state === 'deprovisioning';
           const canStart =
-            provisionable &&
             ['not_ready', 'error', 'provisioning_error', 'deprovisioning_error'].includes(state) &&
             !disableActions;
-          const canStop = provisionable && (state === 'ready' || state === 'provisioning') && !disableActions;
+          const canStop = (state === 'ready' || state === 'provisioning') && !disableActions;
           return (
             <NodeActionButtons
-              provisionable={provisionable}
+              provisionable={true}
               pausable={false}
               canStart={canStart}
               canStop={canStop}

@@ -4,11 +4,7 @@ import { render, screen, fireEvent } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import NodeDetailsPanel from '../NodeDetailsPanel';
 
-vi.mock('../../../lib/graph/templates.provider', () => ({
-  useTemplatesCache: () => ({
-    getTemplate: (name: string) => ({ name, title: name, kind: 'tool', sourcePorts: {}, targetPorts: {}, capabilities: { pausable: true } }),
-  }),
-}));
+// No templates provider mock needed; actions and badges are driven by status alone
 
 let mockStatus: any = { isPaused: false, provisionStatus: { state: 'not_ready' } };
 let mockMutate = vi.fn();

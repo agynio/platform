@@ -24,12 +24,6 @@ describe('Right panel actions: Provision/Deprovision optimistic and reconcile', 
   afterAll(() => server.close());
 
   it('clicking Provision moves status to provisioning then ready; Deprovision moves to deprovisioning then not_ready', async () => {
-    // Ensure template is provisionable for actions
-    server.use(
-      _http.get('/api/graph/templates', () =>
-        _HttpResponse.json([{ name: 'mock', title: 'Mock', kind: 'tool', sourcePorts: {}, targetPorts: {}, capabilities: { provisionable: true } }]),
-      ),
-    );
     render(
       <TestProviders>
         <RightPropertiesPanel node={makeNode('mock')} onChange={() => {}} />

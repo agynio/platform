@@ -21,14 +21,14 @@ const onChange = vi.fn<(id: string, data: Partial<TestNodeData>) => void>();
 vi.mock('@/lib/graph/templates.provider', () => ({
   useTemplatesCache: () => ({
     templates: [],
-    getTemplate: () => ({ capabilities: { provisionable: true } }),
+    getTemplate: (_name: string) => undefined,
     loading: false,
     ready: true,
     error: null,
   }),
 }));
 
-// No capabilities mock needed; provisionable via template provider mock above
+// No capabilities or provisionable mocks; actions render unconditionally and enablement is status-driven
 
 // Avoid requiring QueryClientProvider in this shallow unit test
 const statusMock = { provisionStatus: { state: 'not_ready' as const } };
