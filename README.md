@@ -82,3 +82,6 @@ pnpm -C packages/platform-server prisma:generate
 ```
 
 This prepares the @prisma/client artifacts used by the server and tests.
+
+CI
+- No-op update to trigger CI rerun for PR #524.
