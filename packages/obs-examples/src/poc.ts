@@ -10,6 +10,8 @@ import {
   withSystem,
   withToolCall,
 } from '@agyn/tracing';
+// Import message classes via tracing re-exports to avoid adding a new workspace dep here
+import { HumanMessage, SystemMessage, ToolCallOutputMessage } from '@agyn/tracing';
 
 async function main() {
   const endpoint = process.env.TRACING_SERVER_URL || 'http://localhost:4319';
@@ -115,9 +117,9 @@ async function main() {
       const llmResult2 = await withLLM(
         {
           context: [
-            { role: 'system', content: 'You are an assistant generating human-friendly advisories.' },
-            { role: 'user', content: 'Provide clothing and UV advice given current conditions.' },
-            { role: 'tool', toolCallId: weatherToolCallId1, content: JSON.stringify(weather1) },
+            SystemMessage.fromText('You are an assistant generating human-friendly advisories.'),
+            HumanMessage.fromText('Provide clothing and UV advice given current conditions.'),
+            ToolCallOutputMessage.fromResponse(weatherToolCallId1, JSON.stringify(weather1)),
           ],
         },
         async () => {
@@ -152,8 +154,8 @@ async function main() {
         await withLLM(
           {
             context: [
-              { role: 'system', content: 'Assistant deciding whether to invoke unreliable tool.' },
-              { role: 'user', content: 'Please run the unreliable step.' },
+              SystemMessage.fromText('Assistant deciding whether to invoke unreliable tool.'),
+              HumanMessage.fromText('Please run the unreliable step.'),
             ],
           },
           async () => {
@@ -188,8 +190,8 @@ async function main() {
       await withLLM(
         {
           context: [
-            { role: 'system', content: 'Assistant planning an explicit error tool call.' },
-            { role: 'user', content: 'Invoke the checker tool even if it will report an error.' },
+            SystemMessage.fromText('Assistant planning an explicit error tool call.'),
+            HumanMessage.fromText('Invoke the checker tool even if it will report an error.'),
           ],
         },
         async () =>
@@ -225,12 +227,11 @@ async function main() {
       const llmResult3 = await withLLM(
         {
           context: [
-            { role: 'system', content: 'You are a summarizer.' },
-            { role: 'tool', toolCallId: weatherToolCallId1, content: JSON.stringify(weather1) },
-            { role: 'tool', toolCallId: advisoryToolCallId, content: JSON.stringify(advisory) },
-            // Include failing tool call reference as a tool message so it appears in summary context (optional)
-            { role: 'tool', toolCallId: 'tc_fail_demo_1', content: 'Tool failed intentionally (no output).' },
-            { role: 'user', content: 'Provide a concise final weather + advisory summary.' },
+            SystemMessage.fromText('You are a summarizer.'),
+            ToolCallOutputMessage.fromResponse(weatherToolCallId1, JSON.stringify(weather1)),
+            ToolCallOutputMessage.fromResponse(advisoryToolCallId, JSON.stringify(advisory)),
+            ToolCallOutputMessage.fromResponse('tc_fail_demo_1', 'Tool failed intentionally (no output).'),
+            HumanMessage.fromText('Provide a concise final weather + advisory summary.'),
           ],
         },
         async () => {
