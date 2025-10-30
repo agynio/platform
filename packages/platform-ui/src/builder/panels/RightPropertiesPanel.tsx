@@ -5,7 +5,6 @@ import { useTemplates } from '../useTemplates';
 // Runtime graph components & hooks
 // Removed NodeDetailsPanel wrapper; using granular components directly
 // Custom config views only; legacy RJSF forms removed
-import { useTemplatesCache } from '@/lib/graph/templates.provider';
 import { NodeStatusBadges } from '@/components/graph/NodeStatusBadges';
 import { NodeActionButtons } from '@/components/graph/NodeActionButtons';
 import { useNodeAction, useNodeStatus } from '@/lib/graph/hooks';
@@ -40,7 +39,6 @@ function RightPropertiesPanelBody({
   onChange: (id: string, data: Partial<BuilderPanelNodeData>) => void;
 }) {
   const { templates } = useTemplates();
-  const runtimeTemplates = useTemplatesCache();
   const action = useNodeAction(node.id);
 
   const { data } = node;
@@ -64,11 +62,7 @@ function RightPropertiesPanelBody({
     [cfg, nodeState, data.name, data.template, node.id, onChange],
   );
 
-  const runtimeTemplate = runtimeTemplates.getTemplate(data.template);
-  const kind = runtimeTemplate?.kind as string | undefined;
-  // Show Runtime Status if lifecycle-managed kinds or if status has provisionStatus
-  const lifecycleKinds = new Set(['mcp', 'trigger', 'service']);
-  const hasRuntimeCaps = lifecycleKinds.has(kind || '') || !!status?.provisionStatus;
+  // Always render Runtime Status; RuntimeNodeSection defaults to 'not_ready'
 
   function RuntimeNodeSection({ nodeId }: { nodeId: string }) {
     const { data: status } = useNodeStatus(nodeId);
@@ -107,12 +101,10 @@ function RightPropertiesPanelBody({
 
   return (
     <div className="space-y-4">
-      {hasRuntimeCaps && (
-        <div className="space-y-2">
-          <div className="text-[10px] uppercase text-muted-foreground">Runtime Status</div>
-          <RuntimeNodeSection nodeId={node.id} />
-        </div>
-      )}
+      <div className="space-y-2">
+        <div className="text-[10px] uppercase text-muted-foreground">Runtime Status</div>
+        <RuntimeNodeSection nodeId={node.id} />
+      </div>
       <div className="space-y-2">
         <div className="text-[10px] uppercase text-muted-foreground">Static Configuration</div>
         {StaticView ? (
