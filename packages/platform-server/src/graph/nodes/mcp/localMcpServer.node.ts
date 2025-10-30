@@ -376,8 +376,11 @@ export class LocalMCPServerNode extends Node<z.infer<typeof LocalMcpServerStatic
     const allTools: LocalMCPServerTool[] = this.toolsCache ? [...this.toolsCache] : [];
     try {
       const snap = this.nodeStateService?.getSnapshot(this.nodeId) as { mcp?: { enabledTools?: string[] } } | undefined;
-      const enabled = Array.isArray(snap?.mcp?.enabledTools) ? new Set<string>(snap!.mcp!.enabledTools!) : null;
-      if (enabled && enabled.size > 0) return allTools.filter((t) => enabled.has(t.name));
+      // Treat presence of enabledTools (even empty) as authoritative; undefined => all
+      const enabled = Array.isArray(snap?.mcp?.enabledTools)
+        ? new Set<string>(snap!.mcp!.enabledTools!)
+        : undefined;
+      if (enabled !== undefined) return allTools.filter((t) => enabled.has(t.name));
     } catch {}
     return allTools;
   }
@@ -599,6 +602,16 @@ export class LocalMCPServerNode extends Node<z.infer<typeof LocalMcpServerStatic
       this.logger.error(`[MCP:${this.config.namespace}] Error emitting tools_updated`, e);
     }
   }
+  // Hook invoked by NodeStateService when node state changes; used for real-time tool sync
+  public onNodeStateUpdated(next: { mcp?: { enabledTools?: string[] } }): void {
+    // Simple always-emit on any state change; optional optimization could compare previous vs next
+    try {
+      this.notifyToolsUpdated(Date.now());
+    } catch (e) {
+      this.logger.error(`[MCP:${this.config.namespace}] Error handling onNodeStateUpdated`, e);
+    }
+  }
+
 
   // ----------------- Resilient start internals -----------------
   private flushStartWaiters(err?: unknown) {
