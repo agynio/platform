@@ -13,56 +13,9 @@ export type PlainLLMState = {
   summary?: string;
 };
 
-function isJsonPrimitive(v: unknown): v is string | number | boolean {
-  return typeof v === 'string' || typeof v === 'number' || typeof v === 'boolean';
-}
-
-function isPlainObject(v: unknown): v is Record<string, unknown> {
-  if (v === null || typeof v !== 'object') return false;
-  const proto = Object.getPrototypeOf(v);
-  return proto === Object.prototype || proto === null;
-}
-
-function isInputJsonValue(v: unknown): v is Prisma.InputJsonValue {
-  if (isJsonPrimitive(v)) return true;
-  if (Array.isArray(v)) return v.every(isInputJsonValue);
-  if (isPlainObject(v)) return Object.values(v).every(isInputJsonValue);
-  return false;
-}
-
-export function toJsonValue(input: unknown): Prisma.InputJsonValue {
-  // Already valid
-  if (isInputJsonValue(input)) return input;
-
-  // Primitive
-  if (input === null) throw new Error('Unable to convert value to JSON: null is not allowed for InputJsonValue');
-  if (isJsonPrimitive(input)) return input;
-
-  // Array
-  if (Array.isArray(input)) {
-    const arr: Prisma.InputJsonValue[] = input.map((el) => toJsonValue(el));
-    return arr;
-  }
-
-  // Plain object
-  if (isPlainObject(input)) {
-    const out: { [k: string]: Prisma.InputJsonValue } = {};
-    for (const [k, v] of Object.entries(input)) {
-      if (typeof v === 'function' || typeof v === 'symbol' || typeof v === 'bigint' || typeof v === 'undefined') {
-        throw new Error('Unable to convert value to JSON: non-serializable property');
-      }
-      out[k] = toJsonValue(v);
-    }
-    return out;
-  }
-
-  // Fallback: normalize via JSON stringify/parse
-  try {
-    const normalized = JSON.parse(JSON.stringify(input));
-    if (isInputJsonValue(normalized)) return normalized;
-  } catch {/* noop */}
-  throw new Error('Unable to convert value to JSON');
-}
+// JSON normalization helpers were removed per reviewer preference; we rely on
+// message.toPlain() producing plain JSON-compatible objects and cast to
+// Prisma.InputJsonValue at persistence boundaries.
 
 export function isPlainLLMState(v: unknown): v is PlainLLMState {
   if (!v || typeof v !== 'object') return false;
@@ -76,10 +29,10 @@ export function isPlainLLMState(v: unknown): v is PlainLLMState {
 
 export function serializeState(state: LLMState): PlainLLMState {
   const messages: PlainMessage[] = state.messages.map((m) => {
-    if (m instanceof HumanMessage) return { kind: 'human', value: toJsonValue(m.toPlain()) };
-    if (m instanceof SystemMessage) return { kind: 'system', value: toJsonValue(m.toPlain()) };
-    if (m instanceof ResponseMessage) return { kind: 'response', value: toJsonValue(m.toPlain()) };
-    if (m instanceof ToolCallOutputMessage) return { kind: 'tool_call_output', value: toJsonValue(m.toPlain()) };
+    if (m instanceof HumanMessage) return { kind: 'human', value: m.toPlain() as unknown as Prisma.InputJsonValue };
+    if (m instanceof SystemMessage) return { kind: 'system', value: m.toPlain() as unknown as Prisma.InputJsonValue };
+    if (m instanceof ResponseMessage) return { kind: 'response', value: m.toPlain() as unknown as Prisma.InputJsonValue };
+    if (m instanceof ToolCallOutputMessage) return { kind: 'tool_call_output', value: m.toPlain() as unknown as Prisma.InputJsonValue };
     throw new Error('Unsupported message type for serialization');
   });
   return { messages, summary: state.summary };
