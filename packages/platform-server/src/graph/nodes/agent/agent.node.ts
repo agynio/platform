@@ -88,7 +88,13 @@ export const AgentStaticConfigSchema = z
       .describe('Max enforcement injections per turn (0 = unlimited).'),
   })
   .partial()
-  .strict();
+  .strict()
+  .superRefine((cfg, ctx) => {
+    // Disallow oneByOne with injectAfterTools; injectAfterTools always uses allTogether at injection time
+    if (cfg?.whenBusy === 'injectAfterTools' && cfg?.processBuffer === 'oneByOne') {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "processBuffer=oneByOne is not supported when whenBusy='injectAfterTools'", path: ["processBuffer"] })
+    }
+  });
 
 export type AgentStaticConfig = z.infer<typeof AgentStaticConfigSchema>;
 
@@ -110,7 +116,8 @@ export class AgentNode extends Node<AgentStaticConfig> {
 
   private mcpServerTools: Map<LocalMCPServerNode, FunctionTool[]> = new Map();
   private tools: Set<FunctionTool> = new Set();
-  private deferredByToken: Map<string, Array<(v: ResponseMessage | ToolCallOutputMessage) => void>> = new Map();
+  // Resolve deferred invocations when specific buffer entries are consumed by a run
+  private deferredByEntryId: Map<string, Array<(v: ResponseMessage | ToolCallOutputMessage) => void>> = new Map();
 
   constructor(
     @Inject(ConfigService) protected configService: ConfigService,
@@ -229,13 +236,13 @@ export class AgentNode extends Node<AgentStaticConfig> {
         }
         if (self.config.whenBusy === 'injectAfterTools') {
           const mode = (self.config.processBuffer ?? 'allTogether') === 'oneByOne' ? ProcessBuffer.OneByOne : ProcessBuffer.AllTogether;
-          const desc = self.buffer.tryDrainDescriptor(ctx.threadId, mode);
+          const desc = self.buffer.tryDrainDescriptor(ctx.threadId, ProcessBuffer.AllTogether);
           if (desc.messages.length > 0) {
             const nextMeta = {
               ...(state.meta ?? {}),
-              bufferTokensConsumed: [
-                ...((state.meta?.bufferTokensConsumed as string[] | undefined) ?? []),
-                ...desc.tokenParts.map((t) => t.tokenId),
+              bufferEntryIdsConsumed: [
+                ...((state.meta?.bufferEntryIdsConsumed as string[] | undefined) ?? []),
+                ...desc.entryParts.map((t) => t.bufferEntryId),
               ],
             };
             state = { ...state, messages: [...state.messages, ...desc.messages], meta: nextMeta };
@@ -271,12 +278,12 @@ export class AgentNode extends Node<AgentStaticConfig> {
   }
   async invoke(thread: string, messages: BufferMessage[]): Promise<ResponseMessage | ToolCallOutputMessage> {
     this.buffer.setDebounceMs(this.config.debounceMs ?? 0);
-    const tokenId = `${this.nodeId}:${thread}:${Date.now()}:${Math.random().toString(36).slice(2)}`;
-    this.buffer.enqueueWithToken(thread, tokenId, messages);
+    const bufferEntryId = `${this.nodeId}:${thread}:${Date.now()}:${Math.random().toString(36).slice(2)}`;
+    this.buffer.enqueueWithEntryId(thread, bufferEntryId, messages);
     const promise = new Promise<ResponseMessage | ToolCallOutputMessage>((resolve) => {
-      const arr = this.deferredByToken.get(tokenId) ?? [];
+      const arr = this.deferredByEntryId.get(bufferEntryId) ?? [];
       arr.push(resolve);
-      this.deferredByToken.set(tokenId, arr);
+      this.deferredByEntryId.set(bufferEntryId, arr);
     });
     if (this.busy.tryAcquire(this.nodeId, thread)) {
       void this.processThread(thread).catch((e) => this.logger.error?.('Agent processThread error', e));
@@ -302,7 +309,7 @@ export class AgentNode extends Node<AgentStaticConfig> {
       { threadId: thread, nodeId: this.nodeId, inputParameters: [{ thread }, { messages: history }] },
       async () =>
         await loop.invoke(
-          { messages: history, meta: { bufferTokensConsumed: startDesc.tokenParts.map((t) => t.tokenId) } },
+          { messages: history, meta: { bufferEntryIdsConsumed: startDesc.entryParts.map((t) => t.bufferEntryId) } },
           { threadId: thread, finishSignal, callerAgent: this },
           { start: 'load' },
         ),
@@ -313,11 +320,11 @@ export class AgentNode extends Node<AgentStaticConfig> {
       await this.runs.markTerminated(this.nodeId, runId);
       throw new Error('Agent did not produce a valid response message.');
     }
-    const tokenIds = new Set<string>(newState.meta?.bufferTokensConsumed ?? []);
-    for (const tokenId of tokenIds) {
-      const resolvers = this.deferredByToken.get(tokenId) ?? [];
+    const entryIds = new Set<string>(newState.meta?.bufferEntryIdsConsumed ?? []);
+    for (const id of entryIds) {
+      const resolvers = this.deferredByEntryId.get(id) ?? [];
       for (const r of resolvers) r(result);
-      this.deferredByToken.delete(tokenId);
+      this.deferredByEntryId.delete(id);
     }
     this.logger.info(`Agent response in thread ${thread}: ${result?.text}`);
     await this.runs.markTerminated(this.nodeId, runId);

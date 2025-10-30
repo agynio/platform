@@ -11,7 +11,8 @@ export interface MessagesBufferOptions {
   debounceMs?: number;
 }
 
-type QueuedItem = { msg: BufferMessage; tokenId?: string };
+// Each enqueued item can be correlated via a bufferEntryId for deferred resolution
+type QueuedItem = { msg: BufferMessage; bufferEntryId?: string };
 
 type ThreadState = {
   queue: QueuedItem[];
@@ -43,11 +44,16 @@ export class MessagesBuffer {
     s.lastEnqueueAt = now;
   }
 
-  enqueueWithToken(thread: string, tokenId: string, msgs: BufferMessage[] | BufferMessage, now = Date.now()): void {
+  enqueueWithEntryId(
+    thread: string,
+    bufferEntryId: string,
+    msgs: BufferMessage[] | BufferMessage,
+    now = Date.now(),
+  ): void {
     const batch = Array.isArray(msgs) ? msgs : [msgs];
     if (!batch.length) return;
     const s = this.ensure(thread);
-    s.queue.push(...batch.map((m) => ({ msg: m, tokenId })));
+    s.queue.push(...batch.map((m) => ({ msg: m, bufferEntryId })));
     s.lastEnqueueAt = now;
   }
 
@@ -69,10 +75,10 @@ export class MessagesBuffer {
     thread: string,
     mode: ProcessBuffer,
     now = Date.now(),
-  ): { messages: BufferMessage[]; tokenParts: { tokenId: string; count: number }[] } {
+  ): { messages: BufferMessage[]; entryParts: { bufferEntryId: string; count: number }[] } {
     const s = this.threads.get(thread);
-    if (!s || s.queue.length === 0) return { messages: [], tokenParts: [] };
-    if (this.debounceMs > 0 && now - s.lastEnqueueAt < this.debounceMs) return { messages: [], tokenParts: [] };
+    if (!s || s.queue.length === 0) return { messages: [], entryParts: [] };
+    if (this.debounceMs > 0 && now - s.lastEnqueueAt < this.debounceMs) return { messages: [], entryParts: [] };
     const consumed: QueuedItem[] = [];
     if (mode === ProcessBuffer.AllTogether) {
       consumed.push(...s.queue);
@@ -83,11 +89,11 @@ export class MessagesBuffer {
     const messages = consumed.map((q) => q.msg);
     const partsMap = new Map<string, number>();
     for (const q of consumed) {
-      if (!q.tokenId) continue;
-      partsMap.set(q.tokenId, (partsMap.get(q.tokenId) || 0) + 1);
+      if (!q.bufferEntryId) continue;
+      partsMap.set(q.bufferEntryId, (partsMap.get(q.bufferEntryId) || 0) + 1);
     }
-    const tokenParts = Array.from(partsMap.entries()).map(([tokenId, count]) => ({ tokenId, count }));
-    return { messages, tokenParts };
+    const entryParts = Array.from(partsMap.entries()).map(([bufferEntryId, count]) => ({ bufferEntryId, count }));
+    return { messages, entryParts };
   }
 
   nextReadyAt(thread: string, now = Date.now()): number | undefined {
@@ -109,11 +115,11 @@ export class MessagesBuffer {
     this.threads.clear();
   }
 
-  dropTokens(thread: string, tokenIds: string[]): void {
+  dropEntryIds(thread: string, bufferEntryIds: string[]): void {
     const s = this.threads.get(thread);
     if (!s || s.queue.length === 0) return;
-    const drop = new Set(tokenIds);
-    s.queue = s.queue.filter((q) => !q.tokenId || !drop.has(q.tokenId));
+    const drop = new Set(bufferEntryIds);
+    s.queue = s.queue.filter((q) => !q.bufferEntryId || !drop.has(q.bufferEntryId));
   }
 
   private ensure(thread: string): ThreadState {

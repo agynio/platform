@@ -51,7 +51,7 @@ export type LLMState = {
   meta?: {
     restrictionInjectionCount?: number;
     restrictionInjected?: boolean;
-    bufferTokensConsumed?: string[];
+    bufferEntryIdsConsumed?: string[];
   };
 };
 
