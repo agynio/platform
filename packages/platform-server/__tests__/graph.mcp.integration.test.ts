@@ -13,7 +13,6 @@ import { ContainerRegistry } from '../src/infra/container/container.registry';
 import { NcpsKeyService } from '../src/infra/ncps/ncpsKey.service';
 import { LLMProvisioner } from '../src/llm/provisioners/llm.provisioner';
 import { ModuleRef } from '@nestjs/core';
-import { AgentRunService } from '../src/graph/nodes/agentRun.repository';
 import { TemplateRegistry } from '../src/graph/templateRegistry';
 import { LiveGraphRuntime } from '../src/graph/liveGraph.manager';
 import { GraphRepository } from '../src/graph/graph.repository';
@@ -122,7 +121,6 @@ describe('Graph MCP integration', () => {
         { provide: NcpsKeyService, useValue: { getKeysForInjection: () => [] } },
         { provide: ContainerRegistry, useValue: { updateLastUsed: async () => {}, registerStart: async () => {}, markStopped: async () => {} } },
         { provide: NodeStateService, useValue: { upsertNodeState: async () => {}, getSnapshot: () => undefined } },
-        { provide: AgentRunService, useValue: { startRun: async () => {}, markTerminated: async () => {}, list: async () => [] } },
         TemplateRegistry,
         LiveGraphRuntime,
         GraphRepository,

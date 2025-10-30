@@ -3,31 +3,30 @@ import { describe, it, expect } from 'vitest';
 import { Test } from '@nestjs/testing';
 import { LoggerService } from '../src/core/services/logger.service';
 import { ConfigService } from '../src/core/services/config.service';
-import { AgentRunService } from '../src/graph/nodes/agentRun.repository';
 import { AgentNode } from '../src/graph/nodes/agent/agent.node';
-import { HumanMessage } from '@agyn/llm';
-import { CallAgentFunctionTool } from '../src/graph/nodes/tools/call_agent/call_agent.tool';
+import { ResponseMessage, AIMessage } from '@agyn/llm';
+import { CallAgentNode } from '../src/graph/nodes/tools/call_agent/call_agent.node';
 import { LLMProvisioner } from '../src/llm/provisioners/llm.provisioner';
 
-const dummyRuns = { provide: AgentRunService, useValue: { startRun: async () => {}, markTerminated: async () => {}, list: async () => [] } };
-
 class BusyAgent extends AgentNode {
-  override isThreadRunning(_threadId: string): boolean { return true; }
+  override async invoke(): Promise<ResponseMessage> {
+    return new ResponseMessage({ output: [AIMessage.fromText('queued').toPlain()] });
+  }
 }
 
 describe('call_agent sync busy', () => {
   it('returns queued when target thread running (sync)', async () => {
     const module = await Test.createTestingModule({
-      providers: [LoggerService, ConfigService, dummyRuns, BusyAgent, { provide: LLMProvisioner, useValue: {} }],
+      providers: [LoggerService, ConfigService, BusyAgent, { provide: LLMProvisioner, useValue: {} }],
     }).compile();
     const agent = await module.resolve(BusyAgent);
     await agent.setConfig({});
     agent.init({ nodeId: 'caller' });
-    // Construct CallAgentFunctionTool directly with a simple node wrapper
-    const node = { config: { response: 'sync' as const }, agent } as any;
-    const tool = new (await import('../src/graph/nodes/tools/call_agent/call_agent.tool')).CallAgentFunctionTool(
-      new LoggerService(), node);
-    const res = await tool.execute({ input: 'hi', childThreadId: 'x' } as any, { callerAgent: agent, threadId: 'caller-t' } as any);
+    const node = new CallAgentNode(new LoggerService());
+    await node.setConfig({ response: 'sync' });
+    node.setAgent(agent);
+    const tool = node.getTool();
+    const res = await tool.execute({ input: 'hi', childThreadId: 'x' }, { callerAgent: agent, threadId: 'caller-t' });
     expect(res).toBe('queued');
   });
 });
