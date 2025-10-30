@@ -26,11 +26,14 @@ describe('ShellToolConfigView payload', () => {
     fireEvent.change(exec, { target: { value: '0' } });
     const idle = screen.getByLabelText('Idle timeout (ms)') as HTMLInputElement;
     fireEvent.change(idle, { target: { value: '2000' } });
+    const outLimit = screen.getByLabelText('Output limit (characters)') as HTMLInputElement;
+    fireEvent.change(outLimit, { target: { value: '12345' } });
 
     expect(cfg.workdir).toBe('/work');
     expect(Array.isArray(cfg.env)).toBe(true);
     expect(cfg.env[0]).toEqual({ key: 'FOO', value: 'bar', source: 'static' });
     expect(cfg.executionTimeoutMs).toBe(0);
     expect(cfg.idleTimeoutMs).toBe(2000);
+    expect(cfg.outputLimitChars).toBe(12345);
   });
 });
