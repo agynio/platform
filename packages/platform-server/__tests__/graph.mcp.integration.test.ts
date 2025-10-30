@@ -19,21 +19,39 @@ import { LiveGraphRuntime } from '../src/graph/liveGraph.manager';
 import { GraphRepository } from '../src/graph/graph.repository';
 import type { GraphDefinition } from '../src/graph/types';
 
-class StubContainerService {
-  constructor(private readonly logger: LoggerService, private readonly registry: ContainerRegistry) {}
-  async start(_opts?: ContainerOpts): Promise<ContainerHandle> {
-    return new ContainerHandle((this as unknown) as ContainerService, 'cid');
+class StubContainerService extends ContainerService {
+  constructor(logger: LoggerService, registry: ContainerRegistry) {
+    super(logger, registry);
   }
-  async execContainer(_id: string, _command: string[] | string, _options?: { workdir?: string; env?: Record<string,string> | string[]; timeoutMs?: number; idleTimeoutMs?: number; tty?: boolean; killOnTimeout?: boolean; signal?: AbortSignal }): Promise<{ stdout: string; stderr: string; exitCode: number }> {
+  override async start(_opts?: ContainerOpts): Promise<ContainerHandle> {
+    return new ContainerHandle(this, 'cid');
+  }
+  override async execContainer(
+    _id: string,
+    _command: string[] | string,
+    _options?: { workdir?: string; env?: Record<string, string> | string[]; timeoutMs?: number; idleTimeoutMs?: number; tty?: boolean; killOnTimeout?: boolean; signal?: AbortSignal },
+  ): Promise<{ stdout: string; stderr: string; exitCode: number }> {
     return { stdout: '', stderr: '', exitCode: 0 };
   }
-  async findContainerByLabels(_labels: Record<string,string>, _opts?: { all?: boolean }): Promise<ContainerHandle | undefined> { return undefined; }
-  async findContainersByLabels(_labels: Record<string,string>, _opts?: { all?: boolean }): Promise<ContainerHandle[]> { return []; }
-  async getContainerLabels(_id: string): Promise<Record<string,string> | undefined> { return undefined; }
-  async touchLastUsed(_id: string): Promise<void> {}
-  async stopContainer(_id: string, _timeoutSec = 10): Promise<void> {}
-  async removeContainer(_id: string, _force = false): Promise<void> {}
-  async putArchive(_id: string, _data: Buffer | NodeJS.ReadableStream, _options: { path: string }): Promise<void> {}
+  override async findContainerByLabels(
+    _labels: Record<string, string>,
+    _opts?: { all?: boolean },
+  ): Promise<ContainerHandle | undefined> {
+    return undefined;
+  }
+  override async findContainersByLabels(
+    _labels: Record<string, string>,
+    _opts?: { all?: boolean },
+  ): Promise<ContainerHandle[]> {
+    return [];
+  }
+  override async getContainerLabels(_id: string): Promise<Record<string, string> | undefined> {
+    return undefined;
+  }
+  override async touchLastUsed(_id: string): Promise<void> {}
+  override async stopContainer(_id: string, _timeoutSec = 10): Promise<void> {}
+  override async removeContainer(_id: string, _force = false): Promise<void> {}
+  override async putArchive(_id: string, _data: Buffer | NodeJS.ReadableStream, _options: { path: string }): Promise<void> {}
 }
 class StubConfigService extends ConfigService {
   constructor() {
