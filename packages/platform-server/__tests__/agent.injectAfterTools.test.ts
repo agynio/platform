@@ -68,7 +68,7 @@ describe('Agent injectAfterTools mode', () => {
 
     const agent = new AgentNode({} as any, logger, provisioner as any, runs, moduleRef as any, busy);
     agent.setRuntimeContext({ nodeId: 'agent-2' } as any);
-    await agent.setConfig({ debounceMs: 0, whenBusy: 'injectAfterTools', processBuffer: 'oneByOne' } as any);
+    await agent.setConfig({ debounceMs: 0, whenBusy: 'injectAfterTools', processBuffer: 'allTogether' } as any);
 
     agent.addTool({ getTool: () => new NoopTool() } as any);
 
@@ -78,6 +78,7 @@ describe('Agent injectAfterTools mode', () => {
 
     await Promise.all([p1, p2, p3]);
 
-    expect(fake.callsWithTools).toBe(2);
+    // With injectAfterTools limited to allTogether, all queued messages are handled in a single run
+    expect(fake.callsWithTools).toBe(1);
   });
 });
