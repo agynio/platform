@@ -12,7 +12,7 @@ import { ConfigService } from '../src/core/services/config.service.js';
 import type { Config } from '../src/core/services/config.service.js';
 // PrismaService removed from test harness; use minimal DI stubs
 import { LLMProvisioner } from '../src/llm/provisioners/llm.provisioner';
-import { AgentRunService } from '../src/graph/nodes/agentRun.repository';
+import { AgentNode } from '../src/graph/nodes/agent/agent.node';
 import { MongoService } from '../src/core/services/mongo.service.js';
 
 // Avoid any real network calls by ensuring ChatOpenAI token counting/invoke are not used in this test.
@@ -24,8 +24,7 @@ describe('LiveGraphRuntime -> Agent config propagation', () => {
       constructor(logger: LoggerService, registry: any) { super(logger, registry as any); }
     }
     class StubMongoService { getDb() { return {}; } }
-    class StubLLMProvisioner extends LLMProvisioner { async getLLM() { return { call: async ({ model }: any) => ({ text: `model:${model}`, output: [] }) }; } }
-    class StubAgentRunService { async startRun() {} async markTerminated() {} async list() { return []; } }
+    class StubLLMProvisioner extends LLMProvisioner { async getLLM() { return { call: async ({ model }: { model: string }) => ({ text: `model:${model}`, output: [] }) }; } }
 
     const cfg: Config = {
       githubAppId: 'test', githubAppPrivateKey: 'test', githubInstallationId: 'test', openaiApiKey: 'test', githubToken: 'test',
@@ -45,7 +44,6 @@ describe('LiveGraphRuntime -> Agent config propagation', () => {
         { provide: ConfigService, useValue: new ConfigService(cfg) },
         { provide: MongoService, useClass: StubMongoService },
         { provide: LLMProvisioner, useClass: StubLLMProvisioner },
-        { provide: AgentRunService, useClass: StubAgentRunService },
         { provide: ContainerRegistry, useValue: { updateLastUsed: async () => {}, registerStart: async () => {}, markStopped: async () => {} } },
       ],
     })
@@ -58,7 +56,12 @@ describe('LiveGraphRuntime -> Agent config propagation', () => {
         const provisioner = module.get(LLMProvisioner);
         const moduleRef = module.get(ModuleRef);
         const registry = buildTemplateRegistry({ logger, containerService, configService, mongoService, provisioner, moduleRef });
-        class StubRepo extends GraphRepository { async initIfNeeded(): Promise<void> {} async get(): Promise<any> { return null; } async upsert(req: any): Promise<any> { throw new Error('not-implemented'); } async upsertNodeState(): Promise<void> {} }
+        class StubRepo extends GraphRepository {
+          async initIfNeeded(): Promise<void> {}
+          async get(): Promise<null> { return null; }
+          async upsert(): Promise<never> { throw new Error('not-implemented'); }
+          async upsertNodeState(): Promise<void> {}
+        }
         const runtime = new LiveGraphRuntime(logger, registry, new StubRepo(), moduleRef);
         return { runtime };
       });
@@ -94,8 +97,9 @@ describe('LiveGraphRuntime -> Agent config propagation', () => {
     };
 
     await runtime.apply(graph1);
-    const agent = runtime.getNodeInstance('agent') as any;
-    const cfg = (agent && typeof agent === 'object' && 'config' in agent) ? (agent as any).config : undefined;
+    const agent = runtime.getNodeInstance('agent');
+    expect(agent).toBeInstanceOf(AgentNode);
+    const cfg = (agent as AgentNode).config;
     expect(cfg?.systemPrompt).toBe(systemPrompt);
     expect(cfg?.model).toBe(model);
     expect(cfg?.summarizationKeepTokens).toBe(keep);
@@ -127,8 +131,9 @@ describe('LiveGraphRuntime -> Agent config propagation', () => {
     };
 
     await runtime.apply(graph2);
-    const agent2 = runtime.getNodeInstance('agent') as any;
-    const cfg2 = (agent2 && typeof agent2 === 'object' && 'config' in agent2) ? (agent2 as any).config : undefined;
+    const agent2 = runtime.getNodeInstance('agent');
+    expect(agent2).toBeInstanceOf(AgentNode);
+    const cfg2 = (agent2 as AgentNode).config;
     expect(cfg2?.systemPrompt).toBe(newSystemPrompt);
     expect(cfg2?.model).toBe(newModel);
   });
