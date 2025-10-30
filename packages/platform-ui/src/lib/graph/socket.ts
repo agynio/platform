@@ -54,7 +54,7 @@ class GraphSocket {
 
   isConnected(): boolean {
     const s = this.socket;
-    return !!(s and s.connected);
+    return !!(s && s.connected);
   }
 
   onNodeStatus(nodeId: string, cb: Listener) {

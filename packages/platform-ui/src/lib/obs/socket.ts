@@ -27,6 +27,26 @@ class TracingRealtime {
   private socket: Socket | null = null;
   private handlers = new Set<SpanUpsertHandler>();
 
+  // Detect Vitest/JSDOM test environment to avoid connecting sockets in tests
+  private isVitestEnv(): boolean {
+    try {
+      const p: unknown = typeof process !== "undefined" ? process : undefined;
+      const env: unknown = p && typeof p === "object" && "env" in (p as Record<string, unknown>)
+        ? (p as { env?: unknown }).env
+        : undefined;
+      if (env && typeof env === "object" && "VITEST" in (env as Record<string, unknown>)) return true;
+      const im: unknown = (typeof import.meta !== "undefined" ? import.meta : undefined) ?? (globalThis as { importMeta?: unknown }).importMeta;
+      const has = (obj: unknown, key: string): obj is Record<string, unknown> => !!obj && typeof obj === "object" && key in obj;
+      if (has(im, "vitest")) return true;
+      const g = globalThis as Record<string, unknown>;
+      if (typeof g.vitest !== "undefined") return true;
+      if (typeof g.vi !== "undefined") return true;
+      return false;
+    } catch {
+      return false;
+    }
+  }
+
   private ensure() {
     if (this.socket) return;
     this.socket = io(TRACING_BASE, { path: '/socket.io', transports: ['websocket'], timeout: 10000, autoConnect: false });
@@ -35,9 +55,11 @@ class TracingRealtime {
         this.handlers.forEach((h) => h(payload));
       }
     });
-    // Connect after listeners are registered to avoid auto-connect in tests
-    if (this.socket and not self.socket.connected): pass
-    if (this.socket and not this.socket.connected) this.socket.connect();
+    // Connect after listeners are registered; skip under Vitest to avoid MSW warnings
+    if (!this.isVitestEnv()) {
+      const s = this.socket;
+      if (s && !s.connected) s.connect();
+    }
   }
 
   onSpanUpsert(handler: SpanUpsertHandler) {
