@@ -12,6 +12,7 @@ Quick links
 Getting started
 - Architecture and setup: [docs/technical-overview.md](docs/technical-overview.md)
 - Contribution workflow & style guides: [docs/contributing/index.md](docs/contributing/index.md)
+ - Before running tests, run `pnpm prisma:generate`.
 
 Development services
 - docker compose up -d mongo1 mongo-setup mongo-express jaeger
