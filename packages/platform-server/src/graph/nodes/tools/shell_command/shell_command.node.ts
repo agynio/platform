@@ -36,7 +36,7 @@ export const ShellToolStaticConfigSchema = z
       .default(60 * 1000)
       .describe('Maximum idle time (no output) in milliseconds. 0 disables. Range: 1000-86400000 when enabled.'),
     outputLimitChars: z
-      .union([z.literal(0), z.number().int().positive().max(500000)])
+      .union([z.literal(0), z.number().int().positive()])
       .default(50000)
       .describe(
         'Maximum combined cleaned stdout+stderr length. If >0 and exceeded, output is saved to /tmp/<uuid>.txt and a short error message is returned.',
