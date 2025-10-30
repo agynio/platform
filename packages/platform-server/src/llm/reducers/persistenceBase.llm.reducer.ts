@@ -52,9 +52,9 @@ export abstract class PersistenceBaseLLMReducer extends Reducer<LLMState, LLMCon
 
   protected deserializeState(plain: Prisma.JsonValue): LLMState {
     if (!this.isPlainLLMState(plain)) return { messages: [], summary: undefined };
-    const p = plain as unknown as PlainLLMState;
+    const p: PlainLLMState = plain;
     const messages = p.messages.map((msg) => {
-      const val = msg.value as unknown;
+      const val: unknown = msg.value;
       switch (msg.kind) {
         case 'human':
           if (this.isUserMessage(val)) return new HumanMessage(val);
@@ -131,4 +131,3 @@ export abstract class PersistenceBaseLLMReducer extends Reducer<LLMState, LLMCon
     return this.hasKey(v, 'type') && this.hasKey(v, 'output');
   }
 }
-
