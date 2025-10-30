@@ -1,39 +1,66 @@
 import { HumanMessage, ResponseMessage, SystemMessage, ToolCallOutputMessage } from '@agyn/llm';
 import type { LLMMessage, LLMState } from '../types';
-import type { Prisma } from '@prisma/client';
+import { Prisma } from '@prisma/client';
 import type { ResponseInputItem, Response } from 'openai/resources/responses/responses.mjs';
 
 type PlainMessage = {
   kind: 'human' | 'system' | 'response' | 'tool_call_output';
   value: Prisma.InputJsonValue;
-} & { [key: string]: Prisma.InputJsonValue | null };
+};
 
 export type PlainLLMState = {
   messages: PlainMessage[];
   summary?: string;
 };
 
-function isJsonPrimitive(v: unknown): v is string | number | boolean | null {
-  return v === null || typeof v === 'string' || typeof v === 'number' || typeof v === 'boolean';
+function isJsonPrimitive(v: unknown): v is string | number | boolean {
+  return typeof v === 'string' || typeof v === 'number' || typeof v === 'boolean';
 }
 
 function isPlainObject(v: unknown): v is Record<string, unknown> {
-  if (!v || typeof v !== 'object') return false;
+  if (v === null || typeof v !== 'object') return false;
   const proto = Object.getPrototypeOf(v);
   return proto === Object.prototype || proto === null;
 }
 
-function isJsonValue(v: unknown): v is Prisma.InputJsonValue {
+function isInputJsonValue(v: unknown): v is Prisma.InputJsonValue {
   if (isJsonPrimitive(v)) return true;
-  if (Array.isArray(v)) return v.every(isJsonValue);
-  if (isPlainObject(v)) return Object.values(v).every(isJsonValue);
+  if (Array.isArray(v)) return v.every(isInputJsonValue);
+  if (isPlainObject(v)) return Object.values(v).every(isInputJsonValue);
   return false;
 }
 
 export function toJsonValue(input: unknown): Prisma.InputJsonValue {
-  if (isJsonValue(input)) return input;
-  const normalized = JSON.parse(JSON.stringify(input));
-  if (isJsonValue(normalized)) return normalized;
+  // Already valid
+  if (isInputJsonValue(input)) return input;
+
+  // Primitive
+  if (input === null) throw new Error('Unable to convert value to JSON: null is not allowed for InputJsonValue');
+  if (isJsonPrimitive(input)) return input;
+
+  // Array
+  if (Array.isArray(input)) {
+    const arr: Prisma.InputJsonValue[] = input.map((el) => toJsonValue(el));
+    return arr;
+  }
+
+  // Plain object
+  if (isPlainObject(input)) {
+    const out: { [k: string]: Prisma.InputJsonValue } = {};
+    for (const [k, v] of Object.entries(input)) {
+      if (typeof v === 'function' || typeof v === 'symbol' || typeof v === 'bigint' || typeof v === 'undefined') {
+        throw new Error('Unable to convert value to JSON: non-serializable property');
+      }
+      out[k] = toJsonValue(v);
+    }
+    return out;
+  }
+
+  // Fallback: normalize via JSON stringify/parse
+  try {
+    const normalized = JSON.parse(JSON.stringify(input));
+    if (isInputJsonValue(normalized)) return normalized;
+  } catch {/* noop */}
   throw new Error('Unable to convert value to JSON');
 }
 
@@ -43,8 +70,8 @@ export function isPlainLLMState(v: unknown): v is PlainLLMState {
   if (!Array.isArray(o.messages)) return false;
   // shallow check of first element
   if (o.messages.length === 0) return true;
-  const m = o.messages[0] as any;
-  return m && typeof m === 'object' && 'kind' in m && 'value' in m;
+  const m: unknown = o.messages[0];
+  return isRecord(m) && 'kind' in m && 'value' in m;
 }
 
 export function serializeState(state: LLMState): PlainLLMState {
@@ -82,25 +109,35 @@ export function deserializeState(plain: PlainLLMState): LLMState {
 }
 
 function isRecord(v: unknown): v is Record<string, unknown> {
-  return !!v && typeof v === 'object';
+  return v !== null && typeof v === 'object';
 }
 
-function isMessageValue(v: unknown): v is ResponseInputItem.Message {
-  return isRecord(v) && typeof (v as any).role === 'string' && 'content' in (v as any);
+function hasKey<K extends string>(obj: Record<string, unknown>, key: K): obj is Record<string, unknown> & { [P in K]: unknown } {
+  return key in obj;
+}
+
+function isMessageLike(v: unknown): v is ResponseInputItem.Message {
+  if (!isRecord(v)) return false;
+  if (!hasKey(v, 'role') || typeof v.role !== 'string') return false;
+  if (!hasKey(v, 'content')) return false;
+  return true;
 }
 
 function isUserMessage(v: unknown): v is ResponseInputItem.Message & { role: 'user' } {
-  return isMessageValue(v) && (v as ResponseInputItem.Message).role === 'user';
+  return isMessageLike(v) && v.role === 'user';
 }
 
 function isSystemMessage(v: unknown): v is ResponseInputItem.Message & { role: 'system' } {
-  return isMessageValue(v) && (v as ResponseInputItem.Message).role === 'system';
+  return isMessageLike(v) && v.role === 'system';
 }
 
 function isResponseValue(v: unknown): v is { output: Response['output'] } {
-  return isRecord(v) && Array.isArray((v as any).output);
+  if (!isRecord(v)) return false;
+  if (!hasKey(v, 'output')) return false;
+  return Array.isArray(v.output);
 }
 
 function isFunctionCallOutput(v: unknown): v is ResponseInputItem.FunctionCallOutput {
-  return isRecord(v) && 'type' in (v as any) && 'output' in (v as any);
+  if (!isRecord(v)) return false;
+  return hasKey(v, 'type') && hasKey(v, 'output');
 }
