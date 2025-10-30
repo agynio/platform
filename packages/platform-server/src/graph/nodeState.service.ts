@@ -3,6 +3,7 @@ import { LoggerService } from '../core/services/logger.service';
 import { LiveGraphRuntime } from './liveGraph.manager';
 import { GraphSocketGateway } from '../gateway/graph.socket.gateway';
 import { GraphRepository } from './graph.repository';
+import { mergeWith, isArray } from 'lodash-es';
 
 export function deepMergeNodeState(
   prev: Record<string, unknown>,
@@ -27,7 +28,7 @@ export function deepMergeNodeState(
 }
 
 /**
- * Centralized service to persist per-node runtime state and reflect changes in the in-memory runtime snapshot.
+ * Centralized service to persist per-node runtime state && reflect changes in the in-memory runtime snapshot.
  * Minimal, non-Nest class to avoid broader DI changes for now.
  */
 @Injectable({ scope: Scope.DEFAULT })
@@ -44,26 +45,25 @@ export class NodeStateService {
     return this.runtime.getNodeStateSnapshot(nodeId);
   }
 
-  /**
-   * Deep merge helper for node state upserts.
-   * - Objects: merge recursively
-   * - Arrays: replace entirely
-   * - Primitives: replace
-   * - Undefined in patch: skip (do not introduce undefined keys)
-   */
-  private deepMerge(prev: Record<string, unknown>, patch: Record<string, unknown>): Record<string, unknown> {
-    return deepMergeNodeState(prev, patch);
-  }
-
-  async upsertNodeState(nodeId: string, state: Record<string, unknown>, name = 'main'): Promise<void> {
+  async upsertNodeState(nodeId: string, patch: Record<string, unknown>, name = 'main'): Promise<void> {
     try {
+      // Deep-merge previous snapshot with incoming patch (arrays replace)
       const prev = this.runtime.getNodeStateSnapshot(nodeId) || {};
-      const merged = this.deepMerge(prev, state);
-      // Persist via repository through shared interface (full merged state)
+      const merged = mergeWith({}, prev, patch, (objValue, srcValue) => {
+      if (isArray(objValue) && isArray(srcValue)) return srcValue;
+      return undefined;
+    });
+      // Persist merged via repository, update runtime with merged
       await this.graphRepository.upsertNodeState(name, nodeId, merged);
-      // Reflect into runtime snapshot via typed helper
       this.runtime.updateNodeState(nodeId, merged);
-      // Emit strictly-typed node_state event with merged state
+      // Invoke node instance setState with merged snapshot for runtime reactions
+      const inst = this.runtime.getNodeInstance(nodeId);
+      try {
+        await inst?.setState?.(merged as Record<string, unknown>);
+      } catch (e) {
+        this.logger.error('NodeStateService: instance.setState failed for %s: %s', nodeId, String(e));
+      }
+      // Emit gateway node_state with merged state
       this.gateway?.emitNodeState(nodeId, merged);
     } catch (e) {
       this.logger.error('NodeStateService: upsertNodeState failed for %s: %s', nodeId, String(e));

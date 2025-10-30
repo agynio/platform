@@ -20,7 +20,7 @@ export const bashCommandSchema = z.object({
     .string()
     .min(1)
     .describe(
-      'Shell command to execute. Avoid interactive commands or watch mode. Use single quotes to prevent interpolation.',
+      'Shell command to execute. Avoid interactive commands or watch mode. Use single quotes for cli arguments to prevent unexpected interpolation (do not wrap entire command in quotes).',
     ),
 });
 

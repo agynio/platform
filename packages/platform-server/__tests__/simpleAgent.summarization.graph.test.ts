@@ -7,6 +7,7 @@ import { AgentNode as Agent } from '../src/graph/nodes/agent/agent.node';
 import { Test } from '@nestjs/testing';
 import { LLMProvisioner } from '../src/llm/provisioners/llm.provisioner';
 import { AgentRunService } from '../src/graph/nodes/agentRun.repository';
+import { ThreadRunCoordinatorService } from '../src/graph/nodes/agent/threadRunCoordinator.service';
 
 describe('Agent summarization graph', () => {
   it('invokes successfully over several turns with summarization configured', async () => {
@@ -27,6 +28,7 @@ describe('Agent summarization graph', () => {
         { provide: ConfigService, useValue: new ConfigService({ githubAppId: '1', githubAppPrivateKey: 'k', githubInstallationId: 'i', openaiApiKey: 'x', githubToken: 't', mongodbUrl: 'm' }) },
         { provide: LLMProvisioner, useValue: provisioner },
         { provide: AgentRunService, useValue: runsStub },
+        ThreadRunCoordinatorService,
         Agent,
       ],
     }).compile();
