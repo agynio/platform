@@ -68,50 +68,43 @@ export class ThreadRunCoordinatorService {
 
   private runAndDrain(agentNodeId: string, threadId: string, starter: RunStarter): Promise<RunResult> {
     const entry = this.ensure(agentNodeId, threadId);
-    const runPromise = (async () => starter())();
+    const runPromise = Promise.resolve().then(() => starter());
 
-    // After completion, drain queued starters serially
-    runPromise
-      .then(async (_result) => {
-        // Process queue serially
-        let next: RunStarter | undefined;
-        while ((next = entry.queue.shift())) {
-          try {
-            const nextPromise = (async () => next!)();
-            entry.active = nextPromise;
-            const r = await nextPromise;
-            const w = entry.waiters.shift();
-            if (w) w.resolve(r);
-          } catch (e) {
-            const w = entry.waiters.shift();
-            if (w) w.reject(e);
+    const continueDrain = (): void => {
+      const next = entry.queue.shift();
+      if (!next) {
+        // Nothing left; clear active and optionally cleanup empty containers
+        entry.active = null;
+        const byThread = this.byAgent.get(agentNodeId);
+        if (byThread) {
+          if (byThread.get(threadId)?.active === null && (byThread.get(threadId)?.queue.length || 0) === 0) {
+            byThread.delete(threadId);
+            if (byThread.size === 0) this.byAgent.delete(agentNodeId);
           }
         }
-      })
-      .catch(async (e) => {
-        // On failure of active run, propagate rejection to first waiter and continue draining
+        return;
+      }
+      const waiter = entry.waiters.shift();
+      const nextPromise = Promise.resolve().then(() => next());
+      entry.active = nextPromise;
+      nextPromise
+        .then((r) => {
+          if (waiter) waiter.resolve(r);
+          continueDrain();
+        })
+        .catch((e) => {
+          if (waiter) waiter.reject(e);
+          continueDrain();
+        });
+    };
+
+    runPromise
+      .then(() => continueDrain())
+      .catch((e) => {
+        // Propagate rejection to the first waiter (if any), then continue drain
         const w = entry.waiters.shift();
         if (w) w.reject(e);
-        let next: RunStarter | undefined;
-        while ((next = entry.queue.shift())) {
-          try {
-            const nextPromise = (async () => next!)();
-            entry.active = nextPromise;
-            const r = await nextPromise;
-            const w2 = entry.waiters.shift();
-            if (w2) w2.resolve(r);
-          } catch (err) {
-            const w2 = entry.waiters.shift();
-            if (w2) w2.reject(err);
-          }
-        }
-      })
-      .finally(() => {
-        // Clear active when queue is empty
-        const e = this.ensure(agentNodeId, threadId);
-        if (e.queue.length === 0) {
-          e.active = null;
-        }
+        continueDrain();
       });
 
     return runPromise;

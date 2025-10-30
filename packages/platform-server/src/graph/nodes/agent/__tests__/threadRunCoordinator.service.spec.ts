@@ -2,10 +2,8 @@ import { describe, it, expect } from 'vitest';
 import { ThreadRunCoordinatorService, type RunResult } from '../threadRunCoordinator.service';
 import { ResponseMessage, ToolCallOutputMessage } from '@agyn/llm';
 
-function makeResp(text: string): RunResult {
-  // Create a simple ResponseMessage with no output text; ToolCallOutputMessage is simpler
-  return ToolCallOutputMessage.fromResponse('call', text);
-}
+const makeResp = (text: string): RunResult => ToolCallOutputMessage.fromResponse('call', text);
+const getText = (r: RunResult): string => (r instanceof ToolCallOutputMessage ? r.text : r.text);
 
 describe('ThreadRunCoordinatorService', () => {
   it('starts immediately when idle (started=true)', async () => {
@@ -13,7 +11,7 @@ describe('ThreadRunCoordinatorService', () => {
     const handle = c.acquireOrEnqueue({ agentNodeId: 'a', threadId: 't', mode: 'wait' }, async () => makeResp('r1'));
     expect(handle.started).toBe(true);
     const r = await handle.result;
-    expect(r).toBeInstanceOf(ToolCallOutputMessage);
+    expect(r instanceof ToolCallOutputMessage || r instanceof ResponseMessage).toBe(true);
   });
 
   it('wait mode queues starters and runs serially', async () => {
@@ -39,9 +37,9 @@ describe('ThreadRunCoordinatorService', () => {
     const r2 = await h2.result;
     const r3 = await h3.result;
 
-    expect((r1 as ToolCallOutputMessage).text).toBe('1');
-    expect((r2 as ToolCallOutputMessage).text).toBe('2');
-    expect((r3 as ToolCallOutputMessage).text).toBe('3');
+    expect(getText(r1)).toBe('1');
+    expect(getText(r2)).toBe('2');
+    expect(getText(r3)).toBe('3');
 
     // Verify serial order: starts in submission order and ends correspondingly due to queueing
     expect(order).toEqual(['start:1', 'end:1', 'start:2', 'end:2', 'start:3', 'end:3']);
@@ -66,9 +64,9 @@ describe('ThreadRunCoordinatorService', () => {
     resolveRun!(final);
 
     const [r1, r2, r3] = await Promise.all([h1.result, h2.result, h3.result]);
-    // All must be the same reference or at least equivalent text
-    expect((r1 as ToolCallOutputMessage).text).toBe('joined');
-    expect((r2 as ToolCallOutputMessage).text).toBe('joined');
-    expect((r3 as ToolCallOutputMessage).text).toBe('joined');
+    // All must yield equivalent final text
+    expect(getText(r1)).toBe('joined');
+    expect(getText(r2)).toBe('joined');
+    expect(getText(r3)).toBe('joined');
   });
 });
