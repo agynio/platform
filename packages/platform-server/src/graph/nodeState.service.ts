@@ -5,7 +5,7 @@ import { GraphSocketGateway } from '../gateway/graph.socket.gateway';
 import { GraphRepository } from './graph.repository';
 
 /**
- * Centralized service to persist per-node runtime state and reflect changes in the in-memory runtime snapshot.
+ * Centralized service to persist per-node runtime state && reflect changes in the in-memory runtime snapshot.
  * Minimal, non-Nest class to avoid broader DI changes for now.
  */
 @Injectable({ scope: Scope.DEFAULT })
@@ -24,26 +24,41 @@ export class NodeStateService {
 
   async upsertNodeState(nodeId: string, state: Record<string, unknown>, name = 'main'): Promise<void> {
     try {
-      // Capture previous snapshot to compute merged view for runtime and hooks
+      // Deep-merge previous snapshot with incoming patch
       const prev = this.runtime.getNodeStateSnapshot(nodeId);
-      const merged: Record<string, unknown> = { ...(prev || {}), ...(state || {}) };
-      // Persist via repository through shared interface (patch semantics)
+      const merged = deepMerge(prev, state);
+      // Persist patch via repository (stored as-is), update runtime with merged
       await this.graphRepository.upsertNodeState(name, nodeId, state);
-      // Reflect merged view into runtime snapshot via typed helper
       this.runtime.updateNodeState(nodeId, merged);
-      // Emit strictly-typed node_state event (payload remains the patch)
-      this.gateway?.emitNodeState(nodeId, state);
-      // Duck-typed hook on live node instance (if present)
-      const inst = this.runtime.getNodeInstance(nodeId) as
-        | { onNodeStateUpdated?: (next: Record<string, unknown>, prev?: Record<string, unknown>) => void }
-        | undefined;
+      // Invoke node instance setState with merged snapshot for runtime reactions
+      const inst = this.runtime.getNodeInstance(nodeId);
       try {
-        inst?.onNodeStateUpdated?.(merged, prev);
+        await inst?.setState?.(merged);
       } catch (e) {
-        this.logger.error('NodeStateService: onNodeStateUpdated hook error for %s: %s', nodeId, String(e));
+        this.logger.error('NodeStateService: instance.setState failed for %s: %s', nodeId, String(e));
       }
+      // Emit gateway node_state with merged state
+      this.gateway?.emitNodeState(nodeId, merged);
     } catch (e) {
       this.logger.error('NodeStateService: upsertNodeState failed for %s: %s', nodeId, String(e));
     }
   }
+}
+
+function isPlainObject(v: unknown): v is Record<string, unknown> {
+  return !!v && typeof v === 'object' && !Array.isArray(v);
+}
+function deepMerge(
+  prev: Record<string, unknown> | undefined,
+  patch: Record<string, unknown> | undefined,
+): Record<string, unknown> {
+  if (!prev) return { ...(patch || {}) };
+  if (!patch) return { ...prev };
+  const out: Record<string, unknown> = { ...prev };
+  for (const [k, v] of Object.entries(patch)) {
+    const existing = out[k];
+    if (isPlainObject(existing) && isPlainObject(v)) out[k] = deepMerge(existing, v);
+    else out[k] = v;
+  }
+  return out;
 }

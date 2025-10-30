@@ -37,7 +37,7 @@ describe('LocalMCPServerNode listTools filtering by enabledTools', () => {
   });
 });
 
-describe('LocalMCPServerNode onNodeStateUpdated emits mcp.tools_updated', () => {
+describe('LocalMCPServerNode setState enabledTools emits mcp.tools_updated', () => {
   it('emits on hook invocation', async () => {
     const logger = new MockLogger();
     const server = new LocalMCPServerNode(new MockContainerService() as any, logger as any, undefined as any, undefined as any, undefined as any);
@@ -45,7 +45,7 @@ describe('LocalMCPServerNode onNodeStateUpdated emits mcp.tools_updated', () => 
     (server as any).preloadCachedTools([{ name: 'x', description: 'X', inputSchema: { type: 'object' } }], Date.now());
     let fired = false;
     (server as any).on('mcp.tools_updated', (_payload: { tools: unknown[]; updatedAt: number }) => { fired = true; });
-    server.onNodeStateUpdated({ mcp: { enabledTools: ['ns_x'] } });
+    await server.setState({ mcp: { tools: [], toolsUpdatedAt: Date.now(), enabledTools: ['ns_x'] } as any });
     expect(fired).toBe(true);
   });
 });

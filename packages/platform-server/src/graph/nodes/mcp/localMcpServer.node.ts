@@ -110,6 +110,8 @@ export class LocalMCPServerNode extends Node<z.infer<typeof LocalMcpServerStatic
   // Dynamic config: enabled tools (if undefined => all enabled by default)
   // Dynamic tool filtering removed per strictness spec; always expose all cached tools
   private _globalStaleTimeoutMs = 0;
+  // Last seen enabled tools from state for change detection
+  private _lastEnabledTools?: string[];
 
   constructor(
     @Inject(ContainerService) protected containerService: ContainerService,
@@ -165,7 +167,8 @@ export class LocalMCPServerNode extends Node<z.infer<typeof LocalMcpServerStatic
     this.notifyToolsUpdated(Date.now());
   }
 
-  async setState(state: { mcp?: PersistedMcpState }) {
+  async setState(state: { mcp?: PersistedMcpState }): Promise<void> {
+    // Preload cached tools if present in state
     if (state?.mcp && state.mcp.tools) {
       const summaries = state.mcp.tools;
       const updatedAt = state.mcp.toolsUpdatedAt;
@@ -174,6 +177,25 @@ export class LocalMCPServerNode extends Node<z.infer<typeof LocalMcpServerStatic
       } catch (e) {
         this.logger.error('Error during MCP cache preload for node %s', this.nodeId, e);
       }
+    }
+    // Detect enabledTools changes in state.mcp (optional field)
+    const mcpState = state?.mcp as Record<string, unknown> | undefined;
+    const rawEnabled: unknown = mcpState ? (mcpState['enabledTools'] as unknown) : undefined;
+    const nextEnabled = Array.isArray(rawEnabled) && rawEnabled.every((v) => typeof v === 'string')
+      ? (rawEnabled as string[])
+      : undefined;
+    const eq = (a?: string[], b?: string[]): boolean => {
+      if (!a && !b) return true;
+      const A = a ?? [];
+      const B = b ?? [];
+      if (A.length !== B.length) return false;
+      const setA = new Set(A);
+      for (const x of B) if (!setA.has(x)) return false;
+      return true;
+    };
+    if (!eq(this._lastEnabledTools, nextEnabled)) {
+      this._lastEnabledTools = nextEnabled ? [...nextEnabled] : undefined;
+      this.notifyToolsUpdated(Date.now());
     }
   }
 
@@ -602,15 +624,7 @@ export class LocalMCPServerNode extends Node<z.infer<typeof LocalMcpServerStatic
       this.logger.error(`[MCP:${this.config.namespace}] Error emitting tools_updated`, e);
     }
   }
-  // Hook invoked by NodeStateService when node state changes; used for real-time tool sync
-  public onNodeStateUpdated(next: { mcp?: { enabledTools?: string[] } }): void {
-    // Simple always-emit on any state change; optional optimization could compare previous vs next
-    try {
-      this.notifyToolsUpdated(Date.now());
-    } catch (e) {
-      this.logger.error(`[MCP:${this.config.namespace}] Error handling onNodeStateUpdated`, e);
-    }
-  }
+  // no additional hooks; runtime reactions are handled via setState()
 
 
   // ----------------- Resilient start internals -----------------
