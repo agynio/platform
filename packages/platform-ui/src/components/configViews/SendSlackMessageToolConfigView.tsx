@@ -10,10 +10,17 @@ function isVaultRef(v: string) {
 
 export default function SendSlackMessageToolConfigView({ value, onChange, readOnly, disabled, onValidate }: StaticConfigViewProps) {
   const init = useMemo(() => ({ ...(value || {}) }), [value]);
-  const [default_channel, setDefaultChannel] = useState<string>((init.default_channel as string) || '');
-  type Cfg = { bot_token?: ReferenceValue | string; default_channel?: string };
-  const initCfg = init as unknown as Cfg;
-  const [bot_token, setBotToken] = useState<ReferenceValue | string>(initCfg.bot_token || '');
+  const [default_channel, setDefaultChannel] = useState<string>(() => {
+    const dc = (init as Record<string, unknown>)['default_channel'];
+    return typeof dc === 'string' ? dc : '';
+  });
+  const [bot_token, setBotToken] = useState<ReferenceValue | string>(() => {
+    const t = (init as Record<string, unknown>)['bot_token'];
+    if (!t) return '';
+    if (typeof t === 'string') return t;
+    if (t && typeof t === 'object' && 'value' in (t as Record<string, unknown>)) return t as ReferenceValue;
+    return '';
+  });
   const [errors, setErrors] = useState<string[]>([]);
   const isDisabled = !!readOnly || !!disabled;
 

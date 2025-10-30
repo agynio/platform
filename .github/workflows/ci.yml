@@ -39,6 +39,9 @@ jobs:
         with:
           node-version: '20'
 
+      - name: Approve necessary build scripts
+        run: pnpm approve-builds @prisma/client prisma esbuild mongodb-memory-server @nestjs/core msw
+
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
@@ -76,6 +79,9 @@ jobs:
         uses: actions/setup-node@v5
         with:
           node-version: '20'
+
+      - name: Approve necessary build scripts
+        run: pnpm approve-builds @prisma/client prisma esbuild mongodb-memory-server @nestjs/core msw
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
@@ -117,6 +123,9 @@ jobs:
         uses: actions/setup-node@v5
         with:
           node-version: '20'
+
+      - name: Approve necessary build scripts
+        run: pnpm approve-builds @prisma/client prisma esbuild mongodb-memory-server @nestjs/core msw
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
@@ -161,6 +170,9 @@ jobs:
         uses: actions/setup-node@v5
         with:
           node-version: '20'
+
+      - name: Approve necessary build scripts
+        run: pnpm approve-builds @prisma/client prisma esbuild mongodb-memory-server @nestjs/core msw
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile

@@ -3,8 +3,8 @@ const RUN_MONGOMS = process.env.RUN_MONGOMS === '1';
 import { startMemoryMongo } from './helpers/mongoMemory';
 import { createServer } from '../src/server';
 
-import * as sdk from '../../tracing';
-const { init, withAgent, withLLM, withToolCall, LLMResponse } = sdk;
+import { init, withAgent, withLLM, withToolCall, LLMResponse, HumanMessage, ToolCallMessage, SystemMessage } from '../../tracing';
+import type { ResponseFunctionToolCall } from 'openai/resources/responses/responses.mjs';
 import type { FastifyInstance } from 'fastify';
 
 let mm: Awaited<ReturnType<typeof startMemoryMongo>>;
@@ -35,12 +35,9 @@ describe.skipIf(!RUN_MONGOMS)('LLM span persistence end-to-end (real server + me
     init({ mode: 'extended', endpoints: { extended: baseUrl }, defaultAttributes: { service: 'e2e-app' } });
     const toolCallId = 'tc_e2e_1';
     await withAgent({ threadId: 't1', agentName: 'agent1' }, async () => {
-        await withLLM({ context: [{ role: 'human', content: 'Hello' }] as any }, async () => {
-          return new LLMResponse({
-            raw: { text: 'Hi!' },
-            content: 'Hi! I will help you.',
-            toolCalls: [{ id: toolCallId, name: 'weather', arguments: { city: 'NYC' } }],
-          });
+        await withLLM({ context: [HumanMessage.fromText('Hello')] }, async () => {
+          const tc: ResponseFunctionToolCall = { type: 'function_call', call_id: toolCallId, name: 'weather', arguments: JSON.stringify({ city: 'NYC' }) };
+          return new LLMResponse({ raw: { text: 'Hi!' }, content: 'Hi! I will help you.', toolCalls: [new ToolCallMessage(tc)] });
         });
         await withToolCall({ toolCallId, name: 'weather', input: { city: 'NYC' } }, async () => {
           const result = { tempC: 21 };

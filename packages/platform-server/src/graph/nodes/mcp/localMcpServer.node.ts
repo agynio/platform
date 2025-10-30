@@ -280,7 +280,7 @@ export class LocalMCPServerNode extends Node<z.infer<typeof LocalMcpServerStatic
           },
         };
         if (this.nodeStateService) {
-          await this.nodeStateService.upsertNodeState(this.nodeId, state as unknown as Record<string, unknown>);
+          await this.nodeStateService.upsertNodeState(this.nodeId, state as Record<string, unknown>);
         }
       } catch (e) {
         this.logger.error(`[MCP:${this.config.namespace}] Failed to persist state`, e);

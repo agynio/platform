@@ -1,7 +1,7 @@
 import z from 'zod';
 
 import { FunctionTool } from '@agyn/llm';
-import { LoggerService } from '../../../core/services/logger.service';
+import { LoggerService } from '../../../../core/services/logger.service';
 import { MemoryService } from '../../../nodes/memory.repository';
 
 export const UnifiedMemoryToolStaticConfigSchema = z

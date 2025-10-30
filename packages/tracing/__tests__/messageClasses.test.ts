@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { SystemMessage, HumanMessage, ToolCallMessage, withLLM, init, LLMResponse } from '../src';
-import { ResponseMessage } from '@agyn/llm';
+import { ResponseMessage, AIMessage } from '@agyn/llm';
+import type { ResponseFunctionToolCall } from 'openai/resources/responses/responses.mjs';
 
 // mock fetch
 // @ts-ignore
@@ -14,10 +15,10 @@ describe('Message classes via @agyn/llm', () => {
     const hum = HumanMessage.fromText('hi');
     const response = new ResponseMessage({
       output: [
-        { type: 'message', role: 'assistant', content: [{ type: 'input_text', text: 'hello' }] },
-        new ToolCallMessage({ type: 'function_call', call_id: '1', name: 'tool', arguments: JSON.stringify({ a: 1 }) } as any).toPlain(),
+        AIMessage.fromText('hello').toPlain(),
+        new ToolCallMessage({ type: 'function_call', call_id: '1', name: 'tool', arguments: JSON.stringify({ a: 1 }) } satisfies ResponseFunctionToolCall).toPlain(),
       ],
-    } as any);
+    });
     expect(sys.role).toBe('system');
     expect(hum.role).toBe('user');
     const calls = response.output.filter((o) => o instanceof ToolCallMessage) as ToolCallMessage[];
@@ -27,12 +28,9 @@ describe('Message classes via @agyn/llm', () => {
 });
 
 describe('withLLM context normalization', () => {
-  it('accepts raw objects and converts them', async () => {
-    const rawContext = [
-      { role: 'system', content: 'sys' },
-      { role: 'user', content: 'hello' },
-    ];
-    const res = await withLLM({ context: rawContext as any }, async () => new LLMResponse({ raw: { content: 'ok' }, content: 'ok' }));
+  it('accepts ContextMessage instances only', async () => {
+    const ctx = [SystemMessage.fromText('sys'), HumanMessage.fromText('hello')];
+    const res = await withLLM({ context: ctx }, async () => new LLMResponse({ raw: { content: 'ok' }, content: 'ok' }));
     expect(res).toEqual({ content: 'ok' });
   });
 });

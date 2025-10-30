@@ -592,10 +592,11 @@ export class ContainerService {
     const c = this.docker.getContainer(containerId);
     try {
       await c.stop({ t: timeoutSec });
-    } catch (e) {
-      if (e?.statusCode === 304) {
+    } catch (e: unknown) {
+      const sc = typeof e === 'object' && e && 'statusCode' in e ? (e as { statusCode?: number }).statusCode : undefined;
+      if (sc === 304) {
         this.logger.debug(`Container already stopped cid=${containerId.substring(0, 12)}`);
-      } else if (e?.statusCode === 409) {
+      } else if (sc === 409) {
         // Conflict typically indicates removal already in progress; treat as benign
         this.logger.info(`Container stop conflict (likely removing) cid=${containerId.substring(0, 12)}`);
       } else {
@@ -610,8 +611,9 @@ export class ContainerService {
     const container = this.docker.getContainer(containerId);
     try {
       await container.remove({ force });
-    } catch (e) {
-      if (e?.statusCode === 404) {
+    } catch (e: unknown) {
+      const sc = typeof e === 'object' && e && 'statusCode' in e ? (e as { statusCode?: number }).statusCode : undefined;
+      if (sc === 404) {
         // Already removed – benign
         this.logger.debug(`Container already removed cid=${containerId.substring(0, 12)}`);
       } else {
@@ -733,7 +735,8 @@ export class ContainerService {
     this.logger.debug(
       `putArchive into container cid=${inspectData.Id.substring(0, 12)} path=${options?.path || ''} bytes=${Buffer.isBuffer(data) ? data.length : 'stream'}`,
     );
-    await container.putArchive(data as any, options as any);
+    if (Buffer.isBuffer(data)) await container.putArchive(data, options);
+    else await container.putArchive(data, options);
     void this.touchLastUsed(inspectData.Id);
   }
 }

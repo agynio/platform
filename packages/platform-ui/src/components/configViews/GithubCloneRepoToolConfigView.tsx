@@ -9,12 +9,12 @@ function isVaultRef(v: string) {
 
 export default function GithubCloneRepoToolConfigView({ value, onChange, readOnly, disabled }: StaticConfigViewProps) {
   const init = useMemo(() => ({ ...(value || {}) }), [value]);
-  type Cfg = { token?: ReferenceValue | string };
-  const initialToken = (() => {
-    const t = (init as unknown as Cfg).token;
+  const initialToken: ReferenceValue | string = (() => {
+    const t = (init as Record<string, unknown>)['token'];
     if (!t) return '';
     if (typeof t === 'string') return t;
-    return t;
+    if (t && typeof t === 'object' && 'value' in (t as Record<string, unknown>)) return t as ReferenceValue;
+    return '';
   })();
   const [token, setToken] = useState<ReferenceValue | string>(initialToken);
   const [errors, setErrors] = useState<string[]>([]);

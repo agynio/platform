@@ -10,7 +10,7 @@ class RO {
 interface G extends Global {
 	ResizeObserver?: typeof RO;
 }
-const g = globalThis as unknown as G;
+const g = globalThis as G;
 if (typeof g.ResizeObserver === 'undefined') {
 	g.ResizeObserver = RO;
 }

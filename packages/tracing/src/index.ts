@@ -539,4 +539,12 @@ export class SummarizeResponse<TRaw = unknown> {
 }
 
 // Re-export LLM message classes for convenience in SDK consumers/tests
-export { Message, SystemMessage as SystemMessage, HumanMessage as HumanMessage, AIMessage as AIMessage, ToolCallMessage as ToolCallMessage, ToolCallOutputMessage as ToolCallOutputMessage } from '@agyn/llm';
+export {
+  Message,
+  SystemMessage as SystemMessage,
+  HumanMessage as HumanMessage,
+  AIMessage as AIMessage,
+  ToolCallMessage as ToolCallMessage,
+  ToolCallOutputMessage as ToolCallOutputMessage,
+  ResponseMessage as ResponseMessage,
+} from '@agyn/llm';

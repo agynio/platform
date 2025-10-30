@@ -9,8 +9,13 @@ function isVaultRef(v: string) {
 
 export default function SlackTriggerConfigView({ value, onChange, readOnly, disabled, onValidate }: StaticConfigViewProps) {
   const init = useMemo(() => ({ ...(value || {}) }), [value]);
-  type Cfg = { app_token?: ReferenceValue | string };
-  const [app_token, setAppToken] = useState<ReferenceValue | string>(((init as unknown as Cfg).app_token) || '');
+  const [app_token, setAppToken] = useState<ReferenceValue | string>(() => {
+    const t = (init as Record<string, unknown>)['app_token'];
+    if (!t) return '';
+    if (typeof t === 'string') return t;
+    if (t && typeof t === 'object' && 'value' in (t as Record<string, unknown>)) return t as ReferenceValue;
+    return '';
+  });
 
   useEffect(() => {
     const errors: string[] = [];

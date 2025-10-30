@@ -474,8 +474,10 @@ export async function createServer(db: Db, opts: { logger?: boolean } = {}): Pro
     const find: Filter<LogDoc> = {} as Filter<LogDoc>;
     if (traceId) find.traceId = traceId;
     if (spanId) find.spanId = spanId;
-    if (level && ['debug', 'info', 'error'].includes(level)) find.level = level as any;
-    const docs = await logs.find(find).sort({ ts: -1 }).limit(limit).toArray();
+    const isLogLevel = (s: string): s is 'debug' | 'info' | 'error' => s === 'debug' || s === 'info' || s === 'error';
+    if (level && isLogLevel(level)) find.level = level;
+    const sort: import('mongodb').Sort = { ts: -1 };
+    const docs = await logs.find(find).sort(sort).limit(limit).toArray();
     return { items: docs };
   });
 

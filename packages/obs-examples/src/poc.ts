@@ -9,7 +9,12 @@ import {
   withSummarize,
   withSystem,
   withToolCall,
+  SystemMessage,
+  HumanMessage,
+  ToolCallOutputMessage,
+  ToolCallMessage,
 } from '@agyn/tracing';
+import { AIMessage, ResponseMessage } from '@agyn/tracing';
 
 async function main() {
   const endpoint = process.env.TRACING_SERVER_URL || 'http://localhost:4319';
@@ -26,69 +31,54 @@ async function main() {
   await withAgent({ threadId: 'demo-thread', agentName: 'demo-agent' }, async () => {
       // Loop 1: existing rich context -> tool
       const weatherToolCallId1 = 'tc_weather_1';
-      const richContext = [
-        { role: 'system', content: 'You are a helpful assistant specializing in weather and reminders.' },
-        { role: 'user', content: 'Hi assistant!' },
-        { role: 'assistant', content: 'Hello! How can I help you today?' },
-        { role: 'user', content: 'What is the weather in NYC?' },
-        { role: 'system', content: 'Ensure responses are concise.' },
-        { role: 'user', content: 'Also, set a reminder to check humidity.' },
-        { role: 'assistant', content: 'I can fetch the weather and set a reminder. One moment.' },
-        { role: 'tool', toolCallId: 'memory_lookup_1', content: 'No prior weather queries stored.' },
-        { role: 'user', content: 'Add Brooklyn specifically.' },
-        { role: 'assistant', content: 'Got it. Will include Brooklyn specifics.' },
-        { role: 'user', content: 'And include temperature in Celsius.' },
-        { role: 'system', content: 'Do not include sensitive data.' },
-        { role: 'user', content: 'What about sunrise time?' },
-        { role: 'assistant', content: 'I will retrieve current conditions and sunrise time.' },
-        {
-          role: 'system',
-          content:
-            'Formatting Guidelines:\n- Provide temperature in Celsius and Fahrenheit\n- Include sunrise and sunset on separate lines\n- If UV index > 7, add a caution line\n- Keep overall response under 120 words',
-        },
-        {
-          role: 'human',
-          content:
-            'Actually, could you also:\n1. Show humidity\n2. Show wind speed\n3. Provide a short recommendation about clothing\n4. Repeat the city name at the top\nThanks!',
-        },
-        {
-          role: 'ai',
-          content:
-            'Plan:\n- Fetch base weather (temp, humidity, wind)\n- Fetch astronomical data (sunrise/sunset)\n- Derive clothing recommendation from temperature + wind chill\n- Check UV index for safety notice\nProceeding with tool calls...',
-        },
-        {
-          role: 'human',
-          content:
-            '# Detailed Weather Report Request\n\nPlease include:\n\n## Sections\n- **Current Conditions**\n- **Astronomy** (sunrise/sunset)\n- **Advisories** (UV, wind)\n\n## Format\n1. Start with a title line.\n2. Provide a bullet list summary.\n3. Add a short code block showing JSON of raw key metrics.\n\n```json\n{ "want": ["tempC", "tempF", "humidity", "windKph" ] }\n```\n\nThanks!',
-        },
-        {
-          role: 'ai',
-          content:
-            'Acknowledged. I will structure the response as requested.\n\n```pseudo\nsteps = [\n  "gather_weather()",\n  "compute_advisories()",\n  "format_markdown()"\n]\n```',
-        },
-        {
-          role: 'tool',
-          toolCallId: 'weather_source_prefetch',
-          content: 'Prefetch complete: sources=[noaa, open-meteo]\nlat=40.7128 lon=-74.0060',
-        },
-        { role: 'tool', toolCallId: 'prior_summary_1', content: 'Previous summary: greeting only.' },
-        { role: 'user', content: 'Thanks!' },
-        { role: 'assistant', content: 'You are welcome. Proceeding with weather lookup.' },
-        { role: 'user', content: 'Can you also estimate UV index?' },
-        { role: 'system', content: 'If multiple tool calls needed, batch them.' },
-        { role: 'user', content: 'Let me know if you need clarification.' },
+
+      // Build richContext properly using message classes
+      const contextLoop1: Array<SystemMessage | HumanMessage | ResponseMessage | ToolCallOutputMessage> = [
+        SystemMessage.fromText('You are a helpful assistant specializing in weather and reminders.'),
+        HumanMessage.fromText('Hi assistant!'),
+        new ResponseMessage({ output: [AIMessage.fromText('Hello! How can I help you today?').toPlain()] }),
+        HumanMessage.fromText('What is the weather in NYC?'),
+        SystemMessage.fromText('Ensure responses are concise.'),
+        HumanMessage.fromText('Also, set a reminder to check humidity.'),
+        new ResponseMessage({ output: [AIMessage.fromText('I can fetch the weather and set a reminder. One moment.').toPlain()] }),
+        ToolCallOutputMessage.fromResponse('memory_lookup_1', 'No prior weather queries stored.'),
+        HumanMessage.fromText('Add Brooklyn specifically.'),
+        new ResponseMessage({ output: [AIMessage.fromText('Got it. Will include Brooklyn specifics.').toPlain()] }),
+        HumanMessage.fromText('And include temperature in Celsius.'),
+        SystemMessage.fromText('Do not include sensitive data.'),
+        HumanMessage.fromText('What about sunrise time?'),
+        new ResponseMessage({ output: [AIMessage.fromText('I will retrieve current conditions and sunrise time.').toPlain()] }),
+        SystemMessage.fromText(
+          'Formatting Guidelines:\n- Provide temperature in Celsius and Fahrenheit\n- Include sunrise and sunset on separate lines\n- If UV index > 7, add a caution line\n- Keep overall response under 120 words',
+        ),
+        HumanMessage.fromText(
+          'Actually, could you also:\n1. Show humidity\n2. Show wind speed\n3. Provide a short recommendation about clothing\n4. Repeat the city name at the top\nThanks!',
+        ),
+        new ResponseMessage({ output: [AIMessage.fromText('Plan:\n- Fetch base weather (temp, humidity, wind)\n- Fetch astronomical data (sunrise/sunset)\n- Derive clothing recommendation from temperature + wind chill\n- Check UV index for safety notice\nProceeding with tool calls...').toPlain()] }),
+        HumanMessage.fromText(
+          '# Detailed Weather Report Request\n\nPlease include:\n\n## Sections\n- **Current Conditions**\n- **Astronomy** (sunrise/sunset)\n- **Advisories** (UV, wind)\n\n## Format\n1. Start with a title line.\n2. Provide a bullet list summary.\n3. Add a short code block showing JSON of raw key metrics.\n\n```json\n{ "want": ["tempC", "tempF", "humidity", "windKph" ] }\n```\n\nThanks!',
+        ),
+        new ResponseMessage({ output: [AIMessage.fromText('Acknowledged. I will structure the response as requested.\n\n```pseudo\nsteps = [\n  "gather_weather()",\n  "compute_advisories()",\n  "format_markdown()"\n]\n```').toPlain()] }),
+        ToolCallOutputMessage.fromResponse(
+          'weather_source_prefetch',
+          'Prefetch complete: sources=[noaa, open-meteo]\nlat=40.7128 lon=-74.0060',
+        ),
+        ToolCallOutputMessage.fromResponse('prior_summary_1', 'Previous summary: greeting only.'),
+        HumanMessage.fromText('Thanks!'),
+        new ResponseMessage({ output: [AIMessage.fromText('You are welcome. Proceeding with weather lookup.').toPlain()] }),
+        HumanMessage.fromText('Can you also estimate UV index?'),
+        SystemMessage.fromText('If multiple tool calls needed, batch them.'),
+        HumanMessage.fromText('Let me know if you need clarification.'),
       ];
 
       let llmResult1Content: string | undefined;
-      const llmResult1 = await withLLM({ context: richContext as any }, async () => {
+      const llmResult1 = await withLLM({ context: contextLoop1 }, async () => {
         await new Promise((r) => setTimeout(r, 800));
         const raw = { text: 'Initial weather request acknowledged.' };
         const resp = new LLMResponse({
           raw,
           content: 'I will look up the weather for NYC including Brooklyn details.',
-          toolCalls: [
-            { type: 'function_call', call_id: weatherToolCallId1, name: 'weather', arguments: JSON.stringify({ city: 'NYC' }) } as any,
-          ],
+          toolCalls: [],
         });
         llmResult1Content = resp.content;
         return resp;
@@ -115,9 +105,9 @@ async function main() {
       const llmResult2 = await withLLM(
         {
           context: [
-            { role: 'system', content: 'You are an assistant generating human-friendly advisories.' },
-            { role: 'user', content: 'Provide clothing and UV advice given current conditions.' },
-            { role: 'tool', toolCallId: weatherToolCallId1, content: JSON.stringify(weather1) },
+            SystemMessage.fromText('You are an assistant generating human-friendly advisories.'),
+            HumanMessage.fromText('Provide clothing and UV advice given current conditions.'),
+            ToolCallOutputMessage.fromResponse(weatherToolCallId1, JSON.stringify(weather1)),
           ],
         },
         async () => {
@@ -125,9 +115,7 @@ async function main() {
           const resp = new LLMResponse({
             raw: { text: 'Computing advisories.' },
             content: 'Based on current conditions I will compute advisory.',
-            toolCalls: [
-              { type: 'function_call', call_id: advisoryToolCallId, name: 'advisory', arguments: JSON.stringify({ tempC: weather1.tempC, humidity: weather1.humidity }) } as any,
-            ],
+            toolCalls: [],
           });
           llmResult2Content = resp.content;
           return resp;
@@ -152,18 +140,12 @@ async function main() {
         await withLLM(
           {
             context: [
-              { role: 'system', content: 'Assistant deciding whether to invoke unreliable tool.' },
-              { role: 'user', content: 'Please run the unreliable step.' },
+              SystemMessage.fromText('Assistant deciding whether to invoke unreliable tool.'),
+              HumanMessage.fromText('Please run the unreliable step.'),
             ],
           },
           async () => {
-            return new LLMResponse({
-              raw: { text: 'About to invoke failing tool.' },
-              content: 'Attempting failing tool call now.',
-              toolCalls: [
-                { type: 'function_call', call_id: failingToolCallId, name: 'unstable_tool', arguments: JSON.stringify({ simulate: 'failure' }) } as any,
-              ],
-            });
+            return new LLMResponse({ raw: { text: 'About to invoke failing tool.' }, content: 'Attempting failing tool call now.', toolCalls: [] });
           },
         );
 
@@ -188,17 +170,15 @@ async function main() {
       await withLLM(
         {
           context: [
-            { role: 'system', content: 'Assistant planning an explicit error tool call.' },
-            { role: 'user', content: 'Invoke the checker tool even if it will report an error.' },
+            SystemMessage.fromText('Assistant planning an explicit error tool call.'),
+            HumanMessage.fromText('Invoke the checker tool even if it will report an error.'),
           ],
         },
         async () =>
           new LLMResponse({
             raw: { text: 'Preparing explicit error tool call' },
             content: 'Calling checker tool which will return an error structure.',
-            toolCalls: [
-              { type: 'function_call', call_id: explicitErrorToolCallId, name: 'checker', arguments: JSON.stringify({ mode: 'validate', payloadSize: 0 }) } as any,
-            ],
+            toolCalls: [],
           }),
       );
 
@@ -225,12 +205,11 @@ async function main() {
       const llmResult3 = await withLLM(
         {
           context: [
-            { role: 'system', content: 'You are a summarizer.' },
-            { role: 'tool', toolCallId: weatherToolCallId1, content: JSON.stringify(weather1) },
-            { role: 'tool', toolCallId: advisoryToolCallId, content: JSON.stringify(advisory) },
-            // Include failing tool call reference as a tool message so it appears in summary context (optional)
-            { role: 'tool', toolCallId: 'tc_fail_demo_1', content: 'Tool failed intentionally (no output).' },
-            { role: 'user', content: 'Provide a concise final weather + advisory summary.' },
+            SystemMessage.fromText('You are a summarizer.'),
+            ToolCallOutputMessage.fromResponse(weatherToolCallId1, JSON.stringify(weather1)),
+            ToolCallOutputMessage.fromResponse(advisoryToolCallId, JSON.stringify(advisory)),
+            ToolCallOutputMessage.fromResponse('tc_fail_demo_1', 'Tool failed intentionally (no output).'),
+            HumanMessage.fromText('Provide a concise final weather + advisory summary.'),
           ],
         },
         async () => {
@@ -249,25 +228,25 @@ async function main() {
       await withSummarize(
         {
           oldContext: [
-              { role: 'system', content: 'Conversation recap preparation.' },
-              { role: 'assistant', content: llmResult1Content || 'No first response' },
-              { role: 'tool', toolCallId: weatherToolCallId1, content: JSON.stringify(weather1) },
-              { role: 'assistant', content: llmResult2Content || 'No second response' },
-              { role: 'tool', toolCallId: advisoryToolCallId, content: JSON.stringify(advisory) },
-              { role: 'assistant', content: llmResult3Content || 'No third response' },
-            ] as any,
-          },
+            SystemMessage.fromText('Conversation recap preparation.'),
+            new ResponseMessage({ output: [AIMessage.fromText(llmResult1Content || 'No first response').toPlain()] }),
+            ToolCallOutputMessage.fromResponse(weatherToolCallId1, JSON.stringify(weather1)),
+            new ResponseMessage({ output: [AIMessage.fromText(llmResult2Content || 'No second response').toPlain()] }),
+            ToolCallOutputMessage.fromResponse(advisoryToolCallId, JSON.stringify(advisory)),
+            new ResponseMessage({ output: [AIMessage.fromText(llmResult3Content || 'No third response').toPlain()] }),
+          ],
+        },
         async () => {
           await new Promise((r) => setTimeout(r, 300));
           return new SummarizeResponse({
             raw: { note: 'synthetic summarization output' },
             summary: 'Performed 3-loop interaction (weather, advisory, final summary).',
             newContext: [
-              { role: 'system', content: 'Conversation summary context' },
-              { role: 'tool', toolCallId: weatherToolCallId1, content: JSON.stringify(weather1) },
-              { role: 'tool', toolCallId: advisoryToolCallId, content: JSON.stringify(advisory) },
-              { role: 'assistant', content: llmResult3Content ?? 'No final content' },
-            ] as any,
+              SystemMessage.fromText('Conversation summary context'),
+              ToolCallOutputMessage.fromResponse(weatherToolCallId1, JSON.stringify(weather1)),
+              ToolCallOutputMessage.fromResponse(advisoryToolCallId, JSON.stringify(advisory)),
+              new ResponseMessage({ output: [AIMessage.fromText(llmResult3Content ?? 'No final content').toPlain()] }),
+            ],
           });
         },
       );
