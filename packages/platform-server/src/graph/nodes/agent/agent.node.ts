@@ -261,37 +261,40 @@ export class AgentNode extends Node<AgentStaticConfig> {
     }
 
     this.runningThreads.add(thread);
+    let result: ResponseMessage | ToolCallOutputMessage;
+    try {
+      result = await withAgent(
+        { threadId: thread, nodeId: this.nodeId, inputParameters: [{ thread }, { messages }] },
+        async () => {
+          const loop = await this.prepareLoop();
+          // Process provided messages immediately; if none provided (auto-run), drain the queue
+          const history: HumanMessage[] = messages.map((msg) => HumanMessage.fromText(JSON.stringify(msg)));
+          const finishSignal = new Signal();
+
+          const newState = await loop.invoke(
+            { messages: history },
+            { threadId: thread, finishSignal, callerAgent: this },
+            { start: 'load' },
+          );
+
+          const result = newState.messages.at(-1);
+
+          if ((finishSignal.isActive && result instanceof ToolCallOutputMessage) || result instanceof ResponseMessage) {
+            this.logger.info(`Agent response in thread ${thread}: ${result?.text}`);
+            return result;
+          }
+
+          throw new Error('Agent did not produce a valid response message.');
+        },
+      );
+    } finally {
+      this.runningThreads.delete(thread);
+    }
 
     const mode =
       (this.config.processBuffer ?? 'allTogether') === 'oneByOne' ? ProcessBuffer.OneByOne : ProcessBuffer.AllTogether;
-    const result = await withAgent(
-      { threadId: thread, nodeId: this.nodeId, inputParameters: [{ thread }, { messages }] },
-      async () => {
-        const loop = await this.prepareLoop();
-        // Process provided messages immediately; if none provided (auto-run), drain the queue
-        const history: HumanMessage[] = messages.map((msg) => HumanMessage.fromText(JSON.stringify(msg)));
-        const finishSignal = new Signal();
-
-        const newState = await loop.invoke(
-          { messages: history },
-          { threadId: thread, finishSignal, callerAgent: this },
-          { start: 'load' },
-        );
-
-        const result = newState.messages.at(-1);
-
-        if ((finishSignal.isActive && result instanceof ToolCallOutputMessage) || result instanceof ResponseMessage) {
-          this.logger.info(`Agent response in thread ${thread}: ${result?.text}`);
-          this.runningThreads.delete(thread);
-          return result;
-        }
-
-        this.runningThreads.delete(thread);
-        throw new Error('Agent did not produce a valid response message.');
-      },
-    );
-
     const nextMessages = this.buffer.tryDrain(thread, mode);
+
     if (nextMessages.length > 0) {
       void this.invoke(thread, nextMessages);
     }
