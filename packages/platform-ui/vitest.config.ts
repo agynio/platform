@@ -22,6 +22,8 @@ export default defineConfig({
     alias: {
       '@': path.resolve(__dirname, './src'),
       '@agyn/ui': path.resolve(__dirname, '../../packages/ui/src'),
+      // Test harness: stub socket.io-client to avoid real network in JSDOM
+      'socket.io-client': path.resolve(__dirname, './test/mocks/socket-io-client.ts'),
       // Explicit aliases for Radix UI deps when importing workspace UI sources
       '@radix-ui/react-accordion': path.resolve(__dirname, './node_modules/@radix-ui/react-accordion'),
       '@radix-ui/react-alert-dialog': path.resolve(__dirname, './node_modules/@radix-ui/react-alert-dialog'),
