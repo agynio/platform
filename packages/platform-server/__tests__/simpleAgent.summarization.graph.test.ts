@@ -7,7 +7,6 @@ import { ConfigService } from '../src/core/services/config.service';
 import { AgentNode as Agent } from '../src/graph/nodes/agent/agent.node';
 import { LLMProvisioner } from '../src/llm/provisioners/llm.provisioner';
 import { AgentRunService } from '../src/graph/nodes/agentRun.repository';
-import { ThreadRunCoordinatorService } from '../src/graph/nodes/agent/threadRunCoordinator.service';
 
 // Mock Prisma client to avoid requiring generated client in tests
 vi.mock('@prisma/client', () => ({ PrismaClient: class {} }));
@@ -32,7 +31,6 @@ describe('Agent summarization graph', () => {
         { provide: ConfigService, useValue: new ConfigService({ githubAppId: '1', githubAppPrivateKey: 'k', githubInstallationId: 'i', openaiApiKey: 'x', githubToken: 't', mongodbUrl: 'm' }) },
         { provide: LLMProvisioner, useValue: provisioner },
         { provide: AgentRunService, useValue: runsStub },
-        ThreadRunCoordinatorService,
         Agent,
       ],
     }).compile();

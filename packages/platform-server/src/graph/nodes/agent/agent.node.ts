@@ -32,7 +32,6 @@ import { Signal } from '../../../signal';
 
 import { BaseToolNode } from '../tools/baseToolNode';
 import { MessagesBuffer, ProcessBuffer, BufferMessage } from './messagesBuffer';
-import { ThreadRunCoordinatorService } from './threadRunCoordinator.service';
 
 /**
  * Zod schema describing static configuration for Agent.
@@ -117,7 +116,6 @@ export class AgentNode extends Node<AgentStaticConfig> {
     @Inject(LLMProvisioner) protected llmProvisioner: LLMProvisioner,
     @Inject(AgentRunService) protected readonly runs: AgentRunService,
     @Inject(ModuleRef) protected readonly moduleRef: ModuleRef,
-    @Inject(ThreadRunCoordinatorService) protected readonly coordinator: ThreadRunCoordinatorService,
   ) {
     super(logger);
   }
@@ -227,10 +225,7 @@ export class AgentNode extends Node<AgentStaticConfig> {
           return { state, next: null };
         }
         if (self.config.whenBusy === 'injectAfterTools') {
-          const drainMode = (self.config.processBuffer ?? 'allTogether') === 'allTogether'
-            ? ProcessBuffer.AllTogether
-            : ProcessBuffer.OneByOne;
-          const drained = self.buffer.tryDrain(ctx.threadId, drainMode);
+          const drained = self.buffer.tryDrain(ctx.threadId, ProcessBuffer.AllTogether);
           if (drained.length > 0) {
             const injected = drained.map((d) => HumanMessage.fromText(JSON.stringify(d)));
             state = { ...state, messages: [...state.messages, ...injected] };
@@ -265,37 +260,45 @@ export class AgentNode extends Node<AgentStaticConfig> {
     return loop;
   }
   async invoke(thread: string, messages: BufferMessage[]): Promise<ResponseMessage | ToolCallOutputMessage> {
+    // Buffering & run tracking: enqueue and drain respecting config
+
     this.buffer.setDebounceMs(this.config.debounceMs ?? 0);
     this.buffer.enqueue(thread, messages);
+    // Generate run id for persistence
+    const runId = `${thread}/${Date.now()}`;
+    await this.runs.startRun(this.nodeId, thread, runId);
 
-    const handle = this.coordinator.acquireOrEnqueue(
-      { agentNodeId: this.nodeId, threadId: thread, mode: this.config.whenBusy ?? 'wait' },
+    return await withAgent(
+      { threadId: thread, nodeId: this.nodeId, inputParameters: [{ thread }, { messages }] },
       async () => {
-        const runId = `${thread}/${Date.now()}`;
-        await this.runs.startRun(this.nodeId, thread, runId);
         const loop = await this.prepareLoop();
-        const drainMode = (this.config.processBuffer ?? 'allTogether') === 'allTogether'
-          ? ProcessBuffer.AllTogether
-          : ProcessBuffer.OneByOne;
-        const drained = this.buffer.tryDrain(thread, drainMode);
-        const toProcess = drained.length > 0 ? drained : messages;
-        const history = toProcess.map((m) => HumanMessage.fromText(JSON.stringify(m)));
+        // Drain buffer per config
+        const mode = (this.config.processBuffer ?? 'allTogether') === 'allTogether' ? 'allTogether' : 'oneByOne';
+        const drained: BufferMessage[] = this.buffer.tryDrain(
+          thread,
+          mode === 'allTogether' ? ProcessBuffer.AllTogether : ProcessBuffer.OneByOne,
+        );
+        const toProcess: BufferMessage[] = drained.length > 0 ? drained : messages;
+        const history: HumanMessage[] = toProcess.map((msg) => HumanMessage.fromText(JSON.stringify(msg)));
         const finishSignal = new Signal();
+
         const newState = await loop.invoke(
           { messages: history },
           { threadId: thread, finishSignal, callerAgent: this },
           { start: 'load' },
         );
+
         const result = newState.messages.at(-1);
+
         if ((finishSignal.isActive && result instanceof ToolCallOutputMessage) || result instanceof ResponseMessage) {
+          this.logger.info(`Agent response in thread ${thread}: ${result?.text}`);
           await this.runs.markTerminated(this.nodeId, runId);
           return result;
         }
+
         throw new Error('Agent did not produce a valid response message.');
       },
     );
-
-    return await handle.result;
   }
 
   public async listActiveThreads(prefix?: string): Promise<string[]> {
