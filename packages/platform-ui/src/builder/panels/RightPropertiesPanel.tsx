@@ -5,11 +5,9 @@ import { useTemplates } from '../useTemplates';
 // Runtime graph components & hooks
 // Removed NodeDetailsPanel wrapper; using granular components directly
 // Custom config views only; legacy RJSF forms removed
-import { useTemplatesCache } from '@/lib/graph/templates.provider';
 import { NodeStatusBadges } from '@/components/graph/NodeStatusBadges';
 import { NodeActionButtons } from '@/components/graph/NodeActionButtons';
 import { useNodeAction, useNodeStatus } from '@/lib/graph/hooks';
-import { canProvision } from '@/lib/graph/capabilities';
 import { NixPackagesSection } from '@/components/nix/NixPackagesSection';
 import { getConfigView } from '@/components/configViews/registry';
 // Registry is initialized once in main.tsx via initConfigViewsRegistry()
@@ -41,7 +39,7 @@ function RightPropertiesPanelBody({
   onChange: (id: string, data: Partial<BuilderPanelNodeData>) => void;
 }) {
   const { templates } = useTemplates();
-  const runtimeTemplates = useTemplatesCache();
+  const action = useNodeAction(node.id);
 
   const { data } = node;
   // Derive readOnly/disabled from runtime status where applicable
@@ -64,40 +62,17 @@ function RightPropertiesPanelBody({
     [cfg, nodeState, data.name, data.template, node.id, onChange],
   );
 
-  const runtimeTemplate = runtimeTemplates.getTemplate(data.template);
-  const kind = runtimeTemplate?.kind as string | undefined;
-  // Show Runtime Status if lifecycle-managed kinds or if status has provisionStatus
-  const lifecycleKinds = new Set(['mcp', 'trigger', 'service']);
-  const { data: statusForGate } = useNodeStatus(node.id);
-  const hasRuntimeCaps = lifecycleKinds.has(kind || '') || !!statusForGate?.provisionStatus;
+  // Always render Runtime Status; RuntimeNodeSection defaults to 'not_ready'
 
-  function RuntimeNodeSection({ nodeId, templateName }: { nodeId: string; templateName: string }) {
+  function RuntimeNodeSection({ nodeId }: { nodeId: string }) {
     const { data: status } = useNodeStatus(nodeId);
-    const action = useNodeAction(nodeId);
-    const { getTemplate } = useTemplatesCache();
-    const tmpl = getTemplate(templateName);
-    const provisionable = tmpl ? canProvision(tmpl) : true;
-    // Show block whenever lifecycle-managed kinds or provision status exists (parent gate handles kinds)
     const state = status?.provisionStatus?.state ?? 'not_ready';
     const isPaused = !!status?.isPaused;
     const detail = status?.provisionStatus?.details;
-    const disableAll = state === 'deprovisioning';
-    const canStart =
-      provisionable &&
-      ['not_ready', 'error', 'provisioning_error', 'deprovisioning_error'].includes(state) &&
-      !disableAll;
-    const canStop = provisionable && (state === 'ready' || state === 'provisioning') && !disableAll;
+    // Runtime section only shows status badges per issue #519
     return (
       <div className="space-y-3 text-xs">
         <NodeStatusBadges state={state} isPaused={isPaused} detail={detail} />
-        <NodeActionButtons
-          provisionable={provisionable}
-          pausable={false}
-          canStart={canStart}
-          canStop={canStop}
-          onStart={() => action.mutate('provision')}
-          onStop={() => action.mutate('deprovision')}
-        />
       </div>
     );
   }
@@ -126,12 +101,10 @@ function RightPropertiesPanelBody({
 
   return (
     <div className="space-y-4">
-      {hasRuntimeCaps && (
-        <div className="space-y-2">
-          <div className="text-[10px] uppercase text-muted-foreground">Runtime Status</div>
-          <RuntimeNodeSection nodeId={node.id} templateName={data.template} />
-        </div>
-      )}
+      <div className="space-y-2">
+        <div className="text-[10px] uppercase text-muted-foreground">Runtime Status</div>
+        <RuntimeNodeSection nodeId={node.id} />
+      </div>
       <div className="space-y-2">
         <div className="text-[10px] uppercase text-muted-foreground">Static Configuration</div>
         {StaticView ? (
@@ -163,6 +136,25 @@ function RightPropertiesPanelBody({
         ) : (
           <div className="text-xs text-muted-foreground">No custom view registered for {data.template} (state)</div>
         )}
+        {/* Provision/Deprovision actions under Node State per issue #519 */}
+        {(() => {
+          const state = status?.provisionStatus?.state ?? 'not_ready';
+          const disableActions = state === 'deprovisioning';
+          const canStart =
+            ['not_ready', 'error', 'provisioning_error', 'deprovisioning_error'].includes(state) &&
+            !disableActions;
+          const canStop = (state === 'ready' || state === 'provisioning') && !disableActions;
+          return (
+            <NodeActionButtons
+              provisionable={true}
+              pausable={false}
+              canStart={canStart}
+              canStop={canStop}
+              onStart={() => action.mutate('provision')}
+              onStop={() => action.mutate('deprovision')}
+            />
+          );
+        })()}
       </div>
       {data.template === 'containerProvider' && (
         <div className="space-y-2">

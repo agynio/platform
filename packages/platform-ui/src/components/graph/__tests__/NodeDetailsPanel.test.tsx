@@ -4,11 +4,7 @@ import { render, screen, fireEvent } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import NodeDetailsPanel from '../NodeDetailsPanel';
 
-vi.mock('../../../lib/graph/templates.provider', () => ({
-  useTemplatesCache: () => ({
-    getTemplate: (name: string) => ({ name, title: name, kind: 'tool', sourcePorts: {}, targetPorts: {}, capabilities: { pausable: true } }),
-  }),
-}));
+// No templates provider mock needed; actions and badges are driven by status alone
 
 let mockStatus: any = { isPaused: false, provisionStatus: { state: 'not_ready' } };
 let mockMutate = vi.fn();
@@ -40,10 +36,10 @@ describe('NodeDetailsPanel', () => {
     expect(screen.getByText('not_ready')).toBeInTheDocument();
   });
 
-  it('enables Start on not_ready and calls provision', () => {
+  it('enables Provision on not_ready and calls provision', () => {
     mockStatus = { isPaused: false, provisionStatus: { state: 'not_ready' } };
     renderPanel();
-    const start = screen.getByText('Start');
+    const start = screen.getByText('Provision');
     expect(start).not.toBeDisabled();
     fireEvent.click(start);
     expect(mockMutate).toHaveBeenCalledWith('provision');
@@ -51,10 +47,10 @@ describe('NodeDetailsPanel', () => {
 
   // Pause/Resume removed; Start/Stop only per server API alignment
 
-  it('enables Stop when ready', () => {
+  it('enables Deprovision when ready', () => {
     mockStatus = { isPaused: false, provisionStatus: { state: 'ready' } };
     renderPanel();
-    const stop = screen.getByText('Stop');
+    const stop = screen.getByText('Deprovision');
     expect(stop).not.toBeDisabled();
     fireEvent.click(stop);
     expect(mockMutate).toHaveBeenCalledWith('deprovision');

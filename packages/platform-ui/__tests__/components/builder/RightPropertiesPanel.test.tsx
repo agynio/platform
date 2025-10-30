@@ -17,7 +17,7 @@ function makeNode(template: string, id = 'n1'): Node<BuilderPanelNodeData> {
   };
 }
 
-const onChange = vi.fn();
+const onChange = vi.fn<(id: string, data: Partial<BuilderPanelNodeData>) => void>();
 
 vi.mock('@/lib/graph/templates.provider', () => ({
   useTemplatesCache: () => ({
@@ -29,21 +29,12 @@ vi.mock('@/lib/graph/templates.provider', () => ({
   }),
 }));
 
-vi.mock('@/lib/graph/capabilities', async () => {
-  const actual = await vi.importActual<any>('@/lib/graph/capabilities');
-  return {
-    ...actual,
-    hasStaticConfigByName: () => true,
-    hasDynamicConfigByName: () => true,
-    canPause: () => false,
-    canProvision: () => false,
-  };
-});
+// No capabilities mock needed for these tests
 
 // Avoid requiring QueryClientProvider in this shallow unit test
 vi.mock('@/lib/graph/hooks', () => ({
   useNodeStatus: () => ({ data: undefined }),
-  useNodeAction: () => ({ mutate: () => {} }),
+  useNodeAction: () => ({ mutate: (_action: 'provision' | 'deprovision') => {} }),
 }));
 
 describe('RightPropertiesPanel', () => {

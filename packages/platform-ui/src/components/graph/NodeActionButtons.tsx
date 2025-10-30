@@ -19,10 +19,10 @@ export function NodeActionButtons({ provisionable, pausable, canStart, canStop, 
         {provisionable && (
           <>
             <Button size="sm" variant="outline" onClick={onStart} disabled={!canStart}>
-              Start
+              Provision
             </Button>
             <Button size="sm" variant="outline" onClick={onStop} disabled={!canStop}>
-              Stop
+              Deprovision
             </Button>
           </>
         )}

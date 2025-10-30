@@ -1,15 +1,12 @@
 // React import not needed with react-jsx runtime
 import { Button, Badge } from '@agyn/ui';
 import { useNodeStatus, useNodeAction } from '../../lib/graph/hooks';
-import { useTemplatesCache } from '../../lib/graph/templates.provider';
 
 interface Props { nodeId: string; templateName: string; }
 
 export default function NodeDetailsPanel({ nodeId, templateName }: Props) {
   const { data: status } = useNodeStatus(nodeId);
   const action = useNodeAction(nodeId);
-  const { getTemplate } = useTemplatesCache();
-  const tmpl = getTemplate(templateName);
 
   // Default to not_ready (tests expect this baseline) until first fetch resolves
   const provisionState = status?.provisionStatus?.state || 'not_ready';
@@ -24,8 +21,7 @@ export default function NodeDetailsPanel({ nodeId, templateName }: Props) {
         <Badge variant={provisionState === 'ready' ? 'secondary' : provisionState === 'error' ? 'destructive' : 'neutral'}>
           {provisionState}
         </Badge>
-        {tmpl?.capabilities?.pausable && <Badge variant="outline">pausable</Badge>}
-        {/* Pause/Resume removed per server alignment */}
+        {/* Pause/Resume removed per server alignment; badge removed */}
       </div>
       <div className="flex gap-2 items-center flex-wrap">
         <Button
@@ -34,7 +30,7 @@ export default function NodeDetailsPanel({ nodeId, templateName }: Props) {
           variant="outline"
           disabled={!canStart}
           onClick={() => action.mutate('provision')}
-        >Start</Button>
+        >Provision</Button>
         {/* Pause/Resume removed; only Start/Stop */}
         <Button
           type="button"
@@ -42,7 +38,7 @@ export default function NodeDetailsPanel({ nodeId, templateName }: Props) {
           variant="outline"
           disabled={!canStop}
           onClick={() => action.mutate('deprovision')}
-        >Stop</Button>
+        >Deprovision</Button>
       </div>
     </div>
   );
