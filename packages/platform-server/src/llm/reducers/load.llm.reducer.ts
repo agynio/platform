@@ -5,10 +5,10 @@ import { ConversationStateRepository } from '../repositories/conversationState.r
 import type { LLMContext, LLMState } from '../types';
 
 import { LoggerService } from '../../core/services/logger.service';
-import { deserializeState, isPlainLLMState } from '../utils/serialization';
+import { PersistenceBaseLLMReducer } from './persistenceBase.llm.reducer';
 
 @Injectable()
-export class LoadLLMReducer extends Reducer<LLMState, LLMContext> {
+export class LoadLLMReducer extends PersistenceBaseLLMReducer {
   constructor(
     @Inject(LoggerService) private logger: LoggerService,
     @Inject(PrismaService) private prismaService: PrismaService,
@@ -25,8 +25,8 @@ export class LoadLLMReducer extends Reducer<LLMState, LLMContext> {
       const existing = await repo.get(ctx.threadId, nodeId);
       if (!existing?.state) return state;
       // Merge: existing.messages + incoming messages; keep latest summary
-      if (!isPlainLLMState(existing.state)) return state;
-      const persisted = deserializeState(existing.state);
+      if (!this.isPlainLLMState(existing.state)) return state;
+      const persisted = this.deserializeState(existing.state);
 
       const merged: LLMState = {
         summary: persisted.summary,
