@@ -105,6 +105,25 @@ function RightPropertiesPanelBody({
         <div className="text-[10px] uppercase text-muted-foreground">Runtime Status</div>
         <RuntimeNodeSection nodeId={node.id} />
       </div>
+      {/* Provision/Deprovision actions placed directly after Runtime Status, before Static Configuration per issue #532 */}
+      {(() => {
+        const state = status?.provisionStatus?.state ?? 'not_ready';
+        const disableActions = state === 'deprovisioning';
+        const canStart =
+          ['not_ready', 'error', 'provisioning_error', 'deprovisioning_error'].includes(state) &&
+          !disableActions;
+        const canStop = (state === 'ready' || state === 'provisioning') && !disableActions;
+        return (
+          <NodeActionButtons
+            provisionable={true}
+            pausable={false}
+            canStart={canStart}
+            canStop={canStop}
+            onStart={() => action.mutate('provision')}
+            onStop={() => action.mutate('deprovision')}
+          />
+        );
+      })()}
       <div className="space-y-2">
         <div className="text-[10px] uppercase text-muted-foreground">Static Configuration</div>
         {StaticView ? (
@@ -136,25 +155,6 @@ function RightPropertiesPanelBody({
         ) : (
           <div className="text-xs text-muted-foreground">No custom view registered for {data.template} (state)</div>
         )}
-        {/* Provision/Deprovision actions under Node State per issue #519 */}
-        {(() => {
-          const state = status?.provisionStatus?.state ?? 'not_ready';
-          const disableActions = state === 'deprovisioning';
-          const canStart =
-            ['not_ready', 'error', 'provisioning_error', 'deprovisioning_error'].includes(state) &&
-            !disableActions;
-          const canStop = (state === 'ready' || state === 'provisioning') && !disableActions;
-          return (
-            <NodeActionButtons
-              provisionable={true}
-              pausable={false}
-              canStart={canStart}
-              canStop={canStop}
-              onStart={() => action.mutate('provision')}
-              onStop={() => action.mutate('deprovision')}
-            />
-          );
-        })()}
       </div>
       {data.template === 'containerProvider' && (
         <div className="space-y-2">
