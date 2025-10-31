@@ -1,4 +1,4 @@
-import { Controller, Get, Inject } from '@nestjs/common';
+import { Controller, Get, Inject, Query, Res } from '@nestjs/common';
 import type { FastifyReply } from 'fastify';
 import { z } from 'zod';
 import semver from 'semver';
@@ -160,7 +160,7 @@ export class NixController {
   }
 
   @Get('packages')
-  async packages(query: Record<string, unknown>, reply: FastifyReply) {
+  async packages(@Query() query: Record<string, unknown>, @Res({ passthrough: true }) reply: FastifyReply) {
     try {
       const raw = (query || {}) as Record<string, unknown>;
       const parsed = this.packagesQuerySchema.safeParse(raw);
@@ -208,7 +208,7 @@ export class NixController {
   }
 
   @Get('versions')
-  async versions(query: Record<string, unknown>, reply: FastifyReply) {
+  async versions(@Query() query: Record<string, unknown>, @Res({ passthrough: true }) reply: FastifyReply) {
     try {
       const raw = (query || {}) as Record<string, unknown>;
       const parsed = this.versionsQuerySchema.safeParse(raw);
@@ -260,7 +260,7 @@ export class NixController {
   }
 
   @Get('resolve')
-  async resolve(query: Record<string, unknown>, reply: FastifyReply) {
+  async resolve(@Query() query: Record<string, unknown>, @Res({ passthrough: true }) reply: FastifyReply) {
     try {
       const raw = (query || {}) as Record<string, unknown>;
       const parsed = this.resolveQuerySchema.safeParse(raw);
