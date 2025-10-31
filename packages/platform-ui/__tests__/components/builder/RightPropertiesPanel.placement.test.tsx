@@ -42,18 +42,25 @@ describe('RightPropertiesPanel placement and enablement', () => {
     onChange.mockReset();
   });
 
-  it('renders Actions under the Node State section, not under Runtime Status', () => {
+  it('renders Actions directly after Runtime Status and before Static Configuration', () => {
     render(<RightPropertiesPanel node={makeNode('t')} onChange={onChange} />);
     const runtimeHeader = screen.getByText('Runtime Status');
+    const staticHeader = screen.getByText('Static Configuration');
     const nodeStateHeader = screen.getByText('Node State');
 
-    // Actions should be within Node State block
     const actionsHeader = screen.getByText('Actions');
     expect(actionsHeader).toBeInTheDocument();
-    expect(nodeStateHeader.parentElement?.contains(actionsHeader)).toBe(true);
 
-    // And not inside the Runtime Status block
-    expect(runtimeHeader.parentElement?.contains(actionsHeader)).toBe(false);
+    // Ensure Actions is not inside Node State
+    expect(nodeStateHeader.parentElement?.contains(actionsHeader)).toBe(false);
+
+    // Verify document order: Runtime Status -> Actions -> Static Configuration
+    expect(
+      (runtimeHeader.compareDocumentPosition(actionsHeader) & Node.DOCUMENT_POSITION_FOLLOWING) !== 0,
+    ).toBe(true);
+    expect(
+      (actionsHeader.compareDocumentPosition(staticHeader) & Node.DOCUMENT_POSITION_FOLLOWING) !== 0,
+    ).toBe(true);
   });
 
   it('enables Provision on not_ready and disables Deprovision', () => {
