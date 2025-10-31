@@ -12,6 +12,7 @@ interface GraphDocument {
   updatedAt: Date;
   nodes: PersistedGraphNode[];
   edges: PersistedGraphEdge[];
+  variables?: Array<{ key: string; value: string }>;
 }
 
 export class MongoGraphRepository extends GraphRepository {
@@ -49,6 +50,7 @@ export class MongoGraphRepository extends GraphRepository {
         updatedAt: now,
         nodes: req.nodes.map(this.stripInternalNode),
         edges: req.edges.map(this.stripInternalEdge),
+        variables: req.variables?.map((v) => ({ key: String(v.key), value: String(v.value) })),
       };
       await this.collection!.insertOne(doc);
       return this.toPersisted(doc);
@@ -74,6 +76,11 @@ export class MongoGraphRepository extends GraphRepository {
         return out;
       }),
       edges: req.edges.map(this.stripInternalEdge),
+      // Preserve existing variables when omitted
+      variables:
+        req.variables === undefined
+          ? existing.variables
+          : req.variables.map((v) => ({ key: String(v.key), value: String(v.value) })),
     };
     await this.collection!.replaceOne({ _id: name }, updated);
     return this.toPersisted(updated);
@@ -113,6 +120,7 @@ export class MongoGraphRepository extends GraphRepository {
       updatedAt: doc.updatedAt.toISOString(),
       nodes: doc.nodes,
       edges: doc.edges,
+      variables: doc.variables,
     };
   }
 }

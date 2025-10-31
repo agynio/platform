@@ -14,6 +14,7 @@ import { buildTemplateRegistry } from '../templates';
 import { GraphController } from './controllers/graph.controller';
 import { GraphPersistController } from './controllers/graphPersist.controller';
 import { RunsController } from './controllers/runs.controller';
+import { GraphVariablesController } from './controllers/graphVariables.controller';
 import { GitGraphRepository } from './gitGraph.repository';
 import { GraphGuard } from './graph.guard';
 import { GraphRepository } from './graph.repository';
@@ -43,7 +44,7 @@ import { RemindMeNode } from './nodes/tools/remind_me/remind_me.node';
 
 @Module({
   imports: [CoreModule, InfraModule, LLMModule, EnvModule],
-  controllers: [RunsController, GraphPersistController, GraphController, RemindersController],
+  controllers: [RunsController, GraphPersistController, GraphController, RemindersController, GraphVariablesController],
   providers: [
     {
       provide: GraphGuard,

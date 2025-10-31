@@ -135,13 +135,18 @@ export class GitGraphRepository extends GraphRepository {
         return { ...base, id: detId };
       });
 
-      const current = existing ?? { name, version: 0, updatedAt: nowIso, nodes: [], edges: [] };
+      const current = existing ?? { name, version: 0, updatedAt: nowIso, nodes: [], edges: [], variables: [] };
       const target: PersistedGraph = {
         name,
         version: (current.version || 0) + 1,
         updatedAt: nowIso,
         nodes: normalizedNodes,
         edges: normalizedEdges,
+        // Preserve existing variables if omitted; otherwise accept provided variables
+        variables:
+          req.variables === undefined
+            ? current.variables
+            : req.variables.map((v) => ({ key: String(v.key), value: String(v.value) })),
       };
 
       // Compute deltas
@@ -151,6 +156,7 @@ export class GitGraphRepository extends GraphRepository {
       const root = this.config.graphRepoPath;
       const nodesDir = path.join(root, 'nodes');
       const edgesDir = path.join(root, 'edges');
+      const variablesPath = path.join(root, 'variables.json');
       await fs.mkdir(nodesDir, { recursive: true });
       await fs.mkdir(edgesDir, { recursive: true });
 
@@ -186,6 +192,15 @@ export class GitGraphRepository extends GraphRepository {
       await Promise.all(edgeAdds.map((id) => writeEdge(target.edges.find((e) => e.id === id)!, true)));
       await Promise.all(edgeUpdates.map((id) => writeEdge(target.edges.find((e) => e.id === id)!, false)));
       await Promise.all(edgeDeletes.map((id) => delRel(path.posix.join('edges', `${encodeURIComponent(id)}.json`))));
+
+      // Write variables.json (root-level); compare previous vs next JSON to avoid unnecessary writes
+      const prevVarsJson = JSON.stringify(current.variables ?? [], null, 2);
+      const nextVarsJson = JSON.stringify(target.variables ?? [], null, 2);
+      if (prevVarsJson !== nextVarsJson) {
+        await this.atomicWriteFile(variablesPath, nextVarsJson + '\n');
+        // treat as updated; file always exists once variables feature used
+        touched.updated.push('variables.json');
+      }
 
       // Update meta last
       const meta = { name, version: target.version, updatedAt: target.updatedAt, format: 2 } as const;
@@ -439,6 +454,13 @@ export class GitGraphRepository extends GraphRepository {
       const edgesRes = await this.readEntitiesFromDir<PersistedGraphEdge>(
         path.join(this.config.graphRepoPath, 'edges'),
       );
+      // variables.json at root (optional)
+      let variables: Array<{ key: string; value: string }> | undefined = undefined;
+      try {
+        const raw = await fs.readFile(path.join(this.config.graphRepoPath, 'variables.json'), 'utf8');
+        const parsedVars = JSON.parse(raw) as Array<{ key: string; value: string }>;
+        if (Array.isArray(parsedVars)) variables = parsedVars.map((v) => ({ key: String(v.key), value: String(v.value) }));
+      } catch {}
       if (nodesRes.hadError || edgesRes.hadError) {
         // Prefer lastCommitted snapshot if available; otherwise fall back to HEAD
         if (this.lastCommitted) return this.lastCommitted;
@@ -451,6 +473,7 @@ export class GitGraphRepository extends GraphRepository {
         updatedAt: meta.updatedAt ?? new Date().toISOString(),
         nodes: nodesRes.items,
         edges: edgesRes.items,
+        variables,
       };
     } catch {
       const head = await this.readFromHeadRoot(name);
@@ -502,6 +525,7 @@ export class GitGraphRepository extends GraphRepository {
       const paths = list.split('\n').filter(Boolean);
       const nodePaths = paths.filter((p) => p.startsWith('nodes/') && p.endsWith('.json'));
       const edgePaths = paths.filter((p) => p.startsWith('edges/') && p.endsWith('.json'));
+      const hasVariables = paths.includes('variables.json');
       const nodes = await Promise.all(
         nodePaths.map(async (p) => {
           const raw = await this.runGitCapture(['show', `HEAD:${p}`], this.config.graphRepoPath);
@@ -520,12 +544,21 @@ export class GitGraphRepository extends GraphRepository {
           return obj as PersistedGraphEdge;
         }),
       );
+      let variables: Array<{ key: string; value: string }> | undefined = undefined;
+      if (hasVariables) {
+        try {
+          const rawVars = await this.runGitCapture(['show', 'HEAD:variables.json'], this.config.graphRepoPath);
+          const parsedVars = JSON.parse(rawVars) as Array<{ key: string; value: string }>;
+          if (Array.isArray(parsedVars)) variables = parsedVars.map((v) => ({ key: String(v.key), value: String(v.value) }));
+        } catch {}
+      }
       return {
         name: meta.name ?? name,
         version: meta.version ?? 0,
         updatedAt: meta.updatedAt ?? new Date().toISOString(),
         nodes,
         edges,
+        variables,
       };
     } catch {
       return null;

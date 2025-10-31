@@ -24,5 +24,16 @@ export function validatePersistedGraph(req: PersistedGraphUpsertRequest, schema:
       throw new Error(`Invalid target handle ${e.targetHandle} on template ${targetNode.template}`);
     }
   }
+  // Variables: enforce unique non-empty keys and values when provided
+  if (req.variables) {
+    const seen = new Set<string>();
+    for (const v of req.variables) {
+      const key = (v?.key ?? '').trim();
+      const val = (v?.value ?? '').trim();
+      if (!key) throw new Error('Variable missing key');
+      if (!val) throw new Error(`Variable ${key} missing value`);
+      if (seen.has(key)) throw new Error(`Duplicate variable key ${key}`);
+      seen.add(key);
+    }
+  }
 }
-

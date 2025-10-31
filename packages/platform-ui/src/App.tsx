@@ -17,6 +17,7 @@ import { useParams, useSearchParams } from 'react-router-dom';
 import { MonitoringContainers } from './pages/MonitoringContainers';
 import { MonitoringResources } from './pages/MonitoringResources';
 import { SettingsSecrets } from './pages/SettingsSecrets';
+import { SettingsVariables } from './pages/SettingsVariables';
 
 const queryClient = new QueryClient();
 
@@ -48,6 +49,7 @@ function App() {
 
             {/* Settings */}
             <Route path="/settings/secrets" element={<SettingsSecrets />} />
+            <Route path="/settings/variables" element={<SettingsVariables />} />
           </Route>
         </Routes>
       </RuntimeTemplatesProvider>

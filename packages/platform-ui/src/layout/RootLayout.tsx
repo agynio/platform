@@ -126,7 +126,8 @@ export function RootLayout() {
         isOpen: settingsOpen,
         setOpen: setSettingsOpen,
         items: [
-          { label: 'Secrets', to: '/settings/secrets', icon: KeyRound }
+          { label: 'Secrets', to: '/settings/secrets', icon: KeyRound },
+          { label: 'Variables', to: '/settings/variables', icon: KeyRound }
         ]
       }
     ], [agentsOpen, tracingOpen, monitoringOpen, settingsOpen, setAgentsOpen, setTracingOpen, setMonitoringOpen, setSettingsOpen]

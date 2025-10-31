@@ -143,11 +143,16 @@ export interface PersistedGraph {
   updatedAt: string; // ISO timestamp
   nodes: PersistedGraphNode[];
   edges: PersistedGraphEdge[];
+  // Optional graph-level variables (Issue #543)
+  // Keys must be unique; values are plain strings.
+  variables?: Array<{ key: string; value: string }>;
 }
 export interface PersistedGraphUpsertRequest {
   name: string;
   version?: number; // expected version (undefined => create)
   nodes: PersistedGraphNode[];
   edges: PersistedGraphEdge[];
+  // Optional variables; if omitted, repositories must preserve existing values.
+  variables?: Array<{ key: string; value: string }>;
 }
 export interface PersistedGraphUpsertResponse extends PersistedGraph {}

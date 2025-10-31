@@ -41,11 +41,11 @@ export class GraphPersistController {
   ) {}
 
   @Get('graph')
-  async getGraph(): Promise<{ name: string; version: number; updatedAt: string; nodes: any[]; edges: any[] }> {
+  async getGraph(): Promise<{ name: string; version: number; updatedAt: string; nodes: any[]; edges: any[]; variables?: Array<{ key: string; value: string }> }> {
     const name = 'main';
     const graph = await this.graphs.get(name);
     if (!graph) {
-      return { name, version: 0, updatedAt: new Date().toISOString(), nodes: [], edges: [] };
+      return { name, version: 0, updatedAt: new Date().toISOString(), nodes: [], edges: [], variables: [] };
     }
     return graph;
   }
@@ -136,7 +136,7 @@ const UpsertSchema = z
         }),
       )
       .max(1000),
-    edges: z
+  edges: z
       .array(
         z.object({
           id: z.string().optional(),
@@ -147,5 +147,8 @@ const UpsertSchema = z
         }),
       )
       .max(2000),
+    variables: z
+      .array(z.object({ key: z.string().min(1), value: z.string().min(1) }))
+      .optional(),
   })
   .strict();
