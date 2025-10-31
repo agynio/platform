@@ -7,7 +7,7 @@ describe('normalizeConfigByTemplate idempotence and behavior', () => {
   it('converts env object to array, wraps tokens, renames workdir, removes extras', () => {
     const nodes = [
       { id: '1', template: 'shellTool', config: { workingDir: '/w', env: { A: '1' } } },
-      { id: '2', template: 'containerProvider', config: { env: { B: '2' }, workingDir: '/x', note: 'n' } },
+      { id: '2', template: 'workspace', config: { env: { B: '2' }, workingDir: '/x', note: 'n' } },
       { id: '3', template: 'sendSlackMessageTool', config: { bot_token: 'xoxb-123', note: 'x' } },
       { id: '4', template: 'slackTrigger', config: { app_token: 'xapp-abc', bot_token: 'x', default_channel: '#g' } },
       { id: '5', template: 'githubCloneRepoTool', config: { token: 'tok', repoUrl: 'x', destPath: 'y', authToken: 'z' } },

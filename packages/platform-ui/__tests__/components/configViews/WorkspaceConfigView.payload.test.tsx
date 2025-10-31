@@ -1,14 +1,14 @@
 import React from 'react';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { TooltipProvider } from '@agyn/ui';
-import ContainerProviderConfigView from '@/components/configViews/ContainerProviderConfigView';
+import WorkspaceConfigView from '@/components/configViews/WorkspaceConfigView';
 
-describe('ContainerProviderConfigView payload', () => {
+describe('WorkspaceConfigView payload', () => {
   it('emits aligned schema shape', () => {
     let cfg: any = {};
     render(
       <TooltipProvider delayDuration={0}>
-        <ContainerProviderConfigView
+        <WorkspaceConfigView
           templateName="workspace"
           value={{}}
           onChange={(v) => (cfg = v)}

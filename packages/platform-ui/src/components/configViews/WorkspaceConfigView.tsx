@@ -3,7 +3,7 @@ import { Input } from '@agyn/ui';
 import type { StaticConfigViewProps } from './types';
 import ReferenceEnvField, { type EnvItem } from './shared/ReferenceEnvField';
 
-export default function ContainerProviderConfigView({ value, onChange, readOnly, disabled, onValidate }: StaticConfigViewProps) {
+export default function WorkspaceConfigView({ value, onChange, readOnly, disabled, onValidate }: StaticConfigViewProps) {
   const init = useMemo(() => ({ ...(value || {}) }), [value]);
   const [image, setImage] = useState<string>((init.image as string) || '');
   const [env, setEnv] = useState<EnvItem[]>((init.env as EnvItem[]) || []);
