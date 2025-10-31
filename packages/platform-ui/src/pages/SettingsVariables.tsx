@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useMemo, useRef, useState } from 'react';
-import { Button, Input, Table, TableHead, TableRow, TableBody, TableCell } from '@agyn/ui';
+import { Button, Input, Table, Thead, Tbody, Tr, Th, Td } from '@agyn/ui';
 import { notifyError, notifySuccess } from '../lib/notify';
 
 type VarItem = { key: string; graph: string | null; local: string | null };
@@ -93,29 +93,29 @@ export function SettingsVariables() {
       </div>
 
       <Table>
-        <TableHead>
-          <TableRow>
-            <TableCell>Key</TableCell>
-            <TableCell>Graph</TableCell>
-            <TableCell>Local</TableCell>
-            <TableCell></TableCell>
-          </TableRow>
-        </TableHead>
-        <TableBody>
+        <Thead>
+          <Tr>
+            <Th>Key</Th>
+            <Th>Graph</Th>
+            <Th>Local</Th>
+            <Th></Th>
+          </Tr>
+        </Thead>
+        <Tbody>
           {isLoading ? (
-            <TableRow>
-              <TableCell colSpan={4}>Loading...</TableCell>
-            </TableRow>
+            <Tr>
+              <Td colSpan={4}>Loading...</Td>
+            </Tr>
           ) : data.length === 0 ? (
-            <TableRow>
-              <TableCell colSpan={4} className="text-muted-foreground">No variables defined.</TableCell>
-            </TableRow>
+            <Tr>
+              <Td colSpan={4} className="text-muted-foreground">No variables defined.</Td>
+            </Tr>
           ) : (
             data.map((item) => (
               <VariableRow key={item.key} item={item} onUpdate={(patch) => updateMut.mutate({ key: item.key, patch })} onDelete={() => deleteMut.mutate(item.key)} />
             ))
           )}
-        </TableBody>
+        </Tbody>
       </Table>
     </div>
   );
@@ -129,27 +129,27 @@ function VariableRow({ item, onUpdate, onDelete }: { item: VarItem; onUpdate: (p
   const debounceMs = 600;
 
   return (
-    <TableRow>
-      <TableCell className="font-mono text-xs">{item.key}</TableCell>
-      <TableCell>
+    <Tr>
+      <Td className="font-mono text-xs">{item.key}</Td>
+      <Td>
         <Input value={graph} onChange={(e) => {
           const v = e.target.value;
           setGraph(v);
           if (graphTimer.current) window.clearTimeout(graphTimer.current);
           graphTimer.current = window.setTimeout(() => onUpdate({ graph: v.trim() }), debounceMs);
         }} />
-      </TableCell>
-      <TableCell>
+      </Td>
+      <Td>
         <Input value={local} onChange={(e) => {
           const v = e.target.value;
           setLocal(v);
           if (localTimer.current) window.clearTimeout(localTimer.current);
           localTimer.current = window.setTimeout(() => onUpdate({ local: v.trim() ? v : null }), debounceMs);
         }} />
-      </TableCell>
-      <TableCell className="text-right">
+      </Td>
+      <Td className="text-right">
         <Button variant="destructive" size="sm" onClick={onDelete}>Remove</Button>
-      </TableCell>
-    </TableRow>
+      </Td>
+    </Tr>
   );
 }
