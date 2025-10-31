@@ -5,7 +5,8 @@ import { Inject, Injectable } from '@nestjs/common';
 
 @Injectable()
 export class PrismaService {
-  private prisma?: PrismaClient;
+  // Definite assignment: initialized lazily in getClient()
+  private prisma!: PrismaClient;
 
   constructor(
     @Inject(LoggerService) private logger: LoggerService,
