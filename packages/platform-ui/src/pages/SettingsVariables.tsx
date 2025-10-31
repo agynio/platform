@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { Button, Input, Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from '@agyn/ui';
+import { notifyError, notifySuccess } from '../lib/notify';
 
 type VarItem = { key: string; graph: string | null; local: string | null };
 
@@ -30,7 +31,13 @@ export function SettingsVariables() {
       }
       return await res.json();
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['variables'] }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['variables'] }); notifySuccess('Variable added'); },
+    onError: (e: any) => {
+      const msg = String(e?.message || 'Create failed');
+      if (msg === 'DUPLICATE_KEY') notifyError('Key already exists');
+      else if (msg === 'VERSION_CONFLICT') notifyError('Version conflict, please retry');
+      else notifyError(msg);
+    },
   });
 
   const updateMut = useMutation({
@@ -47,6 +54,12 @@ export function SettingsVariables() {
       return await res.json();
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ['variables'] }),
+    onError: (e: any) => {
+      const msg = String(e?.message || 'Update failed');
+      if (msg === 'BAD_VALUE') notifyError('Value cannot be empty');
+      else if (msg === 'VERSION_CONFLICT') notifyError('Version conflict, please retry');
+      else notifyError(msg);
+    },
   });
 
   const deleteMut = useMutation({
@@ -57,10 +70,12 @@ export function SettingsVariables() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ['variables'] }),
   });
 
+  const existingKeys = useMemo(() => new Set(data.map((d) => d.key)), [data]);
   function addVariable() {
     const key = newKey.trim();
     const graph = newGraph.trim();
-    if (!key || !graph) return;
+    if (!key || !graph) { notifyError('Key and Graph value are required'); return; }
+    if (existingKeys.has(key)) { notifyError('Key already exists'); return; }
     createMut.mutate({ key, graph });
     setNewKey('');
     setNewGraph('');
@@ -109,25 +124,28 @@ export function SettingsVariables() {
 function VariableRow({ item, onUpdate, onDelete }: { item: VarItem; onUpdate: (patch: { graph?: string | null; local?: string | null }) => void; onDelete: () => void }) {
   const [graph, setGraph] = useState(item.graph || '');
   const [local, setLocal] = useState(item.local || '');
-  // debounce ~600ms
-  function debounce(fn: (v: string) => void) {
-    let t: number | null = null;
-    return (v: string) => {
-      if (t) window.clearTimeout(t);
-      t = window.setTimeout(() => fn(v), 600);
-    };
-  }
-  const saveGraph = debounce((v) => onUpdate({ graph: v }));
-  const saveLocal = debounce((v) => onUpdate({ local: v.trim() ? v : null }));
+  const graphTimer = useRef<number | null>(null);
+  const localTimer = useRef<number | null>(null);
+  const debounceMs = 600;
 
   return (
     <TableRow>
       <TableCell className="font-mono text-xs">{item.key}</TableCell>
       <TableCell>
-        <Input value={graph} onChange={(e) => { setGraph(e.target.value); saveGraph(e.target.value); }} />
+        <Input value={graph} onChange={(e) => {
+          const v = e.target.value;
+          setGraph(v);
+          if (graphTimer.current) window.clearTimeout(graphTimer.current);
+          graphTimer.current = window.setTimeout(() => onUpdate({ graph: v.trim() }), debounceMs);
+        }} />
       </TableCell>
       <TableCell>
-        <Input value={local} onChange={(e) => { setLocal(e.target.value); saveLocal(e.target.value); }} />
+        <Input value={local} onChange={(e) => {
+          const v = e.target.value;
+          setLocal(v);
+          if (localTimer.current) window.clearTimeout(localTimer.current);
+          localTimer.current = window.setTimeout(() => onUpdate({ local: v.trim() ? v : null }), debounceMs);
+        }} />
       </TableCell>
       <TableCell className="text-right">
         <Button variant="destructive" size="sm" onClick={onDelete}>Remove</Button>
@@ -135,4 +153,3 @@ function VariableRow({ item, onUpdate, onDelete }: { item: VarItem; onUpdate: (p
     </TableRow>
   );
 }
-

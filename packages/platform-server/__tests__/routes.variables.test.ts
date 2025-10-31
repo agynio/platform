@@ -8,31 +8,34 @@ class InMemoryPrismaClient {
   variableLocal = {
     data: new Map<string, { key: string; value: string }>(),
     async findMany() { return Array.from(this.data.values()); },
-    async upsert({ where, update, create }: any) {
-      const key = where.key;
-      const existing = this.data.get(key);
-      if (existing) { this.data.set(key, { key, value: update.value }); return { key, value: update.value }; }
-      this.data.set(key, { key, value: create.value });
-      return { key, value: create.value };
+    async upsert(args: { where: { key: string }; update: { value: string }; create: { key: string; value: string } }) {
+      const key = args.where.key;
+      const existing = this.variableLocal.data.get(key);
+      if (existing) { this.variableLocal.data.set(key, { key, value: args.update.value }); return { key, value: args.update.value }; }
+      this.variableLocal.data.set(key, { key, value: args.create.value });
+      return { key, value: args.create.value };
     },
-    async delete({ where }: any) { this.data.delete(where.key); return {}; },
-  } as any;
+    async delete(args: { where: { key: string } }) { this.variableLocal.data.delete(args.where.key); return {}; },
+  };
 }
 
-class PrismaStub { client = new InMemoryPrismaClient() as any; getClient(): any { return this.client; } }
+class PrismaStub { client = new InMemoryPrismaClient(); getClient() { return this.client as unknown as any; } }
 
 class GraphRepoStub implements GraphRepository {
   private snapshot: PersistedGraph = { name: 'main', version: 1, updatedAt: new Date().toISOString(), nodes: [], edges: [], variables: [] };
+  private conflictNextUpsert = false;
   async initIfNeeded(): Promise<void> {}
   async get(name: string): Promise<PersistedGraph | null> { return name === 'main' ? this.snapshot : null; }
-  async upsert(req: any): Promise<PersistedGraph> {
-    if (req.version !== this.snapshot.version) {
+  async upsert(req: { name: string; version?: number; nodes: any[]; edges: any[]; variables?: Array<{ key: string; value: string }> }): Promise<PersistedGraph> {
+    if (this.conflictNextUpsert || (req.version ?? 0) !== this.snapshot.version) {
+      this.conflictNextUpsert = false;
       const err: any = new Error('Version conflict'); err.code = 'VERSION_CONFLICT'; err.current = this.snapshot; throw err;
     }
     this.snapshot = { name: 'main', version: this.snapshot.version + 1, updatedAt: new Date().toISOString(), nodes: req.nodes, edges: req.edges, variables: req.variables };
     return this.snapshot;
   }
   async upsertNodeState(): Promise<void> {}
+  triggerConflictOnce() { this.conflictNextUpsert = true; }
 }
 
 describe('GraphVariablesController routes', () => {
@@ -70,6 +73,25 @@ describe('GraphVariablesController routes', () => {
     const byKey = Object.fromEntries(items.map((i) => [i.key, i])); expect(byKey['B'].graph).toBe('GB2'); expect(byKey['B'].local).toBe(null); expect(byKey['A'].local).toBe('LA');
   });
 
+  it('rejects invalid graph value on PUT', async () => {
+    const res = await fastify.inject({ method: 'PUT', url: '/api/graph/variables/A', payload: { graph: '' } });
+    expect(res.statusCode).toBe(400);
+    expect(res.json().error).toBe('BAD_VALUE');
+  });
+
+  it('returns 409 on optimistic version conflict', async () => {
+    // force conflict on next upsert
+    (repo as any).triggerConflictOnce();
+    const res = await fastify.inject({ method: 'POST', url: '/api/graph/variables', payload: { key: 'D', graph: 'GD' } });
+    expect(res.statusCode).toBe(409);
+    expect(res.json().error).toBe('VERSION_CONFLICT');
+    // also for PUT
+    (repo as any).triggerConflictOnce();
+    const res2 = await fastify.inject({ method: 'PUT', url: '/api/graph/variables/A', payload: { graph: 'GA2' } });
+    expect(res2.statusCode).toBe(409);
+    expect(res2.json().error).toBe('VERSION_CONFLICT');
+  });
+
   it('deletes variable from graph and local override', async () => {
     await fastify.inject({ method: 'PUT', url: '/api/graph/variables/C', payload: { local: 'LC2' } });
     const resDel = await fastify.inject({ method: 'DELETE', url: '/api/graph/variables/C' }); expect(resDel.statusCode).toBe(204);
@@ -77,4 +99,3 @@ describe('GraphVariablesController routes', () => {
     const items = resList.json().items as Array<{ key: string }>[]; expect(items.find((i: any) => i.key === 'C')).toBeUndefined();
   });
 });
-
