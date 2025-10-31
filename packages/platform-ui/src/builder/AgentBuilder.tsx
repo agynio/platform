@@ -400,7 +400,7 @@ const RightPanelContent = memo(function RightPanelContent({
   updateNodeData: (nodeId: string, data: Record<string, unknown>) => void;
 }) {
   return (
-    <div className="flex h-full w-full flex-col overflow-hidden">
+    <div className="flex h-full min-h-0 w-full flex-col overflow-hidden">
       <div className="border-b flex items-center gap-2 px-4 h-10 shrink-0">
         <div className="text-xs font-semibold tracking-wide truncate" title={selectedDisplayTitle}>{selectedDisplayTitle}</div>
         {activityEligible && (
@@ -476,7 +476,7 @@ export function AgentBuilder() {
   return (
     <DndProvider backend={HTML5Backend}>
       <ReactFlowProvider>
-        <div className="relative flex h-full w-full min-w-0 overflow-hidden">
+        <div className="relative flex h-full min-h-0 w-full min-w-0 overflow-hidden">
           <TemplatesProvider templates={templates}>
             <CanvasArea
               nodes={nodes}
@@ -492,7 +492,7 @@ export function AgentBuilder() {
             />
           </TemplatesProvider>
           {/* Inline right panel on xl+ */}
-          <aside className="hidden xl:flex w-96 shrink-0 border-l bg-sidebar p-0 flex-col overflow-hidden">
+          <aside className="hidden xl:flex h-full w-96 shrink-0 border-l bg-sidebar p-0 flex-col overflow-hidden">
             <RightPanelContent
               rightTab={rightTab}
               setRightTab={setRightTab}
