@@ -283,6 +283,9 @@ export class AgentNode extends Node<AgentStaticConfig> {
           throw new Error('Agent did not produce a valid response message.');
         },
       );
+    } catch (err) {
+      this.logger.error(`Agent invocation error in thread ${thread}:`, err);
+      result = ResponseMessage.fromText(`Agent error`);
     } finally {
       this.runningThreads.delete(thread);
     }

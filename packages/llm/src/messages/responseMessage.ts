@@ -34,6 +34,11 @@ export class ResponseMessage {
     return this.output.find((o) => o.type === 'message')?.text ?? '';
   }
 
+  static fromText(text: string): ResponseMessage {
+    const aiMessage = AIMessage.fromText(text);
+    return new ResponseMessage({ output: [aiMessage.toPlain()] });
+  }
+
   toPlain() {
     return this._source;
   }

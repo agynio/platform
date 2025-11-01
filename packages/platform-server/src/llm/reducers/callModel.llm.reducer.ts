@@ -1,11 +1,12 @@
 import { FunctionTool, LLM, Reducer, SystemMessage, ToolCallMessage } from '@agyn/llm';
 import { LLMResponse, withLLM } from '@agyn/tracing';
-import { Injectable, Scope } from '@nestjs/common';
+import { Inject, Injectable, Scope } from '@nestjs/common';
 import { LLMContext, LLMMessage, LLMState } from '../types';
+import { LoggerService } from '../../core/services/logger.service';
 
 @Injectable({ scope: Scope.TRANSIENT })
 export class CallModelLLMReducer extends Reducer<LLMState, LLMContext> {
-  constructor() {
+  constructor(@Inject(LoggerService) protected logger: LoggerService) {
     super();
   }
 
@@ -64,7 +65,7 @@ export class CallModelLLMReducer extends Reducer<LLMState, LLMContext> {
           toolCalls: raw.output.filter((m) => m instanceof ToolCallMessage),
         });
       } catch (error) {
-        console.error(error);
+        this.logger.error('Error occurred while calling LLM', error);
         throw error;
       }
     });

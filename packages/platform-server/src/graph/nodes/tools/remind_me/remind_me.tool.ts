@@ -59,7 +59,7 @@ export class RemindMeFunctionTool extends FunctionTool<typeof remindMeInvocation
       if (!exists) return;
       this.active.delete(id);
       try {
-        const msg = AIMessage.fromText(JSON.stringify(`Reminder: ${note}`));
+        const msg = AIMessage.fromText(`Reminder: ${note}`);
 
         await ctx.callerAgent.invoke(threadId, [msg]);
       } catch (e: unknown) {
