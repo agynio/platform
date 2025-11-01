@@ -48,9 +48,9 @@ export class GraphVariablesController {
     };
     try {
       await this.graphs.upsert({ name, version: current.version, nodes: next.nodes, edges: next.edges, variables: next.variables });
-    } catch (e) {
-      if ((e as any)?.code === 'VERSION_CONFLICT') {
-        throw new HttpException({ error: 'VERSION_CONFLICT', current: (e as any)?.current }, HttpStatus.CONFLICT);
+    } catch (e: unknown) {
+      if (isCodeError(e) && e.code === 'VERSION_CONFLICT') {
+        throw new HttpException({ error: 'VERSION_CONFLICT', current: e.current }, HttpStatus.CONFLICT);
       }
       throw e;
     }
@@ -72,9 +72,9 @@ export class GraphVariablesController {
       variables[idx] = { key, value: parsed.graph! };
       try {
         await this.graphs.upsert({ name, version: current.version, nodes: current.nodes, edges: current.edges, variables });
-      } catch (e) {
-        if ((e as any)?.code === 'VERSION_CONFLICT') {
-          throw new HttpException({ error: 'VERSION_CONFLICT', current: (e as any)?.current }, HttpStatus.CONFLICT);
+      } catch (e: unknown) {
+        if (isCodeError(e) && e.code === 'VERSION_CONFLICT') {
+          throw new HttpException({ error: 'VERSION_CONFLICT', current: e.current }, HttpStatus.CONFLICT);
         }
         throw e;
       }
@@ -108,9 +108,9 @@ export class GraphVariablesController {
       const variables = (current.variables || []).filter((v) => v.key !== key);
       try {
         await this.graphs.upsert({ name, version: current.version, nodes: current.nodes, edges: current.edges, variables });
-      } catch (e) {
-        if ((e as any)?.code === 'VERSION_CONFLICT') {
-          throw new HttpException({ error: 'VERSION_CONFLICT', current: (e as any)?.current }, HttpStatus.CONFLICT);
+      } catch (e: unknown) {
+        if (isCodeError(e) && e.code === 'VERSION_CONFLICT') {
+          throw new HttpException({ error: 'VERSION_CONFLICT', current: e.current }, HttpStatus.CONFLICT);
         }
         throw e;
       }
@@ -123,6 +123,10 @@ export class GraphVariablesController {
   private prisma(): PrismaClient {
     return this.prismaService.getClient();
   }
+}
+
+function isCodeError(e: unknown): e is { code?: string; current?: unknown } {
+  return !!e && typeof e === 'object' && 'code' in e;
 }
 
 function parseCreateBody(body: unknown): { key: string; graph: string } {
