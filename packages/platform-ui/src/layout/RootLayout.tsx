@@ -94,7 +94,8 @@ export function RootLayout() {
         setOpen: setAgentsOpen,
         items: [
           { label: 'Graph', to: '/agents/graph', icon: GitBranch },
-          { label: 'Chat', to: '/agents/chat', icon: MessageSquare }
+          { label: 'Chat', to: '/agents/chat', icon: MessageSquare },
+          { label: 'Threads', to: '/agents/threads', icon: MessageSquare }
         ]
       },
       {

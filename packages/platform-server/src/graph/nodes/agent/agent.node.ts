@@ -29,6 +29,8 @@ import { LoadLLMReducer } from '../../../llm/reducers/load.llm.reducer';
 import { SaveLLMReducer } from '../../../llm/reducers/save.llm.reducer';
 import { SummarizationLLMReducer } from '../../../llm/reducers/summarization.llm.reducer';
 import { Signal } from '../../../signal';
+import { AgentsPersistenceService } from '../../../agents/agents.persistence.service';
+import type { Prisma } from '@prisma/client';
 
 import { BaseToolNode } from '../tools/baseToolNode';
 import { BufferMessage, MessagesBuffer, ProcessBuffer } from './messagesBuffer';
@@ -115,6 +117,7 @@ export class AgentNode extends Node<AgentStaticConfig> {
     @Inject(LoggerService) protected logger: LoggerService,
     @Inject(LLMProvisioner) protected llmProvisioner: LLMProvisioner,
     @Inject(ModuleRef) protected readonly moduleRef: ModuleRef,
+    @Inject(AgentsPersistenceService) private readonly persistence: AgentsPersistenceService,
   ) {
     super(logger);
   }
@@ -260,6 +263,27 @@ export class AgentNode extends Node<AgentStaticConfig> {
 
     this.runningThreads.add(thread);
     let result: ResponseMessage | ToolCallOutputMessage;
+    // Begin run and persist input messages (forward-only)
+    const toJson = (bm: BufferMessage): Prisma.InputJsonValue => {
+      try {
+        return bm.toPlain() as unknown as Prisma.InputJsonValue;
+      } catch {
+        // AIMessage/HumanMessage/SystemMessage all implement toPlain; fallback to text only
+        const role = (bm as any)?.role || 'user';
+        const text = (bm as any)?.text || '';
+        return { type: 'message', role, content: [{ type: role === 'assistant' ? 'output_text' : 'input_text', text }] } as any;
+      }
+    };
+    let runId: string | undefined;
+    if (this.persistence) {
+      try {
+        const inputJson = messages.map((m) => toJson(m));
+        const started = await this.persistence.beginRun(thread, inputJson);
+        runId = started.runId;
+      } catch (e) {
+        this.logger.error('Failed to persist beginRun; continuing without persistence', e);
+      }
+    }
     try {
       result = await withAgent(
         { threadId: thread, nodeId: this.nodeId, inputParameters: [{ thread }, { messages }] },
@@ -275,8 +299,48 @@ export class AgentNode extends Node<AgentStaticConfig> {
 
           const result = newState.messages.at(-1);
 
+          // Persist injected messages if any (SystemMessage appended by EnforceTools)
+          if (this.persistence) {
+            try {
+              if (runId) {
+                const initialPlains = messages.map((m) => JSON.stringify(toJson(m)));
+                const injected = newState.messages.filter((m) => (m as any)?.role === 'system') as any[];
+                const injectedPlains = injected
+                  .map((m) => {
+                    try {
+                      return (m as any).toPlain();
+                    } catch {
+                      return undefined;
+                    }
+                  })
+                  .filter((p) => !!p) as Prisma.InputJsonValue[];
+                const newInjected = injectedPlains.filter((p) => !initialPlains.includes(JSON.stringify(p)));
+                if (newInjected.length > 0) {
+                  await this.persistence.recordInjected(runId, newInjected);
+                }
+              }
+            } catch (e) {
+              this.logger.debug('Injected messages persistence failed', e);
+            }
+          }
           if ((finishSignal.isActive && result instanceof ToolCallOutputMessage) || result instanceof ResponseMessage) {
             this.logger.info(`Agent response in thread ${thread}: ${result?.text}`);
+            // Persist outputs and complete run
+            if (this.persistence) {
+              try {
+                if (runId) {
+                  if (result instanceof ResponseMessage) {
+                    const outputs = result.output.map((o) => (o as any).toPlain?.() ?? (o as any));
+                    await this.persistence.completeRun(runId, 'finished', outputs as Prisma.InputJsonValue[]);
+                  } else if (result instanceof ToolCallOutputMessage) {
+                    const out = (result as any).toPlain?.() ?? (result as any);
+                    await this.persistence.completeRun(runId, 'finished', [out as Prisma.InputJsonValue]);
+                  }
+                }
+              } catch (e) {
+                this.logger.error('Failed to persist run completion', e);
+              }
+            }
             return result;
           }
 
@@ -286,6 +350,15 @@ export class AgentNode extends Node<AgentStaticConfig> {
     } catch (err) {
       this.logger.error(`Agent invocation error in thread ${thread}:`, err);
       result = ResponseMessage.fromText(`Agent error`);
+      // Persist error completion if runId exists
+      if (this.persistence) {
+        try {
+          if (runId) {
+            const out = (result as any).toPlain?.() ?? (result as any);
+            await this.persistence.completeRun(runId, 'terminated', [out as Prisma.InputJsonValue]);
+          }
+        } catch {}
+      }
     } finally {
       this.runningThreads.delete(thread);
     }

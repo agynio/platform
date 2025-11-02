@@ -43,10 +43,19 @@ import { SendSlackMessageNode } from './nodes/tools/send_slack_message/send_slac
 import { ShellCommandNode } from './nodes/tools/shell_command/shell_command.node';
 import { GithubCloneRepoNode } from './nodes/tools/github_clone_repo/github_clone_repo.node';
 import { RemindMeNode } from './nodes/tools/remind_me/remind_me.node';
+import { AgentsPersistenceService } from '../agents/agents.persistence.service';
+import { AgentsThreadsController } from '../agents/threads.controller';
 
 @Module({
   imports: [CoreModule, InfraModule, LLMModule, EnvModule],
-  controllers: [RunsController, GraphPersistController, GraphController, RemindersController, GraphVariablesController],
+  controllers: [
+    RunsController,
+    GraphPersistController,
+    GraphController,
+    RemindersController,
+    GraphVariablesController,
+    AgentsThreadsController,
+  ],
   providers: [
     {
       provide: GraphGuard,
@@ -99,6 +108,7 @@ import { RemindMeNode } from './nodes/tools/remind_me/remind_me.node';
     LiveGraphRuntime,
     NodeStateService,
     GraphSocketGateway,
+    AgentsPersistenceService,
 
     //////// Nodes
 

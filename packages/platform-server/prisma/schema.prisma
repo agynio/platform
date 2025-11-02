@@ -20,7 +20,6 @@ model ConversationState {
 
   @@unique([threadId, nodeId])
 }
-
 // Local variable overrides (single-user/single-graph model)
 model VariableLocal {
   id        Int      @id @default(autoincrement())
@@ -28,4 +27,72 @@ model VariableLocal {
   value     String
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+}
+
+// Core normalized persistence per spec: threads, runs, messages, run_messages
+
+model Thread {
+  id        String   @id @default(uuid()) @db.Uuid
+  parentId  String?  @db.Uuid
+  parent    Thread?  @relation("ThreadChildren", fields: [parentId], references: [id])
+  children  Thread[] @relation("ThreadChildren")
+  alias     String   @unique
+  createdAt DateTime @default(now())
+
+  runs      Run[]
+}
+
+enum RunStatus {
+  running
+  finished
+  terminated
+}
+
+model Run {
+  id         String    @id @default(uuid()) @db.Uuid
+  threadId   String    @db.Uuid
+  thread     Thread    @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  status     RunStatus @default(running)
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  runMessages RunMessage[]
+
+  @@index([threadId])
+}
+
+enum MessageKind {
+  user
+  assistant
+  system
+  tool
+}
+
+model Message {
+  id        String      @id @default(uuid()) @db.Uuid
+  kind      MessageKind
+  text      String?
+  source    Json
+  createdAt DateTime    @default(now())
+
+  runLinks  RunMessage[]
+}
+
+enum RunMessageType {
+  input
+  injected
+  output
+}
+
+model RunMessage {
+  runId     String        @db.Uuid
+  messageId String        @db.Uuid
+  type      RunMessageType
+  createdAt DateTime      @default(now())
+
+  run       Run           @relation(fields: [runId], references: [id], onDelete: Cascade)
+  message   Message       @relation(fields: [messageId], references: [id], onDelete: Cascade)
+
+  @@id([runId, messageId])
+  @@index([runId])
 }
