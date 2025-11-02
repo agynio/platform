@@ -13,7 +13,7 @@ export class RemindMeNode extends BaseToolNode<z.infer<typeof RemindMeToolStatic
 
   constructor(
     @Inject(LoggerService) protected logger: LoggerService,
-    @Inject(GraphSocketGateway) private readonly gateway?: GraphSocketGateway,
+    @Inject(GraphSocketGateway) private readonly gateway: GraphSocketGateway,
   ) {
     super(logger);
   }
@@ -25,9 +25,8 @@ export class RemindMeNode extends BaseToolNode<z.infer<typeof RemindMeToolStatic
       this.toolInstance.setOnRegistryChanged((count: number, atMs?: number) => {
         const id = this._nodeId; // emit only when initialized
         if (!id) return;
-        try {
-          this.gateway?.emitReminderCount(id, count, atMs);
-        } catch {}
+        // Emit count change via socket gateway
+        this.gateway.emitReminderCount(id, count, atMs);
       });
     }
     return this.toolInstance;
@@ -46,10 +45,8 @@ export class RemindMeNode extends BaseToolNode<z.infer<typeof RemindMeToolStatic
 
   protected async doDeprovision(): Promise<void> {
     // Ensure tool timers are cleared and count=0 emitted
-    try {
-      await this.toolInstance?.destroy();
-      const id = this._nodeId;
-      if (id) this.gateway?.emitReminderCount(id, 0);
-    } catch {}
+    await this.toolInstance?.destroy();
+    const id = this._nodeId;
+    if (id) this.gateway.emitReminderCount(id, 0);
   }
 }

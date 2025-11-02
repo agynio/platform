@@ -52,9 +52,7 @@ export class RemindMeFunctionTool extends FunctionTool<typeof remindMeInvocation
     for (const rec of this.active.values()) clearTimeout(rec.timer);
     this.active.clear();
     // Emit registry size change (count=0) after destroy
-    try {
-      this.onRegistryChanged?.(0);
-    } catch {}
+    this.onRegistryChanged?.(0);
   }
   async execute(args: z.infer<typeof remindMeInvocationSchema>, ctx: LLMContext): Promise<string> {
     const { delayMs, note } = args;
