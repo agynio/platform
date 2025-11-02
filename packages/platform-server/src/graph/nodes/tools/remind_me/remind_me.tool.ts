@@ -1,9 +1,5 @@
 import z from 'zod';
-<<<<<<< HEAD
-import { FunctionTool, HumanMessage } from '@agyn/llm';
-=======
-import { HumanMessage, FunctionTool, SystemMessage } from '@agyn/llm';
->>>>>>> 9c1ba513 (feat(variables): Settings/Variables UI & backend (Issue #543) (#547))
+import { HumanMessage, FunctionTool } from '@agyn/llm';
 import { v4 as uuidv4 } from 'uuid';
 import { LoggerService } from '../../../../core/services/logger.service';
 import { LLMContext } from '../../../../llm/types';
