@@ -23,7 +23,8 @@ export class RemindMeNode extends BaseToolNode<z.infer<typeof RemindMeToolStatic
       this.toolInstance = new RemindMeFunctionTool(this.logger);
       // Wire registry change callback to socket gateway emission
       this.toolInstance.setOnRegistryChanged((count: number, atMs?: number) => {
-        const id = this._nodeId || this.nodeId; // prefer initialized id
+        const id = this._nodeId; // emit only when initialized
+        if (!id) return;
         try {
           this.gateway?.emitReminderCount(id, count, atMs);
         } catch {}
@@ -47,8 +48,8 @@ export class RemindMeNode extends BaseToolNode<z.infer<typeof RemindMeToolStatic
     // Ensure tool timers are cleared and count=0 emitted
     try {
       await this.toolInstance?.destroy();
-      const id = this._nodeId || this.nodeId;
-      this.gateway?.emitReminderCount(id, 0);
+      const id = this._nodeId;
+      if (id) this.gateway?.emitReminderCount(id, 0);
     } catch {}
   }
 }
