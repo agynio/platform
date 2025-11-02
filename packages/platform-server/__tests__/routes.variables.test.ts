@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import Fastify from 'fastify';
 import { GraphVariablesController } from '../src/graph/controllers/graphVariables.controller';
 import type { GraphRepository } from '../src/graph/graph.repository';
+import { GraphVariablesService } from '../src/graph/services/graphVariables.service';
 import type { PersistedGraph } from '../src/graph/types';
 
 class InMemoryPrismaClient {
@@ -45,7 +46,8 @@ describe('GraphVariablesController routes', () => {
     fastify = Fastify({ logger: false }); prismaSvc = new PrismaStub(); repo = new GraphRepoStub();
     (repo as any).snapshot.variables = [ { key: 'A', value: 'GA' }, { key: 'B', value: 'GB' } ];
     prismaSvc.client.variableLocal.data.set('B', { key: 'B', value: 'LB' }); prismaSvc.client.variableLocal.data.set('C', { key: 'C', value: 'LC' });
-    controller = new GraphVariablesController(repo as unknown as GraphRepository, prismaSvc as any);
+    const service = new GraphVariablesService(repo as unknown as GraphRepository, () => (prismaSvc.getClient() as any));
+    controller = new GraphVariablesController(service);
     fastify.get('/api/graph/variables', async (_req, res) => res.send(await controller.list()));
     // POST should return 201 like Nest's @HttpCode(201)
     fastify.post('/api/graph/variables', async (req, res) => {

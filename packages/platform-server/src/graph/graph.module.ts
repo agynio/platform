@@ -15,6 +15,8 @@ import { GraphController } from './controllers/graph.controller';
 import { GraphPersistController } from './controllers/graphPersist.controller';
 import { RunsController } from './controllers/runs.controller';
 import { GraphVariablesController } from './controllers/graphVariables.controller';
+import { GraphVariablesService } from './services/graphVariables.service';
+import { PrismaService } from '../core/services/prisma.service';
 import { GitGraphRepository } from './gitGraph.repository';
 import { GraphGuard } from './graph.guard';
 import { GraphRepository } from './graph.repository';
@@ -120,6 +122,11 @@ import { RemindMeNode } from './nodes/tools/remind_me/remind_me.node';
     ShellCommandNode,
     GithubCloneRepoNode,
     RemindMeNode,
+    {
+      provide: GraphVariablesService,
+      useFactory: (graphs: GraphRepository, prisma: PrismaService) => new GraphVariablesService(graphs, () => prisma.getClient()),
+      inject: [GraphRepository, PrismaService],
+    },
   ],
   exports: [LiveGraphRuntime, TemplateRegistry, PortsRegistry, GraphRepository, NodeStateService],
 })

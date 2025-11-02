@@ -1,123 +1,47 @@
 import { Body, Controller, Delete, Get, HttpCode, HttpException, HttpStatus, Inject, Param, Post, Put } from '@nestjs/common';
-import { GraphRepository } from '../graph.repository';
-import { PrismaService } from '../../core/services/prisma.service';
-import type { PersistedGraph } from '../types';
-import type { PrismaClient } from '@prisma/client';
-
-type VarItem = { key: string; graph: string | null; local: string | null };
+import { GraphVariablesService, VarItem } from '../services/graphVariables.service';
+type CreateBody = { key: string; graph: string };
+type UpdateBody = { graph?: string | null; local?: string | null };
 
 @Controller('api/graph/variables')
 export class GraphVariablesController {
-  constructor(
-    @Inject(GraphRepository) private readonly graphs: GraphRepository,
-    @Inject(PrismaService) private readonly prismaService: PrismaService,
-  ) {}
+  constructor(@Inject(GraphVariablesService) private readonly service: GraphVariablesService) {}
 
   @Get()
-  async list(): Promise<{ items: VarItem[] }> {
-    const name = 'main';
-    const graph = (await this.graphs.get(name)) || ({ name, version: 0, updatedAt: new Date().toISOString(), nodes: [], edges: [], variables: [] } as PersistedGraph);
-    const prisma = this.prisma();
-    const locals = await prisma.variableLocal.findMany();
-    const itemsMap = new Map<string, VarItem>();
-    for (const v of graph.variables || []) {
-      itemsMap.set(v.key, { key: v.key, graph: v.value, local: null });
-    }
-    for (const lv of locals) {
-      const existing = itemsMap.get(lv.key);
-      if (existing) existing.local = lv.value;
-      else itemsMap.set(lv.key, { key: lv.key, graph: null, local: lv.value });
-    }
-    return { items: Array.from(itemsMap.values()) };
-  }
+  async list(): Promise<{ items: VarItem[] }> { return this.service.list('main'); }
 
   @Post()
   @HttpCode(201)
   async create(@Body() body: unknown): Promise<{ key: string; graph: string }> {
     const parsed = parseCreateBody(body);
-    const name = 'main';
-    const current = (await this.graphs.get(name)) || ({ name, version: 0, updatedAt: new Date().toISOString(), nodes: [], edges: [], variables: [] } as PersistedGraph);
-    const exists = (current.variables || []).some((v) => v.key === parsed.key);
-    if (exists) {
-      throw new HttpException({ error: 'DUPLICATE_KEY' }, HttpStatus.CONFLICT);
-    }
-    const next: PersistedGraph = {
-      ...current,
-      version: current.version,
-      variables: [...(current.variables || []), { key: parsed.key, value: parsed.graph }],
-    };
-    try {
-      await this.graphs.upsert({ name, version: current.version, nodes: next.nodes, edges: next.edges, variables: next.variables });
-    } catch (e: unknown) {
-      if (isCodeError(e) && e.code === 'VERSION_CONFLICT') {
-        throw new HttpException({ error: 'VERSION_CONFLICT', current: e.current }, HttpStatus.CONFLICT);
-      }
+    try { return await this.service.create('main', parsed.key, parsed.graph); }
+    catch (e: unknown) {
+      if (isCodeError(e) && e.code === 'DUPLICATE_KEY') throw new HttpException({ error: 'DUPLICATE_KEY' }, HttpStatus.CONFLICT);
+      if (isCodeError(e) && e.code === 'VERSION_CONFLICT') throw new HttpException({ error: 'VERSION_CONFLICT', current: e.current }, HttpStatus.CONFLICT);
       throw e;
     }
-    // return created variable
-    return { key: parsed.key, graph: parsed.graph };
   }
 
   @Put(':key')
   async update(@Param('key') key: string, @Body() body: unknown): Promise<{ key: string; graph?: string | null; local?: string | null }> {
     const parsed = parseUpdateBody(body);
-    const name = 'main';
-    // Graph update
-    if (parsed.graph !== undefined) {
-      const current = await this.graphs.get(name);
-      if (!current) throw new HttpException({ error: 'GRAPH_NOT_FOUND' }, HttpStatus.NOT_FOUND);
-      const idx = (current.variables || []).findIndex((v) => v.key === key);
-      if (idx < 0) throw new HttpException({ error: 'KEY_NOT_FOUND' }, HttpStatus.NOT_FOUND);
-      const variables = Array.from(current.variables || []);
-      variables[idx] = { key, value: parsed.graph! };
-      try {
-        await this.graphs.upsert({ name, version: current.version, nodes: current.nodes, edges: current.edges, variables });
-      } catch (e: unknown) {
-        if (isCodeError(e) && e.code === 'VERSION_CONFLICT') {
-          throw new HttpException({ error: 'VERSION_CONFLICT', current: e.current }, HttpStatus.CONFLICT);
-        }
-        throw e;
-      }
+    try { return await this.service.update('main', key, parsed); }
+    catch (e: unknown) {
+      if (isCodeError(e) && e.code === 'GRAPH_NOT_FOUND') throw new HttpException({ error: 'GRAPH_NOT_FOUND' }, HttpStatus.NOT_FOUND);
+      if (isCodeError(e) && e.code === 'KEY_NOT_FOUND') throw new HttpException({ error: 'KEY_NOT_FOUND' }, HttpStatus.NOT_FOUND);
+      if (isCodeError(e) && e.code === 'VERSION_CONFLICT') throw new HttpException({ error: 'VERSION_CONFLICT', current: e.current }, HttpStatus.CONFLICT);
+      throw e;
     }
-    // Local override update
-    if (parsed.local !== undefined) {
-      const prisma = this.prisma();
-      const val = (parsed.local ?? '').trim();
-      if (!val) {
-        // delete override if exists
-        await prisma.variableLocal.deleteMany({ where: { key } });
-      } else {
-        await prisma.variableLocal.upsert({ where: { key }, update: { value: val }, create: { key, value: val } });
-      }
-    }
-    const out: { key: string; graph?: string | null; local?: string | null } = { key };
-    if (parsed.graph !== undefined) out.graph = parsed.graph;
-    if (parsed.local !== undefined) {
-      const normalizedLocal = (parsed.local ?? '').trim();
-      out.local = normalizedLocal ? normalizedLocal : null;
-    }
-    return out;
   }
 
   @Delete(':key')
   @HttpCode(204)
   async remove(@Param('key') key: string): Promise<void> {
-    const name = 'main';
-    const current = await this.graphs.get(name);
-    if (current) {
-      const variables = (current.variables || []).filter((v) => v.key !== key);
-      try {
-        await this.graphs.upsert({ name, version: current.version, nodes: current.nodes, edges: current.edges, variables });
-      } catch (e: unknown) {
-        if (isCodeError(e) && e.code === 'VERSION_CONFLICT') {
-          throw new HttpException({ error: 'VERSION_CONFLICT', current: e.current }, HttpStatus.CONFLICT);
-        }
-        throw e;
-      }
+    try { await this.service.remove('main', key); }
+    catch (e: unknown) {
+      if (isCodeError(e) && e.code === 'VERSION_CONFLICT') throw new HttpException({ error: 'VERSION_CONFLICT', current: e.current }, HttpStatus.CONFLICT);
+      throw e;
     }
-    // Delete local override if present
-    const prisma = this.prisma();
-    await prisma.variableLocal.deleteMany({ where: { key } });
   }
 
   private prisma(): PrismaClient {
@@ -129,7 +53,7 @@ function isCodeError(e: unknown): e is { code?: string; current?: unknown } {
   return !!e && typeof e === 'object' && 'code' in e;
 }
 
-function parseCreateBody(body: unknown): { key: string; graph: string } {
+function parseCreateBody(body: unknown): CreateBody {
   if (!body || typeof body !== 'object') throw new HttpException({ error: 'BAD_SCHEMA' }, HttpStatus.BAD_REQUEST);
   const obj = body as Record<string, unknown>;
   const keyRaw = obj['key'];
@@ -143,7 +67,7 @@ function parseCreateBody(body: unknown): { key: string; graph: string } {
   return { key, graph };
 }
 
-function parseUpdateBody(body: unknown): { graph?: string | null; local?: string | null } {
+function parseUpdateBody(body: unknown): UpdateBody {
   if (!body || typeof body !== 'object') throw new HttpException({ error: 'BAD_SCHEMA' }, HttpStatus.BAD_REQUEST);
   const obj = body as Record<string, unknown>;
   const out: { graph?: string | null; local?: string | null } = {};

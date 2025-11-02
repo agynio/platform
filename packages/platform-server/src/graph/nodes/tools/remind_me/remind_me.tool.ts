@@ -1,6 +1,5 @@
 import z from 'zod';
-// Import AIMessage with alias to avoid shadowing/duplication issues
-import { AIMessage as AImsg, FunctionTool, SystemMessage } from '@agyn/llm';
+import { HumanMessage, FunctionTool, SystemMessage } from '@agyn/llm';
 import { v4 as uuidv4 } from 'uuid';
 import { LoggerService } from '../../../../core/services/logger.service';
 import { LLMContext } from '../../../../llm/types';
@@ -59,24 +58,7 @@ export class RemindMeFunctionTool extends FunctionTool<typeof remindMeInvocation
       if (!exists) return;
       this.active.delete(id);
       try {
-        // Construct AI message directly via constructor to avoid static helper ambiguity
-        const msg = new AImsg({
-          id: uuidv4(),
-          type: 'message',
-          role: 'assistant',
-          status: 'completed',
-          content: [
-            {
-              type: 'output_text',
-              text: `Reminder: ${note}`,
-              annotations: [],
-            },
-          ],
-        });
-        // Test-only guard to ensure correct instance type; does not affect production
-        if (process.env.NODE_ENV === 'test' && !(msg instanceof AImsg)) {
-          throw new Error('RemindMe: constructed message is not AIMessage');
-        }
+        const msg = HumanMessage.fromText(`Reminder: ${note}`);
         await ctx.callerAgent.invoke(threadId, [msg]);
       } catch (e: unknown) {
         const msg = e instanceof Error ? e.message : JSON.stringify(e);
