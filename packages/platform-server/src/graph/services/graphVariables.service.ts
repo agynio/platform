@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import type { PrismaClient } from '@prisma/client';
+import { PrismaService } from '../../core/services/prisma.service';
 import { GraphRepository } from '../graph.repository';
 import type { PersistedGraph } from '../types';
 
@@ -10,13 +10,13 @@ export type VarItem = { key: string; graph: string | null; local: string | null 
 export class GraphVariablesService {
   constructor(
     @Inject(GraphRepository) private readonly graphs: GraphRepository,
-    // Function getter to retrieve Prisma client lazily; avoids importing PrismaService here
-    private readonly getPrisma: () => PrismaClient,
+    // Inject PrismaService directly (standard Nest DI)
+    @Inject(PrismaService) private readonly prismaService: PrismaService,
   ) {}
 
   async list(name = 'main'): Promise<{ items: VarItem[] }> {
     const graph = (await this.graphs.get(name)) || ({ name, version: 0, updatedAt: new Date().toISOString(), nodes: [], edges: [], variables: [] } as PersistedGraph);
-    const prisma = this.prisma();
+    const prisma = this.prismaService.getClient();
     const locals = await prisma.variableLocal.findMany();
     const itemsMap = new Map<string, VarItem>();
     for (const v of graph.variables || []) itemsMap.set(v.key, { key: v.key, graph: v.value, local: null });
@@ -72,7 +72,7 @@ export class GraphVariablesService {
     }
     // Local override update
     if (req.local !== undefined) {
-      const prisma = this.prisma();
+      const prisma = this.prismaService.getClient();
       const val = (req.local ?? '').trim();
       if (!val) await prisma.variableLocal.deleteMany({ where: { key } });
       else await prisma.variableLocal.upsert({ where: { key }, update: { value: val }, create: { key, value: val } });
@@ -97,10 +97,7 @@ export class GraphVariablesService {
         throw e;
       }
     }
-    const prisma = this.prisma();
+    const prisma = this.prismaService.getClient();
     await prisma.variableLocal.deleteMany({ where: { key } });
   }
-
-  private prisma(): PrismaClient { return this.getPrisma(); }
 }
-

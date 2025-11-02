@@ -122,11 +122,8 @@ import { RemindMeNode } from './nodes/tools/remind_me/remind_me.node';
     ShellCommandNode,
     GithubCloneRepoNode,
     RemindMeNode,
-    {
-      provide: GraphVariablesService,
-      useFactory: (graphs: GraphRepository, prisma: PrismaService) => new GraphVariablesService(graphs, () => prisma.getClient()),
-      inject: [GraphRepository, PrismaService],
-    },
+    // Standard DI for GraphVariablesService
+    GraphVariablesService,
   ],
   exports: [LiveGraphRuntime, TemplateRegistry, PortsRegistry, GraphRepository, NodeStateService],
 })
