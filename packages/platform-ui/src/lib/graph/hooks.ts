@@ -85,8 +85,8 @@ export function useReminderCount(nodeId: string, enabled: boolean = true) {
     // On reconnect, refetch initial one-shot to reconcile
     const sock = graphSocket.connect();
     const onReconnect = () => {
-      // refresh initial source of truth
-      q.refetch();
+      // refresh initial source of truth via query invalidation
+      qc.invalidateQueries({ queryKey: ['graph', 'node', nodeId, 'reminders', 'count'] }).catch(() => {});
     };
     sock?.on('connect', onReconnect);
     return () => {

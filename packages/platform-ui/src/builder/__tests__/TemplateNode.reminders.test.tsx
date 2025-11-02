@@ -10,7 +10,7 @@ import { graphSocket } from '../../lib/graph/socket';
 describe('TemplateNode reminders badge via socket', () => {
   const g: any = globalThis as any;
   const node: any = { id: 'n1', data: { template: 'remindMeTool', config: {} } };
-  const templates: any[] = [{ name: 'remindMeTool', title: 'Remind Me', kind: 'tool', sourcePorts: {}, targetPorts: {} }];
+  const templates: any[] = [{ name: 'remindMeTool', title: 'Remind Me', kind: 'tool', sourcePorts: [], targetPorts: [] }];
 
   const origFetch = g.fetch;
   beforeEach(() => {
@@ -36,24 +36,22 @@ describe('TemplateNode reminders badge via socket', () => {
     // Initially no badge (count 0)
     expect(screen.queryByTitle('Active reminders: 0')).toBeNull();
 
-    // Simulate socket event for count=3
+    // Wait until hook registers socket listener, then emit
     const anySock: any = graphSocket as any;
-    const listeners: Map<string, Set<(ev: any) => void>> = anySock.reminderListeners;
-    let fired = false;
-    for (const [nodeId, set] of listeners) {
-      if (nodeId === 'n1') {
-        for (const fn of set) { fn({ nodeId: 'n1', count: 3, updatedAt: new Date().toISOString() }); fired = true; }
-      }
+    let attempts = 0;
+    while (attempts < 10 && !(anySock.reminderListeners && anySock.reminderListeners.get('n1'))) {
+      await new Promise((r) => setTimeout(r, 10));
+      attempts += 1;
     }
-    // If no listener registered yet, register and emit directly
-    if (!fired) {
-      const off = graphSocket.onReminderCount('n1', (ev) => {
-        // noop: handled by hook via queryClient
-      });
-      // emit after registering
-      const sets = (graphSocket as any).reminderListeners.get('n1') as Set<(ev: any) => void>;
-      for (const fn of sets) fn({ nodeId: 'n1', count: 3, updatedAt: new Date().toISOString() });
-      off();
+    const set = (anySock.reminderListeners.get('n1') as Set<(ev: any) => void>) || new Set();
+    for (const fn of set) fn({ nodeId: 'n1', count: 3, updatedAt: new Date().toISOString() });
+    // Wait until query cache reflects count
+    let tries = 0;
+    while (tries < 20) {
+      const d = qc.getQueryData(['graph', 'node', 'n1', 'reminders', 'count']) as { count?: number } | undefined;
+      if (d?.count === 3) break;
+      await new Promise((r) => setTimeout(r, 10));
+      tries += 1;
     }
 
     // Badge should appear with count 3
