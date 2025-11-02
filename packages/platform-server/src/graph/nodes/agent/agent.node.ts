@@ -255,7 +255,7 @@ export class AgentNode extends Node<AgentStaticConfig> {
     const busy = this.runningThreads.has(thread);
     if (busy) {
       this.buffer.enqueue(thread, messages);
-      return new ResponseMessage({ output: [AIMessage.fromText('queued').toPlain()] });
+      return ResponseMessage.fromText('queued');
     }
 
     this.runningThreads.add(thread);

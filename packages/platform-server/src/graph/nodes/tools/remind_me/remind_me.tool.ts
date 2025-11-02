@@ -1,6 +1,6 @@
 import z from 'zod';
 
-import { AIMessage, FunctionTool, SystemMessage } from '@agyn/llm';
+import { FunctionTool, HumanMessage } from '@agyn/llm';
 import { v4 as uuidv4 } from 'uuid';
 import { LoggerService } from '../../../../core/services/logger.service';
 import { LLMContext } from '../../../../llm/types';
@@ -59,7 +59,7 @@ export class RemindMeFunctionTool extends FunctionTool<typeof remindMeInvocation
       if (!exists) return;
       this.active.delete(id);
       try {
-        const msg = AIMessage.fromText(`Reminder: ${note}`);
+        const msg = HumanMessage.fromText(`Reminder: ${note}`);
 
         await ctx.callerAgent.invoke(threadId, [msg]);
       } catch (e: unknown) {
