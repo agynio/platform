@@ -22,38 +22,44 @@ export class AgentsPersistenceService {
 
   async beginRun(threadAlias: string, inputMessages: Prisma.InputJsonValue[]): Promise<RunStartResult> {
     const threadId = await this.ensureThreadByAlias(threadAlias);
-    const run = await this.prisma.run.create({ data: { threadId, status: RunStatus.running } });
-    await Promise.all(
-      inputMessages.map(async (msg) => {
-        const { kind, text } = this.extractKindText(msg);
-        const created = await this.prisma.message.create({ data: { kind, text, source: msg } });
-        await this.prisma.runMessage.create({
-          data: { runId: run.id, messageId: created.id, type: RunMessageType.input },
-        });
-      }),
-    );
-    return { runId: run.id };
+    const { runId } = await this.prisma.$transaction(async (tx) => {
+      const run = await tx.run.create({ data: { threadId, status: RunStatus.running } });
+      // Persist input messages and link within the same transaction
+      await Promise.all(
+        inputMessages.map(async (msg) => {
+          const { kind, text } = this.extractKindText(msg);
+          const created = await tx.message.create({ data: { kind, text, source: msg } });
+          await tx.runMessage.create({ data: { runId: run.id, messageId: created.id, type: RunMessageType.input } });
+        }),
+      );
+      return { runId: run.id };
+    });
+    return { runId };
   }
 
   async recordInjected(runId: string, injectedMessages: Prisma.InputJsonValue[]): Promise<void> {
-    await Promise.all(
-      injectedMessages.map(async (msg) => {
-        const { kind, text } = this.extractKindText(msg);
-        const created = await this.prisma.message.create({ data: { kind, text, source: msg } });
-        await this.prisma.runMessage.create({ data: { runId, messageId: created.id, type: RunMessageType.injected } });
-      }),
-    );
+    await this.prisma.$transaction(async (tx) => {
+      await Promise.all(
+        injectedMessages.map(async (msg) => {
+          const { kind, text } = this.extractKindText(msg);
+          const created = await tx.message.create({ data: { kind, text, source: msg } });
+          await tx.runMessage.create({ data: { runId, messageId: created.id, type: RunMessageType.injected } });
+        }),
+      );
+    });
   }
 
   async completeRun(runId: string, status: RunStatus, outputMessages: Prisma.InputJsonValue[]): Promise<void> {
-    await Promise.all(
-      outputMessages.map(async (msg) => {
-        const { kind, text } = this.extractKindText(msg);
-        const created = await this.prisma.message.create({ data: { kind, text, source: msg } });
-        await this.prisma.runMessage.create({ data: { runId, messageId: created.id, type: RunMessageType.output } });
-      }),
-    );
-    await this.prisma.run.update({ where: { id: runId }, data: { status } });
+    await this.prisma.$transaction(async (tx) => {
+      await Promise.all(
+        outputMessages.map(async (msg) => {
+          const { kind, text } = this.extractKindText(msg);
+          const created = await tx.message.create({ data: { kind, text, source: msg } });
+          await tx.runMessage.create({ data: { runId, messageId: created.id, type: RunMessageType.output } });
+        }),
+      );
+      await tx.run.update({ where: { id: runId }, data: { status } });
+    });
   }
 
   async listThreads(): Promise<Array<{ id: string; alias: string; createdAt: Date }>> {
