@@ -72,16 +72,6 @@ export const AgentStaticConfigSchema = z
       .min(1)
       .default(512)
       .describe('Maximum token budget for generated summaries.'),
-    injectSummary: z
-      .boolean()
-      .default(true)
-      .describe('When true, inject summarized context after system prompt.'),
-    summaryMaxTokens: z
-      .number()
-      .int()
-      .min(1)
-      .default(512)
-      .describe('Maximum tokens for injected summary (est. chars/4).'),
     restrictOutput: z.boolean().default(false).describe('When true, enforce calling a tool before finishing the turn.'),
     restrictionMessage: z
       .string()
@@ -198,8 +188,6 @@ export class AgentNode extends Node<AgentStaticConfig> {
       model: this.config.model ?? 'gpt-5',
       systemPrompt: this.config.systemPrompt ?? 'You are a helpful AI assistant.',
       tools,
-      injectSummary: this.config.injectSummary ?? true,
-      summaryMaxTokens: this.config.summaryMaxTokens ?? 512,
       memoryProvider: async (ctx) => {
         if (!this.memoryConnector) return null;
         const msg = await this.memoryConnector.renderMessage({ threadId: ctx.threadId });

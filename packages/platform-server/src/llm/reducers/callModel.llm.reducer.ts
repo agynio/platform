@@ -11,11 +11,9 @@ export class CallModelLLMReducer extends Reducer<LLMState, LLMContext> {
   }
 
   private tools: FunctionTool[] = [];
-  private params: { model: string; systemPrompt: string; injectSummary: boolean; summaryMaxTokens: number } = {
+  private params: { model: string; systemPrompt: string } = {
     model: '',
     systemPrompt: '',
-    injectSummary: true,
-    summaryMaxTokens: 512,
   };
   private llm?: LLM;
   private memoryProvider?: (
@@ -28,8 +26,6 @@ export class CallModelLLMReducer extends Reducer<LLMState, LLMContext> {
     model: string;
     systemPrompt: string;
     tools: FunctionTool[];
-    injectSummary?: boolean;
-    summaryMaxTokens?: number;
     memoryProvider?: (
       ctx: LLMContext,
       state: LLMState,
@@ -39,8 +35,6 @@ export class CallModelLLMReducer extends Reducer<LLMState, LLMContext> {
     this.params = {
       model: params.model,
       systemPrompt: params.systemPrompt,
-      injectSummary: params.injectSummary ?? true,
-      summaryMaxTokens: params.summaryMaxTokens ?? 512,
     };
     this.tools = params.tools || [];
     this.memoryProvider = params.memoryProvider;
@@ -52,28 +46,20 @@ export class CallModelLLMReducer extends Reducer<LLMState, LLMContext> {
       throw new Error('CallModelLLMReducer not initialized');
     }
     const system = SystemMessage.fromText(this.params.systemPrompt);
-    // Optional summary injection as a HumanMessage immediately after the system prompt.
+    // Unconditional summary injection: inject HumanMessage immediately after System when summary is non-empty.
     const summaryText = state.summary && state.summary.trim().length > 0 ? state.summary.trim() : undefined;
-    const shouldInjectSummary = !!summaryText && this.params.injectSummary === true;
-    // Estimate token cap via ~chars/4 without modifying persisted state.summary
-    const maxChars = this.params.summaryMaxTokens * 4;
-    const injectedSummaryText = shouldInjectSummary
-      ? summaryText!.length > maxChars
-        ? summaryText!.slice(0, maxChars)
-        : summaryText!
-      : undefined;
     // Prevent duplicate injection if same text already exists as a HumanMessage in state.messages
-    const isDuplicateSummary = injectedSummaryText
-      ? state.messages.some((m) => m instanceof HumanMessage && m.text === injectedSummaryText)
+    const isDuplicateSummary = summaryText
+      ? state.messages.some((m) => m instanceof HumanMessage && m.text === summaryText)
       : false;
-    const summaryMsg = shouldInjectSummary && !isDuplicateSummary ? HumanMessage.fromText(injectedSummaryText!) : null;
+    const summaryMsg = summaryText && !isDuplicateSummary ? HumanMessage.fromText(summaryText) : null;
 
     const inputBase: (SystemMessage | LLMMessage)[] = summaryMsg ? [system, summaryMsg, ...state.messages] : [system, ...state.messages];
     const mem = this.memoryProvider ? await this.memoryProvider(_ctx, state) : null;
     let input: (SystemMessage | LLMMessage)[] = inputBase;
     if (mem && mem.msg) {
       if (mem.place === 'after_system') {
-        // Respect memory placement ordering with optional summary: [System, Human(summary?), System(memory), ...messages]
+        // Respect memory placement ordering: [System, Human(summary?), System(memory), ...messages]
         input = summaryMsg ? [system, summaryMsg, mem.msg, ...state.messages] : [system, mem.msg, ...state.messages];
       } else {
         // last_message placement: [System, Human(summary?), ...messages, System(memory)]
