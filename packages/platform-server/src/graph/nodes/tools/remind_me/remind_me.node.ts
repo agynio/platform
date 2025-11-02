@@ -4,19 +4,30 @@ import { RemindMeFunctionTool, RemindMeToolStaticConfigSchema } from './remind_m
 import z from 'zod';
 import { AgentNode } from '../../agent/agent.node';
 import { Inject, Injectable, Scope } from '@nestjs/common';
+import { GraphSocketGateway } from '../../../../gateway/graph.socket.gateway';
 
 @Injectable({ scope: Scope.TRANSIENT })
 export class RemindMeNode extends BaseToolNode<z.infer<typeof RemindMeToolStaticConfigSchema>> {
   private toolInstance?: RemindMeFunctionTool;
   private callerAgent?: AgentNode;
 
-  constructor(@Inject(LoggerService) protected logger: LoggerService) {
+  constructor(
+    @Inject(LoggerService) protected logger: LoggerService,
+    @Inject(GraphSocketGateway) private readonly gateway?: GraphSocketGateway,
+  ) {
     super(logger);
   }
 
   getTool(): RemindMeFunctionTool {
     if (!this.toolInstance) {
       this.toolInstance = new RemindMeFunctionTool(this.logger);
+      // Wire registry change callback to socket gateway emission
+      this.toolInstance.setOnRegistryChanged((count: number, atMs?: number) => {
+        const id = this._nodeId || this.nodeId; // prefer initialized id
+        try {
+          this.gateway?.emitReminderCount(id, count, atMs);
+        } catch {}
+      });
     }
     return this.toolInstance;
   }
@@ -30,5 +41,14 @@ export class RemindMeNode extends BaseToolNode<z.infer<typeof RemindMeToolStatic
       targetPorts: { $self: { kind: 'instance' } },
       sourcePorts: { caller: { kind: 'method', create: 'setCallerAgent' } },
     } as const;
+  }
+
+  protected async doDeprovision(): Promise<void> {
+    // Ensure tool timers are cleared and count=0 emitted
+    try {
+      await this.toolInstance?.destroy();
+      const id = this._nodeId || this.nodeId;
+      this.gateway?.emitReminderCount(id, 0);
+    } catch {}
   }
 }

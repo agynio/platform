@@ -36,6 +36,16 @@ export const NodeStateEventSchema = z
   .strict();
 export type NodeStateEvent = z.infer<typeof NodeStateEventSchema>;
 
+// RemindMe: active reminder count event
+export const ReminderCountEventSchema = z
+  .object({
+    nodeId: z.string(),
+    count: z.number().int().min(0),
+    updatedAt: z.string().datetime(),
+  })
+  .strict();
+export type ReminderCountEvent = z.infer<typeof ReminderCountEventSchema>;
+
 /**
  * Socket.IO gateway attached to Fastify/Nest HTTP server for graph events.
  * Constructors DI-only; call init({ server }) explicitly from bootstrap.
@@ -67,7 +77,7 @@ export class GraphSocketGateway {
     return this;
   }
 
-  private broadcast<T>(event: 'node_status' | 'node_state', payload: T, schema: z.ZodType<T>) {
+  private broadcast<T>(event: 'node_status' | 'node_state' | 'node_reminder_count', payload: T, schema: z.ZodType<T>) {
     if (!this.io) return;
     const parsed = schema.safeParse(payload);
     if (!parsed.success) {
@@ -99,5 +109,15 @@ export class GraphSocketGateway {
       updatedAt: new Date(updatedAtMs ?? Date.now()).toISOString(),
     };
     this.broadcast('node_state', payload, NodeStateEventSchema);
+  }
+
+  /** Emit node_reminder_count event for RemindMe tool nodes when registry changes. */
+  emitReminderCount(nodeId: string, count: number, updatedAtMs?: number): void {
+    const payload: ReminderCountEvent = {
+      nodeId,
+      count,
+      updatedAt: new Date(updatedAtMs ?? Date.now()).toISOString(),
+    };
+    this.broadcast('node_reminder_count', payload, ReminderCountEventSchema);
   }
 }

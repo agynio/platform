@@ -45,3 +45,9 @@ export interface ReminderDTO {
   note: string;
   at: string; // ISO timestamp
 }
+
+export interface ReminderCountEvent {
+  nodeId: string;
+  count: number;
+  updatedAt: string; // ISO timestamp
+}

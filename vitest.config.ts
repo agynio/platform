@@ -9,8 +9,8 @@ export default defineConfig({
   test: {
     environment: 'node',
     globals: true,
-    // Look for tests anywhere under packages/*
-    include: ['**/__tests__/**/*.test.ts'],
+    // Look for tests anywhere under packages/* (.ts and .tsx)
+    include: ['**/__tests__/**/*.test.ts', '**/__tests__/**/*.test.tsx'],
     hookTimeout: 60000,
     coverage: {
       enabled: false,

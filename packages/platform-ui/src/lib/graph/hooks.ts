@@ -1,9 +1,9 @@
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from './api';
 import type { PersistedGraphUpsertRequestUI } from './api';
 import { graphSocket } from './socket';
-import type { NodeStatus, NodeStatusEvent, ReminderDTO } from './types';
+import type { NodeStatus, NodeStatusEvent, ReminderDTO, ReminderCountEvent } from './types';
 import { z } from 'zod';
 
 export function useTemplates() {
@@ -50,6 +50,51 @@ export function useNodeReminders(nodeId: string, enabled: boolean = true) {
     staleTime: 2000,
     enabled: enabled && !!nodeId,
   });
+  return q;
+}
+
+// Reminder count hook: one-shot GET + socket updates
+export function useReminderCount(nodeId: string, enabled: boolean = true) {
+  const qc = useQueryClient();
+  const lastUpdatedRef = useRef<number>(0);
+  const q = useQuery<{ count: number; updatedAt: string } | undefined>({
+    queryKey: ['graph', 'node', nodeId, 'reminders', 'count'],
+    queryFn: async () => {
+      const res = await api.getNodeReminders(nodeId);
+      const updatedAt = new Date().toISOString();
+      const count = res?.items?.length || 0;
+      lastUpdatedRef.current = Date.now();
+      return { count, updatedAt };
+    },
+    enabled: enabled && !!nodeId,
+    staleTime: Infinity,
+  });
+
+  useEffect(() => {
+    if (!enabled) return;
+    graphSocket.connect();
+    const off = graphSocket.onReminderCount(nodeId, (ev: ReminderCountEvent) => {
+      const at = Date.parse(ev.updatedAt || new Date().toISOString());
+      if (!Number.isFinite(at)) return;
+      // Accept only if newer than last applied
+      if (at >= lastUpdatedRef.current) {
+        lastUpdatedRef.current = at;
+        qc.setQueryData(['graph', 'node', nodeId, 'reminders', 'count'], { count: ev.count, updatedAt: ev.updatedAt });
+      }
+    });
+    // On reconnect, refetch initial one-shot to reconcile
+    const sock = graphSocket.connect();
+    const onReconnect = () => {
+      // refresh initial source of truth
+      q.refetch();
+    };
+    sock?.on('connect', onReconnect);
+    return () => {
+      off();
+      sock?.off('connect', onReconnect);
+    };
+  }, [nodeId, qc, enabled]);
+
   return q;
 }
 

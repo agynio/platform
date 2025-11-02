@@ -3,7 +3,7 @@ import { Handle, Position, type NodeProps } from 'reactflow';
 import { useTemplates } from '../useTemplates';
 import { getDisplayTitle, getKind, kindBadgeClasses, kindLabel } from '../lib/display';
 import { useRunningCount } from '../../lib/obs/runningStore';
-import { useNodeReminders, useNodeStatus } from '@/lib/graph/hooks';
+import { useReminderCount, useNodeStatus } from '@/lib/graph/hooks';
 import { useNodeVaultStatus } from '@/lib/vault/useNodeVaultStatus';
 
 interface BuilderNodeData {
@@ -21,8 +21,8 @@ function TemplateNodeComponent({ id, data }: NodeProps<BuilderNodeData>) {
   const displayTitle = getDisplayTitle(templates, data.template, data.config);
   const kind = getKind(templates, data.template);
   const runningCount = useRunningCount(id, kind === 'agent' || kind === 'tool' ? (kind as 'agent' | 'tool') : undefined);
-  const reminders = useNodeReminders(id, data.template === 'remindMeTool');
-  const reminderCount = (reminders.data?.items?.length || 0) as number;
+  const reminderCountQ = useReminderCount(id, data.template === 'remindMeTool');
+  const reminderCount = (reminderCountQ.data?.count || 0) as number;
   const nodeStatus = useNodeStatus(id);
   const vaultAgg = useNodeVaultStatus(data?.config);
 

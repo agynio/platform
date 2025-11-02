@@ -7,10 +7,11 @@ Behavior
 
 New in vNext
 - In-memory registry of scheduled reminders per RemindMe node instance.
-- Server endpoint: `GET /graph/nodes/:nodeId/reminders` returns `{ items: [{ id, threadId, note, at }] }` for active (pending) reminders.
+- Server endpoint: `GET /api/graph/nodes/:nodeId/reminders` returns `{ items: [{ id, threadId, note, at }] }` for active (pending) reminders.
+- Socket event: `node_reminder_count` broadcast with payload `{ nodeId, count, updatedAt }` whenever the registry size changes.
 - UI shows:
-  - Numeric badge on the Remind Me node with active reminder count.
-  - An “Active Reminders” section in the Activity sidebar listing note, scheduled time, and threadId. Auto-refresh every ~3.5s.
+  - Numeric badge on the Remind Me node with active reminder count, updated via socket events (no polling).
+  - An “Active Reminders” section in the Activity sidebar listing note, scheduled time, and threadId. One-shot fetch on open; may refresh on reconnect.
 
 Usage
 - Tool name: `remindMeTool`
