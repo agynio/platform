@@ -264,7 +264,7 @@ export class AgentNode extends Node<AgentStaticConfig> {
     this.runningThreads.add(thread);
     let result: ResponseMessage | ToolCallOutputMessage;
     // Begin run and persist input messages (forward-only)
-    const toJson = (bm: BufferMessage): Prisma.InputJsonValue => {
+    const toJson = (bm: BufferMessage): JsonValue => {
       const plain = tryToPlain(bm);
       if (plain) return plain;
       // Fallback JSON structure when toPlain is unavailable
@@ -275,12 +275,12 @@ export class AgentNode extends Node<AgentStaticConfig> {
         role,
         content: [{ type: role === 'assistant' ? 'output_text' : 'input_text', text }],
       };
-      return ensureJsonValue(fallback);
+      return toJsonValue(fallback);
     };
     let runId: string | undefined;
     if (this.persistence) {
       try {
-        const inputJson = messages.map((m) => toJson(m));
+        const inputJson = messages.map((m) => toJson(m) as Prisma.InputJsonValue);
         const started = await this.persistence.beginRun(thread, inputJson);
         runId = started.runId;
       } catch (e) {
@@ -309,11 +309,11 @@ export class AgentNode extends Node<AgentStaticConfig> {
                 const initialPlains = messages.map((m) => JSON.stringify(toJson(m)));
                 const injectedPlains = newState.messages
                   .map((m) => tryToPlain(m))
-                  .filter((p): p is Prisma.InputJsonValue => Boolean(p))
+                  .filter((p): p is JsonValue => Boolean(p))
                   .filter((p) => isSystemRole(p));
                 const newInjected = injectedPlains.filter((p) => !initialPlains.includes(JSON.stringify(p)));
                 if (newInjected.length > 0) {
-                  await this.persistence.recordInjected(runId, newInjected);
+                  await this.persistence.recordInjected(runId, newInjected as Prisma.InputJsonValue[]);
                 }
               }
             } catch (e) {
@@ -327,11 +327,11 @@ export class AgentNode extends Node<AgentStaticConfig> {
               try {
                 if (runId) {
                   if (result instanceof ResponseMessage) {
-                    const outputs = result.output.map((o) => ensureJsonValue(tryToPlain(o) ?? o));
-                    await this.persistence.completeRun(runId, RunStatus.finished, outputs);
+                    const outputs = result.output.map((o) => toJsonValue(tryToPlain(o) ?? o));
+                    await this.persistence.completeRun(runId, RunStatus.finished, outputs as Prisma.InputJsonValue[]);
                   } else if (result instanceof ToolCallOutputMessage) {
-                    const out = ensureJsonValue(tryToPlain(result) ?? result);
-                    await this.persistence.completeRun(runId, RunStatus.finished, [out]);
+                    const out = toJsonValue(tryToPlain(result) ?? result);
+                    await this.persistence.completeRun(runId, RunStatus.finished, [out as Prisma.InputJsonValue]);
                   }
                 }
               } catch (e) {
@@ -351,8 +351,8 @@ export class AgentNode extends Node<AgentStaticConfig> {
       if (this.persistence) {
         try {
           if (runId) {
-            const out = ensureJsonValue(tryToPlain(result) ?? result);
-            await this.persistence.completeRun(runId, RunStatus.terminated, [out]);
+            const out = toJsonValue(tryToPlain(result) ?? result);
+            await this.persistence.completeRun(runId, RunStatus.terminated, [out as Prisma.InputJsonValue]);
           }
         } catch {}
       }
@@ -448,42 +448,43 @@ export class AgentNode extends Node<AgentStaticConfig> {
 // ---- Typed helpers for JSON conversion ----
 type Plainable = { toPlain: () => unknown };
 
+// Strongly-typed JSON value
+type JsonValue = string | number | boolean | null | { [k: string]: JsonValue } | JsonValue[];
+
 function hasToPlain(x: unknown): x is Plainable {
   return typeof x === 'object' && x !== null && typeof (x as Record<string, unknown>).toPlain === 'function';
 }
 
-function tryToPlain(x: unknown): Prisma.InputJsonValue | undefined {
+function tryToPlain(x: unknown): JsonValue | undefined {
   if (!hasToPlain(x)) return undefined;
   try {
     const v = (x as Plainable).toPlain();
-    return ensureJsonValue(v);
+    return toJsonValue(v);
   } catch {
     return undefined;
   }
 }
 
-function isJsonPrimitive(v: unknown): v is string | number | boolean {
-  return (
-    typeof v === 'string' ||
-    typeof v === 'number' ||
-    typeof v === 'boolean'
-  );
+// Plain object guard
+function isPlainObject(v: unknown): v is Record<string, unknown> {
+  if (v === null || typeof v !== 'object') return false;
+  const proto = Object.getPrototypeOf(v);
+  return proto === Object.prototype || proto === null;
 }
 
-function ensureJsonValue(v: unknown): Prisma.InputJsonValue {
-  if (v === null) return 'null' as unknown as Prisma.InputJsonValue;
-  if (isJsonPrimitive(v)) return v as unknown as Prisma.InputJsonValue;
-  if (Array.isArray(v)) return v.map((i) => ensureJsonValue(i)) as unknown as Prisma.InputJsonValue;
-  if (typeof v === 'object' && v !== null) {
-    const out: Record<string, Prisma.InputJsonValue> = {};
-    for (const [k, val] of Object.entries(v)) out[k] = ensureJsonValue(val);
-    return out as unknown as Prisma.InputJsonValue;
+function toJsonValue(v: unknown): JsonValue {
+  if (v === null) return null;
+  if (typeof v === 'string' || typeof v === 'number' || typeof v === 'boolean') return v;
+  if (Array.isArray(v)) return v.map((i) => toJsonValue(i));
+  if (isPlainObject(v)) {
+    const entries = Object.entries(v).filter(([, val]) => typeof val !== 'undefined');
+    return Object.fromEntries(entries.map(([k, val]) => [k, toJsonValue(val)]));
   }
-  // Fallback stringify for unsupported values (functions, symbols)
-  return String(v) as unknown as Prisma.InputJsonValue;
+  // Fallback stringify for unsupported values (functions, symbols, undefined, non-plain objects)
+  return String(v);
 }
 
-function isSystemRole(v: Prisma.InputJsonValue): boolean {
+function isSystemRole(v: JsonValue): boolean {
   if (typeof v !== 'object' || v === null) return false;
   const o = v as Record<string, unknown>;
   return typeof o.role === 'string' && o.role === 'system';
