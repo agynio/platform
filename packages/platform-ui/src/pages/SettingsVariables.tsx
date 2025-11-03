@@ -2,7 +2,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useMemo, useRef, useState } from 'react';
 import { Button, Input, Table, Thead, Tbody, Tr, Th, Td } from '@agyn/ui';
 import { notifyError, notifySuccess } from '../lib/notify';
-import { httpJson } from '../lib/apiClient';
+import { httpJson } from '@/api/client';
 
 type VarItem = { key: string; graph: string | null; local: string | null };
 
