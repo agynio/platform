@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { api } from '../graph/api';
+import { api } from '@/api/graph';
 
 type Status = 'idle' | 'loading' | 'exists' | 'missing' | 'error' | 'disabled';
 

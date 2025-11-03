@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Button, Input } from '@agyn/ui';
 import type { ContainerNixConfig, NixPackageSelection } from './types';
 import { useQuery } from '@tanstack/react-query';
-import { fetchPackages, fetchVersions, resolvePackage } from '@/services/nix';
+import { fetchPackages, fetchVersions, resolvePackage } from '@/api/nix';
 
 // Debounce helper
 function useDebounced<T>(value: T, delay = 300) {

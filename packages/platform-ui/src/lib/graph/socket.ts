@@ -1,5 +1,5 @@
 import { io, Socket } from 'socket.io-client';
-import { getApiBase } from '../apiClient';
+import { getApiBase } from '@/api/client';
 import type { NodeStatusEvent, ReminderCountEvent } from './types';
 
 type NodeStateEvent = { nodeId: string; state: Record<string, unknown>; updatedAt: string };
@@ -16,7 +16,7 @@ class GraphSocket {
 
   connect(baseUrl?: string) {
     if (this.socket) return this.socket;
-    const host = getApiBase(baseUrl);
+    const host = getApiBase(baseUrl ?? '');
     this.socket = io(host, { path: '/socket.io', transports: ['websocket'], forceNew: false, autoConnect: true, timeout: 10000, reconnection: true, reconnectionAttempts: Infinity, reconnectionDelay: 1000, reconnectionDelayMax: 5000, withCredentials: true });
     this.socket.on('connect', () => {
       // noop
@@ -61,7 +61,6 @@ class GraphSocket {
       if (set!.size === 0) this.stateListeners.delete(nodeId);
     };
   }
-
   onReminderCount(nodeId: string, cb: ReminderListener) {
     let set = this.reminderListeners.get(nodeId);
     if (!set) {

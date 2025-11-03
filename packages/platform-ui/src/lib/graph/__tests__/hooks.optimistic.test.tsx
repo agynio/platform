@@ -6,7 +6,7 @@ import { useNodeAction, useNodeStatus } from '../../graph/hooks';
 import { graphSocket } from '../../graph/socket';
 import type { NodeStatusEvent } from '../../graph/types';
 
-vi.mock('../../graph/api', () => ({
+vi.mock('@/api/graph', () => ({
   api: {
     postNodeAction: vi.fn(async () => {}),
     getNodeStatus: vi.fn(async () => ({ isPaused: false, provisionStatus: { state: 'not_ready' } })),
@@ -49,7 +49,7 @@ describe('optimistic actions with socket reconciliation', () => {
 
   it('rollback on error and notify (provision)', async () => {
     const { wrapper } = createWrapper();
-    const { api } = await import('../../graph/api');
+    const { api } = await import('@/api/graph');
     (api.postNodeAction as any).mockImplementationOnce(async () => { throw new Error('boom'); });
     const { result: statusQ } = renderHook(() => useNodeStatus('n3'), { wrapper });
     await waitFor(() => expect(statusQ.current.data).toBeTruthy());

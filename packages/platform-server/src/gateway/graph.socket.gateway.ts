@@ -45,7 +45,6 @@ export const ReminderCountEventSchema = z
   })
   .strict();
 export type ReminderCountEvent = z.infer<typeof ReminderCountEventSchema>;
-
 /**
  * Socket.IO gateway attached to Fastify/Nest HTTP server for graph events.
  * Constructors DI-only; call init({ server }) explicitly from bootstrap.

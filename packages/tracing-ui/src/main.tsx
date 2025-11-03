@@ -27,7 +27,12 @@ function App() {
     </BrowserRouter>
   );
 }
-const serverUrl = import.meta.env?.VITE_OBS_SERVER_URL as string;
+// Require serverUrl via DOM data attribute or global variable; fail fast if missing.
+const rootEl = document.getElementById('root') as (HTMLElement & { dataset?: DOMStringMap }) | null;
+const serverUrl = (rootEl?.dataset?.serverUrl as string | undefined) || (globalThis as any)?.__OBS_UI_SERVER_URL;
+if (!serverUrl || typeof serverUrl !== 'string') {
+  throw new Error('Tracing UI requires serverUrl provided via ObsUiProvider. Set data-server-url on #root or global __OBS_UI_SERVER_URL.');
+}
 createRoot(document.getElementById('root')!).render(
   <ObsUiProvider serverUrl={serverUrl}>
     <App />

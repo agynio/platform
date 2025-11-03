@@ -14,8 +14,8 @@ describe('apiClient base URL resolution', () => {
 
   async function importFresh() {
     // dynamic import of the module to use current env
-    const mod = await import('../../lib/apiClient');
-    return mod;
+    const mod = await import('../../api/client');
+    return mod as typeof import('../../api/client');
   }
 
   it('uses override argument first', async () => {
@@ -24,28 +24,37 @@ describe('apiClient base URL resolution', () => {
   });
 
   it('prefers VITE_API_BASE_URL over others', async () => {
-    vi.stubEnv('VITE_API_BASE_URL', 'https://vite.example');
+    // Simulate Vite env via global importMeta
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (globalThis as any).importMeta = { env: { VITE_API_BASE_URL: 'https://vite.example' } };
     vi.stubEnv('API_BASE_URL', 'https://node.example');
     const { getApiBase } = await importFresh();
     expect(getApiBase()).toBe('https://vite.example');
   });
 
   it('falls back to API_BASE_URL when VITE_API_BASE_URL missing', async () => {
+    // Remove vite env and set node env
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (globalThis as any).importMeta = { env: {} };
     vi.stubEnv('API_BASE_URL', 'https://node.example');
     const { getApiBase } = await importFresh();
     expect(getApiBase()).toBe('https://node.example');
   });
 
-
-  it('returns empty string when VITEST is set', async () => {
-    vi.stubEnv('VITEST', 'true');
+  it('returns empty string when VITE_API_BASE_URL is explicitly empty (tests)', async () => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (globalThis as any).importMeta = { env: { VITE_API_BASE_URL: '' } };
     const { getApiBase } = await importFresh();
     expect(getApiBase()).toBe('');
   });
 
-  it.skip('returns default localhost when no envs (cannot unset VITEST in Vitest runtime)', async () => {
+  it('throws when no envs configured and no override', async () => {
+    // Remove vite env
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (globalThis as any).importMeta = { env: {} };
+    vi.unstubAllEnvs();
     const { getApiBase } = await importFresh();
-    expect(getApiBase()).toBe('http://localhost:3010');
+    expect(() => getApiBase()).toThrowError(/API base not configured/);
   });
 });
 
@@ -59,8 +68,8 @@ describe('apiClient buildUrl edge cases', () => {
   });
 
   async function importFresh() {
-    const mod = await import('../../lib/apiClient');
-    return mod;
+    const mod = await import('../../api/client');
+    return mod as typeof import('../../api/client');
   }
 
   it('joins base with leading slash path', async () => {

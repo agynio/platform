@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { api } from './api';
-import type { PersistedGraphUpsertRequestUI } from './api';
+import { api } from '@/api/graph';
+import type { PersistedGraphUpsertRequestUI } from '@/api/graph';
 import { graphSocket } from './socket';
 import type { NodeStatus, NodeStatusEvent, ReminderDTO, ReminderCountEvent } from './types';
 import { z } from 'zod';
@@ -97,7 +97,6 @@ export function useReminderCount(nodeId: string, enabled: boolean = true) {
 
   return q;
 }
-
 export function useNodeAction(nodeId: string) {
   const qc = useQueryClient();
   return useMutation({

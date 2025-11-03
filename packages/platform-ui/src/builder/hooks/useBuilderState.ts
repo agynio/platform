@@ -11,8 +11,8 @@ import {
   type Node,
 } from 'reactflow';
 import { v4 as uuid } from 'uuid';
-import { getApiBase } from '../../lib/apiClient';
-import type { PersistedGraphUpsertRequestUI } from '../../lib/graph/api';
+import { client, api } from '@/api';
+import type { PersistedGraphUpsertRequestUI } from '@/api/graph';
 import type { TemplateNodeSchema, PersistedGraph } from '@agyn/shared';
 import { deepEqual } from '../../lib/utils';
 
@@ -43,7 +43,7 @@ interface UseBuilderStateResult {
 
 type BuilderOptions = { debounceMs?: number };
 
-export function useBuilderState(serverBase = getApiBase(), options?: BuilderOptions): UseBuilderStateResult {
+export function useBuilderState(serverBase = client.getApiBase(), options?: BuilderOptions): UseBuilderStateResult {
   const [nodes, setNodes] = useState<BuilderNode[]>([]);
   const [edges, setEdges] = useState<Edge[]>([]);
   const [templates, setTemplates] = useState<TemplateNodeSchema[]>([]);
@@ -65,8 +65,8 @@ export function useBuilderState(serverBase = getApiBase(), options?: BuilderOpti
     (async () => {
       try {
         const [tplRes, graphRes] = await Promise.all([
-          fetch(`${serverBase}/api/graph/templates`).then((r) => r.json()),
-          fetch(`${serverBase}/api/graph`).then((r) => r.json()),
+          api.graph.getTemplates(serverBase),
+          client.httpJson<PersistedGraph>(`/api/graph`, undefined, serverBase),
         ]);
         if (cancelled) return;
         setTemplates(tplRes as TemplateNodeSchema[]);
@@ -247,18 +247,8 @@ export function useBuilderState(serverBase = getApiBase(), options?: BuilderOpti
             targetHandle: e.targetHandle,
           })),
         };
-        const res = await fetch(`${serverBase}/api/graph`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload),
-        });
-        if (res.status === 409) {
-          setSaveState('conflict');
-          await res.json();
-          return;
-        }
-        if (!res.ok) throw new Error('Save failed');
-        const saved: PersistedGraph = await res.json();
+        const saved = await api.graph.saveFullGraph(payload, serverBase);
+        if (!saved) throw new Error('Save failed');
         versionRef.current = saved.version;
         setDirty(false); // reset dirty after successful save
         setSaveState('saved');

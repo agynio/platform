@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 
-const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3010';
+const API_BASE: string | undefined = import.meta.env.VITE_API_BASE_URL as string | undefined;
 
 type ThreadItem = { id: string; alias: string; createdAt: string };
 type RunItem = { id: string; status: 'running' | 'finished' | 'terminated'; createdAt: string; updatedAt: string };
@@ -14,6 +14,9 @@ async function api<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 export function AgentsThreads() {
+  if (!API_BASE) {
+    return <div className="p-4 text-sm">Agents API base not configured. Set VITE_API_BASE_URL.</div>;
+  }
   const [selectedThreadId, setSelectedThreadId] = useState<string | undefined>(undefined);
   const [selectedRunId, setSelectedRunId] = useState<string | undefined>(undefined);
 

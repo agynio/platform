@@ -1,8 +1,6 @@
 // Runtime configuration for the obs-ui library.
 // Provider sets the serverUrl at runtime; services read it via getters.
 
-import { isTest } from './utils/env';
-
 let _serverUrl: string | null = null;
 
 export function setServerUrl(url: string) {
@@ -12,7 +10,5 @@ export function setServerUrl(url: string) {
 
 export function getServerUrl(): string {
   if (_serverUrl) return _serverUrl;
-  // In test environment, fall back to localhost to avoid provider boilerplate in unit tests
-  if (isTest) return 'http://localhost:4319';
   throw new Error('ObsUi: serverUrl not configured. Wrap your app in <ObsUiProvider serverUrl={...} />');
 }

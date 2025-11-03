@@ -1,9 +1,8 @@
 import { ObsUiProvider, TracingTracesView } from '@agyn/tracing-ui';
-
-// Use env var with safe default; avoid unsafe cast
-const serverUrl = import.meta.env.VITE_OBS_SERVER_URL || 'http://localhost:4319';
+const serverUrl = import.meta.env.VITE_TRACING_SERVER_URL as string | undefined;
 
 export function TracingTraces() {
+  if (!serverUrl) return <div className="p-4 text-sm">Tracing server URL not configured. Set VITE_TRACING_SERVER_URL.</div>;
   return (
     <div className="p-4">
       <ObsUiProvider serverUrl={serverUrl}>

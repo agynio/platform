@@ -1,7 +1,7 @@
-// Centralized API client utilities
+// Centralized API client utilities (moved from src/lib/apiClient.ts)
 // - getApiBase(): resolve API base URL with precedence
-// - buildUrl(path): join base with normalized path
-// - httpJson<T>(): fetch JSON with sane defaults
+// - buildUrl(path, base?): join base with normalized path
+// - httpJson<T>(path, init?, base?): fetch JSON with sane defaults
 
 type ViteEnv = {
   VITE_API_BASE_URL?: string;
@@ -11,7 +11,7 @@ function readViteEnv(): ViteEnv | undefined {
   try {
     // Prefer globalThis.importMeta (used in tests), fallback to import.meta when present
     const fromGlobal = (globalThis as Record<string, unknown> | undefined)?.importMeta;
-    const im = (typeof import.meta !== 'undefined' ? import.meta : undefined) ?? fromGlobal;
+    const im = fromGlobal ?? (typeof import.meta !== 'undefined' ? import.meta : undefined);
     if (im && typeof im === 'object' && 'env' in (im as Record<string, unknown>)) {
       const env = (im as { env?: unknown }).env;
       if (env && typeof env === 'object') return env as ViteEnv;
@@ -39,36 +39,18 @@ export function getApiBase(override?: string): string {
   // 1) explicit override
   // 2) import.meta.env.VITE_API_BASE_URL
   // 3) process.env.API_BASE_URL
-  // 4) if process.env.VITEST -> ''
-  // 5) default 'http://localhost:3010'
+  // 4) otherwise throw (no hardcoded defaults)
   if (override !== undefined) return override;
   const ve = readViteEnv();
   const ne = readNodeEnv();
 
   const viteApi = ve?.VITE_API_BASE_URL;
-  if (viteApi) return viteApi;
+  // If defined (including empty string), return value as-is. Empty string means relative base for tests.
+  if (viteApi !== undefined) return viteApi as string;
 
   const nodeBase = ne?.API_BASE_URL;
   if (nodeBase) return nodeBase;
-
-  const isVitest = (() => {
-    try {
-      if (typeof ne?.VITEST === 'string') return true;
-      const im: unknown = (typeof import.meta !== 'undefined' ? import.meta : undefined) ?? (globalThis as { importMeta?: unknown }).importMeta;
-      const has = (obj: unknown, key: string): obj is Record<string, unknown> =>
-        !!obj && typeof obj === 'object' && key in obj;
-      if (has(im, 'vitest')) return true;
-      const g = globalThis as Record<string, unknown>;
-      if (typeof g.vitest !== 'undefined') return true;
-      if (typeof g.vi !== 'undefined') return true;
-      return false;
-    } catch {
-      return false;
-    }
-  })();
-  if (isVitest) return '';
-
-  return 'http://localhost:3010';
+  throw new Error('API base not configured. Set VITE_API_BASE_URL or pass override.');
 }
 
 export function buildUrl(path: string, base?: string): string {
@@ -80,8 +62,8 @@ export function buildUrl(path: string, base?: string): string {
 }
 
 // Returns parsed JSON or undefined (e.g., for 204 or non-JSON bodies)
-export async function httpJson<T = unknown>(path: string, init?: RequestInit): Promise<T | undefined> {
-  const url = buildUrl(path);
+export async function httpJson<T = unknown>(path: string, init?: RequestInit, base?: string): Promise<T | undefined> {
+  const url = buildUrl(path, base);
   const res = await fetch(url, {
     ...init,
     headers: { 'Content-Type': 'application/json', ...(init?.headers || {}) },
