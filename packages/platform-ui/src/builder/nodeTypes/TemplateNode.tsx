@@ -3,7 +3,11 @@ import { Handle, Position, type NodeProps } from 'reactflow';
 import { useTemplates } from '../useTemplates';
 import { getDisplayTitle, getKind, kindBadgeClasses, kindLabel } from '../lib/display';
 import { useRunningCount } from '../../lib/obs/runningStore';
+<<<<<<< HEAD
 import { useReminderCount, useNodeStatus } from '@/lib/graph/hooks';
+=======
+import { useNodeReminders, useNodeStatus } from '@/lib/graph/hooks';
+>>>>>>> e30249f6 (test(platform-ui): standardize imports to '@/api/graph' and '@/api/tracing' across graph tests/hooks; wrap NodeObsSidebar filtering test in ObsUiProvider with serverUrl to satisfy context; adjust dynamic import paths to alias for consistency)
 import { useNodeVaultStatus } from '@/lib/vault/useNodeVaultStatus';
 
 interface BuilderNodeData {
@@ -21,8 +25,13 @@ function TemplateNodeComponent({ id, data }: NodeProps<BuilderNodeData>) {
   const displayTitle = getDisplayTitle(templates, data.template, data.config);
   const kind = getKind(templates, data.template);
   const runningCount = useRunningCount(id, kind === 'agent' || kind === 'tool' ? (kind as 'agent' | 'tool') : undefined);
+<<<<<<< HEAD
   const reminderCountQ = useReminderCount(id, data.template === 'remindMeTool');
   const reminderCount = (reminderCountQ.data?.count || 0) as number;
+=======
+  const reminders = useNodeReminders(id, data.template === 'remindMeTool');
+  const reminderCount = (reminders.data?.items?.length || 0) as number;
+>>>>>>> e30249f6 (test(platform-ui): standardize imports to '@/api/graph' and '@/api/tracing' across graph tests/hooks; wrap NodeObsSidebar filtering test in ObsUiProvider with serverUrl to satisfy context; adjust dynamic import paths to alias for consistency)
   const nodeStatus = useNodeStatus(id);
   const vaultAgg = useNodeVaultStatus(data?.config);
 

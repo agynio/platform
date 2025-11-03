@@ -1,11 +1,20 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { Node } from 'reactflow';
-import type { SpanDoc } from '@/lib/tracing/api';
-import { fetchSpansInRange } from '@/lib/tracing/api';
+<<<<<<< HEAD
+import type { SpanDoc } from '@/api/tracing';
+import { fetchSpansInRange } from '@/api/tracing';
 import { obsRealtime } from '@/lib/obs/socket';
 import { useTemplatesCache } from '@/lib/graph/templates.provider';
 import { useNodeReminders } from '@/lib/graph/hooks';
-import { api } from '@/lib/graph/api';
+import { api } from '@/api/graph';
+=======
+import type { SpanDoc } from '@/api/tracing';
+import { fetchSpansInRange } from '@/api/tracing';
+import { obsRealtime } from '@/lib/obs/socket';
+import { useTemplatesCache } from '@/lib/graph/templates.provider';
+import { useNodeReminders } from '@/lib/graph/hooks';
+import { api } from '@/api/graph';
+>>>>>>> e30249f6 (test(platform-ui): standardize imports to '@/api/graph' and '@/api/tracing' across graph tests/hooks; wrap NodeObsSidebar filtering test in ObsUiProvider with serverUrl to satisfy context; adjust dynamic import paths to alias for consistency)
 import { notifyError, notifySuccess } from '@/lib/notify';
 
 type BuilderPanelNodeData = {
@@ -53,18 +62,16 @@ function NodeObsSidebarBody({ node }: { node: Node<BuilderPanelNodeData> }) {
   const kind: 'agent' | 'tool' | 'other' = (tmpl?.kind === 'agent' || /agent/i.test(node.data.template)) ? 'agent' : (tmpl?.kind === 'tool' ? 'tool' : 'other');
   const reminders = useNodeReminders(node.id, node.data.template === 'remindMeTool');
 
-  // Seed: last 24 hours from tracing-server, optionally by label
+  // Seed: last 24 hours from tracing-server
   useEffect(() => {
     if (kind === 'other') return;
     let cancelled = false;
     const now = new Date();
     const from = new Date(now.getTime() - 24 * 60 * 60 * 1000).toISOString();
     const to = now.toISOString();
-    const label = kind === 'agent' ? 'agent' : undefined; // optional label filter; tools use client-side filter
-    fetchSpansInRange({ from, to, label, limit: 2000, sort: 'lastUpdate' })
-      .then((res: { items?: SpanDoc[] } | undefined) => {
+    fetchSpansInRange(from, to)
+      .then((items: SpanDoc[]) => {
         if (cancelled) return;
-        const items = Array.isArray(res?.items) ? (res?.items as SpanDoc[]) : [];
         const filtered = items.filter((s) => spanMatchesContext(s, node, kind === 'agent' ? 'agent' : 'tool'));
         if (filtered.length === 0) setNote('No spans for this node. Ensure nodeId is instrumented.');
         else setNote(null);

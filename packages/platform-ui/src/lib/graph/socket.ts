@@ -1,18 +1,29 @@
 import { io, Socket } from 'socket.io-client';
+<<<<<<< HEAD
 import { getApiBase } from '../apiClient';
 import type { NodeStatusEvent, ReminderCountEvent } from './types';
+=======
+import { getApiBase } from '@/api/client';
+import type { NodeStatusEvent } from './types';
+>>>>>>> e30249f6 (test(platform-ui): standardize imports to '@/api/graph' and '@/api/tracing' across graph tests/hooks; wrap NodeObsSidebar filtering test in ObsUiProvider with serverUrl to satisfy context; adjust dynamic import paths to alias for consistency)
 
 type NodeStateEvent = { nodeId: string; state: Record<string, unknown>; updatedAt: string };
 
 type Listener = (ev: NodeStatusEvent) => void;
 type StateListener = (ev: NodeStateEvent) => void;
+<<<<<<< HEAD
 type ReminderListener = (ev: ReminderCountEvent) => void;
+=======
+>>>>>>> e30249f6 (test(platform-ui): standardize imports to '@/api/graph' and '@/api/tracing' across graph tests/hooks; wrap NodeObsSidebar filtering test in ObsUiProvider with serverUrl to satisfy context; adjust dynamic import paths to alias for consistency)
 
 class GraphSocket {
   private socket: Socket | null = null;
   private listeners = new Map<string, Set<Listener>>();
   private stateListeners = new Map<string, Set<StateListener>>();
+<<<<<<< HEAD
   private reminderListeners = new Map<string, Set<ReminderListener>>();
+=======
+>>>>>>> e30249f6 (test(platform-ui): standardize imports to '@/api/graph' and '@/api/tracing' across graph tests/hooks; wrap NodeObsSidebar filtering test in ObsUiProvider with serverUrl to satisfy context; adjust dynamic import paths to alias for consistency)
 
   connect(baseUrl?: string) {
     if (this.socket) return this.socket;
@@ -29,10 +40,13 @@ class GraphSocket {
       const set = this.stateListeners.get(payload.nodeId);
       if (set) for (const fn of set) fn(payload);
     });
+<<<<<<< HEAD
     this.socket.on('node_reminder_count', (payload: ReminderCountEvent) => {
       const set = this.reminderListeners.get(payload.nodeId);
       if (set) for (const fn of set) fn(payload);
     });
+=======
+>>>>>>> e30249f6 (test(platform-ui): standardize imports to '@/api/graph' and '@/api/tracing' across graph tests/hooks; wrap NodeObsSidebar filtering test in ObsUiProvider with serverUrl to satisfy context; adjust dynamic import paths to alias for consistency)
     return this.socket;
   }
 
@@ -61,6 +75,7 @@ class GraphSocket {
       if (set!.size === 0) this.stateListeners.delete(nodeId);
     };
   }
+<<<<<<< HEAD
 
   onReminderCount(nodeId: string, cb: ReminderListener) {
     let set = this.reminderListeners.get(nodeId);
@@ -74,6 +89,8 @@ class GraphSocket {
       if (set!.size === 0) this.reminderListeners.delete(nodeId);
     };
   }
+=======
+>>>>>>> e30249f6 (test(platform-ui): standardize imports to '@/api/graph' and '@/api/tracing' across graph tests/hooks; wrap NodeObsSidebar filtering test in ObsUiProvider with serverUrl to satisfy context; adjust dynamic import paths to alias for consistency)
 }
 
 export const graphSocket = new GraphSocket();

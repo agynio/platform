@@ -26,7 +26,11 @@ export function useNodeVaultStatus(config?: Record<string, unknown>) {
   const queries = useQueries({
     queries: uniqueResources.map(({ mount, path }) => ({
       queryKey: ['vault', 'keys', mount, path],
+<<<<<<< HEAD
       queryFn: () => import('../graph/api').then((m) => m.api.listVaultKeys(mount, path, { maskErrors: false })),
+=======
+      queryFn: () => import('@/api/graph').then((m) => m.api.listVaultKeys(mount, path, { maskErrors: false })),
+>>>>>>> e30249f6 (test(platform-ui): standardize imports to '@/api/graph' and '@/api/tracing' across graph tests/hooks; wrap NodeObsSidebar filtering test in ObsUiProvider with serverUrl to satisfy context; adjust dynamic import paths to alias for consistency)
       staleTime: 1000 * 60 * 5,
       retry: 2,
       retryDelay: (attempt: number) => Math.min(1000 * Math.pow(2, attempt), 5000),

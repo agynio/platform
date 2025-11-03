@@ -1,9 +1,18 @@
+<<<<<<< HEAD
 import { useEffect, useRef } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from './api';
 import type { PersistedGraphUpsertRequestUI } from './api';
 import { graphSocket } from './socket';
 import type { NodeStatus, NodeStatusEvent, ReminderDTO, ReminderCountEvent } from './types';
+=======
+import { useEffect } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { api } from '@/api/graph';
+import type { PersistedGraphUpsertRequestUI } from '@/api/graph';
+import { graphSocket } from './socket';
+import type { NodeStatus, NodeStatusEvent, ReminderDTO } from './types';
+>>>>>>> e30249f6 (test(platform-ui): standardize imports to '@/api/graph' and '@/api/tracing' across graph tests/hooks; wrap NodeObsSidebar filtering test in ObsUiProvider with serverUrl to satisfy context; adjust dynamic import paths to alias for consistency)
 import { z } from 'zod';
 
 export function useTemplates() {
@@ -53,6 +62,7 @@ export function useNodeReminders(nodeId: string, enabled: boolean = true) {
   return q;
 }
 
+<<<<<<< HEAD
 // Reminder count hook: one-shot GET + socket updates
 export function useReminderCount(nodeId: string, enabled: boolean = true) {
   const qc = useQueryClient();
@@ -98,6 +108,8 @@ export function useReminderCount(nodeId: string, enabled: boolean = true) {
   return q;
 }
 
+=======
+>>>>>>> e30249f6 (test(platform-ui): standardize imports to '@/api/graph' and '@/api/tracing' across graph tests/hooks; wrap NodeObsSidebar filtering test in ObsUiProvider with serverUrl to satisfy context; adjust dynamic import paths to alias for consistency)
 export function useNodeAction(nodeId: string) {
   const qc = useQueryClient();
   return useMutation({

@@ -2,7 +2,11 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Button, Input } from '@agyn/ui';
 import type { ContainerNixConfig, NixPackageSelection } from './types';
 import { useQuery } from '@tanstack/react-query';
+<<<<<<< HEAD
 import { fetchPackages, fetchVersions, resolvePackage } from '@/services/nix';
+=======
+import { fetchPackages, fetchVersions, resolvePackage } from '@/api/nix';
+>>>>>>> e30249f6 (test(platform-ui): standardize imports to '@/api/graph' and '@/api/tracing' across graph tests/hooks; wrap NodeObsSidebar filtering test in ObsUiProvider with serverUrl to satisfy context; adjust dynamic import paths to alias for consistency)
 
 // Debounce helper
 function useDebounced<T>(value: T, delay = 300) {

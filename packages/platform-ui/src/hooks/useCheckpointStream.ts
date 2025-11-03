@@ -1,6 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { io, Socket } from 'socket.io-client';
-import { getApiBase } from '../lib/apiClient';
+<<<<<<< HEAD
+import { getApiBase } from '@/api/client';
+=======
+import { getApiBase } from '@/api/client';
+>>>>>>> e30249f6 (test(platform-ui): standardize imports to '@/api/graph' and '@/api/tracing' across graph tests/hooks; wrap NodeObsSidebar filtering test in ObsUiProvider with serverUrl to satisfy context; adjust dynamic import paths to alias for consistency)
 
 export interface CheckpointWriteClient {
   id: string;

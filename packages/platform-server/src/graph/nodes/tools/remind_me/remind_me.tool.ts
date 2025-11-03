@@ -1,5 +1,5 @@
 import z from 'zod';
-import { HumanMessage, FunctionTool } from '@agyn/llm';
+import { FunctionTool, SystemMessage } from '@agyn/llm';
 import { v4 as uuidv4 } from 'uuid';
 import { LoggerService } from '../../../../core/services/logger.service';
 import { LLMContext } from '../../../../llm/types';
@@ -70,7 +70,7 @@ export class RemindMeFunctionTool extends FunctionTool<typeof remindMeInvocation
       // Registry size decreased; notify
       this.onRegistryChanged?.(this.active.size);
       try {
-        const msg = HumanMessage.fromText(`Reminder: ${note}`);
+        const msg = SystemMessage.fromText(`Reminder: ${note}`);
         await ctx.callerAgent.invoke(threadId, [msg]);
       } catch (e: unknown) {
         const msg = e instanceof Error ? e.message : JSON.stringify(e);

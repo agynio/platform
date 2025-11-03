@@ -3,6 +3,10 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter, Routes, Route } from 'react-router-dom';
 import { ErrorsByToolPage } from '../pages/ErrorsByToolPage';
+<<<<<<< HEAD
+=======
+import { ObsUiProvider } from '../../src/context/ObsUiProvider';
+>>>>>>> e30249f6 (test(platform-ui): standardize imports to '@/api/graph' and '@/api/tracing' across graph tests/hooks; wrap NodeObsSidebar filtering test in ObsUiProvider with serverUrl to satisfy context; adjust dynamic import paths to alias for consistency)
 
 describe('ErrorsByToolPage fallback when metrics 404', () => {
   const origFetch = global.fetch as any;
@@ -33,11 +37,19 @@ describe('ErrorsByToolPage fallback when metrics 404', () => {
 
   it('aggregates client-side when metrics endpoint missing', async () => {
     render(
+<<<<<<< HEAD
       <MemoryRouter initialEntries={[`/errors/tools`]}>
         <Routes>
           <Route path="/errors/tools" element={<ErrorsByToolPage />} />
         </Routes>
       </MemoryRouter>
+=======
+      <ObsUiProvider serverUrl="http://localhost:4319"><MemoryRouter initialEntries={[`/errors/tools`]}> 
+        <Routes>
+          <Route path="/errors/tools" element={<ErrorsByToolPage />} />
+        </Routes>
+      </MemoryRouter></ObsUiProvider>
+>>>>>>> e30249f6 (test(platform-ui): standardize imports to '@/api/graph' and '@/api/tracing' across graph tests/hooks; wrap NodeObsSidebar filtering test in ObsUiProvider with serverUrl to satisfy context; adjust dynamic import paths to alias for consistency)
     );
     // Should show weather with count 2; scope to the table via test id
     const table = await screen.findByTestId('obsui-errors-table');

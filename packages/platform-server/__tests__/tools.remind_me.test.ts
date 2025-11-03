@@ -1,10 +1,18 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { RemindMeFunctionTool } from '../src/graph/nodes/tools/remind_me/remind_me.tool';
+<<<<<<< HEAD
 import { HumanMessage } from '@agyn/llm';
 import { LoggerService } from '../src/core/services/logger.service';
 
 // Minimal typed stub for the caller agent used by the tool
 interface CallerAgentStub { invoke(thread: string, messages: HumanMessage[]): Promise<unknown>; }
+=======
+import { SystemMessage } from '@agyn/llm';
+import { LoggerService } from '../src/core/services/logger.service';
+
+// Minimal typed stub for the caller agent used by the tool
+interface CallerAgentStub { invoke(thread: string, messages: SystemMessage[]): Promise<unknown>; }
+>>>>>>> e30249f6 (test(platform-ui): standardize imports to '@/api/graph' and '@/api/tracing' across graph tests/hooks; wrap NodeObsSidebar filtering test in ObsUiProvider with serverUrl to satisfy context; adjust dynamic import paths to alias for consistency)
 
 // Helper to extract callable tool
 function getToolInstance() {
@@ -26,7 +34,11 @@ describe('RemindMeTool', () => {
   it('schedules reminder and invokes caller_agent after delay', async () => {
     const tool = getToolInstance();
 
+<<<<<<< HEAD
     const invokeSpy = vi.fn(async (_t: string, _m: HumanMessage[]) => undefined);
+=======
+    const invokeSpy = vi.fn(async (_t: string, _m: SystemMessage[]) => undefined);
+>>>>>>> e30249f6 (test(platform-ui): standardize imports to '@/api/graph' and '@/api/tracing' across graph tests/hooks; wrap NodeObsSidebar filtering test in ObsUiProvider with serverUrl to satisfy context; adjust dynamic import paths to alias for consistency)
     const caller_agent: CallerAgentStub = { invoke: invokeSpy };
     const thread_id = 't-123';
 
@@ -49,14 +61,22 @@ describe('RemindMeTool', () => {
     expect(calls0[0][0]).toBe(thread_id);
     expect(calls0[0][1]).toHaveLength(1);
     const m = calls0[0][1][0];
+<<<<<<< HEAD
     expect(m).toBeInstanceOf(HumanMessage);
+=======
+    expect(m).toBeInstanceOf(SystemMessage);
+>>>>>>> e30249f6 (test(platform-ui): standardize imports to '@/api/graph' and '@/api/tracing' across graph tests/hooks; wrap NodeObsSidebar filtering test in ObsUiProvider with serverUrl to satisfy context; adjust dynamic import paths to alias for consistency)
     expect(m.text).toContain('Reminder: Ping');
   });
 
   it('registry tracks active reminders until fired', async () => {
     const logger = new LoggerService();
     const tool = new RemindMeFunctionTool(logger) as any;
+<<<<<<< HEAD
     const invokeSpy = vi.fn(async (_t: string, _m: HumanMessage[]) => undefined);
+=======
+    const invokeSpy = vi.fn(async (_t: string, _m: SystemMessage[]) => undefined);
+>>>>>>> e30249f6 (test(platform-ui): standardize imports to '@/api/graph' and '@/api/tracing' across graph tests/hooks; wrap NodeObsSidebar filtering test in ObsUiProvider with serverUrl to satisfy context; adjust dynamic import paths to alias for consistency)
     const caller_agent: CallerAgentStub = { invoke: invokeSpy };
     const cfg = { configurable: { thread_id: 't-reg', caller_agent } };
 
@@ -124,7 +144,11 @@ describe('RemindMeTool', () => {
 
   it('supports multiple concurrent reminders for the same thread (delayMs=0)', async () => {
     const tool = getToolInstance();
+<<<<<<< HEAD
     const invokeSpy = vi.fn(async (_t: string, _m: HumanMessage[]) => undefined);
+=======
+    const invokeSpy = vi.fn(async (_t: string, _m: SystemMessage[]) => undefined);
+>>>>>>> e30249f6 (test(platform-ui): standardize imports to '@/api/graph' and '@/api/tracing' across graph tests/hooks; wrap NodeObsSidebar filtering test in ObsUiProvider with serverUrl to satisfy context; adjust dynamic import paths to alias for consistency)
     const caller_agent: CallerAgentStub = { invoke: invokeSpy };
     const cfg = { threadId: 't-x', callerAgent: caller_agent as any, finishSignal: { activate() {}, deactivate() {}, isActive: false } } as any;
 
@@ -144,7 +168,11 @@ describe('RemindMeTool', () => {
 
   it('handles overlapping delays for the same thread', async () => {
     const tool = getToolInstance();
+<<<<<<< HEAD
     const invokeSpy = vi.fn(async (_t: string, _m: AIMessage[]) => undefined);
+=======
+    const invokeSpy = vi.fn(async (_t: string, _m: SystemMessage[]) => undefined);
+>>>>>>> e30249f6 (test(platform-ui): standardize imports to '@/api/graph' and '@/api/tracing' across graph tests/hooks; wrap NodeObsSidebar filtering test in ObsUiProvider with serverUrl to satisfy context; adjust dynamic import paths to alias for consistency)
     const caller_agent: CallerAgentStub = { invoke: invokeSpy };
     const cfg = { threadId: 't-ovl', callerAgent: caller_agent as any, finishSignal: { activate() {}, deactivate() {}, isActive: false } } as any;
 

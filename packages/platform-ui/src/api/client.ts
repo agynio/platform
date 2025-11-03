@@ -1,7 +1,7 @@
-// Centralized API client utilities
+// Centralized API client utilities (moved from src/lib/apiClient.ts)
 // - getApiBase(): resolve API base URL with precedence
-// - buildUrl(path): join base with normalized path
-// - httpJson<T>(): fetch JSON with sane defaults
+// - buildUrl(path, base?): join base with normalized path
+// - httpJson<T>(path, init?, base?): fetch JSON with sane defaults
 
 type ViteEnv = {
   VITE_API_BASE_URL?: string;
@@ -80,8 +80,8 @@ export function buildUrl(path: string, base?: string): string {
 }
 
 // Returns parsed JSON or undefined (e.g., for 204 or non-JSON bodies)
-export async function httpJson<T = unknown>(path: string, init?: RequestInit): Promise<T | undefined> {
-  const url = buildUrl(path);
+export async function httpJson<T = unknown>(path: string, init?: RequestInit, base?: string): Promise<T | undefined> {
+  const url = buildUrl(path, base);
   const res = await fetch(url, {
     ...init,
     headers: { 'Content-Type': 'application/json', ...(init?.headers || {}) },
@@ -94,3 +94,4 @@ export async function httpJson<T = unknown>(path: string, init?: RequestInit): P
     return undefined;
   }
 }
+
