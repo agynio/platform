@@ -97,13 +97,4 @@ model RunMessage {
   @@index([runId])
 }
 
-// Local variable overrides (single-user/single-graph model)
-model VariableLocal {
-  id        Int      @id @default(autoincrement())
-  key       String   @unique
-  value     String
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-}
-
 // End of schema
