@@ -17,12 +17,17 @@ export class SaveLLMReducer extends PersistenceBaseLLMReducer {
   }
 
   async invoke(state: LLMState, ctx: LLMContext): Promise<LLMState> {
-    const prisma = this.prismaService.getClient();
-    const repo = new ConversationStateRepository(prisma);
-    const nodeId = ctx.callerAgent.getAgentNodeId?.() || 'agent';
+    try {
+      const prisma = this.prismaService.getClient();
+      const repo = new ConversationStateRepository(prisma);
+      const nodeId = ctx.callerAgent.getAgentNodeId?.() || 'agent';
 
-    const serialized = toPrismaJsonValue(this.serializeState(state));
-    await repo.upsert({ threadId: ctx.threadId, nodeId, state: serialized == null ? {} : serialized });
+      const serialized = toPrismaJsonValue(this.serializeState(state));
+      await repo.upsert({ threadId: ctx.threadId, nodeId, state: serialized == null ? {} : serialized });
+    } catch (e) {
+      this.logger.error('SaveLLMReducer: conversation state persist failed: %s', (e as Error)?.message || String(e));
+      // Continue without failing the run
+    }
     return state;
   }
 }

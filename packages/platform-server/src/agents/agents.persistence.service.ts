@@ -1,3 +1,4 @@
+import { Injectable, Inject } from '@nestjs/common';
 import { Prisma, PrismaClient, MessageKind, RunStatus, RunMessageType } from '@prisma/client';
 import { PrismaService } from '../core/services/prisma.service';
 

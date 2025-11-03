@@ -7,6 +7,7 @@ import { z } from 'zod';
 
 import {
   AIMessage,
+  SystemMessage,
   FunctionTool,
   Loop,
   Reducer,
@@ -266,7 +267,14 @@ export class AgentNode extends Node<AgentStaticConfig> {
     let result: ResponseMessage | ToolCallOutputMessage;
     // Begin run deterministically; persistence must succeed or throw
     const inputJson = messages.map((m) => toPrismaJsonValue(m) as Prisma.InputJsonValue);
-    const { runId } = await this.persistence.beginRun(thread, inputJson);
+    let runId: string;
+    try {
+      const started = await this.persistence.beginRun(thread, inputJson);
+      runId = started.runId;
+    } catch (e) {
+      this.logger.error('Agent beginRun failed for thread %s: %s', thread, (e as Error)?.message || String(e));
+      throw e;
+    }
     try {
       result = await withAgent(
         { threadId: thread, nodeId: this.nodeId, inputParameters: [{ thread }, { messages }] },
