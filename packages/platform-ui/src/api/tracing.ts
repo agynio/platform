@@ -9,7 +9,6 @@ export type SpanDoc = {
 };
 
 // Prefer runtime-configured serverUrl from tracing-ui when available
-// eslint-disable-next-line import/no-internal-modules
 import { getServerUrl as getObsServerUrl } from '@agyn/tracing-ui/src/config';
 
 export function getTracingBase(override?: string): string {
