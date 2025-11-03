@@ -16,8 +16,8 @@ vi.mock('../../../lib/graph/hooks', () => ({
   useNodeReminders: (...args: any[]) => useNodeRemindersImpl(...args),
 }));
 
-vi.mock('../../../lib/tracing/api', () => ({
-  fetchSpansInRange: async () => ({ items: [] }),
+vi.mock('@/api/tracing', () => ({
+  fetchSpansInRange: async () => ([]),
 }));
 vi.mock('../../../lib/obs/socket', () => ({
   obsRealtime: { onSpanUpsert: (_fn: any) => () => {} },

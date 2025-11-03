@@ -1,20 +1,11 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { Node } from 'reactflow';
-<<<<<<< HEAD
 import type { SpanDoc } from '@/api/tracing';
 import { fetchSpansInRange } from '@/api/tracing';
 import { obsRealtime } from '@/lib/obs/socket';
 import { useTemplatesCache } from '@/lib/graph/templates.provider';
 import { useNodeReminders } from '@/lib/graph/hooks';
 import { api } from '@/api/graph';
-=======
-import type { SpanDoc } from '@/api/tracing';
-import { fetchSpansInRange } from '@/api/tracing';
-import { obsRealtime } from '@/lib/obs/socket';
-import { useTemplatesCache } from '@/lib/graph/templates.provider';
-import { useNodeReminders } from '@/lib/graph/hooks';
-import { api } from '@/api/graph';
->>>>>>> e30249f6 (test(platform-ui): standardize imports to '@/api/graph' and '@/api/tracing' across graph tests/hooks; wrap NodeObsSidebar filtering test in ObsUiProvider with serverUrl to satisfy context; adjust dynamic import paths to alias for consistency)
 import { notifyError, notifySuccess } from '@/lib/notify';
 
 type BuilderPanelNodeData = {
@@ -24,7 +15,7 @@ type BuilderPanelNodeData = {
   dynamicConfig?: Record<string, unknown>;
 };
 
-const TRACING_UI_BASE: string = import.meta.env.VITE_TRACING_UI_BASE || 'http://localhost:4320';
+const TRACING_UI_BASE: string | undefined = (import.meta as ImportMeta).env?.VITE_TRACING_UI_BASE as string | undefined;
 
   function spanMatchesContext(span: SpanDoc, node: Node<BuilderPanelNodeData>, kind: 'agent' | 'tool') {
   const attrs = (span.attributes || {}) as Record<string, unknown>;
@@ -141,7 +132,7 @@ function NodeObsSidebarBody({ node }: { node: Node<BuilderPanelNodeData> }) {
 
   const items = useMemo(() => spans.map((s: SpanDoc) => ({
     span: s,
-    link: `${TRACING_UI_BASE}/trace/${encodeURIComponent(s.traceId)}`,
+    link: TRACING_UI_BASE ? `${TRACING_UI_BASE}/trace/${encodeURIComponent(s.traceId)}` : undefined,
   })), [spans]);
 
   const title = kind === 'agent' ? 'Agent Activity' : kind === 'tool' ? 'Tool Spans (24h)' : 'Spans';
@@ -221,7 +212,9 @@ function NodeObsSidebarBody({ node }: { node: Node<BuilderPanelNodeData> }) {
               </div>
               <div className="flex items-center gap-2">
                 <span className="px-1.5 py-0.5 rounded border bg-accent/20 text-[10px]">{summarizeStatus(span.status)}</span>
-                <a href={link} target="_blank" rel="noreferrer" className="text-blue-600 hover:underline text-[11px]">open</a>
+                {link ? (
+                  <a href={link} target="_blank" rel="noreferrer" className="text-blue-600 hover:underline text-[11px]">open</a>
+                ) : null}
               </div>
             </li>
           ))}

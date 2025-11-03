@@ -2,7 +2,7 @@
 import { io, Socket } from 'socket.io-client';
 import type { SpanDoc } from '../tracing/api';
 
-const TRACING_BASE: string = import.meta.env.VITE_TRACING_SERVER_URL || 'http://localhost:4319';
+const TRACING_BASE: string | undefined = (import.meta as ImportMeta).env?.VITE_TRACING_SERVER_URL as string | undefined;
 
 export type SpanUpsertHandler = (span: SpanDoc) => void;
 
@@ -29,6 +29,7 @@ class TracingRealtime {
 
   private ensure() {
     if (this.socket) return;
+    if (!TRACING_BASE) throw new Error('Tracing server URL not configured. Set VITE_TRACING_SERVER_URL.');
     this.socket = io(TRACING_BASE, { path: '/socket.io', transports: ['websocket'], timeout: 10000, autoConnect: true });
     this.socket.on('span_upsert', (payload: unknown) => {
       if (isSpanDoc(payload)) {
@@ -38,7 +39,8 @@ class TracingRealtime {
   }
 
   onSpanUpsert(handler: SpanUpsertHandler) {
-    this.ensure();
+    // Register handler first; connect only when server URL configured
+    if (TRACING_BASE) this.ensure();
     this.handlers.add(handler);
     return () => this.handlers.delete(handler);
   }

@@ -29,35 +29,35 @@ describe('graph api client', () => {
   });
 
   it('getTemplates', async () => {
-    const t = await api.getTemplates();
+    const t = await api.getTemplates('');
     expect(t[0].name).toBe('x');
   });
   it('getNodeStatus', async () => {
-    const s = await api.getNodeStatus('n1');
+    const s = await api.getNodeStatus('n1', '');
     expect(s.isPaused).toBe(false);
   });
 
   it('getDynamicConfigSchema returns null for wrapper/empty', async () => {
     // wrapper response
     fetchMock.mockImplementationOnce(async () => new Response(JSON.stringify({ ready: false })));
-    const r1 = await api.getDynamicConfigSchema('n1');
+    const r1 = await api.getDynamicConfigSchema('n1', '');
     expect(r1).toBeNull();
 
     // empty object
     fetchMock.mockImplementationOnce(async () => new Response(JSON.stringify({})));
-    const r2 = await api.getDynamicConfigSchema('n1');
+    const r2 = await api.getDynamicConfigSchema('n1', '');
     expect(r2).toBeNull();
   });
 
   it('getDynamicConfigSchema returns schema when valid', async () => {
     const schema = { type: 'object', properties: { a: { type: 'string' } } };
     fetchMock.mockImplementationOnce(async () => new Response(JSON.stringify(schema)));
-    const r = await api.getDynamicConfigSchema('n1');
+    const r = await api.getDynamicConfigSchema('n1', '');
     expect(r).toEqual(schema);
 
     // wrapped
     fetchMock.mockImplementationOnce(async () => new Response(JSON.stringify({ ready: true, schema })));
-    const r2 = await api.getDynamicConfigSchema('n1');
+    const r2 = await api.getDynamicConfigSchema('n1', '');
     expect(r2).toEqual(schema);
   });
 });

@@ -2,11 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Button, Input } from '@agyn/ui';
 import type { ContainerNixConfig, NixPackageSelection } from './types';
 import { useQuery } from '@tanstack/react-query';
-<<<<<<< HEAD
-import { fetchPackages, fetchVersions, resolvePackage } from '@/services/nix';
-=======
 import { fetchPackages, fetchVersions, resolvePackage } from '@/api/nix';
->>>>>>> e30249f6 (test(platform-ui): standardize imports to '@/api/graph' and '@/api/tracing' across graph tests/hooks; wrap NodeObsSidebar filtering test in ObsUiProvider with serverUrl to satisfy context; adjust dynamic import paths to alias for consistency)
 
 // Debounce helper
 function useDebounced<T>(value: T, delay = 300) {
@@ -123,7 +119,7 @@ export function NixPackagesSection(props: ControlledProps | UncontrolledProps) {
 
   const qPkgs = useQuery({
     queryKey: ['nix', 'packages', debouncedQuery],
-    queryFn: ({ signal }) => fetchPackages(debouncedQuery, signal),
+    queryFn: ({ signal }) => fetchPackages(debouncedQuery, signal, ''),
     enabled: debouncedQuery.trim().length >= 2,
     staleTime: 60_000,
   });
@@ -284,7 +280,7 @@ export default NixPackagesSection;
 function SelectedPackageItem({ pkg, chosen, onChoose, onRemove, onResolved }: { pkg: { name: string }; chosen: string | ''; onChoose: (v: string | '') => void; onRemove: () => void; onResolved: (name: string, detail: { version: string; commitHash: string; attributePath: string }) => void }) {
   const qVersions = useQuery({
     queryKey: ['nix', 'versions', pkg.name],
-    queryFn: ({ signal }) => fetchVersions(pkg.name, signal),
+    queryFn: ({ signal }) => fetchVersions(pkg.name, signal, ''),
     staleTime: 5 * 60_000,
   });
 
@@ -316,7 +312,7 @@ function SelectedPackageItem({ pkg, chosen, onChoose, onRemove, onResolved }: { 
     const ac = new AbortController();
     resolveRef.current = ac;
     try {
-      const res = await resolvePackage(pkg.name, v, ac.signal);
+      const res = await resolvePackage(pkg.name, v, ac.signal, '');
       // Only apply if not aborted
       if (!ac.signal.aborted) {
         onResolved(pkg.name, { version: res.version, commitHash: res.commitHash, attributePath: res.attributePath });

@@ -1,24 +1,15 @@
-<<<<<<< HEAD
 import { useEffect, useRef } from 'react';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { api } from './api';
-import type { PersistedGraphUpsertRequestUI } from './api';
-import { graphSocket } from './socket';
-import type { NodeStatus, NodeStatusEvent, ReminderDTO, ReminderCountEvent } from './types';
-=======
-import { useEffect } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/api/graph';
 import type { PersistedGraphUpsertRequestUI } from '@/api/graph';
 import { graphSocket } from './socket';
-import type { NodeStatus, NodeStatusEvent, ReminderDTO } from './types';
->>>>>>> e30249f6 (test(platform-ui): standardize imports to '@/api/graph' and '@/api/tracing' across graph tests/hooks; wrap NodeObsSidebar filtering test in ObsUiProvider with serverUrl to satisfy context; adjust dynamic import paths to alias for consistency)
+import type { NodeStatus, NodeStatusEvent, ReminderDTO, ReminderCountEvent } from './types';
 import { z } from 'zod';
 
 export function useTemplates() {
   return useQuery({
     queryKey: ['graph', 'templates'],
-    queryFn: () => api.getTemplates(),
+    queryFn: () => api.getTemplates(''),
     staleTime: 1000 * 60 * 60, // 1h
   });
 }
@@ -29,7 +20,7 @@ export function useNodeStatus(nodeId: string) {
   const qc = useQueryClient();
   const q = useQuery({
     queryKey: ['graph', 'node', nodeId, 'status'],
-    queryFn: () => api.getNodeStatus(nodeId),
+    queryFn: () => api.getNodeStatus(nodeId, ''),
     staleTime: Infinity,
     // Poll periodically since server may not emit socket events for all cases
     refetchInterval: 2000,
@@ -54,7 +45,7 @@ export function useNodeStatus(nodeId: string) {
 export function useNodeReminders(nodeId: string, enabled: boolean = true) {
   const q = useQuery<{ items: ReminderDTO[] }>({
     queryKey: ['graph', 'node', nodeId, 'reminders'],
-    queryFn: () => api.getNodeReminders(nodeId),
+    queryFn: () => api.getNodeReminders(nodeId, ''),
     refetchInterval: enabled ? 3500 : false,
     staleTime: 2000,
     enabled: enabled && !!nodeId,
@@ -62,7 +53,6 @@ export function useNodeReminders(nodeId: string, enabled: boolean = true) {
   return q;
 }
 
-<<<<<<< HEAD
 // Reminder count hook: one-shot GET + socket updates
 export function useReminderCount(nodeId: string, enabled: boolean = true) {
   const qc = useQueryClient();
@@ -70,7 +60,7 @@ export function useReminderCount(nodeId: string, enabled: boolean = true) {
   const q = useQuery<{ count: number; updatedAt: string } | undefined>({
     queryKey: ['graph', 'node', nodeId, 'reminders', 'count'],
     queryFn: async () => {
-      const res = await api.getNodeReminders(nodeId);
+      const res = await api.getNodeReminders(nodeId, '');
       const updatedAt = new Date().toISOString();
       const count = res?.items?.length || 0;
       lastUpdatedRef.current = Date.now();
@@ -107,13 +97,10 @@ export function useReminderCount(nodeId: string, enabled: boolean = true) {
 
   return q;
 }
-
-=======
->>>>>>> e30249f6 (test(platform-ui): standardize imports to '@/api/graph' and '@/api/tracing' across graph tests/hooks; wrap NodeObsSidebar filtering test in ObsUiProvider with serverUrl to satisfy context; adjust dynamic import paths to alias for consistency)
 export function useNodeAction(nodeId: string) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (action: 'provision' | 'deprovision') => api.postNodeAction(nodeId, action),
+    mutationFn: (action: 'provision' | 'deprovision') => api.postNodeAction(nodeId, action, ''),
     onMutate: async (action) => {
       await qc.cancelQueries({ queryKey: ['graph', 'node', nodeId, 'status'] });
       const key = ['graph', 'node', nodeId, 'status'] as const;
@@ -190,7 +177,7 @@ export function useMcpNodeState(nodeId: string) {
   const q = useQuery<{ tools: McpTool[]; enabledTools?: string[] }>({
     queryKey: ['graph', 'node', nodeId, 'state', 'mcp'],
     queryFn: async () => {
-      const res = await api.getNodeState(nodeId);
+      const res = await api.getNodeState(nodeId, '');
       const state = (res?.state ?? {}) as Record<string, unknown>;
       const parsed = McpStateSchema.safeParse(state);
       if (!parsed.success) return { tools: [], enabledTools: undefined };
@@ -215,7 +202,7 @@ export function useMcpNodeState(nodeId: string) {
 
   const m = useMutation({
     mutationFn: async (enabledTools: string[]) => {
-      await api.putNodeState(nodeId, { mcp: { enabledTools } });
+      await api.putNodeState(nodeId, { mcp: { enabledTools } }, '');
       return enabledTools;
     },
     onMutate: async (enabledTools) => {

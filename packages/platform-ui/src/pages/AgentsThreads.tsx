@@ -1,19 +1,23 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-
-const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3010';
+import { buildUrl } from '@/api/client';
+const API_BASE = import.meta.env.VITE_API_BASE_URL as string | undefined;
 
 type ThreadItem = { id: string; alias: string; createdAt: string };
 type RunItem = { id: string; status: 'running' | 'finished' | 'terminated'; createdAt: string; updatedAt: string };
 type MessageItem = { id: string; kind: 'user' | 'assistant' | 'system' | 'tool'; text?: string | null; source: unknown; createdAt: string };
 
 async function api<T>(path: string, init?: RequestInit): Promise<T> {
-  const resp = await fetch(`${API_BASE}/api/${path}`, { headers: { 'Content-Type': 'application/json' }, ...(init || {}) });
+  const base = API_BASE;
+  if (!base) throw new Error('API base not configured');
+  const url = buildUrl(`/api/${path}`, base);
+  const resp = await fetch(url, { headers: { 'Content-Type': 'application/json' }, ...(init || {}) });
   if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
   return resp.json();
 }
 
 export function AgentsThreads() {
+  if (!API_BASE) return <div className="p-4 text-sm">API base URL not configured. Set VITE_API_BASE_URL.</div>;
   const [selectedThreadId, setSelectedThreadId] = useState<string | undefined>(undefined);
   const [selectedRunId, setSelectedRunId] = useState<string | undefined>(undefined);
 
