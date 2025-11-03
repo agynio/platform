@@ -14,8 +14,8 @@ describe('apiClient base URL resolution', () => {
 
   async function importFresh() {
     // dynamic import of the module to use current env
-    const mod = await import('../../lib/apiClient');
-    return mod;
+    const mod = await import('../../api/client');
+    return mod as typeof import('../../api/client');
   }
 
   it('uses override argument first', async () => {
@@ -37,15 +37,9 @@ describe('apiClient base URL resolution', () => {
   });
 
 
-  it('returns empty string when VITEST is set', async () => {
-    vi.stubEnv('VITEST', 'true');
+  it('throws when no envs configured and no override', async () => {
     const { getApiBase } = await importFresh();
-    expect(getApiBase()).toBe('');
-  });
-
-  it.skip('returns default localhost when no envs (cannot unset VITEST in Vitest runtime)', async () => {
-    const { getApiBase } = await importFresh();
-    expect(getApiBase()).toBe('http://localhost:3010');
+    expect(() => getApiBase()).toThrowError(/API base not configured/);
   });
 });
 
@@ -59,8 +53,8 @@ describe('apiClient buildUrl edge cases', () => {
   });
 
   async function importFresh() {
-    const mod = await import('../../lib/apiClient');
-    return mod;
+    const mod = await import('../../api/client');
+    return mod as typeof import('../../api/client');
   }
 
   it('joins base with leading slash path', async () => {

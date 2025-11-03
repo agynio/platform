@@ -44,7 +44,7 @@ export const handlers = [
     });
   }),
   _http.post('/api/graph/nodes/:nodeId/actions', () => new _HttpResponse(null, { status: 204 })),
-  _http.get('/api/graph/nodes/:nodeId/dynamic-config-schema', () =>
+  _http.get('/api/graph/nodes/:nodeId/dynamic-config/schema', () =>
     _HttpResponse.json({
       type: 'object',
       properties: { toolA: { type: 'boolean', title: 'toolA' }, toolB: { type: 'boolean', title: 'toolB' } },

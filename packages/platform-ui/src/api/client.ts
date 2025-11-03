@@ -39,8 +39,7 @@ export function getApiBase(override?: string): string {
   // 1) explicit override
   // 2) import.meta.env.VITE_API_BASE_URL
   // 3) process.env.API_BASE_URL
-  // 4) if process.env.VITEST -> ''
-  // 5) if not found -> throw in app/runtime
+  // 4) if not found -> throw in app/runtime
   if (override !== undefined) return override;
   const ve = readViteEnv();
   const ne = readNodeEnv();
@@ -50,23 +49,6 @@ export function getApiBase(override?: string): string {
 
   const nodeBase = ne?.API_BASE_URL;
   if (nodeBase) return nodeBase;
-
-  const isVitest = (() => {
-    try {
-      if (typeof ne?.VITEST === 'string') return true;
-      const im: unknown = (typeof import.meta !== 'undefined' ? import.meta : undefined) ?? (globalThis as { importMeta?: unknown }).importMeta;
-      const has = (obj: unknown, key: string): obj is Record<string, unknown> =>
-        !!obj && typeof obj === 'object' && key in obj;
-      if (has(im, 'vitest')) return true;
-      const g = globalThis as Record<string, unknown>;
-      if (typeof g.vitest !== 'undefined') return true;
-      if (typeof g.vi !== 'undefined') return true;
-      return false;
-    } catch {
-      return false;
-    }
-  })();
-  if (isVitest) return '';
 
   throw new Error('API base not configured. Set VITE_API_BASE_URL or pass override.');
 }
