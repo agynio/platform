@@ -25,9 +25,20 @@ import { AIMessage, HumanMessage, ResponseMessage, SystemMessage, ToolCallOutput
 import { Signal } from '../signal';
 // Minimal interface required from a caller agent within LLM execution context.
 // AgentNode implements this shape; tests can provide light stubs without heavy DI.
+// Narrow buffer message shape used by AgentNode message queue
+export type BufferLLMMessage = HumanMessage | AIMessage | SystemMessage;
+
+// Minimal interface required from a caller agent within LLM execution context.
 export interface CallerAgent {
   getAgentNodeId?: () => string | undefined;
-  invoke: (threadId: string, messages: LLMMessage[]) => Promise<ResponseMessage | ToolCallOutputMessage>;
+  // AgentNode supports invoking with buffer-safe messages only
+  invoke: (threadId: string, messages: BufferLLMMessage[]) => Promise<ResponseMessage | ToolCallOutputMessage>;
+  // Optional static config surface used by reducers (subset only)
+  config?: {
+    restrictOutput?: boolean;
+    restrictionMaxInjections?: number;
+    restrictionMessage?: string;
+  };
 }
 
 // export type ResponseOutputItem =

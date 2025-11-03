@@ -1,4 +1,4 @@
-import type { Prisma } from '@prisma/client';
+import { Prisma } from '@prisma/client';
 
 // Strongly-typed generic JSON value used in runtime code (looser than Prisma's guard)
 export type JsonValue = string | number | boolean | null | { [k: string]: JsonValue } | JsonValue[];
@@ -31,13 +31,23 @@ export function toJsonValue(input: unknown): JsonValue {
 }
 
 // Strict converter intended for persistence (Prisma JSON). Throws on non-serializable values.
-export function toPrismaJsonValue(input: unknown): Prisma.InputJsonValue | null {
-  if (isPrismaInputJsonValue(input)) return input;
-  if (input === null) return null;
+export function toPrismaJsonValue(input: unknown): Prisma.InputJsonValue {
+  // Fast-path when already a valid Prisma JSON value
+  if (isPrismaInputJsonValue(input)) return input as Prisma.InputJsonValue;
+
+  // Primitive handling (including null)
+  if (input === null) return Prisma.JsonNull as unknown as Prisma.InputJsonValue;
   if (typeof input === 'string' || typeof input === 'number' || typeof input === 'boolean') return input;
-  if (Array.isArray(input)) return input.map((el) => toPrismaJsonValue(el));
+
+  // Arrays: convert each element to a valid Prisma.InputJsonValue
+  if (Array.isArray(input)) {
+    const arr = input.map((el) => toPrismaJsonValue(el));
+    return arr as unknown as Prisma.InputJsonValue; // conforms to Prisma.InputJsonArray
+  }
+
+  // Plain objects: drop undefined keys and convert values
   if (isPlainObject(input)) {
-    const out: Record<string, Prisma.InputJsonValue | null> = {};
+    const out: Record<string, Prisma.InputJsonValue> = {};
     for (const [k, v] of Object.entries(input)) {
       if (typeof v === 'undefined') continue;
       if (typeof v === 'function' || typeof v === 'symbol' || typeof v === 'bigint') {
@@ -45,14 +55,15 @@ export function toPrismaJsonValue(input: unknown): Prisma.InputJsonValue | null 
       }
       out[k] = toPrismaJsonValue(v);
     }
-    return out;
+    return out as unknown as Prisma.InputJsonValue; // conforms to Prisma.InputJsonObject
   }
+
+  // Fallback: attempt JSON normalization for other serializable inputs
   try {
     const normalized = JSON.parse(JSON.stringify(input));
-    if (isPrismaInputJsonValue(normalized)) return normalized;
+    if (isPrismaInputJsonValue(normalized)) return normalized as Prisma.InputJsonValue;
   } catch {
     // ignore JSON.stringify errors
   }
   throw new Error('Unable to convert value to JSON');
 }
-
