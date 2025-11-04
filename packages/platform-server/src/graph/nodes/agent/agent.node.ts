@@ -31,8 +31,7 @@ import { SaveLLMReducer } from '../../../llm/reducers/save.llm.reducer';
 import { SummarizationLLMReducer } from '../../../llm/reducers/summarization.llm.reducer';
 import { Signal } from '../../../signal';
 import { AgentsPersistenceService } from '../../../agents/agents.persistence.service';
-import { Prisma, RunStatus } from '@prisma/client';
-import { toPrismaJsonValue } from '../../../llm/services/messages.serialization';
+import { RunStatus } from '@prisma/client';
 
 import { BaseToolNode } from '../tools/baseToolNode';
 import { BufferMessage, MessagesBuffer, ProcessBuffer } from './messagesBuffer';
@@ -266,16 +265,9 @@ export class AgentNode extends Node<AgentStaticConfig> {
     this.runningThreads.add(thread);
     let result: ResponseMessage | ToolCallOutputMessage;
     // Begin run deterministically; persistence must succeed or throw
-    // Persist plain message shapes for inputs
-    const inputJson = messages.map((m) => toPrismaJsonValue(m.toPlain()))
     let runId: string;
-    try {
-      const started = await this.persistence.beginRun(thread, inputJson);
-      runId = started.runId;
-    } catch (e) {
-      this.logger.error('Agent beginRun failed for thread %s: %s', thread, (e as Error)?.message || String(e));
-      throw e;
-    }
+    const started = await this.persistence.beginRun(thread, messages);
+    runId = started.runId;
     try {
       result = await withAgent(
         { threadId: thread, nodeId: this.nodeId, inputParameters: [{ thread }, { messages }] },
@@ -291,24 +283,23 @@ export class AgentNode extends Node<AgentStaticConfig> {
 
           const result = newState.messages.at(-1);
 
-          // Persist injected messages (SystemMessage appended by EnforceTools)
-          const injected = newState.messages.filter((m) => m instanceof SystemMessage && !messages.includes(m));
-          if (injected.length > 0) {
-            // Persist plain shapes for injected system messages
-            const injectedJson = injected.map((m) => toPrismaJsonValue(m.toPlain()))
-            await this.persistence.recordInjected(runId, injectedJson);
+          // Persist injected messages only when using injectAfterTools strategy
+          if ((this.config.whenBusy ?? 'wait') === 'injectAfterTools') {
+            const injected = newState.messages.filter((m) => m instanceof SystemMessage && !messages.includes(m));
+            if (injected.length > 0) {
+              await this.persistence.recordInjected(runId, injected);
+            }
           }
           if ((finishSignal.isActive && result instanceof ToolCallOutputMessage) || result instanceof ResponseMessage) {
             this.logger.info(`Agent response in thread ${thread}: ${result?.text}`);
             // Persist outputs and complete run
             if (result instanceof ResponseMessage) {
-              // Persist plain shapes for all output items
-              const outputs = result.output.map((o) => toPrismaJsonValue(o.toPlain()))
-              await this.persistence.completeRun(runId, RunStatus.finished, outputs);
+              // Persist strictly typed output items (AIMessage, ToolCallMessage)
+              const outputs = result.output.filter((o) => o instanceof AIMessage || o instanceof ToolCallMessage);
+              await this.persistence.completeRun(runId, RunStatus.finished, outputs as any);
             } else if (result instanceof ToolCallOutputMessage) {
-              // Persist plain shape for tool call output
-              const out = toPrismaJsonValue(result.toPlain())
-              await this.persistence.completeRun(runId, RunStatus.finished, [out]);
+              // Persist tool call output
+              await this.persistence.completeRun(runId, RunStatus.finished, [result]);
             }
             return result;
           }
@@ -318,23 +309,7 @@ export class AgentNode extends Node<AgentStaticConfig> {
       );
     } catch (err) {
       this.logger.error(`Agent invocation error in thread ${thread}:`, err);
-      // Persist terminated status, then rethrow
-      let persistErr: unknown = undefined;
-      try {
-        await this.persistence.completeRun(runId, RunStatus.terminated, []);
-      } catch (e) {
-        persistErr = e;
-        this.logger.error('Failed to persist termination status', e);
-      }
-      // Attach persistence error as cause when available (optional improvement)
-      if (persistErr) {
-        const original = err instanceof Error ? err : new Error(String(err));
-        // Always wrap with a new Error carrying a cause; preserve name/stack when available.
-        const wrapped = new Error(original.message, { cause: persistErr });
-        wrapped.name = original.name;
-        if (original.stack) wrapped.stack = original.stack;
-        throw wrapped;
-      }
+      await this.persistence.completeRun(runId, RunStatus.terminated, [] as any);
       throw err;
     } finally {
       this.runningThreads.delete(thread);

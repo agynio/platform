@@ -1,6 +1,8 @@
 import { Injectable, Inject } from '@nestjs/common';
 import { Prisma, PrismaClient, MessageKind, RunStatus, RunMessageType } from '@prisma/client';
 import { PrismaService } from '../core/services/prisma.service';
+import { AIMessage, HumanMessage, SystemMessage, ToolCallMessage, ToolCallOutputMessage } from '@agyn/llm';
+import { toPrismaJsonValue } from '../llm/services/messages.serialization';
 
 export type RunStartResult = { runId: string };
 
@@ -19,14 +21,18 @@ export class AgentsPersistenceService {
     return created.id;
   }
 
-  async beginRun(threadAlias: string, inputMessages: Prisma.InputJsonValue[]): Promise<RunStartResult> {
+  /**
+   * Begin a run and persist input messages. Accepts strictly typed message instances.
+   */
+  async beginRun(threadAlias: string, inputMessages: Array<HumanMessage | SystemMessage | AIMessage>): Promise<RunStartResult> {
     const threadId = await this.ensureThreadByAlias(threadAlias);
     const { runId } = await this.prisma.$transaction(async (tx) => {
       const run = await tx.run.create({ data: { threadId, status: RunStatus.running } });
       await Promise.all(
         inputMessages.map(async (msg) => {
-          const { kind, text } = this.extractKindText(msg);
-          const created = await tx.message.create({ data: { kind, text, source: msg } });
+          const { kind, text } = this.deriveKindTextTyped(msg);
+          const source = toPrismaJsonValue(msg.toPlain());
+          const created = await tx.message.create({ data: { kind, text, source } });
           await tx.runMessage.create({ data: { runId: run.id, messageId: created.id, type: RunMessageType.input } });
         }),
       );
@@ -35,24 +41,36 @@ export class AgentsPersistenceService {
     return { runId };
   }
 
-  async recordInjected(runId: string, injectedMessages: Prisma.InputJsonValue[]): Promise<void> {
+  /**
+   * Persist injected messages. Only SystemMessage injections are supported.
+   */
+  async recordInjected(runId: string, injectedMessages: SystemMessage[]): Promise<void> {
     await this.prisma.$transaction(async (tx) => {
       await Promise.all(
         injectedMessages.map(async (msg) => {
-          const { kind, text } = this.extractKindText(msg);
-          const created = await tx.message.create({ data: { kind, text, source: msg } });
+          const { kind, text } = this.deriveKindTextTyped(msg);
+          const source = toPrismaJsonValue(msg.toPlain());
+          const created = await tx.message.create({ data: { kind, text, source } });
           await tx.runMessage.create({ data: { runId, messageId: created.id, type: RunMessageType.injected } });
         }),
       );
     });
   }
 
-  async completeRun(runId: string, status: RunStatus, outputMessages: Prisma.InputJsonValue[]): Promise<void> {
+  /**
+   * Complete a run and persist output messages. Accepts strictly typed output message instances.
+   */
+  async completeRun(
+    runId: string,
+    status: RunStatus,
+    outputMessages: Array<AIMessage | ToolCallMessage | ToolCallOutputMessage>,
+  ): Promise<void> {
     await this.prisma.$transaction(async (tx) => {
       await Promise.all(
         outputMessages.map(async (msg) => {
-          const { kind, text } = this.extractKindText(msg);
-          const created = await tx.message.create({ data: { kind, text, source: msg } });
+          const { kind, text } = this.deriveKindTextTyped(msg);
+          const source = toPrismaJsonValue(msg.toPlain());
+          const created = await tx.message.create({ data: { kind, text, source } });
           await tx.runMessage.create({ data: { runId, messageId: created.id, type: RunMessageType.output } });
         }),
       );
@@ -84,76 +102,19 @@ export class AgentsPersistenceService {
     return msgs;
   }
 
-  private extractKindText(msg: Prisma.InputJsonValue): { kind: MessageKind; text: string | null } {
-    const obj = typeof msg === 'object' && msg !== null ? (msg as Record<string, unknown>) : {};
-    const type = typeof obj.type === 'string' ? (obj.type as string) : undefined;
-    const role = typeof obj.role === 'string' ? (obj.role as string) : undefined;
-
-    // Defaults
-    let kind: MessageKind = MessageKind.user;
-    let text: string | null = null;
-
-    // Handle function call variants explicitly
-    if (type === 'function_call') {
-      kind = MessageKind.tool;
-      const name = typeof obj.name === 'string' ? (obj.name as string) : 'unknown';
-      const args = typeof (obj as any).arguments === 'string' ? ((obj as any).arguments as string) : '';
-      text = `call ${name}(${args})`;
-      return { kind, text };
-    }
-    if (type === 'function_call_output') {
-      kind = MessageKind.tool;
-      const output = (obj as any).output as unknown;
-      if (typeof output === 'string') text = output;
-      else if (typeof output !== 'undefined') text = JSON.stringify(output);
-      else text = null;
-      return { kind, text };
-    }
-
-    // Message items
-    if (type === 'message') {
-      if (role === 'assistant') kind = MessageKind.assistant;
-      else if (role === 'system') kind = MessageKind.system;
-      else if (role === 'tool') kind = MessageKind.tool;
-      else kind = MessageKind.user;
-
-      // Immediate fallback: top-level text wins
-      if (typeof (obj as any).text === 'string') {
-        text = (obj as any).text as string;
-      }
-
-      // Role-specific extraction
-      const content = Array.isArray((obj as any).content) ? ((obj as any).content as any[]) : [];
-      if (!text && role === 'assistant') {
-        const parts = content
-          .filter((c) => c && typeof c === 'object' && c.type === 'output_text' && typeof c.text === 'string')
-          .map((c) => c.text as string);
-        if (parts.length) text = parts.join('\n');
-      } else if (!text && (role === 'user' || role === 'system')) {
-        const parts = content
-          .filter((c) => c && typeof c === 'object' && c.type === 'input_text' && typeof c.text === 'string')
-          .map((c) => c.text as string);
-        if (parts.length) text = parts.join('\n');
-      }
-    } else {
-      // Kind inference from role for non-message types (fallback)
-      if (role === 'assistant') kind = MessageKind.assistant;
-      else if (role === 'system') kind = MessageKind.system;
-      else if (role === 'tool') kind = MessageKind.tool;
-    }
-
-    // Fallbacks when still empty
-    if (text === null || text === undefined || text === '') {
-      if (typeof (obj as any).text === 'string') {
-        text = (obj as any).text as string;
-      } else if (Array.isArray((obj as any).content)) {
-        const parts = ((obj as any).content as any[])
-          .filter((c) => c && typeof c === 'object' && typeof (c as any).text === 'string')
-          .map((c) => (c as any).text as string);
-        if (parts.length) text = parts.join('\n');
-      }
-    }
-
-    return { kind, text };
+  /**
+   * Strict derivation of kind/text from typed message instances.
+   */
+  private deriveKindTextTyped(msg: HumanMessage | SystemMessage | AIMessage | ToolCallMessage | ToolCallOutputMessage): {
+    kind: MessageKind;
+    text: string | null;
+  } {
+    if (msg instanceof HumanMessage) return { kind: MessageKind.user, text: msg.text };
+    if (msg instanceof SystemMessage) return { kind: MessageKind.system, text: msg.text };
+    if (msg instanceof AIMessage) return { kind: MessageKind.assistant, text: msg.text };
+    if (msg instanceof ToolCallMessage) return { kind: MessageKind.tool, text: `call ${msg.name}(${msg.args})` };
+    if (msg instanceof ToolCallOutputMessage) return { kind: MessageKind.tool, text: msg.text };
+    // Unreachable via typing; keep fallback for safety
+    return { kind: MessageKind.user, text: null };
   }
 }
