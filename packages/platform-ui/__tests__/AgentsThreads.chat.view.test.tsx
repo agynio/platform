@@ -69,7 +69,7 @@ describe('AgentsThreads chat-like view', () => {
   });
 
   it('autoscrolls to bottom and shows jump control when scrolled up', async () => {
-    let outputCount = 1;
+    const outputCount = 1;
     server.use(
       http.get('http://localhost:3010/api/agents/threads', () => HttpResponse.json({ items: [{ id: 'th1', alias: 'Thread A', createdAt: t(0) }] })),
       http.get('http://localhost:3010/api/agents/threads/th1/runs', () =>

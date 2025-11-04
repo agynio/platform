@@ -15,8 +15,7 @@ async function api<T>(path: string, init?: RequestInit): Promise<T> {
 
 export function AgentsThreads() {
   const [selectedThreadId, setSelectedThreadId] = useState<string | undefined>(undefined);
-  // No run selection in new UX
-  const [selectedRunId, setSelectedRunId] = useState<string | undefined>(undefined);
+  // No run selection in new UX (removed)
 
   const threadsQ = useQuery({
     queryKey: ['agents', 'threads'],
@@ -129,7 +128,6 @@ export function AgentsThreads() {
                   className={`w-full text-left px-2 py-1 rounded ${selectedThreadId === t.id ? 'bg-gray-200' : 'hover:bg-gray-100'}`}
                   onClick={() => {
                     setSelectedThreadId(t.id);
-                    setSelectedRunId(undefined);
                     // reset internal loaders
                     initialLoadedRef.current = false;
                   }}
