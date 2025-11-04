@@ -21,7 +21,9 @@ export const RemindMeToolStaticConfigSchema = z.object({}).strict();
 export type ActiveReminder = { id: string; threadId: string; note: string; at: string };
 
 export class RemindMeFunctionTool extends FunctionTool<typeof remindMeInvocationSchema> {
-  private active: Map<string, { timer: ReturnType<typeof setTimeout>; reminder: ActiveReminder }> = new Map();
+  // Track runtime reminder id -> timer + payload + dbId for persistence
+  private active: Map<string, { timer: ReturnType<typeof setTimeout>; reminder: ActiveReminder; dbId?: string }> =
+    new Map();
   private destroyed = false;
   private maxActive = 1000;
   private onRegistryChanged?: (count: number, updatedAtMs?: number) => void;
@@ -63,11 +65,15 @@ export class RemindMeFunctionTool extends FunctionTool<typeof remindMeInvocation
 
     const etaDate = new Date(Date.now() + delayMs);
     const eta = etaDate.toISOString();
+    // Runtime-only id (includes thread for easier inspection)
     const id = `${threadId}:${uuidv4()}`;
+    // DB primary key must be a UUID; do not concatenate threadId
+    const dbId = uuidv4();
     const logger = this.logger;
     const timer = setTimeout(async () => {
       const exists = this.active.has(id);
       if (!exists) return;
+      const rec = this.active.get(id);
       this.active.delete(id);
       // Registry size decreased; notify
       this.onRegistryChanged?.(this.active.size);
@@ -75,8 +81,10 @@ export class RemindMeFunctionTool extends FunctionTool<typeof remindMeInvocation
       if (this.prismaService) {
         try {
           const prisma = this.prismaService.getClient();
-          await prisma.reminder.update({ where: { id }, data: { completedAt: new Date() } });
-          } catch (e) {
+          if (rec?.dbId) {
+            await prisma.reminder.update({ where: { id: rec.dbId }, data: { completedAt: new Date() } });
+          }
+        } catch (e) {
           try {
             logger.error('RemindMe: failed to mark reminder completed %s: %s', id, (e as Error)?.message || String(e));
           } catch {}
@@ -90,14 +98,14 @@ export class RemindMeFunctionTool extends FunctionTool<typeof remindMeInvocation
         logger.error('RemindMe scheduled invoke error', msg);
       }
     }, delayMs);
-    this.active.set(id, { timer, reminder: { id, threadId: threadId, note, at: eta } });
+    this.active.set(id, { timer, reminder: { id, threadId: threadId, note, at: eta }, dbId });
     // Registry size increased; notify
     this.onRegistryChanged?.(this.active.size);
     // Attempt to persist reminder (best-effort)
     if (this.prismaService) {
       try {
         const prisma = this.prismaService.getClient();
-        await prisma.reminder.create({ data: { id, threadId, note, at: etaDate, completedAt: null } });
+        await prisma.reminder.create({ data: { id: dbId, threadId, note, at: etaDate, completedAt: null } });
       } catch (e) {
         try {
           logger.error('RemindMe: failed to persist reminder %s: %s', id, (e as Error)?.message || String(e));
