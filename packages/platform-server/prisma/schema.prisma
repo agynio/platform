@@ -98,3 +98,13 @@ model RunMessage {
 }
 
 // End of schema
+// Scheduled reminders persisted for resilience; delivery remains in-memory
+model Reminder {
+  id        String   @id @default(uuid()) @db.Uuid
+  threadId  String
+  note      String
+  at        DateTime
+  createdAt DateTime @default(now())
+
+  @@index([threadId])
+}

@@ -2,6 +2,7 @@ import z from 'zod';
 import { HumanMessage, FunctionTool } from '@agyn/llm';
 import { v4 as uuidv4 } from 'uuid';
 import { LoggerService } from '../../../../core/services/logger.service';
+import { PrismaService } from '../../../../core/services/prisma.service';
 import { LLMContext } from '../../../../llm/types';
 
 export const remindMeInvocationSchema = z
@@ -24,7 +25,7 @@ export class RemindMeFunctionTool extends FunctionTool<typeof remindMeInvocation
   private destroyed = false;
   private maxActive = 1000;
   private onRegistryChanged?: (count: number, updatedAtMs?: number) => void;
-  constructor(private logger: LoggerService) {
+  constructor(private logger: LoggerService, private prismaService?: PrismaService) {
     super();
   }
   get name() {
@@ -60,7 +61,8 @@ export class RemindMeFunctionTool extends FunctionTool<typeof remindMeInvocation
     if (this.destroyed) throw new Error('RemindMe tool destroyed');
     if (this.active.size >= this.maxActive) throw new Error(`Too many active reminders (max ${this.maxActive})`);
 
-    const eta = new Date(Date.now() + delayMs).toISOString();
+    const etaDate = new Date(Date.now() + delayMs);
+    const eta = etaDate.toISOString();
     const id = `${threadId}:${uuidv4()}`;
     const logger = this.logger;
     const timer = setTimeout(async () => {
@@ -69,6 +71,17 @@ export class RemindMeFunctionTool extends FunctionTool<typeof remindMeInvocation
       this.active.delete(id);
       // Registry size decreased; notify
       this.onRegistryChanged?.(this.active.size);
+      // Attempt to delete persisted reminder (best-effort)
+      if (this.prismaService) {
+        try {
+          const prisma = this.prismaService.getClient();
+          await prisma.reminder.delete({ where: { id } });
+        } catch (e) {
+          try {
+            logger.warn?.('RemindMe: failed to delete reminder %s: %s', id, (e as Error)?.message || String(e));
+          } catch {}
+        }
+      }
       try {
         const msg = HumanMessage.fromText(`Reminder: ${note}`);
         await ctx.callerAgent.invoke(threadId, [msg]);
@@ -80,6 +93,17 @@ export class RemindMeFunctionTool extends FunctionTool<typeof remindMeInvocation
     this.active.set(id, { timer, reminder: { id, threadId: threadId, note, at: eta } });
     // Registry size increased; notify
     this.onRegistryChanged?.(this.active.size);
+    // Attempt to persist reminder (best-effort)
+    if (this.prismaService) {
+      try {
+        const prisma = this.prismaService.getClient();
+        await prisma.reminder.create({ data: { id, threadId, note, at: etaDate } });
+      } catch (e) {
+        try {
+          logger.warn?.('RemindMe: failed to persist reminder %s: %s', id, (e as Error)?.message || String(e));
+        } catch {}
+      }
+    }
     return JSON.stringify({ status: 'scheduled', etaMs: delayMs, at: eta, id });
   }
 }
