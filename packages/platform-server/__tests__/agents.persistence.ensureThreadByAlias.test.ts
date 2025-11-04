@@ -1,71 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { AgentsPersistenceService } from '../src/agents/agents.persistence.service';
-import { PrismaService } from '../src/core/services/prisma.service';
-
-// Minimal in-memory Prisma stub for threads/runs/messages
-function createPrismaStub() {
-  const threads: Array<{ id: string; alias: string; parentId: string | null; createdAt: Date }> = [];
-  const runs: Array<{ id: string; threadId: string; status: string; createdAt: Date; updatedAt: Date }> = [];
-  const messages: Array<{ id: string; kind: string; text: string | null; source: any; createdAt: Date }> = [];
-  const runMessages: Array<{ runId: string; messageId: string; type: string; createdAt: Date }> = [];
-
-  let idSeq = 1;
-  const newId = () => `t-${idSeq++}`;
-
-  const prisma: any = {
-    thread: {
-      findUnique: async ({ where: { alias } }: any) => threads.find((t) => t.alias === alias) || null,
-      create: async ({ data }: any) => {
-        const row = { id: newId(), alias: data.alias, parentId: data.parentId ?? null, createdAt: new Date() };
-        threads.push(row);
-        return row;
-      },
-      findMany: async (_args: any) => threads,
-    },
-    run: {
-      create: async ({ data }: any) => {
-        const row = { id: `r-${idSeq++}`, threadId: data.threadId, status: data.status ?? 'running', createdAt: new Date(), updatedAt: new Date() };
-        runs.push(row);
-        return row;
-      },
-      update: async ({ where: { id }, data }: any) => {
-        const r = runs.find((x) => x.id === id);
-        if (r && data.status) r.status = data.status;
-        if (r) r.updatedAt = new Date();
-        return r;
-      },
-      findMany: async () => runs,
-    },
-    message: {
-      create: async ({ data }: any) => {
-        const row = { id: `m-${idSeq++}`, kind: data.kind, text: data.text ?? null, source: data.source, createdAt: new Date() };
-        messages.push(row);
-        return row;
-      },
-      findMany: async ({ where: { id: { in: ids } } }: any) => messages.filter((m) => ids.includes(m.id)),
-    },
-    runMessage: {
-      create: async ({ data }: any) => {
-        const row = { runId: data.runId, messageId: data.messageId, type: data.type, createdAt: new Date() };
-        runMessages.push(row);
-        return row;
-      },
-      findMany: async ({ where: { runId, type } }: any) => runMessages.filter((rm) => rm.runId === runId && rm.type === type),
-    },
-    $transaction: async (fn: (tx: any) => Promise<any>) => fn({ thread: prisma.thread, run: prisma.run, message: prisma.message, runMessage: prisma.runMessage }),
-    _store: { threads, runs, messages, runMessages },
-  };
-  return prisma;
-}
-
-class StubPrismaService extends PrismaService {
-  constructor(private stub: any) {
-    super({} as any, {} as any);
-  }
-  override getClient(): any {
-    return this.stub;
-  }
-}
+import { createPrismaStub, StubPrismaService } from './helpers/prisma.stub';
 
 describe('AgentsPersistenceService.ensureThreadByAlias', () => {
   it('creates a thread when alias has no parent', async () => {
@@ -91,5 +26,35 @@ describe('AgentsPersistenceService.ensureThreadByAlias', () => {
     expect(child).toBeTruthy();
     expect(child.parentId).toBe(parent.id);
   });
-});
 
+  it('handles nested aliases (parent__child__leaf) linking to immediate parent', async () => {
+    const stub = createPrismaStub();
+    const svc = new AgentsPersistenceService(new StubPrismaService(stub));
+    const leafId = await svc.ensureThreadByAlias('parentB__child2__leafX');
+    expect(typeof leafId).toBe('string');
+    // three threads: parent, parent__child, parent__child__leaf
+    expect(stub._store.threads.length).toBe(3);
+    const parent = stub._store.threads.find((t: any) => t.alias === 'parentB');
+    const child = stub._store.threads.find((t: any) => t.alias === 'parentB__child2');
+    const leaf = stub._store.threads.find((t: any) => t.alias === 'parentB__child2__leafX');
+    expect(parent).toBeTruthy();
+    expect(child).toBeTruthy();
+    expect(leaf).toBeTruthy();
+    expect(child.parentId).toBe(parent.id);
+    expect(leaf.parentId).toBe(child.id);
+  });
+
+  it('is idempotent: re-ensuring nested aliases does not duplicate and maintains correct links', async () => {
+    const stub = createPrismaStub();
+    const svc = new AgentsPersistenceService(new StubPrismaService(stub));
+    const id1 = await svc.ensureThreadByAlias('A__B__C');
+    const id2 = await svc.ensureThreadByAlias('A__B__C');
+    expect(id1).toBe(id2);
+    expect(stub._store.threads.length).toBe(3);
+    const a = stub._store.threads.find((t: any) => t.alias === 'A');
+    const ab = stub._store.threads.find((t: any) => t.alias === 'A__B');
+    const abc = stub._store.threads.find((t: any) => t.alias === 'A__B__C');
+    expect(ab.parentId).toBe(a.id);
+    expect(abc.parentId).toBe(ab.id);
+  });
+});

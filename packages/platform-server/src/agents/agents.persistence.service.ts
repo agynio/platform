@@ -13,16 +13,20 @@ export class AgentsPersistenceService {
   }
 
   async ensureThreadByAlias(alias: string): Promise<string> {
+    // Return existing thread id if present
     const existing = await this.prisma.thread.findUnique({ where: { alias } });
     if (existing) return existing.id;
-    // If alias indicates a parent-child relationship (parent__child), ensure parent first
-    const sep = alias.indexOf('__');
+
+    // Determine immediate parent alias by the last "__" occurrence for nested paths
+    const sep = alias.lastIndexOf('__');
     if (sep > 0) {
       const parentAlias = alias.slice(0, sep);
       const parentId = await this.ensureThreadByAlias(parentAlias);
       const created = await this.prisma.thread.create({ data: { alias, parentId } });
       return created.id;
     }
+
+    // No parent alias; create a root-level thread
     const created = await this.prisma.thread.create({ data: { alias } });
     return created.id;
   }
