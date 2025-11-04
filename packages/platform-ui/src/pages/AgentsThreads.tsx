@@ -35,15 +35,6 @@ export function AgentsThreads() {
     return [...list].sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
   }, [runsQ.data]);
 
-  // Manage progressive loading of runs' messages: start from latest run
-  const [loadedCount, setLoadedCount] = useState(0); // how many latest runs are loaded
-  const latestRunIndex = runs.length - 1;
-
-  useEffect(() => {
-    // Reset when thread changes
-    setLoadedCount(runs.length > 0 ? 1 : 0);
-  }, [selectedThreadId, runs.length]);
-
   // Helper to fetch all messages for a run
   async function fetchRunMessages(runId: string): Promise<UnifiedRunMessage[]> {
     const [input, injected, output] = await Promise.all([
@@ -58,47 +49,53 @@ export function AgentsThreads() {
     return merged;
   }
 
-  // Cache runId -> messages in local state; useQuery could be used, but simple state works here without backend changes
+  // Cache runId -> messages and fetch all runs with a small concurrency cap
   const [runMessages, setRunMessages] = useState<Record<string, UnifiedRunMessage[]>>({});
-  const [loadingMore, setLoadingMore] = useState(false);
   const [loadError, setLoadError] = useState<Error | null>(null);
 
-  // load latest on change
-  const initialLoadedRef = useRef(false);
+  // Reset cache on thread change
+  useEffect(() => {
+    setRunMessages({});
+    setLoadError(null);
+  }, [selectedThreadId]);
+
   useEffect(() => {
     if (!selectedThreadId || runs.length === 0) return;
-    if (initialLoadedRef.current) return;
-    const latest = runs[latestRunIndex];
-    if (!latest) return;
-    initialLoadedRef.current = true;
-    setLoadingMore(true);
-    fetchRunMessages(latest.id)
-      .then((msgs) => setRunMessages((prev) => ({ ...prev, [latest.id]: msgs })))
-      .catch((e: Error) => setLoadError(e))
-      .finally(() => setLoadingMore(false));
-  }, [selectedThreadId, runs, latestRunIndex]);
+    let cancelled = false;
+    const concurrency = 3;
+    let idx = 0;
+    let active = 0;
 
-  const hasMoreAbove = loadedCount < runs.length;
-  const loadMoreAbove = () => {
-    if (!hasMoreAbove || loadingMore) return;
-    const nextIndexFromEnd = runs.length - 1 - loadedCount; // previous run index
-    const run = runs[nextIndexFromEnd];
-    if (!run) return;
-    setLoadingMore(true);
-    fetchRunMessages(run.id)
-      .then((msgs) => {
-        setRunMessages((prev) => ({ ...prev, [run.id]: msgs }));
-        setLoadedCount((c) => c + 1);
-      })
-      .catch((e: Error) => setLoadError(e))
-      .finally(() => setLoadingMore(false));
-  };
+    const queue = runs.map((run) => async () => {
+      try {
+        const msgs = await fetchRunMessages(run.id);
+        if (!cancelled) setRunMessages((prev) => ({ ...prev, [run.id]: msgs }));
+      } catch (e) {
+        if (!cancelled) setLoadError(e as Error);
+      }
+    });
+
+    const kick = () => {
+      while (active < concurrency && idx < queue.length) {
+        const fn = queue[idx++];
+        active++;
+        fn().finally(() => {
+          active--;
+          if (!cancelled) kick();
+        });
+      }
+    };
+
+    kick();
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedThreadId, runs]);
 
   const unifiedItems: UnifiedListItem[] = useMemo(() => {
     if (!runs.length) return [];
-    const latestSlice = runs.slice(Math.max(0, runs.length - loadedCount)); // the loaded runs (oldest to newest within loaded set)
     const items: UnifiedListItem[] = [];
-    for (const run of latestSlice) {
+    for (const run of runs) {
       const msgs = runMessages[run.id] || [];
       const start = msgs[0]?.createdAt ?? run.createdAt;
       const end = msgs[msgs.length - 1]?.createdAt ?? run.updatedAt;
@@ -106,7 +103,7 @@ export function AgentsThreads() {
       for (const m of msgs) items.push({ type: 'message', message: m });
     }
     return items;
-  }, [runs, loadedCount, runMessages]);
+  }, [runs, runMessages]);
 
   // Per-message JSON toggle state
   const [showJson, setShowJson] = useState<Record<string, boolean>>({});
@@ -128,8 +125,7 @@ export function AgentsThreads() {
                   className={`w-full text-left px-2 py-1 rounded ${selectedThreadId === t.id ? 'bg-gray-200' : 'hover:bg-gray-100'}`}
                   onClick={() => {
                     setSelectedThreadId(t.id);
-                    // reset internal loaders
-                    initialLoadedRef.current = false;
+                    // reset cache handled by effect on thread change
                   }}
                 >
                   <div className="text-sm">{t.alias}</div>
@@ -151,9 +147,6 @@ export function AgentsThreads() {
               onToggleJson={toggleJson}
               isLoading={runsQ.isLoading}
               error={loadError}
-              hasMoreAbove={hasMoreAbove}
-              loadingMoreAbove={loadingMore}
-              onLoadMoreAbove={loadMoreAbove}
             />
           </div>
         </div>

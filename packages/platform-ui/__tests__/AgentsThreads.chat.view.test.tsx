@@ -107,7 +107,7 @@ describe('AgentsThreads chat-like view', () => {
     expect(await screen.findByTestId('jump-to-latest')).toBeInTheDocument();
   });
 
-  it('lazy-loads older runs on upward scroll and inserts run headers', async () => {
+  it('renders multiple run headers by default (all runs loaded)', async () => {
     server.use(
       http.get('http://localhost:3010/api/agents/threads', () => HttpResponse.json({ items: [{ id: 'th1', alias: 'Thread A', createdAt: t(0) }] })),
       http.get('http://localhost:3010/api/agents/threads/th1/runs', () =>
@@ -136,13 +136,7 @@ describe('AgentsThreads chat-like view', () => {
     render(<TestProviders><AgentsThreads /></TestProviders>);
     fireEvent.click(await screen.findByRole('button', { name: /Thread A/ }));
     const list2 = await screen.findByTestId('message-list');
-    // Initially only latest run2 is loaded
-    expect(await within(list2).findAllByTestId('run-header')).toHaveLength(1);
-    // Scroll top to fetch older
-    Object.defineProperty(list2, 'scrollTop', { value: 0, configurable: true });
-    Object.defineProperty(list2, 'clientHeight', { value: 300, configurable: true });
-    Object.defineProperty(list2, 'scrollHeight', { value: 1000, configurable: true });
-    fireEvent.scroll(list2);
+    // Both runs should render without scrolling
     await waitFor(async () => expect((await within(list2).findAllByTestId('run-header')).length).toBe(2));
   });
 

@@ -37,8 +37,10 @@ export function RunMessageList({ items, showJson, onToggleJson, isLoading, error
     if (!c) return;
     const justAppended = items.length > prevCount.current;
     if (justAppended && atBottom) {
-      // Use scrollTop assignment for broad compatibility (jsdom and browsers)
-      c.scrollTop = c.scrollHeight;
+      // Use scrollTop assignment; guard in case of read-only in test envs
+      try {
+        c.scrollTop = c.scrollHeight;
+      } catch {}
     }
     prevCount.current = items.length;
   }, [items, atBottom]);
@@ -107,7 +109,11 @@ export function RunMessageList({ items, showJson, onToggleJson, isLoading, error
           className="absolute bottom-3 left-1/2 -translate-x-1/2 bg-white/90 border rounded px-3 py-1 shadow"
           onClick={() => {
             const c = containerRef.current;
-            if (c) c.scrollTop = c.scrollHeight;
+            if (c) {
+              try {
+                c.scrollTop = c.scrollHeight;
+              } catch {}
+            }
           }}
           data-testid="jump-to-latest"
         >
