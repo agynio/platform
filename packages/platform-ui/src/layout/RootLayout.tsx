@@ -224,8 +224,8 @@ export function RootLayout() {
   return (
     <div className="flex min-h-screen w-full">
       {/* Desktop sidebar */}
-      <aside className={`relative hidden md:flex`}>
-        <Sidebar className={`${collapsed ? 'w-16' : 'w-64'}`}>
+      <aside className={`hidden md:flex md:sticky md:top-0 md:h-screen md:shrink-0 md:z-10`}>
+        <Sidebar className={`${collapsed ? 'w-16' : 'w-64'} h-screen overflow-y-auto shrink-0`}>
           <SidebarInner />
         </Sidebar>
         {/* Right-border clickable collapse/expand button (desktop only) */}
