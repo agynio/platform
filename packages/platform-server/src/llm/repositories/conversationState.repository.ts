@@ -1,21 +1,21 @@
-import type { PrismaClient, Prisma } from '@prisma/client';
+import type { InputJsonValue, JsonValue } from '../services/messages.serialization';
 import { Injectable } from '@nestjs/common';
 
 export type ConversationStateRead = {
   threadId: string;
   nodeId: string;
-  state: Prisma.JsonValue;
+  state: JsonValue;
 };
 
 export type ConversationStateUpsert = {
   threadId: string;
   nodeId: string;
-  state: Prisma.InputJsonValue;
+  state: InputJsonValue;
 };
 
 @Injectable()
 export class ConversationStateRepository {
-  constructor(private prisma: PrismaClient) {}
+  constructor(private prisma: any) {}
 
   async get(threadId: string, nodeId: string): Promise<ConversationStateRead | null> {
     const found = await this.prisma.conversationState.findUnique({ where: { threadId_nodeId: { threadId, nodeId } } });

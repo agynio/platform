@@ -285,7 +285,7 @@ export class AgentNode extends Node<AgentStaticConfig> {
 
           // Persist injected messages only when using injectAfterTools strategy
           if ((this.config.whenBusy ?? 'wait') === 'injectAfterTools') {
-            const injected = newState.messages.filter((m) => m instanceof SystemMessage && !messages.includes(m));
+            const injected = newState.messages.filter((m) => m instanceof SystemMessage && !messages.includes(m)) as SystemMessage[];
             if (injected.length > 0 && runId) {
               await this.persistence.recordInjected(runId, injected);
             }
