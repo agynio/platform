@@ -105,6 +105,7 @@ model Reminder {
   note      String
   at        DateTime
   createdAt DateTime @default(now())
+  completedAt DateTime?
 
   @@index([threadId])
 }
