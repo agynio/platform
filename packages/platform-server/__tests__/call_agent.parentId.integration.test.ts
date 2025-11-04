@@ -7,8 +7,8 @@ import { createPrismaStub, StubPrismaService } from './helpers/prisma.stub';
 
 class FakeAgentWithPersistence {
   constructor(private persistence: AgentsPersistenceService) {}
-  async invoke(thread: string, _messages: any[]): Promise<ResponseMessage> {
-    await this.persistence.beginRun(thread, [{ role: 'user', text: 'work' }]);
+  async invoke(thread: string, _messages: any[], parentThreadId?: string | null): Promise<ResponseMessage> {
+    await this.persistence.beginRun(thread, [{ role: 'user', text: 'work' }], parentThreadId);
     return ResponseMessage.fromText('OK');
   }
 }

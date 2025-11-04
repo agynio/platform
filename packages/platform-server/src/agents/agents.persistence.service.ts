@@ -13,26 +13,34 @@ export class AgentsPersistenceService {
   }
 
   async ensureThreadByAlias(alias: string): Promise<string> {
-    // Return existing thread id if present
+    // Compatibility helper: ensure a thread by alias only.
+    // Does NOT derive parentId from alias. Parent linkage must be explicit via ensureThread.
     const existing = await this.prisma.thread.findUnique({ where: { alias } });
     if (existing) return existing.id;
-
-    // Determine immediate parent alias by the last "__" occurrence for nested paths
-    const sep = alias.lastIndexOf('__');
-    if (sep > 0) {
-      const parentAlias = alias.slice(0, sep);
-      const parentId = await this.ensureThreadByAlias(parentAlias);
-      const created = await this.prisma.thread.create({ data: { alias, parentId } });
-      return created.id;
-    }
-
-    // No parent alias; create a root-level thread
     const created = await this.prisma.thread.create({ data: { alias } });
     return created.id;
   }
 
-  async beginRun(threadAlias: string, inputMessages: Prisma.InputJsonValue[]): Promise<RunStartResult> {
-    const threadId = await this.ensureThreadByAlias(threadAlias);
+  /**
+   * Ensure a thread exists with the given alias.
+   * If parentThreadId is provided and the thread is newly created, set Thread.parentId to it.
+   * Parent linkage is explicit; no alias parsing is performed.
+   */
+  async ensureThread(alias: string, parentThreadId?: string | null): Promise<string> {
+    const existing = await this.prisma.thread.findUnique({ where: { alias } });
+    if (existing) return existing.id;
+    let parentId: string | undefined = undefined;
+    if (parentThreadId) {
+      // Treat provided parentThreadId as alias identifier; resolve actual DB id.
+      parentId = await this.ensureThreadByAlias(parentThreadId);
+    }
+    const created = await this.prisma.thread.create({ data: { alias, parentId } });
+    return created.id;
+  }
+
+  async beginRun(threadAlias: string, inputMessages: Prisma.InputJsonValue[], parentThreadId?: string | null): Promise<RunStartResult> {
+    // Explicit parent linkage when provided; otherwise ensure by alias only.
+    const threadId = await (parentThreadId ? this.ensureThread(threadAlias, parentThreadId) : this.ensureThreadByAlias(threadAlias));
     const { runId } = await this.prisma.$transaction(async (tx) => {
       const run = await tx.run.create({ data: { threadId, status: RunStatus.running } });
       await Promise.all(

@@ -255,7 +255,7 @@ export class AgentNode extends Node<AgentStaticConfig> {
     const loop = new Loop<LLMState, LLMContext>(reducers);
     return loop;
   }
-  async invoke(thread: string, messages: BufferMessage[]): Promise<ResponseMessage | ToolCallOutputMessage> {
+  async invoke(thread: string, messages: BufferMessage[], parentThreadId?: string | null): Promise<ResponseMessage | ToolCallOutputMessage> {
     this.buffer.setDebounceMs(this.config.debounceMs ?? 0);
     const busy = this.runningThreads.has(thread);
     if (busy) {
@@ -269,7 +269,7 @@ export class AgentNode extends Node<AgentStaticConfig> {
     const inputJson = messages.map((m) => toPrismaJsonValue(m));
     let runId: string;
     try {
-      const started = await this.persistence.beginRun(thread, inputJson);
+      const started = await this.persistence.beginRun(thread, inputJson, parentThreadId);
       runId = started.runId;
     } catch (e) {
       this.logger.error('Agent beginRun failed for thread %s: %s', thread, (e as Error)?.message || String(e));
