@@ -476,7 +476,7 @@ export function AgentBuilder() {
   return (
     <DndProvider backend={HTML5Backend}>
       <ReactFlowProvider>
-        <div className="relative flex h-full min-h-0 w-full min-w-0 overflow-hidden">
+        <div className="absolute inset-0 flex min-h-0 min-w-0 overflow-hidden">
           <TemplatesProvider templates={templates}>
             <CanvasArea
               nodes={nodes}
