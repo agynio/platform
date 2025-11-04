@@ -101,11 +101,12 @@ describe('AgentsThreads chat-like view', () => {
     const runBtn = await screen.findByRole('option');
     fireEvent.click(runBtn);
     const list = await screen.findByTestId('message-list');
-    if (!(list as any).scrollTo) (list as any).scrollTo = () => {};
-    const scrollToSpy = vi.spyOn(list as any, 'scrollTo');
+    const setScrollTop = vi.fn();
+    // Spy on scrollTop assignment used for autoscroll
+    Object.defineProperty(list, 'scrollTop', { configurable: true, get: () => 0, set: setScrollTop });
     outputCount = 2;
     fireEvent.click(runBtn);
-    await waitFor(() => expect(scrollToSpy).toHaveBeenCalled());
+    await waitFor(() => expect(setScrollTop).toHaveBeenCalled());
     Object.defineProperty(list, 'scrollHeight', { value: 1000, configurable: true });
     Object.defineProperty(list, 'clientHeight', { value: 300, configurable: true });
     Object.defineProperty(list, 'scrollTop', { value: 100, configurable: true });

@@ -23,30 +23,30 @@ export function AgentsThreads() {
     queryFn: async () => api<{ items: ThreadItem[] }>(`agents/threads`),
   });
 
-  const runsQ = useQuery({
+  const runsQ = useQuery<{ items: RunItem[] }, Error>({
     queryKey: ['agents', 'threads', selectedThreadId, 'runs'],
     enabled: !!selectedThreadId,
     queryFn: async () => api<{ items: RunItem[] }>(`agents/threads/${selectedThreadId}/runs`),
   });
 
-  const inputQ = useQuery({
+  const inputQ = useQuery<{ items: MessageItem[] }, Error>({
     queryKey: ['agents', 'runs', selectedRunId, 'messages', 'input'],
     enabled: !!selectedRunId,
     queryFn: async () => api<{ items: MessageItem[] }>(`agents/runs/${selectedRunId}/messages?type=input`),
   });
-  const injectedQ = useQuery({
+  const injectedQ = useQuery<{ items: MessageItem[] }, Error>({
     queryKey: ['agents', 'runs', selectedRunId, 'messages', 'injected'],
     enabled: !!selectedRunId,
     queryFn: async () => api<{ items: MessageItem[] }>(`agents/runs/${selectedRunId}/messages?type=injected`),
   });
-  const outputQ = useQuery({
+  const outputQ = useQuery<{ items: MessageItem[] }, Error>({
     queryKey: ['agents', 'runs', selectedRunId, 'messages', 'output'],
     enabled: !!selectedRunId,
     queryFn: async () => api<{ items: MessageItem[] }>(`agents/runs/${selectedRunId}/messages?type=output`),
   });
 
   const threads = threadsQ.data?.items || [];
-  const runs = (runsQ.data?.items || []) as RunItem[];
+  const runs: RunItem[] = runsQ.data?.items ?? [];
   const input = inputQ.data?.items || [];
   const injected = injectedQ.data?.items || [];
   const output = outputQ.data?.items || [];
@@ -106,7 +106,7 @@ export function AgentsThreads() {
                 showJson={showJson}
                 onToggleJson={toggleJson}
                 isLoading={inputQ.isLoading || injectedQ.isLoading || outputQ.isLoading}
-                error={(inputQ.error as Error) || (injectedQ.error as Error) || (outputQ.error as Error) || null}
+                error={inputQ.error || injectedQ.error || outputQ.error || null}
               />
             </div>
           </div>
