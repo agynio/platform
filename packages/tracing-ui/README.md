@@ -46,4 +46,4 @@ Env variables (dev preview only):
 - Dark mode
 Provider and styles
 - Provider is required: <TracingProvider serverUrl="..." />
-- Styles: import '@agyn/tracing-ui/styles.css' to get .obs-md and .obs-terminal class rules.
+- Styles: import '@agyn/tracing-ui/styles.css' to get .tracing-md and .tracing-terminal class rules.

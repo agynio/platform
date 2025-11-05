@@ -18,8 +18,11 @@ vi.mock('@/api/graph', () => ({
     terminateRun: vi.fn(async () => ({ status: 'terminating' })),
   },
 }));
+vi.mock('@/lib/tracing/socket', () => ({
+  tracingRealtime: { onSpanUpsert: (_fn: any) => () => {} },
+}));
 
-import { NodeObsSidebar } from '../NodeObsSidebar';
+import { NodeTracingSidebar } from '../NodeTracingSidebar';
 import { api } from '@/api/graph';
 
 describe('NodeObsSidebar terminate UI behavior', () => {
@@ -29,7 +32,7 @@ describe('NodeObsSidebar terminate UI behavior', () => {
     window.confirm = () => true;
     const node: any = { id: 'agent-1', data: { template: 'agent' } };
     const { TracingProvider } = await import('../../../../../tracing-ui/src/context/TracingProvider');
-    await act(async () => { render(<TracingProvider serverUrl="http://localhost:4319"><NodeObsSidebar node={node} /></TracingProvider>); });
+    await act(async () => { render(<TracingProvider serverUrl="http://localhost:4319"><NodeTracingSidebar node={node} /></TracingProvider>); });
     expect(await screen.findByText('Active Runs')).toBeInTheDocument();
     const btn = await screen.findByText('Terminate');
     expect(btn).toBeEnabled();

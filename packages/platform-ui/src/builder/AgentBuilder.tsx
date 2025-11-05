@@ -20,7 +20,7 @@ import type { DragItem } from './dnd';
 import { makeNodeTypes } from './nodeTypes';
 import { TemplatesProvider } from './TemplatesProvider';
 import type { NodeTypes } from 'reactflow';
-import { NodeObsSidebar } from '@/components/graph/NodeObsSidebar';
+import { NodeTracingSidebar } from '@/components/graph/NodeTracingSidebar';
 import { RightPropertiesPanel } from './panels/RightPropertiesPanel';
 import { useBuilderState } from './hooks/useBuilderState';
 import type { TemplateNodeSchema } from '@agyn/shared';
@@ -420,7 +420,7 @@ const RightPanelContent = memo(function RightPanelContent({
         {rightTab === 'activity' && activityEligible && selectedNode ? (
           <div className="space-y-4">
             {/* Show tracing spans for agent/tool nodes */}
-            <NodeObsSidebar node={selectedNode} />
+            <NodeTracingSidebar node={selectedNode} />
           </div>
         ) : (
           <RightPropertiesPanel node={selectedNode} onChange={updateNodeData} />

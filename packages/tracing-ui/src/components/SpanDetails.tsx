@@ -506,7 +506,7 @@ export function SpanDetails({
                                   </span>
                                 )}
                             </div>
-                            <div className="obs-md" data-testid="obs-md" style={{ fontFamily: 'monospace', fontSize: 12, wordBreak: 'break-word' }}>
+                            <div className="tracing-md" data-testid="obs-md" style={{ fontFamily: 'monospace', fontSize: 12, wordBreak: 'break-word' }}>
                               <ReactMarkdown
                                 remarkPlugins={[remarkGfm]}
                                 components={{
@@ -580,7 +580,7 @@ export function SpanDetails({
                                       </span>
                                     )}
                                 </div>
-                                <div className="obs-md" data-testid="obs-md" style={{ fontFamily: 'monospace', fontSize: 12, wordBreak: 'break-word' }}>
+                                <div className="tracing-md" data-testid="obs-md" style={{ fontFamily: 'monospace', fontSize: 12, wordBreak: 'break-word' }}>
                                   <ReactMarkdown
                                     remarkPlugins={[remarkGfm]}
                                     components={{
@@ -673,7 +673,7 @@ export function SpanDetails({
                               </span>
                             )}
                           </div>
-                          <div className="obs-md" data-testid="obs-md" style={{ fontFamily: 'monospace', fontSize: 12, wordBreak: 'break-word' }}>
+                          <div className="tracing-md" data-testid="obs-md" style={{ fontFamily: 'monospace', fontSize: 12, wordBreak: 'break-word' }}>
                             <ReactMarkdown
                               remarkPlugins={[remarkGfm]}
                               components={{
@@ -817,7 +817,7 @@ function renderOutputContent(content: string | undefined, mode: 'md' | 'json' | 
   if (!content) return <div style={baseStyle}><span style={{ color: '#666' }}>(no content)</span></div>;
   if (mode === 'md') {
     return (
-      <div className="obs-md" data-testid="obs-md" style={baseStyle}>
+      <div className="tracing-md" data-testid="obs-md" style={baseStyle}>
         <ReactMarkdown
           remarkPlugins={[remarkGfm]}
           components={{
@@ -854,7 +854,7 @@ function renderOutputContent(content: string | undefined, mode: 'md' | 'json' | 
   }
   if (mode === 'terminal') {
     return (
-      <pre className="obs-terminal" style={baseStyle}>
+      <pre className="tracing-terminal" style={baseStyle}>
         {content}
       </pre>
     );
@@ -944,7 +944,7 @@ function SummarizeIO({ span }: { span: SpanDoc }) {
             }}
           >
             {summary ? (
-              <div className="obs-md" data-testid="obs-md">
+              <div className="tracing-md" data-testid="obs-md">
               <ReactMarkdown
                 remarkPlugins={[remarkGfm]}
                 components={{

@@ -1,4 +1,5 @@
 export { TracingProvider } from './context/TracingProvider';
+export { useTracing } from './context/TracingProvider';
 export type { TracingTracesViewProps } from './views/TracingTracesView';
 export { TracingTracesView } from './views/TracingTracesView';
 export type { TracingErrorsViewProps } from './views/TracingErrorsView';

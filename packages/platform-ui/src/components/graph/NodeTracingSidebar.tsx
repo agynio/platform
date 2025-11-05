@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import type { Node } from 'reactflow';
 import type { SpanDoc } from '@/api/tracing';
 import { fetchSpansInRange } from '@/api/tracing';
-import { obsRealtime } from '@/lib/obs/socket';
+import { tracingRealtime } from '@/lib/tracing/socket';
 import { useTemplatesCache } from '@/lib/graph/templates.provider';
 import { useNodeReminders } from '@/lib/graph/hooks';
 import { api } from '@/api/graph';
@@ -21,8 +21,8 @@ const TRACING_UI_BASE: string | undefined = config.tracing.uiBase;
   function spanMatchesContext(span: SpanDoc, node: Node<BuilderPanelNodeData>, kind: 'agent' | 'tool') {
   const attrs = (span.attributes || {}) as Record<string, unknown>;
   const kindAttr = String(attrs['kind'] || '');
-  const label = span.label || '';
-  const nodeIdAttr = span.nodeId || (attrs['nodeId'] as string | undefined);
+  const label = (span as any).label ? String((span as any).label) : '';
+  const nodeIdAttr = ((span as any).nodeId as string | undefined) || (attrs['nodeId'] as string | undefined);
   const kindOk = kind === 'agent' ? (kindAttr === 'agent' || label === 'agent') : (kindAttr === 'tool_call' || label.startsWith('tool:'));
   if (!kindOk) return false;
   // Agent: filter by nodeId (agent id)
@@ -31,21 +31,22 @@ const TRACING_UI_BASE: string | undefined = config.tracing.uiBase;
   return nodeIdAttr === node.id;
 }
 
-function summarizeStatus(s: SpanDoc['status']) {
+function summarizeStatus(s?: unknown) {
+  const v = String(s || '');
   switch (s) {
     case 'running': return 'running';
     case 'ok': return 'ok';
     case 'error': return 'error';
     case 'cancelled': return 'cancelled';
-    default: return String(s);
+    default: return v || '-';
   }
 }
 
-export function NodeObsSidebar({ node }: { node: Node<BuilderPanelNodeData> }) {
-  return <NodeObsSidebarBody node={node} />;
+export function NodeTracingSidebar({ node }: { node: Node<BuilderPanelNodeData> }) {
+  return <NodeTracingSidebarBody node={node} />;
 }
 
-function NodeObsSidebarBody({ node }: { node: Node<BuilderPanelNodeData> }) {
+function NodeTracingSidebarBody({ node }: { node: Node<BuilderPanelNodeData> }) {
   const [spans, setSpans] = useState<SpanDoc[]>([]);
   const [note, setNote] = useState<string | null>(null);
   const [runs, setRuns] = useState<Array<{ runId: string; threadId: string; status: string; updatedAt: string }>>([]);
@@ -68,7 +69,13 @@ function NodeObsSidebarBody({ node }: { node: Node<BuilderPanelNodeData> }) {
         if (filtered.length === 0) setNote('No spans for this node. Ensure nodeId is instrumented.');
         else setNote(null);
         // Order by lastUpdate desc and cap to 100
-        const sorted = filtered.sort((a, b) => b.lastUpdate.localeCompare(a.lastUpdate)).slice(0, 100);
+        const getTs = (s: SpanDoc) => {
+          const lu = (s as any).lastUpdate as string | undefined;
+          const ended = (s as any).endedAt as string | undefined; // may not exist on payload; guard
+          const end = typeof ended === 'string' ? ended : undefined;
+          return lu || end || s.startedAt;
+        };
+        const sorted = filtered.sort((a, b) => getTs(b).localeCompare(getTs(a))).slice(0, 100);
         setSpans(sorted);
       })
       .catch((err) => {
@@ -80,11 +87,17 @@ function NodeObsSidebarBody({ node }: { node: Node<BuilderPanelNodeData> }) {
   // Realtime subscription
   useEffect(() => {
     if (kind === 'other') return;
-    const off = obsRealtime.onSpanUpsert((s) => {
+    const off = tracingRealtime.onSpanUpsert((s) => {
       if (!spanMatchesContext(s, node, kind === 'agent' ? 'agent' : 'tool')) return;
       setSpans((prev) => {
         const next = [s, ...prev.filter((p) => !(p.traceId === s.traceId && p.spanId === s.spanId))];
-        next.sort((a, b) => b.lastUpdate.localeCompare(a.lastUpdate));
+        const getTs = (x: SpanDoc) => {
+          const lu = (x as any).lastUpdate as string | undefined;
+          const ended = (x as any).endedAt as string | undefined;
+          const end = typeof ended === 'string' ? ended : undefined;
+          return lu || end || x.startedAt;
+        };
+        next.sort((a, b) => getTs(b).localeCompare(getTs(a)));
         return next.slice(0, 100);
       });
     });
@@ -212,7 +225,7 @@ function NodeObsSidebarBody({ node }: { node: Node<BuilderPanelNodeData> }) {
                 <div className="font-mono text-[10px] text-muted-foreground truncate">{span.traceId}</div>
               </div>
               <div className="flex items-center gap-2">
-                <span className="px-1.5 py-0.5 rounded border bg-accent/20 text-[10px]">{summarizeStatus(span.status)}</span>
+                <span className="px-1.5 py-0.5 rounded border bg-accent/20 text-[10px]">{summarizeStatus((span as any).status)}</span>
                 {link ? (
                   <a href={link} target="_blank" rel="noreferrer" className="text-blue-600 hover:underline text-[11px]">open</a>
                 ) : null}

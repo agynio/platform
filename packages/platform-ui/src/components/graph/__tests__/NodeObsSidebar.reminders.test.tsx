@@ -2,7 +2,7 @@
 import React from 'react';
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
-import { NodeObsSidebar } from '../NodeObsSidebar';
+import { NodeTracingSidebar } from '../NodeTracingSidebar';
 
 vi.mock('../../../lib/graph/templates.provider', () => ({
   useTemplatesCache: () => ({ getTemplate: (_name: string) => ({ kind: 'tool' }) }),
@@ -19,15 +19,15 @@ vi.mock('../../../lib/graph/hooks', () => ({
 vi.mock('@/api/tracing', () => ({
   fetchSpansInRange: async () => ([]),
 }));
-vi.mock('../../../lib/obs/socket', () => ({
-  obsRealtime: { onSpanUpsert: (_fn: any) => () => {} },
+vi.mock('../../../lib/tracing/socket', () => ({
+  tracingRealtime: { onSpanUpsert: (_fn: any) => () => {} },
 }));
 
 describe('NodeObsSidebar Active Reminders', () => {
   const node: any = { id: 'n1', data: { template: 'remindMeTool', config: {} } };
 
   it('renders Active Reminders section and items', async () => {
-    render(<NodeObsSidebar node={node} />);
+    render(<NodeTracingSidebar node={node} />);
     expect(screen.getByText('Active Reminders')).toBeInTheDocument();
     expect(screen.getByText('Check back')).toBeInTheDocument();
     // Thread id appears inside an aria-label and split text; use label to assert
@@ -36,7 +36,7 @@ describe('NodeObsSidebar Active Reminders', () => {
 
   it('shows error state when hook errors', async () => {
     useNodeRemindersImpl = () => ({ isLoading: false, error: new Error('boom') });
-    render(<NodeObsSidebar node={node} />);
+    render(<NodeTracingSidebar node={node} />);
     expect(await screen.findByRole('alert')).toBeInTheDocument();
   });
 });

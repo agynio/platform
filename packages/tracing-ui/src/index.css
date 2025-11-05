@@ -33,20 +33,20 @@
   --color-sidebar-ring: var(--sidebar-ring);
 }
 
-/* Observability UI: markdown and terminal overflow handling */
-.obs-md {
+/* Tracing UI: markdown and terminal overflow handling */
+.tracing-md {
   overflow: auto;
 }
-.obs-md p,
-.obs-md li,
-.obs-md code,
-.obs-md pre,
-.obs-md div {
+.tracing-md p,
+.tracing-md li,
+.tracing-md code,
+.tracing-md pre,
+.tracing-md div {
   overflow-wrap: anywhere;
   word-break: break-word;
 }
 
-.obs-terminal {
+.tracing-terminal {
   font-family: monospace;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
