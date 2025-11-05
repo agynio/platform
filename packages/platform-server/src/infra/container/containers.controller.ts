@@ -1,15 +1,24 @@
 import { Controller, Get, Inject, Query } from '@nestjs/common';
 import { PrismaService } from '../../core/services/prisma.service';
-import type { PrismaClient, ContainerStatus } from '@prisma/client';
-import { IsIn, IsOptional, IsString, IsUUID } from 'class-validator';
+import type { PrismaClient, ContainerStatus, Prisma } from '@prisma/client';
+import { IsEnum, IsIn, IsInt, IsOptional, IsString, IsUUID, Max, Min } from 'class-validator';
+import { Type } from 'class-transformer';
 
 // Allowed sort columns for containers list
-const SortByValues = ['lastUsedAt', 'startedAt', 'killAfterAt'] as const;
-type SortBy = (typeof SortByValues)[number];
+enum SortBy {
+  lastUsedAt = 'lastUsedAt',
+  startedAt = 'startedAt',
+  killAfterAt = 'killAfterAt',
+}
+
+enum SortDir {
+  asc = 'asc',
+  desc = 'desc',
+}
 
 export class ListContainersQueryDto {
   @IsOptional()
-  @IsIn(['running', 'stopped', 'terminating', 'failed'])
+  @IsEnum(Object)
   status?: ContainerStatus;
 
   @IsOptional()
@@ -25,14 +34,18 @@ export class ListContainersQueryDto {
   nodeId?: string;
 
   @IsOptional()
-  @IsIn(SortByValues as unknown as string[])
+  @IsEnum(SortBy)
   sortBy?: SortBy;
 
   @IsOptional()
-  @IsIn(['asc', 'desc'])
-  sortDir?: 'asc' | 'desc';
+  @IsEnum(SortDir)
+  sortDir?: SortDir;
 
   @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(500)
   limit?: number;
 }
 
@@ -50,39 +63,41 @@ export class ContainersController {
     threadId: string | null;
     image: string;
     status: ContainerStatus;
-    startedAt: Date;
-    lastUsedAt: Date;
-    killAfterAt: Date | null;
+    startedAt: string;
+    lastUsedAt: string;
+    killAfterAt: string | null;
   }> }> {
     const {
-      status = 'running',
+      status = 'running' as ContainerStatus,
       threadId,
       image,
       nodeId,
-      sortBy = 'lastUsedAt',
-      sortDir = 'desc',
+      sortBy = SortBy.lastUsedAt,
+      sortDir = SortDir.desc,
       limit,
     } = query || {};
 
     // Build Prisma where clause with optional filters
-    const where: Parameters<PrismaClient['container']['findMany']>[0]['where'] = { status };
+    const where: Prisma.ContainerWhereInput = { status };
     if (threadId) where.threadId = threadId;
     if (image) where.image = image;
     if (nodeId) where.nodeId = nodeId;
 
     // Translate sortBy to actual DB column (startedAt maps to createdAt)
-    const orderBy: Parameters<PrismaClient['container']['findMany']>[0]['orderBy'] = (() => {
-      const dir = sortDir === 'asc' ? 'asc' : 'desc';
-      switch (sortBy) {
-        case 'startedAt':
-          return { createdAt: dir } as any;
-        case 'killAfterAt':
-          return { killAfterAt: dir } as any;
-        case 'lastUsedAt':
-        default:
-          return { lastUsedAt: dir } as any;
-      }
-    })();
+    let orderBy: Prisma.ContainerOrderByWithRelationInput;
+    const dir: Prisma.SortOrder = sortDir === SortDir.asc ? 'asc' : 'desc';
+    switch (sortBy) {
+      case SortBy.startedAt:
+        orderBy = { createdAt: dir };
+        break;
+      case SortBy.killAfterAt:
+        orderBy = { killAfterAt: dir };
+        break;
+      case SortBy.lastUsedAt:
+      default:
+        orderBy = { lastUsedAt: dir };
+        break;
+    }
 
     const take = typeof limit === 'number' && Number.isFinite(limit) ? Math.max(1, Math.min(500, limit)) : 200;
 
@@ -107,12 +122,11 @@ export class ContainersController {
       threadId: r.threadId,
       image: r.image,
       status: r.status,
-      startedAt: r.createdAt,
-      lastUsedAt: r.lastUsedAt,
-      killAfterAt: r.killAfterAt,
+      startedAt: r.createdAt.toISOString(),
+      lastUsedAt: r.lastUsedAt.toISOString(),
+      killAfterAt: r.killAfterAt ? r.killAfterAt.toISOString() : null,
     }));
 
     return { items };
   }
 }
-

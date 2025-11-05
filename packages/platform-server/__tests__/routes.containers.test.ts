@@ -76,6 +76,9 @@ describe('ContainersController routes', () => {
     expect(items.every((i) => i.status === 'running')).toBe(true);
     // startedAt should exist and be derived from createdAt
     const first = items[0]; expect(typeof first.startedAt).toBe('string'); expect(typeof first.lastUsedAt).toBe('string');
+    // verify mapping equals underlying createdAt ISO
+    const src = (prismaSvc.client.container.rows as Row[]).find((r) => r.containerId === first.containerId)!;
+    expect(first.startedAt).toBe(src.createdAt.toISOString());
   });
 
   it('supports sorting by lastUsedAt desc', async () => {
@@ -91,5 +94,23 @@ describe('ContainersController routes', () => {
     expect(items.length).toBe(1);
     expect(items[0].threadId).toBe('11111111-1111-1111-1111-111111111111');
   });
-});
 
+  it('applies limit bounds and returns at most requested items', async () => {
+    // add more running rows
+    const now = Date.now();
+    const mkRun = (i: number): Row => ({
+      containerId: `cid-x-${i}`,
+      threadId: null,
+      image: `imgx:${i}`,
+      status: 'running',
+      createdAt: new Date(now - i * 2000),
+      lastUsedAt: new Date(now - i * 1000),
+      killAfterAt: null,
+    });
+    (prismaSvc.client.container.rows as Row[]).push(mkRun(4), mkRun(5), mkRun(6));
+    const res = await fastify.inject({ method: 'GET', url: '/api/containers?limit=1' });
+    expect(res.statusCode).toBe(200);
+    const items = res.json().items as Array<{ containerId: string }>;
+    expect(items.length).toBe(1);
+  });
+});

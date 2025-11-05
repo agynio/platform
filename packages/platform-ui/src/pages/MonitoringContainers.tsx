@@ -27,6 +27,8 @@ export function MonitoringContainers() {
   });
 
   const items = listQ.data?.items || [];
+  // Ensure client-side default sort by lastUsedAt desc
+  const sorted = [...items].sort((a, b) => new Date(b.lastUsedAt).getTime() - new Date(a.lastUsedAt).getTime());
 
   return (
     <div className="p-4">
@@ -38,10 +40,10 @@ export function MonitoringContainers() {
       {listQ.error && (
         <div className="text-sm text-red-600" role="alert">{String(listQ.error.message || 'Error')}</div>
       )}
-      {!listQ.isLoading && !listQ.error && items.length === 0 && (
+      {!listQ.isLoading && !listQ.error && sorted.length === 0 && (
         <div className="text-sm text-muted-foreground">No containers.</div>
       )}
-      {items.length > 0 && (
+      {sorted.length > 0 && (
         <div className="border rounded-md overflow-hidden">
           <Table>
             <Thead>
@@ -56,7 +58,7 @@ export function MonitoringContainers() {
               </Tr>
             </Thead>
             <Tbody>
-              {items.map((c) => (
+              {sorted.map((c) => (
                 <Tr key={c.containerId}>
                   <Td className="font-mono text-xs">{c.containerId}</Td>
                   <Td className="font-mono text-xs">
