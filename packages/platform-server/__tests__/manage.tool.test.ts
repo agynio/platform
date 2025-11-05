@@ -60,7 +60,7 @@ describe('ManageTool unit', () => {
     const tool: ManageFunctionTool = node.getTool();
 
     const ctx: LLMContext = { threadId: 'p', finishSignal: new Signal(), callerAgent: { invoke: async () => new ResponseMessage({ output: [] }) } };
-    const emptyStr = await tool.execute({ command: 'list' }, ctx);
+    const emptyStr = await tool.execute({ command: 'list', threadAlias: 'list' }, ctx);
     const listSchema = z.array(z.string());
     const empty = listSchema.parse(JSON.parse(emptyStr));
     expect(empty.length).toBe(0);
@@ -70,7 +70,7 @@ describe('ManageTool unit', () => {
     node.addWorker('agent-A', a1);
     node.addWorker('agent_1', a2);
 
-    const afterStr = await tool.execute({ command: 'list' }, ctx);
+    const afterStr = await tool.execute({ command: 'list', threadAlias: 'list' }, ctx);
     const after = listSchema.parse(JSON.parse(afterStr));
     expect(after).toContain('agent-A');
     const hasFallback = after.some((n) => /^agent_\d+$/.test(n));
@@ -85,7 +85,7 @@ describe('ManageTool unit', () => {
     node.addWorker('child-1', a);
     const tool = node.getTool();
     const ctx: LLMContext = { threadId: 'parent', finishSignal: new Signal(), callerAgent: { invoke: async () => new ResponseMessage({ output: [] }) } };
-    const res = await tool.execute({ command: 'send_message', worker: 'child-1', message: 'hello' }, ctx);
+    const res = await tool.execute({ command: 'send_message', worker: 'child-1', message: 'hello', threadAlias: 'child-1' }, ctx);
     expect(res?.startsWith('ok-')).toBe(true);
   });
 
@@ -95,10 +95,10 @@ describe('ManageTool unit', () => {
     await node.setConfig({ description: 'd' });
     const tool = node.getTool();
     const ctx: LLMContext = { threadId: 'p', finishSignal: new Signal(), callerAgent: { invoke: async () => new ResponseMessage({ output: [] }) } };
-    await expect(tool.execute({ command: 'send_message', worker: 'x' }, ctx)).rejects.toBeTruthy();
+    await expect(tool.execute({ command: 'send_message', worker: 'x', threadAlias: 'alias-x' }, ctx)).rejects.toBeTruthy();
     const a = await module.resolve(FakeAgent);
     node.addWorker('w1', a);
-    await expect(tool.execute({ command: 'send_message', worker: 'unknown', message: 'm' }, ctx)).rejects.toBeTruthy();
+    await expect(tool.execute({ command: 'send_message', worker: 'unknown', message: 'm', threadAlias: 'alias-unknown' }, ctx)).rejects.toBeTruthy();
   });
 
   it('check_status: aggregates active child threads scoped to current thread', async () => {
@@ -113,7 +113,7 @@ describe('ManageTool unit', () => {
 
     const tool = node.getTool();
     const ctx: LLMContext = { threadId: 'p', finishSignal: new Signal(), callerAgent: { invoke: async () => new ResponseMessage({ output: [] }) } };
-    const statusStr = await tool.execute({ command: 'check_status' }, ctx);
+    const statusStr = await tool.execute({ command: 'check_status', threadAlias: 'status' }, ctx);
     const statusSchema = z.object({ activeTasks: z.number().int(), childThreadIds: z.array(z.string()) });
     const status = statusSchema.parse(JSON.parse(statusStr));
     expect(status.activeTasks).toBe(0);
@@ -127,7 +127,7 @@ describe('ManageTool unit', () => {
     const tool = node.getTool();
     // Missing ctx should throw at compile time; provide minimal ctx for runtime
     const ctx: LLMContext = { threadId: 'p', finishSignal: new Signal(), callerAgent: { invoke: async () => new ResponseMessage({ output: [] }) } };
-    const listStr = await tool.execute({ command: 'list' }, ctx);
+    const listStr = await tool.execute({ command: 'list', threadAlias: 'list' }, ctx);
     const list = z.array(z.string()).parse(JSON.parse(listStr));
     expect(Array.isArray(list)).toBe(true);
   });
@@ -145,7 +145,7 @@ describe('ManageTool unit', () => {
     node.addWorker('W', a);
     const tool = node.getTool();
     const ctx: LLMContext = { threadId: 'p', finishSignal: new Signal(), callerAgent: { invoke: async () => new ResponseMessage({ output: [] }) } };
-    await expect(tool.execute({ command: 'send_message', worker: 'W', message: 'go' }, ctx)).rejects.toBeTruthy();
+    await expect(tool.execute({ command: 'send_message', worker: 'W', message: 'go', threadAlias: 'alias-W' }, ctx)).rejects.toBeTruthy();
   });
 });
 
