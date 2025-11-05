@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { Table, Thead, Tbody, Tr, Th, Td } from '@agyn/ui';
 import { fetchTraces } from '../services/api';
 import { spanRealtime } from '../services/socket';
@@ -97,12 +98,12 @@ export function TracingTracesView({ basePaths, linkBuilders, onNavigate }: Traci
                   const threadId = t.root?.threadId ?? (typeof attrThreadId === 'string' ? attrThreadId : undefined);
                   if (!threadId) return '-';
                   const e3 = emojiHash3(threadId);
-                  const href = buildThreadHref(threadId);
+                  const to = basePaths?.thread ? `${basePaths.thread}/${threadId}` : `/thread/${threadId}`;
                   return (
-                    <a href={href} onClick={(ev) => { if (onNavigate) { ev.preventDefault(); onNavigate({ type: 'thread', id: threadId }); } }} title={threadId} style={{ textDecoration: 'none', color: 'inherit' }}>
+                    <Link to={to} onClick={(ev) => { if (onNavigate) { ev.preventDefault(); onNavigate({ type: 'thread', id: threadId }); } }} title={threadId} style={{ textDecoration: 'none', color: 'inherit' }}>
                       <span style={{ fontSize: 18, marginRight: 6 }}>{e3}</span>
                       <span style={{ color: '#6c757d', fontSize: 11 }}>({threadId})</span>
-                    </a>
+                    </Link>
                   );
                 })()}
               </Td>
@@ -179,4 +180,3 @@ function extractMessagesFromInputParameters(inputParameters: unknown): string[] 
   }
   return [];
 }
-
