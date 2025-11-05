@@ -1,4 +1,4 @@
-import { io, Socket } from 'socket.io-client';
+import { io, type Socket } from 'socket.io-client';
 import { getApiBase } from '../apiClient';
 import type { NodeStatusEvent, ReminderCountEvent } from './types';
 

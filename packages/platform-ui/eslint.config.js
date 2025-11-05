@@ -30,6 +30,8 @@ export default defineConfig([
           caughtErrorsIgnorePattern: '^_',
         },
       ],
+      // Enforce type-only imports for types
+      '@typescript-eslint/consistent-type-imports': ['error', { prefer: 'type-imports', fixStyle: 'inline-type-imports' }],
     },
   },
   // Tests: allow explicit any and relax component-only exports

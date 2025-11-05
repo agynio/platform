@@ -22,7 +22,10 @@ export function MonitoringContainers() {
   const queryKey = useMemo(() => ['containers', { status, sortBy, sortDir }], [status, sortBy, sortDir]);
   const listQ = useQuery<{ items: ContainerItem[] }, Error>({
     queryKey,
-    queryFn: async () => httpJson<{ items: ContainerItem[] }>(`/api/containers?status=${status}&sortBy=${sortBy}&sortDir=${sortDir}`),
+    queryFn: async () => {
+      const res = await httpJson<{ items: ContainerItem[] }>(`/api/containers?status=${status}&sortBy=${sortBy}&sortDir=${sortDir}`);
+      return { items: res?.items ?? [] };
+    },
     refetchInterval: 5000,
   });
 

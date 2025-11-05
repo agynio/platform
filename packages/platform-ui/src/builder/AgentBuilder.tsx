@@ -262,7 +262,7 @@ function PopoverList({
           <ForwardedPopoverListItem
             key={tpl.name}
             template={tpl}
-            ref={(el) => (itemRefs.current[idx] = el)}
+            ref={(el) => { itemRefs.current[idx] = el; }}
             id={`tpl-opt-${idx}`}
             active={idx === activeIndex}
             onInsert={() => onInsert(tpl.name)}
@@ -286,23 +286,7 @@ interface PopoverListItemProps {
   onFocus?: () => void;
 }
 
-function mergeRefs<T>(...refs: Array<React.Ref<T> | undefined>) {
-  return (value: T) => {
-    for (const ref of refs) {
-      if (!ref) continue;
-      if (typeof ref === 'function') {
-        ref(value);
-      } else {
-        try {
-          // @ts-expect-error - React types allow this at runtime
-          (ref as React.MutableRefObject<T | null>).current = value;
-        } catch {
-          // ignore
-        }
-      }
-    }
-  };
-}
+// mergeRefs removed; inline ref composition used below
 
 const PopoverListItem = (
   { template, active, onInsert, onDragStateChange, id, onDropSuccess, onFocus }: PopoverListItemProps,
@@ -346,7 +330,25 @@ const PopoverListItem = (
     return img;
   }
 
-  const setRef = mergeRefs<HTMLButtonElement>(ref, dragRef);
+  // Compose ref with react-dnd connector; ensure void-returning callback
+  const setRef = (el: HTMLButtonElement | null) => {
+    if (el) {
+      try {
+        dragRef(el);
+      } catch {
+        /* ignore */
+      }
+    }
+    if (typeof ref === 'function') {
+      ref(el);
+    } else if (ref && 'current' in (ref as object)) {
+      try {
+        (ref as React.MutableRefObject<HTMLButtonElement | null>).current = el;
+      } catch {
+        /* ignore */
+      }
+    }
+  };
 
   return (
     <Card className={`p-0 ${isDragging ? 'opacity-70' : ''}`}>

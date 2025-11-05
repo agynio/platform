@@ -1,5 +1,5 @@
 // Minimal tracing realtime socket client (span_upsert events)
-import { io, Socket } from 'socket.io-client';
+import { io, type Socket } from 'socket.io-client';
 import type { SpanDoc } from '../tracing/api';
 
 const TRACING_BASE: string = import.meta.env.VITE_TRACING_SERVER_URL || 'http://localhost:4319';

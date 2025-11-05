@@ -7,7 +7,7 @@ export function TracingTraces() {
   return (
     <div className="p-4">
       <ObsUiProvider serverUrl={serverUrl}>
-        <TracingTracesView basePaths={{ trace: '/tracing/trace', thread: '/tracing/thread', errorsTools: '/tracing/errors/tools', toolErrors: '/tracing/errors/tools' }} />
+        <TracingTracesView basePaths={{ trace: '/tracing/trace', thread: '/tracing/thread' }} />
       </ObsUiProvider>
     </div>
   );

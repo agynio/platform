@@ -1,4 +1,3 @@
-import React from 'react';
 
 export type MessageBubbleProps = {
   id: string;
@@ -53,4 +52,3 @@ export function MessageBubble({ id, role, timestamp, text, source, side, showJso
     </div>
   );
 }
-

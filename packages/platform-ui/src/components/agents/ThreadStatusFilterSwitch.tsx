@@ -1,4 +1,3 @@
-import React from 'react';
 
 export type ThreadStatusFilter = 'open' | 'closed' | 'all';
 
@@ -20,4 +19,3 @@ export function ThreadStatusFilterSwitch({ value, onChange }: { value: ThreadSta
     </div>
   );
 }
-
