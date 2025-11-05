@@ -2,7 +2,6 @@ import { Module } from '@nestjs/common';
 import { CoreModule } from '../core/core.module';
 import { ConfigService } from '../core/services/config.service';
 import { LoggerService } from '../core/services/logger.service';
-import { MongoService } from '../core/services/mongo.service';
 import { PrismaService } from '../core/services/prisma.service';
 import { VaultModule } from '../vault/vault.module';
 import { ContainerRegistry } from './container/container.registry';

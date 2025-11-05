@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { ContainerRegistry } from '../src/infra/container/container.registry';
+import { ContainerRegistry, type ContainerStatus, type ContainerMetadata } from '../src/infra/container/container.registry';
 import { LoggerService } from '../src/core/services/logger.service';
 
 type ContainerRow = {
@@ -8,20 +8,20 @@ type ContainerRow = {
   threadId: string | null;
   providerType: 'docker';
   image: string;
-  status: 'running' | 'stopped' | 'terminating' | 'failed';
+  status: ContainerStatus;
   createdAt: Date;
   updatedAt: Date;
   lastUsedAt: Date;
   killAfterAt: Date | null;
   terminationReason: string | null;
   deletedAt: Date | null;
-  metadata: Record<string, any> | null;
+  metadata: ContainerMetadata | null;
 };
 
 class FakePrismaClient {
   private rows = new Map<string, ContainerRow>();
   container = {
-    upsert: async (args: any) => {
+    upsert: async (args: { where: { containerId: string }; create: Partial<ContainerRow> & { containerId: string }; update: Partial<ContainerRow> }) => {
       const key = args.where.containerId as string;
       const existing = this.rows.get(key);
       if (!existing) {
@@ -29,70 +29,70 @@ class FakePrismaClient {
         const now = new Date();
         const row: ContainerRow = {
           containerId: create.containerId,
-          nodeId: create.nodeId,
-          threadId: create.threadId ?? null,
+          nodeId: create.nodeId as string,
+          threadId: (create.threadId as string | null) ?? null,
           providerType: 'docker',
-          image: create.image,
-          status: create.status,
+          image: create.image as string,
+          status: (create.status as ContainerStatus) ?? 'running',
           createdAt: now,
           updatedAt: now,
-          lastUsedAt: create.lastUsedAt,
-          killAfterAt: create.killAfterAt ?? null,
+          lastUsedAt: create.lastUsedAt as Date,
+          killAfterAt: (create.killAfterAt as Date | null) ?? null,
           terminationReason: null,
           deletedAt: null,
-          metadata: create.metadata ?? null,
+          metadata: (create.metadata as ContainerMetadata | null) ?? null,
         };
         this.rows.set(key, row);
         return row;
       } else {
         const update = args.update;
-        existing.nodeId = update.nodeId;
-        existing.threadId = update.threadId ?? null;
-        existing.image = update.image;
-        existing.status = update.status;
+        existing.nodeId = (update.nodeId as string) ?? existing.nodeId;
+        existing.threadId = (update.threadId as string | null) ?? existing.threadId;
+        existing.image = (update.image as string) ?? existing.image;
+        existing.status = (update.status as ContainerStatus) ?? existing.status;
         existing.updatedAt = new Date();
-        existing.lastUsedAt = update.lastUsedAt ?? existing.lastUsedAt;
-        existing.killAfterAt = update.killAfterAt ?? existing.killAfterAt;
-        existing.terminationReason = update.terminationReason ?? existing.terminationReason;
-        existing.deletedAt = update.deletedAt ?? existing.deletedAt;
-        existing.metadata = update.metadata ?? existing.metadata;
+        existing.lastUsedAt = (update.lastUsedAt as Date) ?? existing.lastUsedAt;
+        existing.killAfterAt = (update.killAfterAt as Date | null) ?? existing.killAfterAt;
+        existing.terminationReason = (update.terminationReason as string | null) ?? existing.terminationReason;
+        existing.deletedAt = (update.deletedAt as Date | null) ?? existing.deletedAt;
+        existing.metadata = (update.metadata as ContainerMetadata | null) ?? existing.metadata;
         return existing;
       }
     },
-    findUnique: async (args: any) => {
+    findUnique: async (args: { where: { containerId: string } }) => {
       const key = args.where.containerId as string;
       return this.rows.get(key) || null;
     },
-    update: async (args: any) => {
+    update: async (args: { where: { containerId: string }; data: Partial<ContainerRow> }) => {
       const key = args.where.containerId as string;
       const existing = this.rows.get(key);
       if (!existing) throw new Error('Not found');
       const data = args.data;
       existing.updatedAt = new Date();
-      if ('status' in data) existing.status = data.status;
-      if ('terminationReason' in data) existing.terminationReason = data.terminationReason ?? existing.terminationReason;
-      if ('deletedAt' in data) existing.deletedAt = data.deletedAt ?? existing.deletedAt;
-      if ('lastUsedAt' in data) existing.lastUsedAt = data.lastUsedAt ?? existing.lastUsedAt;
-      if ('killAfterAt' in data) existing.killAfterAt = data.killAfterAt ?? existing.killAfterAt;
-      if ('metadata' in data) existing.metadata = data.metadata ?? existing.metadata;
+      if ('status' in data) existing.status = (data.status as ContainerStatus) ?? existing.status;
+      if ('terminationReason' in data) existing.terminationReason = (data.terminationReason as string | null) ?? existing.terminationReason;
+      if ('deletedAt' in data) existing.deletedAt = (data.deletedAt as Date | null) ?? existing.deletedAt;
+      if ('lastUsedAt' in data) existing.lastUsedAt = (data.lastUsedAt as Date) ?? existing.lastUsedAt;
+      if ('killAfterAt' in data) existing.killAfterAt = (data.killAfterAt as Date | null) ?? existing.killAfterAt;
+      if ('metadata' in data) existing.metadata = (data.metadata as ContainerMetadata | null) ?? existing.metadata;
       return existing;
     },
-    updateMany: async (args: any) => {
-      const id = args.where.containerId as string;
-      const status = args.where.status as string;
+    updateMany: async (args: { where: { containerId: string; status: ContainerStatus }; data: { status: ContainerStatus; metadata?: ContainerMetadata | null } }) => {
+      const id = args.where.containerId;
+      const status = args.where.status;
       const row = this.rows.get(id);
       if (row && row.status === status) {
         row.status = args.data.status;
-        row.metadata = args.data.metadata ?? row.metadata;
+        row.metadata = (args.data.metadata as ContainerMetadata | null) ?? row.metadata;
         row.updatedAt = new Date();
         return { count: 1 };
       }
       return { count: 0 };
     },
-    findMany: async (args: any) => {
+    findMany: async (args?: { where?: { status?: ContainerStatus; killAfterAt?: { not: null; lte: Date }; containerId?: { in: string[] } } }) => {
       if (args?.where?.status && args?.where?.killAfterAt) {
         const notNull = args.where.killAfterAt.not === null;
-        const lte = args.where.killAfterAt.lte as Date;
+        const lte = args.where.killAfterAt.lte;
         return Array.from(this.rows.values()).filter(
           (r) => r.status === args.where.status && (notNull ? r.killAfterAt != null : true) && (r.killAfterAt! <= lte),
         );
@@ -104,7 +104,7 @@ class FakePrismaClient {
       return Array.from(this.rows.values());
     },
   };
-  async $queryRaw(strings: TemplateStringsArray, ...values: any[]): Promise<Array<{ containerId: string }>> {
+  async $queryRaw(strings: TemplateStringsArray, ...values: unknown[]): Promise<Array<{ containerId: string }>> {
     const nowIso = values[0] as string;
     const now = new Date(nowIso);
     const results = Array.from(this.rows.values())
@@ -135,7 +135,7 @@ describe('ContainerRegistry (Prisma-backed)', () => {
 
   beforeEach(() => {
     prisma = new FakePrismaClient();
-    registry = new ContainerRegistry(prisma as any, new NoopLogger());
+    registry = new ContainerRegistry(prisma as unknown as import('@prisma/client').PrismaClient, new NoopLogger());
   });
 
   it('registerStart creates records deterministically', async () => {
@@ -147,18 +147,18 @@ describe('ContainerRegistry (Prisma-backed)', () => {
       labels: { 'hautech.ai/role': 'workspace' },
       ttlSeconds: 10,
     });
-    const row = await (prisma as any).container.findUnique({ where: { containerId: 'abc' } });
+    const row = await prisma.container.findUnique({ where: { containerId: 'abc' } });
     expect(row).toBeTruthy();
-    expect(row.status).toBe('running');
-    expect(row.killAfterAt).not.toBeNull();
-    expect(row.metadata.ttlSeconds).toBe(10);
+    expect(row!.status).toBe('running');
+    expect(row!.killAfterAt).not.toBeNull();
+    expect(row!.metadata!.ttlSeconds).toBe(10);
   });
 
   it('updateLastUsed does not create when missing', async () => {
-    const before = await (prisma as any).container.findMany({});
+    const before = await prisma.container.findMany({});
     expect(before.length).toBe(0);
     await registry.updateLastUsed('missing');
-    const after = await (prisma as any).container.findMany({});
+    const after = await prisma.container.findMany({});
     expect(after.length).toBe(0);
   });
 
@@ -175,16 +175,16 @@ describe('ContainerRegistry (Prisma-backed)', () => {
     const past = new Date(now.getTime() - 1000);
     const future = new Date(now.getTime() + 60_000);
     await registry.registerStart({ containerId: 'r1', nodeId: 'n', threadId: '', image: 'img', ttlSeconds: 0 });
-    await (prisma as any).container.update({ where: { containerId: 'r1' }, data: { killAfterAt: past } });
+    await prisma.container.update({ where: { containerId: 'r1' }, data: { killAfterAt: past } });
     await registry.registerStart({ containerId: 't1', nodeId: 'n', threadId: '', image: 'img' });
-    await (prisma as any).container.update({ where: { containerId: 't1' }, data: { status: 'terminating', metadata: {} } });
+    await prisma.container.update({ where: { containerId: 't1' }, data: { status: 'terminating', metadata: {} as ContainerMetadata } });
     await registry.registerStart({ containerId: 't2', nodeId: 'n', threadId: '', image: 'img' });
-    await (prisma as any).container.update({
+    await prisma.container.update({
       where: { containerId: 't2' },
-      data: { status: 'terminating', metadata: { retryAfter: future.toISOString() } },
+      data: { status: 'terminating', metadata: { labels: {}, ttlSeconds: 86400, retryAfter: future.toISOString() } as ContainerMetadata },
     });
     const expired = await registry.getExpired(now);
-    const ids = expired.map((r: any) => r.containerId);
+    const ids = expired.map((r) => r.containerId);
     expect(ids).toContain('r1');
     expect(ids).toContain('t1');
     expect(ids).not.toContain('t2');
@@ -194,19 +194,18 @@ describe('ContainerRegistry (Prisma-backed)', () => {
     await registry.registerStart({ containerId: 'x', nodeId: 'n', threadId: '', image: 'img' });
     await registry.markTerminating('x', 'cleanup');
     await registry.recordTerminationFailure('x', 'oops');
-    const row = await (prisma as any).container.findUnique({ where: { containerId: 'x' } });
-    expect(row.metadata.lastError).toBe('oops');
-    expect(typeof row.metadata.retryAfter).toBe('string');
-    expect(row.metadata.terminationAttempts).toBe(1);
+    const row = await prisma.container.findUnique({ where: { containerId: 'x' } });
+    expect(row!.metadata!.lastError).toBe('oops');
+    expect(typeof row!.metadata!.retryAfter).toBe('string');
+    expect(row!.metadata!.terminationAttempts).toBe(1);
   });
 
   it('markStopped sets status and deletedAt', async () => {
     await registry.registerStart({ containerId: 'y', nodeId: 'n', threadId: '', image: 'img' });
     await registry.markStopped('y', 'ttl_expired');
-    const row = await (prisma as any).container.findUnique({ where: { containerId: 'y' } });
-    expect(row.status).toBe('stopped');
-    expect(row.deletedAt).toBeInstanceOf(Date);
-    expect(row.terminationReason).toBe('ttl_expired');
+    const row = await prisma.container.findUnique({ where: { containerId: 'y' } });
+    expect(row!.status).toBe('stopped');
+    expect(row!.deletedAt).toBeInstanceOf(Date);
+    expect(row!.terminationReason).toBe('ttl_expired');
   });
 });
-
