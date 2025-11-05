@@ -34,12 +34,12 @@ class SpanRealtime {
           if (resp && typeof resp.ts === 'number') {
             this.lastPongTs = resp.ts;
             if (this.lastPongTs)
-              console.debug('[obs-realtime] pong (ack) at', new Date(this.lastPongTs).toISOString());
+              console.debug('[tracing-realtime] pong (ack) at', new Date(this.lastPongTs).toISOString());
             this.notify();
           }
         });
       } catch (e) {
-        console.warn('[obs-realtime] ping error', e);
+        console.warn('[tracing-realtime] ping error', e);
       }
     }, 10000);
   }
@@ -58,33 +58,33 @@ class SpanRealtime {
     this.connecting = true;
     const base = getServerUrl();
     const url = base; // serverUrl should include protocol/host
-    console.info('[obs-realtime] connecting to', url);
+    console.info('[tracing-realtime] connecting to', url);
     const s = io(url, { path: '/socket.io', transports: ['websocket'], timeout: 10000 });
     this.socket = s;
     s.on('connect', () => {
       this.connecting = false;
       this.connected = true;
-      console.info('[obs-realtime] connected socket id', s.id);
+      console.info('[tracing-realtime] connected socket id', s.id);
       this.startPing();
       this.notify();
     });
     s.on('disconnect', (reason) => {
       this.connected = false;
-      console.warn('[obs-realtime] disconnected', reason);
+      console.warn('[tracing-realtime] disconnected', reason);
       this.stopPing();
       this.notify();
     });
     s.on('connect_error', (err) => {
-      console.error('[obs-realtime] connect_error', err.message);
+      console.error('[tracing-realtime] connect_error', err.message);
     });
     s.on('connected', (payload: any) => {
-      console.debug('[obs-realtime] server connected event', payload);
+      console.debug('[tracing-realtime] server connected event', payload);
     });
     s.on('pong', (payload: any) => {
       if (payload && typeof payload.ts === 'number') {
         this.lastPongTs = payload.ts;
         if (this.lastPongTs)
-          console.debug('[obs-realtime] pong event at', new Date(this.lastPongTs).toISOString());
+          console.debug('[tracing-realtime] pong event at', new Date(this.lastPongTs).toISOString());
         this.notify();
       }
     });

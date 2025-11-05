@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { api } from '../api';
+import { api } from '@/api/graph';
 
 // Re-import normalize via api.saveFullGraph serialization behavior
 

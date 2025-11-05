@@ -1,50 +1,73 @@
 // Running spans store and hook
 // - Tracks realtime running span counts per node and kind (agent/tool)
-// - Uses obsRealtime span_upsert events and seeds from /v1/spans
+// - Uses tracingRealtime span_upsert events and seeds from /v1/spans
 // - Memory is bounded via mapping GC to avoid unbounded growth
 
 import { useSyncExternalStore } from 'react';
-import { obsRealtime } from './socket';
-import type { SpanDoc } from '../tracing/api';
-import { fetchRunningSpansFromTo } from '../tracing/api';
+import { tracingRealtime } from './socket';
+import type { SpanDoc, SpanEventPayload } from '@/api/tracing';
+import { fetchRunningSpansFromTo } from '@/api/tracing';
 
 type Bucket = 'agent' | 'tool';
 
+function getAttributes(span: { attributes?: Record<string, unknown> }): Record<string, unknown> {
+  return (span.attributes && typeof span.attributes === 'object') ? span.attributes : {};
+}
+
+function getAttrString(span: { attributes?: Record<string, unknown> }, key: string): string | undefined {
+  const v = getAttributes(span)[key];
+  return typeof v === 'string' ? v : undefined;
+}
+
+function getAttrBoolean(span: { attributes?: Record<string, unknown> }, key: string): boolean | undefined {
+  const v = getAttributes(span)[key];
+  return typeof v === 'boolean' ? v : undefined;
+}
+
 // Helper to detect bucket from span attributes/label
-function detectBucket(span: SpanDoc): Bucket | undefined {
-  const attrs = (span.attributes || {}) as Record<string, unknown>;
-  const label = span.label || '';
-  const isTool = attrs['kind'] === 'tool_call' || (label.startsWith('tool:') === true);
-  // Detect agent spans for completeness (not used here)
-  // treat explicit agent labels as agent bucket
-  if (attrs['kind'] === 'agent' || label === 'agent') return 'agent';
-  if (isTool) return 'tool';
+function detectBucket(span: SpanDoc & { attributes?: Record<string, unknown> }): Bucket | undefined {
+  const kind = getAttrString(span, 'kind');
+  if (kind === 'agent') return 'agent';
+  if (kind === 'tool_call') return 'tool';
+  // fallback to a best-effort label heuristic if present
+  const maybeLabel = (span as unknown as { label?: unknown }).label;
+  const label = typeof maybeLabel === 'string' ? maybeLabel : '';
+  if (label === 'agent') return 'agent';
+  if (label.startsWith('tool:')) return 'tool';
   return undefined;
 }
 
-function getNodeIdFromSpan(span: SpanDoc): string | undefined {
-  // Determine kind explicitly to avoid precedence bugs
-  const attrs = (span.attributes || {}) as Record<string, unknown>;
-  const label = span.label || '';
-  const isTool = attrs['kind'] === 'tool_call' || (label.startsWith('tool:') === true);
+function getNodeIdFromSpan(span: SpanDoc & { attributes?: Record<string, unknown> } & { nodeId?: string }): string | undefined {
+  const kind = getAttrString(span, 'kind');
+  const maybeLabel = (span as unknown as { label?: unknown }).label;
+  const label = typeof maybeLabel === 'string' ? maybeLabel : '';
+  const isTool = kind === 'tool_call' || label.startsWith('tool:');
 
-  // For tool spans, use ONLY top-level nodeId (Tool id). No fallback to legacy attributes.toolNodeId
+  // Prefer explicit top-level nodeId when present
+  const topNodeId = typeof (span as unknown as { nodeId?: unknown }).nodeId === 'string' ? (span as unknown as { nodeId?: string }).nodeId : undefined;
+  const attrNodeId = getAttrString(span, 'nodeId');
+
   if (isTool) {
-    const nodeIdNew = span.nodeId || (attrs['nodeId'] as string | undefined) || undefined;
-    if (nodeIdNew && typeof nodeIdNew === 'string' && nodeIdNew.length > 0) return nodeIdNew;
-    // If absent, do not attribute tool activity to any node (surfacing missing instrumentation)
-    return undefined;
+    // For tools, only attribute when nodeId is present (top-level or attr)
+    return topNodeId || attrNodeId || undefined;
   }
-
-  // For non-tool, use the standard nodeId
-  const nodeId = span.nodeId || (attrs['nodeId'] as string | undefined) || undefined;
-  if (typeof nodeId === 'string' && nodeId.length > 0) return nodeId;
-  return undefined;
+  return topNodeId || attrNodeId || undefined;
 }
 
-function isRunningSpan(span: SpanDoc): boolean {
-  // Define running as status == 'running' OR completed == false
-  return span.status === 'running' || span.completed === false;
+function getStatus(span: SpanEventPayload): string | undefined {
+  if (typeof span.status === 'string') return span.status;
+  const statusAttr = getAttrString(span, 'status');
+  return statusAttr;
+}
+
+function isRunningSpan(span: SpanEventPayload): boolean {
+  // Prefer explicit status when present; fallback to completed attr; else infer by endedAt absence
+  const s = getStatus(span);
+  if (s) return s === 'running';
+  const completedAttr = getAttrBoolean(span, 'completed');
+  if (typeof completedAttr === 'boolean') return completedAttr === false;
+  const endedAt = typeof span.endedAt === 'string' ? span.endedAt : undefined;
+  return !endedAt;
 }
 
 // Note: capacity is controlled indirectly via TTL-based GC of mappings.
@@ -86,7 +109,7 @@ class RunningStoreImpl {
     if (this.initialized) return;
     this.initialized = true;
     // Attach realtime handler
-    obsRealtime.onSpanUpsert((span) => this.onSpan(span));
+    tracingRealtime.onSpanUpsert((span) => this.onSpan(span));
     // Seed initial running spans for last 24h (best-effort)
     const to = new Date();
     const from = new Date(to.getTime() - 24 * 60 * 60 * 1000);
@@ -127,7 +150,7 @@ class RunningStoreImpl {
     // membership set removed; counts and spanToKeys are the source of truth
   }
 
-  private onSpan(span: SpanDoc) {
+  private onSpan(span: SpanEventPayload) {
     const nodeId = getNodeIdFromSpan(span);
     const bucket = detectBucket(span);
     const running = isRunningSpan(span);

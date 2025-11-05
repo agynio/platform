@@ -4,6 +4,7 @@ import { render, screen, fireEvent, waitFor, within } from '@testing-library/rea
 import { MemoryRouter, Routes, Route } from 'react-router-dom';
 import { ErrorsByToolPage } from '../pages/ErrorsByToolPage';
 import { ToolErrorsPage } from '../pages/ToolErrorsPage';
+import { TracingProvider } from '../../src/context/TracingProvider';
 import { TimeRangeSelector } from '../components/TimeRangeSelector';
 
 vi.mock('../services/api', async () => {
@@ -22,12 +23,12 @@ describe('Errors by Tool pages', () => {
 
   it('renders counts and navigates to detail', async () => {
     const { container } = render(
-      <MemoryRouter initialEntries={[`/errors/tools`]}>
+      <TracingProvider serverUrl="http://localhost:4319"><MemoryRouter initialEntries={[`/errors/tools`]}> 
         <Routes>
           <Route path="/errors/tools" element={<ErrorsByToolPage />} />
           <Route path="/errors/tools/:label" element={<ToolErrorsPage />} />
         </Routes>
-      </MemoryRouter>
+      </MemoryRouter></TracingProvider>
     );
     // Table rendered via test id
     const listTable = await within(container).findByTestId('obsui-errors-table');
@@ -42,11 +43,11 @@ describe('Errors by Tool pages', () => {
 
   it('detail page lists spans and shows details', async () => {
     const { container } = render(
-      <MemoryRouter initialEntries={[`/errors/tools/tool%3Aweather`]}>
+      <TracingProvider serverUrl="http://localhost:4319"><MemoryRouter initialEntries={[`/errors/tools/tool%3Aweather`]}> 
         <Routes>
           <Route path="/errors/tools/:label" element={<ToolErrorsPage />} />
         </Routes>
-      </MemoryRouter>
+      </MemoryRouter></TracingProvider>
     );
     const table = await within(container).findByTestId('obsui-errors-table');
     // Identify the specific row by locating the s1 cell and validating sibling cells
@@ -71,11 +72,11 @@ describe('Errors by Tool pages', () => {
       return { items: [ { traceId: 't2', spanId: 's2', label: 'tool:weather', status: 'error', startTime: new Date().toISOString(), endTime: new Date().toISOString(), completed: true, lastUpdate: new Date().toISOString(), attributes: {}, events: [], rev: 0, idempotencyKeys: [], createdAt: '', updatedAt: '' } ] } as any;
     });
     const { container } = render(
-      <MemoryRouter initialEntries={[`/errors/tools/tool%3Aweather`]}>
+      <TracingProvider serverUrl="http://localhost:4319"><MemoryRouter initialEntries={[`/errors/tools/tool%3Aweather`]}> 
         <Routes>
           <Route path="/errors/tools/:label" element={<ToolErrorsPage />} />
         </Routes>
-      </MemoryRouter>
+      </MemoryRouter></TracingProvider>
     );
     const table = await within(container).findByTestId('obsui-errors-table');
     // First page: verify s1 row and its sibling cells
@@ -115,11 +116,11 @@ describe('Errors by Tool pages', () => {
     const spy = vi.spyOn(api, 'fetchErrorsByTool');
 
     const { container } = render(
-      <MemoryRouter initialEntries={[`/errors/tools`]}> 
+      <TracingProvider serverUrl="http://localhost:4319"><MemoryRouter initialEntries={[`/errors/tools`]}> 
         <Routes>
           <Route path="/errors/tools" element={<ErrorsByToolPage />} />
         </Routes>
-      </MemoryRouter>
+      </MemoryRouter></TracingProvider>
     );
     // change inputs but do not blur -> fetchErrorsByTool should not be called again yet
     const inputs = await within(container).findAllByDisplayValue(/T/);

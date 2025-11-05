@@ -45,7 +45,6 @@ export const ReminderCountEventSchema = z
   })
   .strict();
 export type ReminderCountEvent = z.infer<typeof ReminderCountEventSchema>;
-
 /**
  * Socket.IO gateway attached to Fastify/Nest HTTP server for graph events.
  * Constructors DI-only; call init({ server }) explicitly from bootstrap.
@@ -110,7 +109,6 @@ export class GraphSocketGateway {
     };
     this.broadcast('node_state', payload, NodeStateEventSchema);
   }
-
   /** Emit node_reminder_count event for RemindMe tool nodes when registry changes. */
   emitReminderCount(nodeId: string, count: number, updatedAtMs?: number): void {
     const payload: ReminderCountEvent = {

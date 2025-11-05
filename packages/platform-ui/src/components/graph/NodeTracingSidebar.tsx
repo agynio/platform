@@ -1,12 +1,13 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { Node } from 'reactflow';
-import type { SpanDoc } from '@/lib/tracing/api';
-import { fetchSpansInRange } from '@/lib/tracing/api';
-import { obsRealtime } from '@/lib/obs/socket';
+import type { SpanDoc, SpanExtras } from '@/api/tracing';
+import { fetchSpansInRange } from '@/api/tracing';
+import { tracingRealtime } from '@/lib/tracing/socket';
 import { useTemplatesCache } from '@/lib/graph/templates.provider';
 import { useNodeReminders } from '@/lib/graph/hooks';
-import { api } from '@/lib/graph/api';
+import { api } from '@/api/graph';
 import { notifyError, notifySuccess } from '@/lib/notify';
+import { config } from '@/config';
 
 type BuilderPanelNodeData = {
   template: string;
@@ -15,37 +16,65 @@ type BuilderPanelNodeData = {
   dynamicConfig?: Record<string, unknown>;
 };
 
-const TRACING_UI_BASE: string = import.meta.env.VITE_TRACING_UI_BASE || 'http://localhost:4320';
+const TRACING_UI_BASE: string | undefined = config.tracing.uiBase;
 
-  function spanMatchesContext(span: SpanDoc, node: Node<BuilderPanelNodeData>, kind: 'agent' | 'tool') {
-  const attrs = (span.attributes || {}) as Record<string, unknown>;
-  const kindAttr = String(attrs['kind'] || '');
-  const label = span.label || '';
-  const nodeIdAttr = span.nodeId || (attrs['nodeId'] as string | undefined);
-  const kindOk = kind === 'agent' ? (kindAttr === 'agent' || label === 'agent') : (kindAttr === 'tool_call' || label.startsWith('tool:'));
-  if (!kindOk) return false;
-  // Agent: filter by nodeId (agent id)
-  if (kind === 'agent') return nodeIdAttr === node.id;
-  // Tool: ONLY include spans where nodeId equals Tool id (no legacy fallback)
-  return nodeIdAttr === node.id;
+function getAttributes(span: { attributes?: Record<string, unknown> }): Record<string, unknown> {
+  return (span.attributes && typeof span.attributes === 'object') ? span.attributes : {};
 }
 
-function summarizeStatus(s: SpanDoc['status']) {
+function getStatus(span: SpanDoc & { attributes?: Record<string, unknown> }): string | undefined {
+  const attr = getAttributes(span);
+  const v = attr.status;
+  return typeof v === 'string' ? v : undefined;
+}
+
+function getLabel(span: unknown): string | undefined {
+  const label = (span as { label?: unknown })?.label;
+  return typeof label === 'string' ? label : undefined;
+}
+
+function getNodeId(span: (SpanDoc & Partial<SpanExtras>) & { attributes?: Record<string, unknown> }): string | undefined {
+  if (typeof (span as { nodeId?: unknown }).nodeId === 'string') return (span as { nodeId?: string }).nodeId;
+  const attr = getAttributes(span).nodeId;
+  return typeof attr === 'string' ? attr : undefined;
+}
+
+function getKind(span: SpanDoc & { attributes?: Record<string, unknown> }): 'agent' | 'tool' | undefined {
+  const kindAttr = getAttributes(span).kind;
+  const kind = typeof kindAttr === 'string' ? kindAttr : undefined;
+  if (kind === 'agent') return 'agent';
+  if (kind === 'tool_call') return 'tool';
+  const label = getLabel(span);
+  if (label === 'agent') return 'agent';
+  if (label && label.startsWith('tool:')) return 'tool';
+  return undefined;
+}
+
+function spanMatchesContext(span: (SpanDoc & Partial<SpanExtras>) & { attributes?: Record<string, unknown> }, node: Node<BuilderPanelNodeData>, kind: 'agent' | 'tool') {
+  const detected = getKind(span);
+  const kindOk = detected === kind;
+  if (!kindOk) return false;
+  const nodeId = getNodeId(span);
+  return nodeId === node.id;
+}
+
+function summarizeStatus(s?: unknown) {
+  const v = String(s || '');
   switch (s) {
     case 'running': return 'running';
     case 'ok': return 'ok';
     case 'error': return 'error';
     case 'cancelled': return 'cancelled';
-    default: return String(s);
+    default: return v || '-';
   }
 }
 
-export function NodeObsSidebar({ node }: { node: Node<BuilderPanelNodeData> }) {
-  return <NodeObsSidebarBody node={node} />;
+export function NodeTracingSidebar({ node }: { node: Node<BuilderPanelNodeData> }) {
+  return <NodeTracingSidebarBody node={node} />;
 }
 
-function NodeObsSidebarBody({ node }: { node: Node<BuilderPanelNodeData> }) {
-  const [spans, setSpans] = useState<SpanDoc[]>([]);
+function NodeTracingSidebarBody({ node }: { node: Node<BuilderPanelNodeData> }) {
+  const [spans, setSpans] = useState<Array<SpanDoc & Partial<SpanExtras>>>([]);
   const [note, setNote] = useState<string | null>(null);
   const [runs, setRuns] = useState<Array<{ runId: string; threadId: string; status: string; updatedAt: string }>>([]);
   const { getTemplate } = useTemplatesCache();
@@ -53,23 +82,26 @@ function NodeObsSidebarBody({ node }: { node: Node<BuilderPanelNodeData> }) {
   const kind: 'agent' | 'tool' | 'other' = (tmpl?.kind === 'agent' || /agent/i.test(node.data.template)) ? 'agent' : (tmpl?.kind === 'tool' ? 'tool' : 'other');
   const reminders = useNodeReminders(node.id, node.data.template === 'remindMeTool');
 
-  // Seed: last 24 hours from tracing-server, optionally by label
+  // Seed: last 24 hours from tracing-server
   useEffect(() => {
     if (kind === 'other') return;
     let cancelled = false;
     const now = new Date();
     const from = new Date(now.getTime() - 24 * 60 * 60 * 1000).toISOString();
     const to = now.toISOString();
-    const label = kind === 'agent' ? 'agent' : undefined; // optional label filter; tools use client-side filter
-    fetchSpansInRange({ from, to, label, limit: 2000, sort: 'lastUpdate' })
-      .then((res: { items?: SpanDoc[] } | undefined) => {
+    fetchSpansInRange(from, to)
+      .then((items: SpanDoc[]) => {
         if (cancelled) return;
-        const items = Array.isArray(res?.items) ? (res?.items as SpanDoc[]) : [];
-        const filtered = items.filter((s) => spanMatchesContext(s, node, kind === 'agent' ? 'agent' : 'tool'));
+        const filtered = items.filter((s) => spanMatchesContext(s, node, kind === 'agent' ? 'agent' : 'tool')) as Array<SpanDoc & Partial<SpanExtras>>;
         if (filtered.length === 0) setNote('No spans for this node. Ensure nodeId is instrumented.');
         else setNote(null);
         // Order by lastUpdate desc and cap to 100
-        const sorted = filtered.sort((a, b) => b.lastUpdate.localeCompare(a.lastUpdate)).slice(0, 100);
+        const getTs = (s: SpanDoc & Partial<SpanExtras>) => {
+          const lu = typeof s.lastUpdate === 'string' ? s.lastUpdate : undefined;
+          const ended = typeof s.endedAt === 'string' ? s.endedAt : undefined;
+          return lu || ended || s.startedAt;
+        };
+        const sorted = filtered.sort((a, b) => getTs(b).localeCompare(getTs(a))).slice(0, 100);
         setSpans(sorted);
       })
       .catch((err) => {
@@ -81,11 +113,16 @@ function NodeObsSidebarBody({ node }: { node: Node<BuilderPanelNodeData> }) {
   // Realtime subscription
   useEffect(() => {
     if (kind === 'other') return;
-    const off = obsRealtime.onSpanUpsert((s) => {
+    const off = tracingRealtime.onSpanUpsert((s) => {
       if (!spanMatchesContext(s, node, kind === 'agent' ? 'agent' : 'tool')) return;
-      setSpans((prev) => {
-        const next = [s, ...prev.filter((p) => !(p.traceId === s.traceId && p.spanId === s.spanId))];
-        next.sort((a, b) => b.lastUpdate.localeCompare(a.lastUpdate));
+      setSpans((prev: Array<SpanDoc & Partial<SpanExtras>>) => {
+        const next: Array<SpanDoc & Partial<SpanExtras>> = [s, ...prev.filter((p) => !(p.traceId === s.traceId && p.spanId === s.spanId))];
+        const getTs = (x: SpanDoc & Partial<SpanExtras>) => {
+          const lu = typeof x.lastUpdate === 'string' ? x.lastUpdate : undefined;
+          const ended = typeof x.endedAt === 'string' ? x.endedAt : undefined;
+          return lu || ended || x.startedAt;
+        };
+        next.sort((a, b) => getTs(b).localeCompare(getTs(a)));
         return next.slice(0, 100);
       });
     });
@@ -132,9 +169,9 @@ function NodeObsSidebarBody({ node }: { node: Node<BuilderPanelNodeData> }) {
     }
   }
 
-  const items = useMemo(() => spans.map((s: SpanDoc) => ({
+  const items = useMemo(() => spans.map((s: SpanDoc & Partial<SpanExtras>) => ({
     span: s,
-    link: `${TRACING_UI_BASE}/trace/${encodeURIComponent(s.traceId)}`,
+    link: TRACING_UI_BASE ? `${TRACING_UI_BASE}/trace/${encodeURIComponent(s.traceId)}` : undefined,
   })), [spans]);
 
   const title = kind === 'agent' ? 'Agent Activity' : kind === 'tool' ? 'Tool Spans (24h)' : 'Spans';
@@ -213,8 +250,10 @@ function NodeObsSidebarBody({ node }: { node: Node<BuilderPanelNodeData> }) {
                 <div className="font-mono text-[10px] text-muted-foreground truncate">{span.traceId}</div>
               </div>
               <div className="flex items-center gap-2">
-                <span className="px-1.5 py-0.5 rounded border bg-accent/20 text-[10px]">{summarizeStatus(span.status)}</span>
-                <a href={link} target="_blank" rel="noreferrer" className="text-blue-600 hover:underline text-[11px]">open</a>
+                <span className="px-1.5 py-0.5 rounded border bg-accent/20 text-[10px]">{summarizeStatus(getStatus(span))}</span>
+                {link ? (
+                  <a href={link} target="_blank" rel="noreferrer" className="text-blue-600 hover:underline text-[11px]">open</a>
+                ) : null}
               </div>
             </li>
           ))}

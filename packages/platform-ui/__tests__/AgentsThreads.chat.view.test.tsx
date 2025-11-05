@@ -17,11 +17,11 @@ describe('AgentsThreads chat-like view', () => {
 
   function useThreadsMock() {
     server.use(
-      http.get('http://localhost:3010/api/agents/threads', () => HttpResponse.json({ items: [{ id: 'th1', alias: 'th-a', summary: 'Thread A', createdAt: t(0) }] })),
-      http.get('http://localhost:3010/api/agents/threads/th1/runs', () =>
+      http.get('/api/agents/threads', () => HttpResponse.json({ items: [{ id: 'th1', alias: 'th-a', summary: 'Thread A', createdAt: t(0) }] })),
+      http.get('/api/agents/threads/th1/runs', () =>
         HttpResponse.json({ items: [{ id: 'run1', status: 'finished', createdAt: t(1), updatedAt: t(2) }] }),
       ),
-      http.get('http://localhost:3010/api/agents/runs/run1/messages', ({ request }) => {
+      http.get('/api/agents/runs/run1/messages', ({ request }) => {
         const url = new URL(request.url);
         const type = url.searchParams.get('type');
         if (type === 'input') return HttpResponse.json({ items: [{ id: 'm1', kind: 'user', text: 'Hi', source: { a: 1 }, createdAt: t(10) }] });
@@ -71,11 +71,11 @@ describe('AgentsThreads chat-like view', () => {
   it('autoscrolls to bottom and shows jump control when scrolled up', async () => {
     const outputCount = 1;
     server.use(
-      http.get('http://localhost:3010/api/agents/threads', () => HttpResponse.json({ items: [{ id: 'th1', alias: 'th-a', summary: 'Thread A', createdAt: t(0) }] })),
-      http.get('http://localhost:3010/api/agents/threads/th1/runs', () =>
+      http.get('/api/agents/threads', () => HttpResponse.json({ items: [{ id: 'th1', alias: 'th-a', summary: 'Thread A', createdAt: t(0) }] })),
+      http.get('/api/agents/threads/th1/runs', () =>
         HttpResponse.json({ items: [{ id: 'run1', status: 'finished', createdAt: t(1), updatedAt: t(2) }] }),
       ),
-      http.get('http://localhost:3010/api/agents/runs/run1/messages', ({ request }) => {
+      http.get('/api/agents/runs/run1/messages', ({ request }) => {
         const url = new URL(request.url);
         const type = url.searchParams.get('type');
         if (type === 'input') return HttpResponse.json({ items: [{ id: 'm1', kind: 'user', text: 'Hi', source: {}, createdAt: t(10) }] });
@@ -109,14 +109,14 @@ describe('AgentsThreads chat-like view', () => {
 
   it('renders multiple run headers by default (all runs loaded)', async () => {
     server.use(
-      http.get('http://localhost:3010/api/agents/threads', () => HttpResponse.json({ items: [{ id: 'th1', alias: 'th-a', summary: 'Thread A', createdAt: t(0) }] })),
-      http.get('http://localhost:3010/api/agents/threads/th1/runs', () =>
+      http.get('/api/agents/threads', () => HttpResponse.json({ items: [{ id: 'th1', alias: 'th-a', summary: 'Thread A', createdAt: t(0) }] })),
+      http.get('/api/agents/threads/th1/runs', () =>
         HttpResponse.json({ items: [
           { id: 'run1', status: 'finished', createdAt: t(1), updatedAt: t(2) },
           { id: 'run2', status: 'finished', createdAt: t(3), updatedAt: t(4) },
         ] }),
       ),
-      http.get('http://localhost:3010/api/agents/runs/run2/messages', ({ request }) => {
+      http.get('/api/agents/runs/run2/messages', ({ request }) => {
         const url = new URL(request.url);
         const type = url.searchParams.get('type');
         if (type === 'input') return HttpResponse.json({ items: [{ id: 'r2m1', kind: 'user', text: 'R2 in', source: {}, createdAt: t(10) }] });
@@ -124,7 +124,7 @@ describe('AgentsThreads chat-like view', () => {
         if (type === 'output') return HttpResponse.json({ items: [{ id: 'r2m2', kind: 'assistant', text: 'R2 out', source: {}, createdAt: t(20) }] });
         return HttpResponse.json({ items: [] });
       }),
-      http.get('http://localhost:3010/api/agents/runs/run1/messages', ({ request }) => {
+      http.get('/api/agents/runs/run1/messages', ({ request }) => {
         const url = new URL(request.url);
         const type = url.searchParams.get('type');
         if (type === 'input') return HttpResponse.json({ items: [{ id: 'r1m1', kind: 'user', text: 'R1 in', source: {}, createdAt: t(1) }] });
@@ -142,8 +142,8 @@ describe('AgentsThreads chat-like view', () => {
 
   it('shows empty states when no runs or messages', async () => {
     server.use(
-      http.get('http://localhost:3010/api/agents/threads', () => HttpResponse.json({ items: [{ id: 'th1', alias: 'th-a', summary: 'Thread A', createdAt: t(0) }] })),
-      http.get('http://localhost:3010/api/agents/threads/th1/runs', () => HttpResponse.json({ items: [] })),
+      http.get('/api/agents/threads', () => HttpResponse.json({ items: [{ id: 'th1', alias: 'th-a', summary: 'Thread A', createdAt: t(0) }] })),
+      http.get('/api/agents/threads/th1/runs', () => HttpResponse.json({ items: [] })),
     );
     render(
       <TestProviders>
@@ -156,11 +156,11 @@ describe('AgentsThreads chat-like view', () => {
 
   it('shows error state when message fetch fails', async () => {
     server.use(
-      http.get('http://localhost:3010/api/agents/threads', () => HttpResponse.json({ items: [{ id: 'th1', alias: 'th-a', summary: 'Thread A', createdAt: t(0) }] })),
-      http.get('http://localhost:3010/api/agents/threads/th1/runs', () =>
+      http.get('/api/agents/threads', () => HttpResponse.json({ items: [{ id: 'th1', alias: 'th-a', summary: 'Thread A', createdAt: t(0) }] })),
+      http.get('/api/agents/threads/th1/runs', () =>
         HttpResponse.json({ items: [{ id: 'run1', status: 'finished', createdAt: t(1), updatedAt: t(2) }] }),
       ),
-      http.get('http://localhost:3010/api/agents/runs/run1/messages', () => new HttpResponse(null, { status: 500 })),
+      http.get('/api/agents/runs/run1/messages', () => new HttpResponse(null, { status: 500 })),
     );
     render(<TestProviders><AgentsThreads /></TestProviders>);
     fireEvent.click(await screen.findByRole('button', { name: /Thread A/ }));

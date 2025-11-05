@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { io, type Socket } from 'socket.io-client';
-import { getApiBase } from '../lib/apiClient';
+import { config } from '@/config';
 
 export interface CheckpointWriteClient {
   id: string;
@@ -41,7 +41,7 @@ interface InitialPayload {
 }
 
 export function useCheckpointStream({
-  url = getApiBase(),
+  url = config.apiBaseUrl,
   threadId,
   agentId,
   maxItems = 500,
@@ -77,6 +77,11 @@ export function useCheckpointStream({
     setItems([]);
     setDropped(0);
 
+    if (!url || url.trim() === '') {
+      // No server URL; treat as noop.
+      setStatus('idle');
+      return () => {};
+    }
     const socket = io(url, { transports: ['websocket'] });
     socketRef.current = socket;
 

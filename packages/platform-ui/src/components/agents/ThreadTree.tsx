@@ -1,13 +1,13 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { type ThreadStatusFilter } from './ThreadStatusFilterSwitch';
 import { ThreadTreeNode, type ThreadNode } from './ThreadTreeNode';
-
-const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3010';
+import { httpJson } from '@/api/client';
 
 async function api<T>(path: string, init?: RequestInit): Promise<T> {
-  const resp = await fetch(`${API_BASE}/api/${path}`, { headers: { 'Content-Type': 'application/json' }, ...(init || {}) });
-  if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-  return resp.json();
+  // Use relative base in tests to avoid env dependence
+  const res = await httpJson<T>(`/api/${path}`, init, '');
+  if (res === undefined) throw new Error('Empty response');
+  return res;
 }
 
 export function ThreadTree({ status, onSelect, selectedId }: { status: ThreadStatusFilter; onSelect: (id: string) => void; selectedId?: string }) {

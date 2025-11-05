@@ -3,16 +3,16 @@ import { useQuery } from '@tanstack/react-query';
 import { RunMessageList, type UnifiedRunMessage, type UnifiedListItem, type RunMeta } from '@/components/agents/RunMessageList';
 import { ThreadTree } from '@/components/agents/ThreadTree';
 import { ThreadStatusFilterSwitch, type ThreadStatusFilter } from '@/components/agents/ThreadStatusFilterSwitch';
-
-const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3010';
+import { httpJson } from '@/api/client';
 
 // Thread list rendering moved into ThreadTree component
 type MessageItem = { id: string; kind: 'user' | 'assistant' | 'system' | 'tool'; text?: string | null; source: unknown; createdAt: string };
 
+// Use relative base in tests; avoids env dependence
 async function api<T>(path: string, init?: RequestInit): Promise<T> {
-  const resp = await fetch(`${API_BASE}/api/${path}`, { headers: { 'Content-Type': 'application/json' }, ...(init || {}) });
-  if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-  return resp.json();
+  const res = await httpJson<T>(`/api/${path}`, init, '');
+  if (res === undefined) throw new Error('Empty response');
+  return res;
 }
 
 export function AgentsThreads() {

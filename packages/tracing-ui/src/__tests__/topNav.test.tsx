@@ -3,6 +3,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent, within } from '@testing-library/react';
 import { MemoryRouter, Routes, Route } from 'react-router-dom';
 import { EntryLayout } from '../components/EntryLayout';
+import { TracingProvider } from '../../src/context/TracingProvider';
 import { TracesListPage } from '../pages/TracesListPage';
 import { ErrorsByToolPage } from '../pages/ErrorsByToolPage';
 import { ToolErrorsPage } from '../pages/ToolErrorsPage';
@@ -17,7 +18,7 @@ vi.mock('../services/api', () => ({
 describe('TopNav and EntryLayout', () => {
   it('renders on entry routes and highlights active link', async () => {
     const { container } = render(
-      <MemoryRouter initialEntries={[`/`]}>
+      <TracingProvider serverUrl="http://localhost:4319"><MemoryRouter initialEntries={[`/`]}> 
         <Routes>
           <Route element={<EntryLayout />}>
             <Route path="/" element={<TracesListPage />} />
@@ -25,7 +26,7 @@ describe('TopNav and EntryLayout', () => {
           </Route>
           <Route path="/trace/:traceId" element={<div>Trace</div>} />
         </Routes>
-      </MemoryRouter>
+      </MemoryRouter></TracingProvider>
     );
     // TopNav should be present; scope queries to the first/topmost nav
     const nav = within(container).getByTestId('obsui-topnav');
@@ -40,12 +41,12 @@ describe('TopNav and EntryLayout', () => {
 
   it('TopNav not rendered on non-entry detail routes', async () => {
     const { container } = render(
-      <MemoryRouter initialEntries={[`/trace/abc`]}>
+      <TracingProvider serverUrl="http://localhost:4319"><MemoryRouter initialEntries={[`/trace/abc`]}> 
         <Routes>
           {/* Only the non-entry route is mounted here */}
           <Route path="/trace/:traceId" element={<div>Trace page</div>} />
         </Routes>
-      </MemoryRouter>
+      </MemoryRouter></TracingProvider>
     );
     // Should not render TopNav on non-entry routes
     expect(within(container).queryByTestId('obsui-topnav')).toBeNull();
@@ -53,7 +54,7 @@ describe('TopNav and EntryLayout', () => {
 
   it('preserves from/to when navigating within errors tools', async () => {
     const { container } = render(
-      <MemoryRouter initialEntries={[`/errors/tools?from=2024-01-01T00%3A00%3A00.000Z&to=2024-01-02T00%3A00%3A00.000Z`]}>
+      <TracingProvider serverUrl="http://localhost:4319"><MemoryRouter initialEntries={[`/errors/tools?from=2024-01-01T00%3A00%3A00.000Z&to=2024-01-02T00%3A00%3A00.000Z`]}> 
         <Routes>
           <Route element={<EntryLayout />}>
             <Route path="/" element={<TracesListPage />} />
@@ -61,7 +62,7 @@ describe('TopNav and EntryLayout', () => {
             <Route path="/errors/tools/:label" element={<ToolErrorsPage />} />
           </Route>
         </Routes>
-      </MemoryRouter>
+      </MemoryRouter></TracingProvider>
     );
     const nav = within(container).getByTestId('obsui-topnav');
     const errLink = within(nav).getByTestId('obsui-link-errors-tools');
@@ -108,12 +109,12 @@ describe('TopNav and EntryLayout', () => {
 
   it('TopNav not rendered on /thread/:id', async () => {
     const { container } = render(
-      <MemoryRouter initialEntries={[`/thread/xyz`]}>
+      <TracingProvider serverUrl="http://localhost:4319"><MemoryRouter initialEntries={[`/thread/xyz`]}> 
         <Routes>
           {/* Only the non-entry route is mounted here */}
           <Route path="/thread/:threadId" element={<div>Thread page</div>} />
         </Routes>
-      </MemoryRouter>
+      </MemoryRouter></TracingProvider>
     );
     expect(within(container).queryByTestId('obsui-topnav')).toBeNull();
   });

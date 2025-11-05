@@ -1,6 +1,7 @@
 import { useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { httpJson } from '@/lib/apiClient';
+// Use centralized API client helpers
+import { httpJson } from '@/api/client';
 import { Table, Thead, Tbody, Tr, Th, Td, Button } from '@agyn/ui';
 import { Link } from 'react-router-dom';
 

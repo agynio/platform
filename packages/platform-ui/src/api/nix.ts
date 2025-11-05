@@ -1,11 +1,7 @@
-// Minimal Nix service for simplified endpoints
 import { z } from 'zod';
-import { buildUrl } from '@/api/client';
+import { buildUrl } from './client';
 
-export interface NixPackageDTO {
-  name: string;
-  description?: string | null;
-}
+export interface NixPackageDTO { name: string; description?: string | null }
 export interface PackagesResponse { packages: NixPackageDTO[] }
 export interface VersionsResponse { versions: string[] }
 export interface ResolveResponse { name: string; version: string; commitHash: string; attributePath: string }
@@ -14,10 +10,10 @@ const PackagesResponseSchema = z.object({ packages: z.array(z.object({ name: z.s
 const VersionsResponseSchema = z.object({ versions: z.array(z.string()) });
 const ResolveResponseSchema = z.object({ name: z.string(), version: z.string(), commitHash: z.string(), attributePath: z.string() });
 
-export async function fetchPackages(query: string, signal?: AbortSignal): Promise<NixPackageDTO[]> {
+export async function fetchPackages(query: string, signal?: AbortSignal, base?: string): Promise<NixPackageDTO[]> {
   const q = (query || '').trim();
   if (q.length < 2) return [];
-  const url = buildUrl(`/api/nix/packages?query=${encodeURIComponent(q)}`);
+  const url = buildUrl(`/api/nix/packages?query=${encodeURIComponent(q)}`, base);
   const res = await fetch(url, { signal, headers: { Accept: 'application/json' } });
   if (!res.ok) throw new Error(`Nix packages failed: ${res.status}`);
   const json = await res.json();
@@ -26,11 +22,11 @@ export async function fetchPackages(query: string, signal?: AbortSignal): Promis
   return parsed.data.packages;
 }
 
-export async function fetchVersions(name: string, signal?: AbortSignal): Promise<string[]> {
+export async function fetchVersions(name: string, signal?: AbortSignal, base?: string): Promise<string[]> {
   if (!name) return [];
-  const url = buildUrl(`/api/nix/versions?name=${encodeURIComponent(name)}`);
+  const url = buildUrl(`/api/nix/versions?name=${encodeURIComponent(name)}`, base);
   const res = await fetch(url, { signal, headers: { Accept: 'application/json' } });
-  if (res.status === 404) return []; // treat not found as no versions for UI purposes
+  if (res.status === 404) return [];
   if (!res.ok) throw new Error(`Nix versions failed: ${res.status}`);
   const json = await res.json();
   const parsed = VersionsResponseSchema.safeParse(json);
@@ -38,9 +34,9 @@ export async function fetchVersions(name: string, signal?: AbortSignal): Promise
   return parsed.data.versions;
 }
 
-export async function resolvePackage(name: string, version: string, signal?: AbortSignal): Promise<ResolveResponse> {
+export async function resolvePackage(name: string, version: string, signal?: AbortSignal, base?: string): Promise<ResolveResponse> {
   if (!name || !version) throw new Error('resolvePackage: name and version required');
-  const url = buildUrl(`/api/nix/resolve?name=${encodeURIComponent(name)}&version=${encodeURIComponent(version)}`);
+  const url = buildUrl(`/api/nix/resolve?name=${encodeURIComponent(name)}&version=${encodeURIComponent(version)}`, base);
   const res = await fetch(url, { signal, headers: { Accept: 'application/json' } });
   if (res.status === 404) throw new Error('Nix resolve: not found');
   if (!res.ok) throw new Error(`Nix resolve failed: ${res.status}`);
@@ -49,3 +45,4 @@ export async function resolvePackage(name: string, version: string, signal?: Abo
   if (!parsed.success) throw new Error('Nix resolve: invalid response');
   return parsed.data;
 }
+

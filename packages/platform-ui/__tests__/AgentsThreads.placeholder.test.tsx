@@ -16,7 +16,7 @@ describe('AgentsThreads placeholder for missing summary', () => {
 
   it('renders (no summary yet) when summary is null', async () => {
     server.use(
-      http.get('http://localhost:3010/api/agents/threads', () =>
+      http.get('/api/agents/threads', () =>
         HttpResponse.json({ items: [{ id: 'th1', alias: 'ignored-alias', summary: null, createdAt: t(0) }] }),
       ),
     );
@@ -28,4 +28,3 @@ describe('AgentsThreads placeholder for missing summary', () => {
     expect(await screen.findByText('(no summary yet)')).toBeInTheDocument();
   });
 });
-

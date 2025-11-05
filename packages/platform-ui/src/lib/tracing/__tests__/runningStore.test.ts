@@ -1,31 +1,12 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import type { SpanDoc } from '../../tracing/api';
-import { obsRealtime } from '../../obs/socket';
-import { useRunningCount, __resetRunningStoreForTest } from '../../obs/runningStore';
+import type { SpanDoc } from '../../../api/tracing';
+import { tracingRealtime } from '../socket';
+import { useRunningCount, __resetRunningStoreForTest } from '../runningStore';
 import { renderHook, act } from '@testing-library/react';
 
 // Helper to emit span_upsert using the public test API
-function upsert(
-  span: Partial<SpanDoc> &
-    Pick<
-      SpanDoc,
-      'traceId' | 'spanId' | 'label' | 'status' | 'startTime' | 'completed' | 'lastUpdate' | 'attributes'
-    >,
-) {
-  const payload: SpanDoc = {
-    nodeId: undefined,
-    threadId: undefined,
-    endTime: undefined,
-    events: [],
-    idempotencyKeys: [],
-    rev: 0,
-    createdAt: '',
-    updatedAt: '',
-    parentSpanId: undefined,
-    _id: undefined,
-    ...span,
-  } as SpanDoc;
-  obsRealtime.emitSpanUpsertForTest(payload);
+function upsert(span: any) {
+  tracingRealtime.emitSpanUpsertForTest(span as SpanDoc & Record<string, unknown>);
 }
 
 describe('runningStore transitions', () => {

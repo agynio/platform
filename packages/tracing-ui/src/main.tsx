@@ -8,7 +8,7 @@ import { ThreadPage } from './pages/ThreadPage';
 import { ErrorsByToolPage } from './pages/ErrorsByToolPage';
 import { ToolErrorsPage } from './pages/ToolErrorsPage';
 import { EntryLayout } from './components/EntryLayout';
-import { ObsUiProvider } from './context/ObsUiProvider';
+import { TracingProvider } from './context/TracingProvider';
 
 function App() {
   return (
@@ -27,9 +27,13 @@ function App() {
     </BrowserRouter>
   );
 }
-const serverUrl = import.meta.env?.VITE_OBS_SERVER_URL as string;
+// Preview harness reads VITE_TRACING_SERVER_URL; fail fast if missing.
+const serverUrl = import.meta.env.VITE_TRACING_SERVER_URL as string | undefined;
+if (!serverUrl || typeof serverUrl !== 'string') {
+  throw new Error('TracingUI requires serverUrl provided via TracingProvider. Set VITE_TRACING_SERVER_URL in env for preview.');
+}
 createRoot(document.getElementById('root')!).render(
-  <ObsUiProvider serverUrl={serverUrl}>
+  <TracingProvider serverUrl={serverUrl}>
     <App />
-  </ObsUiProvider>
+  </TracingProvider>
 );

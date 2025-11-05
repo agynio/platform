@@ -2,7 +2,7 @@ import { memo, useMemo } from 'react';
 import { Handle, Position, type NodeProps } from 'reactflow';
 import { useTemplates } from '../useTemplates';
 import { getDisplayTitle, getKind, kindBadgeClasses, kindLabel } from '../lib/display';
-import { useRunningCount } from '../../lib/obs/runningStore';
+import { useRunningCount } from '../../lib/tracing/runningStore';
 import { useReminderCount, useNodeStatus } from '@/lib/graph/hooks';
 import { useNodeVaultStatus } from '@/lib/vault/useNodeVaultStatus';
 

@@ -1,13 +1,13 @@
 /* Minimal styles shipped by @agyn/tracing-ui. */
 /* Do not import Tailwind or other packages here. */
-.obs-md {
+.tracing-md {
   white-space: pre-wrap;
   line-height: 1.35;
 }
-.obs-md code, .obs-terminal code {
+.tracing-md code, .tracing-terminal code {
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
   font-size: 0.95em;
 }
-.obs-terminal {
+.tracing-terminal {
   white-space: pre-wrap;
 }

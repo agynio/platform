@@ -2,6 +2,7 @@ import React from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, within } from '@testing-library/react';
 import { TracesListPage } from '../pages/TracesListPage';
+import { TracingProvider } from '../../src/context/TracingProvider';
 import { MemoryRouter } from 'react-router-dom';
 
 vi.mock('../services/api', () => ({
@@ -20,7 +21,7 @@ describe('TracesListPage', () => {
     vi.mocked(api.fetchTraces).mockResolvedValueOnce([
       { traceId: 't1', root: { traceId: 't1', spanId: 'a', label: 'root', status: 'ok', startTime: now, completed: true, lastUpdate: now, attributes: {}, events: [], rev: 0, idempotencyKeys: [], createdAt: now, updatedAt: now }, spanCount: 2, failedCount: 1, lastUpdate: now }
     ] as TracesResponse);
-    const { container } = render(<MemoryRouter><TracesListPage /></MemoryRouter>);
+    const { container } = render(<TracingProvider serverUrl="http://localhost:4319"><MemoryRouter><TracesListPage /></MemoryRouter></TracingProvider>);
     const table = await within(container).findByTestId('obsui-traces-table');
     const t1Cell = await within(table).findByRole('cell', { name: /^t1$/ });
     expect(t1Cell).toBeTruthy();
@@ -46,7 +47,7 @@ describe('TracesListPage', () => {
         spanCount: 3, failedCount: 0, lastUpdate: now
       }
     ] as TracesResponse);
-    const { container } = render(<MemoryRouter><TracesListPage /></MemoryRouter>);
+    const { container } = render(<TracingProvider serverUrl="http://localhost:4319"><MemoryRouter><TracesListPage /></MemoryRouter></TracingProvider>);
     const table = await within(container).findByTestId('obsui-traces-table');
     // Find the row by trace id and then inspect the messages cell
     const a1Cell = await within(table).findByRole('cell', { name: /^a1$/ });
@@ -72,7 +73,7 @@ describe('TracesListPage', () => {
         spanCount: 1, failedCount: 0, lastUpdate: now
       }
     ] as TracesResponse);
-    const { container } = render(<MemoryRouter><TracesListPage /></MemoryRouter>);
+    const { container } = render(<TracingProvider serverUrl="http://localhost:4319"><MemoryRouter><TracesListPage /></MemoryRouter></TracingProvider>);
     const table = await within(container).findByTestId('obsui-traces-table');
     const n1Cell = await within(table).findByRole('cell', { name: /^n1$/ });
     const row = n1Cell.closest('tr')!;
@@ -97,7 +98,7 @@ describe('TracesListPage', () => {
         spanCount: 4, failedCount: 0, lastUpdate: now
       }
     ] as TracesResponse);
-    const { container } = render(<MemoryRouter><TracesListPage /></MemoryRouter>);
+    const { container } = render(<TracingProvider serverUrl="http://localhost:4319"><MemoryRouter><TracesListPage /></MemoryRouter></TracingProvider>);
     const table = await within(container).findByTestId('obsui-traces-table');
     const a2Cell = await within(table).findByRole('cell', { name: /^a2$/ });
     const row = a2Cell.closest('tr')!;
@@ -124,7 +125,7 @@ describe('TracesListPage', () => {
         spanCount: 2, failedCount: 0, lastUpdate: now
       }
     ] as TracesResponse);
-    const { container } = render(<MemoryRouter><TracesListPage /></MemoryRouter>);
+    const { container } = render(<TracingProvider serverUrl="http://localhost:4319"><MemoryRouter><TracesListPage /></MemoryRouter></TracingProvider>);
     const table = await within(container).findByTestId('obsui-traces-table');
     const a3Cell = await within(table).findByRole('cell', { name: /^a3$/ });
     const row = a3Cell.closest('tr')!;

@@ -1,14 +1,14 @@
-import { ObsUiProvider, TracingErrorsView } from '@agyn/tracing-ui';
-
-// Use env var with safe default; avoid unsafe cast
-const serverUrl = import.meta.env.VITE_OBS_SERVER_URL || 'http://localhost:4319';
+import { TracingProvider, TracingErrorsView } from '@agyn/tracing-ui';
+import { config } from '@/config';
+const serverUrl = config.tracing.serverUrl;
 
 export function TracingErrors() {
+  if (!serverUrl) return <div className="p-4 text-sm">Tracing server URL not configured. Set VITE_TRACING_SERVER_URL.</div>;
   return (
     <div className="p-4">
-      <ObsUiProvider serverUrl={serverUrl}>
+      <TracingProvider serverUrl={serverUrl}>
         <TracingErrorsView basePaths={{ errorsTools: '/tracing/errors/tools', toolErrors: '/tracing/errors/tools' }} />
-      </ObsUiProvider>
+      </TracingProvider>
     </div>
   );
 }
