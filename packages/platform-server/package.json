@@ -10,7 +10,7 @@
     "test:watch": "vitest",
     "lint": "eslint .",
     "prisma:generate": "prisma generate",
-    "prisma:migrate": "prisma migrate dev --name init",
+    "prisma:migrate": "prisma migrate dev",
     "prisma:studio": "prisma studio"
   },
   "dependencies": {
