@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import type { ThreadStatusFilter } from './ThreadStatusFilterSwitch';
 import { httpJson } from '@/api/client';
 

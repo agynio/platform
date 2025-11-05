@@ -1,5 +1,5 @@
 // Minimal tracing realtime socket client (span_upsert events)
-import { io, Socket } from 'socket.io-client';
+import { io, type Socket } from 'socket.io-client';
 import type { SpanDoc } from '../tracing/api';
 import { config } from '@/config';
 

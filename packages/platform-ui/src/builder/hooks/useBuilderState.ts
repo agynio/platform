@@ -236,15 +236,15 @@ export function useBuilderState(serverBase = '', options?: BuilderOptions): UseB
           version: versionRef.current,
           nodes: nodesRef.current.map((n) => ({
             id: n.id,
-            template: n.type,
+            template: n.data.template,
             config: n.data.config,
             position: n.position,
           })),
           edges: edgesRef.current.map((e) => ({
             source: e.source,
-            sourceHandle: e.sourceHandle,
+            sourceHandle: e.sourceHandle ?? undefined,
             target: e.target,
-            targetHandle: e.targetHandle,
+            targetHandle: e.targetHandle ?? undefined,
           })),
         };
         const saved = await api.graph.saveFullGraph(payload, serverBase);

@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import React from 'react';
 import type { Node } from 'reactflow';
-import { RightPropertiesPanel, BuilderPanelNodeData } from '@/builder/panels/RightPropertiesPanel';
+import { RightPropertiesPanel, type BuilderPanelNodeData } from '@/builder/panels/RightPropertiesPanel';
 import { registerConfigView, clearRegistry } from '@/components/configViews/registry';
 import type { StaticConfigViewComponent, DynamicConfigViewComponent } from '@/components/configViews/types';
 

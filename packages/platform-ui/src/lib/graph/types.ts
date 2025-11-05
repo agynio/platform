@@ -16,7 +16,8 @@ export interface TemplateSchema {
   capabilities?: {
     pausable?: boolean;
     provisionable?: boolean;
-  // dynamicConfigurable removed; dynamic config eliminated
+    // whether node supports dynamic config editing
+    dynamicConfigurable?: boolean;
     staticConfigurable?: boolean;
   };
   staticConfigSchema?: unknown; // JSON Schema 7

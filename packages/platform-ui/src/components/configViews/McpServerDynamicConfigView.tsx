@@ -1,4 +1,4 @@
-import React, { useMemo, useCallback } from 'react';
+import { useMemo, useCallback } from 'react';
 import type { DynamicConfigViewProps } from './types';
 import { useMcpNodeState } from '@/lib/graph/hooks';
 

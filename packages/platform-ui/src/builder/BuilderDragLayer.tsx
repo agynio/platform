@@ -1,4 +1,3 @@
-import type React from 'react';
 import { useDragLayer } from 'react-dnd';
 import type { DragItem } from './dnd';
 
