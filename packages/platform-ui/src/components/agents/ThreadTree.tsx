@@ -4,7 +4,8 @@ import { ThreadTreeNode, type ThreadNode } from './ThreadTreeNode';
 import { httpJson } from '@/api/client';
 
 async function api<T>(path: string, init?: RequestInit): Promise<T> {
-  const res = await httpJson<T>(`/api/${path}`, init);
+  // Use relative base in tests to avoid env dependence
+  const res = await httpJson<T>(`/api/${path}`, init, '');
   if (res === undefined) throw new Error('Empty response');
   return res;
 }

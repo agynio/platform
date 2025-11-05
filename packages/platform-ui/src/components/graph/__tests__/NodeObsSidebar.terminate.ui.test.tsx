@@ -8,6 +8,10 @@ vi.mock('@/lib/graph/templates.provider', () => ({
   useTemplatesCache: () => ({ getTemplate: (_name: string) => ({ kind: 'agent' }) }),
 }));
 vi.mock('@/lib/graph/hooks', () => ({ useNodeReminders: () => ({ isLoading: false, data: { items: [] } }) }));
+// Prevent network during span seeding; return empty list by default
+vi.mock('@/api/tracing', () => ({
+  fetchSpansInRange: vi.fn(async () => []),
+}));
 vi.mock('@/api/graph', () => ({
   api: {
     listNodeRuns: vi.fn(async () => ({ items: [{ nodeId: 'n', threadId: 't', runId: 't/run-1', status: 'running', startedAt: new Date().toISOString(), updatedAt: new Date().toISOString() }] })),

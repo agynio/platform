@@ -17,7 +17,7 @@ describe('AgentsReminders page', () => {
 
   it('defaults to Active filter and renders table', async () => {
     server.use(
-      http.get('http://localhost:3010/api/agents/reminders', ({ request }) => {
+      http.get('/api/agents/reminders', ({ request }) => {
         const url = new URL(request.url);
         const filter = url.searchParams.get('filter');
         // Default should be active
@@ -40,7 +40,7 @@ describe('AgentsReminders page', () => {
 
   it('toggles filters: All and Completed', async () => {
     server.use(
-      http.get('http://localhost:3010/api/agents/reminders', ({ request }) => {
+      http.get('/api/agents/reminders', ({ request }) => {
         const url = new URL(request.url);
         const filter = url.searchParams.get('filter');
         if (filter === 'active') {
@@ -82,14 +82,14 @@ describe('AgentsReminders page', () => {
   it('shows loading, error, and empty states', async () => {
     // First return 500 to trigger error
     server.use(
-      http.get('http://localhost:3010/api/agents/reminders', () => new HttpResponse(null, { status: 500 }))
+      http.get('/api/agents/reminders', () => new HttpResponse(null, { status: 500 }))
     );
     render(<MemoryRouter initialEntries={[{ pathname: '/agents/reminders' }]}><TestProviders><AgentsReminders /></TestProviders></MemoryRouter>);
     expect(await screen.findByRole('alert')).toBeInTheDocument();
 
     // Then empty (for Active)
     server.use(
-      http.get('http://localhost:3010/api/agents/reminders', ({ request }) => {
+      http.get('/api/agents/reminders', ({ request }) => {
         const url = new URL(request.url);
         const filter = url.searchParams.get('filter');
         if (filter !== 'active') return new HttpResponse(null, { status: 400 });

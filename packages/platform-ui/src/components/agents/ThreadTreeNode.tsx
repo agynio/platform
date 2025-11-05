@@ -13,7 +13,8 @@ export type ThreadNode = {
 
 async function api<T>(path: string, init?: RequestInit): Promise<T> {
   const p = path.startsWith('/api') ? path : `/api/${path}`;
-  const res = await httpJson<T>(p, init);
+  // Use relative base in tests to avoid env dependence
+  const res = await httpJson<T>(p, init, '');
   if (res === undefined) throw new Error('Empty response');
   return res;
 }
