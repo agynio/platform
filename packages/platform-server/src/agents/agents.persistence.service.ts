@@ -128,6 +128,24 @@ export class AgentsPersistenceService {
     return msgs;
   }
 
+  async listReminders(
+    filter: 'active' | 'completed' | 'all' = 'active',
+    take: number = 100,
+  ): Promise<Array<{ id: string; threadId: string; note: string; at: Date; createdAt: Date; completedAt: Date | null }>> {
+    const where =
+      filter === 'active'
+        ? { completedAt: null }
+        : filter === 'completed'
+        ? { NOT: { completedAt: null } }
+        : undefined;
+    return this.prisma.reminder.findMany({
+      where,
+      orderBy: { at: 'desc' },
+      select: { id: true, threadId: true, note: true, at: true, createdAt: true, completedAt: true },
+      take,
+    });
+  }
+
   /**
    * Strict derivation of kind/text from typed message instances.
    */

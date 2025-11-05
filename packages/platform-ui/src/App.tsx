@@ -11,6 +11,7 @@ import { Navigate, Route, Routes } from 'react-router-dom';
 import { RootLayout } from './layout/RootLayout';
 import { AgentsChat } from './pages/AgentsChat';
 import { AgentsThreads } from './pages/AgentsThreads';
+import { AgentsReminders } from './pages/AgentsReminders';
 import { TracingTraces } from './pages/TracingTraces';
 import { TracingErrors } from './pages/TracingErrors';
 import { ObsUiProvider, TraceDetailView, ThreadView, ToolErrorsView } from '@agyn/tracing-ui';
@@ -37,6 +38,7 @@ function App() {
             <Route path="/agents/graph" element={<AgentBuilder />} />
             <Route path="/agents/chat" element={<AgentsChat />} />
             <Route path="/agents/threads" element={<AgentsThreads />} />
+            <Route path="/agents/reminders" element={<AgentsReminders />} />
 
             {/* Tracing */}
             <Route path="/tracing/traces" element={<TracingTraces />} />

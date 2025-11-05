@@ -45,6 +45,7 @@ import { GithubCloneRepoNode } from './nodes/tools/github_clone_repo/github_clon
 import { RemindMeNode } from './nodes/tools/remind_me/remind_me.node';
 import { AgentsPersistenceService } from '../agents/agents.persistence.service';
 import { AgentsThreadsController } from '../agents/threads.controller';
+import { AgentsRemindersController } from '../agents/reminders.controller';
 
 @Module({
   imports: [CoreModule, InfraModule, LLMModule, EnvModule],
@@ -55,6 +56,7 @@ import { AgentsThreadsController } from '../agents/threads.controller';
     RemindersController,
     GraphVariablesController,
     AgentsThreadsController,
+    AgentsRemindersController,
   ],
   providers: [
     {
