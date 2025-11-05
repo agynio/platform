@@ -68,7 +68,7 @@ export class WorkspaceNode extends Node<ContainerProviderStaticConfig> {
     @Inject(EnvService) protected envService: EnvService,
   ) {
     super(logger);
-    this.idLabels = (id: string) => ({ 'hautech.ai/thread_id': `node__${id}` });
+    this.idLabels = (id: string) => ({ 'hautech.ai/thread_id': id, 'hautech.ai/node_id': this.nodeId });
   }
 
   init(params: { nodeId: string }): void {

@@ -8,6 +8,7 @@ import { ResponseMessage, AIMessage } from '@agyn/llm';
 import { CallAgentNode } from '../src/graph/nodes/tools/call_agent/call_agent.node';
 import { LLMProvisioner } from '../src/llm/provisioners/llm.provisioner';
 import { AgentsPersistenceService } from '../src/agents/agents.persistence.service';
+import { Signal } from '../src/signal';
 
 class BusyAgent extends AgentNode {
   override async invoke(): Promise<ResponseMessage> {
@@ -18,16 +19,16 @@ class BusyAgent extends AgentNode {
 describe('call_agent sync busy', () => {
   it('returns queued when target thread running (sync)', async () => {
     const module = await Test.createTestingModule({
-      providers: [LoggerService, ConfigService, BusyAgent, { provide: LLMProvisioner, useValue: {} }, { provide: AgentsPersistenceService, useValue: { beginRun: async () => ({ runId: 't' }), recordInjected: async () => {}, completeRun: async () => {} } }],
+      providers: [LoggerService, ConfigService, BusyAgent, { provide: LLMProvisioner, useValue: {} }, { provide: AgentsPersistenceService, useValue: { beginRunThread: async () => ({ runId: 't' }), recordInjected: async () => {}, completeRun: async () => {}, getOrCreateSubthreadByAlias: async () => 'child-t' } }],
     }).compile();
     const agent = await module.resolve(BusyAgent);
     await agent.setConfig({});
     agent.init({ nodeId: 'caller' });
-    const node = new CallAgentNode(new LoggerService());
+    const node = new CallAgentNode(new LoggerService(), module.get(AgentsPersistenceService));
     await node.setConfig({ response: 'sync' });
     node.setAgent(agent);
     const tool = node.getTool();
-    const res = await tool.execute({ input: 'hi', childThreadId: 'x' }, { callerAgent: agent, threadId: 'caller-t' });
+    const res = await tool.execute({ input: 'hi', threadAlias: 'x' }, { callerAgent: agent, threadId: 'caller-t', finishSignal: new Signal() } as any);
     expect(res).toBe('queued');
   });
 });

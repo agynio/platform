@@ -6,14 +6,12 @@ import { AgentNode } from '../../agent/agent.node';
 import { CallAgentNode, CallAgentToolStaticConfigSchema } from './call_agent.node';
 import { FunctionTool, HumanMessage } from '@agyn/llm';
 import { LLMContext } from '../../../../llm/types';
+import { AgentsPersistenceService } from '../../../../agents/agents.persistence.service';
 type TriggerMessage = { content: string; info?: Record<string, unknown> };
 
 export const callAgentInvocationSchema = z.object({
   input: z.string().min(1).describe('Message to forward to the target agent.'),
-  childThreadId: z
-    .string()
-    .min(1)
-    .describe('Child thread suffix. Effective child thread = `${parentThreadId}__${childThreadId}`.'),
+  threadAlias: z.string().min(1).describe('Child thread alias to resolve under current parent thread.'),
 });
 
 interface CallAgentFunctionToolDeps {
@@ -28,6 +26,7 @@ export class CallAgentFunctionTool extends FunctionTool<typeof callAgentInvocati
   constructor(
     private logger: LoggerService,
     private node: CallAgentNode,
+    private persistence: AgentsPersistenceService,
   ) {
     super();
   }
@@ -42,7 +41,7 @@ export class CallAgentFunctionTool extends FunctionTool<typeof callAgentInvocati
   }
 
   async execute(args: z.infer<typeof callAgentInvocationSchema>, ctx: LLMContext): Promise<string> {
-    const { input, childThreadId } = args;
+    const { input, threadAlias } = args;
     const targetAgent = this.node.agent;
     const responseMode = this.node.config.response;
 
@@ -51,16 +50,17 @@ export class CallAgentFunctionTool extends FunctionTool<typeof callAgentInvocati
     this.logger.info('call_agent invoked', { targetAttached: !!targetAgent, responseMode });
     if (!targetAgent) return 'Target agent is not connected';
 
-    const targetThreadId = `${parentThreadId}__${childThreadId}`;
+    // Resolve subthread UUID by alias under parent UUID
+    const targetThreadId = await this.persistence.getOrCreateSubthreadByAlias('call_agent', threadAlias, parentThreadId);
 
     const message = HumanMessage.fromText(args.input);
     try {
       if (responseMode === 'sync') {
-        const res = await targetAgent.invoke(targetThreadId, [message], parentThreadId);
+        const res = await targetAgent.invoke(targetThreadId, [message]);
         return res.text;
       }
       // async / ignore: fire and forget
-      void targetAgent.invoke(targetThreadId, [message], parentThreadId).catch((err: unknown) => {
+      void targetAgent.invoke(targetThreadId, [message]).catch((err: unknown) => {
         const e = err as { message?: string; stack?: string } | string | undefined;
         this.logger.error('Error calling agent (async/ignore mode)', e);
       });

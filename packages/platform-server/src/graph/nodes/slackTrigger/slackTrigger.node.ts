@@ -8,6 +8,7 @@ import { Inject, Injectable, Scope } from '@nestjs/common';
 import { BufferMessage } from '../agent/messagesBuffer';
 import { HumanMessage } from '@agyn/llm';
 import { stringify as YamlStringify } from 'yaml';
+import { AgentsPersistenceService } from '../../../agents/agents.persistence.service';
 
 type TriggerHumanMessage = { kind: 'human'; content: string; info?: Record<string, unknown> };
 type TriggerListener = { invoke: (thread: string, messages: BufferMessage[]) => Promise<void> };
@@ -34,6 +35,7 @@ export class SlackTrigger extends Node<SlackTriggerConfig> {
   constructor(
     @Inject(LoggerService) protected readonly logger: LoggerService,
     @Inject(VaultService) protected readonly vault: VaultService,
+    @Inject(AgentsPersistenceService) private readonly persistence: AgentsPersistenceService,
   ) {
     super(logger);
   }
@@ -101,7 +103,7 @@ export class SlackTrigger extends Node<SlackTriggerConfig> {
         if (!text.trim()) return;
         const threadIdPart = event.thread_ts || event.ts || 'unknown';
         const userPart = event.user || 'unknown';
-        const thread = `${userPart}_${threadIdPart}`;
+        const alias = `${userPart}_${threadIdPart}`;
         const msg: TriggerHumanMessage = {
           kind: 'human',
           content: text,
@@ -114,7 +116,9 @@ export class SlackTrigger extends Node<SlackTriggerConfig> {
             event_ts: event.event_ts,
           },
         };
-        await this.notify(thread, [msg]);
+        // Resolve persistent UUID threadId from Slack alias at ingress
+        const threadId = await this.persistence.getOrCreateThreadByAlias('slack', alias);
+        await this.notify(threadId, [msg]);
       } catch (err) {
         this.logger.error('SlackTrigger handler error', err);
       }

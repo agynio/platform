@@ -150,7 +150,7 @@ model Container {
 // Scheduled reminders persisted for resilience; delivery remains in-memory
 model Reminder {
   id        String   @id @default(uuid()) @db.Uuid
-  threadId  String
+  threadId  String   @db.Uuid
   note      String
   at        DateTime
   createdAt DateTime @default(now())

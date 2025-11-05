@@ -14,9 +14,10 @@ export class AgentsPersistenceService {
     return this.prismaService.getClient();
   }
 
-  async ensureThreadByAlias(alias: string): Promise<string> {
-    // Compatibility helper: ensure a thread by alias only.
-    // Does NOT derive parentId from alias. Parent linkage must be explicit via ensureThread.
+  /**
+   * Resolve a UUID threadId for a globally-unique alias. Alias is only used at ingress.
+   */
+  async getOrCreateThreadByAlias(_source: string, alias: string): Promise<string> {
     const existing = await this.prisma.thread.findUnique({ where: { alias } });
     if (existing) return existing.id;
     const created = await this.prisma.thread.create({ data: { alias } });
@@ -24,48 +25,32 @@ export class AgentsPersistenceService {
   }
 
   /**
-   * Ensure a thread exists with the given alias. When parentThreadId is provided
-   * and the thread is newly created, set Thread.parentId to it.
+   * Resolve a child UUID threadId for a subthread alias under a parent threadId.
+   * Alias must be globally unique; we compose alias using parent to satisfy uniqueness.
    */
-  async ensureThread(alias: string, parentAlias?: string | null): Promise<string> {
-    const existing = await this.prisma.thread.findUnique({ where: { alias } });
+  async getOrCreateSubthreadByAlias(source: string, alias: string, parentThreadId: string): Promise<string> {
+    const composed = `${source}:${parentThreadId}:${alias}`;
+    const existing = await this.prisma.thread.findUnique({ where: { alias: composed } });
     if (existing) return existing.id;
-    let parentId: string | undefined = undefined;
-    if (parentAlias) {
-      // Resolve provided parent alias to DB id.
-      parentId = await this.ensureThreadByAlias(parentAlias);
-    }
-    const created = await this.prisma.thread.create({ data: { alias, parentId } });
+    const created = await this.prisma.thread.create({ data: { alias: composed, parentId: parentThreadId } });
     return created.id;
   }
 
   /**
-   * Begin a run and persist input messages. Accepts strictly typed message instances.
-   * Supports optional explicit parent thread linkage.
+   * Resolve a UUID threadId by alias (helper for controllers/tests).
    */
-  async beginRun(
-    threadAlias: string,
-    inputMessages: Array<HumanMessage | SystemMessage | AIMessage>,
-    parentAlias?: string | null,
-  ): Promise<RunStartResult> {
-    // Create thread if missing and set summary only on creation from the first input message.
-    let thread = await this.prisma.thread.findUnique({ where: { alias: threadAlias } });
-    if (!thread) {
-      let parentId: string | undefined = undefined;
-      if (parentAlias) parentId = await this.ensureThreadByAlias(parentAlias);
-      let summary: string | null = null;
-      if (inputMessages.length > 0) {
-        const first = inputMessages[0];
-        const { text } = this.deriveKindTextTyped(first as HumanMessage | SystemMessage | AIMessage);
-        if (typeof text === 'string') {
-          const truncated = text.slice(0, 200).replace(/\s+$/u, '');
-          summary = truncated.length > 0 ? truncated : null;
-        }
-      }
-      thread = await this.prisma.thread.create({ data: { alias: threadAlias, parentId, summary } });
-    }
+  async resolveThreadId(alias: string): Promise<string | null> {
+    const existing = await this.prisma.thread.findUnique({ where: { alias } });
+    return existing?.id ?? null;
+  }
 
-    const threadId = thread.id;
+  /**
+   * Begin a run and persist input messages for an existing threadId.
+   */
+  async beginRunThread(
+    threadId: string,
+    inputMessages: Array<HumanMessage | SystemMessage | AIMessage>,
+  ): Promise<RunStartResult> {
     const { runId } = await this.prisma.$transaction(async (tx: Prisma.TransactionClient) => {
       const run = await tx.run.create({ data: { threadId, status: 'running' as RunStatus } });
       await Promise.all(

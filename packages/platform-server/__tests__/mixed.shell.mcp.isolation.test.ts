@@ -5,6 +5,7 @@ import { EnvService } from '../src/env/env.service';
 import { VaultService } from '../src/vault/vault.service';
 import { ShellCommandNode } from '../src/graph/nodes/tools/shell_command/shell_command.node';
 import { LocalMCPServerNode } from '../src/graph/nodes/mcp/localMcpServer.node';
+import { Signal } from '../src/signal';
 
 class FakeContainer {
   last: any;
@@ -56,7 +57,7 @@ describe('Mixed Shell + MCP overlay isolation', () => {
 
     // Shell exec
     const tool = shell.getTool();
-    const out = String(await tool.execute({ command: 'printenv' }, { threadId: 't' } as any));
+    const out = String(await tool.execute({ command: 'printenv' }, { threadId: 't', finishSignal: new Signal(), callerAgent: { invoke: async () => undefined } } as any));
     expect(out).toContain('S_VAR=s');
     expect(out).not.toContain('M_VAR=m');
 

@@ -4,6 +4,8 @@ import { MongoClient } from 'mongodb';
 import { MongoMemoryServer } from 'mongodb-memory-server';
 import { SystemMessage } from '@agyn/llm';
 import { LiveGraphRuntime } from '../src/graph/liveGraph.manager';
+import type { LLMContext } from '../src/llm/types';
+import { Signal } from '../src/signal';
 import { TemplateRegistry } from '../src/graph/templateRegistry';
 import type { GraphDefinition } from '../src/graph/types';
 import { LoggerService } from '../src/core/services/logger.service';
@@ -77,7 +79,7 @@ class TestCallModelNode extends Node<Record<string, never>> {
 
   async invoke(
     input: { messages: SystemMessage[] },
-    ctx: { threadId: string },
+    ctx: LLMContext,
   ): Promise<{ messages: SystemMessage[] }> {
     const system = SystemMessage.fromText('SYS');
     const messages: SystemMessage[] = [system, ...input.messages];
@@ -126,7 +128,7 @@ function makeRuntime(
 
 async function getLastMessages(runtime: LiveGraphRuntime, nodeId: string): Promise<SystemMessage[]> {
   const cm = runtime.getNodeInstance(nodeId) as TestCallModelNode;
-  const out = await cm.invoke({ messages: [] }, { threadId: 'T' });
+  const out = await cm.invoke({ messages: [] }, { threadId: 'T', finishSignal: new Signal(), callerAgent: { invoke: async () => new Promise(() => {}) } } as LLMContext);
   return out.messages;
 }
 
