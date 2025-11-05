@@ -11,6 +11,7 @@ import { GithubService } from './github/github.client';
 import { PRService } from './github/pr.usecase';
 import { NcpsKeyService } from './ncps/ncpsKey.service';
 import { NixController } from './ncps/nix.controller';
+import { ContainersController } from './container/containers.controller';
 import { ArchiveService } from './archive/archive.service';
 
 @Module({
@@ -58,7 +59,7 @@ import { ArchiveService } from './archive/archive.service';
     GithubService,
     PRService,
   ],
-  controllers: [NixController],
+  controllers: [NixController, ContainersController],
   exports: [
     VaultModule,
     ContainerService,
