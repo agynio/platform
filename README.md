@@ -78,7 +78,7 @@ Prisma workflow (platform-server)
 1) Prerequisites
 - Postgres running locally or reachable from your dev/CI environment.
 - Set AGENTS_DATABASE_URL to a Postgres connection string.
-  - Example (docker compose service on 5443): `postgresql://agents:agents@localhost:5443/agents`
+  - Example (docker compose agents-db service on 5443): `postgresql://agents:agents@localhost:5443/agents`
 - Node.js and pnpm installed (repo uses pnpm workspaces).
 
 2) Generate Prisma Client after schema changes
@@ -113,7 +113,7 @@ Prisma workflow (platform-server)
 - Monorepo targeting: use `pnpm -C packages/platform-server ...` or `pnpm --filter @agyn/platform-server ...`.
 - Import enums/types from `@prisma/client` in server code; do not re-declare.
 - Ensure `AGENTS_DATABASE_URL` is set in env (see `packages/platform-server/.env.example`).
-- Local Postgres: `docker compose up -d postgres` starts a DB on port 5443 with user/password `agents`.
+- Local Postgres: `docker compose up -d agents-db` starts a DB on port 5443 with user/password `agents`.
 
 7) CI note
 - CI runs Prisma client generation before tests/build:
