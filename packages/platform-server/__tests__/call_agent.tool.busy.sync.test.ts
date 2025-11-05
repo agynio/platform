@@ -18,7 +18,7 @@ class BusyAgent extends AgentNode {
 describe('call_agent sync busy', () => {
   it('returns queued when target thread running (sync)', async () => {
     const module = await Test.createTestingModule({
-      providers: [LoggerService, ConfigService, BusyAgent, { provide: LLMProvisioner, useValue: {} }, { provide: AgentsPersistenceService, useValue: { beginRunThread: async () => ({ runId: 't' }), recordInjected: async () => {}, completeRun: async () => {} } }],
+      providers: [LoggerService, ConfigService, BusyAgent, { provide: LLMProvisioner, useValue: {} }, { provide: AgentsPersistenceService, useValue: { beginRunThread: async () => ({ runId: 't' }), recordInjected: async () => {}, completeRun: async () => {}, getOrCreateSubthreadByAlias: async () => 'child-t' } }],
     }).compile();
     const agent = await module.resolve(BusyAgent);
     await agent.setConfig({});

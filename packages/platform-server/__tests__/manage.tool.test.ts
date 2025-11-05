@@ -75,7 +75,7 @@ describe('ManageTool unit', () => {
   });
 
   it('send_message: routes to `${parent}__${worker}` and returns text', async () => {
-    const module = await Test.createTestingModule({ providers: [LoggerService, ConfigService, { provide: MongoService, useClass: StubMongoService }, { provide: LLMProvisioner, useClass: StubLLMProvisioner }, ManageFunctionTool, ManageToolNode, FakeAgent, { provide: AgentsPersistenceService, useValue: { beginRunThread: async () => ({ runId: 't' }), recordInjected: async () => {}, completeRun: async () => {} } }] }).compile();
+    const module = await Test.createTestingModule({ providers: [LoggerService, ConfigService, { provide: MongoService, useClass: StubMongoService }, { provide: LLMProvisioner, useClass: StubLLMProvisioner }, ManageFunctionTool, ManageToolNode, FakeAgent, { provide: AgentsPersistenceService, useValue: { beginRunThread: async () => ({ runId: 't' }), recordInjected: async () => {}, completeRun: async () => {}, getOrCreateSubthreadByAlias: async () => 'child-t' } }] }).compile();
     const node = await module.resolve(ManageToolNode);
     await node.setConfig({ description: 'desc' });
     const a = await module.resolve(FakeAgent);
@@ -86,7 +86,7 @@ describe('ManageTool unit', () => {
   });
 
   it('send_message: parameter validation and unknown worker', async () => {
-    const module = await Test.createTestingModule({ providers: [LoggerService, ConfigService, { provide: MongoService, useClass: StubMongoService }, { provide: LLMProvisioner, useClass: StubLLMProvisioner }, ManageFunctionTool, ManageToolNode, FakeAgent, { provide: AgentsPersistenceService, useValue: { beginRunThread: async () => ({ runId: 't' }), recordInjected: async () => {}, completeRun: async () => {} } }] }).compile();
+    const module = await Test.createTestingModule({ providers: [LoggerService, ConfigService, { provide: MongoService, useClass: StubMongoService }, { provide: LLMProvisioner, useClass: StubLLMProvisioner }, ManageFunctionTool, ManageToolNode, FakeAgent, { provide: AgentsPersistenceService, useValue: { beginRunThread: async () => ({ runId: 't' }), recordInjected: async () => {}, completeRun: async () => {}, getOrCreateSubthreadByAlias: async () => 'child-t' } }] }).compile();
     const node = await module.resolve(ManageToolNode);
     await node.setConfig({ description: 'd' });
     const tool = node.getTool();
@@ -97,7 +97,7 @@ describe('ManageTool unit', () => {
   });
 
   it('check_status: aggregates active child threads scoped to current thread', async () => {
-    const module = await Test.createTestingModule({ providers: [LoggerService, ConfigService, { provide: MongoService, useClass: StubMongoService }, { provide: LLMProvisioner, useClass: StubLLMProvisioner }, ManageFunctionTool, ManageToolNode, FakeAgent, { provide: AgentsPersistenceService, useValue: { beginRunThread: async () => ({ runId: 't' }), recordInjected: async () => {}, completeRun: async () => {} } }] }).compile();
+    const module = await Test.createTestingModule({ providers: [LoggerService, ConfigService, { provide: MongoService, useClass: StubMongoService }, { provide: LLMProvisioner, useClass: StubLLMProvisioner }, ManageFunctionTool, ManageToolNode, FakeAgent, { provide: AgentsPersistenceService, useValue: { beginRunThread: async () => ({ runId: 't' }), recordInjected: async () => {}, completeRun: async () => {}, getOrCreateSubthreadByAlias: async () => 'child-t' } }] }).compile();
     const node = await module.resolve(ManageToolNode);
     await node.setConfig({ description: 'desc' });
     const a1 = await module.resolve(FakeAgent);
@@ -115,7 +115,7 @@ describe('ManageTool unit', () => {
   });
 
   it('throws when runtime configurable.thread_id is missing', async () => {
-    const module = await Test.createTestingModule({ providers: [LoggerService, ConfigService, { provide: MongoService, useClass: StubMongoService }, { provide: LLMProvisioner, useClass: StubLLMProvisioner }, ManageFunctionTool, ManageToolNode, { provide: AgentsPersistenceService, useValue: { beginRunThread: async () => ({ runId: 't' }), recordInjected: async () => {}, completeRun: async () => {} } }] }).compile();
+    const module = await Test.createTestingModule({ providers: [LoggerService, ConfigService, { provide: MongoService, useClass: StubMongoService }, { provide: LLMProvisioner, useClass: StubLLMProvisioner }, ManageFunctionTool, ManageToolNode, { provide: AgentsPersistenceService, useValue: { beginRunThread: async () => ({ runId: 't' }), recordInjected: async () => {}, completeRun: async () => {}, getOrCreateSubthreadByAlias: async () => 'child-t' } }] }).compile();
     const node = await module.resolve(ManageToolNode);
     await node.setConfig({ description: 'desc' });
     const tool = node.getTool();
@@ -123,7 +123,7 @@ describe('ManageTool unit', () => {
   });
 
   it('throws when child agent invoke fails (send_message)', async () => {
-    const module = await Test.createTestingModule({ providers: [LoggerService, ConfigService, { provide: MongoService, useClass: StubMongoService }, { provide: LLMProvisioner, useClass: StubLLMProvisioner }, ManageFunctionTool, ManageToolNode, FakeAgent, { provide: AgentsPersistenceService, useValue: { beginRunThread: async () => ({ runId: 't' }), recordInjected: async () => {}, completeRun: async () => {} } }] }).compile();
+    const module = await Test.createTestingModule({ providers: [LoggerService, ConfigService, { provide: MongoService, useClass: StubMongoService }, { provide: LLMProvisioner, useClass: StubLLMProvisioner }, ManageFunctionTool, ManageToolNode, FakeAgent, { provide: AgentsPersistenceService, useValue: { beginRunThread: async () => ({ runId: 't' }), recordInjected: async () => {}, completeRun: async () => {}, getOrCreateSubthreadByAlias: async () => 'child-t' } }] }).compile();
     const node = await module.resolve(ManageToolNode);
     await node.setConfig({ description: 'desc' });
     class ThrowingAgent extends FakeAgent {
@@ -169,7 +169,7 @@ describe('ManageTool graph wiring', () => {
         { provide: TemplateRegistry, useValue: registry },
         { provide: GraphRepository, useValue: { initIfNeeded: async () => {}, get: async () => null, upsert: async () => { throw new Error('not-implemented'); }, upsertNodeState: async () => {} } },
         { provide: ModuleRef, useValue: moduleRef },
-        { provide: AgentsPersistenceService, useValue: { beginRun: async () => ({ runId: 't' }), recordInjected: async () => {}, completeRun: async () => {} } },
+        { provide: AgentsPersistenceService, useValue: { beginRunThread: async () => ({ runId: 't' }), recordInjected: async () => {}, completeRun: async () => {}, getOrCreateSubthreadByAlias: async () => 'child-t' } },
       ],
     }).compile();
     const runtime = await runtimeModule.resolve(LiveGraphRuntime);
