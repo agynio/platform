@@ -56,11 +56,11 @@ export class CallAgentFunctionTool extends FunctionTool<typeof callAgentInvocati
     const message = HumanMessage.fromText(args.input);
     try {
       if (responseMode === 'sync') {
-        const res = await targetAgent.invoke(targetThreadId, [message]);
+        const res = await targetAgent.invoke(targetThreadId, [message], parentThreadId);
         return res.text;
       }
       // async / ignore: fire and forget
-      void targetAgent.invoke(targetThreadId, [message]).catch((err: unknown) => {
+      void targetAgent.invoke(targetThreadId, [message], parentThreadId).catch((err: unknown) => {
         const e = err as { message?: string; stack?: string } | string | undefined;
         this.logger.error('Error calling agent (async/ignore mode)', e);
       });

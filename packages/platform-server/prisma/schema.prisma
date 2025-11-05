@@ -40,6 +40,9 @@ model Thread {
   createdAt DateTime @default(now())
 
   runs      Run[]
+
+  // Index parentId to accelerate parent-child lookups
+  @@index([parentId])
 }
 
 enum RunStatus {

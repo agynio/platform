@@ -13,14 +13,34 @@ export class AgentsPersistenceService {
   }
 
   async ensureThreadByAlias(alias: string): Promise<string> {
+    // Compatibility helper: ensure a thread by alias only.
+    // Does NOT derive parentId from alias. Parent linkage must be explicit via ensureThread.
     const existing = await this.prisma.thread.findUnique({ where: { alias } });
     if (existing) return existing.id;
     const created = await this.prisma.thread.create({ data: { alias } });
     return created.id;
   }
 
-  async beginRun(threadAlias: string, inputMessages: Prisma.InputJsonValue[]): Promise<RunStartResult> {
-    const threadId = await this.ensureThreadByAlias(threadAlias);
+  /**
+   * Ensure a thread exists with the given alias.
+   * If parentThreadId is provided and the thread is newly created, set Thread.parentId to it.
+   * Parent linkage is explicit; no alias parsing is performed.
+   */
+  async ensureThread(alias: string, parentThreadId?: string | null): Promise<string> {
+    const existing = await this.prisma.thread.findUnique({ where: { alias } });
+    if (existing) return existing.id;
+    let parentId: string | undefined = undefined;
+    if (parentThreadId) {
+      // Treat provided parentThreadId as alias identifier; resolve actual DB id.
+      parentId = await this.ensureThreadByAlias(parentThreadId);
+    }
+    const created = await this.prisma.thread.create({ data: { alias, parentId } });
+    return created.id;
+  }
+
+  async beginRun(threadAlias: string, inputMessages: Prisma.InputJsonValue[], parentThreadId?: string | null): Promise<RunStartResult> {
+    // Explicit parent linkage when provided; otherwise ensure by alias only.
+    const threadId = await (parentThreadId ? this.ensureThread(threadAlias, parentThreadId) : this.ensureThreadByAlias(threadAlias));
     const { runId } = await this.prisma.$transaction(async (tx) => {
       const run = await tx.run.create({ data: { threadId, status: RunStatus.running } });
       await Promise.all(
@@ -60,8 +80,9 @@ export class AgentsPersistenceService {
     });
   }
 
-  async listThreads(): Promise<Array<{ id: string; alias: string; createdAt: Date }>> {
-    return this.prisma.thread.findMany({ orderBy: { createdAt: 'desc' }, select: { id: true, alias: true, createdAt: true }, take: 100 });
+  async listThreads(): Promise<Array<{ id: string; alias: string; createdAt: Date; parentId?: string | null }>> {
+    // Include parentId for clients that need thread hierarchy; preserves compatibility
+    return this.prisma.thread.findMany({ orderBy: { createdAt: 'desc' }, select: { id: true, alias: true, createdAt: true, parentId: true }, take: 100 });
   }
 
   async listRuns(
