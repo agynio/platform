@@ -40,6 +40,7 @@ model Thread {
   createdAt DateTime @default(now())
 
   runs      Run[]
+  containers Container[]
 
   // Index parentId to accelerate parent-child lookups
   @@index([parentId])
@@ -98,6 +99,42 @@ model RunMessage {
 
   @@id([runId, messageId])
   @@index([runId])
+}
+
+// Container tracking moved from MongoDB to Postgres via Prisma
+// threadId is optional and FK to Thread.id
+// Metadata captures labels, platform, ttlSeconds, and termination backoff fields
+
+enum ProviderType {
+  docker
+}
+
+enum ContainerStatus {
+  running
+  stopped
+  terminating
+  failed
+}
+
+model Container {
+  id                Int             @id @default(autoincrement())
+  containerId       String          @unique
+  nodeId            String
+  threadId          String?         @db.Uuid
+  thread            Thread?         @relation(fields: [threadId], references: [id], onDelete: SetNull)
+  providerType      ProviderType    @default(docker)
+  image             String
+  status            ContainerStatus @default(running)
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+  lastUsedAt        DateTime
+  killAfterAt       DateTime?
+  terminationReason String?
+  deletedAt         DateTime?
+  metadata          Json?
+
+  @@index([status, killAfterAt])
+  @@index([nodeId, status, lastUsedAt])
 }
 
 // End of schema
