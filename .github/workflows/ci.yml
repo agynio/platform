@@ -4,8 +4,7 @@ on:
   pull_request:
     branches: [ main ]
   push:
-    branches: [ main, 'casey/**' ]
-  workflow_dispatch:
+    branches: [ main ]
   merge_group:
 
 jobs:
