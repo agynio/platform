@@ -1,0 +1,7 @@
+{
+  "extends": "./tsconfig.json",
+  "include": ["src", "__tests__"],
+  "compilerOptions": {
+    // ESLint only: use for type information; no emit. Keep rootDir as in base tsconfig.
+  }
+}

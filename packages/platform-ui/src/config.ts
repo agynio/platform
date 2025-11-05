@@ -36,9 +36,11 @@ function readNodeEnv(): Record<string, string | undefined> | undefined {
 const ve = readViteEnv();
 const ne = readNodeEnv();
 
-function resolveApiBase(): string | undefined {
-  // Precedence: VITE_API_BASE_URL -> API_BASE_URL -> undefined
-  return ve?.VITE_API_BASE_URL || ne?.API_BASE_URL;
+function resolveApiBase(): string {
+  if (!import.meta.env.VITE_API_BASE_URL) {
+    throw new Error('API base URL is not defined. Please set VITE_API_BASE_URL environment variable.');
+  }
+  return import.meta.env.VITE_API_BASE_URL;
 }
 
 function resolveTracingServer(): string | undefined {
@@ -58,4 +60,3 @@ export const config = {
     uiBase: resolveTracingUiBase(),
   },
 };
-

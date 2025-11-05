@@ -49,15 +49,13 @@ export class PatchThreadBodyDto {
 
 @Controller('api/agents')
 export class AgentsThreadsController {
-  constructor(
-    @Inject(AgentsPersistenceService) private readonly persistence: AgentsPersistenceService,
-  ) {}
+  constructor(@Inject(AgentsPersistenceService) private readonly persistence: AgentsPersistenceService) {}
 
   @Get('threads')
   async listThreads(@Query() query: ListThreadsQueryDto) {
     const rootsOnly = (query.rootsOnly ?? 'false') === 'true';
     const status = query.status ?? 'all';
-    const limit = query.limit ?? 100;
+    const limit = Number(query.limit) ?? 100;
     const threads = await this.persistence.listThreads({ rootsOnly, status, limit });
     return { items: threads };
   }

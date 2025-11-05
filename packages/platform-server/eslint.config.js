@@ -1,5 +1,10 @@
 // Flat ESLint config for server (scoped rules)
 import tseslint from 'typescript-eslint';
+import { fileURLToPath } from 'node:url';
+import path from 'node:path';
+
+// Ensure tsconfigRootDir resolves to this package when running ESLint from the monorepo root
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 export default [
   // Global ignores (apply to all files)
@@ -13,6 +18,7 @@ export default [
       parser: tseslint.parser,
       parserOptions: {
         project: ['./tsconfig.eslint.json'],
+        tsconfigRootDir: __dirname,
       },
     },
     plugins: { '@typescript-eslint': tseslint.plugin },
@@ -61,6 +67,7 @@ export default [
       parser: tseslint.parser,
       parserOptions: {
         project: ['./tsconfig.eslint.json'],
+        tsconfigRootDir: __dirname,
       },
     },
     plugins: { '@typescript-eslint': tseslint.plugin },
@@ -76,18 +83,6 @@ export default [
       '@typescript-eslint/no-empty-object-type': 'error',
       'no-useless-escape': 'error',
       'prefer-const': 'error',
-    },
-  },
-  {
-    files: [
-      'src/entities/containerProvider.entity.ts',
-      'src/core/env.resolver.ts',
-      'src/tools/shell_command.ts',
-      'src/mcp/localMcpServer.ts',
-    ],
-    plugins: { '@typescript-eslint': tseslint.plugin },
-    rules: {
-      '@typescript-eslint/no-non-null-assertion': 'error',
     },
   },
 ];

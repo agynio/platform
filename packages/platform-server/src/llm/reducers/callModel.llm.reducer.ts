@@ -49,10 +49,14 @@ export class CallModelLLMReducer extends Reducer<LLMState, LLMContext> {
     // Assemble input in a single expression using filter(Boolean)
     const input: (SystemMessage | LLMMessage)[] =
       mem?.place === 'after_system'
-        ? [system, summaryMsg, mem?.msg ?? null, ...state.messages].filter(Boolean) as Array<SystemMessage | LLMMessage>
+        ? ([system, summaryMsg, mem?.msg ?? null, ...state.messages].filter(Boolean) as Array<
+            SystemMessage | LLMMessage
+          >)
         : mem?.place === 'last_message'
-        ? [system, summaryMsg, ...state.messages, mem?.msg ?? null].filter(Boolean) as Array<SystemMessage | LLMMessage>
-        : [system, summaryMsg, ...state.messages].filter(Boolean) as Array<SystemMessage | LLMMessage>;
+          ? ([system, summaryMsg, ...state.messages, mem?.msg ?? null].filter(Boolean) as Array<
+              SystemMessage | LLMMessage
+            >)
+          : ([system, summaryMsg, ...state.messages].filter(Boolean) as Array<SystemMessage | LLMMessage>);
 
     const response = await withLLM({ context: input.slice(-10) }, async () => {
       try {
