@@ -48,7 +48,5 @@ describe('SlackTrigger and PRTrigger lifecycle', () => {
     expect(logger.info).toHaveBeenCalled();
   });
 
-  it.skip('PRTrigger start/stop remains backward compatible while using provision hooks', async () => {
-    // Pending clarification on PRTrigger implementation path
-  });
+  // Removed obsolete PRTrigger skipped case per Issue #572.
 });

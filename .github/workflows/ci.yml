@@ -90,7 +90,53 @@ jobs:
         run: pnpm --filter @agyn/platform-server run prisma:generate
 
       - name: Run server tests
+        env:
+          RUN_MONGOMS: '1'
+          MONGOMS_VERSION: '7.0.14'
         run: pnpm --filter @agyn/platform-server test
+
+  test-tracing-server:
+    name: Test Tracing Server
+    runs-on: ubuntu-latest
+    needs: [lint]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.5.0
+          run_install: false
+
+      - name: Get pnpm store directory
+        id: pnpm-store
+        shell: bash
+        run: echo "STORE_PATH=$(pnpm store path --silent)" >> $GITHUB_OUTPUT
+
+      - name: Setup pnpm cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ steps.pnpm-store.outputs.STORE_PATH }}
+          key: ${{ runner.os }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-pnpm-store-
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: '20'
+
+      - name: Approve necessary build scripts
+        run: pnpm approve-builds esbuild mongodb-memory-server msw
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Run tracing-server tests (@agyn/tracing-server)
+        env:
+          RUN_MONGOMS: '1'
+        run: pnpm --filter @agyn/tracing-server test
 
   test-ui:
     name: Test UI

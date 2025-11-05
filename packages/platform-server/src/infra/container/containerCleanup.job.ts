@@ -54,7 +54,8 @@ export class ContainerCleanupService {
     await Promise.allSettled(
       expired.map((doc) =>
         limit(async () => {
-          const id = doc.container_id;
+          // Use camelCase Prisma field names (containerId)
+          const id = doc.containerId;
           const claimId = randomUUID();
           // Only CAS-claim when transitioning from running; terminating should be retried idempotently
           if (doc.status === 'running') {

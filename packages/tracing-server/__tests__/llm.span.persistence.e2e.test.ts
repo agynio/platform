@@ -3,7 +3,7 @@ const RUN_MONGOMS = process.env.RUN_MONGOMS === '1';
 import { startMemoryMongo } from './helpers/mongoMemory';
 import { createServer } from '../src/server';
 
-import { init, withAgent, withLLM, withToolCall, LLMResponse, HumanMessage, ToolCallMessage, SystemMessage } from '../../tracing';
+import { init, withAgent, withLLM, withToolCall, LLMResponse, HumanMessage, ToolCallMessage, SystemMessage, ToolCallResponse } from '../tracing/src';
 import type { ResponseFunctionToolCall } from 'openai/resources/responses/responses.mjs';
 import type { FastifyInstance } from 'fastify';
 
@@ -41,7 +41,7 @@ describe.skipIf(!RUN_MONGOMS)('LLM span persistence end-to-end (real server + me
         });
         await withToolCall({ toolCallId, name: 'weather', input: { city: 'NYC' } }, async () => {
           const result = { tempC: 21 };
-          return new sdk.ToolCallResponse({ raw: result, output: result, status: 'success' });
+          return new ToolCallResponse({ raw: result, output: result, status: 'success' });
         });
     });
 

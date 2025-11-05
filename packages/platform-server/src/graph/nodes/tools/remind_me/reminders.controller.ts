@@ -1,10 +1,10 @@
 import { Controller, Get, Param, Query, HttpException, HttpStatus, Inject } from '@nestjs/common';
 import { LoggerService } from '../../../../core/services/logger.service';
 import { LiveGraphRuntime as RuntimeService } from '../../../../graph/liveGraph.manager';
-import type { ActiveReminder } from './remind_me.tool';
+import type { Reminder } from '@prisma/client';
 
 interface RemindMeInspectable {
-  getActiveReminders(): ActiveReminder[];
+  getActiveReminders(): Reminder[];
 }
 function isRemindMeInspectable(x: unknown): x is RemindMeInspectable {
   return !!x && typeof (x as Record<string, unknown>)['getActiveReminders'] === 'function';
@@ -21,7 +21,7 @@ export class RemindersController {
   async getReminders(
     @Param('nodeId') nodeId: string,
     @Query('limit') limit?: string,
-  ): Promise<{ items: ActiveReminder[] }> {
+  ): Promise<{ items: Reminder[] }> {
     try {
       const inst = this.runtimeService.getNodeInstance(nodeId);
       if (!inst) throw new HttpException({ error: 'node_not_found' }, HttpStatus.NOT_FOUND);

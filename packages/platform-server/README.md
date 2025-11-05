@@ -43,3 +43,50 @@ Persistent conversation state (Prisma)
 - Local dev:
   - LLM_PROVIDER must be set explicitly to 'openai' or 'litellm'. There is no default.
   - GitHub integration is optional. If no GitHub env is provided, the server boots and logs that GitHub is disabled. Any GitHub-dependent feature will error at runtime until credentials are configured.
+
+## Prisma workflow (platform-server)
+
+1) Prerequisites
+- Postgres running locally or reachable from your dev/CI environment.
+- Set AGENTS_DATABASE_URL to a Postgres connection string.
+  - Example (docker compose agents-db service on 5443): `postgresql://agents:agents@localhost:5443/agents`
+- Node.js and pnpm installed (repo uses pnpm workspaces).
+
+2) Generate Prisma Client after schema changes
+- The Prisma schema is at `packages/platform-server/prisma/schema.prisma`.
+- After any schema change, generate the client for the platform-server package:
+  - `pnpm -C packages/platform-server prisma:generate`
+  - Alternative filter syntax: `pnpm --filter @agyn/platform-server prisma:generate`
+- Tip: Always target the package (do not run `prisma generate` from the repo root).
+
+3) Create migrations with Prisma Migrate (no handwritten SQL)
+- Edit `schema.prisma`; do not write SQL directly.
+- Create the initial migration (convenience script):
+  - `pnpm -C packages/platform-server prisma:migrate`  # runs `prisma migrate dev --name init`
+- Create a named migration for subsequent changes:
+  - `pnpm -C packages/platform-server prisma migrate dev --name add_message_table`
+
+4) Apply migrations (dev vs deploy)
+- Development/local: applies and generates client if needed
+  - `pnpm -C packages/platform-server prisma migrate dev`
+- CI/production: apply pending migrations only
+  - `pnpm -C packages/platform-server prisma migrate deploy`
+
+5) Prisma Studio and reset
+- Studio (inspect/edit data):
+  - `pnpm -C packages/platform-server prisma:studio`
+- Reset dev database (drops data, re-applies migrations):
+  - `pnpm -C packages/platform-server prisma migrate reset`  # interactive
+  - Add `--force` to skip prompts if needed.
+
+6) Common pitfalls and guidance
+- Client not found / types missing: run `prisma:generate` for the platform-server package.
+- Monorepo targeting: use `pnpm -C packages/platform-server ...` or `pnpm --filter @agyn/platform-server ...`.
+- Import enums/types from `@prisma/client` in server code; do not re-declare.
+- Ensure `AGENTS_DATABASE_URL` is set in env (see `packages/platform-server/.env.example`).
+- Local Postgres: `docker compose up -d agents-db` starts a DB on port 5443 with user/password `agents`.
+
+7) CI note
+- CI runs Prisma client generation before tests/build:
+  - `pnpm --filter @agyn/platform-server prisma:generate`
+- For production deployments, apply migrations with `prisma migrate deploy` as part of your release process.

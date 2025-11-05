@@ -58,7 +58,7 @@ export class ManageFunctionTool extends FunctionTool<typeof ManageInvocationSche
       if (!target) throw new Error(`Unknown worker: ${worker}`);
       const childThreadId = `${parentThreadId}__${target.name}`;
       try {
-        const res = await target.agent.invoke(childThreadId, [HumanMessage.fromText(message)]);
+        const res = await target.agent.invoke(childThreadId, [HumanMessage.fromText(message)], parentThreadId);
         return res?.text;
       } catch (err: unknown) {
         this.logger.error('Manage: send_message failed', {

@@ -1,5 +1,6 @@
 import { BaseToolNode } from '../baseToolNode';
 import { LoggerService } from '../../../../core/services/logger.service';
+import { PrismaService } from '../../../../core/services/prisma.service';
 import { RemindMeFunctionTool, RemindMeToolStaticConfigSchema } from './remind_me.tool';
 import z from 'zod';
 import { AgentNode } from '../../agent/agent.node';
@@ -14,13 +15,14 @@ export class RemindMeNode extends BaseToolNode<z.infer<typeof RemindMeToolStatic
   constructor(
     @Inject(LoggerService) protected logger: LoggerService,
     @Inject(GraphSocketGateway) private readonly gateway: GraphSocketGateway,
+    @Inject(PrismaService) private readonly prismaService: PrismaService,
   ) {
     super(logger);
   }
 
   getTool(): RemindMeFunctionTool {
     if (!this.toolInstance) {
-      this.toolInstance = new RemindMeFunctionTool(this.logger);
+      this.toolInstance = new RemindMeFunctionTool(this.logger, this.prismaService);
       // Wire registry change callback to socket gateway emission
       this.toolInstance.setOnRegistryChanged((count: number, atMs?: number) => {
         const id = this._nodeId; // emit only when initialized

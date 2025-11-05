@@ -2,6 +2,8 @@ import z from 'zod';
 import { FunctionTool, SystemMessage } from '@agyn/llm';
 import { v4 as uuidv4 } from 'uuid';
 import { LoggerService } from '../../../../core/services/logger.service';
+import { PrismaService } from '../../../../core/services/prisma.service';
+import type { Reminder } from '@prisma/client';
 import { LLMContext } from '../../../../llm/types';
 
 export const remindMeInvocationSchema = z
@@ -17,14 +19,13 @@ export const remindMeInvocationSchema = z
 
 export const RemindMeToolStaticConfigSchema = z.object({}).strict();
 
-export type ActiveReminder = { id: string; threadId: string; note: string; at: string };
-
 export class RemindMeFunctionTool extends FunctionTool<typeof remindMeInvocationSchema> {
-  private active: Map<string, { timer: ReturnType<typeof setTimeout>; reminder: ActiveReminder }> = new Map();
+  // Track DB reminder id -> timer + entity
+  private active: Map<string, { timer: ReturnType<typeof setTimeout>; reminder: Reminder }> = new Map();
   private destroyed = false;
   private maxActive = 1000;
   private onRegistryChanged?: (count: number, updatedAtMs?: number) => void;
-  constructor(private logger: LoggerService) {
+  constructor(private logger: LoggerService, private prismaService: PrismaService) {
     super();
   }
   get name() {
@@ -36,7 +37,7 @@ export class RemindMeFunctionTool extends FunctionTool<typeof remindMeInvocation
   get schema() {
     return remindMeInvocationSchema;
   }
-  getActiveReminders(): ActiveReminder[] {
+  getActiveReminders(): Reminder[] {
     return Array.from(this.active.values()).map((v) => v.reminder);
   }
   /**
@@ -60,15 +61,27 @@ export class RemindMeFunctionTool extends FunctionTool<typeof remindMeInvocation
     if (this.destroyed) throw new Error('RemindMe tool destroyed');
     if (this.active.size >= this.maxActive) throw new Error(`Too many active reminders (max ${this.maxActive})`);
 
-    const eta = new Date(Date.now() + delayMs).toISOString();
-    const id = `${threadId}:${uuidv4()}`;
+    const etaDate = new Date(Date.now() + delayMs);
+    const eta = etaDate.toISOString();
     const logger = this.logger;
+    const prisma = this.prismaService.getClient();
+    // Create DB row first; id is UUID
+    const created = await prisma.reminder.create({
+      data: { id: uuidv4(), threadId, note, at: etaDate, completedAt: null },
+    });
     const timer = setTimeout(async () => {
-      const exists = this.active.has(id);
+      const exists = this.active.has(created.id);
       if (!exists) return;
-      this.active.delete(id);
-      // Registry size decreased; notify
-      this.onRegistryChanged?.(this.active.size);
+      // Mark persisted reminder as completed with localized error handling
+      try {
+        await prisma.reminder.update({ where: { id: created.id }, data: { completedAt: new Date() } });
+      } catch (e) {
+        logger.error('RemindMe completion failed', e);
+      } finally {
+        // Always remove from registry and notify
+        this.active.delete(created.id);
+        this.onRegistryChanged?.(this.active.size);
+      }
       try {
         const msg = SystemMessage.fromText(`Reminder: ${note}`);
         await ctx.callerAgent.invoke(threadId, [msg]);
@@ -77,9 +90,11 @@ export class RemindMeFunctionTool extends FunctionTool<typeof remindMeInvocation
         logger.error('RemindMe scheduled invoke error', msg);
       }
     }, delayMs);
-    this.active.set(id, { timer, reminder: { id, threadId: threadId, note, at: eta } });
+    // Store created entity in registry keyed by DB id
+    this.active.set(created.id, { timer, reminder: created });
     // Registry size increased; notify
     this.onRegistryChanged?.(this.active.size);
-    return JSON.stringify({ status: 'scheduled', etaMs: delayMs, at: eta, id });
+    // Return ack including DB id
+    return JSON.stringify({ status: 'scheduled', etaMs: delayMs, at: eta, id: created.id });
   }
 }

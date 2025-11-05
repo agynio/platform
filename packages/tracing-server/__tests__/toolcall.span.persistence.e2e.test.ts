@@ -3,8 +3,7 @@ const RUN_MONGOMS = process.env.RUN_MONGOMS === '1';
 import { startMemoryMongo } from './helpers/mongoMemory';
 import { createServer } from '../src/server';
 
-import * as sdk from '../../tracing';
-const { init, withAgent, withToolCall, ToolCallResponse } = sdk as any;
+import { init, withAgent, withToolCall, ToolCallResponse } from '../tracing/src';
 import type { FastifyInstance } from 'fastify';
 
 let mm: Awaited<ReturnType<typeof startMemoryMongo>>;

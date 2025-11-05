@@ -14,7 +14,17 @@ describe('GET /graph/nodes/:nodeId/reminders', () => {
   it('returns active reminders for RemindMe tool node', async () => {
     const fastify = Fastify({ logger: false });
     const logger = new LoggerService();
-    const tool = new RemindMeFunctionTool(logger);
+    const prismaStub = {
+      getClient() {
+        return {
+          reminder: {
+          create: vi.fn(async (args: any) => ({ ...args.data, createdAt: new Date() })),
+            update: vi.fn(async () => ({})),
+          },
+        } as any;
+      },
+    };
+    const tool = new RemindMeFunctionTool(logger, prismaStub as any);
     const caller_agent = { invoke: vi.fn(async () => undefined), getAgentNodeId: () => 'agent' };
     await tool.execute({ delayMs: 10_000, note: 'Soon' }, { threadId: 't-1', callerAgent: caller_agent, finishSignal: new Signal() });
 

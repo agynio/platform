@@ -2,7 +2,7 @@ import { Module } from '@nestjs/common';
 import { CoreModule } from '../core/core.module';
 import { ConfigService } from '../core/services/config.service';
 import { LoggerService } from '../core/services/logger.service';
-import { MongoService } from '../core/services/mongo.service';
+import { PrismaService } from '../core/services/prisma.service';
 import { VaultModule } from '../vault/vault.module';
 import { ContainerRegistry } from './container/container.registry';
 import { ContainerService } from './container/container.service';
@@ -19,13 +19,12 @@ import { ArchiveService } from './archive/archive.service';
     ArchiveService,
     {
       provide: ContainerRegistry,
-      useFactory: async (mongo: MongoService, logger: LoggerService) => {
-        const svc = new ContainerRegistry(mongo.getDb(), logger);
+      useFactory: async (prismaSvc: PrismaService, logger: LoggerService) => {
+        const svc = new ContainerRegistry(prismaSvc.getClient(), logger);
         await svc.ensureIndexes();
-
         return svc;
       },
-      inject: [MongoService, LoggerService],
+      inject: [PrismaService, LoggerService],
     },
     {
       provide: ContainerCleanupService,

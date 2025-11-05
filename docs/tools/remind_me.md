@@ -19,9 +19,16 @@ Usage
 - Effect: schedules a system message `{ kind: 'system', content: note, info: { reason: 'reminded' } }` back to the originating agent/thread.
 
 Notes
-- The registry is in-memory only; reminders disappear if the server restarts.
-- The reminder is removed from the registry when it fires (regardless of success). On node disposal, all timers are cleared and registry is emptied.
+- In-memory timers drive delivery; persistence to Postgres records scheduled reminders.
+- Persisted Reminder fields: `id` (UUID, DB PK), `threadId`, `note`, `at`, `createdAt`, `completedAt?`.
+- When a reminder fires, the DB row is updated with `completedAt` (completion is required) instead of being deleted.
+- The reminder id is the DB UUID; the active reminders registry aligns with the persisted entity shape.
+- On node disposal, all timers are cleared and registry is emptied.
 - Soft cap: a maximum of 1000 active reminders per RemindMe node is enforced. When exceeded, the tool call errors with message "Too many active reminders (max 1000)." and no timer is scheduled.
 - Error shapes for reminders endpoint:
   - 404 `{ error: 'node_not_found' }` when node does not exist.
   - 404 `{ error: 'not_remindme_node' }` when the node exists but is not a RemindMe tool.
+
+Migrations
+- Ensure `AGENTS_DATABASE_URL` is set to a Postgres connection string.
+- Run: `pnpm -w --filter @agyn/platform-server prisma:migrate`

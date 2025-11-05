@@ -95,7 +95,8 @@ export function RootLayout() {
         items: [
           { label: 'Graph', to: '/agents/graph', icon: GitBranch },
           { label: 'Chat', to: '/agents/chat', icon: MessageSquare },
-          { label: 'Threads', to: '/agents/threads', icon: MessageSquare }
+          { label: 'Threads', to: '/agents/threads', icon: MessageSquare },
+          { label: 'Reminders', to: '/agents/reminders', icon: MessageSquare }
         ]
       },
       {
@@ -224,8 +225,8 @@ export function RootLayout() {
   return (
     <div className="flex min-h-screen w-full">
       {/* Desktop sidebar */}
-      <aside className={`relative hidden md:flex`}>
-        <Sidebar className={`${collapsed ? 'w-16' : 'w-64'}`}>
+      <aside className={`hidden md:flex md:sticky md:top-0 md:h-screen md:shrink-0 md:z-10`}>
+        <Sidebar className={`${collapsed ? 'w-16' : 'w-64'} h-screen overflow-y-auto shrink-0`}>
           <SidebarInner />
         </Sidebar>
         {/* Right-border clickable collapse/expand button (desktop only) */}
@@ -239,7 +240,7 @@ export function RootLayout() {
       </aside>
 
       {/* Mobile top bar + Drawer */}
-      <div className="flex h-screen flex-1 min-w-0 flex-col overflow-hidden">
+      <div className="flex flex-1 min-w-0 flex-col">
         <div className="flex items-center gap-2 border-b px-3 py-4 md:hidden">
           <Drawer>
             <DrawerTrigger asChild>
@@ -265,7 +266,7 @@ export function RootLayout() {
         </div>
 
         {/* Main content */}
-        <main className="flex-1 min-w-0 min-h-0 overflow-hidden">
+        <main className="relative flex-1 min-w-0">
           <Outlet />
         </main>
       </div>

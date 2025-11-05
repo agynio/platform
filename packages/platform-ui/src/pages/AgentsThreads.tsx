@@ -1,10 +1,12 @@
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { RunMessageList, type UnifiedRunMessage, type UnifiedListItem, type RunMeta } from '@/components/agents/RunMessageList';
+import { ThreadTree } from '@/components/agents/ThreadTree';
+import { ThreadStatusFilterSwitch, type ThreadStatusFilter } from '@/components/agents/ThreadStatusFilterSwitch';
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3010';
 
-type ThreadItem = { id: string; alias: string; createdAt: string };
-type RunItem = { id: string; status: 'running' | 'finished' | 'terminated'; createdAt: string; updatedAt: string };
+// Thread list rendering moved into ThreadTree component
 type MessageItem = { id: string; kind: 'user' | 'assistant' | 'system' | 'tool'; text?: string | null; source: unknown; createdAt: string };
 
 async function api<T>(path: string, init?: RequestInit): Promise<T> {
@@ -15,101 +17,133 @@ async function api<T>(path: string, init?: RequestInit): Promise<T> {
 
 export function AgentsThreads() {
   const [selectedThreadId, setSelectedThreadId] = useState<string | undefined>(undefined);
-  const [selectedRunId, setSelectedRunId] = useState<string | undefined>(undefined);
+  const [statusFilter, setStatusFilter] = useState<ThreadStatusFilter>('open');
+  // No run selection in new UX (removed)
 
-  const threadsQ = useQuery({
-    queryKey: ['agents', 'threads'],
-    queryFn: async () => api<{ items: ThreadItem[] }>(`agents/threads`),
-  });
-
-  const runsQ = useQuery({
+  const runsQ = useQuery<{ items: RunMeta[] }, Error>({
     queryKey: ['agents', 'threads', selectedThreadId, 'runs'],
     enabled: !!selectedThreadId,
-    queryFn: async () => api<{ items: RunItem[] }>(`agents/threads/${selectedThreadId}/runs`),
+    queryFn: async () => api<{ items: RunMeta[] }>(`agents/threads/${selectedThreadId}/runs`),
   });
 
-  const inputQ = useQuery({
-    queryKey: ['agents', 'runs', selectedRunId, 'messages', 'input'],
-    enabled: !!selectedRunId,
-    queryFn: async () => api<{ items: MessageItem[] }>(`agents/runs/${selectedRunId}/messages?type=input`),
-  });
-  const injectedQ = useQuery({
-    queryKey: ['agents', 'runs', selectedRunId, 'messages', 'injected'],
-    enabled: !!selectedRunId,
-    queryFn: async () => api<{ items: MessageItem[] }>(`agents/runs/${selectedRunId}/messages?type=injected`),
-  });
-  const outputQ = useQuery({
-    queryKey: ['agents', 'runs', selectedRunId, 'messages', 'output'],
-    enabled: !!selectedRunId,
-    queryFn: async () => api<{ items: MessageItem[] }>(`agents/runs/${selectedRunId}/messages?type=output`),
-  });
+  const runs: RunMeta[] = useMemo(() => {
+    const list = runsQ.data?.items ?? [];
+    // sort oldest -> newest
+    return [...list].sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+  }, [runsQ.data]);
 
-  const threads = threadsQ.data?.items || [];
-  const runs = runsQ.data?.items || [];
-  const input = inputQ.data?.items || [];
-  const injected = injectedQ.data?.items || [];
-  const output = outputQ.data?.items || [];
+  // Helper to fetch all messages for a run
+  async function fetchRunMessages(runId: string): Promise<UnifiedRunMessage[]> {
+    const [input, injected, output] = await Promise.all([
+      api<{ items: MessageItem[] }>(`agents/runs/${runId}/messages?type=input`),
+      api<{ items: MessageItem[] }>(`agents/runs/${runId}/messages?type=injected`),
+      api<{ items: MessageItem[] }>(`agents/runs/${runId}/messages?type=output`),
+    ]);
+    const mark = (items: MessageItem[], side: 'left' | 'right'): UnifiedRunMessage[] =>
+      items.map((m) => ({ id: m.id, role: m.kind, text: m.text, source: m.source, createdAt: m.createdAt, side, runId }));
+    const merged = [...mark(input.items, 'left'), ...mark(injected.items, 'left'), ...mark(output.items, 'right')];
+    merged.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+    return merged;
+  }
 
-  const [showJson, setShowJson] = useState<{ [id: string]: boolean }>({});
+  // Cache runId -> messages and fetch all runs with a small concurrency cap
+  const [runMessages, setRunMessages] = useState<Record<string, UnifiedRunMessage[]>>({});
+  const [loadError, setLoadError] = useState<Error | null>(null);
+
+  // Reset cache on thread change
+  useEffect(() => {
+    setRunMessages({});
+    setLoadError(null);
+  }, [selectedThreadId]);
+
+  useEffect(() => {
+    if (!selectedThreadId || runs.length === 0) return;
+    let cancelled = false;
+    const concurrency = 3;
+    let idx = 0;
+    let active = 0;
+
+    const queue = runs.map((run) => async () => {
+      try {
+        const msgs = await fetchRunMessages(run.id);
+        if (!cancelled) setRunMessages((prev) => ({ ...prev, [run.id]: msgs }));
+      } catch (e) {
+        if (!cancelled) setLoadError(e as Error);
+      }
+    });
+
+    const kick = () => {
+      while (active < concurrency && idx < queue.length) {
+        const fn = queue[idx++];
+        active++;
+        fn().finally(() => {
+          active--;
+          if (!cancelled) kick();
+        });
+      }
+    };
+
+    kick();
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedThreadId, runs]);
+
+  const unifiedItems: UnifiedListItem[] = useMemo(() => {
+    if (!runs.length) return [];
+    const items: UnifiedListItem[] = [];
+    for (const run of runs) {
+      const msgs = runMessages[run.id] || [];
+      const start = msgs[0]?.createdAt ?? run.createdAt;
+      const end = msgs[msgs.length - 1]?.createdAt ?? run.updatedAt;
+      items.push({ type: 'run_header', run, start, end, durationMs: new Date(end).getTime() - new Date(start).getTime() });
+      for (const m of msgs) items.push({ type: 'message', message: m });
+    }
+    return items;
+  }, [runs, runMessages]);
+
+  // Per-message JSON toggle state
+  const [showJson, setShowJson] = useState<Record<string, boolean>>({});
   const toggleJson = (id: string) => setShowJson((prev) => ({ ...prev, [id]: !prev[id] }));
 
   return (
-    <div className="p-4">
-      <h1 className="text-xl font-semibold mb-3">Agents / Threads</h1>
-      <div className="grid grid-cols-3 gap-4">
-        {/* Left: threads list */}
-        <div className="col-span-1 border rounded-md p-2">
-          <div className="text-sm font-medium">Threads</div>
-          <ul className="mt-2 space-y-1">
-            {threads.map((t) => (
-              <li key={t.id}>
-                <button className={`w-full text-left px-2 py-1 rounded ${selectedThreadId === t.id ? 'bg-gray-200' : 'hover:bg-gray-100'}`} onClick={() => { setSelectedThreadId(t.id); setSelectedRunId(undefined); }}>
-                  <div className="text-sm">{t.alias}</div>
-                  <div className="text-xs text-gray-500">created {new Date(t.createdAt).toLocaleString()}</div>
-                </button>
-              </li>
-            ))}
-          </ul>
-        </div>
+    // Non-scrollable outer page; inner panels handle scroll independently
+    <div className="absolute inset-0 flex min-h-0 min-w-0 flex-col overflow-hidden">
+      {/* Header bar */}
+      <div className="shrink-0 border-b px-4 py-3">
+        <h1 className="text-xl font-semibold">Agents / Threads</h1>
+      </div>
 
-        {/* Right: runs and messages */}
-        <div className="col-span-2 border rounded-md p-2">
-          <div className="text-sm font-medium">Thread: {selectedThreadId || '(none selected)'}</div>
-          <div className="mt-2 grid grid-cols-3 gap-3">
-            {/* Runs list */}
-            <div className="col-span-1 border rounded p-2">
-              <div className="text-sm font-medium">Runs</div>
-              <ul className="mt-2 space-y-1">
-                {runs.map((r) => (
-                  <li key={r.id}>
-                    <button className={`w-full text-left px-2 py-1 rounded ${selectedRunId === r.id ? 'bg-gray-200' : 'hover:bg-gray-100'}`} onClick={() => setSelectedRunId(r.id)}>
-                      <div className="text-sm">{r.id.slice(0, 8)}… {r.status}</div>
-                      <div className="text-xs text-gray-500">{new Date(r.createdAt).toLocaleString()}</div>
-                    </button>
-                  </li>
-                ))}
-              </ul>
+      {/* Content area */}
+      <div className="flex-1 min-h-0 p-4">
+        {/* Mobile: single internally scrollable panel wrapper; desktop uses independent panel scrolls */}
+        <div className="h-full min-h-0 overflow-y-auto md:overflow-hidden" data-testid="mobile-panel">
+          <div className="flex h-full min-h-0 flex-col md:flex-row gap-4">
+            {/* Threads tree panel */}
+            <div className="flex min-h-0 w-full md:w-96 shrink-0 flex-col overflow-visible md:overflow-hidden border rounded-md" data-testid="threads-panel">
+              <div className="border-b px-2 py-2 text-sm font-medium flex items-center gap-3">
+                <span>Threads</span>
+                <ThreadStatusFilterSwitch value={statusFilter} onChange={(v) => setStatusFilter(v)} />
+              </div>
+              <div className="flex-1 md:overflow-y-auto p-2">
+                <ThreadTree status={statusFilter} onSelect={(id) => setSelectedThreadId(id)} selectedId={selectedThreadId} />
+              </div>
             </div>
 
-            {/* Messages: Input / Injected / Output */}
-            <div className="col-span-2 grid grid-cols-3 gap-3">
-              {[{ label: 'Input', items: input }, { label: 'Injected', items: injected }, { label: 'Output', items: output }].map((col) => (
-                <div key={col.label} className="border rounded p-2">
-                  <div className="text-sm font-medium">{col.label}</div>
-                  <ul className="mt-2 space-y-2">
-                    {col.items.map((m) => (
-                      <li key={m.id} className="border rounded p-2">
-                        <div className="text-xs text-gray-500">{m.kind} • {new Date(m.createdAt).toLocaleTimeString()}</div>
-                        {m.text ? <div className="text-sm mt-1">{m.text}</div> : <div className="text-xs text-gray-500">(no text)</div>}
-                        <button className="mt-2 text-xs underline" onClick={() => toggleJson(m.id)}>{showJson[m.id] ? 'Hide raw JSON' : 'Show raw JSON'}</button>
-                        {showJson[m.id] && (
-                          <pre className="mt-2 text-xs bg-gray-50 p-2 rounded overflow-x-auto">{JSON.stringify(m.source, null, 2)}</pre>
-                        )}
-                      </li>
-                    ))}
-                  </ul>
+            {/* Unified messages across all runs panel */}
+            <div className="flex h-[60vh] md:h-full min-h-0 min-w-0 md:flex-1 flex-col overflow-visible md:overflow-hidden border rounded-md" data-testid="messages-panel">
+              <div className="border-b px-2 py-2 text-sm font-medium">Thread: {selectedThreadId || '(none selected)'}</div>
+              <div className="flex-1 min-h-0 p-2">
+                <div className="h-full border rounded p-2">
+                  <RunMessageList
+                    items={unifiedItems}
+                    showJson={showJson}
+                    onToggleJson={toggleJson}
+                    isLoading={runsQ.isLoading}
+                    error={loadError}
+                  />
                 </div>
-              ))}
+              </div>
             </div>
           </div>
         </div>

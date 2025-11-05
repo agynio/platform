@@ -9,7 +9,17 @@ interface CallerAgentStub { invoke(thread: string, messages: SystemMessage[]): P
 // Helper to extract callable tool
 function getToolInstance() {
   const logger = new LoggerService();
-  const tool = new RemindMeFunctionTool(logger);
+  const prismaStub = {
+    getClient() {
+      return {
+        reminder: {
+          create: vi.fn(async (args: any) => ({ ...args.data, createdAt: new Date() })),
+          update: vi.fn(async () => ({})),
+        },
+      } as any;
+    },
+  };
+  const tool = new RemindMeFunctionTool(logger, prismaStub as any);
   return tool;
 }
 
@@ -54,8 +64,7 @@ describe('RemindMeTool', () => {
   });
 
   it('registry tracks active reminders until fired', async () => {
-    const logger = new LoggerService();
-    const tool = new RemindMeFunctionTool(logger) as any;
+    const tool = getToolInstance() as any;
     const invokeSpy = vi.fn(async (_t: string, _m: SystemMessage[]) => undefined);
     const caller_agent: CallerAgentStub = { invoke: invokeSpy };
     const cfg = { configurable: { thread_id: 't-reg', caller_agent } };
@@ -79,8 +88,7 @@ describe('RemindMeTool', () => {
   });
 
   it('destroy cancels timers and clears registry', async () => {
-    const logger = new LoggerService();
-    const tool = new RemindMeFunctionTool(logger) as any;
+    const tool = getToolInstance() as any;
     const caller_agent: CallerAgentStub = { invoke: vi.fn(async () => undefined) };
     await tool.execute({ delayMs: 10_000, note: 'X', parentThreadId: 't' } as any, { threadId: 't', callerAgent: caller_agent as any, finishSignal: { activate() {}, deactivate() {}, isActive: false } });
     expect((tool as any).getActiveReminders().length).toBe(1);
@@ -91,8 +99,7 @@ describe('RemindMeTool', () => {
   });
 
   it('enforces cap on active reminders', async () => {
-    const logger = new LoggerService();
-    const tool = new RemindMeFunctionTool(logger) as any;
+    const tool = getToolInstance() as any;
     const caller_agent: CallerAgentStub = { invoke: vi.fn(async () => undefined) };
     (tool as any).maxActive = 1;
     await tool.execute({ delayMs: 10_000, note: 'ok', parentThreadId: 't' } as any, { threadId: 't', callerAgent: caller_agent as any, finishSignal: { activate() {}, deactivate() {}, isActive: false } });

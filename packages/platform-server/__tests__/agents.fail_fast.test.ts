@@ -60,6 +60,6 @@ describe('Fail-fast behavior', () => {
     }).compile();
 
     const ctrl = await module.resolve(AgentsThreadsController);
-    await expect(ctrl.listThreads()).rejects.toBeTruthy();
+    await expect(ctrl.listThreads({} as any)).rejects.toBeTruthy();
   });
 });

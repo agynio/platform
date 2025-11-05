@@ -70,16 +70,5 @@ LiteLLM proxy (optional)
   - Server will generate a virtual key on startup and set OPENAI_API_KEY/OPENAI_BASE_URL.
 - Direct to OpenAI:
   - Set OPENAI_API_KEY=sk-<real-openai-key>; unset LITELLM_* envs.
-
-
-- Prisma client code generation
-
-Before running tests or starting the server locally, ensure Prisma client types are generated for the platform-server package.
-
-Run the following command from the repo root:
-
-```
-pnpm -C packages/platform-server prisma:generate
-```
-
-This prepares the @prisma/client artifacts used by the server and tests.
+Prisma workflow (platform-server)
+- See packages/platform-server/README.md#prisma-workflow-platform-server

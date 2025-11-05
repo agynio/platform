@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { MongoMemoryServer } from 'mongodb-memory-server';
 import { MongoClient } from 'mongodb';
-import { MemoryNode } from '../../src/graph/nodes/memory/memory.node';
+import { MemoryService } from '../../src/graph/nodes/memory.repository';
 import { LoggerService } from '../../src/core/services/logger.service';
 import { UnifiedMemoryFunctionTool as UnifiedMemoryTool } from '../../src/graph/nodes/tools/memory/memory.tool';
 
@@ -32,12 +32,13 @@ describe.skipIf(!RUN_MONGOMS)('E2E: memory tools with real MongoDB (mongodb-memo
   describe('append', () => {
     it('should store data for new path', async () => {
       const db = client.db('test');
-      const memNode = new MemoryNode(db as any, undefined as any as any);
-      memNode.init({ nodeId: 'node-1' });
-
-      const { MemoryToolNode } = require('../../src/graph/nodes/tools/memory/memory.node');
+      const { MemoryToolNode } = await import('../../src/graph/nodes/tools/memory/memory.node');
       const node = new MemoryToolNode(logger);
-      node.setMemorySource(memNode);
+      // Provide a MemoryService factory directly
+      node.setMemorySource((opts: { threadId?: string }) => {
+        const svc = new MemoryService(db as any);
+        return svc.init({ nodeId: 'node-1', scope: 'global', threadId: opts.threadId });
+      });
       const unified = node.getTool();
 
       const cfg = { threadId: 'debug' } as any;
@@ -51,12 +52,12 @@ describe.skipIf(!RUN_MONGOMS)('E2E: memory tools with real MongoDB (mongodb-memo
 
     it('should append and not overwrite existing data', async () => {
       const db = client.db('test');
-      const memNode = new MemoryNode(db as any, undefined as any as any);
-      memNode.init({ nodeId: 'node-1' });
-
-      const { MemoryToolNode } = require('../../src/graph/nodes/tools/memory/memory.node');
+      const { MemoryToolNode } = await import('../../src/graph/nodes/tools/memory/memory.node');
       const node = new MemoryToolNode(logger);
-      node.setMemorySource(memNode);
+      node.setMemorySource((opts: { threadId?: string }) => {
+        const svc = new MemoryService(db as any);
+        return svc.init({ nodeId: 'node-1', scope: 'global', threadId: opts.threadId });
+      });
       const unified = node.getTool();
 
       const cfg = { threadId: 'debug' } as any;
@@ -74,16 +75,18 @@ describe.skipIf(!RUN_MONGOMS)('E2E: memory tools with real MongoDB (mongodb-memo
   describe('list/read/update/delete', () => {
     it('should list directory entries after multiple appends', async () => {
       const db = client.db('test');
-      const memNode = new MemoryNode(db as any, undefined as any as any);
-      memNode.init({ nodeId: 'node-lrud-1' });
+      const { MemoryToolNode } = await import('../../src/graph/nodes/tools/memory/memory.node');
+      const node = new MemoryToolNode(logger);
+      node.setMemorySource((opts: { threadId?: string }) => {
+        const svc = new MemoryService(db as any);
+        return svc.init({ nodeId: 'node-lrud-1', scope: 'global', threadId: opts.threadId });
+      });
+      const unified = node.getTool();
 
-      const { MemoryToolNode } = require('../../src/graph/nodes/tools/memory/memory.node'); const node = new MemoryToolNode(logger); node.setMemorySource(memNode); const unified = node.getTool();
-      const cfg = { threadId: 'debug' } as any;
+      await unified.execute({ path: 'projects/p1', command: 'append', content: '{"name":"Alpha"}' } as any);
+      await unified.execute({ path: 'projects/p2', command: 'append', content: '{"name":"Beta"}' } as any);
 
-      await unified.invoke({ path: 'projects/p1', command: 'append', content: '{"name":"Alpha"}' }, cfg);
-      await unified.invoke({ path: 'projects/p2', command: 'append', content: '{"name":"Beta"}' }, cfg);
-
-      const listingRaw = JSON.parse(await unified.invoke({ path: 'projects', command: 'list' }, cfg) as any);
+      const listingRaw = JSON.parse(await unified.execute({ path: 'projects', command: 'list' } as any) as any);
       expect(typeof listingRaw).toBe('object');
       const names = listingRaw.result.entries.map((i: any) => i.name).sort();
       expect(names).toEqual(['p1', 'p2']);
@@ -91,11 +94,13 @@ describe.skipIf(!RUN_MONGOMS)('E2E: memory tools with real MongoDB (mongodb-memo
 
     it('should read, update occurrences, and then delete a file', async () => {
       const db = client.db('test');
-      const memNode = new MemoryNode(db as any, undefined as any as any);
-      memNode.init({ nodeId: 'node-lrud-2' });
-      const unifiedInst = new UnifiedMemoryTool(logger); unifiedInst.setMemorySource(memNode); const unified = unifiedInst.init();
-
-      const cfg = { configurable: { thread_id: 'debug' } } as any;
+      const { MemoryToolNode } = await import('../../src/graph/nodes/tools/memory/memory.node');
+      const node = new MemoryToolNode(logger);
+      node.setMemorySource((opts: { threadId?: string }) => {
+        const svc = new MemoryService(db as any);
+        return svc.init({ nodeId: 'node-lrud-2', scope: 'global', threadId: opts.threadId });
+      });
+      const unified = node.getTool();
       const targetPath = 'notes/today';
 
       await unified.execute({ path: targetPath, command: 'append', content: 'Weather is sunny. Mood: good.' } as any);

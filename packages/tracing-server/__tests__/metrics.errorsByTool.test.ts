@@ -93,14 +93,22 @@ describe.skipIf(!RUN_MONGOMS)('GET /v1/metrics/errors-by-tool', () => {
     expect(bad.statusCode).toBe(400);
     // insert docs
     const now = new Date();
+    const earlier = new Date(now.getTime() - 1000);
+    const later = new Date(now.getTime());
     await mm.db.collection('spans').insertMany([
-      { traceId: 't', spanId: 'a', label: 'L', status: 'ok', startTime: now.toISOString(), lastUpdate: new Date(now.getTime()-1000).toISOString(), completed: true, attributes: {}, events: [], rev: 0, idempotencyKeys: [], createdAt: now.toISOString(), updatedAt: now.toISOString() },
-      { traceId: 't', spanId: 'b', label: 'L', status: 'error', startTime: now.toISOString(), lastUpdate: now.toISOString(), completed: true, attributes: {}, events: [], rev: 0, idempotencyKeys: [], createdAt: now.toISOString(), updatedAt: now.toISOString() },
+      { traceId: 't', spanId: 'a', label: 'L', status: 'ok', startTime: earlier.toISOString(), lastUpdate: earlier.toISOString(), completed: true, attributes: {}, events: [], rev: 0, idempotencyKeys: [], createdAt: earlier.toISOString(), updatedAt: earlier.toISOString() },
+      { traceId: 't', spanId: 'b', label: 'L', status: 'error', startTime: later.toISOString(), lastUpdate: later.toISOString(), completed: true, attributes: {}, events: [], rev: 0, idempotencyKeys: [], createdAt: later.toISOString(), updatedAt: later.toISOString() },
     ] as any);
-    const ok = await server.inject({ method: 'GET', url: '/v1/spans?limit=1&sort=lastUpdate' });
+    const from = new Date(earlier.getTime() - 10_000).toISOString();
+    const to = new Date(later.getTime() + 10_000).toISOString();
+    const ok = await server.inject({ method: 'GET', url: `/v1/spans?limit=1&sort=startTime&from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}` });
     expect(ok.statusCode).toBe(200);
     const body = ok.json();
     expect(body.items.length).toBe(1);
-    expect(body.items[0].spanId).toBe('b');
+    // Assert sorting/limit behavior without hardcoding spanId
+    const returned = body.items[0];
+    expect(returned.label).toBe('L');
+    // Should be the most recent by startTime
+    expect(new Date(returned.startTime).toISOString()).toBe(later.toISOString());
   });
 });
