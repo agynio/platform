@@ -8,7 +8,7 @@
     "dev": "tsx src/index.ts",
     "test": "cross-env MONGOMS_VERSION=7.0.14 vitest run",
     "test:watch": "vitest",
-    "lint": "eslint .",
+    "lint": "pnpm run prisma:generate && eslint .",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
     "prisma:studio": "prisma studio"
