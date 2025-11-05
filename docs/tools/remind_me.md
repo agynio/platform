@@ -19,9 +19,9 @@ Usage
 - Effect: schedules a system message `{ kind: 'system', content: note, info: { reason: 'reminded' } }` back to the originating agent/thread.
 
 Notes
-- In-memory timers drive delivery; best-effort persistence to Postgres records scheduled reminders.
+- In-memory timers drive delivery; persistence to Postgres records scheduled reminders.
 - Persisted Reminder fields: `id` (UUID, DB PK), `threadId`, `note`, `at`, `createdAt`, `completedAt?`.
-- When a reminder fires, the DB row is updated with `completedAt` instead of being deleted.
+- When a reminder fires, the DB row is updated with `completedAt` (completion is required) instead of being deleted.
 - The runtime in-memory registry uses a separate internal id (`<threadId>:<uuid>`) for tracking; DB uses a pure UUID id.
 - On node disposal, all timers are cleared and registry is emptied.
 - Soft cap: a maximum of 1000 active reminders per RemindMe node is enforced. When exceeded, the tool call errors with message "Too many active reminders (max 1000)." and no timer is scheduled.

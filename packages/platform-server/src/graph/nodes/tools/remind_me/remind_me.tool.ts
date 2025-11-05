@@ -27,7 +27,7 @@ export class RemindMeFunctionTool extends FunctionTool<typeof remindMeInvocation
   private destroyed = false;
   private maxActive = 1000;
   private onRegistryChanged?: (count: number, updatedAtMs?: number) => void;
-  constructor(private logger: LoggerService, private prismaService?: PrismaService) {
+  constructor(private logger: LoggerService, private prismaService: PrismaService) {
     super();
   }
   get name() {
@@ -77,18 +77,10 @@ export class RemindMeFunctionTool extends FunctionTool<typeof remindMeInvocation
       this.active.delete(id);
       // Registry size decreased; notify
       this.onRegistryChanged?.(this.active.size);
-      // Attempt to mark persisted reminder as completed (best-effort)
-      if (this.prismaService) {
-        try {
-          const prisma = this.prismaService.getClient();
-          if (rec?.dbId) {
-            await prisma.reminder.update({ where: { id: rec.dbId }, data: { completedAt: new Date() } });
-          }
-        } catch (e) {
-          try {
-            logger.error('RemindMe: failed to mark reminder completed %s: %s', id, (e as Error)?.message || String(e));
-          } catch {}
-        }
+      // Mark persisted reminder as completed; surface errors
+      const prisma = this.prismaService.getClient();
+      if (rec?.dbId) {
+        await prisma.reminder.update({ where: { id: rec.dbId }, data: { completedAt: new Date() } });
       }
       try {
         const msg = HumanMessage.fromText(`Reminder: ${note}`);
@@ -101,17 +93,9 @@ export class RemindMeFunctionTool extends FunctionTool<typeof remindMeInvocation
     this.active.set(id, { timer, reminder: { id, threadId: threadId, note, at: eta }, dbId });
     // Registry size increased; notify
     this.onRegistryChanged?.(this.active.size);
-    // Attempt to persist reminder (best-effort)
-    if (this.prismaService) {
-      try {
-        const prisma = this.prismaService.getClient();
-        await prisma.reminder.create({ data: { id: dbId, threadId, note, at: etaDate, completedAt: null } });
-      } catch (e) {
-        try {
-          logger.error('RemindMe: failed to persist reminder %s: %s', id, (e as Error)?.message || String(e));
-        } catch {}
-      }
-    }
+    // Persist reminder; surface errors
+    const prisma2 = this.prismaService.getClient();
+    await prisma2.reminder.create({ data: { id: dbId, threadId, note, at: etaDate, completedAt: null } });
     return JSON.stringify({ status: 'scheduled', etaMs: delayMs, at: eta, id });
   }
 }
