@@ -1,16 +1,17 @@
-import type { PrismaClient, Prisma } from '@prisma/client';
+import type { InputJsonValue, JsonValue } from '../services/messages.serialization';
 import { Injectable } from '@nestjs/common';
+import type { PrismaClient } from '@prisma/client';
 
 export type ConversationStateRead = {
   threadId: string;
   nodeId: string;
-  state: Prisma.JsonValue;
+  state: JsonValue;
 };
 
 export type ConversationStateUpsert = {
   threadId: string;
   nodeId: string;
-  state: Prisma.InputJsonValue;
+  state: InputJsonValue;
 };
 
 @Injectable()

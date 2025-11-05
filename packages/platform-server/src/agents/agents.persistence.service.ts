@@ -1,6 +1,8 @@
 import { Injectable, Inject } from '@nestjs/common';
-import { Prisma, PrismaClient, MessageKind, RunStatus, RunMessageType } from '@prisma/client';
 import { PrismaService } from '../core/services/prisma.service';
+import { AIMessage, HumanMessage, SystemMessage, ToolCallMessage, ToolCallOutputMessage } from '@agyn/llm';
+import { toPrismaJsonValue } from '../llm/services/messages.serialization';
+import type { Prisma, RunStatus, RunMessageType, MessageKind, PrismaClient } from '@prisma/client';
 
 export type RunStartResult = { runId: string };
 
@@ -22,32 +24,41 @@ export class AgentsPersistenceService {
   }
 
   /**
-   * Ensure a thread exists with the given alias.
-   * If parentThreadId is provided and the thread is newly created, set Thread.parentId to it.
-   * Parent linkage is explicit; no alias parsing is performed.
+   * Ensure a thread exists with the given alias. When parentThreadId is provided
+   * and the thread is newly created, set Thread.parentId to it.
    */
   async ensureThread(alias: string, parentThreadId?: string | null): Promise<string> {
     const existing = await this.prisma.thread.findUnique({ where: { alias } });
     if (existing) return existing.id;
     let parentId: string | undefined = undefined;
     if (parentThreadId) {
-      // Treat provided parentThreadId as alias identifier; resolve actual DB id.
+      // Resolve provided parent alias to DB id.
       parentId = await this.ensureThreadByAlias(parentThreadId);
     }
     const created = await this.prisma.thread.create({ data: { alias, parentId } });
     return created.id;
   }
 
-  async beginRun(threadAlias: string, inputMessages: Prisma.InputJsonValue[], parentThreadId?: string | null): Promise<RunStartResult> {
-    // Explicit parent linkage when provided; otherwise ensure by alias only.
-    const threadId = await (parentThreadId ? this.ensureThread(threadAlias, parentThreadId) : this.ensureThreadByAlias(threadAlias));
-    const { runId } = await this.prisma.$transaction(async (tx) => {
-      const run = await tx.run.create({ data: { threadId, status: RunStatus.running } });
+  /**
+   * Begin a run and persist input messages. Accepts strictly typed message instances.
+   * Supports optional explicit parent thread linkage.
+   */
+  async beginRun(
+    threadAlias: string,
+    inputMessages: Array<HumanMessage | SystemMessage | AIMessage>,
+    parentThreadId?: string | null,
+  ): Promise<RunStartResult> {
+    const threadId = await (parentThreadId
+      ? this.ensureThread(threadAlias, parentThreadId)
+      : this.ensureThreadByAlias(threadAlias));
+    const { runId } = await this.prisma.$transaction(async (tx: Prisma.TransactionClient) => {
+      const run = await tx.run.create({ data: { threadId, status: 'running' as RunStatus } });
       await Promise.all(
         inputMessages.map(async (msg) => {
-          const { kind, text } = this.extractKindText(msg);
-          const created = await tx.message.create({ data: { kind, text, source: msg } });
-          await tx.runMessage.create({ data: { runId: run.id, messageId: created.id, type: RunMessageType.input } });
+          const { kind, text } = this.deriveKindTextTyped(msg);
+          const source = toPrismaJsonValue(msg.toPlain());
+          const created = await tx.message.create({ data: { kind, text, source } });
+          await tx.runMessage.create({ data: { runId: run.id, messageId: created.id, type: 'input' as RunMessageType } });
         }),
       );
       return { runId: run.id };
@@ -55,25 +66,37 @@ export class AgentsPersistenceService {
     return { runId };
   }
 
-  async recordInjected(runId: string, injectedMessages: Prisma.InputJsonValue[]): Promise<void> {
-    await this.prisma.$transaction(async (tx) => {
+  /**
+   * Persist injected messages. Only SystemMessage injections are supported.
+   */
+  async recordInjected(runId: string, injectedMessages: SystemMessage[]): Promise<void> {
+    await this.prisma.$transaction(async (tx: Prisma.TransactionClient) => {
       await Promise.all(
         injectedMessages.map(async (msg) => {
-          const { kind, text } = this.extractKindText(msg);
-          const created = await tx.message.create({ data: { kind, text, source: msg } });
-          await tx.runMessage.create({ data: { runId, messageId: created.id, type: RunMessageType.injected } });
+          const { kind, text } = this.deriveKindTextTyped(msg);
+          const source = toPrismaJsonValue(msg.toPlain());
+          const created = await tx.message.create({ data: { kind, text, source } });
+          await tx.runMessage.create({ data: { runId, messageId: created.id, type: 'injected' as RunMessageType } });
         }),
       );
     });
   }
 
-  async completeRun(runId: string, status: RunStatus, outputMessages: Prisma.InputJsonValue[]): Promise<void> {
-    await this.prisma.$transaction(async (tx) => {
+  /**
+   * Complete a run and persist output messages. Accepts strictly typed output message instances.
+   */
+  async completeRun(
+    runId: string,
+    status: RunStatus,
+    outputMessages: Array<AIMessage | ToolCallMessage | ToolCallOutputMessage>,
+  ): Promise<void> {
+    await this.prisma.$transaction(async (tx: Prisma.TransactionClient) => {
       await Promise.all(
         outputMessages.map(async (msg) => {
-          const { kind, text } = this.extractKindText(msg);
-          const created = await tx.message.create({ data: { kind, text, source: msg } });
-          await tx.runMessage.create({ data: { runId, messageId: created.id, type: RunMessageType.output } });
+          const { kind, text } = this.deriveKindTextTyped(msg);
+          const source = toPrismaJsonValue(msg.toPlain());
+          const created = await tx.message.create({ data: { kind, text, source } });
+          await tx.runMessage.create({ data: { runId, messageId: created.id, type: 'output' as RunMessageType } });
         }),
       );
       await tx.run.update({ where: { id: runId }, data: { status } });
@@ -105,46 +128,18 @@ export class AgentsPersistenceService {
     return msgs;
   }
 
-  private extractKindText(msg: Prisma.InputJsonValue): { kind: MessageKind; text: string | null } {
-    const obj = (typeof msg === 'object' && msg !== null ? (msg as Record<string, unknown>) : {});
-    const roleRaw = typeof (obj as Record<string, unknown>).role === 'string'
-      ? ((obj as Record<string, unknown>).role as string)
-      : typeof (obj as Record<string, unknown>)["role"] === 'string'
-      ? ((obj as Record<string, unknown>)["role"] as string)
-      : undefined;
-    const role = (roleRaw || ((obj as Record<string, unknown>).type === 'message' && typeof (obj as Record<string, unknown>).role === 'string' ? ((obj as Record<string, unknown>).role as string) : undefined) || 'user');
-    let kind: MessageKind;
-    switch (role) {
-      case 'assistant':
-        kind = MessageKind.assistant;
-        break;
-      case 'system':
-        kind = MessageKind.system;
-        break;
-      case 'tool':
-        kind = MessageKind.tool;
-        break;
-      default:
-        kind = MessageKind.user;
-    }
-
-    let text: string | null = null;
-    if (typeof (obj as Record<string, unknown>).text === 'string') {
-      text = ((obj as Record<string, unknown>).text as string);
-    } else {
-      const rawContent = (obj as Record<string, unknown>).content as unknown;
-      if (Array.isArray(rawContent)) {
-        const parts: string[] = [];
-        for (const c of rawContent) {
-          if (c && typeof c === 'object') {
-            const co = c as Record<string, unknown>;
-            const t = typeof co.text === 'string' ? (co.text as string) : undefined;
-            if (t) parts.push(t);
-          }
-        }
-        if (parts.length) text = parts.join('\n');
-      }
-    }
-    return { kind, text };
+  /**
+   * Strict derivation of kind/text from typed message instances.
+   */
+  private deriveKindTextTyped(
+    msg: HumanMessage | SystemMessage | AIMessage | ToolCallMessage | ToolCallOutputMessage,
+  ): { kind: MessageKind; text: string | null } {
+    if (msg instanceof HumanMessage) return { kind: 'user' as MessageKind, text: msg.text };
+    if (msg instanceof SystemMessage) return { kind: 'system' as MessageKind, text: msg.text };
+    if (msg instanceof AIMessage) return { kind: 'assistant' as MessageKind, text: msg.text };
+    if (msg instanceof ToolCallMessage) return { kind: 'tool' as MessageKind, text: `call ${msg.name}(${msg.args})` };
+    if (msg instanceof ToolCallOutputMessage) return { kind: 'tool' as MessageKind, text: msg.text };
+    // Unreachable via typing; keep fallback for safety
+    return { kind: 'user' as MessageKind, text: null };
   }
 }

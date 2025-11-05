@@ -1,13 +1,13 @@
 import { Reducer } from '@agyn/llm';
 import type { LLMContext, LLMState } from '../types';
 import { HumanMessage, ResponseMessage, SystemMessage, ToolCallOutputMessage } from '@agyn/llm';
-import type { Prisma } from '@prisma/client';
+import type { JsonValue, InputJsonValue } from '../services/messages.serialization';
 import type { ResponseInputItem, Response } from 'openai/resources/responses/responses.mjs';
 import { toPrismaJsonValue } from '../services/messages.serialization';
 
 type PlainMessage = {
   kind: 'human' | 'system' | 'response' | 'tool_call_output';
-  value: Prisma.InputJsonValue | null;
+  value: InputJsonValue | null;
 };
 
 type PlainLLMState = {
@@ -29,7 +29,7 @@ export abstract class PersistenceBaseLLMReducer extends Reducer<LLMState, LLMCon
     return { messages, summary: state.summary };
   }
 
-  protected deserializeState(plain: Prisma.JsonValue): LLMState {
+  protected deserializeState(plain: JsonValue): LLMState {
     if (!this.isPlainLLMState(plain)) return { messages: [], summary: undefined };
     const p: PlainLLMState = plain;
     const messages = p.messages.map((msg) => {

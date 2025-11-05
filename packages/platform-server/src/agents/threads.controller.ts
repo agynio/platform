@@ -1,10 +1,12 @@
 import { Controller, Get, Inject, Param, Query } from '@nestjs/common';
-import { IsEnum } from 'class-validator';
+import { IsIn } from 'class-validator';
 import { AgentsPersistenceService } from './agents.persistence.service';
 import { RunMessageType } from '@prisma/client';
 
+export const RunMessageTypeValues: ReadonlyArray<RunMessageType> = Object.values(RunMessageType);
+
 export class ListRunMessagesQueryDto {
-  @IsEnum(RunMessageType)
+  @IsIn(RunMessageTypeValues)
   type!: RunMessageType;
 }
 
