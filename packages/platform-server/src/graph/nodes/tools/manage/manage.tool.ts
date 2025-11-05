@@ -4,6 +4,7 @@ import { FunctionTool, HumanMessage } from '@agyn/llm';
 import { ManageToolNode } from './manage.node';
 import { LoggerService } from '../../../../core/services/logger.service';
 import { Inject, Injectable, Scope } from '@nestjs/common';
+import { AgentsPersistenceService } from '../../../../agents/agents.persistence.service';
 type TriggerMessage = { content: string; info?: Record<string, unknown> };
 
 export const ManageInvocationSchema = z
@@ -11,7 +12,7 @@ export const ManageInvocationSchema = z
     command: z.enum(['list', 'send_message', 'check_status']).describe('Command to execute.'),
     worker: z.string().min(1).optional().describe('Target worker name (required for send_message).'),
     message: z.string().min(1).optional().describe('Message to send (required for send_message).'),
-    parentThreadId: z.string().min(1).describe('Parent thread id (base thread for task coordination).'),
+    threadAlias: z.string().min(1).optional().describe('Optional child thread alias (defaults to worker name).'),
   })
   .strict();
 
@@ -19,7 +20,7 @@ export const ManageInvocationSchema = z
 export class ManageFunctionTool extends FunctionTool<typeof ManageInvocationSchema> {
   private _node?: ManageToolNode;
 
-  constructor(@Inject(LoggerService) private readonly logger: LoggerService) {
+  constructor(@Inject(LoggerService) private readonly logger: LoggerService, @Inject(AgentsPersistenceService) private readonly persistence: AgentsPersistenceService) {
     super();
   }
 
@@ -43,9 +44,10 @@ export class ManageFunctionTool extends FunctionTool<typeof ManageInvocationSche
     return this.node.config.description ?? 'Manage tool';
   }
 
-  async execute(args: z.infer<typeof ManageInvocationSchema>): Promise<string> {
-    const { command, worker, message, parentThreadId } = args;
-    if (!parentThreadId) throw new Error('parentThreadId is required');
+  async execute(args: z.infer<typeof ManageInvocationSchema>, ctx?: { threadId?: string }): Promise<string> {
+    const { command, worker, message, threadAlias } = args;
+    const parentThreadId = ctx?.threadId;
+    if (!parentThreadId) throw new Error('threadId is required in context');
     const workers = this.node.listWorkers();
 
     if (command === 'list') {
@@ -56,9 +58,10 @@ export class ManageFunctionTool extends FunctionTool<typeof ManageInvocationSche
       if (!worker || !message) throw new Error('worker and message are required for send_message');
       const target = workers.find((w) => w.name === worker);
       if (!target) throw new Error(`Unknown worker: ${worker}`);
-      const childThreadId = `${parentThreadId}__${target.name}`;
+      const alias = threadAlias ?? target.name;
+      const childThreadId = await this.persistence.getOrCreateSubthreadByAlias('manage', alias, parentThreadId);
       try {
-        const res = await target.agent.invoke(childThreadId, [HumanMessage.fromText(message)], parentThreadId);
+        const res = await target.agent.invoke(childThreadId, [HumanMessage.fromText(message)]);
         return res?.text;
       } catch (err: unknown) {
         this.logger.error('Manage: send_message failed', {

@@ -1,11 +1,11 @@
 import { Body, Controller, Get, Inject, Param, Patch, Query } from '@nestjs/common';
 import { IsBooleanString, IsIn, IsInt, IsOptional, IsString, Max, Min, ValidateIf } from 'class-validator';
 import { AgentsPersistenceService } from './agents.persistence.service';
-import { RunMessageType } from '@prisma/client';
-import type { ThreadStatus } from '@prisma/client';
 import { Transform } from 'class-transformer';
+import type { RunMessageType, ThreadStatus } from '@prisma/client';
 
-export const RunMessageTypeValues: ReadonlyArray<RunMessageType> = Object.values(RunMessageType);
+// Avoid runtime import of Prisma in tests; enumerate allowed values
+export const RunMessageTypeValues: ReadonlyArray<RunMessageType> = ['input', 'injected', 'output'];
 
 export class ListRunMessagesQueryDto {
   @IsIn(RunMessageTypeValues)

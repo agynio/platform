@@ -27,7 +27,7 @@ class NoToolAgent extends AgentNode {
 describe('Agent busy gating (wait mode)', () => {
   it('does not start a new loop while running; schedules next after finish', async () => {
     const module = await Test.createTestingModule({
-      providers: [LoggerService, ConfigService, { provide: LLMProvisioner, useValue: {} }, NoToolAgent, { provide: AgentsPersistenceService, useValue: { beginRun: async () => ({ runId: 't' }), recordInjected: async () => {}, completeRun: async () => {} } }],
+      providers: [LoggerService, ConfigService, { provide: LLMProvisioner, useValue: {} }, NoToolAgent, { provide: AgentsPersistenceService, useValue: { beginRunThread: async () => ({ runId: 't' }), recordInjected: async () => {}, completeRun: async () => {} } }],
     }).compile();
     const agent = await module.resolve(NoToolAgent);
     await agent.setConfig({ whenBusy: 'wait' });

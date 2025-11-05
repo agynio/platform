@@ -2,45 +2,42 @@ import { describe, it, expect } from 'vitest';
 import { AgentsPersistenceService } from '../src/agents/agents.persistence.service';
 import { createPrismaStub, StubPrismaService } from './helpers/prisma.stub';
 
-describe('AgentsPersistenceService.ensureThread (explicit parentThreadId)', () => {
-  it('creates a root thread when no parentThreadId provided', async () => {
+describe('AgentsPersistenceService: alias resolution helpers', () => {
+  it('getOrCreateThreadByAlias creates a root thread', async () => {
     const stub = createPrismaStub();
     const svc = new AgentsPersistenceService(new StubPrismaService(stub));
-    const id = await svc.ensureThread('root');
+    const id = await svc.getOrCreateThreadByAlias('test', 'root');
     expect(typeof id).toBe('string');
     expect(stub._store.threads.length).toBe(1);
     expect(stub._store.threads[0].alias).toBe('root');
     expect(stub._store.threads[0].parentId).toBeNull();
   });
 
-  it('creates child thread and sets parentId when parentThreadId provided', async () => {
+  it('getOrCreateSubthreadByAlias creates child thread under parent and sets parentId', async () => {
     const stub = createPrismaStub();
     const svc = new AgentsPersistenceService(new StubPrismaService(stub));
-    const parentAlias = 'parentA';
-    const parentId = await svc.ensureThread(parentAlias);
-    const childId = await svc.ensureThread('parentA__child1', parentAlias);
+    const parentId = await svc.getOrCreateThreadByAlias('test', 'parentA');
+    const childId = await svc.getOrCreateSubthreadByAlias('manage', 'child1', parentId);
     expect(typeof childId).toBe('string');
     expect(stub._store.threads.length).toBe(2);
     const parent = stub._store.threads.find((t: any) => t.alias === 'parentA');
-    const child = stub._store.threads.find((t: any) => t.alias === 'parentA__child1');
+    const child = stub._store.threads.find((t: any) => t.parentId === parent.id);
     expect(parent).toBeTruthy();
     expect(child).toBeTruthy();
     expect(child.parentId).toBe(parent.id);
   });
 
-  it('supports nested subthreads via explicit parent passing', async () => {
+  it('supports nested subthreads via explicit parent linkage', async () => {
     const stub = createPrismaStub();
     const svc = new AgentsPersistenceService(new StubPrismaService(stub));
-    const parentAlias = 'parentB';
-    const parentId = await svc.ensureThread(parentAlias);
-    const childAlias = 'parentB__child2';
-    const childId = await svc.ensureThread(childAlias, parentAlias);
-    const leafId = await svc.ensureThread('parentB__child2__leafX', childAlias);
+    const parentId = await svc.getOrCreateThreadByAlias('test', 'parentB');
+    const childId = await svc.getOrCreateSubthreadByAlias('manage', 'child2', parentId);
+    const leafId = await svc.getOrCreateSubthreadByAlias('manage', 'leafX', childId);
     expect(typeof leafId).toBe('string');
     expect(stub._store.threads.length).toBe(3);
     const parent = stub._store.threads.find((t: any) => t.alias === 'parentB');
-    const child = stub._store.threads.find((t: any) => t.alias === 'parentB__child2');
-    const leaf = stub._store.threads.find((t: any) => t.alias === 'parentB__child2__leafX');
+    const child = stub._store.threads.find((t: any) => t.parentId === parent.id);
+    const leaf = stub._store.threads.find((t: any) => t.parentId === child.id);
     expect(parent).toBeTruthy();
     expect(child).toBeTruthy();
     expect(leaf).toBeTruthy();
@@ -48,21 +45,14 @@ describe('AgentsPersistenceService.ensureThread (explicit parentThreadId)', () =
     expect(leaf.parentId).toBe(child.id);
   });
 
-  it('is idempotent for existing alias (ignores parentThreadId)', async () => {
+  it('getOrCreateThreadByAlias is idempotent for existing alias', async () => {
     const stub = createPrismaStub();
     const svc = new AgentsPersistenceService(new StubPrismaService(stub));
-    const aAlias = 'A';
-    const aId = await svc.ensureThread(aAlias);
-    const abAlias = 'A__B';
-    const abId = await svc.ensureThread(abAlias, aAlias);
-    const abcId1 = await svc.ensureThread('A__B__C', abAlias);
-    const abcId2 = await svc.ensureThread('A__B__C', abAlias);
-    expect(abcId1).toBe(abcId2);
-    expect(stub._store.threads.length).toBe(3);
-    const a = stub._store.threads.find((t: any) => t.alias === 'A');
-    const ab = stub._store.threads.find((t: any) => t.alias === 'A__B');
-    const abc = stub._store.threads.find((t: any) => t.alias === 'A__B__C');
-    expect(ab.parentId).toBe(a.id);
-    expect(abc.parentId).toBe(ab.id);
+    const aId1 = await svc.getOrCreateThreadByAlias('test', 'A');
+    const aId2 = await svc.getOrCreateThreadByAlias('test', 'A');
+    expect(aId1).toBe(aId2);
+    const childId1 = await svc.getOrCreateSubthreadByAlias('manage', 'B', aId1);
+    const childId2 = await svc.getOrCreateSubthreadByAlias('manage', 'B', aId1);
+    expect(childId1).toBe(childId2);
   });
 });

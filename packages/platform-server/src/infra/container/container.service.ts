@@ -190,8 +190,8 @@ export class ContainerService {
       try {
         const labels = inspect.Config?.Labels || {};
         if (labels['hautech.ai/role'] === 'workspace') {
-          const combined = labels['hautech.ai/thread_id'] || '';
-          const [nodeId, threadId] = combined.includes('__') ? combined.split('__', 2) : ['unknown', combined];
+          const nodeId = labels['hautech.ai/node_id'] || 'unknown';
+          const threadId = labels['hautech.ai/thread_id'] || '';
           await this.registry.registerStart({
             containerId: inspect.Id,
             nodeId,
@@ -690,9 +690,9 @@ export class ContainerService {
         try {
           const labels = await this.getContainerLabels(item.id);
           if (labels && labels['hautech.ai/role'] !== 'workspace') return;
-          const thread = labels?.['hautech.ai/thread_id'] || '';
-          const [nodeId, threadId] = thread.includes('__') ? thread.split('__', 2) : ['unknown', thread];
-          const inspect = await this.docker.getContainer(item.id).inspect();
+      const nodeId = labels?.['hautech.ai/node_id'] || 'unknown';
+      const threadId = labels?.['hautech.ai/thread_id'] || '';
+      const inspect = await this.docker.getContainer(item.id).inspect();
           // created retained for future use; eslint-disable to prevent warning
           // eslint-disable-next-line @typescript-eslint/no-unused-vars
           const created = inspect?.Created ? new Date(inspect.Created).toISOString() : nowIso;

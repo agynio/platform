@@ -46,7 +46,7 @@ describe('LiveGraphRuntime -> Agent config propagation', () => {
         { provide: MongoService, useClass: StubMongoService },
         { provide: LLMProvisioner, useClass: StubLLMProvisioner },
         { provide: ContainerRegistry, useValue: { updateLastUsed: async () => {}, registerStart: async () => {}, markStopped: async () => {} } },
-        { provide: AgentsPersistenceService, useValue: { beginRun: async () => ({ runId: 't' }), recordInjected: async () => {}, completeRun: async () => {} } },
+        { provide: AgentsPersistenceService, useValue: { beginRunThread: async () => ({ runId: 't' }), recordInjected: async () => {}, completeRun: async () => {} } },
       ],
     })
       .compile()

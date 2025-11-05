@@ -26,7 +26,7 @@ describe('Fail-fast behavior', () => {
         {
           provide: AgentsPersistenceService,
           useValue: {
-            beginRun: async () => { throw new Error('persistence_fail'); },
+            beginRunThread: async () => { throw new Error('persistence_fail'); },
             recordInjected: async () => {},
             completeRun: async () => {},
           },

@@ -253,7 +253,7 @@ export class AgentNode extends Node<AgentStaticConfig> {
     const loop = new Loop<LLMState, LLMContext>(reducers);
     return loop;
   }
-  async invoke(thread: string, messages: BufferMessage[], parentThreadId?: string | null): Promise<ResponseMessage | ToolCallOutputMessage> {
+  async invoke(thread: string, messages: BufferMessage[]): Promise<ResponseMessage | ToolCallOutputMessage> {
     this.buffer.setDebounceMs(this.config.debounceMs ?? 0);
     const busy = this.runningThreads.has(thread);
     if (busy) {
@@ -266,8 +266,8 @@ export class AgentNode extends Node<AgentStaticConfig> {
     // Begin run deterministically; persistence must succeed or throw
     let runId: string | undefined;
     try {
-      // Begin run with strictly-typed input messages; support optional parent linkage
-      const started = await this.persistence.beginRun(thread, messages, parentThreadId);
+      // Begin run with strictly-typed input messages for persistent threadId
+      const started = await this.persistence.beginRunThread(thread, messages);
       runId = started.runId;
 
       result = await withAgent(
