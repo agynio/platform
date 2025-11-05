@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import Fastify from 'fastify';
-import { ContainersController } from '../src/infra/container/containers.controller';
+import { ContainersController, ListContainersQueryDto } from '../src/infra/container/containers.controller';
 
 type Row = {
   containerId: string;
@@ -52,7 +52,25 @@ describe('ContainersController routes', () => {
   beforeEach(async () => {
     fastify = Fastify({ logger: false }); prismaSvc = new PrismaStub();
     controller = new ContainersController(prismaSvc as any);
-    fastify.get('/api/containers', async (req, res) => res.send(await controller.list(req.query as any)));
+    // Typed query adapter to avoid any/double assertions
+    const isStatus = (v: unknown): v is 'running' | 'stopped' | 'terminating' | 'failed' =>
+      typeof v === 'string' && ['running', 'stopped', 'terminating', 'failed'].includes(v);
+    const isSortBy = (v: unknown): v is 'lastUsedAt' | 'startedAt' | 'killAfterAt' =>
+      typeof v === 'string' && ['lastUsedAt', 'startedAt', 'killAfterAt'].includes(v);
+    const isSortDir = (v: unknown): v is 'asc' | 'desc' => typeof v === 'string' && ['asc', 'desc'].includes(v);
+    fastify.get('/api/containers', async (req, res) => {
+      const q = (req as { query?: Record<string, unknown> }).query || {};
+      const dto: ListContainersQueryDto = {
+        status: isStatus(q.status) ? q.status : undefined,
+        threadId: typeof q.threadId === 'string' ? q.threadId : undefined,
+        image: typeof q.image === 'string' ? q.image : undefined,
+        nodeId: typeof q.nodeId === 'string' ? q.nodeId : undefined,
+        sortBy: isSortBy(q.sortBy) ? q.sortBy : undefined,
+        sortDir: isSortDir(q.sortDir) ? q.sortDir : undefined,
+        limit: typeof q.limit === 'string' ? Number(q.limit) : undefined,
+      };
+      return res.send(await controller.list(dto));
+    });
     // seed data
     const now = Date.now();
     const mk = (i: number, status: Row['status'], threadId: string | null): Row => ({
@@ -65,32 +83,34 @@ describe('ContainersController routes', () => {
       killAfterAt: i % 2 === 0 ? new Date(now + 10000 + i) : null,
     });
     const rows: Row[] = [mk(1, 'running', '11111111-1111-1111-1111-111111111111'), mk(2, 'running', null), mk(3, 'stopped', null)];
-    (prismaSvc.client.container.rows as Row[]) = rows;
+    prismaSvc.client.container.rows = rows;
   });
 
   it('lists running containers by default and maps startedAt', async () => {
     const res = await fastify.inject({ method: 'GET', url: '/api/containers' }); expect(res.statusCode).toBe(200);
-    const body = res.json();
-    const items = body.items as Array<{ status: string; startedAt: string; lastUsedAt: string; containerId: string }>;
+    type ContainerTestItem = { containerId: string; threadId: string | null; image: string; status: string; startedAt: string; lastUsedAt: string; killAfterAt: string | null };
+    type ListResponse = { items: ContainerTestItem[] };
+    const body = res.json() as ListResponse;
+    const items = body.items;
     // default filter excludes stopped
     expect(items.every((i) => i.status === 'running')).toBe(true);
     // startedAt should exist and be derived from createdAt
     const first = items[0]; expect(typeof first.startedAt).toBe('string'); expect(typeof first.lastUsedAt).toBe('string');
     // verify mapping equals underlying createdAt ISO
-    const src = (prismaSvc.client.container.rows as Row[]).find((r) => r.containerId === first.containerId)!;
+    const src = prismaSvc.client.container.rows.find((r) => r.containerId === first.containerId)!;
     expect(first.startedAt).toBe(src.createdAt.toISOString());
   });
 
   it('supports sorting by lastUsedAt desc', async () => {
     const res = await fastify.inject({ method: 'GET', url: '/api/containers?sortBy=lastUsedAt&sortDir=desc' }); expect(res.statusCode).toBe(200);
-    const items = res.json().items as Array<{ containerId: string }>;
+    const items = (res.json() as { items: Array<{ containerId: string }> }).items;
     // mk(1) has lastUsedAt newer than mk(2)
     expect(items[0].containerId).toBe('cid-1');
   });
 
   it('filters by threadId when provided', async () => {
     const res = await fastify.inject({ method: 'GET', url: '/api/containers?threadId=11111111-1111-1111-1111-111111111111' }); expect(res.statusCode).toBe(200);
-    const items = res.json().items as Array<{ threadId: string | null }>;
+    const items = (res.json() as { items: Array<{ threadId: string | null }> }).items;
     expect(items.length).toBe(1);
     expect(items[0].threadId).toBe('11111111-1111-1111-1111-111111111111');
   });
@@ -107,10 +127,10 @@ describe('ContainersController routes', () => {
       lastUsedAt: new Date(now - i * 1000),
       killAfterAt: null,
     });
-    (prismaSvc.client.container.rows as Row[]).push(mkRun(4), mkRun(5), mkRun(6));
+    prismaSvc.client.container.rows.push(mkRun(4), mkRun(5), mkRun(6));
     const res = await fastify.inject({ method: 'GET', url: '/api/containers?limit=1' });
     expect(res.statusCode).toBe(200);
-    const items = res.json().items as Array<{ containerId: string }>;
+    const items = (res.json() as { items: Array<{ containerId: string }> }).items;
     expect(items.length).toBe(1);
   });
 });
