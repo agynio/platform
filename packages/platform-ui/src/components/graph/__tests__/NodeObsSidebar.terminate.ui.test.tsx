@@ -24,8 +24,8 @@ describe('NodeObsSidebar terminate UI behavior', () => {
     // @ts-expect-error test override
     window.confirm = () => true;
     const node: any = { id: 'agent-1', data: { template: 'agent' } };
-    const { ObsUiProvider } = await import('../../../../../tracing-ui/src/context/ObsUiProvider');
-    await act(async () => { render(<ObsUiProvider serverUrl="http://localhost:4319"><NodeObsSidebar node={node} /></ObsUiProvider>); });
+    const { TracingProvider } = await import('../../../../../tracing-ui/src/context/TracingProvider');
+    await act(async () => { render(<TracingProvider serverUrl="http://localhost:4319"><NodeObsSidebar node={node} /></TracingProvider>); });
     expect(await screen.findByText('Active Runs')).toBeInTheDocument();
     const btn = await screen.findByText('Terminate');
     expect(btn).toBeEnabled();

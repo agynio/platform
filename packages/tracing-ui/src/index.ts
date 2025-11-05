@@ -1,4 +1,4 @@
-export { ObsUiProvider } from './context/ObsUiProvider';
+export { TracingProvider } from './context/TracingProvider';
 export type { TracingTracesViewProps } from './views/TracingTracesView';
 export { TracingTracesView } from './views/TracingTracesView';
 export type { TracingErrorsViewProps } from './views/TracingErrorsView';
@@ -8,4 +8,3 @@ export { ToolErrorsView } from './views/ToolErrorsView';
 export { TraceDetailView } from './views/TraceDetailView';
 export { ThreadView } from './views/ThreadView';
 export * from './types';
-

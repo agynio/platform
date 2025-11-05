@@ -2,7 +2,7 @@ import React from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, within } from '@testing-library/react';
 import { TracePage } from '../pages/TracePage';
-import { ObsUiProvider } from '../../src/context/ObsUiProvider';
+import { TracingProvider } from '../../src/context/TracingProvider';
 import { MemoryRouter } from 'react-router-dom';
 
 vi.mock('../services/api', () => ({
@@ -21,7 +21,7 @@ vi.mock('react-router-dom', async (orig) => {
 describe('TracePage', () => {
   beforeEach(() => { vi.clearAllMocks(); });
   it('renders timeline then span details after click', async () => {
-    const { container } = render(<ObsUiProvider serverUrl="http://localhost:4319"><MemoryRouter><TracePage /></MemoryRouter></ObsUiProvider>);
+    const { container } = render(<TracingProvider serverUrl="http://localhost:4319"><MemoryRouter><TracePage /></MemoryRouter></TracingProvider>);
     // Use test ids on the trace page layout
     const root = await within(container).findByTestId('obsui-trace-root');
     const left = await within(container).findByTestId('obsui-trace-left');

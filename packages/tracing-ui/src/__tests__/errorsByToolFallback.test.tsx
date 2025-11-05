@@ -3,7 +3,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter, Routes, Route } from 'react-router-dom';
 import { ErrorsByToolPage } from '../pages/ErrorsByToolPage';
-import { ObsUiProvider } from '../../src/context/ObsUiProvider';
+import { TracingProvider } from '../../src/context/TracingProvider';
 
 describe('ErrorsByToolPage fallback when metrics 404', () => {
   const origFetch = global.fetch as any;
@@ -34,11 +34,11 @@ describe('ErrorsByToolPage fallback when metrics 404', () => {
 
   it('aggregates client-side when metrics endpoint missing', async () => {
     render(
-      <ObsUiProvider serverUrl="http://localhost:4319"><MemoryRouter initialEntries={[`/errors/tools`]}> 
+      <TracingProvider serverUrl="http://localhost:4319"><MemoryRouter initialEntries={[`/errors/tools`]}> 
         <Routes>
           <Route path="/errors/tools" element={<ErrorsByToolPage />} />
         </Routes>
-      </MemoryRouter></ObsUiProvider>
+      </MemoryRouter></TracingProvider>
     );
     // Should show weather with count 2; scope to the table via test id
     const table = await screen.findByTestId('obsui-errors-table');

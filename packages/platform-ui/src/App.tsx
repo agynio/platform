@@ -14,7 +14,8 @@ import { AgentsThreads } from './pages/AgentsThreads';
 import { AgentsReminders } from './pages/AgentsReminders';
 import { TracingTraces } from './pages/TracingTraces';
 import { TracingErrors } from './pages/TracingErrors';
-import { ObsUiProvider, TraceDetailView, ThreadView, ToolErrorsView } from '@agyn/tracing-ui';
+import { TracingProvider, TraceDetailView, ThreadView, ToolErrorsView } from '@agyn/tracing-ui';
+import { config } from './config';
 import { useParams, useSearchParams } from 'react-router-dom';
 import { MonitoringContainers } from './pages/MonitoringContainers';
 import { MonitoringResources } from './pages/MonitoringResources';
@@ -63,16 +64,16 @@ function App() {
 
 export default App;
 
-// Standardized env var for tracing server base
-const serverUrl = import.meta.env.VITE_TRACING_SERVER_URL as string | undefined;
+// Centralized env var for tracing server base
+const serverUrl = config.tracing.serverUrl;
 
 function TraceDetailRoute() {
   const params = useParams();
   if (!serverUrl) return <div className="p-4 text-sm">Tracing server URL not configured. Set VITE_TRACING_SERVER_URL.</div>;
   return (
-    <ObsUiProvider serverUrl={serverUrl}>
+    <TracingProvider serverUrl={serverUrl}>
       <TraceDetailView traceId={params.traceId!} />
-    </ObsUiProvider>
+    </TracingProvider>
   );
 }
 
@@ -80,9 +81,9 @@ function ThreadRoute() {
   const params = useParams();
   if (!serverUrl) return <div className="p-4 text-sm">Tracing server URL not configured. Set VITE_TRACING_SERVER_URL.</div>;
   return (
-    <ObsUiProvider serverUrl={serverUrl}>
+    <TracingProvider serverUrl={serverUrl}>
       <ThreadView threadId={params.threadId!} />
-    </ObsUiProvider>
+    </TracingProvider>
   );
 }
 
@@ -93,8 +94,8 @@ function ToolErrorsRoute() {
   const to = sp.get('to') || new Date().toISOString();
   if (!serverUrl) return <div className="p-4 text-sm">Tracing server URL not configured. Set VITE_TRACING_SERVER_URL.</div>;
   return (
-    <ObsUiProvider serverUrl={serverUrl}>
+    <TracingProvider serverUrl={serverUrl}>
       <ToolErrorsView label={decodeURIComponent(params.label!)} range={{ from, to }} />
-    </ObsUiProvider>
+    </TracingProvider>
   );
 }
