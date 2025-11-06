@@ -1,3 +1,4 @@
+// CI trigger: no-op comment to touch UI file
 import { io, type Socket } from 'socket.io-client';
 import type { NodeStatusEvent, ReminderCountEvent } from './types';
 
