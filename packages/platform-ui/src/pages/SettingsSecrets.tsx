@@ -5,16 +5,6 @@ import { VaultWriteModal } from '@/components/graph/form/VaultWriteModal';
 import { secretsApi, type SummaryItem } from '@/api/modules/secrets';
 import { notifyError } from '@/lib/notify';
 
-function useAdminToken(): [string, (v: string) => void] {
-  const [tok, setTok] = useState<string>(() => {
-    try { return localStorage.getItem('X-Admin-Token') || ''; } catch { return ''; }
-  });
-  function setToken(v: string) {
-    setTok(v);
-    try { if (v) localStorage.setItem("X-Admin-Token", v); else localStorage.removeItem("X-Admin-Token"); } catch { /* ignore */ }
-  }
-}
-
 export function SettingsSecrets() {
   const qc = useQueryClient();
   const [filter, setFilter] = useState<'used' | 'missing' | 'all'>('all');
@@ -22,7 +12,7 @@ export function SettingsSecrets() {
   const pageSize = 50;
   const [mount, setMount] = useState<string>('');
   const [pathPrefix, setPathPrefix] = useState<string>('');
-  const [adminToken, setAdminToken] = useAdminToken();
+  const [adminToken, setAdminToken] = useState<string>(() => { try { return localStorage.getItem('X-Admin-Token') || ''; } catch { return ''; } });
   const [editing, setEditing] = useState<{ mount: string; path: string; key: string } | null>(null);
 
   const queryKey = useMemo(() => ['secrets', 'summary', { filter, page, pageSize, mount, pathPrefix }], [filter, page, pageSize, mount, pathPrefix]);
@@ -46,7 +36,7 @@ export function SettingsSecrets() {
           <Input placeholder="Path prefix (optional)" value={pathPrefix} onChange={(e) => { setPathPrefix(e.target.value); setPage(1); }} />
         </div>
         <div className="ml-auto flex items-center gap-1">
-          <Input placeholder="Admin token (optional)" type="password" value={adminToken} onChange={(e) => setAdminToken(e.target.value)} />
+          <Input placeholder="Admin token (optional)" type="password" value={adminToken} onChange={(e) => { const v = e.target.value; setAdminToken(v); try { if (v) localStorage.setItem('X-Admin-Token', v); else localStorage.removeItem('X-Admin-Token'); } catch {  />
         </div>
       </div>
 
