@@ -2,6 +2,7 @@
 // - getApiBase(override?): resolve API base URL
 // - buildUrl(path, base?): join base with normalized path
 // - httpJson<T>(path, init?, base?): fetch JSON with sane defaults
+
 // No direct dependency on app config to keep tests stable
 function readViteEnv(): Record<string, string | undefined> | undefined {
   try {
@@ -37,7 +38,10 @@ export function getApiBase(override?: string): string {
   if (viteBase) return viteBase;
   const nodeBase = ne?.API_BASE_URL;
   if (nodeBase) return nodeBase;
-  throw new Error('API base not configured');
+  // Vitest: allow relative URLs
+  if (ne?.VITEST) return '';
+  // Dev default
+  return 'http://localhost:3010';
 }
 
 export function buildUrl(path: string, base?: string): string {

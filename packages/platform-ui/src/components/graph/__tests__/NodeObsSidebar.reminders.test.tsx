@@ -2,6 +2,7 @@
 import React from 'react';
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
+import { MemoryRouter } from 'react-router-dom';
 import { NodeTracingSidebar } from '../NodeTracingSidebar';
 
 vi.mock('../../../lib/graph/templates.provider', () => ({
@@ -27,7 +28,7 @@ describe('NodeObsSidebar Active Reminders', () => {
   const node: any = { id: 'n1', data: { template: 'remindMeTool', config: {} } };
 
   it('renders Active Reminders section and items', async () => {
-    render(<NodeTracingSidebar node={node} />);
+    render(<MemoryRouter><NodeTracingSidebar node={node} /></MemoryRouter>);
     expect(screen.getByText('Active Reminders')).toBeInTheDocument();
     expect(screen.getByText('Check back')).toBeInTheDocument();
     // Thread id appears inside an aria-label and split text; use label to assert
@@ -36,7 +37,7 @@ describe('NodeObsSidebar Active Reminders', () => {
 
   it('shows error state when hook errors', async () => {
     useNodeRemindersImpl = () => ({ isLoading: false, error: new Error('boom') });
-    render(<NodeTracingSidebar node={node} />);
+    render(<MemoryRouter><NodeTracingSidebar node={node} /></MemoryRouter>);
     expect(await screen.findByRole('alert')).toBeInTheDocument();
   });
 });

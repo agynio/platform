@@ -38,9 +38,9 @@ describe('apiClient base URL resolution', () => {
   });
 
 
-  it('throws when no envs configured and no override', async () => {
+  it('returns empty string in Vitest when no envs configured and no override', async () => {
     const { getApiBase } = await importFresh();
-    expect(() => getApiBase()).toThrowError(/API base not configured/);
+    expect(getApiBase()).toBe('');
   });
 });
 

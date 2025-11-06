@@ -1,10 +1,8 @@
 // Centralized environment configuration for platform-ui
-// Provides resolved bases for API and Tracing services without side effects.
+// Minimal configuration: API base URL only (tracing config removed).
 
 type ViteEnv = {
   VITE_API_BASE_URL?: string;
-  VITE_TRACING_SERVER_URL?: string;
-  VITE_TRACING_UI_BASE?: string;
 };
 
 function readViteEnv(): ViteEnv | undefined {
@@ -50,20 +48,6 @@ function resolveApiBase(): string {
   return 'http://localhost:3010';
 }
 
-function resolveTracingServer(): string | undefined {
-  // Precedence: VITE_TRACING_SERVER_URL -> TRACING_SERVER_URL -> default
-  return ve?.VITE_TRACING_SERVER_URL || ne?.TRACING_SERVER_URL || 'http://localhost:4319';
-}
-
-function resolveTracingUiBase(): string | undefined {
-  // Precedence: VITE_TRACING_UI_BASE -> TRACING_UI_BASE -> default
-  return ve?.VITE_TRACING_UI_BASE || ne?.TRACING_UI_BASE || 'http://localhost:4320';
-}
-
 export const config = {
   apiBaseUrl: resolveApiBase(),
-  tracing: {
-    serverUrl: resolveTracingServer(),
-    uiBase: resolveTracingUiBase(),
-  },
 };
