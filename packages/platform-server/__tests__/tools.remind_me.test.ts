@@ -212,30 +212,4 @@ describe('RemindMeTool', () => {
     const parsed = typeof res === 'string' ? JSON.parse(res) : res;
     expect(parsed.status).toBe('scheduled');
   });
-
-  it('schedules metrics via publisher on schedule and completion', async () => {
-    const logger = new LoggerService();
-    const prismaStub = { getClient() { return { reminder: { create: vi.fn(async (args) => ({ ...args.data, createdAt: new Date() })), update: vi.fn(async () => ({})) } } as any; } };
-    const gatewayStub: any = {
-      emitReminderCount: vi.fn(() => {}),
-      scheduleThreadAndAncestorsMetrics: vi.fn(() => {}),
-      scheduleThreadMetrics: vi.fn(() => {}),
-    };
-    // Use node to wire tool registry events to gateway
-    const { RemindMeNode } = await import('../src/graph/nodes/tools/remind_me/remind_me.node');
-    const node = new RemindMeNode(logger as any, gatewayStub, prismaStub as any);
-    node.init({ nodeId: 'node-m' });
-    await node.provision();
-    const tool = node.getTool();
-
-    const caller_agent: CallerAgentStub = { invoke: vi.fn(async () => undefined) };
-    const threadId = 't-metrics';
-    await tool.execute({ delayMs: 10, note: 'm' } as any, { threadId, callerAgent: caller_agent as any, finishSignal: { activate() {}, deactivate() {}, isActive: false } } as any);
-    // Should schedule metrics for thread on schedule
-    expect(gatewayStub.scheduleThreadAndAncestorsMetrics).toHaveBeenCalledWith(threadId);
-    // And again on completion
-    await vi.advanceTimersByTimeAsync(10);
-    const calls = (gatewayStub.scheduleThreadAndAncestorsMetrics as any).mock.calls as unknown as any[][];
-    expect(calls.filter((c) => c[0] === threadId).length).toBeGreaterThanOrEqual(2);
-  });
 });

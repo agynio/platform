@@ -3,9 +3,7 @@ import { io, type Socket } from 'socket.io-client';
 import type { SpanDoc, SpanExtras } from '@/api/types/tracing';
 import { config } from '@/config';
 
-// Socket event payloads validated at runtime in handlers
-
-const TRACING_BASE: string = config.tracingApiBaseUrl;
+const TRACING_BASE: string | undefined = config.tracing.serverUrl;
 
 export type SpanEventPayload = SpanDoc & Partial<SpanExtras> & { attributes?: Record<string, unknown> };
 export type SpanUpsertHandler = (span: SpanEventPayload) => void;
@@ -56,13 +54,9 @@ class TracingRealtime {
 
   private ensure() {
     if (this.socket) return;
+    if (!TRACING_BASE) return; // allow usage without socket (tests/SSR)
     const url = TRACING_BASE.endsWith('/') ? TRACING_BASE.slice(0, -1) : TRACING_BASE;
-    this.socket = io(url, {
-      path: '/socket.io',
-      transports: ['websocket'],
-      timeout: 10000,
-      autoConnect: true,
-    });
+    this.socket = io(url, { path: '/socket.io', transports: ['websocket'], timeout: 10000, autoConnect: true });
     this.socket.on('span_upsert', (payload: unknown) => {
       const norm = normalizeSpan(payload);
       if (norm) this.handlers.forEach((h) => h(norm));

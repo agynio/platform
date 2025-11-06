@@ -7,17 +7,12 @@ vi.mock('@prisma/client', () => ({
   Prisma: { JsonNull: null },
 }));
 const { AgentsPersistenceService } = await import('../src/agents/agents.persistence.service');
-const { LoggerService } = await import('../src/core/services/logger.service');
-const { NoopGraphEventsPublisher } = await import('../src/gateway/graph.events.publisher');
 import { AIMessage, HumanMessage, SystemMessage, ToolCallMessage, ToolCallOutputMessage } from '@agyn/llm';
 import type { ResponseFunctionToolCall } from 'openai/resources/responses/responses.mjs';
 
 function makeService(): InstanceType<typeof AgentsPersistenceService> {
   // Minimal stub; extractKindText does not use prisma
-  const logger = new LoggerService();
-  const metrics = { getThreadsMetrics: async () => ({}) } as any;
-  const publisher = new NoopGraphEventsPublisher();
-  return new AgentsPersistenceService({ getClient: () => ({}) } as any, logger, metrics, publisher as any);
+  return new AgentsPersistenceService({ getClient: () => ({}) } as any);
 }
 
 // Duck-typing tests removed; service now accepts strictly typed messages only.
@@ -61,10 +56,7 @@ describe('AgentsPersistenceService beginRun/completeRun populates Message.text',
       $transaction: async (cb: any) => cb(prismaMock),
     } as any;
 
-    const logger = new LoggerService();
-    const metrics = { getThreadsMetrics: async () => ({}) } as any;
-    const publisher = new NoopGraphEventsPublisher();
-    const svc = new AgentsPersistenceService({ getClient: () => prismaMock } as any, logger, metrics, publisher as any);
+    const svc = new AgentsPersistenceService({ getClient: () => prismaMock } as any);
 
     // Begin run with user + system messages
     const input = [HumanMessage.fromText('hello'), SystemMessage.fromText('sys')];

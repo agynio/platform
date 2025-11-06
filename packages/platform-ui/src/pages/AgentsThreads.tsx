@@ -5,7 +5,6 @@ import { ThreadTree } from '@/components/agents/ThreadTree';
 import { ThreadStatusFilterSwitch, type ThreadStatusFilter } from '@/components/agents/ThreadStatusFilterSwitch';
 import { useThreadRuns } from '@/api/hooks/runs';
 import { runs as runsApi } from '@/api/modules/runs';
-import { graphSocket } from '@/lib/graph/socket';
 
 // Thread list rendering moved into ThreadTree component
 type MessageItem = { id: string; kind: 'user' | 'assistant' | 'system' | 'tool'; text?: string | null; source: unknown; createdAt: string };
@@ -80,28 +79,6 @@ export function AgentsThreads() {
       cancelled = true;
     };
   }, [selectedThreadId, runs]);
-
-  // Subscribe to selected thread room for live updates
-  useEffect(() => {
-    if (!selectedThreadId) return;
-    const room = `thread:${selectedThreadId}`;
-    graphSocket.subscribe([room]);
-    const offMsg = graphSocket.onMessageCreated((payload) => {
-      const m = payload.message;
-      if (!m.runId) return;
-      const role = m.kind as 'user' | 'assistant' | 'system' | 'tool';
-      setRunMessages((prev) => {
-        const runId = m.runId as string;
-        const list = prev[runId] || [];
-        const next: UnifiedRunMessage = { id: m.id, role, text: m.text, source: m.source, createdAt: m.createdAt, side: (role === 'assistant' || role === 'tool') ? 'right' : 'left', runId };
-        return { ...prev, [runId]: [...list, next] };
-      });
-    });
-    const offRun = graphSocket.onRunStatusChanged((_payload) => {
-      // Minimal handling; runs panel fetch will reconcile
-    });
-    return () => { offMsg(); offRun(); };
-  }, [selectedThreadId]);
 
   const unifiedItems: UnifiedListItem[] = useMemo(() => {
     if (!runs.length) return [];

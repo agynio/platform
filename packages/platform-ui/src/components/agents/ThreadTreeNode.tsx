@@ -9,7 +9,6 @@ export type ThreadNode = {
   status?: 'open' | 'closed';
   parentId?: string | null;
   createdAt: string;
-  metrics?: { remindersCount: number; activity: 'working' | 'waiting' | 'idle' };
 };
 
 export function ThreadTreeNode({
@@ -35,8 +34,6 @@ export function ThreadTreeNode({
 
   const label = (node.summary && node.summary.trim().length > 0) ? node.summary : '(no summary yet)';
   const isSelected = selectedId === node.id;
-  const remindersCount = node.metrics?.remindersCount ?? 0;
-  const activity = node.metrics?.activity ?? 'idle';
 
   async function loadChildren() {
     setLoading(true);
@@ -91,18 +88,6 @@ export function ThreadTreeNode({
           <div className="text-sm">{label}</div>
           <div className="text-xs text-gray-500">{(node.status || 'open') === 'open' ? 'Open' : 'Closed'} • created {new Date(node.createdAt).toLocaleString()}</div>
         </button>
-        {/* Activity indicator: small colored dot with tooltip + aria */}
-        <span
-          className={`inline-block w-2 h-2 rounded-full ${activity === 'working' ? 'bg-green-500' : activity === 'waiting' ? 'bg-yellow-500' : 'bg-blue-500'}`}
-          aria-label={`Activity: ${activity}`}
-          title={`Activity: ${activity}`}
-        />
-        {/* Reminders badge: show clock + count when > 0 */}
-        {remindersCount > 0 && (
-          <span className="text-[10px] px-1 py-0.5 rounded bg-gray-100 text-gray-700" aria-label={`Active reminders: ${remindersCount}`} title={`Active reminders: ${remindersCount}`}>
-            🕒 {remindersCount}
-          </span>
-        )}
         <button className="text-xs border rounded px-2 py-0.5" onClick={toggleStatus} disabled={toggling} aria-busy={toggling} aria-label={(node.status || 'open') === 'open' ? 'Close thread' : 'Reopen thread'}>
           {(node.status || 'open') === 'open' ? 'Close' : 'Reopen'}
         </button>

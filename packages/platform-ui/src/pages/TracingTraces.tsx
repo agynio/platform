@@ -4,7 +4,7 @@ import { config } from '@/config';
 export function TracingTraces() {
   return (
     <div className="p-4">
-      <TracingProvider serverUrl={config.tracingApiBaseUrl}>
+      <TracingProvider serverUrl={config.tracingServerUrl}>
         <TracingTracesView basePaths={{ trace: '/tracing/trace', thread: '/tracing/thread' }} />
       </TracingProvider>
     </div>

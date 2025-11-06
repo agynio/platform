@@ -27,20 +27,12 @@ export class ListThreadsQueryDto {
   @Min(1)
   @Max(500)
   limit?: number;
-
-  @IsOptional()
-  @IsBooleanString()
-  includeMetrics?: string; // parse to boolean
 }
 
 export class ListChildrenQueryDto {
   @IsOptional()
   @IsIn(['open', 'closed', 'all'])
   status?: 'open' | 'closed' | 'all';
-
-  @IsOptional()
-  @IsBooleanString()
-  includeMetrics?: string; // parse to boolean
 }
 
 export class PatchThreadBodyDto {
@@ -65,20 +57,13 @@ export class AgentsThreadsController {
     const status = query.status ?? 'all';
     const limit = Number(query.limit) ?? 100;
     const threads = await this.persistence.listThreads({ rootsOnly, status, limit });
-    const includeMetrics = (query.includeMetrics ?? 'false') === 'true';
-    if (!includeMetrics) return { items: threads };
-    const metrics = await this.persistence.getThreadsMetrics(threads.map((t) => t.id));
-    const items = threads.map((t) => ({ ...t, metrics: metrics[t.id] ?? { remindersCount: 0, activity: 'idle' as const } }));
-    return { items };
+    return { items: threads };
   }
 
   @Get('threads/:threadId/children')
   async listChildren(@Param('threadId') threadId: string, @Query() query: ListChildrenQueryDto) {
     const items = await this.persistence.listChildren(threadId, query.status ?? 'all');
-    const includeMetrics = (query.includeMetrics ?? 'false') === 'true';
-    if (!includeMetrics) return { items };
-    const metrics = await this.persistence.getThreadsMetrics(items.map((t) => t.id));
-    return { items: items.map((t) => ({ ...t, metrics: metrics[t.id] ?? { remindersCount: 0, activity: 'idle' as const } })) };
+    return { items };
   }
 
   @Get('threads/:threadId/runs')
@@ -100,11 +85,5 @@ export class AgentsThreadsController {
     if (body.status !== undefined) update.status = body.status;
     await this.persistence.updateThread(threadId, update);
     return { ok: true };
-  }
-
-  @Get('threads/:threadId/metrics')
-  async getThreadMetrics(@Param('threadId') threadId: string) {
-    const metrics = await this.persistence.getThreadsMetrics([threadId]);
-    return metrics[threadId] ?? { remindersCount: 0, activity: 'idle' as const };
   }
 }

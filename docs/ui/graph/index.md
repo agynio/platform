@@ -8,9 +8,12 @@ Data flow
 - Refer to docs/graph/status-updates.md for event shapes and sequencing.
 
 Configuration
-- Required environment variables:
-  - VITE_API_BASE_URL: Agents API base URL
-  - VITE_TRACING_SERVER_URL: Tracing API base URL
+- API base URL precedence:
+  1) VITE_API_BASE_URL
+  2) API_BASE_URL (Node env)
+  3) VITEST: '' (tests use relative URLs)
+  4) default http://localhost:3010
+- Observability deep links: set `VITE_TRACING_UI_BASE` (default http://localhost:4320) to enable trace links.
 
 Related docs
 - docs/ui/config-views.md (custom config view registry)

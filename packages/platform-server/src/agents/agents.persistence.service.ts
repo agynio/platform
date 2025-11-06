@@ -3,20 +3,12 @@ import { PrismaService } from '../core/services/prisma.service';
 import { AIMessage, HumanMessage, SystemMessage, ToolCallMessage, ToolCallOutputMessage } from '@agyn/llm';
 import { toPrismaJsonValue } from '../llm/services/messages.serialization';
 import type { Prisma, RunStatus, RunMessageType, MessageKind, PrismaClient, ThreadStatus } from '@prisma/client';
-import { LoggerService } from '../core/services/logger.service';
-import { ThreadsMetricsService, type ThreadMetrics } from './threads.metrics.service';
-import { GraphEventsPublisher } from '../gateway/graph.events.publisher';
 
 export type RunStartResult = { runId: string };
 
 @Injectable()
 export class AgentsPersistenceService {
-  constructor(
-    @Inject(PrismaService) private prismaService: PrismaService,
-    @Inject(LoggerService) private readonly logger: LoggerService,
-    @Inject(ThreadsMetricsService) private readonly metrics: ThreadsMetricsService,
-    @Inject(GraphEventsPublisher) private readonly events: GraphEventsPublisher,
-  ) {}
+  constructor(@Inject(PrismaService) private prismaService: PrismaService) {}
 
   private get prisma(): PrismaClient {
     return this.prismaService.getClient();
@@ -29,7 +21,6 @@ export class AgentsPersistenceService {
     const existing = await this.prisma.thread.findUnique({ where: { alias } });
     if (existing) return existing.id;
     const created = await this.prisma.thread.create({ data: { alias } });
-    this.events.emitThreadCreated({ id: created.id, alias: created.alias, summary: created.summary ?? null, status: created.status, createdAt: created.createdAt, parentId: created.parentId ?? null });
     return created.id;
   }
 
@@ -42,8 +33,6 @@ export class AgentsPersistenceService {
     const existing = await this.prisma.thread.findUnique({ where: { alias: composed } });
     if (existing) return existing.id;
     const created = await this.prisma.thread.create({ data: { alias: composed, parentId: parentThreadId } });
-    this.events.emitThreadCreated({ id: created.id, alias: created.alias, summary: created.summary ?? null, status: created.status, createdAt: created.createdAt, parentId: created.parentId ?? null });
-    this.events.scheduleThreadAndAncestorsMetrics(created.id);
     return created.id;
   }
 
@@ -62,24 +51,18 @@ export class AgentsPersistenceService {
     threadId: string,
     inputMessages: Array<HumanMessage | SystemMessage | AIMessage>,
   ): Promise<RunStartResult> {
-    const { runId, createdMessages } = await this.prisma.$transaction(async (tx: Prisma.TransactionClient) => {
+    const { runId } = await this.prisma.$transaction(async (tx: Prisma.TransactionClient) => {
       const run = await tx.run.create({ data: { threadId, status: 'running' as RunStatus } });
-      const createdMessages: Array<{ id: string; kind: MessageKind; text: string | null; source: Prisma.JsonValue; createdAt: Date }> = [];
       await Promise.all(
         inputMessages.map(async (msg) => {
           const { kind, text } = this.deriveKindTextTyped(msg);
           const source = toPrismaJsonValue(msg.toPlain());
           const created = await tx.message.create({ data: { kind, text, source } });
           await tx.runMessage.create({ data: { runId: run.id, messageId: created.id, type: 'input' as RunMessageType } });
-          createdMessages.push({ id: created.id, kind, text, source: created.source as Prisma.JsonValue, createdAt: created.createdAt });
         }),
       );
-      return { runId: run.id, createdMessages };
+      return { runId: run.id };
     });
-    this.events.emitRunStatusChanged(threadId, { id: runId, status: 'running' as RunStatus, createdAt: new Date(), updatedAt: new Date() });
-    for (const m of createdMessages) this.events.emitMessageCreated(threadId, { id: m.id, kind: m.kind, text: m.text, source: m.source as Prisma.JsonValue, createdAt: m.createdAt, runId });
-    // Consider scheduling ancestors; keeping current semantics per review note
-    this.events.scheduleThreadMetrics(threadId);
     return { runId };
   }
 
@@ -87,7 +70,6 @@ export class AgentsPersistenceService {
    * Persist injected messages. Only SystemMessage injections are supported.
    */
   async recordInjected(runId: string, injectedMessages: SystemMessage[]): Promise<void> {
-    const createdMessages: Array<{ id: string; kind: MessageKind; text: string | null; source: Prisma.JsonValue; createdAt: Date }> = [];
     await this.prisma.$transaction(async (tx: Prisma.TransactionClient) => {
       await Promise.all(
         injectedMessages.map(async (msg) => {
@@ -95,13 +77,9 @@ export class AgentsPersistenceService {
           const source = toPrismaJsonValue(msg.toPlain());
           const created = await tx.message.create({ data: { kind, text, source } });
           await tx.runMessage.create({ data: { runId, messageId: created.id, type: 'injected' as RunMessageType } });
-          createdMessages.push({ id: created.id, kind, text, source: created.source as Prisma.JsonValue, createdAt: created.createdAt });
         }),
       );
     });
-    const run = await this.prisma.run.findUnique({ where: { id: runId }, select: { threadId: true } });
-    const threadId = run?.threadId;
-    if (threadId) for (const m of createdMessages) this.events.emitMessageCreated(threadId, { id: m.id, kind: m.kind, text: m.text, source: m.source as Prisma.JsonValue, createdAt: m.createdAt, runId });
   }
 
   /**
@@ -112,24 +90,17 @@ export class AgentsPersistenceService {
     status: RunStatus,
     outputMessages: Array<AIMessage | ToolCallMessage | ToolCallOutputMessage>,
   ): Promise<void> {
-    const createdMessages: Array<{ id: string; kind: MessageKind; text: string | null; source: Prisma.JsonValue; createdAt: Date }> = [];
-    const run = await this.prisma.$transaction(async (tx: Prisma.TransactionClient) => {
+    await this.prisma.$transaction(async (tx: Prisma.TransactionClient) => {
       await Promise.all(
         outputMessages.map(async (msg) => {
           const { kind, text } = this.deriveKindTextTyped(msg);
           const source = toPrismaJsonValue(msg.toPlain());
           const created = await tx.message.create({ data: { kind, text, source } });
           await tx.runMessage.create({ data: { runId, messageId: created.id, type: 'output' as RunMessageType } });
-          createdMessages.push({ id: created.id, kind, text, source: created.source as Prisma.JsonValue, createdAt: created.createdAt });
         }),
       );
-      const updated = await tx.run.update({ where: { id: runId }, data: { status } });
-      return updated;
+      await tx.run.update({ where: { id: runId }, data: { status } });
     });
-    const threadId = run.threadId;
-    for (const m of createdMessages) this.events.emitMessageCreated(threadId, { id: m.id, kind: m.kind, text: m.text, source: m.source as Prisma.JsonValue, createdAt: m.createdAt, runId });
-    this.events.emitRunStatusChanged(threadId, { id: runId, status, createdAt: run.createdAt, updatedAt: run.updatedAt });
-    this.events.scheduleThreadMetrics(threadId);
   }
 
   async listThreads(opts?: { rootsOnly?: boolean; status?: 'open' | 'closed' | 'all'; limit?: number }): Promise<Array<{ id: string; alias: string; summary: string | null; status: ThreadStatus; createdAt: Date; parentId?: string | null }>> {
@@ -157,13 +128,7 @@ export class AgentsPersistenceService {
     const patch: Prisma.ThreadUpdateInput = {};
     if (data.summary !== undefined) patch.summary = data.summary;
     if (data.status !== undefined) patch.status = data.status;
-    const updated = await this.prisma.thread.update({ where: { id: threadId }, data: patch });
-    this.events.emitThreadUpdated({ id: updated.id, alias: updated.alias, summary: updated.summary ?? null, status: updated.status, createdAt: updated.createdAt, parentId: updated.parentId ?? null });
-  }
-
-  /** Aggregate subtree metrics for provided root IDs. */
-  async getThreadsMetrics(ids: string[]): Promise<Record<string, ThreadMetrics>> {
-    return this.metrics.getThreadsMetrics(ids);
+    await this.prisma.thread.update({ where: { id: threadId }, data: patch });
   }
 
   async listRuns(
