@@ -31,7 +31,7 @@ export const SlackTriggerStaticConfigSchema = z
  * (non-bot, non-thread broadcast) to subscribers via notify().
  */
 type SlackTokenRef = { value: string; source: 'static' | 'vault' };
-type SlackTriggerConfig = { app_token: SlackTokenRef };
+type SlackTriggerConfig = { app_token: SlackTokenRef; bot_token?: SlackTokenRef };
 
 @Injectable({ scope: Scope.TRANSIENT })
 export class SlackTrigger extends Node<SlackTriggerConfig> {
@@ -153,7 +153,11 @@ export class SlackTrigger extends Node<SlackTriggerConfig> {
       await client.start();
       this.logger.info('SlackTrigger started');
       // Register trigger-bound messenger
-      this.triggerMessaging.register('slack', this.nodeId, createSlackMessenger({ logger: this.logger, vault: this.vault }, { bot_token: this.config.bot_token as any }));
+      this.triggerMessaging.register(
+        'slack',
+        this.nodeId,
+        createSlackMessenger({ logger: this.logger, vault: this.vault }, { bot_token: this.config.bot_token }),
+      );
     } catch (e) {
       this.logger.error('SlackTrigger.start failed', e);
       this.setStatus('provisioning_error');

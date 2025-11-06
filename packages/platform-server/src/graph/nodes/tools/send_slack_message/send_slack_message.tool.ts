@@ -3,10 +3,12 @@ import z from 'zod';
 import { FunctionTool } from '@agyn/llm';
 import { LoggerService } from '../../../../core/services/logger.service';
 import { VaultService } from '../../../../vault/vault.service';
-import { ReferenceFieldSchema, normalizeTokenRef, parseVaultRef, resolveTokenRef } from '../../../../utils/refs';
+import { ReferenceFieldSchema } from '../../../../utils/refs';
 import { SendSlackMessageNode } from './send_slack_message.node';
 import { TriggerMessagingService } from '../../../../channels/trigger.messaging';
 import { AgentsPersistenceService } from '../../../../agents/agents.persistence.service';
+import type { SlackChannelInfo } from '../../../../channels/types';
+import { LLMContext } from '../../../../llm/types';
 
 export const SendSlackMessageToolStaticConfigSchema = z
   .object({
@@ -29,8 +31,6 @@ export const sendSlackInvocationSchema = z
   })
   .strict();
 
-type TokenRef = { value: string; source: 'static' | 'vault' };
-
 export class SendSlackMessageFunctionTool extends FunctionTool<typeof sendSlackInvocationSchema> {
   constructor(
     private node: SendSlackMessageNode,
@@ -51,20 +51,27 @@ export class SendSlackMessageFunctionTool extends FunctionTool<typeof sendSlackI
     return sendSlackInvocationSchema;
   }
 
-  async execute(args: z.infer<typeof sendSlackInvocationSchema>, ctx?: any): Promise<string> {
+  async execute(args: z.infer<typeof sendSlackInvocationSchema>, ctx: LLMContext): Promise<string> {
     const { channel: channelInput, text, thread_ts, broadcast, ephemeral_user } = args;
     this.logger.info('send_slack_message: deprecated; prefer send_message');
     const channel = channelInput;
     if (!channel) throw new Error('channel is required');
     try {
-      const threadId: string | undefined = ctx?.threadId;
+      const threadId: string | undefined = ctx.threadId;
       if (!threadId) return JSON.stringify({ ok: false, error: 'thread_context_required' });
       const info = await this.persistence.getThreadChannel(threadId);
       if (!info || info.type !== 'slack' || !info.meta?.triggerNodeId)
         return JSON.stringify({ ok: false, error: 'invalid_channel_info' });
       const messenger = this.triggers.resolve('slack', info.meta.triggerNodeId);
       if (!messenger) return JSON.stringify({ ok: false, error: 'trigger_not_available' });
-      const res = await messenger.send({ ...info, channel, thread_ts } as any, {
+      const channelInfo: SlackChannelInfo = {
+        type: 'slack',
+        channel,
+        thread_ts: thread_ts ?? info.thread_ts,
+        user: info.user,
+        meta: info.meta,
+      };
+      const res = await messenger.send(channelInfo, {
         text,
         ephemeral_user,
         broadcast: !!broadcast,
