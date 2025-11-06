@@ -7,11 +7,17 @@ import { ThreadTree } from '../src/components/agents/ThreadTree';
 import * as socketModule from '../src/lib/graph/socket';
 
 describe('ThreadTree metrics badges and socket updates', () => {
+  beforeAll(() => server.listen());
+  afterEach(() => server.resetHandlers());
+  afterAll(() => server.close());
   it('renders activity dot and hidden-zero reminders; updates on socket', async () => {
     server.use(
       http.get('/api/agents/threads', ({ request }) => {
         const url = new URL(request.url);
+        // Match exact query used by ThreadTree fetch
         if (url.searchParams.get('rootsOnly') !== 'true') return new HttpResponse(null, { status: 400 });
+        if ((url.searchParams.get('status') || '') !== 'open') return new HttpResponse(null, { status: 400 });
+        // includeMetrics=true is expected; we accept regardless
         return HttpResponse.json({ items: [
           { id: 'th1', alias: 'a1', summary: 'Root A', status: 'open', parentId: null, createdAt: new Date().toISOString(), metrics: { remindersCount: 0, activity: 'idle' } },
         ] });
