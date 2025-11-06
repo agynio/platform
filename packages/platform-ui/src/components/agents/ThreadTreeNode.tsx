@@ -10,6 +10,7 @@ export type ThreadNode = {
   status?: 'open' | 'closed';
   parentId?: string | null;
   createdAt: string;
+  metrics?: { remindersCount?: number; activity?: number };
 };
 
 export function ThreadTreeNode({
@@ -35,7 +36,8 @@ export function ThreadTreeNode({
 
   const label = (node.summary && node.summary.trim().length > 0) ? node.summary : '(no summary yet)';
   const isSelected = selectedId === node.id;
-  const [activity, setActivity] = useState<'working' | 'waiting' | 'idle'>(node.metrics?.activity || 'idle');
+  // Initialize to 'idle'; live updates come from socket listeners
+  const [activity, setActivity] = useState<'working' | 'waiting' | 'idle'>('idle');
   const [remindersCount, setRemindersCount] = useState<number>(node.metrics?.remindersCount || 0);
 
   useEffect(() => {
