@@ -24,7 +24,7 @@ export class RemindMeFunctionTool extends FunctionTool<typeof remindMeInvocation
   private active: Map<string, { timer: ReturnType<typeof setTimeout>; reminder: Reminder }> = new Map();
   private destroyed = false;
   private maxActive = 1000;
-  private onRegistryChanged?: (count: number, updatedAtMs?: number) => void;
+  private onRegistryChanged?: (count: number, updatedAtMs?: number, threadId?: string) => void;
   constructor(private logger: LoggerService, private prismaService: PrismaService) {
     super();
   }
@@ -44,7 +44,7 @@ export class RemindMeFunctionTool extends FunctionTool<typeof remindMeInvocation
    * Register a callback invoked whenever the active reminders registry size changes.
    * Used to emit socket updates without coupling the tool to gateway implementation.
    */
-  setOnRegistryChanged(cb?: (count: number, updatedAtMs?: number) => void) {
+  setOnRegistryChanged(cb?: (count: number, updatedAtMs?: number, threadId?: string) => void) {
     this.onRegistryChanged = cb;
   }
   async destroy(): Promise<void> {
@@ -80,7 +80,7 @@ export class RemindMeFunctionTool extends FunctionTool<typeof remindMeInvocation
       } finally {
         // Always remove from registry and notify
         this.active.delete(created.id);
-        this.onRegistryChanged?.(this.active.size);
+        this.onRegistryChanged?.(this.active.size, undefined, created.threadId);
       }
       try {
         const msg = SystemMessage.fromText(`Reminder: ${note}`);
@@ -92,8 +92,8 @@ export class RemindMeFunctionTool extends FunctionTool<typeof remindMeInvocation
     }, delayMs);
     // Store created entity in registry keyed by DB id
     this.active.set(created.id, { timer, reminder: created });
-    // Registry size increased; notify
-    this.onRegistryChanged?.(this.active.size);
+    // Registry size increased; notify (include threadId)
+    this.onRegistryChanged?.(this.active.size, undefined, threadId);
     // Return ack including DB id
     return JSON.stringify({ status: 'scheduled', etaMs: delayMs, at: eta, id: created.id });
   }
