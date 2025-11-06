@@ -95,16 +95,34 @@ export class SlackChannelAdapter {
   }
 
   private parseError(err: unknown): { retryAfterMs?: number; message: string } {
-    const anyErr = err as any;
-    const message = (anyErr?.data?.error as string) || (anyErr?.message as string) || String(err);
-    const retryAfterSec =
-      typeof anyErr?.retryAfter === 'number'
-        ? anyErr.retryAfter
-        : typeof anyErr?.data?.retry_after === 'number'
-        ? anyErr.data.retry_after
-        : typeof anyErr?.headers?.['retry-after'] === 'string'
-        ? Number(anyErr.headers['retry-after'])
-        : undefined;
+    type SlackApiError = {
+      data?: { error?: string; message?: string; retry_after?: number };
+      headers?: Record<string, string | number | undefined>;
+      retryAfter?: number;
+      message?: string;
+    };
+    const isObject = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 'object';
+    const isSlackApiError = (e: unknown): e is SlackApiError => {
+      if (!isObject(e)) return false;
+      // At least one known key should exist
+      return 'data' in e || 'headers' in e || 'retryAfter' in e || 'message' in e;
+    };
+
+    let message: string = String(err);
+    let retryAfterSec: number | undefined;
+    if (isSlackApiError(err)) {
+      if (err.data?.error) message = err.data.error;
+      else if (err.data?.message) message = err.data.message;
+      else if (typeof err.message === 'string') message = err.message;
+
+      if (typeof err.retryAfter === 'number') retryAfterSec = err.retryAfter;
+      else if (typeof err.data?.retry_after === 'number') retryAfterSec = err.data.retry_after;
+      else if (err.headers) {
+        const ra = err.headers['retry-after'];
+        const n = typeof ra === 'string' ? Number(ra) : typeof ra === 'number' ? ra : undefined;
+        if (typeof n === 'number' && Number.isFinite(n)) retryAfterSec = n;
+      }
+    }
     const retryAfterMs = typeof retryAfterSec === 'number' && Number.isFinite(retryAfterSec) ? retryAfterSec * 1000 : undefined;
     return { retryAfterMs, message };
   }
