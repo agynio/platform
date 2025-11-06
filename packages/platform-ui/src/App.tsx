@@ -15,7 +15,7 @@ import { AgentsReminders } from './pages/AgentsReminders';
 import { TracingTraces } from './pages/TracingTraces';
 import { TracingErrors } from './pages/TracingErrors';
 import { TracingProvider, TraceDetailView, ThreadView, ToolErrorsView } from '@agyn/tracing-ui';
-import { config } from './config';
+import { getTracingBase } from '@/api/tracing';
 import { useParams, useSearchParams } from 'react-router-dom';
 import { MonitoringContainers } from './pages/MonitoringContainers';
 import { MonitoringResources } from './pages/MonitoringResources';
@@ -65,7 +65,7 @@ function App() {
 export default App;
 
 // Centralized derived base for tracing server
-const serverUrl = `${config.apiBaseUrl}/tracing`;
+const serverUrl = getTracingBase();
 
 function TraceDetailRoute() {
   const params = useParams();
