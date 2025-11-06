@@ -3,7 +3,7 @@ import { io, type Socket } from 'socket.io-client';
 import type { SpanDoc, SpanExtras } from '@/api/types/tracing';
 import { config } from '@/config';
 
-const TRACING_BASE: string | undefined = config.tracing.serverUrl;
+const TRACING_BASE: string | undefined = config.tracingApiBaseUrl;
 
 export type SpanEventPayload = SpanDoc & Partial<SpanExtras> & { attributes?: Record<string, unknown> };
 export type SpanUpsertHandler = (span: SpanEventPayload) => void;

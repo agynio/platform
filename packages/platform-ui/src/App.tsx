@@ -65,7 +65,7 @@ function App() {
 export default App;
 
 // Centralized derived base for tracing server
-const serverUrl = config.tracingServerUrl;
+const serverUrl = config.tracingApiBaseUrl;
 
 function TraceDetailRoute() {
   const params = useParams();

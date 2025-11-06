@@ -39,6 +39,20 @@ try {
   // best-effort only
 }
 
+// Provide required Vite envs to avoid import-time throws in tests
+try {
+  const gm = globalThis as any;
+  const env = (gm.importMeta && gm.importMeta.env) ? gm.importMeta.env : {};
+  gm.importMeta = { env: { VITE_API_BASE_URL: env.VITE_API_BASE_URL || 'http://localhost:3010', VITE_TRACING_SERVER_URL: env.VITE_TRACING_SERVER_URL || 'http://localhost:4319' } };
+  // Also populate process.env for non-Vite contexts
+  if (typeof process !== 'undefined' && process.env) {
+    process.env.VITE_API_BASE_URL = process.env.VITE_API_BASE_URL || gm.importMeta.env.VITE_API_BASE_URL;
+    process.env.VITE_TRACING_SERVER_URL = process.env.VITE_TRACING_SERVER_URL || gm.importMeta.env.VITE_TRACING_SERVER_URL;
+  }
+} catch {
+  // ignore
+}
+
 // Avoid mutating config.apiBaseUrl globally to not affect unit tests that
 // validate env resolution. Individual pages pass base '' explicitly where needed.
 
