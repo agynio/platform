@@ -3,7 +3,12 @@ import { io, type Socket } from 'socket.io-client';
 import type { SpanDoc, SpanExtras } from '@/api/types/tracing';
 import { config } from '@/config';
 
-const TRACING_BASE: string | undefined = config.tracingApiBaseUrl;
+type TracingServerToClientEvents = {
+  span_upsert: (payload: unknown) => void;
+};
+type TracingClientToServerEvents = Record<string, never>;
+
+const TRACING_BASE: string = config.tracingApiBaseUrl;
 
 export type SpanEventPayload = SpanDoc & Partial<SpanExtras> & { attributes?: Record<string, unknown> };
 export type SpanUpsertHandler = (span: SpanEventPayload) => void;
@@ -49,14 +54,18 @@ function normalizeSpan(payload: unknown): SpanEventPayload | null {
 }
 
 class TracingRealtime {
-  private socket: Socket | null = null;
+  private socket: Socket<TracingClientToServerEvents, TracingServerToClientEvents> | null = null;
   private handlers = new Set<SpanUpsertHandler>();
 
   private ensure() {
     if (this.socket) return;
-    if (!TRACING_BASE) return; // allow usage without socket (tests/SSR)
     const url = TRACING_BASE.endsWith('/') ? TRACING_BASE.slice(0, -1) : TRACING_BASE;
-    this.socket = io(url, { path: '/socket.io', transports: ['websocket'], timeout: 10000, autoConnect: true });
+    this.socket = io<TracingServerToClientEvents, TracingClientToServerEvents>(url, {
+      path: '/socket.io',
+      transports: ['websocket'],
+      timeout: 10000,
+      autoConnect: true,
+    });
     this.socket.on('span_upsert', (payload: unknown) => {
       const norm = normalizeSpan(payload);
       if (norm) this.handlers.forEach((h) => h(norm));

@@ -5,10 +5,10 @@ import type { NodeStatusEvent, ReminderCountEvent } from './types';
 // Strictly typed server-to-client socket events
 type NodeStateEvent = { nodeId: string; state: Record<string, unknown>; updatedAt: string };
 type ServerToClientEvents = {
-  connect: void;
-  node_status: NodeStatusEvent;
-  node_state: NodeStateEvent;
-  node_reminder_count: ReminderCountEvent;
+  connect: () => void;
+  node_status: (payload: NodeStatusEvent) => void;
+  node_state: (payload: NodeStateEvent) => void;
+  node_reminder_count: (payload: ReminderCountEvent) => void;
 };
 // No client-to-server emits used here
 type ClientToServerEvents = Record<string, never>;
@@ -19,16 +19,16 @@ type ReminderListener = (ev: ReminderCountEvent) => void;
 
 class GraphSocket {
   // Typed socket instance; null until connected
-  private socket: Socket<ClientToServerEvents, ServerToClientEvents> | null = null;
+  private socket!: Socket<ServerToClientEvents, ClientToServerEvents>;
   private listeners = new Map<string, Set<Listener>>();
   private stateListeners = new Map<string, Set<StateListener>>();
   private reminderListeners = new Map<string, Set<ReminderListener>>();
 
-  connect() {
+  connect(): Socket<ServerToClientEvents, ClientToServerEvents> {
     if (this.socket) return this.socket;
     // Use centralized config for API base
     const host = config.apiBaseUrl;
-    this.socket = io(host, {
+    this.socket = io<ServerToClientEvents, ClientToServerEvents>(host, {
       path: '/socket.io',
       transports: ['websocket'],
       forceNew: false,
