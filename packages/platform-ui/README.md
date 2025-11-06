@@ -9,11 +9,13 @@ Quickstart
 
 Env configuration
 - VITE_API_BASE_URL (default http://localhost:3010): base URL for the Agents API used by the UI. In production deployments, set VITE_API_BASE_URL to your server origin (e.g., https://agents.example.com).
+- VITE_TRACING_SERVER_URL (optional): override the tracing-server base URL. Defaults to `${VITE_API_BASE_URL}/tracing`.
 - API_BASE_URL (Node env) optional: used in non-Vite contexts (tests/SSR) when VITE_API_BASE_URL is not set.
 
 Tracing API access
 - The platform UI derives the tracing HTTP and websocket base from the main API host: `${VITE_API_BASE_URL}/tracing`. Ensure your server proxies the `/tracing` path to the tracing-server.
-- Override: tracing routes created via `TracingProvider` from `@agyn/tracing-ui` will use its `serverUrl` when provided, allowing a distinct tracing host when needed. Platform defaults to the `/tracing` proxy.
+- Optional override via `VITE_TRACING_SERVER_URL` when a distinct tracing-server host is required.
+- Note: Separate tracing UI base has been removed; platform-ui uses internal routes and TracingProvider with the configured tracing server.
 
 API base URL
 - The UI primarily uses `VITE_API_BASE_URL` for all API interactions and for tracing via the `/tracing` path. In Node test/SSR contexts, `API_BASE_URL` can be used as a fallback if `VITE_API_BASE_URL` is not defined.
