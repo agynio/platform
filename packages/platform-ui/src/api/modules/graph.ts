@@ -138,9 +138,11 @@ export const graph = {
   // Node runs
   listNodeRuns: async (nodeId: string, status: 'running' | 'terminating' | 'all' = 'all') => {
     const res = await asData<{ items: Array<{ nodeId: string; threadId: string; runId: string; status: string; startedAt: string; updatedAt: string }> }>(
+      http.get<{ items: Array<{ nodeId: string; threadId: string; runId: string; status: string; startedAt: string; updatedAt: string }> }>(
         `/api/graph/nodes/${encodeURIComponent(nodeId)}/runs`,
         { params: { status } },
-      ));
+      ),
+    );
     return res ?? { items: [] };
   },
   terminateRun: (nodeId: string, runId: string) =>
