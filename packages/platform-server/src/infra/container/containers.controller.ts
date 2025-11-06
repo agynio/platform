@@ -167,7 +167,15 @@ export class ContainersController {
     const results = await Promise.allSettled(
       handles.map(async (h) => {
         const inspect = await docker.getContainer(h.id).inspect();
-        const labels = (inspect?.Config?.Labels || {}) as Record<string, string>;
+        // Safely derive string-only labels from Docker inspect
+        const rawLabels = inspect?.Config?.Labels as unknown;
+        const labelEntries: Array<[string, string]> =
+          rawLabels && typeof rawLabels === 'object'
+            ? Object.entries(rawLabels as Record<string, unknown>)
+                .filter(([, v]) => typeof v === 'string')
+                .map(([k, v]) => [String(k), v as string])
+            : [];
+        const labels: Record<string, string> = Object.fromEntries(labelEntries);
         return {
           containerId: String(inspect?.Id ?? h.id),
           parentContainerId: labels['hautech.ai/parent_cid'] || containerId,
