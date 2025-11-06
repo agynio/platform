@@ -22,21 +22,11 @@ export type SpanEventPayload = SpanDoc & Partial<SpanExtras> & {
   attributes?: Record<string, unknown>;
 };
 
-// Prefer runtime-configured serverUrl from tracing-ui when available
-import { getServerUrl as getObsServerUrl } from '@agyn/tracing-ui/src/config';
 import { config } from '@/config';
 
 export function getTracingBase(override?: string): string {
   if (override) return override;
-  try {
-    // Obs UI provider sets this at runtime; throws if not configured
-    return getObsServerUrl();
-  } catch {
-    /* fallthrough to config */
-  }
-  const base = config.tracing.serverUrl;
-  if (base) return base;
-  throw new Error('Tracing base not configured. Set VITE_TRACING_SERVER_URL via config or pass override.');
+  return config.tracingServerUrl;
 }
 
 export async function fetchSpansInRange(fromIso: string, toIso: string, base?: string): Promise<SpanDoc[]> {

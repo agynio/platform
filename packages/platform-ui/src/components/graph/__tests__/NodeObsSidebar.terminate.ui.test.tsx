@@ -2,6 +2,7 @@
 import React from 'react';
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen, act } from '@testing-library/react';
+import { MemoryRouter } from 'react-router-dom';
 
 // Mocks MUST be declared before importing the component under test
 vi.mock('@/lib/graph/templates.provider', () => ({
@@ -32,7 +33,7 @@ describe('NodeObsSidebar terminate UI behavior', () => {
     window.confirm = () => true;
     const node: any = { id: 'agent-1', data: { template: 'agent' } };
     const { TracingProvider } = await import('../../../../../tracing-ui/src/context/TracingProvider');
-    await act(async () => { render(<TracingProvider serverUrl="http://localhost:4319"><NodeTracingSidebar node={node} /></TracingProvider>); });
+    await act(async () => { render(<MemoryRouter><TracingProvider serverUrl="http://localhost:4319"><NodeTracingSidebar node={node} /></TracingProvider></MemoryRouter>); });
     expect(await screen.findByText('Active Runs')).toBeInTheDocument();
     const btn = await screen.findByText('Terminate');
     expect(btn).toBeEnabled();
