@@ -4,15 +4,20 @@
 // - httpJson<T>(path, init?, base?): fetch JSON with sane defaults
 import { config } from '@/config';
 
-export function getApiBase(): string {
-  return config.apiBaseUrl;
+// Minimal API base resolver for client utilities
+export function getApiBase(override?: string): string {
+  // Optional override via argument; otherwise use resolved config
+  if (override) return override;
+  const base = config?.apiBaseUrl;
+  if (typeof base === 'string') return base;
+  throw new Error('API base not configured. Set VITE_API_BASE_URL.');
 }
 
 export function buildUrl(path: string, base?: string): string {
   // Optional override via `base`; otherwise use resolved config
   const b = typeof base === 'string' ? base : getApiBase();
   const p = path.startsWith('/') ? path : `/${path}`;
-  if (!b) return p; // relative for vitest or explicit ''
+  // If base override is an empty string, return relative path for tests
   // Avoid double slashes
   return b.endsWith('/') ? `${b.slice(0, -1)}${p}` : `${b}${p}`;
 }

@@ -1,5 +1,4 @@
 import { io, type Socket } from 'socket.io-client';
-import { config } from '@/config';
 import type { NodeStatusEvent, ReminderCountEvent } from './types';
 
 // Strictly typed server-to-client socket events
@@ -26,7 +25,8 @@ class GraphSocket {
 
   connect() {
     if (this.socket) return this.socket;
-    const host = config.apiBaseUrl;
+    // Derive host lazily from env to avoid import-time errors in tests
+    const host = (import.meta as { env?: Record<string, unknown> } | undefined)?.env?.VITE_API_BASE_URL as string | undefined;
     if (!host || host.trim() === '') {
       // No API base configured; provide no-op behavior.
       return null;

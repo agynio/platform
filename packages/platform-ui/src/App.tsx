@@ -64,12 +64,11 @@ function App() {
 
 export default App;
 
-// Centralized env var for tracing server base
-const serverUrl = config.tracing.serverUrl;
+// Centralized derived base for tracing server
+const serverUrl = config.tracingServerUrl;
 
 function TraceDetailRoute() {
   const params = useParams();
-  if (!serverUrl) return <div className="p-4 text-sm">Tracing server URL not configured. Set VITE_TRACING_SERVER_URL.</div>;
   return (
     <TracingProvider serverUrl={serverUrl}>
       <TraceDetailView traceId={params.traceId!} />
@@ -79,7 +78,6 @@ function TraceDetailRoute() {
 
 function ThreadRoute() {
   const params = useParams();
-  if (!serverUrl) return <div className="p-4 text-sm">Tracing server URL not configured. Set VITE_TRACING_SERVER_URL.</div>;
   return (
     <TracingProvider serverUrl={serverUrl}>
       <ThreadView threadId={params.threadId!} />
@@ -92,7 +90,6 @@ function ToolErrorsRoute() {
   const [sp] = useSearchParams();
   const from = sp.get('from') || new Date(Date.now() - 6 * 3600_000).toISOString();
   const to = sp.get('to') || new Date().toISOString();
-  if (!serverUrl) return <div className="p-4 text-sm">Tracing server URL not configured. Set VITE_TRACING_SERVER_URL.</div>;
   return (
     <TracingProvider serverUrl={serverUrl}>
       <ToolErrorsView label={decodeURIComponent(params.label!)} range={{ from, to }} />
