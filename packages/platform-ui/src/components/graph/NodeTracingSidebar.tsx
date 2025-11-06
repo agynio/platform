@@ -1,11 +1,11 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { Node } from 'reactflow';
-import type { SpanDoc, SpanExtras } from '@/api/tracing';
-import { fetchSpansInRange } from '@/api/tracing';
+import type { SpanDoc, SpanExtras } from '@/api/types/tracing';
+import { fetchSpansInRange } from '@/api/modules/tracing';
 import { tracingRealtime } from '@/lib/tracing/socket';
 import { useTemplatesCache } from '@/lib/graph/templates.provider';
 import { useNodeReminders } from '@/lib/graph/hooks';
-import { api } from '@/api/graph';
+import { graph as api } from '@/api/modules/graph';
 import { notifyError, notifySuccess } from '@/lib/notify';
 import { Link } from 'react-router-dom';
 

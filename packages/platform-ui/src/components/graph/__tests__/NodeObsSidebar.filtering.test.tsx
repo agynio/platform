@@ -15,7 +15,7 @@ vi.mock('@/lib/graph/hooks', () => ({
 
 const spans: any[] = [];
 
-vi.mock('@/api/tracing', () => ({
+vi.mock('@/api/modules/tracing', () => ({
   fetchSpansInRange: async () => spans,
 }));
 vi.mock('@/lib/tracing/socket', () => ({

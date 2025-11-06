@@ -10,11 +10,11 @@ vi.mock('@/lib/graph/templates.provider', () => ({
 }));
 vi.mock('@/lib/graph/hooks', () => ({ useNodeReminders: () => ({ isLoading: false, data: { items: [] } }) }));
 // Prevent network during span seeding; return empty list by default
-vi.mock('@/api/tracing', () => ({
+vi.mock('@/api/modules/tracing', () => ({
   fetchSpansInRange: vi.fn(async () => []),
 }));
-vi.mock('@/api/graph', () => ({
-  api: {
+vi.mock('@/api/modules/graph', () => ({
+  graph: {
     listNodeRuns: vi.fn(async () => ({ items: [{ nodeId: 'n', threadId: 't', runId: 't/run-1', status: 'running', startedAt: new Date().toISOString(), updatedAt: new Date().toISOString() }] })),
     terminateRun: vi.fn(async () => ({ status: 'terminating' })),
   },
@@ -24,7 +24,7 @@ vi.mock('@/lib/tracing/socket', () => ({
 }));
 
 import { NodeTracingSidebar } from '../NodeTracingSidebar';
-import { api } from '@/api/graph';
+import { graph as api } from '@/api/modules/graph';
 
 describe('NodeObsSidebar terminate UI behavior', () => {
   it('renders active runs, disables button during terminate, optimistic state and refresh', async () => {

@@ -17,7 +17,7 @@ vi.mock('../../../lib/graph/hooks', () => ({
   useNodeReminders: (...args: any[]) => useNodeRemindersImpl(...args),
 }));
 
-vi.mock('@/api/tracing', () => ({
+vi.mock('@/api/modules/tracing', () => ({
   fetchSpansInRange: async () => ([]),
 }));
 vi.mock('../../../lib/tracing/socket', () => ({

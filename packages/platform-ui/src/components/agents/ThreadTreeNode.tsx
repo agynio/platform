@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import type { ThreadStatusFilter } from './ThreadStatusFilterSwitch';
-import { httpJson } from '@/api/client';
+import { threads } from '@/api/modules/threads';
 
 export type ThreadNode = {
   id: string;
@@ -10,14 +10,6 @@ export type ThreadNode = {
   parentId?: string | null;
   createdAt: string;
 };
-
-async function api<T>(path: string, init?: RequestInit): Promise<T> {
-  const p = path.startsWith('/api') ? path : `/api/${path}`;
-  // Use relative base in tests to avoid env dependence
-  const res = await httpJson<T>(p, init, '');
-  if (res === undefined) throw new Error('Empty response');
-  return res;
-}
 
 export function ThreadTreeNode({
   node,
@@ -47,8 +39,8 @@ export function ThreadTreeNode({
     setLoading(true);
     setError(null);
     try {
-      const res = await api<{ items: ThreadNode[] }>(`agents/threads/${node.id}/children?status=${statusFilter}`);
-      setChildren(res.items);
+      const res = await threads.children(node.id, statusFilter);
+      setChildren(res.items || []);
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : 'Failed to load children';
       setError(msg);
@@ -62,7 +54,7 @@ export function ThreadTreeNode({
     setError(null);
     try {
       const next = (node.status || 'open') === 'open' ? 'closed' : 'open';
-      await api(`/agents/threads/${node.id}`, { method: 'PATCH', body: JSON.stringify({ status: next }) });
+      await threads.patchStatus(node.id, next);
       // status updated server-side; refresh UI via refetches below
       // Refresh children list if visible to apply filter
       if (expanded) await loadChildren();

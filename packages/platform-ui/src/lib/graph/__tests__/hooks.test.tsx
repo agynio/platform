@@ -1,25 +1,23 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { renderHook, waitFor } from '@testing-library/react';
 import React from 'react';
 import { useNodeStatus, useTemplates, useNodeReminders } from '../../graph/hooks';
 import { graphSocket } from '../../graph/socket';
 
-const g: any = globalThis;
+// Mock http client used by modules (avoid TDZ with vi.hoisted)
+const hoisted = vi.hoisted(() => ({ getMock: vi.fn() }));
+vi.mock('@/api/http', () => ({ http: { get: hoisted.getMock }, tracingHttp: { get: vi.fn() } }));
 
 describe('graph hooks', () => {
-  const origFetch = g.fetch;
   beforeEach(() => {
-    g.fetch = vi.fn(async (input: RequestInfo) => {
-      const url = String(input);
-      if (url.endsWith('/api/graph/templates')) return new Response(JSON.stringify([{ name: 'x', title: 'X', kind: 'tool', sourcePorts: {}, targetPorts: {} }]));
-      if (url.includes('/status')) return new Response(JSON.stringify({ isPaused: false }));
-      if (url.includes('/reminders')) return new Response(JSON.stringify({ items: [{ id: '1', threadId: 't', note: 'n', at: new Date().toISOString() }] }));
-      return new Response('', { status: 204 });
-    }) as any;
-  });
-  afterEach(() => {
-    g.fetch = origFetch;
+    hoisted.getMock.mockReset();
+    hoisted.getMock.mockImplementation(async (url: string) => {
+      if (url.endsWith('/api/graph/templates')) return [{ name: 'x', title: 'X', kind: 'tool', sourcePorts: {}, targetPorts: {} }];
+      if (String(url).includes('/status')) return { isPaused: false };
+      if (String(url).includes('/reminders')) return { items: [{ id: '1', threadId: 't', note: 'n', at: new Date().toISOString() }] };
+      return {};
+    });
   });
 
   it('useTemplates fetches and caches', async () => {

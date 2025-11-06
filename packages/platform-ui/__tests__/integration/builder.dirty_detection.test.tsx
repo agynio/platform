@@ -1,8 +1,24 @@
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+// Shared store for hoisted mocks
+(globalThis as any).__graphTest = { posts: 0, saved: null };
+vi.mock('@/api/modules/graph', () => ({
+  graph: {
+    getTemplates: vi.fn(async () => [{ name: 'mock', title: 'Mock', kind: 'tool', sourcePorts: ['out'], targetPorts: ['in'] }]),
+    getFullGraph: vi.fn(async () => ({
+      name: 'g',
+      version: 1,
+      nodes: [
+        { id: 'n1', template: 'mock', config: {}, position: { x: 10, y: 10 } },
+        { id: 'n2', template: 'mock', config: {}, position: { x: 100, y: 10 } },
+      ],
+      edges: [],
+    })),
+    saveFullGraph: vi.fn(async (body: any) => { (globalThis as any).__graphTest.posts += 1; (globalThis as any).__graphTest.saved = body; return { version: Date.now() } as any; }),
+  },
+}));
 import React, { useEffect } from 'react';
 import { act, render, waitFor, screen } from '@testing-library/react';
-import { http, HttpResponse } from 'msw';
-import { server, TestProviders } from './testUtils';
+import { TestProviders } from './testUtils';
 import { useBuilderState } from '../../src/builder/hooks/useBuilderState';
 import type { EdgeRemoveChange, NodePositionChange, NodeRemoveChange, NodeSelectionChange, OnConnect } from 'reactflow';
 
@@ -15,44 +31,14 @@ function Harness({ expose, debounceMs = 80 }: { expose: (api: ReturnType<typeof 
 }
 
 describe('Builder dirty detection for graph edits', () => {
-  beforeAll(() => server.listen());
-  afterEach(() => {
-    server.resetHandlers();
-    vi.useRealTimers();
-  });
-  afterAll(() => server.close());
+  beforeAll(() => { (globalThis as any).__graphTest.posts = 0; (globalThis as any).__graphTest.saved = null; });
+  afterEach(() => { vi.useRealTimers(); });
+  afterAll(() => {});
 
-  function setupServerCounters() {
-    const counters = { posts: 0 };
-    server.use(
-      http.get('http://localhost:3010/api/graph/templates', () =>
-        HttpResponse.json([
-          { name: 'mock', title: 'Mock', kind: 'tool', sourcePorts: ['out'], targetPorts: ['in'] },
-        ]),
-      ),
-      http.get('http://localhost:3010/api/graph', () =>
-        HttpResponse.json({
-          name: 'g',
-          version: 1,
-          nodes: [
-            { id: 'n1', template: 'mock', config: {}, position: { x: 10, y: 10 } },
-            { id: 'n2', template: 'mock', config: {}, position: { x: 100, y: 10 } },
-          ],
-          edges: [],
-        }),
-      ),
-      // Align with builder.autosave.test.tsx which posts to http://localhost:3010/api/graph
-      http.post('http://localhost:3010/api/graph', async ({ request }) => {
-        counters.posts += 1;
-        await request.json().catch(() => ({}));
-        return HttpResponse.json({ version: Date.now() });
-      }),
-    );
-    return counters;
-  }
+  function getPosts() { return (globalThis as any).__graphTest.posts as number; }
 
   it('ignores selection-only changes (no autosave/version bump)', async () => {
-    const counters = setupServerCounters();
+    (globalThis as any).__graphTest.posts = 0;
     let api: ReturnType<typeof useBuilderState> | null = null;
 
     render(
@@ -74,11 +60,11 @@ describe('Builder dirty detection for graph edits', () => {
       vi.advanceTimersByTime(1200);
       await Promise.resolve();
     });
-    expect(counters.posts).toBe(0);
+    expect(getPosts()).toBe(0);
   });
 
   it('position drag end with no delta is not dirty; real move is dirty', async () => {
-    const counters = setupServerCounters();
+    (globalThis as any).__graphTest.posts = 0;
     let api: ReturnType<typeof useBuilderState> | null = null;
 
     render(
@@ -111,7 +97,7 @@ describe('Builder dirty detection for graph edits', () => {
       vi.advanceTimersByTime(1200);
       await Promise.resolve();
     });
-    expect(counters.posts).toBe(0);
+    expect(getPosts()).toBe(0);
 
     // Real move
     const dragStart2: NodePositionChange = { id: 'n1', type: 'position', dragging: true };
@@ -134,11 +120,11 @@ describe('Builder dirty detection for graph edits', () => {
       vi.advanceTimersByTime(1200);
       await Promise.resolve();
     });
-    await waitFor(() => expect(counters.posts).toBe(1));
+    await waitFor(() => expect(getPosts()).toBe(1));
   });
 
   it('node and edge add/remove mark dirty', async () => {
-    const counters = setupServerCounters();
+    (globalThis as any).__graphTest.posts = 0;
     let api: ReturnType<typeof useBuilderState> | null = null;
 
     render(
@@ -158,7 +144,7 @@ describe('Builder dirty detection for graph edits', () => {
       vi.advanceTimersByTime(1200);
       await Promise.resolve();
     });
-    await waitFor(() => expect(counters.posts).toBe(1));
+    await waitFor(() => expect(getPosts()).toBe(1));
 
     // Edge add via valid connection
     const conn: Parameters<OnConnect>[0] = { source: 'n1', sourceHandle: 'out', target: 'n2', targetHandle: 'in' };
@@ -169,7 +155,7 @@ describe('Builder dirty detection for graph edits', () => {
       vi.advanceTimersByTime(1200);
       await Promise.resolve();
     });
-    await waitFor(() => expect(counters.posts).toBe(2));
+    await waitFor(() => expect(getPosts()).toBe(2));
 
     // Edge remove
     const edgeId = 'n1-out__n2-in';
@@ -181,7 +167,7 @@ describe('Builder dirty detection for graph edits', () => {
       vi.advanceTimersByTime(1200);
       await Promise.resolve();
     });
-    await waitFor(() => expect(counters.posts).toBe(3));
+    await waitFor(() => expect(getPosts()).toBe(3));
 
     // Node remove
     const nrem: NodeRemoveChange = { id: 'n1', type: 'remove' };
@@ -192,6 +178,6 @@ describe('Builder dirty detection for graph edits', () => {
       vi.advanceTimersByTime(1200);
       await Promise.resolve();
     });
-    await waitFor(() => expect(counters.posts).toBe(4));
+    await waitFor(() => expect(getPosts()).toBe(4));
   });
 });

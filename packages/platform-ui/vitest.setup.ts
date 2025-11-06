@@ -43,8 +43,8 @@ try {
 // validate env resolution. Individual pages pass base '' explicitly where needed.
 
 // Stub tracing span fetches to avoid external network in CI.
-// Tests that need specific spans should mock '@/api/tracing' themselves.
-vi.mock('@/api/tracing', async () => {
+// Tests that need specific spans should mock '@/api/modules/tracing' themselves.
+vi.mock('@/api/modules/tracing', async () => {
   return {
     fetchSpansInRange: async () => [],
     fetchRunningSpansFromTo: async () => [],

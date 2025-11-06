@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { api } from '@/api/graph';
+import { graph as api } from '@/api/modules/graph';
 import { notifyError, notifySuccess } from '@/lib/notify';
 
 // Avoid reserved React prop name "key" in component props

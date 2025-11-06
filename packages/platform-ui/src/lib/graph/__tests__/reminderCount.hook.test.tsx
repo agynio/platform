@@ -1,22 +1,16 @@
 /* @vitest-environment jsdom */
 import React from 'react';
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+vi.mock('@/api/modules/graph', () => ({ graph: { getNodeReminders: vi.fn(async () => ({ items: [] })) } }));
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { renderHook, waitFor } from '@testing-library/react';
 import { useReminderCount } from '../hooks';
 import { graphSocket } from '../socket';
 
 describe('useReminderCount', () => {
-  const g: any = globalThis as any;
-  const origFetch = g.fetch;
   beforeEach(() => {
-    g.fetch = vi.fn(async (input: RequestInfo) => {
-      const url = String(input);
-      if (url.includes('/reminders')) return new Response(JSON.stringify({ items: [] }));
-      return new Response('', { status: 204 });
-    }) as any;
+    vi.doMock('@/api/modules/graph', () => ({ graph: { getNodeReminders: vi.fn(async () => ({ items: [] })) } }));
   });
-  afterEach(() => { g.fetch = origFetch; });
 
   it('subscribes to node_reminder_count and updates count', async () => {
     const qc = new QueryClient();
@@ -44,4 +38,3 @@ describe('useReminderCount', () => {
     await waitFor(() => expect(result.current.data?.count).toBe(2));
   });
 });
-

@@ -1,20 +1,9 @@
-import type { NodeStatus, TemplateSchema, ReminderDTO } from '../lib/graph/types';
-import { buildUrl, httpJson } from './client';
+import { http } from '@/api/http';
+import type { TemplateSchema, NodeStatus, PersistedGraphUpsertRequestUI, ReminderDTO } from '@/api/types/graph';
+import type { PersistedGraph } from '@agyn/shared';
+import axios from 'axios';
 
-// Minimal graph type (align with backend PersistedGraphUpsertRequest shape)
-export interface PersistedGraphUpsertRequestUI {
-  name?: string;
-  version?: number;
-  nodes: Array<{ id: string; position?: { x: number; y: number }; template: string; config?: Record<string, unknown> }>;
-  edges: Array<{ source: string; sourceHandle?: string; target: string; targetHandle?: string }>;
-}
-
-function isLikelyJsonSchemaRoot(obj: unknown): obj is Record<string, unknown> {
-  if (!obj || typeof obj !== 'object') return false;
-  const o = obj as Record<string, unknown>;
-  return 'type' in o || 'properties' in o || '$ref' in o;
-}
-
+// Keep normalize function identical to prior implementation
 type TemplateName =
   | 'workspace'
   | 'shellTool'
@@ -136,76 +125,60 @@ function normalizeConfigByTemplate(
   }
 }
 
+function isLikelyJsonSchemaRoot(obj: unknown): obj is Record<string, unknown> {
+  if (!obj || typeof obj !== 'object') return false;
+  const o = obj as Record<string, unknown>;
+  return 'type' in o || 'properties' in o || '$ref' in o;
+}
+
 export const graph = {
-  getTemplates: (base?: string) => httpJson<TemplateSchema[]>(`/api/graph/templates`, undefined, base),
-  listNodeRuns: async (nodeId: string, status: 'running' | 'terminating' | 'all' = 'all', base?: string) => {
-    const res = await httpJson<{
-      items: Array<{
-        nodeId: string;
-        threadId: string;
-        runId: string;
-        status: string;
-        startedAt: string;
-        updatedAt: string;
-      }>;
-    }>(`/api/graph/nodes/${encodeURIComponent(nodeId)}/runs?status=${encodeURIComponent(status)}`, undefined, base);
+  // Templates
+  getTemplates: () => http.get<TemplateSchema[]>(`/api/graph/templates`),
+
+  // Node runs
+  listNodeRuns: async (nodeId: string, status: 'running' | 'terminating' | 'all' = 'all') => {
+    const res = await http.get<{ items: Array<{ nodeId: string; threadId: string; runId: string; status: string; startedAt: string; updatedAt: string }> }>(
+      `/api/graph/nodes/${encodeURIComponent(nodeId)}/runs`,
+      { params: { status } },
+    );
     return res ?? { items: [] };
   },
-  terminateRun: (nodeId: string, runId: string, base?: string) =>
-    httpJson<{ status: string }>(
-      `/api/graph/nodes/${encodeURIComponent(nodeId)}/runs/${encodeURIComponent(runId)}/terminate`,
-      { method: 'POST' },
-      base,
-    ),
-  terminateThread: (nodeId: string, threadId: string, base?: string) =>
-    httpJson<{ status: string }>(
-      `/api/graph/nodes/${encodeURIComponent(nodeId)}/threads/${encodeURIComponent(threadId)}/terminate`,
-      { method: 'POST' },
-      base,
-    ),
-  getNodeReminders: async (nodeId: string, base?: string) => {
-    const res = await httpJson<{ items: ReminderDTO[] }>(`/api/graph/nodes/${encodeURIComponent(nodeId)}/reminders`, undefined, base);
+  terminateRun: (nodeId: string, runId: string) =>
+    http.post<{ status: string }>(`/api/graph/nodes/${encodeURIComponent(nodeId)}/runs/${encodeURIComponent(runId)}/terminate`),
+  terminateThread: (nodeId: string, threadId: string) =>
+    http.post<{ status: string }>(`/api/graph/nodes/${encodeURIComponent(nodeId)}/threads/${encodeURIComponent(threadId)}/terminate`),
+
+  // Reminders
+  getNodeReminders: async (nodeId: string) => {
+    const res = await http.get<{ items: ReminderDTO[] }>(`/api/graph/nodes/${encodeURIComponent(nodeId)}/reminders`);
     return res ?? { items: [] };
   },
-  listVaultMounts: (base?: string) => httpJson<{ items: string[] }>(`/api/vault/mounts`, undefined, base).catch(() => ({ items: [] })),
-  listVaultPaths: (mount: string, prefix = '', base?: string) =>
-    httpJson<{ items: string[] }>(
-      `/api/vault/kv/${encodeURIComponent(mount)}/paths?prefix=${encodeURIComponent(prefix)}`,
-      undefined,
-      base,
-    ).catch(() => ({ items: [] })),
-  listVaultKeys: (mount: string, path = '', opts?: { maskErrors?: boolean; base?: string }) =>
-    opts?.maskErrors === false
-      ? httpJson<{ items: string[] }>(
-          `/api/vault/kv/${encodeURIComponent(mount)}/keys?path=${encodeURIComponent(path)}`,
-          undefined,
-          opts?.base,
-        )
-      : httpJson<{ items: string[] }>(
-          `/api/vault/kv/${encodeURIComponent(mount)}/keys?path=${encodeURIComponent(path)}`,
-          undefined,
-          opts?.base,
-        ).catch(() => ({ items: [] })),
-  writeVaultKey: (mount: string, body: { path: string; key: string; value: string }, base?: string) =>
-    httpJson<{ mount: string; path: string; key: string; version: number }>(
-      `/api/vault/kv/${encodeURIComponent(mount)}/write`,
-      { method: 'POST', body: JSON.stringify(body) },
-      base,
-    ),
-  getNodeStatus: (nodeId: string, base?: string) => httpJson<NodeStatus>(`/api/graph/nodes/${encodeURIComponent(nodeId)}/status`, undefined, base),
-  getNodeState: (nodeId: string, base?: string) => httpJson<{ state: Record<string, unknown> }>(`/api/graph/nodes/${encodeURIComponent(nodeId)}/state`, undefined, base),
-  putNodeState: (nodeId: string, state: Record<string, unknown>, base?: string) =>
-    httpJson<{ state: Record<string, unknown> }>(`/api/graph/nodes/${encodeURIComponent(nodeId)}/state`, {
-      method: 'PUT',
-      body: JSON.stringify({ state }),
-    }, base),
-  getDynamicConfigSchema: async (nodeId: string, base?: string): Promise<Record<string, unknown> | null> => {
-    const structured = buildUrl(`/api/graph/nodes/${encodeURIComponent(nodeId)}/dynamic-config/schema`, base);
+
+  // Vault helpers
+  listVaultMounts: () => http.get<{ items: string[] }>(`/api/vault/mounts`).catch(() => ({ items: [] })),
+  listVaultPaths: (mount: string, prefix = '') =>
+    http
+      .get<{ items: string[] }>(`/api/vault/kv/${encodeURIComponent(mount)}/paths`, { params: { prefix } })
+      .catch(() => ({ items: [] })),
+  listVaultKeys: (mount: string, path = '', opts?: { maskErrors?: boolean }) => {
+    const req = http.get<{ items: string[] }>(`/api/vault/kv/${encodeURIComponent(mount)}/keys`, { params: { path } });
+    return opts?.maskErrors === false ? req : req.catch(() => ({ items: [] }));
+  },
+  writeVaultKey: (mount: string, body: { path: string; key: string; value: string }) =>
+    http.post<{ mount: string; path: string; key: string; version: number }>(`/api/vault/kv/${encodeURIComponent(mount)}/write`, body),
+
+  // Node status/state
+  getNodeStatus: (nodeId: string) => http.get<NodeStatus>(`/api/graph/nodes/${encodeURIComponent(nodeId)}/status`),
+  getNodeState: (nodeId: string) => http.get<{ state: Record<string, unknown> }>(`/api/graph/nodes/${encodeURIComponent(nodeId)}/state`),
+  putNodeState: (nodeId: string, state: Record<string, unknown>) =>
+    http.put<{ state: Record<string, unknown> }>(`/api/graph/nodes/${encodeURIComponent(nodeId)}/state`, { state }),
+
+  // Dynamic config schema (404 -> null)
+  getDynamicConfigSchema: async (nodeId: string): Promise<Record<string, unknown> | null> => {
     try {
-      const res = await fetch(structured, { headers: { 'Content-Type': 'application/json' } });
-      if (res.status === 404) return null;
-      if (!res.ok) return null;
-      const data = await res.json().catch(() => null);
+      const data = await http.get<unknown>(
+        `/api/graph/nodes/${encodeURIComponent(nodeId)}/dynamic-config/schema`,
+      );
       if (!data || typeof data !== 'object') return null;
       if ('schema' in (data as Record<string, unknown>)) {
         const rec = data as Record<string, unknown> & { schema?: unknown };
@@ -213,26 +186,27 @@ export const graph = {
         return isLikelyJsonSchemaRoot(maybeSchema) ? (maybeSchema as Record<string, unknown>) : null;
       }
       return isLikelyJsonSchemaRoot(data) ? (data as Record<string, unknown>) : null;
-    } catch {
+    } catch (e: unknown) {
+      if (axios.isAxiosError(e) && e.response?.status === 404) return null;
       return null;
     }
   },
-  postNodeAction: (nodeId: string, action: 'provision' | 'deprovision', base?: string) =>
-    httpJson<void>(`/api/graph/nodes/${encodeURIComponent(nodeId)}/actions`, {
-      method: 'POST',
-      body: JSON.stringify({ action }),
-    }, base),
-  saveFullGraph: (graph: PersistedGraphUpsertRequestUI, base?: string) => {
-    const normalized = {
-      ...graph,
-      nodes: graph.nodes.map((n) => ({ ...n, config: normalizeConfigByTemplate(n.template, n.config) })),
-    } as PersistedGraphUpsertRequestUI;
-    return httpJson<PersistedGraphUpsertRequestUI & { version: number; updatedAt: string }>(`/api/graph`, {
-      method: 'POST',
-      body: JSON.stringify(normalized),
-    }, base);
+
+  // Node action
+  postNodeAction: (nodeId: string, action: 'provision' | 'deprovision') =>
+    http.post<void>(`/api/graph/nodes/${encodeURIComponent(nodeId)}/actions`, { action }),
+
+  // Full graph
+  saveFullGraph: (g: PersistedGraphUpsertRequestUI) => {
+    const normalized: PersistedGraphUpsertRequestUI = {
+      ...g,
+      nodes: g.nodes.map((n) => ({ ...n, config: normalizeConfigByTemplate(n.template, n.config) })),
+    };
+    return http.post<PersistedGraphUpsertRequestUI & { version: number; updatedAt: string }>(`/api/graph`, normalized);
   },
+  getFullGraph: () => http.get<PersistedGraph>(`/api/graph`),
 };
 
 Object.defineProperty(graph, '__test_normalize', { value: normalizeConfigByTemplate });
-export const api = graph;
+
+export type { PersistedGraphUpsertRequestUI };
