@@ -31,6 +31,11 @@ if (!('ResizeObserver' in globalThis)) {
 // Provide required envs to avoid import-time throws in tests
 vi.stubEnv('VITE_API_BASE_URL', process.env.VITE_API_BASE_URL ?? 'http://localhost:3010');
 vi.stubEnv('VITE_TRACING_SERVER_URL', process.env.VITE_TRACING_SERVER_URL ?? 'http://localhost:4319');
+// Also ensure process.env is populated for test utils reading process.env
+if (typeof process !== 'undefined' && process.env) {
+  process.env.VITE_API_BASE_URL = process.env.VITE_API_BASE_URL ?? 'http://localhost:3010';
+  process.env.VITE_TRACING_SERVER_URL = process.env.VITE_TRACING_SERVER_URL ?? 'http://localhost:4319';
+}
 
 // Avoid mutating config.apiBaseUrl globally to not affect unit tests that
 // validate env resolution. Individual pages pass base '' explicitly where needed.

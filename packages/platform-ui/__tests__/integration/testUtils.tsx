@@ -32,7 +32,11 @@ export const mockTemplates: TemplateSchema[] = [
 ];
 
 // MSW server setup (MSW v2 http handlers)
-export const handlers = [
+// Read API base from env (tests)
+const API_BASE = process.env.VITE_API_BASE_URL;
+const abs = (p: string) => (API_BASE ? `${API_BASE}${p}` : p);
+
+const relativeHandlers = [
   _http.get('/api/graph/templates', () => _HttpResponse.json(mockTemplates)),
   _http.get('/api/graph/nodes/:nodeId/status', ({ params }) => {
     const nodeId = params.nodeId as string;
@@ -89,6 +93,63 @@ export const handlers = [
     return _HttpResponse.json({ name, version, commitHash: 'abcd1234', attributePath: `${name}` });
   }),
 ];
+
+const absoluteHandlers = [
+  _http.get(abs('/api/graph/templates'), () => _HttpResponse.json(mockTemplates)),
+  _http.get(abs('/api/graph/nodes/:nodeId/status'), ({ params }) => {
+    const nodeId = params.nodeId as string;
+    return _HttpResponse.json({
+      nodeId,
+      isPaused: false,
+      provisionStatus: { state: 'not_ready' },
+    });
+  }),
+  _http.post(abs('/api/graph/nodes/:nodeId/actions'), () => new _HttpResponse(null, { status: 204 })),
+  _http.get(abs('/api/graph/nodes/:nodeId/dynamic-config/schema'), () =>
+    _HttpResponse.json({
+      type: 'object',
+      properties: { toolA: { type: 'boolean', title: 'toolA' }, toolB: { type: 'boolean', title: 'toolB' } },
+    }),
+  ),
+  _http.get(abs('/api/graph'), () =>
+    _HttpResponse.json({
+      name: 'g',
+      version: 1,
+      nodes: [
+        { id: 'n4', template: 'mock', config: {} },
+        { id: 'n3', template: 'mock', config: {} },
+        { id: 'n2', template: 'mock', config: {} },
+        { id: 'n1', template: 'mock', config: {} },
+      ],
+      edges: [],
+    }),
+  ),
+  _http.post(abs('/api/graph'), async ({ request }) => {
+    await request.json().catch(() => ({}));
+    return _HttpResponse.json({ version: Date.now(), updatedAt: new Date().toISOString() });
+  }),
+  _http.get(abs('/api/nix/packages'), ({ request }) => {
+    const url = new URL(request.url);
+    const q = url.searchParams.get('query') || '';
+    const packages = q && q.length >= 2 ? [{ name: q, description: `${q} package` }] : [];
+    return _HttpResponse.json({ packages });
+  }),
+  _http.get(abs('/api/nix/versions'), ({ request }) => {
+    const url = new URL(request.url);
+    const name = url.searchParams.get('name');
+    if (!name) return new _HttpResponse(null, { status: 400 });
+    return _HttpResponse.json({ versions: ['1.2.3', '1.0.0'] });
+  }),
+  _http.get(abs('/api/nix/resolve'), ({ request }) => {
+    const url = new URL(request.url);
+    const name = url.searchParams.get('name');
+    const version = url.searchParams.get('version');
+    if (!name || !version) return new _HttpResponse(null, { status: 400 });
+    return _HttpResponse.json({ name, version, commitHash: 'abcd1234', attributePath: `${name}` });
+  }),
+];
+
+export const handlers = API_BASE ? [...relativeHandlers, ...absoluteHandlers] : relativeHandlers;
 
 export const server = setupServer(...handlers);
 
