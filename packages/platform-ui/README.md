@@ -12,6 +12,12 @@ Env configuration
 - VITE_TRACING_SERVER_URL (optional): override the tracing-server base URL. Defaults to `${VITE_API_BASE_URL}/tracing`.
 - API_BASE_URL (Node env) optional: used in non-Vite contexts (tests/SSR) when VITE_API_BASE_URL is not set.
 
+API base resolution precedence
+- Vite env: `VITE_API_BASE_URL`
+- Node env: `API_BASE_URL` (or `VITE_API_BASE_URL`)
+- Under Vitest: `''` (relative URLs for tests)
+- Fallback: `http://localhost:3010`
+
 Tracing API access
 - The platform UI derives the tracing HTTP and websocket base from the main API host: `${VITE_API_BASE_URL}/tracing`. Ensure your server proxies the `/tracing` path to the tracing-server.
 - Optional override via `VITE_TRACING_SERVER_URL` when a distinct tracing-server host is required.
