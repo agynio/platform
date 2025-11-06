@@ -5,7 +5,7 @@ import { NODE_ID_LABEL, PLATFORM_LABEL, PARENT_CID_LABEL, ROLE_LABEL, THREAD_ID_
 export const ContainerMetadataSchema = z.object({
   labels: z.record(z.string(), z.string()).default({}),
   platform: z.string().optional(),
-  ttlSeconds: z.number().int().nonnegative().default(86400),
+  // No TTL in metadata; TTL is a typed column
   lastError: z.string().optional(),
   retryAfter: z.string().optional(),
   terminationAttempts: z.number().int().nonnegative().optional(),
@@ -23,4 +23,3 @@ export const InspectLabelsSchema = z
     [PLATFORM_LABEL]: z.string().optional(),
   })
   .passthrough();
-

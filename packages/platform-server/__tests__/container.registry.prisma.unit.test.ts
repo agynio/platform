@@ -12,6 +12,7 @@ type ContainerRow = {
   createdAt: Date;
   updatedAt: Date;
   lastUsedAt: Date;
+  ttlSeconds: number;
   killAfterAt: Date | null;
   terminationReason: string | null;
   deletedAt: Date | null;
@@ -37,6 +38,7 @@ class FakePrismaClient {
           createdAt: now,
           updatedAt: now,
           lastUsedAt: create.lastUsedAt as Date,
+          ttlSeconds: (create as Partial<ContainerRow>).ttlSeconds ?? 86400,
           killAfterAt: (create.killAfterAt as Date | null) ?? null,
           terminationReason: null,
           deletedAt: null,
@@ -53,6 +55,7 @@ class FakePrismaClient {
         existing.updatedAt = new Date();
         existing.lastUsedAt = (update.lastUsedAt as Date) ?? existing.lastUsedAt;
         existing.killAfterAt = (update.killAfterAt as Date | null) ?? existing.killAfterAt;
+        existing.ttlSeconds = (update as Partial<ContainerRow>).ttlSeconds ?? existing.ttlSeconds;
         existing.terminationReason = (update.terminationReason as string | null) ?? existing.terminationReason;
         existing.deletedAt = (update.deletedAt as Date | null) ?? existing.deletedAt;
         existing.metadata = (update.metadata as ContainerMetadata | null) ?? existing.metadata;
@@ -151,7 +154,7 @@ describe('ContainerRegistry (Prisma-backed)', () => {
     expect(row).toBeTruthy();
     expect(row!.status).toBe('running');
     expect(row!.killAfterAt).not.toBeNull();
-    expect(row!.metadata!.ttlSeconds).toBe(10);
+    expect(row!.ttlSeconds).toBe(10);
   });
 
   it('updateLastUsed does not create when missing', async () => {
@@ -181,13 +184,32 @@ describe('ContainerRegistry (Prisma-backed)', () => {
     await registry.registerStart({ containerId: 't2', nodeId: 'n', threadId: '', image: 'img' });
     await prisma.container.update({
       where: { containerId: 't2' },
-      data: { status: 'terminating', metadata: { labels: {}, ttlSeconds: 86400, retryAfter: future.toISOString() } as ContainerMetadata },
+      data: { status: 'terminating', metadata: { labels: {}, retryAfter: future.toISOString() } as ContainerMetadata },
     });
     const expired = await registry.getExpired(now);
     const ids = expired.map((r) => r.containerId);
     expect(ids).toContain('r1');
     expect(ids).toContain('t1');
     expect(ids).not.toContain('t2');
+  });
+
+  it('updateLastUsed recomputes killAfter using ttl column and override', async () => {
+    // Default TTL path
+    await registry.registerStart({ containerId: 'u1', nodeId: 'n', threadId: '', image: 'img', ttlSeconds: 5 });
+    const startRow = await prisma.container.findUnique({ where: { containerId: 'u1' } });
+    const baseKill = startRow!.killAfterAt!;
+    // Advance clock and update without override
+    const now = new Date(startRow!.lastUsedAt.getTime() + 1000);
+    await registry.updateLastUsed('u1', now);
+    const row1 = await prisma.container.findUnique({ where: { containerId: 'u1' } });
+    expect(row1!.ttlSeconds).toBe(5);
+    expect(row1!.killAfterAt!.getTime()).toBe(now.getTime() + 5 * 1000);
+    expect(row1!.killAfterAt!.getTime()).not.toBe(baseKill.getTime());
+
+    // Override TTL path
+    await registry.updateLastUsed('u1', now, 1);
+    const row2 = await prisma.container.findUnique({ where: { containerId: 'u1' } });
+    expect(row2!.killAfterAt!.getTime()).toBe(now.getTime() + 1 * 1000);
   });
 
   it('recordTerminationFailure sets backoff metadata', async () => {

@@ -112,7 +112,7 @@ model RunMessage {
 
 // Container tracking moved from MongoDB to Postgres via Prisma
 // threadId is optional and FK to Thread.id
-// Metadata captures labels, platform, ttlSeconds, and termination backoff fields
+// Metadata captures labels, platform, and termination backoff fields (no TTL)
 
 enum ProviderType {
   docker
@@ -144,6 +144,7 @@ model Container {
   createdAt         DateTime        @default(now())
   updatedAt         DateTime        @updatedAt
   lastUsedAt        DateTime
+  ttlSeconds        Int             @default(86400)
   killAfterAt       DateTime?
   terminationReason String?
   deletedAt         DateTime?

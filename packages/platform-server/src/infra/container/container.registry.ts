@@ -43,7 +43,6 @@ export class ContainerRegistry {
     const metadata: ContainerMetadata = {
       labels: args.labels ?? {},
       platform: args.platform,
-      ttlSeconds: typeof args.ttlSeconds === 'number' ? args.ttlSeconds : 86400,
     } as ContainerMetadata;
     const role: ContainerRole | null = args.role
       ? args.role
@@ -59,6 +58,7 @@ export class ContainerRegistry {
         image: args.image,
         status: 'running',
         lastUsedAt: new Date(nowIso),
+        ttlSeconds: typeof args.ttlSeconds === 'number' ? args.ttlSeconds : 86400,
         killAfterAt: killAfter ? new Date(killAfter) : null,
         terminationReason: null,
         deletedAt: null,
@@ -73,6 +73,7 @@ export class ContainerRegistry {
         image: args.image,
         status: 'running',
         lastUsedAt: new Date(nowIso),
+        ttlSeconds: typeof args.ttlSeconds === 'number' ? args.ttlSeconds : 86400,
         killAfterAt: killAfter ? new Date(killAfter) : null,
         terminationReason: null,
         deletedAt: null,
@@ -85,9 +86,9 @@ export class ContainerRegistry {
   async updateLastUsed(containerId: string, now: Date = new Date(), ttlOverrideSeconds?: number): Promise<void> {
     const existing = await this.prisma.container.findUnique({ where: { containerId } });
     if (!existing) return; // do not create missing records
-    const meta = (existing.metadata ?? {}) as Partial<ContainerMetadata> | undefined;
-    const ttlMeta = typeof meta?.ttlSeconds === 'number' ? meta.ttlSeconds : undefined;
-    const ttl = typeof ttlOverrideSeconds === 'number' ? ttlOverrideSeconds : typeof ttlMeta === 'number' ? ttlMeta : 86400;
+    // TTL comes from override or typed column; default to 24h
+    const ttlCol = (existing as unknown as { ttlSeconds?: number }).ttlSeconds;
+    const ttl = typeof ttlOverrideSeconds === 'number' ? ttlOverrideSeconds : typeof ttlCol === 'number' ? ttlCol : 86400;
     const killIso = this.computeKillAfter(now.toISOString(), ttl);
     await this.prisma.container.update({
       where: { containerId },
@@ -140,7 +141,6 @@ export class ContainerRegistry {
     return {
       labels: (raw?.labels as Record<string, string>) ?? {},
       platform: raw?.platform,
-      ttlSeconds: typeof raw?.ttlSeconds === 'number' ? raw.ttlSeconds : 86400,
       lastError: raw?.lastError,
       retryAfter: raw?.retryAfter,
       terminationAttempts: raw?.terminationAttempts,
