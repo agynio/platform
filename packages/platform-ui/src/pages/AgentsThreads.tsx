@@ -88,9 +88,10 @@ export function AgentsThreads() {
     const offMsg = graphSocket.onMessageCreated((payload) => {
       const m = payload.message;
       if (!m.runId) return;
+      const role = m.kind as 'user' | 'assistant' | 'system' | 'tool';
       setRunMessages((prev) => {
         const list = prev[m.runId] || [];
-        const next: UnifiedRunMessage = { id: m.id, role: m.kind as any, text: m.text, source: m.source, createdAt: m.createdAt, side: (m.kind === 'assistant' || m.kind === 'tool') ? 'right' : 'left', runId: m.runId };
+        const next: UnifiedRunMessage = { id: m.id, role, text: m.text, source: m.source, createdAt: m.createdAt, side: (role === 'assistant' || role === 'tool') ? 'right' : 'left', runId: m.runId };
         return { ...prev, [m.runId]: [...list, next] };
       });
     });

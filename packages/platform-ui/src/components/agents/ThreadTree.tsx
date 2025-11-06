@@ -10,30 +10,29 @@ export function ThreadTree({ status, onSelect, selectedId }: { status: ThreadSta
   const rootsQ = useThreadRoots(status) as UseQueryResult<{ items: ThreadNode[] }, Error>;
 
   const invalidate = () => qc.invalidateQueries({ queryKey: ['agents', 'threads', 'roots', status] });
-
-  // Subscribe to threads room and update metrics in cache on realtime events
+  // Subscribe to threads room and update react-query cache on events
   useEffect(() => {
     graphSocket.subscribe(['threads']);
     const offAct = graphSocket.onThreadActivityChanged((payload) => {
       qc.setQueryData<{ items: ThreadNode[] }>(['agents', 'threads', 'roots', status], (prev) => {
-        if (!prev) return prev as any;
+        if (!prev) return prev;
         const items = prev.items.map((t) => (t.id === payload.threadId ? { ...t, metrics: { ...(t.metrics || { remindersCount: 0, activity: 'idle' }), activity: payload.activity } } : t));
-        return { items } as { items: ThreadNode[] };
+        return { items };
       });
     });
     const offRem = graphSocket.onThreadRemindersCount((payload) => {
       qc.setQueryData<{ items: ThreadNode[] }>(['agents', 'threads', 'roots', status], (prev) => {
-        if (!prev) return prev as any;
+        if (!prev) return prev;
         const items = prev.items.map((t) => (t.id === payload.threadId ? { ...t, metrics: { ...(t.metrics || { remindersCount: 0, activity: 'idle' }), remindersCount: payload.remindersCount } } : t));
-        return { items } as { items: ThreadNode[] };
+        return { items };
       });
     });
     const offCreated = graphSocket.onThreadCreated((payload) => {
       qc.setQueryData<{ items: ThreadNode[] }>(['agents', 'threads', 'roots', status], (prev) => {
         const thread = payload.thread;
-        const node: ThreadNode = { id: thread.id, alias: thread.alias, summary: thread.summary, status: thread.status as any, parentId: thread.parentId, createdAt: thread.createdAt, metrics: { remindersCount: 0, activity: 'idle' } } as any;
+        const node: ThreadNode = { id: thread.id, alias: thread.alias, summary: thread.summary, status: thread.status as 'open' | 'closed', parentId: thread.parentId, createdAt: thread.createdAt, metrics: { remindersCount: 0, activity: 'idle' } };
         const items = prev ? [node, ...prev.items] : [node];
-        return { items } as { items: ThreadNode[] };
+        return { items };
       });
     });
     return () => { offAct(); offRem(); offCreated(); };
