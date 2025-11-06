@@ -96,6 +96,9 @@ const relativeHandlers = [
   _http.get('/api/agents/threads', () => _HttpResponse.json({ items: [] })),
   _http.get('/api/agents/threads/:threadId/runs', () => _HttpResponse.json({ items: [] })),
   _http.get('/api/agents/runs/:runId/messages', () => _HttpResponse.json({ items: [] })),
+  // Reminders endpoints used by AgentsReminders page (support both forms)
+  _http.get('/api/agents/reminders', () => _HttpResponse.json({ items: [] })),
+  _http.get('/api/agents/:agentId/reminders', () => _HttpResponse.json({ items: [] })),
 ];
 
 const absoluteHandlers = [
@@ -155,6 +158,9 @@ const absoluteHandlers = [
   _http.get(abs('/api/agents/threads'), () => _HttpResponse.json({ items: [] })),
   _http.get(abs('/api/agents/threads/:threadId/runs'), () => _HttpResponse.json({ items: [] })),
   _http.get(abs('/api/agents/runs/:runId/messages'), () => _HttpResponse.json({ items: [] })),
+  // Reminders endpoints (absolute)
+  _http.get(abs('/api/agents/reminders'), () => _HttpResponse.json({ items: [] })),
+  _http.get(abs('/api/agents/:agentId/reminders'), () => _HttpResponse.json({ items: [] })),
 ];
 
 export const handlers = API_BASE ? [...relativeHandlers, ...absoluteHandlers] : relativeHandlers;

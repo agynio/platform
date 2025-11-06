@@ -3,7 +3,7 @@ import React from 'react';
 import { render, screen, fireEvent, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { http, HttpResponse } from 'msw';
-import { TestProviders, server } from './integration/testUtils';
+import { TestProviders, server, abs } from './integration/testUtils';
 import { AgentsReminders } from '../src/pages/AgentsReminders';
 
 function t(offsetMs: number) {
@@ -26,6 +26,14 @@ describe('AgentsReminders page', () => {
           { id: 'r1', threadId: 'th1', note: 'Soon', at: t(100), createdAt: t(50), completedAt: null },
         ] });
       }),
+      http.get(abs('/api/agents/reminders'), ({ request }) => {
+        const url = new URL(request.url);
+        const filter = url.searchParams.get('filter');
+        if (filter !== 'active') return new HttpResponse(null, { status: 400 });
+        return HttpResponse.json({ items: [
+          { id: 'r1', threadId: 'th1', note: 'Soon', at: t(100), createdAt: t(50), completedAt: null },
+        ] });
+      }),
     );
 
     render(<MemoryRouter initialEntries={[{ pathname: '/agents/reminders' }]}><TestProviders><AgentsReminders /></TestProviders></MemoryRouter>);
@@ -41,6 +49,25 @@ describe('AgentsReminders page', () => {
   it('toggles filters: All and Completed', async () => {
     server.use(
       http.get('/api/agents/reminders', ({ request }) => {
+        const url = new URL(request.url);
+        const filter = url.searchParams.get('filter');
+        if (filter === 'active') {
+          return HttpResponse.json({ items: [
+            { id: 'a1', threadId: 'tA', note: 'A', at: t(200), createdAt: t(100), completedAt: null },
+          ] });
+        } else if (filter === 'all') {
+          return HttpResponse.json({ items: [
+            { id: 'a1', threadId: 'tA', note: 'A', at: t(200), createdAt: t(100), completedAt: null },
+            { id: 'c1', threadId: 'tC', note: 'C', at: t(150), createdAt: t(120), completedAt: t(160) },
+          ] });
+        } else if (filter === 'completed') {
+          return HttpResponse.json({ items: [
+            { id: 'c1', threadId: 'tC', note: 'C', at: t(150), createdAt: t(120), completedAt: t(160) },
+          ] });
+        }
+        return new HttpResponse(null, { status: 400 });
+      }),
+      http.get(abs('/api/agents/reminders'), ({ request }) => {
         const url = new URL(request.url);
         const filter = url.searchParams.get('filter');
         if (filter === 'active') {
@@ -82,7 +109,8 @@ describe('AgentsReminders page', () => {
   it('shows loading, error, and empty states', async () => {
     // First return 500 to trigger error
     server.use(
-      http.get('/api/agents/reminders', () => new HttpResponse(null, { status: 500 }))
+      http.get('/api/agents/reminders', () => new HttpResponse(null, { status: 500 })),
+      http.get(abs('/api/agents/reminders'), () => new HttpResponse(null, { status: 500 })),
     );
     render(<MemoryRouter initialEntries={[{ pathname: '/agents/reminders' }]}><TestProviders><AgentsReminders /></TestProviders></MemoryRouter>);
     expect(await screen.findByRole('alert')).toBeInTheDocument();
@@ -94,7 +122,13 @@ describe('AgentsReminders page', () => {
         const filter = url.searchParams.get('filter');
         if (filter !== 'active') return new HttpResponse(null, { status: 400 });
         return HttpResponse.json({ items: [] });
-      })
+      }),
+      http.get(abs('/api/agents/reminders'), ({ request }) => {
+        const url = new URL(request.url);
+        const filter = url.searchParams.get('filter');
+        if (filter !== 'active') return new HttpResponse(null, { status: 400 });
+        return HttpResponse.json({ items: [] });
+      }),
     );
 
     // Trigger refetch by toggling away then back to Active
