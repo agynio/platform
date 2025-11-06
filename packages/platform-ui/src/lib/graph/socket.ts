@@ -2,23 +2,25 @@ import { io, type Socket } from 'socket.io-client';
 import { config } from '@/config';
 import type { NodeStatusEvent, ReminderCountEvent } from './types';
 
-// Strictly typed server-to-client socket events
+// Strictly typed server-to-client socket events (listener signatures)
 type NodeStateEvent = { nodeId: string; state: Record<string, unknown>; updatedAt: string };
-type ServerToClientEvents = {
-  connect: void;
-  node_status: NodeStatusEvent;
-  node_state: NodeStateEvent;
-  node_reminder_count: ReminderCountEvent;
-  // Threads realtime
-  thread_created: { thread: { id: string; alias: string; summary: string | null; status: string; createdAt: string; parentId?: string | null } };
-  thread_updated: { thread: { id: string; alias: string; summary: string | null; status: string; createdAt: string; parentId?: string | null } };
-  thread_activity_changed: { threadId: string; activity: 'working' | 'waiting' | 'idle' };
-  thread_reminders_count: { threadId: string; remindersCount: number };
-  message_created: { message: { id: string; kind: string; text: string | null; source: unknown; createdAt: string; runId?: string } };
-  run_status_changed: { run: { id: string; status: string; createdAt: string; updatedAt: string } };
-};
+type ThreadSummary = { id: string; alias: string; summary: string | null; status: string; createdAt: string; parentId?: string | null };
+type MessageSummary = { id: string; kind: string; text: string | null; source: unknown; createdAt: string; runId?: string };
+type RunSummary = { id: string; status: string; createdAt: string; updatedAt: string };
+interface ServerToClientEvents {
+  node_status: (payload: NodeStatusEvent) => void;
+  node_state: (payload: NodeStateEvent) => void;
+  node_reminder_count: (payload: ReminderCountEvent) => void;
+  thread_created: (payload: { thread: ThreadSummary }) => void;
+  thread_updated: (payload: { thread: ThreadSummary }) => void;
+  thread_activity_changed: (payload: { threadId: string; activity: 'working' | 'waiting' | 'idle' }) => void;
+  thread_reminders_count: (payload: { threadId: string; remindersCount: number }) => void;
+  message_created: (payload: { message: MessageSummary }) => void;
+  run_status_changed: (payload: { run: RunSummary }) => void;
+}
 // Client-to-server emits: subscribe to rooms
-type ClientToServerEvents = { subscribe: (payload: { room?: string; rooms?: string[] }) => void } & Record<string, never>;
+type SubscribePayload = { room?: string; rooms?: string[] };
+interface ClientToServerEvents { subscribe: (payload: SubscribePayload) => void }
 
 type Listener = (ev: NodeStatusEvent) => void;
 type StateListener = (ev: { nodeId: string; state: Record<string, unknown>; updatedAt: string }) => void;
@@ -53,9 +55,7 @@ class GraphSocket {
       reconnectionDelayMax: 5000,
       withCredentials: true,
     });
-    this.socket.on('connect', () => {
-      // noop
-    });
+    // No-op connect listener; optional
     this.socket.on('node_status', (payload: NodeStatusEvent) => {
       const set = this.listeners.get(payload.nodeId);
       if (set) for (const fn of set) fn(payload);
@@ -69,12 +69,12 @@ class GraphSocket {
       if (set) for (const fn of set) fn(payload);
     });
     // Threads events
-    this.socket.on('thread_created', (payload) => { for (const fn of this.threadCreatedListeners) fn(payload); });
-    this.socket.on('thread_updated', (payload) => { for (const fn of this.threadUpdatedListeners) fn(payload); });
-    this.socket.on('thread_activity_changed', (payload) => { for (const fn of this.threadActivityListeners) fn(payload); });
-    this.socket.on('thread_reminders_count', (payload) => { for (const fn of this.threadRemindersListeners) fn(payload); });
-    this.socket.on('message_created', (payload) => { for (const fn of this.messageCreatedListeners) fn(payload); });
-    this.socket.on('run_status_changed', (payload) => { for (const fn of this.runStatusListeners) fn(payload); });
+    this.socket.on('thread_created', (payload: { thread: ThreadSummary }) => { for (const fn of this.threadCreatedListeners) fn(payload); });
+    this.socket.on('thread_updated', (payload: { thread: ThreadSummary }) => { for (const fn of this.threadUpdatedListeners) fn(payload); });
+    this.socket.on('thread_activity_changed', (payload: { threadId: string; activity: 'working' | 'waiting' | 'idle' }) => { for (const fn of this.threadActivityListeners) fn(payload); });
+    this.socket.on('thread_reminders_count', (payload: { threadId: string; remindersCount: number }) => { for (const fn of this.threadRemindersListeners) fn(payload); });
+    this.socket.on('message_created', (payload: { message: MessageSummary }) => { for (const fn of this.messageCreatedListeners) fn(payload); });
+    this.socket.on('run_status_changed', (payload: { run: RunSummary }) => { for (const fn of this.runStatusListeners) fn(payload); });
     return this.socket;
   }
 
