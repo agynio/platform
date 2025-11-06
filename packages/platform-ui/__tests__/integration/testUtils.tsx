@@ -92,6 +92,10 @@ const relativeHandlers = [
     if (!name || !version) return new _HttpResponse(null, { status: 400 });
     return _HttpResponse.json({ name, version, commitHash: 'abcd1234', attributePath: `${name}` });
   }),
+  // Threads endpoints used by AgentsThreads page
+  _http.get('/api/agents/threads', () => _HttpResponse.json({ items: [] })),
+  _http.get('/api/agents/threads/:threadId/runs', () => _HttpResponse.json({ items: [] })),
+  _http.get('/api/agents/runs/:runId/messages', () => _HttpResponse.json({ items: [] })),
 ];
 
 const absoluteHandlers = [
@@ -147,6 +151,10 @@ const absoluteHandlers = [
     if (!name || !version) return new _HttpResponse(null, { status: 400 });
     return _HttpResponse.json({ name, version, commitHash: 'abcd1234', attributePath: `${name}` });
   }),
+  // Threads endpoints (absolute)
+  _http.get(abs('/api/agents/threads'), () => _HttpResponse.json({ items: [] })),
+  _http.get(abs('/api/agents/threads/:threadId/runs'), () => _HttpResponse.json({ items: [] })),
+  _http.get(abs('/api/agents/runs/:runId/messages'), () => _HttpResponse.json({ items: [] })),
 ];
 
 export const handlers = API_BASE ? [...relativeHandlers, ...absoluteHandlers] : relativeHandlers;

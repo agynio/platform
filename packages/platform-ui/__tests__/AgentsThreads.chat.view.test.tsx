@@ -2,7 +2,7 @@ import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest
 import React from 'react';
 import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
-import { TestProviders, server } from './integration/testUtils';
+import { TestProviders, server, abs } from './integration/testUtils';
 // run selection removed; no extra wrappers needed beyond TestProviders
 import { AgentsThreads } from '../src/pages/AgentsThreads';
 
@@ -18,10 +18,22 @@ describe('AgentsThreads chat-like view', () => {
   function useThreadsMock() {
     server.use(
       http.get('/api/agents/threads', () => HttpResponse.json({ items: [{ id: 'th1', alias: 'th-a', summary: 'Thread A', createdAt: t(0) }] })),
+      http.get(abs('/api/agents/threads'), () => HttpResponse.json({ items: [{ id: 'th1', alias: 'th-a', summary: 'Thread A', createdAt: t(0) }] })),
       http.get('/api/agents/threads/th1/runs', () =>
         HttpResponse.json({ items: [{ id: 'run1', status: 'finished', createdAt: t(1), updatedAt: t(2) }] }),
       ),
+      http.get(abs('/api/agents/threads/th1/runs'), () =>
+        HttpResponse.json({ items: [{ id: 'run1', status: 'finished', createdAt: t(1), updatedAt: t(2) }] }),
+      ),
       http.get('/api/agents/runs/run1/messages', ({ request }) => {
+        const url = new URL(request.url);
+        const type = url.searchParams.get('type');
+        if (type === 'input') return HttpResponse.json({ items: [{ id: 'm1', kind: 'user', text: 'Hi', source: { a: 1 }, createdAt: t(10) }] });
+        if (type === 'injected') return HttpResponse.json({ items: [{ id: 'm2', kind: 'system', text: 'Injected', source: { b: 2 }, createdAt: t(20) }] });
+        if (type === 'output') return HttpResponse.json({ items: [{ id: 'm3', kind: 'assistant', text: 'Hello!', source: { c: 3 }, createdAt: t(30) }] });
+        return HttpResponse.json({ items: [] });
+      }),
+      http.get(abs('/api/agents/runs/run1/messages'), ({ request }) => {
         const url = new URL(request.url);
         const type = url.searchParams.get('type');
         if (type === 'input') return HttpResponse.json({ items: [{ id: 'm1', kind: 'user', text: 'Hi', source: { a: 1 }, createdAt: t(10) }] });
@@ -72,10 +84,26 @@ describe('AgentsThreads chat-like view', () => {
     const outputCount = 1;
     server.use(
       http.get('/api/agents/threads', () => HttpResponse.json({ items: [{ id: 'th1', alias: 'th-a', summary: 'Thread A', createdAt: t(0) }] })),
+      http.get(abs('/api/agents/threads'), () => HttpResponse.json({ items: [{ id: 'th1', alias: 'th-a', summary: 'Thread A', createdAt: t(0) }] })),
       http.get('/api/agents/threads/th1/runs', () =>
         HttpResponse.json({ items: [{ id: 'run1', status: 'finished', createdAt: t(1), updatedAt: t(2) }] }),
       ),
+      http.get(abs('/api/agents/threads/th1/runs'), () =>
+        HttpResponse.json({ items: [{ id: 'run1', status: 'finished', createdAt: t(1), updatedAt: t(2) }] }),
+      ),
       http.get('/api/agents/runs/run1/messages', ({ request }) => {
+        const url = new URL(request.url);
+        const type = url.searchParams.get('type');
+        if (type === 'input') return HttpResponse.json({ items: [{ id: 'm1', kind: 'user', text: 'Hi', source: {}, createdAt: t(10) }] });
+        if (type === 'injected') return HttpResponse.json({ items: [] });
+        if (type === 'output') {
+          const base = [{ id: 'm3', kind: 'assistant', text: 'Hello!', source: {}, createdAt: t(30) }];
+          const extra = outputCount > 1 ? [{ id: 'm4', kind: 'assistant', text: 'More', source: {}, createdAt: t(40) }] : [];
+          return HttpResponse.json({ items: [...base, ...extra] });
+        }
+        return HttpResponse.json({ items: [] });
+      }),
+      http.get(abs('/api/agents/runs/run1/messages'), ({ request }) => {
         const url = new URL(request.url);
         const type = url.searchParams.get('type');
         if (type === 'input') return HttpResponse.json({ items: [{ id: 'm1', kind: 'user', text: 'Hi', source: {}, createdAt: t(10) }] });
@@ -110,7 +138,14 @@ describe('AgentsThreads chat-like view', () => {
   it('renders multiple run headers by default (all runs loaded)', async () => {
     server.use(
       http.get('/api/agents/threads', () => HttpResponse.json({ items: [{ id: 'th1', alias: 'th-a', summary: 'Thread A', createdAt: t(0) }] })),
+      http.get(abs('/api/agents/threads'), () => HttpResponse.json({ items: [{ id: 'th1', alias: 'th-a', summary: 'Thread A', createdAt: t(0) }] })),
       http.get('/api/agents/threads/th1/runs', () =>
+        HttpResponse.json({ items: [
+          { id: 'run1', status: 'finished', createdAt: t(1), updatedAt: t(2) },
+          { id: 'run2', status: 'finished', createdAt: t(3), updatedAt: t(4) },
+        ] }),
+      ),
+      http.get(abs('/api/agents/threads/th1/runs'), () =>
         HttpResponse.json({ items: [
           { id: 'run1', status: 'finished', createdAt: t(1), updatedAt: t(2) },
           { id: 'run2', status: 'finished', createdAt: t(3), updatedAt: t(4) },
@@ -124,7 +159,23 @@ describe('AgentsThreads chat-like view', () => {
         if (type === 'output') return HttpResponse.json({ items: [{ id: 'r2m2', kind: 'assistant', text: 'R2 out', source: {}, createdAt: t(20) }] });
         return HttpResponse.json({ items: [] });
       }),
+      http.get(abs('/api/agents/runs/run2/messages'), ({ request }) => {
+        const url = new URL(request.url);
+        const type = url.searchParams.get('type');
+        if (type === 'input') return HttpResponse.json({ items: [{ id: 'r2m1', kind: 'user', text: 'R2 in', source: {}, createdAt: t(10) }] });
+        if (type === 'injected') return HttpResponse.json({ items: [] });
+        if (type === 'output') return HttpResponse.json({ items: [{ id: 'r2m2', kind: 'assistant', text: 'R2 out', source: {}, createdAt: t(20) }] });
+        return HttpResponse.json({ items: [] });
+      }),
       http.get('/api/agents/runs/run1/messages', ({ request }) => {
+        const url = new URL(request.url);
+        const type = url.searchParams.get('type');
+        if (type === 'input') return HttpResponse.json({ items: [{ id: 'r1m1', kind: 'user', text: 'R1 in', source: {}, createdAt: t(1) }] });
+        if (type === 'injected') return HttpResponse.json({ items: [] });
+        if (type === 'output') return HttpResponse.json({ items: [{ id: 'r1m2', kind: 'assistant', text: 'R1 out', source: {}, createdAt: t(2) }] });
+        return HttpResponse.json({ items: [] });
+      }),
+      http.get(abs('/api/agents/runs/run1/messages'), ({ request }) => {
         const url = new URL(request.url);
         const type = url.searchParams.get('type');
         if (type === 'input') return HttpResponse.json({ items: [{ id: 'r1m1', kind: 'user', text: 'R1 in', source: {}, createdAt: t(1) }] });
@@ -143,7 +194,9 @@ describe('AgentsThreads chat-like view', () => {
   it('shows empty states when no runs or messages', async () => {
     server.use(
       http.get('/api/agents/threads', () => HttpResponse.json({ items: [{ id: 'th1', alias: 'th-a', summary: 'Thread A', createdAt: t(0) }] })),
+      http.get(abs('/api/agents/threads'), () => HttpResponse.json({ items: [{ id: 'th1', alias: 'th-a', summary: 'Thread A', createdAt: t(0) }] })),
       http.get('/api/agents/threads/th1/runs', () => HttpResponse.json({ items: [] })),
+      http.get(abs('/api/agents/threads/th1/runs'), () => HttpResponse.json({ items: [] })),
     );
     render(
       <TestProviders>
@@ -157,10 +210,15 @@ describe('AgentsThreads chat-like view', () => {
   it('shows error state when message fetch fails', async () => {
     server.use(
       http.get('/api/agents/threads', () => HttpResponse.json({ items: [{ id: 'th1', alias: 'th-a', summary: 'Thread A', createdAt: t(0) }] })),
+      http.get(abs('/api/agents/threads'), () => HttpResponse.json({ items: [{ id: 'th1', alias: 'th-a', summary: 'Thread A', createdAt: t(0) }] })),
       http.get('/api/agents/threads/th1/runs', () =>
         HttpResponse.json({ items: [{ id: 'run1', status: 'finished', createdAt: t(1), updatedAt: t(2) }] }),
       ),
+      http.get(abs('/api/agents/threads/th1/runs'), () =>
+        HttpResponse.json({ items: [{ id: 'run1', status: 'finished', createdAt: t(1), updatedAt: t(2) }] }),
+      ),
       http.get('/api/agents/runs/run1/messages', () => new HttpResponse(null, { status: 500 })),
+      http.get(abs('/api/agents/runs/run1/messages'), () => new HttpResponse(null, { status: 500 })),
     );
     render(<TestProviders><AgentsThreads /></TestProviders>);
     fireEvent.click(await screen.findByRole('button', { name: /Thread A/ }));
