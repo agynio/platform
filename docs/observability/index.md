@@ -4,7 +4,7 @@ Scope
 - Spans and traces for model calls, tool calls, and system operations.
 - Storage notes and suggested indices.
 - Links to detailed docs in docs/observability/.
-- UI linkage via VITE_TRACING_UI_BASE.
+ - UI integration via platform-ui with internal tracing routes.
 
 Spans and traces
 - The server initializes the observability SDK at startup with default attributes and endpoints.
@@ -18,8 +18,9 @@ Storage and indices
   - Spans by timestamps (start/end)
   
 
-UI linkage
-- The graph UI can link to a trace in the Observability UI via the base configured in `VITE_TRACING_UI_BASE` (default http://localhost:4320). Set this in the UI environment.
+UI integration
+- The platform UI includes tracing views and links using internal routes (e.g., `/tracing/trace/:traceId` and `/tracing/thread/:threadId`).
+- The tracing server base is derived from `VITE_API_BASE_URL` with an optional override via `VITE_TRACING_SERVER_URL`. Ensure your server proxies `/tracing` to the tracing-server.
 
 Related docs
 - docs/observability/heartbeats-and-sweeper.md

@@ -161,7 +161,7 @@ Release qualification plan
   - Verify TTL and cleanup job removes expired containers; simulate removal error and observe backoff.
   - Verify platform-aware reuse and relabeling.
 - Observability
-  - Confirm spans for model/tool calls; UI links to tracing-ui via VITE_TRACING_UI_BASE.
+  - Confirm spans for model/tool calls; platform UI integrates tracing views via internal routes and derives the tracing server from `VITE_API_BASE_URL` (override via `VITE_TRACING_SERVER_URL`).
 
 Glossary and templates
 - Glossary: docs/glossary.md

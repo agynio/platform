@@ -19,8 +19,8 @@ Example package
 - Env: `TRACING_SERVER_URL` (default http://localhost:4319)
 
 Linking from Builder UI (Activity panel)
-- The Builder UI can deep-link to the Observability UI using `VITE_TRACING_UI_BASE` (default http://localhost:4320).
-- The Activity panel displays recent agent/tool spans for the selected node and links to `/trace/:traceId` on the Observability UI.
+- The platform UI integrates observability views using internal routes under `/tracing` (e.g., `/tracing/trace/:traceId`).
+- The tracing server base is derived from `VITE_API_BASE_URL` with an optional override via `VITE_TRACING_SERVER_URL`.
 - Ensure spans include `nodeId` so filtering is accurate.
 
 Scope

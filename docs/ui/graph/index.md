@@ -8,12 +8,12 @@ Data flow
 - Refer to docs/graph/status-updates.md for event shapes and sequencing.
 
 Configuration
-- API base URL precedence:
-  1) VITE_API_BASE_URL
-  2) API_BASE_URL (Node env)
-  3) VITEST: '' (tests use relative URLs)
-  4) default http://localhost:3010
-- Observability deep links: set `VITE_TRACING_UI_BASE` (default http://localhost:4320) to enable trace links.
+- API base URL:
+  - Required: `VITE_API_BASE_URL` must be set for builds.
+  - Tests use relative URLs by passing an empty base where needed.
+- Observability integration:
+  - Tracing views are integrated via internal routes (`/tracing/...`).
+  - The tracing server base defaults to `${VITE_API_BASE_URL}/tracing`, with optional override via `VITE_TRACING_SERVER_URL`.
 
 Related docs
 - docs/ui/config-views.md (custom config view registry)
