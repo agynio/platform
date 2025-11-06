@@ -1,5 +1,5 @@
 import { Inject, Injectable, Scope } from '@nestjs/common';
-import { WebClient, type ChatPostEphemeralResponse, type ChatPostMessageResponse } from '@slack/web-api';
+import { WebClient, type ChatPostEphemeralResponse, type ChatPostMessageResponse, type ChatPostMessageArguments } from '@slack/web-api';
 import { LoggerService } from '../core/services/logger.service';
 import { ConfigService } from '../core/services/config.service';
 import { VaultService } from '../vault/vault.service';
@@ -49,7 +49,15 @@ export class SlackChannelAdapter {
         if (!resp.ok) return { ok: false, error: this.mapSlackError(resp.error), attempts: attempt };
         return { ok: true, ref: { type: 'slack', channel, ts: resp.message_ts, ephemeral: true }, attempts: attempt };
       }
-      const resp: ChatPostMessageResponse = await client.chat.postMessage({ channel, text, attachments: [], ...(thread_ts ? { thread_ts, ...(broadcast ? { reply_broadcast: true } : {}) } : {}) });
+      const reply_broadcast = Boolean(broadcast && thread_ts);
+      const args: ChatPostMessageArguments = {
+        channel,
+        text,
+        attachments: [],
+        reply_broadcast,
+        ...(thread_ts ? { thread_ts } : {}),
+      } as ChatPostMessageArguments;
+      const resp: ChatPostMessageResponse = await client.chat.postMessage(args);
       if (!resp.ok) return { ok: false, error: this.mapSlackError(resp.error), attempts: attempt };
       const thread = (resp.message && 'thread_ts' in resp.message ? (resp.message as { thread_ts?: string }).thread_ts : undefined) || thread_ts || resp.ts;
       return { ok: true, ref: { type: 'slack', channel: resp.channel!, ts: resp.ts, thread_ts: thread }, attempts: attempt };
