@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import Fastify from 'fastify';
 import { ContainersController, ListContainersQueryDto } from '../src/infra/container/containers.controller';
 import type { PrismaService } from '../src/core/services/prisma.service';
-import { describe, it, expect, beforeEach } from 'vitest';
+import { LoggerService } from '../src/core/services/logger.service';
 
 type Row = {
   containerId: string;
@@ -84,7 +84,7 @@ describe('ContainersController routes', () => {
 
   beforeEach(async () => {
     fastify = Fastify({ logger: false }); prismaSvc = new PrismaStub();
-    controller = new ContainersController(prismaSvc as unknown as PrismaService, new FakeContainerService() as any);
+    controller = new ContainersController(prismaSvc as unknown as PrismaService, new FakeContainerService() as any, new LoggerService());
     // Typed query adapter to avoid any/double assertions
     const isStatus = (v: unknown): v is Row['status'] =>
       typeof v === 'string' && ['running', 'stopped', 'terminating', 'failed'].includes(v);
@@ -136,6 +136,46 @@ describe('ContainersController routes', () => {
     expect(first.startedAt).toBe(src.createdAt.toISOString());
     // role should default to workspace
     expect(first.role).toBe('workspace');
+  });
+
+  it('defaults role to workspace when metadata missing', async () => {
+    // add a row without metadata
+    const now = Date.now();
+    const row: Row = {
+      containerId: 'cid-missing-metadata',
+      threadId: null,
+      image: 'img:missing',
+      status: 'running',
+      createdAt: new Date(now - 5000),
+      lastUsedAt: new Date(now - 4000),
+      killAfterAt: null,
+    };
+    prismaSvc.client.container.rows.push(row);
+    const res = await fastify.inject({ method: 'GET', url: '/api/containers' });
+    expect(res.statusCode).toBe(200);
+    const body = res.json() as { items: Array<{ containerId: string; role: string }> };
+    const found = body.items.find((i) => i.containerId === 'cid-missing-metadata');
+    expect(found?.role).toBe('workspace');
+  });
+
+  it('defaults role to workspace when labels missing', async () => {
+    const now = Date.now();
+    const row: Row = {
+      containerId: 'cid-no-labels',
+      threadId: null,
+      metadata: {},
+      image: 'img:no-labels',
+      status: 'running',
+      createdAt: new Date(now - 6000),
+      lastUsedAt: new Date(now - 5500),
+      killAfterAt: null,
+    };
+    prismaSvc.client.container.rows.push(row);
+    const res = await fastify.inject({ method: 'GET', url: '/api/containers' });
+    expect(res.statusCode).toBe(200);
+    const body = res.json() as { items: Array<{ containerId: string; role: string }> };
+    const found = body.items.find((i) => i.containerId === 'cid-no-labels');
+    expect(found?.role).toBe('workspace');
   });
 
   it('supports sorting by lastUsedAt desc', async () => {

@@ -1,9 +1,10 @@
-import { useMemo, useState, useCallback } from 'react';
+import { useMemo, useState, useCallback, Fragment } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { httpJson } from '@/api/client';
 import { Table, Thead, Tbody, Tr, Th, Td, Button, Tooltip, TooltipTrigger, TooltipContent, TooltipProvider, Input } from '@agyn/ui';
 import { Link } from 'react-router-dom';
 import { ClipboardCopy } from 'lucide-react';
+import { notifyError, notifySuccess } from '@/lib/notify';
 
 type ContainerItem = {
   containerId: string;
@@ -36,8 +37,9 @@ function truncateId(id: string): string {
 async function copyToClipboard(text: string): Promise<void> {
   try {
     await navigator.clipboard.writeText(text);
-  } catch {
-    // ignore clipboard errors in non-secure contexts/tests
+    notifySuccess('Copied to clipboard');
+  } catch (e) {
+    notifyError('Failed to copy to clipboard');
   }
 }
 
@@ -57,7 +59,7 @@ export function MonitoringContainers() {
     queryFn: async () => {
       const baseUrl = `/api/containers?status=${status}&sortBy=${sortBy}&sortDir=${sortDir}`;
       const url = validThreadId ? `${baseUrl}&threadId=${encodeURIComponent(validThreadId)}` : baseUrl;
-      const res = await httpJson<{ items: ContainerItem[] }>(url);
+      const res = await httpJson<{ items: ContainerItem[] }>(url, undefined, '');
       return { items: res?.items ?? [] };
     },
     refetchInterval: 5000,
@@ -67,18 +69,20 @@ export function MonitoringContainers() {
   // Ensure client-side default sort by lastUsedAt desc
   const sorted = [...items].sort((a, b) => new Date(b.lastUsedAt).getTime() - new Date(a.lastUsedAt).getTime());
 
-  const toggleExpand = useCallback(async (parentId: string) => {
+  const toggleExpand = useCallback((parentId: string) => {
     setExpanded((prev) => ({ ...prev, [parentId]: !prev[parentId] }));
-    const nextOpen = !expanded[parentId];
-    if (nextOpen && !sidecars[parentId]) {
-      try {
-        const res = await httpJson<{ items: SidecarItem[] }>(`/api/containers/${encodeURIComponent(parentId)}/sidecars`);
-        setSidecars((prev) => ({ ...prev, [parentId]: res?.items || [] }));
-      } catch {
-        setSidecars((prev) => ({ ...prev, [parentId]: [] }));
-      }
-    }
-  }, [expanded, sidecars]);
+  }, []);
+
+  const useSidecarsQuery = (parentId: string, enabled: boolean) =>
+    useQuery<{ items: SidecarItem[] }, Error>({
+      queryKey: ['sidecars', parentId],
+      enabled,
+      staleTime: 5000,
+      queryFn: async () => {
+        const res = await httpJson<{ items: SidecarItem[] }>(`/api/containers/${encodeURIComponent(parentId)}/sidecars`, undefined, '');
+        return { items: res?.items ?? [] };
+      },
+    });
 
   return (
     <div className="p-4">
@@ -122,9 +126,12 @@ export function MonitoringContainers() {
               </Tr>
             </Thead>
             <Tbody>
-              {sorted.map((c) => (
-                <>
-                <Tr key={c.containerId}>
+              {sorted.map((c) => {
+                const scQ = useSidecarsQuery(c.containerId, !!expanded[c.containerId]);
+                const scItems = scQ.data?.items || [];
+                return (
+                <Fragment key={c.containerId}>
+                <Tr>
                   <Td>
                     <Button aria-label={expanded[c.containerId] ? 'Collapse' : 'Expand'} variant="ghost" size="sm" onClick={() => toggleExpand(c.containerId)}>
                       {expanded[c.containerId] ? '−' : '+'}
@@ -162,8 +169,8 @@ export function MonitoringContainers() {
                   <Td>{c.killAfterAt ? new Date(c.killAfterAt).toLocaleString() : '-'}</Td>
                 </Tr>
                 {expanded[c.containerId] && (
-                  (sidecars[c.containerId] && sidecars[c.containerId].length > 0) ? (
-                    sidecars[c.containerId].map((sc) => (
+                  (scItems.length > 0) ? (
+                    scItems.map((sc) => (
                       <Tr key={`sc-${sc.containerId}`}>
                         <Td />
                         <Td className="font-mono text-xs">
@@ -199,8 +206,8 @@ export function MonitoringContainers() {
                     </Tr>
                   )
                 )}
-                </>
-              ))}
+                </Fragment>
+              );})}
             </Tbody>
           </Table>
         </div>

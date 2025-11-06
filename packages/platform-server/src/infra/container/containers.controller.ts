@@ -4,6 +4,7 @@ import type { PrismaClient, ContainerStatus, Prisma } from '@prisma/client';
 import { IsEnum, IsIn, IsInt, IsOptional, IsString, IsUUID, Max, Min } from 'class-validator';
 import { Type } from 'class-transformer';
 import { ContainerService } from './container.service';
+import { LoggerService } from '../../core/services/logger.service';
 
 // Allowed sort columns for containers list
 enum SortBy {
@@ -54,7 +55,11 @@ export class ListContainersQueryDto {
 export class ContainersController {
   private prisma: PrismaClient;
 
-  constructor(@Inject(PrismaService) prismaSvc: PrismaService, @Inject(ContainerService) private containers: ContainerService) {
+  constructor(
+    @Inject(PrismaService) prismaSvc: PrismaService,
+    @Inject(ContainerService) private containers: ContainerService,
+    @Inject(LoggerService) private readonly logger: LoggerService,
+  ) {
     this.prisma = prismaSvc.getClient();
   }
 
@@ -121,19 +126,17 @@ export class ContainersController {
     });
 
     // Map createdAt -> startedAt and return minimal shape
+    const deriveRole = (meta: unknown): string => {
+      const m = meta && typeof meta === 'object' ? (meta as Record<string, unknown>) : undefined;
+      const labels = m && typeof m['labels'] === 'object' && m['labels'] !== null ? (m['labels'] as Record<string, string>) : undefined;
+      const role = labels && typeof labels['hautech.ai/role'] === 'string' ? labels['hautech.ai/role'] : undefined;
+      return role ?? 'workspace';
+    };
+
     const items = rows.map((r) => ({
       containerId: r.containerId,
       threadId: r.threadId,
-      role:
-        r && (r as unknown as { metadata?: unknown })?.metadata &&
-        typeof (r as unknown as { metadata?: Record<string, unknown> }).metadata === 'object'
-          ? ((): string => {
-              const labelsVal = (r as unknown as { metadata?: { labels?: unknown } })?.metadata?.['labels'];
-              const labels = labelsVal && typeof labelsVal === 'object' ? (labelsVal as Record<string, string>) : {};
-              const role = typeof labels['hautech.ai/role'] === 'string' ? labels['hautech.ai/role'] : undefined;
-              return role || 'workspace';
-            })()
-          : 'workspace',
+      role: deriveRole(r.metadata),
       image: r.image,
       status: r.status,
       startedAt: r.createdAt.toISOString(),
@@ -161,30 +164,36 @@ export class ContainersController {
       { all: true },
     );
     const docker = this.containers.getDocker();
-    const items: Array<{
-      containerId: string;
-      parentContainerId: string;
-      role: 'dind';
-      image: string;
-      status: 'running' | 'stopped';
-      startedAt: string;
-    }> = [];
-    for (const h of handles) {
-      try {
+    const results = await Promise.allSettled(
+      handles.map(async (h) => {
         const inspect = await docker.getContainer(h.id).inspect();
         const labels = (inspect?.Config?.Labels || {}) as Record<string, string>;
-        items.push({
-          containerId: inspect.Id,
+        return {
+          containerId: String(inspect?.Id ?? h.id),
           parentContainerId: labels['hautech.ai/parent_cid'] || containerId,
-          role: 'dind',
-          image: inspect?.Config?.Image || 'unknown',
-          status: inspect?.State?.Running ? 'running' : 'stopped',
+          role: 'dind' as const,
+          image: String(inspect?.Config?.Image ?? 'unknown'),
+          status: inspect?.State?.Running ? ('running' as const) : ('stopped' as const),
           startedAt: inspect?.Created ? new Date(inspect.Created).toISOString() : new Date(0).toISOString(),
-        });
-      } catch {
-        // Skip containers that cannot be inspected
-      }
-    }
+        };
+      }),
+    );
+    const items = results
+      .map((r, i) => {
+        if (r.status === 'fulfilled') return r.value;
+        // Log failures with container id
+        const id = handles[i]?.id ?? 'unknown';
+        this.logger.error('ContainersController: sidecar inspect failed', { id, error: r.reason });
+        return undefined;
+      })
+      .filter((x): x is {
+        containerId: string;
+        parentContainerId: string;
+        role: 'dind';
+        image: string;
+        status: 'running' | 'stopped';
+        startedAt: string;
+      } => !!x);
     return { items };
   }
 }
