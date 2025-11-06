@@ -72,8 +72,8 @@ export class AgentsPersistenceService {
       );
       return { runId: run.id, createdMessages };
     });
-    this.gateway?.emitRunStatusChanged(threadId, { id: runId, status: 'running', createdAt: new Date(), updatedAt: new Date() });
-    for (const m of createdMessages) this.gateway?.emitMessageCreated(threadId, { id: m.id, kind: m.kind as unknown as string, text: m.text, source: m.source as unknown as any, createdAt: m.createdAt, runId });
+    this.gateway?.emitRunStatusChanged(threadId, { id: runId, status: 'running' as RunStatus, createdAt: new Date(), updatedAt: new Date() });
+    for (const m of createdMessages) this.gateway?.emitMessageCreated(threadId, { id: m.id, kind: m.kind, text: m.text, source: m.source as Prisma.JsonValue, createdAt: m.createdAt, runId });
     this.gateway?.scheduleThreadMetrics(threadId);
     return { runId };
   }
@@ -96,7 +96,7 @@ export class AgentsPersistenceService {
     });
     const run = await this.prisma.run.findUnique({ where: { id: runId }, select: { threadId: true } });
     const threadId = run?.threadId;
-    if (threadId) for (const m of createdMessages) this.gateway?.emitMessageCreated(threadId, { id: m.id, kind: m.kind as unknown as string, text: m.text, source: m.source as unknown as any, createdAt: m.createdAt, runId });
+    if (threadId) for (const m of createdMessages) this.gateway?.emitMessageCreated(threadId, { id: m.id, kind: m.kind, text: m.text, source: m.source as Prisma.JsonValue, createdAt: m.createdAt, runId });
   }
 
   /**
@@ -122,7 +122,7 @@ export class AgentsPersistenceService {
       return updated;
     });
     const threadId = run.threadId;
-    for (const m of createdMessages) this.gateway?.emitMessageCreated(threadId, { id: m.id, kind: m.kind as unknown as string, text: m.text, source: m.source as unknown as any, createdAt: m.createdAt, runId });
+    for (const m of createdMessages) this.gateway?.emitMessageCreated(threadId, { id: m.id, kind: m.kind, text: m.text, source: m.source as Prisma.JsonValue, createdAt: m.createdAt, runId });
     this.gateway?.emitRunStatusChanged(threadId, { id: runId, status, createdAt: run.createdAt, updatedAt: run.updatedAt });
     this.gateway?.scheduleThreadMetrics(threadId);
   }
@@ -160,7 +160,8 @@ export class AgentsPersistenceService {
   async getThreadsMetrics(ids: string[]): Promise<Record<string, { remindersCount: number; activity: 'working' | 'waiting' | 'idle' }>> {
     if (!ids || ids.length === 0) return {};
     try {
-      const rows = await this.prisma.$queryRaw<Array<{ root_id: string; reminders_count: number; activity: 'working' | 'waiting' | 'idle' }>>`
+      type MetricsRow = { root_id: string; reminders_count: number; desc_working: boolean; self_working: boolean };
+      const rows: MetricsRow[] = await this.prisma.$queryRaw`
         with sel as (
           select unnest(${ids}::uuid[]) as root_id
         ), rec as (
@@ -189,21 +190,24 @@ export class AgentsPersistenceService {
         )
         select root_id,
                reminders_count::int,
-               case
-                 when self_working then 'working'
-                 when desc_working or reminders_count > 0 then 'waiting'
-                 else 'idle'
-               end as activity
+               desc_working,
+               self_working
         from agg;
       `;
       const out: Record<string, { remindersCount: number; activity: 'working' | 'waiting' | 'idle' }> = {};
-      for (const r of rows) out[r.root_id] = { remindersCount: r.reminders_count, activity: r.activity };
+      for (const r of rows) {
+        const activity: 'working' | 'waiting' | 'idle' = r.self_working ? 'working' : (r.desc_working || r.reminders_count > 0) ? 'waiting' : 'idle';
+        out[r.root_id] = { remindersCount: r.reminders_count, activity };
+      }
       return out;
     } catch (_e) {
       // JS fallback for tests/stub env without $queryRaw
       const allThreads = await this.prisma.thread.findMany({ select: { id: true, parentId: true } });
       const runs = await this.prisma.run.findMany({});
-      const reminders = await (this.prisma as any).reminder?.findMany?.({}) ?? [];
+      type ReminderRow = { threadId: string; completedAt: Date | null };
+      const prismaWithReminders = this.prisma as PrismaClient & { reminder: { findMany: () => Promise<ReminderRow[]> } };
+      const hasModelReminders = 'reminder' in prismaWithReminders && typeof prismaWithReminders.reminder.findMany === 'function';
+      const reminders: ReminderRow[] = hasModelReminders ? await prismaWithReminders.reminder.findMany() : [];
       const out: Record<string, { remindersCount: number; activity: 'working' | 'waiting' | 'idle' }> = {};
       function collectSubtree(root: string): string[] {
         const ids: string[] = [root];
@@ -216,12 +220,12 @@ export class AgentsPersistenceService {
         return ids;
       }
       const hasRunning = new Map<string, boolean>();
-      for (const r of runs) if ((r as any).status === 'running') hasRunning.set((r as any).threadId, true);
+      for (const r of runs) if (r.status === 'running') hasRunning.set(r.threadId, true);
       for (const id of ids) {
         const sub = collectSubtree(id);
         const selfWorking = !!hasRunning.get(id);
         const descWorking = sub.some((tid) => tid !== id && !!hasRunning.get(tid));
-        const remindersCount = reminders.filter((rem: any) => sub.includes(rem.threadId) && rem.completedAt == null).length;
+        const remindersCount = reminders.filter((rem) => sub.includes(rem.threadId) && rem.completedAt == null).length;
         const activity: 'working' | 'waiting' | 'idle' = selfWorking ? 'working' : (descWorking || remindersCount > 0) ? 'waiting' : 'idle';
         out[id] = { remindersCount, activity };
       }

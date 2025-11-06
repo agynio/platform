@@ -5,6 +5,7 @@ import { z } from 'zod';
 import { LoggerService } from '../core/services/logger.service';
 import { LiveGraphRuntime } from '../graph/liveGraph.manager';
 import { PrismaService } from '../core/services/prisma.service';
+import type { ThreadStatus, MessageKind, RunStatus } from '@prisma/client';
 
 // Strict outbound event payloads
 export const NodeStatusEventSchema = z
@@ -71,14 +72,18 @@ export class GraphSocketGateway {
     this.io = new SocketIOServer(server, { path: '/socket.io', transports: ['websocket'], cors: { origin: '*' } });
     this.io.on('connection', (socket: Socket) => {
       // Room subscription
+      const SubscribeSchema = z
+        .object({ rooms: z.array(z.string()).optional(), room: z.string().optional() })
+        .strict();
       socket.on('subscribe', (payload: unknown) => {
-        try {
-          const p = payload as any;
-          const rooms: string[] = Array.isArray(p?.rooms) ? p.rooms : p?.room ? [p.room] : [];
-          for (const r of rooms) if (typeof r === 'string' && r.length > 0) socket.join(r);
-        } catch (e) {
-          this.logger.error('Socket subscribe error', e);
+        const parsed = SubscribeSchema.safeParse(payload);
+        if (!parsed.success) {
+          this.logger.error('Socket subscribe payload invalid', parsed.error.issues);
+          return;
         }
+        const p = parsed.data;
+        const rooms: string[] = p.rooms ?? (p.room ? [p.room] : []);
+        for (const r of rooms) if (r.length > 0) socket.join(r);
       });
       socket.on('error', (e: unknown) => {
         this.logger.error('Socket error', e);
@@ -135,22 +140,22 @@ export class GraphSocketGateway {
   }
 
   // Threads realtime events
-  emitThreadCreated(thread: { id: string; alias: string; summary: string | null; status: string; createdAt: Date; parentId?: string | null }) {
+  emitThreadCreated(thread: { id: string; alias: string; summary: string | null; status: ThreadStatus; createdAt: Date; parentId?: string | null }) {
     if (!this.io) return;
     const payload = { thread: { ...thread, createdAt: thread.createdAt.toISOString() } };
     this.io.to('threads').emit('thread_created', payload);
   }
-  emitThreadUpdated(thread: { id: string; alias: string; summary: string | null; status: string; createdAt: Date; parentId?: string | null }) {
+  emitThreadUpdated(thread: { id: string; alias: string; summary: string | null; status: ThreadStatus; createdAt: Date; parentId?: string | null }) {
     if (!this.io) return;
     const payload = { thread: { ...thread, createdAt: thread.createdAt.toISOString() } };
     this.io.to('threads').emit('thread_updated', payload);
   }
-  emitMessageCreated(threadId: string, message: { id: string; kind: string; text: string | null; source: unknown; createdAt: Date; runId?: string }) {
+  emitMessageCreated(threadId: string, message: { id: string; kind: MessageKind; text: string | null; source: import('type-fest').JsonValue | unknown; createdAt: Date; runId?: string }) {
     if (!this.io) return;
     const payload = { message: { ...message, createdAt: message.createdAt.toISOString() } };
     this.io.to(`thread:${threadId}`).emit('message_created', payload);
   }
-  emitRunStatusChanged(threadId: string, run: { id: string; status: string; createdAt: Date; updatedAt: Date }) {
+  emitRunStatusChanged(threadId: string, run: { id: string; status: RunStatus; createdAt: Date; updatedAt: Date }) {
     if (!this.io) return;
     const payload = { run: { ...run, createdAt: run.createdAt.toISOString(), updatedAt: run.updatedAt.toISOString() } };
     this.io.to(`thread:${threadId}`).emit('run_status_changed', payload);
@@ -158,7 +163,8 @@ export class GraphSocketGateway {
   private async computeThreadMetrics(threadId: string): Promise<{ remindersCount: number; activity: 'working' | 'waiting' | 'idle' } | null> {
     try {
       const prisma = this.prismaService.getClient();
-      const rows: Array<{ root_id: string; reminders_count: number; activity: 'working' | 'waiting' | 'idle' }> = await prisma.$queryRaw`
+      type MetricsRow = { root_id: string; reminders_count: number; desc_working: boolean; self_working: boolean };
+      const rows: MetricsRow[] = await prisma.$queryRaw`
         with sel as (
           select ${threadId}::uuid as root_id
         ), rec as (
@@ -187,16 +193,14 @@ export class GraphSocketGateway {
         )
         select root_id,
                reminders_count::int,
-               case
-                 when self_working then 'working'
-                 when desc_working or reminders_count > 0 then 'waiting'
-                 else 'idle'
-               end as activity
+               desc_working,
+               self_working
         from agg;
       `;
       const r = rows[0];
       if (!r) return null;
-      return { remindersCount: r.reminders_count, activity: r.activity };
+      const activity: 'working' | 'waiting' | 'idle' = r.self_working ? 'working' : (r.desc_working || r.reminders_count > 0) ? 'waiting' : 'idle';
+      return { remindersCount: r.reminders_count, activity };
     } catch (e) {
       this.logger.error('computeThreadMetrics error', e);
       return null;
