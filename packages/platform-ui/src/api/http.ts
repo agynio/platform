@@ -1,4 +1,5 @@
-import axios, { AxiosError, AxiosInstance } from 'axios';
+import axios from 'axios';
+import type { AxiosError, AxiosInstance } from 'axios';
 import { config } from '@/config';
 
 export type ApiError = AxiosError<{ error?: string; message?: string } | unknown>;
@@ -26,15 +27,6 @@ function createHttp(baseURL: string): AxiosInstance {
   return inst;
 }
 
-// Primary API client
 export const http = createHttp(config.apiBaseUrl);
-
-// Tracing API client (base from config.tracing.serverUrl or throw)
-function resolveTracingBase(): string {
-  const base = config.tracing.serverUrl;
-  if (base) return base;
-  throw new Error('Tracing base not configured');
-}
-
-export const tracingHttp = createHttp(resolveTracingBase());
-
+// Tracing API client: use base from config (defaults handled in config)
+export const tracingHttp = createHttp(config.tracing.serverUrl as string);

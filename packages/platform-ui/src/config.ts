@@ -5,6 +5,7 @@ type ViteEnv = {
   VITE_API_BASE_URL?: string;
   VITE_TRACING_SERVER_URL?: string;
   VITE_TRACING_UI_BASE?: string;
+  VITEST?: string | boolean;
 };
 
 function readViteEnv(): ViteEnv | undefined {
@@ -42,7 +43,7 @@ function resolveApiBase(): string {
   const node = ne?.API_BASE_URL;
   if (node && node.trim()) return node;
   // In Vitest, default to '' so tests can use relative handlers
-  const isVitest = (ve as any)?.VITEST || (ne?.VITEST_WORKER_ID ? true : false);
+  const isVitest = Boolean(ve?.VITEST || ne?.VITEST_WORKER_ID);
   if (isVitest) return '';
   // Fallback default for local dev
   return 'http://localhost:3010';

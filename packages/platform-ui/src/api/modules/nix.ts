@@ -10,13 +10,8 @@ export async function fetchPackages(query: string, signal?: AbortSignal): Promis
 
 export async function fetchVersions(name: string, signal?: AbortSignal): Promise<string[]> {
   if (!name) return [];
-  try {
-    const res = await http.get<{ versions: string[] }>(`/api/nix/versions`, { signal, params: { name } });
-    return res.versions || [];
-  } catch (e: any) {
-    if (e?.response?.status === 404) return [];
-    throw e;
-  }
+  const res = await http.get<{ versions: string[] }>(`/api/nix/versions`, { signal, params: { name } });
+  return res.versions || [];
 }
 
 export async function resolvePackage(name: string, version: string, signal?: AbortSignal): Promise<ResolveResponse> {
@@ -24,4 +19,3 @@ export async function resolvePackage(name: string, version: string, signal?: Abo
   const res = await http.get<ResolveResponse>(`/api/nix/resolve`, { signal, params: { name, version } });
   return res;
 }
-

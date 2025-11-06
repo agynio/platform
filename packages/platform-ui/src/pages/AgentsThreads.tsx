@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import type { UseQueryResult } from '@tanstack/react-query';
 import { RunMessageList, type UnifiedRunMessage, type UnifiedListItem, type RunMeta } from '@/components/agents/RunMessageList';
 import { ThreadTree } from '@/components/agents/ThreadTree';
 import { ThreadStatusFilterSwitch, type ThreadStatusFilter } from '@/components/agents/ThreadStatusFilterSwitch';
@@ -14,7 +14,7 @@ export function AgentsThreads() {
   const [statusFilter, setStatusFilter] = useState<ThreadStatusFilter>('open');
   // No run selection in new UX (removed)
 
-  const runsQ = useThreadRuns(selectedThreadId) as any as { data?: { items: RunMeta[] }; isLoading: boolean };
+  const runsQ = useThreadRuns(selectedThreadId) as UseQueryResult<{ items: RunMeta[] }, Error>;
 
   const runs: RunMeta[] = useMemo(() => {
     const list = runsQ.data?.items ?? [];

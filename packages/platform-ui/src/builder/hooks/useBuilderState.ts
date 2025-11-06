@@ -258,7 +258,7 @@ export function useBuilderState(serverBase = '', options?: BuilderOptions): UseB
         setSaveState('error');
       }
     }, delay);
-  }, [serverBase, options?.debounceMs]);
+  }, [options?.debounceMs]);
 
   useEffect(() => {
     // Only autosave after initial hydration and when dirty. Do not depend on nodes/edges to avoid resets from selection updates.

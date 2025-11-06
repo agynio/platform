@@ -1,17 +1,6 @@
-import { useMemo } from 'react';
 import { useContainers } from '@/api/hooks/containers';
 import { Table, Thead, Tbody, Tr, Th, Td, Button } from '@agyn/ui';
 import { Link } from 'react-router-dom';
-
-type ContainerItem = {
-  containerId: string;
-  threadId: string | null;
-  image: string;
-  status: 'running' | 'stopped' | 'terminating' | 'failed';
-  startedAt: string;
-  lastUsedAt: string;
-  killAfterAt: string | null;
-};
 
 export function MonitoringContainers() {
   const status = 'running';

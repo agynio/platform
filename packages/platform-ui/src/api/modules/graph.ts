@@ -1,5 +1,7 @@
 import { http } from '@/api/http';
 import type { TemplateSchema, NodeStatus, PersistedGraphUpsertRequestUI, ReminderDTO } from '@/api/types/graph';
+import type { PersistedGraph } from '@agyn/shared';
+import axios from 'axios';
 
 // Keep normalize function identical to prior implementation
 type TemplateName =
@@ -183,11 +185,11 @@ export const graph = {
         return isLikelyJsonSchemaRoot(maybeSchema) ? (maybeSchema as Record<string, unknown>) : null;
       }
       return isLikelyJsonSchemaRoot(data) ? (data as Record<string, unknown>) : null;
-    } catch (e: any) {
-      if (e?.response?.status === 404) return null;
-      return null;
-    }
-  },
+      } catch (e: unknown) {
+        if (axios.isAxiosError(e) && e.response?.status === 404) return null;
+        return null;
+      }
+    },
 
   // Node action
   postNodeAction: (nodeId: string, action: 'provision' | 'deprovision') => http.post<void>(`/api/graph/nodes/${encodeURIComponent(nodeId)}/actions`, { action }),
@@ -200,10 +202,9 @@ export const graph = {
     };
     return http.post<PersistedGraphUpsertRequestUI & { version: number; updatedAt: string }>(`/api/graph`, normalized);
   },
-  getFullGraph: () => http.get<import('@agyn/shared').PersistedGraph>(`/api/graph`),
+  getFullGraph: () => http.get<PersistedGraph>(`/api/graph`),
 };
 
 Object.defineProperty(graph, '__test_normalize', { value: normalizeConfigByTemplate });
 
 export type { PersistedGraphUpsertRequestUI };
-

@@ -1,11 +1,11 @@
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQueryClient, type UseQueryResult } from '@tanstack/react-query';
 import { type ThreadStatusFilter } from './ThreadStatusFilterSwitch';
 import { ThreadTreeNode, type ThreadNode } from './ThreadTreeNode';
 import { useThreadRoots } from '@/api/hooks/threads';
 
 export function ThreadTree({ status, onSelect, selectedId }: { status: ThreadStatusFilter; onSelect: (id: string) => void; selectedId?: string }) {
   const qc = useQueryClient();
-  const rootsQ = useThreadRoots(status) as any as { data?: { items: ThreadNode[] }; isLoading: boolean; error: Error | null };
+  const rootsQ = useThreadRoots(status) as UseQueryResult<{ items: ThreadNode[] }, Error>;
 
   const invalidate = () => qc.invalidateQueries({ queryKey: ['agents', 'threads', 'roots', status] });
 
