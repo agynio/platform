@@ -1,9 +1,6 @@
 // Tracing realtime socket client for platform-ui (span_upsert events)
 import { io, type Socket } from 'socket.io-client';
 import type { SpanDoc, SpanExtras, SpanEventPayload } from '@/api/tracing';
-import { config } from '@/config';
-
-const TRACING_BASE: string | undefined = config.tracing.serverUrl;
 
 export type SpanUpsertHandler = (span: SpanEventPayload) => void;
 
@@ -53,8 +50,12 @@ class TracingRealtime {
 
   private ensure() {
     if (this.socket) return;
-    if (!TRACING_BASE) return; // allow usage without socket (tests/SSR)
-    this.socket = io(TRACING_BASE, { path: '/socket.io', transports: ['websocket'], timeout: 10000, autoConnect: true });
+    // Derive websocket base from main API base; skip connect if not configured (e.g., tests)
+    // Derive base from env without importing config to avoid test import-time errors
+    const apiBase = (import.meta as { env?: Record<string, unknown> } | undefined)?.env?.VITE_API_BASE_URL as string | undefined;
+    const base: string | null = apiBase ? `${apiBase}/tracing` : null;
+    if (!base) return;
+    this.socket = io(base, { path: '/socket.io', transports: ['websocket'], timeout: 10000, autoConnect: true });
     this.socket.on('span_upsert', (payload: unknown) => {
       const norm = normalizeSpan(payload);
       if (norm) this.handlers.forEach((h) => h(norm));

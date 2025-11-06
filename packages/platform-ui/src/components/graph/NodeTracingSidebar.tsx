@@ -7,7 +7,6 @@ import { useTemplatesCache } from '@/lib/graph/templates.provider';
 import { useNodeReminders } from '@/lib/graph/hooks';
 import { api } from '@/api/graph';
 import { notifyError, notifySuccess } from '@/lib/notify';
-import { config } from '@/config';
 
 type BuilderPanelNodeData = {
   template: string;
@@ -16,7 +15,7 @@ type BuilderPanelNodeData = {
   dynamicConfig?: Record<string, unknown>;
 };
 
-const TRACING_UI_BASE: string | undefined = config.tracing.uiBase;
+// Use internal routing for trace links
 
 function getAttributes(span: { attributes?: Record<string, unknown> }): Record<string, unknown> {
   return (span.attributes && typeof span.attributes === 'object') ? span.attributes : {};
@@ -171,7 +170,7 @@ function NodeTracingSidebarBody({ node }: { node: Node<BuilderPanelNodeData> }) 
 
   const items = useMemo(() => spans.map((s: SpanDoc & Partial<SpanExtras>) => ({
     span: s,
-    link: TRACING_UI_BASE ? `${TRACING_UI_BASE}/trace/${encodeURIComponent(s.traceId)}` : undefined,
+    link: `/tracing/trace/${encodeURIComponent(s.traceId)}`,
   })), [spans]);
 
   const title = kind === 'agent' ? 'Agent Activity' : kind === 'tool' ? 'Tool Spans (24h)' : 'Spans';
@@ -251,9 +250,7 @@ function NodeTracingSidebarBody({ node }: { node: Node<BuilderPanelNodeData> }) 
               </div>
               <div className="flex items-center gap-2">
                 <span className="px-1.5 py-0.5 rounded border bg-accent/20 text-[10px]">{summarizeStatus(getStatus(span))}</span>
-                {link ? (
-                  <a href={link} target="_blank" rel="noreferrer" className="text-blue-600 hover:underline text-[11px]">open</a>
-                ) : null}
+                <a href={link} className="text-blue-600 hover:underline text-[11px]">open</a>
               </div>
             </li>
           ))}

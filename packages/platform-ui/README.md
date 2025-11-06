@@ -8,15 +8,13 @@ Quickstart
 - Dev: pnpm -w -F @agyn/platform-ui dev
 
 Env configuration
-- VITE_TRACING_SERVER_URL (default http://localhost:4319): tracing-server base URL for spans/logs and realtime.
-- VITE_TRACING_UI_BASE (default http://localhost:4320): base URL for deep-linking to the Tracing UI trace page.
- - VITE_API_BASE_URL (default http://localhost:3010): base URL for the Agents API used by the UI. In tests (VITEST), defaults to ''. In production deployments, set VITE_API_BASE_URL to your server origin (e.g., https://agents.example.com).
+- VITE_API_BASE_URL (default http://localhost:3010): base URL for the Agents API used by the UI. In production deployments, set VITE_API_BASE_URL to your server origin (e.g., https://agents.example.com).
 
-API base URL precedence
-1) VITE_API_BASE_URL
-2) API_BASE_URL (Node env)
-3) VITEST: '' (tests use relative URLs)
-4) default http://localhost:3010
+Tracing API access
+- The platform UI derives the tracing HTTP and websocket base from the main API host: `${VITE_API_BASE_URL}/tracing`. Ensure your server proxies the `/tracing` path to the tracing-server.
+
+API base URL
+- The UI requires `VITE_API_BASE_URL` to be set. It is used for all API interactions and for tracing via the `/tracing` path.
 
 Notes
 - Legacy VITE_GRAPH_API_BASE has been removed. Use VITE_API_BASE_URL.
