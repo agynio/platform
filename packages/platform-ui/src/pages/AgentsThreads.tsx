@@ -14,7 +14,8 @@ export function AgentsThreads() {
   const [statusFilter, setStatusFilter] = useState<ThreadStatusFilter>('open');
   // No run selection in new UX (removed)
 
-  const runsQ = useThreadRuns(selectedThreadId) as UseQueryResult<{ items: RunMeta[] }, Error>;
+  // Cast through unknown to align differing RunMeta shapes between API and UI list types
+  const runsQ = useThreadRuns(selectedThreadId) as unknown as UseQueryResult<{ items: RunMeta[] }, Error>;
 
   const runs: RunMeta[] = useMemo(() => {
     const list = runsQ.data?.items ?? [];

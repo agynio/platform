@@ -1,5 +1,5 @@
 import axios from 'axios';
-import type { AxiosError, AxiosInstance } from 'axios';
+import type { AxiosError, AxiosInstance, AxiosRequestConfig } from 'axios';
 import { config } from '@/config';
 
 export type ApiError = AxiosError<{ error?: string; message?: string } | unknown>;
@@ -27,11 +27,36 @@ function createHttp(baseURL: string): AxiosInstance {
   return inst;
 }
 
-export const http = createHttp(config.apiBaseUrl);
+// Typed HttpClient wrapper returning payload Promise<T>
+export type HttpClient = {
+  get<T>(url: string, config?: AxiosRequestConfig): Promise<T>;
+  post<T>(url: string, data?: unknown, config?: AxiosRequestConfig): Promise<T>;
+  put<T>(url: string, data?: unknown, config?: AxiosRequestConfig): Promise<T>;
+  delete<T>(url: string, config?: AxiosRequestConfig): Promise<T>;
+  patch<T>(url: string, data?: unknown, config?: AxiosRequestConfig): Promise<T>;
+};
+
+export function wrap(inst: AxiosInstance): HttpClient {
+  return {
+    get: <T>(url: string, cfg?: AxiosRequestConfig) => inst.get(url, cfg) as unknown as Promise<T>,
+    post: <T>(url: string, data?: unknown, cfg?: AxiosRequestConfig) =>
+      inst.post(url, data, cfg) as unknown as Promise<T>,
+    put: <T>(url: string, data?: unknown, cfg?: AxiosRequestConfig) =>
+      inst.put(url, data, cfg) as unknown as Promise<T>,
+    delete: <T>(url: string, cfg?: AxiosRequestConfig) =>
+      inst.delete(url, cfg) as unknown as Promise<T>,
+    patch: <T>(url: string, data?: unknown, cfg?: AxiosRequestConfig) =>
+      inst.patch(url, data, cfg) as unknown as Promise<T>,
+  };
+}
+
+// Export wrapped clients; interceptors above still unwrap res.data
+export const http: HttpClient = wrap(createHttp(config.apiBaseUrl));
 // Tracing API client: use base from config (defaults handled in config)
-export const tracingHttp = createHttp(config.tracing.serverUrl as string);
+export const tracingHttp: HttpClient = wrap(createHttp(config.tracing.serverUrl as string));
 
 // Helper to re-type axios promise (interceptor returns payload at runtime)
 export function asData<T>(p: Promise<unknown>): Promise<T> {
+  // Legacy helper retained for modules still relying on re-typing
   return p as Promise<T>;
 }
