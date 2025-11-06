@@ -3,6 +3,9 @@ import Fastify from 'fastify';
 import { ContainersController, ListContainersQueryDto } from '../src/infra/container/containers.controller';
 import type { PrismaService } from '../src/core/services/prisma.service';
 import { LoggerService } from '../src/core/services/logger.service';
+import { ContainerService } from '../src/infra/container/container.service';
+import { ContainerRegistry } from '../src/infra/container/container.registry';
+import type { PrismaClient } from '@prisma/client';
 
 type Row = {
   containerId: string;
@@ -77,14 +80,20 @@ class PrismaStub {
 
 describe('ContainersController routes', () => {
   let fastify: any; let prismaSvc: PrismaStub; let controller: ContainersController;
-  class FakeContainerService {
-    async findContainersByLabels(): Promise<Array<{ id: string }>> { return []; }
-    getDocker() { return { getContainer: (_id: string) => ({ inspect: async () => ({}) }) }; }
+  class FakeContainerService extends ContainerService {
+    constructor() {
+      // Provide inert registry; it won't be used in these tests
+      const dummyPrisma = {} as unknown as PrismaClient;
+      const logger = new LoggerService();
+      super(logger, new ContainerRegistry(dummyPrisma, logger));
+    }
+    override async findContainersByLabels(): Promise<Array<{ id: string }>> { return []; }
+    override getDocker() { return { getContainer: (_id: string) => ({ inspect: async () => ({}) }) } as unknown as ReturnType<ContainerService['getDocker']>; }
   }
 
   beforeEach(async () => {
     fastify = Fastify({ logger: false }); prismaSvc = new PrismaStub();
-    controller = new ContainersController(prismaSvc as unknown as PrismaService, new FakeContainerService() as any, new LoggerService());
+    controller = new ContainersController(prismaSvc as unknown as PrismaService, new FakeContainerService(), new LoggerService());
     // Typed query adapter to avoid any/double assertions
     const isStatus = (v: unknown): v is Row['status'] =>
       typeof v === 'string' && ['running', 'stopped', 'terminating', 'failed'].includes(v);

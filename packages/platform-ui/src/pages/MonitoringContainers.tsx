@@ -43,13 +43,85 @@ async function copyToClipboard(text: string): Promise<void> {
   }
 }
 
+function SidecarsRow({ parentId, parentThreadId, expanded }: { parentId: string; parentThreadId: string | null; expanded: boolean }) {
+  // Fetch sidecars for a given parent; gated by expanded
+  const scQ = useQuery<{ items: SidecarItem[] }, Error>({
+    queryKey: ['sidecars', parentId],
+    enabled: expanded,
+    staleTime: 5000,
+    queryFn: async () => {
+      const res = await httpJson<{ items: SidecarItem[] }>(`/api/containers/${encodeURIComponent(parentId)}/sidecars`, undefined, '');
+      return { items: res?.items ?? [] };
+    },
+  });
+  const scItems = scQ.data?.items || [];
+  if (!expanded) return null; // render nothing when collapsed
+  if (scQ.isLoading) {
+    return (
+      <Tr key={`${parentId}-loading`}>
+        <Td />
+        <Td colSpan={8} className="text-muted-foreground pl-4">Loading sidecars…</Td>
+      </Tr>
+    );
+  }
+  if (scQ.error) {
+    return (
+      <Tr key={`${parentId}-error`}>
+        <Td />
+        <Td colSpan={8} className="text-red-600 pl-4">Failed to load sidecars</Td>
+      </Tr>
+    );
+  }
+  if (scItems.length === 0) {
+    return (
+      <Tr key={`${parentId}-none`}>
+        <Td />
+        <Td colSpan={8} className="text-muted-foreground pl-4">No sidecars.</Td>
+      </Tr>
+    );
+  }
+  return (
+    <>
+      {scItems.map((sc) => (
+        <Tr key={`sc-${sc.containerId}`}>
+          <Td />
+          <Td className="font-mono text-xs">
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span className="pl-4">{truncateId(sc.containerId)}</span>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <div className="flex items-center gap-2">
+                    <span className="font-mono text-xs">{sc.containerId}</span>
+                    <Button aria-label="Copy sidecarId" variant="outline" size="xs" onClick={() => copyToClipboard(sc.containerId)}>
+                      <ClipboardCopy className="h-3 w-3" />
+                    </Button>
+                  </div>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          </Td>
+          <Td className="font-mono text-xs">{parentThreadId || '-'}</Td>
+          <Td className="font-mono text-xs">{sc.role}</Td>
+          <Td className="font-mono text-xs">{sc.image}</Td>
+          <Td>{sc.status}</Td>
+          <Td>{new Date(sc.startedAt).toLocaleString()}</Td>
+          <Td>-</Td>
+          <Td>-</Td>
+        </Tr>
+      ))}
+    </>
+  );
+}
+
 export function MonitoringContainers() {
   const status = 'running';
   const sortBy = 'lastUsedAt';
   const sortDir = 'desc';
   const [threadIdInput, setThreadIdInput] = useState<string>('');
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
-  const [sidecars, setSidecars] = useState<Record<string, SidecarItem[]>>({});
+  // expanded state drives sidecar fetching in child component
 
   const validThreadId = threadIdInput && isUuid(threadIdInput) ? threadIdInput : undefined;
 
@@ -73,16 +145,7 @@ export function MonitoringContainers() {
     setExpanded((prev) => ({ ...prev, [parentId]: !prev[parentId] }));
   }, []);
 
-  const useSidecarsQuery = (parentId: string, enabled: boolean) =>
-    useQuery<{ items: SidecarItem[] }, Error>({
-      queryKey: ['sidecars', parentId],
-      enabled,
-      staleTime: 5000,
-      queryFn: async () => {
-        const res = await httpJson<{ items: SidecarItem[] }>(`/api/containers/${encodeURIComponent(parentId)}/sidecars`, undefined, '');
-        return { items: res?.items ?? [] };
-      },
-    });
+  // Note: sidecar fetching moved into SidecarsRow; hooks are top-level only
 
   return (
     <div className="p-4">
@@ -126,10 +189,7 @@ export function MonitoringContainers() {
               </Tr>
             </Thead>
             <Tbody>
-              {sorted.map((c) => {
-                const scQ = useSidecarsQuery(c.containerId, !!expanded[c.containerId]);
-                const scItems = scQ.data?.items || [];
-                return (
+              {sorted.map((c) => (
                 <Fragment key={c.containerId}>
                 <Tr>
                   <Td>
@@ -167,47 +227,10 @@ export function MonitoringContainers() {
                   <Td>{new Date(c.startedAt).toLocaleString()}</Td>
                   <Td>{new Date(c.lastUsedAt).toLocaleString()}</Td>
                   <Td>{c.killAfterAt ? new Date(c.killAfterAt).toLocaleString() : '-'}</Td>
-                </Tr>
-                {expanded[c.containerId] && (
-                  (scItems.length > 0) ? (
-                    scItems.map((sc) => (
-                      <Tr key={`sc-${sc.containerId}`}>
-                        <Td />
-                        <Td className="font-mono text-xs">
-                          <TooltipProvider>
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <span className="pl-4">{truncateId(sc.containerId)}</span>
-                              </TooltipTrigger>
-                              <TooltipContent>
-                                <div className="flex items-center gap-2">
-                                  <span className="font-mono text-xs">{sc.containerId}</span>
-                                  <Button aria-label="Copy sidecarId" variant="outline" size="sm" onClick={() => copyToClipboard(sc.containerId)}>
-                                    <ClipboardCopy className="h-3 w-3" />
-                                  </Button>
-                                </div>
-                              </TooltipContent>
-                            </Tooltip>
-                          </TooltipProvider>
-                        </Td>
-                        <Td className="font-mono text-xs">{c.threadId || '-'}</Td>
-                        <Td className="font-mono text-xs">{sc.role}</Td>
-                        <Td className="font-mono text-xs">{sc.image}</Td>
-                        <Td>{sc.status}</Td>
-                        <Td>{new Date(sc.startedAt).toLocaleString()}</Td>
-                        <Td>-</Td>
-                        <Td>-</Td>
-                      </Tr>
-                    ))
-                  ) : (
-                    <Tr key={`${c.containerId}-none`}>
-                      <Td />
-                      <Td colSpan={8} className="text-muted-foreground pl-4">No sidecars.</Td>
-                    </Tr>
-                  )
-                )}
+                {/* Child component calls react-query hook internally; rendered unconditionally */}
+                <SidecarsRow key={c.containerId} parentId={c.containerId} parentThreadId={c.threadId} expanded={!!expanded[c.containerId]} />
                 </Fragment>
-              );})}
+              ))}
             </Tbody>
           </Table>
         </div>

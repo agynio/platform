@@ -3,6 +3,9 @@ import Fastify from 'fastify';
 import { ContainersController } from '../src/infra/container/containers.controller';
 import type { PrismaService } from '../src/core/services/prisma.service';
 import { LoggerService } from '../src/core/services/logger.service';
+import { ContainerService } from '../src/infra/container/container.service';
+import { ContainerRegistry } from '../src/infra/container/container.registry';
+import type { PrismaClient } from '@prisma/client';
 
 class PrismaStub { getClient() { return { container: { findMany: async () => [] } } as any; } }
 
@@ -15,11 +18,16 @@ describe('ContainersController sidecars route', () => {
     getContainer(id: string) { return { inspect: async () => this.data[id] || {} }; }
   }
 
-  class FakeContainerService {
+  class FakeContainerService extends ContainerService {
     private docker: FakeDocker;
-    constructor(private items: Array<{ id: string }>, inspectMap: Record<string, any>) { this.docker = new FakeDocker(inspectMap); }
-    async findContainersByLabels(): Promise<Array<{ id: string }>> { return this.items; }
-    getDocker() { return this.docker; }
+    constructor(private items: Array<{ id: string }>, inspectMap: Record<string, any>) {
+      const dummyPrisma = {} as unknown as PrismaClient;
+      const logger = new LoggerService();
+      super(logger, new ContainerRegistry(dummyPrisma, logger));
+      this.docker = new FakeDocker(inspectMap);
+    }
+    override async findContainersByLabels(): Promise<Array<{ id: string }>> { return this.items; }
+    override getDocker() { return this.docker; }
   }
 
   beforeEach(async () => {
@@ -34,7 +42,7 @@ describe('ContainersController sidecars route', () => {
     };
     controller = new ContainersController(
       new PrismaStub() as unknown as PrismaService,
-      new FakeContainerService([{ id: sideId }], { [sideId]: fakeInspect }) as any,
+      new FakeContainerService([{ id: sideId }], { [sideId]: fakeInspect }),
       new LoggerService(),
     );
     fastify.get('/api/containers/:id/sidecars', async (req, res) => {
@@ -65,14 +73,19 @@ describe('ContainersController sidecars route', () => {
         return { inspect: async () => { throw new Error('boom'); } };
       }
     }
-    class ThrowService extends (class {} as { new (): any }) {
+    class ThrowService extends ContainerService {
       private docker = new ThrowDocker();
-      async findContainersByLabels() { return [{ id: badId }]; }
-      getDocker() { return this.docker; }
+      constructor() {
+        const dummyPrisma = {} as unknown as PrismaClient;
+        const logger = new LoggerService();
+        super(logger, new ContainerRegistry(dummyPrisma, logger));
+      }
+      override async findContainersByLabels() { return [{ id: badId }]; }
+      override getDocker() { return this.docker; }
     }
     const ctrl = new ContainersController(
       new PrismaStub() as unknown as PrismaService,
-      new ThrowService() as any,
+      new ThrowService(),
       new LoggerService(),
     );
     const fastify2 = Fastify({ logger: false });
