@@ -3,7 +3,7 @@ import { describe, it, expect, vi, beforeAll, afterEach, afterAll } from 'vitest
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
-import { server, TestProviders } from '../../integration/testUtils';
+import { server, TestProviders, abs } from '../../integration/testUtils';
 import { TooltipProvider } from '@agyn/ui';
 
 // Shared API mocks
@@ -15,8 +15,16 @@ function mockApi() {
         { name: 'tool.basic', title: 'Tool', kind: 'tool', sourcePorts: [], targetPorts: [] },
       ]),
     ),
+    http.get(abs('/api/graph/templates'), () =>
+      HttpResponse.json([
+        { name: 'agent.basic', title: 'Agent', kind: 'agent', sourcePorts: [], targetPorts: [] },
+        { name: 'tool.basic', title: 'Tool', kind: 'tool', sourcePorts: [], targetPorts: [] },
+      ]),
+    ),
     http.get('/api/graph', () => HttpResponse.json({ name: 'g', version: 1, nodes: [], edges: [] })),
+    http.get(abs('/api/graph'), () => HttpResponse.json({ name: 'g', version: 1, nodes: [], edges: [] })),
     http.post('/api/graph', () => HttpResponse.json({ version: 2, updatedAt: new Date().toISOString() })),
+    http.post(abs('/api/graph'), () => HttpResponse.json({ version: 2, updatedAt: new Date().toISOString() })),
   );
 }
 

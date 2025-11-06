@@ -21,8 +21,8 @@ export const mockTemplates: TemplateSchema[] = [
     name: 'mock',
     title: 'Mock',
     kind: 'tool',
-    sourcePorts: {},
-    targetPorts: {},
+    sourcePorts: [],
+    targetPorts: [],
     capabilities: { pausable: true, staticConfigurable: true },
     staticConfigSchema: {
       type: 'object',
@@ -34,7 +34,7 @@ export const mockTemplates: TemplateSchema[] = [
 // MSW server setup (MSW v2 http handlers)
 // Read API base from env (tests)
 const API_BASE = process.env.VITE_API_BASE_URL;
-const abs = (p: string) => (API_BASE ? `${API_BASE}${p}` : p);
+export const abs = (p: string) => (API_BASE ? `${API_BASE}${p}` : p);
 
 const relativeHandlers = [
   _http.get('/api/graph/templates', () => _HttpResponse.json(mockTemplates)),

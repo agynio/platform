@@ -2,7 +2,7 @@ import React from 'react';
 import { beforeAll, afterAll, afterEach, describe, it, expect } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
-import { server, TestProviders } from '../../integration/testUtils';
+import { server, TestProviders, abs } from '../../integration/testUtils';
 import { AgentBuilder } from '../../../src/builder/AgentBuilder';
 import { TooltipProvider } from '@agyn/ui';
 
@@ -20,7 +20,24 @@ describe('AgentBuilder smoke render', () => {
           { name: 'tool.basic', title: 'Tool', kind: 'tool', sourcePorts: [], targetPorts: [] },
         ]),
       ),
+      http.get(abs('/api/graph/templates'), () =>
+        HttpResponse.json([
+          { name: 'agent.basic', title: 'Agent', kind: 'agent', sourcePorts: [], targetPorts: [] },
+          { name: 'tool.basic', title: 'Tool', kind: 'tool', sourcePorts: [], targetPorts: [] },
+        ]),
+      ),
       http.get('/api/graph', () =>
+        HttpResponse.json({
+          name: 'g',
+          version: 1,
+          nodes: [
+            { id: 'n1', template: 'agent.basic', config: {} },
+            { id: 'n2', template: 'tool.basic', config: {} },
+          ],
+          edges: [],
+        }),
+      ),
+      http.get(abs('/api/graph'), () =>
         HttpResponse.json({
           name: 'g',
           version: 1,

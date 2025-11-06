@@ -37,6 +37,38 @@ if (typeof process !== 'undefined' && process.env) {
   process.env.VITE_TRACING_SERVER_URL = process.env.VITE_TRACING_SERVER_URL ?? 'http://localhost:4319';
 }
 
+// Minimal polyfills for UI libraries (Radix/Floating-UI)
+if (typeof window !== 'undefined') {
+  // matchMedia required by some CSS-in-JS and Radix internals
+  // Provide a basic stub with event methods
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  (window as any).matchMedia = vi.fn().mockImplementation((query: string) => ({
+    matches: false,
+    media: query,
+    onchange: null,
+    addEventListener: vi.fn(),
+    removeEventListener: vi.fn(),
+    addListener: vi.fn(), // deprecated
+    removeListener: vi.fn(), // deprecated
+    dispatchEvent: vi.fn(),
+  }));
+}
+
+// createRange for Floating-UI contextual fragment creation
+if (typeof document !== 'undefined' && !document.createRange) {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  (document as any).createRange = () => ({
+    setStart: () => {},
+    setEnd: () => {},
+    commonAncestorContainer: document.documentElement,
+    createContextualFragment: (html: string) => {
+      const template = document.createElement('template');
+      template.innerHTML = html;
+      return template.content;
+    },
+  });
+}
+
 // Avoid mutating config.apiBaseUrl globally to not affect unit tests that
 // validate env resolution. Individual pages pass base '' explicitly where needed.
 
