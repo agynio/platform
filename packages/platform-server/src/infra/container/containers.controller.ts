@@ -6,6 +6,18 @@ import { Type } from 'class-transformer';
 import { ContainerService } from './container.service';
 import { LoggerService } from '../../core/services/logger.service';
 
+// Safely narrow unknown to Record<string, string>
+function safeStringRecord(u: unknown): Record<string, string> {
+  if (!u || typeof u !== 'object') return {};
+  const out: Record<string, string> = {};
+  for (const [k, v] of Object.entries(u as Record<string, unknown>)) {
+    if (typeof k === 'string' && typeof v === 'string') {
+      out[k] = v;
+    }
+  }
+  return out;
+}
+
 // Allowed sort columns for containers list
 enum SortBy {
   lastUsedAt = 'lastUsedAt',
@@ -168,17 +180,11 @@ export class ContainersController {
       handles.map(async (h) => {
         const inspect = await docker.getContainer(h.id).inspect();
         // Safely derive string-only labels from Docker inspect
-        const rawLabels = inspect?.Config?.Labels as unknown;
-        const labelEntries: Array<[string, string]> =
-          rawLabels && typeof rawLabels === 'object'
-            ? Object.entries(rawLabels as Record<string, unknown>)
-                .filter(([, v]) => typeof v === 'string')
-                .map(([k, v]) => [String(k), v as string])
-            : [];
-        const labels: Record<string, string> = Object.fromEntries(labelEntries);
+        const labels = safeStringRecord(inspect?.Config?.Labels);
+        const parentContainerId = labels['hautech.ai/parent_cid'] ?? containerId;
         return {
           containerId: String(inspect?.Id ?? h.id),
-          parentContainerId: labels['hautech.ai/parent_cid'] || containerId,
+          parentContainerId,
           role: 'dind' as const,
           image: String(inspect?.Config?.Image ?? 'unknown'),
           status: inspect?.State?.Running ? ('running' as const) : ('stopped' as const),
@@ -186,14 +192,15 @@ export class ContainersController {
         };
       }),
     );
-    const items = results
-      .map((r, i) => {
-        if (r.status === 'fulfilled') return r.value;
-        // Log failures with container id
-        const id = handles[i]?.id ?? 'unknown';
-        this.logger.error('ContainersController: sidecar inspect failed', { id, error: r.reason });
-        return undefined;
-      })
+      const items = results
+        .map((r, i) => {
+          if (r.status === 'fulfilled') return r.value;
+          // Log failures with container id
+          const id = handles[i]?.id ?? 'unknown';
+          const err = r.reason instanceof Error ? r.reason : new Error(String(r.reason));
+          this.logger.error('ContainersController: sidecar inspect failed', { id, error: err });
+          return undefined;
+        })
       .filter((x): x is {
         containerId: string;
         parentContainerId: string;
