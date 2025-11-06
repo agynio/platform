@@ -58,7 +58,7 @@ export class ThreadsMetricsService {
     } catch (e) {
       // JS fallback for tests/stub env without $queryRaw
       const err = e as Error;
-      this.logger.warn('ThreadsMetricsService falling back to in-memory aggregation', { ids, error: err?.message || String(e) });
+      this.logger.info('ThreadsMetricsService falling back to in-memory aggregation', { ids, error: err?.message || String(e) });
       const prisma = this.prisma;
       const allThreads = await prisma.thread.findMany({ select: { id: true, parentId: true } });
       const runs = await prisma.run.findMany({});
@@ -91,4 +91,3 @@ export class ThreadsMetricsService {
     }
   }
 }
-
