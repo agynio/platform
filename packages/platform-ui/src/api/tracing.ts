@@ -24,9 +24,17 @@ export type SpanEventPayload = SpanDoc & Partial<SpanExtras> & {
 
 import { config } from '@/config';
 
+// Resolve tracing base URL from env or config.apiBaseUrl
+// Prefer explicit VITE_TRACING_SERVER_URL; otherwise derive from apiBaseUrl
 export function getTracingBase(override?: string): string {
   if (override) return override;
-  return config.tracingServerUrl;
+  const env = (import.meta as { env?: Record<string, unknown> } | undefined)?.env || {};
+  const tracing = env?.VITE_TRACING_SERVER_URL as string | undefined;
+  const base = tracing && tracing.length > 0
+    ? tracing
+    : `${config.apiBaseUrl}/tracing`;
+  // Normalize trailing slash
+  return base.endsWith('/') ? base.slice(0, -1) : base;
 }
 
 export async function fetchSpansInRange(fromIso: string, toIso: string, base?: string): Promise<SpanDoc[]> {
