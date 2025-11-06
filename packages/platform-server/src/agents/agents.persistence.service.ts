@@ -25,7 +25,7 @@ export class AgentsPersistenceService {
     const existing = await this.prisma.thread.findUnique({ where: { alias } });
     if (existing) return existing.id;
     const created = await this.prisma.thread.create({ data: { alias } });
-    this.gateway?.emitThreadCreated({ id: created.id, alias: created.alias, summary: created.summary ?? null, status: created.status as unknown as string, createdAt: created.createdAt, parentId: created.parentId ?? null });
+    this.gateway?.emitThreadCreated({ id: created.id, alias: created.alias, summary: created.summary ?? null, status: created.status, createdAt: created.createdAt, parentId: created.parentId ?? null });
     return created.id;
   }
 
@@ -38,7 +38,7 @@ export class AgentsPersistenceService {
     const existing = await this.prisma.thread.findUnique({ where: { alias: composed } });
     if (existing) return existing.id;
     const created = await this.prisma.thread.create({ data: { alias: composed, parentId: parentThreadId } });
-    this.gateway?.emitThreadCreated({ id: created.id, alias: created.alias, summary: created.summary ?? null, status: created.status as unknown as string, createdAt: created.createdAt, parentId: created.parentId ?? null });
+    this.gateway?.emitThreadCreated({ id: created.id, alias: created.alias, summary: created.summary ?? null, status: created.status, createdAt: created.createdAt, parentId: created.parentId ?? null });
     this.gateway?.scheduleThreadAndAncestorsMetrics(created.id);
     return created.id;
   }
@@ -67,7 +67,7 @@ export class AgentsPersistenceService {
           const source = toPrismaJsonValue(msg.toPlain());
           const created = await tx.message.create({ data: { kind, text, source } });
           await tx.runMessage.create({ data: { runId: run.id, messageId: created.id, type: 'input' as RunMessageType } });
-          createdMessages.push({ id: created.id, kind, text, source, createdAt: created.createdAt });
+          createdMessages.push({ id: created.id, kind, text, source: created.source as Prisma.JsonValue, createdAt: created.createdAt });
         }),
       );
       return { runId: run.id, createdMessages };
@@ -90,7 +90,7 @@ export class AgentsPersistenceService {
           const source = toPrismaJsonValue(msg.toPlain());
           const created = await tx.message.create({ data: { kind, text, source } });
           await tx.runMessage.create({ data: { runId, messageId: created.id, type: 'injected' as RunMessageType } });
-          createdMessages.push({ id: created.id, kind, text, source, createdAt: created.createdAt });
+          createdMessages.push({ id: created.id, kind, text, source: created.source as Prisma.JsonValue, createdAt: created.createdAt });
         }),
       );
     });
@@ -115,7 +115,7 @@ export class AgentsPersistenceService {
           const source = toPrismaJsonValue(msg.toPlain());
           const created = await tx.message.create({ data: { kind, text, source } });
           await tx.runMessage.create({ data: { runId, messageId: created.id, type: 'output' as RunMessageType } });
-          createdMessages.push({ id: created.id, kind, text, source, createdAt: created.createdAt });
+          createdMessages.push({ id: created.id, kind, text, source: created.source as Prisma.JsonValue, createdAt: created.createdAt });
         }),
       );
       const updated = await tx.run.update({ where: { id: runId }, data: { status } });
@@ -153,7 +153,7 @@ export class AgentsPersistenceService {
     if (data.summary !== undefined) patch.summary = data.summary;
     if (data.status !== undefined) patch.status = data.status;
     const updated = await this.prisma.thread.update({ where: { id: threadId }, data: patch });
-    this.gateway?.emitThreadUpdated({ id: updated.id, alias: updated.alias, summary: updated.summary ?? null, status: updated.status as unknown as string, createdAt: updated.createdAt, parentId: updated.parentId ?? null });
+    this.gateway?.emitThreadUpdated({ id: updated.id, alias: updated.alias, summary: updated.summary ?? null, status: updated.status, createdAt: updated.createdAt, parentId: updated.parentId ?? null });
   }
 
   /** Aggregate subtree metrics for provided root IDs. */

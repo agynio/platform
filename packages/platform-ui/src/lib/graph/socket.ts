@@ -25,7 +25,7 @@ type ReminderListener = (ev: ReminderCountEvent) => void;
 
 class GraphSocket {
   // Typed socket instance; null until connected
-  private socket: Socket<ClientToServerEvents, ServerToClientEvents> | null = null;
+  private socket: Socket<ServerToClientEvents, ClientToServerEvents> | null = null;
   private listeners = new Map<string, Set<Listener>>();
   private stateListeners = new Map<string, Set<StateListener>>();
   private reminderListeners = new Map<string, Set<ReminderListener>>();
