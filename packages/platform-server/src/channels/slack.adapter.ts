@@ -29,30 +29,38 @@ export class SlackChannelAdapter {
     return token;
   }
 
-  async send(info: SlackChannelInfo, params: { text: string; broadcast?: boolean; ephemeral_user?: string | null }): Promise<SendResult> {
-    const token = await this.resolveBotToken();
+  async send(
+    info: SlackChannelInfo,
+    params: { text: string; ephemeral_user?: string | null },
+    tokenOverride?: string,
+  ): Promise<SendResult> {
+    const token = tokenOverride ?? (await this.resolveBotToken());
     const client = new WebClient(token, { logLevel: undefined });
     const maxAttempts = 3;
     let attempt = 0;
-    const { text, broadcast, ephemeral_user } = params;
+    const { text, ephemeral_user } = params;
     const channel = info.channel;
     const thread_ts = info.thread_ts;
     let lastError: string | undefined;
+
+    const tryOnce = async (): Promise<SendResult> => {
+      if (ephemeral_user) {
+        const resp: ChatPostEphemeralResponse = await client.chat.postEphemeral({ channel, user: ephemeral_user, text, thread_ts });
+        if (!resp.ok) return { ok: false, error: this.mapSlackError(resp.error), attempts: attempt };
+        return { ok: true, ref: { channel, ts: resp.message_ts }, attempts: attempt };
+      }
+      const resp: ChatPostMessageResponse = await client.chat.postMessage({ channel, text, attachments: [], ...(thread_ts ? { thread_ts } : {}) });
+      if (!resp.ok) return { ok: false, error: this.mapSlackError(resp.error), attempts: attempt };
+      const thread = (resp.message && 'thread_ts' in resp.message ? (resp.message as { thread_ts?: string }).thread_ts : undefined) || thread_ts || resp.ts;
+      return { ok: true, ref: { channel: resp.channel!, ts: resp.ts, thread_ts: thread }, attempts: attempt };
+    };
+
     while (attempt < maxAttempts) {
       attempt++;
       try {
-        if (ephemeral_user) {
-          const resp: ChatPostEphemeralResponse = await client.chat.postEphemeral({ channel, user: ephemeral_user, text, thread_ts });
-          if (!resp.ok) lastError = this.mapSlackError(resp.error);
-          else return { ok: true, ref: { channel, ts: resp.message_ts }, attempts: attempt };
-        } else {
-          const resp: ChatPostMessageResponse = await client.chat.postMessage({ channel, text, attachments: [], ...(thread_ts ? { thread_ts } : {}) });
-          if (!resp.ok) lastError = this.mapSlackError(resp.error);
-          else {
-            const thread = (resp.message && 'thread_ts' in resp.message ? (resp.message as { thread_ts?: string }).thread_ts : undefined) || thread_ts || resp.ts;
-            return { ok: true, ref: { channel: resp.channel!, ts: resp.ts, thread_ts: thread }, attempts: attempt };
-          }
-        }
+        const res = await tryOnce();
+        if (res.ok) return res;
+        lastError = res.error;
       } catch (err: unknown) {
         const mapped = (err as { data?: { error?: string }; message?: string }).data?.error || (err as { message?: string }).message || String(err);
         lastError = this.mapSlackError(mapped);
@@ -81,4 +89,3 @@ export class SlackChannelAdapter {
     }
   }
 }
-

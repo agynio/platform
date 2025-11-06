@@ -28,10 +28,9 @@ export class ChannelRegistry {
         return { ok: res.ok, ref: res.ref, error: res.error, attempts: res.attempts };
       }
       default: {
-        this.logger.warn('ChannelRegistry: unsupported channel type', { type: (info as any).type });
+        this.logger.warn('ChannelRegistry: unsupported channel type');
         return { ok: false, error: 'unsupported_channel', attempts: 0 };
       }
     }
   }
 }
-

@@ -1,12 +1,11 @@
 import z from 'zod';
 
 import { FunctionTool } from '@agyn/llm';
-import { WebClient, type ChatPostEphemeralResponse, type ChatPostMessageResponse } from '@slack/web-api';
 import { LoggerService } from '../../../../core/services/logger.service';
 import { VaultService } from '../../../../vault/vault.service';
 import { ReferenceFieldSchema, normalizeTokenRef, parseVaultRef, resolveTokenRef } from '../../../../utils/refs';
 import { SendSlackMessageNode } from './send_slack_message.node';
-import { SlackChannelAdapter } from '../../../../channels/slack.adapter';
+import { SlackChannelAdapter, type SendResult } from '../../../../channels/slack.adapter';
 
 export const SendSlackMessageToolStaticConfigSchema = z
   .object({
@@ -36,6 +35,7 @@ export class SendSlackMessageFunctionTool extends FunctionTool<typeof sendSlackI
     private node: SendSlackMessageNode,
     private logger: LoggerService,
     private vault: VaultService,
+    private adapter: SlackChannelAdapter,
   ) {
     super();
   }
@@ -59,11 +59,15 @@ export class SendSlackMessageFunctionTool extends FunctionTool<typeof sendSlackI
     if (!channel) throw new Error('channel is required');
     try {
       const token = await resolveTokenRef(bot, { expectedPrefix: 'xoxb-', fieldName: 'bot_token', vault: this.vault });
-      // Delegate to adapter for consistent retries/error mapping
-      const adapter = new SlackChannelAdapter(this.logger, { slackBotToken: token } as any, this.vault);
-      const res = await adapter.send({ type: 'slack', channel, thread_ts }, { text, broadcast, ephemeral_user });
+      // Delegate to adapter for consistent retries/error mapping, overriding token from legacy config
+      const res: SendResult = await this.adapter.send(
+        { type: 'slack', channel, thread_ts },
+        { text, ephemeral_user },
+        token,
+      );
       if (!res.ok) return JSON.stringify({ ok: false, error: res.error });
-      return JSON.stringify({ ok: true, channel: (res.ref as any)?.channel, ts: (res.ref as any)?.ts, thread_ts: (res.ref as any)?.thread_ts, broadcast: !!broadcast });
+      const ref = res.ref;
+      return JSON.stringify({ ok: true, channel: ref?.channel, ts: ref?.ts, thread_ts: ref?.thread_ts, broadcast: !!broadcast });
     } catch (err: unknown) {
       const msg = (err as { message?: string })?.message || String(err);
       this.logger.error('Error sending Slack message', msg);
