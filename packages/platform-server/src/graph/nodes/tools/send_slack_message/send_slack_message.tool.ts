@@ -62,12 +62,12 @@ export class SendSlackMessageFunctionTool extends FunctionTool<typeof sendSlackI
       // Delegate to adapter for consistent retries/error mapping, overriding token from legacy config
       const res: SendResult = await this.adapter.send(
         { type: 'slack', channel, thread_ts },
-        { text, ephemeral_user },
+        { text, ephemeral_user, broadcast: !!broadcast },
         token,
       );
       if (!res.ok) return JSON.stringify({ ok: false, error: res.error });
       const ref = res.ref;
-      return JSON.stringify({ ok: true, channel: ref?.channel, ts: ref?.ts, thread_ts: ref?.thread_ts, broadcast: !!broadcast });
+      return JSON.stringify({ ok: true, channel: ref?.channel, ts: ref?.ts, thread_ts: ref?.thread_ts, broadcast: !!broadcast, ephemeral: !!ephemeral_user });
     } catch (err: unknown) {
       const msg = (err as { message?: string })?.message || String(err);
       this.logger.error('Error sending Slack message', msg);

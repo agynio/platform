@@ -53,7 +53,8 @@ export class AgentsPersistenceService {
    */
   async setThreadChannel(threadId: string, info: ChannelInfo): Promise<void> {
     const validated = ChannelInfoSchema.parse(info);
-    await this.prisma.thread.update({ where: { id: threadId }, data: { channel: validated as unknown as Prisma.InputJsonValue } });
+    const channelJson = toPrismaJsonValue(validated);
+    await this.prisma.thread.update({ where: { id: threadId }, data: { channel: channelJson } });
   }
 
   /**

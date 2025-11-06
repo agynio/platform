@@ -94,3 +94,11 @@ Channel-agnostic messaging
 - Threads persist per-channel metadata (`Thread.channel` JSON). Migration `20251106121500_thread_channel_json` adds this column.
 - Configure `SLACK_BOT_TOKEN` in environment or via Vault ref `${vault:...}` for outbound messages via SendMessage tool.
 - The legacy `send_slack_message` tool is kept for backward compatibility but deprecated; prefer `send_message`.
+
+Config: Slack outbound
+- Set `SLACK_BOT_TOKEN` in `packages/platform-server/.env` (or use Vault: `SLACK_BOT_TOKEN=${vault:secret/path#key}`).
+- Token must be a bot token (starts with `xoxb-`) and include chat:write scopes.
+
+ChannelInfo schema
+- Slack: `{ type: 'slack', channel: 'C…', thread_ts?: '…', user?: 'U…' }`
+- MessageRef (Slack): `{ type: 'slack', channel: 'C…', ts?: '…', thread_ts?: '…', ephemeral?: true }`

@@ -1,11 +1,11 @@
 import { Inject, Injectable, Scope } from '@nestjs/common';
 import { AgentsPersistenceService } from '../agents/agents.persistence.service';
 import { LoggerService } from '../core/services/logger.service';
-import { ChannelInfo } from './types';
+import { ChannelInfo, type MessageRef } from './types';
 import { SlackChannelAdapter } from './slack.adapter';
 
 export type SendMessageParams = { text: string; broadcast?: boolean; ephemeral_user?: string | null };
-export type SendMessageResult = { ok: boolean; ref?: unknown; error?: string; attempts: number };
+export type SendMessageResult = { ok: boolean; ref?: MessageRef; error?: string; attempts: number };
 
 @Injectable({ scope: Scope.TRANSIENT })
 export class ChannelRegistry {

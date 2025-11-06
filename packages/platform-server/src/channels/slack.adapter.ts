@@ -4,9 +4,9 @@ import { LoggerService } from '../core/services/logger.service';
 import { ConfigService } from '../core/services/config.service';
 import { VaultService } from '../vault/vault.service';
 import { parseVaultRef } from '../utils/refs';
-import type { SlackChannelInfo } from './types';
+import type { SlackChannelInfo, SlackMessageRef } from './types';
 
-export type SendResult = { ok: boolean; ref?: { channel: string; ts?: string; thread_ts?: string }; error?: string; attempts: number };
+export type SendResult = { ok: boolean; ref?: SlackMessageRef; error?: string; attempts: number };
 
 @Injectable({ scope: Scope.TRANSIENT })
 export class SlackChannelAdapter {
@@ -31,14 +31,14 @@ export class SlackChannelAdapter {
 
   async send(
     info: SlackChannelInfo,
-    params: { text: string; ephemeral_user?: string | null },
+    params: { text: string; broadcast?: boolean; ephemeral_user?: string | null },
     tokenOverride?: string,
   ): Promise<SendResult> {
     const token = tokenOverride ?? (await this.resolveBotToken());
     const client = new WebClient(token, { logLevel: undefined });
     const maxAttempts = 3;
     let attempt = 0;
-    const { text, ephemeral_user } = params;
+    const { text, ephemeral_user, broadcast } = params;
     const channel = info.channel;
     const thread_ts = info.thread_ts;
     let lastError: string | undefined;
@@ -47,12 +47,12 @@ export class SlackChannelAdapter {
       if (ephemeral_user) {
         const resp: ChatPostEphemeralResponse = await client.chat.postEphemeral({ channel, user: ephemeral_user, text, thread_ts });
         if (!resp.ok) return { ok: false, error: this.mapSlackError(resp.error), attempts: attempt };
-        return { ok: true, ref: { channel, ts: resp.message_ts }, attempts: attempt };
+        return { ok: true, ref: { type: 'slack', channel, ts: resp.message_ts, ephemeral: true }, attempts: attempt };
       }
-      const resp: ChatPostMessageResponse = await client.chat.postMessage({ channel, text, attachments: [], ...(thread_ts ? { thread_ts } : {}) });
+      const resp: ChatPostMessageResponse = await client.chat.postMessage({ channel, text, attachments: [], ...(thread_ts ? { thread_ts, ...(broadcast ? { reply_broadcast: true } : {}) } : {}) });
       if (!resp.ok) return { ok: false, error: this.mapSlackError(resp.error), attempts: attempt };
       const thread = (resp.message && 'thread_ts' in resp.message ? (resp.message as { thread_ts?: string }).thread_ts : undefined) || thread_ts || resp.ts;
-      return { ok: true, ref: { channel: resp.channel!, ts: resp.ts, thread_ts: thread }, attempts: attempt };
+      return { ok: true, ref: { type: 'slack', channel: resp.channel!, ts: resp.ts, thread_ts: thread }, attempts: attempt };
     };
 
     while (attempt < maxAttempts) {
@@ -62,10 +62,15 @@ export class SlackChannelAdapter {
         if (res.ok) return res;
         lastError = res.error;
       } catch (err: unknown) {
-        const mapped = (err as { data?: { error?: string }; message?: string }).data?.error || (err as { message?: string }).message || String(err);
-        lastError = this.mapSlackError(mapped);
+        const { retryAfterMs, message } = this.parseError(err);
+        lastError = this.mapSlackError(message);
+        if (retryAfterMs && attempt < maxAttempts) {
+          await new Promise((r) => setTimeout(r, retryAfterMs));
+          continue;
+        }
       }
-      await new Promise((r) => setTimeout(r, 300 * attempt));
+      const delay = 300 * Math.pow(2, attempt - 1);
+      await new Promise((r) => setTimeout(r, delay));
     }
     this.logger.error('SlackChannelAdapter.send failed', { channel, attempts: attempt, error: lastError });
     return { ok: false, error: lastError || 'unknown_error', attempts: attempt };
@@ -87,5 +92,20 @@ export class SlackChannelAdapter {
       default:
         return err;
     }
+  }
+
+  private parseError(err: unknown): { retryAfterMs?: number; message: string } {
+    const anyErr = err as any;
+    const message = (anyErr?.data?.error as string) || (anyErr?.message as string) || String(err);
+    const retryAfterSec =
+      typeof anyErr?.retryAfter === 'number'
+        ? anyErr.retryAfter
+        : typeof anyErr?.data?.retry_after === 'number'
+        ? anyErr.data.retry_after
+        : typeof anyErr?.headers?.['retry-after'] === 'string'
+        ? Number(anyErr.headers['retry-after'])
+        : undefined;
+    const retryAfterMs = typeof retryAfterSec === 'number' && Number.isFinite(retryAfterSec) ? retryAfterSec * 1000 : undefined;
+    return { retryAfterMs, message };
   }
 }
