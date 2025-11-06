@@ -25,7 +25,6 @@ export class RemindMeFunctionTool extends FunctionTool<typeof remindMeInvocation
   private destroyed = false;
   private maxActive = 1000;
   private onRegistryChanged?: (count: number, updatedAtMs?: number) => void;
-  private onThreadMetricsRequested?: (threadId: string) => void;
   constructor(private logger: LoggerService, private prismaService: PrismaService) {
     super();
   }
@@ -47,9 +46,6 @@ export class RemindMeFunctionTool extends FunctionTool<typeof remindMeInvocation
    */
   setOnRegistryChanged(cb?: (count: number, updatedAtMs?: number) => void) {
     this.onRegistryChanged = cb;
-  }
-  setOnThreadMetricsRequested(cb?: (threadId: string) => void) {
-    this.onThreadMetricsRequested = cb;
   }
   async destroy(): Promise<void> {
     this.destroyed = true;
@@ -85,7 +81,6 @@ export class RemindMeFunctionTool extends FunctionTool<typeof remindMeInvocation
         // Always remove from registry and notify
         this.active.delete(created.id);
         this.onRegistryChanged?.(this.active.size);
-        this.onThreadMetricsRequested?.(created.threadId);
       }
       try {
         const msg = SystemMessage.fromText(`Reminder: ${note}`);
@@ -99,7 +94,6 @@ export class RemindMeFunctionTool extends FunctionTool<typeof remindMeInvocation
     this.active.set(created.id, { timer, reminder: created });
     // Registry size increased; notify
     this.onRegistryChanged?.(this.active.size);
-    this.onThreadMetricsRequested?.(threadId);
     // Return ack including DB id
     return JSON.stringify({ status: 'scheduled', etaMs: delayMs, at: eta, id: created.id });
   }

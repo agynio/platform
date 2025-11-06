@@ -5,7 +5,7 @@ import { toPrismaJsonValue } from '../llm/services/messages.serialization';
 import type { Prisma, RunStatus, RunMessageType, MessageKind, PrismaClient, ThreadStatus } from '@prisma/client';
 import { LoggerService } from '../core/services/logger.service';
 import { ThreadsMetricsService, type ThreadMetrics } from './threads.metrics.service';
-import type { GraphEventsPublisher } from '../gateway/graph.events.publisher';
+import { GraphEventsPublisher } from '../gateway/graph.events.publisher';
 
 export type RunStartResult = { runId: string };
 
@@ -15,7 +15,7 @@ export class AgentsPersistenceService {
     @Inject(PrismaService) private prismaService: PrismaService,
     @Inject(LoggerService) private readonly logger: LoggerService,
     @Inject(ThreadsMetricsService) private readonly metrics: ThreadsMetricsService,
-    @Inject('GraphEventsPublisher') private readonly events: GraphEventsPublisher,
+    @Inject(GraphEventsPublisher) private readonly events: GraphEventsPublisher,
   ) {}
 
   private get prisma(): PrismaClient {

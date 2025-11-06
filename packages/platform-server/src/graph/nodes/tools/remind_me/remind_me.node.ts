@@ -30,10 +30,6 @@ export class RemindMeNode extends BaseToolNode<z.infer<typeof RemindMeToolStatic
         // Emit count change via socket gateway
         this.gateway.emitReminderCount(id, count, atMs);
       });
-      this.toolInstance.setOnThreadMetricsRequested((threadId: string) => {
-        if (!threadId) return;
-        this.gateway.scheduleThreadAndAncestorsMetrics(threadId);
-      });
     }
     return this.toolInstance;
   }
