@@ -26,6 +26,7 @@ import { TemplateRegistry } from './templateRegistry';
 import { EnvModule } from '../env/env.module';
 import { NodeStateService } from './nodeState.service';
 import { GraphSocketGateway } from '../gateway/graph.socket.gateway';
+import { GraphEventsPublisher } from '../gateway/graph.events.publisher';
 import { ThreadsMetricsService } from '../agents/threads.metrics.service';
 import { RemindersController } from './nodes/tools/remind_me/reminders.controller';
 import { AgentNode } from './nodes/agent/agent.node';
@@ -111,7 +112,7 @@ import { AgentsRemindersController } from '../agents/reminders.controller';
     NodeStateService,
     // Gateway and publisher binding
     GraphSocketGateway,
-    { provide: 'GraphEventsPublisher', useExisting: GraphSocketGateway },
+    { provide: GraphEventsPublisher, useExisting: GraphSocketGateway },
     // Centralized threads metrics aggregator
     ThreadsMetricsService,
     AgentsPersistenceService,

@@ -56,38 +56,10 @@ export class ThreadsMetricsService {
       }
       return out;
     } catch (e) {
-      // JS fallback for tests/stub env without $queryRaw
+      // Log SQL aggregation errors; do not fall back to alternate logic
       const err = e as Error;
-      this.logger.error('ThreadsMetricsService falling back to in-memory aggregation', { ids, error: err?.message || String(e) });
-      const prisma = this.prisma;
-      const allThreads = await prisma.thread.findMany({ select: { id: true, parentId: true } });
-      const runs = await prisma.run.findMany({});
-      type ReminderRow = { threadId: string; completedAt: Date | null };
-      const prismaWithReminders = prisma as PrismaClient & { reminder: { findMany: () => Promise<ReminderRow[]> } };
-      const hasModelReminders = 'reminder' in prismaWithReminders && typeof prismaWithReminders.reminder.findMany === 'function';
-      const reminders: ReminderRow[] = hasModelReminders ? await prismaWithReminders.reminder.findMany() : [];
-      const out: Record<string, ThreadMetrics> = {};
-      function collectSubtree(root: string): string[] {
-        const ids: string[] = [root];
-        const stack = [root];
-        while (stack.length) {
-          const cur = stack.pop()!;
-          const kids = allThreads.filter((t) => t.parentId === cur).map((t) => t.id);
-          for (const k of kids) { ids.push(k); stack.push(k); }
-        }
-        return ids;
-      }
-      const hasRunning = new Map<string, boolean>();
-      for (const r of runs) if (r.status === 'running') hasRunning.set(r.threadId, true);
-      for (const id of ids) {
-        const sub = collectSubtree(id);
-        const selfWorking = !!hasRunning.get(id);
-        const descWorking = sub.some((tid) => tid !== id && !!hasRunning.get(tid));
-        const remindersCount = reminders.filter((rem) => sub.includes(rem.threadId) && rem.completedAt == null).length;
-        const activity: ThreadMetrics['activity'] = selfWorking ? 'working' : (descWorking || remindersCount > 0) ? 'waiting' : 'idle';
-        out[id] = { remindersCount, activity };
-      }
-      return out;
+      this.logger.error('ThreadsMetricsService SQL aggregation error', { ids, error: err?.message || String(e) });
+      return {};
     }
   }
 }
