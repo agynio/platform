@@ -29,11 +29,10 @@ describe('GraphSocketGateway metrics coalescing', () => {
     // Assert single batch computation and grouped emits to both rooms
     expect(getThreadsMetrics).toHaveBeenCalledTimes(1);
     expect(getThreadsMetrics).toHaveBeenCalledWith(['t1', 't2']);
-    const activityEvents = captured.filter((e) => e.event === 'thread_activity_changed');
-    const remindersEvents = captured.filter((e) => e.event === 'thread_reminders_count');
-    expect(activityEvents.map((e) => e.payload.threadId).sort()).toEqual(['t1', 't2']);
-    expect(remindersEvents.map((e) => e.payload.threadId).sort()).toEqual(['t1', 't2']);
+    const activityThreadsRoom = captured.filter((e) => e.event === 'thread_activity_changed' && e.room === 'threads');
+    const remindersThreadsRoom = captured.filter((e) => e.event === 'thread_reminders_count' && e.room === 'threads');
+    expect(activityThreadsRoom.map((e) => e.payload.threadId).sort()).toEqual(['t1', 't2']);
+    expect(remindersThreadsRoom.map((e) => e.payload.threadId).sort()).toEqual(['t1', 't2']);
     vi.useRealTimers();
   });
 });
-

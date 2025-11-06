@@ -168,7 +168,8 @@ export class GraphSocketGateway implements GraphEventsPublisher {
     this.io.to(`thread:${threadId}`).emit('run_status_changed', payload);
   }
   private flushMetricsQueue = async () => {
-    const ids = Array.from(this.pendingThreads);
+    // De-duplicate pending thread IDs per flush (preserve insertion order)
+    const ids = Array.from(new Set(this.pendingThreads));
     this.pendingThreads.clear();
     this.metricsTimer = null;
     if (!this.io || ids.length === 0) return;
