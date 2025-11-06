@@ -11,8 +11,8 @@ import {
   type Node,
 } from 'reactflow';
 import { v4 as uuid } from 'uuid';
-import { client, api } from '@/api';
-import type { PersistedGraphUpsertRequestUI } from '@/api/graph';
+import { graph as api } from '@/api/modules/graph';
+import type { PersistedGraphUpsertRequestUI } from '@/api/modules/graph';
 import type { TemplateNodeSchema, PersistedGraph } from '@agyn/shared';
 import { deepEqual } from '../../lib/utils';
 
@@ -65,8 +65,8 @@ export function useBuilderState(serverBase = '', options?: BuilderOptions): UseB
     (async () => {
       try {
         const [tplRes, graphRes] = await Promise.all([
-          api.graph.getTemplates(serverBase),
-          client.httpJson<PersistedGraph>(`/api/graph`, undefined, serverBase),
+          api.getTemplates(),
+          api.getFullGraph(),
         ]);
         if (cancelled) return;
         setTemplates(tplRes as TemplateNodeSchema[]);
@@ -247,7 +247,7 @@ export function useBuilderState(serverBase = '', options?: BuilderOptions): UseB
             targetHandle: e.targetHandle ?? undefined,
           })),
         };
-        const saved = await api.graph.saveFullGraph(payload, serverBase);
+        const saved = await api.saveFullGraph(payload);
         if (!saved) throw new Error('Save failed');
         versionRef.current = saved.version;
         setDirty(false); // reset dirty after successful save
@@ -258,7 +258,7 @@ export function useBuilderState(serverBase = '', options?: BuilderOptions): UseB
         setSaveState('error');
       }
     }, delay);
-  }, [serverBase, options?.debounceMs]);
+  }, [options?.debounceMs]);
 
   useEffect(() => {
     // Only autosave after initial hydration and when dirty. Do not depend on nodes/edges to avoid resets from selection updates.

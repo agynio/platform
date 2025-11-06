@@ -24,7 +24,12 @@ export default [
     plugins: { '@typescript-eslint': tseslint.plugin },
     rules: {
       '@typescript-eslint/no-explicit-any': 'error',
-      'no-empty': 'error',
+      // Disallow empty catch blocks explicitly
+      'no-empty': ['error', { allowEmptyCatch: false }],
+      // Limit nesting to max depth 3
+      'max-depth': ['error', 3],
+      // Avoid wrapping errors needlessly
+      'no-useless-catch': 'error',
       '@typescript-eslint/no-unused-vars': [
         'error',
         { argsIgnorePattern: '^_', varsIgnorePattern: '^_', caughtErrorsIgnorePattern: '^_' },
@@ -47,7 +52,12 @@ export default [
     plugins: { '@typescript-eslint': tseslint.plugin },
     rules: {
       '@typescript-eslint/no-explicit-any': 'error',
-      'no-empty': 'error',
+      // Disallow empty catch blocks explicitly
+      'no-empty': ['error', { allowEmptyCatch: false }],
+      // Limit nesting to max depth 3
+      'max-depth': ['error', 3],
+      // Avoid wrapping errors needlessly
+      'no-useless-catch': 'error',
       '@typescript-eslint/no-unused-vars': [
         'error',
         { argsIgnorePattern: '^_', varsIgnorePattern: '^_', caughtErrorsIgnorePattern: '^_' },
@@ -76,7 +86,12 @@ export default [
       '@typescript-eslint/no-unused-vars': 'off',
       // Tests often use `any` in mocks; allow here only
       '@typescript-eslint/no-explicit-any': 'off',
-      'no-empty': 'error',
+      // Disallow empty catch blocks explicitly
+      'no-empty': ['error', { allowEmptyCatch: false }],
+      // Limit nesting to max depth 3
+      'max-depth': ['error', 3],
+      // Avoid wrapping errors needlessly
+      'no-useless-catch': 'error',
       '@typescript-eslint/no-require-imports': 'error',
       '@typescript-eslint/ban-ts-comment': 'error',
       '@typescript-eslint/no-unsafe-function-type': 'error',

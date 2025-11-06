@@ -117,11 +117,7 @@ export class WorkspaceNode extends Node<ContainerProviderStaticConfig> {
             }
           }),
         );
-        for (const { c, cl } of results) {
-          if (cl?.['hautech.ai/role'] === 'dind') continue;
-          container = c;
-          break;
-        }
+        container = this.chooseNonDinDContainer(results) ?? container;
       }
     }
     const enableDinD = this.config?.enableDinD ?? false;
@@ -129,70 +125,17 @@ export class WorkspaceNode extends Node<ContainerProviderStaticConfig> {
     // Enforce non-reuse on platform mismatch if a platform is requested now
     const requestedPlatform = this.config?.platform ?? DEFAULTS.platform;
     if (container && requestedPlatform) {
+      let existingPlatform: string | undefined;
       try {
         const containerLabels = await this.containerService.getContainerLabels(container.id);
-        const existingPlatform = containerLabels?.[PLATFORM_LABEL];
-        if (!existingPlatform || existingPlatform !== requestedPlatform) {
-          // If DinD is enabled, remove associated DinD sidecar(s) first
-          if (enableDinD) {
-            try {
-              const dinds = await this.containerService.findContainersByLabels({
-                ...labels,
-                'hautech.ai/role': 'dind',
-                'hautech.ai/parent_cid': container.id,
-              });
-              // Stop/remove DinD sidecars concurrently
-              await Promise.all(
-                dinds.map(async (d) => {
-                  try {
-                    await d.stop(5);
-                  } catch (e: unknown) {
-                    const sc = getStatusCode(e);
-                    // benign: already stopped/removed-in-progress
-                    if (sc !== 304 && sc !== 404 && sc !== 409) throw e;
-                  }
-                  try {
-                    await d.remove(true);
-                  } catch (e: unknown) {
-                    const sc = getStatusCode(e);
-                    // benign: already removed / removal-in-progress
-                    if (sc !== 404 && sc !== 409) throw e;
-                  }
-                }),
-              );
-            } catch {
-              // ignore DinD sidecar lookup errors
-            }
-          }
-          // Stop and remove old container, then recreate (handle benign errors)
-          try {
-            await container.stop();
-          } catch (e: unknown) {
-            const sc = getStatusCode(e);
-            if (sc !== 304 && sc !== 404 && sc !== 409) throw e;
-          }
-          try {
-            await container.remove(true);
-          } catch (e: unknown) {
-            const sc = getStatusCode(e);
-            if (sc !== 404 && sc !== 409) throw e;
-          }
-          container = undefined;
-        }
+        existingPlatform = containerLabels?.[PLATFORM_LABEL];
       } catch {
-        // If inspect fails, do not reuse to be safe; still attempt cleanup
-        try {
-          await container!.stop();
-        } catch (e: unknown) {
-          const sc = getStatusCode(e);
-          if (sc !== 304 && sc !== 404 && sc !== 409) throw e;
-        }
-        try {
-          await container!.remove(true);
-        } catch (e: unknown) {
-          const sc = getStatusCode(e);
-          if (sc !== 404 && sc !== 409) throw e;
-        }
+        existingPlatform = undefined; // treat as mismatch
+      }
+      const mismatched = !existingPlatform || existingPlatform !== requestedPlatform;
+      if (mismatched) {
+        if (enableDinD) await this.cleanupDinDSidecars(labels, container.id).catch(() => {});
+        await this.stopAndRemoveContainer(container);
         container = undefined;
       }
     }
@@ -335,40 +278,94 @@ export class WorkspaceNode extends Node<ContainerProviderStaticConfig> {
         ]);
         if (exitCode === 0) return;
       } catch {
-        // ignore touchLastUsed errors
+        // ignore exec errors
       }
       // Early fail if DinD exited unexpectedly (best-effort; skip if low-level client not available)
-      try {
-        const maybeSvc: unknown = this.containerService;
-        // Minimal interfaces to avoid any-casts
-        interface DockerLike {
-          getContainer(id: string): { inspect(): Promise<unknown> };
-        }
-        interface DockerProvider {
-          getDocker(): DockerLike;
-        }
-        const hasGetDocker =
-          typeof maybeSvc === 'object' &&
-          maybeSvc !== null &&
-          'getDocker' in maybeSvc &&
-          typeof (maybeSvc as { getDocker?: unknown }).getDocker === 'function';
-        if (hasGetDocker) {
-          const docker = (maybeSvc as DockerProvider).getDocker();
-          const inspect = (await docker.getContainer(dind.id).inspect()) as {
-            State?: { Running?: boolean; Status?: string };
-          };
-          const state = inspect?.State;
-          if (state && state.Running === false) {
-            throw new Error(`DinD sidecar exited unexpectedly: status=${state.Status}`);
-          }
-        }
-      } catch (e) {
-        // If inspect reports not running or other error, fail fast
-        throw e instanceof Error ? e : new Error('DinD sidecar exited unexpectedly');
-      }
+      await this.failFastIfDinDExited(dind);
       await sleep(1000);
     }
     throw new Error('DinD sidecar did not become ready within timeout');
+  }
+
+  private chooseNonDinDContainer(
+    results: Array<{ c: ContainerHandle; cl?: Record<string, string> | undefined }>,
+  ): ContainerHandle | undefined {
+    for (const { c, cl } of results) {
+      if (cl?.['hautech.ai/role'] === 'dind') continue;
+      return c;
+    }
+    return undefined;
+  }
+
+  private async cleanupDinDSidecars(labels: Record<string, string>, parentId: string): Promise<void> {
+    try {
+      const dinds = await this.containerService.findContainersByLabels({
+        ...labels,
+        'hautech.ai/role': 'dind',
+        'hautech.ai/parent_cid': parentId,
+      });
+      await Promise.all(
+        dinds.map(async (d) => {
+          try {
+            await d.stop(5);
+          } catch (e: unknown) {
+            const sc = getStatusCode(e);
+            if (sc !== 304 && sc !== 404 && sc !== 409) throw e;
+          }
+          try {
+            await d.remove(true);
+          } catch (e: unknown) {
+            const sc = getStatusCode(e);
+            if (sc !== 404 && sc !== 409) throw e;
+          }
+        }),
+      );
+    } catch {
+      // ignore DinD sidecar lookup errors
+    }
+  }
+
+  private async stopAndRemoveContainer(container: ContainerHandle): Promise<void> {
+    try {
+      await container.stop();
+    } catch (e: unknown) {
+      const sc = getStatusCode(e);
+      if (sc !== 304 && sc !== 404 && sc !== 409) throw e;
+    }
+    try {
+      await container.remove(true);
+    } catch (e: unknown) {
+      const sc = getStatusCode(e);
+      if (sc !== 404 && sc !== 409) throw e;
+    }
+  }
+
+  private async failFastIfDinDExited(dind: ContainerHandle): Promise<void> {
+    try {
+      const maybeSvc: unknown = this.containerService;
+      interface DockerLike {
+        getContainer(id: string): { inspect(): Promise<unknown> };
+      }
+      interface DockerProvider {
+        getDocker(): DockerLike;
+      }
+      const hasGetDocker =
+        typeof maybeSvc === 'object' &&
+        maybeSvc !== null &&
+        'getDocker' in maybeSvc &&
+        typeof (maybeSvc as { getDocker?: unknown }).getDocker === 'function';
+      if (!hasGetDocker) return;
+      const docker = (maybeSvc as DockerProvider).getDocker();
+      const inspect = (await docker.getContainer(dind.id).inspect()) as {
+        State?: { Running?: boolean; Status?: string };
+      };
+      const state = inspect?.State;
+      if (state && state.Running === false) {
+        throw new Error(`DinD sidecar exited unexpectedly: status=${state.Status}`);
+      }
+    } catch (e) {
+      throw e instanceof Error ? e : new Error('DinD sidecar exited unexpectedly');
+    }
   }
 
   // ---------------------

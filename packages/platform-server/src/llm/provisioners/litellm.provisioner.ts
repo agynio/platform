@@ -86,15 +86,7 @@ export class LiteLLMProvisioner extends LLMProvisioner {
     for (let attempt = 1; attempt <= maxAttempts; attempt++) {
       try {
         const resp = await fetch(url, { method: 'POST', headers, body: JSON.stringify(body) });
-        if (!resp.ok) {
-          const text = await this.safeReadText(resp);
-          this.logger.error('LiteLLM provisioning failed: status=%s, body=%s', String(resp.status), this.redact(text));
-          if (resp.status >= 500 && attempt < maxAttempts) {
-            await this.delay(baseDelayMs * Math.pow(2, attempt - 1));
-            continue;
-          }
-          throw new Error(`litellm_provision_failed_${resp.status}`);
-        }
+        if (!resp.ok && (await this.handleProvisionNonOk(resp, attempt, maxAttempts, baseDelayMs))) continue;
         const data = (await this.safeReadJson(resp)) as { key?: string } | undefined;
         const key = data?.key;
         if (!key || typeof key !== 'string') throw new Error('litellm_provision_invalid_response');
@@ -112,6 +104,22 @@ export class LiteLLMProvisioner extends LLMProvisioner {
       }
     }
     return {};
+  }
+
+  private async handleProvisionNonOk(
+    resp: Response,
+    attempt: number,
+    maxAttempts: number,
+    baseDelayMs: number,
+  ): Promise<boolean> {
+    const text = await this.safeReadText(resp);
+    this.logger.error('LiteLLM provisioning failed: status=%s, body=%s', String(resp.status), this.redact(text));
+    const shouldRetry = resp.status >= 500 && attempt < maxAttempts;
+    if (shouldRetry) {
+      await this.delay(baseDelayMs * Math.pow(2, attempt - 1));
+      return true;
+    }
+    throw new Error(`litellm_provision_failed_${resp.status}`);
   }
 
   private toList(v: string | undefined, dflt: string[]): string[] {

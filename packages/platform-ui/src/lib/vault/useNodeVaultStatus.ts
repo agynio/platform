@@ -26,7 +26,7 @@ export function useNodeVaultStatus(config?: Record<string, unknown>) {
   const queries = useQueries({
     queries: uniqueResources.map(({ mount, path }) => ({
       queryKey: ['vault', 'keys', mount, path],
-      queryFn: () => import('@/api/graph').then((m) => m.api.listVaultKeys(mount, path, { maskErrors: false })),
+      queryFn: () => import('@/api/modules/graph').then((m) => m.graph.listVaultKeys(mount, path, { maskErrors: false })),
       staleTime: 1000 * 60 * 5,
       retry: 2,
       retryDelay: (attempt: number) => Math.min(1000 * Math.pow(2, attempt), 5000),

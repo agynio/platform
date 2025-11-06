@@ -525,12 +525,7 @@ export class ContainerService {
                 },
               });
               try {
-                const modemObj = this.docker.modem;
-                const demux = modemObj?.['demuxStream'] as
-                  | ((s: NodeJS.ReadableStream, out: NodeJS.WritableStream, err: NodeJS.WritableStream) => void)
-                  | undefined;
-                if (!demux) throw new Error('demuxStream not available');
-                demux(stream, outStdout, outStderr);
+                this.demuxTo(stream, outStdout, outStderr);
               } catch {
                 const { stdout, stderr } = demuxDockerMultiplex(stream);
                 stdout.pipe(outStdout);
@@ -615,6 +610,25 @@ export class ContainerService {
         });
       });
     });
+  }
+
+  // Demultiplex docker multiplexed stream if modem.demuxStream is available; otherwise fall back to manual demux
+  private demuxTo(
+    stream: NodeJS.ReadableStream,
+    outStdout: NodeJS.WritableStream,
+    outStderr: NodeJS.WritableStream,
+  ): void {
+    const modemObj = this.docker.modem;
+    const demux = modemObj?.['demuxStream'] as
+      | ((s: NodeJS.ReadableStream, out: NodeJS.WritableStream, err: NodeJS.WritableStream) => void)
+      | undefined;
+    if (demux) {
+      demux(stream, outStdout, outStderr);
+      return;
+    }
+    const { stdout, stderr } = demuxDockerMultiplex(stream);
+    stdout.pipe(outStdout);
+    stderr.pipe(outStderr);
   }
 
   /** Stop a container by docker id (gracefully). */

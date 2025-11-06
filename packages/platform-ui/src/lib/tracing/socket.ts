@@ -1,7 +1,11 @@
 // Tracing realtime socket client for platform-ui (span_upsert events)
 import { io, type Socket } from 'socket.io-client';
-import type { SpanDoc, SpanExtras, SpanEventPayload } from '@/api/tracing';
+import type { SpanDoc, SpanExtras } from '@/api/types/tracing';
+import { config } from '@/config';
 
+const TRACING_BASE: string | undefined = config.tracing.serverUrl;
+
+export type SpanEventPayload = SpanDoc & Partial<SpanExtras> & { attributes?: Record<string, unknown> };
 export type SpanUpsertHandler = (span: SpanEventPayload) => void;
 
 // Type guards and normalizers for realtime payloads
@@ -50,15 +54,8 @@ class TracingRealtime {
 
   private ensure() {
     if (this.socket) return;
-    // Derive tracing server from env (VITE_TRACING_SERVER_URL or VITE_API_BASE_URL + /tracing); avoid importing config in tests
-    const env = (import.meta as { env?: Record<string, unknown> } | undefined)?.env || {};
-    const envTracing = env?.VITE_TRACING_SERVER_URL as string | undefined;
-    const envApi = env?.VITE_API_BASE_URL as string | undefined;
-    const base: string | null = (envTracing && envTracing.length > 0)
-      ? envTracing
-      : (envApi ? `${envApi}/tracing` : null);
-    if (!base) return;
-    const url = base.endsWith('/') ? base.slice(0, -1) : base;
+    if (!TRACING_BASE) return; // allow usage without socket (tests/SSR)
+    const url = TRACING_BASE.endsWith('/') ? TRACING_BASE.slice(0, -1) : TRACING_BASE;
     this.socket = io(url, { path: '/socket.io', transports: ['websocket'], timeout: 10000, autoConnect: true });
     this.socket.on('span_upsert', (payload: unknown) => {
       const norm = normalizeSpan(payload);

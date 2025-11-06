@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import type { SpanDoc } from '../../../api/tracing';
+import type { SpanDoc } from '../../../api/types/tracing';
 import { tracingRealtime } from '../socket';
 import { useRunningCount, __resetRunningStoreForTest } from '../runningStore';
 import { renderHook, act } from '@testing-library/react';

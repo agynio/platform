@@ -2,13 +2,13 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useMemo, useRef, useState } from 'react';
 import { Button, Input, Table, Thead, Tbody, Tr, Th, Td } from '@agyn/ui';
 import { notifyError, notifySuccess } from '../lib/notify';
-import { httpJson } from '@/api/client';
+import { http, asData } from '@/api/http';
 
 type VarItem = { key: string; graph: string | null; local: string | null };
 
 async function fetchVariables(): Promise<VarItem[]> {
-  const data = await httpJson<{ items: VarItem[] }>(`/api/graph/variables`);
-  return data?.items ?? [];
+  const data = await asData<{ items: VarItem[] }>(http.get<{ items: VarItem[] }>(`/api/graph/variables`));
+  return data.items ?? [];
 }
 
 export function SettingsVariables() {
@@ -18,28 +18,7 @@ export function SettingsVariables() {
   const [newGraph, setNewGraph] = useState('');
 
   const createMut = useMutation<{ key: string; graph: string }, Error, { key: string; graph: string }>({
-    mutationFn: async (payload: { key: string; graph: string }) => {
-      try {
-        return (await httpJson<{ key: string; graph: string }>(`/api/graph/variables`, {
-          method: 'POST',
-          body: JSON.stringify(payload),
-        })) as { key: string; graph: string };
-      } catch (e) {
-        // Attempt to surface server-provided error codes
-        const msg = String((e as Error)?.message || 'Create failed');
-        try {
-          const idx = msg.indexOf(':');
-          const raw = idx >= 0 ? msg.slice(idx + 1).trim() : msg;
-          const parsed = JSON.parse(raw);
-          if (parsed && typeof parsed === 'object' && 'error' in parsed) {
-            throw new Error((parsed as { error?: string }).error || 'Create failed');
-          }
-        } catch {
-          /* swallow parse errors */
-        }
-        throw new Error(msg);
-      }
-    },
+    mutationFn: async (payload: { key: string; graph: string }) => asData<{ key: string; graph: string }>(http.post<{ key: string; graph: string }>(`/api/graph/variables`, payload)),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['variables'] }); notifySuccess('Variable added'); },
     onError: (e: Error) => {
       const msg = String(e?.message || 'Create failed');
@@ -50,27 +29,7 @@ export function SettingsVariables() {
   });
 
   const updateMut = useMutation<{ key: string; graph?: string | null; local?: string | null }, Error, { key: string; patch: { graph?: string | null; local?: string | null } }>({
-    mutationFn: async (args: { key: string; patch: { graph?: string | null; local?: string | null } }) => {
-      try {
-        return (await httpJson<{ key: string; graph?: string | null; local?: string | null }>(`/api/graph/variables/${encodeURIComponent(args.key)}`, {
-          method: 'PUT',
-          body: JSON.stringify(args.patch),
-        })) as { key: string; graph?: string | null; local?: string | null };
-      } catch (e) {
-        const msg = String((e as Error)?.message || 'Update failed');
-        try {
-          const idx = msg.indexOf(':');
-          const raw = idx >= 0 ? msg.slice(idx + 1).trim() : msg;
-          const parsed = JSON.parse(raw);
-          if (parsed && typeof parsed === 'object' && 'error' in parsed) {
-            throw new Error((parsed as { error?: string }).error || 'Update failed');
-          }
-        } catch {
-          /* swallow parse errors */
-        }
-        throw new Error(msg);
-      }
-    },
+    mutationFn: async (args: { key: string; patch: { graph?: string | null; local?: string | null } }) => asData<{ key: string; graph?: string | null; local?: string | null }>(http.put<{ key: string; graph?: string | null; local?: string | null }>(`/api/graph/variables/${encodeURIComponent(args.key)}`, args.patch)),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['variables'] }),
     onError: (e: Error) => {
       const msg = String(e?.message || 'Update failed');
@@ -81,9 +40,7 @@ export function SettingsVariables() {
   });
 
   const deleteMut = useMutation({
-    mutationFn: async (key: string) => {
-      await httpJson<void>(`/api/graph/variables/${encodeURIComponent(key)}`, { method: 'DELETE' });
-    },
+    mutationFn: async (key: string) => { await asData<void>(http.delete<void>(`/api/graph/variables/${encodeURIComponent(key)}`)); },
     onSuccess: () => qc.invalidateQueries({ queryKey: ['variables'] }),
   });
 

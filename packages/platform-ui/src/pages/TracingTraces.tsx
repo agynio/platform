@@ -1,10 +1,10 @@
 import { TracingProvider, TracingTracesView } from '@agyn/tracing-ui';
-import { getTracingBase } from '@/api/tracing';
+import { config } from '@/config';
 
 export function TracingTraces() {
   return (
     <div className="p-4">
-      <TracingProvider serverUrl={getTracingBase()}>
+      <TracingProvider serverUrl={config.tracingServerUrl}>
         <TracingTracesView basePaths={{ trace: '/tracing/trace', thread: '/tracing/thread' }} />
       </TracingProvider>
     </div>

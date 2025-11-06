@@ -1,8 +1,5 @@
-export * as client from './client';
-import { graph } from './graph';
-import * as tracing from './tracing';
-import * as nix from './nix';
-export { graph } from './graph';
-export { tracing, nix };
-
-export const api = { graph, tracing, nix };
+// Backwards-compat export surface now re-exports axios-based modules
+export { http, tracingHttp } from './http';
+export { graph } from './modules/graph';
+export * as tracing from './modules/tracing';
+export * as nix from './modules/nix';

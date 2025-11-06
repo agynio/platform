@@ -13,6 +13,7 @@
     "test:watch": "vitest"
   },
   "dependencies": {
+    "axios": "^1.7.7",
     "@agyn/tracing-ui": "workspace:*",
     "@agyn/ui": "workspace:*",
     "@radix-ui/react-accordion": "^1.1.2",

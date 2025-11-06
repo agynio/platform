@@ -313,50 +313,9 @@ export class LocalMCPServerNode extends Node<z.infer<typeof LocalMcpServerStatic
       } catch (e) {
         this.logger.error(`[MCP:${this.config.namespace}] Error cleaning up temp container`, e);
       }
-      // Ensure any DinD sidecars created for the temporary discovery container are also cleaned up
-      try {
-        const dinds = await this.containerService.findContainersByLabels(
-          { 'hautech.ai/role': 'dind', 'hautech.ai/parent_cid': tempContainerId },
-          { all: true },
-        );
-        if (dinds.length > 0) {
-          const results = await Promise.allSettled(
-            dinds.map(async (d) => {
-              try {
-                await d.stop(5);
-              } catch (e: unknown) {
-                const sc = (e as { statusCode?: number } | undefined)?.statusCode;
-                // benign: already stopped / not found / conflict
-                if (sc !== 304 && sc !== 404 && sc !== 409) throw e;
-              }
-              try {
-                await d.remove(true);
-                return true;
-              } catch (e: unknown) {
-                const sc = (e as { statusCode?: number } | undefined)?.statusCode;
-                // benign: already removed / removal in progress
-                if (sc !== 404 && sc !== 409) throw e;
-                return false;
-              }
-            }),
-          );
-          const cleaned = results.reduce((acc, r) => acc + (r.status === 'fulfilled' && r.value ? 1 : 0), 0);
-          if (cleaned > 0) {
-            this.logger.info(
-              `[MCP:${this.config.namespace}] Cleaned ${cleaned} DinD sidecar(s) for temp container ${String(tempContainerId).substring(0, 12)}`,
-            );
-          }
-          const rejected = results.filter((r) => r.status === 'rejected') as PromiseRejectedResult[];
-          if (rejected.length) {
-            throw new AggregateError(
-              rejected.map((r) => r.reason),
-              'One or more temp DinD cleanup tasks failed',
-            );
-          }
-        }
-      } catch (e) {
-        this.logger.error(`[MCP:${this.config.namespace}] Error cleaning DinD sidecars for temp container`, e);
-      }
+      await this.cleanTempDinDSidecars(tempContainerId).catch((e) =>
+        this.logger.error(`[MCP:${this.config.namespace}] Error cleaning DinD sidecars for temp container`, e),
+      );
     }
 
     return this.toolsCache ?? [];
@@ -647,5 +606,38 @@ export class LocalMCPServerNode extends Node<z.infer<typeof LocalMcpServerStatic
     } catch (e: unknown) {
       this.logger.error(`[MCP:${this.config.namespace}] Start attempt failed`, e);
     }
+  }
+  private async cleanTempDinDSidecars(tempContainerId: string): Promise<void> {
+    const dinds = await this.containerService.findContainersByLabels(
+      { 'hautech.ai/role': 'dind', 'hautech.ai/parent_cid': tempContainerId },
+      { all: true },
+    );
+    if (!Array.isArray(dinds) || dinds.length === 0) return;
+    const results = await Promise.allSettled(
+      dinds.map(async (d) => {
+        try {
+          await d.stop(5);
+        } catch (e: unknown) {
+          const sc = (e as { statusCode?: number } | undefined)?.statusCode;
+          if (sc !== 304 && sc !== 404 && sc !== 409) throw e;
+        }
+        try {
+          await d.remove(true);
+          return true as const;
+        } catch (e: unknown) {
+          const sc = (e as { statusCode?: number } | undefined)?.statusCode;
+          if (sc !== 404 && sc !== 409) throw e;
+          return false as const;
+        }
+      }),
+    );
+    const cleaned = results.reduce((acc, r) => acc + (r.status === 'fulfilled' && r.value ? 1 : 0), 0);
+    if (cleaned > 0) {
+      this.logger.info(
+        `[MCP:${this.config.namespace}] Cleaned ${cleaned} DinD sidecar(s) for temp container ${String(tempContainerId).substring(0, 12)}`,
+      );
+    }
+    const rejected = results.filter((r) => r.status === 'rejected') as PromiseRejectedResult[];
+    if (rejected.length) throw new AggregateError(rejected.map((r) => r.reason), 'One or more temp DinD cleanup tasks failed');
   }
 }

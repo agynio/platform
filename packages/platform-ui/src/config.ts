@@ -1,8 +1,11 @@
 // Centralized environment configuration for platform-ui
-// Minimal configuration: API base URL only (tracing config removed).
+// Provides resolved bases for API and Tracing services without side effects.
 
 type ViteEnv = {
   VITE_API_BASE_URL?: string;
+  VITE_TRACING_SERVER_URL?: string;
+  VITE_TRACING_UI_BASE?: string;
+  VITEST?: string | boolean;
 };
 
 function readViteEnv(): ViteEnv | undefined {
@@ -34,20 +37,42 @@ function readNodeEnv(): Record<string, string | undefined> | undefined {
 const ve = readViteEnv();
 const ne = readNodeEnv();
 
-// API base URL precedence (see README):
-// 1) VITE_API_BASE_URL (Vite env)
-// 2) API_BASE_URL (Node env) or VITE_API_BASE_URL (Node env)
-// 3) VITEST: '' (tests use relative URLs)
-// 4) default http://localhost:3010
 function resolveApiBase(): string {
-  const viteBase = ve?.VITE_API_BASE_URL;
-  if (viteBase) return viteBase;
-  const nodeBase = ne?.API_BASE_URL || ne?.VITE_API_BASE_URL;
-  if (nodeBase) return nodeBase;
-  if (ne?.VITEST) return '';
+  const vite = ve?.VITE_API_BASE_URL;
+  if (vite && vite.trim()) return vite;
+  const node = ne?.API_BASE_URL;
+  if (node && node.trim()) return node;
+  // In Vitest, default to '' so tests can use relative handlers
+  const isVitest = Boolean(ve?.VITEST || ne?.VITEST_WORKER_ID);
+  if (isVitest) return '';
+  // Fallback default for local dev
   return 'http://localhost:3010';
+}
+function resolveTracingServer(): string {
+  // Precedence: VITE_TRACING_SERVER_URL -> TRACING_SERVER_URL -> apiBaseUrl + /tracing -> default
+  const fromVite = ve?.VITE_TRACING_SERVER_URL;
+  if (fromVite && fromVite.trim()) return fromVite;
+  const fromNode = ne?.TRACING_SERVER_URL;
+  if (fromNode && fromNode.trim()) return fromNode;
+  const api = resolveApiBase();
+  const fallback = api ? `${api}/tracing` : 'http://localhost:4319';
+  return fallback.endsWith('/') ? fallback.slice(0, -1) : fallback;
+}
+
+function resolveTracingUiBase(): string {
+  const fromVite = ve?.VITE_TRACING_UI_BASE;
+  if (fromVite && fromVite.trim()) return fromVite;
+  const fromNode = ne?.TRACING_UI_BASE;
+  if (fromNode && fromNode.trim()) return fromNode;
+  return 'http://localhost:4320';
 }
 
 export const config = {
   apiBaseUrl: resolveApiBase(),
+  tracing: {
+    serverUrl: resolveTracingServer(),
+    uiBase: resolveTracingUiBase(),
+  },
+  // Legacy shape used in some components/providers
+  tracingServerUrl: resolveTracingServer(),
 };

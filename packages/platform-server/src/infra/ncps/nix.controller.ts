@@ -225,16 +225,7 @@ export class NixController {
         const upstream = NixhubPackageSchema.safeParse(json);
         const rels: NonNullable<NixhubPackageJSON['releases']> =
           upstream.success && Array.isArray(upstream.data.releases) ? upstream.data.releases : [];
-        const seen = new Set<string>();
-        const withValid: string[] = [];
-        const withInvalid: string[] = [];
-        for (const r of rels) {
-          const v = String(r?.version ?? '');
-          if (!v || seen.has(v)) continue;
-          seen.add(v);
-          if (semver.valid(v) || semver.valid(semver.coerce(v) || '')) withValid.push(v);
-          else withInvalid.push(v);
-        }
+        const { withValid, withInvalid } = this.collectVersions(rels);
         withValid.sort((a, b) => semver.rcompare(semver.coerce(a) || a, semver.coerce(b) || b));
         const versions = [...withValid, ...withInvalid];
         const body = VersionsResponseSchema.parse({ versions });
@@ -303,5 +294,18 @@ export class NixController {
       reply.code(500);
       return { error: 'server_error' };
     }
+  }
+  private collectVersions(rels: NonNullable<NixhubPackageJSON['releases']>): { withValid: string[]; withInvalid: string[] } {
+    const seen = new Set<string>();
+    const withValid: string[] = [];
+    const withInvalid: string[] = [];
+    for (const r of rels) {
+      const v = String(r?.version ?? '');
+      if (!v || seen.has(v)) continue;
+      seen.add(v);
+      if (semver.valid(v) || semver.valid(semver.coerce(v) || '')) withValid.push(v);
+      else withInvalid.push(v);
+    }
+    return { withValid, withInvalid };
   }
 }

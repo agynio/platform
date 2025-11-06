@@ -91,17 +91,7 @@ async upsertGraph(
       }
 
       // Emit node_config events for any node whose static config changed
-      if (before) {
-        const beforeStatic = new Map(before.nodes.map((n) => [n.id, JSON.stringify(n.config || {})]));
-        for (const n of saved.nodes) {
-          const prevS = beforeStatic.get(n.id);
-          const currS = JSON.stringify(n.config || {});
-          if (prevS !== currS) {
-            // Socket.io Gateway not wired in Nest yet; log and TODO
-            this.logger.info('node_config changed for %s (v=%s) [TODO: emit via gateway]', n.id, String(saved.version));
-          }
-        }
-      }
+      if (before) this.emitNodeConfigChanges(before, saved);
       return saved;
     } catch (e: unknown) {
       // Map known repository errors to status codes and bodies
@@ -117,6 +107,21 @@ async upsertGraph(
       }
       const msg = e instanceof Error ? e.message : String(e);
       throw new HttpException({ error: msg || 'Bad Request' }, HttpStatus.BAD_REQUEST);
+    }
+  }
+
+  private emitNodeConfigChanges(
+    before: { nodes: Array<{ id: string; config?: Record<string, unknown> }> },
+    saved: { nodes: Array<{ id: string; config?: Record<string, unknown> }>; version: number },
+  ): void {
+    const beforeStatic = new Map(before.nodes.map((n) => [n.id, JSON.stringify(n.config || {})]));
+    for (const n of saved.nodes) {
+      const prevS = beforeStatic.get(n.id);
+      const currS = JSON.stringify(n.config || {});
+      if (prevS !== currS) {
+        // Socket.io Gateway not wired in Nest yet; log and TODO
+        this.logger.info('node_config changed for %s (v=%s) [TODO: emit via gateway]', n.id, String(saved.version));
+      }
     }
   }
 }

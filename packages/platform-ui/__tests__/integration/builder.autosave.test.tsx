@@ -1,8 +1,16 @@
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+// Shared mutable store for hoisted mocks
+(globalThis as any).__graphTest = { postCount: 0 };
+vi.mock('@/api/modules/graph', () => ({
+  graph: {
+    getTemplates: vi.fn(async () => [{ name: 'mock', title: 'Mock', kind: 'tool', sourcePorts: [], targetPorts: [] }]),
+    getFullGraph: vi.fn(async () => ({ name: 'g', version: 1, nodes: [{ id: 'n1', template: 'mock', config: {} }], edges: [] })),
+    saveFullGraph: vi.fn(async () => { (globalThis as any).__graphTest.postCount += 1; return { version: Date.now() } as any; }),
+  },
+}));
 import { render, waitFor } from '@testing-library/react';
 import React, { useEffect } from 'react';
-import { http, HttpResponse } from 'msw';
-import { server, TestProviders } from './testUtils';
+import { TestProviders } from './testUtils';
 import { useBuilderState } from '../../src/builder/hooks/useBuilderState';
 
 function BuilderHarness({ expose }: { expose: (api: ReturnType<typeof useBuilderState>) => void }) {
@@ -16,31 +24,15 @@ function BuilderHarness({ expose }: { expose: (api: ReturnType<typeof useBuilder
 describe('Builder autosave hydration gating', () => {
   const postSpy: { count: number } = { count: 0 };
 
-  beforeAll(() => {
-    server.listen();
-  });
+  beforeAll(() => { (globalThis as any).__graphTest.postCount = 0; });
   afterEach(() => {
-    server.resetHandlers();
-    postSpy.count = 0;
+    postSpy.count = (globalThis as any).__graphTest.postCount;
     vi.useRealTimers();
   });
-  afterAll(() => server.close());
+  afterAll(() => {});
 
   it('does not POST on initial hydration; posts once after edit (debounced) under StrictMode', async () => {
-    // Ensure endpoints used by builder exist
-    server.use(
-      http.get('http://localhost:3010/api/graph/templates', () =>
-        HttpResponse.json([{ name: 'mock', title: 'Mock', kind: 'tool', sourcePorts: [], targetPorts: [] }]),
-      ),
-      http.get('http://localhost:3010/api/graph', () =>
-        HttpResponse.json({ name: 'g', version: 1, nodes: [{ id: 'n1', template: 'mock', config: {} }], edges: [] }),
-      ),
-      http.post('http://localhost:3010/api/graph', async ({ request }) => {
-        postSpy.count += 1;
-        await request.json().catch(() => ({}));
-        return HttpResponse.json({ version: Date.now() });
-      }),
-    );
+    (globalThis as any).__graphTest.postCount = 0;
 
     let exposed: ReturnType<typeof useBuilderState> | null = null;
 
@@ -68,6 +60,6 @@ describe('Builder autosave hydration gating', () => {
     await new Promise((r) => setTimeout(r, 150));
 
     // Exactly one POST should have occurred
-    expect(postSpy.count).toBe(1);
+    expect((globalThis as any).__graphTest.postCount).toBe(1);
   });
 });
