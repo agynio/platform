@@ -1,11 +1,11 @@
 import { describe, it, expect } from 'vitest';
-import { AgentsPersistenceService } from '../src/agents/agents.persistence.service';
+import { ThreadsMetricsService } from '../src/agents/threads.metrics.service';
 import { StubPrismaService, createPrismaStub } from './helpers/prisma.stub';
 
 describe('Agents threads metrics aggregation', () => {
   it('aggregates reminders and activity across multi-level subtree', async () => {
     const stub = createPrismaStub();
-    const svc = new AgentsPersistenceService(new StubPrismaService(stub) as any);
+    const svc = new ThreadsMetricsService(new StubPrismaService(stub) as any, { warn: () => {} } as any);
 
     // Build thread tree: root -> child -> leaf
     const rootId = (await stub.thread.create({ data: { alias: 'root' } })).id;

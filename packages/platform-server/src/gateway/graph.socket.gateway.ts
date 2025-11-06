@@ -4,8 +4,10 @@ import { Server as SocketIOServer, type Socket } from 'socket.io';
 import { z } from 'zod';
 import { LoggerService } from '../core/services/logger.service';
 import { LiveGraphRuntime } from '../graph/liveGraph.manager';
-import { PrismaService } from '../core/services/prisma.service';
 import type { ThreadStatus, MessageKind, RunStatus } from '@prisma/client';
+import type { GraphEventsPublisher } from './graph.events.publisher';
+import { ThreadsMetricsService } from '../agents/threads.metrics.service';
+import { PrismaService } from '../core/services/prisma.service';
 
 // Strict outbound event payloads
 export const NodeStatusEventSchema = z
@@ -52,7 +54,7 @@ export type ReminderCountEvent = z.infer<typeof ReminderCountEventSchema>;
  * Constructors DI-only; call init({ server }) explicitly from bootstrap.
  */
 @Injectable({ scope: Scope.DEFAULT })
-export class GraphSocketGateway {
+export class GraphSocketGateway implements GraphEventsPublisher {
   private io: SocketIOServer | null = null;
   private initialized = false;
   private pendingThreads = new Set<string>();
@@ -62,6 +64,7 @@ export class GraphSocketGateway {
   constructor(
     @Inject(LoggerService) private readonly logger: LoggerService,
     @Inject(LiveGraphRuntime) private readonly runtime: LiveGraphRuntime,
+    @Inject(ThreadsMetricsService) private readonly metrics: ThreadsMetricsService,
     @Inject(PrismaService) private readonly prismaService: PrismaService,
   ) {}
 
@@ -72,8 +75,12 @@ export class GraphSocketGateway {
     this.io = new SocketIOServer(server, { path: '/socket.io', transports: ['websocket'], cors: { origin: '*' } });
     this.io.on('connection', (socket: Socket) => {
       // Room subscription
+      const RoomSchema = z.union([
+        z.literal('threads'),
+        z.string().regex(/^thread:[0-9a-f-]{36}$/i),
+      ]);
       const SubscribeSchema = z
-        .object({ rooms: z.array(z.string()).optional(), room: z.string().optional() })
+        .object({ rooms: z.array(RoomSchema).optional(), room: RoomSchema.optional() })
         .strict();
       socket.on('subscribe', (payload: unknown) => {
         const parsed = SubscribeSchema.safeParse(payload);
@@ -160,63 +167,23 @@ export class GraphSocketGateway {
     const payload = { run: { ...run, createdAt: run.createdAt.toISOString(), updatedAt: run.updatedAt.toISOString() } };
     this.io.to(`thread:${threadId}`).emit('run_status_changed', payload);
   }
-  private async computeThreadMetrics(threadId: string): Promise<{ remindersCount: number; activity: 'working' | 'waiting' | 'idle' } | null> {
-    try {
-      const prisma = this.prismaService.getClient();
-      type MetricsRow = { root_id: string; reminders_count: number; desc_working: boolean; self_working: boolean };
-      const rows: MetricsRow[] = await prisma.$queryRaw`
-        with sel as (
-          select ${threadId}::uuid as root_id
-        ), rec as (
-          select t.id as thread_id, t."parentId" as parent_id, t.id as root_id
-          from "Thread" t join sel s on t.id = s.root_id
-          union all
-          select c.id as thread_id, c."parentId" as parent_id, r.root_id
-          from "Thread" c join rec r on c."parentId" = r.thread_id
-        ), runs as (
-          select r."threadId" as thread_id
-          from "Run" r
-          where r.status = 'running'
-        ), active_reminders as (
-          select rem."threadId" as thread_id
-          from "Reminder" rem
-          where rem."completedAt" is null
-        ), agg as (
-          select rec.root_id,
-                 count(ar.thread_id) as reminders_count,
-                 bool_or(runs.thread_id is not null) filter (where rec.thread_id != rec.root_id) as desc_working,
-                 bool_or(runs.thread_id is not null) filter (where rec.thread_id = rec.root_id) as self_working
-          from rec
-          left join runs on runs.thread_id = rec.thread_id
-          left join active_reminders ar on ar.thread_id = rec.thread_id
-          group by rec.root_id
-        )
-        select root_id,
-               reminders_count::int,
-               desc_working,
-               self_working
-        from agg;
-      `;
-      const r = rows[0];
-      if (!r) return null;
-      const activity: 'working' | 'waiting' | 'idle' = r.self_working ? 'working' : (r.desc_working || r.reminders_count > 0) ? 'waiting' : 'idle';
-      return { remindersCount: r.reminders_count, activity };
-    } catch (e) {
-      this.logger.error('computeThreadMetrics error', e);
-      return null;
-    }
-  }
   private flushMetricsQueue = async () => {
     const ids = Array.from(this.pendingThreads);
     this.pendingThreads.clear();
     this.metricsTimer = null;
-    for (const id of ids) {
-      const m = await this.computeThreadMetrics(id);
-      if (!m || !this.io) continue;
-      this.io.to('threads').emit('thread_activity_changed', { threadId: id, activity: m.activity });
-      this.io.to('threads').emit('thread_reminders_count', { threadId: id, remindersCount: m.remindersCount });
-      this.io.to(`thread:${id}`).emit('thread_activity_changed', { threadId: id, activity: m.activity });
-      this.io.to(`thread:${id}`).emit('thread_reminders_count', { threadId: id, remindersCount: m.remindersCount });
+    if (!this.io || ids.length === 0) return;
+    try {
+      const map = await this.metrics.getThreadsMetrics(ids);
+      for (const id of ids) {
+        const m = map[id];
+        if (!m) continue;
+        this.io.to('threads').emit('thread_activity_changed', { threadId: id, activity: m.activity });
+        this.io.to('threads').emit('thread_reminders_count', { threadId: id, remindersCount: m.remindersCount });
+        this.io.to(`thread:${id}`).emit('thread_activity_changed', { threadId: id, activity: m.activity });
+        this.io.to(`thread:${id}`).emit('thread_reminders_count', { threadId: id, remindersCount: m.remindersCount });
+      }
+    } catch (e) {
+      this.logger.error('flushMetricsQueue error', e);
     }
   };
   scheduleThreadMetrics(threadId: string) {

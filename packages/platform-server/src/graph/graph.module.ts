@@ -26,6 +26,7 @@ import { TemplateRegistry } from './templateRegistry';
 import { EnvModule } from '../env/env.module';
 import { NodeStateService } from './nodeState.service';
 import { GraphSocketGateway } from '../gateway/graph.socket.gateway';
+import { ThreadsMetricsService } from '../agents/threads.metrics.service';
 import { RemindersController } from './nodes/tools/remind_me/reminders.controller';
 import { AgentNode } from './nodes/agent/agent.node';
 import { MemoryNode } from './nodes/memory/memory.node';
@@ -108,7 +109,11 @@ import { AgentsRemindersController } from '../agents/reminders.controller';
     },
     LiveGraphRuntime,
     NodeStateService,
+    // Gateway and publisher binding
     GraphSocketGateway,
+    { provide: 'GraphEventsPublisher', useExisting: GraphSocketGateway },
+    // Centralized threads metrics aggregator
+    ThreadsMetricsService,
     AgentsPersistenceService,
 
     //////// Nodes

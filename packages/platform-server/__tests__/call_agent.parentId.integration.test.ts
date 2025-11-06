@@ -3,6 +3,7 @@ import { LoggerService } from '../src/core/services/logger.service';
 import { CallAgentTool } from '../src/graph/nodes/tools/call_agent/call_agent.node';
 import { ResponseMessage, HumanMessage } from '@agyn/llm';
 import { AgentsPersistenceService } from '../src/agents/agents.persistence.service';
+import { NoopGraphEventsPublisher } from '../src/gateway/graph.events.publisher';
 import { Signal } from '../src/signal';
 import { createPrismaStub, StubPrismaService } from './helpers/prisma.stub';
 
@@ -18,7 +19,7 @@ class FakeAgentWithPersistence {
 describe('call_agent integration: creates child thread with parentId', () => {
   it('creates parent and child threads and sets child.parentId', async () => {
     const stub = createPrismaStub();
-    const persistence = new AgentsPersistenceService(new StubPrismaService(stub));
+    const persistence = new AgentsPersistenceService(new StubPrismaService(stub) as any, new LoggerService(), { getThreadsMetrics: async () => ({}) } as any, new NoopGraphEventsPublisher());
     const tool = new CallAgentTool(new LoggerService(), persistence);
     await tool.setConfig({ description: 'desc', response: 'sync' });
     // Attach fake agent that persists runs/threads

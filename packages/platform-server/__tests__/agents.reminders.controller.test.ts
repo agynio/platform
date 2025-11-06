@@ -46,7 +46,9 @@ describe('AgentsPersistenceService.listReminders', () => {
         } as any;
       },
     };
-    const svc = new AgentsPersistenceService(prismaStub as any);
+    const { LoggerService } = await import('../src/core/services/logger.service');
+    const { NoopGraphEventsPublisher } = await import('../src/gateway/graph.events.publisher');
+    const svc = new AgentsPersistenceService(prismaStub as any, new LoggerService(), { getThreadsMetrics: async () => ({}) } as any, new NoopGraphEventsPublisher());
 
     await svc.listReminders('active', 50);
     await svc.listReminders('completed', 25);
@@ -57,4 +59,3 @@ describe('AgentsPersistenceService.listReminders', () => {
     expect(captured[2]).toMatchObject({ where: undefined, orderBy: { at: 'desc' }, take: 100 });
   });
 });
-

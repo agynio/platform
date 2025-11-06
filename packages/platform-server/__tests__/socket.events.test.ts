@@ -3,6 +3,7 @@ import { FastifyAdapter } from '@nestjs/platform-fastify';
 import { GraphSocketGateway } from '../src/gateway/graph.socket.gateway';
 import { LoggerService } from '../src/core/services/logger.service';
 import { PrismaService } from '../src/core/services/prisma.service';
+import { ThreadsMetricsService } from '../src/agents/threads.metrics.service';
 import Node from '../src/graph/nodes/base/Node';
 
 // Minimal Test Node to trigger status changes
@@ -18,7 +19,8 @@ describe('Socket events', () => {
     let listener: ((ev: { nodeId: string; prev: string; next: string; at: number }) => void) | undefined;
     const runtimeStub = { subscribe: (fn: typeof listener) => { listener = fn; return () => {}; } } as unknown as import('../src/graph/liveGraph.manager').LiveGraphRuntime;
     const prismaStub = { getClient: () => ({ $queryRaw: async () => [] }) } as unknown as PrismaService;
-    const gateway = new GraphSocketGateway(logger, runtimeStub, prismaStub);
+    const metrics = new ThreadsMetricsService(prismaStub as any, logger);
+    const gateway = new GraphSocketGateway(logger, runtimeStub, metrics, prismaStub);
     gateway.init({ server: fastify.server });
 
     const node = new TestNode();
@@ -37,7 +39,8 @@ describe('Socket events', () => {
     const logger = new LoggerService();
     const runtimeStub = { subscribe: () => () => {} } as unknown as import('../src/graph/liveGraph.manager').LiveGraphRuntime;
     const prismaStub = { getClient: () => ({ $queryRaw: async () => [] }) } as unknown as PrismaService;
-    const gateway = new GraphSocketGateway(logger, runtimeStub, prismaStub);
+    const metrics = new ThreadsMetricsService(prismaStub as any, logger);
+    const gateway = new GraphSocketGateway(logger, runtimeStub, metrics, prismaStub);
     gateway.init({ server: fastify.server });
     // Direct emit through gateway (bridge in NodeStateService calls this)
     expect(() => gateway.emitNodeState('n1', { k: 'v' })).not.toThrow();

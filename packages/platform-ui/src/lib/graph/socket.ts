@@ -4,9 +4,9 @@ import type { NodeStatusEvent, ReminderCountEvent } from './types';
 
 // Strictly typed server-to-client socket events (listener signatures)
 type NodeStateEvent = { nodeId: string; state: Record<string, unknown>; updatedAt: string };
-type ThreadSummary = { id: string; alias: string; summary: string | null; status: string; createdAt: string; parentId?: string | null };
-type MessageSummary = { id: string; kind: string; text: string | null; source: unknown; createdAt: string; runId?: string };
-type RunSummary = { id: string; status: string; createdAt: string; updatedAt: string };
+type ThreadSummary = { id: string; alias: string; summary: string | null; status: 'open' | 'closed'; createdAt: string; parentId?: string | null };
+type MessageSummary = { id: string; kind: 'user' | 'assistant' | 'system' | 'tool'; text: string | null; source: unknown; createdAt: string; runId?: string };
+type RunSummary = { id: string; status: 'running' | 'finished' | 'terminated'; createdAt: string; updatedAt: string };
 interface ServerToClientEvents {
   node_status: (payload: NodeStatusEvent) => void;
   node_state: (payload: NodeStateEvent) => void;

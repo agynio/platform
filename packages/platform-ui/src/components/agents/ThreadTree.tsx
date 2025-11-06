@@ -28,10 +28,15 @@ export function ThreadTree({ status, onSelect, selectedId }: { status: ThreadSta
       });
     });
     const offCreated = graphSocket.onThreadCreated((payload) => {
+      const thread = payload.thread;
+      // Only add to roots list if thread is a root and matches current filter
+      const matchesFilter = status === 'all' || thread.status === status;
+      const isRoot = thread.parentId == null;
+      if (!matchesFilter || !isRoot) return;
       qc.setQueryData<{ items: ThreadNode[] }>(['agents', 'threads', 'roots', status], (prev) => {
-        const thread = payload.thread;
-        const node: ThreadNode = { id: thread.id, alias: thread.alias, summary: thread.summary, status: thread.status as 'open' | 'closed', parentId: thread.parentId, createdAt: thread.createdAt, metrics: { remindersCount: 0, activity: 'idle' } };
-        const items = prev ? [node, ...prev.items] : [node];
+        const node: ThreadNode = { id: thread.id, alias: thread.alias, summary: thread.summary, status: thread.status, parentId: thread.parentId, createdAt: thread.createdAt, metrics: { remindersCount: 0, activity: 'idle' } };
+        const existing = prev?.items?.some((t) => t.id === node.id);
+        const items = existing ? prev!.items : prev ? [node, ...prev.items] : [node];
         return { items };
       });
     });
