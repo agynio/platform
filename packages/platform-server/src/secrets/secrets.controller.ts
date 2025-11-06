@@ -17,7 +17,7 @@ export class SecretsController {
     const pageNum = typeof q.page === 'string' ? Number(q.page) : (q.page as number | undefined);
     const pageSizeNum = typeof q.page_size === 'string' ? Number(q.page_size) : (q.page_size as number | undefined);
     return this.secrets.summarize({
-      filter: (q.filter as any) || 'all',
+      filter: q.filter ?? 'all',
       page: Number.isFinite(pageNum as number) ? (pageNum as number) : 1,
       pageSize: Number.isFinite(pageSizeNum as number) ? (pageSizeNum as number) : 50,
       mount: q.mount,
