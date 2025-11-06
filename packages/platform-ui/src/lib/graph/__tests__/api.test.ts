@@ -19,11 +19,11 @@ describe('graph api client', () => {
   });
 
   it('getTemplates', async () => {
-    const t = await api.getTemplates('');
+    const t = await api.getTemplates();
     expect(t[0].name).toBe('x');
   });
   it('getNodeStatus', async () => {
-    const s = await api.getNodeStatus('n1', '');
+    const s = await api.getNodeStatus('n1');
     expect(s.isPaused).toBe(false);
   });
 

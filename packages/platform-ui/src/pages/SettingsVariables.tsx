@@ -2,12 +2,12 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useMemo, useRef, useState } from 'react';
 import { Button, Input, Table, Thead, Tbody, Tr, Th, Td } from '@agyn/ui';
 import { notifyError, notifySuccess } from '../lib/notify';
-import { http } from '@/api/http';
+import { http, asData } from '@/api/http';
 
 type VarItem = { key: string; graph: string | null; local: string | null };
 
 async function fetchVariables(): Promise<VarItem[]> {
-  const data = await http.get<{ items: VarItem[] }>(`/api/graph/variables`);
+  const data = await asData<{ items: VarItem[] }>(http.get<{ items: VarItem[] }>(`/api/graph/variables`));
   return data.items ?? [];
 }
 
@@ -18,7 +18,7 @@ export function SettingsVariables() {
   const [newGraph, setNewGraph] = useState('');
 
   const createMut = useMutation<{ key: string; graph: string }, Error, { key: string; graph: string }>({
-    mutationFn: async (payload: { key: string; graph: string }) => http.post<{ key: string; graph: string }>(`/api/graph/variables`, payload),
+    mutationFn: async (payload: { key: string; graph: string }) => asData<{ key: string; graph: string }>(http.post<{ key: string; graph: string }>(`/api/graph/variables`, payload)),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['variables'] }); notifySuccess('Variable added'); },
     onError: (e: Error) => {
       const msg = String(e?.message || 'Create failed');
@@ -29,7 +29,7 @@ export function SettingsVariables() {
   });
 
   const updateMut = useMutation<{ key: string; graph?: string | null; local?: string | null }, Error, { key: string; patch: { graph?: string | null; local?: string | null } }>({
-    mutationFn: async (args: { key: string; patch: { graph?: string | null; local?: string | null } }) => http.put<{ key: string; graph?: string | null; local?: string | null }>(`/api/graph/variables/${encodeURIComponent(args.key)}`, args.patch),
+    mutationFn: async (args: { key: string; patch: { graph?: string | null; local?: string | null } }) => asData<{ key: string; graph?: string | null; local?: string | null }>(http.put<{ key: string; graph?: string | null; local?: string | null }>(`/api/graph/variables/${encodeURIComponent(args.key)}`, args.patch)),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['variables'] }),
     onError: (e: Error) => {
       const msg = String(e?.message || 'Update failed');
@@ -40,7 +40,7 @@ export function SettingsVariables() {
   });
 
   const deleteMut = useMutation({
-    mutationFn: async (key: string) => { await http.delete<void>(`/api/graph/variables/${encodeURIComponent(key)}`); },
+    mutationFn: async (key: string) => { await asData<void>(http.delete<void>(`/api/graph/variables/${encodeURIComponent(key)}`)); },
     onSuccess: () => qc.invalidateQueries({ queryKey: ['variables'] }),
   });
 

@@ -30,3 +30,8 @@ function createHttp(baseURL: string): AxiosInstance {
 export const http = createHttp(config.apiBaseUrl);
 // Tracing API client: use base from config (defaults handled in config)
 export const tracingHttp = createHttp(config.tracing.serverUrl as string);
+
+// Helper to re-type axios promise (interceptor returns payload at runtime)
+export function asData<T>(p: Promise<unknown>): Promise<T> {
+  return p as Promise<T>;
+}

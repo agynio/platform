@@ -1,4 +1,4 @@
-import { http } from '@/api/http';
+import { http, asData } from '@/api/http';
 
 export type ContainerItem = {
   containerId: string;
@@ -11,6 +11,5 @@ export type ContainerItem = {
 };
 
 export function listContainers(params: { status?: string; sortBy?: string; sortDir?: string }) {
-  return http.get<{ items: ContainerItem[] }>(`/api/containers`, { params });
+  return asData<{ items: ContainerItem[] }>(http.get<{ items: ContainerItem[] }>(`/api/containers`, { params }));
 }
-

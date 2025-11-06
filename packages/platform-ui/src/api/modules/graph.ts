@@ -1,4 +1,4 @@
-import { http } from '@/api/http';
+import { http, asData } from '@/api/http';
 import type { TemplateSchema, NodeStatus, PersistedGraphUpsertRequestUI, ReminderDTO } from '@/api/types/graph';
 import type { PersistedGraph } from '@agyn/shared';
 import axios from 'axios';
@@ -133,51 +133,53 @@ function isLikelyJsonSchemaRoot(obj: unknown): obj is Record<string, unknown> {
 
 export const graph = {
   // Templates
-  getTemplates: () => http.get<TemplateSchema[]>(`/api/graph/templates`),
+  getTemplates: () => asData<TemplateSchema[]>(http.get<TemplateSchema[]>(`/api/graph/templates`)),
 
   // Node runs
   listNodeRuns: async (nodeId: string, status: 'running' | 'terminating' | 'all' = 'all') => {
-    const res = await http.get<{ items: Array<{ nodeId: string; threadId: string; runId: string; status: string; startedAt: string; updatedAt: string }> }>(
-      `/api/graph/nodes/${encodeURIComponent(nodeId)}/runs`,
-      { params: { status } },
-    );
+    const res = await asData<{ items: Array<{ nodeId: string; threadId: string; runId: string; status: string; startedAt: string; updatedAt: string }> }>(
+        `/api/graph/nodes/${encodeURIComponent(nodeId)}/runs`,
+        { params: { status } },
+      ));
     return res ?? { items: [] };
   },
   terminateRun: (nodeId: string, runId: string) =>
-    http.post<{ status: string }>(`/api/graph/nodes/${encodeURIComponent(nodeId)}/runs/${encodeURIComponent(runId)}/terminate`),
+    asData<{ status: string }>(http.post<{ status: string }>(`/api/graph/nodes/${encodeURIComponent(nodeId)}/runs/${encodeURIComponent(runId)}/terminate`)),
   terminateThread: (nodeId: string, threadId: string) =>
-    http.post<{ status: string }>(`/api/graph/nodes/${encodeURIComponent(nodeId)}/threads/${encodeURIComponent(threadId)}/terminate`),
+    asData<{ status: string }>(http.post<{ status: string }>(`/api/graph/nodes/${encodeURIComponent(nodeId)}/threads/${encodeURIComponent(threadId)}/terminate`)),
 
   // Reminders
   getNodeReminders: async (nodeId: string) => {
-    const res = await http.get<{ items: ReminderDTO[] }>(`/api/graph/nodes/${encodeURIComponent(nodeId)}/reminders`);
+    const res = await asData<{ items: ReminderDTO[] }>(http.get<{ items: ReminderDTO[] }>(`/api/graph/nodes/${encodeURIComponent(nodeId)}/reminders`));
     return res ?? { items: [] };
   },
 
   // Vault helpers
-  listVaultMounts: () => http.get<{ items: string[] }>(`/api/vault/mounts`).catch(() => ({ items: [] })),
+  listVaultMounts: () => asData<{ items: string[] }>(http.get<{ items: string[] }>(`/api/vault/mounts`)).catch(() => ({ items: [] })),
   listVaultPaths: (mount: string, prefix = '') =>
-    http
-      .get<{ items: string[] }>(`/api/vault/kv/${encodeURIComponent(mount)}/paths`, { params: { prefix } })
+    asData<{ items: string[] }>(
+      http.get<{ items: string[] }>(`/api/vault/kv/${encodeURIComponent(mount)}/paths`, { params: { prefix } }),
+    )
       .catch(() => ({ items: [] })),
   listVaultKeys: (mount: string, path = '', opts?: { maskErrors?: boolean }) => {
-    const req = http.get<{ items: string[] }>(`/api/vault/kv/${encodeURIComponent(mount)}/keys`, { params: { path } });
+    const req = asData<{ items: string[] }>(http.get<{ items: string[] }>(`/api/vault/kv/${encodeURIComponent(mount)}/keys`, { params: { path } }));
     return opts?.maskErrors === false ? req : req.catch(() => ({ items: [] }));
   },
   writeVaultKey: (mount: string, body: { path: string; key: string; value: string }) =>
-    http.post<{ mount: string; path: string; key: string; version: number }>(`/api/vault/kv/${encodeURIComponent(mount)}/write`, body),
+    asData<{ mount: string; path: string; key: string; version: number }>(
+      http.post<{ mount: string; path: string; key: string; version: number }>(`/api/vault/kv/${encodeURIComponent(mount)}/write`, body),
+    ),
 
   // Node status/state
-  getNodeStatus: (nodeId: string) => http.get<NodeStatus>(`/api/graph/nodes/${encodeURIComponent(nodeId)}/status`),
-  getNodeState: (nodeId: string) => http.get<{ state: Record<string, unknown> }>(`/api/graph/nodes/${encodeURIComponent(nodeId)}/state`),
+  getNodeStatus: (nodeId: string) => asData<NodeStatus>(http.get<NodeStatus>(`/api/graph/nodes/${encodeURIComponent(nodeId)}/status`)),
+  getNodeState: (nodeId: string) => asData<{ state: Record<string, unknown> }>(http.get<{ state: Record<string, unknown> }>(`/api/graph/nodes/${encodeURIComponent(nodeId)}/state`)),
   putNodeState: (nodeId: string, state: Record<string, unknown>) =>
-    http.put<{ state: Record<string, unknown> }>(`/api/graph/nodes/${encodeURIComponent(nodeId)}/state`, { state }),
+    asData<{ state: Record<string, unknown> }>(http.put<{ state: Record<string, unknown> }>(`/api/graph/nodes/${encodeURIComponent(nodeId)}/state`, { state })),
 
   // Dynamic config schema (404 -> null)
   getDynamicConfigSchema: async (nodeId: string): Promise<Record<string, unknown> | null> => {
     try {
-      const res = await http.get(`/api/graph/nodes/${encodeURIComponent(nodeId)}/dynamic-config/schema`);
-      const data = res as unknown;
+      const data = await asData<unknown>(http.get(`/api/graph/nodes/${encodeURIComponent(nodeId)}/dynamic-config/schema`));
       if (!data || typeof data !== 'object') return null;
       if ('schema' in (data as Record<string, unknown>)) {
         const rec = data as Record<string, unknown> & { schema?: unknown };
@@ -192,7 +194,7 @@ export const graph = {
     },
 
   // Node action
-  postNodeAction: (nodeId: string, action: 'provision' | 'deprovision') => http.post<void>(`/api/graph/nodes/${encodeURIComponent(nodeId)}/actions`, { action }),
+  postNodeAction: (nodeId: string, action: 'provision' | 'deprovision') => asData<void>(http.post<void>(`/api/graph/nodes/${encodeURIComponent(nodeId)}/actions`, { action })),
 
   // Full graph
   saveFullGraph: (g: PersistedGraphUpsertRequestUI) => {
@@ -200,9 +202,11 @@ export const graph = {
       ...g,
       nodes: g.nodes.map((n) => ({ ...n, config: normalizeConfigByTemplate(n.template, n.config) })),
     };
-    return http.post<PersistedGraphUpsertRequestUI & { version: number; updatedAt: string }>(`/api/graph`, normalized);
+    return asData<PersistedGraphUpsertRequestUI & { version: number; updatedAt: string }>(
+      http.post<PersistedGraphUpsertRequestUI & { version: number; updatedAt: string }>(`/api/graph`, normalized),
+    );
   },
-  getFullGraph: () => http.get<PersistedGraph>(`/api/graph`),
+  getFullGraph: () => asData<PersistedGraph>(http.get<PersistedGraph>(`/api/graph`)),
 };
 
 Object.defineProperty(graph, '__test_normalize', { value: normalizeConfigByTemplate });

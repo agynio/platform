@@ -1,11 +1,11 @@
 import { useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useSearchParams } from 'react-router-dom';
-import { http } from '@/api/http';
+import { http, asData } from '@/api/http';
 
 type ReminderItem = { id: string; threadId: string; note: string; at: string; createdAt: string; completedAt: string | null };
 
-async function api<T>(path: string): Promise<T> { return http.get(`/api/${path}`) as unknown as T; }
+async function api<T>(path: string): Promise<T> { return asData<T>(http.get(`/api/${path}`)); }
 
 export function AgentsReminders() {
   const [sp, setSp] = useSearchParams();
