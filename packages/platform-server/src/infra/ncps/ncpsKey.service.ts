@@ -90,15 +90,7 @@ export class NcpsKeyService {
       try {
         const key = await this.fetchOnce();
         if (key && key !== this.currentKey) {
-          // rotate
-          // eslint-disable-next-line max-depth -- rotation bookkeeping within retry loop
-          if (this.currentKey) {
-            this.previousKey = this.currentKey;
-            const minutes = Math.max(0, this.cfg.ncpsRotationGraceMinutes);
-            this.prevUntil = minutes > 0 ? Date.now() + minutes * 60_000 : 0;
-          }
-          this.currentKey = key;
-          this.logger.info('NcpsKeyService updated key (length=%d)', key.length);
+          this.rotateKey(key);
         }
         return !!key;
       } catch (e) {
@@ -118,6 +110,16 @@ export class NcpsKeyService {
         await new Promise((r) => setTimeout(r, nextDelay));
       }
     }
+  }
+
+  private rotateKey(key: string): void {
+    if (this.currentKey) {
+      this.previousKey = this.currentKey;
+      const minutes = Math.max(0, this.cfg.ncpsRotationGraceMinutes);
+      this.prevUntil = minutes > 0 ? Date.now() + minutes * 60_000 : 0;
+    }
+    this.currentKey = key;
+    this.logger.info('NcpsKeyService updated key (length=%d)', key.length);
   }
 
   // Allow tests to inject a fetch shim with an undici dispatcher

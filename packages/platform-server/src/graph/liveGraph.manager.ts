@@ -240,14 +240,9 @@ export class LiveGraphRuntime {
       const key = edgeKey(rem);
       const rec = this.state.executedEdges.get(key);
       if (rec) {
-        try {
-          // eslint-disable-next-line max-depth -- conditional reversal within nested try/catch/if
-          if (rec.reversible && rec.reversal) await rec.reversal();
-          this.unregisterEdgeRecord(rec);
-        } catch (e) {
+        await this.tryReverseAndUnregister(rec).catch((e) => {
           logger.error('Edge reversal failed', key, e);
-          // continue
-        }
+        });
       }
     }
 
@@ -309,20 +304,19 @@ export class LiveGraphRuntime {
 
     // Nodes
     for (const n of next.nodes) {
-      if (!prevNodes.has(n.id)) {
+      const prevNode = prevNodes.get(n.id);
+      if (!prevNode) {
         addedNodes.push(n);
-      } else {
-        const prevNode = prevNodes.get(n.id)!;
-        if (prevNode.data.template !== n.data.template) {
-          recreatedNodeIds.push(n.id);
-        } else {
-          const prevCfg = prevNode.data.config || {};
-          const nextCfg = n.data.config || {};
-          // eslint-disable-next-line max-depth -- nested compare inside loops
-          if (!configsEqual(prevCfg, nextCfg)) configUpdateNodeIds.push(n.id);
-          // dynamicConfig removed
-        }
+        continue;
       }
+      if (prevNode.data.template !== n.data.template) {
+        recreatedNodeIds.push(n.id);
+        continue;
+      }
+      const prevCfg = prevNode.data.config || {};
+      const nextCfg = n.data.config || {};
+      if (!configsEqual(prevCfg, nextCfg)) configUpdateNodeIds.push(n.id);
+      // dynamicConfig removed
     }
     for (const old of prev.nodes) {
       if (!nextNodes.has(old.id)) removedNodeIds.push(old.id);
@@ -411,43 +405,44 @@ export class LiveGraphRuntime {
         await (fn as (cfg: Record<string, unknown>) => unknown | Promise<unknown>).call(instance, current);
         return current; // success
       } catch (err) {
-        if (err instanceof ZodError) {
-          const issues: ZodIssue[] = err.issues || [];
-          const unknownRoot = issues.filter((i: ZodIssue) => {
-            if (!i || typeof i !== 'object') return false;
-            if (i.code !== 'unrecognized_keys') return false;
-            const hasKeys = Array.isArray((i as { keys?: unknown }).keys);
-            const path = (i as { path?: unknown }).path;
-            const pathOk = Array.isArray(path as unknown[]) ? (path as unknown[]).length === 0 : true;
-            return hasKeys && pathOk;
-          });
-          // eslint-disable-next-line max-depth -- deep error-shape handling for Zod issues
-          if (unknownRoot.length > 0) {
-            const keys = new Set<string>();
-            // eslint-disable-next-line max-depth -- iterate collected issues
-            for (const i of unknownRoot) {
-              const ks = (i as { keys?: string[] }).keys;
-              // eslint-disable-next-line max-depth -- flatten keys from issue payloads
-              if (Array.isArray(ks)) for (const k of ks) keys.add(k);
-            }
-            // eslint-disable-next-line max-depth -- pruning config keys before retry
-            if (keys.size > 0) {
-              const next: Record<string, unknown> = {};
-              // eslint-disable-next-line max-depth -- reconstruct pruned config map
-              for (const [k, v] of Object.entries(current)) if (!keys.has(k)) next[k] = v;
-              current = next;
-              // eslint-disable-next-line max-depth -- bounded retry loop
-              if (attempt < MAX_RETRIES) {
-                attempt += 1;
-                continue; // retry
-              }
-            }
-          }
+        if (!(err instanceof ZodError)) {
+          throw Errors.configApplyFailed(nodeId, method, err);
         }
-        // Not an unknown keys case or retries exhausted
-        throw Errors.configApplyFailed(nodeId, method, err);
+        const keys = this.extractUnknownRootKeys(err);
+        if (keys.size === 0) {
+          throw Errors.configApplyFailed(nodeId, method, err);
+        }
+        const next = this.pruneKeys(current, keys);
+        if (attempt >= MAX_RETRIES) {
+          throw Errors.configApplyFailed(nodeId, method, err);
+        }
+        current = next;
+        attempt += 1;
+        continue; // retry
       }
     }
+  }
+
+  // Extract top-level unrecognized keys from a ZodError produced by a config setter
+  private extractUnknownRootKeys(err: ZodError): Set<string> {
+    const keys = new Set<string>();
+    const issues: ZodIssue[] = err.issues || [];
+    for (const i of issues) {
+      const isUnrec = i && typeof i === 'object' && (i as ZodIssue).code === 'unrecognized_keys';
+      if (!isUnrec) continue;
+      const path = (i as { path?: unknown }).path as unknown[] | undefined;
+      const atRoot = Array.isArray(path) ? path.length === 0 : true;
+      if (!atRoot) continue;
+      const ks = (i as { keys?: string[] }).keys;
+      if (Array.isArray(ks)) for (const k of ks) keys.add(k);
+    }
+    return keys;
+  }
+
+  private pruneKeys(obj: Record<string, unknown>, keys: Set<string>): Record<string, unknown> {
+    const next: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(obj)) if (!keys.has(k)) next[k] = v;
+    return next;
   }
 
   private async disposeNode(nodeId: string): Promise<void> {
@@ -471,14 +466,9 @@ export class LiveGraphRuntime {
     for (const k of allEdgeKeys) {
       const rec = this.state.executedEdges.get(k);
       if (rec) {
-        // Attempt reversal if reversible
-        try {
-          // eslint-disable-next-line max-depth -- conditional reversal within nested try/catch/if
-          if (rec.reversible && rec.reversal) await rec.reversal();
-        } catch (e) {
+        await this.tryReverseAndUnregister(rec).catch((e) => {
           this.logger.error('Edge reversal during node disposal failed', k, e);
-        }
-        this.unregisterEdgeRecord(rec);
+        });
       }
     }
     // Call lifecycle teardown if present
@@ -493,6 +483,12 @@ export class LiveGraphRuntime {
     this.state.nodes.delete(nodeId);
     this.state.inboundEdges.delete(nodeId);
     this.state.outboundEdges.delete(nodeId);
+  }
+
+  /** Attempt edge reversal (if supported) and unregister. Logs handled by caller. */
+  private async tryReverseAndUnregister(rec: ExecutedEdgeRecord): Promise<void> {
+    if (rec.reversible && rec.reversal) await rec.reversal();
+    this.unregisterEdgeRecord(rec);
   }
 
   private registerEdgeRecord(rec: ExecutedEdgeRecord) {

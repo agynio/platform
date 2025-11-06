@@ -444,15 +444,10 @@ export class GitGraphRepository extends GraphRepository {
         return { lockPath };
       } catch (e: unknown) {
         const err = e as NodeJS.ErrnoException;
-        if (err && err.code === 'EEXIST') {
-          // eslint-disable-next-line max-depth -- loop-with-retry timeout check
-          if (Date.now() - start > timeout) {
-            throw codeError('LOCK_TIMEOUT', 'Lock timeout');
-          }
-          await new Promise((r) => setTimeout(r, 50));
-          continue;
-        }
-        throw e;
+        const isExists = !!(err && err.code === 'EEXIST');
+        if (!isExists) throw e;
+        if (Date.now() - start > timeout) throw codeError('LOCK_TIMEOUT', 'Lock timeout');
+        await new Promise((r) => setTimeout(r, 50));
       }
     }
   }
@@ -580,17 +575,7 @@ export class GitGraphRepository extends GraphRepository {
           return o as unknown as PersistedGraphEdge;
         }),
       );
-      let variables: Array<{ key: string; value: string }> | undefined = undefined;
-      if (hasVariables) {
-        try {
-          const rawVars = await this.runGitCapture(['show', 'HEAD:variables.json'], this.config.graphRepoPath);
-          const parsedVars = JSON.parse(rawVars) as Array<{ key: string; value: string }>;
-          // eslint-disable-next-line max-depth -- nested within try/if; safe mapping
-          if (Array.isArray(parsedVars)) variables = parsedVars.map((v) => ({ key: String(v.key), value: String(v.value) }));
-        } catch {
-          // ignore variables read error
-        }
-      }
+      const variables = hasVariables ? await this.readHeadVariables() : undefined;
       return {
         name: meta.name ?? name,
         version: meta.version ?? 0,
@@ -602,6 +587,17 @@ export class GitGraphRepository extends GraphRepository {
       } catch {
         return null;
       }
+  }
+
+  private async readHeadVariables(): Promise<Array<{ key: string; value: string }> | undefined> {
+    try {
+      const rawVars = await this.runGitCapture(['show', 'HEAD:variables.json'], this.config.graphRepoPath);
+      const parsedVars = JSON.parse(rawVars) as Array<{ key: string; value: string }>;
+      if (!Array.isArray(parsedVars)) return undefined;
+      return parsedVars.map((v) => ({ key: String(v.key), value: String(v.value) }));
+    } catch {
+      return undefined;
+    }
   }
 
   private async readFromHeadPerGraph(name: string): Promise<PersistedGraph | null> {
