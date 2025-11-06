@@ -8,7 +8,7 @@ import { MonitoringContainers } from '../src/pages/MonitoringContainers';
 
 describe('MonitoringContainers page', () => {
   const httpJsonMock = vi.hoisted(() => vi.fn());
-  vi.mock('@/api/client', () => ({ httpJson: httpJsonMock }));
+  vi.mock('@/api/http', () => ({ httpJson: httpJsonMock }));
   beforeEach(() => {
     vi.clearAllMocks();
     httpJsonMock.mockReset();

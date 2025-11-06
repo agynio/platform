@@ -189,10 +189,7 @@ export class ContainerService {
     // Persist workspace containers in registry
     if (this.registry) {
       try {
-        const labelsRaw = inspect?.Config?.Labels ?? {};
-        // Parse labels via zod schema
-        const { InspectLabelsSchema } = await import('./container.schemas');
-        const labels = InspectLabelsSchema.parse(labelsRaw) as Record<string, string>;
+        const labels = (inspect?.Config?.Labels ?? {}) as Record<string, string>;
         if (labels[ROLE_LABEL] === 'workspace') {
           const nodeId = labels[NODE_ID_LABEL] || 'unknown';
           const threadId = labels[THREAD_ID_LABEL] || '';

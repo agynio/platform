@@ -6,7 +6,6 @@ import { Type } from 'class-transformer';
 import { ContainerService } from './container.service';
 import { LoggerService } from '../../core/services/logger.service';
 import { ROLE_LABEL, PARENT_CID_LABEL } from '../../constants';
-import { InspectLabelsSchema } from './container.schemas';
 
 // Removed duck typing helpers; use zod schemas for parsing
 
@@ -164,10 +163,10 @@ export class ContainersController {
     const results = await Promise.allSettled(
       handles.map(async (h) => {
         const inspect = await docker.getContainer(h.id).inspect();
-        // Parse labels via zod; fall back to containerId when missing
-        const parsedLabels = InspectLabelsSchema.safeParse(inspect?.Config?.Labels ?? {});
-        const labels = parsedLabels.success ? parsedLabels.data : {};
-        const parentContainerId = labels[PARENT_CID_LABEL] ?? containerId;
+        // Read labels directly; fall back to provided containerId when missing
+        const labels = (inspect?.Config?.Labels ?? {}) as Record<string, unknown>;
+        const parentLabel = labels[PARENT_CID_LABEL];
+        const parentContainerId = typeof parentLabel === 'string' && parentLabel.length > 0 ? parentLabel : containerId;
         return {
           containerId: String(inspect?.Id ?? h.id),
           parentContainerId,
