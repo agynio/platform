@@ -16,7 +16,9 @@ export class ResponseMessage {
   }
 
   get output() {
-    return this._source.output.map((o) => {
+    // Return a strictly-typed array of supported output message classes to avoid
+    // any/unknown propagation in downstream code and satisfy ESLint typed rules.
+    const typed = this._source.output.map((o) => {
       const message = Message.fromPlain(o);
       if (
         message instanceof AIMessage || //
@@ -28,6 +30,7 @@ export class ResponseMessage {
 
       throw new Error(`Unsupported response output message type: ${o.type}`);
     });
+    return typed as Array<AIMessage | ToolCallMessage | ReasoningMessage>;
   }
 
   get text(): string {

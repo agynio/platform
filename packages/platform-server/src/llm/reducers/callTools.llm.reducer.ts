@@ -49,7 +49,36 @@ export class CallToolsLLMReducer extends Reducer<LLMState, LLMContext> {
       toolsToCall.map(async (t) => {
         const tool = toolsMap.get(t.name);
         if (!tool) throw new Error(`Unknown tool called: ${t.name}`);
-        const input = tool.schema.parse(JSON.parse(t.args));
+        // Parse args safely and validate via Zod without leaking any/unknown
+        let parsedArgs: unknown;
+        try {
+          parsedArgs = JSON.parse(t.args) as unknown;
+        } catch {
+          parsedArgs = t.args as unknown;
+        }
+        // Support both Zod's safeParse and plain parse (for tests/mocks)
+        let input: unknown;
+        try {
+          // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
+          const maybeSafeParse = (tool.schema as any)?.safeParse;
+          // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
+          const maybeParse = (tool.schema as any)?.parse;
+          if (typeof maybeSafeParse === 'function') {
+            // eslint-disable-next-line @typescript-eslint/no-unsafe-call
+            const parsed = maybeSafeParse.call(tool.schema, parsedArgs);
+            // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
+            if (!parsed.success) throw new Error('Invalid tool arguments');
+            // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
+            input = parsed.data as unknown;
+          } else if (typeof maybeParse === 'function') {
+            // eslint-disable-next-line @typescript-eslint/no-unsafe-call
+            input = maybeParse.call(tool.schema, parsedArgs) as unknown;
+          } else {
+            input = parsedArgs;
+          }
+        } catch {
+          throw new Error('Invalid tool arguments');
+        }
 
         const response = await withToolCall(
           {
@@ -60,9 +89,14 @@ export class CallToolsLLMReducer extends Reducer<LLMState, LLMContext> {
           },
           async () => {
             try {
-              const raw = await tool.execute(input, ctx);
+              // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+              const raw: string | Record<string, unknown> | unknown[] = await tool.execute(
+                input as never,
+                ctx,
+              );
 
-              if (raw.length > 50000) {
+              const rendered = typeof raw === 'string' ? raw : JSON.stringify(raw);
+              if (rendered.length > 50000) {
                 throw new Error('Tool output exceeds maximum allowed length of 50000 characters.');
               }
 

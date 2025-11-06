@@ -3,10 +3,6 @@
 // - buildUrl(path, base?): join base with normalized path
 // - httpJson<T>(path, init?, base?): fetch JSON with sane defaults
 import { config } from '@/config';
-<<<<<<< HEAD
-
-=======
->>>>>>> 1b90de2 (refactor(ui): remove api/http.ts and migrate to client/httpJson; update tests and fix vitest base resolution; ensure UI compiles and tests pass)
 // Minimal API base resolver for client utilities
 export function getApiBase(override?: string): string {
   if (typeof override === 'string') return override;
