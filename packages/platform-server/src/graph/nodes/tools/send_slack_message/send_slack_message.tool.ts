@@ -51,7 +51,7 @@ export class SendSlackMessageFunctionTool extends FunctionTool<typeof sendSlackI
 
   async execute(args: z.infer<typeof sendSlackInvocationSchema>): Promise<string> {
     const { channel: channelInput, text, thread_ts, broadcast, ephemeral_user } = args;
-    this.logger.warn('send_slack_message: deprecated; prefer send_message');
+    this.logger.info('send_slack_message: deprecated; prefer send_message');
     const bot = normalizeTokenRef(this.node.config.bot_token) as TokenRef;
     if ((bot.source || 'static') === 'vault') parseVaultRef(bot.value);
     else if (!bot.value.startsWith('xoxb-')) throw new Error('Slack bot token must start with xoxb-');

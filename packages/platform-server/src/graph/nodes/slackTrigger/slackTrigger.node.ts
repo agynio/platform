@@ -127,7 +127,7 @@ export class SlackTrigger extends Node<SlackTriggerConfig> {
             user: event.user,
           });
         } catch (e) {
-          this.logger.warn('SlackTrigger: setThreadChannel failed', { error: (e as { message?: string })?.message || String(e) });
+          this.logger.error('SlackTrigger: setThreadChannel failed', { error: (e as { message?: string })?.message || String(e) });
         }
         await this.notify(threadId, [msg]);
       } catch (err) {
