@@ -11,7 +11,7 @@ function useAdminToken(): [string, (v: string) => void] {
   });
   function set(v: string) {
     setTok(v);
-    try { if (v) localStorage.setItem('X-Admin-Token', v); else localStorage.removeItem('X-Admin-Token'); } catch {}
+    try { if (v) localStorage.setItem('X-Admin-Token', v); else localStorage.removeItem('X-Admin-Token'); } catch { 
   }
   return [tok, set];
 }
