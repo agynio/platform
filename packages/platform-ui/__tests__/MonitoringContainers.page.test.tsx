@@ -120,3 +120,4 @@ describe('MonitoringContainers page', () => {
     expect(screen.getByText('dind')).toBeTruthy();
   });
 });
+// CI trigger: no-op comment to rerun pipelines
