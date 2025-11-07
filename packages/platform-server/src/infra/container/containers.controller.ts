@@ -159,6 +159,13 @@ export class ContainersController {
       arr.push({ containerId: sc.containerId, role: 'dind', image: sc.image, status });
     }
 
+    const toIso = (d: unknown): string => {
+      try {
+        if (d instanceof Date) return d.toISOString();
+        if (typeof d === 'string') return new Date(d).toISOString();
+      } catch {}
+      return new Date(String(d)).toISOString();
+    };
     const items = rows.map((r) => {
       const labels = metaLabelsOf(r.metadata);
       const role = labels['hautech.ai/role'] ?? 'workspace';
@@ -167,9 +174,9 @@ export class ContainersController {
         threadId: r.threadId,
         image: r.image,
         status: r.status,
-        startedAt: r.createdAt.toISOString(),
-        lastUsedAt: r.lastUsedAt.toISOString(),
-        killAfterAt: r.killAfterAt ? r.killAfterAt.toISOString() : null,
+        startedAt: toIso(r.createdAt),
+        lastUsedAt: toIso(r.lastUsedAt),
+        killAfterAt: r.killAfterAt ? toIso(r.killAfterAt) : null,
         role,
         sidecars: byParent[r.containerId] || [],
       };

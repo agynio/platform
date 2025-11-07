@@ -622,15 +622,26 @@ export class LocalMCPServerNode extends Node<z.infer<typeof LocalMcpServerStatic
     }
     if (!Array.isArray(dinds) || dinds.length === 0) return;
     const results = await Promise.allSettled(
-      dinds.map(async (d) => {
+      dinds.map(async (d: any) => {
+        const id: string | undefined = typeof d?.id === 'string' ? d.id : undefined;
+        // Stop
         try {
           if (typeof d?.stop === 'function') await d.stop(5);
+          else if (id) {
+            const docker = this.containerService.getDocker();
+            await docker.getContainer(id).stop({ t: 5 } as { t?: number });
+          }
         } catch (e: unknown) {
           const sc = (e as { statusCode?: number } | undefined)?.statusCode;
           if (sc !== 304 && sc !== 404 && sc !== 409) throw e;
         }
+        // Remove
         try {
           if (typeof d?.remove === 'function') await d.remove(true);
+          else if (id) {
+            const docker = this.containerService.getDocker();
+            await docker.getContainer(id).remove({ force: true } as { force?: boolean });
+          }
           return true as const;
         } catch (e: unknown) {
           const sc = (e as { statusCode?: number } | undefined)?.statusCode;

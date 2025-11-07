@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { LoggerService } from '../../core/services/logger.service';
-import type { PrismaClient, Prisma } from '@prisma/client';
+import { Prisma, type PrismaClient } from '@prisma/client';
 
 export type ContainerStatus = 'running' | 'stopped' | 'terminating' | 'failed';
 
@@ -154,7 +154,7 @@ export class ContainerRegistry {
   async getExpired(now: Date = new Date()) {
     const iso = now.toISOString();
     // Include terminating containers with no retryAfter or retryAfter <= now; exclude future retryAfter
-    const terminating = await this.prisma.$queryRaw<Array<{ containerId: string }>>`
+    const q = Prisma.sql<Array<{ containerId: string }>>`
       SELECT "containerId" FROM "Container"
       WHERE "status" = 'terminating'
         AND (
@@ -162,6 +162,7 @@ export class ContainerRegistry {
           OR (("metadata"->>'retryAfter')::timestamptz <= ${iso}::timestamptz)
         )
     `;
+    const terminating = await this.prisma.$queryRaw(q);
     const running = await this.prisma.container.findMany({
       where: { status: 'running', killAfterAt: { not: null, lte: now } },
     });

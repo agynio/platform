@@ -7,6 +7,7 @@ import { LiveGraphRuntime } from '../graph/liveGraph.manager';
 import type { ThreadStatus, MessageKind, RunStatus } from '@prisma/client';
 import type { GraphEventsPublisher } from './graph.events.publisher';
 import { ThreadsMetricsService } from '../agents/threads.metrics.service';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../core/services/prisma.service';
 import { Prisma } from '@prisma/client';
 
