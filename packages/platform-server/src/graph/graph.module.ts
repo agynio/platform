@@ -142,6 +142,13 @@ import { AgentsRemindersController } from '../agents/reminders.controller';
     // Standard DI for GraphVariablesService
     GraphVariablesService,
   ],
-  exports: [LiveGraphRuntime, TemplateRegistry, PortsRegistry, GraphRepository, NodeStateService],
+  exports: [
+    LiveGraphRuntime,
+    TemplateRegistry,
+    PortsRegistry,
+    GraphRepository,
+    NodeStateService,
+    ThreadsMetricsService,
+  ],
 })
 export class GraphModule {}
