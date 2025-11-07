@@ -159,13 +159,26 @@ export class ContainersController {
       arr.push({ containerId: sc.containerId, role: 'dind', image: sc.image, status });
     }
 
-    const toIso = (d: unknown): string => {
-      try {
-        if (d instanceof Date) return d.toISOString();
-        if (typeof d === 'string') return new Date(d).toISOString();
-      } catch {}
-      return new Date(String(d)).toISOString();
-    };
+      const toIso = (d: unknown): string => {
+        // Validate and format without empty catch; return safe default when invalid
+        if (d instanceof Date) {
+          const t = d.getTime();
+          return Number.isFinite(t) ? d.toISOString() : new Date(0).toISOString();
+        }
+        if (typeof d === 'string') {
+          const dt = new Date(d);
+          const t = dt.getTime();
+          return Number.isFinite(t) ? dt.toISOString() : new Date(0).toISOString();
+        }
+        if (typeof d === 'number') {
+          const dt = new Date(d);
+          const t = dt.getTime();
+          return Number.isFinite(t) ? dt.toISOString() : new Date(0).toISOString();
+        }
+        const dt = new Date(String(d));
+        const t = dt.getTime();
+        return Number.isFinite(t) ? dt.toISOString() : new Date(0).toISOString();
+      };
     const items = rows.map((r) => {
       const labels = metaLabelsOf(r.metadata);
       const role = labels['hautech.ai/role'] ?? 'workspace';
