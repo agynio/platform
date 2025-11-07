@@ -8,6 +8,8 @@ import { NcpsKeyService } from '../../../infra/ncps/ncpsKey.service';
 import { EnvService, type EnvItem } from '../../../env/env.service';
 import { LoggerService } from '../../../core/services/logger.service';
 import { Inject, Injectable, Scope } from '@nestjs/common';
+import { PrismaService } from '../../../core/services/prisma.service';
+import type { PrismaClient } from '@prisma/client';
 
 // Static configuration schema for ContainerProviderEntity
 // Allows overriding the base image and supplying environment variables.
@@ -59,6 +61,7 @@ const DEFAULTS: ContainerOpts = {
 @Injectable({ scope: Scope.TRANSIENT })
 export class WorkspaceNode extends Node<ContainerProviderStaticConfig> {
   private idLabels: (id: string) => Record<string, string>;
+  private prisma?: PrismaClient;
 
   constructor(
     @Inject(ContainerService) protected containerService: ContainerService,
@@ -66,9 +69,16 @@ export class WorkspaceNode extends Node<ContainerProviderStaticConfig> {
     @Inject(NcpsKeyService) protected ncpsKeyService: NcpsKeyService,
     @Inject(LoggerService) protected logger: LoggerService,
     @Inject(EnvService) protected envService: EnvService,
+    @Inject(PrismaService) private readonly prismaSvc: PrismaService,
   ) {
     super(logger);
     this.idLabels = (id: string) => ({ 'hautech.ai/thread_id': id, 'hautech.ai/node_id': this.nodeId });
+    // Initialize Prisma client for DB-driven checks
+    try {
+      this.prisma = this.prismaSvc.getClient();
+    } catch {
+      // ignore prisma init errors; methods will guard
+    }
   }
 
   init(params: { nodeId: string }): void {
@@ -341,27 +351,13 @@ export class WorkspaceNode extends Node<ContainerProviderStaticConfig> {
   }
 
   private async failFastIfDinDExited(dind: ContainerHandle): Promise<void> {
+    // DB-driven: check persisted Container status
     try {
-      const maybeSvc: unknown = this.containerService;
-      interface DockerLike {
-        getContainer(id: string): { inspect(): Promise<unknown> };
-      }
-      interface DockerProvider {
-        getDocker(): DockerLike;
-      }
-      const hasGetDocker =
-        typeof maybeSvc === 'object' &&
-        maybeSvc !== null &&
-        'getDocker' in maybeSvc &&
-        typeof (maybeSvc as { getDocker?: unknown }).getDocker === 'function';
-      if (!hasGetDocker) return;
-      const docker = (maybeSvc as DockerProvider).getDocker();
-      const inspect = (await docker.getContainer(dind.id).inspect()) as {
-        State?: { Running?: boolean; Status?: string };
-      };
-      const state = inspect?.State;
-      if (state && state.Running === false) {
-        throw new Error(`DinD sidecar exited unexpectedly: status=${state.Status}`);
+      if (!this.prisma) return; // no DB available; skip
+      const rec = await this.prisma.container.findUnique({ where: { containerId: dind.id } });
+      if (!rec) return; // unknown to DB; skip
+      if (rec.status !== 'running') {
+        throw new Error(`DinD sidecar exited unexpectedly: status=${rec.status}`);
       }
     } catch (e) {
       throw e instanceof Error ? e : new Error('DinD sidecar exited unexpectedly');

@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import Fastify from 'fastify';
 import { ContainersController, ListContainersQueryDto } from '../src/infra/container/containers.controller';
-import type { PrismaService } from '../src/core/services/prisma.service';
+import type { PrismaClient } from '@prisma/client';
 import type { FastifyInstance } from 'fastify';
 
 type Row = {
@@ -73,7 +73,8 @@ class InMemoryPrismaClient {
 type MinimalPrismaClient = { container: { findMany(args: FindManyArgs): Promise<SelectedRowWithMeta[]>; rows: Row[] } };
 class PrismaStub {
   client: MinimalPrismaClient = new InMemoryPrismaClient();
-  getClient(): MinimalPrismaClient { return this.client; }
+  // Strict typing to match controller signature; cast internally
+  getClient(): PrismaClient { return this.client as unknown as PrismaClient; }
 }
 
 describe('ContainersController routes', () => {
@@ -81,7 +82,7 @@ describe('ContainersController routes', () => {
 
   beforeEach(async () => {
     fastify = Fastify({ logger: false }); prismaSvc = new PrismaStub();
-    controller = new ContainersController(prismaSvc as unknown as PrismaService);
+    controller = new ContainersController(prismaSvc);
     // Typed query adapter to avoid any/double assertions
     const isStatus = (v: unknown): v is Row['status'] =>
       typeof v === 'string' && ['running', 'stopped', 'terminating', 'failed'].includes(v);

@@ -72,122 +72,108 @@ export class ContainersController {
     role: 'workspace' | 'dind' | string;
     sidecars?: Array<{ containerId: string; role: 'dind'; image: string; status: ContainerStatus }>;
   }> }> {
-    try {
-      const {
-        status = 'running' as ContainerStatus,
-        threadId,
-        image,
-        nodeId,
-        sortBy = SortBy.lastUsedAt,
-        sortDir = SortDir.desc,
-        limit,
-      } = query || {};
+    const {
+      status = 'running' as ContainerStatus,
+      threadId,
+      image,
+      nodeId,
+      sortBy = SortBy.lastUsedAt,
+      sortDir = SortDir.desc,
+      limit,
+    } = query || {};
 
-      // Build Prisma where clause with optional filters
-      const where: Prisma.ContainerWhereInput = { status };
-      if (threadId) where.threadId = threadId;
-      if (image) where.image = image;
-      if (nodeId) where.nodeId = nodeId;
+    // Build Prisma where clause with optional filters
+    const where: Prisma.ContainerWhereInput = { status };
+    if (threadId) where.threadId = threadId;
+    if (image) where.image = image;
+    if (nodeId) where.nodeId = nodeId;
 
-      // Translate sortBy to actual DB column (startedAt maps to createdAt)
-      let orderBy: Prisma.ContainerOrderByWithRelationInput;
-      const dir: Prisma.SortOrder = sortDir === SortDir.asc ? 'asc' : 'desc';
-      switch (sortBy) {
-        case SortBy.startedAt:
-          orderBy = { createdAt: dir };
-          break;
-        case SortBy.killAfterAt:
-          orderBy = { killAfterAt: dir };
-          break;
-        case SortBy.lastUsedAt:
-        default:
-          orderBy = { lastUsedAt: dir };
-          break;
-      }
-
-      const limNum = typeof limit === 'number' ? limit : Number.isFinite(Number(limit)) ? Number(limit) : undefined;
-      const take = typeof limNum === 'number' && Number.isFinite(limNum) ? Math.max(1, Math.min(500, limNum)) : 200;
-
-      const rows = await this.prisma.container.findMany({
-        where,
-        orderBy,
-        select: {
-          containerId: true,
-          threadId: true,
-          image: true,
-          status: true,
-          createdAt: true,
-          lastUsedAt: true,
-          killAfterAt: true,
-          metadata: true,
-        },
-        take,
-      });
-
-      // Narrow type guard for metadata.labels
-      type MetaWithLabels = { labels?: Record<string, unknown> };
-      const isMetaWithLabels = (v: unknown): v is MetaWithLabels => {
-        if (typeof v !== 'object' || v === null) return false;
-        const obj = v as Record<string, unknown>;
-        if (!('labels' in obj)) return false;
-        const lbl = (obj as { labels?: unknown }).labels;
-        return typeof lbl === 'object' && lbl !== null;
-      };
-      const metaLabelsOf = (m: unknown): Record<string, string> => {
-        if (!isMetaWithLabels(m)) return {};
-        const raw = (m.labels ?? {}) as Record<string, unknown>;
-        const out: Record<string, string> = {};
-        for (const [k, v] of Object.entries(raw)) if (typeof v === 'string') out[k] = v;
-        return out;
-      };
-      // Optimize: preselect DinD sidecars for current parent set via JSON-path raw query
-      const parentIds = rows.map((r) => r.containerId);
-      const q = Prisma.sql<Array<{ containerId: string; image: string; status: string; metadata: unknown }>>`
-        SELECT "containerId", "image", "status", "metadata" FROM "Container"
-        WHERE "metadata"->'labels'->>'hautech.ai/role' = 'dind'
-          AND ("metadata"->'labels'->>'hautech.ai/parent_cid') IN (${Prisma.join(parentIds)})
-      `;
-      const rawSidecars = await this.prisma.$queryRaw(q);
-      const isStatus = (s: unknown): s is ContainerStatus =>
-        typeof s === 'string' && ['running', 'stopped', 'terminating', 'failed'].includes(s);
-      const byParent: Record<string, Array<{ containerId: string; role: 'dind'; image: string; status: ContainerStatus }>> = {};
-      for (const sc of rawSidecars) {
-        const labels = metaLabelsOf(sc.metadata);
-        const parent = labels['hautech.ai/parent_cid'];
-        if (!parent) continue;
-        const status: ContainerStatus = isStatus(sc.status) ? sc.status : 'failed';
-        const arr = byParent[parent] || (byParent[parent] = []);
-        arr.push({ containerId: sc.containerId, role: 'dind', image: sc.image, status });
-      }
-
-      const toIso = (d: unknown): string => {
-        try {
-          if (d instanceof Date) return d.toISOString();
-          if (typeof d === 'string') return new Date(d).toISOString();
-        } catch {}
-        return new Date(String(d)).toISOString();
-      };
-      const items = rows.map((r) => {
-        const labels = metaLabelsOf(r.metadata);
-        const role = labels['hautech.ai/role'] ?? 'workspace';
-        return {
-          containerId: r.containerId,
-          threadId: r.threadId,
-          image: r.image,
-          status: r.status,
-          startedAt: toIso(r.createdAt),
-          lastUsedAt: toIso(r.lastUsedAt),
-          killAfterAt: r.killAfterAt ? toIso(r.killAfterAt) : null,
-          role,
-          sidecars: byParent[r.containerId] || [],
-        };
-      });
-
-      return { items };
-    } catch (e) {
-      const msg = e && typeof e === 'object' && 'message' in (e as Record<string, unknown>) ? String((e as Error).message) : String(e);
-      this.logger.error(`ContainersController.list error: ${msg}`);
-      throw e;
+    // Translate sortBy to actual DB column (startedAt maps to createdAt)
+    let orderBy: Prisma.ContainerOrderByWithRelationInput;
+    const dir: Prisma.SortOrder = sortDir === SortDir.asc ? 'asc' : 'desc';
+    switch (sortBy) {
+      case SortBy.startedAt:
+        orderBy = { createdAt: dir };
+        break;
+      case SortBy.killAfterAt:
+        orderBy = { killAfterAt: dir };
+        break;
+      case SortBy.lastUsedAt:
+      default:
+        orderBy = { lastUsedAt: dir };
+        break;
     }
+
+    const limNum = typeof limit === 'number' ? limit : Number.isFinite(Number(limit)) ? Number(limit) : undefined;
+    const take = typeof limNum === 'number' && Number.isFinite(limNum) ? Math.max(1, Math.min(500, limNum)) : 200;
+
+    const rows = await this.prisma.container.findMany({
+      where,
+      orderBy,
+      select: {
+        containerId: true,
+        threadId: true,
+        image: true,
+        status: true,
+        createdAt: true,
+        lastUsedAt: true,
+        killAfterAt: true,
+        metadata: true,
+      },
+      take,
+    });
+
+    // Narrow type guard for metadata.labels
+    type MetaWithLabels = { labels?: Record<string, unknown> };
+    const isMetaWithLabels = (v: unknown): v is MetaWithLabels => {
+      if (typeof v !== 'object' || v === null) return false;
+      const obj = v as Record<string, unknown>;
+      if (!('labels' in obj)) return false;
+      const lbl = (obj as { labels?: unknown }).labels;
+      return typeof lbl === 'object' && lbl !== null;
+    };
+    const metaLabelsOf = (m: unknown): Record<string, string> => {
+      if (!isMetaWithLabels(m)) return {};
+      const raw = (m.labels ?? {}) as Record<string, unknown>;
+      const out: Record<string, string> = {};
+      for (const [k, v] of Object.entries(raw)) if (typeof v === 'string') out[k] = v;
+      return out;
+    };
+    // Optimize: preselect DinD sidecars for current parent set via JSON-path raw query
+    const parentIds = rows.map((r) => r.containerId);
+    const rawSidecars = await this.prisma.$queryRaw<Array<{ containerId: string; image: string; status: string; metadata: unknown }>>`
+      SELECT "containerId", "image", "status", "metadata" FROM "Container"
+      WHERE "metadata"->'labels'->>'hautech.ai/role' = 'dind'
+        AND ("metadata"->'labels'->>'hautech.ai/parent_cid') IN (${Prisma.join(parentIds)})
+    `;
+    const isStatus = (s: unknown): s is ContainerStatus =>
+      typeof s === 'string' && ['running', 'stopped', 'terminating', 'failed'].includes(s);
+    const byParent: Record<string, Array<{ containerId: string; role: 'dind'; image: string; status: ContainerStatus }>> = {};
+    for (const sc of rawSidecars) {
+      const labels = metaLabelsOf(sc.metadata);
+      const parent = labels['hautech.ai/parent_cid'];
+      if (!parent) continue;
+      const status: ContainerStatus = isStatus(sc.status) ? sc.status : 'failed';
+      const arr = byParent[parent] || (byParent[parent] = []);
+      arr.push({ containerId: sc.containerId, role: 'dind', image: sc.image, status });
+    }
+
+    const items = rows.map((r) => {
+      const labels = metaLabelsOf(r.metadata);
+      const role = labels['hautech.ai/role'] ?? 'workspace';
+      return {
+        containerId: r.containerId,
+        threadId: r.threadId,
+        image: r.image,
+        status: r.status,
+        startedAt: r.createdAt.toISOString(),
+        lastUsedAt: r.lastUsedAt.toISOString(),
+        killAfterAt: r.killAfterAt ? r.killAfterAt.toISOString() : null,
+        role,
+        sidecars: byParent[r.containerId] || [],
+      };
+    });
+
+    return { items };
   }
 }
