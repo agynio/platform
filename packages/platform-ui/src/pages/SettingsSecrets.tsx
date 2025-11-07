@@ -167,7 +167,8 @@ export function SecretsRow({ entry }: { entry: SecretEntry }) {
       await navigator.clipboard.writeText(value);
       notifySuccess('Copied');
     } catch {
-      /* no-op */
+      // Surface error without leaking plaintext
+      notifyError('Copy failed');
     }
   }
 
