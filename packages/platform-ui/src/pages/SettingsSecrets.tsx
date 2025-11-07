@@ -140,9 +140,13 @@ export function SecretsRow({ entry }: { entry: SecretEntry }) {
     try {
       const res = await api.graph.readVaultKey(entry.mount, entry.path, entry.key);
       if (res && typeof res.value === 'string') setValue(res.value);
-    } catch {
-      // Avoid leaking details; just notify
-      notifyError('Failed to load value');
+      else notifyError('No existing value found');
+    } catch (e: unknown) {
+      // Avoid leaking details; surface meaningful errors
+      const msg = (e as { message?: string; response?: { status?: number } })?.message;
+      const status = (e as { response?: { status?: number } }).response?.status;
+      if (msg === 'vault_read_missing' || status === 404) notifyError('No existing value found');
+      else notifyError('Failed to load value');
     }
   }
 
