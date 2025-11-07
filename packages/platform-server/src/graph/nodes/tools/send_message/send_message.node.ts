@@ -34,5 +34,3 @@ export class SendMessageNode extends BaseToolNode<SendMessageConfig> {
     return { targetPorts: { $self: { kind: 'instance' } } } as const;
   }
 }
-
-export { SendMessageToolStaticConfigSchema };
