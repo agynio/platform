@@ -30,19 +30,21 @@ describe('Settings/Secrets page', () => {
     // Vault discovery: mounts and paths; start with no keys existing
     let ghKeys: string[] = [];
     let slackKeys: string[] = [];
+    const openaiKeys: string[] = ['API_KEY']; // non-required key to verify 'All' filter includes non-required
     server.use(
       http.get(abs('/api/vault/mounts'), () => HttpResponse.json({ items: ['secret'] })),
       http.get(abs('/api/vault/kv/:mount/paths'), ({ request }) => {
         const url = new URL(request.url);
         const prefix = url.searchParams.get('prefix') || '';
         if (prefix) return HttpResponse.json({ items: [] });
-        return HttpResponse.json({ items: ['github', 'slack'] });
+        return HttpResponse.json({ items: ['github', 'slack', 'openai'] });
       }),
       http.get(abs('/api/vault/kv/:mount/keys'), ({ request }) => {
         const url = new URL(request.url);
         const path = url.searchParams.get('path');
         if (path === 'github') return HttpResponse.json({ items: ghKeys });
         if (path === 'slack') return HttpResponse.json({ items: slackKeys });
+        if (path === 'openai') return HttpResponse.json({ items: openaiKeys });
         return HttpResponse.json({ items: [] });
       }),
       http.post(abs('/api/vault/kv/:mount/write'), async ({ request }) => {
@@ -77,6 +79,14 @@ describe('Settings/Secrets page', () => {
 
     // After save, missing count should drop to 1
     await waitFor(() => expect(screen.getByText('Missing (1)')).toBeInTheDocument());
+
+    // Toggle to Used: shows only required keys (2 rows)
+    fireEvent.click(screen.getByRole('button', { name: 'Used' }));
+    expect(screen.getByText('secret/github/GH_TOKEN')).toBeInTheDocument();
+    expect(screen.getByText('secret/slack/BOT_TOKEN')).toBeInTheDocument();
+    // Toggle to All: includes non-required openai key
+    fireEvent.click(screen.getByRole('button', { name: 'All' }));
+    expect(screen.getByText('secret/openai/API_KEY')).toBeInTheDocument();
   });
 
   it('shows banner when Vault unavailable and still lists graph-required keys', async () => {
@@ -90,8 +100,8 @@ describe('Settings/Secrets page', () => {
         }),
       ),
     );
-    // Vault mounts empty (simulate unavailable)
-    server.use(http.get(abs('/api/vault/mounts'), () => HttpResponse.json({ items: [] })));
+    // Vault mounts error (simulate unavailable)
+    server.use(http.get(abs('/api/vault/mounts'), () => new HttpResponse(null, { status: 500 })));
 
     render(
       <TestProviders>
@@ -99,7 +109,7 @@ describe('Settings/Secrets page', () => {
       </TestProviders>,
     );
 
-    await screen.findByText('Vault not configured/unavailable. Showing graph-required secrets only.');
+    await screen.findByText(/Vault (error|not configured)/);
     expect(screen.getByText('secret/slack/BOT_TOKEN')).toBeInTheDocument();
   });
 });

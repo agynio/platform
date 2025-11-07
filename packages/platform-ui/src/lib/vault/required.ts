@@ -1,4 +1,4 @@
-import type { PersistedGraph } from '@agyn/shared';
+import type { PersistedGraph, PersistedGraphNode } from '@agyn/shared';
 import { collectVaultRefs } from './collect';
 import { parseVaultRef, isValidVaultRef } from './parse';
 import type { SecretKey } from './types';
@@ -6,8 +6,8 @@ import type { SecretKey } from './types';
 export function computeRequiredKeys(graph: PersistedGraph): SecretKey[] {
   const uniq = new Set<string>();
   const out: SecretKey[] = [];
-  for (const n of graph.nodes || []) {
-    const refs = collectVaultRefs((n as { config?: Record<string, unknown> }).config || {});
+  for (const n of (graph.nodes || []) as PersistedGraphNode[]) {
+    const refs = collectVaultRefs(n.config ?? {});
     for (const r of refs) {
       if (!isValidVaultRef(r)) continue;
       const p = parseVaultRef(r);
@@ -20,4 +20,3 @@ export function computeRequiredKeys(graph: PersistedGraph): SecretKey[] {
   }
   return out;
 }
-

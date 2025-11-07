@@ -9,59 +9,59 @@ import { unionWithPresence } from '@/lib/vault/union';
 import type { SecretEntry, SecretFilter, SecretKey } from '@/lib/vault/types';
 import { notifyError, notifySuccess } from '@/lib/notify';
 
-async function discoverVaultKeys(): Promise<SecretKey[]> {
-  const mounts = await api.graph.listVaultMounts();
-  const all: SecretKey[] = [];
-
+async function discoverVaultKeys(mounts: string[]): Promise<SecretKey[]> {
+  // List all leaf paths for a mount using Promise.all and recursion
   async function listAllPaths(mount: string, prefix = ''): Promise<string[]> {
     const res = await api.graph.listVaultPaths(mount, prefix);
     const items = res.items || [];
-    const paths: string[] = [];
-    for (const it of items) {
-      if (it.endsWith('/')) {
-        const deeper = await listAllPaths(mount, `${it}`);
-        paths.push(...deeper);
-      } else {
-        paths.push(it);
-      }
-    }
-    return paths;
+    const folders = items.filter((it) => it.endsWith('/'));
+    const leaves = items.filter((it) => !it.endsWith('/'));
+    if (folders.length === 0) return leaves;
+    const nested = await Promise.all(folders.map((f) => listAllPaths(mount, `${f}`)));
+    return [...leaves, ...nested.flat()];
   }
 
-  for (const mount of mounts.items || []) {
-    try {
+  // For all mounts, fetch paths and then keys in parallel; any failure surfaces to useQuery.error
+  const keyLists = await Promise.all(
+    mounts.map(async (mount) => {
       const paths = await listAllPaths(mount, '');
-      for (const p of paths) {
-        try {
-          const keys = await api.graph.listVaultKeys(mount, p);
-          for (const k of keys.items || []) all.push({ mount, path: p, key: k });
-        } catch {
-          // ignore individual path failures
-        }
-      }
-    } catch {
-      // ignore mount failures
-    }
-  }
-  return all;
+      const perPath = await Promise.all(
+        paths.map(async (p) => {
+          const keys = await api.graph.listVaultKeys(mount, p, { maskErrors: false });
+          return (keys.items || []).map((k) => ({ mount, path: p, key: k } as SecretKey));
+        }),
+      );
+      return perPath.flat();
+    }),
+  );
+  return keyLists.flat();
 }
 
 function useSecretsData() {
   const graphQ = useQuery({ queryKey: ['graph', 'full'], queryFn: () => api.graph.getFullGraph() });
   const reqKeys = useMemo(() => (graphQ.data ? computeRequiredKeys(graphQ.data as PersistedGraph) : []), [graphQ.data]);
 
-  const availQ = useQuery({ queryKey: ['vault', 'discover'], queryFn: discoverVaultKeys, staleTime: 5 * 60 * 1000 });
+  const mountsQ = useQuery({ queryKey: ['vault', 'mounts'], queryFn: () => api.graph.listVaultMounts(), staleTime: 5 * 60 * 1000 });
+  const mounts = mountsQ.data?.items || [];
+
+  const availQ = useQuery({
+    queryKey: ['vault', 'discover', mounts],
+    queryFn: () => discoverVaultKeys(mounts),
+    enabled: mounts.length > 0,
+    staleTime: 5 * 60 * 1000,
+    retry: 1,
+  });
 
   const union = useMemo(() => unionWithPresence(reqKeys, availQ.data ?? []), [reqKeys, availQ.data]);
   const missingCount = useMemo(() => union.filter((e) => e.required && !e.present).length, [union]);
   const requiredCount = reqKeys.length;
-  const vaultUnavailable = (availQ.data?.length ?? 0) === 0 && !availQ.isLoading; // heuristic
+  const vaultUnavailable = Boolean(mountsQ.isError || availQ.isError || (mountsQ.data && mounts.length === 0));
 
-  return { graphQ, availQ, union, missingCount, requiredCount, vaultUnavailable };
+  return { graphQ, mountsQ, availQ, union, missingCount, requiredCount, vaultUnavailable };
 }
 
 export function SettingsSecrets() {
-  const { union, graphQ, availQ, missingCount, requiredCount, vaultUnavailable } = useSecretsData();
+  const { union, graphQ, availQ, mountsQ, missingCount, requiredCount, vaultUnavailable } = useSecretsData();
   const [filter, setFilter] = useState<SecretFilter>('all');
 
   // Default filter selection: Missing > Used > All
@@ -77,16 +77,16 @@ export function SettingsSecrets() {
     return union;
   }, [union, filter]);
 
-  const isLoading = graphQ.isLoading || availQ.isLoading;
+  const isLoading = graphQ.isLoading || mountsQ.isLoading || availQ.isLoading;
 
   return (
     <div className="p-4">
       <h1 className="text-xl font-semibold">Settings / Secrets</h1>
       <p className="text-sm text-muted-foreground mb-3">Manage Vault secrets used by the current graph.</p>
 
-      {vaultUnavailable && (
+      {(vaultUnavailable || availQ.isError) && (
         <div className="mb-3 rounded border border-amber-300 bg-amber-50 text-amber-900 px-3 py-2 text-sm" role="status">
-          Vault not configured/unavailable. Showing graph-required secrets only.
+          {availQ.error ? 'Vault error: failed to discover keys. Showing graph-required secrets only.' : 'Vault not configured/unavailable. Showing graph-required secrets only.'}
         </div>
       )}
 
