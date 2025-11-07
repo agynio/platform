@@ -122,7 +122,6 @@ export class ContainersController {
         createdAt: true,
         lastUsedAt: true,
         killAfterAt: true,
-        metadata: true,
       },
       take,
     });

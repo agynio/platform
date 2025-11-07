@@ -10,8 +10,17 @@ import type { PrismaClient } from '@prisma/client';
 type MinimalPrismaClient = { container: { findMany: (args?: unknown) => Promise<unknown[]> } };
 class PrismaStub { private client: MinimalPrismaClient = { container: { findMany: async () => [] } }; getClient(): MinimalPrismaClient { return this.client; } }
 
+// Minimal typed interface for test Fastify usage
+interface TestFastify {
+  inject: (opts: { method: string; url: string }) => Promise<{ statusCode: number; body: string }>;
+  get: (
+    path: string,
+    handler: (req: { params: unknown }, res: { send: (payload: unknown) => unknown }) => unknown,
+  ) => void;
+}
+
 describe('ContainersController sidecars route', () => {
-  let fastify: any; let controller: ContainersController;
+  let fastify: TestFastify; let controller: ContainersController;
 
   class FakeDocker {
     private data: Record<string, any>;
@@ -56,7 +65,7 @@ describe('ContainersController sidecars route', () => {
     const parentId = 'parent-123';
     const res = await fastify.inject({ method: 'GET', url: `/api/containers/${parentId}/sidecars` });
     expect(res.statusCode).toBe(200);
-    const body = res.json() as { items: Array<{ containerId: string; parentContainerId: string; role: string; image: string; status: string; startedAt: string }>; };
+    const body = JSON.parse(res.body) as { items: Array<{ containerId: string; parentContainerId: string; role: string; image: string; status: string; startedAt: string }>; };
     expect(Array.isArray(body.items)).toBe(true);
     expect(body.items.length).toBe(1);
     const sc = body.items[0];
@@ -96,7 +105,7 @@ describe('ContainersController sidecars route', () => {
     });
     const res = await fastify2.inject({ method: 'GET', url: `/api/containers/${parentId}/sidecars` });
     expect(res.statusCode).toBe(200);
-    const body = res.json() as { items: Array<unknown> };
+    const body = JSON.parse(res.body) as { items: Array<unknown> };
     expect(Array.isArray(body.items)).toBe(true);
     expect(body.items.length).toBe(0);
   });
@@ -123,7 +132,7 @@ describe('ContainersController sidecars route', () => {
     });
     const res = await fastify2.inject({ method: 'GET', url: `/api/containers/${parentId}/sidecars` });
     expect(res.statusCode).toBe(200);
-    const body = res.json() as { items: Array<{ parentContainerId: string; status: string }> };
+    const body = JSON.parse(res.body) as { items: Array<{ parentContainerId: string; status: string }> };
     expect(body.items[0].parentContainerId).toBe(parentId);
     expect(body.items[0].status).toBe('stopped');
   });
