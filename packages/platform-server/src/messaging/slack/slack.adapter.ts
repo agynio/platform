@@ -1,24 +1,14 @@
 import { WebClient, type ChatPostEphemeralResponse, type ChatPostMessageResponse } from '@slack/web-api';
-import { parseVaultRef, ReferenceFieldSchema } from '../../utils/refs';
+import { parseVaultRef } from '../../utils/refs';
 import type { ChannelAdapter, ChannelAdapterDeps, SendMessageOptions, SendResult } from '../types';
 import type { ChannelDescriptor } from '../types';
 import { SlackIdentifiersSchema } from '../types';
-import { z } from 'zod';
-
-const SlackConfigSchema = z.object({
-  slack: z.object({ botToken: z.union([z.string().min(1), ReferenceFieldSchema]) }).strict(),
-});
-
-// _SlackConfig type retained for clarity if needed; prefixed to satisfy lint unused-var rule.
-type _SlackConfig = z.infer<typeof SlackConfigSchema>;
 
 export class SlackAdapter implements ChannelAdapter {
   constructor(private deps: ChannelAdapterDeps) {}
 
   private async resolveBotToken(): Promise<string> {
-    const parsed = SlackConfigSchema.safeParse(this.deps.config);
-    if (!parsed.success) throw new Error('Slack configuration missing (slack.botToken)');
-    const bot = parsed.data.slack.botToken;
+    const bot = this.deps.config.slack.botToken;
     if (typeof bot === 'string') {
       if (!bot.startsWith('xoxb-')) throw new Error('Slack bot token must start with xoxb-');
       return bot;

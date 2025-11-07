@@ -64,8 +64,8 @@ export type SendResult = {
 export interface ChannelAdapterDeps {
   logger: { info: (...args: unknown[]) => void; error: (...args: unknown[]) => void; debug?: (...args: unknown[]) => void };
   vault: VaultService;
-  // Minimal config surface; individual adapters will assert their needed fields
-  config: unknown;
+  // Adapter configuration shape (Slack only for now)
+  config: { slack: { botToken?: string | { value: string; source?: 'static' | 'vault' } } };
 }
 
 export interface ChannelAdapter {
