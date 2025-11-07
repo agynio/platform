@@ -149,37 +149,33 @@ export class ContainersController {
       const fn = obj && (obj['$queryRaw'] as unknown);
       return typeof fn === 'function';
     })();
+    let sidecarSource: Array<{ containerId: string; image: string; status: unknown; metadata: unknown }> = [];
     if (hasQueryRaw) {
       const q = Prisma.sql<Array<{ containerId: string; image: string; status: string; metadata: unknown }>>`
         SELECT "containerId", "image", "status", "metadata" FROM "Container"
         WHERE "metadata"->'labels'->>'hautech.ai/role' = 'dind'
           AND ("metadata"->'labels'->>'hautech.ai/parent_cid') IN (${Prisma.join(parentIds)})
       `;
-      const rawSidecars = await this.prisma.$queryRaw<Array<{ containerId: string; image: string; status: string; metadata: unknown }>>(q);
-      const isStatus = (s: unknown): s is ContainerStatus =>
-        typeof s === 'string' && ['running', 'stopped', 'terminating', 'failed'].includes(s);
-      for (const sc of rawSidecars) {
-        const labels = metaLabelsOf(sc.metadata);
-        const parent = labels['hautech.ai/parent_cid'];
-        if (!parent) continue;
-        const status: ContainerStatus = isStatus(sc.status) ? sc.status : 'failed';
-        const arr = byParent[parent] || (byParent[parent] = []);
-        arr.push({ containerId: sc.containerId, role: 'dind', image: sc.image, status });
-      }
+      sidecarSource = await this.prisma.$queryRaw<Array<{ containerId: string; image: string; status: string; metadata: unknown }>>(q);
     } else {
-      // Fallback: fetch candidates and filter in-memory using metadata.labels
-      const sidecarCandidates = await this.prisma.container.findMany({
+      sidecarSource = await this.prisma.container.findMany({
         select: { containerId: true, image: true, status: true, metadata: true },
-      });
-      for (const sc of sidecarCandidates) {
-        const labels = metaLabelsOf(sc.metadata);
-        const role = labels['hautech.ai/role'];
-        const parent = labels['hautech.ai/parent_cid'];
-        if (role !== 'dind') continue;
-        if (!parent || !parentIds.includes(parent)) continue;
-        const arr = byParent[parent] || (byParent[parent] = []);
-        arr.push({ containerId: sc.containerId, role: 'dind', image: sc.image, status: sc.status });
-      }
+      }) as Array<{ containerId: string; image: string; status: ContainerStatus; metadata: unknown }>;
+    }
+    const isStatus = (s: unknown): s is ContainerStatus =>
+      typeof s === 'string' && ['running', 'stopped', 'terminating', 'failed'].includes(s);
+    for (const sc of sidecarSource) {
+      const labels = metaLabelsOf(sc.metadata);
+      const role = labels['hautech.ai/role'];
+      const parent = labels['hautech.ai/parent_cid'];
+      if (role !== 'dind') continue;
+      if (!parent) continue;
+      if (!parentIds.includes(parent)) continue;
+      const status: ContainerStatus = typeof sc.status === 'string'
+        ? (isStatus(sc.status) ? sc.status : 'failed')
+        : (sc.status as ContainerStatus);
+      const arr = byParent[parent] || (byParent[parent] = []);
+      arr.push({ containerId: sc.containerId, role: 'dind', image: sc.image, status });
     }
 
       const toIso = (d: unknown): string => {
