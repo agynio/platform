@@ -9,9 +9,9 @@ import { ConfigService } from '../../../../core/services/config.service';
 
 export const SendMessageToolStaticConfigSchema = z.object({}).strict();
 
-@Injectable({ scope: Scope.TRANSIENT })
 type SendMessageConfig = Record<string, never>;
 
+@Injectable({ scope: Scope.TRANSIENT })
 export class SendMessageNode extends BaseToolNode<SendMessageConfig> {
   private toolInstance?: SendMessageFunctionTool;
   constructor(

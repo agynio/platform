@@ -31,10 +31,12 @@ export class SlackAdapter implements ChannelAdapter {
   async sendText(input: { threadId: string; text: string; descriptor: ChannelDescriptor; options?: SendMessageOptions }): Promise<SendResult> {
     const { descriptor, threadId, text } = input;
     const opts = input.options || {};
-    const identifiers = descriptor.identifiers as { channelId: string; threadTs?: string | null; ephemeralUser?: string | null };
-    const channel = identifiers.channelId;
-    const replyTs = opts.replyTo ?? identifiers.threadTs ?? undefined;
-    const ephemeralUser = identifiers.ephemeralUser ?? null;
+    const parsedIds = SlackIdentifiersSchema.safeParse(descriptor.identifiers);
+    if (!parsedIds.success) throw new Error('Slack descriptor identifiers invalid');
+    const ids = parsedIds.data;
+    const channel = ids.channelId;
+    const replyTs = opts.replyTo ?? ids.threadTs ?? undefined;
+    const ephemeralUser = ids.ephemeralUser ?? null;
 
     this.deps.logger.info('SlackAdapter.sendText', {
       type: descriptor.type,
