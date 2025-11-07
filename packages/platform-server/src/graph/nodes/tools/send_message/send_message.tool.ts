@@ -55,9 +55,9 @@ export class SendMessageFunctionTool extends FunctionTool<typeof sendMessageInvo
     }
     const descriptor = parsed.data;
     const adapterLogger = {
-      info: (...args: unknown[]) => this.logger.info(...(args as unknown[])),
-      error: (...args: unknown[]) => this.logger.error(...(args as unknown[])),
-      debug: (...args: unknown[]) => this.logger.debug?.(...(args as unknown[])),
+      info: (...args: unknown[]) => this.logger.info('send_message', args),
+      error: (...args: unknown[]) => this.logger.error('send_message', args),
+      debug: (...args: unknown[]) => this.logger.debug?.('send_message', args),
     };
     const adapter = ChannelAdapterRegistry.getAdapter(descriptor, {
       logger: adapterLogger,
