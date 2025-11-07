@@ -81,12 +81,12 @@ export class AgentsPersistenceService {
       const finalSummary = sanitized ? this.truncateSummary(sanitized, 250) : '';
       if (finalSummary.length > 0) {
         // Concurrency-safe: update only if summary is still null
-        const res = await (tx as any).thread.updateMany({ where: { id: threadId, summary: null }, data: { summary: finalSummary } });
+        const res = await tx.thread.updateMany({ where: { id: threadId, summary: null }, data: { summary: finalSummary } });
         const count: number = typeof res?.count === 'number' ? res.count : 0;
         if (count > 0) {
           const updated = await tx.thread.findUnique({ where: { id: threadId } });
           if (updated) {
-            updatedThread = { id: updated.id, alias: updated.alias, summary: updated.summary ?? null, status: updated.status as ThreadStatus, createdAt: updated.createdAt, parentId: updated.parentId ?? null };
+            updatedThread = { id: updated.id, alias: updated.alias, summary: updated.summary ?? null, status: updated.status, createdAt: updated.createdAt, parentId: updated.parentId ?? null };
           }
         }
       }

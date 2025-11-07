@@ -31,6 +31,7 @@ describe('AgentsPersistenceService beginRun/completeRun populates Message.text',
       thread: {
         findUnique: async (_q: any) => ({ id: 'thread-1' }),
         create: async (_d: any) => ({ id: 'thread-1' }),
+        updateMany: async (_args: any) => ({ count: 1 }),
       },
       run: {
         create: async ({ data }: any) => {
