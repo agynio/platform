@@ -62,7 +62,9 @@ export class AgentsPersistenceService {
     threadId: string,
     inputMessages: Array<HumanMessage | SystemMessage | AIMessage>,
   ): Promise<RunStartResult> {
-    const { runId, createdMessages } = await this.prisma.$transaction(async (tx: Prisma.TransactionClient) => {
+    const { runId, createdMessages, updatedThread } = await this.prisma.$transaction(async (tx: Prisma.TransactionClient) => {
+      // Initialize summary on first qualifying beginRun when currently null
+      const thread = await tx.thread.findUnique({ where: { id: threadId } });
       const run = await tx.run.create({ data: { threadId, status: 'running' as RunStatus } });
       const createdMessages: Array<{ id: string; kind: MessageKind; text: string | null; source: Prisma.JsonValue; createdAt: Date }> = [];
       await Promise.all(
@@ -74,10 +76,22 @@ export class AgentsPersistenceService {
           createdMessages.push({ id: created.id, kind, text, source: created.source as Prisma.JsonValue, createdAt: created.createdAt });
         }),
       );
-      return { runId: run.id, createdMessages };
+      let updatedThread: { id: string; alias: string; summary: string | null; status: ThreadStatus; createdAt: Date; parentId?: string | null } | null = null;
+      if (thread && thread.summary === null) {
+        const candidate = this.selectFirstQualifyingText(inputMessages);
+        const sanitized = candidate ? this.sanitizeSummary(candidate) : '';
+        const finalSummary = sanitized ? this.truncateSummary(sanitized, 250) : '';
+        // Only update when non-empty result is produced
+        if (finalSummary.length > 0) {
+          const updated = await tx.thread.update({ where: { id: threadId }, data: { summary: finalSummary } });
+          updatedThread = { id: updated.id, alias: updated.alias, summary: updated.summary ?? null, status: updated.status, createdAt: updated.createdAt, parentId: updated.parentId ?? null };
+        }
+      }
+      return { runId: run.id, createdMessages, updatedThread };
     });
     this.events.emitRunStatusChanged(threadId, { id: runId, status: 'running' as RunStatus, createdAt: new Date(), updatedAt: new Date() });
     for (const m of createdMessages) this.events.emitMessageCreated(threadId, { id: m.id, kind: m.kind, text: m.text, source: m.source as Prisma.JsonValue, createdAt: m.createdAt, runId });
+    if (updatedThread) this.events.emitThreadUpdated(updatedThread);
     // Consider scheduling ancestors; keeping current semantics per review note
     this.events.scheduleThreadMetrics(threadId);
     return { runId };
@@ -217,5 +231,54 @@ export class AgentsPersistenceService {
     if (msg instanceof ToolCallOutputMessage) return { kind: 'tool' as MessageKind, text: msg.text };
     // Unreachable via typing; keep fallback for safety
     return { kind: 'user' as MessageKind, text: null };
+  }
+
+  /**
+   * Select first qualifying message text according to priority:
+   * Human first; if none, fallback to System or AI. Skip empty/whitespace-only.
+   */
+  private selectFirstQualifyingText(input: Array<HumanMessage | SystemMessage | AIMessage>): string | null {
+    const norm = (t: string | null | undefined) => (t ?? '').trim();
+    const firstHuman = input.find((m) => m instanceof HumanMessage && norm((m as HumanMessage).text).length > 0) as HumanMessage | undefined;
+    if (firstHuman) return norm(firstHuman.text);
+    const firstSystem = input.find((m) => m instanceof SystemMessage && norm((m as SystemMessage).text).length > 0) as SystemMessage | undefined;
+    if (firstSystem) return norm(firstSystem.text);
+    const firstAI = input.find((m) => m instanceof AIMessage && norm((m as AIMessage).text).length > 0) as AIMessage | undefined;
+    if (firstAI) return norm(firstAI.text);
+    return null;
+  }
+
+  /**
+   * Sanitize summary text: strip markdown markers, convert links/images, remove backticks/emphasis,
+   * and collapse whitespace to single spaces.
+   */
+  private sanitizeSummary(text: string): string {
+    let out = text;
+    // Convert markdown links and images to labels
+    out = out.replace(/!\[([^\]]*)\]\(([^)]+)\)/g, '$1');
+    out = out.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '$1');
+    // Strip fenced code blocks and inline backticks
+    out = out.replace(/```+/g, '');
+    out = out.replace(/`/g, '');
+    // Strip headings at line starts: leading #+ and spaces
+    out = out.replace(/^#{1,6}\s+/gm, '');
+    // Strip emphasis markers: *, **, _, ~
+    out = out.replace(/[*_~]/g, '');
+    // Collapse whitespace (including newlines/tabs) to single spaces
+    out = out.replace(/[\s\t\n\r]+/g, ' ');
+    // Trim leading/trailing spaces
+    out = out.trim();
+    return out;
+  }
+
+  /**
+   * Truncate string at nearest word boundary up to maxLen. If no space before limit, hard-cut.
+   */
+  private truncateSummary(text: string, maxLen: number): string {
+    if (text.length <= maxLen) return text;
+    const cut = text.slice(0, maxLen);
+    const lastSpace = cut.lastIndexOf(' ');
+    if (lastSpace > 0) return cut.slice(0, lastSpace);
+    return cut;
   }
 }
