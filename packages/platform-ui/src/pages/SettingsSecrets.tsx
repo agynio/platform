@@ -136,17 +136,15 @@ export function SecretsRow({ entry }: { entry: SecretEntry }) {
     }
   }, [editing]);
 
-  async function fetchCurrentValue() {
+  async function fetchCurrentValue(maskErrors = false) {
     try {
-      const res = await api.graph.readVaultKey(entry.mount, entry.path, entry.key);
+      const res = await api.graph.readVaultKey(entry.mount, entry.path, entry.key, { maskErrors });
       if (res && typeof res.value === 'string') setValue(res.value);
-      else notifyError('No existing value found');
-    } catch (e: unknown) {
-      // Avoid leaking details; surface meaningful errors
-      const msg = (e as { message?: string; response?: { status?: number } })?.message;
-      const status = (e as { response?: { status?: number } }).response?.status;
-      if (msg === 'vault_read_missing' || status === 404) notifyError('No existing value found');
+      else if (maskErrors) notifyError('No value available');
       else notifyError('Failed to load value');
+    } catch {
+      // Generic error message when not masking
+      notifyError('Failed to load value');
     }
   }
 
@@ -216,7 +214,7 @@ export function SecretsRow({ entry }: { entry: SecretEntry }) {
               onClick={async () => {
                 setReveal((r) => !r);
                 // If revealing while value is empty, fetch current value
-                if (!reveal && !value) await fetchCurrentValue();
+                if (!reveal && !value) await fetchCurrentValue(true);
               }}
             >
               {reveal ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
@@ -236,7 +234,7 @@ export function SecretsRow({ entry }: { entry: SecretEntry }) {
             <Button size="sm" variant="outline" onClick={() => setEditing(false)} disabled={writeMut.isPending}>Cancel</Button>
           </div>
         ) : (
-          <Button size="sm" onClick={async () => { setEditing(true); await fetchCurrentValue(); }}>Edit</Button>
+          <Button size="sm" onClick={async () => { setEditing(true); await fetchCurrentValue(false); }}>Edit</Button>
         )}
       </Td>
     </Tr>
