@@ -28,7 +28,9 @@ describe('send_message tool', () => {
       prismaStub,
       slackAdapterMock,
     );
-    await trigger.setConfig({ app_token: { value: 'xapp-abc', source: 'static' }, bot_token: { value: 'xoxb-abc', source: 'static' } });
+    const cfg = { app_token: { value: 'xapp-abc', source: 'static' }, bot_token: { value: 'xoxb-abc', source: 'static' } };
+    await trigger.setConfig(cfg);
+    await trigger.provision();
     const tool = new SendMessageFunctionTool(new LoggerService(), trigger);
     const res = await tool.execute({ message: 'hello' }, { threadId: 't1' } as any);
     const obj = JSON.parse(res);
@@ -49,7 +51,9 @@ describe('send_message tool', () => {
       prismaStub2,
       slackAdapterMock2,
     );
-    await trigger.setConfig({ app_token: { value: 'xapp-abc', source: 'static' }, bot_token: { value: 'xoxb-abc', source: 'static' } });
+    const cfg2 = { app_token: { value: 'xapp-abc', source: 'static' }, bot_token: { value: 'xoxb-abc', source: 'static' } };
+    await trigger.setConfig(cfg2);
+    await trigger.provision();
     const tool = new SendMessageFunctionTool(new LoggerService(), trigger);
     const res = await tool.execute({ message: 'hello' }, { threadId: 't1' } as any);
     const obj = JSON.parse(res);
