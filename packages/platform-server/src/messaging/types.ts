@@ -2,7 +2,8 @@ import { z } from 'zod';
 import type { LoggerService } from '../core/services/logger.service';
 
 // Slack-only channel descriptor
-export const SlackIdentifiersSchema = z.object({ channel: z.string().min(1), thread_ts: z.string().min(1).nullable().optional() }).strict();
+// thread_ts is optional (omit if not present)
+export const SlackIdentifiersSchema = z.object({ channel: z.string().min(1), thread_ts: z.string().min(1).optional() }).strict();
 
 export const ChannelDescriptorSchema = z
   .object({

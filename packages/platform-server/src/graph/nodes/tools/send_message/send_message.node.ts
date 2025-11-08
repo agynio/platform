@@ -3,10 +3,7 @@ import z from 'zod';
 import { BaseToolNode } from '../baseToolNode';
 import { SendMessageFunctionTool } from './send_message.tool';
 import { LoggerService } from '../../../../core/services/logger.service';
-import { VaultService } from '../../../../vault/vault.service';
-import { PrismaService } from '../../../../core/services/prisma.service';
-import { ConfigService } from '../../../../core/services/config.service';
-import { SlackRuntimeRegistry } from '../../../../messaging/slack/runtime.registry';
+import { SlackTrigger } from '../../slackTrigger/slackTrigger.node';
 
 export const SendMessageToolStaticConfigSchema = z.object({}).strict();
 
@@ -17,18 +14,13 @@ export class SendMessageNode extends BaseToolNode<SendMessageConfig> {
   private toolInstance?: SendMessageFunctionTool;
   constructor(
     @Inject(LoggerService) protected logger: LoggerService,
-    @Inject(VaultService) protected vault: VaultService,
-    @Inject(PrismaService) protected prisma: PrismaService,
-    @Inject(ConfigService) protected cfg: ConfigService,
-    @Inject(SlackRuntimeRegistry) protected runtime: SlackRuntimeRegistry,
+    @Inject(SlackTrigger) protected trigger: SlackTrigger,
   ) {
     super(logger);
   }
 
   getTool(): SendMessageFunctionTool {
-    if (!this.toolInstance) {
-      this.toolInstance = new SendMessageFunctionTool(this.logger, this.vault, this.prisma, this.cfg, this.runtime);
-    }
+    if (!this.toolInstance) this.toolInstance = new SendMessageFunctionTool(this.logger, this.trigger);
     return this.toolInstance;
   }
 

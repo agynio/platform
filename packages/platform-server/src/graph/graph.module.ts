@@ -49,7 +49,6 @@ import { RemindMeNode } from './nodes/tools/remind_me/remind_me.node';
 import { AgentsPersistenceService } from '../agents/agents.persistence.service';
 import { AgentsThreadsController } from '../agents/threads.controller';
 import { AgentsRemindersController } from '../agents/reminders.controller';
-import { SlackRuntimeRegistry } from '../messaging/slack/runtime.registry';
 
 @Module({
   imports: [CoreModule, InfraModule, LLMModule, EnvModule],
@@ -119,7 +118,6 @@ import { SlackRuntimeRegistry } from '../messaging/slack/runtime.registry';
     // Centralized threads metrics aggregator
     ThreadsMetricsService,
     AgentsPersistenceService,
-    SlackRuntimeRegistry,
 
     //////// Nodes
 

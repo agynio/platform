@@ -9,7 +9,9 @@ import { BufferMessage } from '../agent/messagesBuffer';
 import { HumanMessage } from '@agyn/llm';
 import { stringify as YamlStringify } from 'yaml';
 import { AgentsPersistenceService } from '../../../agents/agents.persistence.service';
-import { SlackRuntimeRegistry } from '../../../messaging/slack/runtime.registry';
+import { PrismaService } from '../../../core/services/prisma.service';
+import { SlackAdapter } from '../../../messaging/slack/slack.adapter';
+import type { SendResult } from '../../../messaging/types';
 
 type TriggerHumanMessage = { kind: 'human'; content: string; info?: Record<string, unknown> };
 type TriggerListener = { invoke: (thread: string, messages: BufferMessage[]) => Promise<void> };
@@ -28,11 +30,13 @@ type SlackTriggerConfig = { app_token: SlackTokenRef; bot_token: SlackTokenRef }
 export class SlackTrigger extends Node<SlackTriggerConfig> {
   private client: SocketModeClient | null = null;
 
+  private botToken: string | null = null;
+
   constructor(
     @Inject(LoggerService) protected readonly logger: LoggerService,
     @Inject(VaultService) protected readonly vault: VaultService,
     @Inject(AgentsPersistenceService) private readonly persistence: AgentsPersistenceService,
-    @Inject(SlackRuntimeRegistry) private readonly runtime: SlackRuntimeRegistry,
+    @Inject(PrismaService) private readonly prismaService: PrismaService,
   ) {
     super(logger);
   }
@@ -112,18 +116,21 @@ export class SlackTrigger extends Node<SlackTriggerConfig> {
           },
         };
         const threadId = await this.persistence.getOrCreateThreadByAlias('slack', alias, text);
-        const botToken = await resolveTokenRef(this.config.bot_token, {
-          expectedPrefix: 'xoxb-',
-          fieldName: 'bot_token',
-          vault: this.vault,
-        });
-        this.runtime.setToken(threadId, botToken);
+        // Resolve bot token once and cache; no registry exposure
+        if (!this.botToken) {
+          const botToken = await resolveTokenRef(this.config.bot_token, {
+            expectedPrefix: 'xoxb-',
+            fieldName: 'bot_token',
+            vault: this.vault,
+          });
+          this.botToken = botToken;
+        }
         const descriptor = {
           type: 'slack' as const,
           version: 1,
           identifiers: {
             channel: event.channel || 'unknown',
-            thread_ts: (event.thread_ts || event.ts || undefined) ?? null,
+            ...(event.thread_ts ? { thread_ts: event.thread_ts } : {}),
           },
           meta: { channel_type: event.channel_type, client_msg_id: event.client_msg_id, event_ts: event.event_ts },
           createdBy: 'SlackTrigger',
@@ -143,6 +150,15 @@ export class SlackTrigger extends Node<SlackTriggerConfig> {
     const client = await this.ensureClient();
     this.logger.info('Starting SlackTrigger (socket mode)');
     try {
+      // Pre-resolve bot token during provision
+      if (!this.botToken) {
+        const botToken = await resolveTokenRef(this.config.bot_token, {
+          expectedPrefix: 'xoxb-',
+          fieldName: 'bot_token',
+          vault: this.vault,
+        });
+        this.botToken = botToken;
+      }
       await client.start();
       this.logger.info('SlackTrigger started');
     } catch (e) {
@@ -192,5 +208,36 @@ export class SlackTrigger extends Node<SlackTriggerConfig> {
 
   getPortConfig() {
     return { sourcePorts: { subscribe: { kind: 'method', create: 'subscribe', destroy: 'unsubscribe' } } } as const;
+  }
+
+  // Send a text message using stored thread descriptor and this trigger's bot token
+  async sendToThread(threadId: string, text: string): Promise<SendResult> {
+    try {
+      const prisma = this.prismaService.getClient();
+      const thread = await prisma.thread.findUnique({ where: { id: threadId }, select: { channel: true } });
+      if (!thread || !thread.channel) {
+        this.logger.error('SlackTrigger.sendToThread: missing descriptor', { threadId });
+        return { ok: false, error: 'missing_channel_descriptor' };
+      }
+      if (!this.botToken) {
+        const botToken = await resolveTokenRef(this.config.bot_token, {
+          expectedPrefix: 'xoxb-',
+          fieldName: 'bot_token',
+          vault: this.vault,
+        });
+        this.botToken = botToken;
+      }
+      const adapter = new SlackAdapter({ logger: this.logger });
+      const res = await adapter.sendText({ token: this.botToken!, threadId, text, descriptor: thread.channel as any });
+      return res;
+    } catch (e) {
+      let msg = 'unknown_error';
+      if (typeof e === 'object' && e !== null && 'message' in e) {
+        const mVal = (e as { message?: unknown }).message;
+        if (typeof mVal === 'string' && mVal) msg = mVal;
+      }
+      this.logger.error('SlackTrigger.sendToThread failed', { threadId, error: msg });
+      return { ok: false, error: msg };
+    }
   }
 }
