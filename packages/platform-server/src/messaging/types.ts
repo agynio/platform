@@ -1,5 +1,4 @@
 import { z } from 'zod';
-import type { LoggerService } from '../core/services/logger.service';
 
 // Slack-only channel descriptor
 // thread_ts is optional (omit if not present)
@@ -25,4 +24,3 @@ export type SendResult = {
 };
 
 // Adapters are provided via DI; no custom deps bags or adapter interfaces needed for v1.
-
