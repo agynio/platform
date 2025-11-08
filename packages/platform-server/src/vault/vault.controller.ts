@@ -31,7 +31,7 @@ export class VaultController {
   async readKv(@Param('mount') mount: string, @Query() query: KvReadQueryDto): Promise<{ value: string } | { error: string }> {
     try {
       const val = await this.vaultService.getSecret({ mount, path: query.path, key: query.key });
-      if (val == null) throw new HttpException({ error: 'vault_read_missing' }, 404);
+      if (val == null) throw new HttpException({ error: 'vault_read_failed' }, 404);
       return { value: val };
     } catch (e: unknown) {
       const status = statusCodeFrom(e);
