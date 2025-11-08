@@ -91,8 +91,8 @@ Persistent conversation state (Prisma)
   - `pnpm --filter @agyn/platform-server prisma:generate`
 - For production deployments, apply migrations with `prisma migrate deploy` as part of your release process.
 
-Messaging
+Messaging (Slack-only v1)
 
-- New `send_message` tool routes replies to the origin channel using a stored `ChannelDescriptor` on `Thread`.
-// Slack adapter: token is provided at runtime via SlackTrigger; no global env tokens needed.
-- Legacy `send_slack_message` remains functional; prefer `send_message` when `Thread.channel` is present.
+- `send_message` routes replies to Slack using `Thread.channel` (descriptor written by `SlackTrigger`).
+- SlackTrigger provides a bot token at runtime per thread; no global Slack config or tokens.
+- No other adapters are supported in v1; attachments/ephemeral not supported.
