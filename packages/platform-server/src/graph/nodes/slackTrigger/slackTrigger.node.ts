@@ -227,8 +227,13 @@ export class SlackTrigger extends Node<SlackTriggerConfig> {
         });
         this.botToken = botToken;
       }
+      const parsed = ChannelDescriptorSchema.safeParse(thread.channel as unknown);
+      if (!parsed.success) {
+        this.logger.error('SlackTrigger.sendToThread: invalid descriptor', { threadId });
+        return { ok: false, error: 'invalid_channel_descriptor' };
+      }
       const adapter = new SlackAdapter({ logger: this.logger });
-      const res = await adapter.sendText({ token: this.botToken!, threadId, text, descriptor: thread.channel as any });
+      const res = await adapter.sendText({ token: this.botToken!, threadId, text, descriptor: parsed.data });
       return res;
     } catch (e) {
       let msg = 'unknown_error';
