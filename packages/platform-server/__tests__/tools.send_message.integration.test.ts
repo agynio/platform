@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { SendMessageFunctionTool } from '../src/graph/nodes/tools/send_message/send_message.tool';
 import { LoggerService } from '../src/core/services/logger.service';
-import { PrismaService } from '../src/core/services/prisma.service';
+// Avoid importing PrismaService to prevent prisma client load
 import { SlackTrigger } from '../src/graph/nodes/slackTrigger/slackTrigger.node';
 import type { VaultRef } from '../src/vault/vault.service';
 
@@ -17,7 +17,7 @@ vi.mock('@slack/web-api', () => {
 
 describe('send_message tool', () => {
   it('returns error when descriptor missing', async () => {
-    const prismaStub = { getClient: () => ({ thread: { findUnique: async () => ({ channel: null }) } }) } as unknown as PrismaService;
+    const prismaStub = { getClient: () => ({ thread: { findUnique: async () => ({ channel: null }) } }) } as any;
     const vaultMock: { getSecret: (ref: VaultRef) => Promise<string | undefined> } = { getSecret: async () => undefined };
     const trigger = new SlackTrigger(new LoggerService(), vaultMock as unknown as import('../src/vault/vault.service').VaultService, {} as any, prismaStub);
     await trigger.setConfig({ app_token: { value: 'xapp-abc', source: 'static' }, bot_token: { value: 'xoxb-abc', source: 'static' } });
@@ -31,7 +31,7 @@ describe('send_message tool', () => {
   it('sends via slack adapter when descriptor present', async () => {
     // Configure trigger-scoped token
     const descriptor = { type: 'slack', identifiers: { channel: 'C1' }, meta: {}, version: 1 };
-    const prismaStub2 = { getClient: () => ({ thread: { findUnique: async () => ({ channel: descriptor }) } }) } as unknown as PrismaService;
+    const prismaStub2 = { getClient: () => ({ thread: { findUnique: async () => ({ channel: descriptor }) } }) } as any;
     const vaultMock: { getSecret: (ref: VaultRef) => Promise<string | undefined> } = { getSecret: async () => 'xoxb-abc' };
     const trigger = new SlackTrigger(new LoggerService(), vaultMock as unknown as import('../src/vault/vault.service').VaultService, {} as any, prismaStub2);
     await trigger.setConfig({ app_token: { value: 'xapp-abc', source: 'static' }, bot_token: { value: 'xoxb-abc', source: 'vault' } });

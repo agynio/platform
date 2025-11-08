@@ -22,8 +22,16 @@ declare module '@slack/socket-mode' {
   export function __getLastSocketClient(): { handlers: Record<string, Array<(...args: unknown[]) => unknown>> } | null;
 }
 import { SlackTrigger } from '../src/graph/nodes/slackTrigger/slackTrigger.node';
-import { SlackRuntimeRegistry } from '../src/messaging/slack/runtime.registry';
 import { __getLastSocketClient } from '@slack/socket-mode';
+// Mock PrismaService to avoid loading @prisma/client in unit tests
+vi.mock('../src/core/services/prisma.service', () => {
+  class PrismaServiceMock {
+    getClient() {
+      return { thread: { findUnique: async () => ({ channel: null }) } };
+    }
+  }
+  return { PrismaService: PrismaServiceMock };
+});
 // Avoid importing AgentsPersistenceService to prevent @prisma/client load in unit tests
 // We pass a stub object where needed.
 
@@ -48,8 +56,8 @@ describe('SlackTrigger events', () => {
     const logger = makeLogger();
     const vault = { getSecret: async (ref: unknown) => (String(ref).includes('APP') ? 'xapp-abc' : 'xoxb-bot') } as any;
     const persistence = { getOrCreateThreadByAlias: async () => 't-slack', updateThreadChannelDescriptor: async () => undefined } as any;
-    const runtime = new SlackRuntimeRegistry();
-    const trig = new SlackTrigger(logger as unknown as LoggerService, vault as any, persistence as any, runtime);
+    const prismaStub = { getClient: () => ({ thread: { findUnique: async () => ({ channel: null }) } }) } as any;
+    const trig = new SlackTrigger(logger as unknown as LoggerService, vault as any, persistence as any, prismaStub);
     await trig.setConfig({ app_token: { value: 'xapp-abc', source: 'static' }, bot_token: { value: 'xoxb-bot', source: 'static' } });
     // Subscribe a listener
     const received: any[] = [];
@@ -77,8 +85,8 @@ describe('SlackTrigger events', () => {
     const logger = makeLogger();
     const vault = { getSecret: vi.fn(async () => { throw new Error('vault disabled'); }) } as any;
     const persistence = { getOrCreateThreadByAlias: async () => 't-slack' } as any;
-    const runtime = new SlackRuntimeRegistry();
-    const trig = new SlackTrigger(logger as unknown as LoggerService, vault as any, persistence as any, runtime);
+    const prismaStub = { getClient: () => ({ thread: { findUnique: async () => ({ channel: null }) } }) } as any;
+    const trig = new SlackTrigger(logger as unknown as LoggerService, vault as any, persistence as any, prismaStub);
     await trig.setConfig({ app_token: { value: 'secret/slack/APP', source: 'vault' }, bot_token: { value: 'secret/slack/BOT', source: 'vault' } });
     await trig.provision();
     expect(trig.status).toBe('provisioning_error');
@@ -88,8 +96,8 @@ describe('SlackTrigger events', () => {
     const logger = makeLogger();
     const vault = { isEnabled: () => true, getSecret: vi.fn(async () => 'xapp-from-vault') } as any;
     const persistence = { getOrCreateThreadByAlias: async () => 't-slack' } as any;
-    const runtime = new SlackRuntimeRegistry();
-    const trig = new SlackTrigger(logger as unknown as LoggerService, vault as any, persistence as any, runtime);
+    const prismaStub = { getClient: () => ({ thread: { findUnique: async () => ({ channel: null }) } }) } as any;
+    const trig = new SlackTrigger(logger as unknown as LoggerService, vault as any, persistence as any, prismaStub);
     await trig.setConfig({ app_token: { value: 'secret/slack/APP', source: 'vault' }, bot_token: { value: 'xoxb-bot', source: 'static' } });
     await trig.provision();
     // Ensure a client was created by the trigger
@@ -100,8 +108,8 @@ describe('SlackTrigger events', () => {
     const logger = makeLogger();
     const vault = { isEnabled: () => true, getSecret: vi.fn(async () => 'xoxb-wrong') } as any;
     const persistence = { getOrCreateThreadByAlias: async () => 't-slack' } as any;
-    const runtime = new SlackRuntimeRegistry();
-    const trig = new SlackTrigger(logger as unknown as LoggerService, vault as any, persistence as any, runtime);
+    const prismaStub = { getClient: () => ({ thread: { findUnique: async () => ({ channel: null }) } }) } as any;
+    const trig = new SlackTrigger(logger as unknown as LoggerService, vault as any, persistence as any, prismaStub);
     await trig.setConfig({ app_token: { value: 'secret/slack/APP', source: 'vault' }, bot_token: { value: 'xoxb-bot', source: 'static' } });
     await trig.provision();
     expect(trig.status).toBe('provisioning_error');

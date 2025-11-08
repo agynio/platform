@@ -35,6 +35,7 @@ import { MemoryNode } from './nodes/memory/memory.node';
 import { MemoryConnectorNode } from './nodes/memoryConnector/memoryConnector.node';
 import { WorkspaceNode } from './nodes/workspace/workspace.node';
 import { SlackTrigger } from './nodes/slackTrigger/slackTrigger.node';
+import { PrismaService } from '../core/services/prisma.service';
 import { LocalMCPServerNode } from './nodes/mcp';
 import { ManageToolNode } from './nodes/tools/manage/manage.node';
 import { ManageFunctionTool } from './nodes/tools/manage/manage.tool';
@@ -118,6 +119,8 @@ import { AgentsRemindersController } from '../agents/reminders.controller';
     // Centralized threads metrics aggregator
     ThreadsMetricsService,
     AgentsPersistenceService,
+    // Provide string token for PrismaService so SlackTrigger can inject without importing the module in tests
+    { provide: 'PrismaService', useExisting: PrismaService },
 
     //////// Nodes
 

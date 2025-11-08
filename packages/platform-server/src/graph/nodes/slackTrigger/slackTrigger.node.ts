@@ -9,7 +9,7 @@ import { BufferMessage } from '../agent/messagesBuffer';
 import { HumanMessage } from '@agyn/llm';
 import { stringify as YamlStringify } from 'yaml';
 import { AgentsPersistenceService } from '../../../agents/agents.persistence.service';
-import { PrismaService } from '../../../core/services/prisma.service';
+import type { PrismaService } from '../../../core/services/prisma.service';
 import { SlackAdapter } from '../../../messaging/slack/slack.adapter';
 import type { SendResult } from '../../../messaging/types';
 
@@ -36,7 +36,7 @@ export class SlackTrigger extends Node<SlackTriggerConfig> {
     @Inject(LoggerService) protected readonly logger: LoggerService,
     @Inject(VaultService) protected readonly vault: VaultService,
     @Inject(AgentsPersistenceService) private readonly persistence: AgentsPersistenceService,
-    @Inject(PrismaService) private readonly prismaService: PrismaService,
+    @Inject('PrismaService') private readonly prismaService: PrismaService,
   ) {
     super(logger);
   }
