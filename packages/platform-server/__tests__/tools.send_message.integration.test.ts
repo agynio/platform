@@ -20,7 +20,11 @@ vi.mock('@slack/web-api', () => {
 describe('send_message tool', () => {
   it('returns error when descriptor missing', async () => {
     const prismaStub = { getClient: () => ({ thread: { findUnique: async () => ({ channel: null, channelVersion: null }) } }) } as unknown as PrismaService;
-    const tool = new SendMessageFunctionTool(new LoggerService(), { getSecret: async () => null } as any, prismaStub, new ConfigService().init({} as any));
+    // Minimal env to satisfy ConfigService schema
+    process.env.LLM_PROVIDER = process.env.LLM_PROVIDER || 'openai';
+    process.env.MONGODB_URL = process.env.MONGODB_URL || 'mongodb://localhost:27017/test';
+    process.env.AGENTS_DATABASE_URL = process.env.AGENTS_DATABASE_URL || 'mongodb://localhost:27017/agents';
+    const tool = new SendMessageFunctionTool(new LoggerService(), { getSecret: async () => null } as any, prismaStub, ConfigService.fromEnv());
     const res = await tool.execute({ text: 'hello' } as any, { threadId: 't1' } as any);
     const obj = JSON.parse(res);
     expect(obj.ok).toBe(false);
@@ -28,6 +32,11 @@ describe('send_message tool', () => {
   });
 
   it('sends via slack adapter when descriptor present', async () => {
+    // Set env for config and slack token ref
+    process.env.LLM_PROVIDER = process.env.LLM_PROVIDER || 'openai';
+    process.env.MONGODB_URL = process.env.MONGODB_URL || 'mongodb://localhost:27017/test';
+    process.env.AGENTS_DATABASE_URL = process.env.AGENTS_DATABASE_URL || 'mongodb://localhost:27017/agents';
+    process.env.SLACK_BOT_TOKEN_REF = process.env.SLACK_BOT_TOKEN_REF || 'secret/slack/bot_token';
     const prismaStub = { getClient: () => ({ thread: { findUnique: async () => ({ channel: { type: 'slack', identifiers: { channelId: 'C1' }, meta: {} }, channelVersion: 1 }) } }) } as unknown as PrismaService;
     const tool = new SendMessageFunctionTool(new LoggerService(), { getSecret: async () => 'xoxb-abc' } as any, prismaStub, ConfigService.fromEnv());
     const res = await tool.execute({ text: 'hello' } as any, { threadId: 't1' } as any);
