@@ -1,7 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import * as dotenv from 'dotenv';
 import { z } from 'zod';
-import { ReferenceFieldSchema } from '../../utils/refs';
 dotenv.config();
 
 export const configSchema = z.object({
