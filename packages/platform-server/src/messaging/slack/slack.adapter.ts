@@ -10,6 +10,7 @@ export class SlackAdapter implements ChannelAdapter {
   private async resolveBotToken(): Promise<string> {
     const slackCfg: { botToken?: string | { value: string; source?: 'static' | 'vault' } } = this.deps.config.slack;
     const bot = slackCfg.botToken;
+    if (!bot) throw new Error('Slack bot token missing');
     if (typeof bot === 'string') {
       if (!bot.startsWith('xoxb-')) throw new Error('Slack bot token must start with xoxb-');
       return bot;
@@ -116,7 +117,7 @@ export class SlackAdapter implements ChannelAdapter {
     // Single retry when rate limited
     const first = await doSend();
     if (first.rateLimited && first.retryAfterMs && first.retryAfterMs > 0) {
-      await new Promise((r) => setTimeout(r, first.retryAfterMs));
+      await new Promise((r) => setTimeout(r, first.retryAfterMs ?? 0));
       const second = await doSend();
       if (!second.ok && second.error === 'rate_limited') return second; // still limited
       return second;

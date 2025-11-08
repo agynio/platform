@@ -54,9 +54,14 @@ export class SendMessageFunctionTool extends FunctionTool<typeof sendMessageInvo
       return JSON.stringify({ ok: false, error: 'invalid_channel_descriptor' });
     }
     const descriptor = parsed.data;
+    const adapterLogger = {
+      info: (...args: unknown[]) => this.logger.info(...(args as unknown[])),
+      error: (...args: unknown[]) => this.logger.error(...(args as unknown[])),
+      debug: (...args: unknown[]) => this.logger.debug?.(...(args as unknown[])),
+    };
     const adapter = ChannelAdapterRegistry.getAdapter(descriptor, {
-      logger: this.logger,
-      vault: this.vault,
+      logger: adapterLogger,
+      vault: { getSecret: (ref) => this.vault.getSecret(ref) },
       config: { slack: this.config.slack },
     });
     this.logger.info('SendMessage: adapter selected', { type: descriptor.type, threadId });

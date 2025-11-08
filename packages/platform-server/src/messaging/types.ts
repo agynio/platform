@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import type { VaultRef } from '../../vault/vault.service';
+import type { VaultRef } from '../vault/vault.service';
 
 // Channel descriptor variants
 export const SlackIdentifiersSchema = z
@@ -36,7 +36,7 @@ export const ChannelDescriptorSchema = z
       InternalChatIdentifiersSchema,
       DiscordIdentifiersSchema,
     ]),
-    meta: z.record(z.unknown()).default({}),
+    meta: z.record(z.string(), z.unknown()).default({}),
     createdBy: z.string().optional(),
     version: z.number().int().optional(),
   })
