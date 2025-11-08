@@ -13,6 +13,12 @@ export class LoggerService {
     tracingLogger().debug(`${message}\n${this.serialize(optionalParams)}`);
   }
 
+  warn(message: string, ...optionalParams: unknown[]) {
+    console.warn(`[WARN] ${message}`, ...optionalParams);
+    // tracing logger lacks warn(); map to info to avoid runtime errors
+    tracingLogger().info(`${message}\n${this.serialize(optionalParams)}`);
+  }
+
   error(message: string, ...optionalParams: unknown[]) {
     console.error(`[ERROR] ${message}`, ...optionalParams);
     tracingLogger().error(`${message}\n${this.serialize(optionalParams)}`);

@@ -341,29 +341,16 @@ export class WorkspaceNode extends Node<ContainerProviderStaticConfig> {
   }
 
   private async failFastIfDinDExited(dind: ContainerHandle): Promise<void> {
+    // Typed guard around Docker inspect; tests may stub ContainerService minimally.
     try {
-      const maybeSvc: unknown = this.containerService;
-      interface DockerLike {
-        getContainer(id: string): { inspect(): Promise<unknown> };
-      }
-      interface DockerProvider {
-        getDocker(): DockerLike;
-      }
-      const hasGetDocker =
-        typeof maybeSvc === 'object' &&
-        maybeSvc !== null &&
-        'getDocker' in maybeSvc &&
-        typeof (maybeSvc as { getDocker?: unknown }).getDocker === 'function';
-      if (!hasGetDocker) return;
-      const docker = (maybeSvc as DockerProvider).getDocker();
-      const inspect = (await docker.getContainer(dind.id).inspect()) as {
-        State?: { Running?: boolean; Status?: string };
-      };
-      const state = inspect?.State;
+      const docker = this.containerService.getDocker();
+      const inspect = await docker.getContainer(dind.id).inspect();
+      const state = (inspect as { State?: { Running?: boolean; Status?: string } }).State;
       if (state && state.Running === false) {
         throw new Error(`DinD sidecar exited unexpectedly: status=${state.Status}`);
       }
     } catch (e) {
+      // On missing methods or errors, surface a typed error
       throw e instanceof Error ? e : new Error('DinD sidecar exited unexpectedly');
     }
   }

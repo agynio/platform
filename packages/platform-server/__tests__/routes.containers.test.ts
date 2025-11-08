@@ -1,7 +1,8 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import Fastify from 'fastify';
 import { ContainersController, ListContainersQueryDto } from '../src/infra/container/containers.controller';
-import type { PrismaService } from '../src/core/services/prisma.service';
+import type { PrismaClient } from '@prisma/client';
+import type { FastifyInstance } from 'fastify';
 
 type Row = {
   containerId: string;
@@ -12,6 +13,7 @@ type Row = {
   lastUsedAt: Date;
   killAfterAt: Date | null;
   nodeId?: string;
+  metadata?: { labels?: Record<string, string> } | null;
 };
 
 type SortOrder = 'asc' | 'desc';
@@ -30,14 +32,16 @@ type ContainerSelect = {
   createdAt?: boolean;
   lastUsedAt?: boolean;
   killAfterAt?: boolean;
+  metadata?: boolean;
 };
 type FindManyArgs = { where?: ContainerWhereInput; orderBy?: ContainerOrderByInput; select?: ContainerSelect; take?: number };
 type SelectedRow = { containerId: string; threadId: string | null; image: string; status: Row['status']; createdAt: Date; lastUsedAt: Date; killAfterAt: Date | null };
+type SelectedRowWithMeta = SelectedRow & { metadata?: Row['metadata'] };
 
 class InMemoryPrismaClient {
   container = {
     rows: [] as Row[],
-    async findMany(args: FindManyArgs): Promise<SelectedRow[]> {
+    async findMany(args: FindManyArgs): Promise<SelectedRowWithMeta[]> {
       const where = args?.where || {};
       let items = this.rows.slice();
       if (where.status) items = items.filter((r) => r.status === where.status);
@@ -60,23 +64,25 @@ class InMemoryPrismaClient {
         createdAt: r.createdAt,
         lastUsedAt: r.lastUsedAt,
         killAfterAt: r.killAfterAt,
+        metadata: r.metadata,
       }));
     },
   };
 }
 
-type MinimalPrismaClient = { container: { findMany(args: FindManyArgs): Promise<SelectedRow[]>; rows: Row[] } };
+type MinimalPrismaClient = { container: { findMany(args: FindManyArgs): Promise<SelectedRowWithMeta[]>; rows: Row[] } };
 class PrismaStub {
   client: MinimalPrismaClient = new InMemoryPrismaClient();
-  getClient(): MinimalPrismaClient { return this.client; }
+  // Strict typing to match controller signature; cast internally
+  getClient(): PrismaClient { return this.client as unknown as PrismaClient; }
 }
 
 describe('ContainersController routes', () => {
-  let fastify: any; let prismaSvc: PrismaStub; let controller: ContainersController;
+  let fastify: FastifyInstance; let prismaSvc: PrismaStub; let controller: ContainersController;
 
   beforeEach(async () => {
     fastify = Fastify({ logger: false }); prismaSvc = new PrismaStub();
-    controller = new ContainersController(prismaSvc as PrismaService);
+    controller = new ContainersController(prismaSvc);
     // Typed query adapter to avoid any/double assertions
     const isStatus = (v: unknown): v is Row['status'] =>
       typeof v === 'string' && ['running', 'stopped', 'terminating', 'failed'].includes(v);
@@ -107,14 +113,30 @@ describe('ContainersController routes', () => {
       createdAt: new Date(now - i * 1000),
       lastUsedAt: new Date(now - i * 500),
       killAfterAt: i % 2 === 0 ? new Date(now + 10000 + i) : null,
+      metadata: i === 1 ? { labels: { 'hautech.ai/role': 'workspace' } } : null,
     });
-    const rows: Row[] = [mk(1, 'running', '11111111-1111-1111-1111-111111111111'), mk(2, 'running', null), mk(3, 'stopped', null)];
+    const rows: Row[] = [
+      mk(1, 'running', '11111111-1111-1111-1111-111111111111'),
+      mk(2, 'running', null),
+      mk(3, 'stopped', null),
+      // DinD sidecar for cid-1
+      {
+        containerId: 'sidecar-1',
+        threadId: '11111111-1111-1111-1111-111111111111',
+        image: 'dind:latest',
+        status: 'running',
+        createdAt: new Date(now - 4000),
+        lastUsedAt: new Date(now - 2000),
+        killAfterAt: null,
+        metadata: { labels: { 'hautech.ai/role': 'dind', 'hautech.ai/parent_cid': 'cid-1' } },
+      },
+    ];
     prismaSvc.client.container.rows = rows;
   });
 
   it('lists running containers by default and maps startedAt', async () => {
     const res = await fastify.inject({ method: 'GET', url: '/api/containers' }); expect(res.statusCode).toBe(200);
-    type ContainerTestItem = { containerId: string; threadId: string | null; image: string; status: string; startedAt: string; lastUsedAt: string; killAfterAt: string | null };
+    type ContainerTestItem = { containerId: string; threadId: string | null; image: string; status: string; startedAt: string; lastUsedAt: string; killAfterAt: string | null; role: string; sidecars?: Array<{ containerId: string; role: string; image: string; status: string }> };
     type ListResponse = { items: ContainerTestItem[] };
     const body = res.json() as ListResponse;
     const items = body.items;
@@ -125,6 +147,11 @@ describe('ContainersController routes', () => {
     // verify mapping equals underlying createdAt ISO
     const src = prismaSvc.client.container.rows.find((r) => r.containerId === first.containerId)!;
     expect(first.startedAt).toBe(src.createdAt.toISOString());
+    // role should default/workspace
+    expect(first.role).toBe('workspace');
+    // sidecars for cid-1 include a dind
+    expect(first.sidecars && first.sidecars.length).toBeGreaterThan(0);
+    expect(first.sidecars![0]).toMatchObject({ containerId: 'sidecar-1', role: 'dind', image: 'dind:latest', status: 'running' });
   });
 
   it('supports sorting by lastUsedAt desc', async () => {

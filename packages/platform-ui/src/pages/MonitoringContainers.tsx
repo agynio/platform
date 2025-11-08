@@ -1,13 +1,28 @@
+import React from 'react';
 import { useContainers } from '@/api/hooks/containers';
-import { Table, Thead, Tbody, Tr, Th, Td, Button } from '@agyn/ui';
+import { Table, Thead, Tbody, Tr, Th, Td, Button, Input, Tooltip, TooltipTrigger, TooltipContent } from '@agyn/ui';
 import { Link } from 'react-router-dom';
+import { useEffect, useState } from 'react';
+import { validate as validateUuid } from 'uuid';
 
 export function MonitoringContainers() {
   const status = 'running';
   const sortBy = 'lastUsedAt';
   const sortDir = 'desc';
 
-  const listQ = useContainers(status, sortBy, sortDir);
+  const [threadFilter, setThreadFilter] = useState('');
+  const [debouncedThreadId, setDebouncedThreadId] = useState<string | undefined>(undefined);
+
+  // Debounce thread filter input and only pass valid UUID to query
+  useEffect(() => {
+    const h = setTimeout(() => {
+      const v = threadFilter.trim();
+      setDebouncedThreadId(validateUuid(v) ? v : undefined);
+    }, 300);
+    return () => clearTimeout(h);
+  }, [threadFilter]);
+
+  const listQ = useContainers(status, sortBy, sortDir, debouncedThreadId);
 
   const items = listQ.data?.items || [];
   // Ensure client-side default sort by lastUsedAt desc
@@ -17,7 +32,21 @@ export function MonitoringContainers() {
     <div className="p-4">
       <div className="flex items-center justify-between mb-3">
         <h1 className="text-xl font-semibold">Monitoring / Containers</h1>
-        <Button onClick={() => listQ.refetch()} variant="outline" size="sm">Refresh</Button>
+        <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2">
+            <Input
+              className="w-64"
+              placeholder="Filter by Thread ID (UUID)"
+              value={threadFilter}
+              onChange={(e) => setThreadFilter(e.target.value)}
+              aria-invalid={!!threadFilter && !validateUuid(threadFilter.trim())}
+            />
+            {threadFilter && (
+              <Button variant="ghost" size="sm" onClick={() => setThreadFilter('')}>Clear</Button>
+            )}
+          </div>
+          <Button onClick={() => listQ.refetch()} variant="outline" size="sm">Refresh</Button>
+        </div>
       </div>
       {listQ.isLoading && <div className="text-sm text-muted-foreground">Loading…</div>}
       {listQ.error && (
@@ -34,6 +63,7 @@ export function MonitoringContainers() {
                 <Th>containerId</Th>
                 <Th>threadId</Th>
                 <Th>image</Th>
+                <Th>role</Th>
                 <Th>status</Th>
                 <Th>startedAt</Th>
                 <Th>lastUsedAt</Th>
@@ -42,8 +72,14 @@ export function MonitoringContainers() {
             </Thead>
             <Tbody>
               {sorted.map((c) => (
-                <Tr key={c.containerId}>
-                  <Td className="font-mono text-xs">{c.containerId}</Td>
+                <React.Fragment key={c.containerId}>
+                <Tr>
+                  <Td className="font-mono text-xs">
+                    <div className="flex items-center gap-2">
+                      <span>{c.containerId.substring(0, 8)}</span>
+                      <CopyButton ariaLabel="Copy full container id" text={c.containerId} />
+                    </div>
+                  </Td>
                   <Td className="font-mono text-xs">
                     {c.threadId ? (
                       <Link className="underline" to={`/tracing/thread/${c.threadId}`}>{c.threadId}</Link>
@@ -52,16 +88,70 @@ export function MonitoringContainers() {
                     )}
                   </Td>
                   <Td className="font-mono text-xs">{c.image}</Td>
+                  <Td><span className="inline-flex items-center rounded bg-muted px-2 py-0.5 text-xs">{c.role}</span></Td>
                   <Td>{c.status}</Td>
                   <Td>{new Date(c.startedAt).toLocaleString()}</Td>
                   <Td>{new Date(c.lastUsedAt).toLocaleString()}</Td>
                   <Td>{c.killAfterAt ? new Date(c.killAfterAt).toLocaleString() : '-'}</Td>
                 </Tr>
+                <Tr key={`${c.containerId}-sidecars`}>
+                  <Td colSpan={8}>
+                    <div className="flex items-center gap-2 pl-4">
+                      <span className="text-xs text-muted-foreground">Sidecars:</span>
+                      {Array.isArray(c.sidecars) && c.sidecars.length > 0 ? (
+                        <div className="flex items-center gap-2">
+                          {c.sidecars.map((s) => (
+                            <div key={s.containerId} className="inline-flex items-center gap-2 rounded border px-2 py-1">
+                              <span className="text-xs rounded bg-muted px-1">{s.role}</span>
+                              <span className="font-mono text-xs">{s.containerId.substring(0, 8)}</span>
+                              <CopyButton ariaLabel={`Copy sidecar ${s.containerId}`} text={s.containerId} />
+                              <span className="text-xs">{s.status}</span>
+                              {s.image && <span className="text-xs text-muted-foreground">{s.image}</span>}
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <span className="text-xs text-muted-foreground">(none)</span>
+                      )}
+                    </div>
+                  </Td>
+                </Tr>
+                </React.Fragment>
               ))}
             </Tbody>
           </Table>
         </div>
       )}
     </div>
+  );
+}
+function CopyButton({ text, ariaLabel }: { text: string; ariaLabel: string }) {
+  const [copied, setCopied] = useState(false);
+  useEffect(() => {
+    if (!copied) return;
+    const t = setTimeout(() => setCopied(false), 800);
+    return () => clearTimeout(t);
+  }, [copied]);
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <Button
+          aria-label={ariaLabel}
+          variant="ghost"
+          size="sm"
+          className="h-6 px-2"
+          onClick={async () => {
+            try {
+              await navigator.clipboard.writeText(text);
+              setCopied(true);
+            } catch (err) {
+              // Log rather than mute so failures are observable during dev
+              console.warn('clipboard write failed', err);
+            }
+          }}
+        >Copy</Button>
+      </TooltipTrigger>
+      {copied && <TooltipContent>Copied!</TooltipContent>}
+    </Tooltip>
   );
 }

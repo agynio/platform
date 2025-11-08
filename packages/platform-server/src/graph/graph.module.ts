@@ -24,6 +24,7 @@ import { LiveGraphRuntime } from './liveGraph.manager';
 import { PortsRegistry } from './ports.registry';
 import { TemplateRegistry } from './templateRegistry';
 import { EnvModule } from '../env/env.module';
+import { EnvService } from '../env/env.service';
 import { NodeStateService } from './nodeState.service';
 import { GraphSocketGateway } from '../gateway/graph.socket.gateway';
 import { GraphEventsPublisher } from '../gateway/graph.events.publisher';
@@ -124,7 +125,17 @@ import { AgentsRemindersController } from '../agents/reminders.controller';
     AgentNode,
     MemoryNode,
     MemoryConnectorNode,
-    WorkspaceNode,
+    {
+      provide: WorkspaceNode,
+      useFactory: (
+        containerService: ContainerService,
+        configService: ConfigService,
+        ncpsKeyService: NcpsKeyService,
+        logger: LoggerService,
+        envService: EnvService,
+      ) => new WorkspaceNode(containerService, configService, ncpsKeyService, logger, envService),
+      inject: [ContainerService, ConfigService, NcpsKeyService, LoggerService, EnvService],
+    },
     SlackTrigger,
     // mcp
     LocalMCPServerNode,

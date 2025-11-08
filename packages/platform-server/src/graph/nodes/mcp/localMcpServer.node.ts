@@ -608,21 +608,45 @@ export class LocalMCPServerNode extends Node<z.infer<typeof LocalMcpServerStatic
     }
   }
   private async cleanTempDinDSidecars(tempContainerId: string): Promise<void> {
-    const dinds = await this.containerService.findContainersByLabels(
-      { 'hautech.ai/role': 'dind', 'hautech.ai/parent_cid': tempContainerId },
-      { all: true },
-    );
+    type DindLike = {
+      id?: string;
+      stop?: (timeout?: number) => Promise<void>;
+      remove?: (force?: boolean) => Promise<void>;
+    };
+    let dinds: DindLike[] = [];
+    try {
+      const found = await this.containerService.findContainersByLabels(
+        { 'hautech.ai/role': 'dind', 'hautech.ai/parent_cid': tempContainerId },
+        { all: true },
+      );
+      dinds = Array.isArray(found) ? found : [];
+    } catch (e) {
+      // In tests, ContainerService may be a minimal stub; guard TypeErrors
+      this.logger.warn(`[MCP:${this.config.namespace}] DinD cleanup: findContainersByLabels failed: ${String(e)}`);
+      return;
+    }
     if (!Array.isArray(dinds) || dinds.length === 0) return;
     const results = await Promise.allSettled(
-      dinds.map(async (d) => {
+      dinds.map(async (d: DindLike) => {
+        const id: string | undefined = typeof d.id === 'string' ? d.id : undefined;
+        // Stop
         try {
-          await d.stop(5);
+          if (typeof d.stop === 'function') await d.stop(5);
+          else if (id) {
+            const docker = this.containerService.getDocker();
+            await docker.getContainer(id).stop({ t: 5 } as { t?: number });
+          }
         } catch (e: unknown) {
           const sc = (e as { statusCode?: number } | undefined)?.statusCode;
           if (sc !== 304 && sc !== 404 && sc !== 409) throw e;
         }
+        // Remove
         try {
-          await d.remove(true);
+          if (typeof d.remove === 'function') await d.remove(true);
+          else if (id) {
+            const docker = this.containerService.getDocker();
+            await docker.getContainer(id).remove({ force: true } as { force?: boolean });
+          }
           return true as const;
         } catch (e: unknown) {
           const sc = (e as { statusCode?: number } | undefined)?.statusCode;

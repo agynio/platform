@@ -186,24 +186,22 @@ export class ContainerService {
     await container.start();
     const inspect = await container.inspect();
     this.logger.info(`Container started cid=${inspect.Id.substring(0, 12)} status=${inspect.State?.Status}`);
-    // Persist workspace containers in registry
+    // Persist container start in registry (workspace and DinD)
     if (this.registry) {
       try {
         const labels = inspect.Config?.Labels || {};
-        if (labels['hautech.ai/role'] === 'workspace') {
-          const nodeId = labels['hautech.ai/node_id'] || 'unknown';
-          const threadId = labels['hautech.ai/thread_id'] || '';
-          await this.registry.registerStart({
-            containerId: inspect.Id,
-            nodeId,
-            threadId,
-            image: optsWithDefaults.image!,
-            providerType: 'docker',
-            labels,
-            platform: optsWithDefaults.platform,
-            ttlSeconds: optsWithDefaults.ttlSeconds,
-          });
-        }
+        const nodeId = labels['hautech.ai/node_id'] || 'unknown';
+        const threadId = labels['hautech.ai/thread_id'] || '';
+        await this.registry.registerStart({
+          containerId: inspect.Id,
+          nodeId,
+          threadId,
+          image: optsWithDefaults.image!,
+          providerType: 'docker',
+          labels,
+          platform: optsWithDefaults.platform,
+          ttlSeconds: optsWithDefaults.ttlSeconds,
+        });
       } catch (e) {
         this.logger.error('Failed to register container start', e);
       }
@@ -720,11 +718,13 @@ export class ContainerService {
     return this.docker;
   }
 
-  /** Backfill container registry from current Docker state (workspaces only). */
+  /** Backfill container registry from current Docker state (workspace and DinD). */
   private async backfillFromDocker(): Promise<void> {
     this.logger.info('ContainerService: backfilling registry from Docker');
     try {
-      const list = await this.findContainersByLabels({ 'hautech.ai/role': 'workspace' }, { all: true });
+      const workspaces = await this.findContainersByLabels({ 'hautech.ai/role': 'workspace' }, { all: true });
+      const dinds = await this.findContainersByLabels({ 'hautech.ai/role': 'dind' }, { all: true }).catch(() => []);
+      const list = [...workspaces, ...dinds];
       const nowIso = new Date().toISOString();
       const concurrency = 5;
       let index = 0;
@@ -734,10 +734,9 @@ export class ContainerService {
         if (!item) return;
         try {
           const labels = await this.getContainerLabels(item.id);
-          if (labels && labels['hautech.ai/role'] !== 'workspace') return;
-      const nodeId = labels?.['hautech.ai/node_id'] || 'unknown';
-      const threadId = labels?.['hautech.ai/thread_id'] || '';
-      const inspect = await this.docker.getContainer(item.id).inspect();
+          const nodeId = labels?.['hautech.ai/node_id'] || 'unknown';
+          const threadId = labels?.['hautech.ai/thread_id'] || '';
+          const inspect = await this.docker.getContainer(item.id).inspect();
           // created retained for future use; eslint-disable to prevent warning
           // eslint-disable-next-line @typescript-eslint/no-unused-vars
           const created = inspect?.Created ? new Date(inspect.Created).toISOString() : nowIso;
