@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import type { PersistedGraph } from '@agyn/shared';
-import { computeRequiredKeys } from '../../vault/required';
+import { computeRequiredKeys } from '@/api/modules/graph';
 
 describe('computeRequiredKeys', () => {
   it('extracts mount/path/key from ReferenceField and env arrays', () => {
@@ -46,4 +46,3 @@ describe('computeRequiredKeys', () => {
     expect(gh.length).toBe(1);
   });
 });
-

@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { unionWithPresence } from '../../vault/union';
-import type { SecretKey } from '../../vault/types';
+import { computeSecretsUnion } from '@/api/modules/graph';
+import type { SecretKey } from '@/api/modules/graph';
 
 describe('unionWithPresence', () => {
   it('marks present and required correctly and computes union', () => {
@@ -13,7 +13,7 @@ describe('unionWithPresence', () => {
       { mount: 'secret', path: 'openai', key: 'API_KEY' },
     ];
 
-    const out = unionWithPresence(required, available);
+    const out = computeSecretsUnion(required, available);
     const by = (m: string, p: string, k: string) => out.find((e) => e.mount === m && e.path === p && e.key === k)!;
 
     expect(by('secret', 'github', 'GH_TOKEN')).toEqual({ mount: 'secret', path: 'github', key: 'GH_TOKEN', required: true, present: true });
@@ -22,4 +22,3 @@ describe('unionWithPresence', () => {
     expect(out.length).toBe(3);
   });
 });
-

@@ -1,6 +1,8 @@
 import { http } from '@/api/http';
 import type { TemplateSchema, NodeStatus, PersistedGraphUpsertRequestUI, ReminderDTO } from '@/api/types/graph';
-import type { PersistedGraph } from '@agyn/shared';
+import type { PersistedGraph, PersistedGraphNode } from '@agyn/shared';
+import { collectVaultRefs } from '@/lib/vault/collect';
+import { parseVaultRef, isValidVaultRef } from '@/lib/vault/parse';
 import axios from 'axios';
 
 // Keep normalize function identical to prior implementation
@@ -216,3 +218,47 @@ export const graph = {
 Object.defineProperty(graph, '__test_normalize', { value: normalizeConfigByTemplate });
 
 export type { PersistedGraphUpsertRequestUI };
+
+// Secrets helpers/types (authoritative definitions for Settings/Secrets)
+export type SecretKey = { mount: string; path: string; key: string };
+export type SecretEntry = SecretKey & { required: boolean; present: boolean };
+export type SecretFilter = 'used' | 'missing' | 'all';
+
+export function computeRequiredKeys(graph: PersistedGraph): SecretKey[] {
+  const uniq = new Set<string>();
+  const out: SecretKey[] = [];
+  for (const n of (graph.nodes || []) as PersistedGraphNode[]) {
+    const refs = collectVaultRefs(n.config ?? {});
+    for (const r of refs) {
+      if (!isValidVaultRef(r)) continue;
+      const p = parseVaultRef(r);
+      if (!(p.mount && p.path && p.key)) continue;
+      const id = `${p.mount}::${p.path}::${p.key}`;
+      if (uniq.has(id)) continue;
+      uniq.add(id);
+      out.push({ mount: p.mount, path: p.path, key: p.key });
+    }
+  }
+  return out;
+}
+
+export function computeSecretsUnion(required: SecretKey[], available: SecretKey[]): SecretEntry[] {
+  const reqSet = new Set(required.map((r) => `${r.mount}::${r.path}::${r.key}`));
+  const byId = new Map<string, SecretEntry>();
+
+  for (const a of available) {
+    const id = `${a.mount}::${a.path}::${a.key}`;
+    byId.set(id, { ...a, required: reqSet.has(id), present: true });
+  }
+  for (const r of required) {
+    const id = `${r.mount}::${r.path}::${r.key}`;
+    if (byId.has(id)) {
+      const e = byId.get(id)!;
+      if (!e.required) byId.set(id, { ...e, required: true });
+    } else {
+      byId.set(id, { ...r, required: true, present: false });
+    }
+  }
+
+  return Array.from(byId.values());
+}

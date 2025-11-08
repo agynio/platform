@@ -4,9 +4,8 @@ import { Button, Input, Table, Tbody, Td, Th, Thead, Tr, Tooltip, TooltipContent
 import { AlertTriangle, Eye, EyeOff, Copy } from 'lucide-react';
 import * as api from '@/api/modules/graph';
 import type { PersistedGraph } from '@agyn/shared';
-import { computeRequiredKeys } from '@/lib/vault/required';
-import { unionWithPresence } from '@/lib/vault/union';
-import type { SecretEntry, SecretFilter, SecretKey } from '@/lib/vault/types';
+import { computeRequiredKeys, computeSecretsUnion } from '@/api/modules/graph';
+import type { SecretEntry, SecretFilter, SecretKey } from '@/api/modules/graph';
 import { notifyError, notifySuccess } from '@/lib/notify';
 
 async function discoverVaultKeys(mounts: string[]): Promise<SecretKey[]> {
@@ -52,7 +51,7 @@ function useSecretsData() {
     retry: 1,
   });
 
-  const union = useMemo(() => unionWithPresence(reqKeys, availQ.data ?? []), [reqKeys, availQ.data]);
+  const union = useMemo(() => computeSecretsUnion(reqKeys, availQ.data ?? []), [reqKeys, availQ.data]);
   const missingCount = useMemo(() => union.filter((e) => e.required && !e.present).length, [union]);
   const requiredCount = reqKeys.length;
   const vaultUnavailable = Boolean(mountsQ.isError || availQ.isError || (mountsQ.data && mounts.length === 0));
