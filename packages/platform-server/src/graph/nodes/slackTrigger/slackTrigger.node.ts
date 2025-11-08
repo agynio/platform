@@ -11,7 +11,7 @@ import { stringify as YamlStringify } from 'yaml';
 import { AgentsPersistenceService } from '../../../agents/agents.persistence.service';
 import type { PrismaService } from '../../../core/services/prisma.service';
 import { SlackAdapter } from '../../../messaging/slack/slack.adapter';
-import type { SendResult } from '../../../messaging/types';
+import { ChannelDescriptorSchema, type SendResult } from '../../../messaging/types';
 
 type TriggerHumanMessage = { kind: 'human'; content: string; info?: Record<string, unknown> };
 type TriggerListener = { invoke: (thread: string, messages: BufferMessage[]) => Promise<void> };
@@ -214,8 +214,10 @@ export class SlackTrigger extends Node<SlackTriggerConfig> {
   async sendToThread(threadId: string, text: string): Promise<SendResult> {
     try {
       const prisma = this.prismaService.getClient();
-      const thread = await prisma.thread.findUnique({ where: { id: threadId }, select: { channel: true } });
-      if (!thread || !thread.channel) {
+      const thread = (await prisma.thread.findUnique({ where: { id: threadId }, select: { channel: true } })) as {
+        channel: unknown | null;
+      } | null;
+      if (!thread) {
         this.logger.error('SlackTrigger.sendToThread: missing descriptor', { threadId });
         return { ok: false, error: 'missing_channel_descriptor' };
       }
@@ -227,13 +229,19 @@ export class SlackTrigger extends Node<SlackTriggerConfig> {
         });
         this.botToken = botToken;
       }
-      const parsed = ChannelDescriptorSchema.safeParse(thread.channel as unknown);
+      const channelRaw: unknown = thread.channel as unknown;
+      if (channelRaw == null) {
+        this.logger.error('SlackTrigger.sendToThread: missing descriptor', { threadId });
+        return { ok: false, error: 'missing_channel_descriptor' };
+      }
+      const parsed = ChannelDescriptorSchema.safeParse(channelRaw);
       if (!parsed.success) {
         this.logger.error('SlackTrigger.sendToThread: invalid descriptor', { threadId });
         return { ok: false, error: 'invalid_channel_descriptor' };
       }
+      const descriptor = parsed.data;
       const adapter = new SlackAdapter({ logger: this.logger });
-      const res = await adapter.sendText({ token: this.botToken!, threadId, text, descriptor: parsed.data });
+      const res = await adapter.sendText({ token: this.botToken!, threadId, text, descriptor });
       return res;
     } catch (e) {
       let msg = 'unknown_error';
