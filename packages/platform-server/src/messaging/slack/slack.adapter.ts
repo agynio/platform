@@ -1,141 +1,68 @@
-import { WebClient, type ChatPostEphemeralResponse, type ChatPostMessageResponse } from '@slack/web-api';
+import { WebClient, type ChatPostMessageResponse } from '@slack/web-api';
 import { parseVaultRef } from '../../utils/refs';
-import type { ChannelAdapter, ChannelAdapterDeps, SendMessageOptions, SendResult } from '../types';
-import type { ChannelDescriptor } from '../types';
+import type { ChannelAdapter, ChannelAdapterDeps, SendResult, ChannelDescriptor } from '../types';
 import { SlackIdentifiersSchema } from '../types';
 
 export class SlackAdapter implements ChannelAdapter {
   constructor(private deps: ChannelAdapterDeps) {}
 
-  private async resolveBotToken(): Promise<string> {
-    const slackCfg: { botToken?: string | { value: string; source?: 'static' | 'vault' } } = this.deps.config.slack;
-    const bot = slackCfg.botToken;
-    if (!bot) throw new Error('Slack bot token missing');
+  private async resolveBotTokenFromDescriptor(desc: ChannelDescriptor): Promise<string> {
+    const bot = desc.auth.botToken;
     if (typeof bot === 'string') {
       if (!bot.startsWith('xoxb-')) throw new Error('Slack bot token must start with xoxb-');
       return bot;
     }
-    const ref = bot;
-    const source = ref.source || 'static';
+    const source = bot.source || 'static';
     if (source === 'vault') {
-      const vr = parseVaultRef(ref.value);
+      const vr = parseVaultRef(bot.value);
       const secret = await this.deps.vault.getSecret(vr);
       if (!secret) throw new Error('Vault secret for bot_token not found');
       if (!secret.startsWith('xoxb-')) throw new Error('Resolved Slack bot token is invalid (must start with xoxb-)');
       return secret;
     }
-    if (!ref.value.startsWith('xoxb-')) throw new Error('Slack bot token must start with xoxb-');
-    return ref.value;
+    if (!bot.value.startsWith('xoxb-')) throw new Error('Slack bot token must start with xoxb-');
+    return bot.value;
   }
 
-  async sendText(input: { threadId: string; text: string; descriptor: ChannelDescriptor; options?: SendMessageOptions }): Promise<SendResult> {
+  async sendText(input: { threadId: string; text: string; descriptor: ChannelDescriptor }): Promise<SendResult> {
     const { descriptor, threadId, text } = input;
-    const opts: SendMessageOptions = input.options ?? {};
     const parsedIds = SlackIdentifiersSchema.safeParse(descriptor.identifiers);
     if (!parsedIds.success) throw new Error('Slack descriptor identifiers invalid');
     const ids = parsedIds.data;
     const channel = ids.channelId;
-    const replyTs = opts.replyTo ?? ids.threadTs ?? undefined;
-    const ephemeralUser = ids.ephemeralUser ?? null;
-    // Handle attachments: currently only 'link' is supported; 'file' is not.
-    let finalText = text;
-    const links = Array.isArray(opts.attachments)
-      ? opts.attachments.filter((a) => a && a.type === 'link' && typeof a.url === 'string')
-      : [];
-    if (links.length > 0) {
-      const linkLines = links.map((l) => (l.name ? `<${l.url}|${l.name}>` : String(l.url)));
-      finalText = `${text}\n${linkLines.join('\n')}`;
-    }
-    const hasFile = Array.isArray(opts.attachments) && opts.attachments.some((a) => a && a.type === 'file');
+    const replyTs = ids.threadTs ?? undefined;
 
     this.deps.logger.info('SlackAdapter.sendText', {
       type: descriptor.type,
       threadId,
       channelId: channel,
       replyTs,
-      correlationId: opts.correlationId,
     });
 
-    const token = await this.resolveBotToken();
+    const token = await this.resolveBotTokenFromDescriptor(descriptor);
     const client = new WebClient(token, { logLevel: undefined });
-
-    const doSend = async (): Promise<SendResult> => {
-      try {
-        if (hasFile) {
-          // Not supported yet via chat.postMessage; instruct to use a dedicated upload tool.
-          return { ok: false, error: 'file_attachments_not_supported' };
-        }
-        if (ephemeralUser) {
-          const resp: ChatPostEphemeralResponse = await client.chat.postEphemeral({
-            channel,
-            user: ephemeralUser,
-            text: finalText,
-            thread_ts: replyTs,
-          });
-          if (!resp.ok) return { ok: false, error: resp.error || 'unknown_error' };
-          return { ok: true, channelMessageId: resp.message_ts ?? null, threadId: replyTs ?? null };
-        }
-        const resp: ChatPostMessageResponse = await client.chat.postMessage({
-          channel,
-          text: finalText,
-          mrkdwn: !!opts.markdown,
-          attachments: [],
-          ...(replyTs ? { thread_ts: replyTs } : {}),
-        });
-        if (!resp.ok) return { ok: false, error: resp.error || 'unknown_error' };
-        const ts: string | null = resp.ts ?? null;
-        let thread_ts: string | undefined;
-        if (resp.message && typeof resp.message === 'object') {
-          const m = resp.message as Record<string, unknown>;
-          if (typeof m.thread_ts === 'string') thread_ts = m.thread_ts;
-        }
-        const threadIdOut = thread_ts ?? replyTs ?? ts ?? null;
-        return { ok: true, channelMessageId: ts, threadId: threadIdOut };
-      } catch (e: unknown) {
-        // Detect rate limit safely via narrow property checks
-        let rateLimited = false;
-        let retryAfterMs: number | null = null;
-        if (typeof e === 'object' && e !== null) {
-          const obj = e as Record<string, unknown>;
-          const code = typeof obj.code === 'string' ? obj.code : undefined;
-          const data = obj.data as unknown;
-          const response = typeof data === 'object' && data !== null && 'response' in (data as Record<string, unknown>)
-            ? (data as Record<string, unknown>).response
-            : undefined;
-          const respObj = typeof response === 'object' && response !== null ? (response as Record<string, unknown>) : undefined;
-          const status = respObj && typeof respObj.status === 'number' ? (respObj.status as number) : undefined;
-          const headers = respObj && typeof respObj.headers === 'object' && respObj.headers !== null ? (respObj.headers as Record<string, unknown>) : undefined;
-          const retryRaw = headers
-            ? (typeof headers['retry-after'] === 'string'
-                ? (headers['retry-after'] as string)
-                : typeof headers['Retry-After'] === 'string'
-                ? (headers['Retry-After'] as string)
-                : undefined)
-            : undefined;
-          if (code === 'slack_webapi_platform_error' && status === 429) {
-            rateLimited = true;
-            const raNum = retryRaw ? Number(retryRaw) : NaN;
-            retryAfterMs = Number.isFinite(raNum) ? raNum * 1000 : null;
-          }
-        }
-        if (rateLimited) return { ok: false, error: 'rate_limited', rateLimited: true, retryAfterMs };
-        let msg = 'unknown_error';
-        if (typeof e === 'object' && e !== null && 'message' in e) {
-          const mVal = (e as { message?: unknown }).message;
-          if (typeof mVal === 'string' && mVal) msg = mVal;
-        }
-        return { ok: false, error: msg };
+    try {
+      const resp: ChatPostMessageResponse = await client.chat.postMessage({
+        channel,
+        text,
+        ...(replyTs ? { thread_ts: replyTs } : {}),
+      });
+      if (!resp.ok) return { ok: false, error: resp.error || 'unknown_error' };
+      const ts: string | null = resp.ts ?? null;
+      let thread_ts: string | undefined;
+      if (resp.message && typeof resp.message === 'object') {
+        const m = resp.message as Record<string, unknown>;
+        if (typeof m.thread_ts === 'string') thread_ts = m.thread_ts;
       }
-    };
-
-    // Single retry when rate limited
-    const first = await doSend();
-    if (first.rateLimited && first.retryAfterMs && first.retryAfterMs > 0) {
-      await new Promise((r) => setTimeout(r, first.retryAfterMs ?? 0));
-      const second = await doSend();
-      if (!second.ok && second.error === 'rate_limited') return second; // still limited
-      return second;
+      const threadIdOut = thread_ts ?? replyTs ?? ts ?? null;
+      return { ok: true, channelMessageId: ts, threadId: threadIdOut };
+    } catch (e: unknown) {
+      let msg = 'unknown_error';
+      if (typeof e === 'object' && e !== null && 'message' in e) {
+        const mVal = (e as { message?: unknown }).message;
+        if (typeof mVal === 'string' && mVal) msg = mVal;
+      }
+      return { ok: false, error: msg };
     }
-    return first;
   }
 }

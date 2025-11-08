@@ -45,11 +45,18 @@ describe('SlackTrigger events', () => {
 
   it('relays message events from socket-mode client', async () => {
     const logger = makeLogger();
+<<<<<<< HEAD
     const vault = { getSecret: async (ref: any) => (String(ref).includes('APP') ? 'xapp-abc' : 'xoxb-bot') } as any;
     const persistence = { getOrCreateThreadByAlias: async (_src: string, _alias: string, _summary: string) => 't-slack', updateThreadChannelDescriptor: async () => undefined } as unknown as AgentsPersistenceService;
     const runtime = new SlackRuntimeRegistry();
     const trig = new SlackTrigger(logger as unknown as LoggerService, vault as any, persistence, runtime);
     await trig.setConfig({ app_token: { value: 'xapp-abc', source: 'static' }, bot_token: { value: 'xoxb-bot', source: 'static' } });
+=======
+    const vault = { getSecret: async () => 'xapp-abc' } as { getSecret: (ref: import('../src/vault/vault.service').VaultRef) => Promise<string> };
+    const persistence = { getOrCreateThreadByAlias: async () => 't-slack', updateThreadChannelDescriptor: async () => undefined } as unknown as AgentsPersistenceService;
+    const trig = new SlackTrigger(logger as unknown as LoggerService, vault as unknown as import('../src/vault/vault.service').VaultService, persistence);
+    await trig.setConfig({ app_token: { value: 'xapp-abc', source: 'static' }, bot_token: { value: 'secret/slack/BOT', source: 'vault' } });
+>>>>>>> c1aed1f (refactor(messaging): Slack-only types and auth on descriptor; feat(trigger): SlackTrigger includes bot_token in Thread.channel; refactor(send_message): text-only schema, SlackAdapter direct; docs(send_message): update for Slack-only v1; test: adjust slack descriptor, adapter, trigger tests; remove registry and rate-limit tests)
     // Subscribe a listener
     const received: TriggerMessage[] = [];
     await trig.subscribe({ invoke: async (_t, msgs) => { received.push(...msgs); } });
@@ -76,10 +83,16 @@ describe('SlackTrigger events', () => {
     const logger = makeLogger();
     const vault: { getSecret: (ref: import('../src/vault/vault.service').VaultRef) => Promise<string> } = {
       getSecret: vi.fn(async () => { throw new Error('vault disabled'); }),
+<<<<<<< HEAD
     } as any;
     const persistence = { getOrCreateThreadByAlias: async (_src: string, _alias: string, _summary: string) => 't-slack' } as unknown as AgentsPersistenceService;
     const runtime = new SlackRuntimeRegistry();
     const trig = new SlackTrigger(logger as unknown as LoggerService, vault as any, persistence, runtime);
+=======
+    };
+    const persistence = { getOrCreateThreadByAlias: async () => 't-slack' } as unknown as AgentsPersistenceService;
+    const trig = new SlackTrigger(logger as unknown as LoggerService, vault as unknown as import('../src/vault/vault.service').VaultService, persistence);
+>>>>>>> c1aed1f (refactor(messaging): Slack-only types and auth on descriptor; feat(trigger): SlackTrigger includes bot_token in Thread.channel; refactor(send_message): text-only schema, SlackAdapter direct; docs(send_message): update for Slack-only v1; test: adjust slack descriptor, adapter, trigger tests; remove registry and rate-limit tests)
     await trig.setConfig({ app_token: { value: 'secret/slack/APP', source: 'vault' }, bot_token: { value: 'secret/slack/BOT', source: 'vault' } });
     await trig.provision();
     expect(trig.status).toBe('provisioning_error');
@@ -91,10 +104,16 @@ describe('SlackTrigger events', () => {
       isEnabled: () => true,
       getSecret: vi.fn(async () => 'xapp-from-vault'),
     };
+<<<<<<< HEAD
     const persistence = { getOrCreateThreadByAlias: async (_src: string, _alias: string, _summary: string) => 't-slack' } as unknown as AgentsPersistenceService;
     const runtime = new SlackRuntimeRegistry();
     const trig = new SlackTrigger(logger as unknown as LoggerService, vault as unknown as any, persistence, runtime);
     await trig.setConfig({ app_token: { value: 'secret/slack/APP', source: 'vault' }, bot_token: { value: 'xoxb-bot', source: 'static' } });
+=======
+    const persistence = { getOrCreateThreadByAlias: async () => 't-slack' } as unknown as AgentsPersistenceService;
+    const trig = new SlackTrigger(logger as unknown as LoggerService, vault as unknown as import('../src/vault/vault.service').VaultService, persistence);
+    await trig.setConfig({ app_token: { value: 'secret/slack/APP', source: 'vault' }, bot_token: { value: 'secret/slack/BOT', source: 'vault' } });
+>>>>>>> c1aed1f (refactor(messaging): Slack-only types and auth on descriptor; feat(trigger): SlackTrigger includes bot_token in Thread.channel; refactor(send_message): text-only schema, SlackAdapter direct; docs(send_message): update for Slack-only v1; test: adjust slack descriptor, adapter, trigger tests; remove registry and rate-limit tests)
     await trig.provision();
     // Ensure a client was created by the trigger
     expect(__getLastSocketClient()).toBeTruthy();

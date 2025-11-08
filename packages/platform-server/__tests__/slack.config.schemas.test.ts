@@ -10,8 +10,8 @@ describe('Slack static config schemas', () => {
     expect(() => SendSlackMessageToolStaticConfigSchema.parse({ bot_token: { value: 'secret/path/KEY', source: 'vault' } })).not.toThrow();
   });
 
-  it('SlackTriggerStaticConfigSchema: accepts reference field only', () => {
-    expect(() => SlackTriggerStaticConfigSchema.parse({ app_token: { value: 'xapp-abc', source: 'static' } })).not.toThrow();
-    expect(() => SlackTriggerStaticConfigSchema.parse({ app_token: { value: 'secret/path/KEY', source: 'vault' } })).not.toThrow();
+  it('SlackTriggerStaticConfigSchema: requires app_token and bot_token reference fields', () => {
+    expect(() => SlackTriggerStaticConfigSchema.parse({ app_token: { value: 'xapp-abc', source: 'static' }, bot_token: { value: 'xoxb-abc', source: 'static' } })).not.toThrow();
+    expect(() => SlackTriggerStaticConfigSchema.parse({ app_token: { value: 'secret/path/APP', source: 'vault' }, bot_token: { value: 'secret/path/BOT', source: 'vault' } })).not.toThrow();
   });
 });

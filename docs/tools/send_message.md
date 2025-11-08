@@ -1,39 +1,27 @@
 SendMessage tool
 
 - Name: send_message
-- Purpose: Send a message to the thread’s origin channel using the stored ChannelDescriptor.
+- Purpose: Send a text message to the thread’s Slack channel using the stored descriptor.
 
 Schema
 
 ```
 {
-  text: string;
-  markdown?: boolean;
-  broadcast?: boolean;
-  correlationId?: string; // optional idempotency key
-  attachments?: [{ type: 'file' | 'link'; url?: string; name?: string }];
+  message: string;
 }
 ```
 
 Behavior
 
-- Requires ctx.threadId; loads Thread.channel and validates the descriptor.
-- Uses adapter registry to route to the correct channel.
-- Returns a JSON envelope: `{ ok, channelMessageId?, threadId?, error?, rateLimited?, retryAfterMs? }`.
+- Requires ctx.threadId; loads `Thread.channel` and validates the Slack-only descriptor.
+- Uses SlackAdapter directly; no registry or multi-channel support in v1.
+- Returns a JSON envelope: `{ ok, channelMessageId?, threadId?, error? }`.
 - Logs adapter type and identifiers; does not log full text.
-- Supports an optional `correlationId` to avoid duplicate sends within a 10-minute TTL window.
-  - If a duplicate `correlationId` is detected, returns `{ ok: false, error: 'duplicate_correlation_id' }`.
-  - On adapter errors, the idempotency key is released to allow retry.
 
-Slack adapter
+Slack-only descriptor and token
 
-- Configured via `SLACK_BOT_TOKEN` env or `SLACK_BOT_TOKEN_REF` (Vault ref).
-- Supports thread replies via `thread_ts`.
-- Ephemeral messages when `ephemeralUser` is provided by descriptor.
-- Handles rate limits (429) with a single backoff retry.
-- Attachment handling:
-  - Link attachments are appended to the message text as formatted links.
-  - File attachments are not supported in `send_message`; use a dedicated upload tool.
+- `SlackTrigger` writes the descriptor on ingress: `{ type: 'slack', identifiers: { channelId, threadTs? }, auth: { botToken: string | { value, source: 'vault' } } }`.
+- `SlackAdapter` resolves the bot token only from the descriptor (direct string or via VaultService when `source: 'vault'`).
 
 Migration
 
