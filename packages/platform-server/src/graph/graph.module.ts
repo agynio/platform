@@ -122,8 +122,7 @@ import { SlackAdapter } from '../messaging/slack/slack.adapter';
     AgentsPersistenceService,
     // Messaging adapters
     SlackAdapter,
-    // Provide string token for PrismaService so SlackTrigger can inject without importing the module in tests
-    { provide: 'PrismaService', useExisting: PrismaService },
+    // PrismaService is injected by type; no string token aliasing required
 
     //////// Nodes
 

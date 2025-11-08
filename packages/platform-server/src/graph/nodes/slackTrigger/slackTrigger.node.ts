@@ -4,12 +4,12 @@ import { LoggerService } from '../../../core/services/logger.service';
 import { VaultService } from '../../../vault/vault.service';
 import { ReferenceFieldSchema, resolveTokenRef } from '../../../utils/refs';
 import Node from '../base/Node';
-import { Injectable, Scope } from '@nestjs/common';
+import { Inject, Injectable, Scope } from '@nestjs/common';
 import { BufferMessage } from '../agent/messagesBuffer';
 import { HumanMessage } from '@agyn/llm';
 import { stringify as YamlStringify } from 'yaml';
 import { AgentsPersistenceService } from '../../../agents/agents.persistence.service';
-import type { PrismaService } from '../../../core/services/prisma.service';
+import { PrismaService } from '../../../core/services/prisma.service';
 import { SlackAdapter } from '../../../messaging/slack/slack.adapter';
 import { ChannelDescriptorSchema, type SendResult } from '../../../messaging/types';
 
@@ -33,11 +33,11 @@ export class SlackTrigger extends Node<SlackTriggerConfig> {
   private botToken: string | null = null;
 
   constructor(
-    protected readonly logger: LoggerService,
-    protected readonly vault: VaultService,
-    private readonly persistence: AgentsPersistenceService,
-    private readonly prismaService: PrismaService,
-    private readonly slackAdapter: SlackAdapter,
+    @Inject(LoggerService) protected readonly logger: LoggerService,
+    @Inject(VaultService) protected readonly vault: VaultService,
+    @Inject(AgentsPersistenceService) private readonly persistence: AgentsPersistenceService,
+    @Inject(PrismaService) private readonly prismaService: PrismaService,
+    @Inject(SlackAdapter) private readonly slackAdapter: SlackAdapter,
   ) {
     super(logger);
   }
