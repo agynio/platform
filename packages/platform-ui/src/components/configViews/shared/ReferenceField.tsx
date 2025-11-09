@@ -63,7 +63,7 @@ export default function ReferenceField({ label, value, onChange, readOnly, disab
         {masked && source === 'static' ? (
           <Button
             type="button"
-            size="xs"
+            size="sm"
             variant="outline"
             onClick={() => setShow((s) => !s)}
             disabled={isDisabled}
