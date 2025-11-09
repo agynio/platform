@@ -77,7 +77,9 @@ function normalizeConfigByTemplate(
       const at = (c as Record<string, unknown>)['app_token'];
       if (typeof at === 'string')
         (c as Record<string, unknown>)['app_token'] = { value: at, source: 'static' } as ReferenceValue;
-      delete (c as Record<string, unknown>).bot_token;
+      const bt = (c as Record<string, unknown>)['bot_token'];
+      if (typeof bt === 'string')
+        (c as Record<string, unknown>)['bot_token'] = { value: bt, source: 'static' } as ReferenceValue;
       delete (c as Record<string, unknown>).default_channel;
       return c;
     }

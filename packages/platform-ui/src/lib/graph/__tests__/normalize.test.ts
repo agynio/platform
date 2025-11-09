@@ -37,7 +37,7 @@ describe('normalizeConfigByTemplate idempotence and behavior', () => {
 
     const cfg4 = body.nodes[3].config;
     expect(cfg4.app_token).toEqual({ value: 'xapp-abc', source: 'static' });
-    expect(cfg4.bot_token).toBeUndefined();
+    expect(cfg4.bot_token).toEqual({ value: 'x', source: 'static' });
     expect(cfg4.default_channel).toBeUndefined();
 
     const cfg5 = body.nodes[4].config;
