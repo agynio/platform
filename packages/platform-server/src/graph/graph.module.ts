@@ -33,7 +33,7 @@ import { ThreadsMetricsService } from '../agents/threads.metrics.service';
 import { RemindersController } from './nodes/tools/remind_me/reminders.controller';
 import { AgentNode } from './nodes/agent/agent.node';
 import { MemoryNode } from './nodes/memory/memory.node';
-import { MemoryService } from './nodes/memory.repository';
+import { MemoryService, PostgresMemoryRepository } from './nodes/memory.repository';
 import { MemoryConnectorNode } from './nodes/memoryConnector/memoryConnector.node';
 import { WorkspaceNode } from './nodes/workspace/workspace.node';
 import { SlackTrigger } from './nodes/slackTrigger/slackTrigger.node';
@@ -129,6 +129,8 @@ import { SlackAdapter } from '../messaging/slack/slack.adapter';
     //////// Nodes
 
     // Provide MemoryService (transient) so ModuleRef can construct it
+    // Provide repository as singleton; MemoryService will inject it
+    PostgresMemoryRepository,
     MemoryService,
     // nodes
     AgentNode,

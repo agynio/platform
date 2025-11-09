@@ -2,7 +2,7 @@ import { describe, it, expect, beforeAll, beforeEach, afterAll } from 'vitest';
 import { PrismaClient } from '@prisma/client';
 import { MemoryController } from '../src/graph/controllers/memory.controller';
 import { ModuleRef } from '@nestjs/core';
-import { MemoryService } from '../src/graph/nodes/memory.repository';
+import { MemoryService, PostgresMemoryRepository } from '../src/graph/nodes/memory.repository';
 import { HttpException } from '@nestjs/common';
 
 const URL = process.env.AGENTS_DATABASE_URL;
@@ -11,7 +11,7 @@ const maybeDescribe = URL ? describe : describe.skip;
 class StubModuleRef implements Partial<ModuleRef> {
   constructor(private prisma: PrismaClient) {}
   get<T>(_token: any): T {
-    return new MemoryService({ getClient: () => this.prisma } as any) as unknown as T;
+    return new MemoryService(new PostgresMemoryRepository({ getClient: () => this.prisma } as any)) as unknown as T;
   }
 }
 
@@ -19,7 +19,7 @@ maybeDescribe('MemoryController endpoints', () => {
   const prisma = new PrismaClient({ datasources: { db: { url: URL! } } });
 
   beforeAll(async () => {
-    const bootstrap = new MemoryService({ getClient: () => prisma } as any).init({ nodeId: 'bootstrap', scope: 'global' });
+    const bootstrap = new MemoryService(new PostgresMemoryRepository({ getClient: () => prisma } as any)).init({ nodeId: 'bootstrap', scope: 'global' });
     await bootstrap.ensureIndexes();
     await prisma.$executeRaw`DELETE FROM memories`;
   });

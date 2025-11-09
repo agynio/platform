@@ -1,12 +1,13 @@
 import { PrismaClient } from '@prisma/client';
-import { MemoryService } from '../src/graph/nodes/memory.repository';
+import { MemoryService, PostgresMemoryRepository } from '../src/graph/nodes/memory.repository';
 
 const URL = process.env.AGENTS_DATABASE_URL;
 const maybeDescribe = URL ? describe : describe.skip;
 
 maybeDescribe('MemoryService', () => {
   it("normalizes paths and forbids .. and $", async () => {
-    const svc = new MemoryService({ getClient: () => new PrismaClient({ datasources: { db: { url: URL! } } }) } as any);
+    const repo = new PostgresMemoryRepository({ getClient: () => new PrismaClient({ datasources: { db: { url: URL! } } }) } as any);
+    const svc = new MemoryService(repo);
     svc.init({ nodeId: 'n1', scope: 'global' });
     expect(svc.normalizePath('a/b')).toBe('/a/b');
     expect(svc.normalizePath('/a//b/')).toBe('/a/b');
@@ -17,7 +18,7 @@ maybeDescribe('MemoryService', () => {
 
   it('append/read/update/delete with string-only semantics', async () => {
     const prisma = new PrismaClient({ datasources: { db: { url: URL! } } });
-    const svc = new MemoryService({ getClient: () => prisma } as any);
+    const svc = new MemoryService(new PostgresMemoryRepository({ getClient: () => prisma } as any));
     svc.init({ nodeId: 'n1', scope: 'global' });
     await svc.ensureIndexes();
     await prisma.$executeRaw`DELETE FROM memories`;
@@ -45,12 +46,12 @@ maybeDescribe('MemoryService', () => {
 
   it('perThread and global scoping', async () => {
     const prisma = new PrismaClient({ datasources: { db: { url: URL! } } });
-    const bootstrap = new MemoryService({ getClient: () => prisma } as any).init({ nodeId: 'bootstrap', scope: 'global' });
+    const bootstrap = new MemoryService(new PostgresMemoryRepository({ getClient: () => prisma } as any)).init({ nodeId: 'bootstrap', scope: 'global' });
     await bootstrap.ensureIndexes();
     await prisma.$executeRaw`DELETE FROM memories`;
-    const g = new MemoryService({ getClient: () => prisma } as any); g.init({ nodeId: 'nodeA', scope: 'global' });
-    const t1 = new MemoryService({ getClient: () => prisma } as any); t1.init({ nodeId: 'nodeA', scope: 'perThread', threadId: 't1' });
-    const t2 = new MemoryService({ getClient: () => prisma } as any); t2.init({ nodeId: 'nodeA', scope: 'perThread', threadId: 't2' });
+    const g = new MemoryService(new PostgresMemoryRepository({ getClient: () => prisma } as any)); g.init({ nodeId: 'nodeA', scope: 'global' });
+    const t1 = new MemoryService(new PostgresMemoryRepository({ getClient: () => prisma } as any)); t1.init({ nodeId: 'nodeA', scope: 'perThread', threadId: 't1' });
+    const t2 = new MemoryService(new PostgresMemoryRepository({ getClient: () => prisma } as any)); t2.init({ nodeId: 'nodeA', scope: 'perThread', threadId: 't2' });
 
     await g.append('/x', 'G');
     await t1.append('/x', 'T1');

@@ -13,7 +13,7 @@ import { MemoryConnectorNode } from '../src/graph/nodes/memoryConnector/memoryCo
 import { EnvService } from '../src/env/env.service';
 import { ArchiveService } from '../src/infra/archive/archive.service';
 import { NcpsKeyService } from '../src/infra/ncps/ncpsKey.service';
-import { MemoryService } from '../src/graph/nodes/memory.repository';
+import { MemoryService, PostgresMemoryRepository } from '../src/graph/nodes/memory.repository';
 import { PrismaClient } from '@prisma/client';
 
 // Build a registry and assert memory templates and agent memory port wiring are present.
@@ -28,7 +28,7 @@ describe('templates: memory registration and agent memory port', () => {
     const archiveService = new ArchiveService();
     const ncpsKeyService = new NcpsKeyService(logger, configService);
     const prisma = new PrismaClient({ datasources: { db: { url: process.env.AGENTS_DATABASE_URL || 'postgres://localhost/skip' } } });
-    const memoryService = new MemoryService({ getClient: () => prisma } as any);
+    const memoryService = new MemoryService(new PostgresMemoryRepository({ getClient: () => prisma } as any));
 
     class MinimalModuleRef implements Pick<ModuleRef, 'create' | 'get'> {
       create<T = any>(cls: new (...args: any[]) => T): T {

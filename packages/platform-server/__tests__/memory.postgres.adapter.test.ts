@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { PrismaClient } from '@prisma/client';
-import { MemoryService } from '../src/graph/nodes/memory.repository';
+import { MemoryService, PostgresMemoryRepository } from '../src/graph/nodes/memory.repository';
 
 // Integration test against Postgres (requires AGENTS_DATABASE_URL env)
 const URL = process.env.AGENTS_DATABASE_URL;
@@ -12,7 +12,7 @@ maybeDescribe('PostgresMemoryRepository adapter', () => {
   const prisma = new PrismaClient({ datasources: { db: { url: URL! } } });
 
   beforeAll(async () => {
-    const bootstrap = new MemoryService({ getClient: () => prisma } as any).init({ nodeId: 'bootstrap', scope: 'global' });
+    const bootstrap = new MemoryService(new PostgresMemoryRepository({ getClient: () => prisma } as any)).init({ nodeId: 'bootstrap', scope: 'global' });
     await bootstrap.ensureIndexes();
     await prisma.$executeRaw`DELETE FROM memories`;
   });
@@ -21,7 +21,7 @@ maybeDescribe('PostgresMemoryRepository adapter', () => {
   });
 
   it('create, append, read, update, delete', async () => {
-    const svc = new MemoryService({ getClient: () => prisma } as any).init({ nodeId: 'nodeA', scope: 'global' });
+    const svc = new MemoryService(new PostgresMemoryRepository({ getClient: () => prisma } as any)).init({ nodeId: 'nodeA', scope: 'global' });
     await svc.ensureIndexes();
     expect(await svc.stat('/')).toEqual({ kind: 'dir' });
     await svc.ensureDir('/docs');

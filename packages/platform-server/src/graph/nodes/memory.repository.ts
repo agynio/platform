@@ -51,8 +51,8 @@ export class MemoryService {
   // Backing repository (Postgres). Inject lazily via PrismaService
   private repo: MemoryRepositoryPort;
 
-  constructor(@Inject(PrismaService) prisma: PrismaService) {
-    this.repo = new PostgresMemoryRepository(prisma);
+  constructor(@Inject(PostgresMemoryRepository) repo: PostgresMemoryRepository) {
+    this.repo = repo;
   }
 
   init(params: { nodeId: string; scope: MemoryScope; threadId?: string }) {
@@ -456,7 +456,8 @@ export class MemoryService {
 
 }
 
-class PostgresMemoryRepository implements MemoryRepositoryPort {
+@Injectable()
+export class PostgresMemoryRepository implements MemoryRepositoryPort {
   constructor(private prismaSvc: PrismaService) {}
 
   private async getClient(): Promise<PrismaClient> {

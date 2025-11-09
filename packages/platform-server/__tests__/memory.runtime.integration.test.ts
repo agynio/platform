@@ -13,7 +13,7 @@ import {
   MemoryConnectorNode,
   type MemoryConnectorStaticConfig,
 } from '../src/graph/nodes/memoryConnector/memoryConnector.node';
-import { MemoryService, type MemoryScope } from '../src/graph/nodes/memory.repository';
+import { MemoryService, PostgresMemoryRepository, type MemoryScope } from '../src/graph/nodes/memory.repository';
 import type { TemplatePortConfig } from '../src/graph/ports.types';
 
 // Minimal ModuleRef surface used by TemplateRegistry/LiveGraphRuntime in this test
@@ -70,7 +70,7 @@ class TestCallModelNode extends Node<Record<string, never>> {
     // Provide MemoryService factory
     conn.setMemorySource((opts: { threadId?: string }) => {
       const scope: MemoryScope = opts.threadId ? 'perThread' : 'global';
-      const svc = new MemoryService({ getClient: () => this.prisma! } as any);
+      const svc = new MemoryService(new PostgresMemoryRepository({ getClient: () => this.prisma! } as any));
       return svc.init({ nodeId: conn.nodeId, scope, threadId: opts.threadId });
     });
   }
@@ -144,7 +144,7 @@ maybeDescribe('Runtime integration: memory injection via LiveGraphRuntime', () =
   const prisma = new PrismaClient({ datasources: { db: { url: URL! } } });
 
   beforeAll(async () => {
-    const bootstrap = new MemoryService({ getClient: () => prisma } as any).init({ nodeId: 'bootstrap', scope: 'global' });
+    const bootstrap = new MemoryService(new PostgresMemoryRepository({ getClient: () => prisma } as any)).init({ nodeId: 'bootstrap', scope: 'global' });
     await bootstrap.ensureIndexes();
   });
 
@@ -172,7 +172,7 @@ maybeDescribe('Runtime integration: memory injection via LiveGraphRuntime', () =
     (runtime.getNodeInstance('cm') as TestCallModelNode).initExtras({ prisma, placement: 'after_system' });
 
     // Pre-populate memory under mem nodeId in global scope
-    const svc = new MemoryService({ getClient: () => prisma } as any);
+    const svc = new MemoryService(new PostgresMemoryRepository({ getClient: () => prisma } as any));
     svc.init({ nodeId: 'mem', scope: 'global' });
     await svc.append('/notes/today', 'hello');
 
@@ -199,7 +199,7 @@ maybeDescribe('Runtime integration: memory injection via LiveGraphRuntime', () =
     (runtime.getNodeInstance('cm') as TestCallModelNode).initExtras({ prisma, placement: 'last_message' });
 
     // Pre-populate memory
-    const svc = new MemoryService({ getClient: () => prisma } as any);
+    const svc = new MemoryService(new PostgresMemoryRepository({ getClient: () => prisma } as any));
     svc.init({ nodeId: 'mem', scope: 'global' });
     await svc.append('/alpha', 'a');
 
@@ -225,7 +225,7 @@ maybeDescribe('Runtime integration: memory injection via LiveGraphRuntime', () =
     (runtime.getNodeInstance('cm') as TestCallModelNode).initExtras({ prisma, placement: 'after_system', content: 'full', maxChars: 20 });
 
     // Populate global memory with a file whose full content would exceed 20 chars.
-    const globalSvc = new MemoryService({ getClient: () => prisma } as any);
+    const globalSvc = new MemoryService(new PostgresMemoryRepository({ getClient: () => prisma } as any));
     globalSvc.init({ nodeId: 'mem', scope: 'global' });
     await globalSvc.append('/long/file', 'aaaaaaaaaaaaaaaaaaaa-long');
 
