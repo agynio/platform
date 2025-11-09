@@ -122,6 +122,50 @@ export class MemoryService {
     return p === '/' ? '' : p.slice(1).replaceAll('/', '.');
   }
 
+  private getPathSegments(normPath: string): string[] {
+    if (normPath === '/') return [];
+    return normPath.slice(1).split('/').filter(Boolean);
+  }
+
+  private async ensureAncestorDirs(normPath: string): Promise<void> {
+    const segments = this.getPathSegments(normPath);
+    if (segments.length <= 1) return;
+    await this.repo.withDoc<void>(this.buildFilter(), async (doc) => {
+      const dirs: MemoryDirsMap = { ...doc.dirs };
+      for (let i = 1; i < segments.length; i++) {
+        const dirPath = '/' + segments.slice(0, i).join('/');
+        const dirKey = this.dotted(dirPath);
+        dirs[dirKey] = true;
+      }
+      return { doc: { ...doc, dirs } };
+    });
+  }
+
+  private resolveChildEntry(rest: string, prefixKey: string, dirs: MemoryDirsMap, defaultKind: 'file' | 'dir'): { name: string; kind: 'file' | 'dir' } {
+    const attemptDir = (segment: string): boolean => {
+      if (!segment) return false;
+      const candidate = prefixKey ? `${prefixKey}${segment}` : segment;
+      return Object.prototype.hasOwnProperty.call(dirs, candidate);
+    };
+
+    if (!rest.includes('.')) {
+      const isDir = attemptDir(rest);
+      return { name: rest, kind: isDir ? 'dir' : defaultKind };
+    }
+
+    let idx = rest.indexOf('.');
+    while (idx !== -1) {
+      const segment = rest.slice(0, idx);
+      if (attemptDir(segment)) {
+        return { name: segment, kind: 'dir' };
+      }
+      idx = rest.indexOf('.', idx + 1);
+    }
+
+    const isDir = attemptDir(rest);
+    return { name: rest, kind: isDir ? 'dir' : defaultKind };
+  }
+
   // Traverse nested object by dotted key. Uses loose typing to support nested-object persistence.
   private getNested(obj: unknown, dottedKey: string): { exists: boolean; node?: unknown } {
     if (dottedKey === '') return { exists: true, node: obj };
@@ -165,8 +209,10 @@ export class MemoryService {
 
   /** Ensure directory exists (creates marker). Root always exists. */
   async ensureDir(path: string): Promise<void> {
-    const key = this.dotted(path);
+    const norm = this.normalizePath(path);
+    const key = this.dotted(norm);
     if (key === '') return; // root
+    await this.ensureAncestorDirs(norm);
     await this.repo.withDoc<void>(this.buildFilter(), async (doc) => {
       const updatedDirs: MemoryDirsMap = { ...doc.dirs, [key]: true };
       return { doc: { ...doc, dirs: updatedDirs } };
@@ -222,22 +268,24 @@ export class MemoryService {
     // Back-compat: flat dotted keys aggregation
     const flatMap = new Map<string, 'file' | 'dir'>();
     const prefix = key === '' ? '' : key + '.';
-    for (const k of Object.keys(doc.data)) {
-      if (typeof k !== 'string' || !k.startsWith(prefix)) continue;
-      const rest = k.slice(prefix.length);
-      if (rest.length === 0) continue; // exact key not a child
-      const seg = rest.split('.', 1)[0];
-      const isDirect = rest === seg;
-      const next: 'file' | 'dir' = isDirect ? 'file' : 'dir';
-      const prev = flatMap.get(seg);
-      flatMap.set(seg, prev === 'dir' ? 'dir' : next);
-    }
-    for (const k of Object.keys(doc.dirs)) {
-      if (typeof k !== 'string' || !k.startsWith(prefix)) continue;
-      const rest = k.slice(prefix.length);
+    for (const fullKey of Object.keys(doc.data)) {
+      if (!fullKey.startsWith(prefix)) continue;
+      const rest = fullKey.slice(prefix.length);
       if (rest.length === 0) continue;
-      const seg = rest.split('.', 1)[0];
-      flatMap.set(seg, 'dir');
+      const { name, kind } = this.resolveChildEntry(rest, prefix, doc.dirs, 'file');
+      if (!name) continue;
+      const prev = flatMap.get(name);
+      if (!prev || (prev === 'file' && kind === 'dir')) {
+        flatMap.set(name, kind);
+      }
+    }
+    for (const fullKey of Object.keys(doc.dirs)) {
+      if (!fullKey.startsWith(prefix)) continue;
+      const rest = fullKey.slice(prefix.length);
+      if (rest.length === 0) continue;
+      const { name } = this.resolveChildEntry(rest, prefix, doc.dirs, 'dir');
+      if (!name) continue;
+      flatMap.set(name, 'dir');
     }
 
     const flatChildren = Array.from(flatMap, ([name, kind]) => ({ name, kind }));
@@ -269,11 +317,7 @@ export class MemoryService {
     if (typeof data !== 'string') throw new Error('append expects string data');
     const norm = this.normalizePath(path);
     const key = this.dotted(norm);
-    // Ensure immediate parent dir marker exists for nested paths and mark ancestors
-    const lastSlash = norm.lastIndexOf('/');
-    const parent = lastSlash <= 0 ? '/' : norm.slice(0, lastSlash);
-    await this.ensureDir(parent);
-    await this.ensureParentDirs(key);
+    await this.ensureAncestorDirs(norm);
     await this.repo.withDoc<void>(this.buildFilter(), async (doc) => {
       if (Object.prototype.hasOwnProperty.call(doc.dirs, key)) throw new Error('EISDIR: path is a directory');
       let current: string | undefined = undefined;
@@ -413,20 +457,6 @@ export class MemoryService {
     };
   }
 
-  // ensure parents of a dotted key are marked as dirs
-  private async ensureParentDirs(key: string) {
-    if (!key) return;
-    const parts = key.split('.');
-    if (parts.length <= 1) return;
-    await this.repo.withDoc<void>(this.buildFilter(), async (doc) => {
-      const dirs: MemoryDirsMap = { ...doc.dirs };
-      for (let i = 1; i < parts.length; i++) {
-        const dirKey = parts.slice(0, i).join('.');
-        dirs[dirKey] = true;
-      }
-      return { doc: { ...doc, dirs } };
-    });
-  }
 }
 
 class PostgresMemoryRepository implements MemoryRepositoryPort {
