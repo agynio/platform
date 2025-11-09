@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeAll, beforeEach, afterAll } from 'vitest';
 import { PrismaClient } from '@prisma/client';
-import { MemoryService, PostgresMemoryRepository } from '../../src/graph/nodes/memory.repository';
+import { PostgresMemoryRepository } from '../../src/graph/nodes/memory.repository';
+import { MemoryService } from '../../src/graph/nodes/memory.service';
 import { UnifiedMemoryFunctionTool as UnifiedMemoryTool } from '../../src/graph/nodes/tools/memory/memory.tool';
 import { LoggerService } from '../../src/core/services/logger.service';
 import { MemoryToolNode } from '../../src/graph/nodes/tools/memory/memory.node';

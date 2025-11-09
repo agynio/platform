@@ -13,7 +13,8 @@ import { MemoryConnectorNode } from '../src/graph/nodes/memoryConnector/memoryCo
 import { EnvService } from '../src/env/env.service';
 import { ArchiveService } from '../src/infra/archive/archive.service';
 import { NcpsKeyService } from '../src/infra/ncps/ncpsKey.service';
-import { MemoryService, PostgresMemoryRepository } from '../src/graph/nodes/memory.repository';
+import { PostgresMemoryRepository } from '../src/graph/nodes/memory.repository';
+import { MemoryService } from '../src/graph/nodes/memory.service';
 import { PrismaClient } from '@prisma/client';
 
 // Build a registry and assert memory templates and agent memory port wiring are present.

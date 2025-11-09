@@ -1,7 +1,8 @@
 import { Inject, Injectable, Scope } from '@nestjs/common';
 import { ModuleRef } from '@nestjs/core';
 import { z } from 'zod';
-import { MemoryScope, MemoryService } from '../../nodes/memory.repository';
+import type { MemoryScope } from '../../nodes/memory.types';
+import { MemoryService } from '../../nodes/memory.service';
 import Node from '../base/Node';
 import { LoggerService } from '../../../core/services/logger.service';
 

@@ -1,8 +1,8 @@
 import { Body, Controller, Delete, Get, HttpCode, HttpException, HttpStatus, Inject, Param, Post, Query } from '@nestjs/common';
 import { IsIn, IsNotEmpty, IsOptional, IsString } from 'class-validator';
 import { ModuleRef } from '@nestjs/core';
-import type { MemoryScope } from '../nodes/memory.repository';
-import { MemoryService } from '../nodes/memory.repository';
+import type { MemoryScope } from '../nodes/memory.types';
+import { MemoryService } from '../nodes/memory.service';
 import { PrismaService } from '../../core/services/prisma.service';
 
 class DocParamsDto {

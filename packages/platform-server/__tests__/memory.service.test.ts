@@ -1,5 +1,6 @@
 import { PrismaClient } from '@prisma/client';
-import { MemoryService, PostgresMemoryRepository } from '../src/graph/nodes/memory.repository';
+import { PostgresMemoryRepository } from '../src/graph/nodes/memory.repository';
+import { MemoryService } from '../src/graph/nodes/memory.service';
 
 const URL = process.env.AGENTS_DATABASE_URL;
 const maybeDescribe = URL ? describe : describe.skip;

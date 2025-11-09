@@ -2,7 +2,8 @@ import { describe, it, expect, beforeAll, beforeEach, afterAll } from 'vitest';
 import { PrismaClient } from '@prisma/client';
 import { MemoryController } from '../src/graph/controllers/memory.controller';
 import { ModuleRef } from '@nestjs/core';
-import { MemoryService, PostgresMemoryRepository } from '../src/graph/nodes/memory.repository';
+import { PostgresMemoryRepository } from '../src/graph/nodes/memory.repository';
+import { MemoryService } from '../src/graph/nodes/memory.service';
 import { HttpException } from '@nestjs/common';
 
 const URL = process.env.AGENTS_DATABASE_URL;

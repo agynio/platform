@@ -13,7 +13,9 @@ import {
   MemoryConnectorNode,
   type MemoryConnectorStaticConfig,
 } from '../src/graph/nodes/memoryConnector/memoryConnector.node';
-import { MemoryService, PostgresMemoryRepository, type MemoryScope } from '../src/graph/nodes/memory.repository';
+import { PostgresMemoryRepository } from '../src/graph/nodes/memory.repository';
+import { MemoryService } from '../src/graph/nodes/memory.service';
+import type { MemoryScope } from '../src/graph/nodes/memory.types';
 import type { TemplatePortConfig } from '../src/graph/ports.types';
 
 // Minimal ModuleRef surface used by TemplateRegistry/LiveGraphRuntime in this test

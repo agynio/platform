@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { MemoryService } from '../../nodes/memory.repository';
+import { MemoryService } from '../../nodes/memory.service';
 import Node from '../base/Node';
 import { SystemMessage } from '@agyn/llm';
 import { Inject, Injectable, Scope } from '@nestjs/common';
