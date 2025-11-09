@@ -478,7 +478,7 @@ class PostgresMemoryRepository implements MemoryRepositoryPort {
       SELECT id, node_id, scope, thread_id, data, dirs, created_at, updated_at
       FROM memories
       WHERE node_id = ${filter.nodeId}
-        AND scope = ${filter.scope}
+        AND scope = ${filter.scope}::"MemoryScope"
         AND (thread_id IS NOT DISTINCT FROM ${filter.scope === 'perThread' ? filter.threadId ?? null : null})
       FOR UPDATE
     `;
@@ -491,7 +491,7 @@ class PostgresMemoryRepository implements MemoryRepositoryPort {
       SELECT id, node_id, scope, thread_id, data, dirs, created_at, updated_at
       FROM memories
       WHERE node_id = ${filter.nodeId}
-        AND scope = ${filter.scope}
+        AND scope = ${filter.scope}::"MemoryScope"
         AND (thread_id IS NOT DISTINCT FROM ${filter.scope === 'perThread' ? filter.threadId ?? null : null})
     `;
     if (!rows[0]) return null;
@@ -503,7 +503,7 @@ class PostgresMemoryRepository implements MemoryRepositoryPort {
     return await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
       let row = await this.selectForUpdate(filter, tx);
       if (!row) {
-        await tx.$executeRaw`INSERT INTO memories (node_id, scope, thread_id, data, dirs) VALUES (${filter.nodeId}, ${filter.scope}, ${filter.scope === 'perThread' ? filter.threadId ?? null : null}, '{}'::jsonb, '{}'::jsonb)`;
+        await tx.$executeRaw`INSERT INTO memories (node_id, scope, thread_id, data, dirs) VALUES (${filter.nodeId}, ${filter.scope}::"MemoryScope", ${filter.scope === 'perThread' ? filter.threadId ?? null : null}, '{}'::jsonb, '{}'::jsonb)`;
         row = await this.selectForUpdate(filter, tx);
       }
       if (!row) throw new Error('failed to create memory document');
@@ -516,14 +516,14 @@ class PostgresMemoryRepository implements MemoryRepositoryPort {
     return await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
       let row = await this.selectForUpdate(filter, tx);
       if (!row) {
-        await tx.$executeRaw`INSERT INTO memories (node_id, scope, thread_id, data, dirs) VALUES (${filter.nodeId}, ${filter.scope}, ${filter.scope === 'perThread' ? filter.threadId ?? null : null}, '{}'::jsonb, '{}'::jsonb)`;
+        await tx.$executeRaw`INSERT INTO memories (node_id, scope, thread_id, data, dirs) VALUES (${filter.nodeId}, ${filter.scope}::"MemoryScope", ${filter.scope === 'perThread' ? filter.threadId ?? null : null}, '{}'::jsonb, '{}'::jsonb)`;
         row = await this.selectForUpdate(filter, tx);
       }
       if (!row) throw new Error('failed to create memory document');
       const current: MemoryDoc = PostgresMemoryRepository.rowToDoc(row as MemoryRow);
       const { doc, result } = await fn(current);
       if (doc) {
-        await tx.$executeRaw`UPDATE memories SET data = ${JSON.stringify(doc.data)}::jsonb, dirs = ${JSON.stringify(doc.dirs)}::jsonb, updated_at = NOW() WHERE node_id = ${filter.nodeId} AND scope = ${filter.scope} AND (thread_id IS NOT DISTINCT FROM ${filter.scope === 'perThread' ? filter.threadId ?? null : null})`;
+        await tx.$executeRaw`UPDATE memories SET data = ${JSON.stringify(doc.data)}::jsonb, dirs = ${JSON.stringify(doc.dirs)}::jsonb, updated_at = NOW() WHERE node_id = ${filter.nodeId} AND scope = ${filter.scope}::"MemoryScope" AND (thread_id IS NOT DISTINCT FROM ${filter.scope === 'perThread' ? filter.threadId ?? null : null})`;
       }
       return result as T;
     });
