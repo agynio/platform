@@ -1,0 +1,101 @@
+import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
+import { PrismaClient } from '@prisma/client';
+import { MemoryService } from '../../src/graph/nodes/memory.repository';
+import { LoggerService } from '../../src/core/services/logger.service';
+import { MemoryToolNode } from '../../src/graph/nodes/tools/memory/memory.node';
+
+const URL = process.env.AGENTS_DATABASE_URL;
+const maybeDescribe = URL ? describe : describe.skip;
+
+maybeDescribe('E2E: memory tools with Postgres backend', () => {
+  const prisma = new PrismaClient({ datasources: { db: { url: URL! } } });
+  const logger = new LoggerService();
+
+  beforeAll(async () => {
+    const bootstrap = new MemoryService({ getClient: () => prisma } as any).init({ nodeId: 'bootstrap', scope: 'global' });
+    await bootstrap.ensureIndexes();
+  });
+
+  beforeEach(async () => {
+    await prisma.$executeRaw`DELETE FROM memories`;
+  });
+
+  afterAll(async () => {
+    await prisma.$disconnect();
+  });
+
+  function makeTool(nodeId: string) {
+    const node = new MemoryToolNode(logger);
+    node.setMemorySource((opts: { threadId?: string }) => {
+      const svc = new MemoryService({ getClient: () => prisma } as any);
+      return svc.init({ nodeId, scope: opts.threadId ? 'perThread' : 'global', threadId: opts.threadId });
+    });
+    return node.getTool();
+  }
+
+  describe('append', () => {
+    it('stores data for new path', async () => {
+      const unified = makeTool('node-append-1');
+
+      const appendRes = JSON.parse(
+        (await unified.execute({ path: 'user/1', command: 'append', content: '{"username":"Test"}' } as any)) as any,
+      );
+      expect(appendRes.ok).toBe(true);
+
+      const content = JSON.parse((await unified.execute({ path: 'user/1', command: 'read' } as any)) as any);
+      expect(content.ok).toBe(true);
+      expect(String(content.result.content)).toContain('"username":"Test"');
+    });
+
+    it('appends without overwriting existing data', async () => {
+      const unified = makeTool('node-append-2');
+
+      await unified.execute({ path: 'user/2', command: 'append', content: '{"username":"Test"}' } as any);
+      await unified.execute({ path: 'user/2', command: 'append', content: '{"interests":"Sub1,Sub2"}' } as any);
+
+      const content = JSON.parse((await unified.execute({ path: 'user/2', command: 'read' } as any)) as any);
+      expect(typeof content.result.content).toBe('string');
+      expect(String(content.result.content)).toContain('"username":"Test"');
+      expect(String(content.result.content)).toContain('"interests":"Sub1,Sub2"');
+    });
+  });
+
+  describe('list/read/update/delete', () => {
+    it('lists directory entries after multiple appends', async () => {
+      const unified = makeTool('node-lrud-1');
+
+      await unified.execute({ path: 'projects/p1', command: 'append', content: '{"name":"Alpha"}' } as any);
+      await unified.execute({ path: 'projects/p2', command: 'append', content: '{"name":"Beta"}' } as any);
+
+      const listingRaw = JSON.parse((await unified.execute({ path: 'projects', command: 'list' } as any)) as any);
+      expect(typeof listingRaw).toBe('object');
+      const names = listingRaw.result.entries.map((i: any) => i.name).sort();
+      expect(names).toEqual(['p1', 'p2']);
+    });
+
+    it('reads, updates occurrences, and then deletes a file', async () => {
+      const unified = makeTool('node-lrud-2');
+      const targetPath = 'notes/today';
+
+      await unified.execute({ path: targetPath, command: 'append', content: 'Weather is sunny. Mood: good.' } as any);
+      let content = JSON.parse((await unified.execute({ path: targetPath, command: 'read' } as any)) as any);
+      expect(String(content.result.content)).toContain('sunny');
+
+      const updateCount = JSON.parse(
+        (await unified.execute({ path: targetPath, command: 'update', oldContent: 'sunny', content: 'rainy' } as any)) as any,
+      );
+      expect(Number(updateCount.result.replaced)).toBeGreaterThanOrEqual(1);
+
+      content = JSON.parse((await unified.execute({ path: targetPath, command: 'read' } as any)) as any);
+      expect(String(content.result.content)).toContain('rainy');
+      expect(String(content.result.content)).not.toContain('sunny');
+
+      const delResultRaw = JSON.parse((await unified.execute({ path: targetPath, command: 'delete' } as any)) as any);
+      expect(typeof delResultRaw).toBe('object');
+
+      const listingRaw = JSON.parse((await unified.execute({ path: 'notes', command: 'list' } as any)) as any);
+      const names = listingRaw.result.entries.map((i: any) => i.name);
+      expect(names).not.toContain('today');
+    });
+  });
+});

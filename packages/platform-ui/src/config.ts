@@ -4,7 +4,6 @@
 type ViteEnv = {
   VITE_API_BASE_URL?: string;
   VITE_TRACING_SERVER_URL?: string;
-  VITE_MEMORY_ADMIN_ENABLED?: string;
 };
 
 function requireEnv(name: keyof ViteEnv): string {
@@ -16,5 +15,4 @@ function requireEnv(name: keyof ViteEnv): string {
 export const config = {
   apiBaseUrl: requireEnv('VITE_API_BASE_URL'),
   tracingApiBaseUrl: requireEnv('VITE_TRACING_SERVER_URL'),
-  memoryAdminEnabled: String(import.meta.env?.['VITE_MEMORY_ADMIN_ENABLED'] || '').toLowerCase() === 'true',
 };

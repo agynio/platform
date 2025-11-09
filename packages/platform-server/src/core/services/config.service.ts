@@ -19,8 +19,6 @@ export const configSchema = z.object({
   openaiBaseUrl: z.string().optional(),
   githubToken: z.string().min(1).optional(),
   mongodbUrl: z.string().min(1, 'MongoDB connection string is required'),
-  // Memory store selection; default Postgres
-  memoryStore: z.enum(['postgres']).default('postgres'),
   // Graph persistence
   graphStore: z.enum(['mongo', 'git']).default('mongo'),
   graphRepoPath: z.string().default('./data/graph'),
@@ -207,9 +205,6 @@ export class ConfigService implements Config {
   get mongodbUrl(): string {
     return this.params.mongodbUrl;
   }
-  get memoryStore(): 'postgres' {
-    return this.params.memoryStore;
-  }
 
   // Graph config accessors
   get graphStore(): 'mongo' | 'git' {
@@ -343,7 +338,6 @@ export class ConfigService implements Config {
       openaiBaseUrl: process.env.OPENAI_BASE_URL,
       githubToken: process.env.GH_TOKEN,
       mongodbUrl: process.env.MONGODB_URL,
-      memoryStore: process.env.MEMORY_STORE || 'postgres',
       // Pass raw env; schema will validate/assign default
       graphStore: process.env.GRAPH_STORE,
       graphRepoPath: process.env.GRAPH_REPO_PATH,

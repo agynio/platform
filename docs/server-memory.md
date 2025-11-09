@@ -5,7 +5,7 @@ Enabling Memory
 - Wiring: add a `memoryNode` and connect its `$self` to the agent's CallModel via `setMemoryConnector`.
 - Tool: attach the unified `memory` tool to `simpleAgent` and wire `$memory` from Memory node. Commands supported: `read | list | append | update | delete`. Node-level static config supports optional `name`, `description`, and `title` fields for tool metadata/UI; defaults preserve current behavior.
 - Scope: `global` per node by default; `perThread` uses the thread id. Data is string-only.
-- Environment: server requires MongoDB in prod; integration/E2E tests use mongodb-memory-server (no env gating); FakeDb is reserved for unit tests only.
+- Environment: server memory persists to Postgres via `AGENTS_DATABASE_URL`; integration and E2E tests run against a real Postgres instance. FakeDb is reserved for unit tests only.
 
 Unified Memory Tool interface
 - Args: `{ path: string, command: 'read'|'list'|'append'|'update'|'delete', content?: string, oldContent?: string }`
