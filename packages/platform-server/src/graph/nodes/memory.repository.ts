@@ -450,33 +450,27 @@ class PostgresMemoryRepository implements MemoryRepositoryPort {
   }
 
   private async performEnsureSchema(prisma: PrismaClient): Promise<void> {
-    await prisma.$transaction(async (tx) => {
-      await tx.$queryRaw`
-        SELECT pg_advisory_lock(${PostgresMemoryRepository.SCHEMA_LOCK_KEY})
+    await prisma.$executeRaw`SELECT pg_advisory_lock(${PostgresMemoryRepository.SCHEMA_LOCK_KEY})`;
+    try {
+      await prisma.$executeRaw`CREATE EXTENSION IF NOT EXISTS pgcrypto;`;
+      await prisma.$executeRaw`
+        CREATE TABLE IF NOT EXISTS memories (
+          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          node_id TEXT NOT NULL,
+          scope TEXT NOT NULL CHECK (scope IN ('global','perThread')),
+          thread_id TEXT NULL,
+          data JSONB NOT NULL DEFAULT '{}'::jsonb,
+          dirs JSONB NOT NULL DEFAULT '{}'::jsonb,
+          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        );
       `;
-      try {
-        await tx.$executeRaw`CREATE EXTENSION IF NOT EXISTS pgcrypto;`;
-        await tx.$executeRaw`
-          CREATE TABLE IF NOT EXISTS memories (
-            id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-            node_id TEXT NOT NULL,
-            scope TEXT NOT NULL CHECK (scope IN ('global','perThread')),
-            thread_id TEXT NULL,
-            data JSONB NOT NULL DEFAULT '{}'::jsonb,
-            dirs JSONB NOT NULL DEFAULT '{}'::jsonb,
-            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-            updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-          );
-        `;
-        await tx.$executeRaw`CREATE UNIQUE INDEX IF NOT EXISTS uniq_memories_global ON memories (node_id, scope) WHERE scope = 'global';`;
-        await tx.$executeRaw`CREATE UNIQUE INDEX IF NOT EXISTS uniq_memories_per_thread ON memories (node_id, scope, thread_id) WHERE scope = 'perThread' AND thread_id IS NOT NULL;`;
-        await tx.$executeRaw`CREATE INDEX IF NOT EXISTS idx_memories_lookup ON memories (node_id, scope, thread_id);`;
-      } finally {
-        await tx.$queryRaw`
-          SELECT pg_advisory_unlock(${PostgresMemoryRepository.SCHEMA_LOCK_KEY})
-        `;
-      }
-    });
+      await prisma.$executeRaw`CREATE UNIQUE INDEX IF NOT EXISTS uniq_memories_global ON memories (node_id, scope) WHERE scope = 'global';`;
+      await prisma.$executeRaw`CREATE UNIQUE INDEX IF NOT EXISTS uniq_memories_per_thread ON memories (node_id, scope, thread_id) WHERE scope = 'perThread' AND thread_id IS NOT NULL;`;
+      await prisma.$executeRaw`CREATE INDEX IF NOT EXISTS idx_memories_lookup ON memories (node_id, scope, thread_id);`;
+    } finally {
+      await prisma.$executeRaw`SELECT pg_advisory_unlock(${PostgresMemoryRepository.SCHEMA_LOCK_KEY})`;
+    }
   }
 
   private async selectForUpdate(filter: { nodeId: string; scope: MemoryScope; threadId?: string }, tx: Prisma.TransactionClient) {
