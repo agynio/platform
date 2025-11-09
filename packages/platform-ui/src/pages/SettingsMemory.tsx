@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { memoryApi, type ListEntry } from '../api/modules/memory';
+import { memoryApi } from '../api/modules/memory';
 import { Button, Input, Label, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, Textarea } from '@agyn/ui';
 
 export function SettingsMemory() {
