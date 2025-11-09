@@ -15,6 +15,7 @@ import { GraphController } from './controllers/graph.controller';
 import { GraphPersistController } from './controllers/graphPersist.controller';
 import { RunsController } from './controllers/runs.controller';
 import { GraphVariablesController } from './controllers/graphVariables.controller';
+import { MemoryController } from './controllers/memory.controller';
 import { GraphVariablesService } from './services/graphVariables.service';
 import { GitGraphRepository } from './gitGraph.repository';
 import { GraphGuard } from './graph.guard';
@@ -32,6 +33,7 @@ import { ThreadsMetricsService } from '../agents/threads.metrics.service';
 import { RemindersController } from './nodes/tools/remind_me/reminders.controller';
 import { AgentNode } from './nodes/agent/agent.node';
 import { MemoryNode } from './nodes/memory/memory.node';
+import { MemoryService } from './nodes/memory.repository';
 import { MemoryConnectorNode } from './nodes/memoryConnector/memoryConnector.node';
 import { WorkspaceNode } from './nodes/workspace/workspace.node';
 import { SlackTrigger } from './nodes/slackTrigger/slackTrigger.node';
@@ -57,6 +59,7 @@ import { SlackAdapter } from '../messaging/slack/slack.adapter';
     RunsController,
     GraphPersistController,
     GraphController,
+    MemoryController,
     RemindersController,
     GraphVariablesController,
     AgentsThreadsController,
@@ -125,7 +128,8 @@ import { SlackAdapter } from '../messaging/slack/slack.adapter';
 
     //////// Nodes
 
-    // MemoryService removed from providers; created transiently via ModuleRef
+    // Provide MemoryService (transient) so ModuleRef can construct it
+    MemoryService,
     // nodes
     AgentNode,
     MemoryNode,

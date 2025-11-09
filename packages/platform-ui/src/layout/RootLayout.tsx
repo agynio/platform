@@ -37,6 +37,7 @@ import {
   ChevronDown
 } from 'lucide-react';
 import { useUser } from '../user/user.runtime';
+import { config } from '../config';
 
 const STORAGE_KEYS = {
   collapsed: 'ui.sidebar.collapsed',
@@ -129,7 +130,8 @@ export function RootLayout() {
         setOpen: setSettingsOpen,
         items: [
           { label: 'Secrets', to: '/settings/secrets', icon: KeyRound },
-          { label: 'Variables', to: '/settings/variables', icon: KeyRound }
+          { label: 'Variables', to: '/settings/variables', icon: KeyRound },
+          ...(config.memoryAdminEnabled ? [{ label: 'Memory', to: '/settings/memory', icon: KeyRound }] as const : [])
         ]
       }
     ], [agentsOpen, tracingOpen, monitoringOpen, settingsOpen, setAgentsOpen, setTracingOpen, setMonitoringOpen, setSettingsOpen]

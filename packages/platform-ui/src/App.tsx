@@ -21,6 +21,8 @@ import { MonitoringContainers } from './pages/MonitoringContainers';
 import { MonitoringResources } from './pages/MonitoringResources';
 import { SettingsSecrets } from './pages/SettingsSecrets';
 import { SettingsVariables } from './pages/SettingsVariables';
+import { SettingsMemory } from './pages/SettingsMemory';
+import { config } from './config';
 
 const queryClient = new QueryClient();
 
@@ -55,6 +57,7 @@ function App() {
             {/* Settings */}
             <Route path="/settings/secrets" element={<SettingsSecrets />} />
             <Route path="/settings/variables" element={<SettingsVariables />} />
+            {config.memoryAdminEnabled ? <Route path="/settings/memory" element={<SettingsMemory />} /> : null}
           </Route>
         </Routes>
       </RuntimeTemplatesProvider>

@@ -1,9 +1,17 @@
-import type { Db, Collection, Document, WithId } from 'mongodb';
-import { Injectable, Scope } from '@nestjs/common';
+import { Injectable, Scope, Inject } from '@nestjs/common';
+import { PrismaService } from '../../core/services/prisma.service';
+
+// Storage port for Postgres-backed memory. Minimal operations used by MemoryService.
+interface MemoryRepositoryPort {
+  ensureSchema(): Promise<void>;
+  withDoc<T>(filter: { nodeId: string; scope: MemoryScope; threadId?: string }, fn: (doc: MemoryDoc) => Promise<{ doc: MemoryDoc; result?: T } | { doc?: MemoryDoc; result?: T }>): Promise<T>;
+  getDoc(filter: { nodeId: string; scope: MemoryScope; threadId?: string }): Promise<MemoryDoc | null>;
+  getOrCreateDoc(filter: { nodeId: string; scope: MemoryScope; threadId?: string }): Promise<MemoryDoc>;
+}
 
 export type MemoryScope = 'global' | 'perThread';
 
-export interface MemoryDoc extends Document {
+export interface MemoryDoc {
   nodeId: string;
   scope: MemoryScope;
   threadId?: string;
@@ -26,25 +34,30 @@ export interface ListEntry {
 }
 
 /**
- * Mongo-backed memory service with string-only file values.
- * One Mongo document per { nodeId, scope[, threadId] } in the `memories` collection.
- * Paths map to dotted keys in doc.data: "/a/b/c" -> data["a.b.c"].
+ * Memory service with string-only file values.
+ * One document per { nodeId, scope[, threadId] } in the `memories` table.
+ * Paths map to dotted keys in doc.data: "/a/b/c" -> data["a.b.c"]. Back-compat for nested JSON present.
  */
 @Injectable({ scope: Scope.TRANSIENT })
 export class MemoryService {
-  private collection!: Collection<MemoryDoc>;
   private nodeId!: string;
   private scope!: MemoryScope;
   private threadId?: string;
 
-  constructor(private db: Db) {}
+  // Backing repository (Postgres). Inject lazily via PrismaService
+  private repo: MemoryRepositoryPort;
+
+  constructor(@Inject(PrismaService) prisma: PrismaService) {
+    this.repo = new PostgresMemoryRepository(prisma);
+  }
 
   init(params: { nodeId: string; scope: MemoryScope; threadId?: string }) {
     this.nodeId = params.nodeId;
     this.scope = params.scope;
     this.threadId = params.threadId;
     if (this.scope === 'perThread' && !this.threadId) throw new Error('threadId is required for perThread scope');
-    this.collection = this.db.collection<MemoryDoc>('memories');
+    // Ensure schema exists lazily
+    void this.repo.ensureSchema().catch(() => {});
 
     return this;
   }
@@ -71,35 +84,7 @@ export class MemoryService {
 
   /** Create idempotent indexes for uniqueness across scopes. */
   async ensureIndexes(): Promise<void> {
-    const existing = await this.collection.indexes();
-    const names = new Set(existing.map((i) => i.name));
-    const specs: { name: string; key: Record<string, 1 | -1>; unique: boolean; partialFilterExpression: Record<string, unknown> }[] = [
-      {
-        name: 'uniq_global',
-        key: { nodeId: 1, scope: 1 },
-        unique: true,
-        partialFilterExpression: { scope: 'global' },
-      },
-      {
-        name: 'uniq_per_thread',
-        key: { nodeId: 1, scope: 1, threadId: 1 },
-        unique: true,
-        partialFilterExpression: { scope: 'perThread', threadId: { $exists: true } },
-      },
-    ];
-    for (const s of specs) {
-      if (!names.has(s.name)) {
-        try {
-          await this.collection.createIndex(s.key, {
-            name: s.name,
-            unique: s.unique,
-            partialFilterExpression: s.partialFilterExpression,
-          });
-        } catch {
-          // ignore if already exists (race conditions)
-        }
-      }
-    }
+    await this.repo.ensureSchema();
   }
 
   private get filter() {
@@ -115,27 +100,16 @@ export class MemoryService {
 
   // Check whether a document exists for this {nodeId, scope[, threadId]}
   async checkDocExists(): Promise<boolean> {
-    const found = await this.collection.findOne(this.filter, { projection: { _id: 1 } });
+    const found = await this.repo.getDoc(this.filter);
     return !!found;
   }
 
-  private async getDocOrCreate(): Promise<WithId<MemoryDoc>> {
-    // Fast path: fetch existing document
-    let doc = (await this.collection.findOne(this.filter)) as WithId<MemoryDoc> | null;
-    if (!doc) {
-      // Create new doc explicitly to avoid potential read-after-write race on memory server
-      await this.collection.updateOne(
-        this.filter,
-        { $setOnInsert: { nodeId: this.nodeId, scope: this.scope, threadId: this.threadId, data: {}, dirs: {} } },
-        { upsert: true },
-      );
-      doc = (await this.collection.findOne(this.filter)) as WithId<MemoryDoc> | null;
-      if (!doc) throw new Error('failed to create memory document');
-    }
+  private async getDocOrCreate(): Promise<MemoryDoc> {
+    const doc = await this.repo.getOrCreateDoc(this.filter);
     // Ensure maps exist
     if (!doc.data) (doc as unknown as { data: Record<string, unknown> }).data = {};
     if (!doc.dirs) (doc as unknown as { dirs: Record<string, unknown> }).dirs = {};
-    return doc;
+    return doc as MemoryDoc;
   }
 
   private dotted(path: string): string {
@@ -157,7 +131,7 @@ export class MemoryService {
   }
 
   // Check quickly if there is any flat dotted child under the prefix
-  private hasFlatChild(doc: WithId<MemoryDoc>, key: string): boolean {
+  private hasFlatChild(doc: MemoryDoc, key: string): boolean {
     const prefix = key ? key + '.' : '';
     const dataKeys = Object.keys(doc.data || {});
     if (dataKeys.some((k) => typeof k === 'string' && k.startsWith(prefix))) return true;
@@ -190,7 +164,11 @@ export class MemoryService {
   async ensureDir(path: string): Promise<void> {
     const key = this.dotted(path);
     if (key === '') return; // root
-    await this.collection.updateOne(this.filter, { $set: { [`dirs.${key}`]: true } }, { upsert: true });
+    await this.repo.withDoc<void>(this.filter, async (doc) => {
+      const dirs = (doc.dirs ?? {}) as Record<string, unknown>;
+      (dirs as Record<string, true>)[key] = true;
+      return { doc: { ...doc, dirs } };
+    });
   }
 
   /**
@@ -294,112 +272,99 @@ export class MemoryService {
     const parent = lastSlash <= 0 ? '/' : norm.slice(0, lastSlash);
     await this.ensureDir(parent);
     await this.ensureParentDirs(key);
-    const doc = await this.getDocOrCreate();
-
-    const dirs = (doc.dirs ?? {}) as Record<string, unknown>;
-    const dataMap = (doc.data ?? {}) as Record<string, string>;
-    // error if explicit dir at this key
-    if (Object.prototype.hasOwnProperty.call(dirs, key)) throw new Error('EISDIR: path is a directory');
-
-    // Support both nested and flat dotted keys. Prefer nested existing resolution.
-    let current: string | undefined = undefined;
-    // attempt nested resolution similar to read/stat logic
-    try {
-      const nested = this.getNested(doc.data, key);
-      if (nested && nested.exists && typeof nested.node === 'string') current = nested.node;
-    } catch {
-      // ignore nested resolution errors
-    }
-    // fallback: flat dotted key value
-    if (current === undefined) current = dataMap[key];
-    const next =
-      current === undefined ? data : current + (current.endsWith('\n') || data.startsWith('\n') ? '' : '\n') + data;
-    await this.collection.updateOne(this.filter, { $set: { [`data.${key}`]: next } });
+    await this.repo.withDoc<void>(this.filter, async (doc) => {
+      const dirs = (doc.dirs ?? {}) as Record<string, unknown>;
+      const dataMap = (doc.data ?? {}) as Record<string, string>;
+      if (Object.prototype.hasOwnProperty.call(dirs, key)) throw new Error('EISDIR: path is a directory');
+      let current: string | undefined = undefined;
+      try {
+        const nested = this.getNested(doc.data, key);
+        if (nested && nested.exists && typeof nested.node === 'string') current = nested.node as string;
+      } catch {}
+      if (current === undefined) current = dataMap[key];
+      const next = current === undefined ? data : current + (current.endsWith('\n') || data.startsWith('\n') ? '' : '\n') + data;
+      const newData = { ...(doc.data as Record<string, unknown>), [key]: next } as Record<string, unknown>;
+      return { doc: { ...doc, data: newData } };
+    });
   }
 
   /** Replace all occurrences of `oldStr` with `newStr` in the file. Returns number of replacements. */
   async update(path: string, oldStr: string, newStr: string): Promise<number> {
     if (typeof oldStr !== 'string' || typeof newStr !== 'string') throw new Error('update expects string args');
     const key = this.dotted(path);
-    const doc = await this.getDocOrCreate();
-
-    if (Object.prototype.hasOwnProperty.call(doc.dirs, key)) throw new Error('EISDIR: path is a directory');
-    // Support both nested object persistence (Mongo auto-expands dotted keys) and flat dotted keys.
-    let current: string | undefined = undefined;
-    try {
-      const nested = this.getNested(doc.data, key);
-      if (nested && nested.exists) {
-        if (typeof nested.node === 'string') current = nested.node;
-        else throw new Error('EISDIR: path is a directory');
-      }
-    } catch {
-      // ignore nested lookup errors
-    }
-    if (current === undefined) current = (doc.data as Record<string, unknown> | undefined)?.[key] as string | undefined;
-    if (current === undefined) throw new Error('ENOENT: file not found');
-
-    if (oldStr.length === 0) return 0;
-    const parts = String(current).split(oldStr);
-    const count = parts.length - 1;
-    if (count === 0) return 0;
-    const next = parts.join(newStr);
-    await this.collection.updateOne(this.filter, { $set: { [`data.${key}`]: next } });
-    return count;
+    let replaced = 0;
+    await this.repo.withDoc<void>(this.filter, async (doc) => {
+      if (Object.prototype.hasOwnProperty.call(doc.dirs, key)) throw new Error('EISDIR: path is a directory');
+      let current: string | undefined = undefined;
+      try {
+        const nested = this.getNested(doc.data, key);
+        if (nested && nested.exists) {
+          if (typeof nested.node === 'string') current = nested.node as string;
+          else throw new Error('EISDIR: path is a directory');
+        }
+      } catch {}
+      if (current === undefined) current = (doc.data as Record<string, unknown> | undefined)?.[key] as string | undefined;
+      if (current === undefined) throw new Error('ENOENT: file not found');
+      if (oldStr.length === 0) return { doc };
+      const parts = String(current).split(oldStr);
+      const count = parts.length - 1;
+      if (count === 0) return { doc };
+      replaced = count;
+      const next = parts.join(newStr);
+      const newData = { ...(doc.data as Record<string, unknown>), [key]: next } as Record<string, unknown>;
+      return { doc: { ...doc, data: newData } };
+    });
+    return replaced;
   }
 
   /** Delete a file or a dir subtree. Returns counts. */
   async delete(path: string): Promise<{ files: number; dirs: number }> {
     const key = this.dotted(path);
-    const doc = await this.getDocOrCreate();
-    if (key === '') {
-      // clear all for this doc
-      const files = Object.keys(doc.data || {}).length;
-      const dirs = Object.keys(doc.dirs || {} as Record<string, unknown>).length;
-      await this.collection.updateOne(this.filter, { $set: { data: {}, dirs: {} } });
-      return { files, dirs };
-    }
-    const prefix = key + '.';
-    const unset: Record<string, ''> = {};
-    let files = 0;
-    const dataObj: Record<string, unknown> = doc.data || {};
-    if (Object.prototype.hasOwnProperty.call(dataObj, key)) {
-      unset[`data.${key}`] = '';
-      files += 1;
-    } else {
-      // attempt nested lookup (Mongo created nested objects from dotted $set)
-      try {
-        const nested = this.getNested(dataObj, key);
-        if (nested && nested.exists && typeof nested.node === 'string') {
-          unset[`data.${key}`] = '';
+    let out = { files: 0, dirs: 0 };
+    await this.repo.withDoc<void>(this.filter, async (doc) => {
+      if (key === '') {
+        const files = Object.keys(doc.data || {}).length;
+        const dirs = Object.keys(doc.dirs || ({} as Record<string, unknown>)).length;
+        out = { files, dirs };
+        return { doc: { ...doc, data: {}, dirs: {} } };
+      }
+      const prefix = key + '.';
+      const dataObj: Record<string, unknown> = { ...(doc.data || {}) };
+      let files = 0;
+      if (Object.prototype.hasOwnProperty.call(dataObj, key)) {
+        delete dataObj[key];
+        files += 1;
+      } else {
+        try {
+          const nested = this.getNested(doc.data, key);
+          if (nested && nested.exists && typeof nested.node === 'string') {
+            delete dataObj[key];
+            files += 1;
+          }
+        } catch {}
+      }
+      for (const k of Object.keys(dataObj)) {
+        if (k.startsWith(prefix)) {
+          delete dataObj[k];
           files += 1;
         }
-      } catch {
-        // ignore nested lookup errors
       }
-    }
-    for (const k of Object.keys(dataObj)) {
-      if (k.startsWith(prefix)) {
-        unset[`data.${k}`] = '';
-        files += 1;
-      }
-    }
-
-    let dirs = 0;
-    const dirsObj: Record<string, unknown> = doc.dirs || {};
-    if (Object.prototype.hasOwnProperty.call(dirsObj, key)) {
-      unset[`dirs.${key}`] = '';
-      dirs += 1;
-    }
-    for (const k of Object.keys(dirsObj)) {
-      if (k.startsWith(prefix)) {
-        unset[`dirs.${k}`] = '';
+      const dirsObj: Record<string, unknown> = { ...(doc.dirs || {}) };
+      let dirs = 0;
+      if (Object.prototype.hasOwnProperty.call(dirsObj, key)) {
+        delete dirsObj[key];
         dirs += 1;
       }
-    }
-
-    if (files === 0 && dirs === 0) return { files: 0, dirs: 0 };
-    await this.collection.updateOne(this.filter, { $unset: unset });
-    return { files, dirs };
+      for (const k of Object.keys(dirsObj)) {
+        if (k.startsWith(prefix)) {
+          delete dirsObj[k];
+          dirs += 1;
+        }
+      }
+      out = { files, dirs };
+      return { doc: { ...doc, data: dataObj, dirs: dirsObj } };
+    });
+    return out;
   }
 
   /** Return flat dotted key -> string value map (clone). */
@@ -426,11 +391,131 @@ export class MemoryService {
   private async ensureParentDirs(key: string) {
     if (!key) return;
     const parts = key.split('.');
-    const updates: Record<string, true> = {};
-    for (let i = 1; i < parts.length; i++) {
-      const dirKey = parts.slice(0, i).join('.');
-      updates[`dirs.${dirKey}`] = true;
-    }
-    if (Object.keys(updates).length) await this.collection.updateOne(this.filter, { $set: updates }, { upsert: true });
+    if (parts.length <= 1) return;
+    await this.repo.withDoc<void>(this.filter, async (doc) => {
+      const dirs = { ...(doc.dirs || {}) } as Record<string, true>;
+      for (let i = 1; i < parts.length; i++) {
+        const dirKey = parts.slice(0, i).join('.');
+        dirs[dirKey] = true;
+      }
+      return { doc: { ...doc, dirs } };
+    });
+  }
+}
+
+class PostgresMemoryRepository implements MemoryRepositoryPort {
+  constructor(private prismaSvc: PrismaService) {}
+
+  private async getClient() {
+    return this.prismaSvc.getClient();
+  }
+
+  async ensureSchema(): Promise<void> {
+    const prisma = await this.getClient();
+    // Create extension, table, and partial unique indexes idempotently
+    await prisma.$executeRawUnsafe(`CREATE EXTENSION IF NOT EXISTS pgcrypto;`);
+    await prisma.$executeRawUnsafe(`
+      CREATE TABLE IF NOT EXISTS memories (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        node_id TEXT NOT NULL,
+        scope TEXT NOT NULL CHECK (scope IN ('global','perThread')),
+        thread_id TEXT NULL,
+        data JSONB NOT NULL DEFAULT '{}'::jsonb,
+        dirs JSONB NOT NULL DEFAULT '{}'::jsonb,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+    `);
+    await prisma.$executeRawUnsafe(`
+      CREATE INDEX IF NOT EXISTS idx_memories_lookup ON memories (node_id, scope, thread_id);
+    `);
+    await prisma.$executeRawUnsafe(`
+      DO $$
+      BEGIN
+        IF NOT EXISTS (
+          SELECT 1 FROM pg_indexes WHERE schemaname = 'public' AND indexname = 'uniq_memories_global'
+        ) THEN
+          EXECUTE 'CREATE UNIQUE INDEX uniq_memories_global ON memories (node_id, scope) WHERE scope = ''global''';
+        END IF;
+        IF NOT EXISTS (
+          SELECT 1 FROM pg_indexes WHERE schemaname = 'public' AND indexname = 'uniq_memories_per_thread'
+        ) THEN
+          EXECUTE 'CREATE UNIQUE INDEX uniq_memories_per_thread ON memories (node_id, scope, thread_id) WHERE scope = ''perThread'' AND thread_id IS NOT NULL';
+        END IF;
+      END $$;
+    `);
+  }
+
+  private async selectForUpdate(filter: { nodeId: string; scope: MemoryScope; threadId?: string }, tx: any) {
+    const rows = await tx.$queryRawUnsafe<Array<{ id: string; node_id: string; scope: string; thread_id: string | null; data: unknown; dirs: unknown }>>(
+      `SELECT id, node_id, scope, thread_id, data, dirs FROM memories WHERE node_id = $1 AND scope = $2 AND (thread_id IS NOT DISTINCT FROM $3) FOR UPDATE`,
+      filter.nodeId,
+      filter.scope,
+      filter.scope === 'perThread' ? filter.threadId ?? null : null,
+    );
+    return rows[0] || null;
+  }
+
+  async getDoc(filter: { nodeId: string; scope: MemoryScope; threadId?: string }): Promise<MemoryDoc | null> {
+    const prisma = await this.getClient();
+    const rows = await prisma.$queryRawUnsafe<Array<{ node_id: string; scope: string; thread_id: string | null; data: unknown; dirs: unknown }>>(
+      `SELECT node_id, scope, thread_id, data, dirs FROM memories WHERE node_id = $1 AND scope = $2 AND (thread_id IS NOT DISTINCT FROM $3)` ,
+      filter.nodeId,
+      filter.scope,
+      filter.scope === 'perThread' ? filter.threadId ?? null : null,
+    );
+    if (!rows[0]) return null;
+    const r = rows[0];
+    return { nodeId: r.node_id, scope: r.scope as MemoryScope, threadId: r.thread_id ?? undefined, data: (r.data as any) || {}, dirs: (r.dirs as any) || {} };
+  }
+
+  async getOrCreateDoc(filter: { nodeId: string; scope: MemoryScope; threadId?: string }): Promise<MemoryDoc> {
+    const prisma = await this.getClient();
+    return await prisma.$transaction(async (tx) => {
+      await this.ensureSchema();
+      let row = await this.selectForUpdate(filter, tx);
+      if (!row) {
+        await tx.$executeRawUnsafe(
+          `INSERT INTO memories (node_id, scope, thread_id, data, dirs) VALUES ($1, $2, $3, '{}'::jsonb, '{}'::jsonb)` ,
+          filter.nodeId,
+          filter.scope,
+          filter.scope === 'perThread' ? filter.threadId ?? null : null,
+        );
+        row = await this.selectForUpdate(filter, tx);
+      }
+      if (!row) throw new Error('failed to create memory document');
+      return { nodeId: row.node_id, scope: row.scope as MemoryScope, threadId: row.thread_id ?? undefined, data: (row.data as any) || {}, dirs: (row.dirs as any) || {} };
+    });
+  }
+
+  async withDoc<T>(filter: { nodeId: string; scope: MemoryScope; threadId?: string }, fn: (doc: MemoryDoc) => Promise<{ doc: MemoryDoc; result?: T } | { doc?: MemoryDoc; result?: T }>): Promise<T> {
+    const prisma = await this.getClient();
+    return await prisma.$transaction(async (tx) => {
+      await this.ensureSchema();
+      let row = await this.selectForUpdate(filter, tx);
+      if (!row) {
+        await tx.$executeRawUnsafe(
+          `INSERT INTO memories (node_id, scope, thread_id, data, dirs) VALUES ($1, $2, $3, '{}'::jsonb, '{}'::jsonb)` ,
+          filter.nodeId,
+          filter.scope,
+          filter.scope === 'perThread' ? filter.threadId ?? null : null,
+        );
+        row = await this.selectForUpdate(filter, tx);
+      }
+      if (!row) throw new Error('failed to create memory document');
+      const current: MemoryDoc = { nodeId: row.node_id, scope: row.scope as MemoryScope, threadId: row.thread_id ?? undefined, data: (row.data as any) || {}, dirs: (row.dirs as any) || {} };
+      const { doc, result } = await fn(current);
+      if (doc) {
+        await tx.$executeRawUnsafe(
+          `UPDATE memories SET data = $1::jsonb, dirs = $2::jsonb, updated_at = NOW() WHERE node_id = $3 AND scope = $4 AND (thread_id IS NOT DISTINCT FROM $5)` ,
+          JSON.stringify(doc.data ?? {}),
+          JSON.stringify(doc.dirs ?? {}),
+          filter.nodeId,
+          filter.scope,
+          filter.scope === 'perThread' ? filter.threadId ?? null : null,
+        );
+      }
+      return result as T;
+    });
   }
 }
