@@ -1,5 +1,6 @@
 import { Injectable, Scope, Inject } from '@nestjs/common';
 import { PrismaService } from '../../core/services/prisma.service';
+import type { Prisma } from '@prisma/client';
 
 // Storage port for Postgres-backed memory. Minimal operations used by MemoryService.
 interface MemoryRepositoryPort {
@@ -280,7 +281,9 @@ export class MemoryService {
       try {
         const nested = this.getNested(doc.data, key);
         if (nested && nested.exists && typeof nested.node === 'string') current = nested.node as string;
-      } catch {}
+      } catch (_e) {
+        // ignore nested lookup errors; fallback to flat map
+      }
       if (current === undefined) current = dataMap[key];
       const next = current === undefined ? data : current + (current.endsWith('\n') || data.startsWith('\n') ? '' : '\n') + data;
       const newData = { ...(doc.data as Record<string, unknown>), [key]: next } as Record<string, unknown>;
@@ -302,7 +305,9 @@ export class MemoryService {
           if (typeof nested.node === 'string') current = nested.node as string;
           else throw new Error('EISDIR: path is a directory');
         }
-      } catch {}
+      } catch (_e) {
+        // ignore nested lookup errors; continue with flat map
+      }
       if (current === undefined) current = (doc.data as Record<string, unknown> | undefined)?.[key] as string | undefined;
       if (current === undefined) throw new Error('ENOENT: file not found');
       if (oldStr.length === 0) return { doc };
@@ -341,7 +346,9 @@ export class MemoryService {
             delete dataObj[key];
             files += 1;
           }
-        } catch {}
+        } catch (_e) {
+          // ignore nested lookup errors; proceed to prefix deletion
+        }
       }
       for (const k of Object.keys(dataObj)) {
         if (k.startsWith(prefix)) {
@@ -410,6 +417,16 @@ class PostgresMemoryRepository implements MemoryRepositoryPort {
     return this.prismaSvc.getClient();
   }
 
+  private static rowToDoc(row: MemoryRow): MemoryDoc {
+    return {
+      nodeId: row.node_id,
+      scope: row.scope,
+      threadId: row.thread_id ?? undefined,
+      data: (row.data || {}) as Record<string, string | Record<string, unknown>>,
+      dirs: (row.dirs || {}) as Record<string, true | Record<string, unknown>>,
+    };
+  }
+
   async ensureSchema(): Promise<void> {
     const prisma = await this.getClient();
     // Create extension, table, and partial unique indexes idempotently
@@ -446,76 +463,73 @@ class PostgresMemoryRepository implements MemoryRepositoryPort {
     `);
   }
 
-  private async selectForUpdate(filter: { nodeId: string; scope: MemoryScope; threadId?: string }, tx: any) {
-    const rows = await tx.$queryRawUnsafe<Array<{ id: string; node_id: string; scope: string; thread_id: string | null; data: unknown; dirs: unknown }>>(
-      `SELECT id, node_id, scope, thread_id, data, dirs FROM memories WHERE node_id = $1 AND scope = $2 AND (thread_id IS NOT DISTINCT FROM $3) FOR UPDATE`,
-      filter.nodeId,
-      filter.scope,
-      filter.scope === 'perThread' ? filter.threadId ?? null : null,
-    );
-    return rows[0] || null;
+  private async selectForUpdate(filter: { nodeId: string; scope: MemoryScope; threadId?: string }, tx: Prisma.TransactionClient) {
+    const rows = await tx.$queryRaw<MemoryRow[]>`
+      SELECT id, node_id, scope, thread_id, data, dirs, created_at, updated_at
+      FROM memories
+      WHERE node_id = ${filter.nodeId}
+        AND scope = ${filter.scope}
+        AND (thread_id IS NOT DISTINCT FROM ${filter.scope === 'perThread' ? filter.threadId ?? null : null})
+      FOR UPDATE
+    `;
+    return rows[0] ?? null;
   }
 
   async getDoc(filter: { nodeId: string; scope: MemoryScope; threadId?: string }): Promise<MemoryDoc | null> {
     const prisma = await this.getClient();
-    const rows = await prisma.$queryRawUnsafe<Array<{ node_id: string; scope: string; thread_id: string | null; data: unknown; dirs: unknown }>>(
-      `SELECT node_id, scope, thread_id, data, dirs FROM memories WHERE node_id = $1 AND scope = $2 AND (thread_id IS NOT DISTINCT FROM $3)` ,
-      filter.nodeId,
-      filter.scope,
-      filter.scope === 'perThread' ? filter.threadId ?? null : null,
-    );
+    const rows = await prisma.$queryRaw<MemoryRow[]>`
+      SELECT id, node_id, scope, thread_id, data, dirs, created_at, updated_at
+      FROM memories
+      WHERE node_id = ${filter.nodeId}
+        AND scope = ${filter.scope}
+        AND (thread_id IS NOT DISTINCT FROM ${filter.scope === 'perThread' ? filter.threadId ?? null : null})
+    `;
     if (!rows[0]) return null;
-    const r = rows[0];
-    return { nodeId: r.node_id, scope: r.scope as MemoryScope, threadId: r.thread_id ?? undefined, data: (r.data as any) || {}, dirs: (r.dirs as any) || {} };
+    return PostgresMemoryRepository.rowToDoc(rows[0]);
   }
 
   async getOrCreateDoc(filter: { nodeId: string; scope: MemoryScope; threadId?: string }): Promise<MemoryDoc> {
     const prisma = await this.getClient();
-    return await prisma.$transaction(async (tx) => {
+    return await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
       await this.ensureSchema();
       let row = await this.selectForUpdate(filter, tx);
       if (!row) {
-        await tx.$executeRawUnsafe(
-          `INSERT INTO memories (node_id, scope, thread_id, data, dirs) VALUES ($1, $2, $3, '{}'::jsonb, '{}'::jsonb)` ,
-          filter.nodeId,
-          filter.scope,
-          filter.scope === 'perThread' ? filter.threadId ?? null : null,
-        );
+        await tx.$executeRaw`INSERT INTO memories (node_id, scope, thread_id, data, dirs) VALUES (${filter.nodeId}, ${filter.scope}, ${filter.scope === 'perThread' ? filter.threadId ?? null : null}, '{}'::jsonb, '{}'::jsonb)`;
         row = await this.selectForUpdate(filter, tx);
       }
       if (!row) throw new Error('failed to create memory document');
-      return { nodeId: row.node_id, scope: row.scope as MemoryScope, threadId: row.thread_id ?? undefined, data: (row.data as any) || {}, dirs: (row.dirs as any) || {} };
+      return PostgresMemoryRepository.rowToDoc(row as MemoryRow);
     });
   }
 
   async withDoc<T>(filter: { nodeId: string; scope: MemoryScope; threadId?: string }, fn: (doc: MemoryDoc) => Promise<{ doc: MemoryDoc; result?: T } | { doc?: MemoryDoc; result?: T }>): Promise<T> {
     const prisma = await this.getClient();
-    return await prisma.$transaction(async (tx) => {
+    return await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
       await this.ensureSchema();
       let row = await this.selectForUpdate(filter, tx);
       if (!row) {
-        await tx.$executeRawUnsafe(
-          `INSERT INTO memories (node_id, scope, thread_id, data, dirs) VALUES ($1, $2, $3, '{}'::jsonb, '{}'::jsonb)` ,
-          filter.nodeId,
-          filter.scope,
-          filter.scope === 'perThread' ? filter.threadId ?? null : null,
-        );
+        await tx.$executeRaw`INSERT INTO memories (node_id, scope, thread_id, data, dirs) VALUES (${filter.nodeId}, ${filter.scope}, ${filter.scope === 'perThread' ? filter.threadId ?? null : null}, '{}'::jsonb, '{}'::jsonb)`;
         row = await this.selectForUpdate(filter, tx);
       }
       if (!row) throw new Error('failed to create memory document');
-      const current: MemoryDoc = { nodeId: row.node_id, scope: row.scope as MemoryScope, threadId: row.thread_id ?? undefined, data: (row.data as any) || {}, dirs: (row.dirs as any) || {} };
+      const current: MemoryDoc = PostgresMemoryRepository.rowToDoc(row as MemoryRow);
       const { doc, result } = await fn(current);
       if (doc) {
-        await tx.$executeRawUnsafe(
-          `UPDATE memories SET data = $1::jsonb, dirs = $2::jsonb, updated_at = NOW() WHERE node_id = $3 AND scope = $4 AND (thread_id IS NOT DISTINCT FROM $5)` ,
-          JSON.stringify(doc.data ?? {}),
-          JSON.stringify(doc.dirs ?? {}),
-          filter.nodeId,
-          filter.scope,
-          filter.scope === 'perThread' ? filter.threadId ?? null : null,
-        );
+        await tx.$executeRaw`UPDATE memories SET data = ${JSON.stringify(doc.data ?? {})}::jsonb, dirs = ${JSON.stringify(doc.dirs ?? {})}::jsonb, updated_at = NOW() WHERE node_id = ${filter.nodeId} AND scope = ${filter.scope} AND (thread_id IS NOT DISTINCT FROM ${filter.scope === 'perThread' ? filter.threadId ?? null : null})`;
       }
       return result as T;
     });
   }
 }
+
+// Strongly-typed row mapped from raw SQL
+type MemoryRow = {
+  id: string;
+  node_id: string;
+  scope: 'global' | 'perThread';
+  thread_id: string | null;
+  data: Record<string, unknown>;
+  dirs: Record<string, unknown>;
+  created_at: Date;
+  updated_at: Date;
+};

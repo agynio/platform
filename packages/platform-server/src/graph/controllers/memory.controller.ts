@@ -25,6 +25,12 @@ class PathQueryDto {
   path!: string;
 }
 
+class PathWithThreadQueryDto extends PathQueryDto {
+  @IsString()
+  @IsOptional()
+  threadId?: string;
+}
+
 class AppendBodyDto {
   @IsString()
   @IsNotEmpty()
@@ -69,34 +75,34 @@ export class MemoryController {
   async listDocs(): Promise<{ items: Array<{ nodeId: string; scope: MemoryScope; threadId?: string }> }> {
     const prisma = this.prismaSvc.getClient();
     // Use raw query to avoid requiring Prisma model
-    const rows = await prisma.$queryRawUnsafe<Array<{ node_id: string; scope: string; thread_id: string | null }>>(
-      `SELECT node_id, scope, thread_id FROM memories ORDER BY node_id ASC`
-    );
+    const rows = await prisma.$queryRaw<Array<{ node_id: string; scope: string; thread_id: string | null }>>`
+      SELECT node_id, scope, thread_id FROM memories ORDER BY node_id ASC
+    `;
     return { items: rows.map((r) => ({ nodeId: r.node_id, scope: r.scope as MemoryScope, threadId: r.thread_id ?? undefined })) };
   }
 
   @Get(':nodeId/:scope/list')
-  async list(@Param() params: DocParamsDto, @Query() query: PathQueryDto): Promise<{ items: Array<{ name: string; kind: 'file'|'dir' }> }> {
+  async list(@Param() params: DocParamsDto, @Query() query: PathWithThreadQueryDto): Promise<{ items: Array<{ name: string; kind: 'file'|'dir' }> }> {
     const { nodeId, scope } = params;
     const path = query.path ?? '/';
-    const svc = this.getSvc(nodeId, scope, params.scope === 'perThread' ? params.threadId || (query as any).threadId : undefined);
+    const svc = this.getSvc(nodeId, scope, params.scope === 'perThread' ? params.threadId || query.threadId : undefined);
     const items = await svc.list(path || '/');
     return { items };
   }
 
   @Get(':nodeId/:scope/stat')
-  async stat(@Param() params: DocParamsDto, @Query() query: PathQueryDto): Promise<{ kind: 'file'|'dir'|'none'; size?: number }> {
+  async stat(@Param() params: DocParamsDto, @Query() query: PathWithThreadQueryDto): Promise<{ kind: 'file'|'dir'|'none'; size?: number }> {
     const { nodeId, scope } = params;
     const path = query.path;
-    const svc = this.getSvc(nodeId, scope, params.scope === 'perThread' ? params.threadId || (query as any).threadId : undefined);
+    const svc = this.getSvc(nodeId, scope, params.scope === 'perThread' ? params.threadId || query.threadId : undefined);
     return svc.stat(path);
   }
 
   @Get(':nodeId/:scope/read')
-  async read(@Param() params: DocParamsDto, @Query() query: PathQueryDto): Promise<{ content: string }> {
+  async read(@Param() params: DocParamsDto, @Query() query: PathWithThreadQueryDto): Promise<{ content: string }> {
     const { nodeId, scope } = params;
     const path = query.path;
-    const svc = this.getSvc(nodeId, scope, params.scope === 'perThread' ? params.threadId || (query as any).threadId : undefined);
+    const svc = this.getSvc(nodeId, scope, params.scope === 'perThread' ? params.threadId || query.threadId : undefined);
     try { const content = await svc.read(path); return { content }; }
     catch (e) {
       const msg = (e as Error)?.message || '';
@@ -141,9 +147,9 @@ export class MemoryController {
   }
 
   @Delete(':nodeId/:scope')
-  async remove(@Param() params: DocParamsDto, @Query() query: PathQueryDto): Promise<{ files: number; dirs: number }> {
+  async remove(@Param() params: DocParamsDto, @Query() query: PathWithThreadQueryDto): Promise<{ files: number; dirs: number }> {
     const { nodeId, scope } = params;
-    const svc = this.getSvc(nodeId, scope, params.scope === 'perThread' ? params.threadId || (query as any).threadId : undefined);
+    const svc = this.getSvc(nodeId, scope, params.scope === 'perThread' ? params.threadId || query.threadId : undefined);
     return svc.delete(query.path);
   }
 
@@ -154,4 +160,3 @@ export class MemoryController {
     return svc.dump();
   }
 }
-
