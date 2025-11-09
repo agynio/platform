@@ -1,16 +1,7 @@
 import { useState } from 'react';
 import type { ThreadStatusFilter } from './ThreadStatusFilterSwitch';
 import { threads } from '@/api/modules/threads';
-
-export type ThreadNode = {
-  id: string;
-  alias: string;
-  summary?: string | null;
-  status?: 'open' | 'closed';
-  parentId?: string | null;
-  createdAt: string;
-  metrics?: { remindersCount: number; activity: 'working' | 'waiting' | 'idle' };
-};
+import type { ThreadNode } from '@/api/types/agents';
 
 export function ThreadTreeNode({
   node,

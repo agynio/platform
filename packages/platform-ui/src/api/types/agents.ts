@@ -1,5 +1,10 @@
 export type ThreadStatus = 'open' | 'closed';
 
+export type ThreadMetrics = {
+  remindersCount: number;
+  activity: 'working' | 'waiting' | 'idle';
+};
+
 export type ThreadNode = {
   id: string;
   alias: string;
@@ -7,6 +12,7 @@ export type ThreadNode = {
   status?: ThreadStatus;
   parentId?: string | null;
   createdAt: string;
+  metrics?: ThreadMetrics;
 };
 
 export type RunMeta = {
@@ -17,4 +23,3 @@ export type RunMeta = {
 };
 
 export type RunMessageItem = { id: string; kind: 'user' | 'assistant' | 'system' | 'tool'; text?: string | null; source: unknown; createdAt: string };
-

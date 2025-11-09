@@ -1,9 +1,10 @@
 import { useEffect } from 'react';
 import { useQueryClient, type UseQueryResult } from '@tanstack/react-query';
 import { type ThreadStatusFilter } from './ThreadStatusFilterSwitch';
-import { ThreadTreeNode, type ThreadNode } from './ThreadTreeNode';
+import { ThreadTreeNode } from './ThreadTreeNode';
 import { useThreadRoots } from '@/api/hooks/threads';
 import { graphSocket } from '@/lib/graph/socket';
+import type { ThreadNode } from '@/api/types/agents';
 
 export function ThreadTree({ status, onSelect, selectedId }: { status: ThreadStatusFilter; onSelect: (id: string) => void; selectedId?: string }) {
   const qc = useQueryClient();
