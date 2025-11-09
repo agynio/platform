@@ -90,6 +90,7 @@ export class SlackTrigger extends Node<SlackTriggerConfig> {
 
     client.on('message', async (envelope: SlackMessageEnvelope) => {
       try {
+        // Slack expects an ACK within 3 seconds; acknowledge immediately to avoid retries and treat downstream handling as at-most-once.
         await envelope.ack();
         const rawEvent =
           envelope.body?.type === 'event_callback'
