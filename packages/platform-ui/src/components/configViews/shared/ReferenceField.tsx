@@ -26,6 +26,7 @@ export default function ReferenceField({ label, value, onChange, readOnly, disab
 
   const [val, setVal] = useState<string>(init.value);
   const [source, setSource] = useState<'static' | 'vault'>(init.source || 'static');
+  // no masked/unmasked behavior
 
   const isDisabled = !!readOnly || !!disabled;
 

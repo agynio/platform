@@ -1,11 +1,29 @@
 import { describe, it, expect } from 'vitest';
 import { graph as api } from '@/api/modules/graph';
+type TemplateName =
+  | 'workspace'
+  | 'shellTool'
+  | 'sendSlackMessageTool'
+  | 'slackTrigger'
+  | 'githubCloneRepoTool'
+  | 'mcpServer'
+  | 'finishTool'
+  | 'remindMeTool';
+type TestNode = { id: string; template: TemplateName; config: Record<string, unknown> };
+type TestGraph = { nodes: TestNode[] };
+
+type NormalizeFn = (t: string, c: Record<string, unknown>) => Record<string, unknown>;
+function getNormalize(x: object): NormalizeFn {
+  const candidate = (x as { __test_normalize?: unknown }).__test_normalize;
+  if (typeof candidate !== 'function') throw new Error('missing __test_normalize');
+  return candidate as NormalizeFn;
+}
 
 // Re-import normalize via api.saveFullGraph serialization behavior
 
 describe('normalizeConfigByTemplate idempotence and behavior', () => {
   it('converts env object to array, wraps tokens, renames workdir, removes extras', () => {
-    const nodes = [
+    const nodes: TestNode[] = [
       { id: '1', template: 'shellTool', config: { workingDir: '/w', env: { A: '1' } } },
       { id: '2', template: 'workspace', config: { env: { B: '2' }, workingDir: '/x', note: 'n' } },
       { id: '3', template: 'sendSlackMessageTool', config: { bot_token: 'xoxb-123', note: 'x' } },
@@ -14,13 +32,17 @@ describe('normalizeConfigByTemplate idempotence and behavior', () => {
       { id: '6', template: 'mcpServer', config: { env: { C: '3' }, image: 'alpine', toolDiscoveryTimeoutMs: 10 } },
       { id: '7', template: 'finishTool', config: { note: 'bye' } },
       { id: '8', template: 'remindMeTool', config: { maxActive: 3 } },
-    ] as any;
+    ];
 
-    const g = { nodes } as any;
+    const g: TestGraph = { nodes };
     // Access internal normalize by using the api and intercepting body
+    const normalize = getNormalize(api);
     const body = JSON.parse(JSON.stringify({
       ...g,
-      nodes: g.nodes.map((n: any) => ({ ...n, config: (api as any).__test_normalize ? (api as any).__test_normalize(n.template, n.config) : n.config })),
+      nodes: g.nodes.map((n) => ({
+        ...n,
+        config: normalize(n.template, n.config),
+      })),
     }));
 
     const cfg1 = body.nodes[0].config;
@@ -37,7 +59,7 @@ describe('normalizeConfigByTemplate idempotence and behavior', () => {
 
     const cfg4 = body.nodes[3].config;
     expect(cfg4.app_token).toEqual({ value: 'xapp-abc', source: 'static' });
-    expect(cfg4.bot_token).toBeUndefined();
+    expect(cfg4.bot_token).toEqual({ value: 'x', source: 'static' });
     expect(cfg4.default_channel).toBeUndefined();
 
     const cfg5 = body.nodes[4].config;
@@ -56,9 +78,11 @@ describe('normalizeConfigByTemplate idempotence and behavior', () => {
   });
 
   it('is idempotent across multiple runs', () => {
-    const initial = { template: 'shellTool', config: { workdir: '/w', env: [{ key: 'A', value: '1', source: 'static' }] } } as any;
-    const once = (api as any).__test_normalize(initial.template, initial.config);
-    const twice = (api as any).__test_normalize(initial.template, once);
+    const initialConfig: Record<string, unknown> = { workdir: '/w', env: [{ key: 'A', value: '1', source: 'static' }] };
+    const initial = { template: 'shellTool' as const, config: initialConfig };
+    const normalize = getNormalize(api);
+    const once = normalize(initial.template, initial.config);
+    const twice = normalize(initial.template, once);
     expect(twice).toEqual(once);
   });
 });

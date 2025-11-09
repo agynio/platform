@@ -20,8 +20,7 @@ type TemplateName =
   | 'memory'
   | 'memoryConnector';
 
-type ReferenceValue = { value: string; source?: 'static' | 'vault' };
-type EnvItem = { key: string; value: string; source?: 'static' | 'vault' };
+// ReferenceValue and EnvItem shapes are inferred where needed; no explicit aliases to avoid unused type lint errors.
 
 function normalizeConfigByTemplate(
   template: TemplateName | string,
@@ -32,9 +31,7 @@ function normalizeConfigByTemplate(
   switch (template) {
     case 'workspace': {
       if (c.env && !Array.isArray(c.env) && typeof c.env === 'object') {
-        c.env = Object.entries(c.env as Record<string, string>).map(
-          ([k, v]) => ({ key: k, value: v, source: 'static' }) as EnvItem,
-        );
+        c.env = Object.entries(c.env as Record<string, string>).map(([k, v]) => ({ key: k, value: v, source: 'static' }));
       }
       if ('workingDir' in c) delete (c as Record<string, unknown>).workingDir;
       delete (c as Record<string, unknown>).note;
@@ -54,9 +51,7 @@ function normalizeConfigByTemplate(
         delete rc.workingDir;
       }
       if (c.env && !Array.isArray(c.env) && typeof c.env === 'object') {
-        c.env = Object.entries(c.env as Record<string, string>).map(
-          ([k, v]) => ({ key: k, value: v, source: 'static' }) as EnvItem,
-        );
+        c.env = Object.entries(c.env as Record<string, string>).map(([k, v]) => ({ key: k, value: v, source: 'static' }));
       }
       return c;
     }
@@ -68,23 +63,21 @@ function normalizeConfigByTemplate(
     }
     case 'sendSlackMessageTool': {
       const t = (c as Record<string, unknown>)['bot_token'];
-      if (typeof t === 'string')
-        (c as Record<string, unknown>)['bot_token'] = { value: t, source: 'static' } as ReferenceValue;
+      if (typeof t === 'string') (c as Record<string, unknown>)['bot_token'] = { value: t, source: 'static' };
       delete (c as Record<string, unknown>).note;
       return c;
     }
     case 'slackTrigger': {
       const at = (c as Record<string, unknown>)['app_token'];
-      if (typeof at === 'string')
-        (c as Record<string, unknown>)['app_token'] = { value: at, source: 'static' } as ReferenceValue;
-      delete (c as Record<string, unknown>).bot_token;
+      if (typeof at === 'string') (c as Record<string, unknown>)['app_token'] = { value: at, source: 'static' };
+      const bt = (c as Record<string, unknown>)['bot_token'];
+      if (typeof bt === 'string') (c as Record<string, unknown>)['bot_token'] = { value: bt, source: 'static' };
       delete (c as Record<string, unknown>).default_channel;
       return c;
     }
     case 'githubCloneRepoTool': {
       const token = (c as Record<string, unknown>)['token'];
-      if (typeof token === 'string')
-        (c as Record<string, unknown>)['token'] = { value: token, source: 'static' } as ReferenceValue;
+      if (typeof token === 'string') (c as Record<string, unknown>)['token'] = { value: token, source: 'static' };
       delete (c as Record<string, unknown>).repoUrl;
       delete (c as Record<string, unknown>).destPath;
       delete (c as Record<string, unknown>).authToken;
@@ -92,9 +85,7 @@ function normalizeConfigByTemplate(
     }
     case 'mcpServer': {
       if (c.env && !Array.isArray(c.env) && typeof c.env === 'object') {
-        c.env = Object.entries(c.env as Record<string, string>).map(
-          ([k, v]) => ({ key: k, value: v, source: 'static' }) as EnvItem,
-        );
+        c.env = Object.entries(c.env as Record<string, string>).map(([k, v]) => ({ key: k, value: v, source: 'static' }));
       }
       delete (c as Record<string, unknown>).image;
       delete (c as Record<string, unknown>).toolDiscoveryTimeoutMs;
