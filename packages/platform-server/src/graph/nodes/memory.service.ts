@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import type { MemoryDirsMap, MemoryDataMap, MemoryDoc, MemoryFilter, MemoryScope, ListEntry, StatResult } from './memory.types';
-import { PostgresMemoryRepository, type MemoryRepositoryPort } from './memory.repository';
+import type { MemoryRepositoryPort } from './memory.repository';
 
 /**
  * Memory service with string-only file values.
@@ -233,12 +233,8 @@ export class MemoryService {
     await this.repo.withDoc<void>(this.buildFilter(), async (doc) => {
       if (Object.prototype.hasOwnProperty.call(doc.dirs, key)) throw new Error('EISDIR: path is a directory');
       let current: string | undefined = undefined;
-      try {
-        const nested = this.getNested(doc.data, key);
-        if (nested && nested.exists && typeof nested.node === 'string') current = nested.node as string;
-      } catch {
-        // ignore
-      }
+      const nested = this.getNested(doc.data, key);
+      if (nested && nested.exists && typeof nested.node === 'string') current = nested.node as string;
       if (current === undefined) {
         const direct = doc.data[key];
         if (typeof direct === 'string') current = direct;
@@ -256,13 +252,11 @@ export class MemoryService {
     await this.repo.withDoc<void>(this.buildFilter(), async (doc) => {
       if (Object.prototype.hasOwnProperty.call(doc.dirs, key)) throw new Error('EISDIR: path is a directory');
       let current: string | undefined = undefined;
-      try {
-        const nested = this.getNested(doc.data, key);
-        if (nested && nested.exists) {
-          if (typeof nested.node === 'string') current = nested.node as string;
-          else throw new Error('EISDIR: path is a directory');
-        }
-      } catch {}
+      const nested = this.getNested(doc.data, key);
+      if (nested && nested.exists) {
+        if (typeof nested.node === 'string') current = nested.node as string;
+        else throw new Error('EISDIR: path is a directory');
+      }
       if (current === undefined) {
         const direct = doc.data[key];
         if (typeof direct === 'string') current = direct;
@@ -299,13 +293,11 @@ export class MemoryService {
         delete dataObj[key];
         files += 1;
       } else {
-        try {
-          const nested = this.getNested(doc.data, key);
-          if (nested && nested.exists && typeof nested.node === 'string') {
-            delete dataObj[key];
-            files += 1;
-          }
-        } catch {}
+        const nested = this.getNested(doc.data, key);
+        if (nested && nested.exists && typeof nested.node === 'string') {
+          delete dataObj[key];
+          files += 1;
+        }
       }
       for (const k of Object.keys(dataObj)) {
         if (k.startsWith(prefix)) {
@@ -354,4 +346,3 @@ export class MemoryService {
     return { nodeId: doc.nodeId, scope: doc.scope, threadId: doc.threadId, data: dataOut, dirs: dirOut };
   }
 }
-

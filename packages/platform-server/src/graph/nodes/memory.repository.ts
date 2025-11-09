@@ -1,6 +1,6 @@
 import { PrismaService } from '../../core/services/prisma.service';
 import type { Prisma, PrismaClient } from '@prisma/client';
-import type { MemoryScope, MemoryDoc, MemoryDirsMap, MemoryDataMap, MemoryFilter } from './memory.types';
+import type { MemoryDoc, MemoryDirsMap, MemoryDataMap, MemoryFilter } from './memory.types';
 import { Injectable } from '@nestjs/common';
 
 export interface MemoryRepositoryPort {
