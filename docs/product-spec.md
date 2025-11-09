@@ -74,6 +74,7 @@ Behaviors and failure modes
   - Tool call failures normalized with message/code/retriable; transport disconnect to be handled by restart/backoff (planned).
 - Slack
   - Filters bot/subtype events; acks envelopes; robust error logging.
+  - Socket Mode requires enabling Socket Mode plus message.* event subscriptions; provide tokens with prefixes `xapp-` (app) and `xoxb-` (bot) via UI or Vault refs.
 - Cleanup
   - Exponential backoff on termination failures (max delay 15m).
 - UI caveats

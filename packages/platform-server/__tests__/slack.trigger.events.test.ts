@@ -2,14 +2,35 @@ import { describe, it, expect, vi } from 'vitest';
 import type { LoggerService } from '../src/core/services/logger.service';
 // BaseTrigger legacy removed in Issue #451; use SlackTrigger semantics only
 // Typed helper for Slack socket-mode envelope used by our handler
-type SlackEnvelope = {
-  envelope_id: string;
-  ack: () => Promise<void>;
-  body: {
-    type: 'event_callback';
-    event: { type: 'message'; user: string; channel: string; text: string; ts: string };
-  };
+type SlackMessageEvent = {
+  type: 'message';
+  user: string;
+  channel: string;
+  text: string;
+  ts: string;
+  thread_ts?: string;
+  channel_type?: string;
+  client_msg_id?: string;
+  event_ts?: string;
+  subtype?: string;
 };
+type SlackEnvelope =
+  | {
+      envelope_id: string;
+      ack: () => Promise<void>;
+      body: { type: 'event_callback'; event: SlackMessageEvent };
+    }
+  | {
+      envelope_id: string;
+      ack: () => Promise<void>;
+      body: { type: 'events_api'; payload: { event: SlackMessageEvent } };
+    }
+  | {
+      envelope_id: string;
+      ack: () => Promise<void>;
+      event: SlackMessageEvent;
+      body?: undefined;
+    };
 // Mock socket-mode client; SlackTrigger registers a 'message' handler
 vi.mock('@slack/socket-mode', () => {
   let last: MockClient | null = null;
@@ -28,12 +49,7 @@ vi.mock('@slack/socket-mode', () => {
   const __getLastSocketClient = () => last;
   return { SocketModeClient: MockClient, __getLastSocketClient };
 });
-// Type augmentation for mocked helper
-declare module '@slack/socket-mode' {
-  export function __getLastSocketClient(): { handlers: { message?: Array<(env: SlackEnvelope) => Promise<void> | void> } } | null;
-}
-import { SlackTrigger } from '../src/graph/nodes/slackTrigger/slackTrigger.node';
-import { __getLastSocketClient } from '@slack/socket-mode';
+vi.mock('@prisma/client', () => ({ PrismaClient: class {} }));
 // Mock PrismaService to avoid loading @prisma/client in unit tests
 vi.mock('../src/core/services/prisma.service', () => {
   class PrismaServiceMock {
@@ -43,6 +59,12 @@ vi.mock('../src/core/services/prisma.service', () => {
   }
   return { PrismaService: PrismaServiceMock };
 });
+// Type augmentation for mocked helper
+declare module '@slack/socket-mode' {
+  export function __getLastSocketClient(): { handlers: { message?: Array<(env: SlackEnvelope) => Promise<void> | void> } } | null;
+}
+import { SlackTrigger } from '../src/graph/nodes/slackTrigger/slackTrigger.node';
+import { __getLastSocketClient } from '@slack/socket-mode';
 // Avoid importing AgentsPersistenceService to prevent @prisma/client load in unit tests
 // We pass a stub object where needed.
 
@@ -55,33 +77,132 @@ describe('SlackTrigger events', () => {
     error: vi.fn(),
   });
 
-  it('relays message events from socket-mode client', async () => {
+  const setupTrigger = async () => {
     const logger = makeLogger();
-    const vault = ({ getSecret: async (ref: { value: string }) => (String(ref.value).includes('APP') ? 'xapp-abc' : 'xoxb-bot') } satisfies Pick<import('../src/vault/vault.service').VaultService, 'getSecret'>) as import('../src/vault/vault.service').VaultService;
-    const persistence = ({ getOrCreateThreadByAlias: async () => 't-slack', updateThreadChannelDescriptor: async () => undefined } satisfies Pick<import('../src/agents/agents.persistence.service').AgentsPersistenceService, 'getOrCreateThreadByAlias' | 'updateThreadChannelDescriptor'>) as import('../src/agents/agents.persistence.service').AgentsPersistenceService;
+    const getSecret = vi.fn(async (ref: { value: string }) => (String(ref.value).includes('APP') ? 'xapp-abc' : 'xoxb-bot'));
+    const vault = ({ getSecret } satisfies Pick<import('../src/vault/vault.service').VaultService, 'getSecret'>) as import('../src/vault/vault.service').VaultService;
+    const getOrCreateThreadByAlias = vi.fn(async () => 't-slack');
+    const updateThreadChannelDescriptor = vi.fn(async () => undefined);
+    const persistence = ({
+      getOrCreateThreadByAlias,
+      updateThreadChannelDescriptor,
+    } satisfies Pick<import('../src/agents/agents.persistence.service').AgentsPersistenceService, 'getOrCreateThreadByAlias' | 'updateThreadChannelDescriptor'>) as import('../src/agents/agents.persistence.service').AgentsPersistenceService;
     const prismaStub = ({ getClient: () => ({ thread: { findUnique: async () => ({ channel: null }) } }) } satisfies Pick<import('../src/core/services/prisma.service').PrismaService, 'getClient'>) as import('../src/core/services/prisma.service').PrismaService;
     const trig = new SlackTrigger(logger as LoggerService, vault, persistence, prismaStub);
     await trig.setConfig({ app_token: { value: 'xapp-abc', source: 'static' }, bot_token: { value: 'xoxb-bot', source: 'static' } });
-    // Subscribe a listener
     const received: BufferMessage[] = [];
-    await trig.subscribe({ invoke: async (_t, msgs) => { received.push(...msgs); } });
+    const listener = { invoke: vi.fn(async (_t: string, msgs: BufferMessage[]) => { received.push(...msgs); }) };
+    await trig.subscribe(listener);
     await trig.provision();
-    // Fire a mock socket-mode 'message' envelope.
     const client = __getLastSocketClient();
-    if (!client) throw new Error('Mock SocketMode client not initialized');
-    const h = (client.handlers.message || [])[0]!;
+    if (!client || !(client.handlers.message || []).length) throw new Error('Mock SocketMode client not initialized');
+    const handler = (client.handlers.message || [])[0]!;
+    return { handler, received, listenerInvoke: listener.invoke, getOrCreateThreadByAlias, updateThreadChannelDescriptor, trig };
+  };
+
+  it('relays message events from socket-mode client and persists metadata', async () => {
+    const { handler, received, getOrCreateThreadByAlias, updateThreadChannelDescriptor } = await setupTrigger();
     const ack = vi.fn<[], Promise<void>>(async () => {});
     const env: SlackEnvelope = {
       envelope_id: 'e1',
       ack,
       body: {
         type: 'event_callback',
-        event: { type: 'message', user: 'U', channel: 'C', text: 'hello', ts: '1.0' },
+        event: {
+          type: 'message',
+          user: 'U',
+          channel: 'C',
+          text: 'hello',
+          ts: '1.0',
+          thread_ts: 'thread-1',
+          channel_type: 'channel',
+          client_msg_id: 'client-1',
+          event_ts: 'evt-1',
+        },
       },
     };
-    await h(env);
+    await handler(env);
     expect(received.length).toBe(1);
     expect(ack).toHaveBeenCalledTimes(1);
+    expect(getOrCreateThreadByAlias).toHaveBeenCalledWith('slack', 'U_thread-1', 'hello');
+    expect(updateThreadChannelDescriptor).toHaveBeenCalledWith(
+      't-slack',
+      expect.objectContaining({
+        identifiers: { channel: 'C', thread_ts: 'thread-1' },
+        meta: expect.objectContaining({ channel_type: 'channel', client_msg_id: 'client-1', event_ts: 'evt-1' }),
+      }),
+    );
+  });
+
+  it('relays message events from socket-mode events_api payload', async () => {
+    const { handler, received, getOrCreateThreadByAlias } = await setupTrigger();
+    const ack = vi.fn<[], Promise<void>>(async () => {});
+    const env: SlackEnvelope = {
+      envelope_id: 'e2',
+      ack,
+      body: {
+        type: 'events_api',
+        payload: {
+          event: {
+            type: 'message',
+            user: 'U2',
+            channel: 'C2',
+            text: 'hello socket',
+            ts: '2.0',
+          },
+        },
+      },
+    };
+    await handler(env);
+    expect(received.length).toBe(1);
+    expect(ack).toHaveBeenCalledTimes(1);
+    expect(getOrCreateThreadByAlias).toHaveBeenCalledWith('slack', 'U2', 'hello socket');
+  });
+
+  it('falls back to envelope.event when body payload missing', async () => {
+    const { handler, received, getOrCreateThreadByAlias } = await setupTrigger();
+    const ack = vi.fn<[], Promise<void>>(async () => {});
+    const env: SlackEnvelope = {
+      envelope_id: 'e3',
+      ack,
+      event: {
+        type: 'message',
+        user: 'UF',
+        channel: 'CF',
+        text: 'fallback',
+        ts: '3.0',
+      },
+    };
+    await handler(env);
+    expect(received.length).toBe(1);
+    expect(ack).toHaveBeenCalledTimes(1);
+    expect(getOrCreateThreadByAlias).toHaveBeenCalledWith('slack', 'UF', 'fallback');
+  });
+
+  it('acks and filters out non-message or subtype events without notifying listeners', async () => {
+    const { handler, received, listenerInvoke, updateThreadChannelDescriptor, getOrCreateThreadByAlias } = await setupTrigger();
+    const ack = vi.fn<[], Promise<void>>(async () => {});
+    const env: SlackEnvelope = {
+      envelope_id: 'e4',
+      ack,
+      body: {
+        type: 'event_callback',
+        event: {
+          type: 'message',
+          user: 'UX',
+          channel: 'CX',
+          text: 'should not dispatch',
+          ts: '4.0',
+          subtype: 'bot_message',
+        },
+      },
+    };
+    await handler(env);
+    expect(ack).toHaveBeenCalledTimes(1);
+    expect(received.length).toBe(0);
+    expect(listenerInvoke).not.toHaveBeenCalled();
+    expect(getOrCreateThreadByAlias).not.toHaveBeenCalled();
+    expect(updateThreadChannelDescriptor).not.toHaveBeenCalled();
   });
 
   it('sets status to provisioning_error when vault ref but vault disabled', async () => {

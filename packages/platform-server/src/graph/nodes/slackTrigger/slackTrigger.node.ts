@@ -77,10 +77,11 @@ export class SlackTrigger extends Node<SlackTriggerConfig> {
       })
       .strict();
     type SlackEventCallbackBody = { type: 'event_callback'; event?: unknown };
+    type SlackEventsApiBody = { type: 'events_api'; payload?: { event?: unknown } };
     type SlackMessageEnvelope = {
       ack: () => Promise<void>;
       envelope_id: string;
-      body?: SlackEventCallbackBody;
+      body?: SlackEventCallbackBody | SlackEventsApiBody;
       event?: unknown;
       retry_num?: number;
       retry_reason?: string;
@@ -89,8 +90,14 @@ export class SlackTrigger extends Node<SlackTriggerConfig> {
 
     client.on('message', async (envelope: SlackMessageEnvelope) => {
       try {
+        // Slack expects an ACK within 3 seconds; acknowledge immediately to avoid retries and treat downstream handling as at-most-once.
         await envelope.ack();
-        const rawEvent = (envelope.body?.type === 'event_callback' ? envelope.body?.event : undefined) ?? envelope.event;
+        const rawEvent =
+          envelope.body?.type === 'event_callback'
+            ? envelope.body.event
+            : envelope.body?.type === 'events_api'
+              ? envelope.body.payload?.event
+              : envelope.event;
         const parsedEvent = SlackMessageEventSchema.safeParse(rawEvent);
         if (!parsedEvent.success) return;
         const event = parsedEvent.data;
