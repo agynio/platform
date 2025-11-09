@@ -64,7 +64,6 @@ export default function SlackTriggerConfigView({ value, onChange, readOnly, disa
         disabled={disabled}
         placeholder="xoxb-... or mount/path/key"
         helpText="Use source=vault to reference a secret as mount/path/key. Must start with xoxb- for static."
-        masked
       />
     </div>
   );

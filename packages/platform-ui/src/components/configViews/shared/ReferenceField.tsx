@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Input, Label, Button } from '@agyn/ui';
+import { Input, Label } from '@agyn/ui';
 
 export type ReferenceValue = { value: string; source?: 'static' | 'vault' };
 
@@ -11,14 +11,13 @@ export interface ReferenceFieldProps {
   disabled?: boolean;
   placeholder?: string;
   helpText?: string;
-  masked?: boolean;
 }
 
 /**
  * ReferenceField allows choosing between static value and vault reference.
  * Emits normalized shape { value, source } with default source 'static'.
  */
-export default function ReferenceField({ label, value, onChange, readOnly, disabled, placeholder, helpText, masked }: ReferenceFieldProps) {
+export default function ReferenceField({ label, value, onChange, readOnly, disabled, placeholder, helpText }: ReferenceFieldProps) {
   const init = useMemo<ReferenceValue>(() => {
     if (!value) return { value: '', source: 'static' };
     if (typeof value === 'string') return { value, source: 'static' };
@@ -27,7 +26,7 @@ export default function ReferenceField({ label, value, onChange, readOnly, disab
 
   const [val, setVal] = useState<string>(init.value);
   const [source, setSource] = useState<'static' | 'vault'>(init.source || 'static');
-  const [show, setShow] = useState<boolean>(false);
+  // no masked/unmasked behavior
 
   const isDisabled = !!readOnly || !!disabled;
 
@@ -57,21 +56,7 @@ export default function ReferenceField({ label, value, onChange, readOnly, disab
           disabled={isDisabled}
           placeholder={placeholder || (source === 'vault' ? 'mount/path/key' : '')}
           data-testid="ref-value"
-          type={masked && source === 'static' && !show ? 'password' : 'text'}
-          autoComplete={masked && source === 'static' ? 'new-password' : undefined}
         />
-        {masked && source === 'static' ? (
-          <Button
-            type="button"
-            size="sm"
-            variant="outline"
-            onClick={() => setShow((s) => !s)}
-            disabled={isDisabled}
-            data-testid="ref-toggle"
-          >
-            {show ? 'Hide' : 'Show'}
-          </Button>
-        ) : null}
       </div>
       {helpText ? <div className="text-[10px] text-muted-foreground">{helpText}</div> : null}
     </div>
