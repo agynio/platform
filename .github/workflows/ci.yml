@@ -100,13 +100,17 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Apply platform-server migrations
+        env:
+          AGENTS_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/agents_test
+        run: pnpm --filter @agyn/platform-server exec prisma migrate deploy
+
       - name: Prisma generate (platform-server)
         run: pnpm --filter @agyn/platform-server run prisma:generate
 
       - name: Run server tests
         env:
           RUN_MONGOMS: '0'
-          MEMORY_STORE: 'postgres'
           MONGOMS_VERSION: '7.0.14'
           AGENTS_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/agents_test
         run: pnpm --filter @agyn/platform-server test

@@ -8,7 +8,6 @@ type MemoryDataMap = Record<string, string | Record<string, unknown>>;
 type MemoryDirsMap = Record<string, true | Record<string, unknown>>;
 
 interface MemoryRepositoryPort {
-  ensureSchema(): Promise<void>;
   withDoc<T>(filter: MemoryFilter, fn: (doc: MemoryDoc) => Promise<{ doc: MemoryDoc; result?: T } | { doc?: MemoryDoc; result?: T }>): Promise<T>;
   getDoc(filter: MemoryFilter): Promise<MemoryDoc | null>;
   getOrCreateDoc(filter: MemoryFilter): Promise<MemoryDoc>;
@@ -58,11 +57,9 @@ export class MemoryService {
 
   init(params: { nodeId: string; scope: MemoryScope; threadId?: string }) {
     this.nodeId = params.nodeId;
-    this.scope = params.scope;
-    this.threadId = params.threadId;
-    if (this.scope === 'perThread' && !this.threadId) throw new Error('threadId is required for perThread scope');
-    // Ensure schema exists lazily
-    void this.repo.ensureSchema().catch(() => {});
+   this.scope = params.scope;
+   this.threadId = params.threadId;
+   if (this.scope === 'perThread' && !this.threadId) throw new Error('threadId is required for perThread scope');
 
     return this;
   }
@@ -89,7 +86,7 @@ export class MemoryService {
 
   /** Create idempotent indexes for uniqueness across scopes. */
   async ensureIndexes(): Promise<void> {
-    await this.repo.ensureSchema();
+    // Schema managed via migrations; nothing to do.
   }
 
   private buildFilter(): MemoryFilter {
@@ -460,10 +457,6 @@ export class MemoryService {
 }
 
 class PostgresMemoryRepository implements MemoryRepositoryPort {
-  private static schemaInitialized = false;
-  private static schemaInitPromise: Promise<void> | null = null;
-  private static readonly SCHEMA_LOCK_KEY = BigInt(0x4d4d5250); // 'MMRP'
-
   constructor(private prismaSvc: PrismaService) {}
 
   private async getClient(): Promise<PrismaClient> {
@@ -478,48 +471,6 @@ class PostgresMemoryRepository implements MemoryRepositoryPort {
       data: (row.data || {}) as MemoryDataMap,
       dirs: (row.dirs || {}) as MemoryDirsMap,
     };
-  }
-
-  async ensureSchema(): Promise<void> {
-    const prisma = await this.getClient();
-
-    if (PostgresMemoryRepository.schemaInitialized) return;
-
-    if (!PostgresMemoryRepository.schemaInitPromise) {
-      PostgresMemoryRepository.schemaInitPromise = this.performEnsureSchema(prisma)
-        .then(() => {
-          PostgresMemoryRepository.schemaInitialized = true;
-        })
-        .finally(() => {
-          PostgresMemoryRepository.schemaInitPromise = null;
-        });
-    }
-
-    await PostgresMemoryRepository.schemaInitPromise;
-  }
-
-  private async performEnsureSchema(prisma: PrismaClient): Promise<void> {
-    await prisma.$executeRaw`SELECT pg_advisory_lock(${PostgresMemoryRepository.SCHEMA_LOCK_KEY})`;
-    try {
-      await prisma.$executeRaw`CREATE EXTENSION IF NOT EXISTS pgcrypto;`;
-      await prisma.$executeRaw`
-        CREATE TABLE IF NOT EXISTS memories (
-          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-          node_id TEXT NOT NULL,
-          scope TEXT NOT NULL CHECK (scope IN ('global','perThread')),
-          thread_id TEXT NULL,
-          data JSONB NOT NULL DEFAULT '{}'::jsonb,
-          dirs JSONB NOT NULL DEFAULT '{}'::jsonb,
-          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-          updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-        );
-      `;
-      await prisma.$executeRaw`CREATE UNIQUE INDEX IF NOT EXISTS uniq_memories_global ON memories (node_id, scope) WHERE scope = 'global';`;
-      await prisma.$executeRaw`CREATE UNIQUE INDEX IF NOT EXISTS uniq_memories_per_thread ON memories (node_id, scope, thread_id) WHERE scope = 'perThread' AND thread_id IS NOT NULL;`;
-      await prisma.$executeRaw`CREATE INDEX IF NOT EXISTS idx_memories_lookup ON memories (node_id, scope, thread_id);`;
-    } finally {
-      await prisma.$executeRaw`SELECT pg_advisory_unlock(${PostgresMemoryRepository.SCHEMA_LOCK_KEY})`;
-    }
   }
 
   private async selectForUpdate(filter: MemoryFilter, tx: Prisma.TransactionClient) {
@@ -549,7 +500,6 @@ class PostgresMemoryRepository implements MemoryRepositoryPort {
 
   async getOrCreateDoc(filter: MemoryFilter): Promise<MemoryDoc> {
     const prisma = await this.getClient();
-    await this.ensureSchema();
     return await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
       let row = await this.selectForUpdate(filter, tx);
       if (!row) {
@@ -563,7 +513,6 @@ class PostgresMemoryRepository implements MemoryRepositoryPort {
 
   async withDoc<T>(filter: MemoryFilter, fn: (doc: MemoryDoc) => Promise<{ doc: MemoryDoc; result?: T } | { doc?: MemoryDoc; result?: T }>): Promise<T> {
     const prisma = await this.getClient();
-    await this.ensureSchema();
     return await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
       let row = await this.selectForUpdate(filter, tx);
       if (!row) {

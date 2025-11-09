@@ -29,6 +29,25 @@ model VariableLocal {
   updatedAt DateTime @updatedAt
 }
 
+enum MemoryScope {
+  global
+  perThread
+}
+
+model Memory {
+  id        String      @id @default(uuid()) @db.Uuid
+  nodeId    String      @map("node_id")
+  scope     MemoryScope
+  threadId  String?     @map("thread_id")
+  data      Json        @default("{}")
+  dirs      Json        @default("{}")
+  createdAt DateTime    @default(now()) @map("created_at")
+  updatedAt DateTime    @updatedAt @map("updated_at")
+
+  @@map("memories")
+  @@index([nodeId, scope], map: "idx_memories_lookup")
+}
+
 // Core normalized persistence per spec: threads, runs, messages, run_messages
 
 model Thread {
