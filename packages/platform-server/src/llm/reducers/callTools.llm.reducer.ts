@@ -4,7 +4,7 @@ import { LLMContext, LLMMessage, LLMState } from '../types';
 import { FunctionTool, Reducer, ResponseMessage, ToolCallMessage, ToolCallOutputMessage } from '@agyn/llm';
 import { LoggerService } from '../../core/services/logger.service';
 import { Inject, Injectable, Scope } from '@nestjs/common';
-import { stringify as YamlStringify } from 'yaml';
+import { McpError } from '../../graph/nodes/mcp/types';
 
 @Injectable({ scope: Scope.TRANSIENT })
 export class CallToolsLLMReducer extends Reducer<LLMState, LLMContext> {
@@ -48,22 +48,102 @@ export class CallToolsLLMReducer extends Reducer<LLMState, LLMContext> {
     const results = await Promise.all(
       toolsToCall.map(async (t) => {
         const tool = toolsMap.get(t.name);
-        if (!tool) throw new Error(`Unknown tool called: ${t.name}`);
-        const input = tool.schema.parse(JSON.parse(t.args));
+        const nodeId = ctx?.callerAgent?.getAgentNodeId?.();
+
+        const createErrorResponse = (params: {
+          code: 'BAD_JSON_ARGS' | 'SCHEMA_VALIDATION_FAILED' | 'TOOL_NOT_FOUND' | 'TOOL_EXECUTION_ERROR' | 'TOOL_OUTPUT_TOO_LARGE' | 'MCP_CALL_ERROR';
+          message: string;
+          originalArgs?: unknown;
+          details?: unknown;
+          retriable?: boolean;
+        }) => {
+          const { code, message, originalArgs, details, retriable } = params;
+          const payload = {
+            status: 'error' as const,
+            tool_name: t.name,
+            tool_call_id: t.callId,
+            error_code: code,
+            message,
+            ...(originalArgs !== undefined ? { original_args: originalArgs } : {}),
+            ...(details !== undefined ? { details } : {}),
+            retriable: retriable ?? false,
+          };
+
+          return new ToolCallResponse({
+            raw: message,
+            output: payload,
+            status: 'error',
+          });
+        };
 
         const response = await withToolCall(
           {
-            name: tool.name,
+            name: t.name,
             toolCallId: t.callId,
-            input,
-            nodeId: ctx?.callerAgent?.getAgentNodeId?.(),
+            input: t.args,
+            nodeId,
           },
           async () => {
+            if (!tool) {
+              this.logger.warn(`Unknown tool called: ${t.name}`);
+              return createErrorResponse({
+                code: 'TOOL_NOT_FOUND',
+                message: `Tool ${t.name} is not registered.`,
+                originalArgs: t.args,
+              });
+            }
+
+            let parsedArgs: unknown;
+            try {
+              parsedArgs = JSON.parse(t.args);
+            } catch (err) {
+              this.logger.error('Failed to parse tool arguments', err);
+              const details = err instanceof Error ? { message: err.message, name: err.name } : { error: err };
+              return createErrorResponse({
+                code: 'BAD_JSON_ARGS',
+                message: `Invalid JSON arguments for tool ${t.name}.`,
+                originalArgs: t.args,
+                details,
+              });
+            }
+
+            let input: unknown;
+            if (typeof (tool.schema as { safeParse?: unknown }).safeParse === 'function') {
+              const validation = (tool.schema as { safeParse: (value: unknown) => { success: boolean; data: unknown; error?: { issues?: unknown } } }).safeParse(parsedArgs);
+              if (!validation.success) {
+                const issues = validation.error?.issues ?? [];
+                return createErrorResponse({
+                  code: 'SCHEMA_VALIDATION_FAILED',
+                  message: `Arguments failed validation for tool ${t.name}.`,
+                  originalArgs: parsedArgs,
+                  details: issues,
+                });
+              }
+              input = validation.data;
+            } else {
+              try {
+                input = (tool.schema as { parse: (value: unknown) => unknown }).parse(parsedArgs);
+              } catch (err) {
+                const details = err instanceof Error ? { message: err.message, name: err.name, stack: err.stack } : { error: err };
+                return createErrorResponse({
+                  code: 'SCHEMA_VALIDATION_FAILED',
+                  message: `Arguments failed validation for tool ${t.name}.`,
+                  originalArgs: parsedArgs,
+                  details,
+                });
+              }
+            }
+
             try {
               const raw = await tool.execute(input, ctx);
 
-              if (raw.length > 50000) {
-                throw new Error('Tool output exceeds maximum allowed length of 50000 characters.');
+              if (typeof raw === 'string' && raw.length > 50000) {
+                return createErrorResponse({
+                  code: 'TOOL_OUTPUT_TOO_LARGE',
+                  message: `Tool ${t.name} produced output longer than 50000 characters.`,
+                  originalArgs: input,
+                  details: { length: raw.length },
+                });
               }
 
               return new ToolCallResponse({
@@ -71,28 +151,21 @@ export class CallToolsLLMReducer extends Reducer<LLMState, LLMContext> {
                 output: raw,
                 status: 'success',
               });
-            } catch (err: unknown) {
+            } catch (err) {
               this.logger.error('Error occurred while executing tool', err);
-
-              if (err instanceof Error) {
-                const message = YamlStringify(err.message);
-                return new ToolCallResponse({
-                  raw: message,
-                  output: message,
-                  status: 'error',
-                });
-              }
-
-              return new ToolCallResponse({
-                raw: 'Unknown error',
-                output: 'Unknown error',
-                status: 'error',
+              const message = err instanceof Error && err.message ? err.message : 'Unknown error';
+              const details = err instanceof Error ? { message: err.message, name: err.name, stack: err.stack } : { error: err };
+              const code = err instanceof McpError ? 'MCP_CALL_ERROR' : 'TOOL_EXECUTION_ERROR';
+              return createErrorResponse({
+                code,
+                message: `Tool ${t.name} execution failed: ${message}`,
+                originalArgs: input,
+                details,
               });
             }
           },
         );
 
-        // Emit raw output payload for FunctionCallOutput
         return ToolCallOutputMessage.fromResponse(t.callId, response);
       }),
     );

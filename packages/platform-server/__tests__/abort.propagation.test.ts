@@ -20,7 +20,7 @@ describe('Abort propagation', () => {
       return 'done';
     }, { name: 'long', description: 'long', schema: z.object({}) });
 
-    const reducer = new CallToolsLLMReducer(new LoggerService()).init({ tools: [{ name: 'long', schema: { parse: (v: any) => v }, execute: async (_i: any, cfg: any) => longTool.invoke(_i, cfg) } as any] });
+    const reducer = new CallToolsLLMReducer(new LoggerService()).init({ tools: [{ name: 'long', schema: { safeParse: (v: any) => ({ success: true, data: v }), parse: (v: any) => v }, execute: async (_i: any, cfg: any) => longTool.invoke(_i, cfg) } as any] });
     const response = new ResponseMessage({ output: [new ToolCallMessage({ type: 'function_call', call_id: 'x', name: 'long', arguments: JSON.stringify({}) } as any).toPlain() as any] as any });
     const ac = new AbortController();
     // Abort before invoking to ensure deterministic throw
