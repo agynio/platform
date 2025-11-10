@@ -119,8 +119,13 @@ export class SlackTrigger extends Node<SlackTriggerConfig> {
         const text = typeof event.text === 'string' ? event.text : '';
         if (!text.trim()) return;
         const userPart = typeof event.user === 'string' && event.user ? event.user : 'slack';
-        const alias =
-          typeof event.thread_ts === 'string' && event.thread_ts ? `${userPart}_${event.thread_ts}` : userPart;
+        const rootTs =
+          typeof event.thread_ts === 'string' && event.thread_ts
+            ? event.thread_ts
+            : typeof event.ts === 'string' && event.ts
+              ? event.ts
+              : null;
+        const alias = rootTs ? `${userPart}_${rootTs}` : userPart;
         const msg: TriggerHumanMessage = {
           kind: 'human',
           content: text,
@@ -128,7 +133,7 @@ export class SlackTrigger extends Node<SlackTriggerConfig> {
             user: event.user,
             channel: event.channel,
             channel_type: event.channel_type,
-            ...(typeof event.thread_ts === 'string' && event.thread_ts ? { thread_ts: event.thread_ts } : {}),
+            ...(rootTs ? { thread_ts: rootTs } : {}),
             client_msg_id: event.client_msg_id,
             event_ts: event.event_ts,
           },
@@ -141,7 +146,7 @@ export class SlackTrigger extends Node<SlackTriggerConfig> {
             version: 1,
             identifiers: {
               channel: event.channel,
-              ...(event.thread_ts ? { thread_ts: event.thread_ts } : {}),
+              ...(rootTs ? { thread_ts: rootTs } : {}),
             },
             meta: {
               channel_type: event.channel_type,
@@ -266,12 +271,16 @@ export class SlackTrigger extends Node<SlackTriggerConfig> {
       }
       const descriptor = parsed.data;
       const ids = descriptor.identifiers;
+      const hadThreadTs = typeof ids.thread_ts === 'string' && ids.thread_ts.length > 0;
       const res = await this.slackAdapter.sendText({
         token: this.botToken!,
         channel: ids.channel,
         text,
         thread_ts: ids.thread_ts,
       });
+      if (res.ok && !hadThreadTs && typeof res.threadId === 'string' && res.threadId.length > 0) {
+        await this.persistence.upsertThreadThreadTs(threadId, res.threadId);
+      }
       return res;
     } catch (e) {
       const msg = e instanceof Error && e.message ? e.message : 'unknown_error';

@@ -33,7 +33,11 @@ describe('send_message tool', () => {
     const trigger = new SlackTrigger(
       new LoggerService(),
       vaultMock,
-      ({ getOrCreateThreadByAlias: async () => 't1', updateThreadChannelDescriptor: async () => undefined } satisfies Pick<import('../src/agents/agents.persistence.service').AgentsPersistenceService, 'getOrCreateThreadByAlias' | 'updateThreadChannelDescriptor'>) as import('../src/agents/agents.persistence.service').AgentsPersistenceService,
+      ({
+        getOrCreateThreadByAlias: async () => 't1',
+        updateThreadChannelDescriptor: async () => undefined,
+        upsertThreadThreadTs: async () => undefined,
+      } satisfies Pick<import('../src/agents/agents.persistence.service').AgentsPersistenceService, 'getOrCreateThreadByAlias' | 'updateThreadChannelDescriptor' | 'upsertThreadThreadTs'>) as import('../src/agents/agents.persistence.service').AgentsPersistenceService,
       prismaStub,
       new SlackAdapterStub(),
     );
@@ -62,7 +66,11 @@ describe('send_message tool', () => {
     const trigger = new SlackTrigger(
       new LoggerService(),
       vaultMock2,
-      ({ getOrCreateThreadByAlias: async () => 't1', updateThreadChannelDescriptor: async () => undefined } satisfies Pick<import('../src/agents/agents.persistence.service').AgentsPersistenceService, 'getOrCreateThreadByAlias' | 'updateThreadChannelDescriptor'>) as import('../src/agents/agents.persistence.service').AgentsPersistenceService,
+      ({
+        getOrCreateThreadByAlias: async () => 't1',
+        updateThreadChannelDescriptor: async () => undefined,
+        upsertThreadThreadTs: async () => undefined,
+      } satisfies Pick<import('../src/agents/agents.persistence.service').AgentsPersistenceService, 'getOrCreateThreadByAlias' | 'updateThreadChannelDescriptor' | 'upsertThreadThreadTs'>) as import('../src/agents/agents.persistence.service').AgentsPersistenceService,
       prismaStub2,
       new SlackAdapterStub2(),
     );

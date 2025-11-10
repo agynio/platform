@@ -68,7 +68,6 @@ export class SendSlackMessageFunctionTool extends FunctionTool<typeof sendSlackI
           channel,
           user: ephemeral_user,
           text,
-          thread_ts,
         });
         if (!resp.ok) return JSON.stringify({ ok: false, error: resp.error });
         return JSON.stringify({ ok: true, channel, message_ts: resp.message_ts, ephemeral: true });

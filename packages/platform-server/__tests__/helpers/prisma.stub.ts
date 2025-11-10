@@ -1,7 +1,7 @@
 import { PrismaService } from '../../src/core/services/prisma.service';
 
 export function createPrismaStub() {
-  const threads: Array<{ id: string; alias: string; parentId: string | null; summary: string | null; status: 'open' | 'closed'; createdAt: Date }> = [];
+  const threads: Array<{ id: string; alias: string; parentId: string | null; summary: string | null; status: 'open' | 'closed'; createdAt: Date; channel: any }> = [];
   const runs: Array<{ id: string; threadId: string; status: string; createdAt: Date; updatedAt: Date }> = [];
   const messages: Array<{ id: string; kind: string; text: string | null; source: any; createdAt: Date }> = [];
   const runMessages: Array<{ runId: string; messageId: string; type: string; createdAt: Date }> = [];
@@ -13,13 +13,28 @@ export function createPrismaStub() {
 
   const prisma: any = {
     thread: {
-      findUnique: async ({ where }: any) => {
-        if (where?.alias) return threads.find((t) => t.alias === where.alias) || null;
-        if (where?.id) return threads.find((t) => t.id === where.id) || null;
-        return null;
+      findUnique: async ({ where, select }: any) => {
+        let row: any = null;
+        if (where?.alias) row = threads.find((t) => t.alias === where.alias) || null;
+        else if (where?.id) row = threads.find((t) => t.id === where.id) || null;
+        if (!row) return null;
+        if (select) {
+          const out: any = {};
+          for (const key of Object.keys(select)) if (select[key]) out[key] = row[key];
+          return out;
+        }
+        return row;
       },
       create: async ({ data }: any) => {
-        const row = { id: newId(), alias: data.alias, parentId: data.parentId ?? null, summary: data.summary ?? null, status: data.status ?? 'open', createdAt: new Date(timeSeed + idSeq) };
+        const row = {
+          id: newId(),
+          alias: data.alias,
+          parentId: data.parentId ?? null,
+          summary: data.summary ?? null,
+          status: data.status ?? 'open',
+          createdAt: new Date(timeSeed + idSeq),
+          channel: data.channel ?? null,
+        };
         threads.push(row);
         return row;
       },
@@ -29,6 +44,7 @@ export function createPrismaStub() {
         const next = { ...threads[idx] } as any;
         if (Object.prototype.hasOwnProperty.call(data, 'summary')) next.summary = data.summary ?? null;
         if (Object.prototype.hasOwnProperty.call(data, 'status')) next.status = data.status;
+        if (Object.prototype.hasOwnProperty.call(data, 'channel')) next.channel = data.channel ?? null;
         threads[idx] = next as any;
         return threads[idx];
       },

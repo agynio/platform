@@ -43,14 +43,54 @@ export class AgentsPersistenceService {
    * Populate thread channel descriptor if not set.
    */
   async updateThreadChannelDescriptor(threadId: string, descriptor: ChannelDescriptor): Promise<void> {
-    const existing = await this.prisma.thread.findUnique({ where: { id: threadId }, select: { channel: true } });
-    if (existing?.channel) return; // do not overwrite
-    const parsed = ChannelDescriptorSchema.safeParse(descriptor);
-    if (!parsed.success) {
+    const parsedIncoming = ChannelDescriptorSchema.safeParse(descriptor);
+    if (!parsedIncoming.success) {
       this.logger.error('Invalid channel descriptor; skipping persistence', { threadId });
       return;
     }
-    const channelJson = toPrismaJsonValue(parsed.data);
+    const incoming = parsedIncoming.data;
+    const existing = await this.prisma.thread.findUnique({ where: { id: threadId }, select: { channel: true } });
+
+    let nextDescriptor: ChannelDescriptor | null = incoming;
+    if (existing?.channel != null) {
+      const parsedExisting = ChannelDescriptorSchema.safeParse(existing.channel as unknown);
+      if (!parsedExisting.success) {
+        this.logger.warn('Existing descriptor invalid; replacing with incoming descriptor', { threadId });
+      } else {
+        const current = parsedExisting.data;
+        if (!current.identifiers.thread_ts && incoming.identifiers.thread_ts) {
+          nextDescriptor = {
+            ...current,
+            identifiers: { ...current.identifiers, thread_ts: incoming.identifiers.thread_ts },
+          };
+        } else {
+          nextDescriptor = null; // nothing to update
+        }
+      }
+    }
+
+    if (!nextDescriptor) return;
+    const channelJson = toPrismaJsonValue(nextDescriptor);
+    const updated = await this.prisma.thread.update({ where: { id: threadId }, data: { channel: channelJson } });
+    this.events.emitThreadUpdated({ id: updated.id, alias: updated.alias, summary: updated.summary ?? null, status: updated.status, createdAt: updated.createdAt, parentId: updated.parentId ?? null });
+  }
+
+  async upsertThreadThreadTs(threadId: string, threadTs: string): Promise<void> {
+    if (!threadTs) return;
+    const existing = await this.prisma.thread.findUnique({ where: { id: threadId }, select: { channel: true } });
+    if (!existing?.channel) return;
+    const parsed = ChannelDescriptorSchema.safeParse(existing.channel as unknown);
+    if (!parsed.success) {
+      this.logger.warn('Existing descriptor invalid; cannot upsert thread_ts', { threadId });
+      return;
+    }
+    const descriptor = parsed.data;
+    if (descriptor.identifiers.thread_ts === threadTs) return;
+    const next: ChannelDescriptor = {
+      ...descriptor,
+      identifiers: { ...descriptor.identifiers, thread_ts: threadTs },
+    };
+    const channelJson = toPrismaJsonValue(next);
     const updated = await this.prisma.thread.update({ where: { id: threadId }, data: { channel: channelJson } });
     this.events.emitThreadUpdated({ id: updated.id, alias: updated.alias, summary: updated.summary ?? null, status: updated.status, createdAt: updated.createdAt, parentId: updated.parentId ?? null });
   }
