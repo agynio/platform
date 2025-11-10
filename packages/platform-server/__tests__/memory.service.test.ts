@@ -9,7 +9,6 @@ maybeDescribe('MemoryService', () => {
   it("normalizes paths and forbids .. and $", async () => {
     const repo = new PostgresMemoryRepository({ getClient: () => new PrismaClient({ datasources: { db: { url: URL! } } }) } as any);
     const svc = new MemoryService(repo);
-    svc.init({ nodeId: 'n1', scope: 'global' });
     expect(svc.normalizePath('a/b')).toBe('/a/b');
     expect(svc.normalizePath('/a//b/')).toBe('/a/b');
     expect(svc.normalizePath('greet.txt')).toBe('/greet.txt');
@@ -20,39 +19,39 @@ maybeDescribe('MemoryService', () => {
   it('append/read/update/delete with string-only semantics', async () => {
     const prisma = new PrismaClient({ datasources: { db: { url: URL! } } });
     const svc = new MemoryService(new PostgresMemoryRepository({ getClient: () => prisma } as any));
-    svc.init({ nodeId: 'n1', scope: 'global' });
     await svc.ensureIndexes();
     await prisma.$executeRaw`DELETE FROM memories`;
 
-    await svc.append('/notes/today', 'hello');
-    expect(await svc.read('/notes/today')).toBe('hello');
+    const bound = svc.forMemory('n1', 'global');
+    await bound.append('/notes/today', 'hello');
+    expect(await bound.read('/notes/today')).toBe('hello');
 
-    await svc.append('/notes/today', 'world');
-    expect(await svc.read('/notes/today')).toBe('hello\nworld');
+    await bound.append('/notes/today', 'world');
+    expect(await bound.read('/notes/today')).toBe('hello\nworld');
 
-    const count = await svc.update('/notes/today', 'world', 'there');
+    const count = await bound.update('/notes/today', 'world', 'there');
     expect(count).toBe(1);
-    expect(await svc.read('/notes/today')).toBe('hello\nthere');
+    expect(await bound.read('/notes/today')).toBe('hello\nthere');
 
-    const statFile = await svc.stat('/notes/today');
+    const statFile = await bound.stat('/notes/today');
     expect(statFile.kind).toBe('file');
 
-    const listRoot = await svc.list('/');
+    const listRoot = await bound.list('/');
     expect(listRoot.find((e) => e.name === 'notes')?.kind).toBe('dir');
 
-    const delRes = await svc.delete('/notes');
+    const delRes = await bound.delete('/notes');
     expect(delRes.files).toBe(1);
-    expect((await svc.stat('/notes')).kind).toBe('none');
+    expect((await bound.stat('/notes')).kind).toBe('none');
   });
 
   it('perThread and global scoping', async () => {
     const prisma = new PrismaClient({ datasources: { db: { url: URL! } } });
-    const bootstrap = new MemoryService(new PostgresMemoryRepository({ getClient: () => prisma } as any)).init({ nodeId: 'bootstrap', scope: 'global' });
-    await bootstrap.ensureIndexes();
+    const svc = new MemoryService(new PostgresMemoryRepository({ getClient: () => prisma } as any));
+    await svc.ensureIndexes();
     await prisma.$executeRaw`DELETE FROM memories`;
-    const g = new MemoryService(new PostgresMemoryRepository({ getClient: () => prisma } as any)); g.init({ nodeId: 'nodeA', scope: 'global' });
-    const t1 = new MemoryService(new PostgresMemoryRepository({ getClient: () => prisma } as any)); t1.init({ nodeId: 'nodeA', scope: 'perThread', threadId: 't1' });
-    const t2 = new MemoryService(new PostgresMemoryRepository({ getClient: () => prisma } as any)); t2.init({ nodeId: 'nodeA', scope: 'perThread', threadId: 't2' });
+    const g = svc.forMemory('nodeA', 'global');
+    const t1 = svc.forMemory('nodeA', 'perThread', 't1');
+    const t2 = svc.forMemory('nodeA', 'perThread', 't2');
 
     await g.append('/x', 'G');
     await t1.append('/x', 'T1');

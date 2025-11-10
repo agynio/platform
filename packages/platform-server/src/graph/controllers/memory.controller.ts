@@ -77,11 +77,6 @@ export class MemoryController {
     @Inject(PrismaService) private readonly prismaSvc: PrismaService,
   ) {}
 
-  private getSvc(nodeId: string, scope: MemoryScope, threadId?: string): MemoryService {
-    const svc = this.moduleRef.get(MemoryService, { strict: false });
-    return svc.init({ nodeId, scope, threadId });
-  }
-
   private resolveThreadId(scope: MemoryScope, ...candidates: Array<string | undefined>): string | undefined {
     if (scope !== 'perThread') return undefined;
     for (const candidate of candidates) {
@@ -108,8 +103,7 @@ export class MemoryController {
     const { nodeId, scope } = params;
     const path = query.path ?? '/';
     const threadId = this.resolveThreadId(scope, params.threadId, query.threadId);
-    const svc = this.getSvc(nodeId, scope, threadId);
-    const items = await svc.list(path || '/');
+    const items = await this.moduleRef.get(MemoryService, { strict: false }).list(nodeId, scope, threadId, path || '/');
     return { items };
   }
 
@@ -118,8 +112,7 @@ export class MemoryController {
     const { nodeId, scope } = params;
     const path = query.path;
     const threadId = this.resolveThreadId(scope, params.threadId, query.threadId);
-    const svc = this.getSvc(nodeId, scope, threadId);
-    return svc.stat(path);
+    return this.moduleRef.get(MemoryService, { strict: false }).stat(nodeId, scope, threadId, path);
   }
 
   @Get(':nodeId/:scope/read')
@@ -127,8 +120,7 @@ export class MemoryController {
     const { nodeId, scope } = params;
     const path = query.path;
     const threadId = this.resolveThreadId(scope, params.threadId, query.threadId);
-    const svc = this.getSvc(nodeId, scope, threadId);
-    try { const content = await svc.read(path); return { content }; }
+    try { const content = await this.moduleRef.get(MemoryService, { strict: false }).read(nodeId, scope, threadId, path); return { content }; }
     catch (e) {
       const msg = (e as Error)?.message || '';
       if (msg.startsWith('EISDIR')) throw new HttpException({ error: 'EISDIR' }, HttpStatus.BAD_REQUEST);
@@ -142,8 +134,7 @@ export class MemoryController {
   async append(@Param() params: DocParamsDto, @Body() body: AppendBodyDto, @Query() query: ThreadOnlyQueryDto): Promise<void> {
     const { nodeId, scope } = params;
     const threadId = this.resolveThreadId(scope, params.threadId, body.threadId, query.threadId);
-    const svc = this.getSvc(nodeId, scope, threadId);
-    try { await svc.append(body.path, body.data); }
+    try { await this.moduleRef.get(MemoryService, { strict: false }).append(nodeId, scope, threadId, body.path, body.data); }
     catch (e) {
       const msg = (e as Error)?.message || '';
       if (msg.startsWith('EISDIR')) throw new HttpException({ error: 'EISDIR' }, HttpStatus.BAD_REQUEST);
@@ -155,8 +146,7 @@ export class MemoryController {
   async update(@Param() params: DocParamsDto, @Body() body: UpdateBodyDto, @Query() query: ThreadOnlyQueryDto): Promise<{ replaced: number }> {
     const { nodeId, scope } = params;
     const threadId = this.resolveThreadId(scope, params.threadId, body.threadId, query.threadId);
-    const svc = this.getSvc(nodeId, scope, threadId);
-    try { const replaced = await svc.update(body.path, body.oldStr, body.newStr); return { replaced }; }
+    try { const replaced = await this.moduleRef.get(MemoryService, { strict: false }).update(nodeId, scope, threadId, body.path, body.oldStr, body.newStr); return { replaced }; }
     catch (e) {
       const msg = (e as Error)?.message || '';
       if (msg.startsWith('EISDIR')) throw new HttpException({ error: 'EISDIR' }, HttpStatus.BAD_REQUEST);
@@ -170,23 +160,20 @@ export class MemoryController {
   async ensureDir(@Param() params: DocParamsDto, @Body() body: EnsureDirBodyDto, @Query() query: ThreadOnlyQueryDto): Promise<void> {
     const { nodeId, scope } = params;
     const threadId = this.resolveThreadId(scope, params.threadId, body.threadId, query.threadId);
-    const svc = this.getSvc(nodeId, scope, threadId);
-    await svc.ensureDir(body.path);
+    await this.moduleRef.get(MemoryService, { strict: false }).ensureDir(nodeId, scope, threadId, body.path);
   }
 
   @Delete(':nodeId/:scope')
   async remove(@Param() params: DocParamsDto, @Query() query: PathWithThreadQueryDto): Promise<{ files: number; dirs: number }> {
     const { nodeId, scope } = params;
     const threadId = this.resolveThreadId(scope, params.threadId, query.threadId);
-    const svc = this.getSvc(nodeId, scope, threadId);
-    return svc.delete(query.path);
+    return this.moduleRef.get(MemoryService, { strict: false }).delete(nodeId, scope, threadId, query.path);
   }
 
   @Get(':nodeId/:scope/dump')
   async dump(@Param() params: DocParamsDto, @Query() query: ThreadOnlyQueryDto): Promise<unknown> {
     const { nodeId, scope } = params;
     const threadId = this.resolveThreadId(scope, params.threadId, query.threadId);
-    const svc = this.getSvc(nodeId, scope, threadId);
-    return svc.dump();
+    return this.moduleRef.get(MemoryService, { strict: false }).dump(nodeId, scope, threadId);
   }
 }

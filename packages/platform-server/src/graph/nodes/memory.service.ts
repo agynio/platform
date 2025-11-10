@@ -1,6 +1,7 @@
-import { Injectable } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
 import type { MemoryDirsMap, MemoryDataMap, MemoryDoc, MemoryFilter, MemoryScope, ListEntry, StatResult } from './memory.types';
 import type { MemoryRepositoryPort } from './memory.repository';
+import { PostgresMemoryRepository } from './memory.repository';
 
 /**
  * Memory service with string-only file values.
@@ -9,19 +10,7 @@ import type { MemoryRepositoryPort } from './memory.repository';
  */
 @Injectable()
 export class MemoryService {
-  private nodeId!: string;
-  private scope!: MemoryScope;
-  private threadId?: string;
-
-  constructor(private readonly repo: MemoryRepositoryPort) {}
-
-  init(params: { nodeId: string; scope: MemoryScope; threadId?: string }) {
-    this.nodeId = params.nodeId;
-    this.scope = params.scope;
-    this.threadId = params.threadId;
-    if (this.scope === 'perThread' && !this.threadId) throw new Error('threadId is required for perThread scope');
-    return this;
-  }
+  constructor(@Inject(PostgresMemoryRepository) private readonly repo: MemoryRepositoryPort) {}
 
   normalizePath(rawPath: string): string {
     if (!rawPath) throw new Error('path is required');
@@ -43,23 +32,19 @@ export class MemoryService {
     // Schema managed via migrations; nothing to do.
   }
 
-  private buildFilter(): MemoryFilter {
-    const filter: MemoryFilter = { nodeId: this.nodeId, scope: this.scope };
-    if (this.scope === 'perThread') filter.threadId = this.threadId;
+  private buildFilter(nodeId: string, scope: MemoryScope, threadId?: string): MemoryFilter {
+    const filter: MemoryFilter = { nodeId, scope };
+    if (scope === 'perThread') filter.threadId = threadId;
     return filter;
   }
 
-  getDebugInfo(): { nodeId: string; scope: MemoryScope; threadId?: string } {
-    return { nodeId: this.nodeId, scope: this.scope, threadId: this.threadId };
-  }
-
-  async checkDocExists(): Promise<boolean> {
-    const found = await this.repo.getDoc(this.buildFilter());
+  async checkDocExists(nodeId: string, scope: MemoryScope, threadId?: string): Promise<boolean> {
+    const found = await this.repo.getDoc(this.buildFilter(nodeId, scope, threadId));
     return !!found;
   }
 
-  private async getDocOrCreate(): Promise<MemoryDoc> {
-    const doc = await this.repo.getOrCreateDoc(this.buildFilter());
+  private async getDocOrCreate(nodeId: string, scope: MemoryScope, threadId?: string): Promise<MemoryDoc> {
+    const doc = await this.repo.getOrCreateDoc(this.buildFilter(nodeId, scope, threadId));
     if (!doc.data) doc.data = {} as MemoryDataMap;
     if (!doc.dirs) doc.dirs = {} as MemoryDirsMap;
     return doc;
@@ -75,10 +60,10 @@ export class MemoryService {
     return normPath.slice(1).split('/').filter(Boolean);
   }
 
-  private async ensureAncestorDirs(normPath: string): Promise<void> {
+  private async ensureAncestorDirs(nodeId: string, scope: MemoryScope, threadId: string | undefined, normPath: string): Promise<void> {
     const segments = this.getPathSegments(normPath);
     if (segments.length <= 1) return;
-    await this.repo.withDoc<void>(this.buildFilter(), async (doc) => {
+    await this.repo.withDoc<void>(this.buildFilter(nodeId, scope, threadId), async (doc) => {
       const dirs: MemoryDirsMap = { ...doc.dirs };
       for (let i = 1; i < segments.length; i++) {
         const dirPath = '/' + segments.slice(0, i).join('/');
@@ -127,20 +112,20 @@ export class MemoryService {
     return Array.from(map, ([name, kind]) => ({ name, kind }));
   }
 
-  async ensureDir(path: string): Promise<void> {
+  async ensureDir(nodeId: string, scope: MemoryScope, threadId: string | undefined, path: string): Promise<void> {
     const norm = this.normalizePath(path);
     const key = this.dotted(norm);
     if (key === '') return;
-    await this.ensureAncestorDirs(norm);
-    await this.repo.withDoc<void>(this.buildFilter(), async (doc) => {
+    await this.ensureAncestorDirs(nodeId, scope, threadId, norm);
+    await this.repo.withDoc<void>(this.buildFilter(nodeId, scope, threadId), async (doc) => {
       const updatedDirs: MemoryDirsMap = { ...doc.dirs, [key]: true };
       return { doc: { ...doc, dirs: updatedDirs } };
     });
   }
 
-  async stat(path: string): Promise<StatResult> {
+  async stat(nodeId: string, scope: MemoryScope, threadId: string | undefined, path: string): Promise<StatResult> {
     const key = this.dotted(path);
-    const doc = await this.getDocOrCreate();
+    const doc = await this.getDocOrCreate(nodeId, scope, threadId);
     if (key === '') return { kind: 'dir' };
     const n = this.getNested(doc.data, key);
     if (n.exists) {
@@ -156,9 +141,9 @@ export class MemoryService {
     return hasChild ? { kind: 'dir' } : { kind: 'none' };
   }
 
-  async list(path: string = '/'): Promise<ListEntry[]> {
+  async list(nodeId: string, scope: MemoryScope, threadId: string | undefined, path: string = '/'): Promise<ListEntry[]> {
     const key = this.dotted(path);
-    const doc = await this.getDocOrCreate();
+    const doc = await this.getDocOrCreate(nodeId, scope, threadId);
     const nestedChildren: ListEntry[] = [];
     const n = this.getNested(doc.data, key);
     if (n.exists && typeof n.node === 'object' && n.node !== null) {
@@ -210,9 +195,9 @@ export class MemoryService {
     return this.mergeChildren(nestedChildren, flatChildren);
   }
 
-  async read(path: string): Promise<string> {
+  async read(nodeId: string, scope: MemoryScope, threadId: string | undefined, path: string): Promise<string> {
     const key = this.dotted(path);
-    const doc = await this.getDocOrCreate();
+    const doc = await this.getDocOrCreate(nodeId, scope, threadId);
     const nested = this.getNested(doc.data, key);
     if (nested.exists) {
       if (typeof nested.node === 'string') return nested.node;
@@ -220,17 +205,17 @@ export class MemoryService {
     }
     const flat = doc.data[key];
     if (typeof flat === 'string') return flat;
-    const s = await this.stat(path);
+    const s = await this.stat(nodeId, scope, threadId, path);
     if (s.kind === 'dir') throw new Error('EISDIR: path is a directory');
     throw new Error('ENOENT: file not found');
   }
 
-  async append(path: string, data: string): Promise<void> {
+  async append(nodeId: string, scope: MemoryScope, threadId: string | undefined, path: string, data: string): Promise<void> {
     if (typeof data !== 'string') throw new Error('append expects string data');
     const norm = this.normalizePath(path);
     const key = this.dotted(norm);
-    await this.ensureAncestorDirs(norm);
-    await this.repo.withDoc<void>(this.buildFilter(), async (doc) => {
+    await this.ensureAncestorDirs(nodeId, scope, threadId, norm);
+    await this.repo.withDoc<void>(this.buildFilter(nodeId, scope, threadId), async (doc) => {
       if (Object.prototype.hasOwnProperty.call(doc.dirs, key)) throw new Error('EISDIR: path is a directory');
       let current: string | undefined = undefined;
       const nested = this.getNested(doc.data, key);
@@ -245,11 +230,11 @@ export class MemoryService {
     });
   }
 
-  async update(path: string, oldStr: string, newStr: string): Promise<number> {
+  async update(nodeId: string, scope: MemoryScope, threadId: string | undefined, path: string, oldStr: string, newStr: string): Promise<number> {
     if (typeof oldStr !== 'string' || typeof newStr !== 'string') throw new Error('update expects string args');
     const key = this.dotted(path);
     let replaced = 0;
-    await this.repo.withDoc<void>(this.buildFilter(), async (doc) => {
+    await this.repo.withDoc<void>(this.buildFilter(nodeId, scope, threadId), async (doc) => {
       if (Object.prototype.hasOwnProperty.call(doc.dirs, key)) throw new Error('EISDIR: path is a directory');
       let current: string | undefined = undefined;
       const nested = this.getNested(doc.data, key);
@@ -274,10 +259,10 @@ export class MemoryService {
     return replaced;
   }
 
-  async delete(path: string): Promise<{ files: number; dirs: number }> {
+  async delete(nodeId: string, scope: MemoryScope, threadId: string | undefined, path: string): Promise<{ files: number; dirs: number }> {
     const key = this.dotted(path);
     let out = { files: 0, dirs: 0 };
-    await this.repo.withDoc<void>(this.buildFilter(), async (doc) => {
+    await this.repo.withDoc<void>(this.buildFilter(nodeId, scope, threadId), async (doc) => {
       if (key === '') {
         const files = Object.keys(doc.data).length;
         const dirs = Object.keys(doc.dirs).length;
@@ -323,8 +308,8 @@ export class MemoryService {
     return out;
   }
 
-  async getAll(): Promise<Record<string, string>> {
-    const doc = await this.getDocOrCreate();
+  async getAll(nodeId: string, scope: MemoryScope, threadId: string | undefined): Promise<Record<string, string>> {
+    const doc = await this.getDocOrCreate(nodeId, scope, threadId);
     const out: Record<string, string> = {};
     for (const [key, value] of Object.entries(doc.data)) {
       if (typeof value === 'string') out[key] = value;
@@ -332,9 +317,9 @@ export class MemoryService {
     return out;
   }
 
-  async dump(): Promise<Pick<MemoryDoc, 'nodeId' | 'scope' | 'threadId'> & { data: Record<string, string>; dirs: Record<string, true> }>
+  async dump(nodeId: string, scope: MemoryScope, threadId: string | undefined): Promise<Pick<MemoryDoc, 'nodeId' | 'scope' | 'threadId'> & { data: Record<string, string>; dirs: Record<string, true> }>
   {
-    const doc = await this.getDocOrCreate();
+    const doc = await this.getDocOrCreate(nodeId, scope, threadId);
     const dataOut: Record<string, string> = {};
     for (const [key, value] of Object.entries(doc.data)) {
       if (typeof value === 'string') dataOut[key] = value;
@@ -344,5 +329,20 @@ export class MemoryService {
       if (value === true) dirOut[key] = true;
     }
     return { nodeId: doc.nodeId, scope: doc.scope, threadId: doc.threadId, data: dataOut, dirs: dirOut };
+  }
+
+  // Convenience: provide a bound adapter for existing consumers
+  forMemory(nodeId: string, scope: MemoryScope, threadId?: string) {
+    return {
+      list: (path = '/') => this.list(nodeId, scope, threadId, path),
+      stat: (path: string) => this.stat(nodeId, scope, threadId, path),
+      read: (path: string) => this.read(nodeId, scope, threadId, path),
+      append: (path: string, data: string) => this.append(nodeId, scope, threadId, path, data),
+      update: (path: string, oldStr: string, newStr: string) => this.update(nodeId, scope, threadId, path, oldStr, newStr),
+      ensureDir: (path: string) => this.ensureDir(nodeId, scope, threadId, path),
+      delete: (path: string) => this.delete(nodeId, scope, threadId, path),
+      getAll: () => this.getAll(nodeId, scope, threadId),
+      dump: () => this.dump(nodeId, scope, threadId),
+    } as const;
   }
 }

@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { MemoryService } from '../../nodes/memory.service';
 import Node from '../base/Node';
 import { SystemMessage } from '@agyn/llm';
-import { Inject, Injectable, Scope } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
 import { LoggerService } from '../../../core/services/logger.service';
 
 // Static config exposed to UI for MemoryConnectorNode
@@ -15,9 +15,14 @@ export const MemoryConnectorStaticConfigSchema = z
   .strict();
 export type MemoryConnectorStaticConfig = z.infer<typeof MemoryConnectorStaticConfigSchema>;
 
-@Injectable({ scope: Scope.TRANSIENT })
+type BoundMemoryService = {
+  getAll: () => Promise<Record<string, string>>;
+  list: (path?: string) => Promise<Array<{ name: string; kind: 'file' | 'dir' }>>;
+};
+
+@Injectable()
 export class MemoryConnectorNode extends Node<MemoryConnectorStaticConfig> {
-  private getMemoryServiceFn?: (opts: { threadId?: string }) => MemoryService;
+  private getMemoryServiceFn?: (opts: { threadId?: string }) => BoundMemoryService;
 
   constructor(@Inject(LoggerService) protected logger: LoggerService) {
     super(logger);
@@ -94,13 +99,13 @@ export class MemoryConnectorNode extends Node<MemoryConnectorStaticConfig> {
   }
   setMemorySource(
     source:
-      | { getMemoryService: (opts: { threadId?: string }) => MemoryService }
-      | ((opts: { threadId?: string }) => MemoryService),
+      | { getMemoryService: (opts: { threadId?: string }) => unknown }
+      | ((opts: { threadId?: string }) => unknown),
   ) {
     if (typeof source === 'function')
-      this.getMemoryServiceFn = source as (opts: { threadId?: string }) => MemoryService;
-    else if (source && typeof source.getMemoryService === 'function')
-      this.getMemoryServiceFn = (opts) => source.getMemoryService(opts);
+      this.getMemoryServiceFn = source as (opts: { threadId?: string }) => BoundMemoryService;
+    else if (source && typeof (source as { getMemoryService?: unknown }).getMemoryService === 'function')
+      this.getMemoryServiceFn = (opts) => (source as { getMemoryService: (opts: { threadId?: string }) => unknown }).getMemoryService(opts) as BoundMemoryService;
     else throw new Error('Invalid memory source');
   }
 }

@@ -73,7 +73,7 @@ class TestCallModelNode extends Node<Record<string, never>> {
     conn.setMemorySource((opts: { threadId?: string }) => {
       const scope: MemoryScope = opts.threadId ? 'perThread' : 'global';
       const svc = new MemoryService(new PostgresMemoryRepository({ getClient: () => this.prisma! } as any));
-      return svc.init({ nodeId: conn.nodeId, scope, threadId: opts.threadId });
+      return svc.forMemory(conn.nodeId, scope, opts.threadId);
     });
   }
 
@@ -146,7 +146,8 @@ maybeDescribe('Runtime integration: memory injection via LiveGraphRuntime', () =
   const prisma = new PrismaClient({ datasources: { db: { url: URL! } } });
 
   beforeAll(async () => {
-    const bootstrap = new MemoryService(new PostgresMemoryRepository({ getClient: () => prisma } as any)).init({ nodeId: 'bootstrap', scope: 'global' });
+    const svc = new MemoryService(new PostgresMemoryRepository({ getClient: () => prisma } as any));
+    const bootstrap = svc.forMemory('bootstrap', 'global');
     await bootstrap.ensureIndexes();
   });
 
@@ -175,8 +176,8 @@ maybeDescribe('Runtime integration: memory injection via LiveGraphRuntime', () =
 
     // Pre-populate memory under mem nodeId in global scope
     const svc = new MemoryService(new PostgresMemoryRepository({ getClient: () => prisma } as any));
-    svc.init({ nodeId: 'mem', scope: 'global' });
-    await svc.append('/notes/today', 'hello');
+    const bound = svc.forMemory('mem', 'global');
+    await bound.append('/notes/today', 'hello');
 
     const msgs = await getLastMessages(runtime, 'cm');
     expect(msgs[0].text).toBe('SYS');
@@ -202,8 +203,8 @@ maybeDescribe('Runtime integration: memory injection via LiveGraphRuntime', () =
 
     // Pre-populate memory
     const svc = new MemoryService(new PostgresMemoryRepository({ getClient: () => prisma } as any));
-    svc.init({ nodeId: 'mem', scope: 'global' });
-    await svc.append('/alpha', 'a');
+    const bound = svc.forMemory('mem', 'global');
+    await bound.append('/alpha', 'a');
 
     const msgs = await getLastMessages(runtime, 'cm');
     const last = msgs[msgs.length - 1];
@@ -228,8 +229,8 @@ maybeDescribe('Runtime integration: memory injection via LiveGraphRuntime', () =
 
     // Populate global memory with a file whose full content would exceed 20 chars.
     const globalSvc = new MemoryService(new PostgresMemoryRepository({ getClient: () => prisma } as any));
-    globalSvc.init({ nodeId: 'mem', scope: 'global' });
-    await globalSvc.append('/long/file', 'aaaaaaaaaaaaaaaaaaaa-long');
+    const boundGlobal = globalSvc.forMemory('mem', 'global');
+    await boundGlobal.append('/long/file', 'aaaaaaaaaaaaaaaaaaaa-long');
 
     // Expect tree fallback instead of full content
     const msgs = await getLastMessages(runtime, 'cm');

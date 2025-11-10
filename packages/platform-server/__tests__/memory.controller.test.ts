@@ -20,7 +20,8 @@ maybeDescribe('MemoryController endpoints', () => {
   const prisma = new PrismaClient({ datasources: { db: { url: URL! } } });
 
   beforeAll(async () => {
-    const bootstrap = new MemoryService(new PostgresMemoryRepository({ getClient: () => prisma } as any)).init({ nodeId: 'bootstrap', scope: 'global' });
+    const svc = new MemoryService(new PostgresMemoryRepository({ getClient: () => prisma } as any));
+    const bootstrap = svc.forMemory('bootstrap', 'global');
     await bootstrap.ensureIndexes();
     await prisma.$executeRaw`DELETE FROM memories`;
   });

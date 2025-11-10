@@ -11,7 +11,8 @@ const maybeDescribe = URL ? describe : describe.skip;
 maybeDescribe('Memory tool adapters', () => {
   const prisma = new PrismaClient({ datasources: { db: { url: URL! } } });
   beforeAll(async () => {
-    const bootstrap = new MemoryService(new PostgresMemoryRepository({ getClient: () => prisma } as any)).init({ nodeId: 'bootstrap', scope: 'global' });
+    const svc = new MemoryService(new PostgresMemoryRepository({ getClient: () => prisma } as any));
+    const bootstrap = svc.forMemory('bootstrap', 'global');
     await bootstrap.ensureIndexes();
     await prisma.$executeRaw`DELETE FROM memories`;
   });
@@ -25,8 +26,7 @@ maybeDescribe('Memory tool adapters', () => {
     const db = { getClient: () => prisma } as any;
     const serviceFactory = (opts: { threadId?: string }) => {
       const svc = new MemoryService(new PostgresMemoryRepository(db as any));
-      svc.init({ nodeId: 'nodeX', scope: opts.threadId ? 'perThread' : 'global', threadId: opts.threadId });
-      return svc;
+      return svc.forMemory('nodeX', opts.threadId ? 'perThread' : 'global', opts.threadId) as any;
     };
     const logger = new LoggerService();
     const adapter = new UnifiedMemoryTool({ getDescription: () => '', getName: () => 'memory', getMemoryFactory: () => serviceFactory, logger });
@@ -55,8 +55,7 @@ maybeDescribe('Memory tool adapters', () => {
     const db = { getClient: () => prisma } as any;
     const serviceFactory = (opts: { threadId?: string }) => {
       const svc = new MemoryService(new PostgresMemoryRepository(db as any));
-      svc.init({ nodeId: 'nodeX', scope: opts.threadId ? 'perThread' : 'global', threadId: opts.threadId });
-      return svc;
+      return svc.forMemory('nodeX', opts.threadId ? 'perThread' : 'global', opts.threadId) as any;
     };
     const logger = new LoggerService();
 

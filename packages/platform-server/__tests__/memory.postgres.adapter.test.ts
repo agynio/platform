@@ -11,10 +11,11 @@ const maybeDescribe = URL ? describe : describe.skip;
 
 maybeDescribe('PostgresMemoryRepository adapter', () => {
   const prisma = new PrismaClient({ datasources: { db: { url: URL! } } });
+  let svc: MemoryService;
 
   beforeAll(async () => {
-    const bootstrap = new MemoryService(new PostgresMemoryRepository({ getClient: () => prisma } as any)).init({ nodeId: 'bootstrap', scope: 'global' });
-    await bootstrap.ensureIndexes();
+    svc = new MemoryService(new PostgresMemoryRepository({ getClient: () => prisma } as any));
+    await svc.ensureIndexes();
     await prisma.$executeRaw`DELETE FROM memories`;
   });
   afterAll(async () => {
@@ -22,19 +23,18 @@ maybeDescribe('PostgresMemoryRepository adapter', () => {
   });
 
   it('create, append, read, update, delete', async () => {
-    const svc = new MemoryService(new PostgresMemoryRepository({ getClient: () => prisma } as any)).init({ nodeId: 'nodeA', scope: 'global' });
-    await svc.ensureIndexes();
-    expect(await svc.stat('/')).toEqual({ kind: 'dir' });
-    await svc.ensureDir('/docs');
-    await svc.append('/docs/readme.txt', 'hello');
-    await svc.append('/docs/readme.txt', 'world');
-    const content = await svc.read('/docs/readme.txt');
+    const bound = svc.forMemory('nodeA', 'global');
+    expect(await bound.stat('/')).toEqual({ kind: 'dir' });
+    await bound.ensureDir('/docs');
+    await bound.append('/docs/readme.txt', 'hello');
+    await bound.append('/docs/readme.txt', 'world');
+    const content = await bound.read('/docs/readme.txt');
     expect(content).toContain('hello');
     expect(content).toContain('world');
-    const replaced = await svc.update('/docs/readme.txt', 'world', 'WORLD');
+    const replaced = await bound.update('/docs/readme.txt', 'world', 'WORLD');
     expect(replaced).toBe(1);
-    expect(await svc.read('/docs/readme.txt')).toContain('WORLD');
-    const del = await svc.delete('/docs');
+    expect(await bound.read('/docs/readme.txt')).toContain('WORLD');
+    const del = await bound.delete('/docs');
     expect(del.dirs).toBeGreaterThanOrEqual(1);
   });
 });

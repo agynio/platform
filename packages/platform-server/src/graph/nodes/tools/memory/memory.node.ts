@@ -5,6 +5,15 @@ import { BaseToolNode } from '../baseToolNode';
 import { UnifiedMemoryFunctionTool } from './memory.tool';
 import { Inject, Injectable, Scope } from '@nestjs/common';
 
+// Minimal service surface consumed by the tool
+type MemoryToolService = {
+  read: (path: string) => Promise<string>;
+  list: (path?: string) => Promise<Array<{ name: string; kind: 'file' | 'dir' }>>;
+  append: (path: string, content: string) => Promise<void>;
+  update: (path: string, oldContent: string, content: string) => Promise<number>;
+  delete: (path: string) => Promise<{ files: number; dirs: number }>;
+};
+
 // Node-level static config for the tool instance (UI). Mirrors call_agent pattern.
 export const MemoryToolNodeStaticConfigSchema = z
   .object({
@@ -22,18 +31,18 @@ export const MemoryToolNodeStaticConfigSchema = z
 export class MemoryToolNode extends BaseToolNode<z.infer<typeof MemoryToolNodeStaticConfigSchema>> {
   private toolInstance?: UnifiedMemoryFunctionTool;
 
-  private memoryFactory?: (opts: { threadId?: string }) => MemoryService;
+  private memoryFactory?: (opts: { threadId?: string }) => MemoryToolService;
   constructor(@Inject(LoggerService) protected logger: LoggerService) {
     super(logger);
   }
   setMemorySource(
     source:
-      | ((opts: { threadId?: string }) => MemoryService)
-      | { getMemoryService: (opts: { threadId?: string }) => MemoryService },
+      | ((opts: { threadId?: string }) => unknown)
+      | { getMemoryService: (opts: { threadId?: string }) => unknown },
   ) {
-    if (typeof source === 'function') this.memoryFactory = source as (opts: { threadId?: string }) => MemoryService;
+    if (typeof source === 'function') this.memoryFactory = source as (opts: { threadId?: string }) => MemoryToolService;
     else if (source && typeof (source as { getMemoryService?: unknown }).getMemoryService === 'function')
-      this.memoryFactory = (opts) => source.getMemoryService!(opts);
+      this.memoryFactory = (opts) => (source as { getMemoryService: (opts: { threadId?: string }) => unknown }).getMemoryService(opts) as MemoryToolService;
     else throw new Error('Invalid memory source');
     this.toolInstance = undefined;
   }

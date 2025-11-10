@@ -1,7 +1,7 @@
 import { PrismaService } from '../../core/services/prisma.service';
 import type { Prisma, PrismaClient } from '@prisma/client';
 import type { MemoryDoc, MemoryDirsMap, MemoryDataMap, MemoryFilter } from './memory.types';
-import { Injectable } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
 
 export interface MemoryRepositoryPort {
   withDoc<T>(
@@ -14,7 +14,7 @@ export interface MemoryRepositoryPort {
 
 @Injectable()
 export class PostgresMemoryRepository implements MemoryRepositoryPort {
-  constructor(private prismaSvc: PrismaService) {}
+  constructor(@Inject(PrismaService) private prismaSvc: PrismaService) {}
 
   private async getClient(): Promise<PrismaClient> {
     return this.prismaSvc.getClient();

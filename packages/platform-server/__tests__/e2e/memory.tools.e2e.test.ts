@@ -13,7 +13,8 @@ maybeDescribe('E2E: memory tools with Postgres backend', () => {
   const logger = new LoggerService();
 
   beforeAll(async () => {
-    const bootstrap = new MemoryService(new PostgresMemoryRepository({ getClient: () => prisma } as any)).init({ nodeId: 'bootstrap', scope: 'global' });
+    const svc = new MemoryService(new PostgresMemoryRepository({ getClient: () => prisma } as any));
+    const bootstrap = svc.forMemory('bootstrap', 'global');
     await bootstrap.ensureIndexes();
   });
 
@@ -27,10 +28,7 @@ maybeDescribe('E2E: memory tools with Postgres backend', () => {
 
   function makeTool(nodeId: string) {
     const node = new MemoryToolNode(logger);
-    node.setMemorySource((opts: { threadId?: string }) => {
-      const svc = new MemoryService(new PostgresMemoryRepository({ getClient: () => prisma } as any));
-      return svc.init({ nodeId, scope: opts.threadId ? 'perThread' : 'global', threadId: opts.threadId });
-    });
+    node.setMemorySource((opts: { threadId?: string }) => svc.forMemory(nodeId, opts.threadId ? 'perThread' : 'global', opts.threadId) as any);
     return node.getTool();
   }
 

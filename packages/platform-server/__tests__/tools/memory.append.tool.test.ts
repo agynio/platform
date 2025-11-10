@@ -13,7 +13,8 @@ const maybeDescribe = URL ? describe : describe.skip;
 maybeDescribe('memory_append tool: path normalization and validation', () => {
   const prisma = new PrismaClient({ datasources: { db: { url: URL! } } });
   beforeAll(async () => {
-    const bootstrap = new MemoryService(new PostgresMemoryRepository({ getClient: () => prisma } as any)).init({ nodeId: 'bootstrap', scope: 'global' });
+    const svc = new MemoryService(new PostgresMemoryRepository({ getClient: () => prisma } as any));
+    const bootstrap = svc.forMemory('bootstrap', 'global');
     await bootstrap.ensureIndexes();
     await prisma.$executeRaw`DELETE FROM memories`;
   });
@@ -25,7 +26,7 @@ maybeDescribe('memory_append tool: path normalization and validation', () => {
   });
   const mkTools = () => {
     const db = { getClient: () => prisma } as any;
-    const factory = (opts: { threadId?: string }) => { const svc = new MemoryService(new PostgresMemoryRepository(db as any)); svc.init({ nodeId: 'nodeT', scope: opts.threadId ? 'perThread' : 'global', threadId: opts.threadId }); return svc; };
+    const factory = (opts: { threadId?: string }) => { const svc = new MemoryService(new PostgresMemoryRepository(db as any)); return svc.forMemory('nodeT', opts.threadId ? 'perThread' : 'global', opts.threadId) as any; };
     const logger = new LoggerService();
     const node = new MemoryToolNode(logger);
     node.setMemorySource(factory);

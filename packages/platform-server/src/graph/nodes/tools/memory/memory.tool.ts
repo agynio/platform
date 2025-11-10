@@ -2,7 +2,7 @@ import z from 'zod';
 
 import { FunctionTool } from '@agyn/llm';
 import { LoggerService } from '../../../../core/services/logger.service';
-import { MemoryService } from '../../../nodes/memory.service';
+// Note: MemoryService is consumed via a bound adapter supplied by MemoryNode/graph; no direct import here.
 
 export const UnifiedMemoryToolStaticConfigSchema = z
   .object({
@@ -31,7 +31,7 @@ type MemoryToolService = {
 interface UnifiedMemoryFunctionToolDeps {
   getDescription: () => string;
   getName: () => string;
-  getMemoryFactory: () => ((opts: { threadId?: string }) => MemoryService) | undefined;
+  getMemoryFactory: () => ((opts: { threadId?: string }) => MemoryToolService) | undefined;
   logger: LoggerService;
 }
 
@@ -121,17 +121,8 @@ export class UnifiedMemoryFunctionTool extends FunctionTool<typeof UnifiedMemory
       try {
         const factory = this.deps.getMemoryFactory();
         if (!factory) throw new Error('Memory not connected');
-        const created: MemoryService = factory({ threadId }) as MemoryService;
-        // Strictly assert expected interface
-        const svc: MemoryToolService = {
-          getDebugInfo: created.getDebugInfo?.bind(created),
-          read: created.read.bind(created),
-          list: created.list.bind(created),
-          append: created.append.bind(created),
-          update: created.update.bind(created),
-          delete: created.delete.bind(created),
-        };
-        return svc;
+        const created: MemoryToolService = factory({ threadId });
+        return created;
       } catch (e) {
         const err = this.extractError(e);
         return this.makeEnvelope(command, path, false, undefined, {
@@ -143,10 +134,7 @@ export class UnifiedMemoryFunctionTool extends FunctionTool<typeof UnifiedMemory
     if (typeof serviceOrEnvelope === 'string') return serviceOrEnvelope;
     const service = serviceOrEnvelope as MemoryToolService;
     const logger = this.deps.logger;
-    if (isMemoryDebugEnabled()) {
-      const dbg = service.getDebugInfo?.();
-      logger.debug('memory tool invoke', { command, path, threadId, nodeId: dbg?.nodeId, scope: dbg?.scope });
-    }
+    if (isMemoryDebugEnabled()) logger.debug('memory tool invoke', { command, path, threadId });
 
     try {
       switch (command) {
