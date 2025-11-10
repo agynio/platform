@@ -1,6 +1,5 @@
 import z from 'zod';
 import { LoggerService } from '../../../../core/services/logger.service';
-import { MemoryService } from '../../../nodes/memory.service';
 import { BaseToolNode } from '../baseToolNode';
 import { UnifiedMemoryFunctionTool } from './memory.tool';
 import { Inject, Injectable, Scope } from '@nestjs/common';
