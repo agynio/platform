@@ -5,6 +5,7 @@ import { FunctionTool, Reducer, ResponseMessage, ToolCallMessage, ToolCallOutput
 import { LoggerService } from '../../core/services/logger.service';
 import { Inject, Injectable, Scope } from '@nestjs/common';
 import { McpError } from '../../graph/nodes/mcp/types';
+import { ResponseFunctionCallOutputItemList } from 'openai/resources/responses/responses.mjs';
 
 @Injectable({ scope: Scope.TRANSIENT })
 export class CallToolsLLMReducer extends Reducer<LLMState, LLMContext> {
@@ -50,8 +51,30 @@ export class CallToolsLLMReducer extends Reducer<LLMState, LLMContext> {
         const tool = toolsMap.get(t.name);
         const nodeId = ctx?.callerAgent?.getAgentNodeId?.();
 
+        type ToolCallErrorCode =
+          | 'BAD_JSON_ARGS'
+          | 'SCHEMA_VALIDATION_FAILED'
+          | 'TOOL_NOT_FOUND'
+          | 'TOOL_EXECUTION_ERROR'
+          | 'TOOL_OUTPUT_TOO_LARGE'
+          | 'MCP_CALL_ERROR';
+
+        type ToolCallRaw = string | ResponseFunctionCallOutputItemList;
+        type ToolCallErrorPayload = {
+          status: 'error';
+          tool_name: string;
+          tool_call_id: string;
+          error_code: ToolCallErrorCode;
+          message: string;
+          original_args?: unknown;
+          details?: unknown;
+          retriable: boolean;
+        };
+
+        type ToolCallStructuredOutput = ToolCallRaw | ToolCallErrorPayload;
+
         const createErrorResponse = (params: {
-          code: 'BAD_JSON_ARGS' | 'SCHEMA_VALIDATION_FAILED' | 'TOOL_NOT_FOUND' | 'TOOL_EXECUTION_ERROR' | 'TOOL_OUTPUT_TOO_LARGE' | 'MCP_CALL_ERROR';
+          code: ToolCallErrorCode;
           message: string;
           originalArgs?: unknown;
           details?: unknown;
@@ -69,14 +92,14 @@ export class CallToolsLLMReducer extends Reducer<LLMState, LLMContext> {
             retriable: retriable ?? false,
           };
 
-          return new ToolCallResponse({
+          return new ToolCallResponse<ToolCallRaw, ToolCallStructuredOutput>({
             raw: message,
             output: payload,
             status: 'error',
           });
         };
 
-        const response = await withToolCall(
+        const response = await withToolCall<ToolCallStructuredOutput, ToolCallRaw>(
           {
             name: t.name,
             toolCallId: t.callId,
@@ -146,7 +169,7 @@ export class CallToolsLLMReducer extends Reducer<LLMState, LLMContext> {
                 });
               }
 
-              return new ToolCallResponse({
+              return new ToolCallResponse<ToolCallRaw, ToolCallStructuredOutput>({
                 raw,
                 output: raw,
                 status: 'success',
