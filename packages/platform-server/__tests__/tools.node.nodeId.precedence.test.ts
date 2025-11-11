@@ -27,7 +27,10 @@ vi.mock('@agyn/tracing', () => {
 
 class EchoTool {
   name = 'echo';
-  schema = { parse: (x: any) => x } as any;
+  schema = {
+    safeParse: (x: any) => ({ success: true, data: x }),
+    parse: (x: any) => x,
+  } as any;
   description = 'echo tool';
   async execute(raw: any): Promise<string> {
     return `echo:${JSON.stringify(raw)}`;
