@@ -4,10 +4,26 @@ import { LoggerService } from '../src/core/services/logger.service';
 import { NoopGraphEventsPublisher } from '../src/gateway/graph.events.publisher';
 import { createPrismaStub, StubPrismaService } from './helpers/prisma.stub';
 
+const metricsStub = { getThreadsMetrics: async () => ({}) } as any;
+const templateRegistryStub = { toSchema: async () => [], getMeta: () => undefined } as any;
+const graphRepoStub = {
+  get: async () => ({ name: 'main', version: 1, updatedAt: new Date().toISOString(), nodes: [], edges: [] }),
+} as any;
+
+const createService = (stub: any) =>
+  new AgentsPersistenceService(
+    new StubPrismaService(stub) as any,
+    new LoggerService(),
+    metricsStub,
+    new NoopGraphEventsPublisher(),
+    templateRegistryStub,
+    graphRepoStub,
+  );
+
 describe('AgentsPersistenceService: alias resolution helpers', () => {
   it('getOrCreateThreadByAlias creates a root thread with summary', async () => {
     const stub = createPrismaStub();
-    const svc = new AgentsPersistenceService(new StubPrismaService(stub) as any, new LoggerService(), { getThreadsMetrics: async () => ({}) } as any, new NoopGraphEventsPublisher());
+    const svc = createService(stub);
     const id = await svc.getOrCreateThreadByAlias('test', 'root', 'Root summary');
     expect(typeof id).toBe('string');
     expect(stub._store.threads.length).toBe(1);
@@ -18,7 +34,7 @@ describe('AgentsPersistenceService: alias resolution helpers', () => {
 
   it('getOrCreateSubthreadByAlias creates child thread under parent and sets parentId', async () => {
     const stub = createPrismaStub();
-    const svc = new AgentsPersistenceService(new StubPrismaService(stub) as any, new LoggerService(), { getThreadsMetrics: async () => ({}) } as any, new NoopGraphEventsPublisher());
+    const svc = createService(stub);
     const parentId = await svc.getOrCreateThreadByAlias('test', 'parentA', 'Parent A');
     const childId = await svc.getOrCreateSubthreadByAlias('manage', 'child1', parentId, 'Child 1');
     expect(typeof childId).toBe('string');
@@ -33,7 +49,7 @@ describe('AgentsPersistenceService: alias resolution helpers', () => {
 
   it('supports nested subthreads via explicit parent linkage', async () => {
     const stub = createPrismaStub();
-    const svc = new AgentsPersistenceService(new StubPrismaService(stub) as any, new LoggerService(), { getThreadsMetrics: async () => ({}) } as any, new NoopGraphEventsPublisher());
+    const svc = createService(stub);
     const parentId = await svc.getOrCreateThreadByAlias('test', 'parentB', 'Parent B');
     const childId = await svc.getOrCreateSubthreadByAlias('manage', 'child2', parentId, 'Child 2');
     const leafId = await svc.getOrCreateSubthreadByAlias('manage', 'leafX', childId, 'Leaf X');
@@ -52,7 +68,7 @@ describe('AgentsPersistenceService: alias resolution helpers', () => {
 
   it('getOrCreateThreadByAlias is idempotent for existing alias', async () => {
     const stub = createPrismaStub();
-    const svc = new AgentsPersistenceService(new StubPrismaService(stub) as any, new LoggerService(), { getThreadsMetrics: async () => ({}) } as any, new NoopGraphEventsPublisher());
+    const svc = createService(stub);
     const aId1 = await svc.getOrCreateThreadByAlias('test', 'A', 'first');
     const aId2 = await svc.getOrCreateThreadByAlias('test', 'A', 'second');
     expect(aId1).toBe(aId2);
@@ -68,7 +84,7 @@ describe('AgentsPersistenceService: alias resolution helpers', () => {
 
   it('trims and crops summary to 256 characters for root threads', async () => {
     const stub = createPrismaStub();
-    const svc = new AgentsPersistenceService(new StubPrismaService(stub) as any, new LoggerService(), { getThreadsMetrics: async () => ({}) } as any, new NoopGraphEventsPublisher());
+    const svc = createService(stub);
     const input = `   ${'abc'.repeat(100)}   `;
     const expected = input.trim().slice(0, 256);
     const id = await svc.getOrCreateThreadByAlias('test', 'root-trim', input);
@@ -79,7 +95,7 @@ describe('AgentsPersistenceService: alias resolution helpers', () => {
 
   it('crops summary to 256 characters for subthreads', async () => {
     const stub = createPrismaStub();
-    const svc = new AgentsPersistenceService(new StubPrismaService(stub) as any, new LoggerService(), { getThreadsMetrics: async () => ({}) } as any, new NoopGraphEventsPublisher());
+    const svc = createService(stub);
     const parentId = await svc.getOrCreateThreadByAlias('test', 'root-crop', 'Root summary');
     const input = 'x'.repeat(300);
     const childId = await svc.getOrCreateSubthreadByAlias('manage', 'child-crop', parentId, input);
@@ -90,7 +106,7 @@ describe('AgentsPersistenceService: alias resolution helpers', () => {
 
   it('beginRunThread does not mutate Thread.summary', async () => {
     const stub = createPrismaStub();
-    const svc = new AgentsPersistenceService(new StubPrismaService(stub) as any, new LoggerService(), { getThreadsMetrics: async () => ({}) } as any, new NoopGraphEventsPublisher());
+    const svc = createService(stub);
     const id = await svc.getOrCreateThreadByAlias('test', 'root-nochange', 'Initial summary');
     await svc.beginRunThread(id, []);
     const t = stub._store.threads.find((tt: any) => tt.id === id);

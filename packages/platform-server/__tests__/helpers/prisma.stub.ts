@@ -6,6 +6,7 @@ export function createPrismaStub() {
   const messages: Array<{ id: string; kind: string; text: string | null; source: any; createdAt: Date }> = [];
   const runMessages: Array<{ runId: string; messageId: string; type: string; createdAt: Date }> = [];
   const reminders: Array<{ id: string; threadId: string; note: string; at: Date; createdAt: Date; completedAt: Date | null }> = [];
+  const conversationStates: Array<{ threadId: string; nodeId: string; state: any; updatedAt: Date }> = [];
 
   let idSeq = 1;
   const timeSeed = Date.now();
@@ -86,6 +87,13 @@ export function createPrismaStub() {
         return r;
       },
       findMany: async () => runs,
+      groupBy: async ({ where }: any) => {
+        const ids = where?.threadId?.in as string[] | undefined;
+        const filtered = runs.filter((r) => !ids || ids.includes(r.threadId));
+        const counts = new Map<string, number>();
+        for (const r of filtered) counts.set(r.threadId, (counts.get(r.threadId) ?? 0) + 1);
+        return Array.from(counts.entries()).map(([threadId, count]) => ({ threadId, _count: { _all: count } }));
+      },
     },
     message: {
       create: async ({ data }: any) => {
@@ -117,7 +125,24 @@ export function createPrismaStub() {
       },
       findMany: async () => reminders,
     },
-    _store: { threads, runs, messages, runMessages, reminders },
+    conversationState: {
+      findMany: async ({ where, orderBy }: any) => {
+        let rows = [...conversationStates];
+        const threadIds = where?.threadId?.in as string[] | undefined;
+        const nodeIds = where?.nodeId?.in as string[] | undefined;
+        if (threadIds) rows = rows.filter((st) => threadIds.includes(st.threadId));
+        if (nodeIds) rows = rows.filter((st) => nodeIds.includes(st.nodeId));
+        if (orderBy?.updatedAt === 'desc') rows.sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime());
+        if (orderBy?.updatedAt === 'asc') rows.sort((a, b) => a.updatedAt.getTime() - b.updatedAt.getTime());
+        return rows;
+      },
+      _push: (state: { threadId: string; nodeId: string; state: any; updatedAt?: Date }) => {
+        const row = { ...state, updatedAt: state.updatedAt ?? new Date(timeSeed + idSeq++) };
+        conversationStates.push(row);
+        return row;
+      },
+    },
+    _store: { threads, runs, messages, runMessages, reminders, conversationStates },
     // Minimal implementation to support ThreadsMetricsService tests.
     // Accepts TemplateStrings and values; expects first array value to contain root IDs.
     async $queryRaw(strings: TemplateStringsArray, ...values: unknown[]): Promise<Array<{ root_id: string; reminders_count: number; desc_working: boolean; self_working: boolean }>> {

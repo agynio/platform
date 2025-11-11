@@ -4,10 +4,23 @@ import { LoggerService } from '../src/core/services/logger.service';
 import { NoopGraphEventsPublisher } from '../src/gateway/graph.events.publisher';
 import { StubPrismaService, createPrismaStub } from './helpers/prisma.stub';
 
+const metricsStub = { getThreadsMetrics: async () => ({}) } as any;
+const templateRegistryStub = { toSchema: async () => [], getMeta: () => undefined } as any;
+const graphRepoStub = {
+  get: async () => ({ name: 'main', version: 1, updatedAt: new Date().toISOString(), nodes: [], edges: [] }),
+} as any;
+
 describe('AgentsPersistenceService threads filters and updates', () => {
   it('filters roots and status; updates summary/status', async () => {
     const stub = createPrismaStub();
-    const svc = new AgentsPersistenceService(new StubPrismaService(stub) as any, new LoggerService(), { getThreadsMetrics: async () => ({}) } as any, new NoopGraphEventsPublisher());
+    const svc = new AgentsPersistenceService(
+      new StubPrismaService(stub) as any,
+      new LoggerService(),
+      metricsStub,
+      new NoopGraphEventsPublisher(),
+      templateRegistryStub,
+      graphRepoStub,
+    );
     // seed
     const rootOpen = await stub.thread.create({ data: { alias: 'a1', parentId: null, summary: 'A1', status: 'open' } });
     const rootClosed = await stub.thread.create({ data: { alias: 'a2', parentId: null, summary: 'A2', status: 'closed' } });

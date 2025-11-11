@@ -3,7 +3,7 @@ import type { PrismaClient } from '@prisma/client';
 import { PrismaService } from '../core/services/prisma.service';
 import { LoggerService } from '../core/services/logger.service';
 
-export type ThreadMetrics = { remindersCount: number; activity: 'working' | 'waiting' | 'idle' };
+export type ThreadMetrics = { remindersCount: number; activity: 'working' | 'waiting' | 'idle'; runsCount?: number };
 
 @Injectable()
 export class ThreadsMetricsService {

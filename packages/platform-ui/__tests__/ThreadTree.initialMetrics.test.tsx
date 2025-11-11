@@ -16,10 +16,12 @@ describe('ThreadTree initial metrics rendering', () => {
       const includeMetrics = url.searchParams.get('includeMetrics');
       const rootsOnly = url.searchParams.get('rootsOnly');
       const status = url.searchParams.get('status');
+      const includeAgentTitles = url.searchParams.get('includeAgentTitles');
 
       if (!(rootsOnly === 'true' || rootsOnly === '1')) return new HttpResponse(null, { status: 400 });
       if (status !== 'open') return new HttpResponse(null, { status: 400 });
       if (!(includeMetrics === 'true' || includeMetrics === '1')) return new HttpResponse(null, { status: 400 });
+      if (!(includeAgentTitles === 'true' || includeAgentTitles === '1')) return new HttpResponse(null, { status: 400 });
 
       return HttpResponse.json({
         items: [
@@ -30,7 +32,8 @@ describe('ThreadTree initial metrics rendering', () => {
             status: 'open',
             parentId: null,
             createdAt: new Date().toISOString(),
-            metrics: { remindersCount: 1, activity: 'working' as const },
+            metrics: { remindersCount: 1, activity: 'working' as const, runsCount: 3 },
+            agentTitle: 'Primary Agent',
           },
         ],
       });
@@ -52,5 +55,7 @@ describe('ThreadTree initial metrics rendering', () => {
     expect(dot).toBeInTheDocument();
     expect(dot.className).toContain('bg-green-500');
     expect(screen.queryByLabelText('Activity: idle')).toBeNull();
+    expect(screen.getByLabelText('Total runs: 3')).toBeInTheDocument();
+    expect(screen.getByText('Primary Agent')).toBeInTheDocument();
   });
 });

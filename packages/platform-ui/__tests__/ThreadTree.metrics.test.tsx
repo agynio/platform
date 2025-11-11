@@ -17,13 +17,24 @@ describe('ThreadTree metrics badges and socket updates', () => {
       const rootsOnly = url.searchParams.get('rootsOnly');
       const status = url.searchParams.get('status') || '';
       const includeMetrics = url.searchParams.get('includeMetrics');
+      const includeAgentTitles = url.searchParams.get('includeAgentTitles');
       // Accept rootsOnly=true or 1
       if (!(rootsOnly === 'true' || rootsOnly === '1')) return new HttpResponse(null, { status: 400 });
       if (status !== 'open') return new HttpResponse(null, { status: 400 });
       // includeMetrics=true may be sent by the client; accept whether present or not
       if (includeMetrics && includeMetrics !== 'true') return new HttpResponse(null, { status: 400 });
+      if (includeAgentTitles && includeAgentTitles !== 'true') return new HttpResponse(null, { status: 400 });
       return HttpResponse.json({ items: [
-        { id: 'th1', alias: 'a1', summary: 'Root A', status: 'open', parentId: null, createdAt: new Date().toISOString(), metrics: { remindersCount: 0, activity: 'idle' } },
+        {
+          id: 'th1',
+          alias: 'a1',
+          summary: 'Root A',
+          status: 'open',
+          parentId: null,
+          createdAt: new Date().toISOString(),
+          metrics: { remindersCount: 0, activity: 'idle', runsCount: 4 },
+          agentTitle: 'Agent 1',
+        },
       ] });
     };
     // Register both relative and absolute handlers to match axios baseURL usage
@@ -32,13 +43,18 @@ describe('ThreadTree metrics badges and socket updates', () => {
       http.get(abs('/api/agents/threads'), handler as any),
     );
     render(<TestProviders><ThreadTree status="open" onSelect={() => {}} /></TestProviders>);
-    await screen.findByText('Root A');
+    const summaryEl = await screen.findByText('Root A');
+    expect(summaryEl).toHaveAttribute('title', 'Root A');
+    const computed = window.getComputedStyle(summaryEl as HTMLElement);
+    expect(computed.getPropertyValue('-webkit-line-clamp')).toBe('2');
+    expect(screen.getByText('Agent 1')).toBeInTheDocument();
     // Activity indicator exists and has no visible text
     const dotIdle = screen.getByLabelText('Activity: idle');
     expect(dotIdle).toBeInTheDocument();
     expect(dotIdle.textContent).toBe('');
     // Reminders badge hidden when 0
     expect(screen.queryByLabelText(/Active reminders:/)).toBeNull();
+    expect(screen.getByLabelText('Total runs: 4')).toBeInTheDocument();
 
     // Simulate socket activity change + reminders count
     const anySock: any = socketModule.graphSocket as any;
@@ -51,5 +67,7 @@ describe('ThreadTree metrics badges and socket updates', () => {
     expect(dotWorking).toBeInTheDocument();
     expect(dotWorking.textContent).toBe('');
     expect(screen.getByLabelText('Active reminders: 2')).toBeInTheDocument();
+    // Runs badge remains unchanged
+    expect(screen.getByLabelText('Total runs: 4')).toBeInTheDocument();
   });
 });

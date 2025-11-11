@@ -4,6 +4,7 @@ import { AgentsPersistenceService } from './agents.persistence.service';
 import { Transform } from 'class-transformer';
 import type { RunMessageType, ThreadStatus } from '@prisma/client';
 import { ContainerThreadTerminationService } from '../infra/container/containerThreadTermination.service';
+import type { ThreadMetrics } from './threads.metrics.service';
 
 // Avoid runtime import of Prisma in tests; enumerate allowed values
 export const RunMessageTypeValues: ReadonlyArray<RunMessageType> = ['input', 'injected', 'output'];
@@ -32,6 +33,10 @@ export class ListThreadsQueryDto {
   @IsOptional()
   @IsBooleanString()
   includeMetrics?: string; // parse to boolean
+
+  @IsOptional()
+  @IsBooleanString()
+  includeAgentTitles?: string; // parse to boolean
 }
 
 export class ListChildrenQueryDto {
@@ -42,6 +47,10 @@ export class ListChildrenQueryDto {
   @IsOptional()
   @IsBooleanString()
   includeMetrics?: string; // parse to boolean
+
+  @IsOptional()
+  @IsBooleanString()
+  includeAgentTitles?: string; // parse to boolean
 }
 
 export class PatchThreadBodyDto {
@@ -70,9 +79,24 @@ export class AgentsThreadsController {
     const limit = Number(query.limit) ?? 100;
     const threads = await this.persistence.listThreads({ rootsOnly, status, limit });
     const includeMetrics = (query.includeMetrics ?? 'false') === 'true';
-    if (!includeMetrics) return { items: threads };
-    const metrics = await this.persistence.getThreadsMetrics(threads.map((t) => t.id));
-    const items = threads.map((t) => ({ ...t, metrics: metrics[t.id] ?? { remindersCount: 0, activity: 'idle' as const } }));
+    const includeAgentTitles = (query.includeAgentTitles ?? 'false') === 'true';
+    if (!includeMetrics && !includeAgentTitles) return { items: threads };
+    const ids = threads.map((t) => t.id);
+    const [metrics, agentTitles] = await Promise.all([
+      includeMetrics && ids.length > 0
+        ? this.persistence.getThreadsMetrics(ids)
+        : Promise.resolve<Record<string, ThreadMetrics>>({}),
+      includeAgentTitles && ids.length > 0
+        ? this.persistence.getThreadsAgentTitles(ids)
+        : Promise.resolve<Record<string, string>>({}),
+    ]);
+    const defaultMetrics: ThreadMetrics = { remindersCount: 0, activity: 'idle', runsCount: 0 };
+    const fallbackTitle = '(unknown agent)';
+    const items = threads.map((t) => ({
+      ...t,
+      ...(includeMetrics ? { metrics: { ...defaultMetrics, ...(metrics[t.id] ?? {}) } } : {}),
+      ...(includeAgentTitles ? { agentTitle: agentTitles[t.id] ?? fallbackTitle } : {}),
+    }));
     return { items };
   }
 
@@ -80,9 +104,26 @@ export class AgentsThreadsController {
   async listChildren(@Param('threadId') threadId: string, @Query() query: ListChildrenQueryDto) {
     const items = await this.persistence.listChildren(threadId, query.status ?? 'all');
     const includeMetrics = (query.includeMetrics ?? 'false') === 'true';
-    if (!includeMetrics) return { items };
-    const metrics = await this.persistence.getThreadsMetrics(items.map((t) => t.id));
-    return { items: items.map((t) => ({ ...t, metrics: metrics[t.id] ?? { remindersCount: 0, activity: 'idle' as const } })) };
+    const includeAgentTitles = (query.includeAgentTitles ?? 'false') === 'true';
+    if (!includeMetrics && !includeAgentTitles) return { items };
+    const ids = items.map((t) => t.id);
+    const [metrics, agentTitles] = await Promise.all([
+      includeMetrics && ids.length > 0
+        ? this.persistence.getThreadsMetrics(ids)
+        : Promise.resolve<Record<string, ThreadMetrics>>({}),
+      includeAgentTitles && ids.length > 0
+        ? this.persistence.getThreadsAgentTitles(ids)
+        : Promise.resolve<Record<string, string>>({}),
+    ]);
+    const defaultMetrics: ThreadMetrics = { remindersCount: 0, activity: 'idle', runsCount: 0 };
+    const fallbackTitle = '(unknown agent)';
+    return {
+      items: items.map((t) => ({
+        ...t,
+        ...(includeMetrics ? { metrics: { ...defaultMetrics, ...(metrics[t.id] ?? {}) } } : {}),
+        ...(includeAgentTitles ? { agentTitle: agentTitles[t.id] ?? fallbackTitle } : {}),
+      })),
+    };
   }
 
   @Get('threads/:threadId/runs')
@@ -113,6 +154,6 @@ export class AgentsThreadsController {
   @Get('threads/:threadId/metrics')
   async getThreadMetrics(@Param('threadId') threadId: string) {
     const metrics = await this.persistence.getThreadsMetrics([threadId]);
-    return metrics[threadId] ?? { remindersCount: 0, activity: 'idle' as const };
+    return metrics[threadId] ?? { remindersCount: 0, activity: 'idle' as const, runsCount: 0 };
   }
 }

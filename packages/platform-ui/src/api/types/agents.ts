@@ -3,6 +3,7 @@ export type ThreadStatus = 'open' | 'closed';
 export type ThreadMetrics = {
   remindersCount: number;
   activity: 'working' | 'waiting' | 'idle';
+  runsCount: number;
 };
 
 export type ThreadNode = {
@@ -13,6 +14,7 @@ export type ThreadNode = {
   parentId?: string | null;
   createdAt: string;
   metrics?: ThreadMetrics;
+  agentTitle?: string;
 };
 
 export type RunMeta = {

@@ -8,6 +8,22 @@ import { StubPrismaService, createPrismaStub } from './helpers/prisma.stub';
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
+const metricsStub = { getThreadsMetrics: async () => ({}) } as any;
+const templateRegistryStub = { toSchema: async () => [], getMeta: () => undefined } as any;
+const graphRepoStub = {
+  get: async () => ({ name: 'main', version: 1, updatedAt: new Date().toISOString(), nodes: [], edges: [] }),
+} as any;
+
+const createPersistence = () =>
+  new AgentsPersistenceService(
+    new StubPrismaService(createPrismaStub()) as any,
+    new LoggerService(),
+    metricsStub,
+    new NoopGraphEventsPublisher(),
+    templateRegistryStub,
+    graphRepoStub,
+  );
+
 class FakeAgent {
   constructor(private responder?: (thread: string, msgs: HumanMessage[]) => Promise<ResponseMessage>) {}
   async invoke(thread: string, messages: HumanMessage[]): Promise<ResponseMessage> {
@@ -19,7 +35,7 @@ class FakeAgent {
 
 describe('CallAgentTool unit', () => {
   it('returns error when no agent attached', async () => {
-    const tool = new CallAgentTool(new LoggerService(), new AgentsPersistenceService(new StubPrismaService(createPrismaStub()) as any, new LoggerService(), { getThreadsMetrics: async () => ({}) } as any, new NoopGraphEventsPublisher()));
+    const tool = new CallAgentTool(new LoggerService(), createPersistence());
     await expect(tool.setConfig({ description: 'desc' })).resolves.toBeUndefined();
     const dynamic = tool.getTool();
     await expect(dynamic.execute({ input: 'hi', threadAlias: 'x', summary: 'x summary' }, { threadId: 't1' } as any)).rejects.toThrowError(
@@ -28,7 +44,7 @@ describe('CallAgentTool unit', () => {
   });
 
   it('calls attached agent and returns its response.text', async () => {
-    const persistence = new AgentsPersistenceService(new StubPrismaService(createPrismaStub()) as any, new LoggerService(), { getThreadsMetrics: async () => ({}) } as any, new NoopGraphEventsPublisher());
+    const persistence = createPersistence();
     const tool = new CallAgentTool(new LoggerService(), persistence);
     await tool.setConfig({ description: 'desc', response: 'sync' });
     const agent = new FakeAgent(async (_thread, _msgs) => {
@@ -45,7 +61,7 @@ describe('CallAgentTool unit', () => {
   // Context pass-through removed; tool forwards only text input.
 
   it('uses provided description in tool metadata', async () => {
-    const tool = new CallAgentTool(new LoggerService(), new AgentsPersistenceService(new StubPrismaService(createPrismaStub()) as any, new LoggerService(), { getThreadsMetrics: async () => ({}) } as any, new NoopGraphEventsPublisher()));
+    const tool = new CallAgentTool(new LoggerService(), createPersistence());
     await tool.setConfig({ description: 'My desc' });
     const dynamic = tool.getTool();
     expect(dynamic.description).toBe('My desc');
@@ -53,7 +69,7 @@ describe('CallAgentTool unit', () => {
   });
 
   it('resolves subthread by alias under parent UUID', async () => {
-    const persistence = new AgentsPersistenceService(new StubPrismaService(createPrismaStub()) as any, new LoggerService(), { getThreadsMetrics: async () => ({}) } as any, new NoopGraphEventsPublisher());
+    const persistence = createPersistence();
     const tool = new CallAgentTool(new LoggerService(), persistence);
     await tool.setConfig({ description: 'desc', response: 'sync' });
     const agent = new FakeAgent(async (_thread, _msgs) => {
@@ -68,7 +84,7 @@ describe('CallAgentTool unit', () => {
   });
 
   it('async mode returns sent immediately', async () => {
-    const tool = new CallAgentTool(new LoggerService(), new AgentsPersistenceService(new StubPrismaService(createPrismaStub()) as any, new LoggerService(), { getThreadsMetrics: async () => ({}) } as any, new NoopGraphEventsPublisher()));
+    const tool = new CallAgentTool(new LoggerService(), createPersistence());
     await tool.setConfig({ description: 'desc', response: 'async' });
     const child = new FakeAgent(async (thread, msgs) => {
       expect(msgs[0]?.text).toBe('do work');
@@ -84,7 +100,7 @@ describe('CallAgentTool unit', () => {
   });
 
   it('ignore mode returns sent and does not trigger parent', async () => {
-    const tool = new CallAgentTool(new LoggerService(), new AgentsPersistenceService(new StubPrismaService(createPrismaStub()) as any, new LoggerService(), { getThreadsMetrics: async () => ({}) } as any, new NoopGraphEventsPublisher()));
+    const tool = new CallAgentTool(new LoggerService(), createPersistence());
     await tool.setConfig({ description: 'desc', response: 'ignore' });
     const child = new FakeAgent(async () => {
       const ai = AIMessage.fromText('ignored');

@@ -24,10 +24,14 @@ export function ThreadTreeNode({
   const [error, setError] = useState<string | null>(null);
   const [toggling, setToggling] = useState(false);
 
-  const label = (node.summary && node.summary.trim().length > 0) ? node.summary : '(no summary yet)';
+  const summary = node.summary && node.summary.trim().length > 0 ? node.summary.trim() : '(no summary yet)';
+  const agentTitle = node.agentTitle && node.agentTitle.trim().length > 0 ? node.agentTitle.trim() : '(unknown agent)';
   const isSelected = selectedId === node.id;
   const remindersCount = node.metrics?.remindersCount ?? 0;
   const activity = node.metrics?.activity ?? 'idle';
+  const runsCount = node.metrics?.runsCount ?? 0;
+  const statusLabel = (node.status || 'open') === 'open' ? 'Open' : 'Closed';
+  const createdAtLabel = new Date(node.createdAt).toLocaleString();
 
   async function loadChildren() {
     setLoading(true);
@@ -79,8 +83,20 @@ export function ThreadTreeNode({
           {expanded ? '▾' : '▸'}
         </button>
         <button className="flex-1 text-left" onClick={() => onSelect(node.id)}>
-          <div className="text-sm">{label}</div>
-          <div className="text-xs text-gray-500">{(node.status || 'open') === 'open' ? 'Open' : 'Closed'} • created {new Date(node.createdAt).toLocaleString()}</div>
+          <div
+            className="text-sm font-medium text-gray-900"
+            style={{ display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}
+            title={summary}
+          >
+            {summary}
+          </div>
+          <div className="mt-0.5 text-xs text-gray-500 flex flex-wrap items-center gap-x-1.5 gap-y-0.5">
+            <span className="truncate max-w-[200px]" title={agentTitle}>{agentTitle}</span>
+            <span aria-hidden="true">•</span>
+            <span>{statusLabel}</span>
+            <span aria-hidden="true">•</span>
+            <span>created {createdAtLabel}</span>
+          </div>
         </button>
         {/* Activity indicator: small colored dot with tooltip + aria */}
         <span
@@ -88,6 +104,11 @@ export function ThreadTreeNode({
           aria-label={`Activity: ${activity}`}
           title={`Activity: ${activity}`}
         />
+        {runsCount > 0 && (
+          <span className="text-[10px] px-1 py-0.5 rounded bg-gray-100 text-gray-700" aria-label={`Total runs: ${runsCount}`} title={`Total runs: ${runsCount}`}>
+            Runs {runsCount}
+          </span>
+        )}
         {/* Reminders badge: show clock + count when > 0 */}
         {remindersCount > 0 && (
           <span className="text-[10px] px-1 py-0.5 rounded bg-gray-100 text-gray-700" aria-label={`Active reminders: ${remindersCount}`} title={`Active reminders: ${remindersCount}`}>

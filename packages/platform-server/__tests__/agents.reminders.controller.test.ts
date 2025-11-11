@@ -3,6 +3,11 @@ import { Test } from '@nestjs/testing';
 import { AgentsRemindersController } from '../src/agents/reminders.controller';
 import { AgentsPersistenceService } from '../src/agents/agents.persistence.service';
 
+const templateRegistryStub = { toSchema: async () => [], getMeta: () => undefined } as any;
+const graphRepoStub = {
+  get: async () => ({ name: 'main', version: 1, updatedAt: new Date().toISOString(), nodes: [], edges: [] }),
+} as any;
+
 describe('AgentsRemindersController', () => {
   it('defaults filter=active and take=100', async () => {
     const svc = { listReminders: vi.fn(async () => [{ id: '1' }]) } as unknown as AgentsPersistenceService;
@@ -48,7 +53,14 @@ describe('AgentsPersistenceService.listReminders', () => {
     };
     const { LoggerService } = await import('../src/core/services/logger.service');
     const { NoopGraphEventsPublisher } = await import('../src/gateway/graph.events.publisher');
-    const svc = new AgentsPersistenceService(prismaStub as any, new LoggerService(), { getThreadsMetrics: async () => ({}) } as any, new NoopGraphEventsPublisher());
+    const svc = new AgentsPersistenceService(
+      prismaStub as any,
+      new LoggerService(),
+      { getThreadsMetrics: async () => ({}) } as any,
+      new NoopGraphEventsPublisher(),
+      templateRegistryStub,
+      graphRepoStub,
+    );
 
     await svc.listReminders('active', 50);
     await svc.listReminders('completed', 25);

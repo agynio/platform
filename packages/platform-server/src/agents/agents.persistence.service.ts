@@ -7,6 +7,9 @@ import { ChannelDescriptorSchema, type ChannelDescriptor } from '../messaging/ty
 import { LoggerService } from '../core/services/logger.service';
 import { ThreadsMetricsService, type ThreadMetrics } from './threads.metrics.service';
 import { GraphEventsPublisher } from '../gateway/graph.events.publisher';
+import { TemplateRegistry } from '../graph/templateRegistry';
+import { GraphRepository } from '../graph/graph.repository';
+import type { PersistedGraphNode } from '../graph/types';
 
 export type RunStartResult = { runId: string };
 
@@ -17,6 +20,8 @@ export class AgentsPersistenceService {
     @Inject(LoggerService) private readonly logger: LoggerService,
     @Inject(ThreadsMetricsService) private readonly metrics: ThreadsMetricsService,
     @Inject(GraphEventsPublisher) private readonly events: GraphEventsPublisher,
+    @Inject(TemplateRegistry) private readonly templateRegistry: TemplateRegistry,
+    @Inject(GraphRepository) private readonly graphs: GraphRepository,
   ) {}
 
   private get prisma(): PrismaClient {
@@ -204,7 +209,26 @@ export class AgentsPersistenceService {
 
   /** Aggregate subtree metrics for provided root IDs. */
   async getThreadsMetrics(ids: string[]): Promise<Record<string, ThreadMetrics>> {
-    return this.metrics.getThreadsMetrics(ids);
+    if (!ids || ids.length === 0) return {};
+    const [metrics, runs] = await Promise.all([this.metrics.getThreadsMetrics(ids), this.getRunsCount(ids)]);
+    const out: Record<string, ThreadMetrics> = {};
+    for (const id of ids) {
+      const base = metrics[id] ?? { remindersCount: 0, activity: 'idle' as const };
+      out[id] = { ...base, runsCount: runs[id] ?? 0 };
+    }
+    return out;
+  }
+
+  async getThreadsAgentTitles(ids: string[]): Promise<Record<string, string>> {
+    if (!ids || ids.length === 0) return {};
+    try {
+      return await this.resolveAgentTitles(ids);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      this.logger.error('AgentsPersistenceService failed to resolve agent titles: %s', message);
+      const fallback = '(unknown agent)';
+      return Object.fromEntries(ids.map((id) => [id, fallback]));
+    }
   }
 
   async listRuns(
@@ -243,6 +267,58 @@ export class AgentsPersistenceService {
       select: { id: true, threadId: true, note: true, at: true, createdAt: true, completedAt: true },
       take,
     });
+  }
+
+  private async getRunsCount(ids: string[]): Promise<Record<string, number>> {
+    if (!ids || ids.length === 0) return {};
+    const grouped = await this.prisma.run.groupBy({
+      by: ['threadId'],
+      where: { threadId: { in: ids } },
+      _count: { _all: true },
+    });
+    const out: Record<string, number> = {};
+    for (const row of grouped) out[row.threadId] = row._count._all;
+    return out;
+  }
+
+  private async resolveAgentTitles(threadIds: string[]): Promise<Record<string, string>> {
+    const fallback = '(unknown agent)';
+    const empty = Object.fromEntries(threadIds.map((id) => [id, fallback]));
+    const graph = await this.graphs.get('main');
+    if (!graph || !Array.isArray(graph.nodes) || graph.nodes.length === 0) return empty;
+
+    const agentNodes = graph.nodes.filter((node) => {
+      const meta = this.templateRegistry.getMeta(node.template);
+      if (meta) return meta.kind === 'agent';
+      return node.template === 'agent';
+    });
+    if (agentNodes.length === 0) return empty;
+
+    const nodeById = new Map<string, PersistedGraphNode>(agentNodes.map((node) => [node.id, node]));
+    const agentIds = agentNodes.map((node) => node.id);
+    if (agentIds.length === 0) return empty;
+
+    const states = await this.prisma.conversationState.findMany({
+      where: { threadId: { in: threadIds }, nodeId: { in: agentIds } },
+      orderBy: { updatedAt: 'desc' },
+    });
+
+    const titles: Record<string, string> = {};
+    const seen = new Set<string>();
+    for (const state of states) {
+      if (seen.has(state.threadId)) continue;
+      const node = nodeById.get(state.nodeId);
+      const config = (node?.config as Record<string, unknown> | undefined) ?? undefined;
+      const rawTitle = typeof config?.['title'] === 'string' ? (config['title'] as string) : undefined;
+      const configTitle = rawTitle?.trim();
+      const templateName = node ? this.templateRegistry.getMeta(node.template)?.title ?? node.template : undefined;
+      const resolved = configTitle && configTitle.length > 0 ? configTitle : templateName && templateName.length > 0 ? templateName : fallback;
+      titles[state.threadId] = resolved;
+      seen.add(state.threadId);
+    }
+
+    for (const id of threadIds) if (!titles[id]) titles[id] = fallback;
+    return titles;
   }
 
   /**

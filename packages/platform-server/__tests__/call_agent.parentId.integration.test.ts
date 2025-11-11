@@ -7,6 +7,12 @@ import { NoopGraphEventsPublisher } from '../src/gateway/graph.events.publisher'
 import { Signal } from '../src/signal';
 import { createPrismaStub, StubPrismaService } from './helpers/prisma.stub';
 
+const metricsStub = { getThreadsMetrics: async () => ({}) } as any;
+const templateRegistryStub = { toSchema: async () => [], getMeta: () => undefined } as any;
+const graphRepoStub = {
+  get: async () => ({ name: 'main', version: 1, updatedAt: new Date().toISOString(), nodes: [], edges: [] }),
+} as any;
+
 class FakeAgentWithPersistence {
   constructor(private persistence: AgentsPersistenceService) {}
   async invoke(thread: string, _messages: any[]): Promise<ResponseMessage> {
@@ -19,7 +25,14 @@ class FakeAgentWithPersistence {
 describe('call_agent integration: creates child thread with parentId', () => {
   it('creates parent and child threads and sets child.parentId', async () => {
     const stub = createPrismaStub();
-    const persistence = new AgentsPersistenceService(new StubPrismaService(stub) as any, new LoggerService(), { getThreadsMetrics: async () => ({}) } as any, new NoopGraphEventsPublisher());
+    const persistence = new AgentsPersistenceService(
+      new StubPrismaService(stub) as any,
+      new LoggerService(),
+      metricsStub,
+      new NoopGraphEventsPublisher(),
+      templateRegistryStub,
+      graphRepoStub,
+    );
     const tool = new CallAgentTool(new LoggerService(), persistence);
     await tool.setConfig({ description: 'desc', response: 'sync' });
     // Attach fake agent that persists runs/threads

@@ -34,6 +34,10 @@ export class TemplateRegistry {
     return this.classes.get(template);
   }
 
+  getMeta(template: string): TemplateMeta | undefined {
+    return this.meta.get(template);
+  }
+
   // Introspect ports by instantiating classes via DI; async to support resolution.
   async toSchema(): Promise<TemplateNodeSchema[]> {
     const schemas: TemplateNodeSchema[] = [];
