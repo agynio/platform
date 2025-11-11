@@ -4,7 +4,7 @@ import { type ThreadStatusFilter } from './ThreadStatusFilterSwitch';
 import { ThreadTreeNode } from './ThreadTreeNode';
 import { useThreadRoots } from '@/api/hooks/threads';
 import { graphSocket } from '@/lib/graph/socket';
-import type { ThreadNode } from '@/api/types/agents';
+import type { ThreadMetrics, ThreadNode } from '@/api/types/agents';
 
 export function ThreadTree({ status, onSelect, selectedId }: { status: ThreadStatusFilter; onSelect: (id: string) => void; selectedId?: string }) {
   const qc = useQueryClient();
@@ -14,17 +14,24 @@ export function ThreadTree({ status, onSelect, selectedId }: { status: ThreadSta
   // Subscribe to threads room and update react-query cache on events
   useEffect(() => {
     graphSocket.subscribe(['threads']);
+    const defaultMetrics: ThreadMetrics = { remindersCount: 0, activity: 'idle', runsCount: 0 };
     const offAct = graphSocket.onThreadActivityChanged((payload) => {
       qc.setQueryData<{ items: ThreadNode[] }>(['agents', 'threads', 'roots', status], (prev) => {
         if (!prev) return prev;
-        const items = prev.items.map((t) => (t.id === payload.threadId ? { ...t, metrics: { ...(t.metrics || { remindersCount: 0, activity: 'idle' }), activity: payload.activity } } : t));
+        const items = prev.items.map((t) =>
+          t.id === payload.threadId ? { ...t, metrics: { ...(t.metrics ?? defaultMetrics), activity: payload.activity } } : t,
+        );
         return { items };
       });
     });
     const offRem = graphSocket.onThreadRemindersCount((payload) => {
       qc.setQueryData<{ items: ThreadNode[] }>(['agents', 'threads', 'roots', status], (prev) => {
         if (!prev) return prev;
-        const items = prev.items.map((t) => (t.id === payload.threadId ? { ...t, metrics: { ...(t.metrics || { remindersCount: 0, activity: 'idle' }), remindersCount: payload.remindersCount } } : t));
+        const items = prev.items.map((t) =>
+          t.id === payload.threadId
+            ? { ...t, metrics: { ...(t.metrics ?? defaultMetrics), remindersCount: payload.remindersCount } }
+            : t,
+        );
         return { items };
       });
     });
@@ -35,7 +42,16 @@ export function ThreadTree({ status, onSelect, selectedId }: { status: ThreadSta
       const isRoot = thread.parentId == null;
       if (!matchesFilter || !isRoot) return;
       qc.setQueryData<{ items: ThreadNode[] }>(['agents', 'threads', 'roots', status], (prev) => {
-        const node: ThreadNode = { id: thread.id, alias: thread.alias, summary: thread.summary, status: thread.status, parentId: thread.parentId, createdAt: thread.createdAt, metrics: { remindersCount: 0, activity: 'idle' } };
+        const node: ThreadNode = {
+          id: thread.id,
+          alias: thread.alias,
+          summary: thread.summary,
+          status: thread.status,
+          parentId: thread.parentId,
+          createdAt: thread.createdAt,
+          metrics: { remindersCount: 0, activity: 'idle', runsCount: 0 },
+          agentTitle: '(unknown agent)',
+        };
         const existing = prev?.items?.some((t) => t.id === node.id);
         const items = existing ? prev!.items : prev ? [node, ...prev.items] : [node];
         return { items };

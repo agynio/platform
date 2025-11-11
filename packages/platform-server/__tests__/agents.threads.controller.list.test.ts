@@ -1,0 +1,104 @@
+import { describe, it, expect, vi } from 'vitest';
+import { Test } from '@nestjs/testing';
+import { AgentsThreadsController } from '../src/agents/threads.controller';
+import { AgentsPersistenceService } from '../src/agents/agents.persistence.service';
+import { ContainerThreadTerminationService } from '../src/infra/container/containerThreadTermination.service';
+
+describe('AgentsThreadsController list endpoints', () => {
+  it('requests metrics and agent titles when flags are enabled', async () => {
+    const now = new Date();
+    const persistence = {
+      listThreads: vi.fn(async () => [
+        { id: 't1', alias: 'a1', summary: 'Summary', status: 'open', createdAt: now, parentId: null },
+      ]),
+      getThreadsMetrics: vi.fn(async () => ({ t1: { remindersCount: 5, activity: 'working', runsCount: 2 } })),
+      getThreadsAgentTitles: vi.fn(async () => ({ t1: 'Agent One' })),
+      listChildren: vi.fn(),
+      listRuns: vi.fn(),
+      listRunMessages: vi.fn(),
+      updateThread: vi.fn(),
+    } as unknown as AgentsPersistenceService;
+
+    const module = await Test.createTestingModule({
+      controllers: [AgentsThreadsController],
+      providers: [
+        { provide: AgentsPersistenceService, useValue: persistence },
+        { provide: ContainerThreadTerminationService, useValue: { terminateByThread: vi.fn() } },
+      ],
+    }).compile();
+
+    const ctrl = await module.resolve(AgentsThreadsController);
+    const res = await ctrl.listThreads({ includeMetrics: 'true', includeAgentTitles: 'true' } as any);
+
+    expect((persistence.listThreads as any).mock.calls.length).toBe(1);
+    expect((persistence.getThreadsMetrics as any).mock.calls[0][0]).toEqual(['t1']);
+    expect((persistence.getThreadsAgentTitles as any).mock.calls[0][0]).toEqual(['t1']);
+    expect(res).toMatchObject({
+      items: [
+        {
+          id: 't1',
+          alias: 'a1',
+          summary: 'Summary',
+          status: 'open',
+          parentId: null,
+          metrics: { remindersCount: 5, activity: 'working', runsCount: 2 },
+          agentTitle: 'Agent One',
+        },
+      ],
+    });
+    expect(res.items[0].createdAt).toBeInstanceOf(Date);
+  });
+
+  it('fills defaults when service omits metrics or titles for children', async () => {
+    const now = new Date();
+    const persistence = {
+      listChildren: vi.fn(async () => [
+        { id: 'c1', alias: 'child', summary: null, status: 'open', createdAt: now, parentId: 't1' },
+      ]),
+      getThreadsMetrics: vi.fn(async () => ({})),
+      getThreadsAgentTitles: vi.fn(async () => ({})),
+      listThreads: vi.fn(),
+      listRuns: vi.fn(),
+      listRunMessages: vi.fn(),
+      updateThread: vi.fn(),
+    } as unknown as AgentsPersistenceService;
+
+    const module = await Test.createTestingModule({
+      controllers: [AgentsThreadsController],
+      providers: [
+        { provide: AgentsPersistenceService, useValue: persistence },
+        { provide: ContainerThreadTerminationService, useValue: { terminateByThread: vi.fn() } },
+      ],
+    }).compile();
+
+    const ctrl = await module.resolve(AgentsThreadsController);
+    const res = await ctrl.listChildren('t1', { includeMetrics: 'true', includeAgentTitles: 'true' } as any);
+
+    expect(res.items[0].metrics).toEqual({ remindersCount: 0, activity: 'idle', runsCount: 0 });
+    expect(res.items[0].agentTitle).toBe('(unknown agent)');
+  });
+
+  it('getThreadMetrics returns default metrics including runsCount when missing', async () => {
+    const persistence = {
+      getThreadsMetrics: vi.fn(async () => ({})),
+      listThreads: vi.fn(),
+      listChildren: vi.fn(),
+      listRuns: vi.fn(),
+      listRunMessages: vi.fn(),
+      updateThread: vi.fn(),
+      getThreadsAgentTitles: vi.fn(),
+    } as unknown as AgentsPersistenceService;
+
+    const module = await Test.createTestingModule({
+      controllers: [AgentsThreadsController],
+      providers: [
+        { provide: AgentsPersistenceService, useValue: persistence },
+        { provide: ContainerThreadTerminationService, useValue: { terminateByThread: vi.fn() } },
+      ],
+    }).compile();
+
+    const ctrl = await module.resolve(AgentsThreadsController);
+    const res = await ctrl.getThreadMetrics('t-miss');
+    expect(res).toEqual({ remindersCount: 0, activity: 'idle', runsCount: 0 });
+  });
+});
