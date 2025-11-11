@@ -64,6 +64,7 @@ model Thread {
 
   runs      Run[]
   containers Container[]
+  runEvents RunEvent[]
 
   // Index parentId to accelerate parent-child lookups
   @@index([parentId])
@@ -91,6 +92,7 @@ model Run {
   updatedAt  DateTime  @updatedAt
 
   runMessages RunMessage[]
+  events      RunEvent[]
 
   @@index([threadId])
 }
@@ -109,13 +111,50 @@ model Message {
   source    Json
   createdAt DateTime    @default(now())
 
-  runLinks  RunMessage[]
+  runLinks      RunMessage[]
+  eventMessages EventMessage[] @relation("MessageEventMessage")
 }
 
 enum RunMessageType {
   input
   injected
   output
+}
+
+enum RunEventType {
+  invocation_message
+  injection
+  llm_call
+  tool_execution
+  summarization
+}
+
+enum RunEventStatus {
+  pending
+  running
+  success
+  error
+  cancelled
+}
+
+enum EventSourceKind {
+  internal
+  tracing
+  backfill
+}
+
+enum ToolExecStatus {
+  success
+  error
+}
+
+enum AttachmentKind {
+  prompt
+  response
+  tool_input
+  tool_output
+  provider_raw
+  other
 }
 
 model RunMessage {
@@ -129,6 +168,144 @@ model RunMessage {
 
   @@id([runId, messageId])
   @@index([runId])
+}
+
+model RunEvent {
+  id             String          @id @default(uuid()) @db.Uuid
+  runId          String          @map("run_id") @db.Uuid
+  threadId       String          @map("thread_id") @db.Uuid
+  type           RunEventType
+  status         RunEventStatus  @default(success)
+  ordinal        Int
+  ts             DateTime        @default(now())
+  startedAt      DateTime?       @map("started_at")
+  endedAt        DateTime?       @map("ended_at")
+  durationMs     Int?            @map("duration_ms")
+  nodeId         String?         @map("node_id")
+  sourceKind     EventSourceKind @default(internal) @map("source_kind")
+  sourceSpanId   String?         @map("source_span_id")
+  schemaVersion  Int             @default(1) @map("schema_version")
+  errorCode      String?         @map("error_code")
+  errorMessage   String?         @map("error_message")
+  metadata       Json            @default("{}")
+  idempotencyKey String?         @map("idempotency_key") @unique
+
+  run           Run            @relation(fields: [runId], references: [id], onDelete: Cascade)
+  thread        Thread         @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  eventMessage  EventMessage?
+  llmCall       LLMCall?
+  toolExecution ToolExecution?
+  summarization Summarization?
+  injection     Injection?
+  attachments   EventAttachment[]
+
+  @@map("run_events")
+  @@unique([runId, ordinal])
+  @@index([runId, ordinal])
+  @@index([runId, type, ordinal])
+  @@index([runId, ts])
+  @@index([threadId, ts])
+  @@index([sourceKind, sourceSpanId])
+}
+
+model EventMessage {
+  eventId   String  @id @map("event_id") @db.Uuid
+  messageId String  @map("message_id") @db.Uuid
+  role      String
+
+  event   RunEvent  @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  message Message   @relation("MessageEventMessage", fields: [messageId], references: [id], onDelete: Cascade)
+
+  @@map("event_messages")
+}
+
+model LLMCall {
+  eventId      String  @id @map("event_id") @db.Uuid
+  provider     String?
+  model        String?
+  temperature  Float?
+  topP         Float?  @map("top_p")
+  stopReason   String? @map("stop_reason")
+  prompt       String? @db.Text
+  responseText String? @map("response_text") @db.Text
+  rawResponse  Json?   @map("raw_response")
+
+  event          RunEvent       @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  toolCalls      ToolCall[]
+  toolExecutions ToolExecution[] @relation("LLMCallToolExecutions")
+
+  @@map("llm_calls")
+}
+
+model ToolCall {
+  id             String @id @default(uuid()) @db.Uuid
+  llmCallEventId String @map("llm_call_event_id") @db.Uuid
+  callId         String @map("call_id")
+  name           String
+  arguments      Json
+  idx            Int
+
+  llmCall LLMCall @relation(fields: [llmCallEventId], references: [eventId], onDelete: Cascade)
+
+  @@map("tool_calls")
+  @@unique([llmCallEventId, callId])
+  @@index([llmCallEventId, idx])
+}
+
+model ToolExecution {
+  eventId        String         @id @map("event_id") @db.Uuid
+  llmCallEventId String?        @map("llm_call_event_id") @db.Uuid
+  toolName       String         @map("tool_name")
+  toolCallId     String?        @map("tool_call_id")
+  input          Json
+  output         Json?
+  execStatus     ToolExecStatus @map("exec_status")
+  errorMessage   String?        @map("error_message")
+  raw            Json?
+
+  event   RunEvent @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  llmCall LLMCall? @relation("LLMCallToolExecutions", fields: [llmCallEventId], references: [eventId], onDelete: SetNull)
+
+  @@map("tool_executions")
+  @@index([llmCallEventId])
+  @@index([toolName])
+}
+
+model Summarization {
+  eventId          String @id @map("event_id") @db.Uuid
+  oldContextTokens Int?   @map("old_context_tokens")
+  summaryText      String @map("summary_text") @db.Text
+  newContextCount  Int    @map("new_context_count")
+  raw              Json?
+
+  event RunEvent @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
+  @@map("summarizations")
+}
+
+model Injection {
+  eventId    String   @id @map("event_id") @db.Uuid
+  messageIds String[] @map("message_ids") @db.Uuid
+  reason     String?
+
+  event RunEvent @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
+  @@map("injections")
+}
+
+model EventAttachment {
+  id          String         @id @default(uuid()) @db.Uuid
+  eventId     String         @map("event_id") @db.Uuid
+  kind        AttachmentKind
+  contentJson Json?          @map("content_json")
+  contentText String?        @map("content_text") @db.Text
+  isGzip      Boolean        @map("is_gzip") @default(false)
+  sizeBytes   Int            @map("size_bytes") @default(0)
+
+  event RunEvent @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
+  @@map("event_attachments")
+  @@index([eventId])
 }
 
 // Container tracking moved from MongoDB to Postgres via Prisma
