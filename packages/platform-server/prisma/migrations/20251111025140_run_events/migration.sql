@@ -13,9 +13,9 @@ CREATE TYPE "ToolExecStatus" AS ENUM ('success', 'error');
 -- CreateEnum
 CREATE TYPE "AttachmentKind" AS ENUM ('prompt', 'response', 'tool_input', 'tool_output', 'provider_raw', 'other');
 
--- AlterTable
-ALTER TABLE "memories" ALTER COLUMN "id" DROP DEFAULT,
-ALTER COLUMN "updated_at" DROP DEFAULT;
+-- Preserve existing defaults on memories table
+ALTER TABLE "memories" ALTER COLUMN "id" SET DEFAULT gen_random_uuid();
+ALTER TABLE "memories" ALTER COLUMN "updated_at" SET DEFAULT NOW();
 
 -- CreateTable
 CREATE TABLE "run_events" (
