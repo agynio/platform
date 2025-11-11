@@ -96,6 +96,35 @@ const relativeHandlers = [
   _http.get('/api/agents/threads', () => _HttpResponse.json({ items: [] })),
   _http.get('/api/agents/threads/:threadId/runs', () => _HttpResponse.json({ items: [] })),
   _http.get('/api/agents/runs/:runId/messages', () => _HttpResponse.json({ items: [] })),
+  _http.get('/api/agents/runs/:runId/summary', ({ params }) =>
+    _HttpResponse.json({
+      runId: params.runId,
+      threadId: 'th-placeholder',
+      status: 'running',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      firstEventAt: null,
+      lastEventAt: null,
+      countsByType: {
+        invocation_message: 0,
+        injection: 0,
+        llm_call: 0,
+        tool_execution: 0,
+        summarization: 0,
+      },
+      countsByStatus: {
+        pending: 0,
+        running: 0,
+        success: 0,
+        error: 0,
+        cancelled: 0,
+      },
+      totalEvents: 0,
+    }),
+  ),
+  _http.get('/api/agents/runs/:runId/events', () =>
+    _HttpResponse.json({ items: [], nextCursor: null }),
+  ),
   // Reminders endpoints used by AgentsReminders page (support both forms)
   _http.get('/api/agents/reminders', () => _HttpResponse.json({ items: [] })),
   _http.get('/api/agents/:agentId/reminders', () => _HttpResponse.json({ items: [] })),
@@ -158,6 +187,35 @@ const absoluteHandlers = [
   _http.get(abs('/api/agents/threads'), () => _HttpResponse.json({ items: [] })),
   _http.get(abs('/api/agents/threads/:threadId/runs'), () => _HttpResponse.json({ items: [] })),
   _http.get(abs('/api/agents/runs/:runId/messages'), () => _HttpResponse.json({ items: [] })),
+  _http.get(abs('/api/agents/runs/:runId/summary'), ({ params }) =>
+    _HttpResponse.json({
+      runId: params.runId,
+      threadId: 'th-placeholder',
+      status: 'running',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      firstEventAt: null,
+      lastEventAt: null,
+      countsByType: {
+        invocation_message: 0,
+        injection: 0,
+        llm_call: 0,
+        tool_execution: 0,
+        summarization: 0,
+      },
+      countsByStatus: {
+        pending: 0,
+        running: 0,
+        success: 0,
+        error: 0,
+        cancelled: 0,
+      },
+      totalEvents: 0,
+    }),
+  ),
+  _http.get(abs('/api/agents/runs/:runId/events'), () =>
+    _HttpResponse.json({ items: [], nextCursor: null }),
+  ),
   // Reminders endpoints (absolute)
   _http.get(abs('/api/agents/reminders'), () => _HttpResponse.json({ items: [] })),
   _http.get(abs('/api/agents/:agentId/reminders'), () => _HttpResponse.json({ items: [] })),

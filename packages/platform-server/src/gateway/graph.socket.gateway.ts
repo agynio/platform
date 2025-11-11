@@ -78,6 +78,7 @@ export class GraphSocketGateway implements GraphEventsPublisher {
       const RoomSchema = z.union([
         z.literal('threads'),
         z.string().regex(/^thread:[0-9a-f-]{36}$/i),
+        z.string().regex(/^run:[0-9a-f-]{36}$/i),
       ]);
       const SubscribeSchema = z
         .object({ rooms: z.array(RoomSchema).optional(), room: RoomSchema.optional() })
@@ -166,9 +167,11 @@ export class GraphSocketGateway implements GraphEventsPublisher {
     if (!this.io) return;
     const payload = { run: { ...run, createdAt: run.createdAt.toISOString(), updatedAt: run.updatedAt.toISOString() } };
     this.io.to(`thread:${threadId}`).emit('run_status_changed', payload);
+    this.io.to(`run:${run.id}`).emit('run_status_changed', payload);
   }
-  emitRunEvent(threadId: string, payload: RunEventBroadcast) {
+  emitRunEvent(runId: string, threadId: string, payload: RunEventBroadcast) {
     if (!this.io) return;
+    this.io.to(`run:${runId}`).emit('run_event_appended', payload);
     this.io.to(`thread:${threadId}`).emit('run_event_appended', payload);
   }
   private flushMetricsQueue = async () => {

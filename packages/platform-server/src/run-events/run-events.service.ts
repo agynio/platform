@@ -139,6 +139,16 @@ export type RunTimelineSummary = {
   totalEvents: number;
 };
 
+export type RunTimelineEventsCursor = {
+  ordinal: number;
+  id: string;
+};
+
+export type RunTimelineEventsResult = {
+  items: RunTimelineEvent[];
+  nextCursor: RunTimelineEventsCursor | null;
+};
+
 export type RunEventMetadata = Prisma.InputJsonValue | typeof Prisma.JsonNull | null | undefined;
 
 export interface InvocationMessageEventArgs {
@@ -396,7 +406,7 @@ export class RunEventsService {
       const event = await this.fetchEvent(eventId);
       if (!event) return null;
       const payload = this.serializeEvent(event);
-      this.events.emitRunEvent(event.threadId, { runId: event.runId, mutation, event: payload });
+      this.events.emitRunEvent(event.runId, event.threadId, { runId: event.runId, mutation, event: payload });
       return payload;
     } catch (err) {
       this.logger.warn('Failed to publish run event', { eventId, err });
@@ -443,19 +453,81 @@ export class RunEventsService {
     };
   }
 
-  async listRunEvents(params: { runId: string; types?: RunEventType[]; statuses?: RunEventStatus[]; limit?: number }): Promise<RunTimelineEvent[]> {
+  async listRunEvents(params: {
+    runId: string;
+    types?: RunEventType[];
+    statuses?: RunEventStatus[];
+    limit?: number;
+    order?: 'asc' | 'desc';
+    cursor?: { ordinal: number; id?: string };
+  }): Promise<RunTimelineEventsResult> {
+    const order: 'asc' | 'desc' = params.order === 'desc' ? 'desc' : 'asc';
     const where: Prisma.RunEventWhereInput = { runId: params.runId };
     if (params.types && params.types.length > 0) where.type = { in: params.types };
     if (params.statuses && params.statuses.length > 0) where.status = { in: params.statuses };
-    const limit = params.limit && Number.isFinite(params.limit) ? Math.max(1, Math.min(1000, params.limit)) : undefined;
+
+    if (params.cursor && Number.isFinite(params.cursor.ordinal)) {
+      const ord = params.cursor.ordinal;
+      const id = params.cursor.id;
+      let cursorConditions: Prisma.RunEventWhereInput;
+      if (order === 'desc') {
+        cursorConditions = id
+          ? {
+              OR: [
+                { ordinal: { lt: ord } },
+                {
+                  AND: [
+                    { ordinal: ord },
+                    { id: { lt: id } },
+                  ],
+                },
+              ],
+            }
+          : { ordinal: { lt: ord } };
+      } else {
+        cursorConditions = id
+          ? {
+              OR: [
+                { ordinal: { gt: ord } },
+                {
+                  AND: [
+                    { ordinal: ord },
+                    { id: { gt: id } },
+                  ],
+                },
+              ],
+            }
+          : { ordinal: { gt: ord } };
+      }
+      if (where.AND) {
+        where.AND = Array.isArray(where.AND) ? [...where.AND, cursorConditions] : [where.AND, cursorConditions];
+      } else {
+        where.AND = cursorConditions;
+      }
+    }
+
+    const limit = params.limit && Number.isFinite(params.limit) ? Math.max(1, Math.min(1000, params.limit)) : 100;
+    const take = limit + 1;
 
     const events = await this.prisma.runEvent.findMany({
       where,
-      orderBy: { ordinal: 'asc' },
-      take: limit,
+      orderBy: [{ ordinal: order }, { id: order }],
+      take,
       include: RUN_EVENT_INCLUDE,
     });
-    return events.map((ev) => this.serializeEvent(ev));
+    const hasMore = events.length > limit;
+    const pageItems = hasMore ? events.slice(0, limit) : events;
+    const nextCursor = hasMore
+      ? {
+          ordinal: pageItems[pageItems.length - 1]!.ordinal,
+          id: pageItems[pageItems.length - 1]!.id,
+        }
+      : null;
+
+    return {
+      items: pageItems.map((ev) => this.serializeEvent(ev)),
+      nextCursor,
+    };
   }
 
   async getEventSnapshot(eventId: string): Promise<RunTimelineEvent | null> {

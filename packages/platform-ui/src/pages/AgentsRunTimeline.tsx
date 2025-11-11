@@ -32,12 +32,12 @@ export function AgentsRunTimeline() {
   const [events, setEvents] = useState<RunTimelineEvent[]>([]);
 
   useEffect(() => {
-    if (eventsQuery.data) setEvents(eventsQuery.data);
+    if (eventsQuery.data?.items) setEvents(eventsQuery.data.items);
   }, [eventsQuery.data]);
 
   useEffect(() => {
-    if (!threadId || !runId) return;
-    const room = `thread:${threadId}`;
+    if (!runId) return;
+    const room = `run:${runId}`;
     graphSocket.subscribe([room]);
     const off = graphSocket.onRunEvent(({ runId: incomingRunId, event }) => {
       if (incomingRunId !== runId) return;
@@ -60,16 +60,20 @@ export function AgentsRunTimeline() {
       });
       summaryQuery.refetch();
     });
+    const offStatus = graphSocket.onRunStatusChanged(({ run }) => {
+      if (run.id === runId) summaryQuery.refetch();
+    });
     const offReconnect = graphSocket.onReconnected(() => {
       summaryQuery.refetch();
       eventsQuery.refetch();
     });
     return () => {
       off();
+      offStatus();
       offReconnect();
       graphSocket.unsubscribe([room]);
     };
-  }, [threadId, runId, selectedTypes, selectedStatuses, summaryQuery, eventsQuery]);
+  }, [runId, selectedTypes, selectedStatuses, summaryQuery, eventsQuery]);
 
   const isDefaultFilters = selectedTypes.length === EVENT_TYPES.length && selectedStatuses.length === 0;
 

@@ -12,7 +12,7 @@ export abstract class GraphEventsPublisher {
   abstract emitThreadUpdated(thread: { id: string; alias: string; summary: string | null; status: ThreadStatus; createdAt: Date; parentId?: string | null }): void;
   abstract emitMessageCreated(threadId: string, message: { id: string; kind: MessageKind; text: string | null; source: unknown; createdAt: Date; runId?: string }): void;
   abstract emitRunStatusChanged(threadId: string, run: { id: string; status: RunStatus; createdAt: Date; updatedAt: Date }): void;
-  abstract emitRunEvent(threadId: string, payload: RunEventBroadcast): void;
+  abstract emitRunEvent(runId: string, threadId: string, payload: RunEventBroadcast): void;
   abstract scheduleThreadMetrics(threadId: string): void;
   abstract scheduleThreadAndAncestorsMetrics(threadId: string): Promise<void> | void;
 }
@@ -23,7 +23,7 @@ export class NoopGraphEventsPublisher extends GraphEventsPublisher {
   emitThreadUpdated(_thread: { id: string; alias: string; summary: string | null; status: ThreadStatus; createdAt: Date; parentId?: string | null }): void {}
   emitMessageCreated(_threadId: string, _message: { id: string; kind: MessageKind; text: string | null; source: unknown; createdAt: Date; runId?: string }): void {}
   emitRunStatusChanged(_threadId: string, _run: { id: string; status: RunStatus; createdAt: Date; updatedAt: Date }): void {}
-  emitRunEvent(_threadId: string, _payload: RunEventBroadcast): void {}
+  emitRunEvent(_runId: string, _threadId: string, _payload: RunEventBroadcast): void {}
   scheduleThreadMetrics(_threadId: string): void {}
   async scheduleThreadAndAncestorsMetrics(_threadId: string): Promise<void> {}
 }

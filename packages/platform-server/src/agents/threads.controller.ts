@@ -1,7 +1,7 @@
 import { Body, Controller, Get, Inject, NotFoundException, Param, Patch, Query } from '@nestjs/common';
 import { IsBooleanString, IsIn, IsInt, IsOptional, IsString, Max, Min, ValidateIf } from 'class-validator';
 import { AgentsPersistenceService } from './agents.persistence.service';
-import { Transform } from 'class-transformer';
+import { Transform, Expose } from 'class-transformer';
 import type { RunEventStatus, RunEventType, RunMessageType, ThreadStatus } from '@prisma/client';
 import { ContainerThreadTerminationService } from '../infra/container/containerThreadTermination.service';
 import type { ThreadMetrics } from './threads.metrics.service';
@@ -43,6 +43,21 @@ export class RunTimelineEventsQueryDto {
   @Min(1)
   @Max(1000)
   limit?: number;
+
+  @IsOptional()
+  @IsIn(['asc', 'desc'])
+  order?: 'asc' | 'desc';
+
+  @IsOptional()
+  @Expose({ name: 'cursor[ordinal]' })
+  @Transform(({ value }) => (value !== undefined ? parseInt(value, 10) : undefined))
+  @IsInt()
+  cursorOrdinal?: number;
+
+  @IsOptional()
+  @Expose({ name: 'cursor[id]' })
+  @IsString()
+  cursorId?: string;
 }
 
 export class ListThreadsQueryDto {
@@ -170,34 +185,59 @@ export class AgentsThreadsController {
     return { items };
   }
 
-  @Get('runs/:runId/timeline/summary')
+  @Get('runs/:runId/summary')
   async getRunTimelineSummary(@Param('runId') runId: string) {
     const summary = await this.runEvents.getRunSummary(runId);
     if (!summary) throw new NotFoundException('run_not_found');
     return summary;
   }
 
-  @Get('runs/:runId/timeline/events')
-  async listRunTimelineEvents(@Param('runId') runId: string, @Query() query: RunTimelineEventsQueryDto) {
-    const typeValues = (query.types ?? '')
-      .split(',')
-      .map((v) => v.trim())
-      .filter((v): v is RunEventType => isRunEventType(v))
-      .filter((v, idx, arr) => arr.indexOf(v) === idx);
+  @Get('runs/:runId/events')
+  async listRunTimelineEvents(
+    @Param('runId') runId: string,
+    @Query() query: RunTimelineEventsQueryDto,
+    @Query('type') typeFilter?: string | string[],
+    @Query('status') statusFilter?: string | string[],
+  ) {
+    const collect = (input?: string | string[]) => {
+      if (!input) return [] as string[];
+      const values = Array.isArray(input) ? input : [input];
+      const tokens: string[] = [];
+      for (const value of values) {
+        for (const token of value.split(',')) {
+          const trimmed = token.trim();
+          if (trimmed.length > 0) tokens.push(trimmed);
+        }
+      }
+      return tokens;
+    };
 
-    const statusValues = (query.statuses ?? '')
-      .split(',')
-      .map((v) => v.trim())
-      .filter((v): v is RunEventStatus => isRunEventStatus(v))
-      .filter((v, idx, arr) => arr.indexOf(v) === idx);
+    const typeValues = Array.from(
+      new Set([
+        ...collect(query.types),
+        ...collect(typeFilter),
+      ]),
+    ).filter((v): v is RunEventType => isRunEventType(v));
 
-    const events = await this.runEvents.listRunEvents({
+    const statusValues = Array.from(
+      new Set([
+        ...collect(query.statuses),
+        ...collect(statusFilter),
+      ]),
+    ).filter((v): v is RunEventStatus => isRunEventStatus(v));
+
+    const cursor = query.cursorOrdinal !== undefined
+      ? { ordinal: query.cursorOrdinal, id: query.cursorId }
+      : undefined;
+
+    return this.runEvents.listRunEvents({
       runId,
       types: typeValues.length > 0 ? typeValues : undefined,
       statuses: statusValues.length > 0 ? statusValues : undefined,
       limit: query.limit,
+      order: query.order,
+      cursor,
     });
-    return { items: events };
   }
 
   @Patch('threads/:threadId')

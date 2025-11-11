@@ -110,3 +110,13 @@ export type RunTimelineEvent = {
     contentText: string | null;
   }>;
 };
+
+export type RunTimelineEventsCursor = {
+  ordinal: number;
+  id: string;
+};
+
+export type RunTimelineEventsResponse = {
+  items: RunTimelineEvent[];
+  nextCursor: RunTimelineEventsCursor | null;
+};

@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { runs } from '@/api/modules/runs';
+import type { RunTimelineEventsCursor } from '@/api/types/agents';
 
 export function useThreadRuns(threadId: string | undefined) {
   return useQuery({
@@ -28,7 +29,7 @@ export function useRunTimelineSummary(runId: string | undefined) {
 
 export function useRunTimelineEvents(
   runId: string | undefined,
-  filters: { types: string[]; statuses: string[]; limit?: number },
+  filters: { types: string[]; statuses: string[]; limit?: number; order?: 'asc' | 'desc'; cursor?: RunTimelineEventsCursor | null },
 ) {
   return useQuery({
     enabled: !!runId,
@@ -38,8 +39,10 @@ export function useRunTimelineEvents(
         types: filters.types.length > 0 ? filters.types.join(',') : undefined,
         statuses: filters.statuses.length > 0 ? filters.statuses.join(',') : undefined,
         limit: filters.limit,
+        order: filters.order,
+        cursorOrdinal: filters.cursor?.ordinal,
+        cursorId: filters.cursor?.id,
       }),
-    select: (data) => data.items,
     refetchOnWindowFocus: false,
   });
 }
