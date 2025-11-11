@@ -7,6 +7,28 @@ import { Inject, Injectable, Scope } from '@nestjs/common';
 import { McpError } from '../../graph/nodes/mcp/types';
 import { ResponseFunctionCallOutputItemList } from 'openai/resources/responses/responses.mjs';
 
+type ToolSchema = FunctionTool['schema'];
+
+type SafeParseResult =
+  | { success: true; data: unknown }
+  | { success: false; error?: { issues?: unknown } };
+
+type SchemaWithSafeParse = ToolSchema & {
+  safeParse: (value: unknown) => SafeParseResult;
+};
+
+type SchemaWithParse = ToolSchema & {
+  parse: (value: unknown) => unknown;
+};
+
+const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null;
+
+const hasSafeParse = (schema: ToolSchema): schema is SchemaWithSafeParse =>
+  isRecord(schema) && 'safeParse' in schema && typeof schema.safeParse === 'function';
+
+const hasParse = (schema: ToolSchema): schema is SchemaWithParse =>
+  isRecord(schema) && 'parse' in schema && typeof schema.parse === 'function';
+
 @Injectable({ scope: Scope.TRANSIENT })
 export class CallToolsLLMReducer extends Reducer<LLMState, LLMContext> {
   constructor(@Inject(LoggerService) private logger: LoggerService) {
@@ -131,8 +153,8 @@ export class CallToolsLLMReducer extends Reducer<LLMState, LLMContext> {
             }
 
             let input: unknown;
-            if (typeof (tool.schema as { safeParse?: unknown }).safeParse === 'function') {
-              const validation = (tool.schema as { safeParse: (value: unknown) => { success: boolean; data: unknown; error?: { issues?: unknown } } }).safeParse(parsedArgs);
+            if (hasSafeParse(tool.schema)) {
+              const validation = tool.schema.safeParse(parsedArgs);
               if (!validation.success) {
                 const issues = validation.error?.issues ?? [];
                 return createErrorResponse({
@@ -143,9 +165,9 @@ export class CallToolsLLMReducer extends Reducer<LLMState, LLMContext> {
                 });
               }
               input = validation.data;
-            } else {
+            } else if (hasParse(tool.schema)) {
               try {
-                input = (tool.schema as { parse: (value: unknown) => unknown }).parse(parsedArgs);
+                input = tool.schema.parse(parsedArgs);
               } catch (err) {
                 const details = err instanceof Error ? { message: err.message, name: err.name, stack: err.stack } : { error: err };
                 return createErrorResponse({
@@ -155,6 +177,12 @@ export class CallToolsLLMReducer extends Reducer<LLMState, LLMContext> {
                   details,
                 });
               }
+            } else {
+              return createErrorResponse({
+                code: 'SCHEMA_VALIDATION_FAILED',
+                message: `Tool ${t.name} schema is missing a parser.`,
+                originalArgs: parsedArgs,
+              });
             }
 
             try {
