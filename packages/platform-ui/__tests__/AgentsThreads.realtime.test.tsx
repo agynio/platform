@@ -10,6 +10,23 @@ function t(offsetMs: number) {
   return new Date(1700000000000 + offsetMs).toISOString();
 }
 
+async function expectRunHeaderVisible(runId: string) {
+  await waitFor(() => {
+    const headers = screen.queryAllByTestId('run-header');
+    const shortId = runId.slice(0, 8).toLowerCase();
+    const match = headers.some((el) => el.textContent?.toLowerCase().includes(`run ${shortId}`));
+    expect(match).toBe(true);
+  });
+}
+
+async function expectMessageBubbleText(container: HTMLElement, text: string) {
+  await waitFor(() => {
+    const bubbles = within(container).queryAllByTestId('message-bubble');
+    const match = bubbles.some((bubble) => bubble.textContent?.includes(text));
+    expect(match).toBe(true);
+  });
+}
+
 describe('AgentsThreads realtime updates', () => {
   beforeAll(() => server.listen());
   afterEach(() => server.resetHandlers());
@@ -42,7 +59,7 @@ describe('AgentsThreads realtime updates', () => {
     >;
     for (const fn of runListeners) fn({ run: { id: 'run-new-1', status: 'running', createdAt: t(1), updatedAt: t(1) } });
 
-    expect(await screen.findByText(/run run-new-1/i)).toBeInTheDocument();
+    await expectRunHeaderVisible('run-new-1');
   });
 
   it('updates run status in place on run_status_changed', async () => {
@@ -164,8 +181,9 @@ describe('AgentsThreads realtime updates', () => {
     >;
     for (const fn of runListeners) fn({ run: { id: 'run-late', status: 'running', createdAt: t(1), updatedAt: t(1) } });
 
-    expect(await screen.findByText(/run run-late/i)).toBeInTheDocument();
-    expect(await screen.findByText('Buffered')).toBeInTheDocument();
+    await expectRunHeaderVisible('run-late');
+    const list = await screen.findByTestId('message-list');
+    await expectMessageBubbleText(list, 'Buffered');
   });
 
   it('re-subscribes on reconnect and reconciles via refetch', async () => {
@@ -231,7 +249,8 @@ describe('AgentsThreads realtime updates', () => {
     const reconnectListeners = (socketModule.graphSocket as any).reconnectCallbacks as Set<() => void>;
     for (const fn of reconnectListeners) fn();
 
-    expect(await screen.findByText(/run run-new/i)).toBeInTheDocument();
-    expect(await screen.findByText('New')).toBeInTheDocument();
+    await expectRunHeaderVisible('run-new');
+    const list = await screen.findByTestId('message-list');
+    await expectMessageBubbleText(list, 'New');
   });
 });
