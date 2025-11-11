@@ -87,7 +87,8 @@ class GraphSocket {
       for (const fn of this.reconnectCallbacks) fn();
     };
     this.socket.on('connect', handleConnect);
-    this.socket.on('reconnect', handleReconnect);
+    const manager = this.socket.io;
+    manager.on('reconnect', handleReconnect);
     // No-op connect listener; optional
     this.socket.on('node_status', (payload: NodeStatusEvent) => {
       const set = this.listeners.get(payload.nodeId);
@@ -168,21 +169,55 @@ class GraphSocket {
   }
 
   // Threads listeners
-  onThreadCreated(cb: (payload: ThreadCreatedPayload) => void) { this.threadCreatedListeners.add(cb); return () => this.threadCreatedListeners.delete(cb); }
-  onThreadUpdated(cb: (payload: ThreadUpdatedPayload) => void) { this.threadUpdatedListeners.add(cb); return () => this.threadUpdatedListeners.delete(cb); }
-  onThreadActivityChanged(cb: (payload: ThreadActivityPayload) => void) { this.threadActivityListeners.add(cb); return () => this.threadActivityListeners.delete(cb); }
-  onThreadRemindersCount(cb: (payload: ThreadRemindersPayload) => void) { this.threadRemindersListeners.add(cb); return () => this.threadRemindersListeners.delete(cb); }
-  onMessageCreated(cb: (payload: MessageCreatedPayload) => void) { this.messageCreatedListeners.add(cb); return () => this.messageCreatedListeners.delete(cb); }
-  onRunStatusChanged(cb: (payload: RunStatusChangedPayload) => void) { this.runStatusListeners.add(cb); return () => this.runStatusListeners.delete(cb); }
+  onThreadCreated(cb: (payload: ThreadCreatedPayload) => void) {
+    this.threadCreatedListeners.add(cb);
+    return () => {
+      this.threadCreatedListeners.delete(cb);
+    };
+  }
+  onThreadUpdated(cb: (payload: ThreadUpdatedPayload) => void) {
+    this.threadUpdatedListeners.add(cb);
+    return () => {
+      this.threadUpdatedListeners.delete(cb);
+    };
+  }
+  onThreadActivityChanged(cb: (payload: ThreadActivityPayload) => void) {
+    this.threadActivityListeners.add(cb);
+    return () => {
+      this.threadActivityListeners.delete(cb);
+    };
+  }
+  onThreadRemindersCount(cb: (payload: ThreadRemindersPayload) => void) {
+    this.threadRemindersListeners.add(cb);
+    return () => {
+      this.threadRemindersListeners.delete(cb);
+    };
+  }
+  onMessageCreated(cb: (payload: MessageCreatedPayload) => void) {
+    this.messageCreatedListeners.add(cb);
+    return () => {
+      this.messageCreatedListeners.delete(cb);
+    };
+  }
+  onRunStatusChanged(cb: (payload: RunStatusChangedPayload) => void) {
+    this.runStatusListeners.add(cb);
+    return () => {
+      this.runStatusListeners.delete(cb);
+    };
+  }
 
   onConnected(cb: () => void) {
     this.connectCallbacks.add(cb);
-    return () => this.connectCallbacks.delete(cb);
+    return () => {
+      this.connectCallbacks.delete(cb);
+    };
   }
 
   onReconnected(cb: () => void) {
     this.reconnectCallbacks.add(cb);
-    return () => this.reconnectCallbacks.delete(cb);
+    return () => {
+      this.reconnectCallbacks.delete(cb);
+    };
   }
 }
 
