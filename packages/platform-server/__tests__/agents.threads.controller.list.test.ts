@@ -2,6 +2,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { Test } from '@nestjs/testing';
 import { AgentsThreadsController } from '../src/agents/threads.controller';
 import { AgentsPersistenceService } from '../src/agents/agents.persistence.service';
+import { ContainerThreadTerminationService } from '../src/infra/container/containerThreadTermination.service';
 
 describe('AgentsThreadsController list endpoints', () => {
   it('requests metrics and agent titles when flags are enabled', async () => {
@@ -20,7 +21,10 @@ describe('AgentsThreadsController list endpoints', () => {
 
     const module = await Test.createTestingModule({
       controllers: [AgentsThreadsController],
-      providers: [{ provide: AgentsPersistenceService, useValue: persistence }],
+      providers: [
+        { provide: AgentsPersistenceService, useValue: persistence },
+        { provide: ContainerThreadTerminationService, useValue: { terminateByThread: vi.fn() } },
+      ],
     }).compile();
 
     const ctrl = await module.resolve(AgentsThreadsController);
@@ -61,7 +65,10 @@ describe('AgentsThreadsController list endpoints', () => {
 
     const module = await Test.createTestingModule({
       controllers: [AgentsThreadsController],
-      providers: [{ provide: AgentsPersistenceService, useValue: persistence }],
+      providers: [
+        { provide: AgentsPersistenceService, useValue: persistence },
+        { provide: ContainerThreadTerminationService, useValue: { terminateByThread: vi.fn() } },
+      ],
     }).compile();
 
     const ctrl = await module.resolve(AgentsThreadsController);
@@ -84,7 +91,10 @@ describe('AgentsThreadsController list endpoints', () => {
 
     const module = await Test.createTestingModule({
       controllers: [AgentsThreadsController],
-      providers: [{ provide: AgentsPersistenceService, useValue: persistence }],
+      providers: [
+        { provide: AgentsPersistenceService, useValue: persistence },
+        { provide: ContainerThreadTerminationService, useValue: { terminateByThread: vi.fn() } },
+      ],
     }).compile();
 
     const ctrl = await module.resolve(AgentsThreadsController);
