@@ -14,6 +14,7 @@ import { LoggerService } from '../core/services/logger.service';
 import { LiteLLMProvisioner } from './provisioners/litellm.provisioner';
 import { OpenAILLMProvisioner } from './provisioners/openai.provisioner';
 import { CoreModule } from '../core/core.module';
+import { RunEventsService } from '../run-events/run-events.service';
 
 @Module({
   imports: [CoreModule],
@@ -38,7 +39,8 @@ import { CoreModule } from '../core/core.module';
     SummarizationLLMReducer,
     StaticLLMRouter,
     ConditionalLLMRouter,
+    RunEventsService,
   ],
-  exports: [LLMProvisioner],
+  exports: [LLMProvisioner, RunEventsService],
 })
 export class LLMModule {}

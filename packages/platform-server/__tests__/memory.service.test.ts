@@ -6,6 +6,7 @@ const URL = process.env.AGENTS_DATABASE_URL;
 const maybeDescribe = URL ? describe : describe.skip;
 
 maybeDescribe('MemoryService', () => {
+  if (!URL) return;
   it("normalizes paths and forbids .. and $", async () => {
     const repo = new PostgresMemoryRepository({ getClient: () => new PrismaClient({ datasources: { db: { url: URL! } } }) } as any);
     const svc = new MemoryService(repo);

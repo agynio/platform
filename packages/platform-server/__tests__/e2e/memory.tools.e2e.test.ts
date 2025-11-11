@@ -9,6 +9,7 @@ const URL = process.env.AGENTS_DATABASE_URL;
 const maybeDescribe = URL ? describe : describe.skip;
 
 maybeDescribe('E2E: memory tools with Postgres backend', () => {
+  if (!URL) return;
   const prisma = new PrismaClient({ datasources: { db: { url: URL! } } });
   const logger = new LoggerService();
   let svc: MemoryService;

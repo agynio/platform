@@ -3,6 +3,7 @@ import { AgentsPersistenceService } from '../src/agents/agents.persistence.servi
 import { LoggerService } from '../src/core/services/logger.service';
 import { NoopGraphEventsPublisher } from '../src/gateway/graph.events.publisher';
 import { createPrismaStub, StubPrismaService } from './helpers/prisma.stub';
+import { createRunEventsStub } from './helpers/runEvents.stub';
 
 const metricsStub = { getThreadsMetrics: async () => ({}) } as any;
 const templateRegistryStub = { toSchema: async () => [], getMeta: () => undefined } as any;
@@ -18,6 +19,7 @@ const createService = (stub: any) =>
     new NoopGraphEventsPublisher(),
     templateRegistryStub,
     graphRepoStub,
+    createRunEventsStub() as any,
   );
 
 describe('AgentsPersistenceService: alias resolution helpers', () => {

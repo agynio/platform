@@ -10,6 +10,7 @@ import { GraphEventsPublisher } from '../gateway/graph.events.publisher';
 import { TemplateRegistry } from '../graph/templateRegistry';
 import { GraphRepository } from '../graph/graph.repository';
 import type { PersistedGraphNode } from '../graph/types';
+import { RunEventsService } from '../run-events/run-events.service';
 
 export type RunStartResult = { runId: string };
 
@@ -22,6 +23,7 @@ export class AgentsPersistenceService {
     @Inject(GraphEventsPublisher) private readonly events: GraphEventsPublisher,
     @Inject(TemplateRegistry) private readonly templateRegistry: TemplateRegistry,
     @Inject(GraphRepository) private readonly graphs: GraphRepository,
+    @Inject(RunEventsService) private readonly runEvents: RunEventsService,
   ) {}
 
   private get prisma(): PrismaClient {
@@ -100,6 +102,15 @@ export class AgentsPersistenceService {
           const source = toPrismaJsonValue(msg.toPlain());
           const created = await tx.message.create({ data: { kind, text, source } });
           await tx.runMessage.create({ data: { runId: run.id, messageId: created.id, type: 'input' as RunMessageType } });
+          await this.runEvents.recordInvocationMessage({
+            tx,
+            runId: run.id,
+            threadId,
+            messageId: created.id,
+            role: kind,
+            ts: created.createdAt,
+            metadata: { messageType: 'input' },
+          });
           createdMessages.push({ id: created.id, kind, text, source: created.source as Prisma.JsonValue, createdAt: created.createdAt });
         }),
       );
@@ -117,15 +128,36 @@ export class AgentsPersistenceService {
   async recordInjected(runId: string, injectedMessages: SystemMessage[]): Promise<void> {
     const createdMessages: Array<{ id: string; kind: MessageKind; text: string | null; source: Prisma.JsonValue; createdAt: Date }> = [];
     await this.prisma.$transaction(async (tx: Prisma.TransactionClient) => {
+      const run = await tx.run.findUnique({ where: { id: runId }, select: { threadId: true } });
+      if (!run) throw new Error(`run_not_found:${runId}`);
+      const threadId = run.threadId;
       await Promise.all(
         injectedMessages.map(async (msg) => {
           const { kind, text } = this.deriveKindTextTyped(msg);
           const source = toPrismaJsonValue(msg.toPlain());
           const created = await tx.message.create({ data: { kind, text, source } });
           await tx.runMessage.create({ data: { runId, messageId: created.id, type: 'injected' as RunMessageType } });
+          await this.runEvents.recordInvocationMessage({
+            tx,
+            runId,
+            threadId,
+            messageId: created.id,
+            role: kind,
+            ts: created.createdAt,
+            metadata: { messageType: 'injected' },
+          });
           createdMessages.push({ id: created.id, kind, text, source: created.source as Prisma.JsonValue, createdAt: created.createdAt });
         }),
       );
+      if (createdMessages.length > 0) {
+        await this.runEvents.recordInjection({
+          tx,
+          runId,
+          threadId,
+          messageIds: createdMessages.map((m) => m.id),
+          ts: createdMessages[0].createdAt,
+        });
+      }
     });
     const run = await this.prisma.run.findUnique({ where: { id: runId }, select: { threadId: true } });
     const threadId = run?.threadId;
@@ -142,12 +174,24 @@ export class AgentsPersistenceService {
   ): Promise<void> {
     const createdMessages: Array<{ id: string; kind: MessageKind; text: string | null; source: Prisma.JsonValue; createdAt: Date }> = [];
     const run = await this.prisma.$transaction(async (tx: Prisma.TransactionClient) => {
+      const current = await tx.run.findUnique({ where: { id: runId }, select: { id: true, threadId: true, createdAt: true, updatedAt: true } });
+      if (!current) throw new Error(`run_not_found:${runId}`);
+      const threadId = current.threadId;
       await Promise.all(
         outputMessages.map(async (msg) => {
           const { kind, text } = this.deriveKindTextTyped(msg);
           const source = toPrismaJsonValue(msg.toPlain());
           const created = await tx.message.create({ data: { kind, text, source } });
           await tx.runMessage.create({ data: { runId, messageId: created.id, type: 'output' as RunMessageType } });
+          await this.runEvents.recordInvocationMessage({
+            tx,
+            runId,
+            threadId,
+            messageId: created.id,
+            role: kind,
+            ts: created.createdAt,
+            metadata: { messageType: 'output' },
+          });
           createdMessages.push({ id: created.id, kind, text, source: created.source as Prisma.JsonValue, createdAt: created.createdAt });
         }),
       );

@@ -8,6 +8,8 @@ import { Test } from '@nestjs/testing';
 import { LLMProvisioner } from '../src/llm/provisioners/llm.provisioner';
 import { PrismaService } from '../src/core/services/prisma.service';
 import { AgentsPersistenceService } from '../src/agents/agents.persistence.service';
+import { RunEventsService } from '../src/run-events/run-events.service';
+import { createRunEventsStub } from './helpers/runEvents.stub';
 
 describe('Agent summarization graph', () => {
   it('invokes successfully over several turns with summarization configured', async () => {
@@ -21,6 +23,7 @@ describe('Agent summarization graph', () => {
         Agent,
         { provide: PrismaService, useValue: { getClient: () => ({ conversationState: { upsert: async () => {}, findUnique: async () => null } }) } },
         { provide: AgentsPersistenceService, useValue: { beginRunThread: async () => ({ runId: 't' }), recordInjected: async () => {}, completeRun: async () => {} } },
+        { provide: RunEventsService, useValue: createRunEventsStub() },
       ],
     }).compile();
 

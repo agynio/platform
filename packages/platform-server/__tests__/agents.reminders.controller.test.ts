@@ -2,6 +2,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { Test } from '@nestjs/testing';
 import { AgentsRemindersController } from '../src/agents/reminders.controller';
 import { AgentsPersistenceService } from '../src/agents/agents.persistence.service';
+import { createRunEventsStub } from './helpers/runEvents.stub';
 
 const templateRegistryStub = { toSchema: async () => [], getMeta: () => undefined } as any;
 const graphRepoStub = {
@@ -60,6 +61,7 @@ describe('AgentsPersistenceService.listReminders', () => {
       new NoopGraphEventsPublisher(),
       templateRegistryStub,
       graphRepoStub,
+      createRunEventsStub() as any,
     );
 
     await svc.listReminders('active', 50);

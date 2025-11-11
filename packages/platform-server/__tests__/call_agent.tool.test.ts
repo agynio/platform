@@ -5,6 +5,8 @@ import { ResponseMessage, AIMessage, HumanMessage } from '@agyn/llm';
 import { AgentsPersistenceService } from '../src/agents/agents.persistence.service';
 import { NoopGraphEventsPublisher } from '../src/gateway/graph.events.publisher';
 import { StubPrismaService, createPrismaStub } from './helpers/prisma.stub';
+import { createRunEventsStub } from './helpers/runEvents.stub';
+import { Signal } from '../src/signal';
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
@@ -22,6 +24,7 @@ const createPersistence = () =>
     new NoopGraphEventsPublisher(),
     templateRegistryStub,
     graphRepoStub,
+    createRunEventsStub() as any,
   );
 
 class FakeAgent {
@@ -38,7 +41,7 @@ describe('CallAgentTool unit', () => {
     const tool = new CallAgentTool(new LoggerService(), createPersistence());
     await expect(tool.setConfig({ description: 'desc' })).resolves.toBeUndefined();
     const dynamic = tool.getTool();
-    await expect(dynamic.execute({ input: 'hi', threadAlias: 'x', summary: 'x summary' }, { threadId: 't1' } as any)).rejects.toThrowError(
+    await expect(dynamic.execute({ input: 'hi', threadAlias: 'x', summary: 'x summary' }, { threadId: 't1', runId: 'r', finishSignal: new Signal(), callerAgent: {} } as any)).rejects.toThrowError(
       'Agent not set',
     );
   });
@@ -54,7 +57,10 @@ describe('CallAgentTool unit', () => {
   // @ts-expect-error private for unit
     tool['setAgent'](agent as any);
     const dynamic = tool.getTool();
-    const out = await dynamic.execute({ input: 'ping', threadAlias: 'sub', summary: 'sub summary' }, { threadId: 't2' } as any);
+    const out = await dynamic.execute(
+      { input: 'ping', threadAlias: 'sub', summary: 'sub summary' },
+      { threadId: 't2', runId: 'r', finishSignal: new Signal(), callerAgent: {} },
+    );
     expect(out).toBe('OK');
   });
 
@@ -79,7 +85,10 @@ describe('CallAgentTool unit', () => {
   // @ts-expect-error private for unit
     tool['setAgent'](agent as any);
     const dynamic = tool.getTool();
-    const out = await dynamic.execute({ input: 'ping', threadAlias: 'sub', summary: 'sub summary' }, { threadId: 'parent' } as any);
+    const out = await dynamic.execute(
+      { input: 'ping', threadAlias: 'sub', summary: 'sub summary' },
+      { threadId: 'parent', runId: 'r', finishSignal: new Signal(), callerAgent: {} },
+    );
     expect(out).toBe('OK');
   });
 
@@ -94,7 +103,10 @@ describe('CallAgentTool unit', () => {
   // @ts-expect-error private for unit
     tool['setAgent'](child as any);
     const dynamic = tool.getTool();
-    const res = await dynamic.execute({ input: 'do work', threadAlias: 'c1', summary: 'c1 summary' }, { threadId: 'p' } as any);
+    const res = await dynamic.execute(
+      { input: 'do work', threadAlias: 'c1', summary: 'c1 summary' },
+      { threadId: 'p', runId: 'r', finishSignal: new Signal(), callerAgent: {} },
+    );
     expect(typeof res).toBe('string');
     expect(JSON.parse(res).status).toBe('sent');
   });
@@ -109,7 +121,10 @@ describe('CallAgentTool unit', () => {
   // @ts-expect-error private for unit
     tool['setAgent'](child as any);
     const dynamic = tool.getTool();
-    const res = await dynamic.execute({ input: 'do work', threadAlias: 'c2', summary: 'c2 summary' }, { threadId: 'p2' } as any);
+    const res = await dynamic.execute(
+      { input: 'do work', threadAlias: 'c2', summary: 'c2 summary' },
+      { threadId: 'p2', runId: 'r', finishSignal: new Signal(), callerAgent: {} },
+    );
     expect(typeof res).toBe('string');
     expect(JSON.parse(res).status).toBe('sent');
   });

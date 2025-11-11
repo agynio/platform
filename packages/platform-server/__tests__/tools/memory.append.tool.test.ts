@@ -11,6 +11,7 @@ const maybeDescribe = URL ? describe : describe.skip;
 
 
 maybeDescribe('memory_append tool: path normalization and validation', () => {
+  if (!URL) return;
   const prisma = new PrismaClient({ datasources: { db: { url: URL! } } });
   beforeAll(async () => {
     const svc = new MemoryService(new PostgresMemoryRepository({ getClient: () => prisma } as any));

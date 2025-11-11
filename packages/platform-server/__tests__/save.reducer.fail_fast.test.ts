@@ -27,7 +27,7 @@ describe('SaveLLMReducer fail-fast', () => {
 
     const reducer = await module.resolve(SaveLLMReducer);
     const state: LLMState = { messages: [HumanMessage.fromText('hello')] };
-    const ctx: LLMContext = { threadId: 't1', finishSignal: new Signal(), callerAgent: { getAgentNodeId: () => 'A', invoke: async () => new Promise(() => {}) } };
+    const ctx: LLMContext = { threadId: 't1', runId: 'r1', finishSignal: new Signal(), callerAgent: { getAgentNodeId: () => 'A', invoke: async () => new Promise(() => {}) } };
 
     await expect(reducer.invoke(state, ctx)).rejects.toBeTruthy();
     expect(spy).toHaveBeenCalled();

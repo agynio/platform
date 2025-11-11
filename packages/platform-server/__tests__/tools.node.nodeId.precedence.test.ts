@@ -2,6 +2,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { ResponseMessage, ToolCallMessage } from '@agyn/llm';
 import { CallToolsLLMReducer } from '../src/llm/reducers/callTools.llm.reducer';
 import { LoggerService } from '../src/core/services/logger.service.js';
+import { createRunEventsStub } from './helpers/runEvents.stub';
 
 // Mock tracing-sdk to capture attributes passed to withToolCall
 vi.mock('@agyn/tracing', () => {
@@ -19,8 +20,7 @@ vi.mock('@agyn/tracing', () => {
   }
   const withToolCall = async (attrs: Captured, fn: () => Promise<any> | any) => {
     captured.push(attrs);
-    const res = await fn();
-    return (res as any).raw; // return raw ToolMessage like real impl
+    return await fn();
   };
   return { withToolCall, ToolCallResponse, __test: { captured } } as any;
 });
@@ -39,9 +39,9 @@ class EchoTool {
 
 describe('ToolsNode tool_call span attribution', () => {
   it('stamps nodeId=Tool id when provided (no toolNodeId attribute)', async () => {
-    const reducer = new CallToolsLLMReducer(new LoggerService()).init({ tools: [new EchoTool() as any] }) as any;
+    const reducer = new CallToolsLLMReducer(new LoggerService(), createRunEventsStub() as any).init({ tools: [new EchoTool() as any] }) as any;
     const response = new ResponseMessage({ output: [new ToolCallMessage({ type: 'function_call', call_id: 'tc1', name: 'echo', arguments: JSON.stringify({ a: 1 }) } as any).toPlain() as any] as any });
-    const config = { callerAgent: { getAgentNodeId: () => 'tool-123' } as any, threadId: 't', finishSignal: { activate(){}, deactivate(){}, isActive:false } } as any;
+    const config = { callerAgent: { getAgentNodeId: () => 'tool-123' } as any, threadId: 't', runId: 'r', finishSignal: { activate(){}, deactivate(){}, isActive:false } } as any;
     await (reducer.invoke as any)({ messages: [response], meta: {} } as any, config);
     const obs: any = await import('@agyn/tracing');
     const captured = (obs as any).__test.captured as Array<{ nodeId?: string; toolNodeId?: string }>;
@@ -56,9 +56,9 @@ describe('ToolsNode tool_call span attribution', () => {
   it('omits nodeId when Tool id not provided (no agent fallback)', async () => {
     const obs: any = await import('@agyn/tracing');
     (obs as any).__test.captured.length = 0; // reset captured
-    const reducer = new CallToolsLLMReducer(new LoggerService()).init({ tools: [new EchoTool() as any] }) as any;
+    const reducer = new CallToolsLLMReducer(new LoggerService(), createRunEventsStub() as any).init({ tools: [new EchoTool() as any] }) as any;
     const response = new ResponseMessage({ output: [new ToolCallMessage({ type: 'function_call', call_id: 'tc2', name: 'echo', arguments: JSON.stringify({ a: 1 }) } as any).toPlain() as any] as any });
-    const config = { callerAgent: { getAgentNodeId: () => undefined } as any, threadId: 't', finishSignal: { activate(){}, deactivate(){}, isActive:false } } as any;
+    const config = { callerAgent: { getAgentNodeId: () => undefined } as any, threadId: 't', runId: 'r', finishSignal: { activate(){}, deactivate(){}, isActive:false } } as any;
     await (reducer.invoke as any)({ messages: [response], meta: {} } as any, config);
     const captured = (obs as any).__test.captured as Array<{ nodeId?: string; toolNodeId?: string }>;
     expect(captured.length).toBeGreaterThan(0);

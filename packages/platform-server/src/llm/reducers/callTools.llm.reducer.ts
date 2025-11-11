@@ -6,10 +6,16 @@ import { LoggerService } from '../../core/services/logger.service';
 import { Inject, Injectable, Scope } from '@nestjs/common';
 import { McpError } from '../../graph/nodes/mcp/types';
 import { ResponseFunctionCallOutputItemList } from 'openai/resources/responses/responses.mjs';
+import { RunEventsService } from '../../run-events/run-events.service';
+import { ToolExecStatus, Prisma } from '@prisma/client';
+import { toPrismaJsonValue } from '../services/messages.serialization';
 
 @Injectable({ scope: Scope.TRANSIENT })
 export class CallToolsLLMReducer extends Reducer<LLMState, LLMContext> {
-  constructor(@Inject(LoggerService) private logger: LoggerService) {
+  constructor(
+    @Inject(LoggerService) private logger: LoggerService,
+    @Inject(RunEventsService) private readonly runEvents: RunEventsService,
+  ) {
     super();
   }
 
@@ -45,11 +51,12 @@ export class CallToolsLLMReducer extends Reducer<LLMState, LLMContext> {
   async invoke(state: LLMState, ctx: LLMContext): Promise<LLMState> {
     const toolsToCall = this.filterToolCalls(state.messages);
     const toolsMap = this.createToolsMap();
+    const nodeId = ctx?.callerAgent?.getAgentNodeId?.() ?? null;
+    const llmEventId = state.meta?.lastLLMEventId ?? null;
 
     const results = await Promise.all(
       toolsToCall.map(async (t) => {
         const tool = toolsMap.get(t.name);
-        const nodeId = ctx?.callerAgent?.getAgentNodeId?.();
 
         type ToolCallErrorCode =
           | 'BAD_JSON_ARGS'
@@ -99,6 +106,7 @@ export class CallToolsLLMReducer extends Reducer<LLMState, LLMContext> {
           });
         };
 
+        let startedEvent: { id: string } | null = null;
         const response = await withToolCall<ToolCallStructuredOutput, ToolCallRaw>(
           {
             name: t.name,
@@ -143,6 +151,27 @@ export class CallToolsLLMReducer extends Reducer<LLMState, LLMContext> {
             const input = validation.data;
 
             try {
+              let serializedInput: Prisma.InputJsonValue = Prisma.JsonNull;
+              try {
+                serializedInput = toPrismaJsonValue(input);
+              } catch (err) {
+                this.logger.warn('Failed to serialize tool input for run event', err);
+              }
+
+              startedEvent = await this.runEvents.startToolExecution({
+                runId: ctx.runId,
+                threadId: ctx.threadId,
+                nodeId,
+                toolName: tool.name,
+                toolCallId: t.callId,
+                llmCallEventId: llmEventId ?? undefined,
+                input: serializedInput,
+              });
+            } catch (err) {
+              this.logger.warn('Failed to record tool execution start', err);
+            }
+
+            try {
               const raw = await tool.execute(input, ctx);
 
               if (typeof raw === 'string' && raw.length > 50000) {
@@ -174,6 +203,21 @@ export class CallToolsLLMReducer extends Reducer<LLMState, LLMContext> {
           },
         );
 
+        if (startedEvent) {
+          const status = response.status === 'success' ? ToolExecStatus.success : ToolExecStatus.error;
+          try {
+            await this.runEvents.completeToolExecution({
+              eventId: startedEvent.id,
+              status,
+              output: this.toJson(response.output),
+              raw: this.toJson(response.raw),
+              errorMessage: status === ToolExecStatus.success ? null : this.extractErrorMessage(response),
+            });
+          } catch (err) {
+            this.logger.warn('Failed to complete tool execution event', err);
+          }
+        }
+
         return ToolCallOutputMessage.fromResponse(t.callId, response);
       }),
     );
@@ -186,5 +230,26 @@ export class CallToolsLLMReducer extends Reducer<LLMState, LLMContext> {
     };
 
     return { ...state, messages: [...state.messages, ...results], meta };
+  }
+
+  private toJson(value: unknown): Prisma.InputJsonValue | null {
+    if (value === null || value === undefined) return null;
+    try {
+      return toPrismaJsonValue(value);
+    } catch (err) {
+      try {
+        return toPrismaJsonValue(JSON.parse(JSON.stringify(value)));
+      } catch (nested) {
+        this.logger.warn('Failed to serialize tool payload for run event', err, nested);
+        return null;
+      }
+    }
+  }
+
+  private extractErrorMessage(response: ToolCallResponse<unknown, unknown>): string | null {
+    if (response.status === 'success') return null;
+    if (typeof response.output === 'string') return response.output;
+    if (typeof response.raw === 'string') return response.raw;
+    return null;
   }
 }

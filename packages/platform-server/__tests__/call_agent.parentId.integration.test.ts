@@ -6,6 +6,7 @@ import { AgentsPersistenceService } from '../src/agents/agents.persistence.servi
 import { NoopGraphEventsPublisher } from '../src/gateway/graph.events.publisher';
 import { Signal } from '../src/signal';
 import { createPrismaStub, StubPrismaService } from './helpers/prisma.stub';
+import { createRunEventsStub } from './helpers/runEvents.stub';
 
 const metricsStub = { getThreadsMetrics: async () => ({}) } as any;
 const templateRegistryStub = { toSchema: async () => [], getMeta: () => undefined } as any;
@@ -32,6 +33,7 @@ describe('call_agent integration: creates child thread with parentId', () => {
       new NoopGraphEventsPublisher(),
       templateRegistryStub,
       graphRepoStub,
+      createRunEventsStub() as any,
     );
     const tool = new CallAgentTool(new LoggerService(), persistence);
     await tool.setConfig({ description: 'desc', response: 'sync' });
@@ -42,7 +44,10 @@ describe('call_agent integration: creates child thread with parentId', () => {
     const dynamic = tool.getTool();
     // Create parent thread and use its UUID in ctx.threadId
     const parentThreadId = await persistence.getOrCreateThreadByAlias('test', 'parentX', 'Parent X');
-    const res = await dynamic.execute({ input: 'do', threadAlias: 'childX', summary: 'Child X' }, { threadId: parentThreadId, finishSignal: new Signal(), callerAgent: { invoke: async () => ResponseMessage.fromText('OK') } } as any);
+    const res = await dynamic.execute(
+      { input: 'do', threadAlias: 'childX', summary: 'Child X' },
+      { threadId: parentThreadId, runId: 'r', finishSignal: new Signal(), callerAgent: { invoke: async () => ResponseMessage.fromText('OK') } } as any,
+    );
     expect(res).toBe('OK');
 
     const parent = stub._store.threads.find((t: any) => t.alias === 'parentX');

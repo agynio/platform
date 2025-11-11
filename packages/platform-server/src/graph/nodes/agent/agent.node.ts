@@ -278,7 +278,7 @@ export class AgentNode extends Node<AgentStaticConfig> {
           const finishSignal = new Signal();
           const newState = await loop.invoke(
             { messages },
-            { threadId: thread, finishSignal, callerAgent: this },
+            { threadId: thread, runId, finishSignal, callerAgent: this },
             { start: 'load' },
           );
 

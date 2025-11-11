@@ -3,6 +3,7 @@ import { AgentsPersistenceService } from '../src/agents/agents.persistence.servi
 import { LoggerService } from '../src/core/services/logger.service';
 import { NoopGraphEventsPublisher } from '../src/gateway/graph.events.publisher';
 import { StubPrismaService, createPrismaStub } from './helpers/prisma.stub';
+import { createRunEventsStub } from './helpers/runEvents.stub';
 
 const metricsStub = { getThreadsMetrics: async () => ({}) } as any;
 const templateRegistryStub = { toSchema: async () => [], getMeta: () => undefined } as any;
@@ -20,6 +21,7 @@ describe('AgentsPersistenceService threads filters and updates', () => {
       new NoopGraphEventsPublisher(),
       templateRegistryStub,
       graphRepoStub,
+      createRunEventsStub() as any,
     );
     // seed
     const rootOpen = await stub.thread.create({ data: { alias: 'a1', parentId: null, summary: 'A1', status: 'open' } });

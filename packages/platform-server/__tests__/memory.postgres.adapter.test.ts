@@ -10,6 +10,7 @@ const URL = process.env.AGENTS_DATABASE_URL;
 const maybeDescribe = URL ? describe : describe.skip;
 
 maybeDescribe('PostgresMemoryRepository adapter', () => {
+  if (!URL) return;
   const prisma = new PrismaClient({ datasources: { db: { url: URL! } } });
   let svc: MemoryService;
 

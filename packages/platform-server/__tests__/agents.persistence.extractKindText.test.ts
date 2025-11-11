@@ -11,6 +11,7 @@ const { LoggerService } = await import('../src/core/services/logger.service');
 const { NoopGraphEventsPublisher } = await import('../src/gateway/graph.events.publisher');
 import { AIMessage, HumanMessage, SystemMessage, ToolCallMessage, ToolCallOutputMessage } from '@agyn/llm';
 import type { ResponseFunctionToolCall } from 'openai/resources/responses/responses.mjs';
+import { createRunEventsStub } from './helpers/runEvents.stub';
 
 const templateRegistryStub = { toSchema: async () => [], getMeta: () => undefined } as any;
 const graphRepoStub = {
@@ -22,7 +23,15 @@ function makeService(): InstanceType<typeof AgentsPersistenceService> {
   const logger = new LoggerService();
   const metrics = { getThreadsMetrics: async () => ({}) } as any;
   const publisher = new NoopGraphEventsPublisher();
-  return new AgentsPersistenceService({ getClient: () => ({}) } as any, logger, metrics, publisher as any, templateRegistryStub, graphRepoStub);
+  return new AgentsPersistenceService(
+    { getClient: () => ({}) } as any,
+    logger,
+    metrics,
+    publisher as any,
+    templateRegistryStub,
+    graphRepoStub,
+    createRunEventsStub() as any,
+  );
 }
 
 // Duck-typing tests removed; service now accepts strictly typed messages only.
@@ -44,6 +53,7 @@ describe('AgentsPersistenceService beginRun/completeRun populates Message.text',
           runs.push(r);
           return r;
         },
+        findUnique: async ({ where }: any) => runs.find((x) => x.id === where.id) ?? null,
         update: async ({ where, data }: any) => {
           const r = runs.find((x) => x.id === where.id);
           if (r) Object.assign(r, data);
@@ -70,7 +80,15 @@ describe('AgentsPersistenceService beginRun/completeRun populates Message.text',
     const logger = new LoggerService();
     const metrics = { getThreadsMetrics: async () => ({}) } as any;
     const publisher = new NoopGraphEventsPublisher();
-    const svc = new AgentsPersistenceService({ getClient: () => prismaMock } as any, logger, metrics, publisher as any, templateRegistryStub, graphRepoStub);
+    const svc = new AgentsPersistenceService(
+      { getClient: () => prismaMock } as any,
+      logger,
+      metrics,
+      publisher as any,
+      templateRegistryStub,
+      graphRepoStub,
+      createRunEventsStub() as any,
+    );
 
     // Begin run with user + system messages
     const input = [HumanMessage.fromText('hello'), SystemMessage.fromText('sys')];

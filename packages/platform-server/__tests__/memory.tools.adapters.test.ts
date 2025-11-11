@@ -9,6 +9,7 @@ const URL = process.env.AGENTS_DATABASE_URL;
 const maybeDescribe = URL ? describe : describe.skip;
 
 maybeDescribe('Memory tool adapters', () => {
+  if (!URL) return;
   const prisma = new PrismaClient({ datasources: { db: { url: URL! } } });
   beforeAll(async () => {
     const svc = new MemoryService(new PostgresMemoryRepository({ getClient: () => prisma } as any));

@@ -67,11 +67,13 @@ export type LLMState = {
   meta?: {
     restrictionInjectionCount?: number;
     restrictionInjected?: boolean;
+    lastLLMEventId?: string | null;
   };
 };
 
 export type LLMContext = {
   threadId: string;
+  runId: string;
   finishSignal: Signal;
   callerAgent: CallerAgent;
 };

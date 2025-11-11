@@ -17,6 +17,7 @@ class StubModuleRef implements Partial<ModuleRef> {
 }
 
 maybeDescribe('MemoryController endpoints', () => {
+  if (!URL) return;
   const prisma = new PrismaClient({ datasources: { db: { url: URL! } } });
 
   beforeAll(async () => {
