@@ -18,6 +18,7 @@ export type ThreadNode = {
 export type RunMeta = {
   id: string;
   threadId: string;
+  status: 'running' | 'finished' | 'terminated';
   createdAt: string;
   updatedAt: string;
 };

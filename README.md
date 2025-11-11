@@ -5,6 +5,7 @@ Composable, graph-driven AI agents (LangGraph) with a live-updatable runtime, Do
 Quick links
 - Server: [packages/platform-server](packages/platform-server) — runtime, triggers, tools, MCP, graph persistence
 - UI: [packages/platform-ui](packages/platform-ui) — graph builder and checkpoint stream viewer
+  - Threads view streams new runs, status updates, and messages in real time via Socket.IO
 - Docs: [docs/README.md](docs/README.md) — technical overview, contributing, MCP design
  
 - Tools: [docs/tools/remind_me.md](docs/tools/remind_me.md) — RemindMe tool behavior and usage
