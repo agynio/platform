@@ -5,6 +5,7 @@ import { AppModule } from './app.module';
 import { MongoService } from '../core/services/mongo.service';
 import { PrismaService } from '../core/services/prisma.service';
 import type { PrismaClient } from '@prisma/client';
+import type { Db } from 'mongodb';
 import { ContainerService } from '../infra/container/container.service';
 import { ContainerCleanupService } from '../infra/container/containerCleanup.job';
 import { ContainerRegistry } from '../infra/container/container.registry';
@@ -33,7 +34,7 @@ describe('AppModule', () => {
     const mongoStub = {
       connect: vi.fn().mockResolvedValue(undefined),
       close: vi.fn().mockResolvedValue(undefined),
-      getDb: vi.fn(() => ({ collection: vi.fn(() => mongoCollectionFactory()) })),
+      getDb: vi.fn(() => ({ collection: vi.fn(() => mongoCollectionFactory()) } as unknown as Db)),
     } satisfies Partial<MongoService>;
 
     const containerRegistryStub = {
@@ -60,14 +61,15 @@ describe('AppModule', () => {
     const runEventsStub = {
       recordInvocationMessage: vi.fn(),
       recordInjection: vi.fn(),
-      recordLLMCallStart: vi.fn(),
-      recordLLMCallComplete: vi.fn(),
-      recordToolExecutionStart: vi.fn(),
-      recordToolExecutionComplete: vi.fn(),
+      startLLMCall: vi.fn(),
+      completeLLMCall: vi.fn(),
+      startToolExecution: vi.fn(),
+      completeToolExecution: vi.fn(),
       recordSummarization: vi.fn(),
-      recordRunStatus: vi.fn(),
-      getRunTimeline: vi.fn().mockResolvedValue({ items: [], nextCursor: null }),
+      publishEvent: vi.fn(),
+      listRunEvents: vi.fn().mockResolvedValue({ items: [], nextCursor: null }),
       getRunSummary: vi.fn().mockResolvedValue(null),
+      getEventSnapshot: vi.fn().mockResolvedValue(null),
     } satisfies Partial<RunEventsService>;
 
     const agentsPersistenceStub = {
@@ -75,8 +77,8 @@ describe('AppModule', () => {
       updateThreadChannelDescriptor: vi.fn(),
       getOrCreateSubthreadByAlias: vi.fn().mockResolvedValue('thread-child'),
       beginRunThread: vi.fn().mockResolvedValue({ runId: 'run' }),
-      appendMessages: vi.fn(),
-      endRun: vi.fn(),
+      recordInjected: vi.fn(),
+      completeRun: vi.fn(),
       resolveThreadId: vi.fn().mockResolvedValue('thread'),
     } satisfies Partial<AgentsPersistenceService>;
 
