@@ -2,6 +2,7 @@ import { PrismaService } from '../../core/services/prisma.service';
 import type { Prisma, PrismaClient } from '@prisma/client';
 import type { MemoryDoc, MemoryDirsMap, MemoryDataMap, MemoryFilter } from './memory.types';
 import { Inject, Injectable } from '@nestjs/common';
+import { randomUUID } from 'node:crypto';
 
 export interface MemoryRepositoryPort {
   withDoc<T>(
@@ -60,7 +61,8 @@ export class PostgresMemoryRepository implements MemoryRepositoryPort {
     return await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
       let row = await this.selectForUpdate(filter, tx);
       if (!row) {
-        await tx.$executeRaw`INSERT INTO memories (node_id, scope, thread_id, data, dirs) VALUES (${filter.nodeId}, ${filter.scope}::"MemoryScope", ${filter.scope === 'perThread' ? filter.threadId ?? null : null}, '{}'::jsonb, '{}'::jsonb)`;
+        const newId = randomUUID();
+        await tx.$executeRaw`INSERT INTO memories (id, node_id, scope, thread_id, data, dirs, created_at, updated_at) VALUES (${newId}::uuid, ${filter.nodeId}, ${filter.scope}::"MemoryScope", ${filter.scope === 'perThread' ? filter.threadId ?? null : null}, '{}'::jsonb, '{}'::jsonb, NOW(), NOW())`;
         row = await this.selectForUpdate(filter, tx);
       }
       if (!row) throw new Error('failed to create memory document');
@@ -73,7 +75,8 @@ export class PostgresMemoryRepository implements MemoryRepositoryPort {
     return await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
       let row = await this.selectForUpdate(filter, tx);
       if (!row) {
-        await tx.$executeRaw`INSERT INTO memories (node_id, scope, thread_id, data, dirs) VALUES (${filter.nodeId}, ${filter.scope}::"MemoryScope", ${filter.scope === 'perThread' ? filter.threadId ?? null : null}, '{}'::jsonb, '{}'::jsonb)`;
+        const newId = randomUUID();
+        await tx.$executeRaw`INSERT INTO memories (id, node_id, scope, thread_id, data, dirs, created_at, updated_at) VALUES (${newId}::uuid, ${filter.nodeId}, ${filter.scope}::"MemoryScope", ${filter.scope === 'perThread' ? filter.threadId ?? null : null}, '{}'::jsonb, '{}'::jsonb, NOW(), NOW())`;
         row = await this.selectForUpdate(filter, tx);
       }
       if (!row) throw new Error('failed to create memory document');
