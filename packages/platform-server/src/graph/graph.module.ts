@@ -10,49 +10,48 @@ import { NcpsKeyService } from '../infra/ncps/ncpsKey.service';
 import { LLMModule } from '../llm/llm.module';
 import { LLMProvisioner } from '../llm/provisioners/llm.provisioner';
 
+import { AgentsPersistenceService } from '../agents/agents.persistence.service';
+import { AgentsRemindersController } from '../agents/reminders.controller';
+import { AgentsThreadsController } from '../agents/threads.controller';
+import { ThreadsMetricsService } from '../agents/threads.metrics.service';
+import { EnvModule } from '../env/env.module';
+import { EnvService } from '../env/env.service';
+import { GraphSocketGateway } from '../gateway/graph.socket.gateway';
+import { SlackAdapter } from '../messaging/slack/slack.adapter';
 import { buildTemplateRegistry } from '../templates';
 import { GraphController } from './controllers/graph.controller';
 import { GraphPersistController } from './controllers/graphPersist.controller';
-import { RunsController } from './controllers/runs.controller';
 import { GraphVariablesController } from './controllers/graphVariables.controller';
 import { MemoryController } from './controllers/memory.controller';
-import { GraphVariablesService } from './services/graphVariables.service';
+import { RunsController } from './controllers/runs.controller';
 import { GitGraphRepository } from './gitGraph.repository';
 import { GraphGuard } from './graph.guard';
 import { GraphRepository } from './graph.repository';
 import { MongoGraphRepository } from './graphMongo.repository';
 import { LiveGraphRuntime } from './liveGraph.manager';
-import { PortsRegistry } from './ports.registry';
-import { TemplateRegistry } from './templateRegistry';
-import { EnvModule } from '../env/env.module';
-import { EnvService } from '../env/env.service';
-import { NodeStateService } from './nodeState.service';
-import { GraphSocketGateway } from '../gateway/graph.socket.gateway';
-import { GraphEventsPublisher } from '../gateway/graph.events.publisher';
-import { ThreadsMetricsService } from '../agents/threads.metrics.service';
-import { RemindersController } from './nodes/tools/remind_me/reminders.controller';
 import { AgentNode } from './nodes/agent/agent.node';
-import { MemoryNode } from './nodes/memory/memory.node';
+import { LocalMCPServerNode } from './nodes/mcp';
 import { PostgresMemoryRepository } from './nodes/memory.repository';
 import { MemoryService } from './nodes/memory.service';
+import { MemoryNode } from './nodes/memory/memory.node';
 import { MemoryConnectorNode } from './nodes/memoryConnector/memoryConnector.node';
-import { WorkspaceNode } from './nodes/workspace/workspace.node';
 import { SlackTrigger } from './nodes/slackTrigger/slackTrigger.node';
-import { LocalMCPServerNode } from './nodes/mcp';
-import { ManageToolNode } from './nodes/tools/manage/manage.node';
-import { ManageFunctionTool } from './nodes/tools/manage/manage.tool';
 import { CallAgentNode } from './nodes/tools/call_agent/call_agent.node';
 import { FinishNode } from './nodes/tools/finish/finish.node';
-import { MemoryToolNode } from './nodes/tools/memory/memory.node';
-import { SendSlackMessageNode } from './nodes/tools/send_slack_message/send_slack_message.node';
-import { SendMessageNode } from './nodes/tools/send_message/send_message.node';
-import { ShellCommandNode } from './nodes/tools/shell_command/shell_command.node';
 import { GithubCloneRepoNode } from './nodes/tools/github_clone_repo/github_clone_repo.node';
+import { ManageToolNode } from './nodes/tools/manage/manage.node';
+import { ManageFunctionTool } from './nodes/tools/manage/manage.tool';
+import { MemoryToolNode } from './nodes/tools/memory/memory.node';
 import { RemindMeNode } from './nodes/tools/remind_me/remind_me.node';
-import { AgentsPersistenceService } from '../agents/agents.persistence.service';
-import { AgentsThreadsController } from '../agents/threads.controller';
-import { AgentsRemindersController } from '../agents/reminders.controller';
-import { SlackAdapter } from '../messaging/slack/slack.adapter';
+import { RemindersController } from './nodes/tools/remind_me/reminders.controller';
+import { SendMessageNode } from './nodes/tools/send_message/send_message.node';
+import { SendSlackMessageNode } from './nodes/tools/send_slack_message/send_slack_message.node';
+import { ShellCommandNode } from './nodes/tools/shell_command/shell_command.node';
+import { WorkspaceNode } from './nodes/workspace/workspace.node';
+import { NodeStateService } from './nodeState.service';
+import { PortsRegistry } from './ports.registry';
+import { GraphVariablesService } from './services/graphVariables.service';
+import { TemplateRegistry } from './templateRegistry';
 
 @Module({
   imports: [CoreModule, InfraModule, LLMModule, EnvModule],
@@ -119,7 +118,6 @@ import { SlackAdapter } from '../messaging/slack/slack.adapter';
     NodeStateService,
     // Gateway and publisher binding
     GraphSocketGateway,
-    { provide: GraphEventsPublisher, useExisting: GraphSocketGateway },
     // Centralized threads metrics aggregator
     ThreadsMetricsService,
     AgentsPersistenceService,

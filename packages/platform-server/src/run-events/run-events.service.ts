@@ -10,11 +10,11 @@ import {
   RunStatus,
   ToolExecStatus,
 } from '@prisma/client';
+import { PrismaClientKnownRequestError } from '@prisma/client/runtime/library';
 import { LoggerService } from '../core/services/logger.service';
 import { PrismaService } from '../core/services/prisma.service';
-import { PrismaClientKnownRequestError } from '@prisma/client/runtime/library';
+import { GraphSocketGateway } from '../gateway/graph.socket.gateway';
 import { toPrismaJsonValue } from '../llm/services/messages.serialization';
-import { GraphEventsPublisher } from '../gateway/graph.events.publisher';
 
 type Tx = PrismaClient | Prisma.TransactionClient;
 
@@ -251,7 +251,7 @@ export class RunEventsService {
   constructor(
     @Inject(PrismaService) private readonly prismaService: PrismaService,
     @Inject(LoggerService) private readonly logger: LoggerService,
-    @Inject(GraphEventsPublisher) private readonly events: GraphEventsPublisher,
+    @Inject(GraphSocketGateway) private readonly events: GraphSocketGateway,
   ) {}
 
   private get prisma(): PrismaClient {
