@@ -19,9 +19,10 @@ import { NodesModule } from '../nodes/nodes.module';
 import { EventsModule } from '../events/events.module';
 import { GraphServicesModule } from './graph-services.module';
 import { RemindersController } from './controllers/reminders.controller';
+import { LLMModule } from '../llm/llm.module';
 
 @Module({
-  imports: [CoreModule, InfraModule, EnvModule, EventsModule, NodesModule, GraphServicesModule],
+  imports: [CoreModule, InfraModule, EnvModule, EventsModule, NodesModule, GraphServicesModule, LLMModule],
   controllers: [
     RunsController,
     GraphPersistController,
