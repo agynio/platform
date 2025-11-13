@@ -16,9 +16,10 @@ import { GraphRepository } from './graph.repository';
 import { MongoGraphRepository } from './graphMongo.repository';
 import { PortsRegistry } from './ports.registry';
 import { TemplateRegistry } from './templateRegistry';
+import { LLMModule } from '../llm/llm.module';
 
 @Module({
-  imports: [CoreModule, InfraModule, EventsModule],
+  imports: [CoreModule, InfraModule, EventsModule, LLMModule],
   providers: [
     ThreadsMetricsService,
     {

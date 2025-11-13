@@ -25,6 +25,7 @@ import { PRService } from '../src/infra/github/pr.usecase';
 import { ArchiveService } from '../src/infra/archive/archive.service';
 import { TemplateRegistry } from '../src/graph/templateRegistry';
 import { GraphRepository } from '../src/graph/graph.repository';
+import { ModuleRef } from '@nestjs/core';
 
 process.env.LLM_PROVIDER = process.env.LLM_PROVIDER || 'openai';
 process.env.MONGODB_URL = process.env.MONGODB_URL || 'mongodb://localhost:27017/test';
@@ -228,7 +229,8 @@ describe('GraphModule DI smoke test', () => {
     const provisioner = moduleRef.get(LLMProvisioner, { strict: false });
     expect(provisioner).toBeDefined();
 
-    await expect(moduleRef.resolve(AgentNode, undefined, { strict: false })).resolves.toBeInstanceOf(AgentNode);
+    const moduleRefProvider = moduleRef.get(ModuleRef, { strict: false });
+    await expect(moduleRefProvider.create(AgentNode)).resolves.toBeInstanceOf(AgentNode);
 
     await moduleRef.close();
   }, 60000);
