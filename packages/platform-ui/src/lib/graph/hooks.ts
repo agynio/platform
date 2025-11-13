@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { graph as api } from '@/api/modules/graph';
 import type { PersistedGraphUpsertRequestUI } from '@/api/modules/graph';
@@ -18,25 +18,64 @@ import { notifyError } from '../notify';
 
 export function useNodeStatus(nodeId: string) {
   const qc = useQueryClient();
+  const lastUpdatedRef = useRef<number>(0);
+  const pollBackoffRef = useRef<number>(5000);
+  const [pollInterval, setPollInterval] = useState<number | false>(() => (graphSocket.isConnected() ? false : 5000));
   const q = useQuery({
     queryKey: ['graph', 'node', nodeId, 'status'],
     queryFn: () => api.getNodeStatus(nodeId),
     staleTime: Infinity,
-    // Poll periodically since server may not emit socket events for all cases
-    refetchInterval: 2000,
+    refetchInterval: pollInterval,
   });
 
   useEffect(() => {
-    graphSocket.connect();
-    // dynamic config eliminated; no schema invalidation debounce needed
-    const off = graphSocket.onNodeStatus(nodeId, (ev: NodeStatusEvent) => {
-      // Authoritative event overwrites optimistic cache
-      qc.setQueryData<NodeStatus>(['graph', 'node', nodeId, 'status'], (prev) => ({ ...(prev || {}), ...ev }));
-
-      // dynamic config eliminated; no schema invalidation
-    });
-    return () => off();
+    if (!nodeId) return;
+    const socket = graphSocket.connect();
+    const room = `node:${nodeId}`;
+    graphSocket.subscribe([room]);
+    const handler = (ev: NodeStatusEvent) => {
+      const parsedAt = ev.updatedAt ? Date.parse(ev.updatedAt) : Number.NaN;
+      const at = Number.isFinite(parsedAt) ? parsedAt : Date.now();
+      if (at < lastUpdatedRef.current) return;
+      lastUpdatedRef.current = at;
+      const { nodeId: _omit, updatedAt: _ignored, ...rest } = ev;
+      qc.setQueryData<NodeStatus>(['graph', 'node', nodeId, 'status'], (prev) => ({ ...(prev || {}), ...rest }));
+    };
+    const offStatus = graphSocket.onNodeStatus(nodeId, handler);
+    const onConnected = () => {
+      pollBackoffRef.current = 5000;
+      setPollInterval(false);
+    };
+    const onReconnected = () => {
+      pollBackoffRef.current = 5000;
+      setPollInterval(false);
+      qc.invalidateQueries({ queryKey: ['graph', 'node', nodeId, 'status'] }).catch(() => {});
+    };
+    const onDisconnected = () => {
+      const next = pollBackoffRef.current;
+      setPollInterval(next);
+      pollBackoffRef.current = Math.min(next * 2, 15000);
+    };
+    const offConnected = graphSocket.onConnected(onConnected);
+    const offReconnected = graphSocket.onReconnected(onReconnected);
+    const offDisconnected = graphSocket.onDisconnected(onDisconnected);
+    if (socket?.connected) {
+      onConnected();
+    }
+    return () => {
+      offStatus();
+      offConnected();
+      offReconnected();
+      offDisconnected();
+      graphSocket.unsubscribe([room]);
+    };
   }, [nodeId, qc]);
+
+  useEffect(() => {
+    if (q.dataUpdatedAt) {
+      lastUpdatedRef.current = Math.max(lastUpdatedRef.current, q.dataUpdatedAt);
+    }
+  }, [q.dataUpdatedAt]);
 
   return q;
 }
@@ -71,8 +110,10 @@ export function useReminderCount(nodeId: string, enabled: boolean = true) {
   });
 
   useEffect(() => {
-    if (!enabled) return;
+    if (!enabled || !nodeId) return;
     graphSocket.connect();
+    const room = `node:${nodeId}`;
+    graphSocket.subscribe([room]);
     const off = graphSocket.onReminderCount(nodeId, (ev: ReminderCountEvent) => {
       const at = Date.parse(ev.updatedAt || new Date().toISOString());
       if (!Number.isFinite(at)) return;
@@ -82,16 +123,14 @@ export function useReminderCount(nodeId: string, enabled: boolean = true) {
         qc.setQueryData(['graph', 'node', nodeId, 'reminders', 'count'], { count: ev.count, updatedAt: ev.updatedAt });
       }
     });
-    // On reconnect, refetch initial one-shot to reconcile
-    const sock = graphSocket.connect();
-    const onReconnect = () => {
-      // refresh initial source of truth via query invalidation
+    const onConnect = () => {
       qc.invalidateQueries({ queryKey: ['graph', 'node', nodeId, 'reminders', 'count'] }).catch(() => {});
     };
-    sock?.on('connect', onReconnect);
+    const offConnected = graphSocket.onConnected(onConnect);
     return () => {
       off();
-      sock?.off('connect', onReconnect);
+      offConnected();
+      graphSocket.unsubscribe([room]);
     };
   }, [nodeId, qc, enabled]);
 
@@ -187,7 +226,10 @@ export function useMcpNodeState(nodeId: string) {
   });
 
   useEffect(() => {
+    if (!nodeId) return;
     graphSocket.connect();
+    const room = `node:${nodeId}`;
+    graphSocket.subscribe([room]);
     const off = graphSocket.onNodeState(nodeId, (ev) => {
       const s = (ev?.state ?? {}) as Record<string, unknown>;
       const parsed = McpStateSchema.safeParse(s);
@@ -197,7 +239,10 @@ export function useMcpNodeState(nodeId: string) {
         { tools: parsed.data.mcp?.tools ?? [], enabledTools: parsed.data.mcp?.enabledTools },
       );
     });
-    return () => off();
+    return () => {
+      off();
+      graphSocket.unsubscribe([room]);
+    };
   }, [nodeId, qc]);
 
   const m = useMutation({

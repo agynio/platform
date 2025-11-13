@@ -4,6 +4,7 @@ import { renderHook, waitFor } from '@testing-library/react';
 import React from 'react';
 import { useNodeStatus, useTemplates, useNodeReminders } from '../../graph/hooks';
 import { graphSocket } from '../../graph/socket';
+import type { NodeStatusEvent } from '../../graph/types';
 
 // Mock http client used by modules (avoid TDZ with vi.hoisted)
 const hoisted = vi.hoisted(() => ({ getMock: vi.fn() }));
@@ -28,25 +29,63 @@ describe('graph hooks', () => {
     expect(result.current.data?.[0]?.name).toBe('x');
   });
 
-  it('useNodeStatus receives socket updates', async () => {
+  it('useNodeStatus subscribes to node room, updates on fresh events, and revalidates on reconnect', async () => {
+    const subscribeSpy = vi.spyOn(graphSocket, 'subscribe').mockImplementation(() => {});
+    const unsubscribeSpy = vi.spyOn(graphSocket, 'unsubscribe').mockImplementation(() => {});
+    const connectSpy = vi.spyOn(graphSocket, 'connect').mockImplementation(() => ({ connected: true } as any));
+    const isConnectedSpy = vi.spyOn(graphSocket, 'isConnected').mockReturnValue(true);
+    let statusHandler: ((ev: NodeStatusEvent) => void) | undefined;
+    const onNodeStatusSpy = vi.spyOn(graphSocket, 'onNodeStatus').mockImplementation((_nodeId, handler) => {
+      statusHandler = handler;
+      return () => {};
+    });
+    let reconnectHandler: (() => void) | undefined;
+    const onReconnectedSpy = vi.spyOn(graphSocket, 'onReconnected').mockImplementation((handler) => {
+      reconnectHandler = handler;
+      return () => {};
+    });
+    const onConnectedSpy = vi.spyOn(graphSocket, 'onConnected').mockImplementation((handler) => {
+      handler();
+      return () => {};
+    });
+    const onDisconnectedSpy = vi.spyOn(graphSocket, 'onDisconnected').mockImplementation(() => () => {});
+
     const qc = new QueryClient();
+    const invalidateSpy = vi.spyOn(qc, 'invalidateQueries').mockResolvedValue(undefined as any);
     const wrapper = ({ children }: any) => <QueryClientProvider client={qc}>{children}</QueryClientProvider>;
 
-    // intercept socket and emit
-    const off = graphSocket.onNodeStatus('n1', () => {});
-    off(); // ensure registry works
+    const { result, unmount } = renderHook(() => useNodeStatus('n1'), { wrapper });
 
-    const { result } = renderHook(() => useNodeStatus('n1'), { wrapper });
-    await waitFor(() => expect(result.current.data).toBeTruthy());
-    expect(result.current.data?.isPaused).toBe(false);
+    try {
+      await waitFor(() => expect(result.current.data).toBeTruthy());
+      expect(result.current.data?.isPaused).toBe(false);
+      expect(subscribeSpy).toHaveBeenCalledWith(['node:n1']);
+      expect(connectSpy).toHaveBeenCalled();
+      expect(onNodeStatusSpy).toHaveBeenCalled();
 
-    // simulate socket event
-    const anySock: any = graphSocket as any;
-    for (const [nodeId, set] of anySock.listeners as Map<string, Set<(...args: unknown[]) => unknown>>) {
-      if (nodeId === 'n1') for (const fn of set) fn({ nodeId: 'n1', isPaused: true });
+      const fresh = new Date().toISOString();
+      statusHandler?.({ nodeId: 'n1', isPaused: true, updatedAt: fresh } as NodeStatusEvent);
+      await waitFor(() => expect(result.current.data?.isPaused).toBe(true));
+
+      const stale = new Date(Date.now() - 60000).toISOString();
+      statusHandler?.({ nodeId: 'n1', isPaused: false, updatedAt: stale } as NodeStatusEvent);
+      await waitFor(() => expect(result.current.data?.isPaused).toBe(true));
+
+      reconnectHandler?.();
+      await waitFor(() => expect(invalidateSpy).toHaveBeenCalled());
+    } finally {
+      unmount();
+      expect(unsubscribeSpy).toHaveBeenCalledWith(['node:n1']);
+      subscribeSpy.mockRestore();
+      unsubscribeSpy.mockRestore();
+      connectSpy.mockRestore();
+      isConnectedSpy.mockRestore();
+      onNodeStatusSpy.mockRestore();
+      onReconnectedSpy.mockRestore();
+      onConnectedSpy.mockRestore();
+      onDisconnectedSpy.mockRestore();
+      invalidateSpy.mockRestore();
     }
-
-    await waitFor(() => expect(result.current.data?.isPaused).toBe(true));
   });
 
   it('useNodeReminders polls and returns items', async () => {

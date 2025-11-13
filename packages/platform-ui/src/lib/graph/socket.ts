@@ -53,6 +53,7 @@ class GraphSocket {
   private subscribedRooms = new Set<string>();
   private connectCallbacks = new Set<() => void>();
   private reconnectCallbacks = new Set<() => void>();
+  private disconnectCallbacks = new Set<() => void>();
 
   private emitSubscriptions(rooms: string[]) {
     if (!rooms.length) return;
@@ -91,7 +92,11 @@ class GraphSocket {
       this.resubscribeAll();
       for (const fn of this.reconnectCallbacks) fn();
     };
+    const handleDisconnect = () => {
+      for (const fn of this.disconnectCallbacks) fn();
+    };
     this.socket.on('connect', handleConnect);
+    this.socket.on('disconnect', handleDisconnect);
     const manager = this.socket.io;
     manager.on('reconnect', handleReconnect);
     // No-op connect listener; optional
@@ -232,6 +237,17 @@ class GraphSocket {
     return () => {
       this.reconnectCallbacks.delete(cb);
     };
+  }
+
+  onDisconnected(cb: () => void) {
+    this.disconnectCallbacks.add(cb);
+    return () => {
+      this.disconnectCallbacks.delete(cb);
+    };
+  }
+
+  isConnected() {
+    return this.socket?.connected ?? false;
   }
 }
 

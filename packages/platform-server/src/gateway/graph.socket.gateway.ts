@@ -77,8 +77,10 @@ export class GraphSocketGateway implements GraphEventsPublisher {
       // Room subscription
       const RoomSchema = z.union([
         z.literal('threads'),
+        z.literal('graph'),
         z.string().regex(/^thread:[0-9a-f-]{36}$/i),
         z.string().regex(/^run:[0-9a-f-]{36}$/i),
+        z.string().regex(/^node:[0-9a-f-]{36}$/i),
       ]);
       const SubscribeSchema = z
         .object({ rooms: z.array(RoomSchema).optional(), room: RoomSchema.optional() })
@@ -104,14 +106,20 @@ export class GraphSocketGateway implements GraphEventsPublisher {
     return this;
   }
 
-  private broadcast<T>(event: 'node_status' | 'node_state' | 'node_reminder_count', payload: T, schema: z.ZodType<T>) {
+  private broadcast<T extends { nodeId: string }>(
+    event: 'node_status' | 'node_state' | 'node_reminder_count',
+    payload: T,
+    schema: z.ZodType<T>,
+  ) {
     if (!this.io) return;
     const parsed = schema.safeParse(payload);
     if (!parsed.success) {
       this.logger.error('Gateway payload validation failed', parsed.error.issues);
       return;
     }
-    this.io.emit(event, parsed.data);
+    const data = parsed.data;
+    this.io.to('graph').emit(event, data);
+    this.io.to(`node:${data.nodeId}`).emit(event, data);
   }
 
   private attachRuntimeSubscriptions() {
