@@ -26,11 +26,13 @@ type PackageDetail = {
 
 //
 
-type ControlledProps = { value: NixPackageSelection[]; onChange: (next: NixPackageSelection[]) => void };
+type BaseProps = { resolveRetryMs?: number };
+type ControlledProps = BaseProps & { value: NixPackageSelection[]; onChange: (next: NixPackageSelection[]) => void };
 type ConfigWithNix = Record<string, unknown> & { nix?: ContainerNixConfig };
-type UncontrolledProps = { config: ConfigWithNix; onUpdateConfig: (next: Record<string, unknown>) => void };
+type UncontrolledProps = BaseProps & { config: ConfigWithNix; onUpdateConfig: (next: Record<string, unknown>) => void };
 
 export function NixPackagesSection(props: ControlledProps | UncontrolledProps) {
+  const resolveRetryMs = props.resolveRetryMs ?? RESOLVE_RETRY_MS;
   const [query, setQuery] = useState('');
   const [isOpen, setIsOpen] = useState(false);
   const [activeIndex, setActiveIndex] = useState(0);
@@ -361,6 +363,7 @@ export function NixPackagesSection(props: ControlledProps | UncontrolledProps) {
               onResolved={handleResolved}
               onResolveFailed={handleResolveFailed}
               onRemove={() => removeSelected(p.name)}
+              resolveRetryMs={resolveRetryMs}
             />
           ))}
         </ul>
@@ -383,6 +386,7 @@ type SelectedPackageItemProps = {
   onRemove: () => void;
   onResolved: (name: string, detail: { version: string; commitHash: string; attributePath: string }) => void;
   onResolveFailed: (name: string, version: string, message?: string) => void;
+  resolveRetryMs: number;
 };
 
 const isAbortError = (err: unknown) => {
@@ -399,7 +403,7 @@ const isAbortError = (err: unknown) => {
   return false;
 };
 
-function SelectedPackageItem({ pkg, chosen, detail, onChoose, onRemove, onResolved, onResolveFailed }: SelectedPackageItemProps) {
+function SelectedPackageItem({ pkg, chosen, detail, onChoose, onRemove, onResolved, onResolveFailed, resolveRetryMs }: SelectedPackageItemProps) {
   const qVersions = useQuery({
     queryKey: ['nix', 'versions', pkg.name],
     queryFn: ({ signal }) => fetchVersions(pkg.name, signal),
@@ -440,14 +444,23 @@ function SelectedPackageItem({ pkg, chosen, detail, onChoose, onRemove, onResolv
       resolveRef.current = null;
       return;
     }
-    const controller = new AbortController();
+    let controller = new AbortController();
     resolveRef.current = controller;
     let retryTimer: ReturnType<typeof setTimeout> | null = null;
 
+    const ensureController = () => {
+      if (controller.signal.aborted) {
+        controller = new AbortController();
+        resolveRef.current = controller;
+      }
+      return controller;
+    };
+
     const attempt = async () => {
+      const activeController = ensureController();
       try {
-        const res = await resolvePackage(pkg.name, chosen, controller.signal);
-        if (!controller.signal.aborted) {
+        const res = await resolvePackage(pkg.name, chosen, activeController.signal);
+        if (!activeController.signal.aborted) {
           onResolved(pkg.name, {
             version: res.version,
             commitHash: res.commitHash,
@@ -455,15 +468,16 @@ function SelectedPackageItem({ pkg, chosen, detail, onChoose, onRemove, onResolv
           });
         }
       } catch (err) {
-        if (controller.signal.aborted || isAbortError(err)) return;
+        if (activeController.signal.aborted || isAbortError(err)) return;
         const message = err instanceof Error ? err.message : 'Failed to resolve package';
         onResolveFailed(pkg.name, chosen, message);
         if (retryTimer) clearTimeout(retryTimer);
         retryTimer = setTimeout(() => {
-          if (!controller.signal.aborted) {
+          const ctrl = ensureController();
+          if (!ctrl.signal.aborted) {
             attempt();
           }
-        }, RESOLVE_RETRY_MS);
+        }, resolveRetryMs);
       }
     };
 
@@ -476,7 +490,7 @@ function SelectedPackageItem({ pkg, chosen, detail, onChoose, onRemove, onResolv
         resolveRef.current = null;
       }
     };
-  }, [chosen, detailAttribute, detailCommit, detailVersion, onResolveFailed, onResolved, pkg.name]);
+  }, [chosen, detailAttribute, detailCommit, detailVersion, onResolveFailed, onResolved, pkg.name, resolveRetryMs]);
 
   const onChangeVersion = useCallback(
     (v: string) => {

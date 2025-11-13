@@ -1,25 +1,25 @@
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import React, { useState } from 'react';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { server, TestProviders, abs } from '../../integration/testUtils';
-import NixPackagesSection, { RESOLVE_RETRY_MS } from '@/components/nix/NixPackagesSection';
+import NixPackagesSection from '@/components/nix/NixPackagesSection';
 import type { NixPackageSelection } from '@/components/nix/types';
 
-function Harness() {
+function Harness({ retryMs }: { retryMs?: number } = {}) {
   const [value, setValue] = useState<NixPackageSelection[]>([]);
   return (
     <TestProviders>
-      <NixPackagesSection value={value} onChange={setValue} />
+      <NixPackagesSection value={value} onChange={setValue} resolveRetryMs={retryMs} />
     </TestProviders>
   );
 }
 
-function HarnessWithInspector() {
+function HarnessWithInspector({ retryMs }: { retryMs?: number } = {}) {
   const [value, setValue] = useState<NixPackageSelection[]>([]);
   return (
     <TestProviders>
-      <NixPackagesSection value={value} onChange={setValue} />
+      <NixPackagesSection value={value} onChange={setValue} resolveRetryMs={retryMs} />
       <div data-testid="nix-value">{JSON.stringify(value)}</div>
     </TestProviders>
   );
@@ -59,7 +59,6 @@ describe('NixPackagesSection (controlled)', () => {
   });
 
   it('persists unresolved selections and upgrades after background retry', async () => {
-    vi.useFakeTimers();
     let resolveCalls = 0;
     server.use(
       http.get(abs('/api/nix/versions'), ({ request }) => {
@@ -86,8 +85,10 @@ describe('NixPackagesSection (controlled)', () => {
       }),
     );
 
+    const retryMs = 200;
+    vi.useFakeTimers({ shouldAdvanceTime: true });
     try {
-      render(<HarnessWithInspector />);
+      render(<HarnessWithInspector retryMs={retryMs} />);
 
       const input = screen.getByLabelText('Search Nix packages') as HTMLInputElement;
       input.focus();
@@ -107,17 +108,20 @@ describe('NixPackagesSection (controlled)', () => {
         expect(text).not.toContain('commitHash');
       });
 
-      await screen.findByText('Unresolved (retrying…)');
+      await waitFor(() => expect(resolveCalls).toBe(1));
 
-      await vi.advanceTimersByTimeAsync(RESOLVE_RETRY_MS + 100);
-
-      await screen.findByText('Resolved');
-
-      await waitFor(() => {
-        const text = screen.getByTestId('nix-value').textContent ?? '';
-        expect(text).toContain('commitHash');
-        expect(text).toContain('attributePath');
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(retryMs + 50);
+        await vi.runOnlyPendingTimersAsync();
       });
+
+      await waitFor(() => expect(resolveCalls).toBeGreaterThanOrEqual(2));
+
+      expect(screen.getByText('Resolved')).toBeInTheDocument();
+
+      const text = screen.getByTestId('nix-value').textContent ?? '';
+      expect(text).toContain('commitHash');
+      expect(text).toContain('attributePath');
 
       expect(resolveCalls).toBeGreaterThanOrEqual(2);
     } finally {
