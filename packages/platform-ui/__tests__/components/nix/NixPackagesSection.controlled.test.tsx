@@ -1,8 +1,9 @@
-import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import React, { useState } from 'react';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
-import { server, TestProviders } from '../../integration/testUtils';
-import NixPackagesSection from '@/components/nix/NixPackagesSection';
+import { http, HttpResponse } from 'msw';
+import { server, TestProviders, abs } from '../../integration/testUtils';
+import NixPackagesSection, { RESOLVE_RETRY_MS } from '@/components/nix/NixPackagesSection';
 import type { NixPackageSelection } from '@/components/nix/types';
 
 function Harness() {
@@ -10,6 +11,16 @@ function Harness() {
   return (
     <TestProviders>
       <NixPackagesSection value={value} onChange={setValue} />
+    </TestProviders>
+  );
+}
+
+function HarnessWithInspector() {
+  const [value, setValue] = useState<NixPackageSelection[]>([]);
+  return (
+    <TestProviders>
+      <NixPackagesSection value={value} onChange={setValue} />
+      <div data-testid="nix-value">{JSON.stringify(value)}</div>
     </TestProviders>
   );
 }
@@ -45,5 +56,72 @@ describe('NixPackagesSection (controlled)', () => {
     // Remove the package
     fireEvent.click(screen.getByLabelText('Remove gi'));
     await waitFor(() => expect(screen.queryByRole('list', { name: 'Selected Nix packages' })).not.toBeInTheDocument());
+  });
+
+  it('persists unresolved selections and upgrades after background retry', async () => {
+    vi.useFakeTimers();
+    let resolveCalls = 0;
+    server.use(
+      http.get(abs('/api/nix/versions'), ({ request }) => {
+        const url = new URL(request.url);
+        const name = url.searchParams.get('name');
+        if (!name) return new HttpResponse(null, { status: 400 });
+        return HttpResponse.json({ versions: ['24.11.0'] });
+      }),
+      http.get(abs('/api/nix/resolve'), ({ request }) => {
+        resolveCalls += 1;
+        const url = new URL(request.url);
+        const name = url.searchParams.get('name');
+        const version = url.searchParams.get('version');
+        if (!name || !version) {
+          return new HttpResponse(null, { status: 400 });
+        }
+        if (resolveCalls === 1) {
+          return new HttpResponse(JSON.stringify({ error: 'upstream_error' }), {
+            status: 502,
+            headers: { 'Content-Type': 'application/json' },
+          });
+        }
+        return HttpResponse.json({ name, version, commitHash: 'abcd1234', attributePath: `${name}` });
+      }),
+    );
+
+    try {
+      render(<HarnessWithInspector />);
+
+      const input = screen.getByLabelText('Search Nix packages') as HTMLInputElement;
+      input.focus();
+      fireEvent.change(input, { target: { value: 'nodejs' } });
+
+      await waitFor(() => expect(screen.getByRole('listbox')).toBeInTheDocument());
+      fireEvent.click(await screen.findByRole('option', { name: /nodejs/ }));
+
+      const select = screen.getByLabelText(/Select version for nodejs/) as HTMLSelectElement;
+      await waitFor(() => expect(select.querySelector('option[value="24.11.0"]')).not.toBeNull());
+      fireEvent.change(select, { target: { value: '24.11.0' } });
+
+      await waitFor(() => {
+        const text = screen.getByTestId('nix-value').textContent ?? '';
+        expect(text).toContain('"name":"nodejs"');
+        expect(text).toContain('"version":"24.11.0"');
+        expect(text).not.toContain('commitHash');
+      });
+
+      await screen.findByText('Unresolved (retrying…)');
+
+      await vi.advanceTimersByTimeAsync(RESOLVE_RETRY_MS + 100);
+
+      await screen.findByText('Resolved');
+
+      await waitFor(() => {
+        const text = screen.getByTestId('nix-value').textContent ?? '';
+        expect(text).toContain('commitHash');
+        expect(text).toContain('attributePath');
+      });
+
+      expect(resolveCalls).toBeGreaterThanOrEqual(2);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

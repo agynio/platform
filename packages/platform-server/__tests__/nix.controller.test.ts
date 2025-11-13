@@ -3,6 +3,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 // Avoid Nest TestingModule; instantiate controller with DI stubs
 import { NixController } from '../src/infra/ncps/nix.controller';
 import { ConfigService, configSchema } from '../src/core/services/config.service';
+import type { LoggerService } from '../src/core/services/logger.service';
 import type { FastifyReply } from 'fastify';
 
 const BASE = 'https://www.nixhub.io';
@@ -23,7 +24,13 @@ describe('nix controller', () => {
         ncpsRefreshIntervalMs: '0',
       })
     );
-    controller = new NixController(cfg);
+    const logger = {
+      info: vi.fn(),
+      warn: vi.fn(),
+      error: vi.fn(),
+      debug: vi.fn(),
+    } as unknown as LoggerService;
+    controller = new NixController(cfg, logger);
     reply = {
       code: vi.fn(() => reply) as any,
       header: vi.fn(() => reply) as any,

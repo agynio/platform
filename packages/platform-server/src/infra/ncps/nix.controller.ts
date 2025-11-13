@@ -3,6 +3,7 @@ import type { FastifyReply } from 'fastify';
 import { z } from 'zod';
 import semver from 'semver';
 import { ConfigService } from '../../core/services/config.service';
+import { LoggerService } from '../../core/services/logger.service';
 
 // Upstream base for NixHub
 const NIXHUB_BASE = 'https://www.nixhub.io';
@@ -97,7 +98,10 @@ export class NixController {
     .object({ name: z.string().max(200).regex(SAFE_IDENT), version: z.string().max(100) })
     .strict();
 
-  constructor(@Inject(ConfigService) private cfg: ConfigService) {
+  constructor(
+    @Inject(ConfigService) private cfg: ConfigService,
+    @Inject(LoggerService) private logger: LoggerService,
+  ) {
     this.timeoutMs = cfg.nixHttpTimeoutMs;
     this.cache = new LruCache<unknown>(cfg.nixCacheMax, cfg.nixCacheTtlMs);
   }
@@ -110,7 +114,9 @@ export class NixController {
     for (let attempt = 1; attempt <= maxAttempts; attempt++) {
       try {
         const res = await fetch(url, { signal, headers: { Accept: 'application/json' } });
-        if ([502, 503, 504].includes(res.status)) throw new Error(`upstream_${res.status}`);
+        if ([502, 503, 504].includes(res.status)) {
+          throw Object.assign(new Error(`upstream_${res.status}`), { status: res.status });
+        }
         if (!res.ok) {
           const txt = await res.text().catch(() => '');
           throw Object.assign(new Error(`upstream_${res.status}`), { status: res.status, body: txt });
@@ -252,14 +258,16 @@ export class NixController {
 
   @Get('resolve')
   async resolve(@Query() query: Record<string, unknown>, @Res({ passthrough: true }) reply: FastifyReply) {
+    const raw = (query || {}) as Record<string, unknown>;
+    let name: string | undefined;
+    let version: string | undefined;
     try {
-      const raw = (query || {}) as Record<string, unknown>;
       const parsed = this.resolveQuerySchema.safeParse(raw);
       if (!parsed.success) {
         reply.code(400);
         return { error: 'validation_error', details: parsed.error.issues };
       }
-      const { name, version } = parsed.data;
+      ({ name, version } = parsed.data);
       const url = `${NIXHUB_BASE}/packages/${encodeURIComponent(name)}?_data=routes%2F_nixhub.packages.%24pkg._index`;
       const ac = new AbortController();
       const tid = setTimeout(() => ac.abort(), this.timeoutMs);
@@ -275,22 +283,53 @@ export class NixController {
       const err = e as Error & { status?: number; code?: string };
       const isAbort = (x: unknown): x is { name: string } => !!x && typeof x === 'object' && 'name' in (x as Record<string, unknown>);
       if (isAbort(err) && err.name === 'AbortError') {
+        this.logger.warn('Nix resolve request timed out', {
+          name,
+          version,
+          errorCode: 'timeout',
+          upstreamStatus: null,
+        });
         reply.code(504);
         return { error: 'timeout' };
       }
       if (typeof err.status === 'number') {
+        this.logger.error('Nix resolve upstream error', {
+          name,
+          version,
+          errorCode: err.status === 404 ? 'not_found' : 'upstream_error',
+          upstreamStatus: err.status,
+        });
         reply.code(err.status === 404 ? 404 : 502);
         return { error: err.status === 404 ? 'not_found' : 'upstream_error', status: err.status };
       }
       // Map known extraction errors to 502/404
       if (err.code && ['bad_upstream_json', 'missing_commit_hash', 'missing_attribute_path'].includes(err.code)) {
+        this.logger.error('Nix resolve extract error', {
+          name,
+          version,
+          errorCode: err.code,
+          upstreamStatus: null,
+        });
         reply.code(502);
         return { error: err.code, message: err.message };
       }
       if (err.code === 'release_not_found') {
+        this.logger.warn('Nix resolve release not found', {
+          name,
+          version,
+          errorCode: err.code,
+          upstreamStatus: null,
+        });
         reply.code(404);
         return { error: err.code };
       }
+      this.logger.error('Nix resolve unexpected error', {
+        name,
+        version,
+        errorCode: err.code ?? 'unknown',
+        upstreamStatus: null,
+        message: err.message,
+      });
       reply.code(500);
       return { error: 'server_error' };
     }

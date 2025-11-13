@@ -4,6 +4,8 @@ import type { ContainerNixConfig, NixPackageSelection } from './types';
 import { useQuery } from '@tanstack/react-query';
 import { fetchPackages, fetchVersions, resolvePackage } from '@/api/modules/nix';
 
+export const RESOLVE_RETRY_MS = 15_000;
+
 // Debounce helper
 function useDebounced<T>(value: T, delay = 300) {
   const [debounced, setDebounced] = useState(value);
@@ -15,6 +17,12 @@ function useDebounced<T>(value: T, delay = 300) {
 }
 
 type SelectedPkg = { name: string };
+type PackageDetail = {
+  version: string;
+  commitHash?: string;
+  attributePath?: string;
+  lastError?: string | null;
+};
 
 //
 
@@ -28,13 +36,79 @@ export function NixPackagesSection(props: ControlledProps | UncontrolledProps) {
   const [activeIndex, setActiveIndex] = useState(0);
   const [selected, setSelected] = useState<SelectedPkg[]>([]);
   const [versionsByName, setVersionsByName] = useState<Record<string, string | ''>>({});
-  const [detailsByName, setDetailsByName] = useState<Record<string, { version: string; commitHash: string; attributePath: string }>>({});
+  const [detailsByName, setDetailsByName] = useState<Record<string, PackageDetail>>({});
   const handleResolved = useCallback(
     (name: string, detail: { version: string; commitHash: string; attributePath: string }) => {
-      setDetailsByName((prev) => ({ ...prev, [name]: detail }));
+      setDetailsByName((prev) => {
+        const prevDetail = prev[name];
+        if (prevDetail && prevDetail.version !== detail.version) return prev;
+        const next: PackageDetail = {
+          version: detail.version,
+          commitHash: detail.commitHash,
+          attributePath: detail.attributePath,
+          lastError: null,
+        };
+        const existing = prev[name];
+        if (
+          existing &&
+          existing.version === next.version &&
+          existing.commitHash === next.commitHash &&
+          existing.attributePath === next.attributePath &&
+          (existing.lastError ?? null) === null
+        ) {
+          return prev;
+        }
+        return { ...prev, [name]: next };
+      });
     },
     [],
   );
+  const handleResolveFailed = useCallback((name: string, version: string, message?: string) => {
+    setDetailsByName((prev) => {
+      const prevDetail = prev[name];
+      if (prevDetail && prevDetail.version !== version) return prev;
+      const normalized = message && message.trim().length > 0 ? message.trim() : null;
+      if (
+        prevDetail &&
+        !prevDetail.commitHash &&
+        !prevDetail.attributePath &&
+        prevDetail.version === version &&
+        (prevDetail.lastError ?? null) === normalized
+      ) {
+        return prev;
+      }
+      return { ...prev, [name]: { version, lastError: normalized } };
+    });
+  }, []);
+  const handleChooseVersion = useCallback((name: string, version: string | '') => {
+    setVersionsByName((prev) => {
+      if (!version) {
+        if (!(name in prev)) return prev;
+        const { [name]: _omit, ...rest } = prev;
+        return rest;
+      }
+      if (prev[name] === version) return prev;
+      return { ...prev, [name]: version };
+    });
+    setDetailsByName((prev) => {
+      if (!version) {
+        if (!(name in prev)) return prev;
+        const { [name]: _omit, ...rest } = prev;
+        return rest;
+      }
+      const prevDetail = prev[name];
+      if (
+        prevDetail &&
+        prevDetail.version === version &&
+        !prevDetail.commitHash &&
+        !prevDetail.attributePath &&
+        (prevDetail.lastError ?? null) === null
+      ) {
+        return prev;
+      }
+      return { ...prev, [name]: { version, lastError: null } };
+    });
+  }, []);
   const lastPushedJson = useRef<string>('');
   const lastPushedPackagesLen = useRef<number>(0);
   // Stable key of the packages array we most recently pushed upstream.
@@ -63,22 +137,44 @@ export function NixPackagesSection(props: ControlledProps | UncontrolledProps) {
       const nextKey = JSON.stringify(nextSelected);
       return prevKey === nextKey ? prev : nextSelected;
     });
-    // Hydrate chosen versions for UI from incoming value
+    const nextVersions: Record<string, string | ''> = {};
+    const nextDetails: Record<string, PackageDetail> = {};
+    for (const p of curr) {
+      const version = typeof p?.version === 'string' ? p.version : '';
+      if (!version) continue;
+      nextVersions[p.name] = version;
+      const commitHash = typeof p.commitHash === 'string' ? p.commitHash : undefined;
+      const attributePath = typeof p.attributePath === 'string' ? p.attributePath : undefined;
+      const isResolved = Boolean(commitHash && attributePath);
+      nextDetails[p.name] = {
+        version,
+        commitHash,
+        attributePath,
+        lastError: isResolved ? null : 'unresolved',
+      };
+    }
     setVersionsByName((prev) => {
-      const next: Record<string, string | ''> = { ...prev };
-      for (const p of curr) if (p.version) next[p.name] = String(p.version);
-      return next;
+      const prevJson = JSON.stringify(prev);
+      const nextJson = JSON.stringify(nextVersions);
+      return prevJson === nextJson ? prev : nextVersions;
+    });
+    setDetailsByName((prev) => {
+      const prevJson = JSON.stringify(prev);
+      const nextJson = JSON.stringify(nextDetails);
+      return prevJson === nextJson ? prev : nextDetails;
     });
   }, [controlled, controlledValueKey, uncontrolledPkgsKey, props]);
 
   // Push updates into node config when selections/channels change
   useEffect(() => {
-    // Build packages array only for items with fully resolved details
     const packages = selected.flatMap((p) => {
-      const d = detailsByName[p.name];
-      return d && d.version && d.commitHash && d.attributePath
-        ? [{ name: p.name, version: d.version, commitHash: d.commitHash, attributePath: d.attributePath }]
-        : [];
+      const version = versionsByName[p.name];
+      if (!version) return [];
+      const detail = detailsByName[p.name];
+      if (detail && detail.version === version && detail.commitHash && detail.attributePath) {
+        return [{ name: p.name, version, commitHash: detail.commitHash, attributePath: detail.attributePath }];
+      }
+      return [{ name: p.name, version }];
     });
     // No debug logs in production
 
@@ -111,7 +207,7 @@ export function NixPackagesSection(props: ControlledProps | UncontrolledProps) {
         (props as UncontrolledProps).onUpdateConfig(next);
       }
     }
-  }, [selected, detailsByName, controlled, controlledValueKey, uncontrolledPkgsKey, props]);
+  }, [selected, detailsByName, versionsByName, controlled, controlledValueKey, uncontrolledPkgsKey, props]);
   const listboxRef = useRef<HTMLUListElement | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
 
@@ -260,8 +356,10 @@ export function NixPackagesSection(props: ControlledProps | UncontrolledProps) {
               key={p.name}
               pkg={p}
               chosen={versionsByName[p.name] || ''}
-              onChoose={(v) => setVersionsByName((prev) => ({ ...prev, [p.name]: v }))}
+              detail={detailsByName[p.name]}
+              onChoose={(v) => handleChooseVersion(p.name, v)}
               onResolved={handleResolved}
+              onResolveFailed={handleResolveFailed}
               onRemove={() => removeSelected(p.name)}
             />
           ))}
@@ -277,7 +375,31 @@ export function NixPackagesSection(props: ControlledProps | UncontrolledProps) {
 // Note: debounce not required; builder autosave already debounces
 export default NixPackagesSection;
 
-function SelectedPackageItem({ pkg, chosen, onChoose, onRemove, onResolved }: { pkg: { name: string }; chosen: string | ''; onChoose: (v: string | '') => void; onRemove: () => void; onResolved: (name: string, detail: { version: string; commitHash: string; attributePath: string }) => void }) {
+type SelectedPackageItemProps = {
+  pkg: { name: string };
+  chosen: string | '';
+  detail?: PackageDetail;
+  onChoose: (v: string | '') => void;
+  onRemove: () => void;
+  onResolved: (name: string, detail: { version: string; commitHash: string; attributePath: string }) => void;
+  onResolveFailed: (name: string, version: string, message?: string) => void;
+};
+
+const isAbortError = (err: unknown) => {
+  if (!err) return false;
+  if (err instanceof DOMException && err.name === 'AbortError') return true;
+  if (typeof err === 'object' && 'code' in (err as Record<string, unknown>)) {
+    const code = (err as { code?: string }).code;
+    if (code === 'ERR_CANCELED') return true;
+  }
+  if (typeof err === 'object' && 'name' in (err as Record<string, unknown>)) {
+    const name = (err as { name?: string }).name;
+    if (name === 'CanceledError') return true;
+  }
+  return false;
+};
+
+function SelectedPackageItem({ pkg, chosen, detail, onChoose, onRemove, onResolved, onResolveFailed }: SelectedPackageItemProps) {
   const qVersions = useQuery({
     queryKey: ['nix', 'versions', pkg.name],
     queryFn: ({ signal }) => fetchVersions(pkg.name, signal),
@@ -304,51 +426,109 @@ function SelectedPackageItem({ pkg, chosen, onChoose, onRemove, onResolved }: { 
     };
   }, []);
 
-  const onChangeVersion = useCallback(async (v: string) => {
-    onChoose(v);
-    // Cancel previous resolve
+  const detailVersion = detail?.version;
+  const detailCommit = detail?.commitHash;
+  const detailAttribute = detail?.attributePath;
+
+  useEffect(() => {
     resolveRef.current?.abort();
-    if (!v) return;
-    const ac = new AbortController();
-    resolveRef.current = ac;
-    try {
-      const res = await resolvePackage(pkg.name, v, ac.signal);
-      // Only apply if not aborted
-      if (!ac.signal.aborted) {
-        onResolved(pkg.name, { version: res.version, commitHash: res.commitHash, attributePath: res.attributePath });
-      }
-    } catch (_e) {
-      // swallow errors; UI will not push unresolved entries
-    } finally {
-      if (resolveRef.current === ac) resolveRef.current = null;
+    if (!chosen) {
+      resolveRef.current = null;
+      return;
     }
-  }, [onChoose, onResolved, pkg.name]);
+    if (detailVersion === chosen && detailCommit && detailAttribute) {
+      resolveRef.current = null;
+      return;
+    }
+    const controller = new AbortController();
+    resolveRef.current = controller;
+    let retryTimer: ReturnType<typeof setTimeout> | null = null;
+
+    const attempt = async () => {
+      try {
+        const res = await resolvePackage(pkg.name, chosen, controller.signal);
+        if (!controller.signal.aborted) {
+          onResolved(pkg.name, {
+            version: res.version,
+            commitHash: res.commitHash,
+            attributePath: res.attributePath,
+          });
+        }
+      } catch (err) {
+        if (controller.signal.aborted || isAbortError(err)) return;
+        const message = err instanceof Error ? err.message : 'Failed to resolve package';
+        onResolveFailed(pkg.name, chosen, message);
+        if (retryTimer) clearTimeout(retryTimer);
+        retryTimer = setTimeout(() => {
+          if (!controller.signal.aborted) {
+            attempt();
+          }
+        }, RESOLVE_RETRY_MS);
+      }
+    };
+
+    attempt();
+
+    return () => {
+      controller.abort();
+      if (retryTimer) clearTimeout(retryTimer);
+      if (resolveRef.current === controller) {
+        resolveRef.current = null;
+      }
+    };
+  }, [chosen, detailAttribute, detailCommit, detailVersion, onResolveFailed, onResolved, pkg.name]);
+
+  const onChangeVersion = useCallback(
+    (v: string) => {
+      resolveRef.current?.abort();
+      onChoose(v);
+    },
+    [onChoose],
+  );
+
+  const isResolved = Boolean(detailVersion === chosen && detailCommit && detailAttribute);
+  const hasSelection = Boolean(chosen);
+  const statusText = (() => {
+    if (!hasSelection) return null;
+    if (isResolved) return 'Resolved';
+    if (detail?.lastError) return 'Unresolved (retrying…)';
+    return 'Resolving…';
+  })();
+  const statusClass = detail?.lastError ? 'text-destructive' : 'text-muted-foreground';
+  const statusTitle = detail?.lastError && detail.lastError !== 'unresolved' ? detail.lastError : undefined;
 
   return (
-    <li className="flex items-center gap-2">
-      <span className="flex-1 text-sm">{label}</span>
-      <select
-        aria-label={`Select version for ${label}`}
-        className="rounded border border-input bg-background px-2 py-1 text-sm"
-        value={chosen}
-        onChange={(e) => onChangeVersion(e.target.value)}
-      >
-        <option value="">Select version…</option>
-        {qVersions.isLoading ? (
-          <option value="" disabled>loading…</option>
-        ) : qVersions.isError ? (
-          <option value="" disabled>error</option>
-        ) : versions.length === 0 ? (
-          <option value="" disabled>n/a</option>
-        ) : (
-          versions.map((v) => (
-            <option key={v} value={v}>{v}</option>
-          ))
-        )}
-      </select>
-      <Button type="button" size="sm" variant="outline" className="text-destructive" aria-label={`Remove ${label}`} onClick={onRemove}>
-        ×
-      </Button>
+    <li className="flex flex-col gap-1">
+      <div className="flex items-center gap-2">
+        <span className="flex-1 text-sm">{label}</span>
+        <select
+          aria-label={`Select version for ${label}`}
+          className="rounded border border-input bg-background px-2 py-1 text-sm"
+          value={chosen}
+          onChange={(e) => onChangeVersion(e.target.value)}
+        >
+          <option value="">Select version…</option>
+          {qVersions.isLoading ? (
+            <option value="" disabled>loading…</option>
+          ) : qVersions.isError ? (
+            <option value="" disabled>error</option>
+          ) : versions.length === 0 ? (
+            <option value="" disabled>n/a</option>
+          ) : (
+            versions.map((v) => (
+              <option key={v} value={v}>{v}</option>
+            ))
+          )}
+        </select>
+        <Button type="button" size="sm" variant="outline" className="text-destructive" aria-label={`Remove ${label}`} onClick={onRemove}>
+          ×
+        </Button>
+      </div>
+      {statusText ? (
+        <span className={`text-xs ${statusClass}`} aria-live="polite" role="status" title={statusTitle}>
+          {statusText}
+        </span>
+      ) : null}
     </li>
   );
 }
