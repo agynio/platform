@@ -30,9 +30,12 @@ export function ThreadTreeNode({
   const remindersCount = node.metrics?.remindersCount ?? 0;
   const activity = node.metrics?.activity ?? 'idle';
   const runsCount = node.metrics?.runsCount ?? 0;
-  const statusLabel = (node.status || 'open') === 'open' ? 'Open' : 'Closed';
   const createdAtLabel = new Date(node.createdAt).toLocaleString();
   const isRoot = node.parentId == null;
+  const showRunsBadge = runsCount > 0;
+  const showRemindersBadge = remindersCount > 0;
+  const showBadges = showRunsBadge || showRemindersBadge;
+  const showFooter = isRoot;
 
   async function loadChildren() {
     setLoading(true);
@@ -71,54 +74,65 @@ export function ThreadTreeNode({
 
   return (
     <li role="treeitem" aria-expanded={expanded} aria-selected={isSelected} aria-level={level + 1} className="select-none">
-      <div className={`flex items-center gap-2 rounded px-2 py-1 ${isSelected ? 'bg-gray-200' : 'hover:bg-gray-100'}`} style={{ paddingLeft: padding }}>
-        <button
-          className="text-xs text-gray-600"
-          aria-label={expanded ? 'Collapse' : 'Expand'}
-          onClick={async () => {
-            const next = !expanded;
-            setExpanded(next);
-            if (next && children == null) await loadChildren();
-          }}
-        >
-          {expanded ? '▾' : '▸'}
-        </button>
-        <button className="flex-1 text-left" onClick={() => onSelect(node.id)}>
-          <div
-            className="thread-summary min-w-0 overflow-hidden text-sm font-medium leading-tight text-gray-900"
-            title={summary}
+      <div className={`rounded px-2 py-1 ${isSelected ? 'bg-gray-200' : 'hover:bg-gray-100'}`} style={{ paddingLeft: padding }}>
+        <div className="flex items-center gap-2">
+          <button
+            className="text-xs text-gray-600"
+            aria-label={expanded ? 'Collapse' : 'Expand'}
+            onClick={async () => {
+              const next = !expanded;
+              setExpanded(next);
+              if (next && children == null) await loadChildren();
+            }}
           >
-            {summary}
-          </div>
-          <div className="mt-0.5 text-xs text-gray-500 flex flex-wrap items-center gap-x-1.5 gap-y-0.5">
-            <span className="truncate max-w-[200px]" title={agentTitle}>{agentTitle}</span>
-            <span aria-hidden="true">•</span>
-            <span>{statusLabel}</span>
-            <span aria-hidden="true">•</span>
-            <span>created {createdAtLabel}</span>
-          </div>
-        </button>
-        {/* Activity indicator: small colored dot with tooltip + aria */}
-        <span
-          className={`inline-block w-2 h-2 rounded-full ${activity === 'working' ? 'bg-green-500' : activity === 'waiting' ? 'bg-yellow-500' : 'bg-blue-500'}`}
-          aria-label={`Activity: ${activity}`}
-          title={`Activity: ${activity}`}
-        />
-        {runsCount > 0 && (
-          <span className="text-[10px] px-1 py-0.5 rounded bg-gray-100 text-gray-700" aria-label={`Total runs: ${runsCount}`} title={`Total runs: ${runsCount}`}>
-            Runs {runsCount}
-          </span>
-        )}
-        {/* Reminders badge: show clock + count when > 0 */}
-        {remindersCount > 0 && (
-          <span className="text-[10px] px-1 py-0.5 rounded bg-gray-100 text-gray-700" aria-label={`Active reminders: ${remindersCount}`} title={`Active reminders: ${remindersCount}`}>
-            🕒 {remindersCount}
-          </span>
-        )}
-        {isRoot && (
-          <button className="text-xs border rounded px-2 py-0.5" onClick={toggleStatus} disabled={toggling} aria-busy={toggling} aria-label={(node.status || 'open') === 'open' ? 'Close thread' : 'Reopen thread'}>
-            {(node.status || 'open') === 'open' ? 'Close' : 'Reopen'}
+            {expanded ? '▾' : '▸'}
           </button>
+          <button className="flex-1 text-left" onClick={() => onSelect(node.id)}>
+            <div
+              className="thread-summary min-w-0 overflow-hidden text-sm font-medium leading-tight text-gray-900"
+              title={summary}
+            >
+              {summary}
+            </div>
+            <div className="mt-0.5 text-xs text-gray-500 flex flex-wrap items-center gap-x-1.5 gap-y-0.5">
+              <span className="truncate max-w-[200px]" title={agentTitle}>{agentTitle}</span>
+              <span aria-hidden="true">•</span>
+              <span>{createdAtLabel}</span>
+            </div>
+            {showBadges && (
+              <div className="mt-1 flex flex-wrap items-center gap-2">
+                {showRunsBadge && (
+                  <span className="text-[10px] px-1 py-0.5 rounded bg-gray-100 text-gray-700" aria-label={`Total runs: ${runsCount}`} title={`Total runs: ${runsCount}`}>
+                    Runs {runsCount}
+                  </span>
+                )}
+                {showRemindersBadge && (
+                  <span className="text-[10px] px-1 py-0.5 rounded bg-gray-100 text-gray-700" aria-label={`Active reminders: ${remindersCount}`} title={`Active reminders: ${remindersCount}`}>
+                    🕒 {remindersCount}
+                  </span>
+                )}
+              </div>
+            )}
+          </button>
+          {/* Activity indicator: small colored dot with tooltip + aria */}
+          <span
+            className={`inline-block w-2 h-2 rounded-full ${activity === 'working' ? 'bg-green-500' : activity === 'waiting' ? 'bg-yellow-500' : 'bg-blue-500'}`}
+            aria-label={`Activity: ${activity}`}
+            title={`Activity: ${activity}`}
+          />
+        </div>
+        {showFooter && (
+          <div className="mt-1 flex w-full justify-end">
+            <button
+              className="text-xs border rounded px-2 py-0.5"
+              onClick={toggleStatus}
+              disabled={toggling}
+              aria-busy={toggling}
+              aria-label={(node.status || 'open') === 'open' ? 'Close thread' : 'Reopen thread'}
+            >
+              {(node.status || 'open') === 'open' ? 'Close' : 'Reopen'}
+            </button>
+          </div>
         )}
       </div>
       {expanded && (
