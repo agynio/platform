@@ -23,6 +23,18 @@ process.env.AGENTS_DATABASE_URL = process.env.AGENTS_DATABASE_URL || 'postgres:/
 
 describe('AppModule bootstrap smoke test', () => {
   it('initializes Nest application with stubbed infrastructure', async () => {
+    const transactionClientStub = {
+      $queryRaw: vi.fn().mockResolvedValue([{ acquired: true }]),
+      run: {
+        findMany: vi.fn().mockResolvedValue([]),
+        updateMany: vi.fn().mockResolvedValue({ count: 0 }),
+      },
+      reminder: {
+        findMany: vi.fn().mockResolvedValue([]),
+        updateMany: vi.fn().mockResolvedValue({ count: 0 }),
+      },
+    } satisfies Partial<PrismaClient>;
+
     const prismaClientStub = {
       container: {
         upsert: vi.fn(),
@@ -40,7 +52,8 @@ describe('AppModule bootstrap smoke test', () => {
         deleteMany: vi.fn(),
         upsert: vi.fn(),
       },
-      $queryRaw: vi.fn().mockResolvedValue([]),
+      $queryRaw: transactionClientStub.$queryRaw,
+      $transaction: vi.fn(async (cb: (tx: typeof transactionClientStub) => Promise<unknown>) => cb(transactionClientStub)),
     } satisfies Partial<PrismaClient>;
 
     const prismaServiceStub = {

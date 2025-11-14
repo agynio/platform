@@ -35,10 +35,6 @@ export class StartupRecoveryService implements OnApplicationBootstrap {
 
   async onApplicationBootstrap(): Promise<void> {
     const prisma = this.prismaService.getClient() as PrismaClient;
-    if (typeof prisma.$transaction !== 'function') {
-      this.logger.debug('Startup recovery skipped (transaction API unavailable)', { reason: RECOVERY_REASON });
-      return;
-    }
     const startedAt = Date.now();
     const recovery = { runs: [] as RecoveredRun[], reminders: [] as RecoveredReminder[], skipped: false };
 

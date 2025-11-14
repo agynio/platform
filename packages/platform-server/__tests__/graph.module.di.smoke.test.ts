@@ -45,6 +45,18 @@ const makeStub = <T extends Record<string, unknown>>(overrides: T): T =>
 
 describe('GraphModule DI smoke test', () => {
   it('resolves LLMProvisioner and creates AgentNode instances', async () => {
+    const transactionClientStub = {
+      $queryRaw: vi.fn().mockResolvedValue([{ acquired: true }]),
+      run: {
+        findMany: vi.fn().mockResolvedValue([]),
+        updateMany: vi.fn().mockResolvedValue({ count: 0 }),
+      },
+      reminder: {
+        findMany: vi.fn().mockResolvedValue([]),
+        updateMany: vi.fn().mockResolvedValue({ count: 0 }),
+      },
+    } satisfies Partial<PrismaClient>;
+
     const prismaClientStub = {
       container: {
         upsert: vi.fn(),
@@ -62,7 +74,8 @@ describe('GraphModule DI smoke test', () => {
         deleteMany: vi.fn(),
         upsert: vi.fn(),
       },
-      $queryRaw: vi.fn().mockResolvedValue([]),
+      $queryRaw: transactionClientStub.$queryRaw,
+      $transaction: vi.fn(async (cb: (tx: typeof transactionClientStub) => Promise<unknown>) => cb(transactionClientStub)),
     } satisfies Partial<PrismaClient>;
 
     const prismaServiceStub = {

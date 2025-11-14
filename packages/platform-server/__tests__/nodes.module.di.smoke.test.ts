@@ -80,6 +80,18 @@ const persistenceStub = makeStub({
   updateThreadChannelDescriptor: vi.fn().mockResolvedValue(undefined),
 });
 
+const transactionClientStub = makeStub({
+  $queryRaw: vi.fn().mockResolvedValue([{ acquired: true }]),
+  run: makeStub({
+    findMany: vi.fn().mockResolvedValue([]),
+    updateMany: vi.fn().mockResolvedValue({ count: 0 }),
+  }),
+  reminder: makeStub({
+    findMany: vi.fn().mockResolvedValue([]),
+    updateMany: vi.fn().mockResolvedValue({ count: 0 }),
+  }),
+});
+
 const prismaClientStub = makeStub({
   container: makeStub({
     upsert: vi.fn().mockResolvedValue(undefined),
@@ -92,13 +104,14 @@ const prismaClientStub = makeStub({
     findUnique: vi.fn().mockResolvedValue(null),
     upsert: vi.fn().mockResolvedValue(undefined),
   }),
-  $queryRaw: vi.fn().mockResolvedValue([]),
+  $queryRaw: transactionClientStub.$queryRaw,
+  $transaction: vi.fn(async (cb: (tx: typeof transactionClientStub) => Promise<unknown>) => cb(transactionClientStub)),
 });
 
 const prismaStub = makeStub({
   $on: vi.fn(),
   $use: vi.fn(),
-  $transaction: vi.fn(),
+  $transaction: vi.fn(async (cb: (tx: typeof transactionClientStub) => Promise<unknown>) => cb(transactionClientStub)),
   $connect: vi.fn(),
   $disconnect: vi.fn(),
   getClient: vi.fn().mockReturnValue(prismaClientStub),
