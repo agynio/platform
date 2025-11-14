@@ -339,6 +339,52 @@ export class RunEventsService {
     };
   }
 
+  private buildContextItemKey(role: ContextItemRole, contentText: string | null): string {
+    return JSON.stringify({ role, contentText }, ['role', 'contentText']);
+  }
+
+  private async loadPreviousContextItems(
+    tx: Tx,
+    runId: string,
+  ): Promise<{ ids: string[]; keys: Array<string | null> } | null> {
+    const previousCall = await tx.lLMCall.findFirst({
+      where: { event: { runId } },
+      orderBy: [
+        { event: { startedAt: 'desc' } },
+        { event: { ts: 'desc' } },
+        { eventId: 'desc' },
+      ],
+      select: { contextItemIds: true },
+    });
+    if (!previousCall || previousCall.contextItemIds.length === 0) return null;
+
+    const rows = await tx.contextItem.findMany({
+      where: { id: { in: previousCall.contextItemIds } },
+      select: { id: true, role: true, contentText: true },
+    });
+    if (rows.length === 0) return { ids: previousCall.contextItemIds, keys: [] };
+
+    const byId = new Map(rows.map((row) => [row.id, row]));
+    const keys = previousCall.contextItemIds.map((id) => {
+      const match = byId.get(id);
+      if (!match) return null;
+      return this.buildContextItemKey(match.role, match.contentText ?? null);
+    });
+
+    return { ids: previousCall.contextItemIds, keys };
+  }
+
+  private countMatchingPrefix(previousKeys: Array<string | null>, currentKeys: string[]): number {
+    const maxPrefix = Math.min(previousKeys.length, currentKeys.length);
+    let reuseCount = 0;
+    for (let idx = 0; idx < maxPrefix; idx += 1) {
+      const prevKey = previousKeys[idx];
+      if (!prevKey || prevKey !== currentKeys[idx]) break;
+      reuseCount += 1;
+    }
+    return reuseCount;
+  }
+
   private async resolveContextItemIds(
     tx: Tx,
     opts: { provided?: ContextItemInput[]; runId: string },
@@ -348,8 +394,31 @@ export class RunEventsService {
     const normalized = normalizeContextItems(provided, this.logger);
     if (normalized.length === 0) return [];
 
+    let reusedPrefix: string[] = [];
+    let remaining = normalized;
+
     try {
-      return await this.persistNormalizedContextItems(tx, normalized);
+      const previous = await this.loadPreviousContextItems(tx, opts.runId);
+      if (previous && previous.keys.length > 0) {
+        const currentKeys = normalized.map((item) => this.buildContextItemKey(item.role, item.contentText));
+        const reuseCount = this.countMatchingPrefix(previous.keys, currentKeys);
+        if (reuseCount > 0) {
+          reusedPrefix = previous.ids.slice(0, reuseCount);
+          remaining = normalized.slice(reuseCount);
+        }
+      }
+    } catch (err) {
+      this.logger.warn('Failed to load previous context items for reuse', {
+        runId: opts.runId,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+
+    if (remaining.length === 0) return reusedPrefix;
+
+    try {
+      const createdIds = await this.persistNormalizedContextItems(tx, remaining);
+      return reusedPrefix.length > 0 ? [...reusedPrefix, ...createdIds] : createdIds;
     } catch (err) {
       this.logger.warn('Failed to persist context items for LLM call', {
         runId: opts.runId,

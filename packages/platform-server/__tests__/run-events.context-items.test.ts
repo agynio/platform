@@ -39,7 +39,7 @@ describe.sequential('RunEventsService context item persistence', () => {
     await prisma.$disconnect();
   });
 
-  it('creates a new context item row for every provided input and preserves order', async () => {
+  it('creates distinct context item rows for duplicates within a single call and preserves order', async () => {
     const { thread, run } = await createThreadAndRun();
     const contextItems = [
       { role: ContextItemRole.system, contentText: 'system priming' },
@@ -66,7 +66,7 @@ describe.sequential('RunEventsService context item persistence', () => {
     await cleanup(thread.id, run.id, Array.from(new Set(callRecord.contextItemIds)));
   });
 
-  it('never reuses context items across LLM call events', async () => {
+  it('reuses context item ids across sequential calls when the messages are identical', async () => {
     const { thread, run } = await createThreadAndRun();
     const contextItems = [
       { role: ContextItemRole.system, contentText: 'system priming' },
@@ -79,17 +79,43 @@ describe.sequential('RunEventsService context item persistence', () => {
     const first = await prisma.lLMCall.findUniqueOrThrow({ where: { eventId: firstEvent.id } });
     const second = await prisma.lLMCall.findUniqueOrThrow({ where: { eventId: secondEvent.id } });
 
-    expect(first.contextItemIds).toHaveLength(2);
-    expect(second.contextItemIds).toHaveLength(2);
-    expect(new Set(first.contextItemIds).size).toBe(2);
-    expect(new Set(second.contextItemIds).size).toBe(2);
-    const overlap = first.contextItemIds.filter((id) => second.contextItemIds.includes(id));
-    expect(overlap).toHaveLength(0);
+    expect(second.contextItemIds).toEqual(first.contextItemIds);
 
-    const allIds = [...first.contextItemIds, ...second.contextItemIds];
-    expect(new Set(allIds).size).toBe(allIds.length);
+    await cleanup(thread.id, run.id, Array.from(new Set(first.contextItemIds)));
+  });
 
-    await cleanup(thread.id, run.id, Array.from(new Set(allIds)));
+  it('appends new context item ids after reusing the existing prefix and keeps ordering stable', async () => {
+    const { thread, run } = await createThreadAndRun();
+    const initialItems = [
+      { role: ContextItemRole.system, contentText: 'system overview' },
+      { role: ContextItemRole.user, contentText: 'initial question' },
+    ];
+    const appendedItems = [
+      ...initialItems,
+      { role: ContextItemRole.assistant, contentText: 'assistant reply' },
+      { role: ContextItemRole.user, contentText: 'follow up question' },
+    ];
+
+    const firstEvent = await runEvents.startLLMCall({ runId: run.id, threadId: thread.id, contextItems: initialItems });
+    const secondEvent = await runEvents.startLLMCall({ runId: run.id, threadId: thread.id, contextItems: appendedItems });
+
+    const first = await prisma.lLMCall.findUniqueOrThrow({ where: { eventId: firstEvent.id } });
+    const second = await prisma.lLMCall.findUniqueOrThrow({ where: { eventId: secondEvent.id } });
+
+    expect(first.contextItemIds).toHaveLength(initialItems.length);
+    expect(second.contextItemIds).toHaveLength(appendedItems.length);
+    expect(second.contextItemIds.slice(0, initialItems.length)).toEqual(first.contextItemIds);
+
+    const newIds = second.contextItemIds.slice(initialItems.length);
+    expect(newIds).toHaveLength(appendedItems.length - initialItems.length);
+    for (const id of newIds) expect(first.contextItemIds).not.toContain(id);
+
+    const stored = await prisma.contextItem.findMany({ where: { id: { in: second.contextItemIds } } });
+    const orderedTexts = second.contextItemIds.map((id) => stored.find((item) => item.id === id)?.contentText ?? null);
+    expect(orderedTexts).toEqual(appendedItems.map((item) => item.contentText ?? null));
+
+    const uniqueIds = Array.from(new Set([...first.contextItemIds, ...second.contextItemIds]));
+    await cleanup(thread.id, run.id, uniqueIds);
   });
 
   it('returns context item ids and resolves payloads via batch endpoint', async () => {
