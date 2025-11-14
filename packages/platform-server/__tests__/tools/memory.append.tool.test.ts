@@ -5,9 +5,11 @@ import { MemoryService } from '../../src/nodes/memory/memory.service';
 import { UnifiedMemoryFunctionTool as UnifiedMemoryTool } from '../../src/nodes/tools/memory/memory.tool';
 import { LoggerService } from '../../src/core/services/logger.service';
 import { MemoryToolNode } from '../../src/nodes/tools/memory/memory.node';
+import { randomUUID } from 'node:crypto';
 
 const URL = process.env.AGENTS_DATABASE_URL;
-const maybeDescribe = URL ? describe : describe.skip;
+const maybeDescribe = URL ? describe.sequential : describe.skip;
+const NODE_ID = `nodeT-${randomUUID()}`;
 
 
 maybeDescribe('memory_append tool: path normalization and validation', () => {
@@ -16,17 +18,20 @@ maybeDescribe('memory_append tool: path normalization and validation', () => {
   beforeAll(async () => {
     const svc = new MemoryService(new PostgresMemoryRepository({ getClient: () => prisma } as any));
     svc.forMemory('bootstrap', 'global');
-    await prisma.$executeRaw`DELETE FROM memories WHERE node_id IN (${Prisma.join(['nodeT', 'bootstrap'])})`;
+    await prisma.$executeRaw`DELETE FROM memories WHERE node_id IN (${Prisma.join([NODE_ID, 'bootstrap'])})`;
   });
   beforeEach(async () => {
-    await prisma.$executeRaw`DELETE FROM memories WHERE node_id IN (${Prisma.join(['nodeT'])})`;
+    await prisma.$executeRaw`DELETE FROM memories WHERE node_id IN (${Prisma.join([NODE_ID])})`;
   });
   afterAll(async () => {
     await prisma.$disconnect();
   });
   const mkTools = () => {
     const db = { getClient: () => prisma } as any;
-    const factory = (opts: { threadId?: string }) => { const svc = new MemoryService(new PostgresMemoryRepository(db as any)); return svc.forMemory('nodeT', opts.threadId ? 'perThread' : 'global', opts.threadId) as any; };
+    const factory = (opts: { threadId?: string }) => {
+      const svc = new MemoryService(new PostgresMemoryRepository(db as any));
+      return svc.forMemory(NODE_ID, opts.threadId ? 'perThread' : 'global', opts.threadId) as any;
+    };
     const logger = new LoggerService();
     const node = new MemoryToolNode(logger);
     node.setMemorySource(factory);

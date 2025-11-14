@@ -1,11 +1,22 @@
-import { FunctionTool, HumanMessage, LLM, Reducer, ResponseMessage, SystemMessage, ToolCallMessage } from '@agyn/llm';
+import {
+  AIMessage,
+  FunctionTool,
+  HumanMessage,
+  LLM,
+  Reducer,
+  ResponseMessage,
+  SystemMessage,
+  ToolCallMessage,
+  ToolCallOutputMessage,
+} from '@agyn/llm';
 import { LLMResponse, withLLM } from '@agyn/tracing';
 import { Inject, Injectable, Scope } from '@nestjs/common';
 import { LLMContext, LLMMessage, LLMState } from '../types';
 import { LoggerService } from '../../core/services/logger.service';
 import { RunEventsService, ToolCallRecord } from '../../events/run-events.service';
-import { RunEventStatus, Prisma } from '@prisma/client';
+import { RunEventStatus, Prisma, ContextItemRole } from '@prisma/client';
 import { toPrismaJsonValue } from '../services/messages.serialization';
+import { ContextItemInput } from '../services/context-items.utils';
 
 @Injectable({ scope: Scope.TRANSIENT })
 export class CallModelLLMReducer extends Reducer<LLMState, LLMContext> {
@@ -71,6 +82,7 @@ export class CallModelLLMReducer extends Reducer<LLMState, LLMContext> {
       nodeId,
       model: this.model,
       prompt: this.serializeMessages(input),
+      contextItems: this.buildContextItems(input),
     });
     await this.runEvents.publishEvent(llmEvent.id, 'append');
 
@@ -139,6 +151,59 @@ export class CallModelLLMReducer extends Reducer<LLMState, LLMContext> {
     }
   }
 
+  private buildContextItems(messages: Array<SystemMessage | LLMMessage>): ContextItemInput[] {
+    const items: ContextItemInput[] = [];
+    for (const message of messages) {
+      if (message instanceof SystemMessage) {
+        items.push({
+          role: ContextItemRole.system,
+          contentText: message.text,
+          metadata: { type: message.type },
+        });
+        continue;
+      }
+      if (message instanceof HumanMessage) {
+        items.push({
+          role: ContextItemRole.user,
+          contentText: message.text,
+          metadata: { type: message.type },
+        });
+        continue;
+      }
+      if (message instanceof AIMessage) {
+        items.push({
+          role: ContextItemRole.assistant,
+          contentText: message.text,
+          metadata: { type: message.type },
+        });
+        continue;
+      }
+      if (message instanceof ToolCallOutputMessage) {
+        items.push({
+          role: ContextItemRole.tool,
+          contentText: message.text,
+          contentJson: safeToPlain(message),
+          metadata: { type: message.type, callId: message.callId },
+        });
+        continue;
+      }
+      if (message instanceof ResponseMessage) {
+        items.push({
+          role: ContextItemRole.assistant,
+          contentText: message.text,
+          contentJson: safeToPlain(message),
+          metadata: { type: message.type },
+        });
+        continue;
+      }
+      items.push({
+        role: ContextItemRole.other,
+        contentJson: safeToPlain(message) ?? null,
+      });
+    }
+    return items;
+  }
+
   private serializeMessages(messages: Array<SystemMessage | LLMMessage>): string {
     try {
       const payload = messages.map((msg) => {
@@ -197,4 +262,18 @@ export class CallModelLLMReducer extends Reducer<LLMState, LLMContext> {
     const reason = obj.stop_reason ?? obj.finish_reason;
     return typeof reason === 'string' ? reason : null;
   }
+}
+
+function safeToPlain(value: unknown): unknown {
+  if (value && typeof value === 'object') {
+    const candidate = value as { toPlain?: () => unknown };
+    if (typeof candidate.toPlain === 'function') {
+      try {
+        return candidate.toPlain();
+      } catch {
+        return null;
+      }
+    }
+  }
+  return null;
 }

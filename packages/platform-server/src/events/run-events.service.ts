@@ -1,6 +1,7 @@
 import { Inject, Injectable, Optional } from '@nestjs/common';
 import {
   AttachmentKind,
+  ContextItemRole,
   EventSourceKind,
   Prisma,
   PrismaClient,
@@ -14,6 +15,7 @@ import { LoggerService } from '../core/services/logger.service';
 import { PrismaService } from '../core/services/prisma.service';
 import { GraphEventsPublisher, NoopGraphEventsPublisher } from '../gateway/graph.events.publisher';
 import { toPrismaJsonValue } from '../llm/services/messages.serialization';
+import { ContextItemInput, NormalizedContextItem, normalizeContextItems, upsertNormalizedContextItems } from '../llm/services/context-items.utils';
 
 type Tx = PrismaClient | Prisma.TransactionClient;
 
@@ -42,6 +44,28 @@ const RUN_EVENT_INCLUDE = {
 } satisfies Prisma.RunEventInclude;
 
 type RunEventWithRelations = Prisma.RunEventGetPayload<{ include: typeof RUN_EVENT_INCLUDE }>;
+
+export type SerializedContextItem = {
+  id: string;
+  role: ContextItemRole;
+  contentText: string | null;
+  contentJson: unknown;
+  metadata: unknown;
+  sizeBytes: number;
+  createdAt: string;
+};
+
+type ContextItemRow = Prisma.ContextItemGetPayload<{
+  select: {
+    id: true;
+    role: true;
+    contentText: true;
+    contentJson: true;
+    metadata: true;
+    sizeBytes: true;
+    createdAt: true;
+  };
+}>;
 
 const RUN_EVENT_TYPES: ReadonlyArray<RunEventType> = [
   RunEventType.invocation_message,
@@ -81,7 +105,8 @@ export type RunTimelineEvent = {
     temperature: number | null;
     topP: number | null;
     stopReason: string | null;
-    prompt: string | null;
+    contextItemIds: string[];
+    contextItems?: SerializedContextItem[];
     responseText: string | null;
     rawResponse: unknown;
     toolCalls: Array<{ callId: string; name: string; arguments: unknown }>;
@@ -179,7 +204,7 @@ export interface LLMCallStartArgs {
   provider?: string | null;
   temperature?: number | null;
   topP?: number | null;
-  prompt?: string | null;
+  contextItems?: ContextItemInput[];
   metadata?: RunEventMetadata;
   sourceKind?: EventSourceKind;
   sourceSpanId?: string | null;
@@ -303,7 +328,44 @@ export class RunEventsService {
     return value;
   }
 
-  private serializeEvent(event: RunEventWithRelations): RunTimelineEvent {
+  private serializeContextItem(row: ContextItemRow): SerializedContextItem {
+    return {
+      id: row.id,
+      role: row.role,
+      contentText: row.contentText ?? null,
+      contentJson: this.toPlainJson(row.contentJson ?? null),
+      metadata: this.toPlainJson(row.metadata ?? null),
+      sizeBytes: row.sizeBytes,
+      createdAt: row.createdAt.toISOString(),
+    };
+  }
+
+  private async resolveContextItemIds(
+    tx: Tx,
+    opts: { provided?: ContextItemInput[]; runId: string },
+  ): Promise<string[]> {
+    const provided = Array.isArray(opts.provided) ? opts.provided.filter(Boolean) : [];
+    if (provided.length === 0) return [];
+    const normalized = normalizeContextItems(provided, this.logger);
+    if (normalized.length === 0) return [];
+
+    try {
+      return await this.persistNormalizedContextItems(tx, normalized);
+    } catch (err) {
+      this.logger.warn('Failed to persist context items for LLM call', {
+        runId: opts.runId,
+        error: err instanceof Error ? err.message : String(err),
+      });
+      return [];
+    }
+  }
+
+  private async persistNormalizedContextItems(tx: Tx, items: NormalizedContextItem[]): Promise<string[]> {
+    const result = await upsertNormalizedContextItems(tx, items, this.logger);
+    return result.ids;
+  }
+
+  private serializeEvent(event: RunEventWithRelations, contextMap?: Map<string, SerializedContextItem>): RunTimelineEvent {
     const attachments = event.attachments.map((att) => ({
       id: att.id,
       kind: att.kind,
@@ -312,6 +374,12 @@ export class RunEventsService {
       contentJson: this.toPlainJson(att.contentJson ?? null),
       contentText: att.contentText ?? null,
     }));
+    const contextItemIds = event.llmCall?.contextItemIds ? [...event.llmCall.contextItemIds] : [];
+    const contextItems = contextMap
+      ? contextItemIds
+          .map((id) => contextMap.get(id))
+          .filter((item): item is SerializedContextItem => !!item)
+      : undefined;
     const llmCall = event.llmCall
       ? {
           provider: event.llmCall.provider ?? null,
@@ -319,7 +387,8 @@ export class RunEventsService {
           temperature: event.llmCall.temperature ?? null,
           topP: event.llmCall.topP ?? null,
           stopReason: event.llmCall.stopReason ?? null,
-          prompt: event.llmCall.prompt ?? null,
+          contextItemIds,
+          ...(contextItems ? { contextItems } : {}),
           responseText: event.llmCall.responseText ?? null,
           rawResponse: this.toPlainJson(event.llmCall.rawResponse ?? null),
           toolCalls: event.llmCall.toolCalls.map((tc) => ({
@@ -454,6 +523,7 @@ export class RunEventsService {
     limit?: number;
     order?: 'asc' | 'desc';
     cursor?: { ts: Date | string; id?: string };
+    expandContext?: boolean;
   }): Promise<RunTimelineEventsResult> {
     const order: 'asc' | 'desc' = params.order === 'desc' ? 'desc' : 'asc';
     const where: Prisma.RunEventWhereInput = { runId: params.runId };
@@ -523,8 +593,32 @@ export class RunEventsService {
         }
       : null;
 
+    let contextMap: Map<string, SerializedContextItem> | undefined;
+    if (params.expandContext) {
+      const idSet = new Set<string>();
+      for (const ev of pageItems) {
+        const ids = ev.llmCall?.contextItemIds ?? [];
+        for (const id of ids) idSet.add(id);
+      }
+      if (idSet.size > 0) {
+        const rows = await this.prisma.contextItem.findMany({
+          where: { id: { in: Array.from(idSet) } },
+          select: {
+            id: true,
+            role: true,
+            contentText: true,
+            contentJson: true,
+            metadata: true,
+            sizeBytes: true,
+            createdAt: true,
+          },
+        });
+        contextMap = new Map(rows.map((row) => [row.id, this.serializeContextItem(row)]));
+      }
+    }
+
     return {
-      items: pageItems.map((ev) => this.serializeEvent(ev)),
+      items: pageItems.map((ev) => this.serializeEvent(ev, contextMap)),
       nextCursor,
     };
   }
@@ -533,6 +627,31 @@ export class RunEventsService {
     const event = await this.fetchEvent(eventId);
     if (!event) return null;
     return this.serializeEvent(event);
+  }
+
+  async getContextItems(ids: string[]): Promise<SerializedContextItem[]> {
+    if (!Array.isArray(ids) || ids.length === 0) return [];
+    const unique = Array.from(new Set(ids));
+    if (unique.length === 0) return [];
+    const rows = await this.prisma.contextItem.findMany({
+      where: { id: { in: unique } },
+      select: {
+        id: true,
+        role: true,
+        contentText: true,
+        contentJson: true,
+        metadata: true,
+        sizeBytes: true,
+        createdAt: true,
+      },
+    });
+    const map = new Map(rows.map((row) => [row.id, this.serializeContextItem(row)]));
+    const ordered: SerializedContextItem[] = [];
+    for (const id of ids) {
+      const found = map.get(id);
+      if (found) ordered.push(found);
+    }
+    return ordered;
   }
 
   private async createEvent(
@@ -643,6 +762,10 @@ export class RunEventsService {
       idempotencyKey: args.idempotencyKey ?? null,
       metadata,
     });
+    const contextItemIds = await this.resolveContextItemIds(tx, {
+      provided: args.contextItems,
+      runId: args.runId,
+    });
     await tx.lLMCall.create({
       data: {
         eventId: event.id,
@@ -651,7 +774,7 @@ export class RunEventsService {
         temperature: args.temperature ?? null,
         topP: args.topP ?? null,
         stopReason: null,
-        prompt: this.truncate(args.prompt ?? null),
+        contextItemIds,
         responseText: null,
         rawResponse: Prisma.JsonNull,
       },
