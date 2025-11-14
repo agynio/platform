@@ -174,7 +174,7 @@ export class ContainerCleanupService {
         this.logger.debug(`ContainerCleanup: volume ${volumeName} missing managed labels; skipping removal`);
         return;
       }
-      await this.containers.removeVolume(volumeName, true);
+      await this.containers.removeVolume(volumeName, false);
       this.logger.info(`ContainerCleanup: removed workspace volume name=${volumeName}`);
     } catch (e) {
       this.logger.error('ContainerCleanup: failed to remove workspace volume', { volumeName, error: e });
@@ -191,7 +191,7 @@ export class ContainerCleanupService {
         if (!name) continue;
         const inUse = await this.containers.listContainersUsingVolume(name);
         if (inUse.length > 0) continue;
-        await this.containers.removeVolume(name, true);
+        await this.containers.removeVolume(name, false);
         removed += 1;
       }
       if (removed > 0) {

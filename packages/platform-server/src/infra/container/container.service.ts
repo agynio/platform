@@ -690,8 +690,9 @@ export class ContainerService {
       this.logger.info(`Removed volume name=${name}`);
     } catch (e: unknown) {
       const sc = typeof e === 'object' && e && 'statusCode' in e ? (e as { statusCode?: number }).statusCode : undefined;
-      if (sc === 404) {
-        this.logger.debug(`Volume already removed name=${name}`);
+      if (sc === 404 || sc === 409) {
+        const reason = sc === 404 ? 'already removed' : 'conflict (likely in use)';
+        this.logger.debug(`Volume removal skipped name=${name} reason=${reason}`);
         return;
       }
       throw e;
