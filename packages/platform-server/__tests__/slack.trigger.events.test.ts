@@ -91,6 +91,15 @@ vi.mock('@prisma/client', () => {
       tool_output: 'tool_output',
       metadata: 'metadata',
     },
+    ContextItemRole: {
+      system: 'system',
+      user: 'user',
+      assistant: 'assistant',
+      tool: 'tool',
+      memory: 'memory',
+      summary: 'summary',
+      other: 'other',
+    },
     Prisma: { JsonNull: null, AnyNull, DbNull },
   };
 });

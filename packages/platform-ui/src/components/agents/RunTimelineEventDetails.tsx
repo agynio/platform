@@ -77,12 +77,7 @@ export function RunTimelineEventDetails({ event }: { event: RunTimelineEvent }) 
             <div>Provider: {event.llmCall.provider ?? '—'}</div>
             <div>Model: {event.llmCall.model ?? '—'}</div>
             <div>Stop reason: {event.llmCall.stopReason ?? '—'}</div>
-            {event.llmCall.prompt && (
-              <details className="mt-1">
-                <summary className="cursor-pointer">Prompt</summary>
-                <pre className="bg-gray-100 rounded p-2 overflow-x-auto">{event.llmCall.prompt}</pre>
-              </details>
-            )}
+            <div>Context items: {event.llmCall.contextItemIds.length}</div>
             {event.llmCall.responseText && (
               <details className="mt-1">
                 <summary className="cursor-pointer">Response</summary>

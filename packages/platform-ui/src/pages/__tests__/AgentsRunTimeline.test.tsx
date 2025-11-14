@@ -202,7 +202,7 @@ beforeEach(() => {
         temperature: null,
         topP: null,
         stopReason: null,
-        prompt: null,
+        contextItemIds: [],
         responseText: null,
         rawResponse: null,
         toolCalls: [],

@@ -35,6 +35,16 @@ enum MemoryScope {
   perThread
 }
 
+enum ContextItemRole {
+  system
+  user
+  assistant
+  tool
+  memory
+  summary
+  other
+}
+
 model Memory {
   id        String      @id @default(uuid()) @db.Uuid
   nodeId    String      @map("node_id")
@@ -47,6 +57,19 @@ model Memory {
 
   @@index([nodeId, scope], map: "idx_memories_lookup")
   @@map("memories")
+}
+
+model ContextItem {
+  id          String           @id @default(uuid()) @db.Uuid
+  role        ContextItemRole
+  contentText String?          @db.Text
+  contentJson Json?            @map("content_json")
+  metadata    Json?            @default("{}")
+  sizeBytes   Int              @map("size_bytes") @default(0)
+  createdAt   DateTime         @default(now())
+
+  @@map("context_items")
+  @@index([role], map: "idx_context_items_role")
 }
 
 // Core normalized persistence per spec: threads, runs, messages, run_messages
@@ -223,7 +246,7 @@ model LLMCall {
   temperature  Float?
   topP         Float?  @map("top_p")
   stopReason   String? @map("stop_reason")
-  prompt       String? @db.Text
+  contextItemIds String[] @map("context_item_ids") @default([])
   responseText String? @map("response_text") @db.Text
   rawResponse  Json?   @map("raw_response")
 
