@@ -1,11 +1,12 @@
+import type { CSSProperties } from 'react';
 import type { RunTimelineEvent } from '@/api/types/agents';
 import { STATUS_COLORS, formatDuration, getEventTypeLabel } from './runTimelineFormatting';
 
 const wrapStyle = {
   whiteSpace: 'pre-wrap',
   wordBreak: 'break-word',
-  overflowWrap: 'anywhere' as const,
-};
+  overflowWrap: 'anywhere',
+} satisfies CSSProperties;
 
 type Attachment = RunTimelineEvent['attachments'][number];
 
