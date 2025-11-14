@@ -65,9 +65,9 @@ Agent runs timeline
     - `statuses` and/or repeated `status` for status filtering
     - `limit` (1-1000, default server-side)
     - `order` (`asc`|`desc`, default `asc`)
-    - Cursor pagination: `cursor[ordinal]`, `cursor[id]`
+    - Cursor pagination: `cursor[ts]`, `cursor[id]`
     - `expandContext=true` to inline normalized context items for each LLM call
-  - 200 `{ items: RunTimelineEvent[], nextCursor: { ordinal, id } | null }`
+  - 200 `{ items: RunTimelineEvent[], nextCursor: { ts, id } | null }`
   - Notes:
     - Each LLM call item includes `contextItemIds` (ordered).
     - When `expandContext=true`, the server embeds `llmCall.contextItems` using the same ordering as `contextItemIds`.

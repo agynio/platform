@@ -57,6 +57,10 @@ export class RunTimelineEventsQueryDto {
   @Expose({ name: 'cursor[id]' })
   @IsString()
   cursorId?: string;
+
+  @IsOptional()
+  @IsBooleanString()
+  expandContext?: string;
 }
 
 export class ListThreadsQueryDto {
@@ -233,6 +237,8 @@ export class AgentsThreadsController {
       }
     }
 
+    const expandContext = (query.expandContext ?? 'false') === 'true';
+
     return this.runEvents.listRunEvents({
       runId,
       types: typeValues.length > 0 ? typeValues : undefined,
@@ -240,6 +246,7 @@ export class AgentsThreadsController {
       limit: query.limit,
       order: query.order,
       cursor,
+      expandContext,
     });
   }
 
