@@ -20,6 +20,7 @@ model ConversationState {
 
   @@unique([threadId, nodeId])
 }
+
 // Local variable overrides (single-user/single-graph model)
 model VariableLocal {
   id        Int      @id @default(autoincrement())
@@ -44,27 +45,27 @@ model Memory {
   createdAt DateTime    @default(now()) @map("created_at")
   updatedAt DateTime    @updatedAt @map("updated_at")
 
-  @@map("memories")
   @@index([nodeId, scope], map: "idx_memories_lookup")
+  @@map("memories")
 }
 
 // Core normalized persistence per spec: threads, runs, messages, run_messages
 
 model Thread {
-  id        String   @id @default(uuid()) @db.Uuid
-  parentId  String?  @db.Uuid
-  parent    Thread?  @relation("ThreadChildren", fields: [parentId], references: [id])
-  children  Thread[] @relation("ThreadChildren")
-  alias     String   @unique
+  id        String       @id @default(uuid()) @db.Uuid
+  parentId  String?      @db.Uuid
+  parent    Thread?      @relation("ThreadChildren", fields: [parentId], references: [id])
+  children  Thread[]     @relation("ThreadChildren")
+  alias     String       @unique
   summary   String?
   status    ThreadStatus @default(open)
   // Channel descriptor for replying to origin channel
   channel   Json?
-  createdAt DateTime @default(now())
+  createdAt DateTime     @default(now())
 
-  runs      Run[]
+  runs       Run[]
   containers Container[]
-  runEvents RunEvent[]
+  runEvents  RunEvent[]
 
   // Index parentId to accelerate parent-child lookups
   @@index([parentId])
@@ -84,12 +85,12 @@ enum RunStatus {
 }
 
 model Run {
-  id         String    @id @default(uuid()) @db.Uuid
-  threadId   String    @db.Uuid
-  thread     Thread    @relation(fields: [threadId], references: [id], onDelete: Cascade)
-  status     RunStatus @default(running)
-  createdAt  DateTime  @default(now())
-  updatedAt  DateTime  @updatedAt
+  id        String    @id @default(uuid()) @db.Uuid
+  threadId  String    @db.Uuid
+  thread    Thread    @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  status    RunStatus @default(running)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
 
   runMessages RunMessage[]
   events      RunEvent[]
@@ -157,13 +158,13 @@ enum AttachmentKind {
 }
 
 model RunMessage {
-  runId     String        @db.Uuid
-  messageId String        @db.Uuid
+  runId     String         @db.Uuid
+  messageId String         @db.Uuid
   type      RunMessageType
-  createdAt DateTime      @default(now())
+  createdAt DateTime       @default(now())
 
-  run       Run           @relation(fields: [runId], references: [id], onDelete: Cascade)
-  message   Message       @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  run     Run     @relation(fields: [runId], references: [id], onDelete: Cascade)
+  message Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
 
   @@id([runId, messageId])
   @@index([runId])
@@ -186,10 +187,10 @@ model RunEvent {
   errorCode      String?         @map("error_code")
   errorMessage   String?         @map("error_message")
   metadata       Json            @default("{}")
-  idempotencyKey String?         @map("idempotency_key") @unique
+  idempotencyKey String?         @unique @map("idempotency_key")
 
-  run           Run            @relation(fields: [runId], references: [id], onDelete: Cascade)
-  thread        Thread         @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  run           Run               @relation(fields: [runId], references: [id], onDelete: Cascade)
+  thread        Thread            @relation(fields: [threadId], references: [id], onDelete: Cascade)
   eventMessage  EventMessage?
   llmCall       LLMCall?
   toolExecution ToolExecution?
@@ -197,20 +198,20 @@ model RunEvent {
   injection     Injection?
   attachments   EventAttachment[]
 
-  @@map("run_events")
   @@index([runId, ts])
   @@index([runId, ts, id])
   @@index([threadId, ts])
   @@index([sourceKind, sourceSpanId])
+  @@map("run_events")
 }
 
 model EventMessage {
-  eventId   String  @id @map("event_id") @db.Uuid
-  messageId String  @map("message_id") @db.Uuid
+  eventId   String @id @map("event_id") @db.Uuid
+  messageId String @map("message_id") @db.Uuid
   role      String
 
-  event   RunEvent  @relation(fields: [eventId], references: [id], onDelete: Cascade)
-  message Message   @relation("MessageEventMessage", fields: [messageId], references: [id], onDelete: Cascade)
+  event   RunEvent @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  message Message  @relation("MessageEventMessage", fields: [messageId], references: [id], onDelete: Cascade)
 
   @@map("event_messages")
 }
@@ -226,7 +227,7 @@ model LLMCall {
   responseText String? @map("response_text") @db.Text
   rawResponse  Json?   @map("raw_response")
 
-  event          RunEvent       @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  event          RunEvent        @relation(fields: [eventId], references: [id], onDelete: Cascade)
   toolCalls      ToolCall[]
   toolExecutions ToolExecution[] @relation("LLMCallToolExecutions")
 
@@ -243,9 +244,9 @@ model ToolCall {
 
   llmCall LLMCall @relation(fields: [llmCallEventId], references: [eventId], onDelete: Cascade)
 
-  @@map("tool_calls")
   @@unique([llmCallEventId, callId])
   @@index([llmCallEventId, idx])
+  @@map("tool_calls")
 }
 
 model ToolExecution {
@@ -262,9 +263,9 @@ model ToolExecution {
   event   RunEvent @relation(fields: [eventId], references: [id], onDelete: Cascade)
   llmCall LLMCall? @relation("LLMCallToolExecutions", fields: [llmCallEventId], references: [eventId], onDelete: SetNull)
 
-  @@map("tool_executions")
   @@index([llmCallEventId])
   @@index([toolName])
+  @@map("tool_executions")
 }
 
 model Summarization {
@@ -295,13 +296,13 @@ model EventAttachment {
   kind        AttachmentKind
   contentJson Json?          @map("content_json")
   contentText String?        @map("content_text") @db.Text
-  isGzip      Boolean        @map("is_gzip") @default(false)
-  sizeBytes   Int            @map("size_bytes") @default(0)
+  isGzip      Boolean        @default(false) @map("is_gzip")
+  sizeBytes   Int            @default(0) @map("size_bytes")
 
   event RunEvent @relation(fields: [eventId], references: [id], onDelete: Cascade)
 
-  @@map("event_attachments")
   @@index([eventId])
+  @@map("event_attachments")
 }
 
 // Container tracking moved from MongoDB to Postgres via Prisma
@@ -343,11 +344,11 @@ model Container {
 // End of schema
 // Scheduled reminders persisted for resilience; delivery remains in-memory
 model Reminder {
-  id        String   @id @default(uuid()) @db.Uuid
-  threadId  String   @db.Uuid
-  note      String
-  at        DateTime
-  createdAt DateTime @default(now())
+  id          String    @id @default(uuid()) @db.Uuid
+  threadId    String    @db.Uuid
+  note        String
+  at          DateTime
+  createdAt   DateTime  @default(now())
   completedAt DateTime?
 
   @@index([threadId])
