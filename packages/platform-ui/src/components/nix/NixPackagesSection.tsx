@@ -64,11 +64,48 @@ export function NixPackagesSection(props: ControlledProps | UncontrolledProps) {
       return prevKey === nextKey ? prev : nextSelected;
     });
     // Hydrate chosen versions for UI from incoming value
-    setVersionsByName((prev) => {
-      const next: Record<string, string | ''> = { ...prev };
-      for (const p of curr) if (p.version) next[p.name] = String(p.version);
-      return next;
-    });
+    const nextVersions: Record<string, string | ''> = {};
+    for (const p of curr) if (p.version) nextVersions[p.name] = String(p.version);
+    setVersionsByName((prev) => (JSON.stringify(prev) === JSON.stringify(nextVersions) ? prev : nextVersions));
+
+    const nextDetails: Record<string, { version: string; commitHash: string; attributePath: string }> = {};
+    for (const p of curr) {
+      if (p.version && p.commitHash && p.attributePath) {
+        nextDetails[p.name] = {
+          version: String(p.version),
+          commitHash: String(p.commitHash),
+          attributePath: String(p.attributePath),
+        };
+      }
+    }
+    setDetailsByName((prev) => (JSON.stringify(prev) === JSON.stringify(nextDetails) ? prev : nextDetails));
+
+    const hydratedPackages = curr.flatMap((p) =>
+      p.version && p.commitHash && p.attributePath
+        ? [
+            {
+              name: p.name,
+              version: String(p.version),
+              commitHash: String(p.commitHash),
+              attributePath: String(p.attributePath),
+            },
+          ]
+        : [],
+    );
+
+    lastPushedPackagesLen.current = hydratedPackages.length;
+    lastPushedPkgsKey.current = incomingKey;
+
+    if (controlled) {
+      lastPushedJson.current = JSON.stringify(hydratedPackages);
+    } else {
+      const conf = (props as UncontrolledProps).config as ConfigWithNix;
+      const nextConfig: Record<string, unknown> = {
+        ...conf,
+        nix: { ...(conf.nix ?? {}), packages: hydratedPackages },
+      };
+      lastPushedJson.current = JSON.stringify(nextConfig);
+    }
   }, [controlled, controlledValueKey, uncontrolledPkgsKey, props]);
 
   // Push updates into node config when selections/channels change
