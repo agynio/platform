@@ -78,33 +78,6 @@ export function RunTimelineEventDetails({ event }: { event: RunTimelineEvent }) 
             <div>Model: {event.llmCall.model ?? '—'}</div>
             <div>Stop reason: {event.llmCall.stopReason ?? '—'}</div>
             <div>Context items: {event.llmCall.contextItemIds.length}</div>
-            {event.llmCall.contextItems && event.llmCall.contextItems.length > 0 && (
-              <details className="mt-1">
-                <summary className="cursor-pointer">View context items ({event.llmCall.contextItems.length})</summary>
-                <div className="mt-1 space-y-2">
-                  {event.llmCall.contextItems.map((item) => (
-                    <div key={item.id} className="bg-gray-50 rounded border p-2 space-y-1">
-                      <div className="text-[11px] text-gray-600">Role: {item.role}</div>
-                      {item.contentText && (
-                        <pre className="bg-white rounded p-2 overflow-x-auto whitespace-pre-wrap text-[11px] text-gray-800">{item.contentText}</pre>
-                      )}
-                      {item.contentJson !== null && item.contentJson !== undefined && (
-                        <details>
-                          <summary className="cursor-pointer text-[11px] text-gray-600">Content JSON</summary>
-                          <pre className="bg-white rounded p-2 overflow-x-auto text-[11px] text-gray-800">{formatJson(item.contentJson)}</pre>
-                        </details>
-                      )}
-                      <details>
-                        <summary className="cursor-pointer text-[11px] text-gray-600">Metadata</summary>
-                        <pre className="bg-white rounded p-2 overflow-x-auto text-[11px] text-gray-800">{formatJson(item.metadata)}</pre>
-                      </details>
-                      <div className="text-[11px] text-gray-500">Size: {item.sizeBytes} bytes</div>
-                      <div className="text-[11px] text-gray-500">Created: {new Date(item.createdAt).toLocaleString()}</div>
-                    </div>
-                  ))}
-                </div>
-              </details>
-            )}
             {event.llmCall.responseText && (
               <details className="mt-1">
                 <summary className="cursor-pointer">Response</summary>

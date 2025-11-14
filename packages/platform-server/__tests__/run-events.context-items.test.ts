@@ -92,7 +92,7 @@ describe.sequential('RunEventsService context item persistence', () => {
     await cleanup(thread.id, run.id, Array.from(new Set(allIds)));
   });
 
-  it('provides context items inline on demand without prompt preview', async () => {
+  it('returns context item ids and resolves payloads via batch endpoint', async () => {
     const { thread, run } = await createThreadAndRun();
     const contextItems = [
       { role: ContextItemRole.system, contentText: 'system overview' },
@@ -110,21 +110,18 @@ describe.sequential('RunEventsService context item persistence', () => {
     const firstPage = await runEvents.listRunEvents({ runId: run.id, limit: 10, order: 'asc' });
     expect(firstPage.items).toHaveLength(1);
     const summaryEvent = firstPage.items[0]!;
+    expect(summaryEvent.llmCall).toBeDefined();
     expect(summaryEvent.llmCall?.contextItemIds).toEqual(callRecord.contextItemIds);
-    expect(summaryEvent.llmCall?.contextItems).toBeUndefined();
+    expect(summaryEvent.llmCall).not.toHaveProperty('contextItems');
     expect(summaryEvent.llmCall).not.toHaveProperty('prompt');
     expect(summaryEvent.llmCall).not.toHaveProperty('promptPreview');
 
-    const expanded = await runEvents.listRunEvents({ runId: run.id, limit: 10, order: 'asc', expandContext: true });
-    expect(expanded.items).toHaveLength(1);
-    const expandedEvent = expanded.items[0]!;
-    expect(expandedEvent.llmCall?.contextItems).toHaveLength(2);
-    expect(expandedEvent.llmCall?.contextItems?.map((item) => item.contentText)).toEqual([
+    const resolved = await runEvents.getContextItems(callRecord.contextItemIds);
+    expect(resolved).toHaveLength(2);
+    expect(resolved.map((item) => item.contentText)).toEqual([
       'system overview',
       'user asks a follow-up question',
     ]);
-    expect(expandedEvent.llmCall).not.toHaveProperty('prompt');
-    expect(expandedEvent.llmCall).not.toHaveProperty('promptPreview');
 
     await cleanup(thread.id, run.id, Array.from(new Set(callRecord.contextItemIds)));
   });

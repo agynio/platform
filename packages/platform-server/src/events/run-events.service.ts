@@ -106,7 +106,6 @@ export type RunTimelineEvent = {
     topP: number | null;
     stopReason: string | null;
     contextItemIds: string[];
-    contextItems?: SerializedContextItem[];
     responseText: string | null;
     rawResponse: unknown;
     toolCalls: Array<{ callId: string; name: string; arguments: unknown }>;
@@ -365,7 +364,7 @@ export class RunEventsService {
     return result.ids;
   }
 
-  private serializeEvent(event: RunEventWithRelations, contextMap?: Map<string, SerializedContextItem>): RunTimelineEvent {
+  private serializeEvent(event: RunEventWithRelations): RunTimelineEvent {
     const attachments = event.attachments.map((att) => ({
       id: att.id,
       kind: att.kind,
@@ -375,11 +374,6 @@ export class RunEventsService {
       contentText: att.contentText ?? null,
     }));
     const contextItemIds = event.llmCall?.contextItemIds ? [...event.llmCall.contextItemIds] : [];
-    const contextItems = contextMap
-      ? contextItemIds
-          .map((id) => contextMap.get(id))
-          .filter((item): item is SerializedContextItem => !!item)
-      : undefined;
     const llmCall = event.llmCall
       ? {
           provider: event.llmCall.provider ?? null,
@@ -388,7 +382,6 @@ export class RunEventsService {
           topP: event.llmCall.topP ?? null,
           stopReason: event.llmCall.stopReason ?? null,
           contextItemIds,
-          ...(contextItems ? { contextItems } : {}),
           responseText: event.llmCall.responseText ?? null,
           rawResponse: this.toPlainJson(event.llmCall.rawResponse ?? null),
           toolCalls: event.llmCall.toolCalls.map((tc) => ({
@@ -523,7 +516,6 @@ export class RunEventsService {
     limit?: number;
     order?: 'asc' | 'desc';
     cursor?: { ts: Date | string; id?: string };
-    expandContext?: boolean;
   }): Promise<RunTimelineEventsResult> {
     const order: 'asc' | 'desc' = params.order === 'desc' ? 'desc' : 'asc';
     const where: Prisma.RunEventWhereInput = { runId: params.runId };
@@ -593,32 +585,8 @@ export class RunEventsService {
         }
       : null;
 
-    let contextMap: Map<string, SerializedContextItem> | undefined;
-    if (params.expandContext) {
-      const idSet = new Set<string>();
-      for (const ev of pageItems) {
-        const ids = ev.llmCall?.contextItemIds ?? [];
-        for (const id of ids) idSet.add(id);
-      }
-      if (idSet.size > 0) {
-        const rows = await this.prisma.contextItem.findMany({
-          where: { id: { in: Array.from(idSet) } },
-          select: {
-            id: true,
-            role: true,
-            contentText: true,
-            contentJson: true,
-            metadata: true,
-            sizeBytes: true,
-            createdAt: true,
-          },
-        });
-        contextMap = new Map(rows.map((row) => [row.id, this.serializeContextItem(row)]));
-      }
-    }
-
     return {
-      items: pageItems.map((ev) => this.serializeEvent(ev, contextMap)),
+      items: pageItems.map((ev) => this.serializeEvent(ev)),
       nextCursor,
     };
   }
