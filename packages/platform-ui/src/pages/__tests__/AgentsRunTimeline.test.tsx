@@ -73,7 +73,6 @@ function buildEvent(overrides: Partial<RunTimelineEvent> = {}): RunTimelineEvent
     threadId: 'thread-1',
     type: 'tool_execution',
     status: 'success',
-    ordinal: 1,
     ts: '2024-01-01T00:00:00.000Z',
     startedAt: '2024-01-01T00:00:00.000Z',
     endedAt: '2024-01-01T00:00:01.500Z',
@@ -194,7 +193,6 @@ beforeEach(() => {
     buildEvent(),
     buildEvent({
       id: 'event-2',
-      ordinal: 2,
       ts: '2024-01-01T00:00:02.000Z',
       type: 'llm_call',
       toolExecution: undefined,
@@ -287,7 +285,6 @@ describe('AgentsRunTimeline socket reactions', () => {
 
     const newEvent = buildEvent({
       id: 'event-3',
-      ordinal: 3,
       ts: '2024-01-01T00:00:03.000Z',
       type: 'summarization',
       toolExecution: undefined,

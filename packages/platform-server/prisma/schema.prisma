@@ -175,7 +175,6 @@ model RunEvent {
   threadId       String          @map("thread_id") @db.Uuid
   type           RunEventType
   status         RunEventStatus  @default(success)
-  ordinal        Int
   ts             DateTime        @default(now())
   startedAt      DateTime?       @map("started_at")
   endedAt        DateTime?       @map("ended_at")
@@ -199,10 +198,8 @@ model RunEvent {
   attachments   EventAttachment[]
 
   @@map("run_events")
-  @@unique([runId, ordinal])
-  @@index([runId, ordinal])
-  @@index([runId, type, ordinal])
   @@index([runId, ts])
+  @@index([runId, ts, id])
   @@index([threadId, ts])
   @@index([sourceKind, sourceSpanId])
 }

@@ -52,7 +52,6 @@ export type RunTimelineEvent = {
   threadId: string;
   type: RunEventType;
   status: RunEventStatus;
-  ordinal: number;
   ts: string;
   startedAt: string | null;
   endedAt: string | null;
@@ -112,7 +111,7 @@ export type RunTimelineEvent = {
 };
 
 export type RunTimelineEventsCursor = {
-  ordinal: number;
+  ts: string;
   id: string;
 };
 

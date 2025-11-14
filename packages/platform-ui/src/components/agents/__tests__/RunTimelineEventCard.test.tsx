@@ -10,7 +10,6 @@ const baseEvent: RunTimelineEvent = {
   threadId: 'thread-1',
   type: 'tool_execution',
   status: 'success',
-  ordinal: 1,
   ts: '2024-01-01T00:00:00.000Z',
   startedAt: '2024-01-01T00:00:00.000Z',
   endedAt: '2024-01-01T00:00:01.500Z',
@@ -40,7 +39,7 @@ const baseEvent: RunTimelineEvent = {
 describe('RunTimelineEventCard', () => {
   it('renders duration in header and tool name in type label', () => {
     render(<RunTimelineEventCard event={baseEvent} />);
-    const header = screen.getByText((text) => text.startsWith('#1') && text.includes('1.50 s'));
+    const header = screen.getByText((text) => text.includes('1.50 s'));
     expect(header).toBeInTheDocument();
     expect(screen.getByText('Tool Execution — Search Tool')).toBeInTheDocument();
   });

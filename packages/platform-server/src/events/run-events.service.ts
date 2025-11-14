@@ -10,7 +10,6 @@ import {
   RunStatus,
   ToolExecStatus,
 } from '@prisma/client';
-import { PrismaClientKnownRequestError } from '@prisma/client/runtime/library';
 import { LoggerService } from '../core/services/logger.service';
 import { PrismaService } from '../core/services/prisma.service';
 import { GraphEventsPublisher, NoopGraphEventsPublisher } from '../gateway/graph.events.publisher';
@@ -19,7 +18,6 @@ import { toPrismaJsonValue } from '../llm/services/messages.serialization';
 type Tx = PrismaClient | Prisma.TransactionClient;
 
 const MAX_INLINE_TEXT = 32_768;
-const MAX_RETRIES = 5;
 
 const RUN_EVENT_INCLUDE = {
   eventMessage: {
@@ -67,7 +65,6 @@ export type RunTimelineEvent = {
   threadId: string;
   type: RunEventType;
   status: RunEventStatus;
-  ordinal: number;
   ts: string;
   startedAt: string | null;
   endedAt: string | null;
@@ -140,7 +137,7 @@ export type RunTimelineSummary = {
 };
 
 export type RunTimelineEventsCursor = {
-  ordinal: number;
+  ts: string;
   id: string;
 };
 
@@ -262,12 +259,6 @@ export class RunEventsService {
     return this.prismaService.getClient();
   }
 
-  private async nextOrdinal(tx: Tx, runId: string): Promise<number> {
-    const agg = await tx.runEvent.aggregate({ where: { runId }, _max: { ordinal: true } });
-    const current = agg._max.ordinal ?? -1;
-    return current + 1;
-  }
-
   private truncate(text: string | null | undefined): string | null {
     if (!text) return text ?? null;
     if (text.length <= MAX_INLINE_TEXT) return text;
@@ -380,7 +371,6 @@ export class RunEventsService {
       threadId: event.threadId,
       type: event.type,
       status: event.status,
-      ordinal: event.ordinal,
       ts: event.ts.toISOString(),
       startedAt: event.startedAt ? event.startedAt.toISOString() : null,
       endedAt: event.endedAt ? event.endedAt.toISOString() : null,
@@ -463,46 +453,51 @@ export class RunEventsService {
     statuses?: RunEventStatus[];
     limit?: number;
     order?: 'asc' | 'desc';
-    cursor?: { ordinal: number; id?: string };
+    cursor?: { ts: Date | string; id?: string };
   }): Promise<RunTimelineEventsResult> {
     const order: 'asc' | 'desc' = params.order === 'desc' ? 'desc' : 'asc';
     const where: Prisma.RunEventWhereInput = { runId: params.runId };
     if (params.types && params.types.length > 0) where.type = { in: params.types };
     if (params.statuses && params.statuses.length > 0) where.status = { in: params.statuses };
 
-    if (params.cursor && Number.isFinite(params.cursor.ordinal)) {
-      const ord = params.cursor.ordinal;
-      const id = params.cursor.id;
-      let cursorConditions: Prisma.RunEventWhereInput;
-      if (order === 'desc') {
-        cursorConditions = id
-          ? {
-              OR: [
-                { ordinal: { lt: ord } },
-                {
-                  AND: [
-                    { ordinal: ord },
-                    { id: { lt: id } },
-                  ],
-                },
-              ],
-            }
-          : { ordinal: { lt: ord } };
-      } else {
-        cursorConditions = id
-          ? {
-              OR: [
-                { ordinal: { gt: ord } },
-                {
-                  AND: [
-                    { ordinal: ord },
-                    { id: { gt: id } },
-                  ],
-                },
-              ],
-            }
-          : { ordinal: { gt: ord } };
+    const cursorTsRaw = params.cursor?.ts;
+    let cursorConditions: Prisma.RunEventWhereInput | null = null;
+    if (cursorTsRaw) {
+      const cursorTs = cursorTsRaw instanceof Date ? cursorTsRaw : new Date(cursorTsRaw);
+      if (!Number.isNaN(cursorTs.getTime())) {
+        const id = params.cursor?.id;
+        if (order === 'desc') {
+          cursorConditions = id
+            ? {
+                OR: [
+                  { ts: { lt: cursorTs } },
+                  {
+                    AND: [
+                      { ts: { equals: cursorTs } },
+                      { id: { lt: id } },
+                    ],
+                  },
+                ],
+              }
+            : { ts: { lt: cursorTs } };
+        } else {
+          cursorConditions = id
+            ? {
+                OR: [
+                  { ts: { gt: cursorTs } },
+                  {
+                    AND: [
+                      { ts: { equals: cursorTs } },
+                      { id: { gt: id } },
+                    ],
+                  },
+                ],
+              }
+            : { ts: { gt: cursorTs } };
+        }
       }
+    }
+    if (cursorConditions) {
       if (where.AND) {
         where.AND = Array.isArray(where.AND) ? [...where.AND, cursorConditions] : [where.AND, cursorConditions];
       } else {
@@ -515,7 +510,7 @@ export class RunEventsService {
 
     const events = await this.prisma.runEvent.findMany({
       where,
-      orderBy: [{ ordinal: order }, { id: order }],
+      orderBy: [{ ts: order }, { id: order }],
       take,
       include: RUN_EVENT_INCLUDE,
     });
@@ -523,7 +518,7 @@ export class RunEventsService {
     const pageItems = hasMore ? events.slice(0, limit) : events;
     const nextCursor = hasMore
       ? {
-          ordinal: pageItems[pageItems.length - 1]!.ordinal,
+          ts: pageItems[pageItems.length - 1]!.ts.toISOString(),
           id: pageItems[pageItems.length - 1]!.id,
         }
       : null;
@@ -580,40 +575,26 @@ export class RunEventsService {
       idempotencyKey,
     } = data;
 
-    let ordinalHint: number | undefined;
-    for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
-      const ordinal = typeof ordinalHint === 'number' && attempt === 0 ? ordinalHint : await this.nextOrdinal(tx, runId);
-      try {
-        return await tx.runEvent.create({
-          data: {
-            runId,
-            threadId,
-            type,
-            status,
-            ordinal,
-            ts: ts ?? new Date(),
-            startedAt: startedAt ?? null,
-            endedAt: endedAt ?? null,
-            durationMs: durationMs ?? null,
-            nodeId: nodeId ?? null,
-            sourceKind,
-            sourceSpanId: sourceSpanId ?? null,
-            schemaVersion,
-            errorCode: errorCode ?? null,
-            errorMessage: errorMessage ?? null,
+    return tx.runEvent.create({
+      data: {
+        runId,
+        threadId,
+        type,
+        status,
+        ts: ts ?? new Date(),
+        startedAt: startedAt ?? null,
+        endedAt: endedAt ?? null,
+        durationMs: durationMs ?? null,
+        nodeId: nodeId ?? null,
+        sourceKind,
+        sourceSpanId: sourceSpanId ?? null,
+        schemaVersion,
+        errorCode: errorCode ?? null,
+        errorMessage: errorMessage ?? null,
         metadata: metadata ?? Prisma.JsonNull,
-            idempotencyKey: idempotencyKey ?? null,
-          },
-        });
-      } catch (err) {
-        if (err instanceof PrismaClientKnownRequestError && err.code === 'P2002') {
-          ordinalHint = ordinal + 1;
-          continue;
-        }
-        throw err;
-      }
-    }
-    throw new Error(`Failed to allocate ordinal for run event (runId=${runId})`);
+        idempotencyKey: idempotencyKey ?? null,
+      },
+    });
   }
 
   async recordInvocationMessage(args: InvocationMessageEventArgs): Promise<RunEvent> {

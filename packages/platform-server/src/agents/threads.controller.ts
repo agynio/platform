@@ -1,5 +1,5 @@
 import { Body, Controller, Get, Inject, NotFoundException, Param, Patch, Query } from '@nestjs/common';
-import { IsBooleanString, IsIn, IsInt, IsOptional, IsString, Max, Min, ValidateIf } from 'class-validator';
+import { IsBooleanString, IsIn, IsInt, IsOptional, IsString, IsISO8601, Max, Min, ValidateIf } from 'class-validator';
 import { AgentsPersistenceService } from './agents.persistence.service';
 import { Transform, Expose } from 'class-transformer';
 import type { RunEventStatus, RunEventType, RunMessageType, ThreadStatus } from '@prisma/client';
@@ -49,10 +49,9 @@ export class RunTimelineEventsQueryDto {
   order?: 'asc' | 'desc';
 
   @IsOptional()
-  @Expose({ name: 'cursor[ordinal]' })
-  @Transform(({ value }) => (value !== undefined ? parseInt(value, 10) : undefined))
-  @IsInt()
-  cursorOrdinal?: number;
+  @Expose({ name: 'cursor[ts]' })
+  @IsISO8601()
+  cursorTs?: string;
 
   @IsOptional()
   @Expose({ name: 'cursor[id]' })
@@ -226,9 +225,13 @@ export class AgentsThreadsController {
       ]),
     ).filter((v): v is RunEventStatus => isRunEventStatus(v));
 
-    const cursor = query.cursorOrdinal !== undefined
-      ? { ordinal: query.cursorOrdinal, id: query.cursorId }
-      : undefined;
+    let cursor: { ts: Date; id?: string } | undefined;
+    if (query.cursorTs) {
+      const ts = new Date(query.cursorTs);
+      if (!Number.isNaN(ts.getTime())) {
+        cursor = { ts, id: query.cursorId ?? undefined };
+      }
+    }
 
     return this.runEvents.listRunEvents({
       runId,

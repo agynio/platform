@@ -23,8 +23,6 @@ export function RunTimelineEventDetails({ event }: { event: RunTimelineEvent }) 
           <span className={`text-white text-[11px] px-2 py-0.5 rounded ${STATUS_COLORS[event.status] ?? 'bg-gray-500'}`}>{event.status}</span>
         </div>
         <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-gray-500">
-          <span className="font-mono text-gray-600">#{event.ordinal}</span>
-          <span aria-hidden="true">•</span>
           <span>{timestamp}</span>
           <span aria-hidden="true">•</span>
           <span>{formatDuration(event.durationMs)}</span>

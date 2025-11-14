@@ -40,7 +40,7 @@ export function useRunTimelineEvents(
         statuses: filters.statuses.length > 0 ? filters.statuses.join(',') : undefined,
         limit: filters.limit,
         order: filters.order,
-        cursorOrdinal: filters.cursor?.ordinal,
+        cursorTs: filters.cursor?.ts,
         cursorId: filters.cursor?.id,
       }),
     refetchOnWindowFocus: false,

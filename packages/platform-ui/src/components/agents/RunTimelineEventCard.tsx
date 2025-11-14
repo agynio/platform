@@ -17,7 +17,7 @@ export function RunTimelineEventCard({ event }: Props) {
     <div className="border rounded-md bg-white shadow-sm p-3" data-testid="timeline-event">
       <div className="flex flex-wrap items-center gap-2 justify-between">
         <div className="flex flex-col text-left">
-          <span className="text-xs text-gray-500">#{event.ordinal} • {timestamp} • {durationLabel}</span>
+          <span className="text-xs text-gray-500">{timestamp} • {durationLabel}</span>
           <span className="text-sm font-semibold">{typeLabel}</span>
         </div>
         <div className="flex items-center gap-2">

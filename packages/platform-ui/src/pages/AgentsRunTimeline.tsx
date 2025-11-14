@@ -73,8 +73,13 @@ export function AgentsRunTimeline() {
           next = [...prev, event];
         }
         next.sort((a, b) => {
-          if (a.ordinal !== b.ordinal) return a.ordinal - b.ordinal;
-          return a.ts.localeCompare(b.ts);
+          const timeA = Date.parse(a.ts);
+          const timeB = Date.parse(b.ts);
+          if (!Number.isNaN(timeA) && !Number.isNaN(timeB) && timeA !== timeB) return timeA - timeB;
+          if (!Number.isNaN(timeA) && !Number.isNaN(timeB)) return a.id.localeCompare(b.id);
+          const lexical = a.ts.localeCompare(b.ts);
+          if (lexical !== 0) return lexical;
+          return a.id.localeCompare(b.id);
         });
         return next;
       });

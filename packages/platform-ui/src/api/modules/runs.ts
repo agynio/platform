@@ -11,12 +11,15 @@ export const runs = {
     ),
   timelineSummary: (runId: string) =>
     asData<RunTimelineSummary>(http.get<RunTimelineSummary>(`/api/agents/runs/${encodeURIComponent(runId)}/summary`)),
-  timelineEvents: (runId: string, params: { types?: string; statuses?: string; limit?: number; order?: 'asc' | 'desc'; cursorOrdinal?: number; cursorId?: string }) =>
+  timelineEvents: (runId: string, params: { types?: string; statuses?: string; limit?: number; order?: 'asc' | 'desc'; cursorTs?: string; cursorId?: string }) =>
     asData<RunTimelineEventsResponse>(
       http.get<RunTimelineEventsResponse>(`/api/agents/runs/${encodeURIComponent(runId)}/events`, {
         params: {
-          ...params,
-          ...(params.cursorOrdinal !== undefined ? { 'cursor[ordinal]': params.cursorOrdinal } : {}),
+          types: params.types,
+          statuses: params.statuses,
+          limit: params.limit,
+          order: params.order,
+          ...(params.cursorTs ? { 'cursor[ts]': params.cursorTs } : {}),
           ...(params.cursorId ? { 'cursor[id]': params.cursorId } : {}),
         },
       }),
