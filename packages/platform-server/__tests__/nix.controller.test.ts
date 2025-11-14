@@ -136,6 +136,51 @@ describe('nix controller', () => {
     scope.done();
   });
 
+  it('resolve: matches semver-equivalent release and uses platform commit hash', async () => {
+    const commit = 'a'.repeat(40);
+    const scope = nock(BASE).get('/packages/nodejs').query((q) => q._data === 'routes/_nixhub.packages.$pkg._index').reply(200, {
+      name: 'nodejs',
+      releases: [{ version: '24.11', platforms: [{ attribute_path: 'nodejs_24', commit_hash: commit }] }],
+    });
+    const body = await controller.resolve({ name: 'nodejs', version: '24.11.0' }, reply);
+    expect(body).toEqual({ name: 'nodejs', version: '24.11.0', commitHash: commit, attributePath: 'nodejs_24' });
+    scope.done();
+  });
+
+  it('resolve: release-level attribute_path fallback when platform missing attribute', async () => {
+    const commit = 'b'.repeat(40);
+    const scope = nock(BASE).get('/packages/pkg.release.attr').query((q) => q._data === 'routes/_nixhub.packages.$pkg._index').reply(200, {
+      name: 'pkg.release.attr',
+      releases: [
+        {
+          version: '1.0.0',
+          commit_hash: commit,
+          attribute_path: 'some.attr.path',
+          platforms: [{ system: 'x86_64-linux' }],
+        },
+      ],
+    });
+    const body = await controller.resolve({ name: 'pkg.release.attr', version: '1.0.0' }, reply);
+    expect(body).toEqual({ name: 'pkg.release.attr', version: '1.0.0', commitHash: commit, attributePath: 'some.attr.path' });
+    scope.done();
+  });
+
+  it('resolve: nodejs fallback derives attribute path by major', async () => {
+    const commit = 'c'.repeat(40);
+    const scope = nock(BASE).get('/packages/nodejs').query((q) => q._data === 'routes/_nixhub.packages.$pkg._index').reply(200, {
+      name: 'nodejs',
+      releases: [
+        {
+          version: '24.10.0',
+          platforms: [{ commit_hash: commit }],
+        },
+      ],
+    });
+    const body = await controller.resolve({ name: 'nodejs', version: '24.10.0' }, reply);
+    expect(body).toEqual({ name: 'nodejs', version: '24.10.0', commitHash: commit, attributePath: 'nodejs_24' });
+    scope.done();
+  });
+
   it('resolve: release not found -> 404', async () => {
     const scope = nock(BASE).get('/packages/abc').query(true).reply(200, { name: 'abc', releases: [{ version: '0.1.0', commit_hash: 'x', platforms: [] }] });
     await controller.resolve({ name: 'abc', version: '9.9.9' }, reply);

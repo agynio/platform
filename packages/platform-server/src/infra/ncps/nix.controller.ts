@@ -71,11 +71,14 @@ const NixhubPackageSchema = z.object({
         platforms_summary: z.string().optional(),
         outputs_summary: z.string().optional(),
         commit_hash: z.string().optional(),
+        attribute_path: z.string().optional(),
+        attribute: z.string().optional(),
         platforms: z
           .array(
             z.object({
               system: z.string().optional(),
               attribute_path: z.string().optional(),
+              commit_hash: z.string().optional(),
             }),
           )
           .optional(),
@@ -144,7 +147,18 @@ export class NixController {
       throw Object.assign(new Error(`bad_upstream_json ${JSON.stringify(parsed.error)}`), {
         code: 'bad_upstream_json',
       });
-    const rel = parsed.data.releases.find((r) => String(r.version ?? '') === version);
+    const releases = parsed.data.releases;
+    const normalizedVersion = version.trim();
+    let rel = releases.find((r) => String(r.version ?? '') === normalizedVersion);
+    if (!rel) {
+      const target = semver.coerce(normalizedVersion);
+      if (target) {
+        rel = releases.find((r) => {
+          const candidate = semver.coerce(String(r.version ?? ''));
+          return candidate ? semver.eq(candidate, target) : false;
+        });
+      }
+    }
     if (!rel) throw Object.assign(new Error('release_not_found'), { code: 'release_not_found' });
     // Prefer x86_64-linux, then aarch64-linux, then first
     const plats = Array.isArray(rel.platforms) ? rel.platforms : [];
@@ -152,9 +166,19 @@ export class NixController {
       plats.find((p) => p.system === 'x86_64-linux') ||
       plats.find((p) => p.system === 'aarch64-linux') ||
       plats[0];
-    const attributePath = preferred?.attribute_path;
-    const commitHash = rel.commit_hash;
-    if (!attributePath) throw Object.assign(new Error('missing_attribute_path'), { code: 'missing_attribute_path' });
+    const attributeCandidates = [preferred?.attribute_path, rel.attribute_path, rel.attribute]
+      .map((val) => (typeof val === 'string' ? val.trim() : ''))
+      .filter((val) => val.length > 0);
+    let attributePath = attributeCandidates[0];
+    if (!attributePath && name === 'nodejs') {
+      const nodeVersion = semver.coerce(String(rel.version ?? normalizedVersion));
+      if (nodeVersion) attributePath = `nodejs_${nodeVersion.major}`;
+    }
+    const commitHash = [preferred?.commit_hash, rel.commit_hash]
+      .map((val) => (typeof val === 'string' ? val.trim() : ''))
+      .find((val) => val.length > 0);
+    if (!attributePath)
+      throw Object.assign(new Error('missing_attribute_path'), { code: 'missing_attribute_path' });
     if (!commitHash) throw Object.assign(new Error('missing_commit_hash'), { code: 'missing_commit_hash' });
     return { commitHash, attributePath };
   }
