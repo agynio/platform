@@ -6,6 +6,16 @@ import type { PersistedGraphUpsertRequestUI } from '@/api/modules/graph';
 import { TestProviders } from './testUtils';
 import { useBuilderState } from '../../src/builder/hooks/useBuilderState';
 
+const graphMocks = vi.hoisted(() => ({
+  getTemplatesMock: vi.fn(),
+  getFullGraphMock: vi.fn(),
+  saveFullGraphMock: vi.fn(),
+})) as {
+  getTemplatesMock: ReturnType<typeof vi.fn>;
+  getFullGraphMock: ReturnType<typeof vi.fn>;
+  saveFullGraphMock: ReturnType<typeof vi.fn>;
+};
+
 const template = {
   name: 'workspace',
   title: 'Workspace',
@@ -39,9 +49,19 @@ const makeGraph = (): PersistedGraph => ({
 let persistedGraph: PersistedGraph = makeGraph();
 const saveCalls: PersistedGraphUpsertRequestUI[] = [];
 
-const getTemplatesMock = vi.fn(async () => [template]);
-const getFullGraphMock = vi.fn(async () => JSON.parse(JSON.stringify(persistedGraph)) as PersistedGraph);
-const saveFullGraphMock = vi.fn(async (payload: PersistedGraphUpsertRequestUI) => {
+vi.mock('@/api/modules/graph', () => ({
+  graph: {
+    getTemplates: graphMocks.getTemplatesMock,
+    getFullGraph: graphMocks.getFullGraphMock,
+    saveFullGraph: graphMocks.saveFullGraphMock,
+  },
+}));
+
+const { getTemplatesMock, getFullGraphMock, saveFullGraphMock } = graphMocks;
+
+getTemplatesMock.mockImplementation(async () => [template]);
+getFullGraphMock.mockImplementation(async () => JSON.parse(JSON.stringify(persistedGraph)) as PersistedGraph);
+saveFullGraphMock.mockImplementation(async (payload: PersistedGraphUpsertRequestUI) => {
   saveCalls.push(payload);
   const nextVersion = (persistedGraph.version ?? 0) + 1;
   const clonedNodes = payload.nodes.map((node) => ({
@@ -65,14 +85,6 @@ const saveFullGraphMock = vi.fn(async (payload: PersistedGraphUpsertRequestUI) =
   };
   return { ...payload, version: persistedGraph.version, updatedAt: persistedGraph.updatedAt };
 });
-
-vi.mock('@/api/modules/graph', () => ({
-  graph: {
-    getTemplates: getTemplatesMock,
-    getFullGraph: getFullGraphMock,
-    saveFullGraph: saveFullGraphMock,
-  },
-}));
 
 function BuilderHarness({ expose }: { expose: (api: ReturnType<typeof useBuilderState>) => void }) {
   const api = useBuilderState('', { debounceMs: 50 });
