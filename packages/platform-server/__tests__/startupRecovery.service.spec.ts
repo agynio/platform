@@ -1,4 +1,4 @@
-import { afterAll, describe, expect, it } from 'vitest';
+import { afterAll, describe, expect, it, vi } from 'vitest';
 import { PrismaClient, RunStatus } from '@prisma/client';
 import { randomUUID } from 'node:crypto';
 import { StartupRecoveryService } from '../src/core/services/startupRecovery.service';
@@ -153,5 +153,62 @@ describe.sequential('StartupRecoveryService', () => {
     expect(skippedCall).toBeDefined();
     expect(events.runStatusChanges).toHaveLength(0);
     expect(events.metricsScheduled).toHaveLength(0);
+  });
+
+  it('updates runs only when still marked running', async () => {
+    const runId = randomUUID();
+
+    class GuardedTx {
+      run = {
+        findMany: vi
+          .fn()
+          .mockImplementationOnce(async () => [{ id: runId, threadId: 'thread-1', createdAt: new Date() }])
+          .mockImplementationOnce(async (args: unknown) => {
+            expect(args).toMatchObject({ where: { id: { in: [runId] }, status: RunStatus.running } });
+            return [
+              {
+                id: runId,
+                threadId: 'thread-1',
+                status: RunStatus.terminated,
+                createdAt: new Date(),
+                updatedAt: new Date(),
+              },
+            ];
+          }),
+        updateMany: vi.fn().mockImplementation(async (args: unknown) => {
+          expect(args).toMatchObject({
+            where: { id: { in: [runId] }, status: RunStatus.running },
+            data: { status: RunStatus.terminated },
+          });
+          return { count: 1 };
+        }),
+      };
+
+      reminder = {
+        findMany: vi.fn().mockResolvedValue([]),
+        updateMany: vi.fn().mockResolvedValue({ count: 0 }),
+      };
+
+      $queryRaw = vi.fn().mockResolvedValue([{ acquired: true }]);
+    }
+
+    const tx = new GuardedTx();
+
+    const stubPrisma = {
+      async $transaction<T>(fn: (guarded: GuardedTx) => Promise<T>): Promise<T> {
+        return fn(tx);
+      },
+    };
+
+    const logger = new TestLogger();
+    const events = new CaptureEventsPublisher();
+    const service = new StartupRecoveryService({ getClient: () => stubPrisma } as any, logger, events);
+
+    await service.onApplicationBootstrap();
+
+    expect(tx.run.updateMany).toHaveBeenCalledTimes(1);
+    const summary = logger.infoCalls.find((call) => call.message === 'Startup recovery completed');
+    expect(summary).toBeDefined();
+    expect(events.runStatusChanges).toHaveLength(1);
   });
 });

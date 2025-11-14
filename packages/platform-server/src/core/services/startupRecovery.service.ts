@@ -106,10 +106,16 @@ export class StartupRecoveryService implements OnApplicationBootstrap {
     if (running.length === 0) return [];
 
     const ids = running.map((r) => r.id);
-    await runDelegate.updateMany({ where: { id: { in: ids } }, data: { status: RunStatusEnum.terminated } });
+    await runDelegate.updateMany({
+      where: {
+        id: { in: ids },
+        status: RunStatusEnum.running,
+      },
+      data: { status: RunStatusEnum.terminated },
+    });
 
     const updated = await runDelegate.findMany({
-      where: { id: { in: ids } },
+      where: { id: { in: ids }, status: RunStatusEnum.terminated },
       select: { id: true, threadId: true, status: true, createdAt: true, updatedAt: true },
     });
     return updated.map((run) => ({ ...run }));
