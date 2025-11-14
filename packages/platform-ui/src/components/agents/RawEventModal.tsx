@@ -9,17 +9,22 @@ type Props = {
 export function RawEventModal({ event, onClose }: Props) {
   const dialogRef = useRef<HTMLDivElement | null>(null);
   const closeRef = useRef<HTMLButtonElement | null>(null);
+  const previousFocusRef = useRef<HTMLElement | null>(null);
   const [copied, setCopied] = useState(false);
   const json = useMemo(() => JSON.stringify(event, null, 2), [event]);
   const titleId = useMemo(() => `raw-event-modal-${event.id}`, [event.id]);
 
   useEffect(() => {
+    previousFocusRef.current = (document.activeElement as HTMLElement | null) ?? null;
     closeRef.current?.focus();
     const handler = (e: KeyboardEvent) => {
       if (e.key === 'Escape') onClose();
     };
     window.addEventListener('keydown', handler);
-    return () => window.removeEventListener('keydown', handler);
+    return () => {
+      window.removeEventListener('keydown', handler);
+      previousFocusRef.current?.focus?.();
+    };
   }, [onClose]);
 
   useEffect(() => {
@@ -80,7 +85,10 @@ export function RawEventModal({ event, onClose }: Props) {
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
       role="presentation"
-      onClick={onClose}
+      onClick={() => {
+        onClose();
+        previousFocusRef.current?.focus?.();
+      }}
     >
       <div
         ref={dialogRef}
@@ -98,7 +106,10 @@ export function RawEventModal({ event, onClose }: Props) {
             ref={closeRef}
             type="button"
             className="rounded border px-2 py-1 text-[11px] text-gray-700 hover:bg-gray-100 focus:outline-none focus:ring-1 focus:ring-blue-500"
-            onClick={onClose}
+            onClick={() => {
+              onClose();
+              previousFocusRef.current?.focus?.();
+            }}
           >
             Close
           </button>
