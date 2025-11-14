@@ -58,6 +58,26 @@ Node status and actions
   - 400 `{ error: 'unknown_action' }`
   - 500 `{ error: string }`
 
+Agent runs timeline
+- GET `/api/agents/runs/:runId/events`
+  - Query params (optional unless noted):
+    - `types` and/or repeated `type` to filter by event kind (comma-separated values supported)
+    - `statuses` and/or repeated `status` for status filtering
+    - `limit` (1-1000, default server-side)
+    - `order` (`asc`|`desc`, default `asc`)
+    - Cursor pagination: `cursor[ordinal]`, `cursor[id]`
+    - `expandContext=true` to inline normalized context items for each LLM call
+  - 200 `{ items: RunTimelineEvent[], nextCursor: { ordinal, id } | null }`
+  - Notes:
+    - Each LLM call item includes `contextItemIds` (ordered) and `promptPreview` alongside the legacy `prompt`.
+    - When `expandContext=true`, the server embeds `llmCall.contextItems` using the same ordering as `contextItemIds`.
+
+Context items
+- GET `/api/agents/context-items?ids=<uuid>&ids=<uuid>`
+  - Query: one or more `ids` params (comma-separated lists supported); invalid UUIDs are rejected with 400.
+  - 200 `{ items: Array<{ id, role, contentText, contentJson, metadata, sizeBytes, sha256, createdAt }> }`
+  - Empty `ids` returns `{ items: [] }`.
+
 Dynamic-config schema (read-only)
 - GET `/graph/nodes/:nodeId/dynamic-config/schema`
   - 200: `{ ready: boolean, schema?: JSONSchema }`
