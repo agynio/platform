@@ -117,7 +117,7 @@ export function ThreadTreeNode({
               type="button"
               className={toggleButtonClasses}
               aria-label={expanded ? 'Collapse' : 'Expand'}
-              aria-controls={childrenGroupId}
+              aria-controls={expanded ? childrenGroupId : undefined}
               onClick={async () => {
                 const next = !expanded;
                 setExpanded(next);

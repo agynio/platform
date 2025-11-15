@@ -53,11 +53,13 @@ describe('ThreadTreeNode', () => {
     const icon = toggle.querySelector('svg');
     expect(icon).not.toBeNull();
     expect(icon).toHaveClass('-rotate-90');
+    expect(toggle).not.toHaveAttribute('aria-controls');
 
     await user.click(toggle);
 
     expect(treeItem).toHaveAttribute('aria-expanded', 'true');
     expect(toggle).toHaveAttribute('aria-label', 'Collapse');
+    expect(toggle).toHaveAttribute('aria-controls', 'thread-children-thread-1');
     const updatedIcon = toggle.querySelector('svg');
     expect(updatedIcon).not.toBeNull();
     expect(updatedIcon).toHaveClass('rotate-0');
