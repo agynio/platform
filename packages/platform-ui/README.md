@@ -21,6 +21,12 @@ API base URL
 Notes
 - Legacy VITE_GRAPH_API_BASE has been removed. Use VITE_API_BASE_URL.
 
+## Run timeline UX
+- The timeline fetches the most recent 100 events per query using descending ordering and then normalizes ascending for display.
+- On initial load the list scrolls to the newest event; scrolling near the top backfills older pages while keeping the viewport anchored.
+- Socket updates append to the bottom only when the viewer is already at the latest position.
+- LLM event details move the "Load older context" action above the context list, prepend retrieved entries, and auto-scroll the context panel when context IDs change.
+
 Provider setup
 ```tsx
 import React from 'react';
