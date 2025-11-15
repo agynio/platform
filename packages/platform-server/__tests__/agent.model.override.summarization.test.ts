@@ -20,7 +20,11 @@ describe('Agent summarization uses overridden model', () => {
       maxTokens: 3,
       systemPrompt: 'Summarize',
     });
-    const state = { messages: [HumanMessage.fromText('AAAA'), HumanMessage.fromText('BBBB')], summary: undefined };
+    const state = {
+      messages: [HumanMessage.fromText('AAAA'), HumanMessage.fromText('BBBB')],
+      summary: undefined,
+      context: { messageIds: [], memory: [] },
+    };
     const out = await reducer.invoke(state, { threadId: 't', runId: 'r', finishSignal: { isActive: false } as any, callerAgent: {} as any });
     expect(out.summary).toBe('model:override-model');
   });

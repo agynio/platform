@@ -1,5 +1,5 @@
 import { Reducer } from '@agyn/llm';
-import type { LLMContext, LLMState } from '../types';
+import type { LLMContext, LLMContextState, LLMState } from '../types';
 import { HumanMessage, ResponseMessage, SystemMessage, ToolCallOutputMessage } from '@agyn/llm';
 import type { JsonValue, InputJsonValue } from '../services/messages.serialization';
 import type { ResponseInputItem, Response } from 'openai/resources/responses/responses.mjs';
@@ -13,6 +13,14 @@ type PlainMessage = {
 type PlainLLMState = {
   messages: PlainMessage[];
   summary?: string;
+  context?: PlainContextState;
+};
+
+type PlainContextState = {
+  messageIds: string[];
+  memory: Array<{ id: string | null; place: 'after_system' | 'last_message' }>;
+  summary?: { id: string | null; text: string | null };
+  system?: { id: string | null };
 };
 
 export abstract class PersistenceBaseLLMReducer extends Reducer<LLMState, LLMContext> {
@@ -26,11 +34,19 @@ export abstract class PersistenceBaseLLMReducer extends Reducer<LLMState, LLMCon
       if (m instanceof ToolCallOutputMessage) return { kind: 'tool_call_output', value: toPrismaJsonValue(m.toPlain()) };
       throw new Error('Unsupported message type for serialization');
     });
-    return { messages, summary: state.summary };
+    const context: PlainContextState = {
+      messageIds: [...(state.context?.messageIds ?? [])],
+      memory: (state.context?.memory ?? []).map((entry) => ({ id: entry.id ?? null, place: entry.place })),
+      summary: state.context?.summary ? { ...state.context.summary } : undefined,
+      system: state.context?.system ? { ...state.context.system } : undefined,
+    };
+    return { messages, summary: state.summary, context };
   }
 
   protected deserializeState(plain: JsonValue): LLMState {
-    if (!this.isPlainLLMState(plain)) return { messages: [], summary: undefined };
+    if (!this.isPlainLLMState(plain)) {
+      return this.emptyState();
+    }
     const p: PlainLLMState = plain;
     const messages = p.messages.map((msg) => {
       const val: unknown = msg.value;
@@ -50,7 +66,27 @@ export abstract class PersistenceBaseLLMReducer extends Reducer<LLMState, LLMCon
       }
       throw new Error('Invalid persisted message value');
     });
-    return { messages, summary: p.summary };
+    return {
+      messages,
+      summary: p.summary,
+      context: this.deserializeContext(p.context),
+    };
+  }
+
+  protected deserializeContext(context: PlainContextState | undefined): LLMContextState {
+    const messageIds = context?.messageIds ? [...context.messageIds] : [];
+    const memory = context?.memory ? context.memory.map((entry) => ({ id: entry.id ?? null, place: entry.place })) : [];
+    const summary = context?.summary ? { id: context.summary.id ?? null, text: context.summary.text ?? null } : undefined;
+    const system = context?.system ? { id: context.system.id ?? null } : undefined;
+    return { messageIds, memory, summary, system };
+  }
+
+  protected emptyState(): LLMState {
+    return {
+      messages: [],
+      summary: undefined,
+      context: { messageIds: [], memory: [] },
+    };
   }
 
   // Guards and helpers

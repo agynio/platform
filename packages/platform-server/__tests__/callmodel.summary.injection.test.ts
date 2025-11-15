@@ -18,7 +18,7 @@ describe('CallModelLLMReducer: summary injection', () => {
     const reducer = new CallModelLLMReducer(new LoggerService(), createRunEventsStub() as any);
     reducer.init({ llm: llm as any, model: 'x', systemPrompt: 'SYS', tools: [] });
     await reducer.invoke(
-      { messages: [HumanMessage.fromText('H1')], summary: 'SUM' } as any,
+      { messages: [HumanMessage.fromText('H1')], summary: 'SUM', context: { messageIds: [], memory: [] } } as any,
       { threadId: 't', runId: 'r', finishSignal: { isActive: false } as any, callerAgent: {} as any },
     );
     expect(llm.lastInput[0] instanceof SystemMessage).toBe(true);
@@ -36,7 +36,7 @@ describe('CallModelLLMReducer: summary injection', () => {
       memoryProvider: async () => ({ msg: SystemMessage.fromText('MEM'), place: 'after_system' }),
     });
     await reducer.invoke(
-      { messages: [HumanMessage.fromText('H1')], summary: 'SUM' } as any,
+      { messages: [HumanMessage.fromText('H1')], summary: 'SUM', context: { messageIds: [], memory: [] } } as any,
       { threadId: 't', runId: 'r', finishSignal: { isActive: false } as any, callerAgent: {} as any },
     );
     expect(llm.lastInput[0] instanceof SystemMessage).toBe(true);
@@ -56,7 +56,7 @@ describe('CallModelLLMReducer: summary injection', () => {
       memoryProvider: async () => ({ msg: SystemMessage.fromText('MEM'), place: 'last_message' }),
     });
     await reducer.invoke(
-      { messages: [HumanMessage.fromText('H1')], summary: 'SUM' } as any,
+      { messages: [HumanMessage.fromText('H1')], summary: 'SUM', context: { messageIds: [], memory: [] } } as any,
       { threadId: 't', runId: 'r', finishSignal: { isActive: false } as any, callerAgent: {} as any },
     );
     expect(llm.lastInput[0] instanceof SystemMessage).toBe(true);
@@ -70,7 +70,7 @@ describe('CallModelLLMReducer: summary injection', () => {
     const reducer = new CallModelLLMReducer(new LoggerService(), createRunEventsStub() as any);
     reducer.init({ llm: llm as any, model: 'x', systemPrompt: 'SYS', tools: [] });
     await reducer.invoke(
-      { messages: [HumanMessage.fromText('H1')], summary: '' } as any,
+      { messages: [HumanMessage.fromText('H1')], summary: '', context: { messageIds: [], memory: [] } } as any,
       { threadId: 't', runId: 'r', finishSignal: { isActive: false } as any, callerAgent: {} as any },
     );
     expect(llm.lastInput[1] instanceof HumanMessage).toBe(true);
@@ -83,7 +83,7 @@ describe('CallModelLLMReducer: summary injection', () => {
     reducer.init({ llm: llm as any, model: 'x', systemPrompt: 'SYS', tools: [] });
     const summary = 'SUM';
     await reducer.invoke(
-      { messages: [HumanMessage.fromText(summary)], summary } as any,
+      { messages: [HumanMessage.fromText(summary)], summary, context: { messageIds: [], memory: [] } } as any,
       { threadId: 't', runId: 'r', finishSignal: { isActive: false } as any, callerAgent: {} as any },
     );
     // Summary should be injected after system, even if an identical HumanMessage exists later

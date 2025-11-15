@@ -1,7 +1,7 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { PrismaService } from '../../core/services/prisma.service';
 import { ConversationStateRepository } from '../repositories/conversationState.repository';
-import type { LLMContext, LLMState } from '../types';
+import type { LLMContext, LLMContextState, LLMState } from '../types';
 
 import { LoggerService } from '../../core/services/logger.service';
 import { PersistenceBaseLLMReducer } from './persistenceBase.llm.reducer';
@@ -20,20 +20,46 @@ export class LoadLLMReducer extends PersistenceBaseLLMReducer {
       const prisma = this.prismaService.getClient();
       const repo = new ConversationStateRepository(prisma);
       const nodeId = ctx.callerAgent.getAgentNodeId?.() || 'agent';
+      const incomingContext = this.ensureContext(state.context);
       const existing = await repo.get(ctx.threadId, nodeId);
-      if (!existing?.state) return state;
+      if (!existing?.state) {
+        return { ...state, context: incomingContext };
+      }
       // Merge: existing.messages + incoming messages; keep latest summary
-      if (!this.isPlainLLMState(existing.state)) return state;
+      if (!this.isPlainLLMState(existing.state)) {
+        return { ...state, context: incomingContext };
+      }
       const persisted = this.deserializeState(existing.state);
 
+      const persistedContext = this.ensureContext(persisted.context);
+
+      const mergedContext: LLMContextState = {
+        messageIds: [...persistedContext.messageIds, ...incomingContext.messageIds],
+        memory: incomingContext.memory.length > 0 ? incomingContext.memory : persistedContext.memory,
+        summary: incomingContext.summary ?? persistedContext.summary,
+        system: persistedContext.system ?? incomingContext.system,
+      };
+
       const merged: LLMState = {
-        summary: persisted.summary,
+        summary: persisted.summary ?? state.summary,
         messages: [...persisted.messages, ...state.messages],
+        context: mergedContext,
+        meta: state.meta,
       };
       return merged;
     } catch (e) {
       this.logger.error('LoadLLMReducer error: %s', (e as Error)?.message || String(e));
-      return state;
+      return { ...state, context: this.ensureContext(state.context) };
     }
+  }
+
+  private ensureContext(context: LLMContextState | undefined): LLMContextState {
+    if (!context) return { messageIds: [], memory: [] };
+    return {
+      messageIds: [...(context.messageIds ?? [])],
+      memory: [...(context.memory ?? [])],
+      summary: context.summary ? { ...context.summary } : undefined,
+      system: context.system ? { ...context.system } : undefined,
+    };
   }
 }

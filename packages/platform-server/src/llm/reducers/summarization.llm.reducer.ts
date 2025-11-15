@@ -1,5 +1,5 @@
 import { SummarizeResponse, withSummarize } from '@agyn/tracing';
-import { LLMContext, LLMMessage, LLMState } from '../types';
+import { LLMContext, LLMContextState, LLMMessage, LLMState } from '../types';
 
 import {
   HumanMessage,
@@ -17,6 +17,7 @@ import { LoggerService } from '../../core/services/logger.service';
 import { RunEventsService } from '../../events/run-events.service';
 import { toPrismaJsonValue } from '../services/messages.serialization';
 import { Prisma } from '@prisma/client';
+import { contextItemInputFromSummary } from '../services/context-items.utils';
 
 @Injectable({ scope: Scope.TRANSIENT })
 export class SummarizationLLMReducer extends Reducer<LLMState, LLMContext> {
@@ -79,6 +80,8 @@ export class SummarizationLLMReducer extends Reducer<LLMState, LLMContext> {
     const messages = state.messages;
     if (!messages.length) return state;
 
+    const context = this.cloneContext(state.context);
+
     // 1. Split messages into head (latest, minimal to reach keepTokens) and tail (older)
     let [tail, head] = await this.splitHeadTailByTokens(messages, keepTokens);
 
@@ -87,7 +90,13 @@ export class SummarizationLLMReducer extends Reducer<LLMState, LLMContext> {
 
     // 3. Summarize tail
     if (!tail.length) {
-      return { ...state, messages: head };
+      return { ...state, messages: head, context };
+    }
+
+    if (tail.length >= context.messageIds.length) {
+      context.messageIds = [];
+    } else {
+      context.messageIds = context.messageIds.slice(tail.length);
     }
 
     const foldLines = stringify(tail);
@@ -144,7 +153,15 @@ export class SummarizationLLMReducer extends Reducer<LLMState, LLMContext> {
     });
     await this.runEvents.publishEvent(event.id, 'append');
 
-    return { summary: summarizeResponse.summary, messages: head };
+    const summaryText = summarizeResponse.summary ?? '';
+    let summaryId = summaryText && context.summary?.text === summaryText ? context.summary.id ?? null : null;
+    if (summaryText && !summaryId) {
+      const created = await this.runEvents.createContextItems([contextItemInputFromSummary(summaryText)]);
+      summaryId = created[0] ?? null;
+    }
+    context.summary = summaryText ? { id: summaryId, text: summaryText } : undefined;
+
+    return { summary: summarizeResponse.summary, messages: head, context };
   }
 
   /**
@@ -199,6 +216,16 @@ export class SummarizationLLMReducer extends Reducer<LLMState, LLMContext> {
       }
     }
     return [newHead, newTail];
+  }
+
+  private cloneContext(context?: LLMContextState): LLMContextState {
+    if (!context) return { messageIds: [], memory: [] };
+    return {
+      messageIds: [...context.messageIds],
+      memory: context.memory.map((entry) => ({ id: entry.id ?? null, place: entry.place })),
+      summary: context.summary ? { id: context.summary.id ?? null, text: context.summary.text ?? null } : undefined,
+      system: context.system ? { id: context.system.id ?? null } : undefined,
+    };
   }
 
   async invoke(state: LLMState, _ctx: LLMContext): Promise<LLMState> {

@@ -42,7 +42,10 @@ describe('ToolsNode tool_call span attribution', () => {
     const reducer = new CallToolsLLMReducer(new LoggerService(), createRunEventsStub() as any).init({ tools: [new EchoTool() as any] }) as any;
     const response = new ResponseMessage({ output: [new ToolCallMessage({ type: 'function_call', call_id: 'tc1', name: 'echo', arguments: JSON.stringify({ a: 1 }) } as any).toPlain() as any] as any });
     const config = { callerAgent: { getAgentNodeId: () => 'tool-123' } as any, threadId: 't', runId: 'r', finishSignal: { activate(){}, deactivate(){}, isActive:false } } as any;
-    await (reducer.invoke as any)({ messages: [response], meta: {} } as any, config);
+    await (reducer.invoke as any)(
+      { messages: [response], meta: {}, context: { messageIds: [], memory: [] } } as any,
+      config,
+    );
     const obs: any = await import('@agyn/tracing');
     const captured = (obs as any).__test.captured as Array<{ nodeId?: string; toolNodeId?: string }>;
     expect(captured.length).toBeGreaterThan(0);
@@ -59,7 +62,10 @@ describe('ToolsNode tool_call span attribution', () => {
     const reducer = new CallToolsLLMReducer(new LoggerService(), createRunEventsStub() as any).init({ tools: [new EchoTool() as any] }) as any;
     const response = new ResponseMessage({ output: [new ToolCallMessage({ type: 'function_call', call_id: 'tc2', name: 'echo', arguments: JSON.stringify({ a: 1 }) } as any).toPlain() as any] as any });
     const config = { callerAgent: { getAgentNodeId: () => undefined } as any, threadId: 't', runId: 'r', finishSignal: { activate(){}, deactivate(){}, isActive:false } } as any;
-    await (reducer.invoke as any)({ messages: [response], meta: {} } as any, config);
+    await (reducer.invoke as any)(
+      { messages: [response], meta: {}, context: { messageIds: [], memory: [] } } as any,
+      config,
+    );
     const captured = (obs as any).__test.captured as Array<{ nodeId?: string; toolNodeId?: string }>;
     expect(captured.length).toBeGreaterThan(0);
     // No nodeId should be set when tool id is missing

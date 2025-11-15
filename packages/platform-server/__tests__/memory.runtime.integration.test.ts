@@ -129,7 +129,7 @@ function makeRuntime(
 async function getLastMessages(runtime: LiveGraphRuntime, nodeId: string): Promise<SystemMessage[]> {
   const cm = runtime.getNodeInstance(nodeId) as TestCallModelNode;
   const out = await cm.invoke(
-    { messages: [] },
+    { messages: [], context: { messageIds: [], memory: [] } },
     {
       threadId: 'T',
       finishSignal: new Signal(),

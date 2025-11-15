@@ -12,7 +12,11 @@ import { AgentsPersistenceService } from '../src/agents/agents.persistence.servi
 
 class PassthroughReducer extends Reducer<LLMState, LLMContext> {
   async invoke(state: LLMState): Promise<LLMState> {
-    return { ...state, messages: [...state.messages, new ResponseMessage({ output: [AIMessage.fromText('done').toPlain()] })] };
+    return {
+      ...state,
+      messages: [...state.messages, new ResponseMessage({ output: [AIMessage.fromText('done').toPlain()] })],
+      context: state.context,
+    };
   }
 }
 

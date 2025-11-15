@@ -60,9 +60,31 @@ export interface CallerAgent {
 
 export type LLMMessage = HumanMessage | SystemMessage | AIMessage | ResponseMessage | ToolCallOutputMessage;
 
+export type LLMContextMemoryEntry = {
+  id: string | null;
+  place: 'after_system' | 'last_message';
+};
+
+export type LLMContextSummaryState = {
+  id: string | null;
+  text: string | null;
+};
+
+export type LLMContextSystemState = {
+  id: string | null;
+};
+
+export type LLMContextState = {
+  messageIds: string[];
+  memory: LLMContextMemoryEntry[];
+  summary?: LLMContextSummaryState;
+  system?: LLMContextSystemState;
+};
+
 export type LLMState = {
   messages: LLMMessage[];
   summary?: string;
+  context: LLMContextState;
   // Per-turn meta used for restriction enforcement and telemetry
   meta?: {
     restrictionInjectionCount?: number;

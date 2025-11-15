@@ -1,5 +1,4 @@
 import {
-  AIMessage,
   FunctionTool,
   HumanMessage,
   LLM,
@@ -7,16 +6,27 @@ import {
   ResponseMessage,
   SystemMessage,
   ToolCallMessage,
-  ToolCallOutputMessage,
 } from '@agyn/llm';
 import { LLMResponse, withLLM } from '@agyn/tracing';
 import { Inject, Injectable, Scope } from '@nestjs/common';
-import { LLMContext, LLMMessage, LLMState } from '../types';
+import { LLMContext, LLMContextState, LLMMessage, LLMState } from '../types';
 import { LoggerService } from '../../core/services/logger.service';
 import { RunEventsService, ToolCallRecord } from '../../events/run-events.service';
-import { RunEventStatus, Prisma, ContextItemRole } from '@prisma/client';
+import { RunEventStatus, Prisma } from '@prisma/client';
 import { toPrismaJsonValue } from '../services/messages.serialization';
-import { ContextItemInput } from '../services/context-items.utils';
+import {
+  contextItemInputFromMemory,
+  contextItemInputFromMessage,
+  contextItemInputFromSummary,
+  contextItemInputFromSystem,
+} from '../services/context-items.utils';
+import type { ContextItemInput } from '../services/context-items.utils';
+
+type SequenceEntry =
+  | { kind: 'system'; message: SystemMessage }
+  | { kind: 'summary'; message: HumanMessage }
+  | { kind: 'memory'; message: SystemMessage; place: 'after_system' | 'last_message' }
+  | { kind: 'conversation'; message: LLMMessage; index: number };
 
 @Injectable({ scope: Scope.TRANSIENT })
 export class CallModelLLMReducer extends Reducer<LLMState, LLMContext> {
@@ -58,22 +68,20 @@ export class CallModelLLMReducer extends Reducer<LLMState, LLMContext> {
     if (!this.llm || !this.model || !this.systemPrompt) {
       throw new Error('CallModelLLMReducer not initialized');
     }
-    const system = SystemMessage.fromText(this.systemPrompt);
-    const summaryText = state.summary?.trim();
-    const summaryMsg = summaryText ? HumanMessage.fromText(summaryText) : null;
-    const mem = this.memoryProvider ? await this.memoryProvider(_ctx, state) : null;
 
-    // Assemble input in a single expression using filter(Boolean)
-    const input: (SystemMessage | LLMMessage)[] =
-      mem?.place === 'after_system'
-        ? ([system, summaryMsg, mem?.msg ?? null, ...state.messages].filter(Boolean) as Array<
-            SystemMessage | LLMMessage
-          >)
-        : mem?.place === 'last_message'
-          ? ([system, summaryMsg, ...state.messages, mem?.msg ?? null].filter(Boolean) as Array<
-              SystemMessage | LLMMessage
-            >)
-          : ([system, summaryMsg, ...state.messages].filter(Boolean) as Array<SystemMessage | LLMMessage>);
+    const system = SystemMessage.fromText(this.systemPrompt);
+    const summaryText = state.summary?.trim() ?? null;
+    const summaryMsg = summaryText ? HumanMessage.fromText(summaryText) : null;
+    const memoryResult = this.memoryProvider ? await this.memoryProvider(_ctx, state) : null;
+
+    const context = this.cloneContext(state.context);
+    if (memoryResult && !memoryResult.msg) {
+      context.memory = context.memory.filter((entry) => entry.place !== memoryResult.place);
+    }
+
+    const sequence = this.buildSequence(system, summaryMsg, memoryResult, state.messages);
+    const { contextItemIds, context: nextContext } = await this.resolveContextIds(context, sequence, summaryText);
+    const input = sequence.map((entry) => entry.message);
 
     const nodeId = _ctx.callerAgent.getAgentNodeId?.() ?? null;
     const llmEvent = await this.runEvents.startLLMCall({
@@ -81,7 +89,11 @@ export class CallModelLLMReducer extends Reducer<LLMState, LLMContext> {
       threadId: _ctx.threadId,
       nodeId,
       model: this.model,
-      contextItems: this.buildContextItems(input),
+      contextItemIds,
+      metadata: {
+        summaryIncluded: Boolean(summaryMsg),
+        memoryPlacement: memoryResult?.msg ? memoryResult.place : null,
+      },
     });
     await this.runEvents.publishEvent(llmEvent.id, 'append');
 
@@ -134,6 +146,7 @@ export class CallModelLLMReducer extends Reducer<LLMState, LLMContext> {
       const updated: LLMState = {
         ...state,
         messages: [...state.messages, rawMessage],
+        context: nextContext,
         meta: { ...state.meta, lastLLMEventId: llmEvent.id },
       };
       return updated;
@@ -150,57 +163,159 @@ export class CallModelLLMReducer extends Reducer<LLMState, LLMContext> {
     }
   }
 
-  private buildContextItems(messages: Array<SystemMessage | LLMMessage>): ContextItemInput[] {
-    const items: ContextItemInput[] = [];
-    for (const message of messages) {
-      if (message instanceof SystemMessage) {
-        items.push({
-          role: ContextItemRole.system,
-          contentText: message.text,
-          metadata: { type: message.type },
-        });
-        continue;
-      }
-      if (message instanceof HumanMessage) {
-        items.push({
-          role: ContextItemRole.user,
-          contentText: message.text,
-          metadata: { type: message.type },
-        });
-        continue;
-      }
-      if (message instanceof AIMessage) {
-        items.push({
-          role: ContextItemRole.assistant,
-          contentText: message.text,
-          metadata: { type: message.type },
-        });
-        continue;
-      }
-      if (message instanceof ToolCallOutputMessage) {
-        items.push({
-          role: ContextItemRole.tool,
-          contentText: message.text,
-          contentJson: safeToPlain(message),
-          metadata: { type: message.type, callId: message.callId },
-        });
-        continue;
-      }
-      if (message instanceof ResponseMessage) {
-        items.push({
-          role: ContextItemRole.assistant,
-          contentText: message.text,
-          contentJson: safeToPlain(message),
-          metadata: { type: message.type },
-        });
-        continue;
-      }
-      items.push({
-        role: ContextItemRole.other,
-        contentJson: safeToPlain(message) ?? null,
-      });
+  private cloneContext(context?: LLMContextState): LLMContextState {
+    if (!context) return { messageIds: [], memory: [] };
+    return {
+      messageIds: [...context.messageIds],
+      memory: context.memory.map((entry) => ({ id: entry.id ?? null, place: entry.place })),
+      summary: context.summary ? { id: context.summary.id ?? null, text: context.summary.text ?? null } : undefined,
+      system: context.system ? { id: context.system.id ?? null } : undefined,
+    };
+  }
+
+  private buildSequence(
+    system: SystemMessage,
+    summaryMsg: HumanMessage | null,
+    memoryResult: { msg: SystemMessage | null; place: 'after_system' | 'last_message' } | null,
+    conversation: LLMMessage[],
+  ): SequenceEntry[] {
+    const sequence: SequenceEntry[] = [{ kind: 'system', message: system }];
+    if (summaryMsg) sequence.push({ kind: 'summary', message: summaryMsg });
+
+    if (memoryResult?.msg && memoryResult.place === 'after_system') {
+      sequence.push({ kind: 'memory', message: memoryResult.msg, place: memoryResult.place });
     }
-    return items;
+
+    conversation.forEach((message, index) => {
+      sequence.push({ kind: 'conversation', message, index });
+    });
+
+    if (memoryResult?.msg && memoryResult.place === 'last_message') {
+      sequence.push({ kind: 'memory', message: memoryResult.msg, place: memoryResult.place });
+    }
+
+    return sequence;
+  }
+
+  private async resolveContextIds(
+    context: LLMContextState,
+    sequence: SequenceEntry[],
+    summaryText: string | null,
+  ): Promise<{ contextItemIds: string[]; context: LLMContextState }> {
+    const ids: string[] = [];
+    const pending: Array<{ input: ContextItemInput; assign: (id: string) => void }> = [];
+    let conversationIndex = 0;
+
+    if (!summaryText) {
+      context.summary = undefined;
+    }
+
+    for (const entry of sequence) {
+      switch (entry.kind) {
+        case 'system': {
+          const existing = context.system ?? { id: null };
+          context.system = existing;
+          this.collectContextId({
+            existingId: existing.id ?? null,
+            ids,
+            pending,
+            input: () => contextItemInputFromSystem(entry.message),
+            assign: (id) => {
+              existing.id = id;
+            },
+          });
+          break;
+        }
+        case 'summary': {
+          if (summaryText) {
+            const existing = context.summary;
+            const reuseId = existing && existing.text === summaryText ? existing.id ?? null : null;
+            this.collectContextId({
+              existingId: reuseId,
+              ids,
+              pending,
+              input: () => contextItemInputFromSummary(summaryText),
+              assign: (id) => {
+                context.summary = { id, text: summaryText };
+              },
+            });
+          }
+          break;
+        }
+        case 'memory': {
+          const place = entry.place;
+          let memoryEntry = context.memory.find((m) => m.place === place);
+          if (!memoryEntry) {
+            memoryEntry = { id: null, place };
+            context.memory.push(memoryEntry);
+          }
+          this.collectContextId({
+            existingId: memoryEntry.id ?? null,
+            ids,
+            pending,
+            input: () => contextItemInputFromMemory(entry.message, place),
+            assign: (id) => {
+              memoryEntry!.id = id;
+            },
+          });
+          break;
+        }
+        case 'conversation': {
+          const existingId = context.messageIds[conversationIndex] ?? null;
+          const idx = conversationIndex;
+          this.collectContextId({
+            existingId,
+            ids,
+            pending,
+            input: () => contextItemInputFromMessage(entry.message),
+            assign: (id) => {
+              if (idx < context.messageIds.length) {
+                context.messageIds[idx] = id;
+              } else {
+                context.messageIds.push(id);
+              }
+            },
+          });
+          conversationIndex += 1;
+          break;
+        }
+      }
+    }
+
+    if (context.messageIds.length > conversationIndex) {
+      context.messageIds = context.messageIds.slice(0, conversationIndex);
+    }
+
+    if (pending.length > 0) {
+      const inputs = pending.map((item) => item.input);
+      const created = await this.runEvents.createContextItems(inputs);
+      created.forEach((id, index) => pending[index].assign(id));
+    }
+
+    return { contextItemIds: ids, context };
+  }
+
+  private collectContextId(params: {
+    existingId: string | null;
+    ids: string[];
+    pending: Array<{ input: ContextItemInput; assign: (id: string) => void }>;
+    input: () => ContextItemInput;
+    assign: (id: string) => void;
+  }): void {
+    const { existingId, ids, pending, input, assign } = params;
+    if (existingId) {
+      ids.push(existingId);
+      return;
+    }
+    const slot = ids.length;
+    ids.push('');
+    pending.push({
+      input: input(),
+      assign: (id) => {
+        ids[slot] = id;
+        assign(id);
+      },
+    });
   }
 
   private serializeToolCalls(calls: ToolCallMessage[]): ToolCallRecord[] {
@@ -239,18 +354,4 @@ export class CallModelLLMReducer extends Reducer<LLMState, LLMContext> {
     const reason = obj.stop_reason ?? obj.finish_reason;
     return typeof reason === 'string' ? reason : null;
   }
-}
-
-function safeToPlain(value: unknown): unknown {
-  if (value && typeof value === 'object') {
-    const candidate = value as { toPlain?: () => unknown };
-    if (typeof candidate.toPlain === 'function') {
-      try {
-        return candidate.toPlain();
-      } catch {
-        return null;
-      }
-    }
-  }
-  return null;
 }

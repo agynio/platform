@@ -19,7 +19,7 @@ describe('CallModel memory injection', () => {
     reducer.init({ llm: llm as any, model: 'x', systemPrompt: 'SYS', tools: [], memoryProvider: async () => ({ msg: SystemMessage.fromText('MEM'), place: 'after_system' }) });
     // Explicitly avoid setting summary truthy, but assertions should be resilient
     await reducer.invoke(
-      { messages: [], summary: undefined } as any,
+      { messages: [], summary: undefined, context: { messageIds: [], memory: [] } } as any,
       { threadId: 't', runId: 'r', finishSignal: { isActive: false } as any, callerAgent: {} as any },
     );
     expect(llm.lastInput[0] instanceof SystemMessage).toBe(true);
@@ -35,7 +35,7 @@ describe('CallModel memory injection', () => {
     const reducer = new CallModelLLMReducer(new LoggerService(), createRunEventsStub() as any);
     reducer.init({ llm: llm as any, model: 'x', systemPrompt: 'SYS', tools: [], memoryProvider: async () => ({ msg: SystemMessage.fromText('MEM'), place: 'last_message' }) });
     await reducer.invoke(
-      { messages: [SystemMessage.fromText('S')] } as any,
+      { messages: [SystemMessage.fromText('S')], context: { messageIds: [], memory: [] } } as any,
       { threadId: 't', runId: 'r', finishSignal: { isActive: false } as any, callerAgent: {} as any },
     );
     expect((llm.lastInput[llm.lastInput.length - 1] as SystemMessage).text).toBe('MEM');
@@ -46,7 +46,7 @@ describe('CallModel memory injection', () => {
     const reducer = new CallModelLLMReducer(new LoggerService(), createRunEventsStub() as any);
     reducer.init({ llm: llm as any, model: 'x', systemPrompt: 'SYS', tools: [], memoryProvider: async () => ({ msg: SystemMessage.fromText('MEM'), place: 'after_system' }) });
     await reducer.invoke(
-      { messages: [SystemMessage.fromText('S1')], summary: 'SUM' } as any,
+      { messages: [SystemMessage.fromText('S1')], summary: 'SUM', context: { messageIds: [], memory: [] } } as any,
       { threadId: 't', runId: 'r', finishSignal: { isActive: false } as any, callerAgent: {} as any },
     );
     expect(llm.lastInput[0] instanceof SystemMessage).toBe(true);
@@ -62,7 +62,7 @@ describe('CallModel memory injection', () => {
     const reducer = new CallModelLLMReducer(new LoggerService(), createRunEventsStub() as any);
     reducer.init({ llm: llm as any, model: 'x', systemPrompt: 'SYS', tools: [], memoryProvider: async () => ({ msg: SystemMessage.fromText('MEM'), place: 'last_message' }) });
     await reducer.invoke(
-      { messages: [SystemMessage.fromText('S1')], summary: 'SUM' } as any,
+      { messages: [SystemMessage.fromText('S1')], summary: 'SUM', context: { messageIds: [], memory: [] } } as any,
       { threadId: 't', runId: 'r', finishSignal: { isActive: false } as any, callerAgent: {} as any },
     );
     const last = llm.lastInput[llm.lastInput.length - 1] as SystemMessage;

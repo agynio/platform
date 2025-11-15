@@ -1,6 +1,6 @@
 import { ToolCallResponse, withToolCall } from '@agyn/tracing';
 
-import { LLMContext, LLMMessage, LLMState } from '../types';
+import { LLMContext, LLMContextState, LLMMessage, LLMState } from '../types';
 import { FunctionTool, Reducer, ResponseMessage, ToolCallMessage, ToolCallOutputMessage } from '@agyn/llm';
 import { LoggerService } from '../../core/services/logger.service';
 import { Inject, Injectable, Scope } from '@nestjs/common';
@@ -9,6 +9,7 @@ import { RunEventsService } from '../../events/run-events.service';
 import { ToolExecStatus, Prisma } from '@prisma/client';
 import { toPrismaJsonValue } from '../services/messages.serialization';
 import type { ResponseFunctionCallOutputItemList } from 'openai/resources/responses/responses.mjs';
+import { contextItemInputFromMessage } from '../services/context-items.utils';
 
 type ToolCallErrorCode =
   | 'BAD_JSON_ARGS'
@@ -273,7 +274,14 @@ export class CallToolsLLMReducer extends Reducer<LLMState, LLMContext> {
       restrictionInjected: false,
     };
 
-    return { ...state, messages: [...state.messages, ...results], meta };
+    const context = this.cloneContext(state.context);
+    if (results.length > 0) {
+      const inputs = results.map((msg) => contextItemInputFromMessage(msg));
+      const created = await this.runEvents.createContextItems(inputs);
+      context.messageIds = [...context.messageIds, ...created];
+    }
+
+    return { ...state, messages: [...state.messages, ...results], meta, context };
   }
 
   private toJson(value: unknown): Prisma.InputJsonValue | null {
@@ -295,6 +303,16 @@ export class CallToolsLLMReducer extends Reducer<LLMState, LLMContext> {
     if (typeof response.output === 'string') return response.output;
     if (typeof response.raw === 'string') return response.raw;
     return null;
+  }
+
+  private cloneContext(context?: LLMContextState): LLMContextState {
+    if (!context) return { messageIds: [], memory: [] };
+    return {
+      messageIds: [...context.messageIds],
+      memory: context.memory.map((entry) => ({ id: entry.id ?? null, place: entry.place })),
+      summary: context.summary ? { id: context.summary.id ?? null, text: context.summary.text ?? null } : undefined,
+      system: context.system ? { id: context.system.id ?? null } : undefined,
+    };
   }
 
   private async finalizeToolExecutionEvent(

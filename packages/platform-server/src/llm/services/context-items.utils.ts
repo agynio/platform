@@ -1,5 +1,12 @@
 import type { PrismaClient } from '@prisma/client';
 import { ContextItemRole, Prisma } from '@prisma/client';
+import {
+  AIMessage,
+  HumanMessage,
+  ResponseMessage,
+  SystemMessage,
+  ToolCallOutputMessage,
+} from '@agyn/llm';
 import { toPrismaJsonValue } from './messages.serialization';
 
 export type ContextItemInput = {
@@ -90,6 +97,8 @@ export type UpsertContextItemsResult = {
   created: number;
 };
 
+export type MemoryPlacement = 'after_system' | 'last_message';
+
 export async function upsertNormalizedContextItems(
   client: PrismaContextClient,
   items: NormalizedContextItem[],
@@ -119,6 +128,70 @@ export async function upsertNormalizedContextItems(
   }
 
   return { ids, created };
+}
+
+export function contextItemInputFromSystem(message: SystemMessage): ContextItemInput {
+  return {
+    role: ContextItemRole.system,
+    contentText: message.text,
+    metadata: { type: message.type },
+  };
+}
+
+export function contextItemInputFromSummary(text: string): ContextItemInput {
+  return {
+    role: ContextItemRole.summary,
+    contentText: text,
+    metadata: { kind: 'summary' },
+  };
+}
+
+export function contextItemInputFromMemory(message: SystemMessage, place: MemoryPlacement): ContextItemInput {
+  return {
+    role: ContextItemRole.memory,
+    contentText: message.text,
+    metadata: { type: message.type, place },
+  };
+}
+
+export function contextItemInputFromMessage(
+  message: SystemMessage | HumanMessage | AIMessage | ResponseMessage | ToolCallOutputMessage,
+): ContextItemInput {
+  if (message instanceof SystemMessage) return contextItemInputFromSystem(message);
+  if (message instanceof HumanMessage) {
+    return {
+      role: ContextItemRole.user,
+      contentText: message.text,
+      metadata: { type: message.type },
+    };
+  }
+  if (message instanceof AIMessage) {
+    return {
+      role: ContextItemRole.assistant,
+      contentText: message.text,
+      metadata: { type: message.type },
+    };
+  }
+  if (message instanceof ToolCallOutputMessage) {
+    return {
+      role: ContextItemRole.tool,
+      contentText: message.text,
+      contentJson: safeToPlain(message),
+      metadata: { type: message.type, callId: message.callId },
+    };
+  }
+  if (message instanceof ResponseMessage) {
+    return {
+      role: ContextItemRole.assistant,
+      contentText: message.text,
+      contentJson: safeToPlain(message),
+      metadata: { type: message.type },
+    };
+  }
+  return {
+    role: ContextItemRole.other,
+    contentJson: safeToPlain(message) ?? null,
+  };
 }
 
 function normalizeJsonValue(value: unknown, logger?: LoggerLike): {
@@ -157,4 +230,18 @@ function toCanonicalJson(value: Prisma.InputJsonValue | typeof Prisma.JsonNull):
     return out;
   }
   return value;
+}
+
+function safeToPlain(value: unknown): unknown {
+  if (value && typeof value === 'object') {
+    const candidate = value as { toPlain?: () => unknown };
+    if (typeof candidate.toPlain === 'function') {
+      try {
+        return candidate.toPlain();
+      } catch {
+        return null;
+      }
+    }
+  }
+  return null;
 }

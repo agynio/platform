@@ -26,7 +26,7 @@ describe('SaveLLMReducer fail-fast', () => {
     vi.spyOn(ConversationStateRepository.prototype, 'upsert').mockRejectedValue(new Error('persist_fail'));
 
     const reducer = await module.resolve(SaveLLMReducer);
-    const state: LLMState = { messages: [HumanMessage.fromText('hello')] };
+    const state: LLMState = { messages: [HumanMessage.fromText('hello')], context: { messageIds: [], memory: [] } };
     const ctx: LLMContext = { threadId: 't1', runId: 'r1', finishSignal: new Signal(), callerAgent: { getAgentNodeId: () => 'A', invoke: async () => new Promise(() => {}) } };
 
     await expect(reducer.invoke(state, ctx)).rejects.toBeTruthy();

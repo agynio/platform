@@ -38,7 +38,7 @@ describe('Abort propagation', () => {
     // Abort before invoking to ensure deterministic throw
     ac.abort();
     const p = reducer.invoke(
-      { messages: [response], meta: {} } as any,
+      { messages: [response], meta: {}, context: { messageIds: [], memory: [] } } as any,
       {
         threadId: 't',
         runId: 'r',

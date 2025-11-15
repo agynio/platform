@@ -3,6 +3,7 @@ import { ResponseMessage, ToolCallMessage } from '@agyn/llm';
 import { CallToolsLLMReducer } from '../src/llm/reducers/callTools.llm.reducer';
 import { LoggerService } from '../src/core/services/logger.service.js';
 import { z } from 'zod';
+import { createRunEventsStub } from './helpers/runEvents.stub';
 
 type Captured = {
   attrs: { toolCallId: string; name: string; input: unknown };
@@ -49,7 +50,7 @@ const buildState = (name: string, callId: string, args: string) => {
   const response = new ResponseMessage({
     output: [new ToolCallMessage({ type: 'function_call', call_id: callId, name, arguments: args } as any).toPlain() as any] as any,
   });
-  return { messages: [response], meta: {} } as any;
+  return { messages: [response], meta: {}, context: { messageIds: [], memory: [] } } as any;
 };
 
 describe('CallToolsLLMReducer error isolation', () => {
@@ -70,7 +71,7 @@ describe('CallToolsLLMReducer error isolation', () => {
       },
     } as any;
 
-    const reducer = new CallToolsLLMReducer(new LoggerService()).init({ tools: [tool] });
+    const reducer = new CallToolsLLMReducer(new LoggerService(), createRunEventsStub() as any).init({ tools: [tool] });
     const result = await reducer.invoke(buildState('demo', 'call-json', '{bad'), ctx);
 
     const last = result.messages.at(-1) as any;
@@ -91,7 +92,7 @@ describe('CallToolsLLMReducer error isolation', () => {
       },
     } as any;
 
-    const reducer = new CallToolsLLMReducer(new LoggerService()).init({ tools: [tool] });
+    const reducer = new CallToolsLLMReducer(new LoggerService(), createRunEventsStub() as any).init({ tools: [tool] });
     const result = await reducer.invoke(buildState('needs-field', 'call-schema', JSON.stringify({})), ctx);
 
     const last = result.messages.at(-1) as any;
@@ -102,7 +103,7 @@ describe('CallToolsLLMReducer error isolation', () => {
   });
 
   it('returns TOOL_NOT_FOUND when tool is missing', async () => {
-    const reducer = new CallToolsLLMReducer(new LoggerService()).init({ tools: [] });
+    const reducer = new CallToolsLLMReducer(new LoggerService(), createRunEventsStub() as any).init({ tools: [] });
     const state = buildState('missing-tool', 'call-missing', JSON.stringify({ foo: 'bar' }));
     const result = await reducer.invoke(state, ctx);
 
@@ -122,7 +123,7 @@ describe('CallToolsLLMReducer error isolation', () => {
       },
     } as any;
 
-    const reducer = new CallToolsLLMReducer(new LoggerService()).init({ tools: [tool] });
+    const reducer = new CallToolsLLMReducer(new LoggerService(), createRunEventsStub() as any).init({ tools: [tool] });
     const result = await reducer.invoke(buildState('failing', 'call-fail', JSON.stringify({})), ctx);
 
     const last = result.messages.at(-1) as any;
@@ -142,7 +143,7 @@ describe('CallToolsLLMReducer error isolation', () => {
       },
     } as any;
 
-    const reducer = new CallToolsLLMReducer(new LoggerService()).init({ tools: [tool] });
+    const reducer = new CallToolsLLMReducer(new LoggerService(), createRunEventsStub() as any).init({ tools: [tool] });
     const result = await reducer.invoke(buildState('bloat', 'call-big', JSON.stringify({})), ctx);
 
     const last = result.messages.at(-1) as any;
