@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import React, { type ReactNode } from 'react';
 import { renderHook, waitFor, act } from '@testing-library/react';
 import { describe, expect, it, vi, afterEach } from 'vitest';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -45,25 +45,31 @@ describe('useContextItems', () => {
       wrapper: createWrapper(),
     });
 
-    await waitFor(() => expect(result.current.loadedCount).toBe(4));
-    expect(fetchMock).toHaveBeenCalledTimes(1);
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      expect(result.current.loadedCount).toBe(4);
+    });
     expect(fetchMock).toHaveBeenCalledWith(ids.slice(-4));
     expect(result.current.items.map((item) => item.id)).toEqual(ids.slice(-4));
 
     act(() => {
       result.current.loadMore();
     });
-    await waitFor(() => expect(result.current.loadedCount).toBe(8));
-    expect(fetchMock).toHaveBeenCalledTimes(2);
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+      expect(result.current.loadedCount).toBe(8);
+    });
     expect(fetchMock).toHaveBeenLastCalledWith(ids.slice(-8, -4));
     expect(result.current.items.map((item) => item.id)).toEqual(ids.slice(-8));
 
     act(() => {
       result.current.loadMore();
     });
-    await waitFor(() => expect(result.current.hasMore).toBe(false));
-    expect(result.current.loadedCount).toBe(12);
-    expect(fetchMock).toHaveBeenCalledTimes(3);
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledTimes(3);
+      expect(result.current.loadedCount).toBe(12);
+      expect(result.current.hasMore).toBe(false);
+    });
     expect(fetchMock).toHaveBeenLastCalledWith(ids.slice(0, 4));
 
     act(() => {

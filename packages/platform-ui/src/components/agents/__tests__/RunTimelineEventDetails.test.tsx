@@ -1,3 +1,4 @@
+import React from 'react';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -139,7 +140,7 @@ describe('RunTimelineEventDetails', () => {
 
     renderDetails(llmOnlyRaw);
     expect(screen.queryByText('Response')).toBeNull();
-    expect(screen.queryByText(/Tool calls/)).toBeNull();
+    expect(screen.queryByText(/Tool Calls/i)).toBeNull();
     expect(screen.queryByText('Raw response')).toBeNull();
     expect(screen.queryByText('Output')).toBeNull();
   });
@@ -169,7 +170,7 @@ describe('RunTimelineEventDetails', () => {
       expect(within(responseContainer).getByText('All good')).toBeInTheDocument();
     }
 
-    const toolCallsLabel = screen.getByText(/Tool calls/);
+    const toolCallsLabel = screen.getByText(/Tool Calls/i);
     expect(toolCallsLabel).toBeInTheDocument();
     expect(screen.getByText(/search/)).toBeInTheDocument();
     expect(screen.queryByText('Raw response')).toBeNull();

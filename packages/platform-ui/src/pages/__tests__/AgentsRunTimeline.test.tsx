@@ -2,6 +2,7 @@ import React from 'react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, fireEvent, within, waitFor, act } from '@testing-library/react';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { AgentsRunTimeline } from '../AgentsRunTimeline';
 import type { RunTimelineEvent, RunTimelineSummary, RunEventStatus, RunEventType } from '@/api/types/agents';
 
@@ -142,20 +143,32 @@ function LocationTracker() {
 }
 
 function renderPage(initialEntries: string[]) {
+  const client = new QueryClient({
+    defaultOptions: {
+      queries: {
+        retry: false,
+        gcTime: Number.POSITIVE_INFINITY,
+        staleTime: Number.POSITIVE_INFINITY,
+      },
+    },
+  });
+
   return render(
-    <MemoryRouter initialEntries={initialEntries}>
-      <Routes>
-        <Route
-          path="/agents/threads/:threadId/runs/:runId"
-          element={(
-            <>
-              <AgentsRunTimeline />
-              <LocationTracker />
-            </>
-          )}
-        />
-      </Routes>
-    </MemoryRouter>,
+    <QueryClientProvider client={client}>
+      <MemoryRouter initialEntries={initialEntries}>
+        <Routes>
+          <Route
+            path="/agents/threads/:threadId/runs/:runId"
+            element={(
+              <>
+                <AgentsRunTimeline />
+                <LocationTracker />
+              </>
+            )}
+          />
+        </Routes>
+      </MemoryRouter>
+    </QueryClientProvider>,
   );
 }
 

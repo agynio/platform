@@ -63,13 +63,15 @@ export function useContextItems(ids: readonly string[] | undefined, options?: Us
     gcTime: Number.POSITIVE_INFINITY,
     refetchOnWindowFocus: false,
     structuralSharing: false,
-    onSuccess: (fetched) => {
-      for (const item of fetched) {
-        queryClient.setQueryData([...BASE_KEY, item.id], item);
-      }
-      setCacheVersion((version) => version + 1);
-    },
   });
+
+  useEffect(() => {
+    if (!batchQuery.data) return;
+    for (const item of batchQuery.data) {
+      queryClient.setQueryData([...BASE_KEY, item.id], item);
+    }
+    setCacheVersion((version) => version + 1);
+  }, [batchQuery.data, queryClient]);
 
   const items = useMemo(() => {
     void cacheVersion;
