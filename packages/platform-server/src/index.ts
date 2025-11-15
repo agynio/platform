@@ -19,6 +19,7 @@ import { AppModule } from './bootstrap/app.module';
 import { ConfigService } from './core/services/config.service';
 import { GraphSocketGateway } from './gateway/graph.socket.gateway';
 import { LiveGraphRuntime } from './graph';
+import { ContainerTerminalGateway } from './infra/container/terminal.gateway';
 // Remove central platform.services.factory usage; rely on DI providers
 
 async function bootstrap() {
@@ -46,6 +47,9 @@ async function bootstrap() {
 
   const logger = app.get(LoggerService);
   const fastifyInstance = fastify;
+
+  const terminalGateway = app.get(ContainerTerminalGateway);
+  terminalGateway.registerRoutes(fastifyInstance);
 
   // Start Fastify then attach Socket.io
   const PORT = Number(process.env.PORT) || 3010;

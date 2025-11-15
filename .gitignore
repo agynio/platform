@@ -1,4 +1,7 @@
 node_modules
+.pnpm-store
+.turbo
+node-compile-cache/
 .env
 # LangGraph API
 .langgraph_api

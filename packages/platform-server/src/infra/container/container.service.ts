@@ -376,6 +376,12 @@ export class ContainerService {
     };
   }
 
+  async resizeExec(execId: string, size: { cols: number; rows: number }): Promise<void> {
+    const exec = this.docker.getExec(execId);
+    if (!exec) throw new Error('exec_not_found');
+    await exec.resize({ w: size.cols, h: size.rows });
+  }
+
   private startAndCollectExec(
     exec: Exec,
     timeoutMs?: number,

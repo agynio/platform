@@ -14,6 +14,9 @@ import { NcpsKeyService } from './ncps/ncpsKey.service';
 import { NixController } from './ncps/nix.controller';
 import { ContainersController } from './container/containers.controller';
 import { ArchiveService } from './archive/archive.service';
+import { TerminalSessionsService } from './container/terminal.sessions.service';
+import { ContainerTerminalGateway } from './container/terminal.gateway';
+import { ContainerTerminalController } from './container/containerTerminal.controller';
 
 @Module({
   imports: [CoreModule, VaultModule],
@@ -46,6 +49,8 @@ import { ArchiveService } from './archive/archive.service';
       },
       inject: [LoggerService, ContainerRegistry],
     },
+    TerminalSessionsService,
+    ContainerTerminalGateway,
     ContainerThreadTerminationService,
     {
       provide: NcpsKeyService,
@@ -60,11 +65,13 @@ import { ArchiveService } from './archive/archive.service';
     GithubService,
     PRService,
   ],
-  controllers: [NixController, ContainersController],
+  controllers: [NixController, ContainersController, ContainerTerminalController],
   exports: [
     VaultModule,
     ContainerService,
     ContainerCleanupService,
+    TerminalSessionsService,
+    ContainerTerminalGateway,
     ContainerThreadTerminationService,
     NcpsKeyService,
     GithubService,
