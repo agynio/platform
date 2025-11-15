@@ -5,17 +5,29 @@ import { LoggerService } from '../../src/core/services/logger.service';
 import type { ContainerHandle } from '../../src/infra/container/container.handle';
 import type { WorkspaceNode } from '../../src/nodes/workspace/workspace.node';
 
+type RecordingOptions = {
+  throwOnTest?: Set<string>;
+  commandResponses?: Map<string, { stdout: string; stderr: string; exitCode: number }>;
+};
+
 class RecordingContainer {
   public readonly calls: Array<{ command: string | string[]; workdir?: string }> = [];
 
-  constructor(private readonly existingDirs: Set<string>) {}
+  constructor(private readonly existingDirs: Set<string>, private readonly options: RecordingOptions = {}) {}
 
   async exec(command: string | string[], options?: { workdir?: string; timeoutMs?: number; idleTimeoutMs?: number }) {
     this.calls.push({ command, workdir: options?.workdir });
     if (Array.isArray(command)) {
       const target = command[command.length - 1] ?? '';
+      if (this.options.throwOnTest?.has(target)) {
+        throw new Error(`simulated failure for ${target}`);
+      }
       const ok = this.existingDirs.has(target);
       return { stdout: '', stderr: ok ? '' : 'missing', exitCode: ok ? 0 : 1 };
+    }
+    const response = this.options.commandResponses?.get(command as string);
+    if (response) {
+      return response;
     }
     const wd = options?.workdir ?? '';
     return { stdout: `PWD=${wd}`, stderr: '', exitCode: 0 };
@@ -119,5 +131,41 @@ describe('ShellCommandTool cwd handling', () => {
       /only letters, numbers, ".", "-", "_" and "\/" are allowed/i,
     );
     expect(container.calls).toHaveLength(0);
+  });
+
+  it('propagates container errors encountered during cwd validation', async () => {
+    const container = new RecordingContainer(new Set(['/workspace']), { throwOnTest: new Set(['/workspace/bad']) });
+    const node = createNodeWithContainer(container);
+    await node.setConfig({});
+    const tool = node.getTool();
+
+    await expect(tool.execute({ command: 'pwd', cwd: '/workspace/bad' }, ctx as any)).rejects.toThrow(
+      /simulated failure/i,
+    );
+    expect(container.calls).toHaveLength(1);
+    expect(container.calls[0].command).toEqual(['test', '-d', '/workspace/bad']);
+  });
+
+  it('throws with stdout and stderr when command exits non-zero', async () => {
+    const responses = new Map<string, { stdout: string; stderr: string; exitCode: number }>([
+      ['pwd', { stdout: 'STDOUT', stderr: 'STDERR', exitCode: 2 }],
+    ]);
+    const container = new RecordingContainer(new Set(['/workspace']), { commandResponses: responses });
+    const node = createNodeWithContainer(container);
+    await node.setConfig({});
+    const tool = node.getTool();
+
+    await tool.execute({ command: 'pwd' }, ctx as any).then(
+      () => {
+        throw new Error('expected execution to fail');
+      },
+      (err) => {
+        expect(err).toBeInstanceOf(Error);
+        expect(err.message).toMatch(/code 2/);
+        expect((err as any).code).toBe(2);
+        expect((err as any).stdout).toBe('STDOUT');
+        expect((err as any).stderr).toBe('STDERR');
+      },
+    );
   });
 });

@@ -16,6 +16,9 @@ Shell tool
   - `cwd?: string` — optional per-call working directory override. Absolute paths must stay under the workspace root (default `/workspace`); relative paths resolve against the static `workdir` when set, or the workspace root otherwise. Only letters, numbers, `.`, `-`, `_`, and `/` are allowed, and the directory must already exist.
 - Behavior:
   - Pass `env`, `workdir`, `executionTimeoutMs`, `idleTimeoutMs` to container.exec (per exec only). When `cwd` is supplied, it overrides the static `workdir` after validation.
+  - Environment resolution failures propagate to callers (no silent fallback to the base environment).
+  - Non-zero exit codes throw an Error with `code`, `stdout`, and `stderr` properties. Oversized output still returns the short message that points to the archived file.
+  - The tool logs the requested `cwd` and effective workdir for each call; environment values are never logged.
   - On timeout and when killOnTimeout=true, the container is stopped with a 10s grace period.
   - Empty string sets a variable to empty (does not unset).
 

@@ -16,7 +16,11 @@ class FakeContainer implements ContainerHandle {
   }
   async putArchive(data: Buffer, options: { path: string }): Promise<void> { this.lastPut = { data, options }; }
 }
-class FakeProvider { public c = new FakeContainer(); async provide(_t: string): Promise<ContainerHandle> { return this.c; } }
+class FakeProvider {
+  public c = new FakeContainer();
+  async provide(_t: string): Promise<ContainerHandle> { return this.c; }
+  getWorkspaceRoot(): string { return '/workspace'; }
+}
 
 describe('ShellTool output limit - non-zero exit oversized', () => {
   it('overrides exit error formatting when oversized and writes file', async () => {

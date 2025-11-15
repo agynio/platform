@@ -5,6 +5,8 @@ import { ExecTimeoutError } from '../../src/utils/execTimeout';
 import { ContainerHandle } from '../../src/infra/container/container.handle';
 import { ContainerService } from '../../src/infra/container/container.service';
 
+const envStub = { resolveProviderEnv: async () => undefined } as any;
+
 // ANSI colored output to verify stripping; include more than 10k and ensure we only keep tail
 const ANSI_RED = '\u001b[31m';
 const ANSI_RESET = '\u001b[0m';
@@ -18,11 +20,15 @@ describe('ShellTool timeout tail inclusion and ANSI stripping', () => {
     const err = new ExecTimeoutError(3600000, stdout, stderr);
 
     class FakeContainer extends ContainerHandle { override async exec(): Promise<never> { throw err; } }
-    class FakeProvider { constructor(private logger: LoggerService) {} async provide(): Promise<ContainerHandle> { return new FakeContainer(new ContainerService(this.logger), 'fake'); } }
+    class FakeProvider {
+      constructor(private logger: LoggerService) {}
+      async provide(): Promise<ContainerHandle> { return new FakeContainer(new ContainerService(this.logger), 'fake'); }
+      getWorkspaceRoot(): string { return '/workspace'; }
+    }
     const provider = new FakeProvider(logger);
     const archiveStub = { createSingleFileTar: async () => Buffer.from('tar') } as const;
     const moduleRefStub = { create: (cls: any) => new (cls as any)(archiveStub) } as const;
-    const node = new ShellCommandNode(undefined as any, logger as any, moduleRefStub as any);
+    const node = new ShellCommandNode(envStub, logger as any, moduleRefStub as any, archiveStub as any);
     node.setContainerProvider(provider as any);
     await node.setConfig({});
     const t = node.getTool();

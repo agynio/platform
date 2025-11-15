@@ -92,7 +92,6 @@ export class ShellCommandTool extends FunctionTool<typeof bashCommandSchema> {
     const provider = this.node.provider;
     if (!provider) throw new Error('ShellCommandTool: containerProvider not set. Connect via graph edge before use.');
     const container = await provider.provide(threadId);
-    this.logger.info('Tool called', 'shell_command', { command });
 
     // Base env pulled from container; overlay from node config
     const baseEnv = undefined; // ContainerHandle does not expose getEnv; resolution handled via EnvService
@@ -100,22 +99,31 @@ export class ShellCommandTool extends FunctionTool<typeof bashCommandSchema> {
     const cfg = (this.node.config || {}) as z.infer<typeof ShellToolStaticConfigSchema>;
     const timeoutMs = cfg.executionTimeoutMs ?? 60 * 60 * 1000;
     const idleTimeoutMs = cfg.idleTimeoutMs ?? 60 * 1000;
+    const staticWorkdir = typeof cfg.workdir === 'string' && cfg.workdir.trim() ? cfg.workdir.trim() : undefined;
     const workspaceRoot = this.normalizeWorkspaceRoot(this.node.getWorkspaceRoot());
     const baseForRelative = this.computeBaseWorkdir(cfg.workdir, workspaceRoot);
 
-    let effectiveWorkdir = typeof cfg.workdir === 'string' && cfg.workdir.trim() ? cfg.workdir.trim() : undefined;
+    let effectiveWorkdir = staticWorkdir;
+    let requestedCwd: string | undefined;
 
     if (typeof cwd === 'string' && cwd.trim()) {
       const resolved = this.resolveCwd(cwd, baseForRelative, workspaceRoot);
       await this.ensureCwdExists(container, resolved);
       effectiveWorkdir = resolved;
+      requestedCwd = resolved;
     }
+
+    this.logger.info('Tool called', 'shell_command', {
+      command,
+      cwd: requestedCwd ?? null,
+      effectiveWorkdir: effectiveWorkdir ?? null,
+    });
 
     let response: { stdout: string; stderr: string; exitCode: number };
     try {
       response = await container.exec(command, {
         env: envOverlay,
-        workdir: effectiveWorkdir ?? cfg.workdir,
+        workdir: effectiveWorkdir,
         timeoutMs,
         idleTimeoutMs,
         killOnTimeout: true,
@@ -154,7 +162,11 @@ export class ShellCommandTool extends FunctionTool<typeof bashCommandSchema> {
       return `Error: output length exceeds ${limit} characters. It was saved on disk: ${path}`;
     }
     if (response.exitCode !== 0) {
-      return `Error (exit code ${response.exitCode}):\n${cleanedStdout}\n${cleanedStderr}`;
+      const error = new Error(`Command exited with code ${response.exitCode}`);
+      (error as Error & { code?: number; stdout?: string; stderr?: string }).code = response.exitCode;
+      (error as Error & { code?: number; stdout?: string; stderr?: string }).stdout = cleanedStdout;
+      (error as Error & { code?: number; stdout?: string; stderr?: string }).stderr = cleanedStderr;
+      throw error;
     }
 
     return cleanedStdout;
@@ -213,15 +225,8 @@ export class ShellCommandTool extends FunctionTool<typeof bashCommandSchema> {
   }
 
   private async ensureCwdExists(container: ContainerHandle, path: string): Promise<void> {
-    try {
-      const result = await container.exec(['test', '-d', path], { timeoutMs: 5000, idleTimeoutMs: 5000 });
-      if (result.exitCode !== 0) {
-        throw new Error(`Invalid cwd: directory "${path}" does not exist.`);
-      }
-    } catch (err) {
-      if (err instanceof Error && err.message && /not running/i.test(err.message)) {
-        throw err;
-      }
+    const result = await container.exec(['test', '-d', path], { timeoutMs: 5000, idleTimeoutMs: 5000 });
+    if (result.exitCode !== 0) {
       throw new Error(`Invalid cwd: directory "${path}" does not exist.`);
     }
   }

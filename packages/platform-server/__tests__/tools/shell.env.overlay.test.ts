@@ -24,6 +24,7 @@ class FakeContainer {
 class FakeProvider {
   private c = new FakeContainer({ UNSETME: '1', BASE_ONLY: '1' }, '/workspace');
   async provide(_thread: string) { return this.c as any; }
+  getWorkspaceRoot(): string { return '/workspace'; }
 }
 
 describe('ShellTool env/workdir isolation with vault-backed overlay', () => {
@@ -36,9 +37,9 @@ describe('ShellTool env/workdir isolation with vault-backed overlay', () => {
 
     const archiveStub = { createSingleFileTar: async () => Buffer.from('tar') } as const;
     const moduleRefStub = { create: (cls: any) => new (cls as any)(archiveStub) } as const;
-    const a = new ShellCommandNode(envSvc as any, new LoggerService() as any, moduleRefStub as any); a.setContainerProvider(provider as any);
+    const a = new ShellCommandNode(envSvc as any, new LoggerService() as any, moduleRefStub as any, archiveStub as any); a.setContainerProvider(provider as any);
     await a.setConfig({ env: [ { key: 'FOO', value: 'A' }, { key: 'BAR', value: 'secret/path/key', source: 'vault' } ], workdir: '/w/a' });
-    const b = new ShellCommandNode(new EnvService(undefined as any) as any, new LoggerService() as any, moduleRefStub as any); b.setContainerProvider(provider as any);
+    const b = new ShellCommandNode(new EnvService(undefined as any) as any, new LoggerService() as any, moduleRefStub as any, archiveStub as any); b.setContainerProvider(provider as any);
     await b.setConfig({ env: [ { key: 'FOO', value: 'B' } ], workdir: '/w/b' });
 
     const at = a.getTool();

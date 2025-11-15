@@ -71,16 +71,8 @@ export class ShellCommandNode extends BaseToolNode<z.infer<typeof ShellToolStati
   }
 
   getWorkspaceRoot(): string {
-    const fallback = '/workspace';
-    const provider = this.containerProvider;
-    if (!provider) return fallback;
-    try {
-      const maybe = typeof provider.getWorkspaceRoot === 'function' ? provider.getWorkspaceRoot() : undefined;
-      if (typeof maybe === 'string' && maybe.trim()) return maybe.trim();
-    } catch {
-      // ignore provider errors and fall back to default
-    }
-    return fallback;
+    if (!this.containerProvider) return '/workspace';
+    return this.containerProvider.getWorkspaceRoot();
   }
 
   getTool(): ShellCommandTool {
@@ -96,17 +88,23 @@ export class ShellCommandNode extends BaseToolNode<z.infer<typeof ShellToolStati
     const items: EnvItem[] = (this.config?.env || []) as EnvItem[];
     try {
       return await this.envService.resolveProviderEnv(items, undefined, base);
-    } catch {
-      return base && Object.keys(base).length ? { ...base } : undefined;
+    } catch (err) {
+      const error = new Error('ShellCommandNode: failed to resolve environment overlay');
+      (error as Error & { cause?: unknown }).cause = err;
+      throw error;
     }
   }
 
   async getContainerForThread(threadId: string) {
-    if (!this.containerProvider) return undefined;
+    if (!this.containerProvider) {
+      throw new Error('ShellCommandNode: container provider not set');
+    }
     try {
       return await this.containerProvider.provide(threadId);
-    } catch {
-      return undefined;
+    } catch (err) {
+      const error = new Error(`ShellCommandNode: failed to provide container for thread ${threadId}`);
+      (error as Error & { cause?: unknown }).cause = err;
+      throw error;
     }
   }
 

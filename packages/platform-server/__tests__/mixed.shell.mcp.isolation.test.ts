@@ -23,6 +23,7 @@ class FakeContainer {
 class SharedProvider {
   c = new FakeContainer('cid', { BASE: '1', SHELL_ONLY: 'S', MCP_ONLY: 'M' });
   async provide(_: string) { return this.c; }
+  getWorkspaceRoot(): string { return '/workspace'; }
 }
 
 describe('Mixed Shell + MCP overlay isolation', () => {
@@ -37,7 +38,9 @@ describe('Mixed Shell + MCP overlay isolation', () => {
     const vault = new VaultService(cfg, logger);
     const envService = new EnvService(vault);
 
-    const shell = new ShellCommandNode(envService, logger);
+    const archiveStub = { createSingleFileTar: async () => Buffer.from('tar') } as const;
+    const moduleRefStub = { create: (cls: any) => new (cls as any)(archiveStub) } as const;
+    const shell = new ShellCommandNode(envService, logger, moduleRefStub as any, archiveStub as any);
     shell.init({ nodeId: 'shell' });
     shell.setContainerProvider(provider);
     await shell.setConfig({ env: [ { key: 'S_VAR', value: 's' } ] });
