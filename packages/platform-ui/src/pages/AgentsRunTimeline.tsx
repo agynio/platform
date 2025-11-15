@@ -367,7 +367,7 @@ export function AgentsRunTimeline() {
               aria-activedescendant={selectedEventId ? `run-event-option-${selectedEventId}` : undefined}
               tabIndex={0}
               onKeyDown={handleListKeyDown}
-              className="flex-1 min-h-0 space-y-2 overflow-y-auto px-3 py-2 focus:outline-none"
+              className="flex-1 min-h-0 space-y-2 overflow-y-auto focus:outline-none"
             >
               {events.map((event) => (
                 <RunTimelineEventListItem
