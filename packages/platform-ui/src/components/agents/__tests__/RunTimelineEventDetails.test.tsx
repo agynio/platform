@@ -1,6 +1,6 @@
 import React from 'react';
 import { beforeEach, describe, expect, it } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { RunTimelineEventDetails } from '../RunTimelineEventDetails';
 import type { RunTimelineEvent } from '@/api/types/agents';
@@ -140,9 +140,16 @@ describe('RunTimelineEventDetails', () => {
     });
 
     render(<RunTimelineEventDetails event={event} />);
-    expect(screen.getByText('Response')).toBeInTheDocument();
-    expect(screen.getByText(/Tool calls/)).toBeInTheDocument();
-    expect(screen.getByText(/All good/)).toBeInTheDocument();
+    const responseLabel = screen.getByText('Response');
+    const responseContainer = responseLabel.parentElement;
+    expect(responseContainer).toBeTruthy();
+    if (responseContainer) {
+      expect(within(responseContainer).getByText('All good')).toBeInTheDocument();
+    }
+
+    const toolCallsLabel = screen.getByText(/Tool calls/);
+    expect(toolCallsLabel).toBeInTheDocument();
+    expect(screen.getByText(/search/)).toBeInTheDocument();
   });
 
   it('omits raw message source in invocation message details', () => {
