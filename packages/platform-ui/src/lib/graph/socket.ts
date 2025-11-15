@@ -1,8 +1,8 @@
 // CI trigger: no-op comment to touch UI file
 import { io, type Socket } from 'socket.io-client';
-import { config } from '@/config';
+import { getSocketBaseUrl } from '@/config';
 import type { NodeStatusEvent, ReminderCountEvent } from './types';
-import type { RunTimelineEvent } from '@/api/types/agents';
+import type { RunTimelineEvent, RunTimelineEventsCursor } from '@/api/types/agents';
 
 // Strictly typed server-to-client socket events (listener signatures)
 type NodeStateEvent = { nodeId: string; state: Record<string, unknown>; updatedAt: string };
@@ -54,6 +54,31 @@ class GraphSocket {
   private connectCallbacks = new Set<() => void>();
   private reconnectCallbacks = new Set<() => void>();
   private disconnectCallbacks = new Set<() => void>();
+  private runCursors = new Map<string, RunTimelineEventsCursor>();
+  private loggedSocketBase = false;
+
+  private compareCursors(a: RunTimelineEventsCursor, b: RunTimelineEventsCursor): number {
+    const parsedA = Date.parse(a.ts);
+    const parsedB = Date.parse(b.ts);
+    const timeA = Number.isNaN(parsedA) ? 0 : parsedA;
+    const timeB = Number.isNaN(parsedB) ? 0 : parsedB;
+    if (timeA !== timeB) return timeA - timeB;
+    const lexical = a.ts.localeCompare(b.ts);
+    if (lexical !== 0) return lexical;
+    return a.id.localeCompare(b.id);
+  }
+
+  private bumpRunCursor(runId: string, candidate: RunTimelineEventsCursor | null, opts?: { force?: boolean }) {
+    if (!runId) return;
+    if (!candidate) {
+      this.runCursors.delete(runId);
+      return;
+    }
+    const current = this.runCursors.get(runId);
+    if (!current || opts?.force || this.compareCursors(candidate, current) > 0) {
+      this.runCursors.set(runId, candidate);
+    }
+  }
 
   private emitSubscriptions(rooms: string[]) {
     if (!rooms.length) return;
@@ -69,8 +94,11 @@ class GraphSocket {
 
   connect(): Socket<ServerToClientEvents, ClientToServerEvents> {
     if (this.socket) return this.socket;
-    // Use centralized config for API base
-    const host = config.apiBaseUrl;
+    const host = getSocketBaseUrl();
+    if (import.meta.env?.DEV && !this.loggedSocketBase) {
+      this.loggedSocketBase = true;
+      console.info('[graphSocket] connecting to', host);
+    }
     // Cast to typed Socket to enable event payload typing
     this.socket = io(host, {
       path: '/socket.io',
@@ -120,6 +148,7 @@ class GraphSocket {
     this.socket.on('message_created', (payload: MessageCreatedPayload) => { for (const fn of this.messageCreatedListeners) fn(payload); });
     this.socket.on('run_status_changed', (payload: RunStatusChangedPayload) => { for (const fn of this.runStatusListeners) fn(payload); });
     this.socket.on('run_event_appended', (payload: RunEventSocketPayload) => {
+      this.bumpRunCursor(payload.runId, { ts: payload.event.ts, id: payload.event.id });
       for (const fn of this.runEventListeners) fn(payload);
     });
     return this.socket;
@@ -178,7 +207,13 @@ class GraphSocket {
   }
 
   unsubscribe(rooms: string[]) {
-    for (const room of rooms) this.subscribedRooms.delete(room);
+    for (const room of rooms) {
+      this.subscribedRooms.delete(room);
+      if (room.startsWith('run:')) {
+        const runId = room.slice(4);
+        this.runCursors.delete(runId);
+      }
+    }
   }
 
   // Threads listeners
@@ -248,6 +283,15 @@ class GraphSocket {
 
   isConnected() {
     return this.socket?.connected ?? false;
+  }
+
+  setRunCursor(runId: string, cursor: RunTimelineEventsCursor | null, opts?: { force?: boolean }) {
+    if (!runId) return;
+    this.bumpRunCursor(runId, cursor, opts);
+  }
+
+  getRunCursor(runId: string): RunTimelineEventsCursor | null {
+    return this.runCursors.get(runId) ?? null;
   }
 }
 

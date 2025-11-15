@@ -3,12 +3,73 @@ import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { RunTimelineEventListItem } from '@/components/agents/RunTimelineEventListItem';
 import { RunTimelineEventDetails } from '@/components/agents/RunTimelineEventDetails';
 import { useRunTimelineEvents, useRunTimelineSummary } from '@/api/hooks/runs';
+import { runs } from '@/api/modules/runs';
 import { graphSocket } from '@/lib/graph/socket';
-import type { RunEventStatus, RunEventType, RunTimelineEvent } from '@/api/types/agents';
+import type { RunEventStatus, RunEventType, RunTimelineEvent, RunTimelineEventsCursor } from '@/api/types/agents';
 import { getEventTypeLabel } from '@/components/agents/runTimelineFormatting';
 
 const EVENT_TYPES: RunEventType[] = ['invocation_message', 'injection', 'llm_call', 'tool_execution', 'summarization'];
 const STATUS_TYPES: RunEventStatus[] = ['pending', 'running', 'success', 'error', 'cancelled'];
+
+function parseTimestamp(value: string): number {
+  const parsed = Date.parse(value);
+  return Number.isNaN(parsed) ? Number.NEGATIVE_INFINITY : parsed;
+}
+
+function compareEvents(a: RunTimelineEvent, b: RunTimelineEvent): number {
+  const timeDiff = parseTimestamp(a.ts) - parseTimestamp(b.ts);
+  if (timeDiff !== 0) return timeDiff;
+  const lexical = a.ts.localeCompare(b.ts);
+  if (lexical !== 0) return lexical;
+  return a.id.localeCompare(b.id);
+}
+
+function sortEvents(events: RunTimelineEvent[]): RunTimelineEvent[] {
+  if (events.length <= 1) return events.slice();
+  return [...events].sort(compareEvents);
+}
+
+function matchesFilters(event: RunTimelineEvent, types: RunEventType[], statuses: RunEventStatus[]): boolean {
+  const typeOk = types.length === 0 || types.includes(event.type);
+  const statusOk = statuses.length === 0 || statuses.includes(event.status);
+  return typeOk && statusOk;
+}
+
+function mergeEvents(
+  prev: RunTimelineEvent[],
+  incoming: RunTimelineEvent[],
+  types: RunEventType[],
+  statuses: RunEventStatus[],
+): RunTimelineEvent[] {
+  if (incoming.length === 0) return prev;
+  const next = [...prev];
+  for (const event of incoming) {
+    const idx = next.findIndex((existing) => existing.id === event.id);
+    const include = matchesFilters(event, types, statuses);
+    if (idx >= 0) {
+      if (include) {
+        next[idx] = event;
+      } else {
+        next.splice(idx, 1);
+      }
+    } else if (include) {
+      next.push(event);
+    }
+  }
+  return sortEvents(next);
+}
+
+function compareCursors(a: RunTimelineEventsCursor, b: RunTimelineEventsCursor): number {
+  const timeDiff = parseTimestamp(a.ts) - parseTimestamp(b.ts);
+  if (timeDiff !== 0) return timeDiff;
+  const lexical = a.ts.localeCompare(b.ts);
+  if (lexical !== 0) return lexical;
+  return a.id.localeCompare(b.id);
+}
+
+function toCursor(event: RunTimelineEvent): RunTimelineEventsCursor {
+  return { ts: event.ts, id: event.id };
+}
 
 function useMediaQuery(query: string): boolean {
   const [matches, setMatches] = useState(() => (typeof window !== 'undefined' ? window.matchMedia(query).matches : false));
@@ -44,16 +105,101 @@ export function AgentsRunTimeline() {
     setSelectedStatuses([]);
   }, [runId]);
 
-  const apiTypes = selectedTypes.length === EVENT_TYPES.length ? [] : selectedTypes;
-  const apiStatuses = selectedStatuses;
+  const apiTypes = useMemo(
+    () => (selectedTypes.length === EVENT_TYPES.length ? [] : selectedTypes),
+    [selectedTypes],
+  );
+  const apiStatuses = useMemo(() => selectedStatuses, [selectedStatuses]);
 
   const summaryQuery = useRunTimelineSummary(runId);
   const eventsQuery = useRunTimelineEvents(runId, { types: apiTypes, statuses: apiStatuses });
   const [events, setEvents] = useState<RunTimelineEvent[]>([]);
+  const cursorRef = useRef<RunTimelineEventsCursor | null>(null);
+  const catchUpRef = useRef<Promise<unknown> | null>(null);
+
+  const setCursor = useCallback(
+    (cursor: RunTimelineEventsCursor | null, opts?: { force?: boolean }) => {
+      if (!runId) return;
+      if (!cursor) {
+        cursorRef.current = null;
+        graphSocket.setRunCursor(runId, null, { force: true });
+        return;
+      }
+      const current = cursorRef.current;
+      if (!current || opts?.force || compareCursors(cursor, current) > 0) {
+        cursorRef.current = cursor;
+        graphSocket.setRunCursor(runId, cursor, { force: opts?.force });
+      }
+    },
+    [runId],
+  );
+
+  const updateEventsState = useCallback(
+    (updater: (prev: RunTimelineEvent[]) => RunTimelineEvent[]) => {
+      setEvents((prev) => {
+        const next = updater(prev);
+        const latest = next[next.length - 1];
+        if (latest) setCursor(toCursor(latest));
+        return next;
+      });
+    },
+    [setCursor],
+  );
 
   useEffect(() => {
-    if (eventsQuery.data?.items) setEvents(eventsQuery.data.items);
-  }, [eventsQuery.data]);
+    setEvents([]);
+    if (!runId) {
+      cursorRef.current = null;
+      return;
+    }
+    cursorRef.current = null;
+    graphSocket.setRunCursor(runId, null, { force: true });
+  }, [runId]);
+
+  useEffect(() => {
+    if (!eventsQuery.data) return;
+    const sorted = sortEvents(eventsQuery.data.items ?? []);
+    setEvents(sorted);
+    const latest = sorted[sorted.length - 1];
+    setCursor(latest ? toCursor(latest) : null, { force: true });
+  }, [eventsQuery.data, setCursor]);
+
+  const fetchSinceCursor = useCallback(() => {
+    if (!runId) return Promise.resolve();
+    if (catchUpRef.current) return catchUpRef.current;
+
+    const cursor = graphSocket.getRunCursor(runId) ?? cursorRef.current;
+    if (!cursor) {
+      const fallback = eventsQuery.refetch();
+      catchUpRef.current = fallback.finally(() => {
+        catchUpRef.current = null;
+      });
+      return catchUpRef.current;
+    }
+
+    const promise = (async () => {
+      try {
+        const response = await runs.timelineEvents(runId, {
+          types: apiTypes.length > 0 ? apiTypes.join(',') : undefined,
+          cursorTs: cursor.ts,
+          cursorId: cursor.id,
+        });
+        const items = response.items ?? [];
+        if (items.length > 0) {
+          updateEventsState((prev) => mergeEvents(prev, items, selectedTypes, selectedStatuses));
+          const newest = items[items.length - 1];
+          if (newest) setCursor(toCursor(newest));
+        }
+      } catch (_err) {
+        await eventsQuery.refetch();
+      }
+    })();
+
+    catchUpRef.current = promise.finally(() => {
+      catchUpRef.current = null;
+    });
+    return catchUpRef.current;
+  }, [runId, apiTypes, selectedTypes, selectedStatuses, eventsQuery, updateEventsState, setCursor]);
 
   useEffect(() => {
     if (!runId) return;
@@ -61,36 +207,16 @@ export function AgentsRunTimeline() {
     graphSocket.subscribe([room]);
     const off = graphSocket.onRunEvent(({ runId: incomingRunId, event }) => {
       if (incomingRunId !== runId) return;
-      if (selectedTypes.length > 0 && !selectedTypes.includes(event.type)) return;
-      if (selectedStatuses.length > 0 && !selectedStatuses.includes(event.status)) return;
-      setEvents((prev) => {
-        const idx = prev.findIndex((e) => e.id === event.id);
-        let next: RunTimelineEvent[];
-        if (idx >= 0) {
-          next = [...prev];
-          next[idx] = event;
-        } else {
-          next = [...prev, event];
-        }
-        next.sort((a, b) => {
-          const timeA = Date.parse(a.ts);
-          const timeB = Date.parse(b.ts);
-          if (!Number.isNaN(timeA) && !Number.isNaN(timeB) && timeA !== timeB) return timeA - timeB;
-          if (!Number.isNaN(timeA) && !Number.isNaN(timeB)) return a.id.localeCompare(b.id);
-          const lexical = a.ts.localeCompare(b.ts);
-          if (lexical !== 0) return lexical;
-          return a.id.localeCompare(b.id);
-        });
-        return next;
-      });
+      updateEventsState((prev) => mergeEvents(prev, [event], selectedTypes, selectedStatuses));
+      setCursor(toCursor(event));
       summaryQuery.refetch();
     });
     const offStatus = graphSocket.onRunStatusChanged(({ run }) => {
       if (run.id === runId) summaryQuery.refetch();
     });
     const offReconnect = graphSocket.onReconnected(() => {
+      void fetchSinceCursor();
       summaryQuery.refetch();
-      eventsQuery.refetch();
     });
     return () => {
       off();
@@ -98,7 +224,7 @@ export function AgentsRunTimeline() {
       offReconnect();
       graphSocket.unsubscribe([room]);
     };
-  }, [runId, selectedTypes, selectedStatuses, summaryQuery, eventsQuery]);
+  }, [runId, selectedTypes, selectedStatuses, summaryQuery, updateEventsState, setCursor, fetchSinceCursor]);
 
   const isDefaultFilters = selectedTypes.length === EVENT_TYPES.length && selectedStatuses.length === 0;
 

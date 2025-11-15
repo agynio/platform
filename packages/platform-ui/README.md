@@ -8,7 +8,7 @@ Quickstart
 - Dev: pnpm -w -F @agyn/platform-ui dev
 
 Env configuration (required)
-- VITE_API_BASE_URL: base URL for the Agents API used by the UI. Set to your server origin (e.g., https://agents.example.com).
+- VITE_API_BASE_URL: base URL for the Agents API used by the UI. Set to your server origin (e.g., https://agents.example.com). **Do not include `/api`;** REST requests add it automatically and websockets connect to `/socket.io` on the same origin.
 - VITE_TRACING_SERVER_URL: base URL for the tracing server used by the UI.
 
 Tracing API access

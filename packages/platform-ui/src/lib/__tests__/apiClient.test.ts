@@ -10,7 +10,12 @@ describe('http client base URL resolution', () => {
 
   it('constructs http client with configured base URL', async () => {
     vi.mock('@/config', () => ({
-      config: { apiBaseUrl: 'https://vite.example', tracingApiBaseUrl: 'https://tracing.example' },
+      config: {
+        apiBaseUrl: 'https://vite.example',
+        tracingApiBaseUrl: 'https://tracing.example',
+        socketBaseUrl: 'https://vite.example',
+      },
+      getSocketBaseUrl: () => 'https://vite.example',
     }));
     const mod = await import('../../api/http');
     expect(mod.http).toBeTruthy();

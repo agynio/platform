@@ -4,7 +4,7 @@ import { render, fireEvent, within, waitFor, act } from '@testing-library/react'
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { AgentsRunTimeline } from '../AgentsRunTimeline';
-import type { RunTimelineEvent, RunTimelineSummary, RunEventStatus, RunEventType } from '@/api/types/agents';
+import type { RunTimelineEvent, RunTimelineSummary, RunEventStatus, RunEventType, RunTimelineEventsCursor } from '@/api/types/agents';
 
 type MockedSummaryResult = {
   data: RunTimelineSummary;
@@ -15,7 +15,7 @@ type MockedSummaryResult = {
 };
 
 type MockedEventsResult = {
-  data: { items: RunTimelineEvent[] };
+  data: { items: RunTimelineEvent[]; nextCursor: RunTimelineEventsCursor | null };
   isFetching: boolean;
   isError: boolean;
   error: Error | null;
@@ -28,10 +28,20 @@ const eventsRefetch = vi.fn();
 const summaryMock = vi.fn<MockedSummaryResult, [string | undefined]>();
 const eventsMock = vi.fn<MockedEventsResult, [string | undefined, { types: string[]; statuses: string[] }]>();
 
+const runsModule = vi.hoisted(() => ({
+  timelineEvents: vi.fn(),
+}));
+
 vi.mock('@/api/hooks/runs', () => ({
   useRunTimelineSummary: (runId: string | undefined) => summaryMock(runId),
   useRunTimelineEvents: (runId: string | undefined, filters: { types: string[]; statuses: string[] }) =>
     eventsMock(runId, filters),
+}));
+
+vi.mock('@/api/modules/runs', () => ({
+  runs: {
+    timelineEvents: runsModule.timelineEvents,
+  },
 }));
 
 const socketMocks = vi.hoisted(() => ({
@@ -40,6 +50,16 @@ const socketMocks = vi.hoisted(() => ({
   runEvent: null as ((payload: { runId: string; event: RunTimelineEvent; mutation: 'append' | 'update' }) => void) | null,
   status: null as ((payload: { run: { id: string } }) => void) | null,
   reconnect: null as (() => void) | null,
+  runCursors: new Map<string, RunTimelineEventsCursor | null>(),
+  setRunCursor: vi.fn((runId: string, cursor: RunTimelineEventsCursor | null) => {
+    if (!runId) return;
+    if (!cursor) {
+      socketMocks.runCursors.delete(runId);
+    } else {
+      socketMocks.runCursors.set(runId, cursor);
+    }
+  }),
+  getRunCursor: vi.fn((runId: string) => socketMocks.runCursors.get(runId) ?? null),
 }));
 
 vi.mock('@/lib/graph/socket', () => ({
@@ -64,6 +84,8 @@ vi.mock('@/lib/graph/socket', () => ({
         socketMocks.reconnect = null;
       };
     }),
+    setRunCursor: socketMocks.setRunCursor,
+    getRunCursor: socketMocks.getRunCursor,
   },
 }));
 
@@ -196,8 +218,12 @@ beforeEach(() => {
   socketMocks.reconnect = null;
   socketMocks.subscribe.mockClear();
   socketMocks.unsubscribe.mockClear();
+  socketMocks.setRunCursor.mockClear();
+  socketMocks.getRunCursor.mockClear();
+  socketMocks.runCursors.clear();
   summaryRefetch.mockClear();
   eventsRefetch.mockClear();
+  runsModule.timelineEvents.mockReset();
   summaryMock.mockReset();
   eventsMock.mockReset();
   setMatchMedia(true);
@@ -232,7 +258,7 @@ beforeEach(() => {
   });
 
   eventsMock.mockReturnValue({
-    data: { items: events },
+    data: { items: events, nextCursor: null },
     isFetching: false,
     isError: false,
     error: null,
@@ -292,12 +318,52 @@ describe('AgentsRunTimeline layout and selection', () => {
 });
 
 describe('AgentsRunTimeline socket reactions', () => {
-  it('updates list on run_event_appended and triggers refetch on reconnect', async () => {
+  it('replaces existing events on update and displays refreshed tool output', async () => {
+    const { getByRole, getByTestId } = renderPage([
+      '/agents/threads/thread-1/runs/run-1?eventId=event-1',
+    ]);
+
+    const listbox = getByRole('listbox');
+    const option = within(listbox).getByText('Tool Execution — Search Tool').closest('[role="option"]');
+    expect(option).not.toBeNull();
+    if (!option) throw new Error('List option not found');
+    expect(within(option).getByText('success')).toBeInTheDocument();
+
+    const updated = buildEvent({
+      id: 'event-1',
+      status: 'error',
+      errorMessage: 'Tool exploded',
+      toolExecution: {
+        toolName: 'Search Tool',
+        toolCallId: 'call-1',
+        execStatus: 'error',
+        input: { query: 'status' },
+        output: { answer: 42 },
+        errorMessage: 'Tool exploded',
+        raw: null,
+      },
+    });
+
+    await act(async () => {
+      socketMocks.runEvent?.({ runId: 'run-1', event: updated, mutation: 'update' });
+    });
+
+    expect(summaryRefetch).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(within(option).getByText('error')).toBeInTheDocument());
+
+    const details = getByTestId('timeline-event-details');
+    expect(details).toHaveTextContent('Tool Execution — Search Tool');
+    expect(details).toHaveTextContent('error');
+    expect(details).toHaveTextContent('"answer": 42');
+    expect(details).toHaveTextContent('Error: Tool exploded');
+  });
+
+  it('merges socket updates and performs cursor catch-up after reconnect', async () => {
     const { findByText, getByTestId, unmount } = renderPage([
       '/agents/threads/thread-1/runs/run-1?eventId=event-1',
     ]);
 
-    const newEvent = buildEvent({
+    const appended = buildEvent({
       id: 'event-3',
       ts: '2024-01-01T00:00:03.000Z',
       type: 'summarization',
@@ -311,22 +377,48 @@ describe('AgentsRunTimeline socket reactions', () => {
     });
 
     await act(async () => {
-      socketMocks.runEvent?.({ runId: 'run-1', event: newEvent, mutation: 'append' });
+      socketMocks.runEvent?.({ runId: 'run-1', event: appended, mutation: 'append' });
     });
 
     await findByText('Summarization');
     expect(summaryRefetch).toHaveBeenCalledTimes(1);
+    expect(socketMocks.setRunCursor).toHaveBeenCalled();
 
     await act(async () => {
       socketMocks.status?.({ run: { id: 'run-1', status: 'finished', createdAt: '', updatedAt: '' } as any });
     });
     expect(summaryRefetch).toHaveBeenCalledTimes(2);
 
+    const caughtUp = buildEvent({
+      id: 'event-4',
+      ts: '2024-01-01T00:00:04.000Z',
+      type: 'tool_execution',
+      toolExecution: {
+        toolName: 'Weather',
+        toolCallId: 'call-4',
+        execStatus: 'success',
+        input: { location: 'NYC' },
+        output: { result: 'Sunny' },
+        errorMessage: null,
+        raw: null,
+      },
+    });
+    runsModule.timelineEvents.mockResolvedValue({ items: [caughtUp], nextCursor: null });
+
     await act(async () => {
       socketMocks.reconnect?.();
+      await Promise.resolve();
     });
+
+    await waitFor(() => expect(runsModule.timelineEvents).toHaveBeenCalledTimes(1));
+    expect(runsModule.timelineEvents).toHaveBeenCalledWith('run-1', expect.objectContaining({
+      types: undefined,
+      cursorTs: appended.ts,
+      cursorId: appended.id,
+    }));
     expect(summaryRefetch).toHaveBeenCalledTimes(3);
-    expect(eventsRefetch).toHaveBeenCalledTimes(1);
+    expect(eventsRefetch).not.toHaveBeenCalled();
+    await findByText('Tool Execution — Weather');
 
     expect(getByTestId('timeline-event-details')).toBeInTheDocument();
     unmount();

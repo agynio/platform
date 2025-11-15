@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { io, type Socket } from 'socket.io-client';
-import { config } from '@/config';
+import { getSocketBaseUrl } from '@/config';
 
 export interface CheckpointWriteClient {
   id: string;
@@ -41,7 +41,7 @@ interface InitialPayload {
 }
 
 export function useCheckpointStream({
-  url = config.apiBaseUrl,
+  url = getSocketBaseUrl(),
   threadId,
   agentId,
   maxItems = 500,
