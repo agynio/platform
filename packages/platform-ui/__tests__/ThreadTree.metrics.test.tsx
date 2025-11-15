@@ -52,9 +52,9 @@ describe('ThreadTree metrics badges and socket updates', () => {
     const dotIdle = screen.getByLabelText('Activity: idle');
     expect(dotIdle).toBeInTheDocument();
     expect(dotIdle.textContent).toBe('');
-    // Reminders badge hidden when 0
+    // No badges rendered in the list
+    expect(screen.queryByText(/Runs/)).toBeNull();
     expect(screen.queryByLabelText(/Active reminders:/)).toBeNull();
-    expect(screen.getByLabelText('Total runs: 4')).toBeInTheDocument();
 
     // Simulate socket activity change + reminders count
     const anySock: any = socketModule.graphSocket as any;
@@ -66,8 +66,8 @@ describe('ThreadTree metrics badges and socket updates', () => {
     const dotWorking = await screen.findByLabelText('Activity: working');
     expect(dotWorking).toBeInTheDocument();
     expect(dotWorking.textContent).toBe('');
-    expect(screen.getByLabelText('Active reminders: 2')).toBeInTheDocument();
-    // Runs badge remains unchanged
-    expect(screen.getByLabelText('Total runs: 4')).toBeInTheDocument();
+    // Still no badges after realtime updates
+    expect(screen.queryByText(/Runs/)).toBeNull();
+    expect(screen.queryByLabelText(/Active reminders:/)).toBeNull();
   });
 });

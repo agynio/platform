@@ -6,6 +6,15 @@ export type ThreadMetrics = {
   runsCount: number;
 };
 
+export type ThreadReminder = {
+  id: string;
+  threadId: string;
+  note: string;
+  at: string;
+  createdAt: string;
+  completedAt: string | null;
+};
+
 export type ThreadNode = {
   id: string;
   alias: string;

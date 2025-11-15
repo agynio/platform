@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { ThreadStatusFilter } from './ThreadStatusFilterSwitch';
 import { threads } from '@/api/modules/threads';
 import type { ThreadNode } from '@/api/types/agents';
@@ -10,13 +10,15 @@ export function ThreadTreeNode({
   onSelect,
   selectedId,
   invalidateSiblingCache,
+  onSelectedNodeChange,
 }: {
   node: ThreadNode;
   statusFilter: ThreadStatusFilter;
   level: number;
-  onSelect: (id: string) => void;
+  onSelect: (node: ThreadNode) => void;
   selectedId?: string;
   invalidateSiblingCache?: () => void;
+  onSelectedNodeChange?: (node: ThreadNode) => void;
 }) {
   const [expanded, setExpanded] = useState(false);
   const [children, setChildren] = useState<ThreadNode[] | null>(null);
@@ -27,15 +29,14 @@ export function ThreadTreeNode({
   const summary = node.summary && node.summary.trim().length > 0 ? node.summary.trim() : '(no summary yet)';
   const agentTitle = node.agentTitle && node.agentTitle.trim().length > 0 ? node.agentTitle.trim() : '(unknown agent)';
   const isSelected = selectedId === node.id;
-  const remindersCount = node.metrics?.remindersCount ?? 0;
   const activity = node.metrics?.activity ?? 'idle';
-  const runsCount = node.metrics?.runsCount ?? 0;
   const createdAtLabel = new Date(node.createdAt).toLocaleString();
   const isRoot = node.parentId == null;
-  const showRunsBadge = runsCount > 0;
-  const showRemindersBadge = remindersCount > 0;
-  const showBadges = showRunsBadge || showRemindersBadge;
   const showFooter = isRoot;
+
+  useEffect(() => {
+    if (isSelected) onSelectedNodeChange?.(node);
+  }, [isSelected, node, onSelectedNodeChange]);
 
   async function loadChildren() {
     setLoading(true);
@@ -87,7 +88,7 @@ export function ThreadTreeNode({
           >
             {expanded ? '▾' : '▸'}
           </button>
-          <button className="flex-1 text-left" onClick={() => onSelect(node.id)}>
+          <button className="flex-1 text-left" onClick={() => onSelect(node)}>
             <div
               className="thread-summary min-w-0 overflow-hidden text-sm font-medium leading-tight text-gray-900"
               title={summary}
@@ -99,20 +100,6 @@ export function ThreadTreeNode({
               <span aria-hidden="true">•</span>
               <span>{createdAtLabel}</span>
             </div>
-            {showBadges && (
-              <div className="mt-1 flex flex-wrap items-center gap-2">
-                {showRunsBadge && (
-                  <span className="text-[10px] px-1 py-0.5 rounded bg-gray-100 text-gray-700" aria-label={`Total runs: ${runsCount}`} title={`Total runs: ${runsCount}`}>
-                    Runs {runsCount}
-                  </span>
-                )}
-                {showRemindersBadge && (
-                  <span className="text-[10px] px-1 py-0.5 rounded bg-gray-100 text-gray-700" aria-label={`Active reminders: ${remindersCount}`} title={`Active reminders: ${remindersCount}`}>
-                    🕒 {remindersCount}
-                  </span>
-                )}
-              </div>
-            )}
           </button>
           {/* Activity indicator: small colored dot with tooltip + aria */}
           <span
@@ -143,7 +130,15 @@ export function ThreadTreeNode({
             <li className="text-xs text-gray-500" style={{ paddingLeft: padding + 16 }}>No children</li>
           )}
           {!loading && !error && (children || []).map((c) => (
-            <ThreadTreeNode key={c.id} node={c} statusFilter={statusFilter} level={level + 1} onSelect={onSelect} selectedId={selectedId} />
+            <ThreadTreeNode
+              key={c.id}
+              node={c}
+              statusFilter={statusFilter}
+              level={level + 1}
+              onSelect={onSelect}
+              selectedId={selectedId}
+              onSelectedNodeChange={onSelectedNodeChange}
+            />
           ))}
         </ul>
       )}

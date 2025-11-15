@@ -1,5 +1,8 @@
+import { useEffect, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { threads } from '@/api/modules/threads';
+import { graphSocket } from '@/lib/graph/socket';
+import type { ThreadMetrics, ThreadReminder } from '@/api/types/agents';
 
 export function useThreadRoots(status: 'open' | 'closed' | 'all') {
   return useQuery({
@@ -29,3 +32,65 @@ export function useToggleThreadStatus(id: string, current: 'open' | 'closed') {
   });
 }
 
+const defaultMetrics: ThreadMetrics = { remindersCount: 0, activity: 'idle', runsCount: 0 };
+
+export function useThreadMetrics(threadId: string | undefined) {
+  const qc = useQueryClient();
+  const queryKey = useMemo(() => ['agents', 'threads', threadId, 'metrics'] as const, [threadId]);
+  const q = useQuery<ThreadMetrics>({
+    enabled: !!threadId,
+    queryKey,
+    queryFn: () => threads.metrics(threadId as string),
+    staleTime: 5000,
+  });
+
+  useEffect(() => {
+    if (!threadId) return;
+    const offActivity = graphSocket.onThreadActivityChanged((payload) => {
+      if (payload.threadId !== threadId) return;
+      qc.setQueryData<ThreadMetrics>(queryKey, (prev) => ({ ...(prev ?? defaultMetrics), activity: payload.activity }));
+    });
+    const offReminders = graphSocket.onThreadRemindersCount((payload) => {
+      if (payload.threadId !== threadId) return;
+      qc.setQueryData<ThreadMetrics>(queryKey, (prev) => ({ ...(prev ?? defaultMetrics), remindersCount: payload.remindersCount }));
+    });
+    const offReconnect = graphSocket.onReconnected(() => {
+      qc.invalidateQueries({ queryKey }).catch(() => {});
+    });
+    return () => {
+      offActivity();
+      offReminders();
+      offReconnect();
+    };
+  }, [threadId, qc, queryKey]);
+
+  return q;
+}
+
+export function useThreadReminders(threadId: string | undefined, enabled: boolean = true) {
+  const qc = useQueryClient();
+  const queryKey = useMemo(() => ['agents', 'threads', threadId, 'reminders'] as const, [threadId]);
+  const q = useQuery<{ items: ThreadReminder[] }>({
+    enabled: !!threadId && enabled,
+    queryKey,
+    queryFn: () => threads.reminders(threadId as string),
+    staleTime: 1500,
+  });
+
+  useEffect(() => {
+    if (!threadId || !enabled) return;
+    const offReminders = graphSocket.onThreadRemindersCount((payload) => {
+      if (payload.threadId !== threadId) return;
+      qc.invalidateQueries({ queryKey }).catch(() => {});
+    });
+    const offReconnect = graphSocket.onReconnected(() => {
+      qc.invalidateQueries({ queryKey }).catch(() => {});
+    });
+    return () => {
+      offReminders();
+      offReconnect();
+    };
+  }, [threadId, enabled, qc, queryKey]);
+
+  return q;
+}
