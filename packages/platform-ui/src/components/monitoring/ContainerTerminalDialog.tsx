@@ -1,7 +1,6 @@
-import React, {
+import {
   useCallback,
   useEffect,
-  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -9,6 +8,10 @@ import React, {
 import { Badge, Button, Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@agyn/ui';
 import type { ContainerItem, ContainerTerminalSessionResponse } from '@/api/modules/containers';
 import { useCreateContainerTerminalSession } from '@/api/hooks/containers';
+import { Terminal } from '@xterm/xterm';
+import { FitAddon } from '@xterm/addon-fit';
+import { WebglAddon } from '@xterm/addon-webgl';
+import '@xterm/xterm/css/xterm.css';
 
 type Props = {
   container: ContainerItem | null;
@@ -22,46 +25,87 @@ export function ContainerTerminalDialog({ container, open, onClose }: Props) {
   const [error, setError] = useState<string | null>(null);
   const loading = mutation.status === 'pending';
 
+  const mutateAsyncRef = useRef(mutation.mutateAsync);
+  const resetRef = useRef(mutation.reset);
+  const prevOpenRef = useRef(open);
+  const inFlightRef = useRef(false);
+
+  useEffect(() => {
+    mutateAsyncRef.current = mutation.mutateAsync;
+  }, [mutation.mutateAsync]);
+
+  useEffect(() => {
+    resetRef.current = mutation.reset;
+  }, [mutation.reset]);
+
+  useEffect(() => {
+    if (prevOpenRef.current && !open) {
+      setSession(null);
+      setError(null);
+      resetRef.current?.();
+      inFlightRef.current = false;
+    }
+    prevOpenRef.current = open;
+  }, [open]);
+
   const containerId = container?.containerId;
 
   useEffect(() => {
     if (!open || !containerId) {
       setSession(null);
       setError(null);
-      mutation.reset();
       return;
     }
     let cancelled = false;
     setSession(null);
     setError(null);
+    const mutate = mutateAsyncRef.current;
+    if (!mutate || inFlightRef.current) return;
+    inFlightRef.current = true;
     (async () => {
       try {
-        const next = await mutation.mutateAsync({ containerId });
+        const next = await mutate({ containerId });
         if (!cancelled) setSession(next);
       } catch (err) {
         if (!cancelled) setError(err instanceof Error ? err.message : String(err));
+      } finally {
+        inFlightRef.current = false;
       }
     })();
     return () => {
       cancelled = true;
     };
-  }, [open, containerId, mutation]);
+  }, [open, containerId]);
 
   const handleRetry = () => {
     if (!containerId) return;
+    if (inFlightRef.current) return;
     setSession(null);
     setError(null);
-    mutation.reset();
-    void mutation.mutateAsync({ containerId }).then(setSession).catch((err: unknown) => {
-      setError(err instanceof Error ? err.message : String(err));
-    });
+    resetRef.current?.();
+    const mutate = mutateAsyncRef.current;
+    if (!mutate) return;
+    inFlightRef.current = true;
+    void mutate({ containerId })
+      .then(setSession)
+      .catch((err: unknown) => {
+        setError(err instanceof Error ? err.message : String(err));
+      })
+      .finally(() => {
+        inFlightRef.current = false;
+      });
   };
 
   const title = container ? `Terminal for ${container.containerId.substring(0, 12)}` : 'Terminal';
 
   return (
     <Dialog open={open} onOpenChange={(value) => { if (!value) onClose(); }}>
-      <DialogContent className="max-w-3xl">
+      <DialogContent
+        className="max-w-3xl"
+        onOpenAutoFocus={(event) => {
+          event.preventDefault();
+        }}
+      >
         <DialogHeader>
           <DialogTitle className="flex items-center gap-3">
             <span>{title}</span>
@@ -104,21 +148,59 @@ type TerminalConsoleProps = {
   onClose: () => void;
 };
 
+type TerminalStatus = 'connecting' | 'running' | 'closed' | 'error';
+
 function TerminalConsole({ session, container, onClose }: TerminalConsoleProps) {
-  const viewportRef = useRef<HTMLDivElement | null>(null);
-  const focusTrapRef = useRef<HTMLDivElement | null>(null);
+  const { cols: negotiatedCols, rows: negotiatedRows, shell } = session.negotiated;
+  const terminalContainerRef = useRef<HTMLDivElement | null>(null);
+  const termRef = useRef<Terminal | null>(null);
+  const fitAddonRef = useRef<FitAddon | null>(null);
+  const disposablesRef = useRef<Array<{ dispose(): void }>>([]);
   const wsRef = useRef<WebSocket | null>(null);
   const pingRef = useRef<number | null>(null);
+  const pendingInputRef = useRef<string[]>([]);
   const isMounted = useRef(true);
-  const dimsRef = useRef<{ cols: number; rows: number }>({ ...session.negotiated });
-  const pendingResizeRef = useRef<{ cols: number; rows: number } | null>(session.negotiated);
+  const pendingResizeRef = useRef<{ cols: number; rows: number } | null>({ cols: negotiatedCols, rows: negotiatedRows });
+  const dimsRef = useRef<{ cols: number; rows: number }>({ cols: negotiatedCols, rows: negotiatedRows });
 
-  const [output, setOutput] = useState('');
-  const [status, setStatus] = useState<'connecting' | 'running' | 'closed' | 'error'>('connecting');
+  const [status, setStatus] = useState<TerminalStatus>('connecting');
   const [statusDetail, setStatusDetail] = useState<string | null>(null);
   const [exitCode, setExitCode] = useState<number | null>(null);
 
   const resolvedUrl = useMemo(() => toWsUrl(session.wsUrl), [session.wsUrl]);
+
+  const setStatusIfChanged = useCallback((next: TerminalStatus) => {
+    setStatus((prev) => (prev === next ? prev : next));
+  }, []);
+
+  const setStatusDetailIfChanged = useCallback((next: string | null) => {
+    setStatusDetail((prev) => (prev === next ? prev : next));
+  }, []);
+
+  const disposeTerminal = useCallback(() => {
+    disposablesRef.current.forEach((d) => {
+      try {
+        d.dispose();
+      } catch {
+        // noop
+      }
+    });
+    disposablesRef.current = [];
+    const fit = fitAddonRef.current as unknown as { dispose?: () => void } | null;
+    fit?.dispose?.();
+    fitAddonRef.current = null;
+    pendingInputRef.current = [];
+    if (termRef.current) {
+      termRef.current.dispose();
+      termRef.current = null;
+    }
+  }, []);
+
+  const focusTerminal = useCallback((options?: FocusOptions) => {
+    const host = terminalContainerRef.current;
+    if (host) host.focus(options);
+    termRef.current?.focus();
+  }, []);
 
   const sendMessage = useCallback((payload: unknown) => {
     const ws = wsRef.current;
@@ -130,15 +212,99 @@ function TerminalConsole({ session, container, onClose }: TerminalConsoleProps) 
     }
   }, []);
 
-  const applyResize = useCallback((cols: number, rows: number) => {
+  const sendOrQueueInput = useCallback((data: string) => {
+    const ws = wsRef.current;
+    if (ws && ws.readyState === WebSocket.OPEN) {
+      sendMessage({ type: 'input', data });
+    } else {
+      pendingInputRef.current.push(data);
+    }
+  }, [sendMessage]);
+
+  const flushPendingInput = useCallback(() => {
+    const ws = wsRef.current;
+    if (!ws || ws.readyState !== WebSocket.OPEN) return;
+    if (!pendingInputRef.current.length) return;
+    const queued = pendingInputRef.current.splice(0, pendingInputRef.current.length);
+    queued.forEach((data) => {
+      sendMessage({ type: 'input', data });
+    });
+  }, [sendMessage]);
+
+  const handleHostClick = useCallback(() => {
+    focusTerminal({ preventScroll: true });
+  }, [focusTerminal]);
+
+  const handleHostFocus = useCallback(() => {
+    termRef.current?.focus();
+  }, []);
+
+  const reportSize = useCallback(() => {
+    const term = termRef.current;
+    if (!term) return;
+    const cols = term.cols;
+    const rows = term.rows;
+    if (!cols || !rows) return;
+    if (dimsRef.current.cols === cols && dimsRef.current.rows === rows) return;
     dimsRef.current = { cols, rows };
     const ws = wsRef.current;
     if (ws && ws.readyState === WebSocket.OPEN) {
       sendMessage({ type: 'resize', cols, rows });
+      pendingResizeRef.current = null;
     } else {
       pendingResizeRef.current = { cols, rows };
     }
   }, [sendMessage]);
+
+  const instantiateTerminal = useCallback(() => {
+    const host = terminalContainerRef.current;
+    if (!host) return;
+    disposeTerminal();
+    pendingInputRef.current = [];
+    const term = new Terminal({
+      convertEol: true,
+      cursorBlink: true,
+      fontFamily: 'Menlo, Monaco, Consolas, monospace',
+      theme: {
+        background: '#0f172a',
+        foreground: '#f8fafc',
+        cursor: '#38bdf8',
+      },
+      scrollback: 5000,
+    });
+    termRef.current = term;
+    dimsRef.current = { cols: negotiatedCols, rows: negotiatedRows };
+
+    const fitAddon = new FitAddon();
+    term.loadAddon(fitAddon);
+    fitAddonRef.current = fitAddon;
+    try {
+      const webgl = new WebglAddon();
+      term.loadAddon(webgl);
+    } catch (err) {
+      if (typeof console !== 'undefined' && typeof console.debug === 'function') {
+        console.debug('terminal webgl addon unavailable', err);
+      }
+    }
+
+    term.open(host);
+    focusTerminal({ preventScroll: true });
+    pendingResizeRef.current = { cols: negotiatedCols, rows: negotiatedRows };
+
+    const disposables = [
+      term.onData(sendOrQueueInput),
+      term.onResize(() => {
+        reportSize();
+      }),
+    ];
+    disposablesRef.current = disposables;
+
+    requestAnimationFrame(() => {
+      focusTerminal({ preventScroll: true });
+      fitAddon.fit();
+      reportSize();
+    });
+  }, [disposeTerminal, focusTerminal, negotiatedCols, negotiatedRows, reportSize, sendOrQueueInput]);
 
   useEffect(() => {
     isMounted.current = true;
@@ -148,22 +314,57 @@ function TerminalConsole({ session, container, onClose }: TerminalConsoleProps) 
   }, []);
 
   useEffect(() => {
-    if (!focusTrapRef.current) return;
-    focusTrapRef.current.focus({ preventScroll: true });
-  }, [session.sessionId]);
+    pendingResizeRef.current = { cols: negotiatedCols, rows: negotiatedRows };
+    dimsRef.current = { cols: negotiatedCols, rows: negotiatedRows };
+  }, [negotiatedCols, negotiatedRows, session.sessionId]);
+
+  useEffect(() => {
+    instantiateTerminal();
+    return () => disposeTerminal();
+  }, [instantiateTerminal, disposeTerminal, session.sessionId, container.containerId]);
+
+  useEffect(() => {
+    if (typeof ResizeObserver === 'undefined') return;
+    const observer = new ResizeObserver(() => {
+      const fit = fitAddonRef.current;
+      if (!fit) return;
+      requestAnimationFrame(() => {
+        fit.fit();
+        reportSize();
+      });
+    });
+    const node = terminalContainerRef.current?.parentElement;
+    if (node) observer.observe(node);
+    const handleWindowResize = () => {
+      const fit = fitAddonRef.current;
+      if (!fit) return;
+      fit.fit();
+      reportSize();
+    };
+    window.addEventListener('resize', handleWindowResize);
+    return () => {
+      observer.disconnect();
+      window.removeEventListener('resize', handleWindowResize);
+    };
+  }, [reportSize]);
 
   useEffect(() => {
     const ws = new WebSocket(resolvedUrl);
     wsRef.current = ws;
-    setStatus('connecting');
-    setStatusDetail(null);
-    setExitCode(null);
+    setStatusIfChanged('connecting');
+    setStatusDetailIfChanged(null);
+    setExitCode((prev) => (prev === null ? prev : null));
 
     const onOpen = () => {
       if (!isMounted.current) return;
-      setStatus('running');
+      setStatusIfChanged('running');
+      focusTerminal({ preventScroll: true });
       const pending = pendingResizeRef.current;
-      if (pending) sendMessage({ type: 'resize', cols: pending.cols, rows: pending.rows });
+      if (pending) {
+        sendMessage({ type: 'resize', cols: pending.cols, rows: pending.rows });
+        pendingResizeRef.current = null;
+      }
+      flushPendingInput();
     };
 
     const onMessage = (event: MessageEvent<string>) => {
@@ -173,29 +374,35 @@ function TerminalConsole({ session, container, onClose }: TerminalConsoleProps) 
         switch (data.type) {
           case 'output': {
             const text = typeof data.data === 'string' ? data.data : '';
-            if (text) setOutput((prev) => prev + text);
+            if (text) termRef.current?.write(text);
             break;
           }
           case 'status': {
             const phase = typeof data.phase === 'string' ? data.phase : '';
             if (phase === 'error') {
-              setStatus('error');
-              setStatusDetail(typeof data.reason === 'string' ? data.reason : 'Terminal error');
+              const reason = typeof data.reason === 'string' ? data.reason : 'Terminal error';
+              setStatusIfChanged('error');
+              setStatusDetailIfChanged(reason);
+              termRef.current?.writeln(`\r\n\x1b[31m${reason}\x1b[0m`);
             } else if (phase === 'exited') {
-              setStatus('closed');
-              setExitCode(typeof data.exitCode === 'number' ? data.exitCode : null);
+              const exit = typeof data.exitCode === 'number' ? data.exitCode : null;
+              setStatusIfChanged('closed');
+              setExitCode((prev) => (prev === exit ? prev : exit));
+              termRef.current?.writeln(`\r\n\x1b[33mProcess exited${exit !== null ? ` (code ${exit})` : ''}\x1b[0m`);
             } else if (phase === 'running') {
-              setStatus('running');
+              setStatusIfChanged('running');
+              setStatusDetailIfChanged(null);
             }
             break;
           }
           case 'error': {
-            setStatus('error');
             const reason = typeof data.message === 'string' ? data.message : data.code;
-            setStatusDetail(typeof reason === 'string' ? reason : 'Terminal error');
+            const text = typeof reason === 'string' ? reason : 'Terminal error';
+            setStatusIfChanged('error');
+            setStatusDetailIfChanged(text);
+            termRef.current?.writeln(`\r\n\x1b[31m${text}\x1b[0m`);
             break;
           }
-          case 'pong':
           default:
             break;
         }
@@ -206,13 +413,19 @@ function TerminalConsole({ session, container, onClose }: TerminalConsoleProps) 
 
     const onError = () => {
       if (!isMounted.current) return;
-      setStatus('error');
-      setStatusDetail('Terminal connection error');
+      const message = 'Terminal connection error';
+      setStatusIfChanged('error');
+      setStatusDetailIfChanged(message);
+      termRef.current?.writeln(`\r\n\x1b[31m${message}\x1b[0m`);
     };
 
     const onClose = () => {
       if (!isMounted.current) return;
-      setStatus((prev) => (prev === 'error' ? prev : 'closed'));
+      setStatus((prev) => {
+        if (prev === 'error') return prev;
+        termRef.current?.writeln('\r\nSession closed');
+        return 'closed';
+      });
     };
 
     ws.addEventListener('open', onOpen);
@@ -226,7 +439,6 @@ function TerminalConsole({ session, container, onClose }: TerminalConsoleProps) 
 
     return () => {
       if (pingRef.current) window.clearInterval(pingRef.current);
-      pendingResizeRef.current = dimsRef.current;
       ws.removeEventListener('open', onOpen);
       ws.removeEventListener('message', onMessage as EventListener);
       ws.removeEventListener('error', onError);
@@ -239,43 +451,7 @@ function TerminalConsole({ session, container, onClose }: TerminalConsoleProps) 
       ws.close();
       wsRef.current = null;
     };
-  }, [resolvedUrl, sendMessage]);
-
-  useLayoutEffect(() => {
-    const el = viewportRef.current;
-    if (!el) return;
-    const estimateDimensions = () => {
-      const width = el.clientWidth;
-      const height = el.clientHeight;
-      const cols = clamp(Math.floor(width / 8), 40, 200);
-      const rows = clamp(Math.floor(height / 18), 10, 120);
-      applyResize(cols, rows);
-    };
-    estimateDimensions();
-    const observer = new ResizeObserver(() => estimateDimensions());
-    observer.observe(el);
-    return () => observer.disconnect();
-  }, [applyResize]);
-
-  useEffect(() => {
-    const el = viewportRef.current;
-    if (!el) return;
-    el.scrollTop = el.scrollHeight;
-  }, [output]);
-
-  const handleKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
-    if (event.metaKey) return;
-    const data = translateKey(event);
-    if (!data) return;
-    event.preventDefault();
-    sendMessage({ type: 'input', data });
-  };
-
-  const handlePaste = (event: React.ClipboardEvent<HTMLDivElement>) => {
-    event.preventDefault();
-    const text = event.clipboardData?.getData('text');
-    if (text) sendMessage({ type: 'input', data: text });
-  };
+  }, [flushPendingInput, focusTerminal, resolvedUrl, sendMessage, setStatusDetailIfChanged, setStatusIfChanged]);
 
   const statusLabel = status === 'running' ? 'Running' : status === 'connecting' ? 'Connecting' : 'Closed';
 
@@ -284,7 +460,7 @@ function TerminalConsole({ session, container, onClose }: TerminalConsoleProps) 
       <div className="flex items-center justify-between text-xs text-muted-foreground">
         <div className="flex items-center gap-2">
           <Badge variant={status === 'running' ? 'outline' : 'secondary'}>{statusLabel}</Badge>
-          <span>Shell: {session.negotiated.shell}</span>
+          <span>Shell: {shell}</span>
           {exitCode !== null && <span>Exit code: {exitCode}</span>}
           {statusDetail && <span className="text-red-500">{statusDetail}</span>}
         </div>
@@ -292,70 +468,22 @@ function TerminalConsole({ session, container, onClose }: TerminalConsoleProps) 
           <Button size="sm" variant="ghost" onClick={() => onClose()}>End session</Button>
         </div>
       </div>
-      <div ref={viewportRef} className="h-[320px] w-full overflow-auto rounded border bg-black text-green-200">
+      <div className="h-[320px] w-full rounded border bg-black">
         <div
-          ref={focusTrapRef}
-          role="textbox"
-          tabIndex={0}
+          ref={terminalContainerRef}
+          className="h-full w-full"
+          data-testid="terminal-view"
           aria-label={`Terminal for container ${container.containerId}`}
-          className="min-h-full cursor-text whitespace-pre-wrap break-words p-3 font-mono text-sm outline-none"
-          onKeyDown={handleKeyDown}
-          onPaste={handlePaste}
-        >
-          {output || ' '}
-        </div>
+          tabIndex={0}
+          onClick={handleHostClick}
+          onFocus={handleHostFocus}
+        />
       </div>
       <p className="text-xs text-muted-foreground">
-        Tip: click inside the terminal area and use your keyboard. ESC + . (Ctrl+C) stops the current command.
+        Tip: click inside the terminal to focus, use your keyboard for input, and scroll to review history.
       </p>
     </div>
   );
-}
-
-function translateKey(event: React.KeyboardEvent<HTMLDivElement>): string | null {
-  const { key, ctrlKey, shiftKey } = event;
-  if (ctrlKey && key.length === 1) {
-    const upper = key.toUpperCase();
-    const code = upper.charCodeAt(0) - 64;
-    if (code >= 1 && code <= 26) {
-      return String.fromCharCode(code);
-    }
-  }
-  switch (key) {
-    case 'Enter':
-      return '\r';
-    case 'Backspace':
-      return '\b';
-    case 'Tab':
-      return '\t';
-    case 'ArrowUp':
-      return '\u001b[A';
-    case 'ArrowDown':
-      return '\u001b[B';
-    case 'ArrowLeft':
-      return '\u001b[D';
-    case 'ArrowRight':
-      return '\u001b[C';
-    case 'Delete':
-      return '\u001b[3~';
-    case 'Home':
-      return '\u001b[H';
-    case 'End':
-      return '\u001b[F';
-    case 'Escape':
-      return '\u001b';
-    default:
-      break;
-  }
-  if (key.length === 1) {
-    if (key === ' ' && !shiftKey) return ' ';
-    return key;
-  }
-  return null;
-}
-
-function clamp(value: number, min: number, max: number) {
-  return Math.max(min, Math.min(max, value));
 }
 
 function toWsUrl(path: string): string {

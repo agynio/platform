@@ -7,6 +7,52 @@ import { MemoryRouter } from 'react-router-dom';
 import type { UseQueryResult } from '@tanstack/react-query';
 import type { ContainerItem } from '@/api/modules/containers';
 
+const terminalOpenMock = vi.fn();
+const terminalDisposeMock = vi.fn();
+const terminalWriteMock = vi.fn();
+const terminalWritelnMock = vi.fn();
+
+vi.mock('@xterm/xterm', () => {
+  class FakeDisposable {
+    dispose = vi.fn();
+  }
+
+  class FakeTerminal {
+    cols = 80;
+    rows = 24;
+    loadAddon = vi.fn();
+    open = terminalOpenMock;
+    focus = vi.fn();
+    dispose = terminalDisposeMock;
+    write = terminalWriteMock;
+    writeln = terminalWritelnMock;
+    onData(_callback: (data: string) => void) {
+      return new FakeDisposable();
+    }
+    onPaste(_callback: (data: string) => void) {
+      return new FakeDisposable();
+    }
+    onResize(_callback: () => void) {
+      return new FakeDisposable();
+    }
+  }
+
+  return { Terminal: FakeTerminal };
+});
+
+vi.mock('@xterm/addon-fit', () => {
+  class FakeFitAddon {
+    fit = vi.fn();
+    dispose = vi.fn();
+  }
+  return { FitAddon: FakeFitAddon };
+});
+
+vi.mock('@xterm/addon-webgl', () => {
+  class FakeWebglAddon {}
+  return { WebglAddon: FakeWebglAddon };
+});
+
 // Mock hooks to control data flow
 const useContainersMock = vi.fn();
 const mutateSessionMock = vi.fn();
@@ -34,6 +80,10 @@ describe('MonitoringContainers page', () => {
   beforeEach(() => {
     lastThreadId = undefined;
     vi.useFakeTimers();
+    terminalOpenMock.mockClear();
+    terminalDisposeMock.mockClear();
+    terminalWriteMock.mockClear();
+    terminalWritelnMock.mockClear();
     useContainersMock.mockImplementation((_status?: string, _sortBy?: string, _sortDir?: 'asc' | 'desc', threadId?: string) => {
       lastThreadId = threadId;
       const result = {
@@ -153,5 +203,7 @@ describe('MonitoringContainers page', () => {
     });
     expect(mutateSessionMock).toHaveBeenCalledWith({ containerId: 'abcdef1234567890' });
     expect(screen.getByText(/Terminal for abcdef123456/)).toBeTruthy();
+    expect(screen.getByTestId('terminal-view')).toBeTruthy();
+    expect(terminalOpenMock).toHaveBeenCalled();
   });
 });
