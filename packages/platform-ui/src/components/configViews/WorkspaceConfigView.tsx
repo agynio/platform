@@ -11,15 +11,33 @@ export default function WorkspaceConfigView({ value, onChange, readOnly, disable
   const [platform, setPlatform] = useState<string>((init.platform as string) || '');
   const [enableDinD, setEnableDinD] = useState<boolean>(!!init.enableDinD);
   const [ttlSeconds, setTtlSeconds] = useState<number>(typeof init.ttlSeconds === 'number' ? (init.ttlSeconds as number) : 86400);
+  const volumeInit = (init.volumes as { enabled?: boolean; mountPath?: string } | undefined) || {};
+  const [volumesEnabled, setVolumesEnabled] = useState<boolean>(!!volumeInit.enabled);
+  const [mountPath, setMountPath] = useState<string>(
+    typeof volumeInit.mountPath === 'string' && volumeInit.mountPath.trim().length > 0
+      ? volumeInit.mountPath
+      : '/workspace',
+  );
+
+  const mountPathError = useMemo(() => {
+    if (!volumesEnabled) return '';
+    const trimmed = mountPath.trim();
+    if (!trimmed) return 'Mount path is required when volumes are enabled.';
+    if (!trimmed.startsWith('/')) return 'Mount path must be absolute.';
+    return '';
+  }, [volumesEnabled, mountPath]);
 
   const isDisabled = !!readOnly || !!disabled;
 
   useEffect(() => {
     const errors: string[] = [];
+    if (mountPathError) errors.push(mountPathError);
     onValidate?.(errors);
-  }, [image, onValidate]);
+  }, [image, mountPathError, onValidate]);
 
   useEffect(() => {
+    const normalizedMountPath = mountPath.trim() || '/workspace';
+    const nextVolumes = { enabled: volumesEnabled, mountPath: normalizedMountPath };
     const next = {
       ...value,
       image: image || undefined,
@@ -28,10 +46,11 @@ export default function WorkspaceConfigView({ value, onChange, readOnly, disable
       platform: platform || undefined,
       enableDinD,
       ttlSeconds,
+      volumes: nextVolumes,
     };
     if (JSON.stringify(value || {}) !== JSON.stringify(next)) onChange(next);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [image, JSON.stringify(env), initialScript, platform, enableDinD, ttlSeconds]);
+  }, [image, JSON.stringify(env), initialScript, platform, enableDinD, ttlSeconds, volumesEnabled, mountPath]);
 
   return (
     <div className="space-y-3 text-sm">
@@ -58,6 +77,33 @@ export default function WorkspaceConfigView({ value, onChange, readOnly, disable
       <div className="flex items-center gap-2">
         <input id="enableDinD" type="checkbox" className="h-4 w-4" checked={enableDinD} onChange={(e) => setEnableDinD(e.target.checked)} disabled={isDisabled} />
         <label htmlFor="enableDinD" className="text-xs">Enable Docker-in-Docker sidecar</label>
+      </div>
+      <div className="space-y-2 rounded border px-3 py-2">
+        <div className="flex items-center gap-2">
+          <input
+            id="enableVolumes"
+            type="checkbox"
+            className="h-4 w-4"
+            checked={volumesEnabled}
+            onChange={(e) => setVolumesEnabled(e.target.checked)}
+            disabled={isDisabled}
+          />
+          <label htmlFor="enableVolumes" className="text-xs">Enable persistent workspace volume</label>
+        </div>
+        <div>
+          <label htmlFor="mountPath" className="block text-xs mb-1">Mount path</label>
+          <Input
+            id="mountPath"
+            value={mountPath}
+            onChange={(e) => setMountPath(e.target.value)}
+            disabled={isDisabled || !volumesEnabled}
+            aria-invalid={volumesEnabled && !!mountPathError}
+            placeholder="/workspace"
+          />
+          {volumesEnabled && mountPathError && (
+            <p className="text-xs text-red-600 mt-1" role="alert">{mountPathError}</p>
+          )}
+        </div>
       </div>
       <div>
         <label htmlFor="ttlSeconds" className="block text-xs mb-1">Workspace TTL (seconds)</label>

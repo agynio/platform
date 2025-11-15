@@ -94,25 +94,43 @@ export function MonitoringContainers() {
                   <Td>{new Date(c.lastUsedAt).toLocaleString()}</Td>
                   <Td>{c.killAfterAt ? new Date(c.killAfterAt).toLocaleString() : '-'}</Td>
                 </Tr>
-                <Tr key={`${c.containerId}-sidecars`}>
+                <Tr key={`${c.containerId}-details`}>
                   <Td colSpan={8}>
-                    <div className="flex items-center gap-2 pl-4">
-                      <span className="text-xs text-muted-foreground">Sidecars:</span>
-                      {Array.isArray(c.sidecars) && c.sidecars.length > 0 ? (
-                        <div className="flex items-center gap-2">
-                          {c.sidecars.map((s) => (
-                            <div key={s.containerId} className="inline-flex items-center gap-2 rounded border px-2 py-1">
-                              <span className="text-xs rounded bg-muted px-1">{s.role}</span>
-                              <span className="font-mono text-xs">{s.containerId.substring(0, 8)}</span>
-                              <CopyButton ariaLabel={`Copy sidecar ${s.containerId}`} text={s.containerId} />
-                              <span className="text-xs">{s.status}</span>
-                              {s.image && <span className="text-xs text-muted-foreground">{s.image}</span>}
-                            </div>
-                          ))}
-                        </div>
-                      ) : (
-                        <span className="text-xs text-muted-foreground">(none)</span>
-                      )}
+                    <div className="flex flex-col gap-2 pl-4 py-2">
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs text-muted-foreground">Sidecars:</span>
+                        {Array.isArray(c.sidecars) && c.sidecars.length > 0 ? (
+                          <div className="flex flex-wrap items-center gap-2">
+                            {c.sidecars.map((s) => (
+                              <div key={s.containerId} className="inline-flex items-center gap-2 rounded border px-2 py-1">
+                                <span className="text-xs rounded bg-muted px-1">{s.role}</span>
+                                <span className="font-mono text-xs">{s.containerId.substring(0, 8)}</span>
+                                <CopyButton ariaLabel={`Copy sidecar ${s.containerId}`} text={s.containerId} />
+                                <span className="text-xs">{s.status}</span>
+                                {s.image && <span className="text-xs text-muted-foreground">{s.image}</span>}
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <span className="text-xs text-muted-foreground">(none)</span>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs text-muted-foreground">Mounts:</span>
+                        {Array.isArray(c.mounts) && c.mounts.length > 0 ? (
+                          <div className="flex flex-wrap items-center gap-2">
+                            {c.mounts.map((m, idx) => (
+                              <div key={`${c.containerId}-mount-${idx}`} className="inline-flex items-center gap-1 rounded border px-2 py-1">
+                                <span className="font-mono text-xs">{m.source}</span>
+                                <span className="text-xs text-muted-foreground">→</span>
+                                <span className="font-mono text-xs">{m.destination}</span>
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <span className="text-xs text-muted-foreground">(none)</span>
+                        )}
+                      </div>
                     </div>
                   </Td>
                 </Tr>

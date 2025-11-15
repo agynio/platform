@@ -24,6 +24,9 @@ describe('WorkspaceConfigView payload', () => {
     fireEvent.change(screen.getByTestId('env-key-0'), { target: { value: 'A' } });
     fireEvent.change(screen.getByTestId('env-value-0'), { target: { value: '1' } });
     fireEvent.click(screen.getByLabelText('Enable Docker-in-Docker sidecar'));
+    fireEvent.click(screen.getByLabelText('Enable persistent workspace volume'));
+    const mountPath = screen.getByLabelText('Mount path') as HTMLInputElement;
+    fireEvent.change(mountPath, { target: { value: '/data' } });
     const ttl = screen.getByLabelText('Workspace TTL (seconds)') as HTMLInputElement;
     fireEvent.change(ttl, { target: { value: '123' } });
 
@@ -32,5 +35,6 @@ describe('WorkspaceConfigView payload', () => {
     expect(cfg.env[0]).toEqual({ key: 'A', value: '1', source: 'static' });
     expect(cfg.enableDinD).toBe(true);
     expect(cfg.ttlSeconds).toBe(123);
+    expect(cfg.volumes).toEqual({ enabled: true, mountPath: '/data' });
   });
 });

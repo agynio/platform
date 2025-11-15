@@ -28,6 +28,9 @@ vi.mock('@/api/hooks/containers', () => {
               sidecars: [
                 { containerId: 'dind1234567890', role: 'dind', image: 'dind:latest', status: 'running' },
               ],
+              mounts: [
+                { source: 'ha_ws_thread', destination: '/workspace' },
+              ],
             },
           ],
         },
@@ -69,6 +72,10 @@ describe('MonitoringContainers page', () => {
     // sidecar badge and truncated id
     expect(screen.getByText('dind')).toBeTruthy();
     expect(screen.getByText('dind1234')).toBeTruthy();
+    // mounts rendered with source and destination
+    expect(screen.getByText('Mounts:')).toBeTruthy();
+    expect(screen.getByText('ha_ws_thread')).toBeTruthy();
+    expect(screen.getAllByText('/workspace')[0]).toBeTruthy();
     const mainCopy = screen.getByRole('button', { name: 'Copy full container id' });
     const sidecarCopy = screen.getByRole('button', { name: /Copy sidecar dind1234567890/ });
     const spy = vi.spyOn(navigator.clipboard, 'writeText');

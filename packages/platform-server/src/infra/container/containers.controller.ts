@@ -71,6 +71,7 @@ export class ContainersController {
     killAfterAt: string | null;
     role: 'workspace' | 'dind' | string;
     sidecars?: Array<{ containerId: string; role: 'dind'; image: string; status: ContainerStatus }>;
+    mounts?: Array<{ source: string; destination: string }>;
   }> }> {
     try {
     const {
@@ -147,6 +148,23 @@ export class ContainersController {
       const raw = (m.labels ?? {}) as Record<string, unknown>;
       const out: Record<string, string> = {};
       for (const [k, v] of Object.entries(raw)) if (typeof v === 'string') out[k] = v;
+      return out;
+    };
+    const metaMountsOf = (m: unknown): Array<{ source: string; destination: string }> => {
+      if (!m || typeof m !== 'object') return [];
+      const raw = (m as { mounts?: unknown }).mounts;
+      if (!Array.isArray(raw)) return [];
+      const out: Array<{ source: string; destination: string }> = [];
+      for (const entry of raw) {
+        if (!entry || typeof entry !== 'object') continue;
+        const source = typeof (entry as { source?: unknown }).source === 'string' ? (entry as { source: string }).source : '';
+        const destination =
+          typeof (entry as { destination?: unknown }).destination === 'string'
+            ? (entry as { destination: string }).destination
+            : '';
+        if (!source || !destination) continue;
+        out.push({ source, destination });
+      }
       return out;
     };
     // Exclude DinD from top-level list (only attach as sidecars)
@@ -227,6 +245,7 @@ export class ContainersController {
         killAfterAt: row.killAfterAt ? toIso(row.killAfterAt) : null,
         role,
         sidecars: byParent[row.containerId] || [],
+        mounts: metaMountsOf(row.metadata),
       };
     });
 
