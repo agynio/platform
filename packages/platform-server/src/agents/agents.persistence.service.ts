@@ -308,19 +308,30 @@ export class AgentsPersistenceService {
   async listReminders(
     filter: 'active' | 'completed' | 'all' = 'active',
     take: number = 100,
+    threadId?: string,
   ): Promise<Array<{ id: string; threadId: string; note: string; at: Date; createdAt: Date; completedAt: Date | null }>> {
-    const where =
-      filter === 'active'
-        ? { completedAt: null }
-        : filter === 'completed'
-        ? { NOT: { completedAt: null } }
-        : undefined;
-    return this.prisma.reminder.findMany({
-      where,
-      orderBy: { at: 'desc' },
-      select: { id: true, threadId: true, note: true, at: true, createdAt: true, completedAt: true },
-      take,
-    });
+    const limit = Number.isFinite(take) ? Math.min(1000, Math.max(1, Math.trunc(take))) : 100;
+    const where: Prisma.ReminderWhereInput = {};
+    if (filter === 'active') where.completedAt = null;
+    else if (filter === 'completed') where.NOT = { completedAt: null };
+    if (threadId) where.threadId = threadId;
+
+    try {
+      return await this.prisma.reminder.findMany({
+        where: Object.keys(where).length === 0 ? undefined : where,
+        orderBy: { at: 'desc' },
+        select: { id: true, threadId: true, note: true, at: true, createdAt: true, completedAt: true },
+        take: limit,
+      });
+    } catch (error) {
+      this.logger.error('Failed to list reminders', {
+        filter,
+        take: limit,
+        threadId,
+        error: error instanceof Error ? { name: error.name, message: error.message } : error,
+      });
+      throw error;
+    }
   }
 
   private async getRunsCount(ids: string[]): Promise<Record<string, number>> {

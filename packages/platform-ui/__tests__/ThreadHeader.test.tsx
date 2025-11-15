@@ -24,23 +24,30 @@ const mockContainers: ContainerItem[] = [
 ];
 
 const useThreadMetrics = vi.fn(() => ({ data: mockMetrics, isLoading: false, error: null }));
-const defaultRemindersResult = () => ({
+const makeRemindersResult = () => ({
   data: { items: mockReminders },
   isLoading: false,
   isFetching: false,
   error: null,
-  refetch: vi.fn(),
+  refetch: vi.fn().mockResolvedValue(undefined),
 });
-const defaultContainersResult = () => ({
+const makeContainersResult = () => ({
   data: { items: mockContainers },
   isLoading: false,
   isFetching: false,
   error: null,
-  refetch: vi.fn(),
+  refetch: vi.fn().mockResolvedValue(undefined),
+});
+const makeDisabledResult = () => ({
+  data: undefined,
+  isLoading: false,
+  isFetching: false,
+  error: null,
+  refetch: vi.fn().mockResolvedValue(undefined),
 });
 
-const useThreadReminders = vi.fn(defaultRemindersResult);
-const useThreadContainers = vi.fn(defaultContainersResult);
+const useThreadReminders = vi.fn(makeRemindersResult);
+const useThreadContainers = vi.fn(makeContainersResult);
 
 vi.mock('@/api/hooks/threads', () => ({
   useThreadMetrics: (...args: unknown[]) => useThreadMetrics(...args),
@@ -52,9 +59,9 @@ describe('ThreadHeader', () => {
   beforeEach(() => {
     useThreadMetrics.mockClear();
     useThreadReminders.mockReset();
-    useThreadReminders.mockImplementation(defaultRemindersResult);
+    useThreadReminders.mockImplementation((_id: unknown, enabled?: boolean) => (enabled ? makeRemindersResult() : makeDisabledResult()));
     useThreadContainers.mockReset();
-    useThreadContainers.mockImplementation(defaultContainersResult);
+    useThreadContainers.mockImplementation((_id: unknown, enabled?: boolean) => (enabled ? makeContainersResult() : makeDisabledResult()));
   });
 
   it('renders selected thread details with metrics and run counts', () => {
@@ -74,7 +81,10 @@ describe('ThreadHeader', () => {
     expect(screen.getByTestId('thread-header-summary')).toHaveTextContent('Investigate alerts');
     expect(screen.getByText('Incident Agent')).toBeInTheDocument();
     expect(screen.getByText(/Status: Open/i)).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /Running containers: 1/ })).toBeInTheDocument();
+    const stats = screen.getByTestId('thread-header-stats');
+    expect(stats).toHaveTextContent('Runs 5');
+    expect(stats).toHaveTextContent('Containers 2');
+    expect(screen.getByRole('button', { name: /Running containers: 2/ })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Active reminders: 3/ })).toBeInTheDocument();
     // Run count prefers live runs length (5) over metrics (2)
     expect(screen.getByLabelText('Runs total: 5')).toHaveTextContent('Runs 5');
@@ -132,13 +142,10 @@ describe('ThreadHeader', () => {
 
   it('shows friendly error with retry when reminders fail to load', async () => {
     const user = userEvent.setup();
-    const refetch = vi.fn();
-    useThreadReminders.mockImplementation((id: unknown, enabled?: boolean) => {
-      if (enabled) {
-        return { data: undefined, isLoading: false, isFetching: false, error: new Error('nope'), refetch };
-      }
-      return defaultRemindersResult();
-    });
+    const refetch = vi.fn().mockResolvedValue(undefined);
+    useThreadReminders.mockImplementation((_id: unknown, enabled?: boolean) =>
+      enabled ? { data: undefined, isLoading: false, isFetching: false, error: new Error('nope'), refetch } : makeDisabledResult(),
+    );
     const thread: ThreadNode = {
       id: 't1',
       alias: 'root',
@@ -162,13 +169,10 @@ describe('ThreadHeader', () => {
 
   it('shows error state and retry when containers fail to load', async () => {
     const user = userEvent.setup();
-    const refetch = vi.fn();
-    useThreadContainers.mockImplementation((id: unknown, enabled?: boolean) => {
-      if (enabled) {
-        return { data: undefined, isLoading: false, isFetching: false, error: new Error('boom'), refetch };
-      }
-      return defaultContainersResult();
-    });
+    const refetch = vi.fn().mockResolvedValue(undefined);
+    useThreadContainers.mockImplementation((_id: unknown, enabled?: boolean) =>
+      enabled ? { data: undefined, isLoading: false, isFetching: false, error: new Error('boom'), refetch } : makeDisabledResult(),
+    );
     const thread: ThreadNode = {
       id: 't1',
       alias: 'root',

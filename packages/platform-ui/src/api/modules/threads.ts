@@ -1,6 +1,14 @@
 import { http, asData } from '@/api/http';
 import type { ThreadMetrics, ThreadNode, ThreadReminder } from '@/api/types/agents';
 
+const UUID_REGEX = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
+
+const clampTake = (value: number | undefined, fallback = 200) => {
+  if (!Number.isFinite(value)) return fallback;
+  const coerced = Math.trunc(value as number);
+  return Math.min(1000, Math.max(1, coerced));
+};
+
 export const threads = {
   roots: (status: 'open' | 'closed' | 'all' = 'open', limit = 100) =>
     asData<{ items: ThreadNode[] }>(
@@ -19,10 +27,14 @@ export const threads = {
   metrics: (id: string) =>
     asData<ThreadMetrics>(http.get(`/api/agents/threads/${encodeURIComponent(id)}/metrics`)),
   reminders: async (id: string, take: number = 200) => {
+    if (!UUID_REGEX.test(id)) {
+      throw new Error('Invalid thread identifier');
+    }
+    const limit = clampTake(take);
     const res = await asData<{ items: ThreadReminder[] }>(
-      http.get(`/api/agents/reminders`, { params: { filter: 'active', take } }),
+      http.get(`/api/agents/reminders`, { params: { filter: 'active', take: limit, threadId: id } }),
     );
-    const items = (res.items || []).filter((r) => r.threadId === id);
+    const items = [...(res.items || [])];
     items.sort((a, b) => new Date(a.at).getTime() - new Date(b.at).getTime());
     return { items };
   },
