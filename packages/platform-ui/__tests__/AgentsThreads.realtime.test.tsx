@@ -43,6 +43,8 @@ describe('AgentsThreads realtime updates', () => {
       ),
       http.get('/api/agents/threads/th1/runs', () => HttpResponse.json({ items: [] })),
       http.get(abs('/api/agents/threads/th1/runs'), () => HttpResponse.json({ items: [] })),
+      http.get('/api/agents/reminders', () => HttpResponse.json({ items: [] })),
+      http.get(abs('/api/agents/reminders'), () => HttpResponse.json({ items: [] })),
     );
 
     render(
@@ -81,6 +83,8 @@ describe('AgentsThreads realtime updates', () => {
       ),
       http.get('/api/agents/runs/run-st-1/messages', () => HttpResponse.json({ items: [] })),
       http.get(abs('/api/agents/runs/run-st-1/messages'), () => HttpResponse.json({ items: [] })),
+      http.get('/api/agents/reminders', () => HttpResponse.json({ items: [] })),
+      http.get(abs('/api/agents/reminders'), () => HttpResponse.json({ items: [] })),
     );
 
     render(
@@ -129,6 +133,8 @@ describe('AgentsThreads realtime updates', () => {
         if (type === 'output') return HttpResponse.json({ items: [{ id: 'msg-initial', kind: 'assistant', text: 'Initial', source: {}, createdAt: t(5) }] });
         return HttpResponse.json({ items: [] });
       }),
+      http.get('/api/agents/reminders', () => HttpResponse.json({ items: [] })),
+      http.get(abs('/api/agents/reminders'), () => HttpResponse.json({ items: [] })),
     );
 
     render(
@@ -164,6 +170,8 @@ describe('AgentsThreads realtime updates', () => {
       ),
       http.get('/api/agents/threads/th1/runs', () => HttpResponse.json({ items: [] })),
       http.get(abs('/api/agents/threads/th1/runs'), () => HttpResponse.json({ items: [] })),
+      http.get('/api/agents/reminders', () => HttpResponse.json({ items: [] })),
+      http.get(abs('/api/agents/reminders'), () => HttpResponse.json({ items: [] })),
     );
 
     render(
@@ -223,6 +231,8 @@ describe('AgentsThreads realtime updates', () => {
         }
         return HttpResponse.json({ items: [] });
       }),
+      http.get('/api/agents/reminders', () => HttpResponse.json({ items: [] })),
+      http.get(abs('/api/agents/reminders'), () => HttpResponse.json({ items: [] })),
     );
 
     render(
@@ -255,6 +265,8 @@ describe('AgentsThreads realtime updates', () => {
       ),
       http.get('/api/agents/runs/run-new/messages', () => HttpResponse.json({ items: [{ id: 'msg-new', kind: 'assistant', text: 'New', source: {}, createdAt: t(5) }] })),
       http.get(abs('/api/agents/runs/run-new/messages'), () => HttpResponse.json({ items: [{ id: 'msg-new', kind: 'assistant', text: 'New', source: {}, createdAt: t(5) }] })),
+      http.get('/api/agents/reminders', () => HttpResponse.json({ items: [] })),
+      http.get(abs('/api/agents/reminders'), () => HttpResponse.json({ items: [] })),
     );
 
     const reconnectListeners = (socketModule.graphSocket as any).reconnectCallbacks as Set<() => void>;
@@ -263,5 +275,206 @@ describe('AgentsThreads realtime updates', () => {
     await expectRunHeaderVisible('run-new');
     const list = await screen.findByTestId('message-list');
     await expectMessageBubbleText(list, 'New');
+  });
+
+  it('shows reminder countdown for finished run threads', async () => {
+    const now = Date.now();
+    const reminderAt = new Date(now + 15000).toISOString();
+    server.use(
+      http.get('/api/agents/threads', () =>
+        HttpResponse.json({ items: [{ id: 'th1', alias: 'th-a', summary: 'Thread A', createdAt: t(0) }] }),
+      ),
+      http.get(abs('/api/agents/threads'), () =>
+        HttpResponse.json({ items: [{ id: 'th1', alias: 'th-a', summary: 'Thread A', createdAt: t(0) }] }),
+      ),
+      http.get('/api/agents/threads/th1/runs', () =>
+        HttpResponse.json({ items: [{ id: 'run-finished', status: 'finished', createdAt: t(1), updatedAt: t(2) }] }),
+      ),
+      http.get(abs('/api/agents/threads/th1/runs'), () =>
+        HttpResponse.json({ items: [{ id: 'run-finished', status: 'finished', createdAt: t(1), updatedAt: t(2) }] }),
+      ),
+      http.get('/api/agents/runs/run-finished/messages', () => HttpResponse.json({ items: [] })),
+      http.get(abs('/api/agents/runs/run-finished/messages'), () => HttpResponse.json({ items: [] })),
+      http.get('/api/agents/reminders', () =>
+        HttpResponse.json({ items: [{ id: 'rem-1', threadId: 'th1', note: 'Check back soon', at: reminderAt, createdAt: t(3), completedAt: null }] }),
+      ),
+      http.get(abs('/api/agents/reminders'), () =>
+        HttpResponse.json({ items: [{ id: 'rem-1', threadId: 'th1', note: 'Check back soon', at: reminderAt, createdAt: t(3), completedAt: null }] }),
+      ),
+    );
+
+    render(
+      <TestProviders>
+        <MemoryRouter>
+          <AgentsThreads />
+        </MemoryRouter>
+      </TestProviders>,
+    );
+
+    fireEvent.click(await screen.findByRole('button', { name: /Thread A/i }));
+    await screen.findByTestId('reminder-countdown-row');
+    expect(screen.getByText('Check back soon')).toBeInTheDocument();
+    expect(screen.getByText(/Due in/i)).toBeInTheDocument();
+  });
+
+  it('does not show countdown when reminders belong to another thread', async () => {
+    server.use(
+      http.get('/api/agents/threads', () =>
+        HttpResponse.json({ items: [{ id: 'th1', alias: 'th-a', summary: 'Thread A', createdAt: t(0) }] }),
+      ),
+      http.get(abs('/api/agents/threads'), () =>
+        HttpResponse.json({ items: [{ id: 'th1', alias: 'th-a', summary: 'Thread A', createdAt: t(0) }] }),
+      ),
+      http.get('/api/agents/threads/th1/runs', () =>
+        HttpResponse.json({ items: [{ id: 'run-finished', status: 'finished', createdAt: t(1), updatedAt: t(2) }] }),
+      ),
+      http.get(abs('/api/agents/threads/th1/runs'), () =>
+        HttpResponse.json({ items: [{ id: 'run-finished', status: 'finished', createdAt: t(1), updatedAt: t(2) }] }),
+      ),
+      http.get('/api/agents/runs/run-finished/messages', () => HttpResponse.json({ items: [] })),
+      http.get(abs('/api/agents/runs/run-finished/messages'), () => HttpResponse.json({ items: [] })),
+    );
+    const foreignReminder = {
+      items: [
+        {
+          id: 'rem-foreign',
+          threadId: 'th2',
+          note: 'Other thread reminder',
+          at: new Date(Date.now() + 30000).toISOString(),
+          createdAt: t(3),
+          completedAt: null,
+        },
+      ],
+    };
+    server.use(
+      http.get('/api/agents/reminders', () => HttpResponse.json(foreignReminder)),
+      http.get(abs('/api/agents/reminders'), () => HttpResponse.json(foreignReminder)),
+    );
+
+    render(
+      <TestProviders>
+        <MemoryRouter>
+          <AgentsThreads />
+        </MemoryRouter>
+      </TestProviders>,
+    );
+
+    fireEvent.click(await screen.findByRole('button', { name: /Thread A/i }));
+    await screen.findByTestId('run-header');
+
+    await waitFor(() => {
+      expect(screen.queryByTestId('reminder-countdown-row')).toBeNull();
+    });
+  });
+
+  it('clears countdown when thread_reminders_count reports zero', async () => {
+    server.use(
+      http.get('/api/agents/threads', () =>
+        HttpResponse.json({ items: [{ id: 'th1', alias: 'th-a', summary: 'Thread A', createdAt: t(0) }] }),
+      ),
+      http.get(abs('/api/agents/threads'), () =>
+        HttpResponse.json({ items: [{ id: 'th1', alias: 'th-a', summary: 'Thread A', createdAt: t(0) }] }),
+      ),
+      http.get('/api/agents/threads/th1/runs', () =>
+        HttpResponse.json({ items: [{ id: 'run-finished', status: 'finished', createdAt: t(1), updatedAt: t(2) }] }),
+      ),
+      http.get(abs('/api/agents/threads/th1/runs'), () =>
+        HttpResponse.json({ items: [{ id: 'run-finished', status: 'finished', createdAt: t(1), updatedAt: t(2) }] }),
+      ),
+      http.get('/api/agents/runs/run-finished/messages', () => HttpResponse.json({ items: [] })),
+      http.get(abs('/api/agents/runs/run-finished/messages'), () => HttpResponse.json({ items: [] })),
+    );
+    const reminderItems = {
+      items: [
+        {
+          id: 'rem-1',
+          threadId: 'th1',
+          note: 'Follow up',
+          at: new Date(Date.now() + 30000).toISOString(),
+          createdAt: t(3),
+          completedAt: null,
+        },
+      ],
+    };
+    server.use(
+      http.get('/api/agents/reminders', () => HttpResponse.json(reminderItems)),
+      http.get(abs('/api/agents/reminders'), () => HttpResponse.json(reminderItems)),
+    );
+
+    render(
+      <TestProviders>
+        <MemoryRouter>
+          <AgentsThreads />
+        </MemoryRouter>
+      </TestProviders>,
+    );
+
+    fireEvent.click(await screen.findByRole('button', { name: /Thread A/i }));
+    await screen.findByTestId('reminder-countdown-row');
+
+    const reminderListeners = (socketModule.graphSocket as any).threadRemindersListeners as Set<
+      (payload: { threadId: string; remindersCount: number }) => void
+    >;
+    for (const fn of reminderListeners) fn({ threadId: 'th1', remindersCount: 0 });
+
+    await waitFor(() => {
+      expect(screen.queryByTestId('reminder-countdown-row')).toBeNull();
+    });
+  });
+
+  it('refetches reminders when a run finishes', async () => {
+    server.use(
+      http.get('/api/agents/threads', () =>
+        HttpResponse.json({ items: [{ id: 'th1', alias: 'th-a', summary: 'Thread A', createdAt: t(0) }] }),
+      ),
+      http.get(abs('/api/agents/threads'), () =>
+        HttpResponse.json({ items: [{ id: 'th1', alias: 'th-a', summary: 'Thread A', createdAt: t(0) }] }),
+      ),
+      http.get('/api/agents/threads/th1/runs', () =>
+        HttpResponse.json({ items: [{ id: 'run-finished', status: 'finished', createdAt: t(1), updatedAt: t(2) }] }),
+      ),
+      http.get(abs('/api/agents/threads/th1/runs'), () =>
+        HttpResponse.json({ items: [{ id: 'run-finished', status: 'finished', createdAt: t(1), updatedAt: t(2) }] }),
+      ),
+      http.get('/api/agents/runs/run-finished/messages', () => HttpResponse.json({ items: [] })),
+      http.get(abs('/api/agents/runs/run-finished/messages'), () => HttpResponse.json({ items: [] })),
+    );
+    let reminderItems = {
+      items: [
+        {
+          id: 'rem-1',
+          threadId: 'th1',
+          note: 'Follow up',
+          at: new Date(Date.now() + 60000).toISOString(),
+          createdAt: t(3),
+          completedAt: null,
+        },
+      ],
+    };
+    server.use(
+      http.get('/api/agents/reminders', () => HttpResponse.json(reminderItems)),
+      http.get(abs('/api/agents/reminders'), () => HttpResponse.json(reminderItems)),
+    );
+
+    render(
+      <TestProviders>
+        <MemoryRouter>
+          <AgentsThreads />
+        </MemoryRouter>
+      </TestProviders>,
+    );
+
+    fireEvent.click(await screen.findByRole('button', { name: /Thread A/i }));
+    await screen.findByTestId('reminder-countdown-row');
+
+    reminderItems = { items: [] };
+    const runListeners = (socketModule.graphSocket as any).runStatusListeners as Set<
+      (payload: { run: { id: string; status: 'running' | 'finished' | 'terminated'; createdAt: string; updatedAt: string } }) => void
+    >;
+    for (const fn of runListeners) fn({ run: { id: 'run-finished', status: 'finished', createdAt: t(1), updatedAt: t(4) } });
+
+    await waitFor(() => {
+      expect(screen.queryByTestId('reminder-countdown-row')).toBeNull();
+    });
   });
 });

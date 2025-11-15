@@ -1,11 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useQueryClient, type UseQueryResult } from '@tanstack/react-query';
+import { useQuery, useQueryClient, type UseQueryResult } from '@tanstack/react-query';
 import { RunMessageList, type UnifiedRunMessage, type UnifiedListItem, type RunMeta } from '@/components/agents/RunMessageList';
 import { ThreadTree } from '@/components/agents/ThreadTree';
 import { ThreadStatusFilterSwitch, type ThreadStatusFilter } from '@/components/agents/ThreadStatusFilterSwitch';
 import { useThreadRuns } from '@/api/hooks/runs';
 import type { ThreadNode } from '@/api/types/agents';
 import { runs as runsApi } from '@/api/modules/runs';
+import { http } from '@/api/http';
+import type { ReminderItem } from '@/api/types/agents';
 import { graphSocket } from '@/lib/graph/socket';
 import { useNavigate } from 'react-router-dom';
 import { ThreadHeader } from '@/components/agents/ThreadHeader';
@@ -90,6 +92,31 @@ export function AgentsThreads() {
   // No run selection in new UX (removed)
   const queryClient = useQueryClient();
   const navigate = useNavigate();
+  const remindersQueryKey = ['agents', 'threads', selectedThreadId ?? 'none', 'reminders', 'active'] as const;
+  const remindersQ = useQuery({
+    enabled: !!selectedThreadId,
+    queryKey: remindersQueryKey,
+    queryFn: async () => {
+      const id = selectedThreadId as string;
+      return http.get<{ items: ReminderItem[] }>(`/api/agents/reminders?filter=active&threadId=${encodeURIComponent(id)}`);
+    },
+    refetchOnWindowFocus: false,
+  });
+  const reminders = useMemo<ReminderItem[]>(() => {
+    const items = remindersQ.data?.items ?? [];
+    if (!selectedThreadId) return [];
+    return items.filter((reminder) => reminder.threadId === selectedThreadId);
+  }, [remindersQ.data, selectedThreadId]);
+  const nearestReminder = useMemo(() => {
+    if (!reminders.length) return null;
+    return reminders.reduce<ReminderItem>((earliest, item) => {
+      return new Date(item.at).getTime() < new Date(earliest.at).getTime() ? item : earliest;
+    }, reminders[0]);
+  }, [reminders]);
+  const invalidateReminders = useCallback(() => {
+    if (!selectedThreadId) return;
+    queryClient.invalidateQueries({ queryKey: ['agents', 'threads', selectedThreadId, 'reminders', 'active'] });
+  }, [queryClient, selectedThreadId]);
 
   // Cast through unknown to align differing RunMeta shapes between API and UI list types
   const runsQ = useThreadRuns(selectedThreadId) as unknown as UseQueryResult<{ items: RunMeta[] }, Error>;
@@ -98,6 +125,8 @@ export function AgentsThreads() {
     const list = runsQ.data?.items ?? [];
     return [...list].sort(compareRunMeta);
   }, [runsQ.data]);
+  const latestRun = runs.length > 0 ? runs[runs.length - 1] : null;
+  const showCountdown = Boolean(selectedThreadId && latestRun?.status === 'finished' && nearestReminder && !remindersQ.isError);
 
   const [runMessages, setRunMessages] = useState<Record<string, UnifiedRunMessage[]>>({});
   const [loadError, setLoadError] = useState<Error | null>(null);
@@ -234,6 +263,20 @@ export function AgentsThreads() {
 
   useEffect(() => {
     if (!selectedThreadId) return;
+    const key = ['agents', 'threads', selectedThreadId, 'reminders', 'active'] as const;
+    const offReminders = graphSocket.onThreadRemindersCount(({ threadId, remindersCount }) => {
+      if (threadId !== selectedThreadId) return;
+      if (remindersCount === 0) {
+        queryClient.setQueryData<{ items: ReminderItem[] }>(key, { items: [] });
+      } else {
+        invalidateReminders();
+      }
+    });
+    return () => offReminders();
+  }, [selectedThreadId, queryClient, invalidateReminders]);
+
+  useEffect(() => {
+    if (!selectedThreadId) return;
     const queryKey = ['agents', 'threads', selectedThreadId, 'runs'];
     const offRun = graphSocket.onRunStatusChanged(({ run }) => {
       const next = run as SocketRun;
@@ -257,21 +300,36 @@ export function AgentsThreads() {
       runIdsRef.current.add(next.id);
       if (!seenMessageIds.current.has(next.id)) seenMessageIds.current.set(next.id, new Set());
       flushPendingForRun(next.id);
+      if (next.status === 'finished') invalidateReminders();
     });
     return () => offRun();
-  }, [selectedThreadId, queryClient, flushPendingForRun]);
+  }, [selectedThreadId, queryClient, flushPendingForRun, invalidateReminders]);
 
   useEffect(() => {
     if (!selectedThreadId) return;
     const invalidate = () => {
       queryClient.invalidateQueries({ queryKey: ['agents', 'threads', selectedThreadId, 'runs'] });
+      invalidateReminders();
     };
     const offReconnect = graphSocket.onReconnected(invalidate);
     return () => offReconnect();
-  }, [selectedThreadId, queryClient]);
+  }, [selectedThreadId, queryClient, invalidateReminders]);
 
   const unifiedItems: UnifiedListItem[] = useMemo(() => {
-    if (!runs.length) return [];
+    if (!runs.length) return showCountdown && nearestReminder
+      ? [
+          {
+            type: 'reminder',
+            reminder: {
+              id: nearestReminder.id,
+              threadId: nearestReminder.threadId,
+              note: nearestReminder.note,
+              at: nearestReminder.at,
+            },
+            onExpire: invalidateReminders,
+          },
+        ]
+      : [];
     const items: UnifiedListItem[] = [];
     for (const run of runs) {
       const msgs = runMessages[run.id] || [];
@@ -280,8 +338,20 @@ export function AgentsThreads() {
       items.push({ type: 'run_header', run, start, end, durationMs: new Date(end).getTime() - new Date(start).getTime() });
       for (const m of msgs) items.push({ type: 'message', message: m });
     }
+    if (showCountdown && nearestReminder) {
+      items.push({
+        type: 'reminder',
+        reminder: {
+          id: nearestReminder.id,
+          threadId: nearestReminder.threadId,
+          note: nearestReminder.note,
+          at: nearestReminder.at,
+        },
+        onExpire: invalidateReminders,
+      });
+    }
     return items;
-  }, [runs, runMessages]);
+  }, [runs, runMessages, showCountdown, nearestReminder, invalidateReminders]);
 
   // Per-message JSON toggle state
   const [showJson, setShowJson] = useState<Record<string, boolean>>({});

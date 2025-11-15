@@ -1,5 +1,6 @@
 import React from 'react';
 import { MessageBubble } from './MessageBubble';
+import { ReminderCountdown } from './ReminderCountdown';
 
 export type RunMeta = { id: string; status: 'running' | 'finished' | 'terminated'; createdAt: string; updatedAt: string };
 export type UnifiedRunMessage = {
@@ -13,7 +14,13 @@ export type UnifiedRunMessage = {
 };
 export type UnifiedListItem =
   | { type: 'run_header'; run: RunMeta; start?: string; end?: string; durationMs?: number }
-  | { type: 'message'; message: UnifiedRunMessage };
+  | { type: 'message'; message: UnifiedRunMessage }
+  | {
+      type: 'reminder';
+      reminder: { id: string; threadId: string; note: string; at: string };
+      serverOffsetMs?: number;
+      onExpire?: () => void;
+    };
 
 type RunMessageListProps = {
   items: UnifiedListItem[];
@@ -100,6 +107,19 @@ export function RunMessageList({ items, showJson, onToggleJson, isLoading, error
                     Timeline
                   </button>
                 )}
+              </div>
+            );
+          }
+          if (it.type === 'reminder') {
+            return (
+              <div key={`reminder-${it.reminder.id}`} role="listitem" data-testid="reminder-countdown-row" className="self-stretch">
+                <ReminderCountdown
+                  threadId={it.reminder.threadId}
+                  at={it.reminder.at}
+                  note={it.reminder.note}
+                  serverOffsetMs={it.serverOffsetMs}
+                  onExpire={it.onExpire}
+                />
               </div>
             );
           }

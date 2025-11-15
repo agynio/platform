@@ -319,7 +319,7 @@ export class AgentsPersistenceService {
     try {
       return await this.prisma.reminder.findMany({
         where: Object.keys(where).length === 0 ? undefined : where,
-        orderBy: { at: 'desc' },
+        orderBy: { at: 'asc' },
         select: { id: true, threadId: true, note: true, at: true, createdAt: true, completedAt: true },
         take: limit,
       });

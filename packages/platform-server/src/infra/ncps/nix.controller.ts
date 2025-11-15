@@ -87,6 +87,10 @@ export class NixController {
         this.cache.set(url, json);
         return json;
       } catch (e) {
+        const aborted = signal.aborted && (e as { name?: string })?.name === 'AbortError';
+        if (aborted && lastErr) {
+          throw lastErr;
+        }
         lastErr = e;
         const msg = String((e as { message?: string })?.message || '');
         const retriable =

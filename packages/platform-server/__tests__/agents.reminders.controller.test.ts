@@ -70,10 +70,10 @@ describe('AgentsPersistenceService.listReminders', () => {
     await svc.listReminders('all', 100);
     await svc.listReminders('active', 20, 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa');
 
-    expect(captured[0]).toMatchObject({ where: { completedAt: null }, orderBy: { at: 'desc' }, take: 50 });
-    expect(captured[1]).toMatchObject({ where: { NOT: { completedAt: null } }, orderBy: { at: 'desc' }, take: 25 });
-    expect(captured[2]).toMatchObject({ where: undefined, orderBy: { at: 'desc' }, take: 100 });
-    expect(captured[3]).toMatchObject({ where: { completedAt: null, threadId: 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa' }, take: 20 });
+    expect(captured[0]).toMatchObject({ where: { completedAt: null }, orderBy: { at: 'asc' }, take: 50 });
+    expect(captured[1]).toMatchObject({ where: { NOT: { completedAt: null } }, orderBy: { at: 'asc' }, take: 25 });
+    expect(captured[2]).toMatchObject({ where: undefined, orderBy: { at: 'asc' }, take: 100 });
+    expect(captured[3]).toMatchObject({ where: { completedAt: null, threadId: 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa' }, orderBy: { at: 'asc' }, take: 20 });
   });
 
   it('logs and rethrows prisma errors', async () => {

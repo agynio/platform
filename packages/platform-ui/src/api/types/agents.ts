@@ -16,6 +16,8 @@ export type ThreadReminder = {
   completedAt: string | null;
 };
 
+export type ReminderItem = ThreadReminder;
+
 export type ThreadNode = {
   id: string;
   alias: string;

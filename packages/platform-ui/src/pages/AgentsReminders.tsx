@@ -2,8 +2,7 @@ import { useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useSearchParams } from 'react-router-dom';
 import { http, asData } from '@/api/http';
-
-type ReminderItem = { id: string; threadId: string; note: string; at: string; createdAt: string; completedAt: string | null };
+import type { ReminderItem } from '@/api/types/agents';
 
 async function api<T>(path: string): Promise<T> { return asData<T>(http.get(`/api/${path}`)); }
 
