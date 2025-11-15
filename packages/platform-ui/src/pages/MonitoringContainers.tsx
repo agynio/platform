@@ -4,6 +4,7 @@ import { Table, Thead, Tbody, Tr, Th, Td, Button, Input, Tooltip, TooltipTrigger
 import { Link } from 'react-router-dom';
 import { useEffect, useState } from 'react';
 import { validate as validateUuid } from 'uuid';
+import { ContainerTerminalDialog } from '@/components/monitoring/ContainerTerminalDialog';
 
 export function MonitoringContainers() {
   const status = 'running';
@@ -27,6 +28,8 @@ export function MonitoringContainers() {
   const items = listQ.data?.items || [];
   // Ensure client-side default sort by lastUsedAt desc
   const sorted = [...items].sort((a, b) => new Date(b.lastUsedAt).getTime() - new Date(a.lastUsedAt).getTime());
+
+  const [terminalContainer, setTerminalContainer] = useState<typeof items[number] | null>(null);
 
   return (
     <div className="p-4">
@@ -68,6 +71,7 @@ export function MonitoringContainers() {
                 <Th>startedAt</Th>
                 <Th>lastUsedAt</Th>
                 <Th>killAfterAt</Th>
+                <Th className="w-32">actions</Th>
               </Tr>
             </Thead>
             <Tbody>
@@ -93,9 +97,19 @@ export function MonitoringContainers() {
                   <Td>{new Date(c.startedAt).toLocaleString()}</Td>
                   <Td>{new Date(c.lastUsedAt).toLocaleString()}</Td>
                   <Td>{c.killAfterAt ? new Date(c.killAfterAt).toLocaleString() : '-'}</Td>
+                  <Td>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={c.status !== 'running'}
+                      onClick={() => setTerminalContainer(c)}
+                    >
+                      Open terminal
+                    </Button>
+                  </Td>
                 </Tr>
                 <Tr key={`${c.containerId}-details`}>
-                  <Td colSpan={8}>
+                  <Td colSpan={9}>
                     <div className="flex flex-col gap-2 pl-4 py-2">
                       <div className="flex items-center gap-2">
                         <span className="text-xs text-muted-foreground">Sidecars:</span>
@@ -140,6 +154,11 @@ export function MonitoringContainers() {
           </Table>
         </div>
       )}
+      <ContainerTerminalDialog
+        container={terminalContainer ?? null}
+        open={terminalContainer != null}
+        onClose={() => setTerminalContainer(null)}
+      />
     </div>
   );
 }

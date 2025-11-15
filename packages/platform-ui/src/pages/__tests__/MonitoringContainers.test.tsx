@@ -7,11 +7,34 @@ import { MemoryRouter } from 'react-router-dom';
 import type { UseQueryResult } from '@tanstack/react-query';
 import type { ContainerItem } from '@/api/modules/containers';
 
-// Mock useContainers hook to control data and capture threadId param
+// Mock hooks to control data flow
+const useContainersMock = vi.fn();
+const mutateSessionMock = vi.fn();
+const resetSessionMock = vi.fn();
+const createSessionHookMock = vi.fn(() => ({ mutateAsync: mutateSessionMock, status: 'idle', reset: resetSessionMock }));
+
 let lastThreadId: string | undefined = undefined;
-vi.mock('@/api/hooks/containers', () => {
-  return {
-    useContainers: vi.fn((_status: string = 'running', _sortBy: string = 'lastUsedAt', _sortDir: 'desc' | 'asc' = 'desc', threadId?: string) => {
+
+vi.mock('@/api/hooks/containers', () => ({
+  useContainers: (...args: unknown[]) => useContainersMock(...args),
+  useCreateContainerTerminalSession: (...args: unknown[]) => createSessionHookMock(...args),
+}));
+
+function renderPage() {
+  return render(
+    <MemoryRouter initialEntries={[{ pathname: '/monitoring/containers' }]}>
+      <TooltipProvider>
+        <MonitoringContainers />
+      </TooltipProvider>
+    </MemoryRouter>
+  );
+}
+
+describe('MonitoringContainers page', () => {
+  beforeEach(() => {
+    lastThreadId = undefined;
+    vi.useFakeTimers();
+    useContainersMock.mockImplementation((_status?: string, _sortBy?: string, _sortDir?: 'asc' | 'desc', threadId?: string) => {
       lastThreadId = threadId;
       const result = {
         data: {
@@ -39,29 +62,47 @@ vi.mock('@/api/hooks/containers', () => {
         refetch: vi.fn(),
       } satisfies Partial<UseQueryResult<{ items: ContainerItem[] }, Error>>;
       return result as UseQueryResult<{ items: ContainerItem[] }, Error>;
-    }),
-  };
-});
-
-function renderPage() {
-  return render(
-    <MemoryRouter initialEntries={[{ pathname: '/monitoring/containers' }]}>
-      <TooltipProvider>
-        <MonitoringContainers />
-      </TooltipProvider>
-    </MemoryRouter>
-  );
-}
-
-describe('MonitoringContainers page', () => {
-  beforeEach(() => {
-    lastThreadId = undefined;
-    vi.useFakeTimers();
+    });
+    mutateSessionMock.mockResolvedValue({
+      sessionId: 'session-1',
+      token: 'tok',
+      wsUrl: '/api/containers/abcdef1234567890/terminal/ws?sessionId=session-1&token=tok',
+      expiresAt: new Date(Date.now() + 30 * 60 * 1000).toISOString(),
+      negotiated: { shell: '/bin/bash', cols: 120, rows: 32 },
+    });
+    createSessionHookMock.mockReturnValue({ mutateAsync: mutateSessionMock, status: 'idle', reset: resetSessionMock });
+    // Stub WebSocket for terminal component
+    class FakeWebSocket {
+      static OPEN = 1;
+      static CLOSED = 3;
+      readyState = FakeWebSocket.OPEN;
+      url: string;
+      constructor(url: string) {
+        this.url = url;
+      }
+      send = vi.fn();
+      close = vi.fn();
+      addEventListener = vi.fn();
+      removeEventListener = vi.fn();
+    }
+    vi.stubGlobal('WebSocket', FakeWebSocket as unknown as typeof WebSocket);
+    class FakeResizeObserver {
+      observe = vi.fn();
+      disconnect = vi.fn();
+    }
+    vi.stubGlobal('ResizeObserver', FakeResizeObserver as unknown as typeof ResizeObserver);
     // Ensure clipboard exists in JSDOM
     // @ts-expect-error - define clipboard for tests
     if (!navigator.clipboard) Object.defineProperty(navigator, 'clipboard', { value: { writeText: vi.fn().mockResolvedValue(undefined) }, configurable: true });
   });
-  afterEach(() => { vi.useRealTimers(); });
+  afterEach(() => {
+    vi.useRealTimers();
+    useContainersMock.mockReset();
+    mutateSessionMock.mockReset();
+    resetSessionMock.mockReset();
+    createSessionHookMock.mockReset();
+    vi.unstubAllGlobals();
+  });
 
   it('shows role column, truncated ID, and sidecars with copy actions', async () => {
     renderPage();
@@ -83,6 +124,8 @@ describe('MonitoringContainers page', () => {
     expect(spy).toHaveBeenCalledWith('abcdef1234567890');
     await act(async () => { fireEvent.click(sidecarCopy); });
     expect(spy).toHaveBeenCalledWith('dind1234567890');
+    const terminalButton = screen.getByRole('button', { name: 'Open terminal' });
+    expect(terminalButton).toBeEnabled();
   });
 
   it('filters by valid Thread ID UUID and ignores invalid input', async () => {
@@ -96,5 +139,19 @@ describe('MonitoringContainers page', () => {
     await act(async () => { fireEvent.change(input, { target: { value: uuid } }); });
     await act(async () => { vi.runOnlyPendingTimers(); });
     expect(lastThreadId).toBe(uuid);
+  });
+
+  it('opens terminal dialog and requests session creation', async () => {
+    renderPage();
+    const button = screen.getByRole('button', { name: 'Open terminal' });
+    await act(async () => {
+      fireEvent.click(button);
+    });
+    await act(async () => {
+      // allow mutation promise to resolve
+      await Promise.resolve();
+    });
+    expect(mutateSessionMock).toHaveBeenCalledWith({ containerId: 'abcdef1234567890' });
+    expect(screen.getByText(/Terminal for abcdef123456/)).toBeTruthy();
   });
 });

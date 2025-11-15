@@ -18,3 +18,23 @@ export type ContainerItem = {
 export function listContainers(params: { status?: string; sortBy?: string; sortDir?: string; threadId?: string }) {
   return asData<{ items: ContainerItem[] }>(http.get<{ items: ContainerItem[] }>(`/api/containers`, { params }));
 }
+
+export type ContainerTerminalSessionResponse = {
+  sessionId: string;
+  token: string;
+  wsUrl: string;
+  expiresAt: string;
+  negotiated: { shell: string; cols: number; rows: number };
+};
+
+export type CreateTerminalSessionInput = {
+  cols?: number;
+  rows?: number;
+  shell?: string;
+};
+
+export function createContainerTerminalSession(containerId: string, body: CreateTerminalSessionInput = {}) {
+  return asData<ContainerTerminalSessionResponse>(
+    http.post<ContainerTerminalSessionResponse>(`/api/containers/${containerId}/terminal/sessions`, body),
+  );
+}
