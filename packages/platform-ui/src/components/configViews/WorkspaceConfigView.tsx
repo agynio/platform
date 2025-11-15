@@ -3,21 +3,35 @@ import { Input } from '@agyn/ui';
 import type { StaticConfigViewProps } from './types';
 import ReferenceEnvField, { type EnvItem } from './shared/ReferenceEnvField';
 
+type VolumesFormState = {
+  enabled: boolean;
+  mountPath: string;
+};
+
+const DEFAULT_VOLUMES: VolumesFormState = { enabled: false, mountPath: '/workspace' };
+
+const parseVolumesConfig = (raw: unknown): VolumesFormState => {
+  if (!raw || typeof raw !== 'object') return { ...DEFAULT_VOLUMES };
+  const candidate = raw as { enabled?: unknown; mountPath?: unknown };
+  const enabled = typeof candidate.enabled === 'boolean' ? candidate.enabled : DEFAULT_VOLUMES.enabled;
+  const mountPathCandidate =
+    typeof candidate.mountPath === 'string' && candidate.mountPath.trim().length > 0
+      ? candidate.mountPath
+      : DEFAULT_VOLUMES.mountPath;
+  return { enabled, mountPath: mountPathCandidate };
+};
+
 export default function WorkspaceConfigView({ value, onChange, readOnly, disabled, onValidate }: StaticConfigViewProps) {
-  const init = useMemo(() => ({ ...(value || {}) }), [value]);
+  const init = useMemo<Record<string, unknown>>(() => ({ ...(value || {}) }), [value]);
   const [image, setImage] = useState<string>((init.image as string) || '');
   const [env, setEnv] = useState<EnvItem[]>((init.env as EnvItem[]) || []);
   const [initialScript, setInitialScript] = useState<string>((init.initialScript as string) || '');
   const [platform, setPlatform] = useState<string>((init.platform as string) || '');
   const [enableDinD, setEnableDinD] = useState<boolean>(!!init.enableDinD);
   const [ttlSeconds, setTtlSeconds] = useState<number>(typeof init.ttlSeconds === 'number' ? (init.ttlSeconds as number) : 86400);
-  const volumeInit = (init.volumes as { enabled?: boolean; mountPath?: string } | undefined) || {};
-  const [volumesEnabled, setVolumesEnabled] = useState<boolean>(!!volumeInit.enabled);
-  const [mountPath, setMountPath] = useState<string>(
-    typeof volumeInit.mountPath === 'string' && volumeInit.mountPath.trim().length > 0
-      ? volumeInit.mountPath
-      : '/workspace',
-  );
+  const initialVolumes = parseVolumesConfig(init.volumes);
+  const [volumesEnabled, setVolumesEnabled] = useState<boolean>(initialVolumes.enabled);
+  const [mountPath, setMountPath] = useState<string>(initialVolumes.mountPath);
 
   const mountPathError = useMemo(() => {
     if (!volumesEnabled) return '';

@@ -11,6 +11,7 @@ import {
   isExecIdleTimeoutError,
 } from '../../utils/execTimeout';
 import { ContainerRegistry } from './container.registry';
+import { mapInspectMounts } from './container.mounts';
 import { createUtf8Collector, demuxDockerMultiplex } from './containerStream.util';
 
 const DEFAULT_IMAGE = 'mcr.microsoft.com/vscode/devcontainers/base';
@@ -187,22 +188,7 @@ export class ContainerService {
         const labels = inspect.Config?.Labels || {};
         const nodeId = labels['hautech.ai/node_id'] || 'unknown';
         const threadId = labels['hautech.ai/thread_id'] || '';
-        const mounts = Array.isArray((inspect as { Mounts?: unknown }).Mounts)
-          ? ((inspect as { Mounts?: Array<Record<string, unknown>> }).Mounts || [])
-              .map((mount) => {
-                const dest = typeof mount.Destination === 'string' ? mount.Destination : '';
-                const name = typeof mount.Name === 'string' && mount.Name.trim().length > 0 ? mount.Name.trim() : undefined;
-                const srcCandidate =
-                  name && name.length > 0
-                    ? name
-                    : typeof mount.Source === 'string' && mount.Source.trim().length > 0
-                      ? mount.Source.trim()
-                      : '';
-                if (!srcCandidate || !dest) return null;
-                return { source: srcCandidate, destination: dest };
-              })
-              .filter((entry): entry is { source: string; destination: string } => !!entry)
-          : [];
+        const mounts = mapInspectMounts(inspect.Mounts);
         await this.registry.registerStart({
           containerId: inspect.Id,
           nodeId,

@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { LoggerService } from '../../core/services/logger.service';
 import { Prisma, type PrismaClient } from '@prisma/client';
+import { sanitizeContainerMounts, type ContainerMount } from './container.mounts';
 
 export type ContainerStatus = 'running' | 'stopped' | 'terminating' | 'failed';
 
@@ -13,7 +14,7 @@ export interface ContainerMetadata {
   retryAfter?: string; // ISO timestamp
   terminationAttempts?: number;
   claimId?: string;
-  mounts?: Array<{ source: string; destination: string }>;
+  mounts?: ContainerMount[];
 }
 
 @Injectable()
@@ -43,25 +44,16 @@ export class ContainerRegistry {
     labels?: Record<string, string>;
     platform?: string;
     ttlSeconds?: number;
-    mounts?: Array<{ source: string; destination: string }>;
+    mounts?: ContainerMount[];
   }): Promise<void> {
     const nowIso = new Date().toISOString();
     const killAfter = this.computeKillAfter(nowIso, args.ttlSeconds);
-    const mounts = Array.isArray(args.mounts)
-      ? args.mounts
-          .map((m) => {
-            const source = typeof m?.source === 'string' ? m.source : '';
-            const destination = typeof m?.destination === 'string' ? m.destination : '';
-            if (!source || !destination) return null;
-            return { source, destination };
-          })
-          .filter((m): m is { source: string; destination: string } => !!m)
-      : undefined;
+    const mounts = sanitizeContainerMounts(args.mounts);
     const metadata: ContainerMetadata = {
       labels: args.labels ?? {},
       platform: args.platform,
       ttlSeconds: typeof args.ttlSeconds === 'number' ? args.ttlSeconds : 86400,
-      mounts: mounts && mounts.length > 0 ? mounts : undefined,
+      mounts: mounts.length > 0 ? mounts : undefined,
     };
     await this.prisma.container.upsert({
       where: { containerId: args.containerId },
@@ -161,21 +153,8 @@ export class ContainerRegistry {
     const retryAfter = typeof m.retryAfter === 'string' ? m.retryAfter : undefined;
     const terminationAttempts = typeof m.terminationAttempts === 'number' ? m.terminationAttempts : undefined;
     const claimId = typeof m.claimId === 'string' ? m.claimId : undefined;
-    const mounts = Array.isArray(m.mounts)
-      ? (m.mounts as unknown[])
-          .map((entry) => {
-            if (!entry || typeof entry !== 'object') return null;
-            const source = typeof (entry as { source?: unknown }).source === 'string' ? (entry as { source: string }).source : '';
-            const destination =
-              typeof (entry as { destination?: unknown }).destination === 'string'
-                ? (entry as { destination: string }).destination
-                : '';
-            if (!source || !destination) return null;
-            return { source, destination };
-          })
-          .filter((entry): entry is { source: string; destination: string } => !!entry)
-      : undefined;
-    return { labels, platform, ttlSeconds, lastError, retryAfter, terminationAttempts, claimId, mounts };
+    const mounts = sanitizeContainerMounts(m.mounts);
+    return { labels, platform, ttlSeconds, lastError, retryAfter, terminationAttempts, claimId, mounts: mounts.length ? mounts : undefined };
   }
 
   async getExpired(now: Date = new Date()) {

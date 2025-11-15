@@ -63,6 +63,7 @@ export const ContainerProviderStaticConfigSchema = z
   .strict();
 
 export type ContainerProviderStaticConfig = z.infer<typeof ContainerProviderStaticConfigSchema>;
+type VolumeConfig = z.infer<typeof VolumeConfigSchema>;
 
 const DEFAULTS: ContainerOpts = {
   platform: 'linux/arm64',
@@ -158,13 +159,9 @@ export class WorkspaceNode extends Node<ContainerProviderStaticConfig> {
       const DOCKER_MIRROR_URL =
         this.configService?.dockerMirrorUrl || process.env.DOCKER_MIRROR_URL || 'http://registry-mirror:5000';
       const enableDinD = this.config?.enableDinD ?? false;
-      const volumeConfig = this.config?.volumes;
-      const volumesEnabled = !!volumeConfig?.enabled;
-      const configuredMountPath =
-        typeof volumeConfig?.mountPath === 'string' && volumeConfig.mountPath.trim().length > 0
-          ? volumeConfig.mountPath.trim()
-          : undefined;
-      const normalizedMountPath = volumesEnabled ? configuredMountPath ?? DEFAULTS.workingDir : DEFAULTS.workingDir;
+      const volumeConfig: VolumeConfig | undefined = this.config?.volumes;
+      const volumesEnabled = volumeConfig?.enabled ?? false;
+      const normalizedMountPath = volumesEnabled ? volumeConfig?.mountPath ?? DEFAULTS.workingDir : DEFAULTS.workingDir;
       const volumeName = `ha_ws_${threadId}`;
       const binds = volumesEnabled ? [`${volumeName}:${normalizedMountPath}`] : undefined;
       let envMerged: Record<string, string> | undefined = await (async () => {
