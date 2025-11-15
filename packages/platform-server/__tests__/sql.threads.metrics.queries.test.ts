@@ -8,7 +8,7 @@ describe('SQL: WITH RECURSIVE and UUID casts', () => {
   it('getThreadsMetrics uses WITH RECURSIVE and ::uuid[] and returns expected aggregation', async () => {
     const logger = new LoggerService();
     const captured: Array<{ strings: TemplateStringsArray; values: unknown[] }> = [];
-    type FakeClient = { $queryRaw: (strings: TemplateStringsArray, ...values: unknown[]) => Promise<Array<{ root_id: string; reminders_count: number; desc_working: boolean; self_working: boolean }>> };
+    type FakeClient = { $queryRaw: (strings: TemplateStringsArray, ...values: unknown[]) => Promise<Array<{ root_id: string; reminders_count: number; containers_count: number; desc_working: boolean; self_working: boolean }>> };
     class FakePrismaService implements Pick<PrismaService, 'getClient'> {
       getClient(): FakeClient {
         return {
@@ -16,7 +16,7 @@ describe('SQL: WITH RECURSIVE and UUID casts', () => {
             captured.push({ strings, values });
             // Return one row per root
             return [
-              { root_id: values[0] && Array.isArray(values[0]) ? (values[0] as string[])[0] : 'r1', reminders_count: 1, desc_working: true, self_working: false },
+              { root_id: values[0] && Array.isArray(values[0]) ? (values[0] as string[])[0] : 'r1', reminders_count: 1, containers_count: 2, desc_working: true, self_working: false },
             ];
           },
         };
@@ -39,6 +39,7 @@ describe('SQL: WITH RECURSIVE and UUID casts', () => {
     expect(res[rootId]).toBeDefined();
     expect(res[rootId].remindersCount).toBe(1);
     expect(res[rootId].activity).toBe('waiting');
+    expect(res[rootId].containersCount).toBe(2);
   });
 
   it('scheduleThreadAndAncestorsMetrics uses WITH RECURSIVE and ::uuid and schedules returned ids', async () => {

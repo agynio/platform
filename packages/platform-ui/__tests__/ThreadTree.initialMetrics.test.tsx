@@ -57,7 +57,7 @@ describe('ThreadTree initial metrics rendering', () => {
     expect(dot).toBeInTheDocument();
     expect(dot.className).toContain('bg-green-500');
     expect(screen.queryByLabelText('Activity: idle')).toBeNull();
-    expect(screen.getByLabelText('Total runs: 3')).toBeInTheDocument();
     expect(screen.getByText('Primary Agent')).toBeInTheDocument();
+    expect(screen.queryByText(/Runs/)).toBeNull();
   });
 });

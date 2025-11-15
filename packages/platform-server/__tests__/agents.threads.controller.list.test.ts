@@ -17,7 +17,7 @@ describe('AgentsThreadsController list endpoints', () => {
       listThreads: vi.fn(async () => [
         { id: 't1', alias: 'a1', summary: 'Summary', status: 'open', createdAt: now, parentId: null },
       ]),
-      getThreadsMetrics: vi.fn(async () => ({ t1: { remindersCount: 5, activity: 'working', runsCount: 2 } })),
+      getThreadsMetrics: vi.fn(async () => ({ t1: { remindersCount: 5, containersCount: 1, activity: 'working', runsCount: 2 } })),
       getThreadsAgentTitles: vi.fn(async () => ({ t1: 'Agent One' })),
       listChildren: vi.fn(),
       listRuns: vi.fn(),
@@ -48,7 +48,7 @@ describe('AgentsThreadsController list endpoints', () => {
           summary: 'Summary',
           status: 'open',
           parentId: null,
-          metrics: { remindersCount: 5, activity: 'working', runsCount: 2 },
+          metrics: { remindersCount: 5, containersCount: 1, activity: 'working', runsCount: 2 },
           agentTitle: 'Agent One',
         },
       ],
@@ -82,7 +82,7 @@ describe('AgentsThreadsController list endpoints', () => {
     const ctrl = await module.resolve(AgentsThreadsController);
     const res = await ctrl.listChildren('t1', { includeMetrics: 'true', includeAgentTitles: 'true' } as any);
 
-    expect(res.items[0].metrics).toEqual({ remindersCount: 0, activity: 'idle', runsCount: 0 });
+    expect(res.items[0].metrics).toEqual({ remindersCount: 0, containersCount: 0, activity: 'idle', runsCount: 0 });
     expect(res.items[0].agentTitle).toBe('(unknown agent)');
   });
 
@@ -108,6 +108,6 @@ describe('AgentsThreadsController list endpoints', () => {
 
     const ctrl = await module.resolve(AgentsThreadsController);
     const res = await ctrl.getThreadMetrics('t-miss');
-    expect(res).toEqual({ remindersCount: 0, activity: 'idle', runsCount: 0 });
+    expect(res).toEqual({ remindersCount: 0, containersCount: 0, activity: 'idle', runsCount: 0 });
   });
 });

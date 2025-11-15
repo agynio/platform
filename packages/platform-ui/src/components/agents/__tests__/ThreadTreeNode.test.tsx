@@ -18,7 +18,7 @@ const baseNode: ThreadNode = {
   status: 'open',
   parentId: null,
   createdAt: '2024-01-01T00:00:00.000Z',
-  metrics: { remindersCount: 0, activity: 'idle', runsCount: 0 },
+  metrics: { remindersCount: 0, containersCount: 0, activity: 'idle', runsCount: 0 },
   agentTitle: 'Agent Alpha',
 };
 

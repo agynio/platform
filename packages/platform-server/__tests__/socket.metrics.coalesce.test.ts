@@ -11,7 +11,9 @@ describe('GraphSocketGateway metrics coalescing', () => {
     const logger = new LoggerService();
     const runtimeStub = { subscribe: () => () => {} } as unknown as import('../src/graph/liveGraph.manager').LiveGraphRuntime;
     // Stub metrics service to capture calls
-    const getThreadsMetrics = vi.fn(async (_ids: string[]) => Object.fromEntries(_ids.map((id) => [id, { remindersCount: 0, activity: 'idle' as const }])));
+    const getThreadsMetrics = vi.fn(async (_ids: string[]) =>
+      Object.fromEntries(_ids.map((id) => [id, { remindersCount: 0, containersCount: 0, activity: 'idle' as const }])),
+    );
     const metricsStub = { getThreadsMetrics } as any;
     const prismaStub = { getClient: () => ({ $queryRaw: async () => [] }) } as any;
     const gateway = new GraphSocketGateway(logger, runtimeStub, metricsStub, prismaStub as any);

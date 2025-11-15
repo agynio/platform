@@ -4,9 +4,11 @@ import { RunMessageList, type UnifiedRunMessage, type UnifiedListItem, type RunM
 import { ThreadTree } from '@/components/agents/ThreadTree';
 import { ThreadStatusFilterSwitch, type ThreadStatusFilter } from '@/components/agents/ThreadStatusFilterSwitch';
 import { useThreadRuns } from '@/api/hooks/runs';
+import type { ThreadNode } from '@/api/types/agents';
 import { runs as runsApi } from '@/api/modules/runs';
 import { graphSocket } from '@/lib/graph/socket';
 import { useNavigate } from 'react-router-dom';
+import { ThreadHeader } from '@/components/agents/ThreadHeader';
 
 // Thread list rendering moved into ThreadTree component
 type MessageItem = { id: string; kind: 'user' | 'assistant' | 'system' | 'tool'; text?: string | null; source: unknown; createdAt: string };
@@ -83,6 +85,7 @@ async function fetchRunMessages(runId: string): Promise<UnifiedRunMessage[]> {
 
 export function AgentsThreads() {
   const [selectedThreadId, setSelectedThreadId] = useState<string | undefined>(undefined);
+  const [selectedThread, setSelectedThread] = useState<ThreadNode | undefined>(undefined);
   const [statusFilter, setStatusFilter] = useState<ThreadStatusFilter>('open');
   // No run selection in new UX (removed)
   const queryClient = useQueryClient();
@@ -110,6 +113,9 @@ export function AgentsThreads() {
     pendingMessages.current.clear();
     seenMessageIds.current.clear();
     runIdsRef.current = new Set();
+    if (!selectedThreadId) {
+      setSelectedThread(undefined);
+    }
   }, [selectedThreadId]);
 
   useEffect(() => {
@@ -299,14 +305,23 @@ export function AgentsThreads() {
                 <ThreadStatusFilterSwitch value={statusFilter} onChange={(v) => setStatusFilter(v)} />
               </header>
               <div className="flex-1 min-h-0 overflow-y-auto px-3 py-2">
-                <ThreadTree status={statusFilter} onSelect={(id) => setSelectedThreadId(id)} selectedId={selectedThreadId} />
+                <ThreadTree
+                  status={statusFilter}
+                  onSelect={(node) => {
+                    setSelectedThreadId(node.id);
+                    setSelectedThread(node);
+                  }}
+                  selectedId={selectedThreadId}
+                  onSelectedNodeChange={(node) => setSelectedThread(node)}
+                />
               </div>
             </section>
 
             <section className="flex h-[60vh] min-h-0 min-w-0 flex-col md:h-full md:flex-1" data-testid="messages-panel">
-              <header className="border-b px-3 py-2 text-sm font-medium">
-                Thread: {selectedThreadId || '(none selected)'}
-              </header>
+              <ThreadHeader
+                thread={selectedThread}
+                runsCount={runs.length}
+              />
               <div className="flex-1 min-h-0 overflow-hidden px-3 py-2">
                 <RunMessageList
                   items={unifiedItems}

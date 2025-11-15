@@ -19,7 +19,7 @@ describe('AgentsRemindersController', () => {
 
     const ctrl = await module.resolve(AgentsRemindersController);
     const res = await ctrl.listReminders({});
-    expect(svc.listReminders).toHaveBeenCalledWith('active', 100);
+    expect(svc.listReminders).toHaveBeenCalledWith('active', 100, undefined);
     expect(res).toHaveProperty('items');
     expect((res as any).items).toHaveLength(1);
   });
@@ -32,8 +32,9 @@ describe('AgentsRemindersController', () => {
     }).compile();
 
     const ctrl = await module.resolve(AgentsRemindersController);
-    await ctrl.listReminders({ filter: 'completed', take: 10 });
-    expect(svc.listReminders).toHaveBeenCalledWith('completed', 10);
+    const threadId = '11111111-1111-1111-1111-111111111111';
+    await ctrl.listReminders({ filter: 'completed', take: 10, threadId });
+    expect(svc.listReminders).toHaveBeenCalledWith('completed', 10, threadId);
   });
 });
 
@@ -67,9 +68,41 @@ describe('AgentsPersistenceService.listReminders', () => {
     await svc.listReminders('active', 50);
     await svc.listReminders('completed', 25);
     await svc.listReminders('all', 100);
+    await svc.listReminders('active', 20, 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa');
 
     expect(captured[0]).toMatchObject({ where: { completedAt: null }, orderBy: { at: 'desc' }, take: 50 });
     expect(captured[1]).toMatchObject({ where: { NOT: { completedAt: null } }, orderBy: { at: 'desc' }, take: 25 });
     expect(captured[2]).toMatchObject({ where: undefined, orderBy: { at: 'desc' }, take: 100 });
+    expect(captured[3]).toMatchObject({ where: { completedAt: null, threadId: 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa' }, take: 20 });
+  });
+
+  it('logs and rethrows prisma errors', async () => {
+    const prismaStub = {
+      getClient() {
+        return {
+          reminder: {
+            findMany: async () => {
+              throw new Error('db down');
+            },
+          },
+        } as any;
+      },
+    };
+    const logger = { error: vi.fn(), warn: vi.fn(), info: vi.fn(), debug: vi.fn() } as any;
+    const { NoopGraphEventsPublisher } = await import('../src/gateway/graph.events.publisher');
+    const svc = new AgentsPersistenceService(
+      prismaStub as any,
+      logger,
+      { getThreadsMetrics: async () => ({}) } as any,
+      new NoopGraphEventsPublisher(),
+      templateRegistryStub,
+      graphRepoStub,
+      createRunEventsStub() as any,
+    );
+
+    await expect(svc.listReminders('active', 5, 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa')).rejects.toThrow('db down');
+    expect(logger.error).toHaveBeenCalledTimes(1);
+    const payload = logger.error.mock.calls[0][1];
+    expect(payload).toMatchObject({ filter: 'active', take: 5, threadId: 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa' });
   });
 });

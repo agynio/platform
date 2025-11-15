@@ -6,6 +6,7 @@ export function createPrismaStub() {
   const messages: Array<{ id: string; kind: string; text: string | null; source: any; createdAt: Date }> = [];
   const runMessages: Array<{ runId: string; messageId: string; type: string; createdAt: Date }> = [];
   const reminders: Array<{ id: string; threadId: string; note: string; at: Date; createdAt: Date; completedAt: Date | null }> = [];
+  const containers: Array<{ id: string; threadId: string | null; status: string; metadata: any }> = [];
   const conversationStates: Array<{ threadId: string; nodeId: string; state: any; updatedAt: Date }> = [];
 
   let idSeq = 1;
@@ -125,6 +126,19 @@ export function createPrismaStub() {
       },
       findMany: async () => reminders,
     },
+    container: {
+      create: async ({ data }: any) => {
+        const row = { id: data.id ?? `cont-${idSeq++}`, threadId: data.threadId ?? null, status: data.status ?? 'running', metadata: data.metadata ?? null };
+        containers.push(row);
+        return row;
+      },
+      findMany: async ({ where }: any) => {
+        let rows = [...containers];
+        if (where?.threadId) rows = rows.filter((c) => c.threadId === where.threadId);
+        if (where?.status) rows = rows.filter((c) => c.status === where.status);
+        return rows;
+      },
+    },
     conversationState: {
       findMany: async ({ where, orderBy }: any) => {
         let rows = [...conversationStates];
@@ -142,15 +156,15 @@ export function createPrismaStub() {
         return row;
       },
     },
-    _store: { threads, runs, messages, runMessages, reminders, conversationStates },
+    _store: { threads, runs, messages, runMessages, reminders, containers, conversationStates },
     // Minimal implementation to support ThreadsMetricsService tests.
     // Accepts TemplateStrings and values; expects first array value to contain root IDs.
-    async $queryRaw(strings: TemplateStringsArray, ...values: unknown[]): Promise<Array<{ root_id: string; reminders_count: number; desc_working: boolean; self_working: boolean }>> {
-      const idsArg = values.find((v) => Array.isArray(v)) as string[] | undefined;
-      const roots = Array.isArray(idsArg) ? idsArg : [];
-      function collectSubtree(root: string): string[] {
-        const acc: string[] = [root];
-        const stack = [root];
+  async $queryRaw(strings: TemplateStringsArray, ...values: unknown[]): Promise<Array<{ root_id: string; reminders_count: number; containers_count: number; desc_working: boolean; self_working: boolean }>> {
+    const idsArg = values.find((v) => Array.isArray(v)) as string[] | undefined;
+    const roots = Array.isArray(idsArg) ? idsArg : [];
+    function collectSubtree(root: string): string[] {
+      const acc: string[] = [root];
+      const stack = [root];
         while (stack.length) {
           const cur = stack.pop()!;
           const kids = threads.filter((t) => t.parentId === cur).map((t) => t.id);
@@ -159,16 +173,17 @@ export function createPrismaStub() {
         return acc;
       }
       const isRunning = new Set(runs.filter((r) => r.status === 'running').map((r) => r.threadId));
-      const out: Array<{ root_id: string; reminders_count: number; desc_working: boolean; self_working: boolean }> = [];
-      for (const root of roots) {
-        const sub = collectSubtree(root);
-        const self_working = isRunning.has(root);
-        const desc_working = sub.some((id) => id !== root && isRunning.has(id));
-        const reminders_count = reminders.filter((rem) => sub.includes(rem.threadId) && rem.completedAt == null).length;
-        out.push({ root_id: root, reminders_count, desc_working, self_working });
-      }
-      return out;
-    },
+    const out: Array<{ root_id: string; reminders_count: number; containers_count: number; desc_working: boolean; self_working: boolean }> = [];
+    for (const root of roots) {
+      const sub = collectSubtree(root);
+      const self_working = isRunning.has(root);
+      const desc_working = sub.some((id) => id !== root && isRunning.has(id));
+      const reminders_count = reminders.filter((rem) => sub.includes(rem.threadId) && rem.completedAt == null).length;
+      const containers_count = containers.filter((cont) => cont.status === 'running' && cont.threadId && sub.includes(cont.threadId) && (cont.metadata?.labels?.['hautech.ai/role'] ?? 'workspace') !== 'dind').length;
+      out.push({ root_id: root, reminders_count, containers_count, desc_working, self_working });
+    }
+    return out;
+  },
   };
   return prisma;
 }

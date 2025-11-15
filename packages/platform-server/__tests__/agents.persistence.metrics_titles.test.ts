@@ -9,7 +9,7 @@ function createService(stub: any, overrides?: { metrics?: any; templateRegistry?
     overrides?.metrics ??
     ({
       getThreadsMetrics: async (ids: string[]) =>
-        Object.fromEntries(ids.map((id) => [id, { remindersCount: 0, activity: 'idle' as const }])),
+        Object.fromEntries(ids.map((id) => [id, { remindersCount: 0, containersCount: 0, activity: 'idle' as const }])),
     } as any);
   const templateRegistry = overrides?.templateRegistry ?? ({ toSchema: async () => [] } as any);
   const graphRepo =
@@ -30,7 +30,7 @@ describe('AgentsPersistenceService metrics and agent titles', () => {
     const stub = createPrismaStub();
     const remindersMetrics = {
       getThreadsMetrics: async (ids: string[]) =>
-        Object.fromEntries(ids.map((id) => [id, { remindersCount: 2, activity: 'waiting' as const }])),
+        Object.fromEntries(ids.map((id) => [id, { remindersCount: 2, containersCount: 1, activity: 'waiting' as const }])),
     };
     const svc = createService(stub, { metrics: remindersMetrics });
 
@@ -41,8 +41,8 @@ describe('AgentsPersistenceService metrics and agent titles', () => {
     await stub.run.create({ data: { threadId: threadA, status: 'finished' } });
 
     const metrics = await svc.getThreadsMetrics([threadA, threadB]);
-    expect(metrics[threadA]).toEqual({ remindersCount: 2, activity: 'waiting', runsCount: 2 });
-    expect(metrics[threadB]).toEqual({ remindersCount: 2, activity: 'waiting', runsCount: 0 });
+    expect(metrics[threadA]).toEqual({ remindersCount: 2, containersCount: 1, activity: 'waiting', runsCount: 2 });
+    expect(metrics[threadB]).toEqual({ remindersCount: 2, containersCount: 1, activity: 'waiting', runsCount: 0 });
   });
 
   it('resolves agent titles from config, template, and falls back when missing', async () => {

@@ -136,7 +136,7 @@ export class AgentsThreadsController {
         ? this.persistence.getThreadsAgentTitles(ids)
         : Promise.resolve<Record<string, string>>({}),
     ]);
-    const defaultMetrics: ThreadMetrics = { remindersCount: 0, activity: 'idle', runsCount: 0 };
+    const defaultMetrics: ThreadMetrics = { remindersCount: 0, containersCount: 0, activity: 'idle', runsCount: 0 };
     const fallbackTitle = '(unknown agent)';
     const items = threads.map((t) => ({
       ...t,
@@ -161,7 +161,7 @@ export class AgentsThreadsController {
         ? this.persistence.getThreadsAgentTitles(ids)
         : Promise.resolve<Record<string, string>>({}),
     ]);
-    const defaultMetrics: ThreadMetrics = { remindersCount: 0, activity: 'idle', runsCount: 0 };
+    const defaultMetrics: ThreadMetrics = { remindersCount: 0, containersCount: 0, activity: 'idle', runsCount: 0 };
     const fallbackTitle = '(unknown agent)';
     return {
       items: items.map((t) => ({
@@ -259,6 +259,6 @@ export class AgentsThreadsController {
   @Get('threads/:threadId/metrics')
   async getThreadMetrics(@Param('threadId') threadId: string) {
     const metrics = await this.persistence.getThreadsMetrics([threadId]);
-    return metrics[threadId] ?? { remindersCount: 0, activity: 'idle' as const, runsCount: 0 };
+    return metrics[threadId] ?? { remindersCount: 0, containersCount: 0, activity: 'idle' as const, runsCount: 0 };
   }
 }
