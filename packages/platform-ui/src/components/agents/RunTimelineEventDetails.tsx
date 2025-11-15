@@ -1,4 +1,5 @@
-import type { CSSProperties } from 'react';
+import { useEffect, useMemo, useState, type CSSProperties } from 'react';
+import { stringify as stringifyYaml } from 'yaml';
 import type { RunTimelineEvent } from '@/api/types/agents';
 import { STATUS_COLORS, formatDuration, getEventTypeLabel } from './runTimelineFormatting';
 
@@ -19,21 +20,181 @@ function formatJson(value: unknown): string {
   }
 }
 
-function textBlock(value: string, tone: 'default' | 'muted' = 'default') {
+function textBlock(value: string, tone: 'default' | 'muted' = 'default', className = '') {
   const base = tone === 'muted' ? 'border bg-gray-50' : 'border bg-white';
   return (
-    <div className={`${base} px-3 py-2 text-[11px] text-gray-800`} style={wrapStyle}>
+    <div className={`${base} px-3 py-2 text-[11px] text-gray-800 ${className}`} style={wrapStyle}>
       {value}
     </div>
   );
 }
 
-function jsonBlock(value: unknown, tone: 'default' | 'muted' = 'muted') {
+function jsonBlock(value: unknown, tone: 'default' | 'muted' = 'muted', className = '') {
   const base = tone === 'muted' ? 'border bg-gray-50' : 'border bg-white';
   return (
-    <pre className={`${base} px-3 py-2 text-[11px] text-gray-800`} style={wrapStyle}>
+    <pre className={`${base} px-3 py-2 text-[11px] text-gray-800 ${className}`} style={wrapStyle}>
       {formatJson(value)}
     </pre>
+  );
+}
+
+const ANSI_PATTERN = '\u001B\\[[0-9;]*m';
+const ANSI_REGEX = new RegExp(ANSI_PATTERN);
+
+type OutputMode = 'text' | 'terminal' | 'markdown' | 'json' | 'yaml';
+
+function isOutputMode(value: string | null): value is OutputMode {
+  return value === 'text' || value === 'terminal' || value === 'markdown' || value === 'json' || value === 'yaml';
+}
+
+function tryParseJson(value: string) {
+  try {
+    return JSON.parse(value);
+  } catch (_err) {
+    return null;
+  }
+}
+
+function looksLikeJsonString(value: string): boolean {
+  const trimmed = value.trim();
+  if (!trimmed) return false;
+  if ((trimmed.startsWith('{') && trimmed.endsWith('}')) || (trimmed.startsWith('[') && trimmed.endsWith(']'))) {
+    return tryParseJson(trimmed) !== null;
+  }
+  return false;
+}
+
+const MARKDOWN_HINTS = [/#\s+/m, /```/, /\*\*[^*]+\*\*/, /\* [^*]+/m, /^- /m, /^\d+\.\s+/m, /\[[^\]]+\]\([^)]+\)/];
+
+function looksLikeMarkdownString(value: string): boolean {
+  const trimmed = value.trim();
+  if (!trimmed) return false;
+  return MARKDOWN_HINTS.some((regex) => regex.test(trimmed));
+}
+
+function determineDefaultMode(output: unknown): OutputMode {
+  if (output === null || output === undefined) {
+    return 'text';
+  }
+  if (Array.isArray(output) || (typeof output === 'object' && output !== null)) {
+    return 'json';
+  }
+  if (typeof output === 'string') {
+    if (ANSI_REGEX.test(output)) {
+      return 'terminal';
+    }
+    if (looksLikeJsonString(output)) {
+      return 'json';
+    }
+    if (looksLikeMarkdownString(output)) {
+      return 'markdown';
+    }
+  }
+  return 'text';
+}
+
+function toText(value: unknown): string {
+  if (value === null || value === undefined) return '';
+  if (typeof value === 'string') return value;
+  if (typeof value === 'number' || typeof value === 'boolean') return String(value);
+  return formatJson(value);
+}
+
+function formatYaml(value: unknown): string {
+  try {
+    const data = typeof value === 'string' ? tryParseJson(value) ?? value : value;
+    if (typeof data === 'string') {
+      return data;
+    }
+    const yaml = stringifyYaml(data ?? null, { indent: 2 });
+    return typeof yaml === 'string' ? yaml.trimEnd() : String(yaml);
+  } catch (_err) {
+    return formatJson(value);
+  }
+}
+
+function renderOutputByMode(mode: OutputMode, value: unknown) {
+  if (mode === 'json') {
+    const parsed = typeof value === 'string' ? tryParseJson(value) ?? value : value;
+    return jsonBlock(parsed, 'default');
+  }
+  if (mode === 'yaml') {
+    return (
+      <pre className="border bg-white px-3 py-2 text-[11px] text-gray-800" style={wrapStyle}>
+        {formatYaml(value)}
+      </pre>
+    );
+  }
+  if (mode === 'terminal') {
+    return (
+      <pre
+        className="border border-gray-800 bg-gray-900 px-3 py-2 text-[11px] font-mono text-emerald-100"
+        style={{ ...wrapStyle, whiteSpace: 'pre' }}
+      >
+        {typeof value === 'string' ? value : formatJson(value)}
+      </pre>
+    );
+  }
+  const displayText = toText(value);
+  if (mode === 'markdown') {
+    return (
+      <pre className="px-3 py-2 text-[11px] text-gray-800" style={wrapStyle}>
+        {displayText}
+      </pre>
+    );
+  }
+  return (
+    <pre className="px-3 py-2 text-[11px] text-gray-800" style={wrapStyle}>
+      {displayText}
+    </pre>
+  );
+}
+
+function ToolOutputVisualization({ eventId, value }: { eventId: string; value: unknown }) {
+  const storageKey = useMemo(() => `timeline-output-mode:${eventId}`, [eventId]);
+  const [mode, setMode] = useState<OutputMode>(() => {
+    if (typeof window !== 'undefined') {
+      const stored = window.sessionStorage.getItem(storageKey);
+      if (isOutputMode(stored)) return stored;
+    }
+    return determineDefaultMode(value);
+  });
+
+  useEffect(() => {
+    const stored = typeof window !== 'undefined' ? window.sessionStorage.getItem(storageKey) : null;
+    const nextMode = isOutputMode(stored) ? stored : determineDefaultMode(value);
+    setMode((prev) => (prev === nextMode ? prev : nextMode));
+  }, [storageKey, value]);
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      window.sessionStorage.setItem(storageKey, mode);
+    }
+  }, [mode, storageKey]);
+
+  const rendered = useMemo(() => renderOutputByMode(mode, value), [mode, value]);
+
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center gap-2">
+        <span className="text-[11px] font-medium text-gray-800" id={`output-view-label-${eventId}`}>
+          View as
+        </span>
+        <select
+          aria-labelledby={`output-view-label-${eventId}`}
+          value={mode}
+          onChange={(event) => setMode(event.target.value as OutputMode)}
+          className="rounded border border-gray-300 bg-white px-2 py-1 text-[11px] text-gray-700 shadow-sm"
+        >
+          <option value="text">text</option>
+          <option value="terminal">terminal</option>
+          <option value="markdown">markdown</option>
+          <option value="json">json</option>
+          <option value="yaml">yaml</option>
+        </select>
+      </div>
+      <div className="overflow-auto">{rendered}</div>
+    </div>
   );
 }
 
@@ -104,136 +265,124 @@ export function RunTimelineEventDetails({ event }: { event: RunTimelineEvent }) 
       </section>
 
       {event.llmCall && (
-        <section className="flex min-h-[260px] flex-col gap-4 md:flex-row md:gap-6 md:min-h-[320px]">
-          <div className="flex min-h-0 flex-1 flex-col border">
-            <header className="border-b px-3 py-2 text-xs font-semibold uppercase tracking-wide text-gray-500">Context</header>
-            <div className="flex-1 min-h-0 overflow-y-auto px-3 py-2 space-y-3">
-              <div className="space-y-1 text-[11px] text-gray-600">
-                <div>
-                  <span className="font-medium text-gray-800">Provider:</span> {event.llmCall.provider ?? '—'}
-                </div>
-                <div>
-                  <span className="font-medium text-gray-800">Model:</span> {event.llmCall.model ?? '—'}
-                </div>
-                {event.llmCall.temperature !== null && event.llmCall.temperature !== undefined && (
-                  <div>
-                    <span className="font-medium text-gray-800">Temperature:</span> {event.llmCall.temperature}
-                  </div>
-                )}
-                {event.llmCall.topP !== null && event.llmCall.topP !== undefined && (
-                  <div>
-                    <span className="font-medium text-gray-800">Top P:</span> {event.llmCall.topP}
-                  </div>
-                )}
-                <div>
-                  <span className="font-medium text-gray-800">Stop reason:</span> {event.llmCall.stopReason ?? '—'}
-                </div>
-                <div>
-                  <span className="font-medium text-gray-800">Context items:</span> {event.llmCall.contextItemIds.length}
-                </div>
-              </div>
-              {event.llmCall.contextItemIds.length > 0 && (
-                <div>
-                  <div className="text-[11px] font-medium text-gray-800">Context item IDs</div>
-                  {textBlock(event.llmCall.contextItemIds.join('\n'))}
-                </div>
-              )}
-              {promptAttachments.map((att) => (
-                <div key={att.id} className="space-y-1">
-                  <div className="text-[11px] font-medium text-gray-800">Prompt attachment ({att.id.slice(0, 8)})</div>
-                  {renderAttachmentContent(att)}
-                </div>
-              ))}
-            </div>
+        <section className="space-y-3">
+          <div className="flex flex-wrap items-center gap-3 text-[11px] text-gray-600">
+            {event.llmCall.provider && (
+              <span>
+                <span className="font-medium text-gray-800">Provider:</span> {event.llmCall.provider}
+              </span>
+            )}
+            <span>
+              <span className="font-medium text-gray-800">Model:</span> {event.llmCall.model ?? '—'}
+            </span>
+            <span>
+              <span className="font-medium text-gray-800">Context items:</span> {event.llmCall.contextItemIds.length}
+            </span>
+            {event.llmCall.stopReason && (
+              <span>
+                <span className="font-medium text-gray-800">Stop reason:</span> {event.llmCall.stopReason}
+              </span>
+            )}
           </div>
-          <div className="flex min-h-0 flex-1 flex-col border">
-            <header className="border-b px-3 py-2 text-xs font-semibold uppercase tracking-wide text-gray-500">Output</header>
-            <div className="flex-1 min-h-0 overflow-y-auto px-3 py-2 space-y-3">
-              {event.llmCall.responseText && (
-                <div className="space-y-1">
-                  <div className="text-[11px] font-medium text-gray-800">Response</div>
-                  {textBlock(event.llmCall.responseText)}
-                </div>
-              )}
-              {event.llmCall.toolCalls.length > 0 && (
-                <div className="space-y-2">
-                  <div className="text-[11px] font-medium text-gray-800">Tool calls ({event.llmCall.toolCalls.length})</div>
-                  {event.llmCall.toolCalls.map((tc) => (
-                    <div key={tc.callId}>{jsonBlock({ callId: tc.callId, name: tc.name, arguments: tc.arguments })}</div>
-                  ))}
-                </div>
-              )}
-              <div className="space-y-1">
-                <div className="text-[11px] font-medium text-gray-800">Raw response</div>
-                {jsonBlock(event.llmCall.rawResponse)}
+          <div className="flex min-h-[260px] flex-col gap-4 md:min-h-[320px] md:flex-row md:gap-6">
+            <div className="flex min-h-0 flex-1 flex-col border">
+              <header className="border-b px-3 py-2 text-xs font-semibold uppercase tracking-wide text-gray-500">Context</header>
+              <div className="flex-1 min-h-0 overflow-y-auto px-3 py-2">
+                {event.llmCall.contextItemIds.length > 0 ? (
+                  textBlock(event.llmCall.contextItemIds.join('\n'))
+                ) : (
+                  <div className="text-[11px] text-gray-500">No context item IDs</div>
+                )}
               </div>
-              {responseAttachments.map((att) => (
-                <div key={att.id} className="space-y-1">
-                  <div className="text-[11px] font-medium text-gray-800">Response attachment ({att.id.slice(0, 8)})</div>
-                  {renderAttachmentContent(att)}
+            </div>
+            <div className="flex min-h-0 flex-1 flex-col border">
+              <header className="border-b px-3 py-2 text-xs font-semibold uppercase tracking-wide text-gray-500">Output</header>
+              <div className="flex-1 min-h-0 overflow-y-auto px-3 py-2 space-y-3">
+                {event.llmCall.responseText && (
+                  <div className="space-y-1">
+                    <div className="text-[11px] font-medium text-gray-800">Response</div>
+                    {textBlock(event.llmCall.responseText)}
+                  </div>
+                )}
+                {event.llmCall.toolCalls.length > 0 && (
+                  <div className="space-y-2">
+                    <div className="text-[11px] font-medium text-gray-800">Tool calls ({event.llmCall.toolCalls.length})</div>
+                    {event.llmCall.toolCalls.map((tc) => (
+                      <div key={tc.callId}>{jsonBlock({ callId: tc.callId, name: tc.name, arguments: tc.arguments })}</div>
+                    ))}
+                  </div>
+                )}
+                <div className="space-y-1">
+                  <div className="text-[11px] font-medium text-gray-800">Raw response</div>
+                  {jsonBlock(event.llmCall.rawResponse)}
                 </div>
-              ))}
-              {providerRawAttachmentsForOutput.map((att) => (
-                <div key={att.id} className="space-y-1">
-                  <div className="text-[11px] font-medium text-gray-800">Provider payload ({att.id.slice(0, 8)})</div>
-                  {renderAttachmentContent(att, 'muted')}
-                </div>
-              ))}
+                {responseAttachments.map((att) => (
+                  <div key={att.id} className="space-y-1">
+                    <div className="text-[11px] font-medium text-gray-800">Response attachment ({att.id.slice(0, 8)})</div>
+                    {renderAttachmentContent(att)}
+                  </div>
+                ))}
+                {providerRawAttachmentsForOutput.map((att) => (
+                  <div key={att.id} className="space-y-1">
+                    <div className="text-[11px] font-medium text-gray-800">Provider payload ({att.id.slice(0, 8)})</div>
+                    {renderAttachmentContent(att, 'muted')}
+                  </div>
+                ))}
+              </div>
             </div>
           </div>
         </section>
       )}
 
       {event.toolExecution && (
-        <section className="flex min-h-[220px] flex-col gap-4 md:flex-row md:gap-6 md:min-h-[280px]">
-          <div className="flex min-h-0 flex-1 flex-col border">
-            <header className="border-b px-3 py-2 text-xs font-semibold uppercase tracking-wide text-gray-500">Input</header>
-            <div className="flex-1 min-h-0 overflow-y-auto px-3 py-2 space-y-3">
-              <div className="space-y-1 text-[11px] text-gray-600">
-                <div>
-                  <span className="font-medium text-gray-800">Tool:</span> {event.toolExecution.toolName}
-                </div>
-                <div>
-                  <span className="font-medium text-gray-800">Status:</span> {event.toolExecution.execStatus}
-                </div>
-                <div>
-                  <span className="font-medium text-gray-800">Tool call:</span> {event.toolExecution.toolCallId ?? '—'}
-                </div>
-              </div>
-              <div className="space-y-1">
-                <div className="text-[11px] font-medium text-gray-800">Input payload</div>
-                {jsonBlock(event.toolExecution.input)}
-              </div>
-              {toolInputAttachments.map((att) => (
-                <div key={att.id} className="space-y-1">
-                  <div className="text-[11px] font-medium text-gray-800">Attachment ({att.id.slice(0, 8)})</div>
-                  {renderAttachmentContent(att)}
-                </div>
-              ))}
-            </div>
+        <section className="space-y-3">
+          <div className="flex flex-wrap items-center gap-3 text-[11px] text-gray-600">
+            <span>
+              <span className="font-medium text-gray-800">Tool:</span> {event.toolExecution.toolName}
+            </span>
+            <span>
+              <span className="font-medium text-gray-800">Status:</span> {event.toolExecution.execStatus}
+            </span>
+            <span>
+              <span className="font-medium text-gray-800">Tool call:</span> {event.toolExecution.toolCallId ?? '—'}
+            </span>
           </div>
-          <div className="flex min-h-0 flex-1 flex-col border">
-            <header className="border-b px-3 py-2 text-xs font-semibold uppercase tracking-wide text-gray-500">Output</header>
-            <div className="flex-1 min-h-0 overflow-y-auto px-3 py-2 space-y-3">
-              <div className="space-y-1">
-                <div className="text-[11px] font-medium text-gray-800">Output payload</div>
-                {jsonBlock(event.toolExecution.output)}
-              </div>
-              {event.toolExecution.errorMessage && (
-                <div className="text-[11px] text-red-600">Error: {event.toolExecution.errorMessage}</div>
-              )}
-              {event.toolExecution.raw !== undefined && event.toolExecution.raw !== null && (
+          <div className="flex min-h-[220px] flex-col gap-4 md:min-h-[280px] md:flex-row md:gap-6">
+            <div className="flex min-h-0 flex-1 flex-col border">
+              <header className="border-b px-3 py-2 text-xs font-semibold uppercase tracking-wide text-gray-500">Input</header>
+              <div className="flex-1 min-h-0 overflow-y-auto px-3 py-2 space-y-3">
                 <div className="space-y-1">
-                  <div className="text-[11px] font-medium text-gray-800">Raw payload</div>
-                  {jsonBlock(event.toolExecution.raw)}
+                  <div className="text-[11px] font-medium text-gray-800">Input payload</div>
+                  {jsonBlock(event.toolExecution.input)}
                 </div>
-              )}
-              {toolOutputAttachments.map((att) => (
-                <div key={att.id} className="space-y-1">
-                  <div className="text-[11px] font-medium text-gray-800">Attachment ({att.id.slice(0, 8)})</div>
-                  {renderAttachmentContent(att)}
-                </div>
-              ))}
+                {toolInputAttachments.map((att) => (
+                  <div key={att.id} className="space-y-1">
+                    <div className="text-[11px] font-medium text-gray-800">Attachment ({att.id.slice(0, 8)})</div>
+                    {renderAttachmentContent(att)}
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div className="flex min-h-0 flex-1 flex-col border">
+              <header className="border-b px-3 py-2 text-xs font-semibold uppercase tracking-wide text-gray-500">Output</header>
+              <div className="flex-1 min-h-0 overflow-y-auto px-3 py-2 space-y-3">
+                <ToolOutputVisualization eventId={event.id} value={event.toolExecution.output} />
+                {event.toolExecution.errorMessage && (
+                  <div className="text-[11px] text-red-600">Error: {event.toolExecution.errorMessage}</div>
+                )}
+                {event.toolExecution.raw !== undefined && event.toolExecution.raw !== null && (
+                  <div className="space-y-1">
+                    <div className="text-[11px] font-medium text-gray-800">Raw payload</div>
+                    {jsonBlock(event.toolExecution.raw)}
+                  </div>
+                )}
+                {toolOutputAttachments.map((att) => (
+                  <div key={att.id} className="space-y-1">
+                    <div className="text-[11px] font-medium text-gray-800">Attachment ({att.id.slice(0, 8)})</div>
+                    {renderAttachmentContent(att)}
+                  </div>
+                ))}
+              </div>
             </div>
           </div>
         </section>
@@ -247,7 +396,6 @@ export function RunTimelineEventDetails({ event }: { event: RunTimelineEvent }) 
             <div>Role: {event.message.role}</div>
             {event.message.kind && <div>Kind: {event.message.kind}</div>}
             {event.message.text && <div>{textBlock(event.message.text)}</div>}
-            <div>{jsonBlock(event.message.source)}</div>
           </div>
         </section>
       )}
@@ -284,7 +432,7 @@ export function RunTimelineEventDetails({ event }: { event: RunTimelineEvent }) 
         </section>
       )}
 
-      {(remainingAttachments.length > 0 || providerRawAttachmentsForAttachments.length > 0) && (
+      {(promptAttachments.length > 0 || remainingAttachments.length > 0 || providerRawAttachmentsForAttachments.length > 0) && (
         <section className="space-y-2">
           <h4 className="text-sm font-semibold text-gray-800">Attachments</h4>
           <div className="space-y-3">
@@ -293,6 +441,14 @@ export function RunTimelineEventDetails({ event }: { event: RunTimelineEvent }) 
                 <div className="text-[11px] font-medium text-gray-800">Provider payloads ({providerRawAttachmentsForAttachments.length})</div>
                 {providerRawAttachmentsForAttachments.map((att) => (
                   <div key={`provider-${att.id}`}>{renderAttachmentContent(att, 'muted')}</div>
+                ))}
+              </div>
+            )}
+            {promptAttachments.length > 0 && (
+              <div className="space-y-1">
+                <div className="text-[11px] font-medium text-gray-800">Prompt attachments ({promptAttachments.length})</div>
+                {promptAttachments.map((att) => (
+                  <div key={`prompt-${att.id}`}>{renderAttachmentContent(att)}</div>
                 ))}
               </div>
             )}
