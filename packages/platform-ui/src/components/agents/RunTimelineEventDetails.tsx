@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { stringify as stringifyYaml } from 'yaml';
 import type { RunTimelineEvent } from '@/api/types/agents';
 import { STATUS_COLORS, formatDuration, getEventTypeLabel } from './runTimelineFormatting';
@@ -209,7 +209,7 @@ function ToolOutputSection({
   const { mode, setMode, rendered } = useToolOutputMode(eventId, value);
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col rounded border border-gray-200 bg-white">
+    <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded border border-gray-200 bg-white">
       <header className="flex items-center justify-between border-b border-gray-200 px-3 py-2 text-xs font-semibold uppercase tracking-wide text-gray-500">
         <span>Output</span>
         <select
@@ -272,9 +272,117 @@ export function RunTimelineEventDetails({ event }: { event: RunTimelineEvent }) 
     providerRawAttachments.length > 0 ||
     remainingAttachments.length > 0;
 
+  const otherSections: ReactNode[] = [];
+
+  if (event.message) {
+    otherSections.push(
+      <section key="message" className="space-y-2">
+        <h4 className="text-sm font-semibold text-gray-800">Message</h4>
+        <div className="space-y-1">
+          <div>ID: {event.message.messageId}</div>
+          <div>Role: {event.message.role}</div>
+          {event.message.kind && <div>Kind: {event.message.kind}</div>}
+          {event.message.text && <div>{textBlock(event.message.text)}</div>}
+        </div>
+      </section>,
+    );
+  }
+
+  if (event.summarization) {
+    otherSections.push(
+      <section key="summarization" className="space-y-2">
+        <h4 className="text-sm font-semibold text-gray-800">Summarization</h4>
+        <div className="space-y-1 text-[11px] text-gray-600">
+          <div>
+            <span className="font-medium text-gray-800">New context messages:</span> {event.summarization.newContextCount}
+          </div>
+          {event.summarization.oldContextTokens !== null && event.summarization.oldContextTokens !== undefined && (
+            <div>
+              <span className="font-medium text-gray-800">Old tokens:</span> {event.summarization.oldContextTokens}
+            </div>
+          )}
+        </div>
+        <div>
+          <div className="text-[11px] font-medium text-gray-800">Summary</div>
+          {textBlock(event.summarization.summaryText)}
+        </div>
+      </section>,
+    );
+  }
+
+  if (event.injection) {
+    otherSections.push(
+      <section key="injection" className="space-y-2">
+        <h4 className="text-sm font-semibold text-gray-800">Injection</h4>
+        <div className="space-y-1">
+          <div>Messages: {event.injection.messageIds.join(', ')}</div>
+          {event.injection.reason && <div>Reason: {event.injection.reason}</div>}
+        </div>
+      </section>,
+    );
+  }
+
+  if (shouldShowAttachmentsSection) {
+    otherSections.push(
+      <section key="attachments" className="space-y-2">
+        <h4 className="text-sm font-semibold text-gray-800">Attachments</h4>
+        <div className="space-y-3">
+          {providerRawAttachments.length > 0 && (
+            <div className="space-y-1">
+              <div className="text-[10px] uppercase tracking-wide text-gray-500">
+                Provider payloads ({providerRawAttachments.length})
+              </div>
+              {providerRawAttachments.map((att) => (
+                <div key={`provider-${att.id}`}>{renderAttachmentContent(att, 'muted')}</div>
+              ))}
+            </div>
+          )}
+          {promptAttachments.length > 0 && (
+            <div className="space-y-1">
+              <div className="text-[10px] uppercase tracking-wide text-gray-500">
+                Prompt attachments ({promptAttachments.length})
+              </div>
+              {promptAttachments.map((att) => (
+                <div key={`prompt-${att.id}`}>{renderAttachmentContent(att)}</div>
+              ))}
+            </div>
+          )}
+          {responseAttachments.length > 0 && (
+            <div className="space-y-1">
+              <div className="text-[10px] uppercase tracking-wide text-gray-500">
+                Response attachments ({responseAttachments.length})
+              </div>
+              {responseAttachments.map((att) => (
+                <div key={`response-${att.id}`}>{renderAttachmentContent(att)}</div>
+              ))}
+            </div>
+          )}
+          {remainingAttachments.map((att) => (
+            <div key={att.id} className="space-y-1">
+              <div className="text-[10px] uppercase tracking-wide text-gray-500">
+                {att.kind} • {att.id.slice(0, 8)} • {att.sizeBytes} bytes {att.isGzip ? '• gzipped' : ''}
+              </div>
+              {renderAttachmentContent(att)}
+            </div>
+          ))}
+        </div>
+      </section>,
+    );
+  }
+
+  const hasOtherSections = otherSections.length > 0;
+
+  const llmCall = event.llmCall;
+  const hasLlmResponse = Boolean(llmCall?.responseText);
+  const hasLlmToolCalls = (llmCall?.toolCalls.length ?? 0) > 0;
+  const toolExecution = event.toolExecution;
+
   return (
-    <div className="flex h-full min-h-0 flex-col gap-4 text-xs text-gray-700" data-testid="timeline-event-details">
-      <section className="space-y-2">
+    <div
+      className="flex h-full min-h-0 flex-col gap-4 overflow-hidden text-xs text-gray-700"
+      data-testid="timeline-event-details"
+    >
+      <section className="shrink-0 space-y-2">
         <div className="flex flex-wrap items-center gap-2 text-sm font-semibold text-gray-900">
           <span>{getEventTypeLabel(event)}</span>
           <span className={`text-white text-[11px] px-2 py-0.5 rounded ${STATUS_COLORS[event.status] ?? 'bg-gray-500'}`}>{event.status}</span>
@@ -291,176 +399,94 @@ export function RunTimelineEventDetails({ event }: { event: RunTimelineEvent }) 
         {event.errorMessage && <div className="text-red-600">Error: {event.errorMessage}</div>}
       </section>
 
-      {event.llmCall && (
-        <section className="space-y-3">
-          <div className="flex flex-wrap items-center gap-3 text-[11px] text-gray-600">
-            {event.llmCall.model && (
+      <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-hidden">
+        {llmCall && (
+          <section className="flex min-h-0 flex-1 flex-col gap-3 overflow-hidden">
+            <div className="flex flex-wrap items-center gap-3 text-[11px] text-gray-600">
+              {llmCall.model && (
+                <span>
+                  <span className="font-medium text-gray-800">Model:</span> {llmCall.model}
+                </span>
+              )}
               <span>
-                <span className="font-medium text-gray-800">Model:</span> {event.llmCall.model}
+                <span className="font-medium text-gray-800">Context items:</span> {llmCall.contextItemIds.length}
               </span>
-            )}
-            <span>
-              <span className="font-medium text-gray-800">Context items:</span> {event.llmCall.contextItemIds.length}
-            </span>
-          </div>
-          <div className="flex min-h-[260px] flex-col gap-4 md:min-h-[320px] md:flex-row md:gap-6">
-            <div className="flex min-h-0 flex-1 flex-col rounded border border-gray-200 bg-white">
-              <header className="border-b border-gray-200 px-3 py-2 text-xs font-semibold uppercase tracking-wide text-gray-500">Context</header>
-              <div className="flex-1 min-h-0 overflow-y-auto px-3 py-2">
-                <LLMContextViewer ids={event.llmCall.contextItemIds} />
+            </div>
+            <div className="flex min-h-[260px] flex-1 flex-col gap-4 md:min-h-[320px] md:flex-row md:gap-6">
+              <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded border border-gray-200 bg-white">
+                <header className="border-b border-gray-200 px-3 py-2 text-xs font-semibold uppercase tracking-wide text-gray-500">Context</header>
+                <div className="flex-1 min-h-0 overflow-y-auto px-3 py-2">
+                  <LLMContextViewer ids={llmCall.contextItemIds} />
+                </div>
               </div>
-            </div>
-            <div className="flex min-h-0 flex-1 flex-col gap-4">
-              {event.llmCall.responseText && (
-                <div className="flex min-h-0 flex-col rounded border border-gray-200 bg-white">
-                  <header className="border-b border-gray-200 px-3 py-2 text-xs font-semibold uppercase tracking-wide text-gray-500">Response</header>
-                  <div className="flex-1 min-h-0 overflow-y-auto px-3 py-2">{textBlock(event.llmCall.responseText)}</div>
-                </div>
-              )}
-              {event.llmCall.toolCalls.length > 0 && (
-                <div className="flex min-h-0 flex-col rounded border border-gray-200 bg-white">
-                  <header className="border-b border-gray-200 px-3 py-2 text-xs font-semibold uppercase tracking-wide text-gray-500">
-                    Tool Calls ({event.llmCall.toolCalls.length})
-                  </header>
-                  <div className="flex-1 min-h-0 space-y-2 overflow-y-auto px-3 py-2">
-                    {event.llmCall.toolCalls.map((tc) => (
-                      <div key={tc.callId}>{jsonBlock({ callId: tc.callId, name: tc.name, arguments: tc.arguments })}</div>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
-        </section>
-      )}
-
-      {event.toolExecution && (
-        <section className="space-y-3">
-          <div className="flex flex-wrap items-center gap-3 text-[11px] text-gray-600">
-            <span>
-              <span className="font-medium text-gray-800">Tool:</span> {event.toolExecution.toolName}
-            </span>
-            <span>
-              <span className="font-medium text-gray-800">Status:</span> {event.toolExecution.execStatus}
-            </span>
-            {event.toolExecution.toolCallId && (
-              <span>
-                <span className="font-medium text-gray-800">Tool call:</span> {event.toolExecution.toolCallId}
-              </span>
-            )}
-          </div>
-          <div className="flex min-h-[220px] flex-col gap-4 md:min-h-[280px] md:flex-row md:gap-6">
-            <div className="flex min-h-0 flex-1 flex-col rounded border border-gray-200 bg-white">
-              <header className="border-b border-gray-200 px-3 py-2 text-xs font-semibold uppercase tracking-wide text-gray-500">Input</header>
-              <div className="flex-1 min-h-0 space-y-3 overflow-y-auto px-3 py-2">
-                {jsonBlock(event.toolExecution.input, 'default')}
-                {toolInputAttachments.map((att) => (
-                  <div key={att.id} className="space-y-1">
-                    <div className="text-[10px] uppercase tracking-wide text-gray-500">
-                      Attachment • {att.id.slice(0, 8)}{att.isGzip ? ' • gzipped' : ''}
+              {(hasLlmResponse || hasLlmToolCalls) && (
+                <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-hidden md:gap-6">
+                  {hasLlmResponse && (
+                    <div className="flex min-h-0 flex-col overflow-hidden rounded border border-gray-200 bg-white md:flex-1">
+                      <header className="border-b border-gray-200 px-3 py-2 text-xs font-semibold uppercase tracking-wide text-gray-500">Response</header>
+                      <div className="flex-1 min-h-0 overflow-y-auto px-3 py-2">{textBlock(llmCall.responseText ?? '')}</div>
                     </div>
-                    {renderAttachmentContent(att)}
-                  </div>
-                ))}
-              </div>
+                  )}
+                  {hasLlmToolCalls && (
+                    <div className="flex min-h-0 flex-col overflow-hidden rounded border border-gray-200 bg-white md:flex-1">
+                      <header className="border-b border-gray-200 px-3 py-2 text-xs font-semibold uppercase tracking-wide text-gray-500">
+                        Tool Calls ({llmCall.toolCalls.length})
+                      </header>
+                      <div className="flex-1 min-h-0 space-y-2 overflow-y-auto px-3 py-2">
+                        {llmCall.toolCalls.map((tc) => (
+                          <div key={tc.callId}>{jsonBlock({ callId: tc.callId, name: tc.name, arguments: tc.arguments })}</div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
-            <ToolOutputSection
-              eventId={event.id}
-              value={event.toolExecution.output}
-              errorMessage={event.toolExecution.errorMessage}
-              attachments={toolOutputAttachments}
-            />
-          </div>
-        </section>
-      )}
+          </section>
+        )}
 
-      {event.message && (
-        <section className="space-y-2">
-          <h4 className="text-sm font-semibold text-gray-800">Message</h4>
-          <div className="space-y-1">
-            <div>ID: {event.message.messageId}</div>
-            <div>Role: {event.message.role}</div>
-            {event.message.kind && <div>Kind: {event.message.kind}</div>}
-            {event.message.text && <div>{textBlock(event.message.text)}</div>}
-          </div>
-        </section>
-      )}
-
-      {event.summarization && (
-        <section className="space-y-2">
-          <h4 className="text-sm font-semibold text-gray-800">Summarization</h4>
-          <div className="space-y-1 text-[11px] text-gray-600">
-            <div>
-              <span className="font-medium text-gray-800">New context messages:</span> {event.summarization.newContextCount}
+        {toolExecution && (
+          <section className="flex min-h-0 flex-1 flex-col gap-3 overflow-hidden">
+            <div className="flex flex-wrap items-center gap-3 text-[11px] text-gray-600">
+              <span>
+                <span className="font-medium text-gray-800">Tool:</span> {toolExecution.toolName}
+              </span>
+              <span>
+                <span className="font-medium text-gray-800">Status:</span> {toolExecution.execStatus}
+              </span>
+              {toolExecution.toolCallId && (
+                <span>
+                  <span className="font-medium text-gray-800">Tool call:</span> {toolExecution.toolCallId}
+                </span>
+              )}
             </div>
-            {event.summarization.oldContextTokens !== null && event.summarization.oldContextTokens !== undefined && (
-              <div>
-                <span className="font-medium text-gray-800">Old tokens:</span> {event.summarization.oldContextTokens}
+            <div className="flex min-h-[220px] flex-1 flex-col gap-4 md:min-h-[280px] md:flex-row md:gap-6">
+              <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded border border-gray-200 bg-white">
+                <header className="border-b border-gray-200 px-3 py-2 text-xs font-semibold uppercase tracking-wide text-gray-500">Input</header>
+                <div className="flex-1 min-h-0 space-y-3 overflow-y-auto px-3 py-2">
+                  {jsonBlock(toolExecution.input, 'default')}
+                  {toolInputAttachments.map((att) => (
+                    <div key={att.id} className="space-y-1">
+                      <div className="text-[10px] uppercase tracking-wide text-gray-500">
+                        Attachment • {att.id.slice(0, 8)}{att.isGzip ? ' • gzipped' : ''}
+                      </div>
+                      {renderAttachmentContent(att)}
+                    </div>
+                  ))}
+                </div>
               </div>
-            )}
-          </div>
-          <div>
-            <div className="text-[11px] font-medium text-gray-800">Summary</div>
-            {textBlock(event.summarization.summaryText)}
-          </div>
-        </section>
-      )}
+              <ToolOutputSection
+                eventId={event.id}
+                value={toolExecution.output}
+                errorMessage={toolExecution.errorMessage}
+                attachments={toolOutputAttachments}
+              />
+            </div>
+          </section>
+        )}
 
-      {event.injection && (
-        <section className="space-y-2">
-          <h4 className="text-sm font-semibold text-gray-800">Injection</h4>
-          <div className="space-y-1">
-            <div>Messages: {event.injection.messageIds.join(', ')}</div>
-            {event.injection.reason && <div>Reason: {event.injection.reason}</div>}
-          </div>
-        </section>
-      )}
-
-      {shouldShowAttachmentsSection && (
-        <section className="space-y-2">
-          <h4 className="text-sm font-semibold text-gray-800">Attachments</h4>
-          <div className="space-y-3">
-            {providerRawAttachments.length > 0 && (
-              <div className="space-y-1">
-                <div className="text-[10px] uppercase tracking-wide text-gray-500">
-                  Provider payloads ({providerRawAttachments.length})
-                </div>
-                {providerRawAttachments.map((att) => (
-                  <div key={`provider-${att.id}`}>{renderAttachmentContent(att, 'muted')}</div>
-                ))}
-              </div>
-            )}
-            {promptAttachments.length > 0 && (
-              <div className="space-y-1">
-                <div className="text-[10px] uppercase tracking-wide text-gray-500">
-                  Prompt attachments ({promptAttachments.length})
-                </div>
-                {promptAttachments.map((att) => (
-                  <div key={`prompt-${att.id}`}>{renderAttachmentContent(att)}</div>
-                ))}
-              </div>
-            )}
-            {responseAttachments.length > 0 && (
-              <div className="space-y-1">
-                <div className="text-[10px] uppercase tracking-wide text-gray-500">
-                  Response attachments ({responseAttachments.length})
-                </div>
-                {responseAttachments.map((att) => (
-                  <div key={`response-${att.id}`}>{renderAttachmentContent(att)}</div>
-                ))}
-              </div>
-            )}
-            {remainingAttachments.map((att) => (
-              <div key={att.id} className="space-y-1">
-                <div className="text-[10px] uppercase tracking-wide text-gray-500">
-                  {att.kind} • {att.id.slice(0, 8)} • {att.sizeBytes} bytes {att.isGzip ? '• gzipped' : ''}
-                </div>
-                {renderAttachmentContent(att)}
-              </div>
-            ))}
-          </div>
-        </section>
-      )}
+        {hasOtherSections && <div className="flex min-h-0 flex-1 flex-col space-y-4 overflow-y-auto">{otherSections}</div>}
+      </div>
     </div>
   );
 }

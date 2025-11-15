@@ -343,22 +343,31 @@ export function AgentsRunTimeline() {
         {eventsQuery.isFetching && <div className="mt-2 text-xs text-gray-500">Loading events…</div>}
       </div>
 
-      <div className="flex-1 min-h-0 px-4 py-4 md:px-6 md:py-6">
-        <div className="flex h-full min-h-0 flex-col gap-4 md:flex-row md:gap-6">
-          <section className="flex min-h-0 w-full flex-col border md:w-[360px] md:flex-none md:border-r">
-            <header className="border-b px-3 py-2 text-xs font-semibold uppercase tracking-wide text-gray-500">Events</header>
+      <div className="flex-1 min-h-0">
+        <div className="flex h-full min-h-0 flex-col gap-4 md:grid md:grid-cols-[360px_minmax(0,1fr)] md:gap-0">
+          <section
+            className="flex min-h-0 w-full flex-col overflow-hidden md:border-r md:border-gray-200"
+            role="region"
+            aria-labelledby="run-timeline-events-heading"
+          >
+            <header
+              id="run-timeline-events-heading"
+              className="border-b px-3 py-2 text-xs font-semibold uppercase tracking-wide text-gray-500"
+            >
+              Events
+            </header>
             <div className="px-3 py-2 text-xs text-gray-500" aria-live="polite">
               {events.length === 0 && !eventsQuery.isFetching ? 'No events for selected filters.' : null}
             </div>
             <div
               ref={listRef}
               role="listbox"
-              aria-label="Run events"
+              aria-labelledby="run-timeline-events-heading"
               aria-busy={eventsQuery.isFetching}
               aria-activedescendant={selectedEventId ? `run-event-option-${selectedEventId}` : undefined}
               tabIndex={0}
               onKeyDown={handleListKeyDown}
-              className="flex-1 min-h-0 overflow-y-auto px-3 py-2 space-y-2 focus:outline-none"
+              className="flex-1 min-h-0 space-y-2 overflow-y-auto focus:outline-none"
             >
               {events.map((event) => (
                 <RunTimelineEventListItem
@@ -377,13 +386,18 @@ export function AgentsRunTimeline() {
               ))}
             </div>
           </section>
-          <section className="hidden min-h-0 flex-1 flex-col md:flex">
-            <header className="border-b px-4 py-2 text-xs font-semibold uppercase tracking-wide text-gray-500">Details</header>
-            <div className="flex-1 min-h-0 overflow-y-auto px-4 py-3">
+          <section
+            className="hidden min-h-0 flex-1 flex-col overflow-hidden md:flex"
+            role="region"
+            aria-label="Run event details"
+          >
+            <div className="flex-1 min-h-0 overflow-hidden">
               {selectedEvent ? (
                 <RunTimelineEventDetails event={selectedEvent} />
               ) : (
-                <div className="text-sm text-gray-500">Select an event to view details.</div>
+                <div className="flex h-full items-center justify-center px-4 text-sm text-gray-500">
+                  Select an event to view details.
+                </div>
               )}
             </div>
           </section>
