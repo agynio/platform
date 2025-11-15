@@ -517,7 +517,7 @@ export function AgentsRunTimeline() {
             role="region"
             aria-label="Run event details"
           >
-            <div className="flex-1 min-h-0 overflow-hidden">
+            <div className={`flex-1 min-h-0 overflow-hidden${selectedEvent ? ' p-3 md:p-4' : ''}`}>
               {selectedEvent ? (
                 <RunTimelineEventDetails event={selectedEvent} />
               ) : (
