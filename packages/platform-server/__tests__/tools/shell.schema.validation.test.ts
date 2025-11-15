@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { ShellToolStaticConfigSchema } from '../../src/nodes/tools/shell_command/shell_command.node';
+import { bashCommandSchema } from '../../src/nodes/tools/shell_command/shell_command.tool';
 
 describe('ShellToolStaticConfigSchema validation', () => {
   it('accepts 0 for both timeouts', () => {
@@ -15,5 +16,12 @@ describe('ShellToolStaticConfigSchema validation', () => {
       expect(execRes.success).toBe(false);
       expect(idleRes.success).toBe(false);
     }
+  });
+
+  it('validates cwd input schema', () => {
+    const ok = bashCommandSchema.safeParse({ command: 'pwd', cwd: 'project/src' });
+    expect(ok.success).toBe(true);
+    const invalid = bashCommandSchema.safeParse({ command: 'pwd', cwd: 'foo$bar' });
+    expect(invalid.success).toBe(false);
   });
 });

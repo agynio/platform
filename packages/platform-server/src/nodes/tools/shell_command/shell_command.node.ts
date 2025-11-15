@@ -70,6 +70,19 @@ export class ShellCommandNode extends BaseToolNode<z.infer<typeof ShellToolStati
     this.containerProvider = provider;
   }
 
+  getWorkspaceRoot(): string {
+    const fallback = '/workspace';
+    const provider = this.containerProvider;
+    if (!provider) return fallback;
+    try {
+      const maybe = typeof provider.getWorkspaceRoot === 'function' ? provider.getWorkspaceRoot() : undefined;
+      if (typeof maybe === 'string' && maybe.trim()) return maybe.trim();
+    } catch {
+      // ignore provider errors and fall back to default
+    }
+    return fallback;
+  }
+
   getTool(): ShellCommandTool {
     if (!this.toolInstance) {
       const tool = new ShellCommandTool(this.archive);

@@ -93,6 +93,16 @@ export class WorkspaceNode extends Node<ContainerProviderStaticConfig> {
     return { sourcePorts: { $self: { kind: 'instance' as const } } } as const;
   }
 
+  getWorkspaceRoot(): string {
+    const base = (DEFAULTS.workingDir || '/workspace') as string;
+    const volumes = this.config?.volumes;
+    if (volumes?.enabled) {
+      const candidate = typeof volumes.mountPath === 'string' && volumes.mountPath.trim() ? volumes.mountPath.trim() : base;
+      return candidate;
+    }
+    return base;
+  }
+
   async provide(threadId: string): Promise<ContainerHandle> {
     // Build base thread labels and workspace-specific labels
     const labels = this.idLabels(threadId);
