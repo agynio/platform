@@ -39,6 +39,7 @@ export function NixPackagesSection(props: ControlledProps | UncontrolledProps) {
   const lastPushedPackagesLen = useRef<number>(0);
   // Stable key of the packages array we most recently pushed upstream.
   const lastPushedPkgsKey = useRef<string>('');
+  const isHydrating = useRef<boolean>(false);
 
   // Initialize from existing config.nix.packages when mounting or when config changes externally
   const isControlled = (p: ControlledProps | UncontrolledProps): p is ControlledProps => 'value' in p && 'onChange' in p;
@@ -56,6 +57,8 @@ export function NixPackagesSection(props: ControlledProps | UncontrolledProps) {
     // Guard: if props reflect exactly what we just pushed, skip rehydration
     if (incomingKey === lastPushedPkgsKey.current) return;
 
+    isHydrating.current = true;
+
     const curr = incoming.filter((p) => p && typeof p.name === 'string');
     const nextSelected: SelectedPkg[] = curr.map((p) => ({ name: p.name }));
     setSelected((prev) => {
@@ -64,11 +67,48 @@ export function NixPackagesSection(props: ControlledProps | UncontrolledProps) {
       return prevKey === nextKey ? prev : nextSelected;
     });
     // Hydrate chosen versions for UI from incoming value
-    setVersionsByName((prev) => {
-      const next: Record<string, string | ''> = { ...prev };
-      for (const p of curr) if (p.version) next[p.name] = String(p.version);
-      return next;
-    });
+    const nextVersions: Record<string, string | ''> = {};
+    for (const p of curr) if (p.version) nextVersions[p.name] = String(p.version);
+    setVersionsByName((prev) => (JSON.stringify(prev) === JSON.stringify(nextVersions) ? prev : nextVersions));
+
+    const nextDetails: Record<string, { version: string; commitHash: string; attributePath: string }> = {};
+    for (const p of curr) {
+      if (p.version && p.commitHash && p.attributePath) {
+        nextDetails[p.name] = {
+          version: String(p.version),
+          commitHash: String(p.commitHash),
+          attributePath: String(p.attributePath),
+        };
+      }
+    }
+    setDetailsByName((prev) => (JSON.stringify(prev) === JSON.stringify(nextDetails) ? prev : nextDetails));
+
+    const hydratedPackages = curr.flatMap((p) =>
+      p.version && p.commitHash && p.attributePath
+        ? [
+            {
+              name: p.name,
+              version: String(p.version),
+              commitHash: String(p.commitHash),
+              attributePath: String(p.attributePath),
+            },
+          ]
+        : [],
+    );
+
+    lastPushedPackagesLen.current = hydratedPackages.length;
+    lastPushedPkgsKey.current = incomingKey;
+
+    if (controlled) {
+      lastPushedJson.current = JSON.stringify(hydratedPackages);
+    } else {
+      const conf = (props as UncontrolledProps).config as ConfigWithNix;
+      const nextConfig: Record<string, unknown> = {
+        ...conf,
+        nix: { ...(conf.nix ?? {}), packages: hydratedPackages },
+      };
+      lastPushedJson.current = JSON.stringify(nextConfig);
+    }
   }, [controlled, controlledValueKey, uncontrolledPkgsKey, props]);
 
   // Push updates into node config when selections/channels change
@@ -80,6 +120,15 @@ export function NixPackagesSection(props: ControlledProps | UncontrolledProps) {
         ? [{ name: p.name, version: d.version, commitHash: d.commitHash, attributePath: d.attributePath }]
         : [];
     });
+
+    if (isHydrating.current) {
+      const packagesKey = toStableKey(packages as NixPackageSelection[]);
+      if (packagesKey === lastPushedPkgsKey.current) {
+        lastPushedPackagesLen.current = packages.length;
+        isHydrating.current = false;
+      }
+      return;
+    }
     // No debug logs in production
 
     // Skip no-op early pushes when there are no chosen versions and nothing was previously pushed
@@ -286,6 +335,10 @@ function SelectedPackageItem({ pkg, chosen, onChoose, onRemove, onResolved }: { 
 
   const label = pkg.name;
   const versions = useMemo(() => qVersions.data || [], [qVersions.data]);
+  const versionOptions = useMemo(() => {
+    if (!chosen) return versions;
+    return versions.includes(chosen) ? versions : [chosen, ...versions];
+  }, [versions, chosen]);
 
   // Optional: auto-select only when there is a single version available
   useEffect(() => {
@@ -338,10 +391,10 @@ function SelectedPackageItem({ pkg, chosen, onChoose, onRemove, onResolved }: { 
           <option value="" disabled>loading…</option>
         ) : qVersions.isError ? (
           <option value="" disabled>error</option>
-        ) : versions.length === 0 ? (
+        ) : versionOptions.length === 0 ? (
           <option value="" disabled>n/a</option>
         ) : (
-          versions.map((v) => (
+          versionOptions.map((v) => (
             <option key={v} value={v}>{v}</option>
           ))
         )}
