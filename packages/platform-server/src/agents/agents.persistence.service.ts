@@ -14,6 +14,8 @@ import { ThreadsMetricsService, type ThreadMetrics } from './threads.metrics.ser
 
 export type RunStartResult = { runId: string };
 
+type RunEventDelegate = Prisma.TransactionClient['runEvent'];
+
 @Injectable()
 export class AgentsPersistenceService implements GraphEventsPublisherAware {
   private events: GraphEventsPublisher;
@@ -469,8 +471,8 @@ export class AgentsPersistenceService implements GraphEventsPublisherAware {
     return titles;
   }
 
-  private getRunEventDelegate(tx: Prisma.TransactionClient): Prisma.RunEventDelegate<false> | undefined {
-    const candidate = (tx as { runEvent?: Prisma.RunEventDelegate<false> }).runEvent;
+  private getRunEventDelegate(tx: Prisma.TransactionClient): RunEventDelegate | undefined {
+    const candidate = (tx as { runEvent?: RunEventDelegate }).runEvent;
     if (!candidate || typeof candidate.findFirst !== 'function') return undefined;
     return candidate;
   }

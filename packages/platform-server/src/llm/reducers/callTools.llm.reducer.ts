@@ -5,7 +5,7 @@ import { FunctionTool, Reducer, ResponseMessage, ToolCallMessage, ToolCallOutput
 import { LoggerService } from '../../core/services/logger.service';
 import { Inject, Injectable, Scope } from '@nestjs/common';
 import { McpError } from '../../nodes/mcp/types';
-import { RunEventsService } from '../../events/run-events.service';
+import { RunEventsService, type RunEventMetadata } from '../../events/run-events.service';
 import { ToolExecStatus, Prisma } from '@prisma/client';
 import { toPrismaJsonValue } from '../services/messages.serialization';
 import type { ResponseFunctionCallOutputItemList } from 'openai/resources/responses/responses.mjs';
@@ -33,7 +33,7 @@ type ToolCallErrorPayload = {
 type ToolCallStructuredOutput = ToolCallRaw | ToolCallErrorPayload;
 
 type ToolExecutionPreparation = {
-  metadata?: unknown;
+  metadata?: RunEventMetadata;
   sourceSpanId?: string | null;
   prepared?: unknown;
 };
