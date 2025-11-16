@@ -80,14 +80,14 @@ export function LLMContextViewer({ ids, onItemsRendered, onBeforeLoadMore }: LLM
         const textContent = toPlainText(item.contentText, item.contentJson);
         const roleColor = ROLE_COLORS[item.role] ?? 'bg-gray-900 text-white';
         return (
-          <div key={item.id} className="space-y-2 text-[11px] text-gray-800">
+          <article key={item.id} className="space-y-2 text-[11px] text-gray-800">
             <header className="flex flex-wrap items-center gap-2 text-[10px] font-medium uppercase tracking-wide text-gray-500">
               <Badge className={`px-2 py-0.5 text-[10px] font-semibold capitalize leading-tight ${roleColor}`}>{item.role}</Badge>
               <span className="normal-case text-gray-600">{new Date(item.createdAt).toLocaleString()}</span>
               <span className="normal-case text-gray-500">{formatBytes(item.sizeBytes)}</span>
             </header>
             {textContent ? <div className="content-wrap text-gray-800">{textContent}</div> : null}
-          </div>
+          </article>
         );
       })}
 

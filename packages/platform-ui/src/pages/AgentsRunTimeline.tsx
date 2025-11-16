@@ -10,53 +10,44 @@ import { getEventTypeLabel } from '@/components/agents/runTimelineFormatting';
 
 const EVENT_TYPES: RunEventType[] = ['invocation_message', 'injection', 'llm_call', 'tool_execution', 'summarization'];
 const STATUS_TYPES: RunEventStatus[] = ['pending', 'running', 'success', 'error', 'cancelled'];
-
-function parseTimestamp(value: string): number {
-  const parsed = Date.parse(value);
-  return Number.isNaN(parsed) ? Number.NEGATIVE_INFINITY : parsed;
-}
+const PAGE_SIZE = 100;
+const SCROLL_THRESHOLD_PX = 40;
 
 function compareEvents(a: RunTimelineEvent, b: RunTimelineEvent): number {
-  const timeDiff = parseTimestamp(a.ts) - parseTimestamp(b.ts);
-  if (timeDiff !== 0) return timeDiff;
+  const timeA = Date.parse(a.ts);
+  const timeB = Date.parse(b.ts);
+  if (!Number.isNaN(timeA) && !Number.isNaN(timeB) && timeA !== timeB) {
+    return timeA - timeB;
+  }
+  if (!Number.isNaN(timeA) && !Number.isNaN(timeB)) {
+    return a.id.localeCompare(b.id);
+  }
   const lexical = a.ts.localeCompare(b.ts);
   if (lexical !== 0) return lexical;
   return a.id.localeCompare(b.id);
 }
 
-function sortEvents(events: RunTimelineEvent[]): RunTimelineEvent[] {
-  if (events.length <= 1) return events.slice();
-  return [...events].sort(compareEvents);
-}
-
-function matchesFilters(event: RunTimelineEvent, types: RunEventType[], statuses: RunEventStatus[]): boolean {
-  const typeOk = types.length === 0 || types.includes(event.type);
-  const statusOk = statuses.length === 0 || statuses.includes(event.status);
-  return typeOk && statusOk;
-}
-
-function mergeEvents(
-  prev: RunTimelineEvent[],
-  incoming: RunTimelineEvent[],
-  types: RunEventType[],
-  statuses: RunEventStatus[],
-): RunTimelineEvent[] {
-  if (incoming.length === 0) return prev;
-  const next = [...prev];
-  for (const event of incoming) {
-    const idx = next.findIndex((existing) => existing.id === event.id);
-    const include = matchesFilters(event, types, statuses);
-    if (idx >= 0) {
-      if (include) {
-        next[idx] = event;
-      } else {
-        next.splice(idx, 1);
-      }
-    } else if (include) {
-      next.push(event);
-    }
+function sortAndDedupe(entries: RunTimelineEvent[]): RunTimelineEvent[] {
+  const byId = new Map<string, RunTimelineEvent>();
+  for (const item of entries) {
+    byId.set(item.id, item);
   }
-  return sortEvents(next);
+  const unique = Array.from(byId.values());
+  unique.sort(compareEvents);
+  return unique;
+}
+
+function mergeEvents(existing: RunTimelineEvent[], incoming: RunTimelineEvent[], preferIncoming = false): RunTimelineEvent[] {
+  if (incoming.length === 0) return existing;
+  if (preferIncoming) {
+    return sortAndDedupe([...incoming, ...existing]);
+  }
+  return sortAndDedupe([...existing, ...incoming]);
+}
+
+function parseTimestamp(value: string): number {
+  const parsed = Date.parse(value);
+  return Number.isNaN(parsed) ? Number.NEGATIVE_INFINITY : parsed;
 }
 
 function compareCursors(a: RunTimelineEventsCursor, b: RunTimelineEventsCursor): number {
@@ -69,6 +60,19 @@ function compareCursors(a: RunTimelineEventsCursor, b: RunTimelineEventsCursor):
 
 function toCursor(event: RunTimelineEvent): RunTimelineEventsCursor {
   return { ts: event.ts, id: event.id };
+}
+
+function getSocketCursor(runId: string): RunTimelineEventsCursor | null {
+  if (typeof graphSocket.getRunCursor === 'function') {
+    return graphSocket.getRunCursor(runId);
+  }
+  return null;
+}
+
+function setSocketCursor(runId: string, cursor: RunTimelineEventsCursor | null, opts?: { force?: boolean }) {
+  if (typeof graphSocket.setRunCursor === 'function') {
+    graphSocket.setRunCursor(runId, cursor, opts);
+  }
 }
 
 function useMediaQuery(query: string): boolean {
@@ -112,65 +116,75 @@ export function AgentsRunTimeline() {
   const apiStatuses = useMemo(() => selectedStatuses, [selectedStatuses]);
 
   const summaryQuery = useRunTimelineSummary(runId);
-  const eventsQuery = useRunTimelineEvents(runId, { types: apiTypes, statuses: apiStatuses });
+  const typeParam = useMemo(() => (apiTypes.length ? apiTypes.join(',') : undefined), [apiTypes]);
+  const statusParam = useMemo(() => (apiStatuses.length ? apiStatuses.join(',') : undefined), [apiStatuses]);
+  const querySignature = useMemo(
+    () => `${runId ?? ''}|${typeParam ?? ''}|${statusParam ?? ''}`,
+    [runId, typeParam, statusParam],
+  );
+
+  const eventsQuery = useRunTimelineEvents(runId, {
+    types: apiTypes,
+    statuses: apiStatuses,
+    limit: PAGE_SIZE,
+    order: 'desc',
+  });
+  const { refetch: refetchEvents } = eventsQuery;
   const [events, setEvents] = useState<RunTimelineEvent[]>([]);
+  const [nextCursor, setNextCursor] = useState<RunTimelineEventsCursor | null>(null);
+  const [isLoadingPrev, setIsLoadingPrev] = useState(false);
   const cursorRef = useRef<RunTimelineEventsCursor | null>(null);
   const catchUpRef = useRef<Promise<unknown> | null>(null);
+
+  const listRef = useRef<HTMLDivElement | null>(null);
+  const selectedItemRef = useRef<HTMLDivElement | null>(null);
+  const pendingInitialScrollRef = useRef(true);
+  const pendingScrollToBottomRef = useRef(false);
+  const pendingPrependAdjustmentRef = useRef<{ previousHeight: number; previousTop: number } | null>(null);
+  const shouldStickToBottomRef = useRef(true);
+  const lastSignatureRef = useRef(querySignature);
+  const isLoadingPrevRef = useRef(false);
 
   const setCursor = useCallback(
     (cursor: RunTimelineEventsCursor | null, opts?: { force?: boolean }) => {
       if (!runId) return;
       if (!cursor) {
         cursorRef.current = null;
-        graphSocket.setRunCursor(runId, null, { force: true });
+        setSocketCursor(runId, null, { force: true });
         return;
       }
       const current = cursorRef.current;
       if (!current || opts?.force || compareCursors(cursor, current) > 0) {
         cursorRef.current = cursor;
-        graphSocket.setRunCursor(runId, cursor, { force: opts?.force });
+        setSocketCursor(runId, cursor, { force: opts?.force });
       }
     },
     [runId],
   );
 
   const updateEventsState = useCallback(
-    (updater: (prev: RunTimelineEvent[]) => RunTimelineEvent[]) => {
+    (updater: (prev: RunTimelineEvent[]) => RunTimelineEvent[], options?: { forceCursor?: boolean }) => {
       setEvents((prev) => {
         const next = updater(prev);
         const latest = next[next.length - 1];
-        if (latest) setCursor(toCursor(latest));
+        if (latest) {
+          setCursor(toCursor(latest), options?.forceCursor ? { force: true } : undefined);
+        } else {
+          setCursor(null, options?.forceCursor ? { force: true } : undefined);
+        }
         return next;
       });
     },
     [setCursor],
   );
 
-  useEffect(() => {
-    setEvents([]);
-    if (!runId) {
-      cursorRef.current = null;
-      return;
-    }
-    cursorRef.current = null;
-    graphSocket.setRunCursor(runId, null, { force: true });
-  }, [runId]);
-
-  useEffect(() => {
-    if (!eventsQuery.data) return;
-    const sorted = sortEvents(eventsQuery.data.items ?? []);
-    setEvents(sorted);
-    const latest = sorted[sorted.length - 1];
-    setCursor(latest ? toCursor(latest) : null, { force: true });
-  }, [eventsQuery.data, setCursor]);
-
   const fetchSinceCursor = useCallback(() => {
     if (!runId) return Promise.resolve();
     if (catchUpRef.current) return catchUpRef.current;
 
-    const cursor = graphSocket.getRunCursor(runId) ?? cursorRef.current;
+    const cursor = getSocketCursor(runId) ?? cursorRef.current;
     if (!cursor) {
-      const fallback = eventsQuery.refetch();
+      const fallback = refetchEvents();
       catchUpRef.current = fallback.finally(() => {
         catchUpRef.current = null;
       });
@@ -180,18 +194,17 @@ export function AgentsRunTimeline() {
     const promise = (async () => {
       try {
         const response = await runs.timelineEvents(runId, {
-          types: apiTypes.length > 0 ? apiTypes.join(',') : undefined,
+          types: typeParam,
+          statuses: statusParam,
           cursorTs: cursor.ts,
           cursorId: cursor.id,
         });
         const items = response.items ?? [];
         if (items.length > 0) {
-          updateEventsState((prev) => mergeEvents(prev, items, selectedTypes, selectedStatuses));
-          const newest = items[items.length - 1];
-          if (newest) setCursor(toCursor(newest));
+          updateEventsState((prev) => mergeEvents(prev, items));
         }
       } catch (_err) {
-        await eventsQuery.refetch();
+        await refetchEvents();
       }
     })();
 
@@ -199,7 +212,70 @@ export function AgentsRunTimeline() {
       catchUpRef.current = null;
     });
     return catchUpRef.current;
-  }, [runId, apiTypes, selectedTypes, selectedStatuses, eventsQuery, updateEventsState, setCursor]);
+  }, [runId, typeParam, statusParam, refetchEvents, updateEventsState]);
+
+  useEffect(() => {
+    if (lastSignatureRef.current !== querySignature) {
+      lastSignatureRef.current = querySignature;
+      setEvents([]);
+      setNextCursor(null);
+      setIsLoadingPrev(false);
+      isLoadingPrevRef.current = false;
+      pendingInitialScrollRef.current = true;
+      pendingScrollToBottomRef.current = false;
+      pendingPrependAdjustmentRef.current = null;
+      shouldStickToBottomRef.current = true;
+      cursorRef.current = null;
+      setCursor(null, { force: true });
+      catchUpRef.current = null;
+    }
+  }, [querySignature, setCursor]);
+
+  useEffect(() => {
+    if (!eventsQuery.data) {
+      if (pendingInitialScrollRef.current && eventsQuery.isFetching) {
+        shouldStickToBottomRef.current = true;
+      }
+      return;
+    }
+    const sorted = sortAndDedupe(eventsQuery.data.items ?? []);
+    updateEventsState(() => sorted, { forceCursor: true });
+    setNextCursor(eventsQuery.data.nextCursor ?? null);
+    if (pendingInitialScrollRef.current) {
+      pendingInitialScrollRef.current = false;
+      if (sorted.length > 0) {
+        pendingScrollToBottomRef.current = true;
+      } else {
+        shouldStickToBottomRef.current = true;
+      }
+    }
+  }, [eventsQuery.data, eventsQuery.isFetching, updateEventsState]);
+
+  useEffect(() => {
+    if (events.length === 0) return;
+
+    if (pendingPrependAdjustmentRef.current) {
+      const adjustment = pendingPrependAdjustmentRef.current;
+      pendingPrependAdjustmentRef.current = null;
+      requestAnimationFrame(() => {
+        const node = listRef.current;
+        if (!node || !adjustment) return;
+        const newHeight = node.scrollHeight;
+        const delta = newHeight - adjustment.previousHeight;
+        node.scrollTop = adjustment.previousTop + delta;
+      });
+    }
+
+    if (pendingScrollToBottomRef.current) {
+      pendingScrollToBottomRef.current = false;
+      requestAnimationFrame(() => {
+        const node = listRef.current;
+        if (!node) return;
+        node.scrollTop = node.scrollHeight;
+        shouldStickToBottomRef.current = true;
+      });
+    }
+  }, [events]);
 
   useEffect(() => {
     if (!runId) return;
@@ -207,8 +283,22 @@ export function AgentsRunTimeline() {
     graphSocket.subscribe([room]);
     const off = graphSocket.onRunEvent(({ runId: incomingRunId, event }) => {
       if (incomingRunId !== runId) return;
-      updateEventsState((prev) => mergeEvents(prev, [event], selectedTypes, selectedStatuses));
-      setCursor(toCursor(event));
+      if (selectedTypes.length > 0 && !selectedTypes.includes(event.type)) return;
+      if (selectedStatuses.length > 0 && !selectedStatuses.includes(event.status)) return;
+
+      const shouldStick = shouldStickToBottomRef.current;
+      let shouldScrollAfterUpdate = false;
+      updateEventsState((prev) => {
+        const exists = prev.some((existing) => existing.id === event.id);
+        const merged = mergeEvents(prev, [event]);
+        if (!exists && merged.length > 0 && merged[merged.length - 1]?.id === event.id && shouldStick) {
+          shouldScrollAfterUpdate = true;
+        }
+        return merged;
+      });
+      if (shouldScrollAfterUpdate) {
+        pendingScrollToBottomRef.current = true;
+      }
       summaryQuery.refetch();
     });
     const offStatus = graphSocket.onRunStatusChanged(({ run }) => {
@@ -223,8 +313,9 @@ export function AgentsRunTimeline() {
       offStatus();
       offReconnect();
       graphSocket.unsubscribe([room]);
+      setSocketCursor(runId, null, { force: true });
     };
-  }, [runId, selectedTypes, selectedStatuses, summaryQuery, updateEventsState, setCursor, fetchSinceCursor]);
+  }, [runId, selectedTypes, selectedStatuses, summaryQuery, updateEventsState, fetchSinceCursor]);
 
   const isDefaultFilters = selectedTypes.length === EVENT_TYPES.length && selectedStatuses.length === 0;
 
@@ -306,8 +397,6 @@ export function AgentsRunTimeline() {
   const selectedEventId = searchParams.get('eventId');
   const selectedEvent = selectedEventId ? events.find((evt) => evt.id === selectedEventId) : undefined;
   const isMdUp = useMediaQuery('(min-width: 768px)');
-  const listRef = useRef<HTMLDivElement | null>(null);
-  const selectedItemRef = useRef<HTMLDivElement | null>(null);
 
   const selectEvent = useCallback(
     (eventId: string, options: { focus?: boolean } = {}) => {
@@ -334,6 +423,62 @@ export function AgentsRunTimeline() {
     }, { replace: true });
   }, [setSearchParams]);
 
+  const loadOlder = useCallback(async () => {
+    if (!runId || !nextCursor || isLoadingPrevRef.current) return;
+    const node = listRef.current;
+    if (!node) return;
+
+    isLoadingPrevRef.current = true;
+    setIsLoadingPrev(true);
+    const previousHeight = node.scrollHeight;
+    const previousTop = node.scrollTop;
+    const signatureAtCall = lastSignatureRef.current;
+
+    try {
+      const response = await runs.timelineEvents(runId, {
+        types: typeParam,
+        statuses: statusParam,
+        limit: PAGE_SIZE,
+        order: 'desc',
+        cursorTs: nextCursor.ts,
+        cursorId: nextCursor.id,
+      });
+
+      if (lastSignatureRef.current !== signatureAtCall) return;
+
+      if (response.items.length > 0) {
+        pendingPrependAdjustmentRef.current = { previousHeight, previousTop };
+        updateEventsState((prev) => mergeEvents(prev, response.items, true));
+      }
+
+      setNextCursor(response.nextCursor ?? null);
+    } catch (err) {
+      if (lastSignatureRef.current === signatureAtCall) {
+        console.error('Failed to load older timeline events', err);
+      }
+    } finally {
+      if (lastSignatureRef.current === signatureAtCall) {
+        setIsLoadingPrev(false);
+      }
+      isLoadingPrevRef.current = false;
+    }
+  }, [runId, nextCursor, typeParam, statusParam, updateEventsState]);
+
+  const handleScroll = useCallback(() => {
+    const node = listRef.current;
+    if (!node) return;
+
+    const maxScrollable = node.scrollHeight - node.clientHeight;
+    const normalizedTop = maxScrollable <= 0 ? 0 : node.scrollTop;
+    const distanceToBottom = node.scrollHeight - normalizedTop - node.clientHeight;
+    const nearBottom = distanceToBottom <= SCROLL_THRESHOLD_PX || maxScrollable <= 0;
+    shouldStickToBottomRef.current = nearBottom;
+
+    if (normalizedTop <= SCROLL_THRESHOLD_PX && nextCursor) {
+      void loadOlder();
+    }
+  }, [loadOlder, nextCursor]);
+
   useEffect(() => {
     const itemsCount = eventsQuery.data?.items?.length ?? 0;
     if (!events.length) {
@@ -342,15 +487,16 @@ export function AgentsRunTimeline() {
       }
       return;
     }
+    const newest = events[events.length - 1];
     if (selectedEventId) {
       const exists = events.some((evt) => evt.id === selectedEventId);
-      if (!exists && isMdUp && !eventsQuery.isFetching) {
-        selectEvent(events[0].id, { focus: false });
+      if (!exists && isMdUp && !eventsQuery.isFetching && newest) {
+        selectEvent(newest.id, { focus: false });
       }
       return;
     }
-    if (isMdUp && !eventsQuery.isFetching) {
-      selectEvent(events[0].id, { focus: false });
+    if (isMdUp && !eventsQuery.isFetching && newest) {
+      selectEvent(newest.id, { focus: false });
     }
   }, [events, selectedEventId, selectEvent, clearSelection, isMdUp, eventsQuery.isFetching, eventsQuery.data]);
 
@@ -502,11 +648,13 @@ export function AgentsRunTimeline() {
               ref={listRef}
               role="listbox"
               aria-labelledby="run-timeline-events-heading"
-              aria-busy={eventsQuery.isFetching}
+              aria-busy={eventsQuery.isFetching || isLoadingPrev}
               aria-activedescendant={selectedEventId ? `run-event-option-${selectedEventId}` : undefined}
               tabIndex={0}
               onKeyDown={handleListKeyDown}
-              className="flex-1 min-h-0 space-y-2 overflow-y-auto focus:outline-none"
+              onScroll={handleScroll}
+              className="flex-1 min-h-0 space-y-2 overflow-y-auto px-3 py-2 focus:outline-none"
+              data-testid="agents-run-timeline-scroll"
             >
               {events.map((event) => (
                 <RunTimelineEventListItem
