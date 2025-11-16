@@ -3,7 +3,7 @@ import React from 'react';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { renderHook, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { useThreadContainers } from '../threads';
+import { useThreadContainers, useThreadContainersCount } from '../threads';
 
 const reconnectHandlers: Set<() => void> = new Set();
 
@@ -71,5 +71,32 @@ describe('useThreadContainers', () => {
 
     await waitFor(() => expect(mockedListContainers).toHaveBeenCalledTimes(2));
     client.clear();
+  });
+});
+
+describe('useThreadContainersCount', () => {
+  beforeEach(() => {
+    reconnectHandlers.clear();
+    vi.clearAllMocks();
+  });
+
+  it('skips fetching when thread missing or invalid', () => {
+    const { wrapper } = createWrapper();
+    const { result: noThread } = renderHook(() => useThreadContainersCount(undefined), { wrapper });
+    const { result: invalid } = renderHook(() => useThreadContainersCount('not-a-uuid'), { wrapper });
+
+    expect(noThread.current.isLoading).toBe(false);
+    expect(invalid.current.isLoading).toBe(false);
+    expect(mockedListContainers).not.toHaveBeenCalled();
+  });
+
+  it('fetches containers once and returns count', async () => {
+    mockedListContainers.mockResolvedValueOnce({ items: [{ containerId: '1' } as any, { containerId: '2' } as any] });
+    const { wrapper } = createWrapper();
+    const { result } = renderHook(() => useThreadContainersCount(validThreadId), { wrapper });
+
+    await waitFor(() => expect(mockedListContainers).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(result.current.data).toBe(2));
+    expect(mockedListContainers).toHaveBeenCalledWith({ status: 'running', sortBy: 'lastUsedAt', sortDir: 'desc', threadId: validThreadId });
   });
 });

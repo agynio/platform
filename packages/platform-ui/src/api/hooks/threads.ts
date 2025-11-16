@@ -103,6 +103,23 @@ export function useThreadReminders(threadId: string | undefined, enabled: boolea
   return q;
 }
 
+export function useThreadContainersCount(threadId: string | undefined) {
+  const queryKey = useMemo(() => ['agents', 'threads', threadId, 'containers', 'badge'] as const, [threadId]);
+  const isValidThread = !!threadId && UUID_REGEX.test(threadId);
+  return useQuery<number>({
+    enabled: isValidThread,
+    queryKey,
+    queryFn: async () => {
+      const result = await listContainers({ status: 'running', sortBy: 'lastUsedAt', sortDir: 'desc', threadId: threadId as string });
+      return result.items.length;
+    },
+    staleTime: 5000,
+    refetchInterval: false,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
+  });
+}
+
 export function useThreadContainers(threadId: string | undefined, enabled: boolean = true) {
   const qc = useQueryClient();
   const queryKey = useMemo(() => ['agents', 'threads', threadId, 'containers'] as const, [threadId]);
