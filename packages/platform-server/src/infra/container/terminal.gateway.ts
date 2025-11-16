@@ -132,6 +132,7 @@ export class ContainerTerminalGateway {
     const cleanup = async (reason: string) => {
       if (closed) return;
       closed = true;
+      this.logger.debug('terminal cleanup triggered', { execId, sessionId, reason });
       try {
         if (idleTimer) clearTimeout(idleTimer);
         if (maxTimer) clearTimeout(maxTimer);
@@ -139,13 +140,25 @@ export class ContainerTerminalGateway {
         // ignore timer cleanup errors
       }
       try {
-        stdin?.end?.();
+        if (stdin) {
+          this.logger.debug('terminal stdin end invoked', { execId, sessionId, reason });
+          stdin.removeAllListeners?.('drain');
+          stdin.end?.();
+          stdin = null;
+        }
       } catch {
         // ignore
       }
       stdout?.removeAllListeners?.('data');
       stdout?.removeAllListeners?.('end');
+      stdout?.removeAllListeners?.('error');
+      stdout?.removeAllListeners?.('close');
       stderr?.removeAllListeners?.('data');
+      stderr?.removeAllListeners?.('end');
+      stderr?.removeAllListeners?.('error');
+      stderr?.removeAllListeners?.('close');
+      stdout = null;
+      stderr = null;
       socket.removeAllListeners?.('message');
       socket.removeAllListeners?.('close');
       socket.removeAllListeners?.('error');
@@ -176,33 +189,127 @@ export class ContainerTerminalGateway {
       stdout = exec.stdout;
       stderr = exec.stderr ?? null;
       closeExec = exec.close;
+      this.logger.debug('terminal exec opened', {
+        sessionId,
+        containerId: containerId.substring(0, 12),
+        execId,
+        hasStdin: Boolean(stdin),
+        hasStdout: Boolean(stdout),
+        hasStderr: Boolean(stderr),
+      });
+      if (stdin && typeof (stdin as NodeJS.WriteStream).setDefaultEncoding === 'function') {
+        (stdin as NodeJS.WriteStream).setDefaultEncoding('utf8');
+        this.logger.debug('terminal stdin default encoding set', { execId, sessionId, encoding: 'utf8' });
+      }
+      if (stdin) {
+        stdin.on('error', (err) => {
+          this.logger.warn('terminal stdin error', {
+            execId,
+            sessionId,
+            containerId: containerId.substring(0, 12),
+            error: err instanceof Error ? err.message : String(err),
+          });
+        });
+        stdin.on('close', () => {
+          this.logger.debug('terminal stdin close', { execId, sessionId });
+        });
+        stdin.on('end', () => {
+          this.logger.debug('terminal stdin end', { execId, sessionId });
+        });
+        stdin.on('finish', () => {
+          this.logger.debug('terminal stdin finish', { execId, sessionId });
+        });
+      }
       send({ type: 'status', phase: 'running' });
       refreshActivity();
 
       if (execId) {
         try {
           await this.containers.resizeExec(execId, { cols: session.cols, rows: session.rows });
+          this.logger.debug('terminal resize applied', {
+            execId,
+            sessionId,
+            cols: session.cols,
+            rows: session.rows,
+          });
         } catch (err) {
           this.logger.warn('initial terminal resize failed', {
             execId,
+            sessionId,
             containerId: containerId.substring(0, 12),
             error: err instanceof Error ? err.message : String(err),
           });
         }
       }
 
+      let firstStdout = true;
+      if (stdout) {
+        this.logger.debug('terminal stdout stream attached', { execId, sessionId });
+        stdout.on('error', (err) => {
+          this.logger.warn('terminal stdout error', {
+            execId,
+            sessionId,
+            error: err instanceof Error ? err.message : String(err),
+          });
+        });
+        stdout.on('close', () => {
+          this.logger.debug('terminal stdout close', { execId, sessionId });
+        });
+      }
       stdout?.on('data', (chunk: Buffer | string) => {
         const data = typeof chunk === 'string' ? chunk : chunk.toString('utf8');
+        if (firstStdout) {
+          firstStdout = false;
+          this.logger.debug('terminal first stdout chunk', {
+            execId,
+            sessionId,
+            length: data.length,
+            preview: data.slice(0, 32),
+          });
+        }
+        if (data.length) {
+          this.logger.debug('terminal stdout chunk', {
+            execId,
+            sessionId,
+            length: data.length,
+            preview: data.slice(0, 32),
+          });
+        }
         if (data.length) send({ type: 'output', data });
         refreshActivity();
       });
       stdout?.on('end', () => {
+        this.logger.debug('terminal stdout end', { execId, sessionId });
         void cleanup('stream_end');
       });
+      if (stderr) {
+        this.logger.debug('terminal stderr stream attached', { execId, sessionId });
+        stderr.on('error', (err) => {
+          this.logger.warn('terminal stderr error', {
+            execId,
+            sessionId,
+            error: err instanceof Error ? err.message : String(err),
+          });
+        });
+        stderr.on('close', () => {
+          this.logger.debug('terminal stderr close', { execId, sessionId });
+        });
+      }
       stderr?.on('data', (chunk: Buffer | string) => {
         const data = typeof chunk === 'string' ? chunk : chunk.toString('utf8');
+        if (data.length) {
+          this.logger.debug('terminal stderr chunk', {
+            execId,
+            sessionId,
+            length: data.length,
+            preview: data.slice(0, 32),
+          });
+        }
         if (data.length) send({ type: 'output', data });
         refreshActivity();
+      });
+      stderr?.on('end', () => {
+        this.logger.debug('terminal stderr end', { execId, sessionId });
       });
     } catch (err) {
       send({ type: 'error', code: 'exec_start_failed', message: err instanceof Error ? err.message : String(err) });
@@ -226,14 +333,70 @@ export class ContainerTerminalGateway {
         return;
       }
       const message = result.data;
+      if (message.type === 'input') {
+        const preview = message.data.slice(0, 16);
+        this.logger.debug('terminal input message parsed', {
+          type: message.type,
+          sessionId,
+          containerId: containerId.substring(0, 12),
+          execId,
+          length: message.data.length,
+          preview,
+        });
+      }
       switch (message.type) {
         case 'input': {
           if (!stdin) {
+            this.logger.warn('terminal stdin unavailable on input', {
+              execId,
+              sessionId,
+              containerId: containerId.substring(0, 12),
+            });
             send({ type: 'error', code: 'stdin_closed', message: 'Terminal stdin unavailable' });
             return;
           }
           try {
-            stdin.write(message.data, () => refreshActivity());
+            const normalized = message.data.replace(/\r\n/g, '\n').replace(/\n/g, '\r');
+            const buffer = Buffer.from(normalized, 'utf8');
+            this.logger.debug('terminal stdin write start', {
+              execId,
+              sessionId,
+              inputLength: message.data.length,
+              bufferLength: buffer.byteLength,
+              stdinWritable:
+                typeof (stdin as NodeJS.WriteStream).writable === 'boolean'
+                  ? (stdin as NodeJS.WriteStream).writable
+                  : undefined,
+            });
+            const writeOk = stdin.write(buffer, (error) => {
+              if (error) {
+                this.logger.warn('terminal stdin write callback error', {
+                  execId,
+                  sessionId,
+                  error: error instanceof Error ? error.message : String(error),
+                });
+              } else {
+                this.logger.debug('terminal stdin write complete', {
+                  execId,
+                  sessionId,
+                  bytes: buffer.byteLength,
+                });
+              }
+              refreshActivity();
+            });
+            this.logger.debug('terminal stdin write dispatched', {
+              execId,
+              sessionId,
+              ok: writeOk,
+            });
+            if (!writeOk) {
+              const streamRef = stdin;
+              const onDrain = () => {
+                this.logger.debug('terminal stdin drain', { execId, sessionId });
+                streamRef?.removeListener('drain', onDrain);
+              };
+              streamRef?.once('drain', onDrain);
+            }
           } catch (err) {
             send({ type: 'error', code: 'stdin_write_failed', message: err instanceof Error ? err.message : String(err) });
           }
@@ -241,16 +404,33 @@ export class ContainerTerminalGateway {
         }
         case 'resize': {
           if (!execId) return;
+          this.logger.debug('terminal resize message received', {
+            execId,
+            sessionId,
+            cols: message.cols,
+            rows: message.rows,
+          });
           this.sessions.touch(sessionId);
           resetIdleTimer();
-          void this.containers.resizeExec(execId, { cols: message.cols, rows: message.rows }).catch((err) => {
-            this.logger.warn('terminal resize failed', {
-              execId,
-              containerId: containerId.substring(0, 12),
-              error: err instanceof Error ? err.message : String(err),
+          void this.containers
+            .resizeExec(execId, { cols: message.cols, rows: message.rows })
+            .then(() => {
+              this.logger.debug('terminal resize handled', {
+                execId,
+                sessionId,
+                cols: message.cols,
+                rows: message.rows,
+              });
+            })
+            .catch((err) => {
+              this.logger.warn('terminal resize failed', {
+                execId,
+                containerId: containerId.substring(0, 12),
+                sessionId,
+                error: err instanceof Error ? err.message : String(err),
+              });
+              send({ type: 'error', code: 'resize_failed', message: 'Terminal resize failed' });
             });
-            send({ type: 'error', code: 'resize_failed', message: 'Terminal resize failed' });
-          });
           break;
         }
         case 'ping': {
@@ -260,6 +440,7 @@ export class ContainerTerminalGateway {
           break;
         }
         case 'close': {
+          this.logger.debug('terminal close message received', { execId, sessionId });
           void cleanup('client_closed');
           break;
         }
@@ -269,12 +450,14 @@ export class ContainerTerminalGateway {
     });
 
     socket.on('close', () => {
+      this.logger.debug('terminal socket close received', { execId, sessionId });
       void cleanup('socket_closed');
     });
 
     socket.on('error', (err) => {
       this.logger.warn('terminal socket error', {
         containerId: containerId.substring(0, 12),
+        sessionId,
         error: err instanceof Error ? err.message : String(err),
       });
       void cleanup('socket_error');

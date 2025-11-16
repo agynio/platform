@@ -159,6 +159,7 @@ function TerminalConsole({ session, container, onClose }: TerminalConsoleProps) 
   const wsRef = useRef<WebSocket | null>(null);
   const pingRef = useRef<number | null>(null);
   const pendingInputRef = useRef<string[]>([]);
+  const terminalDebugRef = useRef(false);
   const isMounted = useRef(true);
   const pendingResizeRef = useRef<{ cols: number; rows: number } | null>({ cols: negotiatedCols, rows: negotiatedRows });
   const dimsRef = useRef<{ cols: number; rows: number }>({ cols: negotiatedCols, rows: negotiatedRows });
@@ -168,6 +169,31 @@ function TerminalConsole({ session, container, onClose }: TerminalConsoleProps) 
   const [exitCode, setExitCode] = useState<number | null>(null);
 
   const resolvedUrl = useMemo(() => toWsUrl(session.wsUrl), [session.wsUrl]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    try {
+      terminalDebugRef.current = window.localStorage?.getItem('terminalDebug') === '1';
+      if (terminalDebugRef.current && typeof console !== 'undefined' && typeof console.debug === 'function') {
+        console.debug(`[terminal:${session.sessionId}] debug logging enabled`);
+      }
+    } catch {
+      terminalDebugRef.current = false;
+    }
+  }, [session.sessionId]);
+
+  const debugLog = useCallback(
+    (event: string, details?: Record<string, unknown>) => {
+      if (!terminalDebugRef.current) return;
+      if (typeof console === 'undefined' || typeof console.debug !== 'function') return;
+      try {
+        console.debug(`[terminal:${session.sessionId}] ${event}`, details ?? {});
+      } catch {
+        // ignore debug logging errors
+      }
+    },
+    [session.sessionId],
+  );
 
   const setStatusIfChanged = useCallback((next: TerminalStatus) => {
     setStatus((prev) => (prev === next ? prev : next));
@@ -202,34 +228,58 @@ function TerminalConsole({ session, container, onClose }: TerminalConsoleProps) 
     termRef.current?.focus();
   }, []);
 
-  const sendMessage = useCallback((payload: unknown) => {
-    const ws = wsRef.current;
-    if (!ws || ws.readyState !== WebSocket.OPEN) return;
-    try {
-      ws.send(JSON.stringify(payload));
-    } catch (err) {
-      console.warn('terminal send failed', err);
-    }
-  }, []);
+  const sendMessage = useCallback(
+    (payload: unknown) => {
+      const ws = wsRef.current;
+      const type = typeof payload === 'object' && payload !== null && 'type' in payload ? (payload as { type?: unknown }).type : undefined;
+      if (!ws || ws.readyState !== WebSocket.OPEN) {
+        debugLog('send skipped', { reason: 'socket_not_open', readyState: ws?.readyState, type });
+        return;
+      }
+      try {
+        ws.send(JSON.stringify(payload));
+        debugLog('send message', { type, readyState: ws.readyState });
+      } catch (err) {
+        debugLog('send failed', { type, error: err instanceof Error ? err.message : String(err) });
+        console.warn('terminal send failed', err);
+      }
+    },
+    [debugLog],
+  );
 
-  const sendOrQueueInput = useCallback((data: string) => {
-    const ws = wsRef.current;
-    if (ws && ws.readyState === WebSocket.OPEN) {
-      sendMessage({ type: 'input', data });
-    } else {
-      pendingInputRef.current.push(data);
-    }
-  }, [sendMessage]);
+  const sendOrQueueInput = useCallback(
+    (data: string) => {
+      const ws = wsRef.current;
+      const length = data.length;
+      if (ws && ws.readyState === WebSocket.OPEN) {
+        debugLog('input send immediate', { length, readyState: ws.readyState });
+        sendMessage({ type: 'input', data });
+      } else {
+        pendingInputRef.current.push(data);
+        debugLog('input queued', { length, queued: pendingInputRef.current.length });
+      }
+    },
+    [debugLog, sendMessage],
+  );
 
   const flushPendingInput = useCallback(() => {
     const ws = wsRef.current;
-    if (!ws || ws.readyState !== WebSocket.OPEN) return;
-    if (!pendingInputRef.current.length) return;
+    if (!ws || ws.readyState !== WebSocket.OPEN) {
+      debugLog('flush skipped', { reason: 'socket_not_open', readyState: ws?.readyState });
+      return;
+    }
+    if (!pendingInputRef.current.length) {
+      debugLog('flush skipped', { reason: 'queue_empty' });
+      return;
+    }
     const queued = pendingInputRef.current.splice(0, pendingInputRef.current.length);
-    queued.forEach((data) => {
+    const totalBytes = queued.reduce((sum, value) => sum + value.length, 0);
+    debugLog('flush queue start', { count: queued.length, totalBytes });
+    queued.forEach((data, index) => {
+      debugLog('flush queue send', { index, length: data.length });
       sendMessage({ type: 'input', data });
     });
-  }, [sendMessage]);
+  }, [debugLog, sendMessage]);
 
   const handleHostClick = useCallback(() => {
     focusTerminal({ preventScroll: true });
@@ -249,12 +299,14 @@ function TerminalConsole({ session, container, onClose }: TerminalConsoleProps) 
     dimsRef.current = { cols, rows };
     const ws = wsRef.current;
     if (ws && ws.readyState === WebSocket.OPEN) {
+      debugLog('resize send', { cols, rows });
       sendMessage({ type: 'resize', cols, rows });
       pendingResizeRef.current = null;
     } else {
+      debugLog('resize queued', { cols, rows });
       pendingResizeRef.current = { cols, rows };
     }
-  }, [sendMessage]);
+  }, [debugLog, sendMessage]);
 
   const instantiateTerminal = useCallback(() => {
     const host = terminalContainerRef.current;
@@ -292,7 +344,10 @@ function TerminalConsole({ session, container, onClose }: TerminalConsoleProps) 
     pendingResizeRef.current = { cols: negotiatedCols, rows: negotiatedRows };
 
     const disposables = [
-      term.onData(sendOrQueueInput),
+      term.onData((data) => {
+        debugLog('xterm onData', { length: data.length, containsReturn: /\r/.test(data), containsNewline: /\n/.test(data) });
+        sendOrQueueInput(data);
+      }),
       term.onResize(() => {
         reportSize();
       }),
@@ -304,7 +359,7 @@ function TerminalConsole({ session, container, onClose }: TerminalConsoleProps) 
       fitAddon.fit();
       reportSize();
     });
-  }, [disposeTerminal, focusTerminal, negotiatedCols, negotiatedRows, reportSize, sendOrQueueInput]);
+  }, [debugLog, disposeTerminal, focusTerminal, negotiatedCols, negotiatedRows, reportSize, sendOrQueueInput]);
 
   useEffect(() => {
     isMounted.current = true;
@@ -349,6 +404,7 @@ function TerminalConsole({ session, container, onClose }: TerminalConsoleProps) 
   }, [reportSize]);
 
   useEffect(() => {
+    debugLog('ws connecting', { url: resolvedUrl });
     const ws = new WebSocket(resolvedUrl);
     wsRef.current = ws;
     setStatusIfChanged('connecting');
@@ -357,28 +413,38 @@ function TerminalConsole({ session, container, onClose }: TerminalConsoleProps) 
 
     const onOpen = () => {
       if (!isMounted.current) return;
+      debugLog('ws open', { readyState: ws.readyState });
       setStatusIfChanged('running');
       focusTerminal({ preventScroll: true });
       const pending = pendingResizeRef.current;
       if (pending) {
+        debugLog('ws applying pending resize', { cols: pending.cols, rows: pending.rows });
         sendMessage({ type: 'resize', cols: pending.cols, rows: pending.rows });
         pendingResizeRef.current = null;
+      }
+      if (pendingInputRef.current.length) {
+        debugLog('ws flushing queued input after open', { queued: pendingInputRef.current.length });
       }
       flushPendingInput();
     };
 
     const onMessage = (event: MessageEvent<string>) => {
       if (!isMounted.current) return;
+      debugLog('ws message received', { bytes: event.data.length });
       try {
         const data = JSON.parse(event.data) as Record<string, unknown>;
         switch (data.type) {
           case 'output': {
             const text = typeof data.data === 'string' ? data.data : '';
-            if (text) termRef.current?.write(text);
+            if (text) {
+              debugLog('ws output', { length: text.length });
+              termRef.current?.write(text);
+            }
             break;
           }
           case 'status': {
             const phase = typeof data.phase === 'string' ? data.phase : '';
+            debugLog('ws status', { phase });
             if (phase === 'error') {
               const reason = typeof data.reason === 'string' ? data.reason : 'Terminal error';
               setStatusIfChanged('error');
@@ -398,29 +464,34 @@ function TerminalConsole({ session, container, onClose }: TerminalConsoleProps) 
           case 'error': {
             const reason = typeof data.message === 'string' ? data.message : data.code;
             const text = typeof reason === 'string' ? reason : 'Terminal error';
+            debugLog('ws error payload', { message: text, code: data.code });
             setStatusIfChanged('error');
             setStatusDetailIfChanged(text);
             termRef.current?.writeln(`\r\n\x1b[31m${text}\x1b[0m`);
             break;
           }
           default:
+            debugLog('ws unhandled message', { type: data.type });
             break;
         }
       } catch (err) {
+        debugLog('ws message parse failed', { error: err instanceof Error ? err.message : String(err) });
         console.warn('terminal payload parse failed', err);
       }
     };
 
-    const onError = () => {
+    const onError = (event: Event) => {
       if (!isMounted.current) return;
       const message = 'Terminal connection error';
+      debugLog('ws error event', { type: event.type });
       setStatusIfChanged('error');
       setStatusDetailIfChanged(message);
       termRef.current?.writeln(`\r\n\x1b[31m${message}\x1b[0m`);
     };
 
-    const onClose = () => {
+    const onClose = (event: CloseEvent) => {
       if (!isMounted.current) return;
+      debugLog('ws close', { code: event.code, reason: event.reason, wasClean: event.wasClean });
       setStatus((prev) => {
         if (prev === 'error') return prev;
         termRef.current?.writeln('\r\nSession closed');
@@ -434,10 +505,12 @@ function TerminalConsole({ session, container, onClose }: TerminalConsoleProps) 
     ws.addEventListener('close', onClose);
 
     pingRef.current = window.setInterval(() => {
+      debugLog('ws ping');
       sendMessage({ type: 'ping', ts: Date.now() });
     }, 20000);
 
     return () => {
+      debugLog('ws cleanup start');
       if (pingRef.current) window.clearInterval(pingRef.current);
       ws.removeEventListener('open', onOpen);
       ws.removeEventListener('message', onMessage as EventListener);
@@ -450,8 +523,9 @@ function TerminalConsole({ session, container, onClose }: TerminalConsoleProps) 
       }
       ws.close();
       wsRef.current = null;
+      debugLog('ws cleanup complete');
     };
-  }, [flushPendingInput, focusTerminal, resolvedUrl, sendMessage, setStatusDetailIfChanged, setStatusIfChanged]);
+  }, [debugLog, flushPendingInput, focusTerminal, resolvedUrl, sendMessage, setStatusDetailIfChanged, setStatusIfChanged]);
 
   const statusLabel = status === 'running' ? 'Running' : status === 'connecting' ? 'Connecting' : 'Closed';
 

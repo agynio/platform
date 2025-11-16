@@ -1,5 +1,5 @@
 import { EventEmitter } from 'node:events';
-import { PassThrough } from 'node:stream';
+import { PassThrough, Writable } from 'node:stream';
 import WebSocket from 'ws';
 import { describe, expect, it, vi } from 'vitest';
 import type { FastifyInstance, FastifyRequest } from 'fastify';
@@ -20,6 +20,7 @@ class MockSocket extends EventEmitter {
     return this;
   }
 }
+
 
 const logger = new LoggerService();
 
@@ -45,7 +46,7 @@ describe('ContainerTerminalGateway', () => {
 
   it('handles a successful terminal websocket session', async () => {
     const now = Date.now();
-    const sessionId = '00000000-0000-0000-0000-000000000000';
+    const sessionId = '11111111-1111-4111-8111-111111111111';
     const record: TerminalSessionRecord = {
       sessionId,
       token: 'tok',
@@ -120,6 +121,122 @@ describe('ContainerTerminalGateway', () => {
     expect(close).toHaveBeenCalled();
     expect(sessionMocks.close).toHaveBeenCalledWith(sessionId);
     expect(socket.close).toHaveBeenCalledWith(1000, 'client_closed');
+  });
+
+  it('normalizes input newlines and streams output for interactive exec', async () => {
+    const now = Date.now();
+    const sessionId = '11111111-1111-4111-8111-111111111111';
+    const record: TerminalSessionRecord = {
+      sessionId,
+      token: 'tok',
+      containerId: 'cid',
+      shell: '/bin/sh',
+      cols: 80,
+      rows: 24,
+      createdAt: now,
+      lastActivityAt: now,
+      idleTimeoutMs: 60_000,
+      maxDurationMs: 120_000,
+      state: 'pending',
+    };
+
+    const sessionMocks = {
+      validate: vi.fn().mockReturnValue(record),
+      markConnected: vi.fn().mockImplementation(() => {
+        record.state = 'connected';
+      }),
+      get: vi.fn().mockImplementation(() => record),
+      touch: vi.fn(),
+      close: vi.fn(),
+    };
+
+    let written = '';
+    const writeSpy = vi.fn();
+    const stdin = new Writable({
+      write(chunk, _encoding, callback) {
+        written += Buffer.isBuffer(chunk) ? chunk.toString('utf8') : String(chunk);
+        callback();
+        writeSpy();
+      },
+    });
+    const stdout = new PassThrough();
+
+    const close = vi.fn().mockResolvedValue({ exitCode: 0 });
+
+    const containerMocks = {
+      openInteractiveExec: vi.fn().mockResolvedValue({
+        stdin,
+        stdout,
+        stderr: undefined,
+        close,
+        execId: 'exec-2',
+      }),
+      resizeExec: vi.fn().mockResolvedValue(undefined),
+    };
+
+    const gateway = new ContainerTerminalGateway(
+      sessionMocks as unknown as TerminalSessionsService,
+      containerMocks as unknown as ContainerService,
+      logger,
+    );
+
+    const socket = new MockSocket();
+    const request = {
+      params: { containerId: 'cid' },
+      query: { sessionId, token: 'tok' },
+    } as unknown as FastifyRequest;
+
+    await (gateway as unknown as { handleConnection(s: MockSocket, r: FastifyRequest): Promise<void> }).handleConnection(
+      socket,
+      request,
+    );
+
+    await flush();
+
+    expect(sessionMocks.validate).toHaveBeenCalled();
+
+    socket.emit('message', JSON.stringify({ type: 'input', data: 'echo hi\r\nwhoami\r\nexit\r\n' }));
+    await flush();
+
+    const messages = socket.send.mock.calls
+      .map(([payload]) => {
+        if (typeof payload !== 'string') return null;
+        try {
+          return JSON.parse(payload) as { type?: string; code?: string };
+        } catch {
+          return null;
+        }
+      })
+      .filter(Boolean);
+    const errorMessage = messages.find((msg) => msg?.type === 'error');
+    expect(errorMessage).toBeUndefined();
+
+    expect(writeSpy).toHaveBeenCalled();
+    expect(written).toBe('echo hi\rwhoami\rexit\r');
+
+    stdout.write('hi\n');
+    stdout.write('user\n');
+    stdout.end();
+    await flush();
+
+    const outputs = socket.send.mock.calls
+      .map(([payload]) => {
+        if (typeof payload !== 'string') return null;
+        try {
+          return JSON.parse(payload) as { type?: string; data?: string };
+        } catch {
+          return null;
+        }
+      })
+      .filter((message): message is { type: string; data: string } => Boolean(message && message.type === 'output'))
+      .map((message) => message.data)
+      .join('');
+
+    expect(outputs).toContain('hi');
+    expect(outputs).toContain('user');
+
+    expect(close).toHaveBeenCalled();
+    expect(sessionMocks.close).toHaveBeenCalledWith(sessionId);
   });
 
   it('rejects invalid query parameters', async () => {
