@@ -1,6 +1,7 @@
 import React from 'react';
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { ThreadTreeNode } from '../ThreadTreeNode';
 import type { ThreadNode } from '@/api/types/agents';
 
@@ -39,5 +40,28 @@ describe('ThreadTreeNode', () => {
   it('hides Close/Reopen toggle for child threads', () => {
     renderNode({ ...baseNode, id: 'thread-2', parentId: baseNode.id });
     expect(screen.queryByRole('button', { name: /Close thread|Reopen thread/ })).toBeNull();
+  });
+
+  it('renders chevron toggle with accessible label and rotates on expand', async () => {
+    const user = userEvent.setup();
+    renderNode(baseNode);
+
+    const treeItem = screen.getByRole('treeitem');
+    expect(treeItem).toHaveAttribute('aria-expanded', 'false');
+
+    const toggle = screen.getByRole('button', { name: 'Expand' });
+    const icon = toggle.querySelector('svg');
+    expect(icon).not.toBeNull();
+    expect(icon).toHaveClass('-rotate-90');
+    expect(toggle).not.toHaveAttribute('aria-controls');
+
+    await user.click(toggle);
+
+    expect(treeItem).toHaveAttribute('aria-expanded', 'true');
+    expect(toggle).toHaveAttribute('aria-label', 'Collapse');
+    expect(toggle).toHaveAttribute('aria-controls', 'thread-children-thread-1');
+    const updatedIcon = toggle.querySelector('svg');
+    expect(updatedIcon).not.toBeNull();
+    expect(updatedIcon).toHaveClass('rotate-0');
   });
 });
