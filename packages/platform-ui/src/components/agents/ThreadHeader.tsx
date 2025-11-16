@@ -4,7 +4,7 @@ import { RovingFocusGroup, RovingFocusGroupItem } from '@radix-ui/react-roving-f
 import { VisuallyHidden } from '@radix-ui/react-visually-hidden';
 import { Boxes } from 'lucide-react';
 import { formatDistanceToNow, formatDistanceToNowStrict } from 'date-fns';
-import { useThreadMetrics, useThreadReminders, useThreadContainers } from '@/api/hooks/threads';
+import { useThreadMetrics, useThreadReminders, useThreadContainers, useThreadContainersCount } from '@/api/hooks/threads';
 import type { ThreadNode, ThreadReminder } from '@/api/types/agents';
 import type { ContainerItem } from '@/api/modules/containers';
 
@@ -109,9 +109,10 @@ export function ThreadHeader({ thread, runsCount }: { thread: ThreadNode | undef
   const remindersQ = useThreadReminders(threadId, remindersOpen);
   const reminders = remindersQ.data?.items ?? [];
 
+  const containersBadgeQ = useThreadContainersCount(threadId);
   const containersQ = useThreadContainers(threadId, containersOpen);
   const containers = containersQ.data?.items ?? [];
-  const containersCount = containersQ.data ? containers.length : metrics.containersCount ?? 0;
+  const containersCount = containersQ.data ? containers.length : containersBadgeQ.data ?? 0;
 
   const summary = useMemo(() => {
     if (!thread) return '(none selected)';

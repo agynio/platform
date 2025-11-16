@@ -38,6 +38,13 @@ const makeContainersResult = () => ({
   error: null,
   refetch: vi.fn().mockResolvedValue(undefined),
 });
+const makeContainersCountResult = (count = mockContainers.length) => ({
+  data: count,
+  isLoading: false,
+  isFetching: false,
+  error: null,
+  refetch: vi.fn().mockResolvedValue(undefined),
+});
 const makeDisabledResult = () => ({
   data: undefined,
   isLoading: false,
@@ -48,11 +55,13 @@ const makeDisabledResult = () => ({
 
 const useThreadReminders = vi.fn(makeRemindersResult);
 const useThreadContainers = vi.fn(makeContainersResult);
+const useThreadContainersCount = vi.fn(() => makeContainersCountResult());
 
 vi.mock('@/api/hooks/threads', () => ({
   useThreadMetrics: (...args: unknown[]) => useThreadMetrics(...args),
   useThreadReminders: (...args: unknown[]) => useThreadReminders(...args),
   useThreadContainers: (...args: unknown[]) => useThreadContainers(...args),
+  useThreadContainersCount: (...args: unknown[]) => useThreadContainersCount(...args),
 }));
 
 describe('ThreadHeader', () => {
@@ -62,6 +71,8 @@ describe('ThreadHeader', () => {
     useThreadReminders.mockImplementation((_id: unknown, enabled?: boolean) => (enabled ? makeRemindersResult() : makeDisabledResult()));
     useThreadContainers.mockReset();
     useThreadContainers.mockImplementation((_id: unknown, enabled?: boolean) => (enabled ? makeContainersResult() : makeDisabledResult()));
+    useThreadContainersCount.mockReset();
+    useThreadContainersCount.mockImplementation(() => makeContainersCountResult());
   });
 
   it('renders selected thread details with metrics and run counts', () => {
@@ -83,8 +94,8 @@ describe('ThreadHeader', () => {
     expect(screen.getByText(/Status: Open/i)).toBeInTheDocument();
     const stats = screen.getByTestId('thread-header-stats');
     expect(stats).toHaveTextContent('Runs 5');
-    expect(stats).toHaveTextContent('Containers 2');
-    expect(screen.getByRole('button', { name: /Running containers: 2/ })).toBeInTheDocument();
+    expect(stats).toHaveTextContent('Containers 1');
+    expect(screen.getByRole('button', { name: /Running containers: 1/ })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Active reminders: 3/ })).toBeInTheDocument();
     // Run count prefers live runs length (5) over metrics (2)
     expect(screen.getByLabelText('Runs total: 5')).toHaveTextContent('Runs 5');
@@ -195,6 +206,7 @@ describe('ThreadHeader', () => {
   });
 
   it('renders placeholder when no thread is selected', () => {
+    useThreadContainersCount.mockImplementation(() => makeContainersCountResult(0));
     render(<ThreadHeader thread={undefined} runsCount={0} />);
     expect(screen.getByTestId('thread-header')).toHaveTextContent('Select a thread to view details');
   });
