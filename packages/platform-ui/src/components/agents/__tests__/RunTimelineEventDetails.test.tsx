@@ -537,6 +537,7 @@ describe('RunTimelineEventDetails', () => {
     }
   });
 
+<<<<<<< HEAD
   it('preserves context scroll position when loading older items', async () => {
     const user = userEvent.setup();
     const raf = vi.spyOn(window, 'requestAnimationFrame').mockImplementation((cb: FrameRequestCallback) => {
@@ -603,11 +604,24 @@ describe('RunTimelineEventDetails', () => {
         responseText: null,
         rawResponse: null,
         toolCalls: [],
+=======
+  it('renders call_agent links and queued status when run not started', () => {
+    const event = buildEvent({
+      metadata: {
+        childThreadId: 'child-123',
+        childRunStatus: 'queued',
+        childRunLinkEnabled: false,
+      },
+      toolExecution: {
+        toolName: 'call_agent',
+        execStatus: 'running',
+>>>>>>> e0586020 (feat(call-agent): link child runs in timeline)
       },
     });
 
     renderDetails(event);
 
+<<<<<<< HEAD
     const scroll = await screen.findByTestId('llm-context-scroll');
 
     let scrollHeightValue = 1000;
@@ -676,5 +690,66 @@ describe('RunTimelineEventDetails', () => {
 
     useContextItemsSpy.mockRestore();
     raf.mockRestore();
+  });
+
+  it('renders call_agent metadata in link group before run start', () => {
+    const event = buildEvent({
+      metadata: {
+        childThreadId: 'child-123',
+        childRunStatus: 'queued',
+        childRunLinkEnabled: false,
+      },
+      toolExecution: {
+        toolName: 'call_agent',
+        execStatus: 'running',
+      },
+    });
+
+    renderDetails(event);
+
+    const group = screen.getByTestId('call-agent-link-group');
+    const subthreadLink = within(group).getByRole('link', { name: 'Subthread' });
+    expect(subthreadLink).toHaveAttribute('href', '/agents/threads/child-123');
+    expect(within(group).queryByRole('link', { name: /Run timeline/i })).toBeNull();
+    expect(within(group).getByText('Run (not started)')).toBeInTheDocument();
+    const statusBadge = within(group).getByText('Queued');
+    expect(statusBadge).toHaveClass('bg-amber-500');
+  });
+
+  it('enables call_agent run link and updates status on metadata change', () => {
+    const baseEvent = buildEvent({
+      metadata: {
+        childThreadId: 'child-123',
+        childRunStatus: 'queued',
+        childRunLinkEnabled: false,
+      },
+      toolExecution: {
+        toolName: 'call_agent',
+        execStatus: 'running',
+      },
+    });
+
+    const { rerender } = renderDetails(baseEvent);
+
+    const updatedEvent = buildEvent({
+      metadata: {
+        childThreadId: 'child-123',
+        childRunStatus: 'running',
+        childRunLinkEnabled: true,
+        childRunId: 'run-xyz',
+      },
+      toolExecution: {
+        toolName: 'call_agent',
+        execStatus: 'running',
+      },
+    });
+
+    rerender(updatedEvent);
+
+    const group = screen.getByTestId('call-agent-link-group');
+    const runLink = within(group).getByRole('link', { name: 'Run timeline' });
+    expect(runLink).toHaveAttribute('href', '/agents/threads/child-123/runs/run-xyz/timeline');
+    const statusBadge = within(group).getByText('Running');
+    expect(statusBadge).toHaveClass('bg-sky-500');
   });
 });
