@@ -55,7 +55,7 @@ describe('ThreadTree initial metrics rendering', () => {
     expect(summaryEl).toHaveClass('overflow-hidden');
     const dot = screen.getByLabelText('Activity: working');
     expect(dot).toBeInTheDocument();
-    expect(dot.className).toContain('bg-green-500');
+    expect(dot.className).toContain('bg-blue-500');
     expect(screen.queryByLabelText('Activity: idle')).toBeNull();
     expect(screen.getByText('Primary Agent')).toBeInTheDocument();
     expect(screen.queryByText(/Runs/)).toBeNull();

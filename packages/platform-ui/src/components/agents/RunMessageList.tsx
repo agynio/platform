@@ -1,6 +1,7 @@
 import React from 'react';
 import { MessageBubble } from './MessageBubble';
 import { ReminderCountdown } from './ReminderCountdown';
+import { waitForStableScrollHeight } from './waitForStableScrollHeight';
 
 export type RunMeta = { id: string; status: 'running' | 'finished' | 'terminated'; createdAt: string; updatedAt: string };
 export type UnifiedRunMessage = {
@@ -33,28 +34,69 @@ type RunMessageListProps = {
   loadingMoreAbove?: boolean;
   onLoadMoreAbove?: () => void;
   onViewRunTimeline?: (run: RunMeta) => void;
+  activeThreadId?: string;
 };
 
-export function RunMessageList({ items, showJson, onToggleJson, isLoading, error, hasMoreAbove, loadingMoreAbove, onLoadMoreAbove, onViewRunTimeline }: RunMessageListProps) {
+export function RunMessageList({ items, showJson, onToggleJson, isLoading, error, hasMoreAbove, loadingMoreAbove, onLoadMoreAbove, onViewRunTimeline, activeThreadId }: RunMessageListProps) {
   const containerRef = React.useRef<HTMLDivElement | null>(null);
   const [atBottom, setAtBottom] = React.useState(true);
 
   const prevCount = React.useRef(0);
-  React.useEffect(() => {
+  const scrollToBottom = React.useCallback(() => {
     const c = containerRef.current;
     if (!c) return;
-    const justAppended = items.length > prevCount.current;
-    if (justAppended && atBottom) {
-      // Use scrollTop assignment; guard in case of read-only in test envs
+    try {
+      c.scrollTo({ top: c.scrollHeight });
+    } catch (_err) {
       try {
         c.scrollTop = c.scrollHeight;
-      } catch (_err) {
-        // ignore read-only scrollTop in test envs
-        void _err;
+      } catch (__err) {
+        void __err;
       }
     }
+  }, []);
+  React.useEffect(() => {
+    const c = containerRef.current;
+    const justAppended = items.length > prevCount.current;
+    const initialLoad = prevCount.current === 0 && items.length > 0;
     prevCount.current = items.length;
-  }, [items, atBottom]);
+
+    if (!c) return;
+    if (!initialLoad && !(justAppended && atBottom)) return;
+
+    let cancelled = false;
+
+    void (async () => {
+      await waitForStableScrollHeight(c);
+      if (cancelled) return;
+      scrollToBottom();
+      if (initialLoad) setAtBottom(true);
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [items, atBottom, scrollToBottom]);
+
+  React.useEffect(() => {
+    if (!activeThreadId) return;
+    prevCount.current = 0;
+    setAtBottom(true);
+    const c = containerRef.current;
+    if (!c) return;
+
+    let cancelled = false;
+
+    void (async () => {
+      await waitForStableScrollHeight(c);
+      if (cancelled) return;
+      scrollToBottom();
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activeThreadId, scrollToBottom]);
 
   const onScroll = (e: React.UIEvent<HTMLDivElement>) => {
     const el = e.currentTarget;
@@ -69,10 +111,9 @@ export function RunMessageList({ items, showJson, onToggleJson, isLoading, error
 
   return (
     <div className="relative h-full" aria-busy={!!isLoading || undefined}>
-      <div className="text-sm font-medium px-2 py-1">Messages</div>
       <div
         ref={containerRef}
-        className="h-[calc(100%-2rem)] overflow-auto p-2 flex flex-col gap-2"
+        className="flex h-full flex-col gap-2 overflow-auto p-2"
         onScroll={onScroll}
         aria-live="polite"
         aria-label="Run messages"
@@ -143,16 +184,12 @@ export function RunMessageList({ items, showJson, onToggleJson, isLoading, error
         <button
           type="button"
           className="absolute bottom-3 left-1/2 -translate-x-1/2 bg-white/90 border rounded px-3 py-1 shadow"
-          onClick={() => {
+          onClick={async () => {
             const c = containerRef.current;
-            if (c) {
-              try {
-                c.scrollTop = c.scrollHeight;
-              } catch (_err) {
-                // ignore read-only scrollTop in test envs
-                void _err;
-              }
-            }
+            if (!c) return;
+            await waitForStableScrollHeight(c);
+            scrollToBottom();
+            setAtBottom(true);
           }}
           data-testid="jump-to-latest"
         >
