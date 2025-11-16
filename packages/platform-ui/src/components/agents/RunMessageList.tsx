@@ -42,6 +42,8 @@ export function RunMessageList({ items, showJson, onToggleJson, isLoading, error
   const [atBottom, setAtBottom] = React.useState(true);
 
   const prevCount = React.useRef(0);
+  const prependSnapshotRef = React.useRef<{ prevScrollHeight: number; prevScrollTop: number } | null>(null);
+  const requestedMoreAboveRef = React.useRef(false);
   const scrollToBottom = React.useCallback(() => {
     const c = containerRef.current;
     if (!c) return;
@@ -82,6 +84,8 @@ export function RunMessageList({ items, showJson, onToggleJson, isLoading, error
     if (!activeThreadId) return;
     prevCount.current = 0;
     setAtBottom(true);
+    prependSnapshotRef.current = null;
+    requestedMoreAboveRef.current = false;
     const c = containerRef.current;
     if (!c) return;
 
@@ -98,13 +102,46 @@ export function RunMessageList({ items, showJson, onToggleJson, isLoading, error
     };
   }, [activeThreadId, scrollToBottom]);
 
+  React.useEffect(() => {
+    if (loadingMoreAbove) return;
+    if (!prependSnapshotRef.current) return;
+
+    const c = containerRef.current;
+    const snapshot = prependSnapshotRef.current;
+    prependSnapshotRef.current = null;
+    requestedMoreAboveRef.current = false;
+
+    if (!c || !snapshot) return;
+
+    let cancelled = false;
+
+    void (async () => {
+      await waitForStableScrollHeight(c);
+      if (cancelled) return;
+      const newScrollHeight = c.scrollHeight;
+      const delta = newScrollHeight - snapshot.prevScrollHeight;
+      const nextTop = Math.max(snapshot.prevScrollTop + delta, 0);
+      try {
+        c.scrollTop = nextTop;
+      } catch (_err) {
+        void _err;
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [items, loadingMoreAbove]);
+
   const onScroll = (e: React.UIEvent<HTMLDivElement>) => {
     const el = e.currentTarget;
     const threshold = 8;
     const nearBottom = el.scrollHeight - el.clientHeight - el.scrollTop <= threshold;
     setAtBottom(nearBottom);
     const nearTop = el.scrollTop <= threshold;
-    if (nearTop && hasMoreAbove && !loadingMoreAbove) {
+    if (nearTop && hasMoreAbove && !loadingMoreAbove && !requestedMoreAboveRef.current) {
+      prependSnapshotRef.current = { prevScrollHeight: el.scrollHeight, prevScrollTop: el.scrollTop };
+      requestedMoreAboveRef.current = true;
       onLoadMoreAbove?.();
     }
   };

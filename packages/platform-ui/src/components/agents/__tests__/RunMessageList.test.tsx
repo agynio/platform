@@ -196,6 +196,191 @@ describe('RunMessageList', () => {
     expect(list.scrollTop).toBe(list.scrollHeight);
   });
 
+  it('preserves scroll offset when older messages are prepended', async () => {
+    const onLoadMoreAbove = vi.fn();
+    const { rerender } = render(
+      <RunMessageList
+        items={baseItems}
+        showJson={{}}
+        onToggleJson={vi.fn()}
+        hasMoreAbove
+        loadingMoreAbove={false}
+        onLoadMoreAbove={onLoadMoreAbove}
+      />
+    );
+
+    const list = screen.getByTestId('message-list');
+    makeScrollable(list, { scrollHeight: 600, clientHeight: 280, scrollTop: 200 });
+
+    await settleHeightSequence(list, [600]);
+
+    await act(async () => {
+      list.scrollTop = 4;
+      fireEvent.scroll(list);
+    });
+
+    expect(onLoadMoreAbove).toHaveBeenCalledTimes(1);
+
+    rerender(
+      <RunMessageList
+        items={baseItems}
+        showJson={{}}
+        onToggleJson={vi.fn()}
+        hasMoreAbove
+        loadingMoreAbove
+        onLoadMoreAbove={onLoadMoreAbove}
+      />
+    );
+
+    const olderItems: UnifiedListItem[] = [
+      {
+        type: 'message',
+        message: {
+          id: 'older-1',
+          createdAt: new Date().toISOString(),
+          role: 'assistant',
+          side: 'left',
+          text: 'Older content',
+          source: null,
+          runId: 'run-0',
+        },
+      },
+      ...baseItems,
+    ];
+
+    rerender(
+      <RunMessageList
+        items={olderItems}
+        showJson={{}}
+        onToggleJson={vi.fn()}
+        hasMoreAbove
+        loadingMoreAbove={false}
+        onLoadMoreAbove={onLoadMoreAbove}
+      />
+    );
+
+    await settleHeightSequence(list, [900]);
+
+    expect(list.scrollTop).toBe(304);
+  });
+
+  it('supports successive older-loads without jumping the viewport', async () => {
+    const onLoadMoreAbove = vi.fn();
+    const { rerender } = render(
+      <RunMessageList
+        items={baseItems}
+        showJson={{}}
+        onToggleJson={vi.fn()}
+        hasMoreAbove
+        loadingMoreAbove={false}
+        onLoadMoreAbove={onLoadMoreAbove}
+      />
+    );
+
+    const list = screen.getByTestId('message-list');
+    makeScrollable(list, { scrollHeight: 480, clientHeight: 260, scrollTop: 120 });
+
+    await settleHeightSequence(list, [480]);
+
+    await act(async () => {
+      list.scrollTop = 6;
+      fireEvent.scroll(list);
+    });
+
+    expect(onLoadMoreAbove).toHaveBeenCalledTimes(1);
+
+    rerender(
+      <RunMessageList
+        items={baseItems}
+        showJson={{}}
+        onToggleJson={vi.fn()}
+        hasMoreAbove
+        loadingMoreAbove
+        onLoadMoreAbove={onLoadMoreAbove}
+      />
+    );
+
+    const firstOlderBatch: UnifiedListItem[] = [
+      {
+        type: 'message',
+        message: {
+          id: 'older-a',
+          createdAt: new Date().toISOString(),
+          role: 'assistant',
+          side: 'left',
+          text: 'Older A',
+          source: null,
+          runId: 'run-older',
+        },
+      },
+      ...baseItems,
+    ];
+
+    rerender(
+      <RunMessageList
+        items={firstOlderBatch}
+        showJson={{}}
+        onToggleJson={vi.fn()}
+        hasMoreAbove
+        loadingMoreAbove={false}
+        onLoadMoreAbove={onLoadMoreAbove}
+      />
+    );
+
+    await settleHeightSequence(list, [640]);
+    expect(list.scrollTop).toBe(166);
+
+    await act(async () => {
+      list.scrollTop = 8;
+      fireEvent.scroll(list);
+    });
+
+    expect(onLoadMoreAbove).toHaveBeenCalledTimes(2);
+
+    rerender(
+      <RunMessageList
+        items={firstOlderBatch}
+        showJson={{}}
+        onToggleJson={vi.fn()}
+        hasMoreAbove
+        loadingMoreAbove
+        onLoadMoreAbove={onLoadMoreAbove}
+      />
+    );
+
+    const secondOlderBatch: UnifiedListItem[] = [
+      {
+        type: 'message',
+        message: {
+          id: 'older-b',
+          createdAt: new Date().toISOString(),
+          role: 'assistant',
+          side: 'left',
+          text: 'Older B',
+          source: null,
+          runId: 'run-older',
+        },
+      },
+      ...firstOlderBatch,
+    ];
+
+    rerender(
+      <RunMessageList
+        items={secondOlderBatch}
+        showJson={{}}
+        onToggleJson={vi.fn()}
+        hasMoreAbove
+        loadingMoreAbove={false}
+        onLoadMoreAbove={onLoadMoreAbove}
+      />
+    );
+
+    await settleHeightSequence(list, [860]);
+
+    expect(list.scrollTop).toBe(228);
+    expect(onLoadMoreAbove).toHaveBeenCalledTimes(2);
+  });
+
   it('jump to latest waits for stabilized scroll height after user scrolls up', async () => {
     const { rerender } = render(<RunMessageList items={baseItems} showJson={{}} onToggleJson={vi.fn()} />);
 
