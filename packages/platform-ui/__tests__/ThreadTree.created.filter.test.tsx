@@ -1,6 +1,6 @@
 import React from 'react';
 import { describe, it, expect } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { server, TestProviders } from './integration/testUtils';
 import { ThreadTree } from '../src/components/agents/ThreadTree';
@@ -30,5 +30,33 @@ describe('ThreadTree conditional insertion on thread_created', () => {
     // Should still show 'No threads'
     expect(await screen.findByText('No threads')).toBeInTheDocument();
   });
-});
 
+  it('prepends new root thread when it matches the current filter', async () => {
+    server.use(
+      http.get('/api/agents/threads', ({ request }) => {
+        const url = new URL(request.url);
+        if (url.searchParams.get('rootsOnly') !== 'true') return new HttpResponse(null, { status: 400 });
+        if ((url.searchParams.get('status') || '') !== 'open') return new HttpResponse(null, { status: 400 });
+        return HttpResponse.json({ items: [] });
+      }),
+    );
+    render(<TestProviders><ThreadTree status="open" onSelect={() => {}} /></TestProviders>);
+    expect(await screen.findByText('No threads')).toBeInTheDocument();
+
+    const anySock: any = socketModule.graphSocket as any;
+    const createdListeners = anySock.threadCreatedListeners as Set<(p: any) => void>;
+    for (const fn of createdListeners)
+      fn({
+        thread: {
+          id: 't2',
+          alias: 'a2',
+          summary: 'Fresh root thread',
+          status: 'open',
+          parentId: null,
+          createdAt: new Date().toISOString(),
+        },
+      });
+
+    await waitFor(() => expect(screen.getByText('Fresh root thread')).toBeInTheDocument());
+  });
+});

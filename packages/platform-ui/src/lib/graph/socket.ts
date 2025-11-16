@@ -37,8 +37,6 @@ type MessageCreatedPayload = { message: MessageSummary };
 type RunStatusChangedPayload = { run: RunSummary };
 type RunEventListenerPayload = RunEventSocketPayload;
 
-const IS_DEV = import.meta.env.DEV ?? false;
-
 class GraphSocket {
   // Typed socket instance; null until connected
   private socket: Socket<ServerToClientEvents, ClientToServerEvents> | null = null;
@@ -56,16 +54,7 @@ class GraphSocket {
   private connectCallbacks = new Set<() => void>();
   private reconnectCallbacks = new Set<() => void>();
   private disconnectCallbacks = new Set<() => void>();
-  private eventCounters = new Map<string, number>();
-
-  private recordEvent(event: string) {
-    if (!IS_DEV) return;
-    const next = (this.eventCounters.get(event) ?? 0) + 1;
-    this.eventCounters.set(event, next);
-    console.debug(`[graphSocket] event ${event} (total=${next})`);
-  }
   private runCursors = new Map<string, RunTimelineEventsCursor>();
-  private loggedSocketBase = false;
 
   private compareCursors(a: RunTimelineEventsCursor, b: RunTimelineEventsCursor): number {
     const parsedA = Date.parse(a.ts);
@@ -95,7 +84,6 @@ class GraphSocket {
     const sock = this.socket;
     if (!sock) return;
     sock.emit('subscribe', { rooms });
-    if (IS_DEV) console.debug('[graphSocket] subscribe rooms', rooms, 'total', this.subscribedRooms.size);
   }
 
   private resubscribeAll() {
@@ -106,10 +94,6 @@ class GraphSocket {
   connect(): Socket<ServerToClientEvents, ClientToServerEvents> {
     if (this.socket) return this.socket;
     const host = getSocketBaseUrl();
-    if (import.meta.env?.DEV && !this.loggedSocketBase) {
-      this.loggedSocketBase = true;
-      console.info('[graphSocket] connecting to', host);
-    }
     // Cast to typed Socket to enable event payload typing
     this.socket = io(host, {
       path: '/socket.io',
@@ -153,31 +137,24 @@ class GraphSocket {
     });
     // Threads events
     this.socket.on('thread_created', (payload: ThreadCreatedPayload) => {
-      this.recordEvent('thread_created');
       for (const fn of this.threadCreatedListeners) fn(payload);
     });
     this.socket.on('thread_updated', (payload: ThreadUpdatedPayload) => {
-      this.recordEvent('thread_updated');
       for (const fn of this.threadUpdatedListeners) fn(payload);
     });
     this.socket.on('thread_activity_changed', (payload: ThreadActivityPayload) => {
-      this.recordEvent('thread_activity_changed');
       for (const fn of this.threadActivityListeners) fn(payload);
     });
     this.socket.on('thread_reminders_count', (payload: ThreadRemindersPayload) => {
-      this.recordEvent('thread_reminders_count');
       for (const fn of this.threadRemindersListeners) fn(payload);
     });
     this.socket.on('message_created', (payload: MessageCreatedPayload) => {
-      this.recordEvent('message_created');
       for (const fn of this.messageCreatedListeners) fn(payload);
     });
     this.socket.on('run_status_changed', (payload: RunStatusChangedPayload) => {
-      this.recordEvent('run_status_changed');
       for (const fn of this.runStatusListeners) fn(payload);
     });
     this.socket.on('run_event_appended', (payload: RunEventSocketPayload) => {
-      this.recordEvent('run_event_appended');
       this.bumpRunCursor(payload.runId, { ts: payload.event.ts, id: payload.event.id });
       for (const fn of this.runEventListeners) fn(payload);
     });
@@ -244,7 +221,6 @@ class GraphSocket {
         this.runCursors.delete(runId);
       }
     }
-    if (IS_DEV && rooms.length) console.debug('[graphSocket] unsubscribe rooms', rooms, 'total', this.subscribedRooms.size);
   }
 
   // Threads listeners
