@@ -6,6 +6,10 @@ export type RunEventBroadcast = {
   event: unknown;
 };
 
+export interface GraphEventsPublisherAware {
+  setEventsPublisher(publisher: GraphEventsPublisher): void;
+}
+
 // Abstract class token to decouple persistence from socket gateway
 export abstract class GraphEventsPublisher {
   abstract emitThreadCreated(thread: { id: string; alias: string; summary: string | null; status: ThreadStatus; createdAt: Date; parentId?: string | null }): void;

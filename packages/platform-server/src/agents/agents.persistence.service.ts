@@ -3,7 +3,7 @@ import { Inject, Injectable } from '@nestjs/common';
 import type { MessageKind, Prisma, PrismaClient, RunMessageType, RunStatus, ThreadStatus } from '@prisma/client';
 import { LoggerService } from '../core/services/logger.service';
 import { PrismaService } from '../core/services/prisma.service';
-import { GraphEventsPublisher } from '../gateway/graph.events.publisher';
+import { GraphEventsPublisher, type GraphEventsPublisherAware } from '../gateway/graph.events.publisher';
 import { GraphRepository } from '../graph/graph.repository';
 import { TemplateRegistry } from '../graph/templateRegistry';
 import type { PersistedGraphNode } from '../graph/types';
@@ -15,7 +15,7 @@ import { ThreadsMetricsService, type ThreadMetrics } from './threads.metrics.ser
 export type RunStartResult = { runId: string };
 
 @Injectable()
-export class AgentsPersistenceService {
+export class AgentsPersistenceService implements GraphEventsPublisherAware {
   private events: GraphEventsPublisher;
 
   constructor(

@@ -9,6 +9,7 @@ import type { GraphEventsPublisher, RunEventBroadcast } from './graph.events.pub
 import { ThreadsMetricsService } from '../agents/threads.metrics.service';
 import { PrismaService } from '../core/services/prisma.service';
 import { AgentsPersistenceService } from '../agents/agents.persistence.service';
+import type { GraphEventsPublisherAware } from './graph.events.publisher';
 
 // Strict outbound event payloads
 export const NodeStatusEventSchema = z
@@ -67,11 +68,9 @@ export class GraphSocketGateway implements GraphEventsPublisher {
     @Inject(LiveGraphRuntime) private readonly runtime: LiveGraphRuntime,
     @Inject(ThreadsMetricsService) private readonly metrics: ThreadsMetricsService,
     @Inject(PrismaService) private readonly prismaService: PrismaService,
-    @Optional() @Inject(AgentsPersistenceService) persistence?: AgentsPersistenceService,
+    @Optional() @Inject(AgentsPersistenceService) persistence?: GraphEventsPublisherAware,
   ) {
-    if (persistence && typeof persistence.setEventsPublisher === 'function') {
-      persistence.setEventsPublisher(this);
-    }
+    persistence?.setEventsPublisher(this);
   }
 
   /** Attach Socket.IO to the provided HTTP server. */

@@ -153,6 +153,7 @@ describe('GraphModule DI smoke test', () => {
       recordInjected: vi.fn(),
       completeRun: vi.fn(),
       resolveThreadId: vi.fn().mockResolvedValue('thread'),
+      setEventsPublisher: vi.fn(),
     } satisfies Partial<AgentsPersistenceService>;
 
     const threadsMetricsStub = {
