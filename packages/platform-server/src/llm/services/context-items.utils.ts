@@ -1,13 +1,6 @@
 import type { PrismaClient } from '@prisma/client';
 import { ContextItemRole, Prisma } from '@prisma/client';
-import {
-  AIMessage,
-  HumanMessage,
-  ResponseMessage,
-  SystemMessage,
-  ToolCallMessage,
-  ToolCallOutputMessage,
-} from '@agyn/llm';
+import { AIMessage, HumanMessage, ResponseMessage, SystemMessage, ToolCallMessage, ToolCallOutputMessage } from '@agyn/llm';
 import { toPrismaJsonValue } from './messages.serialization';
 
 export type ContextItemInput = {
@@ -174,16 +167,8 @@ export function contextItemInputFromMessage(
     };
   }
   if (message instanceof ToolCallMessage) {
-    let args: unknown = null;
-    try {
-      args = message.args ? JSON.parse(message.args) : null;
-    } catch {
-      args = message.args;
-    }
     return {
       role: ContextItemRole.tool,
-      contentText: `Request: ${message.name} (id=${message.callId})`,
-      contentJson: args,
       metadata: { type: message.type, callId: message.callId, name: message.name, phase: 'request' },
     };
   }
@@ -198,7 +183,7 @@ export function contextItemInputFromMessage(
   if (message instanceof ResponseMessage) {
     return {
       role: ContextItemRole.assistant,
-      contentText: message.text,
+      contentText: message.text.length > 0 ? message.text : null,
       contentJson: safeToPlain(message),
       metadata: { type: message.type },
     };

@@ -1,28 +1,26 @@
 import { describe, it, expect, vi } from 'vitest';
-import { ResponseMessage, ToolCallMessage } from '@agyn/llm';
+import { HumanMessage, ResponseMessage, ToolCallMessage } from '@agyn/llm';
 import { CallToolsLLMReducer } from '../src/llm/reducers/callTools.llm.reducer';
+import { CallModelLLMReducer } from '../src/llm/reducers/callModel.llm.reducer';
 import { LoggerService } from '../src/core/services/logger.service.js';
 import { createRunEventsStub } from './helpers/runEvents.stub';
+import { Signal } from '../src/signal';
 
-vi.mock('@agyn/tracing', () => {
-  class ToolCallResponse<TRaw = unknown, TOutput = unknown> {
-    raw: TRaw;
-    output?: TOutput;
-    status: 'success' | 'error';
+vi.mock('@agyn/tracing', async () => {
+  const actual = await vi.importActual<typeof import('@agyn/tracing')>('@agyn/tracing');
+  const ToolCallResponse = actual.ToolCallResponse;
 
-    constructor(params: { raw: TRaw; output?: TOutput; status: 'success' | 'error' }) {
-      this.raw = params.raw;
-      this.output = params.output;
-      this.status = params.status;
-    }
-  }
-
-  const withToolCall = async (
-    _attrs: unknown,
-    fn: () => Promise<ToolCallResponse> | ToolCallResponse,
-  ): Promise<unknown> => {
+  const withToolCall = async (_attrs: unknown, fn: () => Promise<unknown> | unknown): Promise<unknown> => {
     const res = await fn();
     return res instanceof ToolCallResponse ? res.raw : res;
+  };
+
+  const withLLM = async (_attrs: unknown, fn: () => Promise<unknown> | unknown): Promise<unknown> => {
+    const res = await fn();
+    if (res instanceof actual.LLMResponse) {
+      return res.raw;
+    }
+    return res;
   };
 
   const loggerImpl = {
@@ -34,13 +32,18 @@ vi.mock('@agyn/tracing', () => {
 
   const logger = () => loggerImpl;
 
-  return { withToolCall, ToolCallResponse, logger } as const;
+  return {
+    ...actual,
+    withToolCall,
+    withLLM,
+    logger,
+  } as const;
 });
 
 type MockFn = ReturnType<typeof vi.fn>;
 
 describe('CallToolsLLMReducer context items', () => {
-  it('persists request context items before results and maintains ordering', async () => {
+  it('persists tool outputs without request items and keeps ordering placeholders', async () => {
     const runEvents = createRunEventsStub();
     const createContextItemsMock = runEvents.createContextItems as unknown as MockFn;
     const executionSnapshots: Array<{ name: string; callCount: number; input: unknown }> = [];
@@ -65,40 +68,37 @@ describe('CallToolsLLMReducer context items', () => {
     ];
 
     const response = new ResponseMessage({ output: toolCalls.map((call) => call.toPlain() as any) as any });
-    const initialState = { messages: [response], meta: {}, context: { messageIds: ['existing-1'], memory: [] } } as any;
+    const initialState = {
+      messages: [HumanMessage.fromText('hello'), response],
+      meta: {},
+      context: { messageIds: ['existing-1'], memory: [] },
+    } as any;
     const ctx = { threadId: 'thread-1', runId: 'run-1', callerAgent: { getAgentNodeId: () => 'agent-node' } } as any;
 
     const result = await reducer.invoke(initialState, ctx);
 
-    expect(createContextItemsMock).toHaveBeenCalledTimes(2);
-    const [requestItems, resultItems] = createContextItemsMock.mock.calls.map(([items]) => items as any[]);
+    expect(createContextItemsMock).toHaveBeenCalledTimes(1);
+    const [resultItems] = createContextItemsMock.mock.calls.map(([items]) => items as any[]);
 
-    expect(requestItems).toHaveLength(2);
-    expect(requestItems[0].contentText).toBe('Request: alpha (id=call-alpha)');
-    expect(requestItems[1].contentText).toBe('Request: beta (id=call-beta)');
-    expect(requestItems[0].metadata?.phase).toBe('request');
-    expect(requestItems[0].metadata?.callId).toBe('call-alpha');
-    expect(requestItems[0].contentJson).toEqual({ foo: 1 });
-    expect(requestItems[1].contentJson).toEqual({ bar: 2 });
+    expect(resultItems).toHaveLength(2);
+    expect(resultItems.map((item) => item.contentText)).toEqual(['alpha-result', 'beta-result']);
 
     expect(executionSnapshots).toHaveLength(2);
     executionSnapshots.forEach((snapshot) => {
-      expect(snapshot.callCount).toBe(1);
+      expect(snapshot.callCount).toBe(0);
     });
     expect(executionSnapshots.find((s) => s.name === 'alpha')?.input).toEqual({ foo: 1 });
     expect(executionSnapshots.find((s) => s.name === 'beta')?.input).toEqual({ bar: 2 });
 
-    expect(resultItems).toHaveLength(2);
-    const requestIds = await (createContextItemsMock.mock.results[0]?.value as Promise<string[]>);
-    const resultIds = await (createContextItemsMock.mock.results[1]?.value as Promise<string[]>);
-    expect(result.context.messageIds).toEqual(['existing-1', ...requestIds, ...resultIds]);
+    const resultIds = await (createContextItemsMock.mock.results[0]?.value as Promise<string[]>);
+    expect(result.context.messageIds).toEqual(['existing-1', '', ...resultIds]);
 
     const appendedMessages = result.messages.slice(-2);
     expect(appendedMessages[0].text).toBe('alpha-result');
     expect(appendedMessages[1].text).toBe('beta-result');
   });
 
-  it('records request context items even when tool execution fails', async () => {
+  it('persists tool output context even when execution fails', async () => {
     const runEvents = createRunEventsStub();
     const createContextItemsMock = runEvents.createContextItems as unknown as MockFn;
 
@@ -107,7 +107,6 @@ describe('CallToolsLLMReducer context items', () => {
       description: 'fails',
       schema: { safeParse: (value: unknown) => ({ success: true, data: value }) },
       execute: vi.fn(async () => {
-        expect(createContextItemsMock).toHaveBeenCalledTimes(1);
         throw new Error('boom');
       }),
     };
@@ -115,22 +114,115 @@ describe('CallToolsLLMReducer context items', () => {
     const reducer = new CallToolsLLMReducer(new LoggerService(), runEvents as any).init({ tools: [failingTool] });
     const call = new ToolCallMessage({ type: 'function_call', call_id: 'call-fail', name: 'failing', arguments: JSON.stringify({ ok: true }) } as any);
     const response = new ResponseMessage({ output: [call.toPlain() as any] as any });
-    const state = { messages: [response], meta: {}, context: { messageIds: ['existing-ctx'], memory: [] } } as any;
+    const state = {
+      messages: [HumanMessage.fromText('hi'), response],
+      meta: {},
+      context: { messageIds: ['existing-ctx'], memory: [] },
+    } as any;
     const ctx = { threadId: 'thread', runId: 'run', callerAgent: { getAgentNodeId: () => 'node' } } as any;
 
     const result = await reducer.invoke(state, ctx);
 
-    expect(createContextItemsMock).toHaveBeenCalledTimes(2);
-    const [requestItems, resultItems] = createContextItemsMock.mock.calls.map(([items]) => items as any[]);
-
-    expect(requestItems).toHaveLength(1);
-    expect(requestItems[0].contentText).toBe('Request: failing (id=call-fail)');
-    expect(requestItems[0].metadata?.phase).toBe('request');
+    expect(createContextItemsMock).toHaveBeenCalledTimes(1);
+    const [resultItems] = createContextItemsMock.mock.calls.map(([items]) => items as any[]);
 
     expect(resultItems).toHaveLength(1);
-    const requestIds = await (createContextItemsMock.mock.results[0]?.value as Promise<string[]>);
-    const resultIds = await (createContextItemsMock.mock.results[1]?.value as Promise<string[]>);
-    expect(result.context.messageIds).toEqual(['existing-ctx', ...requestIds, ...resultIds]);
+    expect(resultItems[0].contentText).toContain('Tool failing execution failed');
+    const resultIds = await (createContextItemsMock.mock.results[0]?.value as Promise<string[]>);
+    expect(result.context.messageIds).toEqual(['existing-ctx', '', ...resultIds]);
     expect(result.messages.at(-1)?.text).toContain('Tool failing execution failed');
+  });
+
+  it('aligns context ordering for grouped responses with tool output results', async () => {
+    const runEvents = createRunEventsStub();
+    const createContextItemsMock = runEvents.createContextItems as unknown as MockFn;
+    const startLLMCallMock = runEvents.startLLMCall as unknown as MockFn;
+
+    const tool = {
+      name: 'alpha',
+      description: 'Alpha tool',
+      schema: { safeParse: (value: unknown) => ({ success: true, data: value }) },
+      execute: vi.fn(async () => 'alpha-output'),
+    };
+
+    const toolCall = new ToolCallMessage({
+      type: 'function_call',
+      call_id: 'call-alpha',
+      name: 'alpha',
+      arguments: JSON.stringify({ foo: 'bar' }),
+    } as any);
+
+    const reasoningItem = {
+      type: 'reasoning',
+      summary: [{ type: 'text', text: 'thinking' }],
+      reasoning: [],
+    };
+
+    const responseWithTool = new ResponseMessage({ output: [reasoningItem as any, toolCall.toPlain() as any] as any });
+    const llmCall = vi
+      .fn()
+      .mockResolvedValueOnce(responseWithTool)
+      .mockResolvedValue(ResponseMessage.fromText('done'));
+
+    const callModel = new CallModelLLMReducer(new LoggerService(), runEvents as any).init({
+      llm: { call: llmCall } as any,
+      model: 'gpt-test',
+      systemPrompt: 'Stay on task',
+      tools: [tool as any],
+    });
+
+    const callTools = new CallToolsLLMReducer(new LoggerService(), runEvents as any).init({ tools: [tool] as any });
+
+    const ctx = {
+      threadId: 'thread-ctx',
+      runId: 'run-ctx',
+      finishSignal: new Signal(),
+      callerAgent: { getAgentNodeId: () => 'agent-node' },
+    } as any;
+
+    const initialState = {
+      messages: [HumanMessage.fromText('what is the plan?')],
+      meta: {},
+      context: { messageIds: ['ctx-user-1'], memory: [], system: { id: 'ctx-system-1' } },
+    } as any;
+
+    const afterFirstModel = await callModel.invoke(initialState, ctx);
+    expect(startLLMCallMock).toHaveBeenCalledTimes(1);
+    expect(startLLMCallMock.mock.calls[0][0]?.contextItemIds).toEqual(['ctx-system-1', 'ctx-user-1']);
+    expect(afterFirstModel.messages).toHaveLength(2);
+    const lastMessage = afterFirstModel.messages.at(-1);
+    expect(lastMessage).toBeInstanceOf(ResponseMessage);
+    const responseMessage = lastMessage as ResponseMessage;
+    expect(responseMessage.output.some((entry) => entry instanceof ToolCallMessage)).toBe(true);
+
+    const afterTools = await callTools.invoke(afterFirstModel, ctx);
+    expect(tool.execute).toHaveBeenCalledTimes(1);
+    expect(createContextItemsMock).toHaveBeenCalledTimes(1);
+    const toolContextIds = await (createContextItemsMock.mock.results[0]?.value as Promise<string[]>);
+    expect(toolContextIds).toHaveLength(1);
+
+    const afterSecondModel = await callModel.invoke(afterTools, ctx);
+
+    expect(startLLMCallMock).toHaveBeenCalledTimes(2);
+    const secondCallArgs = startLLMCallMock.mock.calls[1][0];
+    expect(Array.isArray(secondCallArgs?.contextItemIds)).toBe(true);
+
+    expect(createContextItemsMock).toHaveBeenCalledTimes(2);
+    const assistantIds = await (createContextItemsMock.mock.results[1]?.value as Promise<string[]>);
+    expect(assistantIds).toHaveLength(1);
+    const assistantId = assistantIds[0];
+
+    expect(secondCallArgs.contextItemIds).toEqual(['ctx-system-1', 'ctx-user-1', assistantId, toolContextIds[0]]);
+    expect(afterSecondModel.context.messageIds).toEqual(['ctx-user-1', assistantId, toolContextIds[0]]);
+
+    const assistantItem = createContextItemsMock.mock.calls[1][0][0] as any;
+    expect(assistantItem.role).toBe('assistant');
+    expect(assistantItem.contentText).toBeNull();
+    expect(Array.isArray(assistantItem.contentJson?.output)).toBe(true);
+    expect(assistantItem.contentJson.output).toHaveLength(2);
+    const [reasoning, toolEntry] = assistantItem.contentJson.output;
+    expect(reasoning.type).toBe('reasoning');
+    expect(toolEntry.type).toBe('function_call');
+    expect(toolEntry.name).toBe('alpha');
   });
 });
