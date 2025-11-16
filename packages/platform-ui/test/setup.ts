@@ -358,7 +358,7 @@ const graphSocketMock = {
   }),
   connect: vi.fn(() => fakeSocket),
   isConnected: vi.fn(() => true),
-  onNodeStatus: vi.fn((nodeId: string, cb: (payload: any) => void) => {
+  onNodeStatus: vi.fn((nodeId: string, cb: (payload: unknown) => void) => {
     let set = graphSocketMock.listeners.get(nodeId);
     if (!set) {
       set = new Set();
@@ -370,7 +370,7 @@ const graphSocketMock = {
       if (set!.size === 0) graphSocketMock.listeners.delete(nodeId);
     };
   }),
-  onNodeState: vi.fn((nodeId: string, cb: (payload: any) => void) => {
+  onNodeState: vi.fn((nodeId: string, cb: (payload: unknown) => void) => {
     let set = graphSocketMock.stateListeners.get(nodeId);
     if (!set) {
       set = new Set();
@@ -382,7 +382,7 @@ const graphSocketMock = {
       if (set!.size === 0) graphSocketMock.stateListeners.delete(nodeId);
     };
   }),
-  onReminderCount: vi.fn((nodeId: string, cb: (payload: any) => void) => {
+  onReminderCount: vi.fn((nodeId: string, cb: (payload: unknown) => void) => {
     let set = graphSocketMock.reminderListeners.get(nodeId);
     if (!set) {
       set = new Set();

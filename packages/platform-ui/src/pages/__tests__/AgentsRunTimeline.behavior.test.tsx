@@ -184,6 +184,8 @@ describe('AgentsRunTimeline behavior', () => {
     await waitFor(() => expect(document.querySelectorAll('[data-event-id]').length).toBe(INITIAL_COUNT));
     await waitFor(() => expect(metrics.top).toBe(metrics.height));
 
+    const loadOlderButton = await screen.findByTestId('timeline-load-older');
+
     const previousHeight = metrics.height;
     const previousTop = 20;
     metrics.top = previousTop;
@@ -191,7 +193,7 @@ describe('AgentsRunTimeline behavior', () => {
     const nextHeight = previousHeight + 600;
 
     await act(async () => {
-      fireEvent.scroll(list);
+      fireEvent.click(loadOlderButton);
       metrics.height = nextHeight;
     });
 

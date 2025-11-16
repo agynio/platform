@@ -485,6 +485,19 @@ export function AgentsRunTimeline() {
             <div className="px-3 py-2 text-xs text-gray-500" aria-live="polite">
               {events.length === 0 && !eventsQuery.isFetching ? 'No events for selected filters.' : null}
             </div>
+            <div className="px-3">
+              <button
+                type="button"
+                onClick={() => {
+                  void loadOlder();
+                }}
+                disabled={!nextCursor || isLoadingPrev}
+                data-testid="timeline-load-older"
+                className="mb-2 w-full rounded border px-2 py-1 text-xs font-medium text-gray-700 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                Load older events
+              </button>
+            </div>
             <div
               ref={listRef}
               role="listbox"
