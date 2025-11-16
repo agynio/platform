@@ -6,6 +6,9 @@ import { server, TestProviders } from './integration/testUtils';
 import { ThreadTree } from '../src/components/agents/ThreadTree';
 import * as socketModule from '../src/lib/graph/socket';
 
+const THREAD_ID = '11111111-1111-1111-1111-111111111111';
+const THREAD_ALIAS = 'alias-1';
+
 describe('ThreadTree conditional insertion on thread_created', () => {
   beforeAll(() => server.listen());
   afterEach(() => server.resetHandlers());
@@ -26,9 +29,8 @@ describe('ThreadTree conditional insertion on thread_created', () => {
     // Emit thread_created with closed status
     const anySock: any = socketModule.graphSocket as any;
     const createdListeners = anySock.threadCreatedListeners as Set<(p: any) => void>;
-    for (const fn of createdListeners) fn({ thread: { id: 't1', alias: 'a1', summary: null, status: 'closed', parentId: null, createdAt: new Date().toISOString() } });
+    for (const fn of createdListeners) fn({ thread: { id: THREAD_ID, alias: THREAD_ALIAS, summary: null, status: 'closed', parentId: null, createdAt: new Date().toISOString() } });
     // Should still show 'No threads'
     expect(await screen.findByText('No threads')).toBeInTheDocument();
   });
 });
-

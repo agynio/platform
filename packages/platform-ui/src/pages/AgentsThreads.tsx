@@ -5,13 +5,20 @@ import { ThreadTree } from '@/components/agents/ThreadTree';
 import { ThreadStatusFilterSwitch, type ThreadStatusFilter } from '@/components/agents/ThreadStatusFilterSwitch';
 import { useThreadRuns } from '@/api/hooks/runs';
 import { runs as runsApi } from '@/api/modules/runs';
+import { threads as threadsApi } from '@/api/modules/threads';
 import { graphSocket } from '@/lib/graph/socket';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 
 // Thread list rendering moved into ThreadTree component
 type MessageItem = { id: string; kind: 'user' | 'assistant' | 'system' | 'tool'; text?: string | null; source: unknown; createdAt: string };
 type SocketMessage = { id: string; kind: 'user' | 'assistant' | 'system' | 'tool'; text: string | null; source: unknown; createdAt: string; runId?: string };
 type SocketRun = { id: string; status: 'running' | 'finished' | 'terminated'; createdAt: string; updatedAt: string };
+
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+function isUuid(value: string): boolean {
+  return UUID_REGEX.test(value);
+}
 
 function compareRunMeta(a: RunMeta, b: RunMeta): number {
   const diff = new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
@@ -82,14 +89,69 @@ async function fetchRunMessages(runId: string): Promise<UnifiedRunMessage[]> {
 }
 
 export function AgentsThreads() {
-  const [selectedThreadId, setSelectedThreadId] = useState<string | undefined>(undefined);
+  const [searchParams, setSearchParams] = useSearchParams();
+  const threadParam = searchParams.get('thread');
+  const lastAppliedThreadParam = useRef<string | null>(null);
+
+  const [selectedThreadKey, setSelectedThreadKey] = useState<string | undefined>(undefined);
+  const [selectedThreadAlias, setSelectedThreadAlias] = useState<string | null>(null);
+  const [resolvedThreadId, setResolvedThreadId] = useState<string | undefined>(undefined);
   const [statusFilter, setStatusFilter] = useState<ThreadStatusFilter>('open');
   // No run selection in new UX (removed)
   const queryClient = useQueryClient();
   const navigate = useNavigate();
 
   // Cast through unknown to align differing RunMeta shapes between API and UI list types
-  const runsQ = useThreadRuns(selectedThreadId) as unknown as UseQueryResult<{ items: RunMeta[] }, Error>;
+  const runsQ = useThreadRuns(resolvedThreadId) as unknown as UseQueryResult<{ items: RunMeta[] }, Error>;
+
+  useEffect(() => {
+    if (!threadParam) return;
+    if (lastAppliedThreadParam.current === threadParam) return;
+    lastAppliedThreadParam.current = threadParam;
+    setSelectedThreadKey(threadParam);
+    setSelectedThreadAlias(threadParam);
+  }, [threadParam]);
+
+  useEffect(() => {
+    if (!selectedThreadKey) {
+      setResolvedThreadId(undefined);
+      return;
+    }
+    if (isUuid(selectedThreadKey)) {
+      setResolvedThreadId(selectedThreadKey);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        const resolved = await threadsApi.resolveIdentifier(selectedThreadKey);
+        if (cancelled) return;
+        if (resolved) {
+          setResolvedThreadId(resolved.id);
+          setSelectedThreadAlias((prev) => (prev === resolved.alias ? prev : resolved.alias));
+          setSelectedThreadKey((prev) => (prev === resolved.id ? prev : resolved.id));
+        } else {
+          setResolvedThreadId(undefined);
+        }
+      } catch {
+        if (!cancelled) setResolvedThreadId(undefined);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedThreadKey]);
+
+  useEffect(() => {
+    const aliasForUrl = selectedThreadAlias ?? resolvedThreadId;
+    if (!aliasForUrl) return;
+    const current = searchParams.get('thread');
+    if (current === aliasForUrl) return;
+    lastAppliedThreadParam.current = aliasForUrl;
+    const next = new URLSearchParams(searchParams);
+    next.set('thread', aliasForUrl);
+    setSearchParams(next, { replace: true });
+  }, [selectedThreadAlias, resolvedThreadId, searchParams, setSearchParams]);
 
   const runs: RunMeta[] = useMemo(() => {
     const list = runsQ.data?.items ?? [];
@@ -110,7 +172,7 @@ export function AgentsThreads() {
     pendingMessages.current.clear();
     seenMessageIds.current.clear();
     runIdsRef.current = new Set();
-  }, [selectedThreadId]);
+  }, [selectedThreadKey]);
 
   useEffect(() => {
     runIdsRef.current = new Set(runs.map((run) => run.id));
@@ -147,7 +209,7 @@ export function AgentsThreads() {
   }, [runs, flushPendingForRun]);
 
   useEffect(() => {
-    if (!selectedThreadId || runs.length === 0) return;
+    if (!resolvedThreadId || runs.length === 0) return;
     let cancelled = false;
     const concurrency = 3;
     let idx = 0;
@@ -185,20 +247,21 @@ export function AgentsThreads() {
     return () => {
       cancelled = true;
     };
-  }, [selectedThreadId, runs]);
+  }, [resolvedThreadId, runs]);
 
   // Subscribe to selected thread room for live updates
   useEffect(() => {
-    if (!selectedThreadId) return;
-    const room = `thread:${selectedThreadId}`;
+    if (!resolvedThreadId) return;
+    const room = `thread:${resolvedThreadId}`;
     graphSocket.subscribe([room]);
+    if (import.meta.env?.DEV) console.info('[AgentsThreads] subscribed to', room);
     return () => {
       graphSocket.unsubscribe([room]);
     };
-  }, [selectedThreadId]);
+  }, [resolvedThreadId]);
 
   useEffect(() => {
-    if (!selectedThreadId) return;
+    if (!resolvedThreadId) return;
     const offMsg = graphSocket.onMessageCreated(({ message }) => {
       if (!message.runId) return;
       const runId = message.runId;
@@ -224,11 +287,11 @@ export function AgentsThreads() {
       });
     });
     return () => offMsg();
-  }, [selectedThreadId]);
+  }, [resolvedThreadId]);
 
   useEffect(() => {
-    if (!selectedThreadId) return;
-    const queryKey = ['agents', 'threads', selectedThreadId, 'runs'];
+    if (!resolvedThreadId) return;
+    const queryKey = ['agents', 'threads', resolvedThreadId, 'runs'];
     const offRun = graphSocket.onRunStatusChanged(({ run }) => {
       const next = run as SocketRun;
       queryClient.setQueryData(queryKey, (prev: { items: RunMeta[] } | undefined) => {
@@ -253,16 +316,16 @@ export function AgentsThreads() {
       flushPendingForRun(next.id);
     });
     return () => offRun();
-  }, [selectedThreadId, queryClient, flushPendingForRun]);
+  }, [resolvedThreadId, queryClient, flushPendingForRun]);
 
   useEffect(() => {
-    if (!selectedThreadId) return;
+    if (!resolvedThreadId) return;
     const invalidate = () => {
-      queryClient.invalidateQueries({ queryKey: ['agents', 'threads', selectedThreadId, 'runs'] });
+      queryClient.invalidateQueries({ queryKey: ['agents', 'threads', resolvedThreadId, 'runs'] });
     };
     const offReconnect = graphSocket.onReconnected(invalidate);
     return () => offReconnect();
-  }, [selectedThreadId, queryClient]);
+  }, [resolvedThreadId, queryClient]);
 
   const unifiedItems: UnifiedListItem[] = useMemo(() => {
     if (!runs.length) return [];
@@ -299,13 +362,22 @@ export function AgentsThreads() {
                 <ThreadStatusFilterSwitch value={statusFilter} onChange={(v) => setStatusFilter(v)} />
               </header>
               <div className="flex-1 min-h-0 overflow-y-auto px-3 py-2">
-                <ThreadTree status={statusFilter} onSelect={(id) => setSelectedThreadId(id)} selectedId={selectedThreadId} />
+                <ThreadTree
+                  status={statusFilter}
+                  onSelect={(thread) => {
+                    lastAppliedThreadParam.current = thread.alias ?? thread.id;
+                    setSelectedThreadKey(thread.id);
+                    setSelectedThreadAlias(thread.alias);
+                    setResolvedThreadId(thread.id);
+                  }}
+                  selectedId={resolvedThreadId}
+                />
               </div>
             </section>
 
             <section className="flex h-[60vh] min-h-0 min-w-0 flex-col md:h-full md:flex-1" data-testid="messages-panel">
               <header className="border-b px-3 py-2 text-sm font-medium">
-                Thread: {selectedThreadId || '(none selected)'}
+                Thread: {selectedThreadAlias ?? resolvedThreadId ?? '(none selected)'}
               </header>
               <div className="flex-1 min-h-0 overflow-hidden px-3 py-2">
                 <RunMessageList
@@ -315,8 +387,8 @@ export function AgentsThreads() {
                   isLoading={runsQ.isLoading}
                   error={loadError}
                   onViewRunTimeline={(run) => {
-                    if (!selectedThreadId) return;
-                    navigate(`/agents/threads/${encodeURIComponent(selectedThreadId)}/runs/${encodeURIComponent(run.id)}/timeline`);
+                    if (!resolvedThreadId) return;
+                    navigate(`/agents/threads/${encodeURIComponent(resolvedThreadId)}/runs/${encodeURIComponent(run.id)}/timeline`);
                   }}
                 />
               </div>

@@ -14,7 +14,7 @@ export function ThreadTreeNode({
   node: ThreadNode;
   statusFilter: ThreadStatusFilter;
   level: number;
-  onSelect: (id: string) => void;
+  onSelect: (thread: { id: string; alias: string }) => void;
   selectedId?: string;
   invalidateSiblingCache?: () => void;
 }) {
@@ -87,7 +87,7 @@ export function ThreadTreeNode({
           >
             {expanded ? '▾' : '▸'}
           </button>
-          <button className="flex-1 text-left" onClick={() => onSelect(node.id)}>
+          <button className="flex-1 text-left" onClick={() => onSelect({ id: node.id, alias: node.alias })}>
             <div
               className="thread-summary min-w-0 overflow-hidden text-sm font-medium leading-tight text-gray-900"
               title={summary}

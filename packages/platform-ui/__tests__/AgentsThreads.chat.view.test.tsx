@@ -6,24 +6,38 @@ import { TestProviders, server, abs } from './integration/testUtils';
 import { MemoryRouter } from 'react-router-dom';
 // run selection removed; no extra wrappers needed beyond TestProviders
 import { AgentsThreads } from '../src/pages/AgentsThreads';
+import * as threadsModule from '../src/api/modules/threads';
 
 function t(offsetMs: number) {
   return new Date(1700000000000 + offsetMs).toISOString();
 }
 
+const THREAD_ID = '11111111-1111-1111-1111-111111111111';
+const THREAD_ALIAS = 'thread-alias-a';
+
 describe('AgentsThreads chat-like view', () => {
   beforeAll(() => server.listen());
-  afterEach(() => server.resetHandlers());
+  afterEach(() => {
+    vi.restoreAllMocks();
+    server.resetHandlers();
+  });
   afterAll(() => server.close());
+
+  beforeEach(() => {
+    vi.spyOn(threadsModule.threads, 'resolveIdentifier').mockImplementation(async (identifier: string) => ({
+      id: identifier,
+      alias: identifier,
+    }));
+  });
 
   function useThreadsMock() {
     server.use(
-      http.get('/api/agents/threads', () => HttpResponse.json({ items: [{ id: 'th1', alias: 'th-a', summary: 'Thread A', createdAt: t(0) }] })),
-      http.get(abs('/api/agents/threads'), () => HttpResponse.json({ items: [{ id: 'th1', alias: 'th-a', summary: 'Thread A', createdAt: t(0) }] })),
-      http.get('/api/agents/threads/th1/runs', () =>
+      http.get('/api/agents/threads', () => HttpResponse.json({ items: [{ id: THREAD_ID, alias: THREAD_ALIAS, summary: 'Thread A', createdAt: t(0) }] })),
+      http.get(abs('/api/agents/threads'), () => HttpResponse.json({ items: [{ id: THREAD_ID, alias: THREAD_ALIAS, summary: 'Thread A', createdAt: t(0) }] })),
+      http.get(`/api/agents/threads/${THREAD_ID}/runs`, () =>
         HttpResponse.json({ items: [{ id: 'run1', status: 'finished', createdAt: t(1), updatedAt: t(2) }] }),
       ),
-      http.get(abs('/api/agents/threads/th1/runs'), () =>
+      http.get(abs(`/api/agents/threads/${THREAD_ID}/runs`), () =>
         HttpResponse.json({ items: [{ id: 'run1', status: 'finished', createdAt: t(1), updatedAt: t(2) }] }),
       ),
       http.get('/api/agents/runs/run1/messages', ({ request }) => {
@@ -88,12 +102,12 @@ describe('AgentsThreads chat-like view', () => {
   it('autoscrolls to bottom and shows jump control when scrolled up', async () => {
     const outputCount = 1;
     server.use(
-      http.get('/api/agents/threads', () => HttpResponse.json({ items: [{ id: 'th1', alias: 'th-a', summary: 'Thread A', createdAt: t(0) }] })),
-      http.get(abs('/api/agents/threads'), () => HttpResponse.json({ items: [{ id: 'th1', alias: 'th-a', summary: 'Thread A', createdAt: t(0) }] })),
-      http.get('/api/agents/threads/th1/runs', () =>
+      http.get('/api/agents/threads', () => HttpResponse.json({ items: [{ id: THREAD_ID, alias: THREAD_ALIAS, summary: 'Thread A', createdAt: t(0) }] })),
+      http.get(abs('/api/agents/threads'), () => HttpResponse.json({ items: [{ id: THREAD_ID, alias: THREAD_ALIAS, summary: 'Thread A', createdAt: t(0) }] })),
+      http.get(`/api/agents/threads/${THREAD_ID}/runs`, () =>
         HttpResponse.json({ items: [{ id: 'run1', status: 'finished', createdAt: t(1), updatedAt: t(2) }] }),
       ),
-      http.get(abs('/api/agents/threads/th1/runs'), () =>
+      http.get(abs(`/api/agents/threads/${THREAD_ID}/runs`), () =>
         HttpResponse.json({ items: [{ id: 'run1', status: 'finished', createdAt: t(1), updatedAt: t(2) }] }),
       ),
       http.get('/api/agents/runs/run1/messages', ({ request }) => {
@@ -144,15 +158,15 @@ describe('AgentsThreads chat-like view', () => {
 
   it('renders multiple run headers by default (all runs loaded)', async () => {
     server.use(
-      http.get('/api/agents/threads', () => HttpResponse.json({ items: [{ id: 'th1', alias: 'th-a', summary: 'Thread A', createdAt: t(0) }] })),
-      http.get(abs('/api/agents/threads'), () => HttpResponse.json({ items: [{ id: 'th1', alias: 'th-a', summary: 'Thread A', createdAt: t(0) }] })),
-      http.get('/api/agents/threads/th1/runs', () =>
+      http.get('/api/agents/threads', () => HttpResponse.json({ items: [{ id: THREAD_ID, alias: THREAD_ALIAS, summary: 'Thread A', createdAt: t(0) }] })),
+      http.get(abs('/api/agents/threads'), () => HttpResponse.json({ items: [{ id: THREAD_ID, alias: THREAD_ALIAS, summary: 'Thread A', createdAt: t(0) }] })),
+      http.get(`/api/agents/threads/${THREAD_ID}/runs`, () =>
         HttpResponse.json({ items: [
           { id: 'run1', status: 'finished', createdAt: t(1), updatedAt: t(2) },
           { id: 'run2', status: 'finished', createdAt: t(3), updatedAt: t(4) },
         ] }),
       ),
-      http.get(abs('/api/agents/threads/th1/runs'), () =>
+      http.get(abs(`/api/agents/threads/${THREAD_ID}/runs`), () =>
         HttpResponse.json({ items: [
           { id: 'run1', status: 'finished', createdAt: t(1), updatedAt: t(2) },
           { id: 'run2', status: 'finished', createdAt: t(3), updatedAt: t(4) },
@@ -206,10 +220,10 @@ describe('AgentsThreads chat-like view', () => {
 
   it('shows empty states when no runs or messages', async () => {
     server.use(
-      http.get('/api/agents/threads', () => HttpResponse.json({ items: [{ id: 'th1', alias: 'th-a', summary: 'Thread A', createdAt: t(0) }] })),
-      http.get(abs('/api/agents/threads'), () => HttpResponse.json({ items: [{ id: 'th1', alias: 'th-a', summary: 'Thread A', createdAt: t(0) }] })),
-      http.get('/api/agents/threads/th1/runs', () => HttpResponse.json({ items: [] })),
-      http.get(abs('/api/agents/threads/th1/runs'), () => HttpResponse.json({ items: [] })),
+      http.get('/api/agents/threads', () => HttpResponse.json({ items: [{ id: THREAD_ID, alias: THREAD_ALIAS, summary: 'Thread A', createdAt: t(0) }] })),
+      http.get(abs('/api/agents/threads'), () => HttpResponse.json({ items: [{ id: THREAD_ID, alias: THREAD_ALIAS, summary: 'Thread A', createdAt: t(0) }] })),
+      http.get(`/api/agents/threads/${THREAD_ID}/runs`, () => HttpResponse.json({ items: [] })),
+      http.get(abs(`/api/agents/threads/${THREAD_ID}/runs`), () => HttpResponse.json({ items: [] })),
     );
     render(
       <TestProviders>
@@ -224,12 +238,12 @@ describe('AgentsThreads chat-like view', () => {
 
   it('shows error state when message fetch fails', async () => {
     server.use(
-      http.get('/api/agents/threads', () => HttpResponse.json({ items: [{ id: 'th1', alias: 'th-a', summary: 'Thread A', createdAt: t(0) }] })),
-      http.get(abs('/api/agents/threads'), () => HttpResponse.json({ items: [{ id: 'th1', alias: 'th-a', summary: 'Thread A', createdAt: t(0) }] })),
-      http.get('/api/agents/threads/th1/runs', () =>
+      http.get('/api/agents/threads', () => HttpResponse.json({ items: [{ id: THREAD_ID, alias: THREAD_ALIAS, summary: 'Thread A', createdAt: t(0) }] })),
+      http.get(abs('/api/agents/threads'), () => HttpResponse.json({ items: [{ id: THREAD_ID, alias: THREAD_ALIAS, summary: 'Thread A', createdAt: t(0) }] })),
+      http.get(`/api/agents/threads/${THREAD_ID}/runs`, () =>
         HttpResponse.json({ items: [{ id: 'run1', status: 'finished', createdAt: t(1), updatedAt: t(2) }] }),
       ),
-      http.get(abs('/api/agents/threads/th1/runs'), () =>
+      http.get(abs(`/api/agents/threads/${THREAD_ID}/runs`), () =>
         HttpResponse.json({ items: [{ id: 'run1', status: 'finished', createdAt: t(1), updatedAt: t(2) }] }),
       ),
       http.get('/api/agents/runs/run1/messages', () => new HttpResponse(null, { status: 500 })),
