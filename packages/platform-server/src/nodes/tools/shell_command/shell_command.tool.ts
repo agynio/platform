@@ -22,6 +22,7 @@ export const bashCommandSchema = z.object({
     .describe(
       `Shell command to execute. Avoid interactive commands or watch mode. Use single quotes for cli arguments to prevent unexpected interpolation (do not wrap entire command in quotes). Command is executed in wrapper \`bash -lc '<COMMAND>'\`, no need to add bash invocation.`,
     ),
+  cwd: z.string().optional().describe('Optional working directory override applied for this command.'),
 });
 
 // Regex to strip ANSI escape sequences (colors, cursor moves, etc.)
@@ -72,7 +73,7 @@ export class ShellCommandTool extends FunctionTool<typeof bashCommandSchema> {
   }
 
   async execute(args: z.infer<typeof bashCommandSchema>, ctx: LLMContext): Promise<string> {
-    const { command } = args;
+    const { command, cwd } = args;
     const { threadId } = ctx;
 
     const provider = this.node.provider;
@@ -91,7 +92,7 @@ export class ShellCommandTool extends FunctionTool<typeof bashCommandSchema> {
     try {
       response = await container.exec(command, {
         env: envOverlay,
-        workdir: cfg.workdir,
+        workdir: cwd ?? cfg.workdir,
         timeoutMs,
         idleTimeoutMs,
         killOnTimeout: true,

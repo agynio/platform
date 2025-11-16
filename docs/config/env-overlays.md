@@ -12,6 +12,8 @@ Shell tool
   - `executionTimeoutMs?: number` — max wall time in ms (default 3600000; 0 disables). When enabled (non-zero), must be an integer between 1000 and 86400000 inclusive.
   - `idleTimeoutMs?: number` — max idle time with no output in ms (default 60000; 0 disables). When enabled (non-zero), must be an integer between 1000 and 86400000 inclusive.
   - `outputLimitChars?: number` — maximum combined cleaned stdout+stderr length (default 50000; 0 disables). Valid values are 0 or any positive integer. If greater than 0 and exceeded, output is saved to `/tmp/<uuid>.txt` and a short error message is returned.
+- Runtime arguments:
+  - `cwd?: string` — optional per-call working directory override for the executed command.
 - Behavior:
   - Pass `env`, `workdir`, `executionTimeoutMs`, `idleTimeoutMs` to container.exec (per exec only).
   - On timeout and when killOnTimeout=true, the container is stopped with a 10s grace period.

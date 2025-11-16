@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { ShellToolStaticConfigSchema } from '../../src/nodes/tools/shell_command/shell_command.node';
+import { bashCommandSchema } from '../../src/nodes/tools/shell_command/shell_command.tool';
 
 describe('ShellToolStaticConfigSchema validation', () => {
   it('accepts 0 for both timeouts', () => {
@@ -15,5 +16,11 @@ describe('ShellToolStaticConfigSchema validation', () => {
       expect(execRes.success).toBe(false);
       expect(idleRes.success).toBe(false);
     }
+  });
+
+  it('accepts optional cwd string', () => {
+    expect(bashCommandSchema.safeParse({ command: 'pwd' }).success).toBe(true);
+    expect(bashCommandSchema.safeParse({ command: 'pwd', cwd: '/workspace/app' }).success).toBe(true);
+    expect(bashCommandSchema.safeParse({ command: 'pwd', cwd: 42 as unknown as string }).success).toBe(false);
   });
 });
