@@ -363,9 +363,9 @@ export function AgentsThreads() {
         <h1 className="text-xl font-semibold">Agents / Threads</h1>
       </div>
 
-      <div className="flex-1 min-h-0 px-4 py-4 md:px-6 md:py-6">
+      <div className="flex-1 min-h-0">
         <div className="h-full min-h-0 overflow-y-auto md:overflow-hidden" data-testid="mobile-panel">
-          <div className="flex h-full min-h-0 flex-col gap-4 md:flex-row">
+          <div className="flex h-full min-h-0 flex-col md:flex-row">
             <section
               className="flex min-h-0 w-full shrink-0 flex-col border-b md:w-[340px] md:flex-none md:border-b-0 md:border-r"
               data-testid="threads-panel"
@@ -403,6 +403,7 @@ export function AgentsThreads() {
                     if (!selectedThreadId) return;
                     navigate(`/agents/threads/${encodeURIComponent(selectedThreadId)}/runs/${encodeURIComponent(run.id)}/timeline`);
                   }}
+                  activeThreadId={selectedThreadId}
                 />
               </div>
             </section>

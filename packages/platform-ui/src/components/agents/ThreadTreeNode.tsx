@@ -109,7 +109,7 @@ export function ThreadTreeNode({
           </button>
           <div className="flex items-center gap-2">
             <span
-              className={`inline-block h-2 w-2 rounded-full ${activity === 'working' ? 'bg-green-500' : activity === 'waiting' ? 'bg-yellow-500' : 'bg-blue-500'}`}
+              className={`inline-block h-2 w-2 rounded-full ${activity === 'working' ? 'bg-blue-500' : activity === 'waiting' ? 'bg-yellow-500' : 'bg-green-500'}`}
               aria-label={`Activity: ${activity}`}
               title={`Activity: ${activity}`}
             />

@@ -33,28 +33,51 @@ type RunMessageListProps = {
   loadingMoreAbove?: boolean;
   onLoadMoreAbove?: () => void;
   onViewRunTimeline?: (run: RunMeta) => void;
+  activeThreadId?: string;
 };
 
-export function RunMessageList({ items, showJson, onToggleJson, isLoading, error, hasMoreAbove, loadingMoreAbove, onLoadMoreAbove, onViewRunTimeline }: RunMessageListProps) {
+export function RunMessageList({ items, showJson, onToggleJson, isLoading, error, hasMoreAbove, loadingMoreAbove, onLoadMoreAbove, onViewRunTimeline, activeThreadId }: RunMessageListProps) {
   const containerRef = React.useRef<HTMLDivElement | null>(null);
   const [atBottom, setAtBottom] = React.useState(true);
 
   const prevCount = React.useRef(0);
+  const scrollToBottom = React.useCallback(() => {
+    const c = containerRef.current;
+    if (!c) return;
+    try {
+      c.scrollTo({ top: c.scrollHeight });
+    } catch (_err) {
+      try {
+        c.scrollTop = c.scrollHeight;
+      } catch (__err) {
+        void __err;
+      }
+    }
+  }, []);
   React.useEffect(() => {
     const c = containerRef.current;
     if (!c) return;
     const justAppended = items.length > prevCount.current;
-    if (justAppended && atBottom) {
-      // Use scrollTop assignment; guard in case of read-only in test envs
-      try {
-        c.scrollTop = c.scrollHeight;
-      } catch (_err) {
-        // ignore read-only scrollTop in test envs
-        void _err;
-      }
+    const initialLoad = prevCount.current === 0 && items.length > 0;
+    if (initialLoad) {
+      scrollToBottom();
+      setAtBottom(true);
+    } else if (justAppended && atBottom) {
+      scrollToBottom();
     }
     prevCount.current = items.length;
-  }, [items, atBottom]);
+  }, [items, atBottom, scrollToBottom]);
+
+  React.useEffect(() => {
+    prevCount.current = 0;
+    setAtBottom(true);
+    const schedule = typeof requestAnimationFrame === 'function' ? requestAnimationFrame : (cb: FrameRequestCallback) => window.setTimeout(cb, 0);
+    const cancel = typeof cancelAnimationFrame === 'function' ? cancelAnimationFrame : (id: number) => window.clearTimeout(id);
+    const frame = schedule(() => {
+      scrollToBottom();
+    });
+    return () => cancel(frame);
+  }, [activeThreadId, scrollToBottom]);
 
   const onScroll = (e: React.UIEvent<HTMLDivElement>) => {
     const el = e.currentTarget;
@@ -69,10 +92,9 @@ export function RunMessageList({ items, showJson, onToggleJson, isLoading, error
 
   return (
     <div className="relative h-full" aria-busy={!!isLoading || undefined}>
-      <div className="text-sm font-medium px-2 py-1">Messages</div>
       <div
         ref={containerRef}
-        className="h-[calc(100%-2rem)] overflow-auto p-2 flex flex-col gap-2"
+        className="flex h-full flex-col gap-2 overflow-auto p-2"
         onScroll={onScroll}
         aria-live="polite"
         aria-label="Run messages"
