@@ -43,7 +43,7 @@ vi.mock('@agyn/tracing', async () => {
 type MockFn = ReturnType<typeof vi.fn>;
 
 describe('CallToolsLLMReducer context items', () => {
-  it('persists tool outputs without request items and keeps ordering placeholders', async () => {
+  it('persists tool outputs after existing assistant response context', async () => {
     const runEvents = createRunEventsStub();
     const createContextItemsMock = runEvents.createContextItems as unknown as MockFn;
     const executionSnapshots: Array<{ name: string; callCount: number; input: unknown }> = [];
@@ -71,7 +71,7 @@ describe('CallToolsLLMReducer context items', () => {
     const initialState = {
       messages: [HumanMessage.fromText('hello'), response],
       meta: {},
-      context: { messageIds: ['existing-1'], memory: [] },
+      context: { messageIds: ['existing-1', 'assistant-existing'], memory: [] },
     } as any;
     const ctx = { threadId: 'thread-1', runId: 'run-1', callerAgent: { getAgentNodeId: () => 'agent-node' } } as any;
 
@@ -91,7 +91,7 @@ describe('CallToolsLLMReducer context items', () => {
     expect(executionSnapshots.find((s) => s.name === 'beta')?.input).toEqual({ bar: 2 });
 
     const resultIds = await (createContextItemsMock.mock.results[0]?.value as Promise<string[]>);
-    expect(result.context.messageIds).toEqual(['existing-1', '', ...resultIds]);
+    expect(result.context.messageIds).toEqual(['existing-1', 'assistant-existing', ...resultIds]);
 
     const appendedMessages = result.messages.slice(-2);
     expect(appendedMessages[0].text).toBe('alpha-result');
@@ -117,7 +117,7 @@ describe('CallToolsLLMReducer context items', () => {
     const state = {
       messages: [HumanMessage.fromText('hi'), response],
       meta: {},
-      context: { messageIds: ['existing-ctx'], memory: [] },
+      context: { messageIds: ['existing-ctx', 'assistant-ctx'], memory: [] },
     } as any;
     const ctx = { threadId: 'thread', runId: 'run', callerAgent: { getAgentNodeId: () => 'node' } } as any;
 
@@ -129,7 +129,7 @@ describe('CallToolsLLMReducer context items', () => {
     expect(resultItems).toHaveLength(1);
     expect(resultItems[0].contentText).toContain('Tool failing execution failed');
     const resultIds = await (createContextItemsMock.mock.results[0]?.value as Promise<string[]>);
-    expect(result.context.messageIds).toEqual(['existing-ctx', '', ...resultIds]);
+    expect(result.context.messageIds).toEqual(['existing-ctx', 'assistant-ctx', ...resultIds]);
     expect(result.messages.at(-1)?.text).toContain('Tool failing execution failed');
   });
 
@@ -194,12 +194,27 @@ describe('CallToolsLLMReducer context items', () => {
     expect(lastMessage).toBeInstanceOf(ResponseMessage);
     const responseMessage = lastMessage as ResponseMessage;
     expect(responseMessage.output.some((entry) => entry instanceof ToolCallMessage)).toBe(true);
+    expect(createContextItemsMock).toHaveBeenCalledTimes(1);
+    const firstAssistantIds = await (createContextItemsMock.mock.results[0]?.value as Promise<string[]>);
+    expect(firstAssistantIds).toHaveLength(1);
+    const firstAssistantId = firstAssistantIds[0];
+    expect(afterFirstModel.context.messageIds).toEqual(['ctx-user-1', firstAssistantId]);
+    const firstAssistantItem = createContextItemsMock.mock.calls[0][0][0] as any;
+    expect(firstAssistantItem.role).toBe('assistant');
+    expect(firstAssistantItem.contentText).toBeNull();
+    expect(Array.isArray(firstAssistantItem.contentJson?.output)).toBe(true);
+    expect(firstAssistantItem.contentJson.output).toHaveLength(2);
+    const [reasoning, toolEntry] = firstAssistantItem.contentJson.output;
+    expect(reasoning.type).toBe('reasoning');
+    expect(toolEntry.type).toBe('function_call');
+    expect(toolEntry.name).toBe('alpha');
 
     const afterTools = await callTools.invoke(afterFirstModel, ctx);
     expect(tool.execute).toHaveBeenCalledTimes(1);
-    expect(createContextItemsMock).toHaveBeenCalledTimes(1);
-    const toolContextIds = await (createContextItemsMock.mock.results[0]?.value as Promise<string[]>);
+    expect(createContextItemsMock).toHaveBeenCalledTimes(2);
+    const toolContextIds = await (createContextItemsMock.mock.results[1]?.value as Promise<string[]>);
     expect(toolContextIds).toHaveLength(1);
+    expect(afterTools.context.messageIds).toEqual(['ctx-user-1', firstAssistantId, toolContextIds[0]]);
 
     const afterSecondModel = await callModel.invoke(afterTools, ctx);
 
@@ -207,22 +222,17 @@ describe('CallToolsLLMReducer context items', () => {
     const secondCallArgs = startLLMCallMock.mock.calls[1][0];
     expect(Array.isArray(secondCallArgs?.contextItemIds)).toBe(true);
 
-    expect(createContextItemsMock).toHaveBeenCalledTimes(2);
-    const assistantIds = await (createContextItemsMock.mock.results[1]?.value as Promise<string[]>);
-    expect(assistantIds).toHaveLength(1);
-    const assistantId = assistantIds[0];
+    expect(createContextItemsMock).toHaveBeenCalledTimes(3);
+    const secondAssistantIds = await (createContextItemsMock.mock.results[2]?.value as Promise<string[]>);
+    expect(secondAssistantIds).toHaveLength(1);
+    const secondAssistantId = secondAssistantIds[0];
 
-    expect(secondCallArgs.contextItemIds).toEqual(['ctx-system-1', 'ctx-user-1', assistantId, toolContextIds[0]]);
-    expect(afterSecondModel.context.messageIds).toEqual(['ctx-user-1', assistantId, toolContextIds[0]]);
+    expect(secondCallArgs.contextItemIds).toEqual(['ctx-system-1', 'ctx-user-1', firstAssistantId, toolContextIds[0]]);
+    expect(afterSecondModel.context.messageIds).toEqual(['ctx-user-1', firstAssistantId, toolContextIds[0], secondAssistantId]);
 
-    const assistantItem = createContextItemsMock.mock.calls[1][0][0] as any;
-    expect(assistantItem.role).toBe('assistant');
-    expect(assistantItem.contentText).toBeNull();
-    expect(Array.isArray(assistantItem.contentJson?.output)).toBe(true);
-    expect(assistantItem.contentJson.output).toHaveLength(2);
-    const [reasoning, toolEntry] = assistantItem.contentJson.output;
-    expect(reasoning.type).toBe('reasoning');
-    expect(toolEntry.type).toBe('function_call');
-    expect(toolEntry.name).toBe('alpha');
+    const secondAssistantItem = createContextItemsMock.mock.calls[2][0][0] as any;
+    expect(secondAssistantItem.role).toBe('assistant');
+    expect(secondAssistantItem.contentText).toBe('done');
+    expect(Array.isArray(secondAssistantItem.contentJson?.output)).toBe(true);
   });
 });

@@ -181,9 +181,11 @@ export function contextItemInputFromMessage(
     };
   }
   if (message instanceof ResponseMessage) {
+    const text = message.text;
+    const hasContent = text.trim().length > 0;
     return {
       role: ContextItemRole.assistant,
-      contentText: message.text.length > 0 ? message.text : null,
+      contentText: hasContent ? text : null,
       contentJson: safeToPlain(message),
       metadata: { type: message.type },
     };

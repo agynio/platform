@@ -275,9 +275,6 @@ export class CallToolsLLMReducer extends Reducer<LLMState, LLMContext> {
     };
 
     const context = this.cloneContext(state.context);
-    while (context.messageIds.length < state.messages.length) {
-      context.messageIds.push('');
-    }
     if (results.length > 0) {
       const inputs = results.map((msg) => contextItemInputFromMessage(msg));
       const created = await this.runEvents.createContextItems(inputs);

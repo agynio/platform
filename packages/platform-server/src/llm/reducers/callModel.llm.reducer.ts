@@ -133,6 +133,19 @@ export class CallModelLLMReducer extends Reducer<LLMState, LLMContext> {
       const toolCalls = this.serializeToolCalls(llmResult.toolCalls ?? []);
       const rawResponse = this.trySerialize(llmResult.raw);
 
+      const assistantContextItems = await this.runEvents.createContextItems([
+        contextItemInputFromMessage(rawMessage),
+      ]);
+      const assistantContextId = assistantContextItems[0];
+      if (!assistantContextId) {
+        throw new Error('Failed to persist assistant response context item');
+      }
+
+      const contextWithAssistant: LLMContextState = {
+        ...nextContext,
+        messageIds: [...nextContext.messageIds, assistantContextId],
+      };
+
       await this.runEvents.completeLLMCall({
         eventId: llmEvent.id,
         status: RunEventStatus.success,
@@ -146,7 +159,7 @@ export class CallModelLLMReducer extends Reducer<LLMState, LLMContext> {
       const updated: LLMState = {
         ...state,
         messages: [...state.messages, rawMessage],
-        context: nextContext,
+        context: contextWithAssistant,
         meta: { ...state.meta, lastLLMEventId: llmEvent.id },
       };
       return updated;
@@ -202,7 +215,6 @@ export class CallModelLLMReducer extends Reducer<LLMState, LLMContext> {
     sequence: SequenceEntry[],
     summaryText: string | null,
   ): Promise<{ contextItemIds: string[]; context: LLMContextState }> {
-    const ids: string[] = [];
     const pending: Array<{ input: ContextItemInput; assign: (id: string) => void }> = [];
     let conversationIndex = 0;
 
@@ -217,7 +229,6 @@ export class CallModelLLMReducer extends Reducer<LLMState, LLMContext> {
           context.system = existing;
           this.collectContextId({
             existingId: existing.id ?? null,
-            ids,
             pending,
             input: () => contextItemInputFromSystem(entry.message),
             assign: (id) => {
@@ -232,7 +243,6 @@ export class CallModelLLMReducer extends Reducer<LLMState, LLMContext> {
             const reuseId = existing && existing.text === summaryText ? existing.id ?? null : null;
             this.collectContextId({
               existingId: reuseId,
-              ids,
               pending,
               input: () => contextItemInputFromSummary(summaryText),
               assign: (id) => {
@@ -251,7 +261,6 @@ export class CallModelLLMReducer extends Reducer<LLMState, LLMContext> {
           }
           this.collectContextId({
             existingId: memoryEntry.id ?? null,
-            ids,
             pending,
             input: () => contextItemInputFromMemory(entry.message, place),
             assign: (id) => {
@@ -261,11 +270,10 @@ export class CallModelLLMReducer extends Reducer<LLMState, LLMContext> {
           break;
         }
         case 'conversation': {
-          const existingId = context.messageIds[conversationIndex] ?? null;
           const idx = conversationIndex;
+          const existingId = context.messageIds[idx] ?? null;
           this.collectContextId({
             existingId,
-            ids,
             pending,
             input: () => contextItemInputFromMessage(entry.message),
             assign: (id) => {
@@ -292,29 +300,50 @@ export class CallModelLLMReducer extends Reducer<LLMState, LLMContext> {
       created.forEach((id, index) => pending[index].assign(id));
     }
 
-    return { contextItemIds: ids, context };
+    const contextItemIds: string[] = [];
+    for (const entry of sequence) {
+      switch (entry.kind) {
+        case 'system': {
+          const id = context.system?.id ?? null;
+          if (id) contextItemIds.push(id);
+          break;
+        }
+        case 'summary': {
+          const id = context.summary?.id ?? null;
+          if (id) contextItemIds.push(id);
+          break;
+        }
+        case 'memory': {
+          const memoryEntry = context.memory.find((m) => m.place === entry.place);
+          if (memoryEntry?.id) contextItemIds.push(memoryEntry.id);
+          break;
+        }
+        case 'conversation': {
+          const id = context.messageIds[entry.index] ?? null;
+          if (id) contextItemIds.push(id);
+          break;
+        }
+      }
+    }
+
+    return { contextItemIds, context };
   }
 
   private collectContextId(params: {
     existingId: string | null;
-    ids: string[];
     pending: Array<{ input: ContextItemInput; assign: (id: string) => void }>;
     input: () => ContextItemInput;
     assign: (id: string) => void;
   }): void {
-    const { existingId, ids, pending, input, assign } = params;
-    if (existingId) {
-      ids.push(existingId);
+    const { existingId, pending, input, assign } = params;
+    const normalizedId = existingId && existingId.length > 0 ? existingId : null;
+    if (normalizedId) {
+      assign(normalizedId);
       return;
     }
-    const slot = ids.length;
-    ids.push('');
     pending.push({
       input: input(),
-      assign: (id) => {
-        ids[slot] = id;
-        assign(id);
-      },
+      assign,
     });
   }
 
