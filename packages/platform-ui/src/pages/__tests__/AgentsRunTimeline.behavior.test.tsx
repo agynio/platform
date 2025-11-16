@@ -1,323 +1,207 @@
 import React from 'react';
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, waitFor, act, fireEvent } from '@testing-library/react';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { render, screen, waitFor, act, fireEvent } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { AgentsRunTimeline } from '../AgentsRunTimeline';
-import type { RunTimelineEvent, RunTimelineSummary, RunTimelineEventsCursor } from '@/api/types/agents';
+import type { RunTimelineEvent } from '@/api/types/agents';
 
-type MockedSummaryResult = {
-  data: RunTimelineSummary;
-  isLoading: boolean;
-  isError: boolean;
-  error: Error | null;
-  refetch: ReturnType<typeof vi.fn>;
+type TimelineControls = {
+  reset(): void;
+  prime(input: {
+    runId: string;
+    threadId: string;
+    pages: Array<{
+      cursor: { ts: string; id: string } | null;
+      items: RunTimelineEvent[];
+      nextCursor: { ts: string; id: string } | null;
+    }>;
+  }): void;
 };
 
-type MockedEventsResult = {
-  data: { items: RunTimelineEvent[]; nextCursor: RunTimelineEventsCursor | null };
-  isFetching: boolean;
-  isError: boolean;
-  error: Error | null;
-  refetch: ReturnType<typeof vi.fn>;
-};
+const timeline = globalThis.__timeline as TimelineControls;
 
-type TimelineFilters = {
-  types: string[];
-  statuses: string[];
-  limit?: number;
-  order?: 'asc' | 'desc';
-  cursor?: RunTimelineEventsCursor | null;
-};
+const runId = 'run-1';
+const threadId = 'thread-1';
+const INITIAL_COUNT = 100;
+const OLDER_COUNT = 20;
 
-const summaryRefetch = vi.fn();
-const eventsRefetch = vi.fn();
-const summaryMock = vi.fn<MockedSummaryResult, [string | undefined]>();
-const eventsMock = vi.fn<MockedEventsResult, [string | undefined, TimelineFilters]>();
-const loadOlderMock = vi.hoisted(() => vi.fn());
+const baseTimestamp = new Date('2024-01-01T09:00:00.000Z').getTime();
 
-const setMatchMedia = (value: boolean) => {
-  (window.matchMedia as unknown) = vi.fn().mockImplementation(() => ({
-    matches: value,
-    media: '',
-    onchange: null,
-    addEventListener: vi.fn(),
-    removeEventListener: vi.fn(),
-    addListener: vi.fn(),
-    removeListener: vi.fn(),
-    dispatchEvent: vi.fn(),
-  }));
-};
-
-vi.mock('@/api/hooks/runs', () => ({
-  useRunTimelineSummary: (runId: string | undefined) => summaryMock(runId),
-  useRunTimelineEvents: (runId: string | undefined, filters: TimelineFilters) => eventsMock(runId, filters),
-}));
-
-vi.mock('@/api/modules/runs', () => ({
-  runs: {
-    timelineEvents: loadOlderMock,
-  },
-}));
-
-const socketMocks = vi.hoisted(() => ({
-  subscribe: vi.fn(),
-  unsubscribe: vi.fn(),
-}));
-
-vi.mock('@/lib/graph/socket', () => ({
-  graphSocket: {
-    subscribe: socketMocks.subscribe,
-    unsubscribe: socketMocks.unsubscribe,
-    onRunEvent: vi.fn(() => () => {}),
-    onRunStatusChanged: vi.fn(() => () => {}),
-    onReconnected: vi.fn(() => () => {}),
-  },
-}));
-
-function buildEvent(overrides: Partial<RunTimelineEvent> = {}): RunTimelineEvent {
+const buildEvent = (id: string, secondsAgo: number): RunTimelineEvent => {
+  const ts = new Date(baseTimestamp - secondsAgo * 1000).toISOString();
   return {
-    id: 'event-1',
-    runId: 'run-1',
-    threadId: 'thread-1',
+    id,
+    runId,
+    threadId,
     type: 'tool_execution',
     status: 'success',
-    ts: '2024-01-01T00:00:00.000Z',
-    startedAt: '2024-01-01T00:00:00.000Z',
-    endedAt: '2024-01-01T00:00:01.000Z',
-    durationMs: 1000,
+    ts,
+    startedAt: ts,
+    endedAt: ts,
+    durationMs: 0,
     nodeId: null,
-    sourceKind: 'run_step',
+    sourceKind: 'internal',
     sourceSpanId: null,
     metadata: {},
     errorCode: null,
     errorMessage: null,
     toolExecution: {
-      toolName: 'calculator',
-      input: '{}',
-      output: '{}',
-      error: null,
-      outputFormat: 'json',
+      toolName: 'demo',
+      toolCallId: null,
+      execStatus: 'success',
+      input: {},
+      output: {},
+      errorMessage: null,
+      raw: null,
     },
-    llmCall: null,
-    summarization: null,
-    injection: null,
-    invocationMessage: null,
     attachments: [],
-    ...overrides,
-  } satisfies RunTimelineEvent;
-}
+  };
+};
 
-function renderPage(initialEntries: string[]) {
-  const queryClient = new QueryClient({
+const createQueryClient = () =>
+  new QueryClient({
     defaultOptions: {
       queries: {
         retry: false,
+        gcTime: 0,
       },
     },
   });
 
-  return render(
-    <MemoryRouter initialEntries={initialEntries}>
-      <QueryClientProvider client={queryClient}>
+const renderPage = () =>
+  render(
+    <MemoryRouter initialEntries={[`/agents/threads/${threadId}/runs/${runId}`]}>
+      <QueryClientProvider client={createQueryClient()}>
         <Routes>
           <Route path="/agents/threads/:threadId/runs/:runId" element={<AgentsRunTimeline />} />
         </Routes>
       </QueryClientProvider>
     </MemoryRouter>,
   );
-}
 
-describe('AgentsRunTimeline pagination behavior', () => {
+const setMatchMedia = (matches: boolean) => {
+  Object.defineProperty(window, 'matchMedia', {
+    configurable: true,
+    writable: true,
+    value: vi.fn().mockImplementation((query: string) => ({
+      matches,
+      media: query,
+      onchange: null,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+      dispatchEvent: vi.fn(),
+    })),
+  });
+};
+
+const primeTimeline = () => {
+  const current = Array.from({ length: INITIAL_COUNT }, (_, index) => buildEvent(`current-${index + 1}`, index));
+  const oldestCurrent = current.at(-1)!;
+  const older = Array.from({ length: OLDER_COUNT }, (_, index) => buildEvent(`older-${index + 1}`, INITIAL_COUNT + index + 1));
+
+  timeline.reset();
+  timeline.prime({
+    runId,
+    threadId,
+    pages: [
+      {
+        cursor: null,
+        items: current,
+        nextCursor: { ts: oldestCurrent.ts, id: oldestCurrent.id },
+      },
+      {
+        cursor: { ts: oldestCurrent.ts, id: oldestCurrent.id },
+        items: older,
+        nextCursor: null,
+      },
+    ],
+  });
+
+  return { current, older };
+};
+
+describe('AgentsRunTimeline behavior', () => {
   beforeEach(() => {
-    summaryRefetch.mockReset();
-    eventsRefetch.mockReset();
-    summaryMock.mockReset();
-    eventsMock.mockReset();
-    loadOlderMock.mockReset();
-    socketMocks.subscribe.mockReset();
-    socketMocks.unsubscribe.mockReset();
     setMatchMedia(true);
-
-    summaryMock.mockReturnValue({
-      data: {
-        runId: 'run-1',
-        threadId: 'thread-1',
-        status: 'success',
-        createdAt: '2024-01-01T00:00:00.000Z',
-        updatedAt: '2024-01-01T00:00:03.000Z',
-        firstEventAt: '2024-01-01T00:00:01.000Z',
-        lastEventAt: '2024-01-01T00:00:03.000Z',
-        countsByType: {
-          invocation_message: 0,
-          injection: 0,
-          llm_call: 0,
-          tool_execution: 3,
-          summarization: 0,
-        },
-        countsByStatus: {
-          pending: 0,
-          running: 0,
-          success: 3,
-          error: 0,
-          cancelled: 0,
-        },
-        totalEvents: 3,
-      },
-      isLoading: false,
-      isError: false,
-      error: null,
-      refetch: summaryRefetch,
-    });
-
-    const events = [
-      buildEvent({ id: 'event-1', ts: '2024-01-01T00:00:01.000Z' }),
-      buildEvent({ id: 'event-2', ts: '2024-01-01T00:00:02.000Z' }),
-      buildEvent({ id: 'event-3', ts: '2024-01-01T00:00:03.000Z' }),
-    ];
-
-    eventsMock.mockReturnValue({
-      data: { items: events, nextCursor: null },
-      isFetching: false,
-      isError: false,
-      error: null,
-      refetch: eventsRefetch,
-    });
-
-    loadOlderMock.mockResolvedValue({ items: [], nextCursor: null });
   });
 
-  afterEach(() => {
-    vi.restoreAllMocks();
+  it('anchors to the bottom after the newest page loads', async () => {
+    primeTimeline();
+
+    renderPage();
+
+    const list = await screen.findByTestId('agents-run-timeline-scroll');
+    const metrics = { client: 400, height: 1600, top: 0 };
+
+    Object.defineProperty(list, 'clientHeight', {
+      configurable: true,
+      get: () => metrics.client,
+    });
+    Object.defineProperty(list, 'scrollHeight', {
+      configurable: true,
+      get: () => metrics.height,
+    });
+    Object.defineProperty(list, 'scrollTop', {
+      configurable: true,
+      get: () => metrics.top,
+      set: (value: number) => {
+        metrics.top = value;
+      },
+    });
+
+    await waitFor(() => expect(document.querySelectorAll('[data-event-id]').length).toBe(INITIAL_COUNT));
+
+    await waitFor(() => expect(metrics.top).toBe(metrics.height));
   });
 
-  it('requests the newest 100 items and scrolls to bottom on initial load', async () => {
-    const rafCallbacks: FrameRequestCallback[] = [];
-    const rafSpy = vi.spyOn(window, 'requestAnimationFrame').mockImplementation((cb) => {
-      rafCallbacks.push(cb);
-      return rafCallbacks.length;
-    });
+  it('prepends older events when the user scrolls to the top while preserving scroll offset', async () => {
+    const { current, older } = primeTimeline();
 
-    const { getByRole } = renderPage(['/agents/threads/thread-1/runs/run-1']);
+    renderPage();
 
-    await waitFor(() => expect(eventsMock).toHaveBeenCalled());
-    const filters = eventsMock.mock.calls.at(-1)?.[1];
-    expect(filters?.limit).toBe(100);
-    expect(filters?.order).toBe('desc');
+    const list = await screen.findByTestId('agents-run-timeline-scroll');
+    const metrics = { client: 480, height: 2400, top: 0 };
 
-    const listbox = getByRole('listbox');
-    let scrollTopValue = 0;
-    Object.defineProperty(listbox, 'clientHeight', { configurable: true, value: 160 });
-    Object.defineProperty(listbox, 'scrollHeight', { configurable: true, value: 640 });
-    Object.defineProperty(listbox, 'scrollTop', {
+    Object.defineProperty(list, 'clientHeight', {
       configurable: true,
-      get: () => scrollTopValue,
-      set: (val) => {
-        scrollTopValue = val;
+      get: () => metrics.client,
+    });
+    Object.defineProperty(list, 'scrollHeight', {
+      configurable: true,
+      get: () => metrics.height,
+    });
+    Object.defineProperty(list, 'scrollTop', {
+      configurable: true,
+      get: () => metrics.top,
+      set: (value: number) => {
+        metrics.top = value;
       },
     });
 
-    await act(async () => {
-      const callbacks = rafCallbacks.splice(0);
-      callbacks.forEach((cb) => cb(0));
-    });
+    await waitFor(() => expect(document.querySelectorAll('[data-event-id]').length).toBe(INITIAL_COUNT));
+    await waitFor(() => expect(metrics.top).toBe(metrics.height));
 
-    expect(scrollTopValue).toBe(640);
+    const previousHeight = metrics.height;
+    const previousTop = 20;
+    metrics.top = previousTop;
 
-    rafSpy.mockRestore();
-  });
-
-  it('loads older events when scrolled near the top and preserves viewport offset', async () => {
-    const initialEvents = [
-      buildEvent({ id: 'event-1', ts: '2024-01-01T00:00:01.000Z' }),
-      buildEvent({ id: 'event-2', ts: '2024-01-01T00:00:02.000Z' }),
-      buildEvent({ id: 'event-3', ts: '2024-01-01T00:00:03.000Z' }),
-    ];
-
-    eventsMock.mockImplementation(() => ({
-      data: { items: initialEvents, nextCursor: { ts: '2023-12-31T23:59:50.000Z', id: 'cursor-prev' } },
-      isFetching: false,
-      isError: false,
-      error: null,
-      refetch: eventsRefetch,
-    }));
-
-    const olderEvent = buildEvent({
-      id: 'event-0',
-      ts: '2023-12-31T23:59:59.000Z',
-      type: 'summarization',
-      toolExecution: undefined,
-      summarization: {
-        summaryText: 'older',
-        newContextCount: 1,
-        oldContextTokens: null,
-        raw: null,
-      },
-    });
-
-    loadOlderMock.mockResolvedValueOnce({
-      items: [olderEvent, initialEvents[1]],
-      nextCursor: null,
-    });
-
-    const rafCallbacks: FrameRequestCallback[] = [];
-    const rafSpy = vi.spyOn(window, 'requestAnimationFrame').mockImplementation((cb) => {
-      rafCallbacks.push(cb);
-      return rafCallbacks.length;
-    });
-
-    const { getByRole, getAllByRole } = renderPage(['/agents/threads/thread-1/runs/run-1']);
-
-    await waitFor(() => expect(eventsMock).toHaveBeenCalled());
-
-    const listbox = getByRole('listbox');
-    const ITEM_HEIGHT = 60;
-    Object.defineProperty(listbox, 'clientHeight', { configurable: true, value: ITEM_HEIGHT * 2 });
-    Object.defineProperty(listbox, 'scrollHeight', {
-      configurable: true,
-      get: () => listbox.childElementCount * ITEM_HEIGHT,
-    });
-    let scrollTopValue = 0;
-    Object.defineProperty(listbox, 'scrollTop', {
-      configurable: true,
-      get: () => scrollTopValue,
-      set: (val) => {
-        scrollTopValue = val;
-      },
-    });
+    const nextHeight = previousHeight + 600;
 
     await act(async () => {
-      const callbacks = rafCallbacks.splice(0);
-      callbacks.forEach((cb) => cb(0));
+      fireEvent.scroll(list);
+      metrics.height = nextHeight;
     });
 
-    expect(scrollTopValue).toBe(listbox.scrollHeight);
+    await waitFor(() => expect(document.querySelectorAll('[data-event-id]').length).toBe(INITIAL_COUNT + OLDER_COUNT));
 
-    const previousHeight = listbox.scrollHeight;
-    listbox.scrollTop = 5;
+    const expectedTop = previousTop + (nextHeight - previousHeight);
+    await waitFor(() => expect(metrics.top).toBe(expectedTop));
 
-    await act(async () => {
-      fireEvent.scroll(listbox);
-    });
-
-    await waitFor(() => expect(loadOlderMock).toHaveBeenCalledTimes(1));
-    const [runId, params] = loadOlderMock.mock.calls[0];
-    expect(runId).toBe('run-1');
-    expect(params).toMatchObject({ limit: 100, order: 'desc', cursorTs: '2023-12-31T23:59:50.000Z', cursorId: 'cursor-prev' });
-
-    await act(async () => {
-      const callbacks = rafCallbacks.splice(0);
-      callbacks.forEach((cb) => cb(0));
-    });
-
-    const expectedTop = 5 + (listbox.scrollHeight - previousHeight);
-    expect(scrollTopValue).toBe(expectedTop);
-
-    const options = getAllByRole('option');
-    expect(options[0]).toHaveAttribute('data-event-id', 'event-0');
-    const uniqueIds = new Set(options.map((opt) => opt.getAttribute('data-event-id')));
-    expect(uniqueIds.size).toBe(options.length);
-
-    rafSpy.mockRestore();
+    const orderedIds = Array.from(document.querySelectorAll('[data-event-id]')).map((node) => node.getAttribute('data-event-id') as string);
+    const expectedIds = [...older, ...current].sort((a, b) => a.ts.localeCompare(b.ts)).map((event) => event.id);
+    expect(orderedIds).toEqual(expectedIds);
   });
 });
