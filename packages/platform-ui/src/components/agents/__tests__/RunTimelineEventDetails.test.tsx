@@ -1,10 +1,11 @@
 import React from 'react';
-import { beforeEach, describe, expect, it } from 'vitest';
-import { render, screen, within } from '@testing-library/react';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { act, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { RunTimelineEventDetails } from '../RunTimelineEventDetails';
-import type { RunTimelineEvent } from '@/api/types/agents';
+import * as contextItemsModule from '@/api/hooks/contextItems';
+import type { ContextItem, RunTimelineEvent } from '@/api/types/agents';
 
 function renderDetails(event: RunTimelineEvent) {
   const client = new QueryClient({
@@ -29,6 +30,33 @@ function renderDetails(event: RunTimelineEvent) {
       );
     },
   };
+}
+
+function makeScrollable(element: HTMLElement, {
+  scrollHeight,
+  clientHeight,
+  scrollTop,
+}: {
+  scrollHeight: number;
+  clientHeight: number;
+  scrollTop: number;
+}) {
+  Object.defineProperty(element, 'scrollHeight', {
+    configurable: true,
+    get: () => scrollHeight,
+  });
+  Object.defineProperty(element, 'clientHeight', {
+    configurable: true,
+    get: () => clientHeight,
+  });
+  let currentTop = scrollTop;
+  Object.defineProperty(element, 'scrollTop', {
+    configurable: true,
+    get: () => currentTop,
+    set: (value) => {
+      currentTop = value;
+    },
+  });
 }
 
 function buildEvent(overrides: Partial<RunTimelineEvent> = {}): RunTimelineEvent {
@@ -350,5 +378,149 @@ describe('RunTimelineEventDetails', () => {
 
     expect(screen.getByText(/Messages:/)).toBeInTheDocument();
     expect(screen.queryByText(/Reason:/)).toBeNull();
+  });
+
+  it('renders context chunks with role badges and no metadata block', () => {
+    const contextItems: ContextItem[] = [
+      {
+        id: 'ctx-1',
+        role: 'user',
+        contentText: 'First chunk',
+        contentJson: null,
+        metadata: { foo: 'bar' },
+        sizeBytes: 128,
+        createdAt: '2024-01-01T00:00:00.000Z',
+      },
+    ];
+
+    const useContextItemsSpy = vi.spyOn(contextItemsModule, 'useContextItems').mockReturnValue({
+      items: contextItems,
+      total: contextItems.length,
+      loadedCount: contextItems.length,
+      targetCount: contextItems.length,
+      hasMore: false,
+      isInitialLoading: false,
+      isFetching: false,
+      error: null,
+      loadMore: vi.fn(),
+    });
+
+    try {
+      const event = buildEvent({
+        type: 'llm_call',
+        llmCall: {
+          provider: 'openai',
+          model: 'gpt-test',
+          temperature: null,
+          topP: null,
+          stopReason: null,
+          contextItemIds: contextItems.map((item) => item.id),
+          responseText: null,
+          rawResponse: null,
+          toolCalls: [],
+        },
+        toolExecution: undefined,
+      });
+
+      renderDetails(event);
+
+      const contextRegion = screen.getByTestId('llm-context-scroll');
+      expect(within(contextRegion).getByText('First chunk')).toBeInTheDocument();
+      const badge = within(contextRegion).getByText('user');
+      expect(badge).toHaveClass('capitalize');
+      expect(within(contextRegion).queryByText('Metadata')).toBeNull();
+    } finally {
+      useContextItemsSpy.mockRestore();
+    }
+  });
+
+  it('auto-scrolls context to bottom when items resolve asynchronously', async () => {
+    const contextItems: ContextItem[] = [
+      {
+        id: 'ctx-1',
+        role: 'system',
+        contentText: 'System prompt',
+        contentJson: null,
+        metadata: null,
+        sizeBytes: 256,
+        createdAt: '2024-01-01T00:00:00.000Z',
+      },
+      {
+        id: 'ctx-2',
+        role: 'assistant',
+        contentText: 'Assistant reply',
+        contentJson: null,
+        metadata: null,
+        sizeBytes: 384,
+        createdAt: '2024-01-01T00:01:00.000Z',
+      },
+    ];
+
+    let state = {
+      items: [] as ContextItem[],
+      total: contextItems.length,
+      loadedCount: 0,
+      targetCount: contextItems.length,
+      hasMore: false,
+      isInitialLoading: true,
+      isFetching: true,
+      error: null as unknown,
+      loadMore: vi.fn(),
+    };
+
+    const useContextItemsSpy = vi.spyOn(contextItemsModule, 'useContextItems').mockImplementation(() => state);
+
+    try {
+      const event = buildEvent({
+        type: 'llm_call',
+        llmCall: {
+          provider: 'openai',
+          model: 'gpt-test',
+          temperature: null,
+          topP: null,
+          stopReason: null,
+          contextItemIds: contextItems.map((item) => item.id),
+          responseText: null,
+          rawResponse: null,
+          toolCalls: [],
+        },
+        toolExecution: undefined,
+      });
+
+      const { rerender } = renderDetails(event);
+      const scrollContainer = screen.getByTestId('llm-context-scroll');
+      makeScrollable(scrollContainer, { scrollHeight: 400, clientHeight: 200, scrollTop: 0 });
+
+      const raf = vi.spyOn(window, 'requestAnimationFrame').mockImplementation((cb: FrameRequestCallback) => {
+        cb(0);
+        return 1;
+      });
+
+      expect(scrollContainer.scrollTop).toBe(0);
+
+      state = {
+        ...state,
+        items: contextItems,
+        loadedCount: contextItems.length,
+        isInitialLoading: false,
+        isFetching: false,
+      };
+
+      await act(async () => {
+        rerender(buildEvent({
+          ...event,
+          llmCall: {
+            ...event.llmCall!,
+            contextItemIds: contextItems.map((item) => item.id),
+          },
+        }));
+      });
+
+      expect(scrollContainer.scrollTop).toBe(scrollContainer.scrollHeight);
+
+      raf.mockRestore();
+    } finally {
+      useContextItemsSpy.mockRestore();
+    }
   });
 });

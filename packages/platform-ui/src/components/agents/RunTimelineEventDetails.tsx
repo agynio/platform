@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { stringify as stringifyYaml } from 'yaml';
 import type { RunTimelineEvent } from '@/api/types/agents';
 import { STATUS_COLORS, formatDuration, getEventTypeLabel } from './runTimelineFormatting';
@@ -15,22 +15,22 @@ function formatJson(value: unknown): string {
   }
 }
 
-function textBlock(value: string, tone: 'default' | 'muted' = 'default', className = '') {
-  const base = tone === 'muted' ? 'border border-gray-200 bg-gray-50' : 'border border-gray-200 bg-white';
-  return (
-    <div className={`${base} content-wrap px-3 py-2 text-[11px] text-gray-800 ${className}`}>
-      {value}
-    </div>
-  );
+function textBlock(value: string, tone: 'default' | 'muted' = 'default', className = '', framed = true) {
+  const classes = ['content-wrap', 'text-[11px]', tone === 'muted' ? 'text-gray-700' : 'text-gray-800', className];
+  if (framed) {
+    classes.push('px-3', 'py-2');
+    classes.push(tone === 'muted' ? 'border border-gray-200 bg-gray-50' : 'border border-gray-200 bg-white');
+  }
+  return <div className={classes.filter(Boolean).join(' ')}>{value}</div>;
 }
 
-function jsonBlock(value: unknown, tone: 'default' | 'muted' = 'muted', className = '') {
-  const base = tone === 'muted' ? 'border border-gray-200 bg-gray-50' : 'border border-gray-200 bg-white';
-  return (
-    <pre className={`${base} content-wrap px-3 py-2 text-[11px] text-gray-800 ${className}`}>
-      {formatJson(value)}
-    </pre>
-  );
+function jsonBlock(value: unknown, tone: 'default' | 'muted' = 'muted', className = '', framed = true) {
+  const classes = ['content-wrap', 'text-[11px]', tone === 'muted' ? 'text-gray-700' : 'text-gray-800', className];
+  if (framed) {
+    classes.push('px-3', 'py-2');
+    classes.push(tone === 'muted' ? 'border border-gray-200 bg-gray-50' : 'border border-gray-200 bg-white');
+  }
+  return <pre className={classes.filter(Boolean).join(' ')}>{formatJson(value)}</pre>;
 }
 
 const ANSI_PATTERN = '\u001B\\[[0-9;]*m';
@@ -138,40 +138,37 @@ function formatYaml(value: unknown): string {
   }
 }
 
-function renderOutputByMode(mode: OutputMode, value: unknown) {
+function renderOutputByMode(mode: OutputMode, value: unknown, options: { framed?: boolean } = {}) {
+  const { framed = true } = options;
   if (mode === 'json') {
     const parsed = typeof value === 'string' ? tryParseJson(value) ?? value : value;
-    return jsonBlock(parsed, 'default');
+    return jsonBlock(parsed, 'default', '', framed);
   }
   if (mode === 'yaml') {
-    return (
-      <pre className="border border-gray-200 bg-white content-wrap px-3 py-2 text-[11px] text-gray-800">
-        {formatYaml(value)}
-      </pre>
-    );
+    const classes = ['content-wrap', 'text-[11px]', 'text-gray-800'];
+    if (framed) {
+      classes.push('px-3', 'py-2', 'border', 'border-gray-200', 'bg-white');
+    }
+    return <pre className={classes.join(' ')}>{formatYaml(value)}</pre>;
   }
   if (mode === 'terminal') {
-    return (
-      <pre
-        className="content-pre border border-gray-800 bg-gray-900 px-3 py-2 text-[11px] font-mono text-emerald-100"
-      >
-        {typeof value === 'string' ? value : formatJson(value)}
-      </pre>
-    );
+    const classes = ['content-pre', 'text-[11px]', 'font-mono'];
+    if (framed) {
+      classes.push('px-3', 'py-2', 'border', 'border-gray-800', 'bg-gray-900', 'text-emerald-100');
+    } else {
+      classes.push('text-gray-800');
+    }
+    return <pre className={classes.join(' ')}>{typeof value === 'string' ? value : formatJson(value)}</pre>;
   }
   const displayText = toText(value);
   if (mode === 'markdown') {
-    return (
-      <pre className="content-wrap px-3 py-2 text-[11px] text-gray-800">
-        {displayText}
-      </pre>
-    );
+    const classes = ['content-wrap', 'text-[11px]', 'text-gray-800'];
+    if (framed) classes.push('px-3', 'py-2');
+    return <pre className={classes.join(' ')}>{displayText}</pre>;
   }
-  return (
-    <pre className="content-wrap px-3 py-2 text-[11px] text-gray-800">
-      {displayText}
-    </pre>
-  );
+  const classes = ['content-wrap', 'text-[11px]', 'text-gray-800'];
+  if (framed) classes.push('px-3', 'py-2');
+  return <pre className={classes.join(' ')}>{displayText}</pre>;
 }
 
 function useToolOutputMode(eventId: string, value: unknown) {
@@ -190,7 +187,7 @@ function useToolOutputMode(eventId: string, value: unknown) {
     writeStoredMode(storageKey, mode);
   }, [mode, storageKey]);
 
-  const rendered = useMemo(() => renderOutputByMode(mode, value), [mode, value]);
+  const rendered = useMemo(() => renderOutputByMode(mode, value, { framed: false }), [mode, value]);
 
   return { mode, setMode, rendered };
 }
@@ -376,6 +373,40 @@ export function RunTimelineEventDetails({ event }: { event: RunTimelineEvent }) 
   const hasLlmResponse = Boolean(llmCall?.responseText);
   const hasLlmToolCalls = (llmCall?.toolCalls.length ?? 0) > 0;
   const toolExecution = event.toolExecution;
+  const contextScrollRef = useRef<HTMLDivElement | null>(null);
+  const hasLlmCall = Boolean(llmCall);
+  const contextItemsKey = llmCall ? `${event.id}:${llmCall.contextItemIds.join('|')}` : '';
+
+  const scrollContextToBottom = useCallback(() => {
+    const apply = () => {
+      const el = contextScrollRef.current;
+      if (!el) return;
+      try {
+        if (typeof el.scrollTo === 'function') {
+          el.scrollTo({ top: el.scrollHeight, behavior: 'auto' });
+        } else {
+          el.scrollTop = el.scrollHeight;
+        }
+      } catch (_err) {
+        el.scrollTop = el.scrollHeight;
+      }
+    };
+
+    if (typeof window !== 'undefined' && typeof window.requestAnimationFrame === 'function') {
+      window.requestAnimationFrame(apply);
+    } else {
+      apply();
+    }
+  }, []);
+
+  const handleContextItemsRendered = useCallback((_: unknown) => {
+    scrollContextToBottom();
+  }, [scrollContextToBottom]);
+
+  useEffect(() => {
+    if (!hasLlmCall) return;
+    scrollContextToBottom();
+  }, [hasLlmCall, contextItemsKey, scrollContextToBottom]);
 
   return (
     <div
@@ -415,8 +446,8 @@ export function RunTimelineEventDetails({ event }: { event: RunTimelineEvent }) 
             <div className="flex min-h-[260px] flex-1 flex-col gap-4 md:min-h-[320px] md:flex-row md:gap-6">
               <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded border border-gray-200 bg-white">
                 <header className="border-b border-gray-200 px-3 py-2 text-xs font-semibold uppercase tracking-wide text-gray-500">Context</header>
-                <div className="flex-1 min-h-0 overflow-y-auto px-3 py-2">
-                  <LLMContextViewer ids={llmCall.contextItemIds} />
+                <div ref={contextScrollRef} data-testid="llm-context-scroll" className="flex-1 min-h-0 overflow-y-auto px-3 py-2">
+                  <LLMContextViewer ids={llmCall.contextItemIds} onItemsRendered={handleContextItemsRendered} />
                 </div>
               </div>
               {(hasLlmResponse || hasLlmToolCalls) && (
@@ -424,7 +455,7 @@ export function RunTimelineEventDetails({ event }: { event: RunTimelineEvent }) 
                   {hasLlmResponse && (
                     <div className="flex min-h-0 flex-col overflow-hidden rounded border border-gray-200 bg-white md:flex-1">
                       <header className="border-b border-gray-200 px-3 py-2 text-xs font-semibold uppercase tracking-wide text-gray-500">Response</header>
-                      <div className="flex-1 min-h-0 overflow-y-auto px-3 py-2">{textBlock(llmCall.responseText ?? '')}</div>
+                      <div className="flex-1 min-h-0 overflow-y-auto px-3 py-2">{textBlock(llmCall.responseText ?? '', 'default', '', false)}</div>
                     </div>
                   )}
                   {hasLlmToolCalls && (
@@ -434,7 +465,7 @@ export function RunTimelineEventDetails({ event }: { event: RunTimelineEvent }) 
                       </header>
                       <div className="flex-1 min-h-0 space-y-2 overflow-y-auto px-3 py-2">
                         {llmCall.toolCalls.map((tc) => (
-                          <div key={tc.callId}>{jsonBlock({ callId: tc.callId, name: tc.name, arguments: tc.arguments })}</div>
+                          <div key={tc.callId}>{jsonBlock({ callId: tc.callId, name: tc.name, arguments: tc.arguments }, 'default', '', false)}</div>
                         ))}
                       </div>
                     </div>
@@ -464,7 +495,7 @@ export function RunTimelineEventDetails({ event }: { event: RunTimelineEvent }) 
               <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded border border-gray-200 bg-white">
                 <header className="border-b border-gray-200 px-3 py-2 text-xs font-semibold uppercase tracking-wide text-gray-500">Input</header>
                 <div className="flex-1 min-h-0 space-y-3 overflow-y-auto px-3 py-2">
-                  {jsonBlock(toolExecution.input, 'default')}
+                  {jsonBlock(toolExecution.input, 'default', '', false)}
                   {toolInputAttachments.map((att) => (
                     <div key={att.id} className="space-y-1">
                       <div className="text-[10px] uppercase tracking-wide text-gray-500">
