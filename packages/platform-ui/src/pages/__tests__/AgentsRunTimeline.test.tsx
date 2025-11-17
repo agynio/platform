@@ -351,6 +351,10 @@ describe('AgentsRunTimeline socket reactions', () => {
     expect(summaryRefetch).toHaveBeenCalledTimes(1);
     await waitFor(() => expect(within(option).getByText('error')).toBeInTheDocument());
 
+    const lastCursorCall = socketMocks.setRunCursor.mock.calls.at(-1);
+    expect(lastCursorCall?.[0]).toBe('run-1');
+    expect(lastCursorCall?.[1]).toEqual({ ts: updated.ts, id: updated.id });
+
     const details = getByTestId('timeline-event-details');
     expect(details).toHaveTextContent('Tool Execution — Search Tool');
     expect(details).toHaveTextContent('error');
@@ -383,6 +387,9 @@ describe('AgentsRunTimeline socket reactions', () => {
     await findByText('Summarization');
     expect(summaryRefetch).toHaveBeenCalledTimes(1);
     expect(socketMocks.setRunCursor).toHaveBeenCalled();
+    const appendedCursorCall = socketMocks.setRunCursor.mock.calls.find(([, cursor]) => cursor?.id === appended.id);
+    expect(appendedCursorCall?.[0]).toBe('run-1');
+    expect(appendedCursorCall?.[1]).toEqual({ ts: appended.ts, id: appended.id });
 
     await act(async () => {
       socketMocks.status?.({ run: { id: 'run-1', status: 'finished', createdAt: '', updatedAt: '' } as any });
@@ -419,6 +426,10 @@ describe('AgentsRunTimeline socket reactions', () => {
     expect(summaryRefetch).toHaveBeenCalledTimes(3);
     expect(eventsRefetch).not.toHaveBeenCalled();
     await findByText('Tool Execution — Weather');
+
+    const finalCursorCall = socketMocks.setRunCursor.mock.calls.at(-1);
+    expect(finalCursorCall?.[0]).toBe('run-1');
+    expect(finalCursorCall?.[1]).toEqual({ ts: caughtUp.ts, id: caughtUp.id });
 
     expect(getByTestId('timeline-event-details')).toBeInTheDocument();
     unmount();

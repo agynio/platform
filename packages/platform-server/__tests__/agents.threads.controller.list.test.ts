@@ -8,6 +8,7 @@ import { RunEventsService } from '../src/events/run-events.service';
 const runEventsStub = {
   getRunSummary: vi.fn(async () => null),
   listRunEvents: vi.fn(async () => []),
+  setEventsPublisher: vi.fn(),
 } as unknown as RunEventsService;
 
 describe('AgentsThreadsController list endpoints', () => {

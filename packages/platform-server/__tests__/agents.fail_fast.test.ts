@@ -69,6 +69,7 @@ describe('Fail-fast behavior', () => {
             listRunEvents: async () => ({ items: [], nextCursor: null }),
             getEventSnapshot: async () => null,
             publishEvent: async () => null,
+            setEventsPublisher: vi.fn(),
           },
         },
         {

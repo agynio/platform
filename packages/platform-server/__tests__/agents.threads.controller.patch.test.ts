@@ -22,6 +22,7 @@ const runEventsStub = {
   listRunEvents: async () => ({ items: [], nextCursor: null }),
   getEventSnapshot: async () => null,
   publishEvent: async () => null,
+  setEventsPublisher: vi.fn(),
 };
 
 describe('AgentsThreadsController PATCH threads/:id', () => {

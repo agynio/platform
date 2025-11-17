@@ -143,6 +143,7 @@ describe('GraphModule DI smoke test', () => {
       listRunEvents: vi.fn().mockResolvedValue({ items: [], nextCursor: null }),
       getRunSummary: vi.fn().mockResolvedValue(null),
       getEventSnapshot: vi.fn().mockResolvedValue(null),
+      setEventsPublisher: vi.fn(),
     } satisfies Partial<RunEventsService>;
 
     const agentsPersistenceStub = {

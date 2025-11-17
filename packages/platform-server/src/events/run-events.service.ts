@@ -13,7 +13,7 @@ import {
 } from '@prisma/client';
 import { LoggerService } from '../core/services/logger.service';
 import { PrismaService } from '../core/services/prisma.service';
-import { GraphEventsPublisher, NoopGraphEventsPublisher } from '../gateway/graph.events.publisher';
+import { GraphEventsPublisher, NoopGraphEventsPublisher, type GraphEventsPublisherAware } from '../gateway/graph.events.publisher';
 import { toPrismaJsonValue } from '../llm/services/messages.serialization';
 import { ContextItemInput, NormalizedContextItem, normalizeContextItems, upsertNormalizedContextItems } from '../llm/services/context-items.utils';
 
@@ -270,8 +270,8 @@ export interface SummarizationEventArgs {
 }
 
 @Injectable()
-export class RunEventsService {
-  private readonly events: GraphEventsPublisher;
+export class RunEventsService implements GraphEventsPublisherAware {
+  private events: GraphEventsPublisher;
 
   constructor(
     @Inject(PrismaService) private readonly prismaService: PrismaService,
@@ -279,6 +279,10 @@ export class RunEventsService {
     @Optional() @Inject(GraphEventsPublisher) events?: GraphEventsPublisher,
   ) {
     this.events = events ?? new NoopGraphEventsPublisher();
+  }
+
+  setEventsPublisher(publisher: GraphEventsPublisher): void {
+    this.events = publisher;
   }
 
   private get prisma(): PrismaClient {

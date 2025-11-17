@@ -171,7 +171,8 @@ describe.sequential('GraphSocketGateway realtime integration', () => {
     const runtime = createRuntimeStub();
     const metricsDouble = createMetricsDouble();
     const prismaService = ({ getClient: () => prisma }) as PrismaService;
-    const gateway = new GraphSocketGateway(logger, runtime, metricsDouble.service, prismaService);
+    const runEvents = new RunEventsService(prismaService, logger);
+    const gateway = new GraphSocketGateway(logger, runtime, metricsDouble.service, prismaService, undefined, runEvents);
 
     const server = createServer();
     await new Promise((resolve) => server.listen(0, resolve));
@@ -187,7 +188,6 @@ describe.sequential('GraphSocketGateway realtime integration', () => {
     const thread = await prisma.thread.create({ data: { alias: `thread-${randomUUID()}`, summary: 'initial' } });
     await subscribeRooms(threadClient, [`thread:${thread.id}`]);
 
-    const runEvents = new RunEventsService(prismaService, logger, gateway);
     const templateRegistryStub = ({ getMeta: () => undefined }) as unknown as TemplateRegistry;
     const graphRepositoryStub = ({ get: async () => ({ nodes: [] }) }) as unknown as GraphRepository;
     const agents = new AgentsPersistenceService(prismaService, logger, metricsDouble.service, gateway, templateRegistryStub, graphRepositoryStub, runEvents, createLinkingStub());
@@ -225,14 +225,14 @@ describe.sequential('GraphSocketGateway realtime integration', () => {
     const runtime = createRuntimeStub();
     const metricsDouble = createMetricsDouble();
     const prismaService = ({ getClient: () => prisma }) as PrismaService;
-    const gateway = new GraphSocketGateway(logger, runtime, metricsDouble.service, prismaService);
+    const runEvents = new RunEventsService(prismaService, logger);
+    const gateway = new GraphSocketGateway(logger, runtime, metricsDouble.service, prismaService, undefined, runEvents);
 
     const server = createServer();
     await new Promise((resolve) => server.listen(0, resolve));
     const { port } = server.address() as AddressInfo;
     gateway.init({ server });
 
-    const runEvents = new RunEventsService(prismaService, logger, gateway);
     const templateRegistryStub = ({ getMeta: () => undefined }) as unknown as TemplateRegistry;
     const graphRepositoryStub = ({ get: async () => ({ nodes: [] }) }) as unknown as GraphRepository;
     const agents = new AgentsPersistenceService(prismaService, logger, metricsDouble.service, gateway, templateRegistryStub, graphRepositoryStub, runEvents, createLinkingStub());
@@ -269,6 +269,9 @@ describe.sequential('GraphSocketGateway realtime integration', () => {
     expect(appendPayload?.toolExecution?.input).toEqual({ query: 'status' });
     const [appendThread, appendRun] = await Promise.all([appendThreadEvent, appendRunEvent]);
     expect(appendThread.mutation).toBe('append');
+    expect(appendThread.runId).toBe(runId);
+    expect(appendThread.event.threadId).toBe(thread.id);
+    expect(appendRun.runId).toBe(runId);
     expect(appendRun.event.id).toBe(toolExecution.id);
 
     await runEvents.completeToolExecution({
@@ -283,6 +286,9 @@ describe.sequential('GraphSocketGateway realtime integration', () => {
     await runEvents.publishEvent(toolExecution.id, 'update');
     const [updateThread, updateRun] = await Promise.all([updateThreadEvent, updateRunEvent]);
     expect(updateThread.mutation).toBe('update');
+    expect(updateThread.runId).toBe(runId);
+    expect(updateThread.event.toolExecution?.output).toEqual({ answer: 42 });
+    expect(updateRun.runId).toBe(runId);
     expect(updateRun.event.toolExecution?.output).toEqual({ answer: 42 });
 
     await new Promise((resolve) => setTimeout(resolve, 150));
