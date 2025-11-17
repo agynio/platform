@@ -6,6 +6,7 @@ import { CallAgentNode, CallAgentToolStaticConfigSchema } from './call_agent.nod
 import { FunctionTool, HumanMessage } from '@agyn/llm';
 import { LLMContext } from '../../../llm/types';
 import { AgentsPersistenceService } from '../../../agents/agents.persistence.service';
+import { CallAgentLinkingService } from '../../../agents/call-agent-linking.service';
 
 export const callAgentInvocationSchema = z.object({
   input: z.string().min(1).describe('Message to forward to the target agent.'),
@@ -13,13 +14,12 @@ export const callAgentInvocationSchema = z.object({
   summary: z.string().min(1).describe('Initial summary for the child thread.'),
 });
 
-// Interface removed (unused)
-
 export class CallAgentFunctionTool extends FunctionTool<typeof callAgentInvocationSchema> {
   constructor(
     private logger: LoggerService,
     private node: CallAgentNode,
     private persistence: AgentsPersistenceService,
+    private linking: CallAgentLinkingService,
   ) {
     super();
   }
@@ -39,12 +39,23 @@ export class CallAgentFunctionTool extends FunctionTool<typeof callAgentInvocati
     const responseMode = this.node.config.response;
 
     const parentThreadId = ctx.threadId;
+    const targetThreadId = await this.persistence.getOrCreateSubthreadByAlias('call_agent', threadAlias, parentThreadId, args.summary);
+
+    try {
+      await this.linking.registerParentToolExecution({
+        runId: ctx.runId,
+        parentThreadId,
+        childThreadId: targetThreadId,
+        toolName: this.name,
+      });
+    } catch (err) {
+      this.logger.warn('Failed to register call_agent parent link', { err, runId: ctx.runId, parentThreadId, childThreadId: targetThreadId });
+    }
 
     this.logger.info('call_agent invoked', { targetAttached: !!targetAgent, responseMode });
     if (!targetAgent) return 'Target agent is not connected';
 
     // Resolve subthread UUID by alias under parent UUID
-    const targetThreadId = await this.persistence.getOrCreateSubthreadByAlias('call_agent', threadAlias, parentThreadId, args.summary);
 
     const message = HumanMessage.fromText(args.input);
     try {

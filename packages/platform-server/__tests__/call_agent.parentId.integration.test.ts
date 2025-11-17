@@ -7,6 +7,7 @@ import { NoopGraphEventsPublisher } from '../src/gateway/graph.events.publisher'
 import { Signal } from '../src/signal';
 import { createPrismaStub, StubPrismaService } from './helpers/prisma.stub';
 import { createRunEventsStub } from './helpers/runEvents.stub';
+import { CallAgentLinkingService } from '../src/agents/call-agent-linking.service';
 
 const metricsStub = { getThreadsMetrics: async () => ({}) } as any;
 const templateRegistryStub = { toSchema: async () => [], getMeta: () => undefined } as any;
@@ -34,8 +35,40 @@ describe('call_agent integration: creates child thread with parentId', () => {
       templateRegistryStub,
       graphRepoStub,
       createRunEventsStub() as any,
+      {
+        buildInitialMetadata: (params: { toolName: string; parentThreadId: string; childThreadId: string }) => ({
+          tool: params.toolName === 'call_engineer' ? 'call_engineer' : 'call_agent',
+          parentThreadId: params.parentThreadId,
+          childThreadId: params.childThreadId,
+          childRun: { id: null, status: 'queued', linkEnabled: false, latestMessageId: null },
+          childRunId: null,
+          childRunStatus: 'queued',
+          childRunLinkEnabled: false,
+          childMessageId: null,
+        }),
+        registerParentToolExecution: async () => null,
+        onChildRunStarted: async () => null,
+        onChildRunMessage: async () => null,
+        onChildRunCompleted: async () => null,
+      } as unknown as CallAgentLinkingService,
     );
-    const tool = new CallAgentTool(new LoggerService(), persistence);
+    const linking = {
+      buildInitialMetadata: (params: { toolName: string; parentThreadId: string; childThreadId: string }) => ({
+        tool: params.toolName === 'call_engineer' ? 'call_engineer' : 'call_agent',
+        parentThreadId: params.parentThreadId,
+        childThreadId: params.childThreadId,
+        childRun: { id: null, status: 'queued', linkEnabled: false, latestMessageId: null },
+        childRunId: null,
+        childRunStatus: 'queued',
+        childRunLinkEnabled: false,
+        childMessageId: null,
+      }),
+      registerParentToolExecution: async () => null,
+      onChildRunStarted: async () => null,
+      onChildRunMessage: async () => null,
+      onChildRunCompleted: async () => null,
+    } as unknown as CallAgentLinkingService;
+    const tool = new CallAgentTool(new LoggerService(), persistence, linking);
     await tool.setConfig({ description: 'desc', response: 'sync' });
     // Attach fake agent that persists runs/threads
     // @ts-expect-error accessing private for test setup

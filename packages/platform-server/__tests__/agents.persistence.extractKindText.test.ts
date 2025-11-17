@@ -61,11 +61,29 @@ const { NoopGraphEventsPublisher } = await import('../src/gateway/graph.events.p
 import { AIMessage, HumanMessage, SystemMessage, ToolCallMessage, ToolCallOutputMessage } from '@agyn/llm';
 import type { ResponseFunctionToolCall } from 'openai/resources/responses/responses.mjs';
 import { createRunEventsStub } from './helpers/runEvents.stub';
+import { CallAgentLinkingService } from '../src/agents/call-agent-linking.service';
 
 const templateRegistryStub = { toSchema: async () => [], getMeta: () => undefined } as any;
 const graphRepoStub = {
   get: async () => ({ name: 'main', version: 1, updatedAt: new Date().toISOString(), nodes: [], edges: [] }),
 } as any;
+
+const createLinkingStub = () =>
+  ({
+    buildInitialMetadata: (params: { toolName: string; parentThreadId: string; childThreadId: string }) => ({
+      tool: params.toolName === 'call_engineer' ? 'call_engineer' : 'call_agent',
+      parentThreadId: params.parentThreadId,
+      childThreadId: params.childThreadId,
+      childRun: { id: null, status: 'queued', linkEnabled: false, latestMessageId: null },
+      childRunId: null,
+      childRunStatus: 'queued',
+      childRunLinkEnabled: false,
+      childMessageId: null,
+    }),
+    onChildRunStarted: async () => null,
+    onChildRunMessage: async () => null,
+    onChildRunCompleted: async () => null,
+  }) as unknown as CallAgentLinkingService;
 
 function makeService(): InstanceType<typeof AgentsPersistenceService> {
   // Minimal stub; extractKindText does not use prisma
@@ -80,6 +98,7 @@ function makeService(): InstanceType<typeof AgentsPersistenceService> {
     templateRegistryStub,
     graphRepoStub,
     createRunEventsStub() as any,
+    createLinkingStub(),
   );
 }
 
@@ -129,6 +148,7 @@ describe('AgentsPersistenceService beginRun/completeRun populates Message.text',
     const logger = new LoggerService();
     const metrics = { getThreadsMetrics: async () => ({}) } as any;
     const publisher = new NoopGraphEventsPublisher();
+    const linking = createLinkingStub();
     const svc = new AgentsPersistenceService(
       { getClient: () => prismaMock } as any,
       logger,
@@ -137,6 +157,7 @@ describe('AgentsPersistenceService beginRun/completeRun populates Message.text',
       templateRegistryStub,
       graphRepoStub,
       createRunEventsStub() as any,
+      linking,
     );
 
     // Begin run with user + system messages

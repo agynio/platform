@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { stringify as stringifyYaml } from 'yaml';
+import { Link } from 'react-router-dom';
 import type { ContextItem, RunTimelineEvent } from '@/api/types/agents';
 import { STATUS_COLORS, formatDuration, getEventTypeLabel } from './runTimelineFormatting';
 import { LLMContextViewer } from './LLMContextViewer';
@@ -36,6 +37,31 @@ function jsonBlock(value: unknown, tone: 'default' | 'muted' = 'muted', classNam
 
 const ANSI_PATTERN = '\u001B\\[[0-9;]*m';
 const ANSI_REGEX = new RegExp(ANSI_PATTERN);
+
+const CALL_AGENT_TOOL_NAMES = new Set(['call_agent', 'call_engineer']);
+
+const CALL_AGENT_STATUS_STYLES = {
+  queued: { bg: 'bg-amber-500', text: 'text-gray-900' },
+  running: { bg: 'bg-sky-500', text: 'text-white' },
+  finished: { bg: 'bg-emerald-500', text: 'text-white' },
+  terminated: { bg: 'bg-gray-500', text: 'text-white' },
+} as const;
+
+type CallAgentStatusKey = keyof typeof CALL_AGENT_STATUS_STYLES;
+
+function normalizeCallAgentStatus(value: string): { display: string; colorKey: CallAgentStatusKey } {
+  const raw = (value ?? '').toLowerCase();
+  if (raw === 'processing') return { display: 'processing', colorKey: 'running' };
+  if (raw === 'running' || raw === 'finished' || raw === 'terminated') {
+    return { display: raw, colorKey: raw as CallAgentStatusKey };
+  }
+  return { display: raw || 'queued', colorKey: 'queued' };
+}
+
+function formatCallAgentStatusLabel(status: string): string {
+  if (!status) return 'Queued';
+  return status.charAt(0).toUpperCase() + status.slice(1);
+}
 
 type OutputMode = 'text' | 'terminal' | 'markdown' | 'json' | 'yaml';
 
@@ -374,6 +400,49 @@ export function RunTimelineEventDetails({ event }: { event: RunTimelineEvent }) 
   const hasLlmResponse = Boolean(llmCall?.responseText);
   const hasLlmToolCalls = (llmCall?.toolCalls.length ?? 0) > 0;
   const toolExecution = event.toolExecution;
+  const callAgentMeta = useMemo(() => {
+    if (!toolExecution || !CALL_AGENT_TOOL_NAMES.has(toolExecution.toolName)) return null;
+    const metadata = event.metadata;
+    if (!metadata || typeof metadata !== 'object' || Array.isArray(metadata)) return null;
+
+    const raw = metadata as Record<string, unknown>;
+    const childThreadId = typeof raw.childThreadId === 'string' && raw.childThreadId.length > 0 ? raw.childThreadId : null;
+    if (!childThreadId) return null;
+
+    const childRun: { id: string | null; status: string; linkEnabled: boolean; latestMessageId: string | null } = {
+      id: null,
+      status: 'queued',
+      linkEnabled: false,
+      latestMessageId: null,
+    };
+
+    const maybeChildRun = raw.childRun;
+    if (maybeChildRun && typeof maybeChildRun === 'object' && !Array.isArray(maybeChildRun)) {
+      const details = maybeChildRun as Record<string, unknown>;
+      if (typeof details.id === 'string' && details.id.length > 0) childRun.id = details.id;
+      if (typeof details.status === 'string' && details.status.length > 0) childRun.status = details.status;
+      if (typeof details.linkEnabled === 'boolean') childRun.linkEnabled = details.linkEnabled;
+      if (typeof details.latestMessageId === 'string' && details.latestMessageId.length > 0) childRun.latestMessageId = details.latestMessageId;
+    }
+
+    if (typeof raw.childRunId === 'string' && raw.childRunId.length > 0 && !childRun.id) childRun.id = raw.childRunId;
+    if (typeof raw.childRunStatus === 'string' && raw.childRunStatus.length > 0) childRun.status = raw.childRunStatus;
+    if (raw.childRunLinkEnabled === true) childRun.linkEnabled = true;
+    if (typeof raw.childMessageId === 'string' && raw.childMessageId.length > 0) childRun.latestMessageId = raw.childMessageId;
+
+    const { display, colorKey } = normalizeCallAgentStatus(childRun.status);
+    const linkEnabled = childRun.linkEnabled && Boolean(childRun.id);
+
+    return {
+      childThreadId,
+      childRunId: childRun.id,
+      childRunLinkEnabled: linkEnabled,
+      childRunStatus: display,
+      statusForColor: colorKey,
+      childMessageId: childRun.latestMessageId,
+    } as const;
+  }, [event.metadata, toolExecution]);
+  const callAgentStatusStyles = callAgentMeta ? CALL_AGENT_STATUS_STYLES[callAgentMeta.statusForColor] ?? CALL_AGENT_STATUS_STYLES.queued : null;
   const contextScrollRef = useRef<HTMLDivElement | null>(null);
   const contextPrependSnapshotRef = useRef<{ prevScrollHeight: number; prevScrollTop: number } | null>(null);
   const contextPendingPrependRef = useRef(false);
@@ -550,6 +619,40 @@ export function RunTimelineEventDetails({ event }: { event: RunTimelineEvent }) 
                 </span>
               )}
             </div>
+            {callAgentMeta && callAgentStatusStyles && (
+              <div
+                data-testid="call-agent-link-group"
+                className="flex flex-wrap items-center gap-2 rounded border border-gray-200 bg-gray-50 px-3 py-2 text-[11px] text-gray-700"
+              >
+                <Link
+                  to={`/agents/threads/${encodeURIComponent(callAgentMeta.childThreadId)}`}
+                  className="font-medium text-blue-600 hover:underline"
+                >
+                  Subthread
+                </Link>
+                <span aria-hidden="true" className="text-gray-400">
+                  •
+                </span>
+                {callAgentMeta.childRunLinkEnabled && callAgentMeta.childRunId ? (
+                  <Link
+                    to={`/agents/threads/${encodeURIComponent(callAgentMeta.childThreadId)}/runs/${encodeURIComponent(callAgentMeta.childRunId)}/timeline`}
+                    className="font-medium text-blue-600 hover:underline"
+                  >
+                    Run timeline
+                  </Link>
+                ) : (
+                  <span className="text-gray-500">Run (not started)</span>
+                )}
+                <span aria-hidden="true" className="text-gray-400">
+                  •
+                </span>
+                <span
+                  className={`inline-flex items-center rounded px-2 py-0.5 text-[10px] font-semibold uppercase ${callAgentStatusStyles.bg} ${callAgentStatusStyles.text}`}
+                >
+                  {formatCallAgentStatusLabel(callAgentMeta.childRunStatus)}
+                </span>
+              </div>
+            )}
             <div className="flex min-h-[220px] flex-1 flex-col gap-4 md:min-h-[280px] md:flex-row md:gap-6">
               <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded border border-gray-200 bg-white">
                 <header className="border-b border-gray-200 px-3 py-2 text-xs font-semibold uppercase tracking-wide text-gray-500">Input</header>

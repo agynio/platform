@@ -20,6 +20,7 @@ import { GraphRepository } from './graph.repository';
 import { MongoGraphRepository } from './graphMongo.repository';
 import { PortsRegistry } from './ports.registry';
 import { TemplateRegistry } from './templateRegistry';
+import { CallAgentLinkingService } from '../agents/call-agent-linking.service';
 
 @Module({
   imports: [
@@ -75,7 +76,8 @@ import { TemplateRegistry } from './templateRegistry';
       inject: [ConfigService, LoggerService, MongoService, TemplateRegistry],
     },
     AgentsPersistenceService,
+    CallAgentLinkingService,
   ],
-  exports: [ThreadsMetricsService, TemplateRegistry, PortsRegistry, GraphRepository, AgentsPersistenceService],
+  exports: [ThreadsMetricsService, TemplateRegistry, PortsRegistry, GraphRepository, AgentsPersistenceService, CallAgentLinkingService],
 })
 export class GraphServicesModule {}

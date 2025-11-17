@@ -243,6 +243,7 @@ export interface ToolExecutionStartArgs {
   input: Prisma.InputJsonValue;
   metadata?: RunEventMetadata;
   startedAt?: Date;
+  sourceSpanId?: string | null;
 }
 
 export interface ToolExecutionCompleteArgs {
@@ -823,6 +824,7 @@ export class RunEventsService {
       status: RunEventStatus.running,
       startedAt: args.startedAt ?? new Date(),
       nodeId: args.nodeId ?? null,
+      sourceSpanId: args.sourceSpanId ?? null,
       metadata,
     });
     await tx.toolExecution.create({

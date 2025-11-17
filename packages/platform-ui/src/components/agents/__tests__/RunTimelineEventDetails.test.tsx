@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { MemoryRouter } from 'react-router-dom';
 import { RunTimelineEventDetails } from '../RunTimelineEventDetails';
 import * as contextItemsModule from '@/api/hooks/contextItems';
 import type { UseContextItemsResult } from '@/api/hooks/contextItems';
@@ -25,20 +26,18 @@ function renderDetails(event: RunTimelineEvent) {
     },
   });
 
-  const result = render(
-    <QueryClientProvider client={client}>
-      <RunTimelineEventDetails event={event} />
-    </QueryClientProvider>,
+  const Providers: React.FC<{ children: React.ReactNode }> = ({ children }) => (
+    <MemoryRouter>
+      <QueryClientProvider client={client}>{children}</QueryClientProvider>
+    </MemoryRouter>
   );
+
+  const result = render(<RunTimelineEventDetails event={event} />, { wrapper: Providers });
 
   return {
     ...result,
     rerender(nextEvent: RunTimelineEvent) {
-      result.rerender(
-        <QueryClientProvider client={client}>
-          <RunTimelineEventDetails event={nextEvent} />
-        </QueryClientProvider>,
-      );
+      result.rerender(<RunTimelineEventDetails event={nextEvent} />);
     },
   };
 }
@@ -676,5 +675,87 @@ describe('RunTimelineEventDetails', () => {
 
     useContextItemsSpy.mockRestore();
     raf.mockRestore();
+  });
+
+  it('renders call_agent metadata in link group before run start', () => {
+    const event = buildEvent({
+      metadata: {
+        childThreadId: 'child-123',
+        childRun: {
+          id: null,
+          status: 'queued',
+          linkEnabled: false,
+          latestMessageId: null,
+        },
+        childRunStatus: 'queued',
+        childRunLinkEnabled: false,
+        childRunId: null,
+      },
+      toolExecution: {
+        toolName: 'call_agent',
+        execStatus: 'running',
+      },
+    });
+
+    renderDetails(event);
+
+    const group = screen.getByTestId('call-agent-link-group');
+    const subthreadLink = within(group).getByRole('link', { name: 'Subthread' });
+    expect(subthreadLink).toHaveAttribute('href', '/agents/threads/child-123');
+    expect(within(group).queryByRole('link', { name: /Run timeline/i })).toBeNull();
+    expect(within(group).getByText('Run (not started)')).toBeInTheDocument();
+    const statusBadge = within(group).getByText('Queued');
+    expect(statusBadge).toHaveClass('bg-amber-500');
+  });
+
+  it('enables call_agent run link and updates status on metadata change', () => {
+    const baseEvent = buildEvent({
+      metadata: {
+        childThreadId: 'child-123',
+        childRun: {
+          id: null,
+          status: 'queued',
+          linkEnabled: false,
+          latestMessageId: null,
+        },
+        childRunStatus: 'queued',
+        childRunLinkEnabled: false,
+        childRunId: null,
+      },
+      toolExecution: {
+        toolName: 'call_agent',
+        execStatus: 'running',
+      },
+    });
+
+    const { rerender } = renderDetails(baseEvent);
+
+    const updatedEvent = buildEvent({
+      metadata: {
+        childThreadId: 'child-123',
+        childRun: {
+          id: 'run-xyz',
+          status: 'running',
+          linkEnabled: true,
+          latestMessageId: 'msg-1',
+        },
+        childRunStatus: 'running',
+        childRunLinkEnabled: true,
+        childRunId: 'run-xyz',
+        childMessageId: 'msg-1',
+      },
+      toolExecution: {
+        toolName: 'call_agent',
+        execStatus: 'running',
+      },
+    });
+
+    rerender(updatedEvent);
+
+    const group = screen.getByTestId('call-agent-link-group');
+    const runLink = within(group).getByRole('link', { name: 'Run timeline' });
+    expect(runLink).toHaveAttribute('href', '/agents/threads/child-123/runs/run-xyz/timeline');
+    const statusBadge = within(group).getByText('Running');
+    expect(statusBadge).toHaveClass('bg-sky-500');
   });
 });

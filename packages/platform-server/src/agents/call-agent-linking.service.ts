@@ -1,0 +1,297 @@
+import { Inject, Injectable } from '@nestjs/common';
+import type { Prisma, PrismaClient, RunStatus } from '@prisma/client';
+import { Prisma as PrismaNamespace } from '@prisma/client';
+
+import { LoggerService } from '../core/services/logger.service';
+import { PrismaService } from '../core/services/prisma.service';
+import { RunEventsService } from '../events/run-events.service';
+
+type Tx = PrismaClient | Prisma.TransactionClient;
+
+type CallAgentToolName = 'call_agent' | 'call_engineer';
+const CALL_AGENT_TOOL_NAMES: CallAgentToolName[] = ['call_agent', 'call_engineer'];
+
+export type CallAgentChildRunStatus = 'queued' | RunStatus;
+
+export interface CallAgentChildRunLink {
+  id: string | null;
+  status: CallAgentChildRunStatus;
+  linkEnabled: boolean;
+  latestMessageId: string | null;
+}
+
+export interface CallAgentLinkMetadata {
+  tool: CallAgentToolName;
+  parentThreadId: string;
+  childThreadId: string;
+  childRun: CallAgentChildRunLink;
+  // Legacy flattened fields kept for backwards compatibility
+  childRunId?: string | null;
+  childRunStatus?: string;
+  childRunLinkEnabled?: boolean;
+  childMessageId?: string | null;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+@Injectable()
+export class CallAgentLinkingService {
+  constructor(
+    @Inject(PrismaService) private readonly prismaService: PrismaService,
+    @Inject(RunEventsService) private readonly runEvents: RunEventsService,
+    @Inject(LoggerService) private readonly logger: LoggerService,
+  ) {}
+
+  private get prisma(): PrismaClient {
+    return this.prismaService.getClient();
+  }
+
+  buildInitialMetadata(params: { toolName: string; parentThreadId: string; childThreadId: string }): CallAgentLinkMetadata {
+    const canonical: CallAgentToolName = params.toolName === 'call_engineer' ? 'call_engineer' : 'call_agent';
+    const childRun: CallAgentChildRunLink = {
+      id: null,
+      status: 'queued',
+      linkEnabled: false,
+      latestMessageId: null,
+    };
+    return {
+      tool: canonical,
+      parentThreadId: params.parentThreadId,
+      childThreadId: params.childThreadId,
+      childRun,
+      childRunId: childRun.id,
+      childRunStatus: childRun.status,
+      childRunLinkEnabled: childRun.linkEnabled,
+      childMessageId: childRun.latestMessageId,
+    };
+  }
+
+  async registerParentToolExecution(params: {
+    runId: string;
+    parentThreadId: string;
+    childThreadId: string;
+    toolName: string;
+  }): Promise<string | null> {
+    const canonical: CallAgentToolName = params.toolName === 'call_engineer' ? 'call_engineer' : 'call_agent';
+    try {
+      const eventId = await this.prisma.$transaction(async (tx) => {
+        const event = await this.findLatestToolEvent(tx, params.runId, canonical);
+        if (!event) return null;
+
+        const metadata = this.buildInitialMetadata({
+          toolName: canonical,
+          parentThreadId: params.parentThreadId,
+          childThreadId: params.childThreadId,
+        });
+
+        await this.saveMetadata(tx, event.id, metadata);
+        return event.id;
+      });
+      if (eventId) await this.runEvents.publishEvent(eventId, 'update');
+      return eventId;
+    } catch (err) {
+      this.logger.warn('call_agent_linking: failed to register parent tool execution', {
+        err,
+        runId: params.runId,
+        childThreadId: params.childThreadId,
+      });
+      return null;
+    }
+  }
+
+  async onChildRunStarted(params: {
+    tx?: Tx;
+    childThreadId: string;
+    runId: string;
+    latestMessageId: string | null;
+  }): Promise<string | null> {
+    const tx = params.tx ?? this.prisma;
+    const event = await this.findParentEventByChildThread(tx, params.childThreadId);
+    if (!event) return null;
+
+    const current = this.parseMetadata(event.metadata);
+    if (!current) return null;
+
+    const childRun: CallAgentChildRunLink = {
+      id: params.runId,
+      status: 'running',
+      linkEnabled: true,
+      latestMessageId: params.latestMessageId,
+    };
+
+    const metadata: CallAgentLinkMetadata = {
+      ...current,
+      childRun,
+      childRunId: childRun.id,
+      childRunStatus: childRun.status,
+      childRunLinkEnabled: childRun.linkEnabled,
+      childMessageId: childRun.latestMessageId,
+    };
+
+    await this.saveMetadata(tx, event.id, metadata);
+    return event.id;
+  }
+
+  async onChildRunMessage(params: { tx?: Tx; runId: string; latestMessageId: string | null }): Promise<string | null> {
+    const tx = params.tx ?? this.prisma;
+    const event = await this.findParentEventByRun(tx, params.runId);
+    if (!event) return null;
+
+    const current = this.parseMetadata(event.metadata);
+    if (!current) return null;
+
+    const childRun: CallAgentChildRunLink = {
+      id: current.childRun.id ?? params.runId,
+      status: current.childRun.status,
+      linkEnabled: current.childRun.linkEnabled || Boolean(params.runId),
+      latestMessageId: params.latestMessageId ?? current.childRun.latestMessageId ?? null,
+    };
+
+    const metadata: CallAgentLinkMetadata = {
+      ...current,
+      childRun,
+      childRunId: childRun.id,
+      childRunStatus: childRun.status,
+      childRunLinkEnabled: childRun.linkEnabled,
+      childMessageId: childRun.latestMessageId,
+    };
+
+    await this.saveMetadata(tx, event.id, metadata);
+    return event.id;
+  }
+
+  async onChildRunCompleted(params: { tx?: Tx; runId: string; status: RunStatus }): Promise<string | null> {
+    const tx = params.tx ?? this.prisma;
+    const event = await this.findParentEventByRun(tx, params.runId);
+    if (!event) return null;
+
+    const current = this.parseMetadata(event.metadata);
+    if (!current) return null;
+
+    const childRun: CallAgentChildRunLink = {
+      id: current.childRun.id ?? params.runId,
+      status: params.status,
+      linkEnabled: true,
+      latestMessageId: current.childRun.latestMessageId ?? null,
+    };
+
+    const metadata: CallAgentLinkMetadata = {
+      ...current,
+      childRun,
+      childRunId: childRun.id,
+      childRunStatus: childRun.status,
+      childRunLinkEnabled: childRun.linkEnabled,
+      childMessageId: childRun.latestMessageId,
+    };
+
+    await this.saveMetadata(tx, event.id, metadata);
+    return event.id;
+  }
+
+  private serializeMetadata(metadata: CallAgentLinkMetadata): PrismaNamespace.JsonObject {
+    return {
+      tool: metadata.tool,
+      parentThreadId: metadata.parentThreadId,
+      childThreadId: metadata.childThreadId,
+      childRun: {
+        id: metadata.childRun.id,
+        status: metadata.childRun.status,
+        linkEnabled: metadata.childRun.linkEnabled,
+        latestMessageId: metadata.childRun.latestMessageId,
+      },
+      childRunId: metadata.childRunId ?? metadata.childRun.id ?? null,
+      childRunStatus: metadata.childRunStatus ?? metadata.childRun.status,
+      childRunLinkEnabled: metadata.childRunLinkEnabled ?? metadata.childRun.linkEnabled,
+      childMessageId: metadata.childMessageId ?? metadata.childRun.latestMessageId ?? null,
+    } satisfies PrismaNamespace.JsonObject;
+  }
+
+  private async saveMetadata(tx: Tx, eventId: string, metadata: CallAgentLinkMetadata): Promise<void> {
+    try {
+      await tx.runEvent.update({ where: { id: eventId }, data: { metadata: this.serializeMetadata(metadata) } });
+    } catch (err) {
+      this.logger.warn('call_agent_linking: failed to save metadata', { eventId, err });
+    }
+  }
+
+  private parseMetadata(raw: Prisma.JsonValue | null): CallAgentLinkMetadata | null {
+    if (!isRecord(raw)) return null;
+    const toolRaw = typeof raw.tool === 'string' ? raw.tool : 'call_agent';
+    const tool: CallAgentToolName = toolRaw === 'call_engineer' ? 'call_engineer' : 'call_agent';
+    const parentThreadId = typeof raw.parentThreadId === 'string' ? raw.parentThreadId : null;
+    const childThreadId = typeof raw.childThreadId === 'string' ? raw.childThreadId : null;
+    if (!parentThreadId || !childThreadId) return null;
+
+    const childRun: CallAgentChildRunLink = {
+      id: null,
+      status: 'queued',
+      linkEnabled: false,
+      latestMessageId: null,
+    };
+
+    if (isRecord(raw.childRun)) {
+      if (typeof raw.childRun.id === 'string') childRun.id = raw.childRun.id;
+      if (typeof raw.childRun.status === 'string') childRun.status = raw.childRun.status as CallAgentChildRunStatus;
+      if (typeof raw.childRun.linkEnabled === 'boolean') childRun.linkEnabled = raw.childRun.linkEnabled;
+      if (typeof raw.childRun.latestMessageId === 'string') childRun.latestMessageId = raw.childRun.latestMessageId;
+    }
+
+    if (typeof raw.childRunId === 'string' && !childRun.id) childRun.id = raw.childRunId;
+    if (typeof raw.childRunStatus === 'string') childRun.status = raw.childRunStatus as CallAgentChildRunStatus;
+    if (raw.childRunLinkEnabled === true) childRun.linkEnabled = true;
+    if (typeof raw.childMessageId === 'string') childRun.latestMessageId = raw.childMessageId;
+
+    return {
+      tool,
+      parentThreadId,
+      childThreadId,
+      childRun,
+      childRunId: childRun.id,
+      childRunStatus: childRun.status,
+      childRunLinkEnabled: childRun.linkEnabled,
+      childMessageId: childRun.latestMessageId,
+    };
+  }
+
+  private async findParentEventByChildThread(tx: Tx, childThreadId: string) {
+    return tx.runEvent.findFirst({
+      where: {
+        type: 'tool_execution',
+        toolExecution: { toolName: { in: CALL_AGENT_TOOL_NAMES } },
+        metadata: { path: ['childThreadId'], equals: childThreadId },
+      },
+      orderBy: { ts: 'desc' },
+      select: { id: true, metadata: true },
+    });
+  }
+
+  private async findParentEventByRun(tx: Tx, runId: string) {
+    return tx.runEvent.findFirst({
+      where: {
+        type: 'tool_execution',
+        toolExecution: { toolName: { in: CALL_AGENT_TOOL_NAMES } },
+        metadata: { path: ['childRunId'], equals: runId },
+      },
+      orderBy: { ts: 'desc' },
+      select: { id: true, metadata: true },
+    });
+  }
+
+  private async findLatestToolEvent(tx: Tx, runId: string, tool: CallAgentToolName) {
+    return tx.runEvent.findFirst({
+      where: {
+        runId,
+        type: 'tool_execution',
+        toolExecution: {
+          is: {
+            toolName: tool,
+          },
+        },
+      },
+      orderBy: { startedAt: 'desc' },
+      select: { id: true, metadata: true },
+    });
+  }
+}

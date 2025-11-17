@@ -14,6 +14,7 @@ import { AgentsPersistenceService } from '../src/agents/agents.persistence.servi
 import type { TemplateRegistry } from '../src/graph/templateRegistry';
 import type { GraphRepository } from '../src/graph/graph.repository';
 import { HumanMessage, AIMessage } from '@agyn/llm';
+import { CallAgentLinkingService } from '../src/agents/call-agent-linking.service';
 
 type MetricsPayload = { activity: 'working' | 'waiting' | 'idle'; remindersCount: number };
 
@@ -53,6 +54,23 @@ const createPrismaStub = () =>
       $queryRaw: async () => [],
     }),
   }) as unknown as PrismaService;
+
+const createLinkingStub = () =>
+  ({
+    buildInitialMetadata: (params: { toolName: string; parentThreadId: string; childThreadId: string }) => ({
+      tool: params.toolName === 'call_engineer' ? 'call_engineer' : 'call_agent',
+      parentThreadId: params.parentThreadId,
+      childThreadId: params.childThreadId,
+      childRun: { id: null, status: 'queued', linkEnabled: false, latestMessageId: null },
+      childRunId: null,
+      childRunStatus: 'queued',
+      childRunLinkEnabled: false,
+      childMessageId: null,
+    }),
+    onChildRunStarted: async () => null,
+    onChildRunMessage: async () => null,
+    onChildRunCompleted: async () => null,
+  }) as unknown as CallAgentLinkingService;
 
 const waitForEvent = <T>(socket: Socket, event: string, timeoutMs = 5000): Promise<T> =>
   new Promise((resolve, reject) => {
@@ -172,7 +190,7 @@ describe.sequential('GraphSocketGateway realtime integration', () => {
     const runEvents = new RunEventsService(prismaService, logger, gateway);
     const templateRegistryStub = ({ getMeta: () => undefined }) as unknown as TemplateRegistry;
     const graphRepositoryStub = ({ get: async () => ({ nodes: [] }) }) as unknown as GraphRepository;
-    const agents = new AgentsPersistenceService(prismaService, logger, metricsDouble.service, gateway, templateRegistryStub, graphRepositoryStub, runEvents);
+    const agents = new AgentsPersistenceService(prismaService, logger, metricsDouble.service, gateway, templateRegistryStub, graphRepositoryStub, runEvents, createLinkingStub());
 
     const startResult = await agents.beginRunThread(thread.id, [HumanMessage.fromText('hello')]);
     const runId = startResult.runId;
@@ -217,7 +235,7 @@ describe.sequential('GraphSocketGateway realtime integration', () => {
     const runEvents = new RunEventsService(prismaService, logger, gateway);
     const templateRegistryStub = ({ getMeta: () => undefined }) as unknown as TemplateRegistry;
     const graphRepositoryStub = ({ get: async () => ({ nodes: [] }) }) as unknown as GraphRepository;
-    const agents = new AgentsPersistenceService(prismaService, logger, metricsDouble.service, gateway, templateRegistryStub, graphRepositoryStub, runEvents);
+    const agents = new AgentsPersistenceService(prismaService, logger, metricsDouble.service, gateway, templateRegistryStub, graphRepositoryStub, runEvents, createLinkingStub());
 
     const thread = await prisma.thread.create({ data: { alias: `thread-${randomUUID()}`, summary: 'timeline' } });
     const startResult = await agents.beginRunThread(thread.id, [HumanMessage.fromText('start')]);

@@ -10,9 +10,12 @@ import type { PersistedGraphNode } from '../graph/types';
 import { toPrismaJsonValue } from '../llm/services/messages.serialization';
 import { ChannelDescriptorSchema, type ChannelDescriptor } from '../messaging/types';
 import { RunEventsService } from '../events/run-events.service';
+import { CallAgentLinkingService } from './call-agent-linking.service';
 import { ThreadsMetricsService, type ThreadMetrics } from './threads.metrics.service';
 
 export type RunStartResult = { runId: string };
+
+type RunEventDelegate = Prisma.TransactionClient['runEvent'];
 
 @Injectable()
 export class AgentsPersistenceService implements GraphEventsPublisherAware {
@@ -26,6 +29,7 @@ export class AgentsPersistenceService implements GraphEventsPublisherAware {
     @Inject(TemplateRegistry) private readonly templateRegistry: TemplateRegistry,
     @Inject(GraphRepository) private readonly graphs: GraphRepository,
     @Inject(RunEventsService) private readonly runEvents: RunEventsService,
+    @Inject(CallAgentLinkingService) private readonly callAgentLinking: CallAgentLinkingService,
   ) {
     this.events = events;
   }
@@ -100,11 +104,12 @@ export class AgentsPersistenceService implements GraphEventsPublisherAware {
     threadId: string,
     inputMessages: Array<HumanMessage | SystemMessage | AIMessage>,
   ): Promise<RunStartResult> {
-    const { runId, createdMessages, eventIds } = await this.prisma.$transaction(async (tx: Prisma.TransactionClient) => {
+    const { runId, createdMessages, eventIds, patchedEventIds } = await this.prisma.$transaction(async (tx: Prisma.TransactionClient) => {
       // Begin run and persist messages
       const run = await tx.run.create({ data: { threadId, status: 'running' as RunStatus } });
       const createdMessages: Array<{ id: string; kind: MessageKind; text: string | null; source: Prisma.JsonValue; createdAt: Date }> = [];
       const eventIds: string[] = [];
+      const patchedEventIds: string[] = [];
       await Promise.all(
         inputMessages.map(async (msg) => {
           const { kind, text } = this.deriveKindTextTyped(msg);
@@ -124,12 +129,20 @@ export class AgentsPersistenceService implements GraphEventsPublisherAware {
           createdMessages.push({ id: created.id, kind, text, source: created.source as Prisma.JsonValue, createdAt: created.createdAt });
         }),
       );
-      return { runId: run.id, createdMessages, eventIds };
+      const linkedEventId = await this.callAgentLinking.onChildRunStarted({
+        tx,
+        childThreadId: threadId,
+        runId: run.id,
+        latestMessageId: createdMessages[0]?.id ?? null,
+      });
+      if (linkedEventId) patchedEventIds.push(linkedEventId);
+      return { runId: run.id, createdMessages, eventIds, patchedEventIds };
     });
     this.events.emitRunStatusChanged(threadId, { id: runId, status: 'running' as RunStatus, createdAt: new Date(), updatedAt: new Date() });
     for (const m of createdMessages) this.events.emitMessageCreated(threadId, { id: m.id, kind: m.kind, text: m.text, source: m.source as Prisma.JsonValue, createdAt: m.createdAt, runId });
     this.events.scheduleThreadMetrics(threadId);
     await Promise.all(eventIds.map((id) => this.runEvents.publishEvent(id, 'append')));
+    await Promise.all(patchedEventIds.map((id) => this.runEvents.publishEvent(id, 'update')));
     return { runId };
   }
 
@@ -139,6 +152,7 @@ export class AgentsPersistenceService implements GraphEventsPublisherAware {
   async recordInjected(runId: string, injectedMessages: SystemMessage[]): Promise<void> {
     const createdMessages: Array<{ id: string; kind: MessageKind; text: string | null; source: Prisma.JsonValue; createdAt: Date }> = [];
     const eventIds: string[] = [];
+    const patchedEventIds: string[] = [];
     await this.prisma.$transaction(async (tx: Prisma.TransactionClient) => {
       const run = await tx.run.findUnique({ where: { id: runId }, select: { threadId: true } });
       if (!run) throw new Error(`run_not_found:${runId}`);
@@ -171,12 +185,19 @@ export class AgentsPersistenceService implements GraphEventsPublisherAware {
           ts: createdMessages[0].createdAt,
         });
         eventIds.push(inj.id);
+        const linkedEventId = await this.callAgentLinking.onChildRunMessage({
+          tx,
+          runId,
+          latestMessageId: createdMessages[0]?.id ?? null,
+        });
+        if (linkedEventId) patchedEventIds.push(linkedEventId);
       }
     });
     const run = await this.prisma.run.findUnique({ where: { id: runId }, select: { threadId: true } });
     const threadId = run?.threadId;
     if (threadId) for (const m of createdMessages) this.events.emitMessageCreated(threadId, { id: m.id, kind: m.kind, text: m.text, source: m.source as Prisma.JsonValue, createdAt: m.createdAt, runId });
     await Promise.all(eventIds.map((id) => this.runEvents.publishEvent(id, 'append')));
+    await Promise.all(patchedEventIds.map((id) => this.runEvents.publishEvent(id, 'update')));
   }
 
   /**
@@ -189,6 +210,7 @@ export class AgentsPersistenceService implements GraphEventsPublisherAware {
   ): Promise<void> {
     const createdMessages: Array<{ id: string; kind: MessageKind; text: string | null; source: Prisma.JsonValue; createdAt: Date }> = [];
     const eventIds: string[] = [];
+    const patchedEventIds: string[] = [];
     const run = await this.prisma.$transaction(async (tx: Prisma.TransactionClient) => {
       const current = await tx.run.findUnique({ where: { id: runId }, select: { id: true, threadId: true, createdAt: true, updatedAt: true } });
       if (!current) throw new Error(`run_not_found:${runId}`);
@@ -213,6 +235,8 @@ export class AgentsPersistenceService implements GraphEventsPublisherAware {
         }),
       );
       const updated = await tx.run.update({ where: { id: runId }, data: { status } });
+      const linkedEventId = await this.callAgentLinking.onChildRunCompleted({ tx, runId, status });
+      if (linkedEventId) patchedEventIds.push(linkedEventId);
       return updated;
     });
     const threadId = run.threadId;
@@ -220,6 +244,7 @@ export class AgentsPersistenceService implements GraphEventsPublisherAware {
     this.events.emitRunStatusChanged(threadId, { id: runId, status, createdAt: run.createdAt, updatedAt: run.updatedAt });
     this.events.scheduleThreadMetrics(threadId);
     await Promise.all(eventIds.map((id) => this.runEvents.publishEvent(id, 'append')));
+    await Promise.all(patchedEventIds.map((id) => this.runEvents.publishEvent(id, 'update')));
   }
 
   async listThreads(opts?: { rootsOnly?: boolean; status?: 'open' | 'closed' | 'all'; limit?: number }): Promise<Array<{ id: string; alias: string; summary: string | null; status: ThreadStatus; createdAt: Date; parentId?: string | null }>> {
@@ -392,6 +417,12 @@ export class AgentsPersistenceService implements GraphEventsPublisherAware {
 
     for (const id of threadIds) if (!titles[id]) titles[id] = fallback;
     return titles;
+  }
+
+  private getRunEventDelegate(tx: Prisma.TransactionClient): RunEventDelegate | undefined {
+    const candidate = (tx as { runEvent?: RunEventDelegate }).runEvent;
+    if (!candidate || typeof candidate.findFirst !== 'function') return undefined;
+    return candidate;
   }
 
   /**
