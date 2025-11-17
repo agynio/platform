@@ -1,49 +1,19 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import { useQueryClient } from '@tanstack/react-query';
 import { RunTimelineEventListItem } from '@/components/agents/RunTimelineEventListItem';
 import { RunTimelineEventDetails } from '@/components/agents/RunTimelineEventDetails';
 import { useRunTimelineEvents, useRunTimelineSummary } from '@/api/hooks/runs';
 import { runs } from '@/api/modules/runs';
 import { graphSocket } from '@/lib/graph/socket';
-import type { RunEventStatus, RunEventType, RunTimelineEvent, RunTimelineEventsCursor } from '@/api/types/agents';
+import type { RunEventStatus, RunEventType, RunTimelineEvent, RunTimelineEventsCursor, RunTimelineEventsResponse } from '@/api/types/agents';
 import { getEventTypeLabel } from '@/components/agents/runTimelineFormatting';
+import { mergeTimelineEvents, sortAndDedupeTimelineEvents } from '@/lib/agents/timelineEvents';
 
 const EVENT_TYPES: RunEventType[] = ['invocation_message', 'injection', 'llm_call', 'tool_execution', 'summarization'];
 const STATUS_TYPES: RunEventStatus[] = ['pending', 'running', 'success', 'error', 'cancelled'];
 const PAGE_SIZE = 100;
 const SCROLL_THRESHOLD_PX = 40;
-
-function compareEvents(a: RunTimelineEvent, b: RunTimelineEvent): number {
-  const timeA = Date.parse(a.ts);
-  const timeB = Date.parse(b.ts);
-  if (!Number.isNaN(timeA) && !Number.isNaN(timeB) && timeA !== timeB) {
-    return timeA - timeB;
-  }
-  if (!Number.isNaN(timeA) && !Number.isNaN(timeB)) {
-    return a.id.localeCompare(b.id);
-  }
-  const lexical = a.ts.localeCompare(b.ts);
-  if (lexical !== 0) return lexical;
-  return a.id.localeCompare(b.id);
-}
-
-function sortAndDedupe(entries: RunTimelineEvent[]): RunTimelineEvent[] {
-  const byId = new Map<string, RunTimelineEvent>();
-  for (const item of entries) {
-    byId.set(item.id, item);
-  }
-  const unique = Array.from(byId.values());
-  unique.sort(compareEvents);
-  return unique;
-}
-
-function mergeEvents(existing: RunTimelineEvent[], incoming: RunTimelineEvent[], preferIncoming = false): RunTimelineEvent[] {
-  if (incoming.length === 0) return existing;
-  if (preferIncoming) {
-    return sortAndDedupe([...incoming, ...existing]);
-  }
-  return sortAndDedupe([...existing, ...incoming]);
-}
 
 function parseTimestamp(value: string): number {
   const parsed = Date.parse(value);
@@ -123,13 +93,17 @@ export function AgentsRunTimeline() {
     [runId, typeParam, statusParam],
   );
 
-  const eventsQuery = useRunTimelineEvents(runId, {
-    types: apiTypes,
-    statuses: apiStatuses,
-    limit: PAGE_SIZE,
-    order: 'desc',
-  });
+  const timelineFilters = useMemo(
+    () => ({ types: apiTypes, statuses: apiStatuses, limit: PAGE_SIZE, order: 'desc' as const }),
+    [apiTypes, apiStatuses],
+  );
+  const eventsQuery = useRunTimelineEvents(runId, timelineFilters);
   const { refetch: refetchEvents } = eventsQuery;
+  const queryClient = useQueryClient();
+  const eventsQueryKey = useMemo(
+    () => (runId ? (['agents', 'runs', runId, 'timeline', 'events', timelineFilters] as const) : null),
+    [runId, timelineFilters],
+  );
   const [events, setEvents] = useState<RunTimelineEvent[]>([]);
   const [nextCursor, setNextCursor] = useState<RunTimelineEventsCursor | null>(null);
   const [isLoadingPrev, setIsLoadingPrev] = useState(false);
@@ -200,7 +174,17 @@ export function AgentsRunTimeline() {
         });
         const items = response.items ?? [];
         if (items.length > 0) {
-          updateEventsState((prev) => mergeEvents(prev, items));
+          updateEventsState((prev) => mergeTimelineEvents(prev, items));
+          if (eventsQueryKey) {
+            queryClient.setQueryData<RunTimelineEventsResponse | undefined>(eventsQueryKey, (prev) => {
+              const prevItems = prev?.items ?? [];
+              const merged = mergeTimelineEvents(prevItems, items);
+              return {
+                items: merged,
+                nextCursor: prev?.nextCursor ?? null,
+              };
+            });
+          }
         }
       } catch (_err) {
         await refetchEvents();
@@ -211,7 +195,7 @@ export function AgentsRunTimeline() {
       catchUpRef.current = null;
     });
     return catchUpRef.current;
-  }, [runId, typeParam, statusParam, refetchEvents, updateEventsState]);
+  }, [runId, typeParam, statusParam, refetchEvents, updateEventsState, eventsQueryKey, queryClient]);
 
   useEffect(() => {
     if (lastSignatureRef.current !== querySignature) {
@@ -237,7 +221,7 @@ export function AgentsRunTimeline() {
       }
       return;
     }
-    const sorted = sortAndDedupe(eventsQuery.data.items ?? []);
+    const sorted = sortAndDedupeTimelineEvents(eventsQuery.data.items ?? []);
     updateEventsState(() => sorted, { forceCursor: true });
     setNextCursor(eventsQuery.data.nextCursor ?? null);
     if (pendingInitialScrollRef.current) {
@@ -289,7 +273,7 @@ export function AgentsRunTimeline() {
       let shouldScrollAfterUpdate = false;
       updateEventsState((prev) => {
         const exists = prev.some((existing) => existing.id === event.id);
-        const merged = mergeEvents(prev, [event]);
+        const merged = mergeTimelineEvents(prev, [event]);
         if (!exists && merged.length > 0 && merged[merged.length - 1]?.id === event.id && shouldStick) {
           shouldScrollAfterUpdate = true;
         }
@@ -444,9 +428,21 @@ export function AgentsRunTimeline() {
 
       if (lastSignatureRef.current !== signatureAtCall) return;
 
-      if (response.items.length > 0) {
+      if (eventsQueryKey) {
+        queryClient.setQueryData<RunTimelineEventsResponse | undefined>(eventsQueryKey, (prev) => {
+          const prevItems = prev?.items ?? [];
+          const merged = mergeTimelineEvents(prevItems, response.items ?? [], { preferIncoming: true });
+          return {
+            items: merged,
+            nextCursor: response.nextCursor ?? null,
+          };
+        });
+      }
+
+      const incoming = response.items ?? [];
+      if (incoming.length > 0) {
         pendingPrependAdjustmentRef.current = { previousHeight, previousTop };
-        updateEventsState((prev) => mergeEvents(prev, response.items, true));
+        updateEventsState((prev) => mergeTimelineEvents(prev, incoming, { preferIncoming: true }));
       }
 
       setNextCursor(response.nextCursor ?? null);
@@ -460,7 +456,7 @@ export function AgentsRunTimeline() {
       }
       isLoadingPrevRef.current = false;
     }
-  }, [runId, nextCursor, typeParam, statusParam, updateEventsState]);
+  }, [runId, nextCursor, typeParam, statusParam, updateEventsState, eventsQueryKey, queryClient]);
 
   const handleScroll = useCallback(() => {
     const node = listRef.current;

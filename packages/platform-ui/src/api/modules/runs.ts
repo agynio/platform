@@ -29,22 +29,58 @@ function coerceCursor(cursorLike: unknown): RunTimelineEventsCursor | null {
 
 function normalizeTimelineEventsResponse(raw: unknown): RunTimelineEventsResponse {
   const topLevel = toRecord(raw);
-  const payload = 'data' in topLevel && topLevel.data ? toRecord(topLevel.data) : topLevel;
 
-  const page = toRecord(payload.page ?? payload.pagination ?? {});
-  const itemsCandidate =
-    payload.items ??
-    payload.events ??
-    page.items ??
-    (Array.isArray(payload.data) ? payload.data : undefined);
-  const items = Array.isArray(itemsCandidate) ? (itemsCandidate as RunTimelineEvent[]) : [];
+  const visited = new Set<UnknownRecord>();
+  const queue: UnknownRecord[] = [topLevel];
+  const candidates: UnknownRecord[] = [];
 
-  const nextCursor =
-    coerceCursor(payload.nextCursor) ??
-    coerceCursor(payload.next_cursor) ??
-    coerceCursor(payload.next) ??
-    coerceCursor(page.nextCursor ?? page.cursor ?? page.next) ??
-    null;
+  const enqueue = (value: unknown) => {
+    const record = toRecord(value);
+    if (!record || visited.has(record)) return;
+    if (Object.keys(record).length === 0) return;
+    queue.push(record);
+  };
+
+  while (queue.length) {
+    const current = queue.shift()!;
+    if (visited.has(current)) continue;
+    visited.add(current);
+    candidates.push(current);
+
+    enqueue(current.data);
+    enqueue(current.page ?? current.pagination);
+
+    const pageRecord = toRecord(current.page ?? current.pagination ?? {});
+    if (Object.keys(pageRecord).length > 0) {
+      enqueue(pageRecord.data);
+    }
+  }
+
+  const pickArray = (getter: (candidate: UnknownRecord) => unknown): RunTimelineEvent[] | undefined => {
+    for (const candidate of candidates) {
+      const value = getter(candidate);
+      if (Array.isArray(value)) return value as RunTimelineEvent[];
+    }
+    return undefined;
+  };
+
+  const items =
+    pickArray((candidate) => candidate.items) ??
+    pickArray((candidate) => candidate.events) ??
+    (Array.isArray(topLevel.data) ? (topLevel.data as RunTimelineEvent[]) : undefined) ??
+    [];
+
+  const cursorCandidates: Array<RunTimelineEventsCursor | null> = [];
+  for (const candidate of candidates) {
+    cursorCandidates.push(
+      coerceCursor(candidate.nextCursor) ??
+        coerceCursor(candidate.next_cursor) ??
+        coerceCursor(candidate.cursor) ??
+        coerceCursor(candidate.next),
+    );
+  }
+
+  const nextCursor = cursorCandidates.find((cursor): cursor is RunTimelineEventsCursor => cursor != null) ?? null;
 
   return {
     items,

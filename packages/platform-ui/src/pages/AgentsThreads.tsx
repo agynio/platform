@@ -5,16 +5,15 @@ import { ThreadTree } from '@/components/agents/ThreadTree';
 import { ThreadStatusFilterSwitch, type ThreadStatusFilter } from '@/components/agents/ThreadStatusFilterSwitch';
 import { useThreadRuns } from '@/api/hooks/runs';
 import { useThreadById } from '@/api/hooks/threads';
-import type { ThreadNode } from '@/api/types/agents';
+import type { ThreadNode, ReminderItem, RunTimelineEvent, RunTimelineEventsCursor, RunTimelineEventsResponse } from '@/api/types/agents';
 import { runs as runsApi } from '@/api/modules/runs';
 import { http } from '@/api/http';
-import type { ReminderItem } from '@/api/types/agents';
 import { graphSocket } from '@/lib/graph/socket';
 import { useNavigate, useParams } from 'react-router-dom';
 import { ThreadHeader } from '@/components/agents/ThreadHeader';
+import { mergeTimelineEvents } from '@/lib/agents/timelineEvents';
 
 // Thread list rendering moved into ThreadTree component
-type MessageItem = { id: string; kind: 'user' | 'assistant' | 'system' | 'tool'; text?: string | null; source: unknown; createdAt: string };
 type SocketMessage = { id: string; kind: 'user' | 'assistant' | 'system' | 'tool'; text: string | null; source: unknown; createdAt: string; runId?: string };
 type SocketRun = { id: string; status: 'running' | 'finished' | 'terminated'; createdAt: string; updatedAt: string };
 
@@ -73,18 +72,42 @@ function toUnifiedFromSocket(message: SocketMessage, runId: string): UnifiedRunM
   };
 }
 
-async function fetchRunMessages(runId: string): Promise<UnifiedRunMessage[]> {
-  const [input, injected, output] = await Promise.all([
-    runsApi.messages(runId, 'input'),
-    runsApi.messages(runId, 'injected'),
-    runsApi.messages(runId, 'output'),
-  ]);
-  const mapItems = (items: MessageItem[], side: 'left' | 'right'): UnifiedRunMessage[] =>
-    items.map((m) => ({ id: m.id, role: m.kind, text: m.text, source: m.source, createdAt: m.createdAt, side, runId }));
-  const combined = [...mapItems(input.items, 'left'), ...mapItems(injected.items, 'left'), ...mapItems(output.items, 'right')];
-  combined.sort(compareUnifiedMessages);
-  return combined;
+function toUnifiedFromTimelineEvent(event: RunTimelineEvent): UnifiedRunMessage | null {
+  const message = event.message;
+  if (!message) return null;
+  const role = message.kind ?? message.role ?? 'system';
+  const createdAt = message.createdAt ?? event.ts;
+  const id = message.messageId ?? event.id;
+  const side: 'left' | 'right' = role === 'assistant' || role === 'tool' ? 'right' : 'left';
+  return {
+    id,
+    role,
+    text: message.text,
+    source: message.source,
+    createdAt,
+    side,
+    runId: event.runId,
+  };
 }
+
+function toUnifiedMessageList(events: RunTimelineEvent[]): UnifiedRunMessage[] {
+  const mapped: UnifiedRunMessage[] = [];
+  for (const event of events) {
+    const unified = toUnifiedFromTimelineEvent(event);
+    if (unified) mapped.push(unified);
+  }
+  return mergeMessageLists([], mapped);
+}
+
+const TIMELINE_PAGE_SIZE = 100;
+const TIMELINE_QUERY_FILTERS = {
+  types: [] as string[],
+  statuses: [] as string[],
+  limit: TIMELINE_PAGE_SIZE,
+  order: 'desc' as const,
+};
+
+const timelineQueryKey = (runId: string) => ['agents', 'runs', runId, 'timeline', 'events', TIMELINE_QUERY_FILTERS] as const;
 
 export function AgentsThreads() {
   const params = useParams<{ threadId?: string }>();
@@ -140,6 +163,8 @@ export function AgentsThreads() {
   const showCountdown = Boolean(activeThreadId && latestRun?.status === 'finished' && nearestReminder && !remindersQ.isError);
 
   const [runMessages, setRunMessages] = useState<Record<string, UnifiedRunMessage[]>>({});
+  const [runNextCursors, setRunNextCursors] = useState<Record<string, RunTimelineEventsCursor | null>>({});
+  const [loadingOlderByRun, setLoadingOlderByRun] = useState<Record<string, boolean>>({});
   const [loadError, setLoadError] = useState<Error | null>(null);
 
   const pendingMessages = useRef<Map<string, UnifiedRunMessage[]>>(new Map());
@@ -149,6 +174,8 @@ export function AgentsThreads() {
   // Reset cache on thread change
   useEffect(() => {
     setRunMessages({});
+    setRunNextCursors({});
+    setLoadingOlderByRun({});
     setLoadError(null);
     pendingMessages.current.clear();
     seenMessageIds.current.clear();
@@ -185,6 +212,44 @@ export function AgentsThreads() {
     for (const key of Array.from(pendingMessages.current.keys())) {
       if (!runIdsRef.current.has(key)) pendingMessages.current.delete(key);
     }
+    setRunNextCursors((prev) => {
+      const next: Record<string, RunTimelineEventsCursor | null> = {};
+      for (const run of runs) {
+        if (Object.prototype.hasOwnProperty.call(prev, run.id)) {
+          next[run.id] = prev[run.id];
+        }
+      }
+      if (Object.keys(next).length === Object.keys(prev).length) {
+        let unchanged = true;
+        for (const key of Object.keys(next)) {
+          if (next[key] !== prev[key]) {
+            unchanged = false;
+            break;
+          }
+        }
+        if (unchanged) return prev;
+      }
+      return next;
+    });
+    setLoadingOlderByRun((prev) => {
+      const next: Record<string, boolean> = {};
+      for (const run of runs) {
+        if (prev[run.id]) {
+          next[run.id] = prev[run.id];
+        }
+      }
+      if (Object.keys(next).length === Object.keys(prev).length) {
+        let unchanged = true;
+        for (const key of Object.keys(next)) {
+          if (next[key] !== prev[key]) {
+            unchanged = false;
+            break;
+          }
+        }
+        if (unchanged) return prev;
+      }
+      return next;
+    });
   }, [runs]);
 
   const flushPendingForRun = useCallback(
@@ -217,16 +282,34 @@ export function AgentsThreads() {
 
     const queue = runs.map((run) => async () => {
       try {
-        const msgs = await fetchRunMessages(run.id);
-        if (!cancelled) {
-          setRunMessages((prev) => {
-            const existing = prev[run.id] ?? [];
-            const merged = mergeMessageLists(existing, msgs);
-            seenMessageIds.current.set(run.id, new Set(merged.map((m) => m.id)));
-            if (areMessageListsEqual(existing, merged)) return prev;
-            return { ...prev, [run.id]: merged };
-          });
-        }
+        const response = await runsApi.timelineEvents(run.id, {
+          limit: TIMELINE_PAGE_SIZE,
+          order: 'desc',
+        });
+        if (cancelled) return;
+
+        const events = response.items ?? [];
+        const msgs = toUnifiedMessageList(events);
+
+        setRunMessages((prev) => {
+          const existing = prev[run.id] ?? [];
+          const merged = mergeMessageLists(existing, msgs);
+          seenMessageIds.current.set(run.id, new Set(merged.map((m) => m.id)));
+          if (areMessageListsEqual(existing, merged)) return prev;
+          return { ...prev, [run.id]: merged };
+        });
+
+        setRunNextCursors((prev) => ({ ...prev, [run.id]: response.nextCursor ?? null }));
+        setLoadError(null);
+
+        queryClient.setQueryData<RunTimelineEventsResponse | undefined>(timelineQueryKey(run.id), (prev) => {
+          const prevItems = prev?.items ?? [];
+          const mergedEvents = mergeTimelineEvents(prevItems, events, { preferIncoming: true });
+          return {
+            items: mergedEvents,
+            nextCursor: response.nextCursor ?? null,
+          };
+        });
       } catch (e) {
         if (!cancelled) setLoadError(e as Error);
       }
@@ -247,7 +330,7 @@ export function AgentsThreads() {
     return () => {
       cancelled = true;
     };
-  }, [activeThreadId, runs]);
+  }, [activeThreadId, runs, queryClient]);
 
   // Subscribe to selected thread room for live updates
   useEffect(() => {
@@ -341,6 +424,77 @@ export function AgentsThreads() {
     const offReconnect = graphSocket.onReconnected(invalidate);
     return () => offReconnect();
   }, [activeThreadId, queryClient, invalidateReminders]);
+
+  const loadOlderForRun = useCallback(
+    async (runId: string) => {
+      const cursor = runNextCursors[runId];
+      if (!cursor || loadingOlderByRun[runId]) return;
+
+      setLoadingOlderByRun((prev) => ({ ...prev, [runId]: true }));
+
+      try {
+        const response = await runsApi.timelineEvents(runId, {
+          limit: TIMELINE_PAGE_SIZE,
+          order: 'desc',
+          cursor,
+        });
+        const events = response.items ?? [];
+        if (events.length > 0) {
+          const msgs = toUnifiedMessageList(events);
+          setRunMessages((prev) => {
+            const existing = prev[runId] ?? [];
+            const merged = mergeMessageLists(existing, msgs);
+            seenMessageIds.current.set(runId, new Set(merged.map((m) => m.id)));
+            if (areMessageListsEqual(existing, merged)) return prev;
+            return { ...prev, [runId]: merged };
+          });
+        }
+        setRunNextCursors((prev) => ({ ...prev, [runId]: response.nextCursor ?? null }));
+        setLoadError(null);
+        queryClient.setQueryData<RunTimelineEventsResponse | undefined>(timelineQueryKey(runId), (prev) => {
+          const prevItems = prev?.items ?? [];
+          const mergedEvents = mergeTimelineEvents(prevItems, events, { preferIncoming: true });
+          return {
+            items: mergedEvents,
+            nextCursor: response.nextCursor ?? null,
+          };
+        });
+      } catch (err) {
+        setLoadError(err as Error);
+      } finally {
+        setLoadingOlderByRun((prev) => {
+          const next = { ...prev };
+          delete next[runId];
+          return next;
+        });
+      }
+    },
+    [runNextCursors, loadingOlderByRun, queryClient],
+  );
+
+  const loadOlderState = useMemo(() => {
+    const map: Record<string, { hasMore: boolean; loading: boolean }> = {};
+    for (const run of runs) {
+      const hasMore = !!(runNextCursors[run.id] ?? null);
+      const loading = !!loadingOlderByRun[run.id];
+      if (hasMore || loading) {
+        map[run.id] = { hasMore, loading };
+      }
+    }
+    return map;
+  }, [runs, runNextCursors, loadingOlderByRun]);
+
+  const anyHasMoreAbove = runs.some((run) => !!(runNextCursors[run.id] ?? null));
+  const anyLoadingOlder = runs.some((run) => !!loadingOlderByRun[run.id]);
+
+  const handleLoadMoreAbove = useCallback(() => {
+    for (const run of runs) {
+      if (runNextCursors[run.id]) {
+        void loadOlderForRun(run.id);
+        break;
+      }
+    }
+  }, [runs, runNextCursors, loadOlderForRun]);
 
   const unifiedItems: UnifiedListItem[] = useMemo(() => {
     if (!runs.length) return showCountdown && nearestReminder
@@ -459,6 +613,11 @@ export function AgentsThreads() {
                     onToggleJson={toggleJson}
                     isLoading={runsQ.isLoading}
                     error={loadError}
+                    hasMoreAbove={anyHasMoreAbove}
+                    loadingMoreAbove={anyLoadingOlder}
+                    onLoadMoreAbove={anyHasMoreAbove ? handleLoadMoreAbove : undefined}
+                    loadOlderByRun={loadOlderState}
+                    onLoadOlderRun={loadOlderForRun}
                     onViewRunTimeline={(run) => {
                       if (!activeThreadId) return;
                       navigate(`/agents/threads/${encodeURIComponent(activeThreadId)}/runs/${encodeURIComponent(run.id)}/timeline`);

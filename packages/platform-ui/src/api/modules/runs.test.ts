@@ -90,4 +90,19 @@ describe('runs.timelineEvents', () => {
     expect(result.items).toEqual([event]);
     expect(result.nextCursor).toEqual({ ts: '2024-01-01T00:02:00.000Z', id: 'event-200' });
   });
+
+  it('accepts nested page.events arrays and nested data cursor fields', async () => {
+    const event = buildEvent('event-4');
+
+    const getSpy = vi.spyOn(http, 'get').mockResolvedValue({
+      page: { events: [event] },
+      data: { nextCursor: { ts: '2024-01-01T00:03:00.000Z', id: 'event-250' } },
+    });
+
+    const result = await runs.timelineEvents('run-1', {});
+
+    expect(getSpy).toHaveBeenCalledTimes(1);
+    expect(result.items).toEqual([event]);
+    expect(result.nextCursor).toEqual({ ts: '2024-01-01T00:03:00.000Z', id: 'event-250' });
+  });
 });

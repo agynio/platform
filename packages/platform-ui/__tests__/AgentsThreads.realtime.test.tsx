@@ -6,6 +6,8 @@ import { AgentsThreads } from '../src/pages/AgentsThreads';
 import { TestProviders, server, abs } from './integration/testUtils';
 import * as socketModule from '../src/lib/graph/socket';
 import { MemoryRouter } from 'react-router-dom';
+import { runs } from '@/api/modules/runs';
+import type { RunTimelineEvent } from '@/api/types/agents';
 
 function t(offsetMs: number) {
   return new Date(1700000000000 + offsetMs).toISOString();
@@ -26,6 +28,42 @@ async function expectMessageBubbleText(container: HTMLElement, text: string) {
     const match = bubbles.some((bubble) => bubble.textContent?.includes(text));
     expect(match).toBe(true);
   });
+}
+
+function buildTimelineEvent(params: {
+  runId: string;
+  messageId: string;
+  kind: 'assistant' | 'user';
+  text: string;
+  createdAt: string;
+}): RunTimelineEvent {
+  const { runId, messageId, kind, text, createdAt } = params;
+  return {
+    id: `evt-${messageId}`,
+    runId,
+    threadId: 'th1',
+    type: 'invocation_message',
+    status: 'success',
+    ts: createdAt,
+    startedAt: createdAt,
+    endedAt: createdAt,
+    durationMs: 0,
+    nodeId: null,
+    sourceKind: 'internal',
+    sourceSpanId: null,
+    metadata: {},
+    errorCode: null,
+    errorMessage: null,
+    message: {
+      messageId,
+      role: kind,
+      kind,
+      text,
+      source: {},
+      createdAt,
+    },
+    attachments: [],
+  };
 }
 
 describe('AgentsThreads realtime updates', () => {
@@ -108,6 +146,24 @@ describe('AgentsThreads realtime updates', () => {
   });
 
   it('appends streamed messages once and dedupes duplicates', async () => {
+    const timelineSpy = vi.spyOn(runs, 'timelineEvents').mockImplementation(async (runId) => {
+      if (runId === 'run-msg-1') {
+        return {
+          items: [
+            buildTimelineEvent({
+              runId: 'run-msg-1',
+              messageId: 'msg-initial',
+              kind: 'assistant',
+              text: 'Initial',
+              createdAt: t(5),
+            }),
+          ],
+          nextCursor: null,
+        };
+      }
+      return { items: [], nextCursor: null };
+    });
+
     server.use(
       http.get('/api/agents/threads', () =>
         HttpResponse.json({ items: [{ id: 'th1', alias: 'th-a', summary: 'Thread A', createdAt: t(0) }] }),
@@ -121,43 +177,35 @@ describe('AgentsThreads realtime updates', () => {
       http.get(abs('/api/agents/threads/th1/runs'), () =>
         HttpResponse.json({ items: [{ id: 'run-msg-1', status: 'running', createdAt: t(1), updatedAt: t(1) }] }),
       ),
-      http.get('/api/agents/runs/run-msg-1/messages', ({ request }) => {
-        const url = new URL(request.url);
-        const type = url.searchParams.get('type');
-        if (type === 'output') return HttpResponse.json({ items: [{ id: 'msg-initial', kind: 'assistant', text: 'Initial', source: {}, createdAt: t(5) }] });
-        return HttpResponse.json({ items: [] });
-      }),
-      http.get(abs('/api/agents/runs/run-msg-1/messages'), ({ request }) => {
-        const url = new URL(request.url);
-        const type = url.searchParams.get('type');
-        if (type === 'output') return HttpResponse.json({ items: [{ id: 'msg-initial', kind: 'assistant', text: 'Initial', source: {}, createdAt: t(5) }] });
-        return HttpResponse.json({ items: [] });
-      }),
       http.get('/api/agents/reminders', () => HttpResponse.json({ items: [] })),
       http.get(abs('/api/agents/reminders'), () => HttpResponse.json({ items: [] })),
     );
 
-    render(
-      <TestProviders>
-        <MemoryRouter>
-          <AgentsThreads />
-        </MemoryRouter>
-      </TestProviders>,
-    );
+    try {
+      render(
+        <TestProviders>
+          <MemoryRouter>
+            <AgentsThreads />
+          </MemoryRouter>
+        </TestProviders>,
+      );
 
-    fireEvent.click(await screen.findByRole('button', { name: /Thread A/i }));
-    const list = await screen.findByTestId('message-list');
-    await waitFor(async () => expect((await within(list).findAllByTestId('message-bubble')).length).toBe(1));
+      fireEvent.click(await screen.findByRole('button', { name: /Thread A/i }));
+      const list = await screen.findByTestId('message-list');
+      await waitFor(async () => expect((await within(list).findAllByTestId('message-bubble')).length).toBe(1));
 
-    const messageListeners = (socketModule.graphSocket as any).messageCreatedListeners as Set<
-      (payload: { message: { id: string; kind: 'assistant' | 'user' | 'system' | 'tool'; text: string | null; source: unknown; createdAt: string; runId?: string } }) => void
-    >;
-    const payload = { message: { id: 'msg-stream', kind: 'assistant', text: 'Streamed', source: {}, createdAt: t(6), runId: 'run-msg-1' } };
-    for (const fn of messageListeners) fn(payload);
-    await waitFor(async () => expect((await within(list).findAllByTestId('message-bubble')).length).toBe(2));
+      const messageListeners = (socketModule.graphSocket as any).messageCreatedListeners as Set<
+        (payload: { message: { id: string; kind: 'assistant' | 'user' | 'system' | 'tool'; text: string | null; source: unknown; createdAt: string; runId?: string } }) => void
+      >;
+      const payload = { message: { id: 'msg-stream', kind: 'assistant', text: 'Streamed', source: {}, createdAt: t(6), runId: 'run-msg-1' } };
+      for (const fn of messageListeners) fn(payload);
+      await waitFor(async () => expect((await within(list).findAllByTestId('message-bubble')).length).toBe(2));
 
-    for (const fn of messageListeners) fn(payload);
-    await waitFor(async () => expect((await within(list).findAllByTestId('message-bubble')).length).toBe(2));
+      for (const fn of messageListeners) fn(payload);
+      await waitFor(async () => expect((await within(list).findAllByTestId('message-bubble')).length).toBe(2));
+    } finally {
+      timelineSpy.mockRestore();
+    }
   });
 
   it('buffers messages for unknown runs until the run is created', async () => {
@@ -204,6 +252,38 @@ describe('AgentsThreads realtime updates', () => {
   });
 
   it('re-subscribes on reconnect and reconciles via refetch', async () => {
+    const timelineSpy = vi.spyOn(runs, 'timelineEvents').mockImplementation(async (runId) => {
+      if (runId === 'run-base') {
+        return {
+          items: [
+            buildTimelineEvent({
+              runId: 'run-base',
+              messageId: 'msg-base',
+              kind: 'assistant',
+              text: 'Base',
+              createdAt: t(3),
+            }),
+          ],
+          nextCursor: null,
+        };
+      }
+      if (runId === 'run-new') {
+        return {
+          items: [
+            buildTimelineEvent({
+              runId: 'run-new',
+              messageId: 'msg-new',
+              kind: 'assistant',
+              text: 'New',
+              createdAt: t(5),
+            }),
+          ],
+          nextCursor: null,
+        };
+      }
+      return { items: [], nextCursor: null };
+    });
+
     server.use(
       http.get('/api/agents/threads', () =>
         HttpResponse.json({ items: [{ id: 'th1', alias: 'th-a', summary: 'Thread A', createdAt: t(0) }] }),
@@ -217,64 +297,52 @@ describe('AgentsThreads realtime updates', () => {
       http.get(abs('/api/agents/threads/th1/runs'), () =>
         HttpResponse.json({ items: [{ id: 'run-base', status: 'finished', createdAt: t(1), updatedAt: t(2) }] }),
       ),
-      http.get('/api/agents/runs/run-base/messages', ({ request }) => {
-        const url = new URL(request.url);
-        if (url.searchParams.get('type') === 'output') {
-          return HttpResponse.json({ items: [{ id: 'msg-base', kind: 'assistant', text: 'Base', source: {}, createdAt: t(3) }] });
-        }
-        return HttpResponse.json({ items: [] });
-      }),
-      http.get(abs('/api/agents/runs/run-base/messages'), ({ request }) => {
-        const url = new URL(request.url);
-        if (url.searchParams.get('type') === 'output') {
-          return HttpResponse.json({ items: [{ id: 'msg-base', kind: 'assistant', text: 'Base', source: {}, createdAt: t(3) }] });
-        }
-        return HttpResponse.json({ items: [] });
-      }),
       http.get('/api/agents/reminders', () => HttpResponse.json({ items: [] })),
       http.get(abs('/api/agents/reminders'), () => HttpResponse.json({ items: [] })),
     );
 
-    render(
-      <TestProviders>
-        <MemoryRouter>
-          <AgentsThreads />
-        </MemoryRouter>
-      </TestProviders>,
-    );
+    try {
+      render(
+        <TestProviders>
+          <MemoryRouter>
+            <AgentsThreads />
+          </MemoryRouter>
+        </TestProviders>,
+      );
 
-    fireEvent.click(await screen.findByRole('button', { name: /Thread A/i }));
-    await screen.findByText(/run run-base/i);
+      fireEvent.click(await screen.findByRole('button', { name: /Thread A/i }));
+      await screen.findByText(/run run-base/i);
 
-    server.use(
-      http.get('/api/agents/threads/th1/runs', () =>
-        HttpResponse.json({
-          items: [
-            { id: 'run-base', status: 'finished', createdAt: t(1), updatedAt: t(2) },
-            { id: 'run-new', status: 'running', createdAt: t(4), updatedAt: t(4) },
-          ],
-        }),
-      ),
-      http.get(abs('/api/agents/threads/th1/runs'), () =>
-        HttpResponse.json({
-          items: [
-            { id: 'run-base', status: 'finished', createdAt: t(1), updatedAt: t(2) },
-            { id: 'run-new', status: 'running', createdAt: t(4), updatedAt: t(4) },
-          ],
-        }),
-      ),
-      http.get('/api/agents/runs/run-new/messages', () => HttpResponse.json({ items: [{ id: 'msg-new', kind: 'assistant', text: 'New', source: {}, createdAt: t(5) }] })),
-      http.get(abs('/api/agents/runs/run-new/messages'), () => HttpResponse.json({ items: [{ id: 'msg-new', kind: 'assistant', text: 'New', source: {}, createdAt: t(5) }] })),
-      http.get('/api/agents/reminders', () => HttpResponse.json({ items: [] })),
-      http.get(abs('/api/agents/reminders'), () => HttpResponse.json({ items: [] })),
-    );
+      server.use(
+        http.get('/api/agents/threads/th1/runs', () =>
+          HttpResponse.json({
+            items: [
+              { id: 'run-base', status: 'finished', createdAt: t(1), updatedAt: t(2) },
+              { id: 'run-new', status: 'running', createdAt: t(4), updatedAt: t(4) },
+            ],
+          }),
+        ),
+        http.get(abs('/api/agents/threads/th1/runs'), () =>
+          HttpResponse.json({
+            items: [
+              { id: 'run-base', status: 'finished', createdAt: t(1), updatedAt: t(2) },
+              { id: 'run-new', status: 'running', createdAt: t(4), updatedAt: t(4) },
+            ],
+          }),
+        ),
+        http.get('/api/agents/reminders', () => HttpResponse.json({ items: [] })),
+        http.get(abs('/api/agents/reminders'), () => HttpResponse.json({ items: [] })),
+      );
 
-    const reconnectListeners = (socketModule.graphSocket as any).reconnectCallbacks as Set<() => void>;
-    for (const fn of reconnectListeners) fn();
+      const reconnectListeners = (socketModule.graphSocket as any).reconnectCallbacks as Set<() => void>;
+      for (const fn of reconnectListeners) fn();
 
-    await expectRunHeaderVisible('run-new');
-    const list = await screen.findByTestId('message-list');
-    await expectMessageBubbleText(list, 'New');
+      await expectRunHeaderVisible('run-new');
+      const list = await screen.findByTestId('message-list');
+      await expectMessageBubbleText(list, 'New');
+    } finally {
+      timelineSpy.mockRestore();
+    }
   });
 
   it('shows reminder countdown for finished run threads', async () => {

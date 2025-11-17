@@ -35,9 +35,11 @@ type RunMessageListProps = {
   onLoadMoreAbove?: () => void;
   onViewRunTimeline?: (run: RunMeta) => void;
   activeThreadId?: string;
+  loadOlderByRun?: Record<string, { hasMore: boolean; loading: boolean }>;
+  onLoadOlderRun?: (runId: string) => void | Promise<void>;
 };
 
-export function RunMessageList({ items, showJson, onToggleJson, isLoading, error, hasMoreAbove, loadingMoreAbove, onLoadMoreAbove, onViewRunTimeline, activeThreadId }: RunMessageListProps) {
+export function RunMessageList({ items, showJson, onToggleJson, isLoading, error, hasMoreAbove, loadingMoreAbove, onLoadMoreAbove, onViewRunTimeline, activeThreadId, loadOlderByRun, onLoadOlderRun }: RunMessageListProps) {
   const containerRef = React.useRef<HTMLDivElement | null>(null);
   const [atBottom, setAtBottom] = React.useState(true);
 
@@ -158,7 +160,7 @@ export function RunMessageList({ items, showJson, onToggleJson, isLoading, error
         data-testid="message-list"
       >
         {isLoading && <div className="text-sm text-gray-500">Loading…</div>}
-        {loadingMoreAbove && <div className="text-xs text-gray-500 self-center">Loading older messages…</div>}
+        {loadingMoreAbove && <div className="text-xs text-gray-500 self-center">Loading older events…</div>}
         {error && <div className="text-sm text-red-600" role="alert">{error.message}</div>}
         {!isLoading && !error && items.length === 0 && <div className="text-sm text-gray-500">No messages</div>}
         {items.map((it, idx) => {
@@ -166,26 +168,44 @@ export function RunMessageList({ items, showJson, onToggleJson, isLoading, error
             const run = it.run;
             const shortId = run.id.slice(0, 8);
             const range = it.start && it.end ? `${new Date(it.start).toLocaleTimeString()}–${new Date(it.end).toLocaleTimeString()}` : '';
+            const loadState = loadOlderByRun?.[run.id];
+            const showLoadOlder = !!loadState?.hasMore;
+            const loadingOlder = !!loadState?.loading;
             return (
-              <div key={`hdr-${run.id}-${idx}`} className="self-center text-xs text-gray-600 my-1 flex items-center gap-2" role="separator" data-testid="run-header">
-                <span className="px-2 py-0.5 rounded border bg-white">run {shortId}</span>
-                <span
-                  className="inline-block px-1.5 py-0.5 rounded text-white"
-                  style={{ backgroundColor: run.status === 'finished' ? '#16a34a' : run.status === 'running' ? '#2563eb' : '#6b7280' }}
-                >
-                  {run.status}
-                </span>
-                {range && <span className="text-gray-500">{range}</span>}
-                {onViewRunTimeline && (
-                  <button
-                    type="button"
-                    className="ml-2 px-2 py-0.5 text-xs border rounded bg-white hover:bg-gray-100"
-                    onClick={() => onViewRunTimeline(run)}
-                  >
-                    Timeline
-                  </button>
+              <React.Fragment key={`hdr-${run.id}-${idx}`}>
+                {showLoadOlder && (
+                  <div className="self-center">
+                    <button
+                      type="button"
+                      className="mb-1 rounded border px-2 py-1 text-xs font-medium text-gray-700 hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-50"
+                      onClick={() => onLoadOlderRun?.(run.id)}
+                      disabled={loadingOlder || !onLoadOlderRun}
+                      data-testid={`run-load-older-${run.id}`}
+                    >
+                      {loadingOlder ? 'Loading older events…' : 'Load older events'}
+                    </button>
+                  </div>
                 )}
-              </div>
+                <div className="self-center text-xs text-gray-600 my-1 flex items-center gap-2" role="separator" data-testid="run-header">
+                  <span className="px-2 py-0.5 rounded border bg-white">run {shortId}</span>
+                  <span
+                    className="inline-block px-1.5 py-0.5 rounded text-white"
+                    style={{ backgroundColor: run.status === 'finished' ? '#16a34a' : run.status === 'running' ? '#2563eb' : '#6b7280' }}
+                  >
+                    {run.status}
+                  </span>
+                  {range && <span className="text-gray-500">{range}</span>}
+                  {onViewRunTimeline && (
+                    <button
+                      type="button"
+                      className="ml-2 px-2 py-0.5 text-xs border rounded bg-white hover:bg-gray-100"
+                      onClick={() => onViewRunTimeline(run)}
+                    >
+                      Timeline
+                    </button>
+                  )}
+                </div>
+              </React.Fragment>
             );
           }
           if (it.type === 'reminder') {
