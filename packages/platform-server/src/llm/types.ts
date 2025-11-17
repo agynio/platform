@@ -93,15 +93,9 @@ export type LLMState = {
   };
 };
 
-export type ToolExecutionContext = {
-  eventId: string;
-  prepared?: unknown;
-};
-
 export type LLMContext = {
   threadId: string;
   runId: string;
   finishSignal: Signal;
   callerAgent: CallerAgent;
-  toolExecution?: ToolExecutionContext;
 };
