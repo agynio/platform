@@ -93,7 +93,7 @@ export class LoggerService {
   }
 
   private sanitizeParams(params: unknown[]): unknown[] {
-    const defaults = {
+    const defaults: SanitizationOptions = {
       redactKeyRe: /(authorization|token|accessToken|api[_-]?key|password|secret)/i,
       redactValuePatterns: [
         /(ghp_[A-Za-z0-9]{20,})/g,
@@ -105,22 +105,14 @@ export class LoggerService {
       MAX_JSON: 20000,
       MAX_DEPTH: 3,
       MAX_KEYS: 100,
-    } as const;
+    };
 
     return this.sanitizeParamsInternal(params, defaults);
   }
 
   private sanitizeParamsInternal(
     params: unknown[],
-    options: {
-      redactKeyRe: RegExp;
-      redactValuePatterns: RegExp[];
-      redactQueryParamRe: RegExp;
-      MAX_STRING: number;
-      MAX_JSON: number;
-      MAX_DEPTH: number;
-      MAX_KEYS: number;
-    },
+    options: SanitizationOptions,
   ): unknown[] {
     const seen = new WeakSet<object>();
 
@@ -212,3 +204,13 @@ export class LoggerService {
     }
   }
 }
+
+type SanitizationOptions = {
+  redactKeyRe: RegExp;
+  redactValuePatterns: ReadonlyArray<RegExp>;
+  redactQueryParamRe: RegExp;
+  MAX_STRING: number;
+  MAX_JSON: number;
+  MAX_DEPTH: number;
+  MAX_KEYS: number;
+};
