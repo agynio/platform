@@ -33,26 +33,44 @@ type WsLike = {
   removeAllListeners?: (event?: string) => unknown;
 };
 
+const getObjectKeys = (value: unknown): string[] | undefined => {
+  if (!value || (typeof value !== 'object' && typeof value !== 'function')) return undefined;
+  try {
+    return Object.keys(value as { [key: string]: unknown });
+  } catch {
+    return undefined;
+  }
+};
+
 const isWsLike = (value: unknown): value is WsLike => {
   if (!value || typeof value !== 'object') return false;
   const candidate = value as Partial<WsLike>;
   return typeof candidate.readyState === 'number' && typeof candidate.send === 'function' && typeof candidate.on === 'function';
 };
 
-const safeSend = (ws: WsLike, payload: Record<string, unknown>, logger: LoggerService): void => {
-  if (ws.readyState !== WebSocket.OPEN) {
+const safeSend = (candidate: unknown, payload: Record<string, unknown>, logger: LoggerService): void => {
+  if (!isWsLike(candidate)) {
+    logger.debug('terminal socket send skipped: socket not ws-like', { payloadType: payload.type });
+    return;
+  }
+  if (candidate.readyState !== WebSocket.OPEN) {
     logger.debug('terminal socket send skipped: socket not open', { payloadType: payload.type });
     return;
   }
   try {
     logger.debug('terminal socket send', { payload });
-    ws.send(JSON.stringify(payload));
+    candidate.send(JSON.stringify(payload));
   } catch (err) {
     logger.warn('terminal socket send failed', { error: err instanceof Error ? err.message : String(err) });
   }
 };
 
-const safeClose = (ws: WsLike, code: number | undefined, reason: string | undefined, logger: LoggerService): void => {
+const safeClose = (candidate: unknown, code: number | undefined, reason: string | undefined, logger: LoggerService): void => {
+  if (!isWsLike(candidate)) {
+    logger.debug('terminal socket close skipped: socket not ws-like', { code, reason });
+    return;
+  }
+  const ws = candidate;
   const details = { code, reason };
   if (typeof ws.close === 'function') {
     try {
@@ -124,10 +142,9 @@ export class ContainerTerminalGateway {
     if (process.env.NODE_ENV === 'test') {
       this.logger.debug('terminal connection shape', {
         connectionType: typeof connection,
-        connectionKeys: typeof connection === 'object' ? Object.keys(connection as Record<string, unknown>) : undefined,
+        connectionKeys: getObjectKeys(connection),
         socketType: typeof rawSocket,
-        socketKeys:
-          rawSocket && typeof rawSocket === 'object' ? Object.keys(rawSocket as Record<string, unknown>) : undefined,
+        socketKeys: getObjectKeys(rawSocket),
       });
     }
     const candidate = (rawSocket ?? connection) as unknown;
@@ -138,7 +155,7 @@ export class ContainerTerminalGateway {
     if (!isWsLike(candidate)) {
       this.logger.error('terminal websocket connection lacks ws-like interface', {
         connectionType: typeof connection,
-        connectionKeys: typeof connection === 'object' ? Object.keys(connection as Record<string, unknown>) : undefined,
+        connectionKeys: getObjectKeys(connection),
       });
       try {
         (connection as { end?: () => void }).end?.();
@@ -162,13 +179,13 @@ export class ContainerTerminalGateway {
     const isOpen = () => ws.readyState === WebSocket.OPEN;
     const send = (payload: Record<string, unknown>) => safeSend(ws, payload, this.logger);
     const close = (code: number, reason: string) => safeClose(ws, code, reason, this.logger);
-    const detach = (event: string, handler: (...args: unknown[]) => void) => {
+    const detach = (event: string, handler?: (...args: unknown[]) => void) => {
       const off = (ws as { off?: (event: string, handler: (...args: unknown[]) => void) => void }).off;
-      if (typeof off === 'function') {
+      if (handler && typeof off === 'function') {
         off.call(ws, event, handler);
         return;
       }
-      if (typeof ws.removeListener === 'function') {
+      if (handler && typeof ws.removeListener === 'function') {
         ws.removeListener(event, handler);
         return;
       }
@@ -290,18 +307,12 @@ export class ContainerTerminalGateway {
       stderr?.removeAllListeners?.('close');
       stdout = null;
       stderr = null;
-      if (onMessage) {
-        detach('message', onMessage);
-        onMessage = null;
-      }
-      if (onClose) {
-        detach('close', onClose);
-        onClose = null;
-      }
-      if (onError) {
-        detach('error', onError);
-        onError = null;
-      }
+      detach('message');
+      detach('close');
+      detach('error');
+      onMessage = null;
+      onClose = null;
+      onError = null;
       try {
         if (closeExec) {
           const { exitCode } = await closeExec();
@@ -589,9 +600,18 @@ export class ContainerTerminalGateway {
       }
     };
 
+    const messageListener = (...args: unknown[]) => {
+      const raw = args[0] as RawData;
+      if (onMessage) onMessage(raw);
+    };
+
     onClose = () => {
       this.logger.debug('terminal socket close received', { execId, sessionId });
       void cleanup('socket_closed');
+    };
+
+    const closeListener = (..._args: unknown[]) => {
+      if (onClose) onClose();
     };
 
     onError = (err) => {
@@ -603,8 +623,13 @@ export class ContainerTerminalGateway {
       void cleanup('socket_error');
     };
 
-    ws.on('message', onMessage);
-    ws.on('close', onClose);
-    ws.on('error', onError);
+    const errorListener = (...args: unknown[]) => {
+      const err = args[0] instanceof Error ? (args[0] as Error) : new Error(String(args[0] ?? 'unknown websocket error'));
+      if (onError) onError(err);
+    };
+
+    ws.on('message', messageListener);
+    ws.on('close', closeListener);
+    ws.on('error', errorListener);
   }
 }
