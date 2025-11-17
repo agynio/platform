@@ -21,6 +21,12 @@ class MockSocket extends EventEmitter {
   }
 }
 
+const createConnection = () => {
+  const socket = new MockSocket();
+  const connection = { socket } as { socket: MockSocket };
+  return { socket, connection };
+};
+
 
 const logger = new LoggerService();
 
@@ -90,14 +96,14 @@ describe('ContainerTerminalGateway', () => {
 
     const gateway = new ContainerTerminalGateway(sessions as TerminalSessionsService, containers as ContainerService, logger);
 
-    const socket = new MockSocket();
+    const { socket, connection } = createConnection();
     const request = {
       params: { containerId: 'cid' },
       query: { sessionId, token: 'tok' },
     } as unknown as FastifyRequest;
 
-    await (gateway as unknown as { handleConnection(s: MockSocket, r: FastifyRequest): Promise<void> }).handleConnection(
-      socket,
+    await (gateway as unknown as { handleConnection(c: { socket: MockSocket }, r: FastifyRequest): Promise<void> }).handleConnection(
+      connection,
       request,
     );
 
@@ -180,14 +186,14 @@ describe('ContainerTerminalGateway', () => {
       logger,
     );
 
-    const socket = new MockSocket();
+    const { socket, connection } = createConnection();
     const request = {
       params: { containerId: 'cid' },
       query: { sessionId, token: 'tok' },
     } as unknown as FastifyRequest;
 
-    await (gateway as unknown as { handleConnection(s: MockSocket, r: FastifyRequest): Promise<void> }).handleConnection(
-      socket,
+    await (gateway as unknown as { handleConnection(c: { socket: MockSocket }, r: FastifyRequest): Promise<void> }).handleConnection(
+      connection,
       request,
     );
 
@@ -248,18 +254,43 @@ describe('ContainerTerminalGateway', () => {
       openInteractiveExec: vi.fn(),
     } as unknown as ContainerService;
     const gateway = new ContainerTerminalGateway(sessions, containers, logger);
-    const socket = new MockSocket();
+    const { socket, connection } = createConnection();
     const request = {
       params: { containerId: 'cid' },
       query: { sessionId: 'not-a-uuid', token: '' },
     } as unknown as FastifyRequest;
 
-    await (gateway as unknown as { handleConnection(s: MockSocket, r: FastifyRequest): Promise<void> }).handleConnection(
-      socket,
+    await (gateway as unknown as { handleConnection(c: { socket: MockSocket }, r: FastifyRequest): Promise<void> }).handleConnection(
+      connection,
       request,
     );
 
     expect(socket.close).toHaveBeenCalledWith(1008, 'invalid_query');
     expect(sessionMocks.validate).not.toHaveBeenCalled();
+  });
+
+  it('closes websocket without throwing when validation fails', async () => {
+    const sessions = {
+      validate: vi.fn(() => {
+        throw new Error('session_error');
+      }),
+    } as unknown as TerminalSessionsService;
+    const containers = {
+      openInteractiveExec: vi.fn(),
+    } as unknown as ContainerService;
+    const gateway = new ContainerTerminalGateway(sessions, containers, logger);
+    const { socket, connection } = createConnection();
+    const request = {
+      params: { containerId: 'cid' },
+      query: { sessionId: '11111111-1111-4111-8111-111111111111', token: 'tok' },
+    } as unknown as FastifyRequest;
+
+    const result = (gateway as unknown as { handleConnection(c: { socket: MockSocket }, r: FastifyRequest): Promise<void> }).handleConnection(
+      connection,
+      request,
+    );
+
+    await expect(result).resolves.toBeUndefined();
+    expect(socket.close).toHaveBeenCalledWith(1008, 'session_error');
   });
 });

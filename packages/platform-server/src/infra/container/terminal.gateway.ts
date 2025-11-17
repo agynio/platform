@@ -32,18 +32,18 @@ export class ContainerTerminalGateway {
     if (this.registered) return;
     fastify.register(websocketPlugin);
     fastify.get('/api/containers/:containerId/terminal/ws', { websocket: true }, (socket, request) => {
-      void this.handleConnection(socket, request);
+      void this.handleConnection({ socket }, request);
     });
     this.registered = true;
     this.logger.info('Container terminal WebSocket registered');
   }
 
-  private async handleConnection(socket: WebSocket, request: FastifyRequest): Promise<void> {
-    const isOpen = () => socket.readyState === WebSocket.OPEN;
+  private async handleConnection(connection: { socket: WebSocket }, request: FastifyRequest): Promise<void> {
+    const isOpen = () => connection.socket.readyState === WebSocket.OPEN;
     const send = (payload: Record<string, unknown>) => {
       if (!isOpen()) return;
       try {
-        socket.send(JSON.stringify(payload));
+        connection.socket.send(JSON.stringify(payload));
       } catch (err) {
         this.logger.warn('terminal socket send failed', { error: err instanceof Error ? err.message : String(err) });
       }
@@ -53,14 +53,14 @@ export class ContainerTerminalGateway {
     const containerIdParam = params?.containerId;
     if (!containerIdParam) {
       send({ type: 'error', code: 'container_id_required', message: 'Container id missing in route' });
-      socket.close(1008, 'container_id_required');
+      connection.socket.close(1008, 'container_id_required');
       return;
     }
 
     const parsedQuery = QuerySchema.safeParse(request.query);
     if (!parsedQuery.success) {
       send({ type: 'error', code: 'invalid_query', message: 'Invalid session parameters' });
-      socket.close(1008, 'invalid_query');
+      connection.socket.close(1008, 'invalid_query');
       return;
     }
     const { sessionId, token } = parsedQuery.data;
@@ -71,14 +71,14 @@ export class ContainerTerminalGateway {
     } catch (err) {
       const code = err instanceof Error ? err.message : 'session_error';
       send({ type: 'error', code, message: 'Terminal session validation failed' });
-      socket.close(1008, code);
+      connection.socket.close(1008, code);
       return;
     }
 
     const containerId = session.containerId;
     if (containerIdParam && containerIdParam !== containerId) {
       send({ type: 'error', code: 'container_mismatch', message: 'Terminal session belongs to different container' });
-      socket.close(1008, 'container_mismatch');
+      connection.socket.close(1008, 'container_mismatch');
       return;
     }
 
@@ -88,7 +88,7 @@ export class ContainerTerminalGateway {
     } catch (err) {
       const code = err instanceof Error ? err.message : 'session_error';
       send({ type: 'error', code, message: 'Terminal session already connected' });
-      socket.close(1008, code);
+      connection.socket.close(1008, code);
       return;
     }
 
@@ -159,9 +159,9 @@ export class ContainerTerminalGateway {
       stderr?.removeAllListeners?.('close');
       stdout = null;
       stderr = null;
-      socket.removeAllListeners?.('message');
-      socket.removeAllListeners?.('close');
-      socket.removeAllListeners?.('error');
+      connection.socket.removeAllListeners?.('message');
+      connection.socket.removeAllListeners?.('close');
+      connection.socket.removeAllListeners?.('error');
       try {
         if (closeExec) {
           const { exitCode } = await closeExec();
@@ -172,7 +172,7 @@ export class ContainerTerminalGateway {
       } finally {
         this.sessions.close(sessionId);
         try {
-          if (isOpen()) socket.close(1000, reason);
+          if (isOpen()) connection.socket.close(1000, reason);
         } catch {
           // ignore close errors
         }
@@ -317,7 +317,7 @@ export class ContainerTerminalGateway {
       return;
     }
 
-    socket.on('message', (raw: RawData) => {
+    connection.socket.on('message', (raw: RawData) => {
       if (closed) return;
       const text = typeof raw === 'string' ? raw : raw.toString('utf8');
       let parsed: unknown;
@@ -449,12 +449,12 @@ export class ContainerTerminalGateway {
       }
     });
 
-    socket.on('close', () => {
+    connection.socket.on('close', () => {
       this.logger.debug('terminal socket close received', { execId, sessionId });
       void cleanup('socket_closed');
     });
 
-    socket.on('error', (err) => {
+    connection.socket.on('error', (err) => {
       this.logger.warn('terminal socket error', {
         containerId: containerId.substring(0, 12),
         sessionId,
