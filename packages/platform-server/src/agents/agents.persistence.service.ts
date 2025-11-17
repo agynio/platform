@@ -385,6 +385,13 @@ export class AgentsPersistenceService implements GraphEventsPublisherAware {
     });
   }
 
+  async getRunById(runId: string): Promise<{ id: string; threadId: string; status: RunStatus } | null> {
+    return this.prisma.run.findUnique({
+      where: { id: runId },
+      select: { id: true, threadId: true, status: true },
+    });
+  }
+
   async listRunMessages(runId: string, type: RunMessageType): Promise<Array<{ id: string; kind: MessageKind; text: string | null; source: Prisma.JsonValue; createdAt: Date }>> {
     const links = await this.prisma.runMessage.findMany({ where: { runId, type }, select: { messageId: true } });
     if (links.length === 0) return [];

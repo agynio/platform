@@ -18,6 +18,7 @@ import { LiveGraphRuntime } from '../src/graph/liveGraph.manager';
 import { GraphRepository } from '../src/graph/graph.repository';
 import type { GraphDefinition } from '../src/graph/types';
 import { AgentsPersistenceService } from '../src/agents/agents.persistence.service';
+import { RunSignalsRegistry } from '../src/agents/run-signals.service';
 
 class StubContainerService extends ContainerService {
   constructor(logger: LoggerService, registry: ContainerRegistry) {
@@ -126,6 +127,7 @@ describe('Graph MCP integration', () => {
         LiveGraphRuntime,
         GraphRepository,
         { provide: AgentsPersistenceService, useValue: { beginRunThread: async () => ({ runId: 't' }), recordInjected: async () => {}, completeRun: async () => {} } },
+        RunSignalsRegistry,
       ],
     }).compile();
 

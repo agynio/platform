@@ -36,7 +36,10 @@ describe('ShellTool output limit - combined stdout+stderr oversized', () => {
     await node.setConfig({ outputLimitChars: 1000 });
     const t = node.getTool();
 
-    const msg = await t.execute({ command: 'run' }, { threadId: 't', finishSignal: { activate() {}, deactivate() {}, isActive: false }, callerAgent: {} } as any);
+    const msg = await t.execute(
+      { command: 'run' },
+      { threadId: 't', finishSignal: { activate() {}, deactivate() {}, isActive: false }, terminateSignal: { activate() {}, deactivate() {}, isActive: false }, callerAgent: {} } as any,
+    );
     expect(msg).toMatch(/^Error: output length exceeds 1000 characters\. It was saved on disk: \/tmp\/.+\.txt$/);
     expect((provider.c as FakeContainer).lastPut?.options.path).toBe('/tmp');
     expect((provider.c as FakeContainer).lastPut?.data instanceof Buffer).toBe(true);

@@ -76,6 +76,7 @@ export class SummarizationLLMReducer extends Reducer<LLMState, LLMContext> {
   }
 
   private async summarize(state: LLMState, ctx: LLMContext): Promise<LLMState> {
+    if (ctx.terminateSignal.isActive) return state;
     const { keepTokens, model, systemPrompt } = this.params;
     const messages = state.messages;
     if (!messages.length) return state;
@@ -228,13 +229,15 @@ export class SummarizationLLMReducer extends Reducer<LLMState, LLMContext> {
     };
   }
 
-  async invoke(state: LLMState, _ctx: LLMContext): Promise<LLMState> {
+  async invoke(state: LLMState, ctx: LLMContext): Promise<LLMState> {
     if (!this.params.maxTokens) return state;
+
+    if (ctx.terminateSignal.isActive) return state;
 
     const shouldSummarize = await this.shouldSummarize(state);
     if (!shouldSummarize) return state;
 
-    const newState = await this.summarize(state, _ctx);
+    const newState = await this.summarize(state, ctx);
 
     return newState;
   }

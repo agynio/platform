@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Inject, NotFoundException, Param, Patch, Query } from '@nestjs/common';
+import { Body, Controller, Get, Inject, NotFoundException, Param, Patch, Post, Query } from '@nestjs/common';
 import { IsBooleanString, IsIn, IsInt, IsOptional, IsString, IsISO8601, Max, Min, ValidateIf } from 'class-validator';
 import { AgentsPersistenceService } from './agents.persistence.service';
 import { Transform, Expose } from 'class-transformer';
@@ -6,6 +6,7 @@ import type { RunEventStatus, RunEventType, RunMessageType, ThreadStatus } from 
 import { ContainerThreadTerminationService } from '../infra/container/containerThreadTermination.service';
 import type { ThreadMetrics } from './threads.metrics.service';
 import { RunEventsService } from '../events/run-events.service';
+import { RunSignalsRegistry } from './run-signals.service';
 
 // Avoid runtime import of Prisma in tests; enumerate allowed values
 export const RunMessageTypeValues: ReadonlyArray<RunMessageType> = ['input', 'injected', 'output'];
@@ -126,6 +127,7 @@ export class AgentsThreadsController {
     @Inject(AgentsPersistenceService) private readonly persistence: AgentsPersistenceService,
     @Inject(ContainerThreadTerminationService) private readonly terminationService: ContainerThreadTerminationService,
     @Inject(RunEventsService) private readonly runEvents: RunEventsService,
+    @Inject(RunSignalsRegistry) private readonly runSignals: RunSignalsRegistry,
   ) {}
 
   @Get('threads')
@@ -286,5 +288,16 @@ export class AgentsThreadsController {
   async getThreadMetrics(@Param('threadId') threadId: string) {
     const metrics = await this.persistence.getThreadsMetrics([threadId]);
     return metrics[threadId] ?? { remindersCount: 0, containersCount: 0, activity: 'idle' as const, runsCount: 0 };
+  }
+
+  @Post('runs/:runId/terminate')
+  async terminateRun(@Param('runId') runId: string) {
+    const run = await this.persistence.getRunById(runId);
+    if (!run) throw new NotFoundException('run_not_found');
+    if (run.status !== 'running') {
+      return { ok: true };
+    }
+    this.runSignals.activateTerminate(runId);
+    return { ok: true };
   }
 }

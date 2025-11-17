@@ -26,7 +26,7 @@ describe('GET /graph/nodes/:nodeId/reminders', () => {
     };
     const tool = new RemindMeFunctionTool(logger, prismaStub as any);
     const caller_agent = { invoke: vi.fn(async () => undefined), getAgentNodeId: () => 'agent' };
-    await tool.execute({ delayMs: 10_000, note: 'Soon' }, { threadId: 't-1', callerAgent: caller_agent, finishSignal: new Signal() });
+    await tool.execute({ delayMs: 10_000, note: 'Soon' }, { threadId: 't-1', callerAgent: caller_agent, finishSignal: new Signal(), terminateSignal: new Signal() });
 
     // schedule a far reminder so it stays active
     // scheduled above via execute

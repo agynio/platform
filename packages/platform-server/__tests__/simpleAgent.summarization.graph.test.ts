@@ -10,6 +10,7 @@ import { PrismaService } from '../src/core/services/prisma.service';
 import { AgentsPersistenceService } from '../src/agents/agents.persistence.service';
 import { RunEventsService } from '../src/events/run-events.service';
 import { createRunEventsStub } from './helpers/runEvents.stub';
+import { RunSignalsRegistry } from '../src/agents/run-signals.service';
 
 describe('Agent summarization graph', () => {
   it('invokes successfully over several turns with summarization configured', async () => {
@@ -24,6 +25,7 @@ describe('Agent summarization graph', () => {
         { provide: PrismaService, useValue: { getClient: () => ({ conversationState: { upsert: async () => {}, findUnique: async () => null } }) } },
         { provide: AgentsPersistenceService, useValue: { beginRunThread: async () => ({ runId: 't' }), recordInjected: async () => {}, completeRun: async () => {} } },
         { provide: RunEventsService, useValue: createRunEventsStub() },
+        RunSignalsRegistry,
       ],
     }).compile();
 

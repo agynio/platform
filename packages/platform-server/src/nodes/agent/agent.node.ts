@@ -31,6 +31,7 @@ import { SaveLLMReducer } from '../../llm/reducers/save.llm.reducer';
 import { SummarizationLLMReducer } from '../../llm/reducers/summarization.llm.reducer';
 import { Signal } from '../../signal';
 import { AgentsPersistenceService } from '../../agents/agents.persistence.service';
+import { RunSignalsRegistry } from '../../agents/run-signals.service';
 
 import { BaseToolNode } from '../tools/baseToolNode';
 import { BufferMessage, MessagesBuffer, ProcessBuffer } from './messagesBuffer';
@@ -118,6 +119,7 @@ export class AgentNode extends Node<AgentStaticConfig> {
     @Inject(LLMProvisioner) protected llmProvisioner: LLMProvisioner,
     @Inject(ModuleRef) protected readonly moduleRef: ModuleRef,
     @Inject(AgentsPersistenceService) private readonly persistence: AgentsPersistenceService,
+    @Inject(RunSignalsRegistry) private readonly runSignals: RunSignalsRegistry,
   ) {
     super(logger);
   }
@@ -265,12 +267,16 @@ export class AgentNode extends Node<AgentStaticConfig> {
     let result: ResponseMessage | ToolCallOutputMessage;
     // Begin run deterministically; persistence must succeed or throw
     let runId: string | undefined;
+    let terminateSignal: Signal | undefined;
     try {
       // Begin run with strictly-typed input messages for persistent threadId
       const started = await this.persistence.beginRunThread(thread, messages);
       runId = started.runId;
       if (!runId) throw new Error('run_start_failed');
       const ensuredRunId = runId;
+
+      terminateSignal = new Signal();
+      this.runSignals.register(ensuredRunId, terminateSignal);
 
       result = await withAgent(
         { threadId: thread, nodeId: this.nodeId, inputParameters: [{ thread }, { messages }] },
@@ -280,9 +286,14 @@ export class AgentNode extends Node<AgentStaticConfig> {
           const finishSignal = new Signal();
           const newState = await loop.invoke(
             { messages, context: { messageIds: [], memory: [] } },
-            { threadId: thread, runId: ensuredRunId, finishSignal, callerAgent: this },
+            { threadId: thread, runId: ensuredRunId, finishSignal, terminateSignal: terminateSignal!, callerAgent: this },
             { start: 'load' },
           );
+
+          if (terminateSignal!.isActive) {
+            await this.persistence.completeRun(ensuredRunId, 'terminated', []);
+            return ResponseMessage.fromText('terminated');
+          }
 
           const last = newState.messages.at(-1);
 
@@ -320,6 +331,7 @@ export class AgentNode extends Node<AgentStaticConfig> {
       throw err;
     } finally {
       this.runningThreads.delete(thread);
+      if (runId) this.runSignals.clear(runId);
     }
 
     const mode =

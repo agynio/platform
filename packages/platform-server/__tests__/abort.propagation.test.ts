@@ -43,6 +43,7 @@ describe('Abort propagation', () => {
         threadId: 't',
         runId: 'r',
         finishSignal: { activate() {}, deactivate() {}, isActive: false },
+        terminateSignal: { activate() {}, deactivate() {}, isActive: false },
         callerAgent: { getAgentNodeId: () => 'tools-1' },
         configurable: { thread_id: 't', nodeId: 'tools-1', abort_signal: ac.signal },
       } as any,

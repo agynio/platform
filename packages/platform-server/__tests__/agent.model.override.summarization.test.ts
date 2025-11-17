@@ -25,7 +25,7 @@ describe('Agent summarization uses overridden model', () => {
       summary: undefined,
       context: { messageIds: [], memory: [] },
     };
-    const out = await reducer.invoke(state, { threadId: 't', runId: 'r', finishSignal: { isActive: false } as any, callerAgent: {} as any });
+    const out = await reducer.invoke(state, { threadId: 't', runId: 'r', finishSignal: { isActive: false } as any, terminateSignal: { isActive: false } as any, callerAgent: {} as any });
     expect(out.summary).toBe('model:override-model');
   });
 });
