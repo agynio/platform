@@ -73,3 +73,10 @@ LiteLLM proxy (optional)
   - Set OPENAI_API_KEY=sk-<real-openai-key>; unset LITELLM_* envs.
 Prisma workflow (platform-server)
 - See packages/platform-server/README.md#prisma-workflow-platform-server
+
+Monitoring stack
+- Start Prometheus + cAdvisor + Grafana: `docker compose -f monitoring/docker-compose.yml up -d`
+- Prometheus UI: http://localhost:9090 (7-day retention persisted in `prometheus-data` volume)
+- Grafana UI: http://localhost:3000 (anonymous access; Prometheus datasource pre-provisioned)
+- cAdvisor UI: http://localhost:8080
+- Grafana dashboards persist in the `grafana-data` volume.
