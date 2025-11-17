@@ -3,10 +3,27 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { AgentsThreads } from '../AgentsThreads';
 
-const threadByIdMock = vi.fn();
-const threadRunsMock = vi.fn();
+const hoisted = vi.hoisted(() => {
+  const socketMock = {
+    subscribe: vi.fn(),
+    unsubscribe: vi.fn(),
+    onThreadActivityChanged: vi.fn(() => () => {}),
+    onThreadRemindersCount: vi.fn(() => () => {}),
+    onMessageCreated: vi.fn(() => () => {}),
+    onRunStatusChanged: vi.fn(() => () => {}),
+    onReconnected: vi.fn(() => () => {}),
+  };
+  return {
+    threadById: vi.fn(),
+    threadRuns: vi.fn(),
+    httpGet: vi.fn(() => Promise.resolve({ items: [] })),
+    socket: socketMock,
+  };
+});
+
+const threadByIdMock = hoisted.threadById;
+const threadRunsMock = hoisted.threadRuns;
 
 vi.mock('@/api/hooks/threads', () => ({
   useThreadById: (threadId: string | undefined) => threadByIdMock(threadId),
@@ -16,11 +33,9 @@ vi.mock('@/api/hooks/runs', () => ({
   useThreadRuns: (threadId: string | undefined) => threadRunsMock(threadId),
 }));
 
-const httpGetMock = vi.fn(() => Promise.resolve({ items: [] }));
-
 vi.mock('@/api/http', () => ({
   http: {
-    get: httpGetMock,
+    get: hoisted.httpGet,
   },
   asData: <T,>(promise: Promise<T>) => promise,
 }));
@@ -36,8 +51,14 @@ vi.mock('@/components/agents/ThreadTree', () => ({
 }));
 
 vi.mock('@/components/agents/RunMessageList', () => ({
-  RunMessageList: (props: { items: unknown[] }) => (
-    <div data-testid="run-message-list">items:{props.items.length}</div>
+  RunMessageList: (props: { items: Array<{ type?: string; reminder?: { id: string } }> }) => (
+    <div data-testid="run-message-list">
+      {props.items.map((item, idx) =>
+        item && item.type === 'reminder' && item.reminder ? (
+          <div key={`reminder-${item.reminder.id}-${idx}`} data-testid="reminder-countdown-row" />
+        ) : null
+      )}
+    </div>
   ),
 }));
 
@@ -53,19 +74,11 @@ vi.mock('@/components/agents/ThreadStatusFilterSwitch', () => ({
   ),
 }));
 
-const socketMock = {
-  subscribe: vi.fn(),
-  unsubscribe: vi.fn(),
-  onThreadActivityChanged: vi.fn(() => () => {}),
-  onThreadRemindersCount: vi.fn(() => () => {}),
-  onMessageCreated: vi.fn(() => () => {}),
-  onRunStatusChanged: vi.fn(() => () => {}),
-  onReconnected: vi.fn(() => () => {}),
-};
-
 vi.mock('@/lib/graph/socket', () => ({
-  graphSocket: socketMock,
+  graphSocket: hoisted.socket,
 }));
+
+import { AgentsThreads } from '../AgentsThreads';
 
 function renderWithProviders(initialEntry: string, element: React.ReactNode) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -141,18 +154,20 @@ describe('AgentsThreads deep links', () => {
       return null;
     };
 
+    const WithSpy = () => (
+      <>
+        <LocationSpy />
+        <AgentsThreads />
+      </>
+    );
+
     renderWithProviders(
       '/agents/threads/bad-id',
       <Routes>
-        <Route
-          path="/agents/threads/*"
-          element={(
-            <>
-              <LocationSpy />
-              <AgentsThreads />
-            </>
-          )}
-        />
+        <Route path="/agents/threads">
+          <Route index element={<WithSpy />} />
+          <Route path=":threadId" element={<WithSpy />} />
+        </Route>
       </Routes>,
     );
 

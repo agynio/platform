@@ -88,12 +88,18 @@ async function fetchRunMessages(runId: string): Promise<UnifiedRunMessage[]> {
 
 export function AgentsThreads() {
   const params = useParams<{ threadId?: string }>();
-  const selectedThreadId = params.threadId ?? undefined;
+  const [selectedThreadIdState, setSelectedThreadIdState] = useState<string | undefined>(params.threadId ?? undefined);
+  const selectedThreadId = params.threadId ?? selectedThreadIdState;
+  const hasRouteThread = params.threadId !== undefined;
   const [selectedThread, setSelectedThread] = useState<ThreadNode | undefined>(undefined);
   const [statusFilter, setStatusFilter] = useState<ThreadStatusFilter>('open');
   // No run selection in new UX (removed)
-  const threadByIdQ = useThreadById(selectedThreadId);
-  const activeThreadId = selectedThreadId && !threadByIdQ.isError ? selectedThreadId : undefined;
+  const threadByIdQ = useThreadById(hasRouteThread ? params.threadId : undefined);
+  const activeThreadId = hasRouteThread
+    ? !threadByIdQ.isError
+      ? (params.threadId as string)
+      : undefined
+    : selectedThreadIdState;
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   const remindersQueryKey = ['agents', 'threads', activeThreadId ?? 'none', 'reminders', 'active'] as const;
@@ -151,16 +157,22 @@ export function AgentsThreads() {
   }, [selectedThreadId]);
 
   useEffect(() => {
-    if (selectedThreadId && threadByIdQ.data) {
-      setSelectedThread(threadByIdQ.data);
+    if (params.threadId !== undefined) {
+      setSelectedThreadIdState(params.threadId);
     }
-  }, [selectedThreadId, threadByIdQ.data]);
+  }, [params.threadId]);
 
   useEffect(() => {
-    if (selectedThreadId && threadByIdQ.isError) {
+    if (hasRouteThread && threadByIdQ.data) {
+      setSelectedThread(threadByIdQ.data);
+    }
+  }, [hasRouteThread, threadByIdQ.data]);
+
+  useEffect(() => {
+    if (hasRouteThread && threadByIdQ.isError) {
       setSelectedThread(undefined);
     }
-  }, [selectedThreadId, threadByIdQ.isError]);
+  }, [hasRouteThread, threadByIdQ.isError]);
 
   useEffect(() => {
     runIdsRef.current = new Set(runs.map((run) => run.id));
@@ -371,11 +383,11 @@ export function AgentsThreads() {
   // Per-message JSON toggle state
   const [showJson, setShowJson] = useState<Record<string, boolean>>({});
   const toggleJson = (id: string) => setShowJson((prev) => ({ ...prev, [id]: !prev[id] }));
-  const apiThread = selectedThreadId ? threadByIdQ.data : undefined;
+  const apiThread = hasRouteThread ? threadByIdQ.data : undefined;
   const currentThread = apiThread ?? selectedThread;
-  const threadLoadError = selectedThreadId ? threadByIdQ.error : null;
-  const threadNotFound = Boolean(selectedThreadId && threadLoadError?.response?.status === 404);
-  const threadLoadFailed = Boolean(selectedThreadId && threadByIdQ.isError);
+  const threadLoadError = hasRouteThread ? threadByIdQ.error : null;
+  const threadNotFound = Boolean(hasRouteThread && threadLoadError?.response?.status === 404);
+  const threadLoadFailed = Boolean(hasRouteThread && threadByIdQ.isError);
   const threadErrorTitle = threadNotFound ? 'Thread not found' : 'Unable to load thread';
   const threadErrorMessage = threadNotFound
     ? 'The thread may have been removed or the link is invalid.'
@@ -403,7 +415,10 @@ export function AgentsThreads() {
                   status={statusFilter}
                   onSelect={(node) => {
                     setSelectedThread(node);
-                    navigate(`/agents/threads/${encodeURIComponent(node.id)}`);
+                    setSelectedThreadIdState(node.id);
+                    if (params.threadId !== node.id) {
+                      navigate(`/agents/threads/${encodeURIComponent(node.id)}`);
+                    }
                   }}
                   selectedId={selectedThreadId}
                   onSelectedNodeChange={(node) => setSelectedThread(node)}
@@ -426,7 +441,11 @@ export function AgentsThreads() {
                         <button
                           type="button"
                           className="rounded border border-input px-3 py-1 text-sm font-medium text-foreground hover:bg-muted"
-                          onClick={() => navigate('/agents/threads')}
+                          onClick={() => {
+                            setSelectedThreadIdState(undefined);
+                            setSelectedThread(undefined);
+                            navigate('/agents/threads');
+                          }}
                         >
                           Back to threads
                         </button>
