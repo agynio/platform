@@ -262,6 +262,61 @@ export class AgentsPersistenceService implements GraphEventsPublisherAware {
     });
   }
 
+  async getThreadById(
+    threadId: string,
+    opts?: { includeMetrics?: boolean; includeAgentTitles?: boolean },
+  ): Promise<
+    | ({
+        id: string;
+        alias: string;
+        summary: string | null;
+        status: ThreadStatus;
+        createdAt: Date;
+        parentId: string | null;
+        metrics?: ThreadMetrics;
+        agentTitle?: string;
+      })
+    | null
+  > {
+    const thread = await this.prisma.thread.findUnique({
+      where: { id: threadId },
+      select: { id: true, alias: true, summary: true, status: true, createdAt: true, parentId: true },
+    });
+    if (!thread) return null;
+
+    const includeMetrics = opts?.includeMetrics ?? false;
+    const includeAgentTitles = opts?.includeAgentTitles ?? false;
+
+    const result: {
+      id: string;
+      alias: string;
+      summary: string | null;
+      status: ThreadStatus;
+      createdAt: Date;
+      parentId: string | null;
+      metrics?: ThreadMetrics;
+      agentTitle?: string;
+    } = {
+      ...thread,
+      parentId: thread.parentId ?? null,
+    };
+
+    const defaultMetrics: ThreadMetrics = { remindersCount: 0, containersCount: 0, activity: 'idle', runsCount: 0 };
+    const fallbackTitle = '(unknown agent)';
+
+    if (includeMetrics) {
+      const metrics = await this.getThreadsMetrics([thread.id]);
+      result.metrics = metrics[thread.id] ?? defaultMetrics;
+    }
+
+    if (includeAgentTitles) {
+      const titles = await this.getThreadsAgentTitles([thread.id]);
+      result.agentTitle = titles[thread.id] ?? fallbackTitle;
+    }
+
+    return result;
+  }
+
   async listChildren(parentId: string, status: 'open' | 'closed' | 'all' = 'all'): Promise<Array<{ id: string; alias: string; summary: string | null; status: ThreadStatus; createdAt: Date; parentId?: string | null }>> {
     const where: Prisma.ThreadWhereInput = { parentId };
     if (status !== 'all') where.status = status as ThreadStatus;

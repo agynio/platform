@@ -4,12 +4,13 @@ import { RunMessageList, type UnifiedRunMessage, type UnifiedListItem, type RunM
 import { ThreadTree } from '@/components/agents/ThreadTree';
 import { ThreadStatusFilterSwitch, type ThreadStatusFilter } from '@/components/agents/ThreadStatusFilterSwitch';
 import { useThreadRuns } from '@/api/hooks/runs';
+import { useThreadById } from '@/api/hooks/threads';
 import type { ThreadNode } from '@/api/types/agents';
 import { runs as runsApi } from '@/api/modules/runs';
 import { http } from '@/api/http';
 import type { ReminderItem } from '@/api/types/agents';
 import { graphSocket } from '@/lib/graph/socket';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import { ThreadHeader } from '@/components/agents/ThreadHeader';
 
 // Thread list rendering moved into ThreadTree component
@@ -86,27 +87,30 @@ async function fetchRunMessages(runId: string): Promise<UnifiedRunMessage[]> {
 }
 
 export function AgentsThreads() {
-  const [selectedThreadId, setSelectedThreadId] = useState<string | undefined>(undefined);
+  const params = useParams<{ threadId?: string }>();
+  const selectedThreadId = params.threadId ?? undefined;
   const [selectedThread, setSelectedThread] = useState<ThreadNode | undefined>(undefined);
   const [statusFilter, setStatusFilter] = useState<ThreadStatusFilter>('open');
   // No run selection in new UX (removed)
+  const threadByIdQ = useThreadById(selectedThreadId);
+  const activeThreadId = selectedThreadId && !threadByIdQ.isError ? selectedThreadId : undefined;
   const queryClient = useQueryClient();
   const navigate = useNavigate();
-  const remindersQueryKey = ['agents', 'threads', selectedThreadId ?? 'none', 'reminders', 'active'] as const;
+  const remindersQueryKey = ['agents', 'threads', activeThreadId ?? 'none', 'reminders', 'active'] as const;
   const remindersQ = useQuery({
-    enabled: !!selectedThreadId,
+    enabled: !!activeThreadId,
     queryKey: remindersQueryKey,
     queryFn: async () => {
-      const id = selectedThreadId as string;
+      const id = activeThreadId as string;
       return http.get<{ items: ReminderItem[] }>(`/api/agents/reminders?filter=active&threadId=${encodeURIComponent(id)}`);
     },
     refetchOnWindowFocus: false,
   });
   const reminders = useMemo<ReminderItem[]>(() => {
     const items = remindersQ.data?.items ?? [];
-    if (!selectedThreadId) return [];
-    return items.filter((reminder) => reminder.threadId === selectedThreadId);
-  }, [remindersQ.data, selectedThreadId]);
+    if (!activeThreadId) return [];
+    return items.filter((reminder) => reminder.threadId === activeThreadId);
+  }, [remindersQ.data, activeThreadId]);
   const nearestReminder = useMemo(() => {
     if (!reminders.length) return null;
     return reminders.reduce<ReminderItem>((earliest, item) => {
@@ -114,19 +118,20 @@ export function AgentsThreads() {
     }, reminders[0]);
   }, [reminders]);
   const invalidateReminders = useCallback(() => {
-    if (!selectedThreadId) return;
-    queryClient.invalidateQueries({ queryKey: ['agents', 'threads', selectedThreadId, 'reminders', 'active'] });
-  }, [queryClient, selectedThreadId]);
+    if (!activeThreadId) return;
+    queryClient.invalidateQueries({ queryKey: ['agents', 'threads', activeThreadId, 'reminders', 'active'] });
+  }, [queryClient, activeThreadId]);
 
   // Cast through unknown to align differing RunMeta shapes between API and UI list types
-  const runsQ = useThreadRuns(selectedThreadId) as unknown as UseQueryResult<{ items: RunMeta[] }, Error>;
+  const runsQ = useThreadRuns(activeThreadId) as unknown as UseQueryResult<{ items: RunMeta[] }, Error>;
 
   const runs: RunMeta[] = useMemo(() => {
+    if (!activeThreadId) return [];
     const list = runsQ.data?.items ?? [];
     return [...list].sort(compareRunMeta);
-  }, [runsQ.data]);
+  }, [runsQ.data, activeThreadId]);
   const latestRun = runs.length > 0 ? runs[runs.length - 1] : null;
-  const showCountdown = Boolean(selectedThreadId && latestRun?.status === 'finished' && nearestReminder && !remindersQ.isError);
+  const showCountdown = Boolean(activeThreadId && latestRun?.status === 'finished' && nearestReminder && !remindersQ.isError);
 
   const [runMessages, setRunMessages] = useState<Record<string, UnifiedRunMessage[]>>({});
   const [loadError, setLoadError] = useState<Error | null>(null);
@@ -142,10 +147,20 @@ export function AgentsThreads() {
     pendingMessages.current.clear();
     seenMessageIds.current.clear();
     runIdsRef.current = new Set();
-    if (!selectedThreadId) {
+    setSelectedThread(undefined);
+  }, [selectedThreadId]);
+
+  useEffect(() => {
+    if (selectedThreadId && threadByIdQ.data) {
+      setSelectedThread(threadByIdQ.data);
+    }
+  }, [selectedThreadId, threadByIdQ.data]);
+
+  useEffect(() => {
+    if (selectedThreadId && threadByIdQ.isError) {
       setSelectedThread(undefined);
     }
-  }, [selectedThreadId]);
+  }, [selectedThreadId, threadByIdQ.isError]);
 
   useEffect(() => {
     runIdsRef.current = new Set(runs.map((run) => run.id));
@@ -182,7 +197,7 @@ export function AgentsThreads() {
   }, [runs, flushPendingForRun]);
 
   useEffect(() => {
-    if (!selectedThreadId || runs.length === 0) return;
+    if (!activeThreadId || runs.length === 0) return;
     let cancelled = false;
     const concurrency = 3;
     let idx = 0;
@@ -220,20 +235,20 @@ export function AgentsThreads() {
     return () => {
       cancelled = true;
     };
-  }, [selectedThreadId, runs]);
+  }, [activeThreadId, runs]);
 
   // Subscribe to selected thread room for live updates
   useEffect(() => {
-    if (!selectedThreadId) return;
-    const room = `thread:${selectedThreadId}`;
+    if (!activeThreadId) return;
+    const room = `thread:${activeThreadId}`;
     graphSocket.subscribe([room]);
     return () => {
       graphSocket.unsubscribe([room]);
     };
-  }, [selectedThreadId]);
+  }, [activeThreadId]);
 
   useEffect(() => {
-    if (!selectedThreadId) return;
+    if (!activeThreadId) return;
     const offMsg = graphSocket.onMessageCreated(({ message }) => {
       if (!message.runId) return;
       const runId = message.runId;
@@ -259,13 +274,13 @@ export function AgentsThreads() {
       });
     });
     return () => offMsg();
-  }, [selectedThreadId]);
+  }, [activeThreadId]);
 
   useEffect(() => {
-    if (!selectedThreadId) return;
-    const key = ['agents', 'threads', selectedThreadId, 'reminders', 'active'] as const;
+    if (!activeThreadId) return;
+    const key = ['agents', 'threads', activeThreadId, 'reminders', 'active'] as const;
     const offReminders = graphSocket.onThreadRemindersCount(({ threadId, remindersCount }) => {
-      if (threadId !== selectedThreadId) return;
+      if (threadId !== activeThreadId) return;
       if (remindersCount === 0) {
         queryClient.setQueryData<{ items: ReminderItem[] }>(key, { items: [] });
       } else {
@@ -273,11 +288,11 @@ export function AgentsThreads() {
       }
     });
     return () => offReminders();
-  }, [selectedThreadId, queryClient, invalidateReminders]);
+  }, [activeThreadId, queryClient, invalidateReminders]);
 
   useEffect(() => {
-    if (!selectedThreadId) return;
-    const queryKey = ['agents', 'threads', selectedThreadId, 'runs'];
+    if (!activeThreadId) return;
+    const queryKey = ['agents', 'threads', activeThreadId, 'runs'];
     const offRun = graphSocket.onRunStatusChanged(({ run }) => {
       const next = run as SocketRun;
       queryClient.setQueryData(queryKey, (prev: { items: RunMeta[] } | undefined) => {
@@ -303,17 +318,17 @@ export function AgentsThreads() {
       if (next.status === 'finished') invalidateReminders();
     });
     return () => offRun();
-  }, [selectedThreadId, queryClient, flushPendingForRun, invalidateReminders]);
+  }, [activeThreadId, queryClient, flushPendingForRun, invalidateReminders]);
 
   useEffect(() => {
-    if (!selectedThreadId) return;
+    if (!activeThreadId) return;
     const invalidate = () => {
-      queryClient.invalidateQueries({ queryKey: ['agents', 'threads', selectedThreadId, 'runs'] });
+      queryClient.invalidateQueries({ queryKey: ['agents', 'threads', activeThreadId, 'runs'] });
       invalidateReminders();
     };
     const offReconnect = graphSocket.onReconnected(invalidate);
     return () => offReconnect();
-  }, [selectedThreadId, queryClient, invalidateReminders]);
+  }, [activeThreadId, queryClient, invalidateReminders]);
 
   const unifiedItems: UnifiedListItem[] = useMemo(() => {
     if (!runs.length) return showCountdown && nearestReminder
@@ -356,6 +371,15 @@ export function AgentsThreads() {
   // Per-message JSON toggle state
   const [showJson, setShowJson] = useState<Record<string, boolean>>({});
   const toggleJson = (id: string) => setShowJson((prev) => ({ ...prev, [id]: !prev[id] }));
+  const apiThread = selectedThreadId ? threadByIdQ.data : undefined;
+  const currentThread = apiThread ?? selectedThread;
+  const threadLoadError = selectedThreadId ? threadByIdQ.error : null;
+  const threadNotFound = Boolean(selectedThreadId && threadLoadError?.response?.status === 404);
+  const threadLoadFailed = Boolean(selectedThreadId && threadByIdQ.isError);
+  const threadErrorTitle = threadNotFound ? 'Thread not found' : 'Unable to load thread';
+  const threadErrorMessage = threadNotFound
+    ? 'The thread may have been removed or the link is invalid.'
+    : threadLoadError?.message ?? 'Please try again later.';
 
   return (
     <div className="absolute inset-0 flex min-h-0 min-w-0 flex-col overflow-hidden">
@@ -378,8 +402,8 @@ export function AgentsThreads() {
                 <ThreadTree
                   status={statusFilter}
                   onSelect={(node) => {
-                    setSelectedThreadId(node.id);
                     setSelectedThread(node);
+                    navigate(`/agents/threads/${encodeURIComponent(node.id)}`);
                   }}
                   selectedId={selectedThreadId}
                   onSelectedNodeChange={(node) => setSelectedThread(node)}
@@ -389,22 +413,40 @@ export function AgentsThreads() {
 
             <section className="flex h-[60vh] min-h-0 min-w-0 flex-col md:h-full md:flex-1" data-testid="messages-panel">
               <ThreadHeader
-                thread={selectedThread}
+                thread={currentThread}
                 runsCount={runs.length}
               />
               <div className="flex-1 min-h-0 overflow-hidden px-3 py-2">
-                <RunMessageList
-                  items={unifiedItems}
-                  showJson={showJson}
-                  onToggleJson={toggleJson}
-                  isLoading={runsQ.isLoading}
-                  error={loadError}
-                  onViewRunTimeline={(run) => {
-                    if (!selectedThreadId) return;
-                    navigate(`/agents/threads/${encodeURIComponent(selectedThreadId)}/runs/${encodeURIComponent(run.id)}/timeline`);
-                  }}
-                  activeThreadId={selectedThreadId}
-                />
+                {threadLoadFailed ? (
+                  <div className="flex h-full w-full items-center justify-center">
+                    <div className="w-full max-w-sm rounded-md border border-border bg-background px-6 py-5 text-sm shadow-sm">
+                      <div className="text-base font-semibold text-foreground">{threadErrorTitle}</div>
+                      <p className="mt-2 text-muted-foreground">{threadErrorMessage}</p>
+                      <div className="mt-4 flex justify-end">
+                        <button
+                          type="button"
+                          className="rounded border border-input px-3 py-1 text-sm font-medium text-foreground hover:bg-muted"
+                          onClick={() => navigate('/agents/threads')}
+                        >
+                          Back to threads
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <RunMessageList
+                    items={unifiedItems}
+                    showJson={showJson}
+                    onToggleJson={toggleJson}
+                    isLoading={runsQ.isLoading}
+                    error={loadError}
+                    onViewRunTimeline={(run) => {
+                      if (!activeThreadId) return;
+                      navigate(`/agents/threads/${encodeURIComponent(activeThreadId)}/runs/${encodeURIComponent(run.id)}/timeline`);
+                    }}
+                    activeThreadId={activeThreadId}
+                  />
+                )}
               </div>
             </section>
           </div>

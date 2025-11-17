@@ -22,6 +22,12 @@ export const threads = {
         params: { status, includeMetrics: true, includeAgentTitles: true },
       }),
     ),
+  getById: (id: string) =>
+    asData<ThreadNode>(
+      http.get(`/api/agents/threads/${encodeURIComponent(id)}`, {
+        params: { includeMetrics: true, includeAgentTitles: true },
+      }),
+    ),
   patchStatus: (id: string, status: 'open' | 'closed') =>
     asData<void>(http.patch(`/api/agents/threads/${encodeURIComponent(id)}`, { status })),
   metrics: (id: string) =>

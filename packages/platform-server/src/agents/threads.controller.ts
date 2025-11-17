@@ -98,6 +98,16 @@ export class ListChildrenQueryDto {
   includeAgentTitles?: string; // parse to boolean
 }
 
+export class GetThreadQueryDto {
+  @IsOptional()
+  @IsBooleanString()
+  includeMetrics?: string; // parse to boolean
+
+  @IsOptional()
+  @IsBooleanString()
+  includeAgentTitles?: string; // parse to boolean
+}
+
 export class PatchThreadBodyDto {
   @IsOptional()
   // Allow null explicitly; validate string only when not null or undefined
@@ -169,6 +179,22 @@ export class AgentsThreadsController {
         ...(includeMetrics ? { metrics: { ...defaultMetrics, ...(metrics[t.id] ?? {}) } } : {}),
         ...(includeAgentTitles ? { agentTitle: agentTitles[t.id] ?? fallbackTitle } : {}),
       })),
+    };
+  }
+
+  @Get('threads/:threadId')
+  async getThread(@Param('threadId') threadId: string, @Query() query: GetThreadQueryDto) {
+    const includeMetrics = (query.includeMetrics ?? 'false') === 'true';
+    const includeAgentTitles = (query.includeAgentTitles ?? 'false') === 'true';
+    const thread = await this.persistence.getThreadById(threadId, { includeMetrics, includeAgentTitles });
+    if (!thread) throw new NotFoundException('thread_not_found');
+    if (!includeMetrics && !includeAgentTitles) return thread;
+    const defaultMetrics: ThreadMetrics = { remindersCount: 0, containersCount: 0, activity: 'idle', runsCount: 0 };
+    const fallbackTitle = '(unknown agent)';
+    return {
+      ...thread,
+      ...(includeMetrics ? { metrics: thread.metrics ?? defaultMetrics } : {}),
+      ...(includeAgentTitles ? { agentTitle: thread.agentTitle ?? fallbackTitle } : {}),
     };
   }
 

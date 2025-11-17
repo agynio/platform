@@ -42,6 +42,7 @@ function App() {
             <Route path="/agents/graph" element={<AgentBuilder />} />
             <Route path="/agents/chat" element={<AgentsChat />} />
             <Route path="/agents/threads" element={<AgentsThreads />} />
+            <Route path="/agents/threads/:threadId" element={<AgentsThreads />} />
             <Route path="/agents/threads/:threadId/runs/:runId/timeline" element={<AgentsRunTimeline />} />
             <Route path="/agents/reminders" element={<AgentsReminders />} />
 

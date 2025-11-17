@@ -1,9 +1,10 @@
 import { useEffect, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { threads } from '@/api/modules/threads';
+import type { ApiError } from '@/api/http';
 import { listContainers } from '@/api/modules/containers';
 import { graphSocket } from '@/lib/graph/socket';
-import type { ThreadMetrics, ThreadReminder } from '@/api/types/agents';
+import type { ThreadMetrics, ThreadNode, ThreadReminder } from '@/api/types/agents';
 import type { ContainerItem } from '@/api/modules/containers';
 
 const UUID_REGEX = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
@@ -20,6 +21,18 @@ export function useThreadChildren(id: string | undefined, status: 'open' | 'clos
     enabled: !!id,
     queryKey: ['agents', 'threads', id, 'children', status],
     queryFn: () => threads.children(id as string, status),
+  });
+}
+
+export function useThreadById(threadId: string | undefined) {
+  return useQuery<ThreadNode, ApiError>({
+    enabled: !!threadId,
+    queryKey: ['agents', 'threads', 'by-id', threadId],
+    queryFn: () => threads.getById(threadId as string),
+    retry: (failureCount, error) => {
+      if (error?.response?.status === 404) return false;
+      return failureCount < 2;
+    },
   });
 }
 
