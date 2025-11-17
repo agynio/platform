@@ -77,8 +77,9 @@ export class StartupRecoveryService implements OnApplicationBootstrap {
     const queryRaw = (tx as unknown as { $queryRaw?: TransactionClient['$queryRaw'] }).$queryRaw;
     if (typeof queryRaw !== 'function') return true;
     try {
-      const rows = await queryRaw<{ acquired: boolean }[]>`
-        SELECT pg_try_advisory_xact_lock(${LOCK_KEY_NAMESPACE}, ${LOCK_KEY_ID}) AS acquired
+      // Call through tx.$queryRaw so Prisma retains the "this" binding on the proxy object.
+      const rows = await tx.$queryRaw<{ acquired: boolean }[]>`
+        SELECT pg_try_advisory_xact_lock(${LOCK_KEY_NAMESPACE}::int, ${LOCK_KEY_ID}::int) AS acquired
       `;
       return rows?.[0]?.acquired ?? false;
     } catch (err) {

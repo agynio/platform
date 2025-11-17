@@ -211,4 +211,55 @@ describe.sequential('StartupRecoveryService', () => {
     expect(summary).toBeDefined();
     expect(events.runStatusChanges).toHaveLength(1);
   });
+
+  it('binds tx.$queryRaw during bootstrap', async () => {
+    type BindingTx = {
+      run: {
+        findMany: ReturnType<typeof vi.fn>;
+        updateMany: ReturnType<typeof vi.fn>;
+      };
+      reminder: {
+        findMany: ReturnType<typeof vi.fn>;
+        updateMany: ReturnType<typeof vi.fn>;
+      };
+      $queryRaw: (...args: unknown[]) => Promise<{ acquired: boolean }[]>;
+    };
+
+    const txInstance: BindingTx = {
+      run: {
+        findMany: vi.fn().mockResolvedValue([]),
+        updateMany: vi.fn().mockResolvedValue({ count: 0 }),
+      },
+      reminder: {
+        findMany: vi.fn().mockResolvedValue([]),
+        updateMany: vi.fn().mockResolvedValue({ count: 0 }),
+      },
+      $queryRaw: async () => [{ acquired: true }],
+    };
+
+    const queryRawSpy = vi.fn().mockImplementation(function (this: BindingTx) {
+      expect(this).toBe(txInstance);
+      return Promise.resolve([{ acquired: true }]);
+    });
+
+    txInstance.$queryRaw = queryRawSpy;
+
+    const stubPrisma = {
+      async $transaction<T>(fn: (tx: BindingTx) => Promise<T>): Promise<T> {
+        return fn(txInstance);
+      },
+    };
+
+    const logger = new TestLogger();
+    const events = new CaptureEventsPublisher();
+    const service = new StartupRecoveryService({ getClient: () => stubPrisma } as any, logger, events);
+
+    await expect(service.onApplicationBootstrap()).resolves.toBeUndefined();
+
+    expect(queryRawSpy).toHaveBeenCalledTimes(1);
+    const summary = logger.infoCalls.find((call) => call.message === 'Startup recovery completed');
+    expect(summary).toBeDefined();
+    expect(events.runStatusChanges).toHaveLength(0);
+    expect(events.metricsScheduled).toHaveLength(0);
+  });
 });
