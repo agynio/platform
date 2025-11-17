@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach, beforeAll, afterAll } from 'vites
 import { render, waitFor, fireEvent, screen } from '@testing-library/react';
 import React from 'react';
 import { ContainerTerminalDialog } from '../ContainerTerminalDialog';
+import { toWsUrl } from '../toWsUrl';
 import type { ContainerItem, ContainerTerminalSessionResponse } from '@/api/modules/containers';
 
 const terminalOpenMock = vi.fn();
@@ -221,5 +222,23 @@ describe('ContainerTerminalDialog stability', () => {
     await waitFor(() => {
       expect(getSentInputs()).toContain('live command');
     });
+  });
+});
+
+describe('toWsUrl', () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  it('uses API base env for relative paths', () => {
+    vi.stubEnv('VITE_API_BASE_URL', 'http://localhost:3010');
+    const url = toWsUrl('/api/containers/terminal/session');
+    expect(url).toBe('ws://localhost:3010/api/containers/terminal/session');
+  });
+
+  it('returns absolute websocket URLs unchanged', () => {
+    vi.stubEnv('VITE_API_BASE_URL', 'http://localhost:9999');
+    const url = toWsUrl('wss://external.example.com/ws');
+    expect(url).toBe('wss://external.example.com/ws');
   });
 });

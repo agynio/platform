@@ -12,6 +12,7 @@ import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import { WebglAddon } from '@xterm/addon-webgl';
 import '@xterm/xterm/css/xterm.css';
+import { toWsUrl } from './toWsUrl';
 
 type Props = {
   container: ContainerItem | null;
@@ -558,12 +559,4 @@ function TerminalConsole({ session, container, onClose }: TerminalConsoleProps) 
       </p>
     </div>
   );
-}
-
-function toWsUrl(path: string): string {
-  if (path.startsWith('ws://') || path.startsWith('wss://')) return path;
-  const { protocol, host } = window.location;
-  const wsProto = protocol === 'https:' ? 'wss:' : 'ws:';
-  if (path.startsWith('/')) return `${wsProto}//${host}${path}`;
-  return `${wsProto}//${host}/${path.replace(/^\/?/, '')}`;
 }
