@@ -276,7 +276,7 @@ describe('AgentsRunTimeline layout and selection', () => {
       '/agents/threads/thread-1/runs/run-1?eventId=event-2',
     ]);
 
-    expect(socketMocks.subscribe).toHaveBeenCalledWith(['run:run-1']);
+    expect(socketMocks.subscribe).toHaveBeenCalledWith(['run:run-1', 'thread:thread-1']);
 
     const listbox = getByRole('listbox');
     expect(listbox).toHaveAttribute('aria-labelledby', 'run-timeline-events-heading');

@@ -184,8 +184,9 @@ export class GraphSocketGateway implements GraphEventsPublisher {
   }
   emitRunEvent(runId: string, threadId: string, payload: RunEventBroadcast) {
     if (!this.io) return;
-    this.io.to(`run:${runId}`).emit('run_event_appended', payload);
-    this.io.to(`thread:${threadId}`).emit('run_event_appended', payload);
+    const event = payload.mutation === 'append' ? 'run_timeline_event_created' : 'run_timeline_event_updated';
+    this.io.to(`run:${runId}`).emit(event, payload);
+    this.io.to(`thread:${threadId}`).emit(event, payload);
   }
   private flushMetricsQueue = async () => {
     // De-duplicate pending thread IDs per flush (preserve insertion order)

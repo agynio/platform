@@ -20,7 +20,8 @@ interface ServerToClientEvents {
   thread_reminders_count: (payload: { threadId: string; remindersCount: number }) => void;
   message_created: (payload: { message: MessageSummary }) => void;
   run_status_changed: (payload: { run: RunSummary }) => void;
-  run_event_appended: (payload: RunEventSocketPayload) => void;
+  run_timeline_event_created: (payload: RunEventSocketPayload) => void;
+  run_timeline_event_updated: (payload: RunEventSocketPayload) => void;
 }
 // Client-to-server emits: subscribe to rooms
 type SubscribePayload = { room?: string; rooms?: string[] };
@@ -154,10 +155,12 @@ class GraphSocket {
     this.socket.on('run_status_changed', (payload: RunStatusChangedPayload) => {
       for (const fn of this.runStatusListeners) fn(payload);
     });
-    this.socket.on('run_event_appended', (payload: RunEventSocketPayload) => {
+    const handleRunTimelineEvent = (payload: RunEventSocketPayload) => {
       this.bumpRunCursor(payload.runId, { ts: payload.event.ts, id: payload.event.id });
       for (const fn of this.runEventListeners) fn(payload);
-    });
+    };
+    this.socket.on('run_timeline_event_created', handleRunTimelineEvent);
+    this.socket.on('run_timeline_event_updated', handleRunTimelineEvent);
     return this.socket;
   }
 

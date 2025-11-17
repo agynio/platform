@@ -263,8 +263,14 @@ describe.sequential('GraphSocketGateway realtime integration', () => {
       input: { query: 'status' },
     });
 
-    const appendThreadEvent = waitForEvent<{ mutation: string; event: { id: string } }>(threadClient, 'run_event_appended');
-    const appendRunEvent = waitForEvent<{ mutation: string; event: { id: string } }>(runClient, 'run_event_appended');
+    const appendThreadEvent = waitForEvent<{ mutation: string; event: { id: string } }>(
+      threadClient,
+      'run_timeline_event_created',
+    );
+    const appendRunEvent = waitForEvent<{ mutation: string; event: { id: string } }>(
+      runClient,
+      'run_timeline_event_created',
+    );
     const appendPayload = await runEvents.publishEvent(toolExecution.id, 'append');
     expect(appendPayload?.toolExecution?.input).toEqual({ query: 'status' });
     const [appendThread, appendRun] = await Promise.all([appendThreadEvent, appendRunEvent]);
@@ -278,8 +284,14 @@ describe.sequential('GraphSocketGateway realtime integration', () => {
       raw: { latencyMs: 1200 },
     });
 
-    const updateThreadEvent = waitForEvent<{ mutation: string; event: { toolExecution?: { output?: unknown } } }>(threadClient, 'run_event_appended');
-    const updateRunEvent = waitForEvent<{ mutation: string; event: { toolExecution?: { output?: unknown } } }>(runClient, 'run_event_appended');
+    const updateThreadEvent = waitForEvent<{ mutation: string; event: { toolExecution?: { output?: unknown } } }>(
+      threadClient,
+      'run_timeline_event_updated',
+    );
+    const updateRunEvent = waitForEvent<{ mutation: string; event: { toolExecution?: { output?: unknown } } }>(
+      runClient,
+      'run_timeline_event_updated',
+    );
     await runEvents.publishEvent(toolExecution.id, 'update');
     const [updateThread, updateRun] = await Promise.all([updateThreadEvent, updateRunEvent]);
     expect(updateThread.mutation).toBe('update');
