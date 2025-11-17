@@ -6,6 +6,7 @@ import { CallAgentNode, CallAgentToolStaticConfigSchema } from './call_agent.nod
 import { FunctionTool, HumanMessage } from '@agyn/llm';
 import { LLMContext } from '../../../llm/types';
 import { AgentsPersistenceService } from '../../../agents/agents.persistence.service';
+import { CallAgentLinkingService, type CallAgentLinkMetadata } from '../../../agents/call-agent-linking.service';
 
 export const callAgentInvocationSchema = z.object({
   input: z.string().min(1).describe('Message to forward to the target agent.'),
@@ -24,6 +25,7 @@ export class CallAgentFunctionTool extends FunctionTool<typeof callAgentInvocati
     private logger: LoggerService,
     private node: CallAgentNode,
     private persistence: AgentsPersistenceService,
+    private linking: CallAgentLinkingService,
   ) {
     super();
   }
@@ -37,22 +39,14 @@ export class CallAgentFunctionTool extends FunctionTool<typeof callAgentInvocati
     return this.node.config.description ?? 'Call agent';
   }
 
-  async prepareToolExecution(params: { input: z.infer<typeof callAgentInvocationSchema>; ctx: LLMContext }): Promise<{ metadata: Record<string, unknown>; sourceSpanId: string; prepared: CallAgentPreparedContext }> {
+  async prepareToolExecution(params: { input: z.infer<typeof callAgentInvocationSchema>; ctx: LLMContext }): Promise<{ metadata: CallAgentLinkMetadata; sourceSpanId: string; prepared: CallAgentPreparedContext }> {
     const { input, ctx } = params;
     const parentThreadId = ctx.threadId;
     const targetThreadId = await this.persistence.getOrCreateSubthreadByAlias('call_agent', input.threadAlias, parentThreadId, input.summary);
     const toolName = this.name;
-    const canonicalTool = toolName === 'call_engineer' ? 'call_engineer' : 'call_agent';
+    const metadata = this.linking.buildInitialMetadata({ toolName, parentThreadId, childThreadId: targetThreadId });
     return {
-      metadata: {
-        tool: canonicalTool,
-        parentThreadId,
-        childThreadId: targetThreadId,
-        childRunId: null,
-        childMessageId: null,
-        childRunLinkEnabled: false,
-        childRunStatus: 'queued',
-      },
+      metadata,
       sourceSpanId: targetThreadId,
       prepared: { targetThreadId },
     };

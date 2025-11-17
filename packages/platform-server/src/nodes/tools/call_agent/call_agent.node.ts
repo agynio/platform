@@ -6,6 +6,7 @@ import { CallAgentFunctionTool } from './call_agent.tool';
 import { AgentNode } from '../../agent/agent.node';
 import { Inject, Injectable, Scope } from '@nestjs/common';
 import { AgentsPersistenceService } from '../../../agents/agents.persistence.service';
+import { CallAgentLinkingService } from '../../../agents/call-agent-linking.service';
 
 export const CallAgentToolStaticConfigSchema = z
   .object({
@@ -27,7 +28,11 @@ export class CallAgentNode extends BaseToolNode<z.infer<typeof CallAgentToolStat
   private responseMode: 'sync' | 'async' | 'ignore' = 'sync';
   private toolInstance?: CallAgentFunctionTool;
 
-  constructor(@Inject(LoggerService) protected logger: LoggerService, @Inject(AgentsPersistenceService) private readonly persistence: AgentsPersistenceService) {
+  constructor(
+    @Inject(LoggerService) protected logger: LoggerService,
+    @Inject(AgentsPersistenceService) private readonly persistence: AgentsPersistenceService,
+    @Inject(CallAgentLinkingService) private readonly linking: CallAgentLinkingService,
+  ) {
     super(logger);
   }
 
@@ -43,7 +48,7 @@ export class CallAgentNode extends BaseToolNode<z.infer<typeof CallAgentToolStat
 
   getTool(): CallAgentFunctionTool {
     if (!this.toolInstance) {
-      this.toolInstance = new CallAgentFunctionTool(this.logger, this, this.persistence);
+      this.toolInstance = new CallAgentFunctionTool(this.logger, this, this.persistence, this.linking);
     }
     return this.toolInstance;
   }

@@ -10,6 +10,7 @@ import type { ThreadsMetricsService } from '../src/agents/threads.metrics.servic
 import type { TemplateRegistry } from '../src/graph/templateRegistry';
 import type { GraphRepository } from '../src/graph/graph.repository';
 import { HumanMessage, SystemMessage, AIMessage } from '@agyn/llm';
+import { CallAgentLinkingService } from '../src/agents/call-agent-linking.service';
 
 const databaseUrl = process.env.AGENTS_DATABASE_URL;
 if (!databaseUrl) throw new Error('AGENTS_DATABASE_URL must be set for call_agent.timeline.metadata.integration.test.ts');
@@ -24,7 +25,8 @@ const graphRepoStub = { get: async () => ({ nodes: [], edges: [] }) } as unknown
 
 const eventsPublisher = new NoopGraphEventsPublisher();
 const runEvents = new RunEventsService(prismaService, logger, eventsPublisher);
-const agents = new AgentsPersistenceService(prismaService, logger, metricsStub, eventsPublisher, templateRegistryStub, graphRepoStub, runEvents);
+const callAgentLinking = new CallAgentLinkingService(logger, runEvents, prismaService);
+const agents = new AgentsPersistenceService(prismaService, logger, metricsStub, eventsPublisher, templateRegistryStub, graphRepoStub, runEvents, callAgentLinking);
 
 async function createCallAgentParentEvent(parentThreadId: string, childThreadId: string, runId: string) {
   const toolEvent = await prisma.runEvent.create({
@@ -39,6 +41,12 @@ async function createCallAgentParentEvent(parentThreadId: string, childThreadId:
         tool: 'call_agent',
         parentThreadId,
         childThreadId,
+        childRun: {
+          id: null,
+          status: 'queued',
+          linkEnabled: false,
+          latestMessageId: null,
+        },
         childRunId: null,
         childMessageId: null,
         childRunLinkEnabled: false,
@@ -98,6 +106,12 @@ describe.sequential('call_agent timeline metadata linkage', () => {
       expect(firstMetadata?.childRunId).toBe(runId);
       expect(firstMetadata?.childRunLinkEnabled).toBe(true);
       expect(firstMetadata?.childRunStatus).toBe('running');
+      const childRunMeta = firstMetadata?.childRun as Record<string, unknown> | undefined;
+      expect(childRunMeta).toBeDefined();
+      expect(childRunMeta?.id).toBe(runId);
+      expect(childRunMeta?.status).toBe('running');
+      expect(childRunMeta?.linkEnabled).toBe(true);
+      expect(typeof childRunMeta?.latestMessageId).toBe('string');
       expect(typeof firstMetadata?.childMessageId).toBe('string');
 
       const initialMessageIds = await collectMessageIds(runId);
@@ -108,6 +122,11 @@ describe.sequential('call_agent timeline metadata linkage', () => {
       expect(afterInjection?.childRunId).toBe(runId);
       expect(afterInjection?.childRunStatus).toBe('running');
       expect(afterInjection?.childRunLinkEnabled).toBe(true);
+      const injectedChildRun = afterInjection?.childRun as Record<string, unknown> | undefined;
+      expect(injectedChildRun?.id).toBe(runId);
+      expect(injectedChildRun?.status).toBe('running');
+      expect(injectedChildRun?.linkEnabled).toBe(true);
+      expect(typeof injectedChildRun?.latestMessageId).toBe('string');
       expect(typeof afterInjection?.childMessageId).toBe('string');
       const injectedIds = await prisma.runMessage.findMany({ where: { runId, type: 'injected' }, orderBy: { createdAt: 'desc' }, select: { messageId: true } });
       if (injectedIds.length > 0) {
@@ -118,6 +137,9 @@ describe.sequential('call_agent timeline metadata linkage', () => {
       const afterCompletion = await loadMetadata(toolEventId);
       expect(afterCompletion?.childRunStatus).toBe('finished');
       expect(afterCompletion?.childRunId).toBe(runId);
+      const completedChildRun = afterCompletion?.childRun as Record<string, unknown> | undefined;
+      expect(completedChildRun?.status).toBe('finished');
+      expect(completedChildRun?.id).toBe(runId);
     } finally {
       const childRuns = await prisma.run.findMany({ where: { threadId: childThread.id }, select: { id: true } });
       for (const child of childRuns) {

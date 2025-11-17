@@ -10,6 +10,7 @@ import type { PersistedGraphNode } from '../graph/types';
 import { toPrismaJsonValue } from '../llm/services/messages.serialization';
 import { ChannelDescriptorSchema, type ChannelDescriptor } from '../messaging/types';
 import { RunEventsService } from '../events/run-events.service';
+import { CallAgentLinkingService } from './call-agent-linking.service';
 import { ThreadsMetricsService, type ThreadMetrics } from './threads.metrics.service';
 
 export type RunStartResult = { runId: string };
@@ -28,6 +29,7 @@ export class AgentsPersistenceService implements GraphEventsPublisherAware {
     @Inject(TemplateRegistry) private readonly templateRegistry: TemplateRegistry,
     @Inject(GraphRepository) private readonly graphs: GraphRepository,
     @Inject(RunEventsService) private readonly runEvents: RunEventsService,
+    @Inject(CallAgentLinkingService) private readonly callAgentLinking: CallAgentLinkingService,
   ) {
     this.events = events;
   }
@@ -127,30 +129,13 @@ export class AgentsPersistenceService implements GraphEventsPublisherAware {
           createdMessages.push({ id: created.id, kind, text, source: created.source as Prisma.JsonValue, createdAt: created.createdAt });
         }),
       );
-      const runEventDelegate = this.getRunEventDelegate(tx);
-      if (runEventDelegate) {
-        const parentToolEvent = await runEventDelegate.findFirst({
-          where: {
-            type: 'tool_execution',
-            sourceSpanId: threadId,
-            toolExecution: { toolName: { in: ['call_agent', 'call_engineer'] } },
-          },
-          orderBy: { ts: 'desc' },
-        });
-        if (parentToolEvent) {
-          await this.runEvents.patchEventMetadata({
-            tx,
-            eventId: parentToolEvent.id,
-            patch: {
-              childRunId: run.id,
-              childRunStatus: 'running',
-              childRunLinkEnabled: true,
-              childMessageId: createdMessages[0]?.id ?? null,
-            },
-          });
-          patchedEventIds.push(parentToolEvent.id);
-        }
-      }
+      const linkedEventId = await this.callAgentLinking.onChildRunStarted({
+        tx,
+        childThreadId: threadId,
+        runId: run.id,
+        latestMessageId: createdMessages[0]?.id ?? null,
+      });
+      if (linkedEventId) patchedEventIds.push(linkedEventId);
       return { runId: run.id, createdMessages, eventIds, patchedEventIds };
     });
     this.events.emitRunStatusChanged(threadId, { id: runId, status: 'running' as RunStatus, createdAt: new Date(), updatedAt: new Date() });
@@ -200,30 +185,12 @@ export class AgentsPersistenceService implements GraphEventsPublisherAware {
           ts: createdMessages[0].createdAt,
         });
         eventIds.push(inj.id);
-        const runEventDelegate = this.getRunEventDelegate(tx);
-        if (runEventDelegate) {
-          const parentToolEvent = await runEventDelegate.findFirst({
-            where: {
-              type: 'tool_execution',
-              toolExecution: { toolName: { in: ['call_agent', 'call_engineer'] } },
-              metadata: { path: ['childRunId'], equals: runId },
-            },
-            orderBy: { ts: 'desc' },
-          });
-          if (parentToolEvent) {
-            await this.runEvents.patchEventMetadata({
-              tx,
-              eventId: parentToolEvent.id,
-              patch: {
-                childRunId: runId,
-                childRunStatus: 'running',
-                childRunLinkEnabled: true,
-                childMessageId: createdMessages[0]?.id ?? null,
-              },
-            });
-            patchedEventIds.push(parentToolEvent.id);
-          }
-        }
+        const linkedEventId = await this.callAgentLinking.onChildRunMessage({
+          tx,
+          runId,
+          latestMessageId: createdMessages[0]?.id ?? null,
+        });
+        if (linkedEventId) patchedEventIds.push(linkedEventId);
       }
     });
     const run = await this.prisma.run.findUnique({ where: { id: runId }, select: { threadId: true } });
@@ -268,27 +235,8 @@ export class AgentsPersistenceService implements GraphEventsPublisherAware {
         }),
       );
       const updated = await tx.run.update({ where: { id: runId }, data: { status } });
-      const runEventDelegate = this.getRunEventDelegate(tx);
-      if (runEventDelegate) {
-        const parentToolEvent = await runEventDelegate.findFirst({
-          where: {
-            type: 'tool_execution',
-            toolExecution: { toolName: { in: ['call_agent', 'call_engineer'] } },
-            metadata: { path: ['childRunId'], equals: runId },
-          },
-          orderBy: { ts: 'desc' },
-        });
-        if (parentToolEvent) {
-          await this.runEvents.patchEventMetadata({
-            tx,
-            eventId: parentToolEvent.id,
-            patch: {
-              childRunStatus: status,
-            },
-          });
-          patchedEventIds.push(parentToolEvent.id);
-        }
-      }
+      const linkedEventId = await this.callAgentLinking.onChildRunCompleted({ tx, runId, status });
+      if (linkedEventId) patchedEventIds.push(linkedEventId);
       return updated;
     });
     const threadId = run.threadId;

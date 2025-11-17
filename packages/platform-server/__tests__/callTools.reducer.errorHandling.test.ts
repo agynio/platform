@@ -7,6 +7,7 @@ import { createRunEventsStub } from './helpers/runEvents.stub';
 import { CallAgentTool } from '../src/nodes/tools/call_agent/call_agent.node';
 import type { AgentsPersistenceService } from '../src/agents/agents.persistence.service';
 import { Signal } from '../src/signal';
+import { CallAgentLinkingService } from '../src/agents/call-agent-linking.service';
 
 type Captured = {
   attrs: { toolCallId: string; name: string; input: unknown };
@@ -162,7 +163,23 @@ describe('CallToolsLLMReducer call_agent metadata', () => {
       getOrCreateSubthreadByAlias: vi.fn().mockResolvedValue('child-thread-id'),
     } as unknown as AgentsPersistenceService;
 
-    const callAgentNode = new CallAgentTool(new LoggerService(), persistence);
+    const linking = {
+      buildInitialMetadata: vi.fn((params: { toolName: string; parentThreadId: string; childThreadId: string }) => ({
+        tool: params.toolName === 'call_engineer' ? 'call_engineer' : 'call_agent',
+        parentThreadId: params.parentThreadId,
+        childThreadId: params.childThreadId,
+        childRun: { id: null, status: 'queued', linkEnabled: false, latestMessageId: null },
+        childRunId: null,
+        childRunStatus: 'queued',
+        childRunLinkEnabled: false,
+        childMessageId: null,
+      })),
+      onChildRunStarted: vi.fn().mockResolvedValue(null),
+      onChildRunMessage: vi.fn().mockResolvedValue(null),
+      onChildRunCompleted: vi.fn().mockResolvedValue(null),
+    } as unknown as CallAgentLinkingService;
+
+    const callAgentNode = new CallAgentTool(new LoggerService(), persistence, linking);
     await callAgentNode.setConfig({ description: 'desc', response: 'sync' });
 
     const agent = {
@@ -194,10 +211,7 @@ describe('CallToolsLLMReducer call_agent metadata', () => {
     expect(startArgs?.metadata).toMatchObject({
       parentThreadId: 'parent-thread',
       childThreadId: 'child-thread-id',
-      childRunStatus: 'queued',
-      childRunLinkEnabled: false,
-      childRunId: null,
-      childMessageId: null,
+      childRun: { id: null, status: 'queued', linkEnabled: false, latestMessageId: null },
     });
   });
 });

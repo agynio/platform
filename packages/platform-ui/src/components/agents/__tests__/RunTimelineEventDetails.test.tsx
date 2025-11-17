@@ -537,7 +537,6 @@ describe('RunTimelineEventDetails', () => {
     }
   });
 
-<<<<<<< HEAD
   it('preserves context scroll position when loading older items', async () => {
     const user = userEvent.setup();
     const raf = vi.spyOn(window, 'requestAnimationFrame').mockImplementation((cb: FrameRequestCallback) => {
@@ -604,24 +603,11 @@ describe('RunTimelineEventDetails', () => {
         responseText: null,
         rawResponse: null,
         toolCalls: [],
-=======
-  it('renders call_agent links and queued status when run not started', () => {
-    const event = buildEvent({
-      metadata: {
-        childThreadId: 'child-123',
-        childRunStatus: 'queued',
-        childRunLinkEnabled: false,
-      },
-      toolExecution: {
-        toolName: 'call_agent',
-        execStatus: 'running',
->>>>>>> e0586020 (feat(call-agent): link child runs in timeline)
       },
     });
 
     renderDetails(event);
 
-<<<<<<< HEAD
     const scroll = await screen.findByTestId('llm-context-scroll');
 
     let scrollHeightValue = 1000;
@@ -696,8 +682,15 @@ describe('RunTimelineEventDetails', () => {
     const event = buildEvent({
       metadata: {
         childThreadId: 'child-123',
+        childRun: {
+          id: null,
+          status: 'queued',
+          linkEnabled: false,
+          latestMessageId: null,
+        },
         childRunStatus: 'queued',
         childRunLinkEnabled: false,
+        childRunId: null,
       },
       toolExecution: {
         toolName: 'call_agent',
@@ -720,8 +713,15 @@ describe('RunTimelineEventDetails', () => {
     const baseEvent = buildEvent({
       metadata: {
         childThreadId: 'child-123',
+        childRun: {
+          id: null,
+          status: 'queued',
+          linkEnabled: false,
+          latestMessageId: null,
+        },
         childRunStatus: 'queued',
         childRunLinkEnabled: false,
+        childRunId: null,
       },
       toolExecution: {
         toolName: 'call_agent',
@@ -734,9 +734,16 @@ describe('RunTimelineEventDetails', () => {
     const updatedEvent = buildEvent({
       metadata: {
         childThreadId: 'child-123',
+        childRun: {
+          id: 'run-xyz',
+          status: 'running',
+          linkEnabled: true,
+          latestMessageId: 'msg-1',
+        },
         childRunStatus: 'running',
         childRunLinkEnabled: true,
         childRunId: 'run-xyz',
+        childMessageId: 'msg-1',
       },
       toolExecution: {
         toolName: 'call_agent',
