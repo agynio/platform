@@ -188,11 +188,13 @@ export function AgentsRunTimeline() {
   );
 
   const updateEventsState = useCallback(
-    (updater: (prev: RunTimelineEvent[]) => RunTimelineEvent[]) => {
+    (updater: (prev: RunTimelineEvent[]) => RunTimelineEvent[], opts?: { setCursor?: boolean }) => {
       setEvents((prev) => {
         const next = updater(prev);
-        const latest = next[next.length - 1];
-        if (latest) setCursor(toCursor(latest));
+        if (opts?.setCursor !== false) {
+          const latest = next[next.length - 1];
+          if (latest) setCursor(toCursor(latest));
+        }
         return next;
       });
     },
@@ -248,13 +250,21 @@ export function AgentsRunTimeline() {
   useEffect(() => {
     if (!eventsQuery.data) return;
 
+    const incoming = eventsQuery.data.items ?? [];
+    const newestIncoming = incoming.length > 0
+      ? incoming.reduce<RunTimelineEvent>((latest, event) => (compareEvents(event, latest) > 0 ? event : latest), incoming[0])
+      : null;
     const queryCursor = eventsQuery.data.nextCursor ?? null;
     setLoadOlderError(null);
     updateEventsState((prev) => {
       const base = replaceEventsRef.current ? [] : prev;
-      const merged = mergeEvents(base, eventsQuery.data?.items ?? [], selectedTypes, selectedStatuses);
-      return merged;
-    });
+      return mergeEvents(base, incoming, selectedTypes, selectedStatuses);
+    }, { setCursor: false });
+    if (newestIncoming) {
+      setCursor(toCursor(newestIncoming), { force: true });
+    } else {
+      setCursor(null, { force: true });
+    }
     replaceEventsRef.current = false;
     if (!queryCursor) {
       reachedHistoryEndRef.current = true;
@@ -266,7 +276,7 @@ export function AgentsRunTimeline() {
         return compareCursors(queryCursor, prev) < 0 ? queryCursor : prev;
       });
     }
-  }, [eventsQuery.data, selectedTypes, selectedStatuses, updateEventsState, updateOlderCursor]);
+  }, [eventsQuery.data, selectedTypes, selectedStatuses, updateEventsState, updateOlderCursor, setCursor]);
 
   const fetchSinceCursor = useCallback(() => {
     if (!runId) return Promise.resolve();

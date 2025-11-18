@@ -45,8 +45,10 @@ const notifyMocks = vi.hoisted(() => ({
 
 vi.mock('@/api/hooks/runs', () => ({
   useRunTimelineSummary: (runId: string | undefined) => summaryMock(runId),
-  useRunTimelineEvents: (runId: string | undefined, filters: { types: string[]; statuses: string[] }) =>
-    eventsMock(runId, filters),
+  useRunTimelineEvents: (
+    runId: string | undefined,
+    filters: { types: string[]; statuses: string[]; limit?: number; order?: 'asc' | 'desc'; cursor?: RunTimelineEventsCursor | null },
+  ) => eventsMock(runId, filters),
 }));
 
 vi.mock('@/api/modules/runs', () => ({
@@ -1391,7 +1393,7 @@ describe('AgentsRunTimeline load older regressions', () => {
     });
   });
 
-  it('Case F: keeps prepended older events visible after base query refetch', async () => {
+  it('Overwrites older items on refetch (before fix) and preserves after fix', async () => {
     const olderCursor: RunTimelineEventsCursor = {
       id: 'cursor-older',
       ts: '2023-12-31T23:59:59.000Z',
