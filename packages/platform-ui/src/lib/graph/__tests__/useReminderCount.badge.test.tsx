@@ -1,10 +1,21 @@
 /* @vitest-environment jsdom */
 import React from 'react';
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach, beforeAll, afterAll } from 'vitest';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render, screen } from '@testing-library/react';
+import type * as ConfigModule from '@/config';
 import { useReminderCount } from '../hooks';
-import { graphSocket } from '../socket';
+import { createSocketTestServer, type TestSocketServer } from '../../../../__tests__/socketServer.helper';
+
+let socketBaseUrl = 'http://127.0.0.1:0';
+
+vi.mock('@/config', async () => {
+  const actual = await vi.importActual<typeof ConfigModule>('@/config');
+  return {
+    ...actual,
+    getSocketBaseUrl: () => socketBaseUrl,
+  };
+});
 
 function Badge({ nodeId }: { nodeId: string }) {
   const q = useReminderCount(nodeId, true);
@@ -16,9 +27,21 @@ function Badge({ nodeId }: { nodeId: string }) {
   );
 }
 
+let socketServer: TestSocketServer;
+
 describe('useReminderCount badge', () => {
   const g: any = globalThis as any;
   const origFetch = g.fetch;
+
+  beforeAll(async () => {
+    socketServer = await createSocketTestServer();
+    socketBaseUrl = socketServer.baseUrl;
+  });
+
+  afterAll(async () => {
+    await socketServer.close();
+  });
+
   beforeEach(() => {
     g.fetch = vi.fn(async (input: RequestInfo) => {
       const url = String(input);
@@ -26,7 +49,10 @@ describe('useReminderCount badge', () => {
       return new Response('', { status: 204 });
     }) as any;
   });
-  afterEach(() => { g.fetch = origFetch; });
+
+  afterEach(() => {
+    g.fetch = origFetch;
+  });
 
   it('updates on node_reminder_count socket event', async () => {
     const qc = new QueryClient();
@@ -36,21 +62,16 @@ describe('useReminderCount badge', () => {
       </QueryClientProvider>,
     );
 
-    // Initially no reminders
     expect(await screen.findByText('no reminders')).toBeInTheDocument();
 
-    // Wait for hook to register listener
-    const anySock: any = graphSocket as any;
-    let tries = 0;
-    while (tries < 20 && !(anySock.reminderListeners && anySock.reminderListeners.get('n1'))) {
-      await new Promise((r) => setTimeout(r, 10));
-      tries += 1;
-    }
-    const set = (anySock.reminderListeners.get('n1') as Set<(ev: any) => void>) || new Set();
-    for (const fn of set) fn({ nodeId: 'n1', count: 2, updatedAt: new Date().toISOString() });
+    await socketServer.waitForRoom('node:n1');
 
-    // Expect badge now shows count
+    socketServer.emitReminderCount({
+      nodeId: 'n1',
+      count: 2,
+      updatedAt: new Date().toISOString(),
+    });
+
     expect(await screen.findByTitle('Active reminders: 2')).toBeInTheDocument();
   });
 });
-

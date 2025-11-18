@@ -3,17 +3,28 @@ import { setupServer } from 'msw/node';
 import { http as _http, HttpResponse as _HttpResponse } from 'msw';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { TemplatesProvider } from '../../src/lib/graph/templates.provider';
-import * as socketModule from '../../src/lib/graph/socket';
 import type { NodeStatusEvent, TemplateSchema } from '../../src/lib/graph/types';
 import { TooltipProvider } from '@agyn/ui';
+import type { TestSocketServer } from '../socketServer.helper';
 
-// Mock socket emitter
 export const emitted: Array<NodeStatusEvent> = [];
+let socketServerRef: TestSocketServer | null = null;
+
+export function setSocketServer(server: TestSocketServer | null) {
+  socketServerRef = server;
+}
+
+export async function waitForNodeSubscription(nodeId: string) {
+  if (!socketServerRef) throw new Error('Socket server is not configured');
+  await socketServerRef.waitForRoom(`node:${nodeId}`);
+}
+
 export function emitNodeStatus(ev: NodeStatusEvent) {
   emitted.push(ev);
-  const anySock: any = socketModule.graphSocket as any;
-  const set = (anySock.listeners as Map<string, Set<(...args: unknown[]) => unknown>>).get(ev.nodeId);
-  if (set) for (const fn of set) fn(ev);
+  if (!socketServerRef) throw new Error('Socket server is not configured');
+  const payload = { ...ev };
+  if (!payload.updatedAt) payload.updatedAt = new Date().toISOString();
+  socketServerRef.emitNodeStatus(payload);
 }
 
 export const mockTemplates: TemplateSchema[] = [

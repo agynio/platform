@@ -1,10 +1,12 @@
 import React from 'react';
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach, beforeAll, afterAll } from 'vitest';
 import { render, fireEvent, within, waitFor, act } from '@testing-library/react';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { AgentsRunTimeline } from '../AgentsRunTimeline';
 import type { RunTimelineEvent, RunTimelineSummary, RunEventStatus, RunEventType, RunTimelineEventsCursor } from '@/api/types/agents';
+import type * as ConfigModule from '@/config';
+import { graphSocket } from '@/lib/graph/socket';
+import { createSocketTestServer, type TestSocketServer } from '../../../__tests__/socketServer.helper';
 
 type MockedSummaryResult = {
   data: RunTimelineSummary;
@@ -38,6 +40,16 @@ const notifyMocks = vi.hoisted(() => ({
   error: vi.fn(),
 }));
 
+let socketBaseUrl = 'http://127.0.0.1:0';
+
+vi.mock('@/config', async () => {
+  const actual = await vi.importActual<typeof ConfigModule>('@/config');
+  return {
+    ...actual,
+    getSocketBaseUrl: () => socketBaseUrl,
+  };
+});
+
 vi.mock('@/api/hooks/runs', () => ({
   useRunTimelineSummary: (runId: string | undefined) => summaryMock(runId),
   useRunTimelineEvents: (runId: string | undefined, filters: { types: string[]; statuses: string[] }) =>
@@ -56,56 +68,19 @@ vi.mock('@/lib/notify', () => ({
   notifyError: (...args: unknown[]) => notifyMocks.error(...args),
 }));
 
-const socketMocks = vi.hoisted(() => ({
-  subscribe: vi.fn(),
-  unsubscribe: vi.fn(),
-  runEvent: null as ((payload: { runId: string; event: RunTimelineEvent; mutation: 'append' | 'update' }) => void) | null,
-  status: null as ((payload: { run: { id: string } }) => void) | null,
-  reconnect: null as (() => void) | null,
-  runCursors: new Map<string, RunTimelineEventsCursor | null>(),
-  setRunCursor: vi.fn((runId: string, cursor: RunTimelineEventsCursor | null) => {
-    if (!runId) return;
-    if (!cursor) {
-      socketMocks.runCursors.delete(runId);
-    } else {
-      socketMocks.runCursors.set(runId, cursor);
-    }
-  }),
-  getRunCursor: vi.fn((runId: string) => socketMocks.runCursors.get(runId) ?? null),
-}));
+import { AgentsRunTimeline } from '../AgentsRunTimeline';
 
-vi.mock('@/lib/graph/socket', () => ({
-  graphSocket: {
-    subscribe: socketMocks.subscribe,
-    unsubscribe: socketMocks.unsubscribe,
-    onRunEvent: vi.fn((cb: NonNullable<typeof socketMocks.runEvent>) => {
-      socketMocks.runEvent = cb;
-      return () => {
-        socketMocks.runEvent = null;
-      };
-    }),
-    onRunStatusChanged: vi.fn((cb: NonNullable<typeof socketMocks.status>) => {
-      socketMocks.status = cb;
-      return () => {
-        socketMocks.status = null;
-      };
-    }),
-    onReconnected: vi.fn((cb: NonNullable<typeof socketMocks.reconnect>) => {
-      socketMocks.reconnect = cb;
-      return () => {
-        socketMocks.reconnect = null;
-      };
-    }),
-    setRunCursor: socketMocks.setRunCursor,
-    getRunCursor: socketMocks.getRunCursor,
-  },
-}));
+const THREAD_ID = '11111111-1111-1111-1111-111111111111';
+const RUN_ID = '22222222-2222-2222-2222-222222222222';
+const RUN_APPEND_ID = '33333333-3333-3333-3333-333333333333';
+
+let socketServer: TestSocketServer;
 
 function buildEvent(overrides: Partial<RunTimelineEvent> = {}): RunTimelineEvent {
   return {
     id: 'event-1',
-    runId: 'run-1',
-    threadId: 'thread-1',
+    runId: RUN_ID,
+    threadId: THREAD_ID,
     type: 'tool_execution',
     status: 'success',
     ts: '2024-01-01T00:00:00.000Z',
@@ -158,8 +133,8 @@ function buildSummary(events: RunTimelineEvent[]): RunTimelineSummary {
     cancelled: 0,
   });
   return {
-    runId: 'run-1',
-    threadId: 'thread-1',
+    runId: RUN_ID,
+    threadId: THREAD_ID,
     status: 'running',
     createdAt: '2024-01-01T00:00:00.000Z',
     updatedAt: '2024-01-01T00:00:02.000Z',
@@ -209,30 +184,29 @@ function renderPage(initialEntries: string[]) {
 function setMatchMedia(matches: boolean) {
   Object.defineProperty(window, 'matchMedia', {
     writable: true,
-    value: vi.fn().mockImplementation((query: string) => {
-      return {
-        matches,
-        media: query,
-        onchange: null,
-        addEventListener: vi.fn(),
-        removeEventListener: vi.fn(),
-        addListener: vi.fn(),
-        removeListener: vi.fn(),
-        dispatchEvent: vi.fn(),
-      };
-    }),
+    value: vi.fn().mockImplementation((query: string) => ({
+      matches,
+      media: query,
+      onchange: null,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+      dispatchEvent: vi.fn(),
+    })),
   });
 }
 
+async function waitForRunSubscription(runId: string) {
+  await socketServer.waitForRoom(`run:${runId}`);
+}
+
+beforeAll(async () => {
+  socketServer = await createSocketTestServer();
+  socketBaseUrl = socketServer.baseUrl;
+});
+
 beforeEach(() => {
-  socketMocks.runEvent = null;
-  socketMocks.status = null;
-  socketMocks.reconnect = null;
-  socketMocks.subscribe.mockClear();
-  socketMocks.unsubscribe.mockClear();
-  socketMocks.setRunCursor.mockClear();
-  socketMocks.getRunCursor.mockClear();
-  socketMocks.runCursors.clear();
   summaryRefetch.mockClear();
   eventsRefetch.mockClear();
   runsModule.timelineEvents.mockReset();
@@ -244,6 +218,8 @@ beforeEach(() => {
   setMatchMedia(true);
 
   runsModule.terminate.mockResolvedValue({ ok: true });
+  graphSocket.setRunCursor(RUN_ID, null, { force: true });
+  graphSocket.setRunCursor(RUN_APPEND_ID, null, { force: true });
 
   const events = [
     buildEvent(),
@@ -287,13 +263,17 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 
+afterAll(async () => {
+  await socketServer.close();
+});
+
 describe('AgentsRunTimeline layout and selection', () => {
   it('renders list/detail columns, honors URL selection, and supports keyboard navigation', async () => {
     const { getByRole, getByText, getByTestId } = renderPage([
-      '/agents/threads/thread-1/runs/run-1?eventId=event-2',
+      `/agents/threads/${THREAD_ID}/runs/${RUN_ID}?eventId=event-2`,
     ]);
 
-    expect(socketMocks.subscribe).toHaveBeenCalledWith(['run:run-1']);
+    await waitForRunSubscription(RUN_ID);
 
     const listbox = getByRole('listbox');
     expect(listbox).toHaveAttribute('aria-labelledby', 'run-timeline-events-heading');
@@ -317,7 +297,7 @@ describe('AgentsRunTimeline layout and selection', () => {
   it('opens details in an accessible modal on mobile and clears selection on close', () => {
     setMatchMedia(false);
     const { getAllByText, queryByRole, getByRole, getByTestId } = renderPage([
-      '/agents/threads/thread-1/runs/run-1',
+      `/agents/threads/${THREAD_ID}/runs/${RUN_ID}`,
     ]);
 
     const firstItem = getAllByText('Tool Execution — Search Tool')[0];
@@ -337,12 +317,13 @@ describe('AgentsRunTimeline layout and selection', () => {
 describe('AgentsRunTimeline socket reactions', () => {
   it('replaces existing events on update and displays refreshed tool output', async () => {
     const { getByRole, getByTestId } = renderPage([
-      '/agents/threads/thread-1/runs/run-1?eventId=event-1',
+      `/agents/threads/${THREAD_ID}/runs/${RUN_ID}?eventId=event-1`,
     ]);
+
+    await waitForRunSubscription(RUN_ID);
 
     const listbox = getByRole('listbox');
     const option = within(listbox).getByText('Tool Execution — Search Tool').closest('[role="option"]');
-    expect(option).not.toBeNull();
     if (!option) throw new Error('List option not found');
     expect(within(option).getByText('success')).toBeInTheDocument();
 
@@ -362,11 +343,12 @@ describe('AgentsRunTimeline socket reactions', () => {
     });
 
     await act(async () => {
-      socketMocks.runEvent?.({ runId: 'run-1', event: updated, mutation: 'update' });
+      socketServer.emitRunEvent(RUN_ID, THREAD_ID, { runId: RUN_ID, event: updated, mutation: 'update' });
     });
 
     expect(summaryRefetch).toHaveBeenCalledTimes(1);
     await waitFor(() => expect(within(option).getByText('error')).toBeInTheDocument());
+    expect(graphSocket.getRunCursor(RUN_ID)).toEqual({ ts: updated.ts, id: updated.id });
 
     const details = getByTestId('timeline-event-details');
     expect(details).toHaveTextContent('Tool Execution — Search Tool');
@@ -377,8 +359,10 @@ describe('AgentsRunTimeline socket reactions', () => {
 
   it('merges socket updates and performs cursor catch-up after reconnect', async () => {
     const { findByText, getByTestId, unmount } = renderPage([
-      '/agents/threads/thread-1/runs/run-1?eventId=event-1',
+      `/agents/threads/${THREAD_ID}/runs/${RUN_ID}?eventId=event-1`,
     ]);
+
+    await waitForRunSubscription(RUN_ID);
 
     const appended = buildEvent({
       id: 'event-3',
@@ -394,15 +378,20 @@ describe('AgentsRunTimeline socket reactions', () => {
     });
 
     await act(async () => {
-      socketMocks.runEvent?.({ runId: 'run-1', event: appended, mutation: 'append' });
+      socketServer.emitRunEvent(RUN_ID, THREAD_ID, { runId: RUN_ID, event: appended, mutation: 'append' });
     });
 
     await findByText('Summarization');
     expect(summaryRefetch).toHaveBeenCalledTimes(1);
-    expect(socketMocks.setRunCursor).toHaveBeenCalled();
+    expect(graphSocket.getRunCursor(RUN_ID)).toEqual({ ts: appended.ts, id: appended.id });
 
     await act(async () => {
-      socketMocks.status?.({ run: { id: 'run-1', status: 'finished', createdAt: '', updatedAt: '' } as any });
+      socketServer.emitRunStatusChanged(THREAD_ID, {
+        id: RUN_ID,
+        status: 'finished',
+        createdAt: appended.ts,
+        updatedAt: '2024-01-01T00:00:04.000Z',
+      });
     });
     expect(summaryRefetch).toHaveBeenCalledTimes(2);
 
@@ -422,13 +411,14 @@ describe('AgentsRunTimeline socket reactions', () => {
     });
     runsModule.timelineEvents.mockResolvedValue({ items: [caughtUp], nextCursor: null });
 
+    const socket = graphSocket.connect();
     await act(async () => {
-      socketMocks.reconnect?.();
+      socket.io.emit('reconnect');
       await Promise.resolve();
     });
 
     await waitFor(() => expect(runsModule.timelineEvents).toHaveBeenCalledTimes(1));
-    expect(runsModule.timelineEvents).toHaveBeenCalledWith('run-1', expect.objectContaining({
+    expect(runsModule.timelineEvents).toHaveBeenCalledWith(RUN_ID, expect.objectContaining({
       types: undefined,
       cursorTs: appended.ts,
       cursorId: appended.id,
@@ -446,15 +436,17 @@ describe('AgentsRunTimeline terminate control', () => {
   it('renders terminate button for running runs and triggers termination flow', async () => {
     const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
     const { getByRole } = renderPage([
-      '/agents/threads/thread-1/runs/run-1',
+      `/agents/threads/${THREAD_ID}/runs/${RUN_ID}`,
     ]);
+
+    await waitForRunSubscription(RUN_ID);
 
     const terminateButton = getByRole('button', { name: 'Terminate' });
     await act(async () => {
       fireEvent.click(terminateButton);
     });
 
-    await waitFor(() => expect(runsModule.terminate).toHaveBeenCalledWith('run-1'));
+    await waitFor(() => expect(runsModule.terminate).toHaveBeenCalledWith(RUN_ID));
     expect(confirmSpy).toHaveBeenCalledWith('Terminate this run? This will attempt to stop the active run.');
     expect(notifyMocks.success).toHaveBeenCalledWith('Termination signaled');
     expect(notifyMocks.error).not.toHaveBeenCalled();
@@ -487,7 +479,7 @@ describe('AgentsRunTimeline terminate control', () => {
     });
 
     const { queryByRole } = renderPage([
-      '/agents/threads/thread-1/runs/run-1',
+      `/agents/threads/${THREAD_ID}/runs/${RUN_ID}`,
     ]);
 
     expect(queryByRole('button', { name: 'Terminate' })).toBeNull();
