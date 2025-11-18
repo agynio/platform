@@ -1,6 +1,6 @@
 import { Inject, Injectable, Optional, Scope } from '@nestjs/common';
 import type { IncomingHttpHeaders, Server as HTTPServer } from 'http';
-import { Server as SocketIOServer, type Socket } from 'socket.io';
+import { Server as SocketIOServer, type ServerOptions, type Socket } from 'socket.io';
 import { z } from 'zod';
 import { LoggerService } from '../core/services/logger.service';
 import { LiveGraphRuntime } from '../graph/liveGraph.manager';
@@ -62,7 +62,6 @@ export class GraphSocketGateway implements GraphEventsPublisher {
   private pendingThreads = new Set<string>();
   private metricsTimer: NodeJS.Timeout | null = null;
   private readonly COALESCE_MS = 100;
-  private static debugEnabled: boolean | null = null;
 
   constructor(
     @Inject(LoggerService) private readonly logger: LoggerService,
@@ -78,7 +77,11 @@ export class GraphSocketGateway implements GraphEventsPublisher {
   init(params: { server: HTTPServer }): this {
     if (this.initialized) return this;
     const server = params.server;
-    const options = { path: '/socket.io', transports: ['websocket'], cors: { origin: '*' } } as const;
+    const options: Partial<ServerOptions> = {
+      path: '/socket.io',
+      transports: ['websocket'] as ServerOptions['transports'],
+      cors: { origin: '*' },
+    };
     this.debug('Attaching Socket.IO server', () => options);
     this.io = new SocketIOServer(server, options);
     this.io.on('connection', (socket: Socket) => {
@@ -239,14 +242,7 @@ export class GraphSocketGateway implements GraphEventsPublisher {
     }
   }
 
-  private static isDebugEnabled(): boolean {
-    if (this.debugEnabled !== null) return this.debugEnabled;
-    this.debugEnabled = process.env.GRAPH_SOCKET_DEBUG === 'true';
-    return this.debugEnabled;
-  }
-
   private debug(message: string, payload?: unknown | (() => unknown)) {
-    if (!GraphSocketGateway.isDebugEnabled()) return;
     let value: unknown;
     if (typeof payload === 'function') {
       try {
@@ -289,15 +285,13 @@ export class GraphSocketGateway implements GraphEventsPublisher {
     summaryFactory: () => Record<string, unknown>,
   ) {
     if (!this.io || rooms.length === 0) return;
-    if (GraphSocketGateway.isDebugEnabled()) {
-      let summary: Record<string, unknown> = {};
-      try {
-        summary = summaryFactory();
-      } catch (error) {
-        summary = { summaryError: error instanceof Error ? { message: error.message, name: error.name } : error };
-      }
-      this.logger.debug('GraphSocketGateway emit', { event, rooms, ...summary });
+    let summary: Record<string, unknown> = {};
+    try {
+      summary = summaryFactory();
+    } catch (error) {
+      summary = { summaryError: error instanceof Error ? { message: error.message, name: error.name } : error };
     }
+    this.logger.debug('GraphSocketGateway emit', { event, rooms, ...summary });
     for (const room of rooms) {
       try {
         this.io.to(room).emit(event, payload);
