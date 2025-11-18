@@ -272,6 +272,66 @@ services:
     networks:
       - agents_net
 
+  cadvisor:
+    image: gcr.io/cadvisor/cadvisor:latest
+    container_name: cadvisor
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    volumes:
+      - type: bind
+        source: /var/run/docker.sock
+        target: /var/run/docker.sock
+        read_only: true
+      - type: bind
+        source: /sys
+        target: /sys
+        read_only: true
+      - type: bind
+        source: /var/lib/docker
+        target: /var/lib/docker
+        read_only: true
+    networks:
+      - agents_net
+
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: prometheus
+    restart: unless-stopped
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+      - "--storage.tsdb.retention.time=7d"
+    depends_on:
+      - cadvisor
+    ports:
+      - "9090:9090"
+    volumes:
+      - type: bind
+        source: ./monitoring/prometheus
+        target: /etc/prometheus
+        read_only: true
+      - prometheus-data:/prometheus
+    networks:
+      - agents_net
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: grafana
+    restart: unless-stopped
+    depends_on:
+      - prometheus
+    ports:
+      - "3000:3000"
+    volumes:
+      - type: bind
+        source: ./monitoring/grafana/provisioning
+        target: /etc/grafana/provisioning
+        read_only: true
+      - grafana-data:/var/lib/grafana
+    networks:
+      - agents_net
+
 volumes:
   mongo1_data:
     driver: local
@@ -283,6 +343,10 @@ volumes:
   litellm_pgdata:
     driver: local
   agents_pgdata:
+    driver: local
+  prometheus-data:
+    driver: local
+  grafana-data:
     driver: local
 
 networks:
