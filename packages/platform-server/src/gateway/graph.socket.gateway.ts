@@ -82,14 +82,20 @@ export class GraphSocketGateway implements GraphEventsPublisher {
       transports: ['websocket'] as ServerOptions['transports'],
       cors: { origin: '*' },
     };
-    this.logInfo('Attaching Socket.IO server', () => options);
+    this.logger.info('GraphSocketGateway: attach');
+    this.logger.info('GraphSocketGateway: options', {
+      path: options.path,
+      transports: Array.isArray(options.transports) ? [...options.transports] : options.transports,
+    });
     this.io = new SocketIOServer(server, options);
     this.io.on('connection', (socket: Socket) => {
-      this.logInfo('Client connected', () => ({
+      this.logger.info('GraphSocketGateway: connection', {
         socketId: socket.id,
-        query: this.sanitizeQuery(socket.handshake.query as Record<string, unknown>),
-        headers: this.sanitizeHeaders(socket.handshake.headers),
-      }));
+        handshake: {
+          query: this.sanitizeQuery(socket.handshake.query as Record<string, unknown>),
+          headers: this.sanitizeHeaders(socket.handshake.headers),
+        },
+      });
       // Room subscription
       const RoomSchema = z.union([
         z.literal('threads'),
@@ -101,25 +107,39 @@ export class GraphSocketGateway implements GraphEventsPublisher {
       const SubscribeSchema = z
         .object({ rooms: z.array(RoomSchema).optional(), room: RoomSchema.optional() })
         .strict();
-      socket.on('subscribe', (payload: unknown) => {
+      socket.on('subscribe', (payload: unknown, ack?: (response: unknown) => void) => {
         const parsed = SubscribeSchema.safeParse(payload);
         if (!parsed.success) {
-          this.logger.error('Socket subscribe payload invalid', parsed.error.issues);
+          const details = parsed.error.issues.map((issue) => ({
+            path: issue.path,
+            message: issue.message,
+            code: issue.code,
+          }));
+          this.logger.warn('GraphSocketGateway: subscribe invalid', { socketId: socket.id, issues: details });
+          if (typeof ack === 'function') {
+            ack({ ok: false, error: 'invalid_payload', issues: details });
+          }
           return;
         }
         const p = parsed.data;
         const rooms: string[] = p.rooms ?? (p.room ? [p.room] : []);
-        this.logInfo('Subscribe request', () => ({ socketId: socket.id, rooms }));
+        this.logger.info('GraphSocketGateway: subscribe', { socketId: socket.id, payload: p });
         for (const r of rooms) if (r.length > 0) socket.join(r);
         if (rooms.length > 0) {
-          this.logInfo('Rooms joined', () => ({ socketId: socket.id, rooms }));
+          this.logger.info('GraphSocketGateway: subscribed', { socketId: socket.id, rooms });
+        }
+        if (typeof ack === 'function') {
+          ack({ ok: true, rooms });
         }
       });
       socket.on('disconnect', (reason) => {
-        this.logInfo('Client disconnected', () => ({ socketId: socket.id, reason }));
+        this.logger.info('GraphSocketGateway: disconnect', { socketId: socket.id, reason });
       });
       socket.on('error', (e: unknown) => {
-        this.logger.warn('Graph socket client error', e);
+        this.logger.warn('GraphSocketGateway: socket error', {
+          socketId: socket.id,
+          error: this.toSafeError(e),
+        });
       });
     });
     this.initialized = true;
@@ -250,21 +270,6 @@ export class GraphSocketGateway implements GraphEventsPublisher {
     }
   }
 
-  private logInfo(message: string, payload?: unknown | (() => unknown)) {
-    let value: unknown;
-    if (typeof payload === 'function') {
-      try {
-        value = (payload as () => unknown)();
-      } catch (error) {
-        value = { debugError: error instanceof Error ? { message: error.message, name: error.name } : error };
-      }
-    } else {
-      value = payload;
-    }
-    if (value === undefined) this.logger.info(`GraphSocketGateway ${message}`);
-    else this.logger.info(`GraphSocketGateway ${message}`, value);
-  }
-
   private sanitizeHeaders(headers: IncomingHttpHeaders | undefined): Record<string, unknown> {
     if (!headers) return {};
     const sensitive = new Set(['authorization', 'cookie', 'set-cookie']);
@@ -299,15 +304,26 @@ export class GraphSocketGateway implements GraphEventsPublisher {
     } catch (error) {
       summary = { summaryError: error instanceof Error ? { message: error.message, name: error.name } : error };
     }
-    this.logger.info('GraphSocketGateway emit', { event, rooms, ...summary });
+    this.logger.info('GraphSocketGateway: emit', { event, rooms, ...summary });
     for (const room of rooms) {
       try {
         this.io.to(room).emit(event, payload);
       } catch (error) {
         const errPayload =
           error instanceof Error ? { name: error.name, message: error.message } : { message: String(error) };
-        this.logger.warn('GraphSocketGateway emit error', { event, room, error: errPayload });
+        this.logger.warn('GraphSocketGateway: emit error', { event, room, error: errPayload });
       }
+    }
+  }
+
+  private toSafeError(error: unknown): { name?: string; message: string } {
+    if (error instanceof Error) {
+      return { name: error.name, message: error.message };
+    }
+    try {
+      return { message: JSON.stringify(error) };
+    } catch {
+      return { message: String(error) };
     }
   }
 }
