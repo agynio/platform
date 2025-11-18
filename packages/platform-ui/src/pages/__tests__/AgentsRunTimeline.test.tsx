@@ -197,7 +197,7 @@ function renderPage(initialEntries: string[]) {
       <MemoryRouter initialEntries={initialEntries}>
         <Routes>
           <Route
-            path="/agents/threads/:threadId/runs/:runId"
+            path="/agents/threads/:threadId/runs/:runId/timeline"
             element={(
               <>
                 <AgentsRunTimeline />
@@ -307,7 +307,7 @@ afterEach(() => {
 describe('AgentsRunTimeline layout and selection', () => {
   it('renders list/detail columns, honors URL selection, and supports keyboard navigation', async () => {
     const { getByRole, getByText, getByTestId } = renderPage([
-      '/agents/threads/thread-1/runs/run-1?eventId=event-2',
+      '/agents/threads/thread-1/runs/run-1/timeline?eventId=event-2',
     ]);
 
     expect(socketMocks.subscribe).toHaveBeenCalledWith(['run:run-1']);
@@ -334,7 +334,7 @@ describe('AgentsRunTimeline layout and selection', () => {
   it('opens details in an accessible modal on mobile and clears selection on close', () => {
     setMatchMedia(false);
     const { getAllByText, queryByRole, getByRole, getByTestId } = renderPage([
-      '/agents/threads/thread-1/runs/run-1',
+      '/agents/threads/thread-1/runs/run-1/timeline',
     ]);
 
     const firstItem = getAllByText('Tool Execution — Search Tool')[0];
@@ -354,7 +354,7 @@ describe('AgentsRunTimeline layout and selection', () => {
 describe('AgentsRunTimeline socket reactions', () => {
   it('replaces existing events on update and displays refreshed tool output', async () => {
     const { getByRole, getByTestId } = renderPage([
-      '/agents/threads/thread-1/runs/run-1?eventId=event-1',
+      '/agents/threads/thread-1/runs/run-1/timeline?eventId=event-1',
     ]);
 
     const listbox = getByRole('listbox');
@@ -394,7 +394,7 @@ describe('AgentsRunTimeline socket reactions', () => {
 
   it('merges socket updates and performs cursor catch-up after reconnect', async () => {
     const { findByText, getByTestId, unmount } = renderPage([
-      '/agents/threads/thread-1/runs/run-1?eventId=event-1',
+      '/agents/threads/thread-1/runs/run-1/timeline?eventId=event-1',
     ]);
 
     const appended = buildEvent({
@@ -463,7 +463,7 @@ describe('AgentsRunTimeline terminate control', () => {
   it('renders terminate button for running runs and triggers termination flow', async () => {
     const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
     const { getByRole } = renderPage([
-      '/agents/threads/thread-1/runs/run-1?eventId=event-10',
+      '/agents/threads/thread-1/runs/run-1/timeline?eventId=event-10',
     ]);
 
     const terminateButton = getByRole('button', { name: 'Terminate' });
@@ -504,7 +504,7 @@ describe('AgentsRunTimeline terminate control', () => {
     eventsMock.mockImplementation(() => eventsQueryState);
 
     const { queryByRole } = renderPage([
-      '/agents/threads/thread-1/runs/run-1',
+      '/agents/threads/thread-1/runs/run-1/timeline',
     ]);
 
     expect(queryByRole('button', { name: 'Terminate' })).toBeNull();
@@ -521,7 +521,7 @@ describe('AgentsRunTimeline pagination and scrolling', () => {
     });
 
     const { getByRole } = renderPage([
-      '/agents/threads/thread-1/runs/run-1?eventId=event-2',
+      '/agents/threads/thread-1/runs/run-1/timeline?eventId=event-2',
     ]);
 
     expect(eventsMock).toHaveBeenCalledWith('run-1', expect.objectContaining({ limit: 100, order: 'desc' }));
@@ -596,7 +596,7 @@ describe('AgentsRunTimeline pagination and scrolling', () => {
     });
 
     const { getByRole, queryByRole, getByText } = renderPage([
-      '/agents/threads/thread-1/runs/run-1',
+      '/agents/threads/thread-1/runs/run-1/timeline',
     ]);
 
     const listbox = getByRole('listbox');
@@ -691,7 +691,7 @@ describe('AgentsRunTimeline pagination and scrolling', () => {
     });
 
     const { getByRole, findByText } = renderPage([
-      '/agents/threads/thread-1/runs/run-1',
+      '/agents/threads/thread-1/runs/run-1/timeline',
     ]);
 
     const listbox = getByRole('listbox');
@@ -784,7 +784,7 @@ describe('AgentsRunTimeline filter refetch reconciliation', () => {
     });
 
     const { getByRole, findByText } = renderPage([
-      '/agents/threads/thread-1/runs/run-1',
+      '/agents/threads/thread-1/runs/run-1/timeline',
     ]);
 
     const listbox = getByRole('listbox');
@@ -901,7 +901,7 @@ describe('AgentsRunTimeline load older resilience', () => {
     };
 
     const { getByRole, findByText, queryByRole } = renderPage([
-      '/agents/threads/thread-1/runs/run-1',
+      '/agents/threads/thread-1/runs/run-1/timeline',
     ]);
 
     const listbox = getByRole('listbox');
@@ -993,7 +993,7 @@ describe('AgentsRunTimeline load older regressions', () => {
     };
 
     const { getByRole } = renderPage([
-      '/agents/threads/thread-1/runs/run-1?eventId=event-3',
+      '/agents/threads/thread-1/runs/run-1/timeline?eventId=event-3',
     ]);
 
     const listbox = getByRole('listbox');
@@ -1086,7 +1086,7 @@ describe('AgentsRunTimeline load older regressions', () => {
     };
 
     const { getByRole } = renderPage([
-      '/agents/threads/thread-1/runs/run-1',
+      '/agents/threads/thread-1/runs/run-1/timeline',
     ]);
 
     const listbox = getByRole('listbox');
@@ -1181,7 +1181,7 @@ describe('AgentsRunTimeline load older regressions', () => {
     };
 
     const { getByRole } = renderPage([
-      '/agents/threads/thread-1/runs/run-1',
+      '/agents/threads/thread-1/runs/run-1/timeline',
     ]);
 
     const listbox = getByRole('listbox');
@@ -1283,7 +1283,7 @@ describe('AgentsRunTimeline load older regressions', () => {
     };
 
     const { getByRole } = renderPage([
-      '/agents/threads/thread-1/runs/run-1',
+      '/agents/threads/thread-1/runs/run-1/timeline',
     ]);
 
     const listbox = getByRole('listbox');
@@ -1353,7 +1353,7 @@ describe('AgentsRunTimeline load older regressions', () => {
     };
 
     const { getByRole } = renderPage([
-      '/agents/threads/thread-1/runs/run-1',
+      '/agents/threads/thread-1/runs/run-1/timeline',
     ]);
 
     const typeButtons = {
@@ -1435,7 +1435,7 @@ describe('AgentsRunTimeline load older regressions', () => {
     };
 
     const { getByRole } = renderPage([
-      '/agents/threads/thread-1/runs/run-1',
+      '/agents/threads/thread-1/runs/run-1/timeline',
     ]);
 
     const listbox = getByRole('listbox');
