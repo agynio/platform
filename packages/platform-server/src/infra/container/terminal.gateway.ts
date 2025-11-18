@@ -1,8 +1,8 @@
 import { Inject, Injectable } from '@nestjs/common';
-import websocketPlugin from '@fastify/websocket';
-import type { WebsocketHandler } from '@fastify/websocket';
 import type { FastifyInstance, FastifyRequest } from 'fastify';
-import WebSocket, { type RawData } from 'ws';
+import type { IncomingHttpHeaders, IncomingMessage } from 'http';
+import type { Duplex } from 'stream';
+import WebSocket, { WebSocketServer, type RawData } from 'ws';
 import { z } from 'zod';
 import { TerminalSessionsService, type TerminalSessionRecord } from './terminal.sessions.service';
 import { ContainerService } from './container.service';
@@ -19,7 +19,7 @@ const IncomingMessageSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('close') }),
 ]);
 
-type SocketStream = Parameters<WebsocketHandler>[0] & { socket?: WebSocket };
+type SocketStream = { socket?: WebSocket };
 
 type WsLike = {
   readyState: number;
@@ -141,6 +141,7 @@ const rawDataToUtf8 = (raw: RawDataLike): string => {
 @Injectable()
 export class ContainerTerminalGateway {
   private registered = false;
+  private wss: WebSocketServer | null = null;
 
   constructor(
     @Inject(TerminalSessionsService) private readonly sessions: TerminalSessionsService,
@@ -150,14 +151,57 @@ export class ContainerTerminalGateway {
 
   registerRoutes(fastify: FastifyInstance): void {
     if (this.registered) return;
-    fastify.register(websocketPlugin);
-    fastify.after(() => {
-      fastify.get('/api/containers/:containerId/terminal/ws', { websocket: true }, (connection, request) => {
-        void this.handleConnection(connection as SocketStream, request);
+    this.wss = new WebSocketServer({ noServer: true });
+    const sanitizeHeaders = (headers: IncomingHttpHeaders | undefined): Record<string, unknown> => {
+      if (!headers) return {};
+      const sensitive = new Set(['authorization', 'cookie', 'set-cookie']);
+      const sanitized: Record<string, unknown> = {};
+      for (const [key, value] of Object.entries(headers)) {
+        if (!key) continue;
+        sanitized[key] = sensitive.has(key.toLowerCase()) ? '[REDACTED]' : value;
+      }
+      return sanitized;
+    };
+
+    const sanitizeQuery = (params: URLSearchParams): Record<string, string> => {
+      const sanitized: Record<string, string> = {};
+      for (const [key, value] of params.entries()) {
+        sanitized[key] = key.toLowerCase() === 'token' ? '[REDACTED]' : value;
+      }
+      return sanitized;
+    };
+
+    fastify.server.on('upgrade', (req: IncomingMessage, socket: Duplex, head: Buffer) => {
+      const rawUrl = req.url ?? '';
+      let url: URL | null = null;
+      try {
+        url = new URL(rawUrl, 'http://localhost');
+      } catch {
+        return;
+      }
+      const pathname = url.pathname;
+      const match = pathname.match(/^\/api\/containers\/([0-9a-fA-F-]{8}-[0-9a-fA-F-]{4}-[0-9a-fA-F-]{4}-[0-9a-fA-F-]{4}-[0-9a-fA-F-]{12})\/terminal\/ws$/);
+      if (!match) return;
+      const containerId = match[1];
+      const wss = this.wss;
+      if (!wss) return;
+      this.logger.info('Terminal WS upgrade handled', {
+        url: pathname,
+        containerId,
+        query: sanitizeQuery(url.searchParams),
+        headers: sanitizeHeaders(req.headers),
+      });
+      wss.handleUpgrade(req, socket, head, (ws) => {
+        const stream: SocketStream = { socket: ws };
+        const fakeReq = {
+          params: { containerId },
+          query: Object.fromEntries(url.searchParams.entries()),
+        } as unknown as FastifyRequest;
+        void this.handleConnection(stream, fakeReq);
       });
     });
     this.registered = true;
-    this.logger.info('Container terminal WebSocket registered');
+    this.logger.info('Container terminal WebSocket upgrade handler registered');
   }
 
   private async handleConnection(connection: SocketStream, request: FastifyRequest): Promise<void> {

@@ -56,7 +56,11 @@ async function bootstrap() {
   const terminalGateway = app.get(ContainerTerminalGateway);
   terminalGateway.registerRoutes(fastifyInstance);
 
-  // Start Fastify then attach Socket.io
+  // Attach Socket.IO gateway via DI before starting server
+  const gateway = app.get(GraphSocketGateway);
+  gateway.init({ server: fastify.server });
+
+  // Start Fastify HTTP server
   const PORT = Number(process.env.PORT) || 3010;
   await fastifyInstance.listen({ port: PORT, host: '0.0.0.0' });
   logger.info(`HTTP server listening on :${PORT}`);
@@ -67,10 +71,6 @@ async function bootstrap() {
       headers: sanitizeHeaders(req.headers),
     });
   });
-
-  // Attach Socket.IO gateway via DI and explicit init
-  const gateway = app.get(GraphSocketGateway);
-  gateway.init({ server: fastify.server });
 
   // Load graph
   const liveGraphRuntime = app.get(LiveGraphRuntime);
