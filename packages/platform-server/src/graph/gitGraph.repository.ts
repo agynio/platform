@@ -342,28 +342,40 @@ export class GitGraphRepository extends GraphRepository {
 
   private async ensureBranch(branch: string) {
     // Try to checkout branch; if missing, create
+    const root = this.config.graphRepoPath;
     try {
-      await this.runGit(['rev-parse', '--verify', branch], this.config.graphRepoPath);
+      await this.runGit(['rev-parse', '--verify', branch], root);
+      await this.runGit(['checkout', branch], root);
+      return;
     } catch {
-      await this.runGit(['branch', branch], this.config.graphRepoPath);
+      // branch missing or HEAD unborn; fall through to create/attach
     }
-    await this.runGit(['checkout', branch], this.config.graphRepoPath);
+
+    try {
+      await this.runGit(['checkout', '-B', branch], root);
+    } catch (err) {
+      try {
+        await this.runGit(['checkout', '--orphan', branch], root);
+      } catch {
+        throw err;
+      }
+    }
   }
 
   private commit(message: string, author?: { name?: string; email?: string }): Promise<void> {
     // Prefer CLI args over env: --author and -c user.name/email for committer
     const args: string[] = [];
-    // Configure committer when defaults are present (graphAuthorName/Email)
-    const committerName = this.config.graphAuthorName;
-    const committerEmail = this.config.graphAuthorEmail;
+    const defaults = this.defaultAuthor();
+    const committerName = defaults.name;
+    const committerEmail = defaults.email;
     if (committerName) args.push('-c', `user.name=${committerName}`);
     if (committerEmail) args.push('-c', `user.email=${committerEmail}`);
     args.push('commit');
-    if (author?.name || author?.email) {
-      const aName = author?.name || committerName || '';
-      const aEmail = author?.email || committerEmail || '';
-      if (aName || aEmail) args.push('--author', `${aName} <${aEmail}>`);
-    }
+    const resolvedAuthor = {
+      name: (author?.name ?? committerName)?.trim() || committerName,
+      email: (author?.email ?? committerEmail)?.trim() || committerEmail,
+    };
+    args.push('--author', `${resolvedAuthor.name} <${resolvedAuthor.email}>`);
     args.push('-m', message);
     return new Promise((resolve, reject) => {
       const child = spawn('git', args, { cwd: this.config.graphRepoPath });
@@ -720,12 +732,11 @@ export class GitGraphRepository extends GraphRepository {
     }
     return { edgeAdds, edgeUpdates, edgeDeletes };
   }
-  private defaultAuthor(): { name?: string; email?: string } | undefined {
-    const name = this.config.graphAuthorName;
-    const email = this.config.graphAuthorEmail;
-    if (!name && !email) {
-      return undefined;
-    }
+  private defaultAuthor(): { name: string; email: string } {
+    const fallbackName = 'CI Runner';
+    const fallbackEmail = 'ci@example.com';
+    const name = this.config.graphAuthorName?.trim() || fallbackName;
+    const email = this.config.graphAuthorEmail?.trim() || fallbackEmail;
     return { name, email };
   }
 }
