@@ -16,7 +16,10 @@ Getting started
  - Before running tests, run `pnpm prisma:generate`.
 
 Development services
-- docker compose up -d mongo1 mongo-setup mongo-express jaeger
+- docker compose up -d
+  - Prometheus: http://localhost:9090
+  - Grafana: http://localhost:3000 (default admin/admin)
+  - cAdvisor: http://localhost:8080
 - Optional: start Vault for dev secret flows: `docker compose up -d vault vault-init`
   - Set VAULT_ENABLED=true, VAULT_ADDR, VAULT_TOKEN in packages/platform-server/.env
   - See docs/security/vault.md
