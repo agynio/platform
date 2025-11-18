@@ -229,6 +229,16 @@ function setMatchMedia(matches: boolean) {
   });
 }
 
+function createDeferred<T>() {
+  let resolve!: (value: T | PromiseLike<T>) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((res, rej) => {
+    resolve = res;
+    reject = rej;
+  });
+  return { promise, resolve, reject };
+}
+
 beforeEach(() => {
   socketMocks.runEvent = null;
   socketMocks.status = null;
@@ -944,5 +954,333 @@ describe('AgentsRunTimeline load older resilience', () => {
     const options = within(listbox).getAllByRole('option');
     expect(options[0]).toHaveAttribute('id', 'run-event-option-event-0');
     expect(options[options.length - 1]).toHaveAttribute('id', 'run-event-option-event-2');
+  });
+});
+
+describe('AgentsRunTimeline load older regressions', () => {
+  it('Case A: prepends older events in ascending order', async () => {
+    const olderCursor: RunTimelineEventsCursor = {
+      id: 'cursor-1',
+      ts: '2023-12-31T23:59:59.000Z',
+    };
+
+    const initialEvents = [
+      buildEvent({
+        id: 'event-9',
+        ts: '2024-01-01T00:00:09.000Z',
+      }),
+      buildEvent({
+        id: 'event-10',
+        ts: '2024-01-01T00:00:10.000Z',
+        toolExecution: {
+          toolName: 'Latest tool',
+          toolCallId: 'call-latest',
+          execStatus: 'success',
+          input: {},
+          output: {},
+          errorMessage: null,
+          raw: null,
+        },
+      }),
+    ];
+
+    eventsQueryState = {
+      data: { items: initialEvents, nextCursor: olderCursor },
+      isFetching: false,
+      isError: false,
+      error: null,
+      refetch: eventsRefetch,
+    };
+
+    const { getByRole } = renderPage([
+      '/agents/threads/thread-1/runs/run-1',
+    ]);
+
+    const listbox = getByRole('listbox');
+    await within(listbox).findByText('Tool Execution — Latest tool');
+
+    const button = getByRole('button', { name: 'Load older events' });
+
+    const olderEvent = buildEvent({
+      id: 'event-8',
+      ts: '2023-12-31T23:59:58.000Z',
+      type: 'summarization',
+      summarization: {
+        summaryText: 'Older summary',
+        newContextCount: 0,
+        oldContextTokens: null,
+        raw: null,
+      },
+    });
+
+    runsModule.timelineEvents.mockResolvedValueOnce({
+      items: [olderEvent],
+      nextCursor: null,
+    });
+
+    await act(async () => {
+      fireEvent.click(button);
+      await Promise.resolve();
+    });
+
+    const options = within(listbox).getAllByRole('option');
+    expect(options.map((option) => option.getAttribute('id'))).toEqual([
+      'run-event-option-event-8',
+      'run-event-option-event-9',
+      'run-event-option-event-10',
+    ]);
+    expect(within(listbox).getByText('Summarization')).toBeInTheDocument();
+  });
+
+  it('Case B: honors latest filters during in-flight load older resolution', async () => {
+    const olderCursor: RunTimelineEventsCursor = {
+      id: 'cursor-1',
+      ts: '2023-12-31T23:59:59.000Z',
+    };
+
+    const initialEvents = [
+      buildEvent({
+        id: 'event-1',
+        ts: '2024-01-01T00:00:00.000Z',
+        type: 'summarization',
+        summarization: {
+          summaryText: 'summary',
+          newContextCount: 0,
+          oldContextTokens: null,
+          raw: null,
+        },
+      }),
+      buildEvent({
+        id: 'event-2',
+        ts: '2024-01-01T00:00:01.000Z',
+        toolExecution: {
+          toolName: 'Tool after summary',
+          toolCallId: 'call-2',
+          execStatus: 'success',
+          input: {},
+          output: {},
+          errorMessage: null,
+          raw: null,
+        },
+      }),
+    ];
+
+    eventsQueryState = {
+      data: { items: initialEvents, nextCursor: olderCursor },
+      isFetching: false,
+      isError: false,
+      error: null,
+      refetch: eventsRefetch,
+    };
+
+    const { getByRole } = renderPage([
+      '/agents/threads/thread-1/runs/run-1',
+    ]);
+
+    const listbox = getByRole('listbox');
+    await within(listbox).findByText('Summarization');
+
+    const toggleMessages = getByRole('button', { name: 'Messages' });
+    const toggleLLM = getByRole('button', { name: 'LLM' });
+    const toggleTools = getByRole('button', { name: 'Tools' });
+    const toggleInjected = getByRole('button', { name: 'Injected' });
+    const toggleSummaries = getByRole('button', { name: 'Summaries' });
+
+    await act(async () => {
+      fireEvent.click(toggleMessages);
+      fireEvent.click(toggleLLM);
+      fireEvent.click(toggleTools);
+      fireEvent.click(toggleInjected);
+    });
+
+    await waitFor(() => {
+      expect(within(listbox).queryByText('Tool Execution — Tool after summary')).not.toBeInTheDocument();
+      expect(within(listbox).getByText('Summarization')).toBeInTheDocument();
+    });
+
+    const deferred = createDeferred<{ items: RunTimelineEvent[]; nextCursor: RunTimelineEventsCursor | null }>();
+    runsModule.timelineEvents.mockReturnValueOnce(deferred.promise);
+
+    const button = getByRole('button', { name: 'Load older events' });
+
+    await act(async () => {
+      fireEvent.click(button);
+    });
+
+    await waitFor(() => expect(runsModule.timelineEvents).toHaveBeenCalledTimes(1));
+
+    await act(async () => {
+      fireEvent.click(toggleTools);
+      fireEvent.click(toggleSummaries);
+    });
+
+    const matchingOlderEvent = buildEvent({
+      id: 'event-0',
+      ts: '2023-12-31T23:59:58.000Z',
+      toolExecution: {
+        toolName: 'Older tool',
+        toolCallId: 'call-0',
+        execStatus: 'success',
+        input: {},
+        output: {},
+        errorMessage: null,
+        raw: null,
+      },
+    });
+
+    await act(async () => {
+      deferred.resolve({
+        items: [matchingOlderEvent],
+        nextCursor: null,
+      });
+      await deferred.promise;
+    });
+
+    await waitFor(() => {
+      expect(within(listbox).getByText('Tool Execution — Older tool')).toBeInTheDocument();
+    });
+  });
+
+  it('Case C: retains older history after reconnect-triggered refetch fallback', async () => {
+    const olderCursor: RunTimelineEventsCursor = {
+      id: 'cursor-1',
+      ts: '2023-12-31T23:59:59.000Z',
+    };
+
+    const initialEvents = [
+      buildEvent({
+        id: 'event-1',
+        ts: '2024-01-01T00:00:00.000Z',
+      }),
+      buildEvent({
+        id: 'event-2',
+        ts: '2024-01-01T00:00:02.000Z',
+        toolExecution: {
+          toolName: 'Latest tool',
+          toolCallId: 'call-2',
+          execStatus: 'success',
+          input: {},
+          output: {},
+          errorMessage: null,
+          raw: null,
+        },
+      }),
+    ];
+
+    eventsQueryState = {
+      data: { items: initialEvents, nextCursor: olderCursor },
+      isFetching: false,
+      isError: false,
+      error: null,
+      refetch: eventsRefetch,
+    };
+
+    const { getByRole } = renderPage([
+      '/agents/threads/thread-1/runs/run-1',
+    ]);
+
+    const listbox = getByRole('listbox');
+    await within(listbox).findByText('Tool Execution — Latest tool');
+
+    runsModule.timelineEvents.mockResolvedValueOnce({
+      items: [
+        buildEvent({
+          id: 'event-0',
+          ts: '2023-12-31T23:59:58.000Z',
+          type: 'summarization',
+          summarization: {
+            summaryText: 'Older summary',
+            newContextCount: 0,
+            oldContextTokens: null,
+            raw: null,
+          },
+        }),
+      ],
+      nextCursor: null,
+    });
+
+    await act(async () => {
+      fireEvent.click(getByRole('button', { name: 'Load older events' }));
+      await Promise.resolve();
+    });
+
+    expect(within(listbox).getByText('Summarization')).toBeInTheDocument();
+
+    runsModule.timelineEvents.mockRejectedValueOnce(new Error('network'));
+    eventsRefetch.mockImplementation(async () => {
+      eventsQueryState = {
+        ...eventsQueryState,
+        data: { items: initialEvents, nextCursor: olderCursor },
+      };
+    });
+
+    await act(async () => {
+      socketMocks.reconnect?.();
+      await Promise.resolve();
+    });
+
+    const options = within(listbox).getAllByRole('option');
+    expect(options[0]).toHaveAttribute('id', 'run-event-option-event-0');
+    expect(options[options.length - 1]).toHaveAttribute('id', 'run-event-option-event-2');
+  });
+
+  it('Case D: includes cursor, limit, order, and filters in load older call', async () => {
+    const olderCursor: RunTimelineEventsCursor = {
+      id: 'cursor-1',
+      ts: '2023-12-31T23:59:59.000Z',
+    };
+
+    const initialEvents = [
+      buildEvent({
+        id: 'event-1',
+        ts: '2024-01-01T00:00:00.000Z',
+      }),
+    ];
+
+    eventsQueryState = {
+      data: { items: initialEvents, nextCursor: olderCursor },
+      isFetching: false,
+      isError: false,
+      error: null,
+      refetch: eventsRefetch,
+    };
+
+    const { getByRole } = renderPage([
+      '/agents/threads/thread-1/runs/run-1',
+    ]);
+
+    const typeButtons = {
+      messages: getByRole('button', { name: 'Messages' }),
+      llm: getByRole('button', { name: 'LLM' }),
+      summaries: getByRole('button', { name: 'Summaries' }),
+      injected: getByRole('button', { name: 'Injected' }),
+    };
+    const statusSuccess = getByRole('button', { name: 'success' });
+
+    await act(async () => {
+      fireEvent.click(typeButtons.messages);
+      fireEvent.click(typeButtons.llm);
+      fireEvent.click(typeButtons.summaries);
+      fireEvent.click(typeButtons.injected);
+      fireEvent.click(statusSuccess);
+    });
+
+    runsModule.timelineEvents.mockResolvedValueOnce({ items: [], nextCursor: null });
+
+    await act(async () => {
+      fireEvent.click(getByRole('button', { name: 'Load older events' }));
+      await Promise.resolve();
+    });
+
+    expect(runsModule.timelineEvents).toHaveBeenCalledTimes(1);
+    const [, params] = runsModule.timelineEvents.mock.calls[0];
+    expect(params).toMatchObject({
+      cursorTs: olderCursor.ts,
+      cursorId: olderCursor.id,
+      order: 'desc',
+      limit: 100,
+      types: 'tool_execution',
+      statuses: 'success',
+    });
   });
 });

@@ -117,7 +117,7 @@ export function AgentsRunTimeline() {
   const { data: summaryData, refetch: refetchSummary } = summaryQuery;
   const eventsQuery = useRunTimelineEvents(runId, { types: apiTypes, statuses: apiStatuses, limit: 100, order: 'desc' });
   const [events, setEvents] = useState<RunTimelineEvent[]>([]);
-  const [nextCursor, setNextCursor] = useState<RunTimelineEventsCursor | null>(null);
+  const [nextCursor, setNextCursorState] = useState<RunTimelineEventsCursor | null>(null);
   const [loadingOlder, setLoadingOlder] = useState(false);
   const [loadOlderError, setLoadOlderError] = useState<string | null>(null);
   const cursorRef = useRef<RunTimelineEventsCursor | null>(null);
@@ -129,7 +129,46 @@ export function AgentsRunTimeline() {
   const lastRunIdRef = useRef<string | undefined>(undefined);
   const lastFilterKeyRef = useRef<string>('');
   const reachedHistoryEndRef = useRef(false);
+  const olderCursorRef = useRef<RunTimelineEventsCursor | null>(null);
   const canTerminate = summaryData?.status === 'running';
+
+  const updateOlderCursor = useCallback(
+    (
+      update:
+        | RunTimelineEventsCursor
+        | null
+        | ((prev: RunTimelineEventsCursor | null) => RunTimelineEventsCursor | null),
+    ) => {
+      const next =
+        typeof update === 'function'
+          ? (update as (prev: RunTimelineEventsCursor | null) => RunTimelineEventsCursor | null)(olderCursorRef.current)
+          : update;
+      olderCursorRef.current = next;
+      setNextCursorState(next);
+    },
+    [],
+  );
+
+  const selectedTypesRef = useRef(selectedTypes);
+  const selectedStatusesRef = useRef(selectedStatuses);
+  const apiTypesRef = useRef(apiTypes);
+  const apiStatusesRef = useRef(apiStatuses);
+
+  useEffect(() => {
+    selectedTypesRef.current = selectedTypes;
+  }, [selectedTypes]);
+
+  useEffect(() => {
+    selectedStatusesRef.current = selectedStatuses;
+  }, [selectedStatuses]);
+
+  useEffect(() => {
+    apiTypesRef.current = apiTypes;
+  }, [apiTypes]);
+
+  useEffect(() => {
+    apiStatusesRef.current = apiStatuses;
+  }, [apiStatuses]);
 
   const setCursor = useCallback(
     (cursor: RunTimelineEventsCursor | null, opts?: { force?: boolean }) => {
@@ -179,7 +218,7 @@ export function AgentsRunTimeline() {
       replaceEventsRef.current = true;
       hasAutoScrolledRef.current = false;
       pendingScrollAdjustmentRef.current = null;
-      setNextCursor(null);
+      updateOlderCursor(null);
       reachedHistoryEndRef.current = false;
       setLoadOlderError(null);
       setLoadingOlder(false);
@@ -192,7 +231,7 @@ export function AgentsRunTimeline() {
     }
 
     if (previousFilterKey !== currentFilterKey) {
-      setNextCursor(null);
+      updateOlderCursor(null);
       reachedHistoryEndRef.current = false;
       setLoadOlderError(null);
       setLoadingOlder(false);
@@ -204,7 +243,7 @@ export function AgentsRunTimeline() {
         return prev.filter((evt) => matchesFilters(evt, selectedTypes, selectedStatuses));
       });
     }
-  }, [runId, selectedTypes, selectedStatuses, setCursor, updateEventsState]);
+  }, [runId, selectedTypes, selectedStatuses, setCursor, updateEventsState, updateOlderCursor]);
 
   useEffect(() => {
     if (!eventsQuery.data) return;
@@ -219,15 +258,15 @@ export function AgentsRunTimeline() {
     replaceEventsRef.current = false;
     if (!queryCursor) {
       reachedHistoryEndRef.current = true;
-      setNextCursor(null);
+      updateOlderCursor(null);
     } else if (!reachedHistoryEndRef.current) {
       reachedHistoryEndRef.current = false;
-      setNextCursor((prev) => {
+      updateOlderCursor((prev) => {
         if (!prev) return queryCursor;
         return compareCursors(queryCursor, prev) < 0 ? queryCursor : prev;
       });
     }
-  }, [eventsQuery.data, selectedTypes, selectedStatuses, updateEventsState]);
+  }, [eventsQuery.data, selectedTypes, selectedStatuses, updateEventsState, updateOlderCursor]);
 
   const fetchSinceCursor = useCallback(() => {
     if (!runId) return Promise.resolve();
@@ -244,14 +283,19 @@ export function AgentsRunTimeline() {
 
     const promise = (async () => {
       try {
+        const currentApiTypes = apiTypesRef.current;
+        const currentApiStatuses = apiStatusesRef.current;
         const response = await runs.timelineEvents(runId, {
-          types: apiTypes.length > 0 ? apiTypes.join(',') : undefined,
+          types: currentApiTypes.length > 0 ? currentApiTypes.join(',') : undefined,
+          statuses: currentApiStatuses.length > 0 ? currentApiStatuses.join(',') : undefined,
           cursorTs: cursor.ts,
           cursorId: cursor.id,
         });
         const items = response.items ?? [];
         if (items.length > 0) {
-          updateEventsState((prev) => mergeEvents(prev, items, selectedTypes, selectedStatuses));
+          const latestSelectedTypes = selectedTypesRef.current;
+          const latestSelectedStatuses = selectedStatusesRef.current;
+          updateEventsState((prev) => mergeEvents(prev, items, latestSelectedTypes, latestSelectedStatuses));
           const newest = items[items.length - 1];
           if (newest) setCursor(toCursor(newest));
         }
@@ -264,7 +308,7 @@ export function AgentsRunTimeline() {
       catchUpRef.current = null;
     });
     return catchUpRef.current;
-  }, [runId, apiTypes, selectedTypes, selectedStatuses, eventsQuery, updateEventsState, setCursor]);
+  }, [runId, eventsQuery, updateEventsState, setCursor]);
 
   const handleTerminate = useCallback(async () => {
     if (!runId) return;
@@ -422,7 +466,9 @@ export function AgentsRunTimeline() {
   }, [setSearchParams]);
 
   const loadOlderEvents = useCallback(async () => {
-    if (!runId || !nextCursor || loadingOlderRef.current) return;
+    if (!runId) return;
+    const cursor = olderCursorRef.current;
+    if (!cursor || loadingOlderRef.current) return;
     loadingOlderRef.current = true;
     setLoadingOlder(true);
     setLoadOlderError(null);
@@ -436,24 +482,28 @@ export function AgentsRunTimeline() {
       pendingScrollAdjustmentRef.current = null;
     }
     try {
+      const currentApiTypes = apiTypesRef.current;
+      const currentApiStatuses = apiStatusesRef.current;
       const response = await runs.timelineEvents(runId, {
-        types: apiTypes.length > 0 ? apiTypes.join(',') : undefined,
-        statuses: apiStatuses.length > 0 ? apiStatuses.join(',') : undefined,
+        types: currentApiTypes.length > 0 ? currentApiTypes.join(',') : undefined,
+        statuses: currentApiStatuses.length > 0 ? currentApiStatuses.join(',') : undefined,
         limit: 100,
         order: 'desc',
-        cursorTs: nextCursor.ts,
-        cursorId: nextCursor.id,
+        cursorTs: cursor.ts,
+        cursorId: cursor.id,
       });
       const items = response.items ?? [];
       if (response.nextCursor) {
         reachedHistoryEndRef.current = false;
-        setNextCursor(response.nextCursor);
+        updateOlderCursor(response.nextCursor);
       } else {
         reachedHistoryEndRef.current = true;
-        setNextCursor(null);
+        updateOlderCursor(null);
       }
       if (items.length > 0) {
-        updateEventsState((prev) => mergeEvents(prev, items, selectedTypes, selectedStatuses));
+        const latestSelectedTypes = selectedTypesRef.current;
+        const latestSelectedStatuses = selectedStatusesRef.current;
+        updateEventsState((prev) => mergeEvents(prev, items, latestSelectedTypes, latestSelectedStatuses));
       } else {
         pendingScrollAdjustmentRef.current = null;
       }
@@ -464,7 +514,7 @@ export function AgentsRunTimeline() {
       loadingOlderRef.current = false;
       setLoadingOlder(false);
     }
-  }, [runId, nextCursor, apiTypes, apiStatuses, updateEventsState, selectedTypes, selectedStatuses]);
+  }, [runId, updateEventsState, updateOlderCursor]);
 
   useEffect(() => {
     if (hasAutoScrolledRef.current) return;
