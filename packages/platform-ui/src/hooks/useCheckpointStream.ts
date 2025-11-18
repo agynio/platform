@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { io, type Socket } from 'socket.io-client';
+import { io, type Socket, type ManagerOptions, type SocketOptions } from 'socket.io-client';
 import { getSocketBaseUrl } from '@/config';
 import { createSocketLogger } from '@/lib/debug/socketDebug';
 
@@ -87,8 +87,9 @@ export function useCheckpointStream({
       setStatus('idle');
       return () => {};
     }
-    const socketOptions = { transports: ['websocket'] } as const;
-    log('connecting to checkpoint socket', () => ({ url, options: { ...socketOptions } }));
+    const transports: ManagerOptions['transports'] = ['websocket'];
+    const socketOptions: Partial<ManagerOptions & SocketOptions> = { transports };
+    log('connecting to checkpoint socket', () => ({ url, options: { ...socketOptions, transports: [...(transports ?? [])] } }));
     const socket = io(url, socketOptions);
     socketRef.current = socket;
 

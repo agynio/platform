@@ -1,5 +1,5 @@
 // CI trigger: no-op comment to touch UI file
-import { io, type Socket } from 'socket.io-client';
+import { io, type ManagerOptions, type Socket, type SocketOptions } from 'socket.io-client';
 import { getSocketBaseUrl } from '@/config';
 import { createSocketLogger } from '@/lib/debug/socketDebug';
 import type { NodeStatusEvent, ReminderCountEvent } from './types';
@@ -98,9 +98,10 @@ class GraphSocket {
     const host = getSocketBaseUrl();
     this.log('resolved socket base URL', () => ({ host }));
     // Cast to typed Socket to enable event payload typing
-    const options = {
+    const transports: ManagerOptions['transports'] = ['websocket'];
+    const options: Partial<ManagerOptions & SocketOptions> = {
       path: '/socket.io',
-      transports: ['websocket'],
+      transports,
       forceNew: false,
       autoConnect: true,
       timeout: 10000,
@@ -109,8 +110,8 @@ class GraphSocket {
       reconnectionDelay: 1000,
       reconnectionDelayMax: 5000,
       withCredentials: false,
-    } as const;
-    this.log('socket.io connection options', () => ({ ...options }));
+    };
+    this.log('socket.io connection options', () => ({ ...options, transports: [...(transports ?? [])] }));
     this.socket = io(host, options) as unknown as Socket<ServerToClientEvents, ClientToServerEvents>;
     const handleConnect = () => {
       this.log('socket connected', () => ({ id: this.socket?.id }));
