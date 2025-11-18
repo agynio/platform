@@ -21,6 +21,21 @@ API base URL
 Notes
 - Legacy VITE_GRAPH_API_BASE has been removed. Use VITE_API_BASE_URL.
 
+Proxy / ingress forwarding
+- When routing the UI through a reverse proxy or ingress, ensure websocket upgrades on `/socket.io` are forwarded to the Agents API service.
+- Example Nginx location block:
+
+```nginx
+location /socket.io/ {
+  proxy_http_version 1.1;
+  proxy_set_header Upgrade $http_upgrade;
+  proxy_set_header Connection "Upgrade";
+  proxy_set_header Host $host;
+  proxy_pass http://agents-api/socket.io/;
+  proxy_read_timeout 60s;
+}
+```
+
 Provider setup
 ```tsx
 import React from 'react';
