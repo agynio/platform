@@ -19,6 +19,7 @@ import { GraphRepository } from '../src/graph/graph.repository';
 import { GraphSocketGateway } from '../src/gateway/graph.socket.gateway';
 import type { GraphDefinition, PersistedGraph } from '../src/graph/types';
 import { AgentsPersistenceService } from '../src/agents/agents.persistence.service';
+import { RunSignalsRegistry } from '../src/agents/run-signals.service';
 
 class StubContainerService extends ContainerService {
   constructor(logger: LoggerService, registry: ContainerRegistry) {
@@ -127,6 +128,7 @@ describe('Boot respects MCP enabledTools from persisted state', () => {
         LiveGraphRuntime,
         GraphRepository,
         { provide: AgentsPersistenceService, useValue: { beginRun: async () => ({ runId: 't' }), recordInjected: async () => {}, completeRun: async () => {} } },
+        RunSignalsRegistry,
       ],
     }).compile();
 

@@ -15,6 +15,7 @@ import { LLMProvisioner } from '../src/llm/provisioners/llm.provisioner';
 import { AgentNode } from '../src/nodes/agent/agent.node';
 import { MongoService } from '../src/core/services/mongo.service.js';
 import { AgentsPersistenceService } from '../src/agents/agents.persistence.service';
+import { RunSignalsRegistry } from '../src/agents/run-signals.service';
 
 // Avoid any real network calls by ensuring ChatOpenAI token counting/invoke are not used in this test.
 // We don't invoke the graph; we only verify propagation of config to internal nodes/fields.
@@ -47,6 +48,7 @@ describe('LiveGraphRuntime -> Agent config propagation', () => {
         { provide: LLMProvisioner, useClass: StubLLMProvisioner },
         { provide: ContainerRegistry, useValue: { updateLastUsed: async () => {}, registerStart: async () => {}, markStopped: async () => {} } },
         { provide: AgentsPersistenceService, useValue: { beginRunThread: async () => ({ runId: 't' }), recordInjected: async () => {}, completeRun: async () => {} } },
+        RunSignalsRegistry,
       ],
     })
       .compile()

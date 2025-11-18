@@ -10,6 +10,7 @@ import { HumanMessage } from '@agyn/llm';
 import { AgentsThreadsController } from '../src/agents/threads.controller';
 import { ContainerThreadTerminationService } from '../src/infra/container/containerThreadTermination.service';
 import { RunEventsService } from '../src/events/run-events.service';
+import { RunSignalsRegistry } from '../src/agents/run-signals.service';
 
 class StubLLMProvisioner extends LLMProvisioner {
   async getLLM(): Promise<{ call: (messages: unknown) => Promise<{ text: string; output: unknown[] }> }> {
@@ -33,6 +34,7 @@ describe('Fail-fast behavior', () => {
             completeRun: async () => {},
           },
         },
+        { provide: RunSignalsRegistry, useValue: { register: vi.fn(), activateTerminate: vi.fn(), clear: vi.fn() } },
       ],
     }).compile();
 
@@ -80,6 +82,7 @@ describe('Fail-fast behavior', () => {
           },
         },
         { provide: ContainerThreadTerminationService, useValue: { terminateByThread: vi.fn() } },
+        { provide: RunSignalsRegistry, useValue: { register: vi.fn(), activateTerminate: vi.fn(), clear: vi.fn() } },
       ],
     }).compile();
 

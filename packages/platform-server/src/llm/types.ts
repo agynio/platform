@@ -97,5 +97,6 @@ export type LLMContext = {
   threadId: string;
   runId: string;
   finishSignal: Signal;
+  terminateSignal: Signal;
   callerAgent: CallerAgent;
 };

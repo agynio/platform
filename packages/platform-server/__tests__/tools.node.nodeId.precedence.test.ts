@@ -41,7 +41,7 @@ describe('ToolsNode tool_call span attribution', () => {
   it('stamps nodeId=Tool id when provided (no toolNodeId attribute)', async () => {
     const reducer = new CallToolsLLMReducer(new LoggerService(), createRunEventsStub() as any).init({ tools: [new EchoTool() as any] }) as any;
     const response = new ResponseMessage({ output: [new ToolCallMessage({ type: 'function_call', call_id: 'tc1', name: 'echo', arguments: JSON.stringify({ a: 1 }) } as any).toPlain() as any] as any });
-    const config = { callerAgent: { getAgentNodeId: () => 'tool-123' } as any, threadId: 't', runId: 'r', finishSignal: { activate(){}, deactivate(){}, isActive:false } } as any;
+    const config = { callerAgent: { getAgentNodeId: () => 'tool-123' } as any, threadId: 't', runId: 'r', finishSignal: { activate(){}, deactivate(){}, isActive:false }, terminateSignal: { activate(){}, deactivate(){}, isActive:false } } as any;
     await (reducer.invoke as any)(
       { messages: [response], meta: {}, context: { messageIds: [], memory: [] } } as any,
       config,
@@ -61,7 +61,7 @@ describe('ToolsNode tool_call span attribution', () => {
     (obs as any).__test.captured.length = 0; // reset captured
     const reducer = new CallToolsLLMReducer(new LoggerService(), createRunEventsStub() as any).init({ tools: [new EchoTool() as any] }) as any;
     const response = new ResponseMessage({ output: [new ToolCallMessage({ type: 'function_call', call_id: 'tc2', name: 'echo', arguments: JSON.stringify({ a: 1 }) } as any).toPlain() as any] as any });
-    const config = { callerAgent: { getAgentNodeId: () => undefined } as any, threadId: 't', runId: 'r', finishSignal: { activate(){}, deactivate(){}, isActive:false } } as any;
+    const config = { callerAgent: { getAgentNodeId: () => undefined } as any, threadId: 't', runId: 'r', finishSignal: { activate(){}, deactivate(){}, isActive:false }, terminateSignal: { activate(){}, deactivate(){}, isActive:false } } as any;
     await (reducer.invoke as any)(
       { messages: [response], meta: {}, context: { messageIds: [], memory: [] } } as any,
       config,

@@ -1,6 +1,7 @@
 import { forwardRef, Module } from '@nestjs/common';
 import { ModuleRef } from '@nestjs/core';
 import { AgentsPersistenceService } from '../agents/agents.persistence.service';
+import { RunSignalsRegistry } from '../agents/run-signals.service';
 import { ThreadsMetricsService } from '../agents/threads.metrics.service';
 import { CoreModule } from '../core/core.module';
 import { ConfigService } from '../core/services/config.service';
@@ -76,8 +77,9 @@ import { CallAgentLinkingService } from '../agents/call-agent-linking.service';
       inject: [ConfigService, LoggerService, MongoService, TemplateRegistry],
     },
     AgentsPersistenceService,
+    RunSignalsRegistry,
     CallAgentLinkingService,
   ],
-  exports: [ThreadsMetricsService, TemplateRegistry, PortsRegistry, GraphRepository, AgentsPersistenceService, CallAgentLinkingService],
+  exports: [ThreadsMetricsService, TemplateRegistry, PortsRegistry, GraphRepository, AgentsPersistenceService, CallAgentLinkingService, RunSignalsRegistry],
 })
 export class GraphServicesModule {}

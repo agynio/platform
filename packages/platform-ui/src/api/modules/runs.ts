@@ -24,4 +24,8 @@ export const runs = {
         },
       }),
     ),
+  terminate: (runId: string) =>
+    asData<{ ok: boolean }>(
+      http.post<{ ok: boolean }>(`/api/agents/runs/${encodeURIComponent(runId)}/terminate`, {}),
+    ),
 };

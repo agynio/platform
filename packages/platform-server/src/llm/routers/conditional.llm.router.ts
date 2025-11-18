@@ -17,6 +17,9 @@ export class ConditionalLLMRouter extends Router<LLMState, LLMContext> {
   }
 
   async route(state: LLMState, ctx: LLMContext) {
+    if (ctx.terminateSignal.isActive) {
+      return { state, next: null };
+    }
     return { state, next: this.next(state, ctx) };
   }
 }

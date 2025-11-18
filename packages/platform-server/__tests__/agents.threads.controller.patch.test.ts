@@ -2,6 +2,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { Test } from '@nestjs/testing';
 import { AgentsThreadsController } from '../src/agents/threads.controller';
 import { AgentsPersistenceService } from '../src/agents/agents.persistence.service';
+import { RunSignalsRegistry } from '../src/agents/run-signals.service';
 import { ContainerThreadTerminationService } from '../src/infra/container/containerThreadTermination.service';
 import { RunEventsService } from '../src/events/run-events.service';
 
@@ -49,6 +50,7 @@ describe('AgentsThreadsController PATCH threads/:id', () => {
           },
         },
         { provide: ContainerThreadTerminationService, useValue: { terminateByThread: terminate } },
+        { provide: RunSignalsRegistry, useValue: { register: vi.fn(), activateTerminate: vi.fn(), clear: vi.fn() } },
       ],
     }).compile();
 
@@ -83,6 +85,7 @@ describe('AgentsThreadsController PATCH threads/:id', () => {
         },
         { provide: RunEventsService, useValue: runEventsStub },
         { provide: ContainerThreadTerminationService, useValue: { terminateByThread: terminate } },
+        { provide: RunSignalsRegistry, useValue: { register: vi.fn(), activateTerminate: vi.fn(), clear: vi.fn() } },
       ],
     }).compile();
 
@@ -111,6 +114,7 @@ describe('AgentsThreadsController PATCH threads/:id', () => {
         },
         { provide: RunEventsService, useValue: runEventsStub },
         { provide: ContainerThreadTerminationService, useValue: { terminateByThread: terminate } },
+        { provide: RunSignalsRegistry, useValue: { register: vi.fn(), activateTerminate: vi.fn(), clear: vi.fn() } },
       ],
     }).compile();
 

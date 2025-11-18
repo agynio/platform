@@ -71,6 +71,9 @@ export class CallToolsLLMReducer extends Reducer<LLMState, LLMContext> {
   }
 
   async invoke(state: LLMState, ctx: LLMContext): Promise<LLMState> {
+    if (ctx.terminateSignal.isActive) {
+      return state;
+    }
     const toolsToCall = this.filterToolCalls(state.messages);
     const toolsMap = this.createToolsMap();
     const nodeId = ctx?.callerAgent?.getAgentNodeId?.() ?? null;
@@ -266,6 +269,10 @@ export class CallToolsLLMReducer extends Reducer<LLMState, LLMContext> {
         return ToolCallOutputMessage.fromResponse(t.callId, outputForMessage);
       }),
     );
+
+    if (ctx.terminateSignal.isActive) {
+      return state;
+    }
 
     // Reset enforcement counters after successful tool execution
     const meta = {

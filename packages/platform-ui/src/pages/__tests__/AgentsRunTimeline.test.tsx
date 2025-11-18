@@ -30,6 +30,12 @@ const eventsMock = vi.fn<MockedEventsResult, [string | undefined, { types: strin
 
 const runsModule = vi.hoisted(() => ({
   timelineEvents: vi.fn(),
+  terminate: vi.fn(),
+}));
+
+const notifyMocks = vi.hoisted(() => ({
+  success: vi.fn(),
+  error: vi.fn(),
 }));
 
 vi.mock('@/api/hooks/runs', () => ({
@@ -41,7 +47,13 @@ vi.mock('@/api/hooks/runs', () => ({
 vi.mock('@/api/modules/runs', () => ({
   runs: {
     timelineEvents: runsModule.timelineEvents,
+    terminate: runsModule.terminate,
   },
+}));
+
+vi.mock('@/lib/notify', () => ({
+  notifySuccess: (...args: unknown[]) => notifyMocks.success(...args),
+  notifyError: (...args: unknown[]) => notifyMocks.error(...args),
 }));
 
 const socketMocks = vi.hoisted(() => ({
@@ -224,9 +236,14 @@ beforeEach(() => {
   summaryRefetch.mockClear();
   eventsRefetch.mockClear();
   runsModule.timelineEvents.mockReset();
+  runsModule.terminate.mockReset();
   summaryMock.mockReset();
   eventsMock.mockReset();
+  notifyMocks.success.mockReset();
+  notifyMocks.error.mockReset();
   setMatchMedia(true);
+
+  runsModule.terminate.mockResolvedValue({ ok: true });
 
   const events = [
     buildEvent(),
@@ -422,5 +439,58 @@ describe('AgentsRunTimeline socket reactions', () => {
 
     expect(getByTestId('timeline-event-details')).toBeInTheDocument();
     unmount();
+  });
+});
+
+describe('AgentsRunTimeline terminate control', () => {
+  it('renders terminate button for running runs and triggers termination flow', async () => {
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
+    const { getByRole } = renderPage([
+      '/agents/threads/thread-1/runs/run-1',
+    ]);
+
+    const terminateButton = getByRole('button', { name: 'Terminate' });
+    await act(async () => {
+      fireEvent.click(terminateButton);
+    });
+
+    await waitFor(() => expect(runsModule.terminate).toHaveBeenCalledWith('run-1'));
+    expect(confirmSpy).toHaveBeenCalledWith('Terminate this run? This will attempt to stop the active run.');
+    expect(notifyMocks.success).toHaveBeenCalledWith('Termination signaled');
+    expect(notifyMocks.error).not.toHaveBeenCalled();
+    await waitFor(() => expect(terminateButton).not.toBeDisabled());
+    expect(summaryRefetch).toHaveBeenCalled();
+
+    confirmSpy.mockRestore();
+  });
+
+  it('hides terminate button when run is not running', () => {
+    const events = [buildEvent()];
+    const nonRunningSummary = { ...buildSummary(events), status: 'success' as RunEventStatus };
+
+    summaryMock.mockReset();
+    summaryMock.mockReturnValue({
+      data: nonRunningSummary,
+      isLoading: false,
+      isError: false,
+      error: null,
+      refetch: summaryRefetch,
+    });
+
+    eventsMock.mockReset();
+    eventsMock.mockReturnValue({
+      data: { items: events, nextCursor: null },
+      isFetching: false,
+      isError: false,
+      error: null,
+      refetch: eventsRefetch,
+    });
+
+    const { queryByRole } = renderPage([
+      '/agents/threads/thread-1/runs/run-1',
+    ]);
+
+    expect(queryByRole('button', { name: 'Terminate' })).toBeNull();
+    expect(runsModule.terminate).not.toHaveBeenCalled();
   });
 });

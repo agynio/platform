@@ -58,7 +58,7 @@ describe('Mixed Shell + MCP overlay isolation', () => {
 
     // Shell exec
     const tool = shell.getTool();
-    const out = String(await tool.execute({ command: 'printenv' }, { threadId: 't', finishSignal: new Signal(), callerAgent: { invoke: async () => undefined } } as unknown as import('../src/llm/types').LLMContext));
+    const out = String(await tool.execute({ command: 'printenv' }, { threadId: 't', finishSignal: new Signal(), terminateSignal: new Signal(), callerAgent: { invoke: async () => undefined } } as unknown as import('../src/llm/types').LLMContext));
     expect(out).toContain('S_VAR=s');
     expect(out).not.toContain('M_VAR=m');
 

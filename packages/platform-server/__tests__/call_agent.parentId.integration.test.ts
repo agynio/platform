@@ -79,7 +79,7 @@ describe('call_agent integration: creates child thread with parentId', () => {
     const parentThreadId = await persistence.getOrCreateThreadByAlias('test', 'parentX', 'Parent X');
     const res = await dynamic.execute(
       { input: 'do', threadAlias: 'childX', summary: 'Child X' },
-      { threadId: parentThreadId, runId: 'r', finishSignal: new Signal(), callerAgent: { invoke: async () => ResponseMessage.fromText('OK') } } as any,
+      { threadId: parentThreadId, runId: 'r', finishSignal: new Signal(), terminateSignal: new Signal(), callerAgent: { invoke: async () => ResponseMessage.fromText('OK') } } as any,
     );
     expect(res).toBe('OK');
 

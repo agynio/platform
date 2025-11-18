@@ -64,7 +64,7 @@ export class CallModelLLMReducer extends Reducer<LLMState, LLMContext> {
     return this;
   }
 
-  async invoke(state: LLMState, _ctx: LLMContext): Promise<LLMState> {
+  async invoke(state: LLMState, ctx: LLMContext): Promise<LLMState> {
     if (!this.llm || !this.model || !this.systemPrompt) {
       throw new Error('CallModelLLMReducer not initialized');
     }
@@ -72,7 +72,7 @@ export class CallModelLLMReducer extends Reducer<LLMState, LLMContext> {
     const system = SystemMessage.fromText(this.systemPrompt);
     const summaryText = state.summary?.trim() ?? null;
     const summaryMsg = summaryText ? HumanMessage.fromText(summaryText) : null;
-    const memoryResult = this.memoryProvider ? await this.memoryProvider(_ctx, state) : null;
+    const memoryResult = this.memoryProvider ? await this.memoryProvider(ctx, state) : null;
 
     const context = this.cloneContext(state.context);
     if (memoryResult && !memoryResult.msg) {
@@ -83,10 +83,10 @@ export class CallModelLLMReducer extends Reducer<LLMState, LLMContext> {
     const { contextItemIds, context: nextContext } = await this.resolveContextIds(context, sequence, summaryText);
     const input = sequence.map((entry) => entry.message);
 
-    const nodeId = _ctx.callerAgent.getAgentNodeId?.() ?? null;
+    const nodeId = ctx.callerAgent.getAgentNodeId?.() ?? null;
     const llmEvent = await this.runEvents.startLLMCall({
-      runId: _ctx.runId,
-      threadId: _ctx.threadId,
+      runId: ctx.runId,
+      threadId: ctx.threadId,
       nodeId,
       model: this.model,
       contextItemIds,
@@ -96,6 +96,21 @@ export class CallModelLLMReducer extends Reducer<LLMState, LLMContext> {
       },
     });
     await this.runEvents.publishEvent(llmEvent.id, 'append');
+
+    const cancelAndReturn = async (params?: { rawResponse?: Prisma.InputJsonValue | null; errorMessage?: string | null }) => {
+      await this.runEvents.completeLLMCall({
+        eventId: llmEvent.id,
+        status: RunEventStatus.cancelled,
+        rawResponse: params?.rawResponse ?? null,
+        errorMessage: params?.errorMessage ?? null,
+      });
+      await this.runEvents.publishEvent(llmEvent.id, 'update');
+      return state;
+    };
+
+    if (ctx.terminateSignal.isActive) {
+      return cancelAndReturn();
+    }
 
     let wrapped: LLMResponse<ResponseMessage> | null = null;
     try {
@@ -129,6 +144,10 @@ export class CallModelLLMReducer extends Reducer<LLMState, LLMContext> {
           content: rawMessage.text,
           toolCalls: rawMessage.output.filter((m) => m instanceof ToolCallMessage) as ToolCallMessage[],
         });
+
+      if (ctx.terminateSignal.isActive) {
+        return cancelAndReturn({ rawResponse: this.trySerialize(llmResult.raw) });
+      }
 
       const toolCalls = this.serializeToolCalls(llmResult.toolCalls ?? []);
       const rawResponse = this.trySerialize(llmResult.raw);
@@ -164,6 +183,12 @@ export class CallModelLLMReducer extends Reducer<LLMState, LLMContext> {
       };
       return updated;
     } catch (error) {
+      if (ctx.terminateSignal.isActive) {
+        return cancelAndReturn({
+          rawResponse: this.trySerialize(error),
+          errorMessage: error instanceof Error ? error.message : String(error),
+        });
+      }
       await this.runEvents.completeLLMCall({
         eventId: llmEvent.id,
         status: RunEventStatus.error,

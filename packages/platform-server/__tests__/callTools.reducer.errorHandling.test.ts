@@ -63,7 +63,13 @@ describe('CallToolsLLMReducer error isolation', () => {
     current.length = 0;
   });
 
-  const ctx = { callerAgent: { getAgentNodeId: () => 'agent-node' } } as any;
+  const ctx = {
+    threadId: 'thread-err',
+    runId: 'run-err',
+    finishSignal: new Signal(),
+    terminateSignal: new Signal(),
+    callerAgent: { getAgentNodeId: () => 'agent-node' },
+  } as any;
 
   it('returns BAD_JSON_ARGS error without throwing', async () => {
     const tool = {
@@ -203,6 +209,7 @@ describe('CallToolsLLMReducer call_agent metadata', () => {
       threadId: 'parent-thread',
       runId: 'parent-run',
       finishSignal: new Signal(),
+      terminateSignal: new Signal(),
       callerAgent: { getAgentNodeId: () => 'agent-node' },
     } as any;
 

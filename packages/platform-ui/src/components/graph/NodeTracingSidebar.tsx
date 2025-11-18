@@ -157,7 +157,7 @@ function NodeTracingSidebarBody({ node }: { node: Node<BuilderPanelNodeData> }) 
     if (!ok) return;
     try {
       setTerminating((prev) => ({ ...prev, [runId]: true }));
-      await api.terminateRun(node.id, runId);
+      await api.terminateRun(runId);
       notifySuccess('Termination signaled');
       // locally mark as terminating immediately
       setRuns((prev) => prev.map((r) => (r.runId === runId ? { ...r, status: 'terminating' } : r)));

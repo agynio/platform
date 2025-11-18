@@ -136,8 +136,7 @@ export const graph = {
     );
     return res ?? { items: [] };
   },
-  terminateRun: (nodeId: string, runId: string) =>
-    http.post<{ status: string }>(`/api/graph/nodes/${encodeURIComponent(nodeId)}/runs/${encodeURIComponent(runId)}/terminate`),
+  terminateRun: (runId: string) => http.post<{ ok: boolean }>(`/api/agents/runs/${encodeURIComponent(runId)}/terminate`),
   terminateThread: (nodeId: string, threadId: string) =>
     http.post<{ status: string }>(`/api/graph/nodes/${encodeURIComponent(nodeId)}/threads/${encodeURIComponent(threadId)}/terminate`),
 

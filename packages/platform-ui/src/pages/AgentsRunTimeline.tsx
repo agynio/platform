@@ -7,6 +7,7 @@ import { runs } from '@/api/modules/runs';
 import { graphSocket } from '@/lib/graph/socket';
 import type { RunEventStatus, RunEventType, RunTimelineEvent, RunTimelineEventsCursor } from '@/api/types/agents';
 import { getEventTypeLabel } from '@/components/agents/runTimelineFormatting';
+import { notifyError, notifySuccess } from '@/lib/notify';
 
 const EVENT_TYPES: RunEventType[] = ['invocation_message', 'injection', 'llm_call', 'tool_execution', 'summarization'];
 const STATUS_TYPES: RunEventStatus[] = ['pending', 'running', 'success', 'error', 'cancelled'];
@@ -99,6 +100,7 @@ export function AgentsRunTimeline() {
 
   const [selectedTypes, setSelectedTypes] = useState<RunEventType[]>(EVENT_TYPES);
   const [selectedStatuses, setSelectedStatuses] = useState<RunEventStatus[]>([]);
+  const [isTerminating, setIsTerminating] = useState(false);
 
   useEffect(() => {
     setSelectedTypes(EVENT_TYPES);
@@ -112,10 +114,12 @@ export function AgentsRunTimeline() {
   const apiStatuses = useMemo(() => selectedStatuses, [selectedStatuses]);
 
   const summaryQuery = useRunTimelineSummary(runId);
+  const { data: summaryData, refetch: refetchSummary } = summaryQuery;
   const eventsQuery = useRunTimelineEvents(runId, { types: apiTypes, statuses: apiStatuses });
   const [events, setEvents] = useState<RunTimelineEvent[]>([]);
   const cursorRef = useRef<RunTimelineEventsCursor | null>(null);
   const catchUpRef = useRef<Promise<unknown> | null>(null);
+  const canTerminate = summaryData?.status === 'running';
 
   const setCursor = useCallback(
     (cursor: RunTimelineEventsCursor | null, opts?: { force?: boolean }) => {
@@ -201,6 +205,28 @@ export function AgentsRunTimeline() {
     return catchUpRef.current;
   }, [runId, apiTypes, selectedTypes, selectedStatuses, eventsQuery, updateEventsState, setCursor]);
 
+  const handleTerminate = useCallback(async () => {
+    if (!runId) return;
+    if (typeof window !== 'undefined' && !window.confirm('Terminate this run? This will attempt to stop the active run.')) {
+      return;
+    }
+    setIsTerminating(true);
+    try {
+      await runs.terminate(runId);
+      notifySuccess('Termination signaled');
+      try {
+        await refetchSummary();
+      } catch {
+        /* ignore summary refetch errors */
+      }
+    } catch (error) {
+      const message = error instanceof Error && error.message ? error.message : 'Failed to terminate run';
+      notifyError(message);
+    } finally {
+      setIsTerminating(false);
+    }
+  }, [refetchSummary, runId]);
+
   useEffect(() => {
     if (!runId) return;
     const room = `run:${runId}`;
@@ -271,8 +297,7 @@ export function AgentsRunTimeline() {
     () => STATUS_TYPES.map((status) => ({ status, active: selectedStatuses.includes(status) })),
     [selectedStatuses],
   );
-
-  const summary = summaryQuery.data;
+  const summary = summaryData;
   const summaryItems = useMemo(
     () => {
       const items: Array<{ label: string; value: string }> = [
@@ -461,6 +486,16 @@ export function AgentsRunTimeline() {
             >
               Refresh
             </button>
+            {canTerminate && (
+              <button
+                type="button"
+                className="px-3 py-1 text-xs border bg-transparent text-red-600 border-red-600 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent"
+                onClick={handleTerminate}
+                disabled={isTerminating}
+              >
+                {isTerminating ? 'Terminating…' : 'Terminate'}
+              </button>
+            )}
           </div>
         </div>
         {eventsQuery.isError && (

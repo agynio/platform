@@ -132,7 +132,9 @@ async function getLastMessages(runtime: LiveGraphRuntime, nodeId: string): Promi
     { messages: [], context: { messageIds: [], memory: [] } },
     {
       threadId: 'T',
+      runId: 'R',
       finishSignal: new Signal(),
+      terminateSignal: new Signal(),
       callerAgent: { invoke: async () => new Promise(() => {}) },
     } as LLMContext,
   );

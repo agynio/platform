@@ -17,7 +17,10 @@ export class StaticLLMRouter extends Router<LLMState, LLMContext> {
     return this._nextId;
   }
 
-  async route(state: LLMState, _ctx: LLMContext) {
+  async route(state: LLMState, ctx: LLMContext) {
+    if (ctx.terminateSignal.isActive) {
+      return { state, next: null };
+    }
     return { state, next: this.nextId };
   }
 }

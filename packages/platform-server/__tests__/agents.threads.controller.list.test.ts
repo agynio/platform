@@ -2,6 +2,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { Test } from '@nestjs/testing';
 import { AgentsThreadsController } from '../src/agents/threads.controller';
 import { AgentsPersistenceService } from '../src/agents/agents.persistence.service';
+import { RunSignalsRegistry } from '../src/agents/run-signals.service';
 import { ContainerThreadTerminationService } from '../src/infra/container/containerThreadTermination.service';
 import { RunEventsService } from '../src/events/run-events.service';
 
@@ -31,6 +32,7 @@ describe('AgentsThreadsController list endpoints', () => {
         { provide: AgentsPersistenceService, useValue: persistence },
         { provide: ContainerThreadTerminationService, useValue: { terminateByThread: vi.fn() } },
         { provide: RunEventsService, useValue: runEventsStub },
+        { provide: RunSignalsRegistry, useValue: { register: vi.fn(), activateTerminate: vi.fn(), clear: vi.fn() } },
       ],
     }).compile();
 
@@ -76,6 +78,7 @@ describe('AgentsThreadsController list endpoints', () => {
         { provide: AgentsPersistenceService, useValue: persistence },
         { provide: ContainerThreadTerminationService, useValue: { terminateByThread: vi.fn() } },
         { provide: RunEventsService, useValue: runEventsStub },
+        { provide: RunSignalsRegistry, useValue: { register: vi.fn(), activateTerminate: vi.fn(), clear: vi.fn() } },
       ],
     }).compile();
 
@@ -104,6 +107,7 @@ describe('AgentsThreadsController list endpoints', () => {
         { provide: AgentsPersistenceService, useValue: persistence },
         { provide: ContainerThreadTerminationService, useValue: { terminateByThread: vi.fn() } },
         { provide: RunEventsService, useValue: runEventsStub },
+        { provide: RunSignalsRegistry, useValue: { register: vi.fn(), activateTerminate: vi.fn(), clear: vi.fn() } },
       ],
     }).compile();
 
@@ -143,6 +147,7 @@ describe('AgentsThreadsController list endpoints', () => {
         { provide: AgentsPersistenceService, useValue: persistence },
         { provide: ContainerThreadTerminationService, useValue: { terminateByThread: vi.fn() } },
         { provide: RunEventsService, useValue: runEventsStub },
+        { provide: RunSignalsRegistry, useValue: { register: vi.fn(), activateTerminate: vi.fn(), clear: vi.fn() } },
       ],
     }).compile();
 
@@ -177,6 +182,7 @@ describe('AgentsThreadsController list endpoints', () => {
         { provide: AgentsPersistenceService, useValue: persistence },
         { provide: ContainerThreadTerminationService, useValue: { terminateByThread: vi.fn() } },
         { provide: RunEventsService, useValue: runEventsStub },
+        { provide: RunSignalsRegistry, useValue: { register: vi.fn(), activateTerminate: vi.fn(), clear: vi.fn() } },
       ],
     }).compile();
 
