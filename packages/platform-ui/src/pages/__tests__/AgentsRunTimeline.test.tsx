@@ -999,6 +999,11 @@ describe('AgentsRunTimeline load older regressions', () => {
     const listbox = getByRole('listbox');
     await within(listbox).findByText('Tool Execution — Latest tool');
 
+    const initialOptions = within(listbox).getAllByRole('option');
+    expect(initialOptions).toHaveLength(2);
+    expect(initialOptions[0]).toHaveAttribute('id', 'run-event-option-event-9');
+    expect(initialOptions[1]).toHaveAttribute('id', 'run-event-option-event-10');
+
     const button = getByRole('button', { name: 'Load older events' });
 
     const olderEvent = buildEvent({
@@ -1023,7 +1028,10 @@ describe('AgentsRunTimeline load older regressions', () => {
       await Promise.resolve();
     });
 
+    await within(listbox).findByText('Summarization');
+
     const options = within(listbox).getAllByRole('option');
+    expect(options).toHaveLength(initialOptions.length + 1);
     expect(options.map((option) => option.getAttribute('id'))).toEqual([
       'run-event-option-event-8',
       'run-event-option-event-9',
@@ -1032,7 +1040,106 @@ describe('AgentsRunTimeline load older regressions', () => {
     expect(within(listbox).getByText('Summarization')).toBeInTheDocument();
   });
 
-  it('Case B: honors latest filters during in-flight load older resolution', async () => {
+  it('Case B: prepends older events when success status filter is active', async () => {
+    const olderCursor: RunTimelineEventsCursor = {
+      id: 'cursor-1',
+      ts: '2023-12-31T23:59:59.000Z',
+    };
+
+    const initialEvents = [
+      buildEvent({
+        id: 'event-1',
+        ts: '2024-01-01T00:00:00.000Z',
+        status: 'pending',
+        toolExecution: {
+          toolName: 'Pending tool',
+          toolCallId: 'call-1',
+          execStatus: 'pending',
+          input: {},
+          output: {},
+          errorMessage: null,
+          raw: null,
+        },
+      }),
+      buildEvent({
+        id: 'event-2',
+        ts: '2024-01-01T00:00:02.000Z',
+        status: 'success',
+        toolExecution: {
+          toolName: 'Success tool',
+          toolCallId: 'call-2',
+          execStatus: 'success',
+          input: {},
+          output: {},
+          errorMessage: null,
+          raw: null,
+        },
+      }),
+    ];
+
+    eventsQueryState = {
+      data: { items: initialEvents, nextCursor: olderCursor },
+      isFetching: false,
+      isError: false,
+      error: null,
+      refetch: eventsRefetch,
+    };
+
+    const { getByRole } = renderPage([
+      '/agents/threads/thread-1/runs/run-1',
+    ]);
+
+    const listbox = getByRole('listbox');
+    await within(listbox).findByText('Tool Execution — Success tool');
+
+    const successFilter = getByRole('button', { name: 'success' });
+
+    await act(async () => {
+      fireEvent.click(successFilter);
+    });
+
+    await waitFor(() => {
+      const filtered = within(listbox).getAllByRole('option');
+      expect(filtered).toHaveLength(1);
+      expect(filtered[0]).toHaveAttribute('id', 'run-event-option-event-2');
+    });
+
+    const button = getByRole('button', { name: 'Load older events' });
+
+    const olderEvent = buildEvent({
+      id: 'event-0',
+      ts: '2023-12-31T23:59:58.000Z',
+      status: 'success',
+      toolExecution: {
+        toolName: 'Older success tool',
+        toolCallId: 'call-0',
+        execStatus: 'success',
+        input: {},
+        output: {},
+        errorMessage: null,
+        raw: null,
+      },
+    });
+
+    runsModule.timelineEvents.mockResolvedValueOnce({
+      items: [olderEvent],
+      nextCursor: null,
+    });
+
+    await act(async () => {
+      fireEvent.click(button);
+      await Promise.resolve();
+    });
+
+    await within(listbox).findByText('Tool Execution — Older success tool');
+
+    const options = within(listbox).getAllByRole('option');
+    expect(options).toHaveLength(2);
+    expect(options[0]).toHaveAttribute('id', 'run-event-option-event-0');
+    expect(options[1]).toHaveAttribute('id', 'run-event-option-event-2');
+  });
+
+  it('Case C: honors latest filters during in-flight load older resolution', async () => {
     const olderCursor: RunTimelineEventsCursor = {
       id: 'cursor-1',
       ts: '2023-12-31T23:59:59.000Z',
@@ -1141,7 +1248,7 @@ describe('AgentsRunTimeline load older regressions', () => {
     });
   });
 
-  it('Case C: retains older history after reconnect-triggered refetch fallback', async () => {
+  it('Case D: retains older history after reconnect-triggered refetch fallback', async () => {
     const olderCursor: RunTimelineEventsCursor = {
       id: 'cursor-1',
       ts: '2023-12-31T23:59:59.000Z',
@@ -1224,7 +1331,7 @@ describe('AgentsRunTimeline load older regressions', () => {
     expect(options[options.length - 1]).toHaveAttribute('id', 'run-event-option-event-2');
   });
 
-  it('Case D: includes cursor, limit, order, and filters in load older call', async () => {
+  it('Case E: includes cursor, limit, order, and filters in load older call', async () => {
     const olderCursor: RunTimelineEventsCursor = {
       id: 'cursor-1',
       ts: '2023-12-31T23:59:59.000Z',
@@ -1282,5 +1389,111 @@ describe('AgentsRunTimeline load older regressions', () => {
       types: 'tool_execution',
       statuses: 'success',
     });
+  });
+
+  it('Case F: keeps prepended older events visible after base query refetch', async () => {
+    const olderCursor: RunTimelineEventsCursor = {
+      id: 'cursor-older',
+      ts: '2023-12-31T23:59:59.000Z',
+    };
+
+    const initialEvents = [
+      buildEvent({
+        id: 'event-2',
+        ts: '2024-01-01T00:00:02.000Z',
+        toolExecution: {
+          toolName: 'Recent tool',
+          toolCallId: 'call-recent',
+          execStatus: 'success',
+          input: {},
+          output: {},
+          errorMessage: null,
+          raw: null,
+        },
+      }),
+      buildEvent({
+        id: 'event-3',
+        ts: '2024-01-01T00:00:03.000Z',
+        toolExecution: {
+          toolName: 'Latest tool',
+          toolCallId: 'call-latest',
+          execStatus: 'success',
+          input: {},
+          output: {},
+          errorMessage: null,
+          raw: null,
+        },
+      }),
+    ];
+
+    eventsQueryState = {
+      data: { items: initialEvents, nextCursor: olderCursor },
+      isFetching: false,
+      isError: false,
+      error: null,
+      refetch: eventsRefetch,
+    };
+
+    const { getByRole } = renderPage([
+      '/agents/threads/thread-1/runs/run-1',
+    ]);
+
+    const listbox = getByRole('listbox');
+    await within(listbox).findByText('Tool Execution — Latest tool');
+
+    const button = getByRole('button', { name: 'Load older events' });
+
+    const olderEvent = buildEvent({
+      id: 'event-1',
+      ts: '2023-12-31T23:59:58.000Z',
+      toolExecution: {
+        toolName: 'Oldest tool',
+        toolCallId: 'call-oldest',
+        execStatus: 'success',
+        input: {},
+        output: {},
+        errorMessage: null,
+        raw: null,
+      },
+    });
+
+    runsModule.timelineEvents.mockResolvedValueOnce({
+      items: [olderEvent],
+      nextCursor: null,
+    });
+
+    await act(async () => {
+      fireEvent.click(button);
+      await Promise.resolve();
+    });
+
+    await within(listbox).findByText('Tool Execution — Oldest tool');
+
+    const afterLoad = within(listbox).getAllByRole('option');
+    expect(afterLoad).toHaveLength(3);
+    expect(afterLoad[0]).toHaveAttribute('id', 'run-event-option-event-1');
+    expect(afterLoad[afterLoad.length - 1]).toHaveAttribute('id', 'run-event-option-event-3');
+
+    eventsRefetch.mockImplementation(async () => {
+      eventsQueryState = {
+        data: { items: initialEvents, nextCursor: olderCursor },
+        isFetching: false,
+        isError: false,
+        error: null,
+        refetch: eventsRefetch,
+      };
+    });
+
+    const refreshButton = getByRole('button', { name: 'Refresh' });
+
+    await act(async () => {
+      fireEvent.click(refreshButton);
+      await Promise.resolve();
+    });
+
+    const afterRefetch = within(listbox).getAllByRole('option');
+    expect(afterRefetch).toHaveLength(3);
+    expect(afterRefetch[0]).toHaveAttribute('id', 'run-event-option-event-1');
+    expect(afterRefetch[afterRefetch.length - 1]).toHaveAttribute('id', 'run-event-option-event-3');
   });
 });

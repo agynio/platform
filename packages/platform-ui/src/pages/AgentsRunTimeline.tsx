@@ -473,7 +473,7 @@ export function AgentsRunTimeline() {
     setLoadingOlder(true);
     setLoadOlderError(null);
     const listNode = listRef.current;
-    if (listNode) {
+    if (listNode && events.length > 0) {
       pendingScrollAdjustmentRef.current = {
         prevScrollHeight: listNode.scrollHeight,
         prevScrollTop: listNode.scrollTop,
@@ -503,7 +503,24 @@ export function AgentsRunTimeline() {
       if (items.length > 0) {
         const latestSelectedTypes = selectedTypesRef.current;
         const latestSelectedStatuses = selectedStatusesRef.current;
-        updateEventsState((prev) => mergeEvents(prev, items, latestSelectedTypes, latestSelectedStatuses));
+        updateEventsState((prev) => {
+          const merged = mergeEvents(prev, items, latestSelectedTypes, latestSelectedStatuses);
+          if (process.env.NODE_ENV !== 'production') {
+            const beforeCount = prev.length;
+            const afterCount = merged.length;
+            const addedIds = items.map((item) => item.id);
+            const firstId = merged[0]?.id ?? null;
+            const lastId = merged[merged.length - 1]?.id ?? null;
+            console.debug('[AgentsRunTimeline] loadOlder merge', {
+              beforeCount,
+              afterCount,
+              addedIds,
+              firstId,
+              lastId,
+            });
+          }
+          return merged;
+        });
       } else {
         pendingScrollAdjustmentRef.current = null;
       }
@@ -514,7 +531,7 @@ export function AgentsRunTimeline() {
       loadingOlderRef.current = false;
       setLoadingOlder(false);
     }
-  }, [runId, updateEventsState, updateOlderCursor]);
+  }, [runId, events, updateEventsState, updateOlderCursor]);
 
   useEffect(() => {
     if (hasAutoScrolledRef.current) return;
