@@ -23,6 +23,10 @@ describe('WorkspaceConfigView payload', () => {
     fireEvent.click(screen.getByText('Add env'));
     fireEvent.change(screen.getByTestId('env-key-0'), { target: { value: 'A' } });
     fireEvent.change(screen.getByTestId('env-value-0'), { target: { value: '1' } });
+    const cpuLimit = screen.getByLabelText('CPU limit') as HTMLInputElement;
+    fireEvent.change(cpuLimit, { target: { value: '750m' } });
+    const memoryLimit = screen.getByLabelText('Memory limit') as HTMLInputElement;
+    fireEvent.change(memoryLimit, { target: { value: '512Mi' } });
     fireEvent.click(screen.getByLabelText('Enable Docker-in-Docker sidecar'));
     fireEvent.click(screen.getByLabelText('Enable persistent workspace volume'));
     const mountPath = screen.getByLabelText('Mount path') as HTMLInputElement;
@@ -33,6 +37,8 @@ describe('WorkspaceConfigView payload', () => {
     expect(cfg.image).toBe('node:20');
     expect(Array.isArray(cfg.env)).toBe(true);
     expect(cfg.env[0]).toEqual({ key: 'A', value: '1', source: 'static' });
+    expect(cfg.cpu_limit).toBe('750m');
+    expect(cfg.memory_limit).toBe('512Mi');
     expect(cfg.enableDinD).toBe(true);
     expect(cfg.ttlSeconds).toBe(123);
     expect(cfg.volumes).toEqual({ enabled: true, mountPath: '/data' });

@@ -26,6 +26,14 @@ export default function WorkspaceConfigView({ value, onChange, readOnly, disable
   const [image, setImage] = useState<string>((init.image as string) || '');
   const [env, setEnv] = useState<EnvItem[]>((init.env as EnvItem[]) || []);
   const [initialScript, setInitialScript] = useState<string>((init.initialScript as string) || '');
+  const [cpuLimit, setCpuLimit] = useState<string>(() => {
+    const raw = init.cpu_limit as unknown;
+    return typeof raw === 'number' || typeof raw === 'string' ? String(raw) : '';
+  });
+  const [memoryLimit, setMemoryLimit] = useState<string>(() => {
+    const raw = init.memory_limit as unknown;
+    return typeof raw === 'number' || typeof raw === 'string' ? String(raw) : '';
+  });
   const [platform, setPlatform] = useState<string>((init.platform as string) || '');
   const [enableDinD, setEnableDinD] = useState<boolean>(!!init.enableDinD);
   const [ttlSeconds, setTtlSeconds] = useState<number>(typeof init.ttlSeconds === 'number' ? (init.ttlSeconds as number) : 86400);
@@ -52,11 +60,20 @@ export default function WorkspaceConfigView({ value, onChange, readOnly, disable
   useEffect(() => {
     const normalizedMountPath = mountPath.trim() || '/workspace';
     const nextVolumes = { enabled: volumesEnabled, mountPath: normalizedMountPath };
+    const parseLimitValue = (raw: string): number | string | undefined => {
+      const trimmed = raw.trim();
+      if (!trimmed) return undefined;
+      return /^-?\d+(?:\.\d+)?$/.test(trimmed) ? Number(trimmed) : trimmed;
+    };
+    const cpuParsed = parseLimitValue(cpuLimit);
+    const memoryParsed = parseLimitValue(memoryLimit);
     const next = {
       ...value,
       image: image || undefined,
       env,
       initialScript: initialScript || undefined,
+      cpu_limit: cpuParsed ?? undefined,
+      memory_limit: memoryParsed ?? undefined,
       platform: platform || undefined,
       enableDinD,
       ttlSeconds,
@@ -64,7 +81,7 @@ export default function WorkspaceConfigView({ value, onChange, readOnly, disable
     };
     if (JSON.stringify(value || {}) !== JSON.stringify(next)) onChange(next);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [image, JSON.stringify(env), initialScript, platform, enableDinD, ttlSeconds, volumesEnabled, mountPath]);
+  }, [image, JSON.stringify(env), initialScript, cpuLimit, memoryLimit, platform, enableDinD, ttlSeconds, volumesEnabled, mountPath]);
 
   return (
     <div className="space-y-3 text-sm">
@@ -87,6 +104,14 @@ export default function WorkspaceConfigView({ value, onChange, readOnly, disable
           <option value="linux/amd64">linux/amd64</option>
           <option value="linux/arm64">linux/arm64</option>
         </select>
+      </div>
+      <div>
+        <label htmlFor="cpuLimit" className="block text-xs mb-1">CPU limit</label>
+        <Input id="cpuLimit" value={cpuLimit} onChange={(e) => setCpuLimit(e.target.value)} disabled={isDisabled} placeholder="0.5 or 500m" />
+      </div>
+      <div>
+        <label htmlFor="memoryLimit" className="block text-xs mb-1">Memory limit</label>
+        <Input id="memoryLimit" value={memoryLimit} onChange={(e) => setMemoryLimit(e.target.value)} disabled={isDisabled} placeholder="512Mi or 1Gi" />
       </div>
       <div className="flex items-center gap-2">
         <input id="enableDinD" type="checkbox" className="h-4 w-4" checked={enableDinD} onChange={(e) => setEnableDinD(e.target.checked)} disabled={isDisabled} />

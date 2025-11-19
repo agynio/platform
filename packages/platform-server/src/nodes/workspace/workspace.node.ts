@@ -42,6 +42,14 @@ export const ContainerProviderStaticConfigSchema = z
       .optional()
       .describe('Shell script (executed with /bin/sh -lc) to run immediately after creating the container.')
       .meta({ 'ui:widget': 'textarea', 'ui:options': { rows: 6 } }),
+    cpu_limit: z
+      .union([z.number(), z.string().min(1)])
+      .optional()
+      .describe('Optional CPU limit (cores as number or string in millicores, e.g., "500m").'),
+    memory_limit: z
+      .union([z.number(), z.string().min(1)])
+      .optional()
+      .describe('Optional memory limit (bytes as number or string with Ki, Mi, Gi, Ti, KB, MB, GB, or B units).'),
     platform: z
       .enum(SUPPORTED_PLATFORMS)
       .optional()
@@ -192,6 +200,17 @@ export class WorkspaceNode extends Node<ContainerProviderStaticConfig> {
       }
 
       const normalizedEnv: Record<string, string> | undefined = envMerged;
+      const cpuLimitNano = this.normalizeCpuLimit(this.config?.cpu_limit);
+      const memoryLimitBytes = this.normalizeMemoryLimit(this.config?.memory_limit);
+      const createExtras =
+        cpuLimitNano !== undefined || memoryLimitBytes !== undefined
+          ? {
+              HostConfig: {
+                ...(cpuLimitNano !== undefined ? { NanoCPUs: cpuLimitNano } : {}),
+                ...(memoryLimitBytes !== undefined ? { Memory: memoryLimitBytes } : {}),
+              },
+            }
+          : undefined;
       container = await this.containerService.start({
         ...DEFAULTS,
         workingDir: normalizedMountPath,
@@ -202,6 +221,7 @@ export class WorkspaceNode extends Node<ContainerProviderStaticConfig> {
         labels: { ...workspaceLabels },
         platform: requestedPlatform,
         ttlSeconds: this.config?.ttlSeconds ?? 86400,
+        createExtras,
       });
       if (enableDinD) await this.ensureDinD(container, labels, DOCKER_MIRROR_URL);
 
@@ -374,6 +394,110 @@ export class WorkspaceNode extends Node<ContainerProviderStaticConfig> {
       // On missing methods or errors, surface a typed error
       throw e instanceof Error ? e : new Error('DinD sidecar exited unexpectedly');
     }
+  }
+
+  private normalizeCpuLimit(raw: unknown): number | undefined {
+    if (raw === undefined || raw === null) return undefined;
+    const logInvalid = (reason: string) => {
+      this.logger.warn('Workspace cpu_limit invalid; ignoring', { reason, value: raw });
+    };
+    if (typeof raw === 'number') {
+      if (!Number.isFinite(raw) || raw <= 0) {
+        logInvalid('non-positive number');
+        return undefined;
+      }
+      return Math.round(raw * 1_000_000_000);
+    }
+    if (typeof raw === 'string') {
+      const trimmed = raw.trim();
+      if (!trimmed) {
+        logInvalid('empty string');
+        return undefined;
+      }
+      const lower = trimmed.toLowerCase();
+      const milliMatch = /^([0-9]+(?:\.[0-9]+)?)m$/.exec(lower);
+      if (milliMatch) {
+        const value = Number.parseFloat(milliMatch[1]);
+        if (!Number.isFinite(value) || value <= 0) {
+          logInvalid('invalid millicore value');
+          return undefined;
+        }
+        return Math.round(value * 1_000_000);
+      }
+      const numericMatch = /^([0-9]+(?:\.[0-9]+)?)$/.exec(lower);
+      if (numericMatch) {
+        const value = Number.parseFloat(numericMatch[1]);
+        if (!Number.isFinite(value) || value <= 0) {
+          logInvalid('invalid numeric string');
+          return undefined;
+        }
+        return Math.round(value * 1_000_000_000);
+      }
+      logInvalid('unsupported string format');
+      return undefined;
+    }
+    logInvalid(`unsupported type ${typeof raw}`);
+    return undefined;
+  }
+
+  private normalizeMemoryLimit(raw: unknown): number | undefined {
+    if (raw === undefined || raw === null) return undefined;
+    const logInvalid = (reason: string) => {
+      this.logger.warn('Workspace memory_limit invalid; ignoring', { reason, value: raw });
+    };
+    if (typeof raw === 'number') {
+      if (!Number.isFinite(raw) || raw <= 0) {
+        logInvalid('non-positive number');
+        return undefined;
+      }
+      return Math.round(raw);
+    }
+    if (typeof raw === 'string') {
+      const trimmed = raw.trim();
+      if (!trimmed) {
+        logInvalid('empty string');
+        return undefined;
+      }
+      const lower = trimmed.toLowerCase();
+      const unitMatch = /^([0-9]+(?:\.[0-9]+)?)(ki|mi|gi|ti|kb|mb|gb|b)$/.exec(lower);
+      if (unitMatch) {
+        const value = Number.parseFloat(unitMatch[1]);
+        if (!Number.isFinite(value) || value <= 0) {
+          logInvalid('invalid unit value');
+          return undefined;
+        }
+        const unit = unitMatch[2];
+        const multipliers: Record<string, number> = {
+          ki: 1024,
+          mi: 1024 ** 2,
+          gi: 1024 ** 3,
+          ti: 1024 ** 4,
+          kb: 1000,
+          mb: 1000 ** 2,
+          gb: 1000 ** 3,
+          b: 1,
+        };
+        const multiplier = multipliers[unit];
+        if (!multiplier) {
+          logInvalid('unsupported unit');
+          return undefined;
+        }
+        return Math.round(value * multiplier);
+      }
+      const numericMatch = /^([0-9]+(?:\.[0-9]+)?)$/.exec(lower);
+      if (numericMatch) {
+        const value = Number.parseFloat(numericMatch[1]);
+        if (!Number.isFinite(value) || value <= 0) {
+          logInvalid('invalid numeric string');
+          return undefined;
+        }
+        return Math.round(value);
+      }
+      logInvalid('unsupported string format');
+      return undefined;
+    }
+    logInvalid(`unsupported type ${typeof raw}`);
+    return undefined;
   }
 
   // ---------------------
