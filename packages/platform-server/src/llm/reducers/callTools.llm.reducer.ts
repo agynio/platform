@@ -37,6 +37,9 @@ type ToolCallResult = {
   output: ToolCallStructuredOutput;
 };
 
+const isToolCallRaw = (value: unknown): value is ToolCallRaw =>
+  typeof value === 'string' || Array.isArray(value);
+
 @Injectable({ scope: Scope.TRANSIENT })
 export class CallToolsLLMReducer extends Reducer<LLMState, LLMContext> {
   constructor(
@@ -223,13 +226,17 @@ export class CallToolsLLMReducer extends Reducer<LLMState, LLMContext> {
       try {
         let raw: unknown;
         if (tool instanceof ShellCommandTool && startedEventId) {
-          raw = await tool.executeStreaming(input, ctx, {
-            runId: ctx.runId,
-            threadId: ctx.threadId,
-            eventId: startedEventId,
-          });
+          raw = await tool.executeStreaming(
+            input as Parameters<ShellCommandTool['executeStreaming']>[0],
+            ctx,
+            {
+              runId: ctx.runId,
+              threadId: ctx.threadId,
+              eventId: startedEventId,
+            },
+          );
         } else {
-          raw = await tool.execute(input, ctx);
+          raw = await tool.execute(input as Parameters<FunctionTool['execute']>[0], ctx);
         }
 
         if (typeof raw === 'string' && raw.length > 50000) {
@@ -238,6 +245,13 @@ export class CallToolsLLMReducer extends Reducer<LLMState, LLMContext> {
             message: `Tool ${toolCall.name} produced output longer than 50000 characters.`,
             originalArgs: input,
             details: { length: raw.length },
+          });
+        } else if (!isToolCallRaw(raw)) {
+          response = createErrorResponse({
+            code: 'TOOL_EXECUTION_ERROR',
+            message: `Tool ${toolCall.name} returned unsupported output type.`,
+            originalArgs: input,
+            details: { receivedType: typeof raw },
           });
         } else {
           response = {
