@@ -295,6 +295,9 @@ services:
         source: /var/lib/docker
         target: /var/lib/docker
         read_only: true
+    command:
+      - --docker_only=true
+      - --disable_metrics=hugetlb,perf_event,resctrl,tcp,udp,process,referenced_memory,disk
     networks:
       - agents_net
 
