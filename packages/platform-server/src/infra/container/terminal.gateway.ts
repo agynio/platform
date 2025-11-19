@@ -305,6 +305,8 @@ export class ContainerTerminalGateway {
     let maxTimer: NodeJS.Timeout | null = null;
     let execId: string | null = null;
     let sessionMarkedConnected = false;
+    let started = false;
+    let closedEarly = false;
     let stdin: NodeJS.WritableStream | null = null;
     let stdout: NodeJS.ReadableStream | null = null;
     let stderr: NodeJS.ReadableStream | null = null;
@@ -359,6 +361,30 @@ export class ContainerTerminalGateway {
     };
 
     const closeListener = (..._args: unknown[]) => {
+      if (!started && !closedEarly) {
+        closedEarly = true;
+        if (sessionId) {
+          try {
+            this.sessions.touch(sessionId);
+          } catch (err) {
+            this.logger.debug('terminal session touch on early close failed', {
+              sessionId,
+              error: err instanceof Error ? err.message : String(err),
+            });
+          }
+        }
+        this.logger.info('Terminal socket closed before session start, preserving for reconnect', {
+          sessionId,
+          containerId: containerIdParam ?? 'unknown',
+          readyState: ws.readyState,
+        });
+        void cleanup('socket_closed', {
+          preserveSession: true,
+          skipStatus: true,
+          skipCloseSocket: true,
+        });
+        return;
+      }
       if (onClose) onClose();
     };
 
@@ -387,6 +413,9 @@ export class ContainerTerminalGateway {
       if (closed) return;
       closed = true;
       const { preserveSession = false, skipStatus = false, skipCloseSocket = false } = options;
+      if (!sessionMarkedConnected && !execId && (preserveSession || reason.startsWith('socket_not_open_before_'))) {
+        closedEarly = true;
+      }
       this.logger.info('Terminal cleanup triggered', {
         execId,
         sessionId,
@@ -528,6 +557,7 @@ export class ContainerTerminalGateway {
       if (!aborted) return false;
       const reasonTag = `socket_not_open_before_${context}`;
       const preserve = !sessionMarkedConnected && !execId;
+      if (preserve) closedEarly = true;
       this.logger.info('Terminal connection aborted before exec', {
         sessionId,
         containerIdParam,
@@ -547,6 +577,14 @@ export class ContainerTerminalGateway {
 
     const markSessionConnected = async (): Promise<boolean> => {
       if (!sessionId || sessionMarkedConnected) return true;
+      if (closedEarly) {
+        this.logger.info('Terminal session markConnected skipped: socket closed early', {
+          sessionId,
+          containerId: containerId ?? containerIdParam ?? 'unknown',
+          execId,
+        });
+        return false;
+      }
       if (!isOpen()) {
         this.logger.info('Terminal session markConnected skipped: socket not open', {
           sessionId,
@@ -582,6 +620,15 @@ export class ContainerTerminalGateway {
     if (await abortIfSocketClosed('pre_validation')) {
       return;
     }
+
+    if (started) {
+      this.logger.warn('Terminal session start already handled, ignoring duplicate invocation', {
+        sessionId,
+        containerId: containerIdParam ?? 'unknown',
+      });
+      return;
+    }
+    started = true;
 
     try {
       session = this.sessions.validate(sessionId, token);
