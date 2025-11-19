@@ -6,6 +6,7 @@ import type { LoggerService } from '../src/core/services/logger.service';
 import { RunEventsService } from '../src/events/run-events.service';
 import { NoopGraphEventsPublisher } from '../src/gateway/graph.events.publisher';
 import type { ContextItemInput } from '../src/llm/services/context-items.utils';
+import type { ConfigService } from '../src/core/services/config.service';
 
 const databaseUrl = process.env.AGENTS_DATABASE_URL;
 const shouldRunDbTests = process.env.RUN_DB_TESTS === 'true' && !!databaseUrl;
@@ -26,7 +27,8 @@ if (!shouldRunDbTests) {
     error: () => undefined,
   } as unknown as LoggerService;
 
-  const runEvents = new RunEventsService(prismaService, logger, new NoopGraphEventsPublisher());
+  const config = { toolOutputPersistenceEnabled: true } as ConfigService;
+  const runEvents = new RunEventsService(prismaService, logger, config, new NoopGraphEventsPublisher());
 
   async function createThreadAndRun() {
     const thread = await prisma.thread.create({ data: { alias: `thread-${randomUUID()}` } });

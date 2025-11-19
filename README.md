@@ -11,16 +11,6 @@ cargo build --release
 
 The binary communicates over stdio using JSON-RPC 2.0. Launch it from an MCP-compatible host (for example, the MCP Inspector or any tool runner that can spawn stdio-based servers). Run `./target/release/codex-tools-mcp --help` for command-line options (log level, version information).
 
-
-Development services
-- docker compose up -d
-  - Prometheus: http://localhost:9090
-  - Grafana: http://localhost:3000 (default admin/admin)
-  - cAdvisor: http://localhost:8080
-- Optional: start Vault for dev secret flows: `docker compose up -d vault vault-init`
-  - Set VAULT_ENABLED=true, VAULT_ADDR, VAULT_TOKEN in packages/platform-server/.env
-  - See docs/security/vault.md
-
 ## Tool Schemas
 
 - `update_plan`: matches the schema defined in `codex-rs/core/src/plan_tool.rs` (required `plan` array with `step` and `status`, optional `explanation`).

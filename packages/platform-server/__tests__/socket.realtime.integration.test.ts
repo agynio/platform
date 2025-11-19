@@ -15,6 +15,7 @@ import type { TemplateRegistry } from '../src/graph/templateRegistry';
 import type { GraphRepository } from '../src/graph/graph.repository';
 import { HumanMessage, AIMessage } from '@agyn/llm';
 import { CallAgentLinkingService } from '../src/agents/call-agent-linking.service';
+import type { ConfigService } from '../src/core/services/config.service';
 
 type MetricsPayload = { activity: 'working' | 'waiting' | 'idle'; remindersCount: number };
 
@@ -25,6 +26,11 @@ const createLoggerStub = (): LoggerService =>
     warn: () => undefined,
     error: () => undefined,
   }) as LoggerService;
+
+const createConfigStub = (enabled = true): ConfigService =>
+  ({
+    toolOutputPersistenceEnabled: enabled,
+  }) as ConfigService;
 
 const createRuntimeStub = (): LiveGraphRuntime =>
   ({
@@ -191,7 +197,7 @@ if (!shouldRunRealtimeTests) {
     const thread = await prisma.thread.create({ data: { alias: `thread-${randomUUID()}`, summary: 'initial' } });
     await subscribeRooms(threadClient, [`thread:${thread.id}`]);
 
-    const runEvents = new RunEventsService(prismaService, logger, gateway);
+    const runEvents = new RunEventsService(prismaService, logger, createConfigStub(), gateway);
     const templateRegistryStub = ({ getMeta: () => undefined }) as unknown as TemplateRegistry;
     const graphRepositoryStub = ({ get: async () => ({ nodes: [] }) }) as unknown as GraphRepository;
     const agents = new AgentsPersistenceService(prismaService, logger, metricsDouble.service, templateRegistryStub, graphRepositoryStub, runEvents, createLinkingStub());
@@ -237,7 +243,7 @@ if (!shouldRunRealtimeTests) {
     const { port } = server.address() as AddressInfo;
     gateway.init({ server });
 
-    const runEvents = new RunEventsService(prismaService, logger, gateway);
+    const runEvents = new RunEventsService(prismaService, logger, createConfigStub(), gateway);
     const templateRegistryStub = ({ getMeta: () => undefined }) as unknown as TemplateRegistry;
     const graphRepositoryStub = ({ get: async () => ({ nodes: [] }) }) as unknown as GraphRepository;
     const agents = new AgentsPersistenceService(prismaService, logger, metricsDouble.service, templateRegistryStub, graphRepositoryStub, runEvents, createLinkingStub());

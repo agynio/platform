@@ -42,6 +42,9 @@ Persistent conversation state (Prisma)
 - Local dev:
   - LLM_PROVIDER must be set explicitly to 'openai' or 'litellm'. There is no default.
   - GitHub integration is optional. If no GitHub env is provided, the server boots and logs that GitHub is disabled. Any GitHub-dependent feature will error at runtime until credentials are configured.
+- Shell tool streaming persistence:
+  - `ENABLE_TOOL_OUTPUT_PERSISTENCE` (default `true`) controls whether shell tool stdout/stderr chunks are stored via Prisma.
+  - When disabled or when the tool output tables are unavailable, streaming continues via sockets but snapshots return HTTP 501.
 
 ## Prisma workflow (platform-server)
 

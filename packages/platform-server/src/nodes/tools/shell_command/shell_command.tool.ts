@@ -269,7 +269,7 @@ export class ShellCommandTool extends FunctionTool<typeof bashCommandSchema> {
           });
         } catch (err) {
           droppedChunks += 1;
-          this.logger.warn('ShellCommandTool chunk persistence failed', {
+          this.logger.warn('ShellCommandTool chunk persistence failed; continuing without storing chunk', {
             eventId: options.eventId,
             seqGlobal,
             source,
@@ -439,7 +439,7 @@ export class ShellCommandTool extends FunctionTool<typeof bashCommandSchema> {
           message: truncationMessage,
         });
       } catch (eventErr) {
-        this.logger.warn('ShellCommandTool failed to record terminal summary', {
+        this.logger.warn('ShellCommandTool failed to record terminal summary; continuing', {
           eventId: options.eventId,
           error: eventErr,
         });

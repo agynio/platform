@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Inject, NotFoundException, Param, Patch, Post, Query } from '@nestjs/common';
+import { Body, Controller, Get, Inject, NotFoundException, NotImplementedException, Param, Patch, Post, Query } from '@nestjs/common';
 import { IsBooleanString, IsIn, IsInt, IsOptional, IsString, IsISO8601, Max, Min, ValidateIf } from 'class-validator';
 import { AgentsPersistenceService } from './agents.persistence.service';
 import { Transform, Expose } from 'class-transformer';
@@ -296,6 +296,9 @@ export class AgentsThreadsController {
     @Param('eventId') eventId: string,
     @Query() query: RunEventOutputQueryDto,
   ) {
+    if (!this.runEvents.isToolOutputPersistenceAvailable()) {
+      throw new NotImplementedException('tool_output_persistence_unavailable');
+    }
     const snapshot = await this.runEvents.getToolOutputSnapshot({
       runId,
       eventId,

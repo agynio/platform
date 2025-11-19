@@ -15,6 +15,7 @@ import { LoggerService } from '../src/core/services/logger.service';
 import { LiveGraphRuntime } from '../src/graph/liveGraph.manager';
 import { ThreadsMetricsService } from '../src/agents/threads.metrics.service';
 import { PrismaService } from '../src/core/services/prisma.service';
+import { ConfigService } from '../src/core/services/config.service';
 import { ContainerTerminalGateway } from '../src/infra/container/terminal.gateway';
 import { TerminalSessionsService, type TerminalSessionRecord } from '../src/infra/container/terminal.sessions.service';
 import { ContainerService } from '../src/infra/container/container.service';
@@ -249,6 +250,7 @@ describe('Socket gateway real server handshakes', () => {
         { provide: LiveGraphRuntime, useClass: LiveGraphRuntimeStub },
         { provide: ThreadsMetricsService, useClass: ThreadsMetricsServiceStub },
         { provide: PrismaService, useClass: PrismaServiceStub },
+        { provide: ConfigService, useValue: { toolOutputPersistenceEnabled: true } },
         ContainerTerminalGateway,
         { provide: TerminalSessionsService, useClass: TerminalSessionsServiceStub },
         { provide: ContainerService, useClass: ContainerServiceStub },

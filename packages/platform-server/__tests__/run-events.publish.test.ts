@@ -5,6 +5,7 @@ import type { PrismaService } from '../src/core/services/prisma.service';
 import type { LoggerService } from '../src/core/services/logger.service';
 import { RunEventsService, type RunTimelineEvent } from '../src/events/run-events.service';
 import { NoopGraphEventsPublisher, type RunEventBroadcast } from '../src/gateway/graph.events.publisher';
+import type { ConfigService } from '../src/core/services/config.service';
 
 const databaseUrl = process.env.AGENTS_DATABASE_URL;
 const shouldRunDbTests = process.env.RUN_DB_TESTS === 'true' && !!databaseUrl;
@@ -49,10 +50,11 @@ maybeDescribe('RunEventsService publishEvent broadcasting', () => {
 
   let publisher: CapturingPublisher;
   let runEvents: RunEventsService;
+  const config = { toolOutputPersistenceEnabled: true } as ConfigService;
 
   beforeEach(() => {
     publisher = new CapturingPublisher();
-    runEvents = new RunEventsService(prismaService, logger, publisher);
+    runEvents = new RunEventsService(prismaService, logger, config, publisher);
   });
 
   afterAll(async () => {
