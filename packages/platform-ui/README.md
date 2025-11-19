@@ -57,14 +57,13 @@ Routing (Issue #285)
   - Keys:
     - ui.sidebar.collapsed
     - ui.sidebar.section.agents.open
-    - ui.sidebar.section.tracing.open
+    - ui.sidebar.section.memory.open
     - ui.sidebar.section.monitoring.open
     - ui.sidebar.section.settings.open
 - Routes:
   - Agents → Graph (/agents/graph) renders AgentBuilder
   - Agents → Chat (/agents/chat) placeholder
-  - Tracing → Traces (/tracing/traces) shows a tracing-removed notice
-  - Tracing → Errors (/tracing/errors) shows a tracing-removed notice
+  - Tracing routes (/tracing/traces, /tracing/errors) remain disabled when accessed directly; no navigation entry links to them
   - Monitoring → Containers (/monitoring/containers) placeholder
   - Monitoring → Resources (/monitoring/resources) placeholder
   - Settings → Secrets (/settings/secrets) placeholder

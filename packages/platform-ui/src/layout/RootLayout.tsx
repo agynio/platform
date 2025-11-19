@@ -25,12 +25,10 @@ import {
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@agyn/ui';
 import {
   Bot,
-  Activity,
   Boxes,
   Settings as SettingsIcon,
   GitBranch,
   MessageSquare,
-  AlertTriangle,
   Gauge,
   KeyRound,
   Menu,
@@ -42,7 +40,6 @@ import { useUser } from '../user/user.runtime';
 const STORAGE_KEYS = {
   collapsed: 'ui.sidebar.collapsed',
   agentsOpen: 'ui.sidebar.section.agents.open',
-  tracingOpen: 'ui.sidebar.section.tracing.open',
   monitoringOpen: 'ui.sidebar.section.monitoring.open',
   memoryOpen: 'ui.sidebar.section.memory.open',
   settingsOpen: 'ui.sidebar.section.settings.open'
@@ -82,7 +79,6 @@ type Section = {
 export function RootLayout() {
   const [collapsed, setCollapsed] = useStoredBoolean(STORAGE_KEYS.collapsed, false);
   const [agentsOpen, setAgentsOpen] = useStoredBoolean(STORAGE_KEYS.agentsOpen, true);
-  const [tracingOpen, setTracingOpen] = useStoredBoolean(STORAGE_KEYS.tracingOpen, false);
   const [monitoringOpen, setMonitoringOpen] = useStoredBoolean(STORAGE_KEYS.monitoringOpen, false);
   const [memoryOpen, setMemoryOpen] = useStoredBoolean(STORAGE_KEYS.memoryOpen, true);
   const [settingsOpen, setSettingsOpen] = useStoredBoolean(STORAGE_KEYS.settingsOpen, false);
@@ -100,17 +96,6 @@ export function RootLayout() {
           { label: 'Chat', to: '/agents/chat', icon: MessageSquare },
           { label: 'Threads', to: '/agents/threads', icon: MessageSquare },
           { label: 'Reminders', to: '/agents/reminders', icon: MessageSquare }
-        ]
-      },
-      {
-        id: 'tracing',
-        label: 'Tracing',
-        icon: Activity,
-        isOpen: tracingOpen,
-        setOpen: setTracingOpen,
-        items: [
-          { label: 'Traces', to: '/tracing/traces', icon: Activity },
-          { label: 'Errors', to: '/tracing/errors', icon: AlertTriangle }
         ]
       },
       {
@@ -145,7 +130,7 @@ export function RootLayout() {
           { label: 'Variables', to: '/settings/variables', icon: KeyRound },
         ]
       }
-    ], [agentsOpen, tracingOpen, monitoringOpen, memoryOpen, settingsOpen, setAgentsOpen, setTracingOpen, setMonitoringOpen, setMemoryOpen, setSettingsOpen]
+    ], [agentsOpen, monitoringOpen, memoryOpen, settingsOpen, setAgentsOpen, setMonitoringOpen, setMemoryOpen, setSettingsOpen]
   );
 
   const { user } = useUser();
