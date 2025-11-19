@@ -62,8 +62,8 @@ class GraphSocket {
   private reconnectCallbacks = new Set<() => void>();
   private disconnectCallbacks = new Set<() => void>();
   private runCursors = new Map<string, RunTimelineEventsCursor>();
-  private socketHandlers: Array<{ event: string; handler: (...args: unknown[]) => void }> = [];
-  private managerHandlers: Array<{ event: string; handler: (...args: unknown[]) => void }> = [];
+  private socketCleanup: Array<() => void> = [];
+  private managerCleanup: Array<() => void> = [];
 
   private compareCursors(a: RunTimelineEventsCursor, b: RunTimelineEventsCursor): number {
     const parsedA = Date.parse(a.ts);
@@ -117,22 +117,13 @@ class GraphSocket {
       reconnectionDelayMax: 5000,
       withCredentials: false,
     };
-    this.socketHandlers = [];
-    this.managerHandlers = [];
+    this.socketCleanup = [];
+    this.managerCleanup = [];
 
-    const socket = io(host, options) as unknown as Socket<ServerToClientEvents, ClientToServerEvents>;
+    const socket: Socket<ServerToClientEvents, ClientToServerEvents> = io(host, options);
     this.socket = socket;
 
-    const registerSocketHandler = (event: string, handler: (...args: unknown[]) => void) => {
-      socket.on(event as never, handler as never);
-      this.socketHandlers.push({ event, handler });
-    };
-
     const manager = socket.io;
-    const registerManagerHandler = (event: string, handler: (...args: unknown[]) => void) => {
-      manager.on(event as never, handler as never);
-      this.managerHandlers.push({ event, handler });
-    };
 
     const handleConnect = () => {
       this.resubscribeAll();
@@ -146,50 +137,86 @@ class GraphSocket {
       for (const fn of this.disconnectCallbacks) fn();
     };
     const handleConnectError = () => {};
-    registerSocketHandler('connect', handleConnect);
-    registerSocketHandler('disconnect', handleDisconnect);
-    registerSocketHandler('connect_error', handleConnectError);
-    registerManagerHandler('reconnect', handleReconnect);
+    socket.on('connect', handleConnect);
+    this.socketCleanup.push(() => socket.off('connect', handleConnect));
+    socket.on('disconnect', handleDisconnect);
+    this.socketCleanup.push(() => socket.off('disconnect', handleDisconnect));
+    socket.on('connect_error', handleConnectError);
+    this.socketCleanup.push(() => socket.off('connect_error', handleConnectError));
+    manager.on('reconnect', handleReconnect);
+    this.managerCleanup.push(() => manager.off('reconnect', handleReconnect));
     // No-op connect listener; optional
-    registerSocketHandler('node_status', (payload: NodeStatusEvent) => {
+    const handleNodeStatus: ServerToClientEvents['node_status'] = (payload) => {
       const set = this.listeners.get(payload.nodeId);
       if (set) for (const fn of set) fn(payload);
-    });
-    registerSocketHandler('node_state', (payload: { nodeId: string; state: Record<string, unknown>; updatedAt: string }) => {
+    };
+    socket.on('node_status', handleNodeStatus);
+    this.socketCleanup.push(() => socket.off('node_status', handleNodeStatus));
+
+    const handleNodeState: ServerToClientEvents['node_state'] = (payload) => {
       const set = this.stateListeners.get(payload.nodeId);
       if (set) for (const fn of set) fn(payload);
-    });
-    registerSocketHandler('node_reminder_count', (payload: ReminderCountEvent) => {
+    };
+    socket.on('node_state', handleNodeState);
+    this.socketCleanup.push(() => socket.off('node_state', handleNodeState));
+
+    const handleNodeReminderCount: ServerToClientEvents['node_reminder_count'] = (payload) => {
       const set = this.reminderListeners.get(payload.nodeId);
       if (set) for (const fn of set) fn(payload);
-    });
+    };
+    socket.on('node_reminder_count', handleNodeReminderCount);
+    this.socketCleanup.push(() => socket.off('node_reminder_count', handleNodeReminderCount));
     // Threads events
-    registerSocketHandler('thread_created', (payload: ThreadCreatedPayload) => {
+    const handleThreadCreated: ServerToClientEvents['thread_created'] = (payload) => {
       for (const fn of this.threadCreatedListeners) fn(payload);
-    });
-    registerSocketHandler('thread_updated', (payload: ThreadUpdatedPayload) => {
+    };
+    socket.on('thread_created', handleThreadCreated);
+    this.socketCleanup.push(() => socket.off('thread_created', handleThreadCreated));
+
+    const handleThreadUpdated: ServerToClientEvents['thread_updated'] = (payload) => {
       for (const fn of this.threadUpdatedListeners) fn(payload);
-    });
-    registerSocketHandler('thread_activity_changed', (payload: ThreadActivityPayload) => {
+    };
+    socket.on('thread_updated', handleThreadUpdated);
+    this.socketCleanup.push(() => socket.off('thread_updated', handleThreadUpdated));
+
+    const handleThreadActivityChanged: ServerToClientEvents['thread_activity_changed'] = (payload) => {
       for (const fn of this.threadActivityListeners) fn(payload);
-    });
-    registerSocketHandler('thread_reminders_count', (payload: ThreadRemindersPayload) => {
+    };
+    socket.on('thread_activity_changed', handleThreadActivityChanged);
+    this.socketCleanup.push(() => socket.off('thread_activity_changed', handleThreadActivityChanged));
+
+    const handleThreadRemindersCount: ServerToClientEvents['thread_reminders_count'] = (payload) => {
       for (const fn of this.threadRemindersListeners) fn(payload);
-    });
-    registerSocketHandler('message_created', (payload: MessageCreatedPayload) => {
+    };
+    socket.on('thread_reminders_count', handleThreadRemindersCount);
+    this.socketCleanup.push(() => socket.off('thread_reminders_count', handleThreadRemindersCount));
+
+    const handleMessageCreated: ServerToClientEvents['message_created'] = (payload) => {
       for (const fn of this.messageCreatedListeners) fn(payload);
-    });
-    registerSocketHandler('run_status_changed', (payload: RunStatusChangedPayload) => {
+    };
+    socket.on('message_created', handleMessageCreated);
+    this.socketCleanup.push(() => socket.off('message_created', handleMessageCreated));
+
+    const handleRunStatusChanged: ServerToClientEvents['run_status_changed'] = (payload) => {
       for (const fn of this.runStatusListeners) fn(payload);
-    });
+    };
+    socket.on('run_status_changed', handleRunStatusChanged);
+    this.socketCleanup.push(() => socket.off('run_status_changed', handleRunStatusChanged));
     const handleRunEvent = (eventName: 'run_event_appended' | 'run_event_updated', payload: RunEventSocketPayload) => {
       const cursor = { ts: payload.event.ts, id: payload.event.id } as RunTimelineEventsCursor;
       const force = eventName === 'run_event_updated';
       this.bumpRunCursor(payload.runId, cursor, force ? { force: true } : undefined);
       for (const fn of this.runEventListeners) fn(payload);
     };
-    registerSocketHandler('run_event_appended', (payload: RunEventSocketPayload) => handleRunEvent('run_event_appended', payload));
-    registerSocketHandler('run_event_updated', (payload: RunEventSocketPayload) => handleRunEvent('run_event_updated', payload));
+    const handleRunEventAppended: ServerToClientEvents['run_event_appended'] = (payload) =>
+      handleRunEvent('run_event_appended', payload);
+    socket.on('run_event_appended', handleRunEventAppended);
+    this.socketCleanup.push(() => socket.off('run_event_appended', handleRunEventAppended));
+
+    const handleRunEventUpdated: ServerToClientEvents['run_event_updated'] = (payload) =>
+      handleRunEvent('run_event_updated', payload);
+    socket.on('run_event_updated', handleRunEventUpdated);
+    this.socketCleanup.push(() => socket.off('run_event_updated', handleRunEventUpdated));
     return socket;
   }
 
@@ -258,15 +285,14 @@ class GraphSocket {
   dispose() {
     const socket = this.socket;
     if (socket) {
-      for (const { event, handler } of this.socketHandlers) {
-        socket.off(event as never, handler as never);
+      for (const cleanup of this.socketCleanup) {
+        cleanup();
       }
-      const manager = socket.io as unknown as { off?: (event: string, handler: (...args: unknown[]) => void) => void };
-      for (const { event, handler } of this.managerHandlers) {
-        manager.off?.(event, handler);
+      for (const cleanup of this.managerCleanup) {
+        cleanup();
       }
-      this.socketHandlers = [];
-      this.managerHandlers = [];
+      this.socketCleanup = [];
+      this.managerCleanup = [];
       socket.disconnect();
     }
 
