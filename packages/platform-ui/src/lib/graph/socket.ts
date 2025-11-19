@@ -112,7 +112,7 @@ class GraphSocket {
       autoConnect: true,
       timeout: 10000,
       reconnection: true,
-      reconnectionAttempts: 5,
+      reconnectionAttempts: Infinity,
       reconnectionDelay: 1000,
       reconnectionDelayMax: 5000,
       withCredentials: false,
