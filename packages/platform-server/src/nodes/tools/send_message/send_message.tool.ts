@@ -31,6 +31,15 @@ export class SendMessageFunctionTool extends FunctionTool<typeof sendMessageInvo
     if (!threadId) return JSON.stringify({ ok: false, error: 'missing_thread_context' });
     try {
       const res: SendResult = await this.trigger.sendToThread(threadId, args.message);
+      if (!res || typeof res !== 'object' || typeof res.ok !== 'boolean') {
+        this.logger.error('SendMessageFunctionTool.execute received invalid response', {
+          threadId,
+          responseType: res === null ? 'null' : typeof res,
+          hasOk: res && typeof (res as { ok?: unknown }).ok !== 'undefined',
+        });
+        const fallback: SendResult = { ok: false, error: 'send_message_invalid_response' };
+        return JSON.stringify(fallback);
+      }
       return JSON.stringify(res);
     } catch (e) {
       const normalized = normalizeError(e);

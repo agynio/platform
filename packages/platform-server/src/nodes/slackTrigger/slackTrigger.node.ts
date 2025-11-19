@@ -225,14 +225,24 @@ export class SlackTrigger extends Node<SlackTriggerConfig> {
     this.logger.debug(`[SlackTrigger.notify] thread=${thread} messages=${YamlStringify(messages)}`);
     if (!messages.length) return;
     await Promise.all(
-      this._listeners.map(async (listener) =>
-        listener.invoke(
-          thread,
-          messages.map((m) =>
-            HumanMessage.fromText(`${YamlStringify({ from: m.info })}\n---\n${YamlStringify({ content: m.content })}`),
-          ),
-        ),
-      ),
+      this._listeners.map(async (listener) => {
+        try {
+          await listener.invoke(
+            thread,
+            messages.map((m) =>
+              HumanMessage.fromText(`${YamlStringify({ from: m.info })}\n---\n${YamlStringify({ content: m.content })}`),
+            ),
+          );
+        } catch (err) {
+          const normalized = normalizeError(err);
+          this.logger.error('SlackTrigger.notify listener failed', {
+            thread,
+            error: normalized.message,
+            details: normalized.details,
+          });
+          throw err;
+        }
+      }),
     );
   }
 
@@ -280,6 +290,18 @@ export class SlackTrigger extends Node<SlackTriggerConfig> {
         text,
         thread_ts: ids.thread_ts,
       });
+      if (!res || typeof res !== 'object' || typeof res.ok !== 'boolean') {
+        const meta = {
+          responseType: res === null ? 'null' : typeof res,
+          hasOk: res && typeof (res as { ok?: unknown }).ok !== 'undefined',
+        };
+        this.logger.error('SlackTrigger.sendToThread: adapter returned invalid response', {
+          threadId,
+          meta,
+        });
+        const fallback: SendResult = { ok: false, error: 'slack_adapter_invalid_response', details: meta };
+        return fallback;
+      }
       return res;
     } catch (e) {
       const normalized = normalizeError(e);
