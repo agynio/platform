@@ -1,75 +1,30 @@
-# Agents
+# Codex Tools MCP Server
 
-Composable, graph-driven AI agents (LangGraph) with a live-updatable runtime, Docker-backed tools/MCP, and a minimal UI.
+A minimal [Model Context Protocol](https://modelcontextprotocol.io/) server implemented in Rust that exposes the `update_plan` and `apply_patch` tools used by the Codex GPT-5 model. It lets developers integrate these tools inside any MCP-aware client without running the Codex CLI.
 
-Quick links
-- Server: [packages/platform-server](packages/platform-server) — runtime, triggers, tools, MCP, graph persistence
-- UI: [packages/platform-ui](packages/platform-ui) — graph builder and checkpoint stream viewer
-  - Threads view streams new runs, status updates, and messages in real time via Socket.IO
-- Docs: [docs/README.md](docs/README.md) — technical overview, contributing, MCP design
- 
-- Tools: [docs/tools/remind_me.md](docs/tools/remind_me.md) — RemindMe tool behavior and usage
+## Build & Run
+**Prerequisite:** install Rust toolchain 1.90.0 or newer (edition 2024 support) before building, e.g. `rustup toolchain install 1.90.0` and `rustup override set 1.90.0` in this directory.
 
-Getting started
-- Architecture and setup: [docs/technical-overview.md](docs/technical-overview.md)
-- Contribution workflow & style guides: [docs/contributing/index.md](docs/contributing/index.md)
- - Before running tests, run `pnpm prisma:generate`.
+```bash
+cargo build --release
+```
 
-Development services
-- docker compose up -d mongo1 mongo-setup mongo-express jaeger
-- Optional: start Vault for dev secret flows: `docker compose up -d vault vault-init`
-  - Set VAULT_ENABLED=true, VAULT_ADDR, VAULT_TOKEN in packages/platform-server/.env
-  - See docs/security/vault.md
+The binary communicates over stdio using JSON-RPC 2.0. Launch it from an MCP-compatible host (for example, the MCP Inspector or any tool runner that can spawn stdio-based servers). Run `./target/release/codex-tools-mcp --help` for command-line options (log level, version information).
 
-Postgres checkpointer (optional)
-- Start Postgres only: `docker compose up -d postgres`
-- Configure server env:
-  - `LANGGRAPH_CHECKPOINTER=postgres`
-  - `POSTGRES_URL=postgresql://agents:agents@localhost:5443/agents?sslmode=disable`
-- Note: The UI checkpoint stream currently depends on Mongo change streams and won’t reflect Postgres writes in this initial version.
+## Tool Schemas
 
-Slack integration
-- Use Vault-managed secrets and the Graph UI templates for SlackTrigger and SendSlackMessageTool.
-  - Setup: docs/security/vault.md
-  - UI reference: docs/ui/graph/README.md
+- `update_plan`: matches the schema defined in `codex-rs/core/src/plan_tool.rs` (required `plan` array with `step` and `status`, optional `explanation`).
+- `apply_patch`: matches the JSON variant defined in `codex-rs/core/src/tool_apply_patch.rs` (required `input` string containing the full patch payload).
 
-Docker-in-Docker and registry mirror (Issue #99)
-- Workspace containers can opt-in to a per-workspace Docker daemon via `DOCKER_HOST=tcp://localhost:2375`; this port is only reachable inside the workspace namespace and is not published on the host.
-- A lightweight registry mirror runs as a compose service `registry-mirror` on the shared network `agents_net`. It is HTTP-only and only reachable within that network.
-- Override the mirror by setting `DOCKER_MIRROR_URL` (default `http://registry-mirror:5000`).
+The `apply_patch` tool reuses the official Codex `codex-apply-patch` crate to parse and apply patches, so file changes are applied exactly as in the CLI. The server streams the CLI-equivalent summary back in the MCP response. `update_plan` returns the acknowledgement "Plan updated".
 
-Server graph store configuration
-- GRAPH_STORE: `mongo` | `git` (default `mongo`)
-- GRAPH_REPO_PATH: path to local git repo (default `./data/graph`)
-- GRAPH_BRANCH: branch name (default `graph-state`)
-- GRAPH_AUTHOR_NAME / GRAPH_AUTHOR_EMAIL: default commit author
+## Agents SDK Demo
 
-Git graph storage (format: 2)
-- Root-level files/directories: `graph.meta.json`, `nodes/`, `edges/`, and advisory lock `.graph.lock`.
-- Filenames use encodeURIComponent(id); edge ids are deterministic: `<src>-<srcH>__<tgt>-<tgtH>`.
-- Writes are atomic per-entity; meta is written last; `.graph.lock` guards concurrent writers.
+For local testing without exposing an HTTP endpoint, use the OpenAI Agents SDK with the stdio MCP server:
 
-Migration
-- From legacy layouts (monolithic `graphs/<name>/graph.json` or per-entity under `graphs/<name>/`), run:
-  `tsx packages/platform-server/scripts/migrate_graph_to_git.ts`
-- Behavior: always writes a single graph to the repository root (single-graph layout):
-  - `graph.meta.json` containing `{ name, version, updatedAt, format: 2 }`
-  - `nodes/<encodeURIComponent(id)>.json` and `edges/<encodeURIComponent(edgeId)>.json`
-  - Deterministic edge id: `${source}-${sourceHandle}__${target}-${targetHandle}`
-  - Removes legacy `graphs/` directory via `git rm -r --ignore-unmatch graphs` (with fs fallback)
-- Graph selection rules:
-  - If `GRAPH_NAME` is set, migrate only that graph.
-  - If `GRAPH_NAME` is not set: if exactly one graph exists in Mongo, migrate it; if zero, exit non-zero with a clear message; if more than one, exit non-zero with a message instructing to set `GRAPH_NAME`.
-- Idempotency: commit only when staged changes exist; reruns are no-ops.
-- Commit message: `chore(graph): migrate to single-graph root layout: <name> v<version> (+N nodes, +M edges)`.
-- Env: `MONGODB_URL` (default `mongodb://localhost:27017/agents`), `GRAPH_REPO_PATH` (default `./data/graph`), `GRAPH_BRANCH` (default `graph-state`), `GRAPH_AUTHOR_NAME`, `GRAPH_AUTHOR_EMAIL`, `GRAPH_NAME` (optional).
+```bash
+pip install openai-agents
+OPENAI_API_KEY=your_key python3 scripts/agents_demo.py
+```
 
-LiteLLM proxy (optional)
-- See docs/litellm-setup.md for full setup.
-- Auto-provisioning (recommended):
-  - Set LITELLM_BASE_URL and LITELLM_MASTER_KEY; leave OPENAI_API_KEY unset.
-  - Server will generate a virtual key on startup and set OPENAI_API_KEY/OPENAI_BASE_URL.
-- Direct to OpenAI:
-  - Set OPENAI_API_KEY=sk-<real-openai-key>; unset LITELLM_* envs.
-Prisma workflow (platform-server)
-- See packages/platform-server/README.md#prisma-workflow-platform-server
+Set `OPENAI_API_KEY` (or export it beforehand) so the Agents SDK can authenticate with OpenAI. This runs the codex MCP binary via stdio and asks it to write `hello world!` into `hello.txt` in the working directory.

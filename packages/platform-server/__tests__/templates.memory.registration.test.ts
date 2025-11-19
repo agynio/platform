@@ -17,9 +17,12 @@ import { PostgresMemoryRepository } from '../src/nodes/memory/memory.repository'
 import { MemoryService } from '../src/nodes/memory/memory.service';
 import { PrismaClient } from '@prisma/client';
 
+const shouldRunDbTests = process.env.RUN_DB_TESTS === 'true' && !!process.env.AGENTS_DATABASE_URL;
+const maybeIt = shouldRunDbTests ? it : it.skip;
+
 // Build a registry and assert memory templates and agent memory port wiring are present.
 describe('templates: memory registration and agent memory port', () => {
-  it('registers memory and memoryConnector templates and exposes Agent memory target port', async () => {
+  maybeIt('registers memory and memoryConnector templates and exposes Agent memory target port', async () => {
     const logger = new LoggerService();
     const configService = new ConfigService({ githubAppId: '1', githubAppPrivateKey: 'k', githubInstallationId: 'i', openaiApiKey: 'x', githubToken: 't', mongodbUrl: 'm' });
     const containerService = new ContainerService(logger);

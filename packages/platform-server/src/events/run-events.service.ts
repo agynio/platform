@@ -1,4 +1,4 @@
-import { Inject, Injectable, Optional } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
 import {
   AttachmentKind,
   ContextItemRole,
@@ -13,7 +13,7 @@ import {
 } from '@prisma/client';
 import { LoggerService } from '../core/services/logger.service';
 import { PrismaService } from '../core/services/prisma.service';
-import { GraphEventsPublisher, NoopGraphEventsPublisher } from '../gateway/graph.events.publisher';
+import { GraphEventsPublisher } from '../gateway/graph.events.publisher';
 import { toPrismaJsonValue } from '../llm/services/messages.serialization';
 import { ContextItemInput, NormalizedContextItem, normalizeContextItems, upsertNormalizedContextItems } from '../llm/services/context-items.utils';
 
@@ -276,9 +276,12 @@ export class RunEventsService {
   constructor(
     @Inject(PrismaService) private readonly prismaService: PrismaService,
     @Inject(LoggerService) private readonly logger: LoggerService,
-    @Optional() @Inject(GraphEventsPublisher) events?: GraphEventsPublisher,
+    @Inject(GraphEventsPublisher) events: GraphEventsPublisher,
   ) {
-    this.events = events ?? new NoopGraphEventsPublisher();
+    if (!events) {
+      throw new Error('RunEventsService requires a GraphEventsPublisher provider');
+    }
+    this.events = events;
   }
 
   private get prisma(): PrismaClient {

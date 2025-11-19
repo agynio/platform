@@ -10,6 +10,7 @@ import { LLMProvisioner } from '../src/llm/provisioners/llm.provisioner';
 import { AgentsPersistenceService } from '../src/agents/agents.persistence.service';
 import { RunSignalsRegistry } from '../src/agents/run-signals.service';
 import { Signal } from '../src/signal';
+import { CallAgentLinkingService } from '../src/agents/call-agent-linking.service';
 
 class BusyAgent extends AgentNode {
   override async invoke(): Promise<ResponseMessage> {
@@ -32,7 +33,23 @@ describe('call_agent sync busy', () => {
     const agent = await module.resolve(BusyAgent);
     await agent.setConfig({});
     agent.init({ nodeId: 'caller' });
-    const node = new CallAgentNode(new LoggerService(), module.get(AgentsPersistenceService));
+    const linkingStub = {
+      registerParentToolExecution: async () => undefined,
+      buildInitialMetadata: () => ({
+        tool: 'call_agent',
+        parentThreadId: 'caller-t',
+        childThreadId: 'child-t',
+        childRun: { id: null, status: 'queued', linkEnabled: false, latestMessageId: null },
+        childRunId: null,
+        childRunStatus: 'queued',
+        childRunLinkEnabled: false,
+        childMessageId: null,
+      }),
+      onChildRunStarted: async () => null,
+      onChildRunMessage: async () => null,
+      onChildRunCompleted: async () => null,
+    } as unknown as CallAgentLinkingService;
+    const node = new CallAgentNode(new LoggerService(), module.get(AgentsPersistenceService), linkingStub);
     await node.setConfig({ response: 'sync' });
     node.setAgent(agent);
     const tool = node.getTool();

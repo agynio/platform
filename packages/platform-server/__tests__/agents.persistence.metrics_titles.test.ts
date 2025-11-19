@@ -15,14 +15,15 @@ function createService(stub: any, overrides?: { metrics?: any; templateRegistry?
   const graphRepo =
     overrides?.graphRepo ??
     ({ get: async () => ({ name: 'main', version: 1, updatedAt: new Date().toISOString(), nodes: [], edges: [] }) } as any);
-  return new AgentsPersistenceService(
+  const svc = new AgentsPersistenceService(
     new StubPrismaService(stub) as any,
     new LoggerService(),
     metrics,
-    new NoopGraphEventsPublisher(),
     templateRegistry,
     graphRepo,
   );
+  svc.setEventsPublisher(new NoopGraphEventsPublisher());
+  return svc;
 }
 
 describe('AgentsPersistenceService metrics and agent titles', () => {

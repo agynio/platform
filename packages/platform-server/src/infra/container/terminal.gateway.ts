@@ -1,8 +1,8 @@
 import { Inject, Injectable } from '@nestjs/common';
-import websocketPlugin from '@fastify/websocket';
-import type { WebsocketHandler } from '@fastify/websocket';
 import type { FastifyInstance, FastifyRequest } from 'fastify';
-import WebSocket, { type RawData } from 'ws';
+import type { IncomingHttpHeaders, IncomingMessage } from 'http';
+import type { Duplex } from 'stream';
+import WebSocket, { WebSocketServer, type RawData } from 'ws';
 import { z } from 'zod';
 import { TerminalSessionsService, type TerminalSessionRecord } from './terminal.sessions.service';
 import { ContainerService } from './container.service';
@@ -12,6 +12,8 @@ const QuerySchema = z
   .object({ sessionId: z.string().uuid(), token: z.string().min(1) })
   .strict();
 
+const TERMINAL_PATH_REGEX = /^\/api\/containers\/(?:([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})|([0-9a-fA-F]{64}))\/terminal\/ws$/;
+
 const IncomingMessageSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('input'), data: z.string().max(8192) }),
   z.object({ type: z.literal('resize'), cols: z.number().int().min(20).max(400), rows: z.number().int().min(10).max(200) }),
@@ -19,7 +21,7 @@ const IncomingMessageSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('close') }),
 ]);
 
-type SocketStream = Parameters<WebsocketHandler>[0] & { socket?: WebSocket };
+type SocketStream = { socket?: WebSocket };
 
 type WsLike = {
   readyState: number;
@@ -34,6 +36,7 @@ type WsLike = {
 };
 
 const READY_STATE_OPEN = 1; // WebSocket.OPEN
+const EARLY_CLOSE_DETECTION_MS = 5;
 type RawDataLike = RawData | string;
 
 const getObjectKeys = (value: unknown): string[] | undefined => {
@@ -53,15 +56,12 @@ const isWsLike = (value: unknown): value is WsLike => {
 
 const safeSend = (candidate: unknown, payload: Record<string, unknown>, logger: LoggerService): void => {
   if (!isWsLike(candidate)) {
-    logger.debug('terminal socket send skipped: socket not ws-like', { payloadType: payload.type });
     return;
   }
   if (candidate.readyState !== READY_STATE_OPEN) {
-    logger.debug('terminal socket send skipped: socket not open', { payloadType: payload.type });
     return;
   }
   try {
-    logger.debug('terminal socket send', { payload });
     candidate.send(JSON.stringify(payload));
   } catch (err) {
     logger.warn('terminal socket send failed', { error: err instanceof Error ? err.message : String(err) });
@@ -70,14 +70,12 @@ const safeSend = (candidate: unknown, payload: Record<string, unknown>, logger: 
 
 const safeClose = (candidate: unknown, code: number | undefined, reason: string | undefined, logger: LoggerService): void => {
   if (!isWsLike(candidate)) {
-    logger.debug('terminal socket close skipped: socket not ws-like', { code, reason });
     return;
   }
   const ws = candidate;
   const details = { code, reason };
   if (typeof ws.close === 'function') {
     try {
-      logger.debug('terminal socket close via close()', details);
       ws.close(code, reason);
       return;
     } catch (err) {
@@ -90,7 +88,6 @@ const safeClose = (candidate: unknown, code: number | undefined, reason: string 
 
   if (typeof ws.terminate === 'function') {
     try {
-      logger.debug('terminal socket close via terminate()', details);
       ws.terminate();
       return;
     } catch (err) {
@@ -104,7 +101,6 @@ const safeClose = (candidate: unknown, code: number | undefined, reason: string 
   const end = (ws as { end?: () => void }).end;
   if (typeof end === 'function') {
     try {
-      logger.debug('terminal socket close via end()', details);
       end.call(ws);
       return;
     } catch (err) {
@@ -115,7 +111,6 @@ const safeClose = (candidate: unknown, code: number | undefined, reason: string 
     }
   }
 
-  logger.debug('terminal socket close fallback exhausted', details);
 };
 
 const isRawDataLike = (value: unknown): value is RawDataLike => {
@@ -141,6 +136,7 @@ const rawDataToUtf8 = (raw: RawDataLike): string => {
 @Injectable()
 export class ContainerTerminalGateway {
   private registered = false;
+  private wss: WebSocketServer | null = null;
 
   constructor(
     @Inject(TerminalSessionsService) private readonly sessions: TerminalSessionsService,
@@ -150,31 +146,75 @@ export class ContainerTerminalGateway {
 
   registerRoutes(fastify: FastifyInstance): void {
     if (this.registered) return;
-    fastify.register(websocketPlugin);
-    fastify.after(() => {
-      fastify.get('/api/containers/:containerId/terminal/ws', { websocket: true }, (connection, request) => {
-        void this.handleConnection(connection as SocketStream, request);
+    this.wss = new WebSocketServer({ noServer: true });
+
+    fastify.server.on('upgrade', (req: IncomingMessage, socket: Duplex, head: Buffer) => {
+      const rawUrl = req.url ?? '';
+      let parsedUrl: URL;
+      try {
+        parsedUrl = new URL(rawUrl, 'http://localhost');
+      } catch {
+        return;
+      }
+
+      const match = TERMINAL_PATH_REGEX.exec(parsedUrl.pathname);
+      if (!match) return;
+
+      const containerId = match[1] ?? match[2] ?? '';
+      const wss = this.wss;
+      if (!wss) return;
+
+      socket.on('error', (err) => {
+        this.logger.warn('Terminal WS upgrade socket error', {
+          path: parsedUrl.pathname,
+          containerId,
+          error: err instanceof Error ? err.message : String(err),
+        });
+      });
+
+      wss.handleUpgrade(req, socket, head, (ws) => {
+        const stream: SocketStream = { socket: ws };
+        const fakeReq = {
+          params: { containerId },
+          query: Object.fromEntries(parsedUrl.searchParams.entries()),
+        } as unknown as FastifyRequest;
+        void this.handleConnection(stream, fakeReq);
       });
     });
     this.registered = true;
-    this.logger.info('Container terminal WebSocket registered');
+  }
+
+  private sanitizeHeaders(headers: IncomingHttpHeaders | undefined): Record<string, unknown> {
+    if (!headers) return {};
+    const sensitive = new Set(['authorization', 'cookie', 'set-cookie']);
+    const sanitized: Record<string, unknown> = {};
+    for (const [key, value] of Object.entries(headers)) {
+      if (!key) continue;
+      sanitized[key] = sensitive.has(key.toLowerCase()) ? '[REDACTED]' : value;
+    }
+    return sanitized;
+  }
+
+  private sanitizeUrlSearchParams(params: URLSearchParams): Record<string, string> {
+    const sanitized: Record<string, string> = {};
+    for (const [key, value] of params.entries()) {
+      sanitized[key] = key.toLowerCase() === 'token' ? '[REDACTED]' : value;
+    }
+    return sanitized;
+  }
+
+  private sanitizeRequestQuery(query: unknown): Record<string, unknown> {
+    if (!query || typeof query !== 'object') return {};
+    const sanitized: Record<string, unknown> = {};
+    for (const [key, value] of Object.entries(query as Record<string, unknown>)) {
+      sanitized[key] = key && key.toLowerCase() === 'token' ? '[REDACTED]' : value;
+    }
+    return sanitized;
   }
 
   private async handleConnection(connection: SocketStream, request: FastifyRequest): Promise<void> {
     const rawSocket = (connection as { socket?: unknown }).socket;
-    if (process.env.NODE_ENV === 'test') {
-      this.logger.debug('terminal connection shape', {
-        connectionType: typeof connection,
-        connectionKeys: getObjectKeys(connection),
-        socketType: typeof rawSocket,
-        socketKeys: getObjectKeys(rawSocket),
-      });
-    }
     const candidate = (rawSocket ?? connection) as unknown;
-    this.logger.debug('terminal connection received', {
-      requestWs: (request as FastifyRequest & { ws?: boolean }).ws,
-      connectionType: typeof connection,
-    });
     if (!isWsLike(candidate)) {
       this.logger.error('terminal websocket connection lacks ws-like interface', {
         connectionType: typeof connection,
@@ -200,7 +240,12 @@ export class ContainerTerminalGateway {
 
     const ws: WsLike = candidate;
     const isOpen = () => ws.readyState === READY_STATE_OPEN;
-    const send = (payload: Record<string, unknown>) => safeSend(ws, payload, this.logger);
+    const send = (payload: Record<string, unknown>) => {
+      if (!isOpen()) {
+        return;
+      }
+      safeSend(ws, payload, this.logger);
+    };
     const close = (code: number, reason: string) => safeClose(ws, code, reason, this.logger);
     const detach = (event: string, handler?: (...args: unknown[]) => void) => {
       const off = (ws as { off?: (event: string, handler: (...args: unknown[]) => void) => void }).off;
@@ -217,6 +262,24 @@ export class ContainerTerminalGateway {
       }
     };
 
+    let sessionId: string | null = null;
+    let session: TerminalSessionRecord | null = null;
+    let containerId: string | null = null;
+    let idleTimer: NodeJS.Timeout | null = null;
+    let maxTimer: NodeJS.Timeout | null = null;
+    let execId: string | null = null;
+    let sessionMarkedConnected = false;
+    let started = false;
+    let closedEarly = false;
+    let stdin: NodeJS.WritableStream | null = null;
+    let stdout: NodeJS.ReadableStream | null = null;
+    let stderr: NodeJS.ReadableStream | null = null;
+    let closeExec: (() => Promise<{ exitCode: number }>) | null = null;
+    let closed = false;
+    let onMessage: ((raw: RawDataLike) => void) | null = null;
+    let onClose: (() => void) | null = null;
+    let onError: ((err: Error) => void) | null = null;
+
     const params = request.params as { containerId?: string };
     const containerIdParam = params?.containerId;
     if (!containerIdParam) {
@@ -231,79 +294,87 @@ export class ContainerTerminalGateway {
       close(1008, 'invalid_query');
       return;
     }
-    const { sessionId, token } = parsedQuery.data;
+    sessionId = parsedQuery.data.sessionId;
+    const token = parsedQuery.data.token;
 
-    let session: TerminalSessionRecord;
-    try {
-      session = this.sessions.validate(sessionId, token);
-    } catch (err) {
-      const code = err instanceof Error ? err.message : 'session_error';
-      send({ type: 'error', code, message: 'Terminal session validation failed' });
-      close(1008, code);
-      return;
-    }
-
-    const containerId = session.containerId;
-    if (containerIdParam && containerIdParam !== containerId) {
-      send({ type: 'error', code: 'container_mismatch', message: 'Terminal session belongs to different container' });
-      close(1008, 'container_mismatch');
-      return;
-    }
-
-    try {
-      this.sessions.markConnected(sessionId);
-      session = this.sessions.get(sessionId)!;
-    } catch (err) {
-      const code = err instanceof Error ? err.message : 'session_error';
-      send({ type: 'error', code, message: 'Terminal session already connected' });
-      close(1008, code);
-      return;
-    }
-
-    send({ type: 'status', phase: 'starting' });
-
-    const refreshActivity = () => {
-      this.sessions.touch(sessionId);
-      resetIdleTimer();
-    };
-
-    const idleTimeoutMs = session.idleTimeoutMs;
-    const maxDurationRemaining = Math.max(0, session.maxDurationMs - (Date.now() - session.createdAt));
-    let idleTimer: NodeJS.Timeout | null = null;
-    const resetIdleTimer = () => {
-      if (idleTimer) clearTimeout(idleTimer);
-      if (idleTimeoutMs > 0) {
-        idleTimer = setTimeout(() => {
-          send({ type: 'error', code: 'idle_timeout', message: 'Terminal session idle timeout exceeded' });
-          void cleanup('idle_timeout');
-        }, idleTimeoutMs);
-        if (idleTimer.unref) idleTimer.unref();
+    const logStatus = (phase: string, extra: Record<string, unknown> = {}) => {
+      const context = {
+        sessionId: session?.sessionId ?? sessionId ?? 'unknown',
+        containerId: containerId ?? containerIdParam ?? 'unknown',
+        phase,
+        ...extra,
+      };
+      if (phase === 'running') {
+        this.logger.info('Terminal session started', context);
+      } else if (phase === 'exited') {
+        this.logger.info('Terminal session exited', context);
+      } else if (phase === 'error') {
+        this.logger.warn('Terminal session errored', context);
       }
     };
-    resetIdleTimer();
 
-    const maxTimer = maxDurationRemaining
-      ? setTimeout(() => {
-          send({ type: 'error', code: 'max_duration', message: 'Terminal session maximum duration exceeded' });
-          void cleanup('max_duration');
-        }, maxDurationRemaining)
-      : null;
-    if (maxTimer?.unref) maxTimer.unref();
+    const messageListener = (...args: unknown[]) => {
+      const [first] = args;
+      if (!isRawDataLike(first)) {
+        this.logger.warn('terminal socket message ignored: unsupported payload type', {
+          payloadType: typeof first,
+        });
+        return;
+      }
+      if (onMessage) onMessage(first);
+    };
 
-    let execId: string | null = null;
-    let stdin: NodeJS.WritableStream | null = null;
-    let stdout: NodeJS.ReadableStream | null = null;
-    let stderr: NodeJS.ReadableStream | null = null;
-    let closeExec: (() => Promise<{ exitCode: number }>) | null = null;
-    let closed = false;
-    let onMessage: ((raw: RawDataLike) => void) | null = null;
-    let onClose: (() => void) | null = null;
-    let onError: ((err: Error) => void) | null = null;
+    const closeListener = (..._args: unknown[]) => {
+      if (!started && !closedEarly) {
+        closedEarly = true;
+        if (sessionId) {
+          try {
+            this.sessions.touch(sessionId);
+          } catch (err) {
+            this.logger.warn('terminal session touch on early close failed', {
+              sessionId,
+              error: err instanceof Error ? err.message : String(err),
+            });
+          }
+        }
+        void cleanup('socket_closed', {
+          preserveSession: true,
+          skipStatus: true,
+          skipCloseSocket: true,
+        });
+        return;
+      }
+      if (onClose) onClose();
+    };
 
-    const cleanup = async (reason: string) => {
+    onError = (err) => {
+      const containerPrefix = String(containerId ?? containerIdParam ?? '').slice(0, 12);
+      this.logger.warn('terminal socket error', {
+        containerId: containerPrefix,
+        sessionId,
+        error: err instanceof Error ? err.message : String(err),
+      });
+      void cleanup('socket_error');
+    };
+
+    const errorListener = (...args: unknown[]) => {
+      const err = args[0] instanceof Error ? (args[0] as Error) : new Error(String(args[0] ?? 'unknown websocket error'));
+      if (onError) onError(err);
+    };
+
+    type CleanupOptions = {
+      preserveSession?: boolean;
+      skipStatus?: boolean;
+      skipCloseSocket?: boolean;
+    };
+
+    const cleanup = async (reason: string, options: CleanupOptions = {}) => {
       if (closed) return;
       closed = true;
-      this.logger.debug('terminal cleanup triggered', { execId, sessionId, reason });
+      const { preserveSession = false, skipStatus = false, skipCloseSocket = false } = options;
+      if (!sessionMarkedConnected && !execId && (preserveSession || reason.startsWith('socket_not_open_before_'))) {
+        closedEarly = true;
+      }
       try {
         if (idleTimer) clearTimeout(idleTimer);
         if (maxTimer) clearTimeout(maxTimer);
@@ -312,7 +383,6 @@ export class ContainerTerminalGateway {
       }
       try {
         if (stdin) {
-          this.logger.debug('terminal stdin end invoked', { execId, sessionId, reason });
           stdin.removeAllListeners?.('drain');
           stdin.end?.();
           stdin = null;
@@ -330,28 +400,207 @@ export class ContainerTerminalGateway {
       stderr?.removeAllListeners?.('close');
       stdout = null;
       stderr = null;
-      detach('message');
-      detach('close');
-      detach('error');
+      detach('message', messageListener);
+      detach('close', closeListener);
+      detach('error', errorListener);
       onMessage = null;
       onClose = null;
       onError = null;
-      try {
-        if (closeExec) {
-          const { exitCode } = await closeExec();
-          send({ type: 'status', phase: 'exited', exitCode });
-        }
-      } catch (err) {
-        send({ type: 'status', phase: 'error', reason: err instanceof Error ? err.message : String(err) });
-      } finally {
-        this.sessions.close(sessionId);
+
+      let exitCodeResult: number | null = null;
+      let exitError: string | null = null;
+      if (closeExec) {
         try {
-          if (isOpen()) close(1000, reason);
-        } catch {
-          // ignore close errors
+          const { exitCode } = await closeExec();
+          exitCodeResult = exitCode;
+        } catch (err) {
+          exitError = err instanceof Error ? err.message : String(err);
         }
       }
+
+      if (!skipStatus) {
+        if (exitError) {
+          send({ type: 'status', phase: 'error', reason: exitError });
+          logStatus('error', { reason: exitError });
+        } else if (exitCodeResult !== null) {
+          send({ type: 'status', phase: 'exited', exitCode: exitCodeResult });
+          logStatus('exited', { exitCode: exitCodeResult });
+        }
+      }
+
+      if (sessionId) {
+        const shouldPreserve = preserveSession || (!sessionMarkedConnected && !execId);
+        if (shouldPreserve) {
+          try {
+            this.sessions.touch(sessionId);
+          } catch (err) {
+            this.logger.warn('terminal session touch during cleanup failed', {
+              sessionId,
+              error: err instanceof Error ? err.message : String(err),
+            });
+          }
+        } else {
+          try {
+            this.sessions.close(sessionId);
+          } catch (err) {
+            this.logger.warn('terminal session close during cleanup failed', {
+              sessionId,
+              error: err instanceof Error ? err.message : String(err),
+            });
+          }
+        }
+      }
+
+      if (skipCloseSocket) return;
+      try {
+        if (isOpen()) close(1000, reason);
+      } catch {
+        // ignore close errors
+      }
     };
+
+    onClose = () => {
+      void cleanup('socket_closed');
+    };
+
+    ws.on('message', messageListener);
+    ws.on('close', closeListener);
+    ws.on('error', errorListener);
+
+    const waitForEarlyClose = async (): Promise<boolean> => {
+      if (closed || !isOpen()) return true;
+      return await new Promise<boolean>((resolve) => {
+        let settled = false;
+        const tempCloseListener = () => {
+          if (settled) return;
+          settled = true;
+          clearTimeout(timeout);
+          detach('close', tempCloseListener);
+          resolve(true);
+        };
+        const timeout = setTimeout(() => {
+          if (settled) return;
+          settled = true;
+          detach('close', tempCloseListener);
+          resolve(closed || !isOpen());
+        }, EARLY_CLOSE_DETECTION_MS);
+        ws.on('close', tempCloseListener);
+      });
+    };
+
+    const abortIfSocketClosed = async (
+      context: string,
+      options: { wait?: boolean } = {},
+    ): Promise<boolean> => {
+      const { wait = true } = options;
+      const alreadyClosed = closed || !isOpen();
+      const aborted = alreadyClosed ? true : wait ? await waitForEarlyClose() : !isOpen();
+      if (!aborted) return false;
+      const reasonTag = `socket_not_open_before_${context}`;
+      const preserve = !sessionMarkedConnected && !execId;
+      if (preserve) closedEarly = true;
+      if (!closed) {
+        await cleanup(reasonTag, {
+          preserveSession: preserve,
+          skipStatus: true,
+          skipCloseSocket: true,
+        });
+      }
+      return true;
+    };
+
+    const markSessionConnected = async (): Promise<boolean> => {
+      if (!sessionId || sessionMarkedConnected) return true;
+      if (closedEarly) {
+        return false;
+      }
+      if (!isOpen()) {
+        return false;
+      }
+      try {
+        this.sessions.markConnected(sessionId);
+        session = this.sessions.get(sessionId) ?? session;
+        sessionMarkedConnected = true;
+        return true;
+      } catch (err) {
+        const code = err instanceof Error ? err.message : 'session_error';
+        this.logger.warn('Terminal session markConnected failed after exec start', {
+          sessionId,
+          containerId,
+          execId,
+          error: code,
+        });
+        send({ type: 'error', code, message: 'Terminal session already connected' });
+        await cleanup('session_already_connected');
+        return false;
+      }
+    };
+
+    if (await abortIfSocketClosed('pre_validation')) {
+      return;
+    }
+
+    if (started) {
+      this.logger.warn('Terminal session start already handled, ignoring duplicate invocation', {
+        sessionId,
+        containerId: containerIdParam ?? 'unknown',
+      });
+      return;
+    }
+    started = true;
+
+    try {
+      session = this.sessions.validate(sessionId, token);
+    } catch (err) {
+      const code = err instanceof Error ? err.message : 'session_error';
+      send({ type: 'error', code, message: 'Terminal session validation failed' });
+      close(1008, code);
+      await cleanup('session_validation_failed');
+      return;
+    }
+
+    containerId = session.containerId;
+
+    if (containerIdParam && containerIdParam !== containerId) {
+      send({ type: 'error', code: 'container_mismatch', message: 'Terminal session belongs to different container' });
+      close(1008, 'container_mismatch');
+      await cleanup('container_mismatch');
+      return;
+    }
+
+    send({ type: 'status', phase: 'starting' });
+    logStatus('starting');
+
+    if (await abortIfSocketClosed('pre_exec', { wait: false })) {
+      return;
+    }
+
+    const refreshActivity = () => {
+      this.sessions.touch(sessionId);
+      resetIdleTimer();
+    };
+
+    const idleTimeoutMs = session.idleTimeoutMs;
+    const maxDurationRemaining = Math.max(0, session.maxDurationMs - (Date.now() - session.createdAt));
+    const resetIdleTimer = () => {
+      if (idleTimer) clearTimeout(idleTimer);
+      if (idleTimeoutMs > 0) {
+        idleTimer = setTimeout(() => {
+          send({ type: 'error', code: 'idle_timeout', message: 'Terminal session idle timeout exceeded' });
+          void cleanup('idle_timeout');
+        }, idleTimeoutMs);
+        if (idleTimer.unref) idleTimer.unref();
+      }
+    };
+    resetIdleTimer();
+
+    maxTimer = maxDurationRemaining
+      ? setTimeout(() => {
+          send({ type: 'error', code: 'max_duration', message: 'Terminal session maximum duration exceeded' });
+          void cleanup('max_duration');
+        }, maxDurationRemaining)
+      : null;
+    if (maxTimer?.unref) maxTimer.unref();
 
     try {
       const exec = await this.containers.openInteractiveExec(containerId, `exec ${session.shell}`, {
@@ -363,17 +612,8 @@ export class ContainerTerminalGateway {
       stdout = exec.stdout;
       stderr = exec.stderr ?? null;
       closeExec = exec.close;
-      this.logger.debug('terminal exec opened', {
-        sessionId,
-        containerId: containerId.substring(0, 12),
-        execId,
-        hasStdin: Boolean(stdin),
-        hasStdout: Boolean(stdout),
-        hasStderr: Boolean(stderr),
-      });
       if (stdin && typeof (stdin as NodeJS.WriteStream).setDefaultEncoding === 'function') {
         (stdin as NodeJS.WriteStream).setDefaultEncoding('utf8');
-        this.logger.debug('terminal stdin default encoding set', { execId, sessionId, encoding: 'utf8' });
       }
       if (stdin) {
         stdin.on('error', (err) => {
@@ -384,28 +624,22 @@ export class ContainerTerminalGateway {
             error: err instanceof Error ? err.message : String(err),
           });
         });
-        stdin.on('close', () => {
-          this.logger.debug('terminal stdin close', { execId, sessionId });
-        });
-        stdin.on('end', () => {
-          this.logger.debug('terminal stdin end', { execId, sessionId });
-        });
-        stdin.on('finish', () => {
-          this.logger.debug('terminal stdin finish', { execId, sessionId });
-        });
       }
+      if (await abortIfSocketClosed('post_exec_start', { wait: false })) {
+        return;
+      }
+
+      if (!(await markSessionConnected())) {
+        return;
+      }
+
       send({ type: 'status', phase: 'running' });
+      logStatus('running', { execId });
       refreshActivity();
 
       if (execId) {
         try {
           await this.containers.resizeExec(execId, { cols: session.cols, rows: session.rows });
-          this.logger.debug('terminal resize applied', {
-            execId,
-            sessionId,
-            cols: session.cols,
-            rows: session.rows,
-          });
         } catch (err) {
           this.logger.warn('initial terminal resize failed', {
             execId,
@@ -416,9 +650,7 @@ export class ContainerTerminalGateway {
         }
       }
 
-      let firstStdout = true;
       if (stdout) {
-        this.logger.debug('terminal stdout stream attached', { execId, sessionId });
         stdout.on('error', (err) => {
           this.logger.warn('terminal stdout error', {
             execId,
@@ -426,38 +658,16 @@ export class ContainerTerminalGateway {
             error: err instanceof Error ? err.message : String(err),
           });
         });
-        stdout.on('close', () => {
-          this.logger.debug('terminal stdout close', { execId, sessionId });
-        });
       }
       stdout?.on('data', (chunk: Buffer | string) => {
         const data = typeof chunk === 'string' ? chunk : chunk.toString('utf8');
-        if (firstStdout) {
-          firstStdout = false;
-          this.logger.debug('terminal first stdout chunk', {
-            execId,
-            sessionId,
-            length: data.length,
-            preview: data.slice(0, 32),
-          });
-        }
-        if (data.length) {
-          this.logger.debug('terminal stdout chunk', {
-            execId,
-            sessionId,
-            length: data.length,
-            preview: data.slice(0, 32),
-          });
-        }
         if (data.length) send({ type: 'output', data });
         refreshActivity();
       });
       stdout?.on('end', () => {
-        this.logger.debug('terminal stdout end', { execId, sessionId });
         void cleanup('stream_end');
       });
       if (stderr) {
-        this.logger.debug('terminal stderr stream attached', { execId, sessionId });
         stderr.on('error', (err) => {
           this.logger.warn('terminal stderr error', {
             execId,
@@ -465,28 +675,16 @@ export class ContainerTerminalGateway {
             error: err instanceof Error ? err.message : String(err),
           });
         });
-        stderr.on('close', () => {
-          this.logger.debug('terminal stderr close', { execId, sessionId });
-        });
       }
       stderr?.on('data', (chunk: Buffer | string) => {
         const data = typeof chunk === 'string' ? chunk : chunk.toString('utf8');
-        if (data.length) {
-          this.logger.debug('terminal stderr chunk', {
-            execId,
-            sessionId,
-            length: data.length,
-            preview: data.slice(0, 32),
-          });
-        }
         if (data.length) send({ type: 'output', data });
         refreshActivity();
       });
-      stderr?.on('end', () => {
-        this.logger.debug('terminal stderr end', { execId, sessionId });
-      });
     } catch (err) {
-      send({ type: 'error', code: 'exec_start_failed', message: err instanceof Error ? err.message : String(err) });
+      const message = err instanceof Error ? err.message : String(err);
+      send({ type: 'error', code: 'exec_start_failed', message });
+      logStatus('error', { reason: message, code: 'exec_start_failed' });
       await cleanup('exec_start_failed');
       return;
     }
@@ -507,17 +705,6 @@ export class ContainerTerminalGateway {
         return;
       }
       const message = result.data;
-      if (message.type === 'input') {
-        const preview = message.data.slice(0, 16);
-        this.logger.debug('terminal input message parsed', {
-          type: message.type,
-          sessionId,
-          containerId: containerId.substring(0, 12),
-          execId,
-          length: message.data.length,
-          preview,
-        });
-      }
       switch (message.type) {
         case 'input': {
           if (!stdin) {
@@ -532,16 +719,6 @@ export class ContainerTerminalGateway {
           try {
             const normalized = message.data.replace(/\r\n/g, '\n').replace(/\n/g, '\r');
             const buffer = Buffer.from(normalized, 'utf8');
-            this.logger.debug('terminal stdin write start', {
-              execId,
-              sessionId,
-              inputLength: message.data.length,
-              bufferLength: buffer.byteLength,
-              stdinWritable:
-                typeof (stdin as NodeJS.WriteStream).writable === 'boolean'
-                  ? (stdin as NodeJS.WriteStream).writable
-                  : undefined,
-            });
             const writeOk = stdin.write(buffer, (error) => {
               if (error) {
                 this.logger.warn('terminal stdin write callback error', {
@@ -549,24 +726,12 @@ export class ContainerTerminalGateway {
                   sessionId,
                   error: error instanceof Error ? error.message : String(error),
                 });
-              } else {
-                this.logger.debug('terminal stdin write complete', {
-                  execId,
-                  sessionId,
-                  bytes: buffer.byteLength,
-                });
               }
               refreshActivity();
-            });
-            this.logger.debug('terminal stdin write dispatched', {
-              execId,
-              sessionId,
-              ok: writeOk,
             });
             if (!writeOk) {
               const streamRef = stdin;
               const onDrain = () => {
-                this.logger.debug('terminal stdin drain', { execId, sessionId });
                 streamRef?.removeListener('drain', onDrain);
               };
               streamRef?.once('drain', onDrain);
@@ -578,24 +743,10 @@ export class ContainerTerminalGateway {
         }
         case 'resize': {
           if (!execId) return;
-          this.logger.debug('terminal resize message received', {
-            execId,
-            sessionId,
-            cols: message.cols,
-            rows: message.rows,
-          });
           this.sessions.touch(sessionId);
           resetIdleTimer();
           void this.containers
             .resizeExec(execId, { cols: message.cols, rows: message.rows })
-            .then(() => {
-              this.logger.debug('terminal resize handled', {
-                execId,
-                sessionId,
-                cols: message.cols,
-                rows: message.rows,
-              });
-            })
             .catch((err) => {
               this.logger.warn('terminal resize failed', {
                 execId,
@@ -614,7 +765,6 @@ export class ContainerTerminalGateway {
           break;
         }
         case 'close': {
-          this.logger.debug('terminal close message received', { execId, sessionId });
           void cleanup('client_closed');
           break;
         }
@@ -623,42 +773,5 @@ export class ContainerTerminalGateway {
       }
     };
 
-    const messageListener = (...args: unknown[]) => {
-      const [first] = args;
-      if (!isRawDataLike(first)) {
-        this.logger.warn('terminal socket message ignored: unsupported payload type', {
-          payloadType: typeof first,
-        });
-        return;
-      }
-      if (onMessage) onMessage(first);
-    };
-
-    onClose = () => {
-      this.logger.debug('terminal socket close received', { execId, sessionId });
-      void cleanup('socket_closed');
-    };
-
-    const closeListener = (..._args: unknown[]) => {
-      if (onClose) onClose();
-    };
-
-    onError = (err) => {
-      this.logger.warn('terminal socket error', {
-        containerId: containerId.substring(0, 12),
-        sessionId,
-        error: err instanceof Error ? err.message : String(err),
-      });
-      void cleanup('socket_error');
-    };
-
-    const errorListener = (...args: unknown[]) => {
-      const err = args[0] instanceof Error ? (args[0] as Error) : new Error(String(args[0] ?? 'unknown websocket error'));
-      if (onError) onError(err);
-    };
-
-    ws.on('message', messageListener);
-    ws.on('close', closeListener);
-    ws.on('error', errorListener);
   }
 }

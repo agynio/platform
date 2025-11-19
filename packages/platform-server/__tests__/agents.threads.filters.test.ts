@@ -14,15 +14,16 @@ const graphRepoStub = {
 describe('AgentsPersistenceService threads filters and updates', () => {
   it('filters roots and status; updates summary/status', async () => {
     const stub = createPrismaStub();
+    const publisher = new NoopGraphEventsPublisher();
     const svc = new AgentsPersistenceService(
       new StubPrismaService(stub) as any,
       new LoggerService(),
       metricsStub,
-      new NoopGraphEventsPublisher(),
       templateRegistryStub,
       graphRepoStub,
       createRunEventsStub() as any,
     );
+    svc.setEventsPublisher(publisher);
     // seed
     const rootOpen = await stub.thread.create({ data: { alias: 'a1', parentId: null, summary: 'A1', status: 'open' } });
     const rootClosed = await stub.thread.create({ data: { alias: 'a2', parentId: null, summary: 'A2', status: 'closed' } });

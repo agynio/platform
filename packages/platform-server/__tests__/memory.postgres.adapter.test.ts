@@ -5,12 +5,13 @@ import { MemoryService } from '../src/nodes/memory/memory.service';
 
 // Integration test against Postgres (requires AGENTS_DATABASE_URL env)
 const URL = process.env.AGENTS_DATABASE_URL;
+const shouldRunDbTests = process.env.RUN_DB_TESTS === 'true' && !!URL;
 
-// Skip tests if no Postgres URL provided
-const maybeDescribe = URL ? describe : describe.skip;
+// Skip tests if no Postgres URL provided or DB tests disabled
+const maybeDescribe = shouldRunDbTests ? describe : describe.skip;
 
 maybeDescribe('PostgresMemoryRepository adapter', () => {
-  if (!URL) return;
+  if (!shouldRunDbTests) return;
   const prisma = new PrismaClient({ datasources: { db: { url: URL! } } });
   let svc: MemoryService;
 

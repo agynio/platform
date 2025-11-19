@@ -38,17 +38,19 @@ const createLinkingStub = () => {
   return { instance: spies as unknown as CallAgentLinkingService, spies };
 };
 
-const createPersistence = (linking?: CallAgentLinkingService) =>
-  new AgentsPersistenceService(
+const createPersistence = (linking?: CallAgentLinkingService) => {
+  const svc = new AgentsPersistenceService(
     new StubPrismaService(createPrismaStub()) as any,
     new LoggerService(),
     metricsStub,
-    new NoopGraphEventsPublisher(),
     templateRegistryStub,
     graphRepoStub,
     createRunEventsStub() as any,
     linking ?? createLinkingStub().instance,
   );
+  svc.setEventsPublisher(new NoopGraphEventsPublisher());
+  return svc;
+};
 
 class FakeAgent {
   constructor(private responder?: (thread: string, msgs: HumanMessage[]) => Promise<ResponseMessage>) {}

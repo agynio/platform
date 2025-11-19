@@ -156,6 +156,11 @@ jobs:
       - name: Run UI tests (@agyn/platform-ui)
         run: pnpm --filter @agyn/platform-ui test
 
+      - name: Run UI socket e2e tests (@agyn/platform-ui)
+        env:
+          VITE_API_BASE_URL: 'http://localhost:3010'
+        run: pnpm --filter @agyn/platform-ui run test:e2e
+
       - name: Type-check platform UI (@agyn/platform-ui)
         run: pnpm --filter @agyn/platform-ui run typecheck
 

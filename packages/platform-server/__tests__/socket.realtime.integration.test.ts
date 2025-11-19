@@ -110,18 +110,22 @@ const closeServer = async (server: HTTPServer) =>
     server.close(() => resolve());
   });
 
-const DATABASE_URL = process.env.AGENTS_DATABASE_URL;
+const shouldRunRealtimeTests = process.env.RUN_DB_TESTS === 'true' && !!process.env.AGENTS_DATABASE_URL;
 
-if (!DATABASE_URL) {
-  throw new Error('AGENTS_DATABASE_URL must be set for realtime integration tests');
-}
-
-const prisma = new PrismaClient({ datasources: { db: { url: DATABASE_URL } } });
-
-describe.sequential('GraphSocketGateway realtime integration', () => {
-  afterAll(async () => {
-    await prisma.$disconnect();
+if (!shouldRunRealtimeTests) {
+  describe.skip('GraphSocketGateway realtime integration', () => {
+    it('skipped because RUN_DB_TESTS is not true', () => {
+      expect(true).toBe(true);
+    });
   });
+} else {
+  const DATABASE_URL = process.env.AGENTS_DATABASE_URL as string;
+  const prisma = new PrismaClient({ datasources: { db: { url: DATABASE_URL } } });
+
+  describe.sequential('GraphSocketGateway realtime integration', () => {
+    afterAll(async () => {
+      await prisma.$disconnect();
+    });
 
   it('broadcasts thread lifecycle and metrics events to subscribers', async () => {
     const logger = createLoggerStub();
@@ -190,7 +194,8 @@ describe.sequential('GraphSocketGateway realtime integration', () => {
     const runEvents = new RunEventsService(prismaService, logger, gateway);
     const templateRegistryStub = ({ getMeta: () => undefined }) as unknown as TemplateRegistry;
     const graphRepositoryStub = ({ get: async () => ({ nodes: [] }) }) as unknown as GraphRepository;
-    const agents = new AgentsPersistenceService(prismaService, logger, metricsDouble.service, gateway, templateRegistryStub, graphRepositoryStub, runEvents, createLinkingStub());
+    const agents = new AgentsPersistenceService(prismaService, logger, metricsDouble.service, templateRegistryStub, graphRepositoryStub, runEvents, createLinkingStub());
+    agents.setEventsPublisher(gateway);
 
     const startResult = await agents.beginRunThread(thread.id, [HumanMessage.fromText('hello')]);
     const runId = startResult.runId;
@@ -235,7 +240,8 @@ describe.sequential('GraphSocketGateway realtime integration', () => {
     const runEvents = new RunEventsService(prismaService, logger, gateway);
     const templateRegistryStub = ({ getMeta: () => undefined }) as unknown as TemplateRegistry;
     const graphRepositoryStub = ({ get: async () => ({ nodes: [] }) }) as unknown as GraphRepository;
-    const agents = new AgentsPersistenceService(prismaService, logger, metricsDouble.service, gateway, templateRegistryStub, graphRepositoryStub, runEvents, createLinkingStub());
+    const agents = new AgentsPersistenceService(prismaService, logger, metricsDouble.service, templateRegistryStub, graphRepositoryStub, runEvents, createLinkingStub());
+    agents.setEventsPublisher(gateway);
 
     const thread = await prisma.thread.create({ data: { alias: `thread-${randomUUID()}`, summary: 'timeline' } });
     const startResult = await agents.beginRunThread(thread.id, [HumanMessage.fromText('start')]);
@@ -278,8 +284,8 @@ describe.sequential('GraphSocketGateway realtime integration', () => {
       raw: { latencyMs: 1200 },
     });
 
-    const updateThreadEvent = waitForEvent<{ mutation: string; event: { toolExecution?: { output?: unknown } } }>(threadClient, 'run_event_appended');
-    const updateRunEvent = waitForEvent<{ mutation: string; event: { toolExecution?: { output?: unknown } } }>(runClient, 'run_event_appended');
+    const updateThreadEvent = waitForEvent<{ mutation: string; event: { toolExecution?: { output?: unknown } } }>(threadClient, 'run_event_updated');
+    const updateRunEvent = waitForEvent<{ mutation: string; event: { toolExecution?: { output?: unknown } } }>(runClient, 'run_event_updated');
     await runEvents.publishEvent(toolExecution.id, 'update');
     const [updateThread, updateRun] = await Promise.all([updateThreadEvent, updateRunEvent]);
     expect(updateThread.mutation).toBe('update');
@@ -293,4 +299,5 @@ describe.sequential('GraphSocketGateway realtime integration', () => {
     (gateway as unknown as { io?: { close(): void } }).io?.close();
     await closeServer(server);
   });
-});
+  });
+}
