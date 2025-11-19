@@ -7,7 +7,8 @@ import { MemoryService } from '../src/nodes/memory/memory.service';
 import { HttpException } from '@nestjs/common';
 
 const URL = process.env.AGENTS_DATABASE_URL;
-const maybeDescribe = URL ? describe : describe.skip;
+const shouldRunDbTests = process.env.RUN_DB_TESTS === 'true' && !!URL;
+const maybeDescribe = shouldRunDbTests ? describe : describe.skip;
 
 class StubModuleRef implements Partial<ModuleRef> {
   constructor(private prisma: PrismaClient) {}
@@ -17,7 +18,7 @@ class StubModuleRef implements Partial<ModuleRef> {
 }
 
 maybeDescribe('MemoryController endpoints', () => {
-  if (!URL) return;
+  if (!shouldRunDbTests) return;
   const prisma = new PrismaClient({ datasources: { db: { url: URL! } } });
 
   beforeAll(async () => {

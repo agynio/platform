@@ -12,13 +12,12 @@ describe('http client base URL resolution', () => {
     vi.mock('@/config', () => ({
       config: {
         apiBaseUrl: 'https://vite.example',
-        tracingApiBaseUrl: 'https://tracing.example',
         socketBaseUrl: 'https://vite.example',
       },
       getSocketBaseUrl: () => 'https://vite.example',
     }));
     const mod = await import('../../api/http');
     expect(mod.http).toBeTruthy();
-    expect(mod.tracingHttp).toBeTruthy();
+    expect(typeof mod.http.get).toBe('function');
   });
 });

@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { useSearchParams } from 'react-router-dom';
+import { useSearchParams, Link } from 'react-router-dom';
 import { http, asData } from '@/api/http';
 import type { ReminderItem } from '@/api/types/agents';
 
@@ -92,9 +92,9 @@ export function AgentsReminders() {
                       {items.map((r) => (
                         <tr key={r.id} className="border-b">
                           <td className="px-2 py-2">
-                            <a href={`/tracing/thread/${r.threadId}`} className="underline">
+                            <Link to={`/agents/threads/${r.threadId}`} className="underline">
                               {r.threadId}
-                            </a>
+                            </Link>
                           </td>
                           <td className="px-2 py-2">{r.note}</td>
                           <td className="px-2 py-2">{new Date(r.at).toLocaleString()}</td>

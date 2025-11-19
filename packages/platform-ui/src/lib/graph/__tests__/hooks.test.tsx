@@ -8,7 +8,7 @@ import type { NodeStatusEvent } from '../../graph/types';
 
 // Mock http client used by modules (avoid TDZ with vi.hoisted)
 const hoisted = vi.hoisted(() => ({ getMock: vi.fn() }));
-vi.mock('@/api/http', () => ({ http: { get: hoisted.getMock }, tracingHttp: { get: vi.fn() } }));
+vi.mock('@/api/http', () => ({ http: { get: hoisted.getMock } }));
 
 describe('graph hooks', () => {
   beforeEach(() => {

@@ -1,12 +1,7 @@
-import { TracingProvider, TracingErrorsView } from '@agyn/tracing-ui';
-import { config } from '@/config';
+import { TracingDisabledPage } from './TracingDisabled';
 
 export function TracingErrors() {
   return (
-    <div className="p-4">
-      <TracingProvider serverUrl={config.tracingApiBaseUrl}>
-        <TracingErrorsView basePaths={{ errorsTools: '/tracing/errors/tools', toolErrors: '/tracing/errors/tools' }} />
-      </TracingProvider>
-    </div>
+    <TracingDisabledPage title="Tracing removed" message="Trace error analytics are no longer available." />
   );
 }

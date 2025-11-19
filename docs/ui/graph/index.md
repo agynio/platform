@@ -10,7 +10,7 @@ Data flow
 Configuration
 - Required environment variables:
   - VITE_API_BASE_URL: Agents API base URL (use the origin only; the UI appends `/api` for REST calls and `/socket.io` for websockets)
-  - VITE_TRACING_SERVER_URL: Tracing API base URL
+- Tracing configuration has been removed; span data is no longer rendered in the builder sidebar.
 
 Related docs
 - docs/ui/config-views.md (custom config view registry)

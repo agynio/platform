@@ -9,12 +9,12 @@
     "lint": "eslint .",
     "preview": "vite preview",
     "test": "vitest run",
+    "test:e2e": "vitest run e2e/graph-socket.e2e.test.ts",
     "typecheck": "tsc -p tsconfig.app.json --noEmit",
     "test:watch": "vitest"
   },
   "dependencies": {
     "@agyn/shared": "workspace:*",
-    "@agyn/tracing-ui": "workspace:*",
     "@agyn/ui": "workspace:*",
     "@radix-ui/react-accordion": "^1.1.2",
     "@radix-ui/react-alert-dialog": "^1.1.7",

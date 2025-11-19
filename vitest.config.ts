@@ -21,8 +21,7 @@ export default defineConfig({
     alias: {
       '@': path.resolve(__dirname, 'packages/platform-ui/src'),
       '@agyn/ui': path.resolve(__dirname, 'packages/ui/src'),
-      '@agyn/tracing-ui': path.resolve(__dirname, 'packages/tracing-ui'),
-      '../tracing/src': path.resolve(__dirname, 'packages/tracing/src'),
+      // Tracing packages removed; no alias needed.
     },
   },
   server: {
@@ -30,8 +29,6 @@ export default defineConfig({
       allow: [
         path.resolve(__dirname),
         path.resolve(__dirname, 'packages/ui'),
-        path.resolve(__dirname, 'packages/tracing-ui'),
-        path.resolve(__dirname, 'packages/tracing'),
       ],
     },
   },

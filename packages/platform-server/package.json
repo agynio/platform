@@ -16,7 +16,6 @@
   },
   "dependencies": {
     "@agyn/llm": "workspace:*",
-    "@agyn/tracing": "workspace:*",
     "@fastify/cors": "^11.1.0",
     "@fastify/websocket": "^11.2.0",
     "@langchain/core": "1.0.1",

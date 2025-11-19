@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 // Mock http client used by modules (use vi.hoisted to avoid TDZ issues)
 const hoisted = vi.hoisted(() => ({ getMock: vi.fn(), postMock: vi.fn() }));
-vi.mock('@/api/http', () => ({ http: { get: hoisted.getMock, post: hoisted.postMock }, tracingHttp: { get: vi.fn() } }));
+vi.mock('@/api/http', () => ({ http: { get: hoisted.getMock, post: hoisted.postMock } }));
 
 import { graph as api } from '@/api/modules/graph';
 

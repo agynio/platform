@@ -1,4 +1,3 @@
-import { SummarizeResponse, withSummarize } from '@agyn/tracing';
 import { LLMContext, LLMContextState, LLMMessage, LLMState } from '../types';
 
 import {
@@ -105,56 +104,46 @@ export class SummarizationLLMReducer extends Reducer<LLMState, LLMContext> {
 
     const previousTokens = await this.countTokensFromMessages(state.messages);
 
-    let summarizeResponse: SummarizeResponse<{ summary: string; newContext: unknown[] }> | undefined;
-    await withSummarize(
-      {
-        oldContext: state.messages,
-        oldContextTokensCount: previousTokens,
-      },
-      async () => {
-        try {
-          const response = await this.llm.call({
-            model,
-            input: [
-              SystemMessage.fromText(systemPrompt), //
-              HumanMessage.fromText(userPrompt),
-            ],
-          });
-          const newSummary = response.text.trim();
-          const rawPayload = {
-            summary: newSummary,
-            newContext: head.map((m) => this.toPlainMessage(m)),
-          };
-          const wrapped = new SummarizeResponse<{ summary: string; newContext: unknown[] }>({
-            raw: rawPayload,
-            summary: newSummary,
-            newContext: head,
-          });
-          summarizeResponse = wrapped;
-          return wrapped;
-        } catch (error) {
-          this.logger.error('Error during summarization LLM call', error);
-          throw error;
-        }
-      },
-    );
+    let newSummary = '';
+    let rawPayload: { summary: string; newContext: unknown[] } | null = null;
+    try {
+      const response = await this.llm.call({
+        model,
+        input: [
+          SystemMessage.fromText(systemPrompt),
+          HumanMessage.fromText(userPrompt),
+        ],
+      });
+      newSummary = response.text.trim();
+      rawPayload = {
+        summary: newSummary,
+        newContext: head.map((m) => this.toPlainMessage(m)),
+      };
+    } catch (error) {
+      this.logger.error('Error during summarization LLM call', error);
+      if (error instanceof Error) throw error;
+      throw new Error(String(error));
+    }
 
-    if (!summarizeResponse) {
-      throw new Error('summarization_response_missing');
+    if (!rawPayload) {
+      rawPayload = {
+        summary: newSummary,
+        newContext: head.map((m) => this.toPlainMessage(m)),
+      };
     }
 
     const event = await this.runEvents.recordSummarization({
       runId: ctx.runId,
       threadId: ctx.threadId,
       nodeId: ctx.callerAgent.getAgentNodeId?.() ?? null,
-      summaryText: summarizeResponse.summary ?? '',
+      summaryText: newSummary ?? '',
       oldContextTokens: Math.round(previousTokens),
-      newContextCount: summarizeResponse.newContext?.length ?? head.length,
-      raw: this.toJson(summarizeResponse.raw),
+      newContextCount: head.length,
+      raw: this.toJson(rawPayload),
     });
     await this.runEvents.publishEvent(event.id, 'append');
 
-    const summaryText = summarizeResponse.summary ?? '';
+    const summaryText = newSummary ?? '';
     let summaryId = summaryText && context.summary?.text === summaryText ? context.summary.id ?? null : null;
     if (summaryText && !summaryId) {
       const created = await this.runEvents.createContextItems([contextItemInputFromSummary(summaryText)]);
@@ -162,7 +151,7 @@ export class SummarizationLLMReducer extends Reducer<LLMState, LLMContext> {
     }
     context.summary = summaryText ? { id: summaryId, text: summaryText } : undefined;
 
-    return { summary: summarizeResponse.summary, messages: head, context };
+    return { summary: newSummary, messages: head, context };
   }
 
   /**

@@ -43,7 +43,7 @@ Architecture and components
 - Secrets and env overlays
   - Vault optionally resolves vault refs; Env overlays merge static and vault inputs; values never logged; per-node env overlays used for shell and MCP calls only.
 - Observability
-  - SDK init at server start; spans for model/tool calls; UI checkpoint stream via socket; dedicated services provide storage and UI.
+  - Run-events persistence logs model/tool executions; console/logger output surfaces server activity. Tracing SDK/server/UI stack was removed in issue #760; remaining references are historical until new observability plan lands.
 
 Features and capabilities
 - Agents: SimpleAgent graph with scheduling and buffer policies; dynamic summarization; restriction enforcement for tool-first flows.
@@ -122,7 +122,6 @@ Configuration matrix (server env vars)
   - LANGGRAPH_CHECKPOINTER: mongo|postgres (default mongo)
   - POSTGRES_URL (postgres connection string)
   - NIX_* (if Nix proxy enabled)
-  - Observability vars in tracing-server (e.g., TRACING_STALE_TTL_MS)
 - Derived/labels
   - hautech.ai/role=workspace, hautech.ai/thread_id, optional hautech.ai/platform
   - Optional DOCKER_HOST=tcp://localhost:2375 for DinD
@@ -141,9 +140,7 @@ Runbooks
   - Verify: curl http://localhost:3010/api/templates; open UI; connect socket to observe node_status when provisioning.
  - Docker Compose stack
   - Services: mongo, mongo-express, vault (auto-init), postgres, registry-mirror.
-  - Observability: This repo does not include Jaeger in compose. Use the provided observability services (ports 4319 and 4320) for storage and UI. Quickstart:
-    - `pnpm --filter @agyn/tracing-server dev` (or build+start)
-    - `pnpm --filter @agyn/tracing-ui dev` (or build+start)
+  - Observability: Tracing services have been removed; follow upcoming observability docs for replacements.
   - Vault init: vault/auto-init.sh populates root token/unseal keys; set VAULT_ENABLED=true and VAULT_ADDR/VAULT_TOKEN.
   - Postgres checkpointer: set LANGGRAPH_CHECKPOINTER=postgres and POSTGRES_URL; UI stream caveat remains.
 
@@ -162,7 +159,7 @@ Release qualification plan
   - Verify TTL and cleanup job removes expired containers; simulate removal error and observe backoff.
   - Verify platform-aware reuse and relabeling.
 - Observability
-  - Confirm spans for model/tool calls; UI links to tracing-ui via VITE_TRACING_UI_BASE.
+  - Tracing UI has been removed; verify agent runs are visible via Threads and Timeline views.
 
 Glossary and templates
 - Glossary: docs/glossary.md

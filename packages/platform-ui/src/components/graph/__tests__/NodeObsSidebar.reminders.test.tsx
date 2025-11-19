@@ -17,13 +17,6 @@ vi.mock('../../../lib/graph/hooks', () => ({
   useNodeReminders: (...args: any[]) => useNodeRemindersImpl(...args),
 }));
 
-vi.mock('@/api/modules/tracing', () => ({
-  fetchSpansInRange: async () => ([]),
-}));
-vi.mock('../../../lib/tracing/socket', () => ({
-  tracingRealtime: { onSpanUpsert: (_fn: any) => () => {} },
-}));
-
 describe('NodeObsSidebar Active Reminders', () => {
   const node: any = { id: 'n1', data: { template: 'remindMeTool', config: {} } };
 

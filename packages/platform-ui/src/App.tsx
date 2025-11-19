@@ -15,9 +15,7 @@ import { AgentsReminders } from './pages/AgentsReminders';
 import { AgentsRunTimeline } from './pages/AgentsRunTimeline';
 import { TracingTraces } from './pages/TracingTraces';
 import { TracingErrors } from './pages/TracingErrors';
-import { TracingProvider, TraceDetailView, ThreadView, ToolErrorsView } from '@agyn/tracing-ui';
-import { config } from './config';
-import { useParams, useSearchParams } from 'react-router-dom';
+import { TracingDisabledPage } from './pages/TracingDisabled';
 import { MonitoringContainers } from './pages/MonitoringContainers';
 import { MonitoringResources } from './pages/MonitoringResources';
 import { SettingsSecrets } from './pages/SettingsSecrets';
@@ -49,9 +47,18 @@ function App() {
             {/* Tracing */}
             <Route path="/tracing/traces" element={<TracingTraces />} />
             <Route path="/tracing/errors" element={<TracingErrors />} />
-            <Route path="/tracing/trace/:traceId" element={<TraceDetailRoute />} />
-            <Route path="/tracing/thread/:threadId" element={<ThreadRoute />} />
-            <Route path="/tracing/errors/tools/:label" element={<ToolErrorsRoute />} />
+            <Route
+              path="/tracing/trace/:traceId"
+              element={<TracingDisabledPage title="Tracing removed" message="Trace details are no longer available." />}
+            />
+            <Route
+              path="/tracing/thread/:threadId"
+              element={<TracingDisabledPage title="Tracing removed" message="Thread trace views are no longer available." />}
+            />
+            <Route
+              path="/tracing/errors/tools/:label"
+              element={<TracingDisabledPage title="Tracing removed" message="Tool error analytics are no longer available." />}
+            />
 
             {/* Monitoring */}
             <Route path="/monitoring/containers" element={<MonitoringContainers />} />
@@ -72,36 +79,3 @@ function App() {
 }
 
 export default App;
-
-// Centralized derived base for tracing server
-const serverUrl = config.tracingApiBaseUrl;
-
-function TraceDetailRoute() {
-  const params = useParams();
-  return (
-    <TracingProvider serverUrl={serverUrl}>
-      <TraceDetailView traceId={params.traceId!} />
-    </TracingProvider>
-  );
-}
-
-function ThreadRoute() {
-  const params = useParams();
-  return (
-    <TracingProvider serverUrl={serverUrl}>
-      <ThreadView threadId={params.threadId!} />
-    </TracingProvider>
-  );
-}
-
-function ToolErrorsRoute() {
-  const params = useParams();
-  const [sp] = useSearchParams();
-  const from = sp.get('from') || new Date(Date.now() - 6 * 3600_000).toISOString();
-  const to = sp.get('to') || new Date().toISOString();
-  return (
-    <TracingProvider serverUrl={serverUrl}>
-      <ToolErrorsView label={decodeURIComponent(params.label!)} range={{ from, to }} />
-    </TracingProvider>
-  );
-}

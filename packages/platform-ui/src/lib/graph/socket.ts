@@ -1,5 +1,5 @@
 // CI trigger: no-op comment to touch UI file
-import { io, type Socket } from 'socket.io-client';
+import { io, type ManagerOptions, type Socket, type SocketOptions } from 'socket.io-client';
 import { getSocketBaseUrl } from '@/config';
 import type { NodeStatusEvent, ReminderCountEvent } from './types';
 import type { RunTimelineEvent, RunTimelineEventsCursor } from '@/api/types/agents';
@@ -8,7 +8,13 @@ import type { RunTimelineEvent, RunTimelineEventsCursor } from '@/api/types/agen
 type NodeStateEvent = { nodeId: string; state: Record<string, unknown>; updatedAt: string };
 type ThreadSummary = { id: string; alias: string; summary: string | null; status: 'open' | 'closed'; createdAt: string; parentId?: string | null };
 type MessageSummary = { id: string; kind: 'user' | 'assistant' | 'system' | 'tool'; text: string | null; source: unknown; createdAt: string; runId?: string };
-type RunSummary = { id: string; status: 'running' | 'finished' | 'terminated'; createdAt: string; updatedAt: string };
+type RunSummary = {
+  id: string;
+  threadId?: string;
+  status: 'running' | 'finished' | 'terminated';
+  createdAt: string;
+  updatedAt: string;
+};
 type RunEventSocketPayload = { runId: string; mutation: 'append' | 'update'; event: RunTimelineEvent };
 interface ServerToClientEvents {
   node_status: (payload: NodeStatusEvent) => void;
@@ -18,9 +24,10 @@ interface ServerToClientEvents {
   thread_updated: (payload: { thread: ThreadSummary }) => void;
   thread_activity_changed: (payload: { threadId: string; activity: 'working' | 'waiting' | 'idle' }) => void;
   thread_reminders_count: (payload: { threadId: string; remindersCount: number }) => void;
-  message_created: (payload: { message: MessageSummary }) => void;
-  run_status_changed: (payload: { run: RunSummary }) => void;
+  message_created: (payload: { threadId: string; message: MessageSummary }) => void;
+  run_status_changed: (payload: RunStatusChangedPayload) => void;
   run_event_appended: (payload: RunEventSocketPayload) => void;
+  run_event_updated: (payload: RunEventSocketPayload) => void;
 }
 // Client-to-server emits: subscribe to rooms
 type SubscribePayload = { room?: string; rooms?: string[] };
@@ -33,8 +40,8 @@ type ThreadCreatedPayload = { thread: ThreadSummary };
 type ThreadUpdatedPayload = { thread: ThreadSummary };
 type ThreadActivityPayload = { threadId: string; activity: 'working' | 'waiting' | 'idle' };
 type ThreadRemindersPayload = { threadId: string; remindersCount: number };
-type MessageCreatedPayload = { message: MessageSummary };
-type RunStatusChangedPayload = { run: RunSummary };
+type MessageCreatedPayload = { message: MessageSummary; threadId: string };
+type RunStatusChangedPayload = { threadId: string; run: RunSummary };
 type RunEventListenerPayload = RunEventSocketPayload;
 
 class GraphSocket {
@@ -95,9 +102,10 @@ class GraphSocket {
     if (this.socket) return this.socket;
     const host = getSocketBaseUrl();
     // Cast to typed Socket to enable event payload typing
-    this.socket = io(host, {
+    const transports: ManagerOptions['transports'] = ['websocket'];
+    const options: Partial<ManagerOptions & SocketOptions> = {
       path: '/socket.io',
-      transports: ['websocket'],
+      transports,
       forceNew: false,
       autoConnect: true,
       timeout: 10000,
@@ -105,8 +113,9 @@ class GraphSocket {
       reconnectionAttempts: Infinity,
       reconnectionDelay: 1000,
       reconnectionDelayMax: 5000,
-      withCredentials: true,
-    }) as unknown as Socket<ServerToClientEvents, ClientToServerEvents>;
+      withCredentials: false,
+    };
+    this.socket = io(host, options) as unknown as Socket<ServerToClientEvents, ClientToServerEvents>;
     const handleConnect = () => {
       this.resubscribeAll();
       for (const fn of this.connectCallbacks) fn();
@@ -120,6 +129,7 @@ class GraphSocket {
     };
     this.socket.on('connect', handleConnect);
     this.socket.on('disconnect', handleDisconnect);
+    this.socket.on('connect_error', () => {});
     const manager = this.socket.io;
     manager.on('reconnect', handleReconnect);
     // No-op connect listener; optional
@@ -154,10 +164,14 @@ class GraphSocket {
     this.socket.on('run_status_changed', (payload: RunStatusChangedPayload) => {
       for (const fn of this.runStatusListeners) fn(payload);
     });
-    this.socket.on('run_event_appended', (payload: RunEventSocketPayload) => {
-      this.bumpRunCursor(payload.runId, { ts: payload.event.ts, id: payload.event.id });
+    const handleRunEvent = (eventName: 'run_event_appended' | 'run_event_updated', payload: RunEventSocketPayload) => {
+      const cursor = { ts: payload.event.ts, id: payload.event.id } as RunTimelineEventsCursor;
+      const force = eventName === 'run_event_updated';
+      this.bumpRunCursor(payload.runId, cursor, force ? { force: true } : undefined);
       for (const fn of this.runEventListeners) fn(payload);
-    });
+    };
+    this.socket.on('run_event_appended', (payload: RunEventSocketPayload) => handleRunEvent('run_event_appended', payload));
+    this.socket.on('run_event_updated', (payload: RunEventSocketPayload) => handleRunEvent('run_event_updated', payload));
     return this.socket;
   }
 

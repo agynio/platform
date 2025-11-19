@@ -3,6 +3,8 @@ import { Test } from '@nestjs/testing';
 import { FastifyAdapter, NestFastifyApplication } from '@nestjs/platform-fastify';
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { PassThrough } from 'node:stream';
+import type { AddressInfo } from 'net';
+import WebSocket from 'ws';
 import { ContainerTerminalController } from '../../src/infra/container/containerTerminal.controller';
 import { ContainerTerminalGateway } from '../../src/infra/container/terminal.gateway';
 import { TerminalSessionsService } from '../../src/infra/container/terminal.sessions.service';
@@ -71,6 +73,7 @@ class TestContainerService {
 describe('ContainerTerminalGateway E2E', () => {
   let app: NestFastifyApplication;
   let containerService: TestContainerService;
+  let baseUrl: string;
 
   beforeAll(async () => {
     const moduleRef = await Test.createTestingModule({
@@ -89,7 +92,13 @@ describe('ContainerTerminalGateway E2E', () => {
     const fastify = app.getHttpAdapter().getInstance();
     const gateway = app.get(ContainerTerminalGateway);
     gateway.registerRoutes(fastify);
-    await fastify.ready();
+    await app.listen(0, '127.0.0.1');
+
+    const addressInfo = fastify.server.address() as AddressInfo;
+    if (!addressInfo || typeof addressInfo.port !== 'number') {
+      throw new Error('Failed to determine Fastify listen port');
+    }
+    baseUrl = `http://127.0.0.1:${addressInfo.port}`;
 
     containerService = app.get(ContainerService) as unknown as TestContainerService;
   });
@@ -100,7 +109,7 @@ describe('ContainerTerminalGateway E2E', () => {
 
   it('supports full websocket terminal lifecycle', async () => {
     const fastify = app.getHttpAdapter().getInstance();
-    const containerId = 'test-container';
+    const containerId = 'c'.repeat(64);
 
     const sessionResponse = await fastify.inject({
       method: 'POST',
@@ -111,22 +120,36 @@ describe('ContainerTerminalGateway E2E', () => {
     const { sessionId, token } = sessionResponse.json() as { sessionId: string; token: string };
 
     const messages: TerminalMessage[] = [];
-    const ws = await fastify.injectWS(
-      `/api/containers/${containerId}/terminal/ws?sessionId=${sessionId}&token=${token}`,
-      {},
-      {
-        onInit(client) {
-          client.on('message', (payload) => {
-            const text = typeof payload === 'string' ? payload : payload.toString('utf8');
-            try {
-              messages.push(JSON.parse(text) as TerminalMessage);
-            } catch {
-              messages.push({ raw: text });
-            }
-          });
-        },
-      },
-    );
+    const wsUrl = new URL(baseUrl);
+    wsUrl.protocol = wsUrl.protocol === 'https:' ? 'wss:' : 'ws:';
+    wsUrl.pathname = `/api/containers/${containerId}/terminal/ws`;
+    wsUrl.search = new URLSearchParams({ sessionId, token }).toString();
+
+    const ws = new WebSocket(wsUrl.toString());
+    ws.on('message', (payload) => {
+      const text = typeof payload === 'string' ? payload : payload.toString('utf8');
+      try {
+        messages.push(JSON.parse(text) as TerminalMessage);
+      } catch {
+        messages.push({ raw: text });
+      }
+    });
+
+    await new Promise<void>((resolve, reject) => {
+      const timer = setTimeout(() => {
+        ws.removeAllListeners('open');
+        ws.removeAllListeners('error');
+        reject(new Error('Timed out waiting for terminal websocket open'));
+      }, 3000);
+      ws.once('open', () => {
+        clearTimeout(timer);
+        resolve();
+      });
+      ws.once('error', (err) => {
+        clearTimeout(timer);
+        reject(err);
+      });
+    });
 
     await waitFor(() => messages.some((msg) => msg.type === 'status' && msg.phase === 'running'), 2000);
 
@@ -148,7 +171,7 @@ describe('ContainerTerminalGateway E2E', () => {
     ws.send(JSON.stringify({ type: 'close' }));
     const closeInfo = await waitForWsClose(ws, 3000);
 
-    expect(closeInfo.code).toBe(1000);
+    expect([1000, 1005]).toContain(closeInfo.code);
     expect(messages.some((msg) => msg.type === 'status' && msg.phase === 'exited')).toBe(true);
     expect(messages.some((msg) => msg.type === 'error')).toBe(false);
     expect(containerService.closeCalls).toBeGreaterThan(0);

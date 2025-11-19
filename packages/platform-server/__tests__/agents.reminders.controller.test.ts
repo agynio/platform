@@ -55,15 +55,16 @@ describe('AgentsPersistenceService.listReminders', () => {
     };
     const { LoggerService } = await import('../src/core/services/logger.service');
     const { NoopGraphEventsPublisher } = await import('../src/gateway/graph.events.publisher');
+    const publisher = new NoopGraphEventsPublisher();
     const svc = new AgentsPersistenceService(
       prismaStub as any,
       new LoggerService(),
       { getThreadsMetrics: async () => ({}) } as any,
-      new NoopGraphEventsPublisher(),
       templateRegistryStub,
       graphRepoStub,
       createRunEventsStub() as any,
     );
+    svc.setEventsPublisher(publisher);
 
     await svc.listReminders('active', 50);
     await svc.listReminders('completed', 25);
@@ -90,15 +91,16 @@ describe('AgentsPersistenceService.listReminders', () => {
     };
     const logger = { error: vi.fn(), warn: vi.fn(), info: vi.fn(), debug: vi.fn() } as any;
     const { NoopGraphEventsPublisher } = await import('../src/gateway/graph.events.publisher');
+    const publisher = new NoopGraphEventsPublisher();
     const svc = new AgentsPersistenceService(
       prismaStub as any,
       logger,
       { getThreadsMetrics: async () => ({}) } as any,
-      new NoopGraphEventsPublisher(),
       templateRegistryStub,
       graphRepoStub,
       createRunEventsStub() as any,
     );
+    svc.setEventsPublisher(publisher);
 
     await expect(svc.listReminders('active', 5, 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa')).rejects.toThrow('db down');
     expect(logger.error).toHaveBeenCalledTimes(1);

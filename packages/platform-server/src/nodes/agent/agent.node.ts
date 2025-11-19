@@ -16,7 +16,6 @@ import {
   ToolCallMessage,
   ToolCallOutputMessage,
 } from '@agyn/llm';
-import { withAgent } from '@agyn/tracing';
 
 import { LLMProvisioner } from '../../llm/provisioners/llm.provisioner';
 import { CallModelLLMReducer } from '../../llm/reducers/callModel.llm.reducer';
@@ -98,7 +97,7 @@ export type AgentStaticConfig = z.infer<typeof AgentStaticConfigSchema>;
 export type WhenBusyMode = 'wait' | 'injectAfterTools';
 
 // Consolidated Agent class (merges previous BaseAgent + Agent into single AgentNode)
-import { Inject, Injectable, Scope } from '@nestjs/common';
+import { Inject, Injectable, Optional, Scope, forwardRef } from '@nestjs/common';
 import { ModuleRef } from '@nestjs/core';
 import type { TemplatePortConfig } from '../../graph/ports.types';
 import type { RuntimeContext } from '../../graph/runtimeContext';
@@ -118,10 +117,32 @@ export class AgentNode extends Node<AgentStaticConfig> {
     @Inject(LoggerService) protected logger: LoggerService,
     @Inject(LLMProvisioner) protected llmProvisioner: LLMProvisioner,
     @Inject(ModuleRef) protected readonly moduleRef: ModuleRef,
-    @Inject(AgentsPersistenceService) private readonly persistence: AgentsPersistenceService,
-    @Inject(RunSignalsRegistry) private readonly runSignals: RunSignalsRegistry,
+    @Optional() @Inject(forwardRef(() => AgentsPersistenceService)) private persistence?: AgentsPersistenceService,
+    @Optional() @Inject(RunSignalsRegistry) private runSignals?: RunSignalsRegistry,
   ) {
     super(logger);
+  }
+
+  private getPersistence(): AgentsPersistenceService {
+    if (!this.persistence) {
+      const resolved = this.moduleRef.get(AgentsPersistenceService, { strict: false });
+      if (!resolved) {
+        throw new Error('AgentsPersistenceService unavailable');
+      }
+      this.persistence = resolved;
+    }
+    return this.persistence;
+  }
+
+  private getRunSignals(): RunSignalsRegistry {
+    if (!this.runSignals) {
+      const resolved = this.moduleRef.get(RunSignalsRegistry, { strict: false });
+      if (!resolved) {
+        throw new Error('RunSignalsRegistry unavailable');
+      }
+      this.runSignals = resolved;
+    }
+    return this.runSignals;
   }
 
   get config() {
@@ -270,68 +291,61 @@ export class AgentNode extends Node<AgentStaticConfig> {
     let terminateSignal: Signal | undefined;
     try {
       // Begin run with strictly-typed input messages for persistent threadId
-      const started = await this.persistence.beginRunThread(thread, messages);
+      const started = await this.getPersistence().beginRunThread(thread, messages);
       runId = started.runId;
       if (!runId) throw new Error('run_start_failed');
       const ensuredRunId = runId;
 
       terminateSignal = new Signal();
-      this.runSignals.register(ensuredRunId, terminateSignal);
+      this.getRunSignals().register(ensuredRunId, terminateSignal);
 
-      result = await withAgent(
-        { threadId: thread, nodeId: this.nodeId, inputParameters: [{ thread }, { messages }] },
-        async () => {
-          const loop = await this.prepareLoop();
+      const loop = await this.prepareLoop();
 
-          const finishSignal = new Signal();
-          const newState = await loop.invoke(
-            { messages, context: { messageIds: [], memory: [] } },
-            { threadId: thread, runId: ensuredRunId, finishSignal, terminateSignal: terminateSignal!, callerAgent: this },
-            { start: 'load' },
-          );
-
-          if (terminateSignal!.isActive) {
-            await this.persistence.completeRun(ensuredRunId, 'terminated', []);
-            return ResponseMessage.fromText('terminated');
-          }
-
-          const last = newState.messages.at(-1);
-
-          // Persist injected messages only when using injectAfterTools strategy
-          if ((this.config.whenBusy ?? 'wait') === 'injectAfterTools') {
-            const injected = newState.messages.filter((m) => m instanceof SystemMessage && !messages.includes(m)) as SystemMessage[];
-            if (injected.length > 0) {
-              await this.persistence.recordInjected(ensuredRunId, injected);
-            }
-          }
-          if ((finishSignal.isActive && last instanceof ToolCallOutputMessage) || last instanceof ResponseMessage) {
-            this.logger.info(`Agent response in thread ${thread}: ${last?.text}`);
-            // Persist outputs and complete run
-            if (ensuredRunId) {
-              if (last instanceof ResponseMessage) {
-                // Persist strictly typed output items (AIMessage, ToolCallMessage)
-                const outputs: Array<AIMessage | ToolCallMessage> = last.output.filter(
-                  (o) => o instanceof AIMessage || o instanceof ToolCallMessage,
-                ) as Array<AIMessage | ToolCallMessage>;
-                await this.persistence.completeRun(ensuredRunId, 'finished', outputs);
-              } else if (last instanceof ToolCallOutputMessage) {
-                // Persist tool call output
-                await this.persistence.completeRun(ensuredRunId, 'finished', [last]);
-              }
-            }
-            return last;
-          }
-
-          throw new Error('Agent did not produce a valid response message.');
-        },
+      const finishSignal = new Signal();
+      const newState = await loop.invoke(
+        { messages, context: { messageIds: [], memory: [] } },
+        { threadId: thread, runId: ensuredRunId, finishSignal, terminateSignal, callerAgent: this },
+        { start: 'load' },
       );
+
+      if (terminateSignal.isActive) {
+        await this.getPersistence().completeRun(ensuredRunId, 'terminated', []);
+        result = ResponseMessage.fromText('terminated');
+      } else {
+        const last = newState.messages.at(-1);
+
+        const injected = (this.config.whenBusy ?? 'wait') === 'injectAfterTools'
+          ? (newState.messages.filter((m) => m instanceof SystemMessage && !messages.includes(m)) as SystemMessage[])
+          : [];
+        if (injected.length > 0) {
+          await this.getPersistence().recordInjected(ensuredRunId, injected);
+        }
+
+        const isToolResult = finishSignal.isActive && last instanceof ToolCallOutputMessage;
+        const isResponseResult = last instanceof ResponseMessage;
+        if (!isToolResult && !isResponseResult) {
+          throw new Error('Agent did not produce a valid response message.');
+        }
+
+        this.logger.info(`Agent response in thread ${thread}: ${last?.text}`);
+        if (last instanceof ResponseMessage) {
+          const outputs: Array<AIMessage | ToolCallMessage> = last.output.filter(
+            (o) => o instanceof AIMessage || o instanceof ToolCallMessage,
+          ) as Array<AIMessage | ToolCallMessage>;
+          await this.getPersistence().completeRun(ensuredRunId, 'finished', outputs);
+        } else {
+          await this.getPersistence().completeRun(ensuredRunId, 'finished', [last]);
+        }
+
+        result = last;
+      }
     } catch (err) {
       // Log and propagate; do not wrap persistence in try/catch
       this.logger.error(`Agent invocation error in thread ${thread}:`, err);
       throw err;
     } finally {
       this.runningThreads.delete(thread);
-      if (runId) this.runSignals.clear(runId);
+      if (runId) this.getRunSignals().clear(runId);
     }
 
     const mode =

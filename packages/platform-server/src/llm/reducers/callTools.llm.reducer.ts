@@ -1,5 +1,3 @@
-import { ToolCallResponse, withToolCall } from '@agyn/tracing';
-
 import { LLMContext, LLMContextState, LLMMessage, LLMState } from '../types';
 import { FunctionTool, Reducer, ResponseMessage, ToolCallMessage, ToolCallOutputMessage } from '@agyn/llm';
 import { LoggerService } from '../../core/services/logger.service';
@@ -31,6 +29,12 @@ type ToolCallErrorPayload = {
   retriable: boolean;
 };
 type ToolCallStructuredOutput = ToolCallRaw | ToolCallErrorPayload;
+
+type ToolCallResult = {
+  status: 'success' | 'error';
+  raw: ToolCallRaw;
+  output: ToolCallStructuredOutput;
+};
 
 @Injectable({ scope: Scope.TRANSIENT })
 export class CallToolsLLMReducer extends Reducer<LLMState, LLMContext> {
@@ -80,193 +84,17 @@ export class CallToolsLLMReducer extends Reducer<LLMState, LLMContext> {
     const llmEventId = state.meta?.lastLLMEventId ?? null;
 
     const results = await Promise.all(
-      toolsToCall.map(async (t) => {
-        const tool = toolsMap.get(t.name);
-        let toolResponse: ToolCallResponse<ToolCallRaw, ToolCallStructuredOutput> | null = null;
-        const storeResponse = (value: ToolCallResponse<ToolCallRaw, ToolCallStructuredOutput>) => {
-          toolResponse = value;
-          return value;
-        };
-
-        const createErrorResponse = (params: {
-          code: ToolCallErrorCode;
-          message: string;
-          originalArgs?: unknown;
-          details?: unknown;
-          retriable?: boolean;
-        }) => {
-          const { code, message, originalArgs, details, retriable } = params;
-          const payload = {
-            status: 'error' as const,
-            tool_name: t.name,
-            tool_call_id: t.callId,
-            error_code: code,
-            message,
-            ...(originalArgs !== undefined ? { original_args: originalArgs } : {}),
-            ...(details !== undefined ? { details } : {}),
-            retriable: retriable ?? false,
-          };
-
-          return new ToolCallResponse<ToolCallRaw, ToolCallStructuredOutput>({
-            raw: message,
-            output: payload,
-            status: 'error',
-          });
-        };
-
-        let startedEventId: string | null = null;
-        let response!: ToolCallResponse<ToolCallRaw, ToolCallStructuredOutput>;
-        let hasResponse = false;
-        let caughtError: unknown | null = null;
-
-        try {
-          await withToolCall<ToolCallStructuredOutput, ToolCallRaw>(
-            {
-              name: t.name,
-              toolCallId: t.callId,
-              input: t.args,
-              nodeId: nodeId ?? undefined,
-            },
-            async () => {
-              if (!tool) {
-                this.logger.warn(`Unknown tool called: ${t.name}`);
-                return storeResponse(
-                  createErrorResponse({
-                    code: 'TOOL_NOT_FOUND',
-                    message: `Tool ${t.name} is not registered.`,
-                    originalArgs: t.args,
-                  }),
-                );
-              }
-
-              let parsedArgs: unknown;
-              try {
-                parsedArgs = JSON.parse(t.args);
-              } catch (err) {
-                this.logger.error('Failed to parse tool arguments', err);
-                const details = err instanceof Error ? { message: err.message, name: err.name } : { error: err };
-                return storeResponse(
-                  createErrorResponse({
-                    code: 'BAD_JSON_ARGS',
-                    message: `Invalid JSON arguments for tool ${t.name}.`,
-                    originalArgs: t.args,
-                    details,
-                  }),
-                );
-              }
-
-              const validation = tool.schema.safeParse(parsedArgs);
-              if (!validation.success) {
-                const issues = validation.error?.issues ?? [];
-                return storeResponse(
-                  createErrorResponse({
-                    code: 'SCHEMA_VALIDATION_FAILED',
-                    message: `Arguments failed validation for tool ${t.name}.`,
-                    originalArgs: parsedArgs,
-                    details: issues,
-                  }),
-                );
-              }
-              const input = validation.data;
-
-              try {
-                let serializedInput: Prisma.InputJsonValue;
-                try {
-                  serializedInput = toPrismaJsonValue(input);
-                } catch (err) {
-                  this.logger.warn('Failed to serialize tool input for run event', err);
-                  serializedInput = toPrismaJsonValue(null);
-                }
-
-                const started = await this.runEvents.startToolExecution({
-                  runId: ctx.runId,
-                  threadId: ctx.threadId,
-                  nodeId,
-                  toolName: tool.name,
-                  toolCallId: t.callId,
-                  llmCallEventId: llmEventId ?? undefined,
-                  input: serializedInput,
-                });
-                startedEventId = started.id;
-                await this.runEvents.publishEvent(started.id, 'append');
-              } catch (err) {
-                this.logger.warn('Failed to record tool execution start', err);
-              }
-
-              try {
-                const raw = await tool.execute(input, ctx);
-
-                if (typeof raw === 'string' && raw.length > 50000) {
-                  return storeResponse(
-                    createErrorResponse({
-                      code: 'TOOL_OUTPUT_TOO_LARGE',
-                      message: `Tool ${t.name} produced output longer than 50000 characters.`,
-                      originalArgs: input,
-                      details: { length: raw.length },
-                    }),
-                  );
-                }
-
-                return storeResponse(
-                  new ToolCallResponse<ToolCallRaw, ToolCallStructuredOutput>({
-                    raw,
-                    output: raw,
-                    status: 'success',
-                  }),
-                );
-              } catch (err) {
-                this.logger.error('Error occurred while executing tool', err);
-                const message = err instanceof Error && err.message ? err.message : 'Unknown error';
-                const details = err instanceof Error ? { message: err.message, name: err.name, stack: err.stack } : { error: err };
-                const code = err instanceof McpError ? 'MCP_CALL_ERROR' : 'TOOL_EXECUTION_ERROR';
-                return storeResponse(createErrorResponse({
-                  code,
-                  message: `Tool ${t.name} execution failed: ${message}`,
-                  originalArgs: input,
-                  details,
-                }));
-              }
-            },
-          );
-          if (!toolResponse) throw new Error('tool_response_missing');
-          response = toolResponse;
-          hasResponse = true;
-        } catch (err: unknown) {
-          caughtError = err;
-          throw err;
-        } finally {
-          if (startedEventId) {
-            try {
-              await this.finalizeToolExecutionEvent(startedEventId, hasResponse ? response : undefined, caughtError);
-            } catch (err: unknown) {
-              this.logger.warn('Failed to finalize tool execution event', err);
-            }
-          }
-        }
-
-        if (!hasResponse) {
-          throw caughtError instanceof Error
-            ? caughtError
-            : new Error('tool_execution_failed_without_response');
-        }
-
-        const outputForMessage = (() => {
-          const payload = response.output ?? response.raw;
-          if (response.status === 'success') {
-            if (typeof payload === 'string') return payload;
-            if (Array.isArray(payload)) return payload as ResponseFunctionCallOutputItemList;
-            throw new Error('tool_response_invalid_output');
-          }
-
-          if (typeof payload === 'string') return payload;
-          try {
-            return JSON.stringify(payload);
-          } catch {
-            return 'Tool execution failed';
-          }
-        })();
-
-        return ToolCallOutputMessage.fromResponse(t.callId, outputForMessage);
+      toolsToCall.map(async (toolCall) => {
+        const tool = toolsMap.get(toolCall.name);
+        const execution = await this.executeToolCall({
+          ctx,
+          llmEventId,
+          nodeId,
+          tool,
+          toolCall,
+        });
+        const outputForMessage = this.buildToolMessagePayload(execution);
+        return ToolCallOutputMessage.fromResponse(toolCall.callId, outputForMessage);
       }),
     );
 
@@ -291,6 +119,172 @@ export class CallToolsLLMReducer extends Reducer<LLMState, LLMContext> {
     return { ...state, messages: [...state.messages, ...results], meta, context };
   }
 
+  private async executeToolCall(params: {
+    ctx: LLMContext;
+    llmEventId: string | null;
+    nodeId: string | null;
+    tool: FunctionTool | undefined;
+    toolCall: ToolCallMessage;
+  }): Promise<ToolCallResult> {
+    const { ctx, llmEventId, nodeId, tool, toolCall } = params;
+
+    let startedEventId: string | null = null;
+    let caughtError: unknown | null = null;
+    let response: ToolCallResult | undefined;
+
+    const createErrorResponse = (args: {
+      code: ToolCallErrorCode;
+      message: string;
+      originalArgs?: unknown;
+      details?: unknown;
+      retriable?: boolean;
+    }): ToolCallResult => {
+      const { code, message, originalArgs, details, retriable } = args;
+      return {
+        status: 'error',
+        raw: message,
+        output: {
+          status: 'error',
+          tool_name: toolCall.name,
+          tool_call_id: toolCall.callId,
+          error_code: code,
+          message,
+          ...(originalArgs !== undefined ? { original_args: originalArgs } : {}),
+          ...(details !== undefined ? { details } : {}),
+          retriable: retriable ?? false,
+        },
+      };
+    };
+
+    try {
+      if (!tool) {
+        this.logger.warn(`Unknown tool called: ${toolCall.name}`);
+        response = createErrorResponse({
+          code: 'TOOL_NOT_FOUND',
+          message: `Tool ${toolCall.name} is not registered.`,
+          originalArgs: toolCall.args,
+        });
+        return response;
+      }
+
+      let parsedArgs: unknown;
+      try {
+        parsedArgs = JSON.parse(toolCall.args);
+      } catch (err) {
+        this.logger.error('Failed to parse tool arguments', err);
+        const details = err instanceof Error ? { message: err.message, name: err.name } : { error: err };
+        response = createErrorResponse({
+          code: 'BAD_JSON_ARGS',
+          message: `Invalid JSON arguments for tool ${toolCall.name}.`,
+          originalArgs: toolCall.args,
+          details,
+        });
+        return response;
+      }
+
+      const validation = tool.schema.safeParse(parsedArgs);
+      if (!validation.success) {
+        const issues = validation.error?.issues ?? [];
+        response = createErrorResponse({
+          code: 'SCHEMA_VALIDATION_FAILED',
+          message: `Arguments failed validation for tool ${toolCall.name}.`,
+          originalArgs: parsedArgs,
+          details: issues,
+        });
+        return response;
+      }
+      const input = validation.data;
+
+      try {
+        let serializedInput: Prisma.InputJsonValue;
+        try {
+          serializedInput = toPrismaJsonValue(input);
+        } catch (err) {
+          this.logger.warn('Failed to serialize tool input for run event', err);
+          serializedInput = toPrismaJsonValue(null);
+        }
+
+        const started = await this.runEvents.startToolExecution({
+          runId: ctx.runId,
+          threadId: ctx.threadId,
+          nodeId,
+          toolName: tool.name,
+          toolCallId: toolCall.callId,
+          llmCallEventId: llmEventId ?? undefined,
+          input: serializedInput,
+        });
+        startedEventId = started.id;
+        await this.runEvents.publishEvent(started.id, 'append');
+      } catch (err) {
+        this.logger.warn('Failed to record tool execution start', err);
+      }
+
+      try {
+        const raw = await tool.execute(input, ctx);
+
+        if (typeof raw === 'string' && raw.length > 50000) {
+          response = createErrorResponse({
+            code: 'TOOL_OUTPUT_TOO_LARGE',
+            message: `Tool ${toolCall.name} produced output longer than 50000 characters.`,
+            originalArgs: input,
+            details: { length: raw.length },
+          });
+        } else {
+          response = {
+            status: 'success',
+            raw,
+            output: raw,
+          };
+        }
+      } catch (err) {
+        this.logger.error('Error occurred while executing tool', err);
+        const message = err instanceof Error && err.message ? err.message : 'Unknown error';
+        const details =
+          err instanceof Error ? { message: err.message, name: err.name, stack: err.stack } : { error: err };
+        const code = err instanceof McpError ? 'MCP_CALL_ERROR' : 'TOOL_EXECUTION_ERROR';
+        response = createErrorResponse({
+          code,
+          message: `Tool ${toolCall.name} execution failed: ${message}`,
+          originalArgs: input,
+          details,
+        });
+      }
+
+      if (!response) {
+        throw new Error('tool_response_missing');
+      }
+
+      return response;
+    } catch (err) {
+      caughtError = err;
+      throw err instanceof Error ? err : new Error(String(err));
+    } finally {
+      if (startedEventId) {
+        try {
+          await this.finalizeToolExecutionEvent(startedEventId, response, caughtError);
+        } catch (finalizeErr: unknown) {
+          this.logger.warn('Failed to finalize tool execution event', finalizeErr);
+        }
+      }
+    }
+  }
+
+  private buildToolMessagePayload(response: ToolCallResult): ToolCallRaw {
+    const payload = response.output ?? response.raw;
+    if (response.status === 'success') {
+      if (typeof payload === 'string') return payload;
+      if (Array.isArray(payload)) return payload as ResponseFunctionCallOutputItemList;
+      throw new Error('tool_response_invalid_output');
+    }
+
+    if (typeof payload === 'string') return payload;
+    try {
+      return JSON.stringify(payload);
+    } catch {
+      return 'Tool execution failed';
+    }
+  }
+
   private toJson(value: unknown): Prisma.InputJsonValue | null {
     if (value === null || value === undefined) return null;
     try {
@@ -305,8 +299,8 @@ export class CallToolsLLMReducer extends Reducer<LLMState, LLMContext> {
     }
   }
 
-  private extractErrorMessage(response: ToolCallResponse<unknown, unknown>): string | null {
-    if (response.status === 'success') return null;
+  private extractErrorMessage(response: ToolCallResult | undefined): string | null {
+    if (!response || response.status === 'success') return null;
     if (typeof response.output === 'string') return response.output;
     if (typeof response.raw === 'string') return response.raw;
     return null;
@@ -324,7 +318,7 @@ export class CallToolsLLMReducer extends Reducer<LLMState, LLMContext> {
 
   private async finalizeToolExecutionEvent(
     eventId: string,
-    response: ToolCallResponse<ToolCallRaw, ToolCallStructuredOutput> | undefined,
+    response: ToolCallResult | undefined,
     caughtError: unknown | null,
   ): Promise<void> {
     if (caughtError !== null) {

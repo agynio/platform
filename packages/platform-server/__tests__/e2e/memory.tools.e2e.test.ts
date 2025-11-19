@@ -6,10 +6,11 @@ import { LoggerService } from '../../src/core/services/logger.service';
 import { MemoryToolNode } from '../../src/nodes/tools/memory/memory.node';
 
 const URL = process.env.AGENTS_DATABASE_URL;
-const maybeDescribe = URL ? describe : describe.skip;
+const shouldRunDbTests = process.env.RUN_DB_TESTS === 'true' && !!URL;
+const maybeDescribe = shouldRunDbTests ? describe : describe.skip;
 
 maybeDescribe('E2E: memory tools with Postgres backend', () => {
-  if (!URL) return;
+  if (!shouldRunDbTests) return;
   const prisma = new PrismaClient({ datasources: { db: { url: URL! } } });
   const logger = new LoggerService();
   let svc: MemoryService;

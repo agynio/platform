@@ -1,10 +1,12 @@
 # Observability Overview
 
+> NOTE: The dedicated tracing stack has been removed from the platform. The details below remain for historical reference only.
+
 Scope
 - Spans and traces for model calls, tool calls, and system operations.
 - Storage notes and suggested indices.
 - Links to detailed docs in docs/observability/.
-- UI linkage via VITE_TRACING_UI_BASE.
+- Former UI linkage relied on a tracing UI base URL; this integration is now retired.
 
 Spans and traces
 - The server initializes the observability SDK at startup with default attributes and endpoints.
@@ -19,12 +21,12 @@ Storage and indices
   
 
 UI linkage
-- The graph UI can link to a trace in the Observability UI via the base configured in `VITE_TRACING_UI_BASE` (default http://localhost:4320). Set this in the UI environment.
+- The platform UI no longer links to a dedicated tracing application. Historical references to the tracing UI base are obsolete.
 
 Related docs
 - docs/observability/heartbeats-and-sweeper.md
 - docs/observability/stage-1-plan.md
-- Migration: see CHANGELOG.md for OBS_* -> TRACING_* mapping.
+- Migration: see CHANGELOG.md for historical environment variable mapping between obs_* and tracing equivalents.
 
 Related behavior
 - SDK initialization occurs at server startup; spans are emitted for model/tool calls.

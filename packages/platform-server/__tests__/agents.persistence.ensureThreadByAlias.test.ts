@@ -29,17 +29,19 @@ const createLinkingStub = () =>
     onChildRunCompleted: async () => null,
   }) as unknown as CallAgentLinkingService;
 
-const createService = (stub: any) =>
-  new AgentsPersistenceService(
+const createService = (stub: any) => {
+  const svc = new AgentsPersistenceService(
     new StubPrismaService(stub) as any,
     new LoggerService(),
     metricsStub,
-    new NoopGraphEventsPublisher(),
     templateRegistryStub,
     graphRepoStub,
     createRunEventsStub() as any,
     createLinkingStub(),
   );
+  svc.setEventsPublisher(new NoopGraphEventsPublisher());
+  return svc;
+};
 
 describe('AgentsPersistenceService: alias resolution helpers', () => {
   it('getOrCreateThreadByAlias creates a root thread with summary', async () => {

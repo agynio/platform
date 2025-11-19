@@ -4,8 +4,7 @@ import { vi } from 'vitest';
 // Global test harness configuration for platform-ui
 // - Polyfill ResizeObserver for Radix UI components
 // - Normalize window.location to a stable origin (for MSW absolute handlers)
-// - Provide safe defaults for config.apiBaseUrl and tracing server
-// - Stub tracing spans fetches to avoid network in CI
+// - Provide safe defaults for config.apiBaseUrl
 //
 // Note: Do NOT start a global MSW server here because some tests manage their
 // own msw server instance via TestProviders. Instead, keep fetch deterministic
@@ -30,11 +29,9 @@ if (!('ResizeObserver' in globalThis)) {
 
 // Provide required envs to avoid import-time throws in tests
 vi.stubEnv('VITE_API_BASE_URL', process.env.VITE_API_BASE_URL ?? 'http://localhost:3010');
-vi.stubEnv('VITE_TRACING_SERVER_URL', process.env.VITE_TRACING_SERVER_URL ?? 'http://localhost:4319');
 // Also ensure process.env is populated for test utils reading process.env
 if (typeof process !== 'undefined' && process.env) {
   process.env.VITE_API_BASE_URL = process.env.VITE_API_BASE_URL ?? 'http://localhost:3010';
-  process.env.VITE_TRACING_SERVER_URL = process.env.VITE_TRACING_SERVER_URL ?? 'http://localhost:4319';
 }
 
 // Minimal polyfills for UI libraries (Radix/Floating-UI)
@@ -71,12 +68,3 @@ if (typeof document !== 'undefined' && !document.createRange) {
 
 // Avoid mutating config.apiBaseUrl globally to not affect unit tests that
 // validate env resolution. Individual pages pass base '' explicitly where needed.
-
-// Stub tracing span fetches to avoid external network in CI.
-// Tests that need specific spans should mock '@/api/modules/tracing' themselves.
-vi.mock('@/api/modules/tracing', async () => {
-  return {
-    fetchSpansInRange: async () => [],
-    fetchRunningSpansFromTo: async () => [],
-  };
-});

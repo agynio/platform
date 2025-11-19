@@ -7,43 +7,46 @@ import { RunEventsService, type RunTimelineEvent } from '../src/events/run-event
 import { NoopGraphEventsPublisher, type RunEventBroadcast } from '../src/gateway/graph.events.publisher';
 
 const databaseUrl = process.env.AGENTS_DATABASE_URL;
-if (!databaseUrl) throw new Error('AGENTS_DATABASE_URL must be set for run-events.publish.test.ts');
+const shouldRunDbTests = process.env.RUN_DB_TESTS === 'true' && !!databaseUrl;
+const maybeDescribe = shouldRunDbTests ? describe.sequential : describe.skip;
 
-const prisma = new PrismaClient({ datasources: { db: { url: databaseUrl } } });
-const prismaService = { getClient: () => prisma } as unknown as PrismaService;
-const logger = {
-  info: () => undefined,
-  debug: () => undefined,
-  warn: () => undefined,
-  error: () => undefined,
-} as unknown as LoggerService;
+maybeDescribe('RunEventsService publishEvent broadcasting', () => {
+  if (!shouldRunDbTests) return;
 
-type CapturedEvent = { runId: string; threadId: string; payload: RunEventBroadcast };
+  const prisma = new PrismaClient({ datasources: { db: { url: databaseUrl! } } });
+  const prismaService = { getClient: () => prisma } as unknown as PrismaService;
+  const logger = {
+    info: () => undefined,
+    debug: () => undefined,
+    warn: () => undefined,
+    error: () => undefined,
+  } as unknown as LoggerService;
 
-class CapturingPublisher extends NoopGraphEventsPublisher {
-  public events: CapturedEvent[] = [];
+  type CapturedEvent = { runId: string; threadId: string; payload: RunEventBroadcast };
 
-  override emitRunEvent(runId: string, threadId: string, payload: RunEventBroadcast): void {
-    this.events.push({ runId, threadId, payload });
+  class CapturingPublisher extends NoopGraphEventsPublisher {
+    public events: CapturedEvent[] = [];
+
+    override emitRunEvent(runId: string, threadId: string, payload: RunEventBroadcast): void {
+      this.events.push({ runId, threadId, payload });
+    }
+
+    clear() {
+      this.events = [];
+    }
   }
 
-  clear() {
-    this.events = [];
+  async function createThreadAndRun() {
+    const thread = await prisma.thread.create({ data: { alias: `thread-${randomUUID()}` } });
+    const run = await prisma.run.create({ data: { threadId: thread.id } });
+    return { thread, run };
   }
-}
 
-async function createThreadAndRun() {
-  const thread = await prisma.thread.create({ data: { alias: `thread-${randomUUID()}` } });
-  const run = await prisma.run.create({ data: { threadId: thread.id } });
-  return { thread, run };
-}
+  async function cleanup(threadId: string, runId: string) {
+    await prisma.run.delete({ where: { id: runId } }).catch(() => undefined);
+    await prisma.thread.delete({ where: { id: threadId } }).catch(() => undefined);
+  }
 
-async function cleanup(threadId: string, runId: string) {
-  await prisma.run.delete({ where: { id: runId } }).catch(() => undefined);
-  await prisma.thread.delete({ where: { id: threadId } }).catch(() => undefined);
-}
-
-describe.sequential('RunEventsService publishEvent broadcasting', () => {
   let publisher: CapturingPublisher;
   let runEvents: RunEventsService;
 

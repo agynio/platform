@@ -3,7 +3,7 @@ import { Inject, Injectable } from '@nestjs/common';
 import type { MessageKind, Prisma, PrismaClient, RunMessageType, RunStatus, ThreadStatus } from '@prisma/client';
 import { LoggerService } from '../core/services/logger.service';
 import { PrismaService } from '../core/services/prisma.service';
-import { GraphEventsPublisher, type GraphEventsPublisherAware } from '../gateway/graph.events.publisher';
+import { GraphEventsPublisher, NoopGraphEventsPublisher, type GraphEventsPublisherAware } from '../gateway/graph.events.publisher';
 import { GraphRepository } from '../graph/graph.repository';
 import { TemplateRegistry } from '../graph/templateRegistry';
 import type { PersistedGraphNode } from '../graph/types';
@@ -25,13 +25,12 @@ export class AgentsPersistenceService implements GraphEventsPublisherAware {
     @Inject(PrismaService) private prismaService: PrismaService,
     @Inject(LoggerService) private readonly logger: LoggerService,
     @Inject(ThreadsMetricsService) private readonly metrics: ThreadsMetricsService,
-    @Inject(GraphEventsPublisher) events: GraphEventsPublisher,
     @Inject(TemplateRegistry) private readonly templateRegistry: TemplateRegistry,
     @Inject(GraphRepository) private readonly graphs: GraphRepository,
     @Inject(RunEventsService) private readonly runEvents: RunEventsService,
     @Inject(CallAgentLinkingService) private readonly callAgentLinking: CallAgentLinkingService,
   ) {
-    this.events = events;
+    this.events = new NoopGraphEventsPublisher();
   }
 
   setEventsPublisher(publisher: GraphEventsPublisher): void {

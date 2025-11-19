@@ -6,40 +6,6 @@ import { LoggerService } from '../src/core/services/logger.service.js';
 import { createRunEventsStub } from './helpers/runEvents.stub';
 import { Signal } from '../src/signal';
 
-vi.mock('@agyn/tracing', async () => {
-  const actual = await vi.importActual<typeof import('@agyn/tracing')>('@agyn/tracing');
-  const ToolCallResponse = actual.ToolCallResponse;
-
-  const withToolCall = async (_attrs: unknown, fn: () => Promise<unknown> | unknown): Promise<unknown> => {
-    const res = await fn();
-    return res instanceof ToolCallResponse ? res.raw : res;
-  };
-
-  const withLLM = async (_attrs: unknown, fn: () => Promise<unknown> | unknown): Promise<unknown> => {
-    const res = await fn();
-    if (res instanceof actual.LLMResponse) {
-      return res.raw;
-    }
-    return res;
-  };
-
-  const loggerImpl = {
-    info: vi.fn(),
-    error: vi.fn(),
-    debug: vi.fn(),
-    warn: vi.fn(),
-  };
-
-  const logger = () => loggerImpl;
-
-  return {
-    ...actual,
-    withToolCall,
-    withLLM,
-    logger,
-  } as const;
-});
-
 type MockFn = ReturnType<typeof vi.fn>;
 
 describe('CallToolsLLMReducer context items', () => {

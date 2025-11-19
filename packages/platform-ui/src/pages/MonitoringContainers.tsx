@@ -86,7 +86,7 @@ export function MonitoringContainers() {
                   </Td>
                   <Td className="font-mono text-xs">
                     {c.threadId ? (
-                      <Link className="underline" to={`/tracing/thread/${c.threadId}`}>{c.threadId}</Link>
+                      <Link className="underline" to={`/agents/threads/${c.threadId}`}>{c.threadId}</Link>
                     ) : (
                       <span className="text-muted-foreground">(none)</span>
                     )}

@@ -3,7 +3,6 @@
 
 type ViteEnv = {
   VITE_API_BASE_URL?: string;
-  VITE_TRACING_SERVER_URL?: string;
 };
 
 function requireEnv(name: keyof ViteEnv): string {
@@ -39,15 +38,12 @@ function deriveBase(raw: string, options: { stripApi: boolean }): string {
 }
 
 const rawApiBase = requireEnv('VITE_API_BASE_URL');
-const rawTracingBase = requireEnv('VITE_TRACING_SERVER_URL');
 
 const apiBaseUrl = deriveBase(rawApiBase, { stripApi: true });
 const socketBaseUrl = deriveBase(rawApiBase, { stripApi: true });
-const tracingApiBaseUrl = deriveBase(rawTracingBase, { stripApi: false });
 
 export const config = {
   apiBaseUrl,
-  tracingApiBaseUrl,
   socketBaseUrl,
 };
 

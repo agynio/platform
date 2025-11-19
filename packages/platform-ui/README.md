@@ -9,11 +9,6 @@ Quickstart
 
 Env configuration (required)
 - VITE_API_BASE_URL: base URL for the Agents API used by the UI. Set to your server origin (e.g., https://agents.example.com). **Do not include `/api`;** REST requests add it automatically and websockets connect to `/socket.io` on the same origin.
-- VITE_TRACING_SERVER_URL: base URL for the tracing server used by the UI.
-
-Tracing API access
-- The platform UI uses the configured `VITE_TRACING_SERVER_URL` for tracing HTTP and websocket access via TracingProvider and utilities.
-- Note: Separate tracing UI base has been removed; platform-ui uses internal routes and TracingProvider with the configured tracing server.
 
 API base URL
 - The UI requires `VITE_API_BASE_URL` for all API interactions. No fallback is provided.
@@ -68,8 +63,8 @@ Routing (Issue #285)
 - Routes:
   - Agents → Graph (/agents/graph) renders AgentBuilder
   - Agents → Chat (/agents/chat) placeholder
-  - Tracing → Traces (/tracing/traces) placeholder
-  - Tracing → Errors (/tracing/errors) placeholder
+  - Tracing → Traces (/tracing/traces) shows a tracing-removed notice
+  - Tracing → Errors (/tracing/errors) shows a tracing-removed notice
   - Monitoring → Containers (/monitoring/containers) placeholder
   - Monitoring → Resources (/monitoring/resources) placeholder
   - Settings → Secrets (/settings/secrets) placeholder

@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { LoggerService } from '../src/core/services/logger.service.js';
 
 // Access private via any for lightweight test without changing API
@@ -80,6 +80,38 @@ describe('LoggerService.serialize', () => {
       if (typeof c2.cause.cause === 'string') {
         expect(c2.cause.cause).toContain('Truncated');
       }
+    }
+  });
+
+  it('emits structured JSON logs with merged object context', () => {
+    const spy = vi.spyOn(console, 'info').mockImplementation(() => {});
+    try {
+      logger.info('hello world', { userId: 42, status: 'ok' });
+      expect(spy).toHaveBeenCalledTimes(1);
+      const payload = JSON.parse(spy.mock.calls[0][0]);
+      expect(payload.level).toBe('INFO');
+      expect(payload.message).toBe('hello world');
+      expect(payload.userId).toBe(42);
+      expect(payload.status).toBe('ok');
+      expect(payload).not.toHaveProperty('context');
+      expect(typeof payload.ts).toBe('string');
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it('emits context array when params are not plain objects', () => {
+    const spy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      logger.warn('with details', 'raw', { value: 1 });
+      expect(spy).toHaveBeenCalledTimes(1);
+      const payload = JSON.parse(spy.mock.calls[0][0]);
+      expect(payload.level).toBe('WARN');
+      expect(Array.isArray(payload.context)).toBe(true);
+      expect(payload.context[0]).toBe('raw');
+      expect(payload.context[1].value).toBe(1);
+    } finally {
+      spy.mockRestore();
     }
   });
 });

@@ -1,12 +1,7 @@
-import { TracingProvider, TracingTracesView } from '@agyn/tracing-ui';
-import { config } from '@/config';
+import { TracingDisabledPage } from './TracingDisabled';
 
 export function TracingTraces() {
   return (
-    <div className="p-4">
-      <TracingProvider serverUrl={config.tracingApiBaseUrl}>
-        <TracingTracesView basePaths={{ trace: '/tracing/trace', thread: '/tracing/thread' }} />
-      </TracingProvider>
-    </div>
+    <TracingDisabledPage title="Tracing removed" message="Trace inspection is no longer available." />
   );
 }

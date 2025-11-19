@@ -15,8 +15,6 @@ export default defineConfig({
         path.resolve(__dirname, '../..'),
         // packages/ui
         path.resolve(__dirname, '../../packages/ui'),
-        // packages/tracing-ui
-        path.resolve(__dirname, '../../packages/tracing-ui'),
       ],
     },
   },
@@ -24,7 +22,6 @@ export default defineConfig({
     alias: {
       '@': path.resolve(__dirname, './src'),
       '@agyn/ui': path.resolve(__dirname, '../../packages/ui/src'),
-      '@agyn/tracing-ui': path.resolve(__dirname, '../../packages/tracing-ui'),
       // Explicit aliases for Radix UI deps when importing workspace UI sources
       '@radix-ui/react-accordion': path.resolve(__dirname, './node_modules/@radix-ui/react-accordion'),
       '@radix-ui/react-alert-dialog': path.resolve(__dirname, './node_modules/@radix-ui/react-alert-dialog'),
