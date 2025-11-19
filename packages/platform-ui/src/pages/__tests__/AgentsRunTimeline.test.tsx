@@ -259,6 +259,7 @@ beforeEach(() => {
   notifyMocks.success.mockReset();
   notifyMocks.error.mockReset();
   setMatchMedia(true);
+  window.localStorage.clear();
 
   runsModule.terminate.mockResolvedValue({ ok: true });
 
@@ -317,6 +318,8 @@ describe('AgentsRunTimeline layout and selection', () => {
     const listbox = getByRole('listbox');
     expect(listbox).toHaveAttribute('aria-labelledby', 'run-timeline-events-heading');
     await waitFor(() => expect(listbox).toHaveAttribute('aria-activedescendant', 'run-event-option-event-2'));
+    await waitFor(() => expect(getByTestId('location').textContent).toContain('follow=true'));
+    await waitFor(() => expect(window.localStorage.getItem('timeline-follow:run-1')).toBe('true'));
 
     const detailsBefore = getByTestId('timeline-event-details');
     expect(detailsBefore).toHaveTextContent('LLM Call');
@@ -324,22 +327,29 @@ describe('AgentsRunTimeline layout and selection', () => {
     listbox.focus();
     fireEvent.keyDown(listbox, { key: 'ArrowUp' });
 
-    expect(listbox).toHaveAttribute('aria-activedescendant', 'run-event-option-event-1');
+    await waitFor(() => expect(listbox).toHaveAttribute('aria-activedescendant', 'run-event-option-event-1'));
     const detailsAfter = getByTestId('timeline-event-details');
     expect(detailsAfter).toHaveTextContent('Tool Execution');
     expect(getByTestId('location').textContent).toContain('eventId=event-1');
+    await waitFor(() => expect(getByTestId('location').textContent).toContain('follow=false'));
+    await waitFor(() => expect(window.localStorage.getItem('timeline-follow:run-1')).toBe('false'));
 
     expect(getByText('Events')).toBeInTheDocument();
     expect(getByRole('region', { name: 'Run event details' })).toBeInTheDocument();
   });
 
-  it('opens details in an accessible modal on mobile and clears selection on close', () => {
+  it('opens details in an accessible modal on mobile and clears selection on close', async () => {
     setMatchMedia(false);
-    const { getAllByText, queryByRole, getByRole, getByTestId } = renderPage([
+    const { queryByRole, getByRole, getByTestId } = renderPage([
       '/agents/threads/thread-1/runs/run-1/timeline',
     ]);
 
-    const firstItem = getAllByText('Tool Execution — Search Tool')[0];
+    const listbox = getByRole('listbox');
+    await waitFor(() => expect(getByTestId('location').textContent).toContain('follow=false'));
+    await waitFor(() => expect(window.localStorage.getItem('timeline-follow:run-1')).toBe('false'));
+
+    const firstItem = within(listbox).getByText('Tool Execution — Search Tool').closest('[role="option"]');
+    if (!firstItem) throw new Error('List option not found');
     fireEvent.click(firstItem);
 
     const dialog = getByRole('dialog');
@@ -356,7 +366,7 @@ describe('AgentsRunTimeline layout and selection', () => {
 describe('AgentsRunTimeline socket reactions', () => {
   it('replaces existing events on update and displays refreshed tool output', async () => {
     const { getByRole, getByTestId } = renderPage([
-      '/agents/threads/thread-1/runs/run-1/timeline?eventId=event-1',
+      '/agents/threads/thread-1/runs/run-1/timeline?eventId=event-1&follow=false',
     ]);
 
     const listbox = getByRole('listbox');
@@ -396,7 +406,7 @@ describe('AgentsRunTimeline socket reactions', () => {
 
   it('merges socket updates and performs cursor catch-up after reconnect', async () => {
     const { findByText, getByTestId, unmount } = renderPage([
-      '/agents/threads/thread-1/runs/run-1/timeline?eventId=event-1',
+      '/agents/threads/thread-1/runs/run-1/timeline?eventId=event-1&follow=false',
     ]);
 
     const appended = buildEvent({
@@ -459,6 +469,164 @@ describe('AgentsRunTimeline socket reactions', () => {
 
     expect(getByTestId('timeline-event-details')).toBeInTheDocument();
     unmount();
+  });
+});
+
+describe('AgentsRunTimeline follow mode', () => {
+  it('defaults to follow on desktop and auto-selects the latest event', async () => {
+    const { getByRole, getByTestId } = renderPage([
+      '/agents/threads/thread-1/runs/run-1/timeline',
+    ]);
+
+    const listbox = getByRole('listbox');
+    await waitFor(() => expect(listbox).toHaveAttribute('aria-activedescendant', 'run-event-option-event-2'));
+    await waitFor(() => expect(getByTestId('location').textContent).toContain('follow=true'));
+    await waitFor(() => expect(getByTestId('location').textContent).toContain('eventId=event-2'));
+    await waitFor(() => expect(window.localStorage.getItem('timeline-follow:run-1')).toBe('true'));
+  });
+
+  it('defaults to manual mode on mobile without auto-selecting an event', async () => {
+    setMatchMedia(false);
+    const { getByRole, getByTestId } = renderPage([
+      '/agents/threads/thread-1/runs/run-1/timeline',
+    ]);
+
+    const listbox = getByRole('listbox');
+    await waitFor(() => expect(getByTestId('location').textContent).toContain('follow=false'));
+    expect(listbox.getAttribute('aria-activedescendant')).toBeNull();
+    await waitFor(() => expect(window.localStorage.getItem('timeline-follow:run-1')).toBe('false'));
+  });
+
+  it('turns follow off on manual selection and keeps focus on the chosen event', async () => {
+    const { getByRole, getByTestId } = renderPage([
+      '/agents/threads/thread-1/runs/run-1/timeline',
+    ]);
+
+    const listbox = getByRole('listbox');
+    await waitFor(() => expect(listbox).toHaveAttribute('aria-activedescendant', 'run-event-option-event-2'));
+
+    const firstItem = within(listbox).getByText('Tool Execution — Search Tool').closest('[role="option"]');
+    if (!firstItem) throw new Error('List option not found');
+    fireEvent.click(firstItem);
+
+    await waitFor(() => expect(getByTestId('location').textContent).toContain('follow=false'));
+    await waitFor(() => expect(listbox).toHaveAttribute('aria-activedescendant', 'run-event-option-event-1'));
+
+    const appended = buildEvent({
+      id: 'event-3',
+      ts: '2024-01-01T00:00:03.000Z',
+      type: 'summarization',
+      toolExecution: undefined,
+      summarization: {
+        summaryText: 'done',
+        newContextCount: 1,
+        oldContextTokens: null,
+        raw: null,
+      },
+    });
+
+    await act(async () => {
+      socketMocks.runEvent?.({ runId: 'run-1', event: appended, mutation: 'append' });
+    });
+
+    await waitFor(() => expect(within(listbox).getByText('Summarization')).toBeInTheDocument());
+    expect(listbox).toHaveAttribute('aria-activedescendant', 'run-event-option-event-1');
+    await waitFor(() => expect(window.localStorage.getItem('timeline-follow:run-1')).toBe('false'));
+  });
+
+  it('re-enables follow and selects the newest event when toggled back on', async () => {
+    const { getByRole, getByTestId } = renderPage([
+      '/agents/threads/thread-1/runs/run-1/timeline',
+    ]);
+
+    const listbox = getByRole('listbox');
+    await waitFor(() => expect(listbox).toHaveAttribute('aria-activedescendant', 'run-event-option-event-2'));
+    const firstOption = within(listbox).getByText('Tool Execution — Search Tool').closest('[role="option"]');
+    if (!firstOption) throw new Error('List option not found');
+    fireEvent.click(firstOption);
+    await waitFor(() => expect(getByTestId('location').textContent).toContain('follow=false'));
+
+    const appended = buildEvent({
+      id: 'event-3',
+      ts: '2024-01-01T00:00:03.000Z',
+      type: 'summarization',
+      toolExecution: undefined,
+      summarization: {
+        summaryText: 'done',
+        newContextCount: 1,
+        oldContextTokens: null,
+        raw: null,
+      },
+    });
+    await act(async () => {
+      socketMocks.runEvent?.({ runId: 'run-1', event: appended, mutation: 'append' });
+    });
+    await waitFor(() => expect(within(listbox).getByText('Summarization')).toBeInTheDocument());
+    expect(listbox).toHaveAttribute('aria-activedescendant', 'run-event-option-event-1');
+
+    const toggle = getByRole('switch', { name: 'Follow latest events' });
+    fireEvent.click(toggle);
+
+    await waitFor(() => expect(toggle).toHaveAttribute('aria-checked', 'true'));
+    await waitFor(() => expect(listbox).toHaveAttribute('aria-activedescendant', 'run-event-option-event-3'));
+    await waitFor(() => expect(getByTestId('location').textContent).toContain('follow=true'));
+    await waitFor(() => expect(window.localStorage.getItem('timeline-follow:run-1')).toBe('true'));
+  });
+
+  it('updates selection on filter changes while following', async () => {
+    const { getByRole, getByText, getByTestId } = renderPage([
+      '/agents/threads/thread-1/runs/run-1/timeline',
+    ]);
+
+    const listbox = getByRole('listbox');
+    await waitFor(() => expect(listbox).toHaveAttribute('aria-activedescendant', 'run-event-option-event-2'));
+
+    const llmFilter = getByRole('button', { name: 'LLM' });
+    fireEvent.click(llmFilter);
+
+    await waitFor(() => expect(listbox).toHaveAttribute('aria-activedescendant', 'run-event-option-event-1'));
+    await waitFor(() => expect(getByTestId('location').textContent).toContain('follow=true'));
+    expect(getByTestId('location').textContent).toContain('eventId=event-1');
+    expect(getByText('Following')).toBeInTheDocument();
+  });
+
+  it('clears selection on filter changes when in manual mode', async () => {
+    const { getByRole, getByTestId } = renderPage([
+      '/agents/threads/thread-1/runs/run-1/timeline',
+    ]);
+
+    const listbox = getByRole('listbox');
+    await waitFor(() => expect(listbox).toHaveAttribute('aria-activedescendant', 'run-event-option-event-2'));
+    const firstOption = within(listbox).getByText('Tool Execution — Search Tool').closest('[role="option"]');
+    if (!firstOption) throw new Error('List option not found');
+    fireEvent.click(firstOption);
+    await waitFor(() => expect(listbox).toHaveAttribute('aria-activedescendant', 'run-event-option-event-1'));
+
+    const toolsFilter = getByRole('button', { name: 'Tools' });
+    fireEvent.click(toolsFilter);
+
+    await waitFor(() => expect(listbox.getAttribute('aria-activedescendant')).toBeNull());
+    await waitFor(() => expect(getByTestId('location').textContent).toContain('follow=false'));
+    await waitFor(() => expect(getByTestId('location').textContent).not.toContain('eventId='));
+  });
+
+  it('supports toggling follow with the "f" keyboard shortcut', async () => {
+    const { getByRole, getByTestId, getByText } = renderPage([
+      '/agents/threads/thread-1/runs/run-1/timeline',
+    ]);
+
+    const toggle = getByRole('switch', { name: 'Follow latest events' });
+    await waitFor(() => expect(toggle).toHaveAttribute('aria-checked', 'true'));
+
+    fireEvent.keyDown(window, { key: 'f' });
+    await waitFor(() => expect(toggle).toHaveAttribute('aria-checked', 'false'));
+    await waitFor(() => expect(getByTestId('location').textContent).toContain('follow=false'));
+    expect(getByText('Manual')).toBeInTheDocument();
+
+    fireEvent.keyDown(window, { key: 'f' });
+    await waitFor(() => expect(toggle).toHaveAttribute('aria-checked', 'true'));
+    await waitFor(() => expect(getByTestId('location').textContent).toContain('follow=true'));
+    expect(getByText('Following')).toBeInTheDocument();
   });
 });
 

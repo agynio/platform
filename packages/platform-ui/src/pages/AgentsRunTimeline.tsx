@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react';
+import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { RunTimelineEventListItem } from '@/components/agents/RunTimelineEventListItem';
 import { RunTimelineEventDetails } from '@/components/agents/RunTimelineEventDetails';
@@ -8,6 +8,7 @@ import { graphSocket } from '@/lib/graph/socket';
 import type { RunEventStatus, RunEventType, RunTimelineEvent, RunTimelineEventsCursor, RunTimelineEventsResponse } from '@/api/types/agents';
 import { getEventTypeLabel } from '@/components/agents/runTimelineFormatting';
 import { notifyError, notifySuccess } from '@/lib/notify';
+import { Switch } from '@agyn/ui';
 
 const EVENT_TYPES: RunEventType[] = ['invocation_message', 'injection', 'llm_call', 'tool_execution', 'summarization'];
 const STATUS_TYPES: RunEventStatus[] = ['pending', 'running', 'success', 'error', 'cancelled'];
@@ -34,6 +35,35 @@ function matchesFilters(event: RunTimelineEvent, types: RunEventType[], statuses
   const typeOk = types.length === 0 || types.includes(event.type);
   const statusOk = statuses.length === 0 || statuses.includes(event.status);
   return typeOk && statusOk;
+}
+
+const FOLLOW_STORAGE_PREFIX = 'timeline-follow:';
+
+function parseFollowValue(value: string | null): boolean | null {
+  if (value === 'true') return true;
+  if (value === 'false') return false;
+  return null;
+}
+
+function readFollowFromStorage(runId: string | undefined): boolean | null {
+  if (!runId || typeof window === 'undefined') return null;
+  const raw = window.localStorage.getItem(`${FOLLOW_STORAGE_PREFIX}${runId}`);
+  if (raw === 'true') return true;
+  if (raw === 'false') return false;
+  return null;
+}
+
+function writeFollowToStorage(runId: string | undefined, value: boolean) {
+  if (!runId || typeof window === 'undefined') return;
+  window.localStorage.setItem(`${FOLLOW_STORAGE_PREFIX}${runId}`, value ? 'true' : 'false');
+}
+
+function resolveFollowDefault(searchParams: URLSearchParams, runId: string | undefined, isMdUp: boolean): boolean {
+  const paramValue = parseFollowValue(searchParams.get('follow'));
+  if (paramValue !== null) return paramValue;
+  const stored = readFollowFromStorage(runId);
+  if (stored !== null) return stored;
+  return isMdUp;
 }
 
 type EventBoundary = { id: string; ts: string };
@@ -203,6 +233,60 @@ export function AgentsRunTimeline() {
   const runId = params.runId;
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
+  const updateSearchParams = useCallback(
+    (mutator: (params: URLSearchParams) => void) => {
+      setSearchParams((prev) => {
+        const next = new URLSearchParams(prev);
+        mutator(next);
+        return next;
+      }, { replace: true });
+    },
+    [setSearchParams],
+  );
+  const isMdUp = useMediaQuery('(min-width: 768px)');
+  const followToggleId = useId();
+  const [follow, setFollowState] = useState(() => resolveFollowDefault(searchParams, runId, isMdUp));
+  const followRef = useRef(follow);
+  const [liveMessage, setLiveMessage] = useState('');
+
+  useEffect(() => {
+    followRef.current = follow;
+  }, [follow]);
+
+  useEffect(() => {
+    if (!runId) return;
+    const resolved = resolveFollowDefault(searchParams, runId, isMdUp);
+    setFollowState((prev) => (prev === resolved ? prev : resolved));
+    followRef.current = resolved;
+    writeFollowToStorage(runId, resolved);
+    const paramValue = parseFollowValue(searchParams.get('follow'));
+    if (paramValue === null) {
+      updateSearchParams((next) => {
+        next.set('follow', resolved ? 'true' : 'false');
+      });
+    }
+  }, [runId, searchParams, isMdUp, updateSearchParams]);
+
+  const announce = useCallback((message: string) => {
+    setLiveMessage((prev) => (prev === message ? `${message} ` : message));
+  }, []);
+
+  const persistFollow = useCallback((value: boolean) => {
+    writeFollowToStorage(runId, value);
+    updateSearchParams((next) => {
+      next.set('follow', value ? 'true' : 'false');
+    });
+  }, [runId, updateSearchParams]);
+
+  const commitFollow = useCallback((value: boolean, options?: { announceMessage?: string }) => {
+    if (followRef.current === value) {
+      return;
+    }
+    followRef.current = value;
+    setFollowState(value);
+    persistFollow(value);
+    if (options?.announceMessage) announce(options.announceMessage);
+  }, [persistFollow, announce]);
 
   const [selectedTypes, setSelectedTypes] = useState<RunEventType[]>(EVENT_TYPES);
   const [selectedStatuses, setSelectedStatuses] = useState<RunEventStatus[]>([]);
@@ -528,26 +612,6 @@ export function AgentsRunTimeline() {
 
   const isDefaultFilters = selectedTypes.length === EVENT_TYPES.length && selectedStatuses.length === 0;
 
-  const toggleType = (value: RunEventType) => {
-    setSelectedTypes((prev) => {
-      if (prev.includes(value)) {
-        const next = prev.filter((v) => v !== value);
-        return next.length === 0 ? EVENT_TYPES : next;
-      }
-      const next = Array.from(new Set([...prev, value])) as RunEventType[];
-      next.sort((a, b) => EVENT_TYPES.indexOf(a) - EVENT_TYPES.indexOf(b));
-      if (next.length > EVENT_TYPES.length) return EVENT_TYPES;
-      return next;
-    });
-  };
-
-  const toggleStatus = (value: RunEventStatus) => {
-    setSelectedStatuses((prev) => {
-      if (prev.includes(value)) return prev.filter((v) => v !== value);
-      return [...prev, value];
-    });
-  };
-
   const typeFilters = useMemo(
     () =>
       EVENT_TYPES.map((type) => ({
@@ -606,17 +670,15 @@ export function AgentsRunTimeline() {
   const selectedEventId = searchParams.get('eventId');
   const selectedEvent = selectedEventId ? events.find((evt) => evt.id === selectedEventId) : undefined;
   const lastSelectedIdRef = useRef<string | null>(selectedEventId ?? null);
-  const isMdUp = useMediaQuery('(min-width: 768px)');
   const listRef = useRef<HTMLDivElement | null>(null);
   const selectedItemRef = useRef<HTMLDivElement | null>(null);
 
   const selectEvent = useCallback(
-    (eventId: string, options: { focus?: boolean } = {}) => {
-      setSearchParams((prev) => {
-        const next = new URLSearchParams(prev);
-        next.set('eventId', eventId);
-        return next;
-      }, { replace: true });
+    (eventId: string, options: { focus?: boolean; modifyParams?: (params: URLSearchParams) => void } = {}) => {
+      updateSearchParams((params) => {
+        params.set('eventId', eventId);
+        options.modifyParams?.(params);
+      });
       const shouldFocus = options.focus ?? true;
       if (shouldFocus) {
         requestAnimationFrame(() => {
@@ -624,16 +686,107 @@ export function AgentsRunTimeline() {
         });
       }
     },
-    [setSearchParams],
+    [updateSearchParams],
   );
 
   const clearSelection = useCallback(() => {
-    setSearchParams((prev) => {
-      const next = new URLSearchParams(prev);
-      next.delete('eventId');
+    updateSearchParams((params) => {
+      params.delete('eventId');
+    });
+  }, [updateSearchParams]);
+
+  const manualSelect = useCallback(
+    (eventId: string, options: { focus?: boolean } = {}) => {
+      if (followRef.current) {
+        followRef.current = false;
+        setFollowState(false);
+        writeFollowToStorage(runId, false);
+        announce('Follow disabled');
+        selectEvent(eventId, {
+          focus: options.focus,
+          modifyParams: (params) => {
+            params.set('follow', 'false');
+          },
+        });
+        return;
+      }
+      selectEvent(eventId, { focus: options.focus });
+    },
+    [announce, runId, selectEvent],
+  );
+
+  const ensureSelectionVisible = useCallback(
+    (nextTypes: RunEventType[], nextStatuses: RunEventStatus[]) => {
+      if (followRef.current) return;
+      if (!selectedEventId) return;
+      const stillVisible = events.some((evt) => evt.id === selectedEventId && matchesFilters(evt, nextTypes, nextStatuses));
+      if (!stillVisible) {
+        clearSelection();
+      }
+    },
+    [clearSelection, events, selectedEventId],
+  );
+
+  const toggleType = (value: RunEventType) => {
+    setSelectedTypes((prev) => {
+      let next: RunEventType[];
+      if (prev.includes(value)) {
+        const filtered = prev.filter((v) => v !== value);
+        next = filtered.length === 0 ? EVENT_TYPES : filtered;
+      } else {
+        const expanded = Array.from(new Set([...prev, value])) as RunEventType[];
+        expanded.sort((a, b) => EVENT_TYPES.indexOf(a) - EVENT_TYPES.indexOf(b));
+        next = expanded.length > EVENT_TYPES.length ? EVENT_TYPES : expanded;
+      }
+      ensureSelectionVisible(next, selectedStatuses);
       return next;
-    }, { replace: true });
-  }, [setSearchParams]);
+    });
+  };
+
+  const toggleStatus = (value: RunEventStatus) => {
+    setSelectedStatuses((prev) => {
+      let next: RunEventStatus[];
+      if (prev.includes(value)) {
+        next = prev.filter((v) => v !== value);
+      } else {
+        next = [...prev, value];
+      }
+      ensureSelectionVisible(selectedTypes, next);
+      return next;
+    });
+  };
+
+  const handleFollowToggle = useCallback(
+    (next: boolean) => {
+      commitFollow(next, { announceMessage: next ? 'Follow enabled' : 'Follow disabled' });
+    },
+    [commitFollow],
+  );
+
+  const toggleFollow = useCallback(() => {
+    const next = !followRef.current;
+    commitFollow(next, { announceMessage: next ? 'Follow enabled' : 'Follow disabled' });
+  }, [commitFollow]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.defaultPrevented) return;
+      if (event.metaKey || event.ctrlKey || event.altKey) return;
+      if (event.key?.toLowerCase() !== 'f') return;
+      const target = event.target as HTMLElement | null;
+      if (target) {
+        const tagName = target.tagName;
+        if (tagName === 'INPUT' || tagName === 'TEXTAREA' || tagName === 'SELECT' || target.isContentEditable) {
+          return;
+        }
+      }
+      event.preventDefault();
+      toggleFollow();
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [toggleFollow]);
 
   const loadOlderEvents = useCallback(async () => {
     if (!runId) return;
@@ -744,25 +897,36 @@ export function AgentsRunTimeline() {
   }, [events, runId]);
 
   useEffect(() => {
-    const itemsCount = eventsQuery.data?.items?.length ?? 0;
+    if (eventsQuery.isFetching) return;
+    const items = eventsQuery.data?.items ?? null;
+    const hasFetched = items !== null;
+    if (follow) {
+      if (!events.length) {
+        if (selectedEventId) {
+          clearSelection();
+        }
+        return;
+      }
+      const latestEvent = events[events.length - 1];
+      if (latestEvent && latestEvent.id !== selectedEventId) {
+        selectEvent(latestEvent.id, { focus: false });
+        announce('Selected latest event');
+      }
+      return;
+    }
+    if (!selectedEventId) return;
     if (!events.length) {
-      if (selectedEventId && !eventsQuery.isFetching && itemsCount === 0) {
+      if (hasFetched && (items?.length ?? 0) === 0) {
         clearSelection();
       }
       return;
     }
-    const latestEvent = events[events.length - 1];
-    if (selectedEventId) {
-      const exists = events.some((evt) => evt.id === selectedEventId);
-      if (!exists && isMdUp && !eventsQuery.isFetching) {
-        if (latestEvent) selectEvent(latestEvent.id, { focus: false });
-      }
-      return;
+    const exists = events.some((evt) => evt.id === selectedEventId);
+    const existsInItems = items?.some((evt) => evt.id === selectedEventId) ?? false;
+    if (!exists && hasFetched && !existsInItems) {
+      clearSelection();
     }
-    if (isMdUp && !eventsQuery.isFetching && latestEvent) {
-      selectEvent(latestEvent.id, { focus: false });
-    }
-  }, [events, selectedEventId, selectEvent, clearSelection, isMdUp, eventsQuery.isFetching, eventsQuery.data]);
+  }, [follow, events, selectedEventId, selectEvent, clearSelection, announce, eventsQuery.isFetching, eventsQuery.data]);
 
   useEffect(() => {
     const nextSelection = selectedEventId ?? null;
@@ -790,34 +954,37 @@ export function AgentsRunTimeline() {
         e.preventDefault();
         const nextIndex = currentIndex < 0 ? 0 : Math.min(events.length - 1, currentIndex + 1);
         const nextEvent = events[nextIndex];
-        if (nextEvent) selectEvent(nextEvent.id, { focus: false });
+        if (nextEvent) manualSelect(nextEvent.id, { focus: false });
       } else if (e.key === 'ArrowUp') {
         e.preventDefault();
         const nextIndex = currentIndex <= 0 ? 0 : currentIndex - 1;
         const nextEvent = events[nextIndex];
-        if (nextEvent) selectEvent(nextEvent.id, { focus: false });
+        if (nextEvent) manualSelect(nextEvent.id, { focus: false });
       } else if (e.key === 'Home') {
         e.preventDefault();
         const nextEvent = events[0];
-        if (nextEvent) selectEvent(nextEvent.id, { focus: false });
+        if (nextEvent) manualSelect(nextEvent.id, { focus: false });
       } else if (e.key === 'End') {
         e.preventDefault();
         const nextEvent = events[events.length - 1];
-        if (nextEvent) selectEvent(nextEvent.id, { focus: false });
+        if (nextEvent) manualSelect(nextEvent.id, { focus: false });
       }
     },
-    [events, selectedEventId, selectEvent],
+    [events, selectedEventId, manualSelect],
   );
 
   const handleSelect = useCallback(
     (eventId: string) => {
-      selectEvent(eventId, { focus: isMdUp });
+      manualSelect(eventId, { focus: isMdUp });
     },
-    [selectEvent, isMdUp],
+    [manualSelect, isMdUp],
   );
 
   return (
     <div className="absolute inset-0 flex min-h-0 flex-col overflow-hidden">
+      <div aria-live="polite" role="status" className="sr-only">
+        {liveMessage}
+      </div>
       <div className="shrink-0 border-b px-6 py-3">
         <div className="flex flex-wrap items-center gap-3">
           <button type="button" className="text-sm text-blue-600 hover:underline" onClick={() => navigate(-1)}>
@@ -862,36 +1029,50 @@ export function AgentsRunTimeline() {
               {entry.status}
             </button>
           ))}
-          <div className="ml-auto flex gap-2">
-            <button
-              type="button"
-              className="px-3 py-1 text-xs border bg-transparent hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent"
-              onClick={() => {
-                setSelectedTypes(EVENT_TYPES);
-                setSelectedStatuses([]);
-              }}
-              disabled={isDefaultFilters}
-            >
-              Reset
-            </button>
-            <button
-              type="button"
-              className="px-3 py-1 text-xs border bg-transparent hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent"
-              onClick={() => eventsQuery.refetch()}
-              disabled={eventsQuery.isFetching}
-            >
-              Refresh
-            </button>
-            {canTerminate && (
+          <div className="ml-auto flex flex-wrap items-center gap-4">
+            <div className="flex items-center gap-2">
+              <label htmlFor={followToggleId} className="text-xs font-medium text-gray-700">
+                Follow latest
+              </label>
+              <Switch
+                id={followToggleId}
+                checked={follow}
+                onCheckedChange={handleFollowToggle}
+                aria-label="Follow latest events"
+              />
+              <span className="text-xs font-medium uppercase tracking-wide text-gray-500">{follow ? 'Following' : 'Manual'}</span>
+            </div>
+            <div className="flex gap-2">
               <button
                 type="button"
-                className="px-3 py-1 text-xs border bg-transparent text-red-600 border-red-600 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent"
-                onClick={handleTerminate}
-                disabled={isTerminating}
+                className="px-3 py-1 text-xs border bg-transparent hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent"
+                onClick={() => {
+                  setSelectedTypes(EVENT_TYPES);
+                  setSelectedStatuses([]);
+                }}
+                disabled={isDefaultFilters}
               >
-                {isTerminating ? 'Terminating…' : 'Terminate'}
+                Reset
               </button>
-            )}
+              <button
+                type="button"
+                className="px-3 py-1 text-xs border bg-transparent hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent"
+                onClick={() => eventsQuery.refetch()}
+                disabled={eventsQuery.isFetching}
+              >
+                Refresh
+              </button>
+              {canTerminate && (
+                <button
+                  type="button"
+                  className="px-3 py-1 text-xs border bg-transparent text-red-600 border-red-600 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent"
+                  onClick={handleTerminate}
+                  disabled={isTerminating}
+                >
+                  {isTerminating ? 'Terminating…' : 'Terminate'}
+                </button>
+              )}
+            </div>
           </div>
         </div>
         {eventsQuery.isError && (
