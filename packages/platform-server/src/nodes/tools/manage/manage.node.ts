@@ -19,7 +19,7 @@ export const ManageToolStaticConfigSchema = z
 @Injectable({ scope: Scope.TRANSIENT })
 export class ManageToolNode extends BaseToolNode<z.infer<typeof ManageToolStaticConfigSchema>> {
   private tool?: ManageFunctionTool;
-  private readonly workers: { name: string; agent: AgentNode }[] = [];
+  private readonly workers: Set<AgentNode> = new Set();
 
   constructor(
     @Inject(ManageFunctionTool) private readonly manageTool: ManageFunctionTool,
@@ -28,19 +28,52 @@ export class ManageToolNode extends BaseToolNode<z.infer<typeof ManageToolStatic
     super(logger);
   }
 
-  addWorker(name: string, agent: AgentNode) {
-    const existing = this.workers.find((w) => w.name === name);
-    if (existing) throw new Error(`Worker with name ${name} already exists`);
-    this.workers.push({ name, agent });
+  addWorker(agent: AgentNode): void {
+    if (!agent) throw new Error('ManageToolNode: agent instance is required');
+    if (this.workers.has(agent)) return;
+    const title = this.resolveAgentTitle(agent);
+    const existing = this.getWorkerByTitle(title);
+    if (existing && existing !== agent) {
+      throw new Error(`ManageToolNode: worker with title "${title}" already exists`);
+    }
+    this.workers.add(agent);
   }
 
-  removeWorker(name: string) {
-    const idx = this.workers.findIndex((w) => w.name === name);
-    if (idx >= 0) this.workers.splice(idx, 1);
+  removeWorker(agent: AgentNode): void {
+    if (!agent) return;
+    this.workers.delete(agent);
   }
 
-  listWorkers() {
-    return [...this.workers];
+  listWorkers(): string[] {
+    return Array.from(this.workers).map((worker) => this.resolveAgentTitle(worker));
+  }
+
+  getWorkers(): AgentNode[] {
+    return Array.from(this.workers);
+  }
+
+  getWorkerByTitle(title: string): AgentNode | undefined {
+    const trimmedTitle = title.trim();
+    if (!trimmedTitle) return undefined;
+    for (const agent of this.workers) {
+      if (this.resolveAgentTitle(agent) === trimmedTitle) return agent;
+    }
+    return undefined;
+  }
+
+  private resolveAgentTitle(agent: AgentNode): string {
+    let rawTitle: string | undefined;
+    try {
+      rawTitle = agent.config.title;
+    } catch (_err) {
+      throw new Error('ManageToolNode: worker agent missing configuration');
+    }
+
+    const trimmed = rawTitle?.trim();
+    if (!trimmed) {
+      throw new Error('ManageToolNode: worker agent requires non-empty title');
+    }
+    return trimmed;
   }
 
   protected createTool() {

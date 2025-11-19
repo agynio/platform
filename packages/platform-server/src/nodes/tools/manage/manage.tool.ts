@@ -9,11 +9,10 @@ import { AgentsPersistenceService } from '../../../agents/agents.persistence.ser
 
 export const ManageInvocationSchema = z
   .object({
-    command: z.enum(['list', 'send_message', 'check_status']).describe('Command to execute.'),
+    command: z.enum(['send_message', 'check_status']).describe('Command to execute.'),
     worker: z.string().min(1).optional().describe('Target worker name (required for send_message).'),
     message: z.string().min(1).optional().describe('Message to send (required for send_message).'),
     threadAlias: z.string().min(1).describe('Child thread alias'),
-    summary: z.string().min(1).optional().describe('Initial summary for created subthread (required when creating).'),
   })
   .strict();
 
@@ -48,25 +47,22 @@ export class ManageFunctionTool extends FunctionTool<typeof ManageInvocationSche
   async execute(args: z.infer<typeof ManageInvocationSchema>, ctx: LLMContext): Promise<string> {
     const { command, worker, message, threadAlias } = args;
     const parentThreadId = ctx.threadId;
-    const workers = this.node.listWorkers();
-
-    if (command === 'list') {
-      return JSON.stringify(workers.map((w) => w.name));
-    }
+    const workerTitles = this.node.listWorkers();
     if (command === 'send_message') {
-      if (!workers.length) throw new Error('No agents connected');
-      if (!worker || !message) throw new Error('worker and message are required for send_message');
-      const target = workers.find((w) => w.name === worker);
-      if (!target) throw new Error(`Unknown worker: ${worker}`);
-      const summary = (args.summary ?? '').toString();
-      if (!summary || summary.trim().length === 0) throw new Error('summary is required when creating subthreads');
-      const childThreadId = await this.persistence.getOrCreateSubthreadByAlias('manage', threadAlias, parentThreadId, summary);
+      if (!workerTitles.length) throw new Error('No agents connected');
+      const targetTitle = worker?.trim();
+      if (!targetTitle) throw new Error('worker is required for send_message');
+      const messageText = message?.trim() ?? '';
+      if (!messageText) throw new Error('message is required for send_message');
+      const targetAgent = this.node.getWorkerByTitle(targetTitle);
+      if (!targetAgent) throw new Error(`Unknown worker: ${targetTitle}`);
+      const childThreadId = await this.persistence.getOrCreateSubthreadByAlias('manage', threadAlias, parentThreadId, '');
       try {
-        const res = await target.agent.invoke(childThreadId, [HumanMessage.fromText(message)]);
+        const res = await targetAgent.invoke(childThreadId, [HumanMessage.fromText(messageText)]);
         return res?.text;
       } catch (err: unknown) {
         this.logger.error('Manage: send_message failed', {
-          worker: target.name,
+          worker: targetTitle,
           childThreadId,
           error: (err as { message?: string })?.message || String(err),
         });
@@ -74,10 +70,11 @@ export class ManageFunctionTool extends FunctionTool<typeof ManageInvocationSche
       }
     }
     if (command === 'check_status') {
+      const workers = this.node.getWorkers();
       if (!workers.length) return JSON.stringify({ activeTasks: 0, childThreadIds: [] });
       const _prefix = `${parentThreadId}__`;
       const ids = new Set<string>();
-      const promises = workers.map(async (_w) => {
+      const promises = workers.map(async (_agent) => {
         try {
           // const res = await Promise.resolve(w.agent.listActiveThreads(prefix));
           // const threads = Array.isArray(res) ? res : [];
