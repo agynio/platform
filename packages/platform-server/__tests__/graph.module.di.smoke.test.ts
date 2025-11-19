@@ -137,7 +137,7 @@ if (!shouldRunDbTests) {
         updateThreadChannelDescriptor: vi.fn(),
         getOrCreateSubthreadByAlias: vi.fn().mockResolvedValue('thread-child'),
         beginRunThread: vi.fn().mockResolvedValue({ runId: 'run' }),
-        recordInjected: vi.fn(),
+        recordInjected: vi.fn().mockResolvedValue({ messageIds: [] }),
         completeRun: vi.fn(),
         resolveThreadId: vi.fn().mockResolvedValue('thread'),
         setEventsPublisher: vi.fn(),

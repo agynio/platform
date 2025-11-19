@@ -35,7 +35,10 @@ describe('AgentNode termination flow', () => {
         LoggerService,
         ConfigService,
         { provide: LLMProvisioner, useValue: {} },
-        { provide: AgentsPersistenceService, useValue: { beginRunThread, completeRun, recordInjected: vi.fn() } },
+        {
+          provide: AgentsPersistenceService,
+          useValue: { beginRunThread, completeRun, recordInjected: vi.fn().mockResolvedValue({ messageIds: [] }) },
+        },
         RunSignalsRegistry,
         TerminateAwareAgent,
       ],

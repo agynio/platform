@@ -80,7 +80,14 @@ describe('LiveGraphRuntime -> Agent config propagation', () => {
         { provide: ConfigService, useValue: new ConfigService().init(cfg) },
         { provide: LLMProvisioner, useClass: StubLLMProvisioner },
         { provide: ContainerRegistry, useValue: { updateLastUsed: async () => {}, registerStart: async () => {}, markStopped: async () => {} } },
-        { provide: AgentsPersistenceService, useValue: { beginRunThread: async () => ({ runId: 't' }), recordInjected: async () => {}, completeRun: async () => {} } },
+        {
+          provide: AgentsPersistenceService,
+          useValue: {
+            beginRunThread: async () => ({ runId: 't' }),
+            recordInjected: async () => ({ messageIds: [] }),
+            completeRun: async () => {},
+          },
+        },
         RunSignalsRegistry,
       ],
     })

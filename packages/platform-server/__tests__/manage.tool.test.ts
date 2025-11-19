@@ -51,7 +51,7 @@ describe('ManageTool unit', () => {
           provide: AgentsPersistenceService,
           useValue: {
             beginRunThread: async () => ({ runId: 't' }),
-            recordInjected: async () => {},
+            recordInjected: async () => ({ messageIds: [] }),
             completeRun: async () => {},
             getOrCreateSubthreadByAlias: async () => 'child-t',
           },
@@ -86,7 +86,7 @@ describe('ManageTool unit', () => {
           provide: AgentsPersistenceService,
           useValue: {
             beginRunThread: async () => ({ runId: 't' }),
-            recordInjected: async () => {},
+            recordInjected: async () => ({ messageIds: [] }),
             completeRun: async () => {},
             getOrCreateSubthreadByAlias: async () => 'child-t',
           },
@@ -125,7 +125,7 @@ describe('ManageTool unit', () => {
           provide: AgentsPersistenceService,
           useValue: {
             beginRunThread: async () => ({ runId: 't' }),
-            recordInjected: async () => {},
+            recordInjected: async () => ({ messageIds: [] }),
             completeRun: async () => {},
             getOrCreateSubthreadByAlias: async () => 'child-t',
           },
@@ -164,7 +164,7 @@ describe('ManageTool unit', () => {
           provide: AgentsPersistenceService,
           useValue: {
             beginRunThread: async () => ({ runId: 't' }),
-            recordInjected: async () => {},
+            recordInjected: async () => ({ messageIds: [] }),
             completeRun: async () => {},
             getOrCreateSubthreadByAlias: async () => 'child-t',
           },
@@ -211,7 +211,7 @@ describe('ManageTool unit', () => {
           provide: AgentsPersistenceService,
           useValue: {
             beginRunThread: async () => ({ runId: 't' }),
-            recordInjected: async () => {},
+            recordInjected: async () => ({ messageIds: [] }),
             completeRun: async () => {},
             getOrCreateSubthreadByAlias: async () => 'child-t',
           },
@@ -251,7 +251,7 @@ describe('ManageTool graph wiring', () => {
           provide: AgentsPersistenceService,
           useValue: {
             beginRunThread: async () => ({ runId: 't' }),
-            recordInjected: async () => {},
+            recordInjected: async () => ({ messageIds: [] }),
             completeRun: async () => {},
             getOrCreateSubthreadByAlias: async () => 'child-t',
           },
@@ -296,7 +296,7 @@ describe('ManageTool graph wiring', () => {
           provide: AgentsPersistenceService,
           useValue: {
             beginRunThread: async () => ({ runId: 't' }),
-            recordInjected: async () => {},
+            recordInjected: async () => ({ messageIds: [] }),
             completeRun: async () => {},
             getOrCreateSubthreadByAlias: async () => 'child-t',
           },

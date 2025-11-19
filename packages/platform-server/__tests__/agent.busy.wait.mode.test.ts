@@ -37,7 +37,14 @@ describe('Agent busy gating (wait mode)', () => {
         ConfigService,
         { provide: LLMProvisioner, useValue: {} },
         NoToolAgent,
-        { provide: AgentsPersistenceService, useValue: { beginRunThread: async () => ({ runId: 't' }), recordInjected: async () => {}, completeRun: async () => {} } },
+        {
+          provide: AgentsPersistenceService,
+          useValue: {
+            beginRunThread: async () => ({ runId: 't' }),
+            recordInjected: async () => ({ messageIds: [] }),
+            completeRun: async () => {},
+          },
+        },
         RunSignalsRegistry,
       ],
     }).compile();
