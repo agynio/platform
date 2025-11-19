@@ -2,10 +2,8 @@ import { Test } from '@nestjs/testing';
 import { describe, expect, it, vi } from 'vitest';
 import { AppModule } from '../src/bootstrap/app.module';
 import { FastifyAdapter } from '@nestjs/platform-fastify';
-import { MongoService } from '../src/core/services/mongo.service';
 import { PrismaService } from '../src/core/services/prisma.service';
 import type { PrismaClient } from '@prisma/client';
-import type { Db } from 'mongodb';
 import { ContainerService } from '../src/infra/container/container.service';
 import { ContainerCleanupService } from '../src/infra/container/containerCleanup.job';
 import { ContainerRegistry } from '../src/infra/container/container.registry';
@@ -18,7 +16,6 @@ import { VaultService } from '../src/vault/vault.service';
 import { SlackAdapter } from '../src/messaging/slack/slack.adapter';
 
 process.env.LLM_PROVIDER = process.env.LLM_PROVIDER || 'openai';
-process.env.MONGODB_URL = process.env.MONGODB_URL || 'mongodb://localhost:27017/test';
 process.env.AGENTS_DATABASE_URL = process.env.AGENTS_DATABASE_URL || 'postgres://localhost:5432/test';
 
 describe('AppModule bootstrap smoke test', () => {
@@ -59,22 +56,6 @@ describe('AppModule bootstrap smoke test', () => {
     const prismaServiceStub = {
       getClient: vi.fn(() => prismaClientStub as PrismaClient),
     } satisfies Pick<PrismaService, 'getClient'>;
-
-    const mongoCollectionStub = {
-      findOne: vi.fn().mockResolvedValue(null),
-      insertOne: vi.fn().mockResolvedValue({}),
-      replaceOne: vi.fn().mockResolvedValue({}),
-      updateOne: vi.fn().mockResolvedValue({}),
-      updateMany: vi.fn().mockResolvedValue({}),
-      find: vi.fn().mockReturnValue({ toArray: vi.fn().mockResolvedValue([]) }),
-      deleteOne: vi.fn().mockResolvedValue({}),
-    };
-
-    const mongoServiceStub = {
-      connect: vi.fn().mockResolvedValue(undefined),
-      close: vi.fn().mockResolvedValue(undefined),
-      getDb: vi.fn(() => ({ collection: vi.fn(() => mongoCollectionStub) } as unknown as Db)),
-    } satisfies Partial<MongoService>;
 
     const containerRegistryStub = {
       registerStart: vi.fn(),
@@ -137,8 +118,6 @@ describe('AppModule bootstrap smoke test', () => {
     } satisfies Partial<SlackAdapter>;
 
     const moduleRef = await Test.createTestingModule({ imports: [AppModule] })
-      .overrideProvider(MongoService)
-      .useValue(mongoServiceStub)
       .overrideProvider(PrismaService)
       .useValue(prismaServiceStub)
       .overrideProvider(ContainerRegistry)

@@ -2,10 +2,8 @@ import { Test } from '@nestjs/testing';
 import { describe, expect, it, vi } from 'vitest';
 
 import { AppModule } from './app.module';
-import { MongoService } from '../core/services/mongo.service';
 import { PrismaService } from '../core/services/prisma.service';
 import type { PrismaClient } from '@prisma/client';
-import type { Db } from 'mongodb';
 import { ContainerService } from '../infra/container/container.service';
 import { ContainerCleanupService } from '../infra/container/containerCleanup.job';
 import { ContainerRegistry } from '../infra/container/container.registry';
@@ -21,21 +19,6 @@ describe('AppModule', () => {
     const prismaServiceStub = {
       getClient: vi.fn(() => ({} as PrismaClient)),
     } satisfies Pick<PrismaService, 'getClient'>;
-
-    const mongoCollectionFactory = () => ({
-      findOne: vi.fn().mockResolvedValue(null),
-      insertOne: vi.fn().mockResolvedValue({}),
-      updateOne: vi.fn().mockResolvedValue({}),
-      updateMany: vi.fn().mockResolvedValue({}),
-      deleteOne: vi.fn().mockResolvedValue({}),
-      find: vi.fn().mockReturnValue({ toArray: vi.fn().mockResolvedValue([]) }),
-    });
-
-    const mongoStub = {
-      connect: vi.fn().mockResolvedValue(undefined),
-      close: vi.fn().mockResolvedValue(undefined),
-      getDb: vi.fn(() => ({ collection: vi.fn(() => mongoCollectionFactory()) } as unknown as Db)),
-    } satisfies Partial<MongoService>;
 
     const containerRegistryStub = {
       registerStart: vi.fn(),
@@ -93,8 +76,6 @@ describe('AppModule', () => {
     } satisfies Partial<VaultService>;
 
     const testingModule = await Test.createTestingModule({ imports: [AppModule] })
-      .overrideProvider(MongoService)
-      .useValue(mongoStub)
       .overrideProvider(PrismaService)
       .useValue(prismaServiceStub)
       .overrideProvider(ContainerRegistry)

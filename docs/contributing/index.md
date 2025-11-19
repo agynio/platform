@@ -11,7 +11,7 @@ Thank you for taking the time to contribute! This document explains how to set u
 ## Prerequisites
 - Node.js 20+
 - pnpm 10+
-- Docker (optional, for local MongoDB via docker-compose)
+- Docker (optional, for local Postgres via docker-compose)
 
 ## Getting Started
 1. Install dependencies (workspace-aware):
@@ -20,9 +20,9 @@ Thank you for taking the time to contribute! This document explains how to set u
    ```
 2. Copy environment file(s) and set required variables:
   - Server app: `packages/platform-server/.env.example` -> `packages/platform-server/.env`
-3. Optional: start MongoDB replica set for real-time checkpoint stream:
+3. Optional: start Postgres via docker-compose:
    ```bash
-   docker compose up -d mongo
+   docker compose up -d agents-db
    ```
 
 ## Common Scripts
@@ -85,8 +85,8 @@ packages/
   shared/      # Shared types/utilities
 ```
 
-## Local Mongo (optional)
-MongoDB is optional unless you need change streams for checkpoint writes. Use docker-compose included in the repo.
+## Local Postgres (optional)
+Postgres is required for memory persistence and LangGraph checkpoints. A docker-compose service `agents-db` is provided for local development.
 
 ## Questions?
 Open a GitHub issue or reach out in Slack.

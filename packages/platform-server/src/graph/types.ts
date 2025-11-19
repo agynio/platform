@@ -138,7 +138,7 @@ export interface PersistedGraphEdge {
   targetHandle: string;
 }
 export interface PersistedGraph {
-  name: string; // unique name (maps to _id in Mongo)
+  name: string; // unique graph name used for Git commits
   version: number; // optimistic lock version
   updatedAt: string; // ISO timestamp
   nodes: PersistedGraphNode[];

@@ -14,7 +14,7 @@ Templates
     curl http://localhost:3010/api/templates
     ```
 
-Graph state (Mongo or Git-backed)
+Graph state (Git-backed)
 - GET `/api/graph`
   - 200: Persisted graph document: `{ name, version, updatedAt, nodes, edges }`
   - Example:
@@ -32,11 +32,9 @@ Graph state (Mongo or Git-backed)
     - 500 `{ error: 'COMMIT_FAILED' }`
     - 400 `{ error: 'Bad Request' | string }` (includes Git-store deterministic edge check; see notes)
   - Notes:
-    - When `GRAPH_STORE=git`:
-      - A provided `edge.id` must match the deterministic id `${source}-${sourceHandle}__${target}-${targetHandle}`. If it doesn't, the server returns `400` with `{ error: 'Edge id mismatch: expected <id> got <id>' }`.
-      - Commit failures surface as `500 { error: 'COMMIT_FAILED' }`.
-      - Lock acquisition timeout surfaces as `409 { error: 'LOCK_TIMEOUT' }`.
-    - When `GRAPH_STORE=mongo`, the deterministic edge check is not enforced by the store and Git-specific errors do not occur.
+    - A provided `edge.id` must match the deterministic id `${source}-${sourceHandle}__${target}-${targetHandle}`. If it doesn't, the server returns `400` with `{ error: 'Edge id mismatch: expected <id> got <id>' }`.
+    - Commit failures surface as `500 { error: 'COMMIT_FAILED' }`.
+    - Lock acquisition timeout surfaces as `409 { error: 'LOCK_TIMEOUT' }`.
   - Example:
     ```bash
     curl -X POST http://localhost:3010/api/graph \

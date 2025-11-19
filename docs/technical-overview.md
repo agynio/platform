@@ -16,7 +16,7 @@ Table of contents
 - Purpose: A TypeScript runtime and UI for building and operating graph-driven AI agents using LangGraph. The system composes Agents, Tools, Triggers, and external MCP servers into a live, reversible graph that can be updated at runtime.
 - Primary use cases:
   - Operate agent graphs that react to external events (Slack messages, PR updates) and call tools (bash, GitHub, Slack) and MCP tools inside containers.
-  - Persist graph definitions to MongoDB and apply diffs live without restarts.
+  - Persist graph definitions to a Git-backed repository and apply diffs live without restarts.
   - Stream checkpoint writes to an interactive UI for observability.
 - Pipeline phases:
   - Persisted graph fetch/validate -> Live graph apply (diff) -> Runtime execution (triggers -> agent graph -> tools) -> Checkpoint stream.
@@ -43,7 +43,7 @@ Layers
 - Nodes: graph components like LLM invocation and memory.
 - Tools: actions callable by the LLM (bash, GitHub clone, Slack message) and adapters.
 - MCP: local server inside a workspace container with transport over docker exec.
-- Services: infra clients and helpers (config, docker container provision, Mongo, Slack, GitHub, checkpointer, sockets).
+- Services: infra clients and helpers (config, docker container provision, Prisma/Postgres, Slack, GitHub, checkpointer, sockets).
 
 Workspace container platform
 - containerProvider.staticConfig.platform: Optional; enum of `linux/amd64` or `linux/arm64`.
@@ -72,6 +72,6 @@ Defaults and toggles
 - MCP restart defaults: maxAttempts 5; backoffMs 2000.
 
 How to Develop & Test
-- Prereqs: Node.js 20+, pnpm 9+, Docker, MongoDB
+- Prereqs: Node.js 20+, pnpm 9+, Docker, Postgres
 - Run server: pnpm --filter @agyn/platform-server dev
 - Tests: pnpm --filter @agyn/platform-server test

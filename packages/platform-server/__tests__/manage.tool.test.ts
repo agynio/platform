@@ -7,8 +7,7 @@ import { TemplateRegistry } from '../src/graph/templateRegistry';
 import { ModuleRef } from '@nestjs/core';
 import { LiveGraphRuntime } from '../src/graph/liveGraph.manager';
 import { AgentNode } from '../src/nodes/agent/agent.node';
-import { ConfigService } from '../src/core/services/config.service';
-import { MongoService } from '../src/core/services/mongo.service';
+import { ConfigService, configSchema } from '../src/core/services/config.service';
 import { LLMProvisioner } from '../src/llm/provisioners/llm.provisioner';
 import { GraphRepository } from '../src/graph/graph.repository';
 import type { LiveNode } from '../src/graph/liveGraph.types';
@@ -19,11 +18,6 @@ import { Signal } from '../src/signal';
 import type { LLMContext } from '../src/llm/types';
 import { RunSignalsRegistry } from '../src/agents/run-signals.service';
 
-class StubMongoService extends MongoService {
-  override getDb(): Record<string, unknown> {
-    return {};
-  }
-}
 class StubLLMProvisioner extends LLMProvisioner {
   async getLLM(): Promise<{ call: (messages: unknown) => Promise<{ text: string; output: unknown[] }> }> {
     return { call: async () => ({ text: 'ok', output: [] }) };
@@ -47,9 +41,8 @@ describe('ManageTool unit', () => {
     const module = await Test.createTestingModule({
       providers: [
         LoggerService,
-        { provide: MongoService, useClass: StubMongoService },
+        { provide: ConfigService, useValue: new ConfigService().init(configSchema.parse({ llmProvider: 'openai', agentsDatabaseUrl: 'postgres://localhost/agents' })) },
         { provide: LLMProvisioner, useClass: StubLLMProvisioner },
-        ConfigService,
         ManageFunctionTool,
         ManageToolNode,
         FakeAgent,
@@ -83,8 +76,7 @@ describe('ManageTool unit', () => {
     const module = await Test.createTestingModule({
       providers: [
         LoggerService,
-        ConfigService,
-        { provide: MongoService, useClass: StubMongoService },
+        { provide: ConfigService, useValue: new ConfigService().init(configSchema.parse({ llmProvider: 'openai', agentsDatabaseUrl: 'postgres://localhost/agents' })) },
         { provide: LLMProvisioner, useClass: StubLLMProvisioner },
         ManageFunctionTool,
         ManageToolNode,
@@ -107,8 +99,7 @@ describe('ManageTool unit', () => {
     const module = await Test.createTestingModule({
       providers: [
         LoggerService,
-        ConfigService,
-        { provide: MongoService, useClass: StubMongoService },
+        { provide: ConfigService, useValue: new ConfigService().init(configSchema.parse({ llmProvider: 'openai', agentsDatabaseUrl: 'postgres://localhost/agents' })) },
         { provide: LLMProvisioner, useClass: StubLLMProvisioner },
         ManageFunctionTool,
         ManageToolNode,
@@ -131,8 +122,7 @@ describe('ManageTool unit', () => {
     const module = await Test.createTestingModule({
       providers: [
         LoggerService,
-        ConfigService,
-        { provide: MongoService, useClass: StubMongoService },
+        { provide: ConfigService, useValue: new ConfigService().init(configSchema.parse({ llmProvider: 'openai', agentsDatabaseUrl: 'postgres://localhost/agents' })) },
         { provide: LLMProvisioner, useClass: StubLLMProvisioner },
         ManageFunctionTool,
         ManageToolNode,
@@ -162,8 +152,7 @@ describe('ManageTool unit', () => {
     const module = await Test.createTestingModule({
       providers: [
         LoggerService,
-        ConfigService,
-        { provide: MongoService, useClass: StubMongoService },
+        { provide: ConfigService, useValue: new ConfigService().init(configSchema.parse({ llmProvider: 'openai', agentsDatabaseUrl: 'postgres://localhost/agents' })) },
         { provide: LLMProvisioner, useClass: StubLLMProvisioner },
         ManageFunctionTool,
         ManageToolNode,
@@ -185,8 +174,7 @@ describe('ManageTool unit', () => {
     const module = await Test.createTestingModule({
       providers: [
         LoggerService,
-        ConfigService,
-        { provide: MongoService, useClass: StubMongoService },
+        { provide: ConfigService, useValue: new ConfigService().init(configSchema.parse({ llmProvider: 'openai', agentsDatabaseUrl: 'postgres://localhost/agents' })) },
         { provide: LLMProvisioner, useClass: StubLLMProvisioner },
         ManageFunctionTool,
         ManageToolNode,
@@ -215,8 +203,7 @@ describe('ManageTool graph wiring', () => {
     const module = await Test.createTestingModule({
       providers: [
         LoggerService,
-        ConfigService,
-        { provide: MongoService, useClass: StubMongoService },
+        { provide: ConfigService, useValue: new ConfigService().init(configSchema.parse({ llmProvider: 'openai', agentsDatabaseUrl: 'postgres://localhost/agents' })) },
         { provide: LLMProvisioner, useClass: StubLLMProvisioner },
         ManageFunctionTool,
         ManageToolNode,

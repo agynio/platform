@@ -46,7 +46,7 @@ Our repo currently uses:
 - Prefer functional, pure modules. Side effects live in service classes.
 
 ### Node.js server
-- Keep services injectable and stateless. IO is abstracted behind services (e.g., MongoService). Note: Slack no longer uses a global service; Slack integration is configured per node (see SlackTrigger and SendSlackMessageTool static configs).
+- Keep services injectable and stateless. IO is abstracted behind services (e.g., PrismaService). Note: Slack no longer uses a global service; Slack integration is configured per node (see SlackTrigger and SendSlackMessageTool static configs).
 - Configuration comes from `ConfigService` reading env. No direct `process.env` reads inside business logic.
 - Log with structured messages. Avoid console.log in code; use LoggerService.
 - Graceful shutdown handlers must close external connections.

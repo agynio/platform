@@ -14,9 +14,9 @@ describe('NixController E2E (Fastify)', () => {
     const cfg = new ConfigService().init(
       configSchema.parse({
         llmProvider: 'openai',
-        githubAppId: 'x', githubAppPrivateKey: 'x', githubInstallationId: 'x', githubToken: 'x', mongodbUrl: 'x',
+        githubAppId: 'x', githubAppPrivateKey: 'x', githubInstallationId: 'x', githubToken: 'x',
         agentsDatabaseUrl: 'postgres://localhost:5432/agents',
-        graphStore: 'mongo', graphRepoPath: './data/graph', graphBranch: 'graph-state',
+        graphRepoPath: './data/graph', graphBranch: 'graph-state',
         dockerMirrorUrl: 'http://registry-mirror:5000', nixAllowedChannels: 'nixpkgs-unstable',
         nixHttpTimeoutMs: String(200), nixCacheTtlMs: String(5 * 60_000), nixCacheMax: String(500),
         mcpToolsStaleTimeoutMs: '0', ncpsEnabled: 'false', ncpsUrl: 'http://ncps:8501',

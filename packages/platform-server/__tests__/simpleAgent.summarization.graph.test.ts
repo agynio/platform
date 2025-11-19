@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { ResponseMessage, AIMessage, HumanMessage } from '@agyn/llm';
 import { LoggerService } from '../src/core/services/logger.service';
-import { ConfigService } from '../src/core/services/config.service';
+import { ConfigService, configSchema } from '../src/core/services/config.service';
 
 import { AgentNode as Agent } from '../src/nodes/agent/agent.node';
 import { Test } from '@nestjs/testing';
@@ -19,7 +19,15 @@ describe('Agent summarization graph', () => {
     const module = await Test.createTestingModule({
       providers: [
         LoggerService,
-        { provide: ConfigService, useValue: new ConfigService({ githubAppId: '1', githubAppPrivateKey: 'k', githubInstallationId: 'i', openaiApiKey: 'x', githubToken: 't', mongodbUrl: 'm' }) },
+        {
+          provide: ConfigService,
+          useValue: new ConfigService().init(
+            configSchema.parse({
+              llmProvider: 'openai',
+              agentsDatabaseUrl: 'postgres://localhost/agents',
+            }),
+          ),
+        },
         { provide: LLMProvisioner, useValue: provisioner },
         Agent,
         { provide: PrismaService, useValue: { getClient: () => ({ conversationState: { upsert: async () => {}, findUnique: async () => null } }) } },

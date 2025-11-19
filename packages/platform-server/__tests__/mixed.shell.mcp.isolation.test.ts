@@ -31,7 +31,8 @@ describe('Mixed Shell + MCP overlay isolation', () => {
     const provider = new SharedProvider();
     const cfg = new ConfigService().init(
       configSchema.parse({
-        llmProvider: 'openai', mongodbUrl: 'mongodb://localhost/test', agentsDatabaseUrl: 'mongodb://localhost/agents',
+        llmProvider: 'openai',
+        agentsDatabaseUrl: 'postgres://localhost/agents',
       }),
     );
     const vault = new VaultService(cfg, logger);

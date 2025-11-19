@@ -1,33 +1,4 @@
 services:
-  mongo1:
-    image: mongo:latest
-    container_name: mongo1
-    restart: unless-stopped
-    ports:
-      - 27017:27017
-    command: ["mongod", "--replSet", "rs0", "--bind_ip_all"]
-    volumes:
-      - mongo1_data:/data/db
-
-  mongo-setup:
-    image: mongo:latest
-    container_name: mongo-setup
-    depends_on:
-      - mongo1
-    entrypoint: ["bash", "-c"]
-    command: >
-      "
-      sleep 5 &&
-      mongosh --host mongo1:27017 --eval '
-        rs.initiate({
-          _id: \"rs0\",
-          members: [
-            { _id: 0, host: \"mongo1:27017\" }
-          ]
-        })
-      ' || true
-      "
-
   postgres:
     image: postgres:16-alpine
     oom_score_adj: -900
@@ -340,8 +311,6 @@ services:
       - agents_net
 
 volumes:
-  mongo1_data:
-    driver: local
   vault-file:
     driver: local
   pgdata:

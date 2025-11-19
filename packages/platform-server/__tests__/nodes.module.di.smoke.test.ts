@@ -9,7 +9,6 @@ import { SlackAdapter } from '../src/messaging/slack/slack.adapter';
 import { SlackTrigger } from '../src/nodes/slackTrigger/slackTrigger.node';
 import { RemindMeNode } from '../src/nodes/tools/remind_me/remind_me.node';
 import { ConfigService, configSchema } from '../src/core/services/config.service';
-import { MongoService } from '../src/core/services/mongo.service';
 import { ContainerService } from '../src/infra/container/container.service';
 import { NcpsKeyService } from '../src/infra/ncps/ncpsKey.service';
 import { EnvService } from '../src/env/env.service';
@@ -21,7 +20,6 @@ import { PRService } from '../src/infra/github/pr.usecase';
 import { ArchiveService } from '../src/infra/archive/archive.service';
 
 process.env.LLM_PROVIDER = process.env.LLM_PROVIDER || 'openai';
-process.env.MONGODB_URL = process.env.MONGODB_URL || 'mongodb://localhost:27017/test';
 process.env.AGENTS_DATABASE_URL = process.env.AGENTS_DATABASE_URL || 'postgres://localhost:5432/test';
 
 const shouldRunDbTests = process.env.RUN_DB_TESTS === 'true';
@@ -124,17 +122,9 @@ const slackAdapterStub = makeStub({
   sendText: vi.fn(),
 });
 
-const mongoServiceStub = makeStub({
-  connect: vi.fn().mockResolvedValue(undefined),
-  getDb: vi.fn(),
-  getClient: vi.fn(),
-  close: vi.fn().mockResolvedValue(undefined),
-});
-
 const configServiceStub = new ConfigService().init(
   configSchema.parse({
     llmProvider: 'openai',
-    mongodbUrl: 'mongodb://localhost:27017/test',
     agentsDatabaseUrl: 'postgres://localhost:5432/test',
   }),
 );
@@ -148,27 +138,13 @@ if (!shouldRunDbTests) {
 } else {
   describe('NodesModule DI smoke test', () => {
     it('resolves SlackTrigger provider when module compiles', async () => {
-      vi.spyOn(MongoService.prototype, 'connect').mockResolvedValue(undefined);
-      vi.spyOn(MongoService.prototype, 'getDb').mockReturnValue(
-        makeStub({
-          collection: vi.fn().mockReturnValue(
-            makeStub({
-            findOne: vi.fn().mockResolvedValue(null),
-            insertOne: vi.fn().mockResolvedValue(undefined),
-            replaceOne: vi.fn().mockResolvedValue(undefined),
-          }),
-        ),
-      }),
-    );
-    vi.spyOn(MongoService.prototype, 'getClient').mockReturnValue(makeStub({}));
-    vi.spyOn(PrismaService.prototype, 'getClient').mockReturnValue(prismaClientStub);
+      vi.spyOn(PrismaService.prototype, 'getClient').mockReturnValue(prismaClientStub);
 
     const builder = Test.createTestingModule({
       imports: [NodesModule],
     });
 
     builder.overrideProvider(ConfigService).useFactory(() => configServiceStub);
-    builder.overrideProvider(MongoService).useFactory(() => mongoServiceStub);
     builder.overrideProvider(PrismaService).useFactory(() => prismaStub);
     builder.overrideProvider(ContainerService).useFactory(() => containerServiceStub);
     builder.overrideProvider(NcpsKeyService).useFactory(() => ncpsKeyServiceStub);

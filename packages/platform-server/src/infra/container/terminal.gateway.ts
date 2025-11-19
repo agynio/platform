@@ -1,6 +1,6 @@
 import { Inject, Injectable } from '@nestjs/common';
 import type { FastifyInstance, FastifyRequest } from 'fastify';
-import type { IncomingHttpHeaders, IncomingMessage } from 'http';
+import type { IncomingMessage } from 'http';
 import type { Duplex } from 'stream';
 import WebSocket, { WebSocketServer, type RawData } from 'ws';
 import { z } from 'zod';
@@ -136,13 +136,13 @@ const rawDataToUtf8 = (raw: RawDataLike): string => {
 @Injectable()
 export class ContainerTerminalGateway {
   private registered = false;
-  private wss: WebSocketServer | null = null;
-
   constructor(
     @Inject(TerminalSessionsService) private readonly sessions: TerminalSessionsService,
     @Inject(ContainerService) private readonly containers: ContainerService,
     @Inject(LoggerService) private readonly logger: LoggerService,
   ) {}
+
+  private wss: WebSocketServer | null = null;
 
   registerRoutes(fastify: FastifyInstance): void {
     if (this.registered) return;
@@ -182,34 +182,6 @@ export class ContainerTerminalGateway {
       });
     });
     this.registered = true;
-  }
-
-  private sanitizeHeaders(headers: IncomingHttpHeaders | undefined): Record<string, unknown> {
-    if (!headers) return {};
-    const sensitive = new Set(['authorization', 'cookie', 'set-cookie']);
-    const sanitized: Record<string, unknown> = {};
-    for (const [key, value] of Object.entries(headers)) {
-      if (!key) continue;
-      sanitized[key] = sensitive.has(key.toLowerCase()) ? '[REDACTED]' : value;
-    }
-    return sanitized;
-  }
-
-  private sanitizeUrlSearchParams(params: URLSearchParams): Record<string, string> {
-    const sanitized: Record<string, string> = {};
-    for (const [key, value] of params.entries()) {
-      sanitized[key] = key.toLowerCase() === 'token' ? '[REDACTED]' : value;
-    }
-    return sanitized;
-  }
-
-  private sanitizeRequestQuery(query: unknown): Record<string, unknown> {
-    if (!query || typeof query !== 'object') return {};
-    const sanitized: Record<string, unknown> = {};
-    for (const [key, value] of Object.entries(query as Record<string, unknown>)) {
-      sanitized[key] = key && key.toLowerCase() === 'token' ? '[REDACTED]' : value;
-    }
-    return sanitized;
   }
 
   private async handleConnection(connection: SocketStream, request: FastifyRequest): Promise<void> {

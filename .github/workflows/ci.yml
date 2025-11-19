@@ -40,7 +40,7 @@ jobs:
           node-version: '20'
 
       - name: Approve necessary build scripts
-        run: pnpm approve-builds @prisma/client prisma esbuild mongodb-memory-server @nestjs/core msw
+        run: pnpm approve-builds @prisma/client prisma esbuild @nestjs/core msw
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
@@ -95,7 +95,7 @@ jobs:
           node-version: '20'
 
       - name: Approve necessary build scripts
-        run: pnpm approve-builds @prisma/client prisma esbuild mongodb-memory-server @nestjs/core msw
+        run: pnpm approve-builds @prisma/client prisma esbuild @nestjs/core msw
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
@@ -110,8 +110,6 @@ jobs:
 
       - name: Run server tests
         env:
-          RUN_MONGOMS: '0'
-          MONGOMS_VERSION: '7.0.14'
           AGENTS_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/agents_test
         run: pnpm --filter @agyn/platform-server test
 
@@ -148,7 +146,7 @@ jobs:
           node-version: '20'
 
       - name: Approve necessary build scripts
-        run: pnpm approve-builds @prisma/client prisma esbuild mongodb-memory-server @nestjs/core msw
+        run: pnpm approve-builds @prisma/client prisma esbuild @nestjs/core msw
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
@@ -200,7 +198,7 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Approve necessary build scripts
-        run: pnpm approve-builds @prisma/client esbuild mongodb-memory-server msw
+        run: pnpm approve-builds @prisma/client esbuild msw
 
       - name: Rebuild native dependencies
         run: pnpm -r rebuild

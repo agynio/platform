@@ -8,7 +8,6 @@ import { ConfigService } from '../src/core/services/config.service.js';
 import { EnvService } from '../src/env/env.service';
 import { VaultService } from '../src/vault/vault.service';
 import { NodeStateService } from '../src/graph/nodeState.service';
-import { MongoService } from '../src/core/services/mongo.service';
 import { ContainerRegistry } from '../src/infra/container/container.registry';
 import { NcpsKeyService } from '../src/infra/ncps/ncpsKey.service';
 import { LLMProvisioner } from '../src/llm/provisioners/llm.provisioner';
@@ -67,14 +66,11 @@ class StubConfigService extends ConfigService {
       litellmMasterKey: undefined,
       openaiBaseUrl: undefined,
       githubToken: 'test',
-      mongodbUrl: 'mongodb://localhost:27017/?replicaSet=rs0',
-      graphStore: 'mongo',
       graphRepoPath: './data/graph',
       graphBranch: 'graph-state',
       graphAuthorName: undefined,
       graphAuthorEmail: undefined,
       graphLockTimeoutMs: 5000,
-      graphMongoCollectionName: 'graphs',
       vaultEnabled: false,
       vaultAddr: undefined,
       vaultToken: undefined,
@@ -104,9 +100,16 @@ class StubConfigService extends ConfigService {
     });
   }
 }
-class StubVaultService extends VaultService { override async getSecret(): Promise<string | undefined> { return undefined; } }
-class StubMongoService extends MongoService { override getDb(): Record<string,unknown> { return {}; } }
-class StubLLMProvisioner extends LLMProvisioner { async getLLM(): Promise<{ call: (messages: unknown) => Promise<{ text: string; output: unknown[] }> }> { return { call: async () => ({ text: 'ok', output: [] }) }; } }
+class StubVaultService extends VaultService {
+  override async getSecret(): Promise<string | undefined> {
+    return undefined;
+  }
+}
+class StubLLMProvisioner extends LLMProvisioner {
+  async getLLM(): Promise<{ call: (messages: unknown) => Promise<{ text: string; output: unknown[] }> }> {
+    return { call: async () => ({ text: 'ok', output: [] }) };
+  }
+}
 
 
 describe('Graph MCP integration', () => {
@@ -118,7 +121,6 @@ describe('Graph MCP integration', () => {
         { provide: ConfigService, useClass: StubConfigService },
         EnvService,
         { provide: VaultService, useClass: StubVaultService },
-        { provide: MongoService, useClass: StubMongoService },
         { provide: LLMProvisioner, useClass: StubLLMProvisioner },
         { provide: NcpsKeyService, useValue: { getKeysForInjection: () => [] } },
         { provide: ContainerRegistry, useValue: { updateLastUsed: async () => {}, registerStart: async () => {}, markStopped: async () => {} } },
@@ -134,11 +136,10 @@ describe('Graph MCP integration', () => {
     const logger = module.get(LoggerService);
     const containerService = module.get(ContainerService);
     const configService = module.get(ConfigService);
-    const mongoService = module.get(MongoService);
     const provisioner = module.get(LLMProvisioner);
     const moduleRef = module.get(ModuleRef);
 
-    const templateRegistry = buildTemplateRegistry({ logger, containerService, configService, mongoService, provisioner, moduleRef });
+    const templateRegistry = buildTemplateRegistry({ logger, containerService, configService, provisioner, moduleRef });
     class GraphRepoStub implements Pick<GraphRepository, 'initIfNeeded' | 'get' | 'upsert' | 'upsertNodeState'> {
       async initIfNeeded(): Promise<void> {}
       async get(): Promise<null> { return null; }

@@ -4,11 +4,10 @@ Runtime for graph-driven agents, tool adapters, triggers, and memory. See docs f
 
 Graph persistence
 - Configure via env:
-  - GRAPH_STORE: `mongo` | `git` (default `mongo`)
-  - GRAPH_REPO_PATH: path to local git repo for graphs (default `./data/graph`)
+  - GRAPH_REPO_PATH: path to the local git repo for graph state (default `./data/graph`)
   - GRAPH_BRANCH: branch name to use (default `graph-state`)
   - GRAPH_AUTHOR_NAME / GRAPH_AUTHOR_EMAIL: default git author (can be overridden per request with headers `x-graph-author-name`/`x-graph-author-email`)
-- On startup with GRAPH_STORE=git, the server initializes `GRAPH_REPO_PATH` as a git repo if missing, ensures branch checkout, seeds root-level per-entity layout (format: 2) with empty `nodes/` and `edges/`, writes `graph.meta.json` for the active graph name (default `main`), and commits the initial state.
+- On startup, the server initializes `GRAPH_REPO_PATH` as a git repo if missing, ensures branch checkout, seeds root-level per-entity layout (format: 2) with empty `nodes/` and `edges/`, writes `graph.meta.json` for the active graph name (default `main`), and commits the initial state.
  - The existing API `/api/graph` supports GET and POST. POST maintains optimistic locking via the `version` field. Each successful write creates one commit with message `chore(graph): <name> v<version> (+/- nodes, +/- edges)` on the configured branch.
  - Error responses:
    - 409 VERSION_CONFLICT with `{ error, current }` body when version mismatch.
@@ -25,8 +24,8 @@ Enabling Memory
 - Default connector config: placement=after_system, content=tree, maxChars=4000.
 - To wire memory into an agent's CallModel at runtime, add a `memoryNode` and connect its `$self` source port to the agent's `callModel`/`setMemoryConnector` target port (or use template API to create a connector).
 - Tool usage: attach the unified `memory` tool to the `simpleAgent` via the `memory` target port on the tool; commands: `read|list|append|update|delete`.
-- Scope: `global` per node by default; use `perThread` to isolate by thread id. No external Mongo needed in tests; the service works with a real `Db` in prod.
-- Environment: requires MongoDB URL for server runtime; tests use in-memory fakes.
+- Scope: `global` per node by default; use `perThread` to isolate by thread id.
+- Backing store uses Postgres via Prisma; no MongoDB dependency.
 
 Examples
 - Set connector defaults programmatically: `mem.createConnector({ placement: 'after_system', content: 'tree', maxChars: 4000 })`.

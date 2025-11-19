@@ -14,7 +14,7 @@ Spans and traces
 - Traces aggregate spans per run; the UI can deep-link into a trace in the Observability UI.
 
 Storage and indices
-- The reference implementation stores spans in MongoDB. Suggested indices:
+- The reference implementation stores spans in Postgres (JSONB). Suggested indices:
   - Spans by `nodeId`
   - Spans by `traceId`
   - Spans by timestamps (start/end)

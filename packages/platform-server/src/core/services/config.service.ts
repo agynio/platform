@@ -18,9 +18,7 @@ export const configSchema = z.object({
   // Optional explicit OpenAI base URL passthrough
   openaiBaseUrl: z.string().optional(),
   githubToken: z.string().min(1).optional(),
-  mongodbUrl: z.string().min(1, 'MongoDB connection string is required'),
   // Graph persistence
-  graphStore: z.enum(['mongo', 'git']).default('mongo'),
   graphRepoPath: z.string().default('./data/graph'),
   graphBranch: z.string().default('graph-state'),
   graphAuthorName: z.string().optional(),
@@ -32,7 +30,6 @@ export const configSchema = z.object({
       const n = typeof v === 'number' ? v : Number(v);
       return Number.isFinite(n) ? n : 5000;
     }),
-  graphMongoCollectionName: z.string().default('graphs'),
   // Optional Vault flags (disabled by default)
   vaultEnabled: z
     .union([z.boolean(), z.string()])
@@ -202,14 +199,7 @@ export class ConfigService implements Config {
     return this.params.githubToken;
   }
 
-  get mongodbUrl(): string {
-    return this.params.mongodbUrl;
-  }
-
   // Graph config accessors
-  get graphStore(): 'mongo' | 'git' {
-    return this.params.graphStore;
-  }
   get graphRepoPath(): string {
     return this.params.graphRepoPath;
   }
@@ -224,9 +214,6 @@ export class ConfigService implements Config {
   }
   get graphLockTimeoutMs(): number {
     return this.params.graphLockTimeoutMs;
-  }
-  get graphMongoCollectionName(): string {
-    return this.params.graphMongoCollectionName;
   }
 
   // Vault getters (optional)
@@ -337,15 +324,12 @@ export class ConfigService implements Config {
       litellmMasterKey: process.env.LITELLM_MASTER_KEY,
       openaiBaseUrl: process.env.OPENAI_BASE_URL,
       githubToken: process.env.GH_TOKEN,
-      mongodbUrl: process.env.MONGODB_URL,
       // Pass raw env; schema will validate/assign default
-      graphStore: process.env.GRAPH_STORE,
       graphRepoPath: process.env.GRAPH_REPO_PATH,
       graphBranch: process.env.GRAPH_BRANCH,
       graphAuthorName: process.env.GRAPH_AUTHOR_NAME,
       graphAuthorEmail: process.env.GRAPH_AUTHOR_EMAIL,
       graphLockTimeoutMs: process.env.GRAPH_LOCK_TIMEOUT_MS,
-      graphMongoCollectionName: process.env.GRAPH_MONGO_COLLECTION_NAME,
       vaultEnabled: process.env.VAULT_ENABLED,
       vaultAddr: process.env.VAULT_ADDR,
       vaultToken: process.env.VAULT_TOKEN,

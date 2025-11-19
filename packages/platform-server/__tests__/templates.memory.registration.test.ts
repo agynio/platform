@@ -3,8 +3,7 @@ import { buildTemplateRegistry } from '../src/templates';
 import { ModuleRef } from '@nestjs/core';
 import { LoggerService } from '../src/core/services/logger.service';
 import { ContainerService } from '../src/infra/container/container.service';
-import { ConfigService } from '../src/core/services/config.service';
-import type { MongoService } from '../src/core/services/mongo.service';
+import { ConfigService, configSchema } from '../src/core/services/config.service';
 import { LLMProvisioner } from '../src/llm/provisioners/llm.provisioner';
 import { WorkspaceNode } from '../src/nodes/workspace/workspace.node';
 import { ShellCommandNode } from '../src/nodes/tools/shell_command/shell_command.node';
@@ -24,9 +23,13 @@ const maybeIt = shouldRunDbTests ? it : it.skip;
 describe('templates: memory registration and agent memory port', () => {
   maybeIt('registers memory and memoryConnector templates and exposes Agent memory target port', async () => {
     const logger = new LoggerService();
-    const configService = new ConfigService({ githubAppId: '1', githubAppPrivateKey: 'k', githubInstallationId: 'i', openaiApiKey: 'x', githubToken: 't', mongodbUrl: 'm' });
+    const configService = new ConfigService().init(
+      configSchema.parse({
+        llmProvider: 'openai',
+        agentsDatabaseUrl: process.env.AGENTS_DATABASE_URL || 'postgres://localhost/skip',
+      }),
+    );
     const containerService = new ContainerService(logger);
-    const mongoService = { getDb: () => ({}) } as unknown as MongoService;
     const provisioner = { getLLM: async () => ({ call: async () => ({ text: 'ok', output: [] }) }) } as unknown as LLMProvisioner;
     const envService = new EnvService(configService);
     const archiveService = new ArchiveService();
@@ -58,7 +61,6 @@ describe('templates: memory registration and agent memory port', () => {
       logger,
       containerService,
       configService,
-      mongoService,
       provisioner,
       moduleRef: moduleRef as unknown as ModuleRef,
     };

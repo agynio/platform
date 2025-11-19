@@ -7,4 +7,3 @@ export * from './ports.types';
 export * from './ports.registry';
 export * from './graph.repository';
 export * from './gitGraph.repository';
-export * from './graphMongo.repository';

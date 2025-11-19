@@ -1,7 +1,7 @@
 # Git-backed Graph Store (format: 2)
 
 Overview
-- An alternative to Mongo persistence that stores the single graph in a Git repository working tree with a root-level, per-entity layout (format: 2).
+- Git-backed persistence stores the single graph in a repository working tree with a root-level, per-entity layout (format: 2).
 - Deterministic edge IDs, advisory file lock, and serial, idempotent upserts.
 
 Repository layout (root)
@@ -33,18 +33,6 @@ Optimistic locking
 Working tree recovery
 - If working tree is partially written or corrupt, service falls back to last committed snapshot (HEAD) or the previous in-memory snapshot.
 
-Migration tool
-- Use the provided migration script to migrate a Mongo-stored graph into the format:2 root layout.
-  - Inputs via env:
-    - MONGODB_URL (default mongodb://localhost:27017/agents)
-    - GRAPH_REPO_PATH (e.g., ./data/graph)
-    - GRAPH_BRANCH (default graph-state)
-    - GRAPH_AUTHOR_NAME / GRAPH_AUTHOR_EMAIL
-    - Optional GRAPH_NAME to select a specific graph
-  - Behavior:
-    - Ensures repo and branch; writes nodes/edges/meta; removes legacy graphs/ directory; commits if there are staged changes.
-    - Deterministic edge IDs are computed during migration.
-
 Example commands
 ```bash
 # Validate templates
@@ -60,13 +48,6 @@ curl -X POST http://localhost:3010/api/graph \
   -H 'x-graph-author-email: jane@example.com' \
   -d '{"name":"main","version":1,"nodes":[],"edges":[]}'
 
-# Run migration (from repo root)
-MONGODB_URL='mongodb://localhost:27017/agents' \
-GRAPH_REPO_PATH='./data/graph' \
-GRAPH_BRANCH='graph-state' \
-GRAPH_AUTHOR_NAME='Graph Migrator' \
-GRAPH_AUTHOR_EMAIL='graph-migrator@example.com' \
-pnpm -w -F @agyn/platform-server tsx <migration script>
 ```
 
 Related behavior

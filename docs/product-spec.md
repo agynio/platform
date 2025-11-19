@@ -30,13 +30,13 @@ Architecture and components
 - Runtime
   - Live graph runtime applies versioned diffs serially to a single named graph. PortsRegistry enables reversible edge updates; TemplateRegistry defines template factories, ports, capabilities, and config schemas.
   - Unknown-key handling and retries: apply strips unknown config keys on schema validation errors and retries up to 3 times.
-  - Checkpointing via Mongo (default) or Postgres; UI stream currently depends on Mongo change streams.
+  - Checkpointing via Postgres (default); streaming UI integration planned.
 - Server
   - HTTP APIs and Socket.IO for management and status streaming.
   - Endpoints manage graph templates, graph state, node lifecycle/actions, dynamic-config schema, reminders, runs, vault proxy, and Nix proxy (when enabled).
 - Persistence
-  - Graph store: Mongo or Git-backed working tree (format: 2) with deterministic edge IDs and advisory lock. Upsert commit per version with conflict/timeout/commit error modes.
-  - Container registry: Mongo collection of workspace lifecycle and TTL; cleanup service with backoff.
+  - Graph store: Git-backed working tree (format: 2) with deterministic edge IDs and advisory lock. Upsert commit per version with conflict/timeout/commit error modes.
+  - Container registry: Postgres table of workspace lifecycle and TTL; cleanup service with backoff.
 - Containers and workspace network
   - Workspaces via container provider; labeled hautech.ai/role=workspace and hautech.ai/thread_id; optional hautech.ai/platform for platform-aware reuse. Network: agents_net. Optional DinD sidecar with DOCKER_HOST=tcp://localhost:2375. Optional HTTP-only registry mirror on agents_net.
   - Exec behavior: wall/idle timeouts, abort/kill on timeout, demux, and ANSI stripping.
@@ -78,7 +78,7 @@ Behaviors and failure modes
 - Cleanup
   - Exponential backoff on termination failures (max delay 15m).
 - UI caveats
-  - UI checkpoint stream requires Mongo; Postgres checkpointer writes aren’t reflected yet.
+  - UI checkpoint stream support for Postgres is pending.
 
 Security model
 - Vault (optional) for secrets; vault endpoints require VAULT_ENABLED. Vault refs used in env overlays; secrets never logged.
@@ -92,13 +92,11 @@ Performance and scale
 - Runtime serializes applies; concurrent applies rejected with 409 on version mismatch.
 - Container reuse via registry with TTL reduces cold starts.
 - Platform-aware pulls slower on emulation.
-- Observability storage relies on Mongo; add indices on spans by nodeId, traceId, timestamps.
+- Observability storage relies on Postgres; add indices on spans by nodeId, traceId, timestamps.
 
 Upgrade and migration
-- Graph store migration to Git: use the provided migration script — idempotent.
-  - Inputs: MONGODB_URL, GRAPH_REPO_PATH, GRAPH_BRANCH, author name/email, optional GRAPH_NAME filter.
-  - Output: repo layout with format 2 files.
-- UI dependency on Mongo change streams remains until Postgres streaming is added.
+- Graph store is Git-backed by default; legacy Mongo support has been removed.
+- UI dependency on change streams is retired alongside Mongo.
 - MCP heartbeat/backoff planned; non-breaking once added.
 - See: docs/graph/git-store.md
 
@@ -109,17 +107,15 @@ Configuration matrix (server env vars)
   - GITHUB_INSTALLATION_ID
   - OPENAI_API_KEY
   - GH_TOKEN
-  - MONGODB_URL (e.g., mongodb://localhost:27017/agents)
 - Optional
-  - GRAPH_STORE: mongo|git (default mongo)
-  - GRAPH_REPO_PATH (required if GRAPH_STORE=git)
+  - GRAPH_REPO_PATH (default ./data/graph)
   - GRAPH_BRANCH (default graph-state)
   - GRAPH_AUTHOR_NAME / GRAPH_AUTHOR_EMAIL
   - VAULT_ENABLED: true|false (default false)
   - VAULT_ADDR, VAULT_TOKEN
   - DOCKER_MIRROR_URL (default http://registry-mirror:5000)
   - MCP_TOOLS_STALE_TIMEOUT_MS
-  - LANGGRAPH_CHECKPOINTER: mongo|postgres (default mongo)
+  - LANGGRAPH_CHECKPOINTER: postgres (default)
   - POSTGRES_URL (postgres connection string)
   - NIX_* (if Nix proxy enabled)
 - Derived/labels
@@ -132,21 +128,21 @@ HTTP API and sockets (pointers)
 
 Runbooks
 - Local dev
-  - Prereqs: Node 18+, pnpm, Docker, Mongo.
-  - Set: MONGODB_URL, OPENAI_API_KEY, GITHUB_*, GH_TOKEN. Optional VAULT_* and DOCKER_MIRROR_URL.
-  - Start deps (compose or local Mongo)
+  - Prereqs: Node 18+, pnpm, Docker, Postgres.
+  - Set: OPENAI_API_KEY, GITHUB_*, GH_TOKEN, AGENTS_DATABASE_URL. Optional VAULT_* and DOCKER_MIRROR_URL.
+  - Start deps (compose or local Postgres)
   - Server: pnpm -w -F @agyn/platform-server dev
   - UI: pnpm -w -F @agyn/platform-ui dev
   - Verify: curl http://localhost:3010/api/templates; open UI; connect socket to observe node_status when provisioning.
- - Docker Compose stack
-  - Services: mongo, mongo-express, vault (auto-init), postgres, registry-mirror.
+- Docker Compose stack
+  - Services: postgres, vault (auto-init), registry-mirror.
   - Observability: Tracing services have been removed; follow upcoming observability docs for replacements.
   - Vault init: vault/auto-init.sh populates root token/unseal keys; set VAULT_ENABLED=true and VAULT_ADDR/VAULT_TOKEN.
-  - Postgres checkpointer: set LANGGRAPH_CHECKPOINTER=postgres and POSTGRES_URL; UI stream caveat remains.
+  - Postgres checkpointer: LANGGRAPH_CHECKPOINTER defaults to postgres; configure POSTGRES_URL for the checkpointer connection.
 
 Release qualification plan
 - Pre-flight config
-  - Validate required env vars; verify graph store; if VAULT_ENABLED, verify connectivity and token.
+  - Validate required env vars; verify git repo access; if VAULT_ENABLED, verify connectivity and token.
 - Functional smoke
   - /api/templates returns expected templates.
   - Create trivial graph with containerProvider + shell tool; exec simple command with execution+idle timeouts; verify timeouts.
@@ -154,7 +150,7 @@ Release qualification plan
   - Add Slack trigger (with Vault); send message; verify trigger delivery and agent run.
 - Persistence
   - Git store: apply small diff twice (idempotent); stale baseVersion returns 409.
-  - Mongo/Postgres checkpointers: run agent loop; verify spans/checkpoints; note UI stream caveat in Postgres.
+  - Postgres checkpointer: run agent loop; verify spans/checkpoints.
 - Container lifecycle
   - Verify TTL and cleanup job removes expired containers; simulate removal error and observe backoff.
   - Verify platform-aware reuse and relabeling.

@@ -15,7 +15,6 @@ import { MemoryToolNode } from './nodes/tools/memory/memory.node';
 
 import { ConfigService } from './core/services/config.service';
 import { LoggerService } from './core/services/logger.service';
-import { MongoService } from './core/services/mongo.service';
 
 import { ContainerService } from './infra/container/container.service';
 import { NcpsKeyService } from './infra/ncps/ncpsKey.service';
@@ -23,14 +22,15 @@ import { RemindMeNode } from './nodes/tools/remind_me/remind_me.node';
 import { ShellCommandNode } from './nodes/tools/shell_command/shell_command.node';
 import { SendSlackMessageNode } from './nodes/tools/send_slack_message/send_slack_message.node';
 import { SendMessageNode } from './nodes/tools/send_message/send_message.node';
+import { LLMProvisioner } from './llm/provisioners/llm.provisioner';
 // Unified Memory tool
 
 export interface TemplateRegistryDeps {
   logger: LoggerService;
   containerService: ContainerService;
   configService: ConfigService;
-  mongoService: MongoService; // required for memory nodes
   ncpsKeyService?: NcpsKeyService;
+  provisioner: LLMProvisioner;
   moduleRef: ModuleRef;
 }
 
