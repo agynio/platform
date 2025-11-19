@@ -1,10 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { runs } from '@/api/modules/runs';
-import type { ToolOutputTerminal } from '@/api/types/agents';
+import type { ToolOutputChunk, ToolOutputTerminal } from '@/api/types/agents';
 import { graphSocket } from '@/lib/graph/socket';
 
 type StreamState = {
   text: string;
+  stdoutText: string;
+  stderrText: string;
+  chunks: ToolOutputChunk[];
   lastSeq: number;
   terminal: ToolOutputTerminal | null;
   hydrated: boolean;
@@ -16,7 +19,15 @@ type Options = {
   enabled: boolean;
 };
 
-const INITIAL_STATE: StreamState = { text: '', lastSeq: 0, terminal: null, hydrated: false };
+const INITIAL_STATE: StreamState = {
+  text: '',
+  stdoutText: '',
+  stderrText: '',
+  chunks: [],
+  lastSeq: 0,
+  terminal: null,
+  hydrated: false,
+};
 
 export function useToolOutputStreaming({ runId, eventId, enabled }: Options) {
   const [state, setState] = useState<StreamState>(INITIAL_STATE);
@@ -50,17 +61,33 @@ export function useToolOutputStreaming({ runId, eventId, enabled }: Options) {
         setError(null);
         applyState((prev) => {
           const append = Boolean(sinceSeq && sinceSeq > 0);
-          const baseText = append ? prev.text : '';
           const baseSeq = append ? prev.lastSeq : 0;
-          let nextText = baseText;
+          const baseChunks = append ? prev.chunks.slice() : [];
           let nextSeq = baseSeq;
+          let nextText = append ? prev.text : '';
+          let nextStdout = append ? prev.stdoutText : '';
+          let nextStderr = append ? prev.stderrText : '';
           for (const chunk of snapshot.items ?? []) {
             if (chunk.seqGlobal <= nextSeq) continue;
-            nextText += chunk.data;
+            baseChunks.push(chunk);
             nextSeq = chunk.seqGlobal;
+            nextText += chunk.data;
+            if (chunk.source === 'stdout') {
+              nextStdout += chunk.data;
+            } else {
+              nextStderr += chunk.data;
+            }
           }
           const nextTerminal = snapshot.terminal ?? (append ? prev.terminal : null);
-          return { text: nextText, lastSeq: nextSeq, terminal: nextTerminal ?? null, hydrated: true };
+          return {
+            text: nextText,
+            stdoutText: nextStdout,
+            stderrText: nextStderr,
+            chunks: baseChunks,
+            lastSeq: nextSeq,
+            terminal: nextTerminal ?? null,
+            hydrated: true,
+          };
         });
       } catch (err) {
         if (!sinceSeq) {
@@ -111,9 +138,13 @@ export function useToolOutputStreaming({ runId, eventId, enabled }: Options) {
           requestCatchup(prev.lastSeq);
           return prev;
         }
+        const nextChunks = prev.chunks.concat(payload);
         return {
           ...prev,
           text: prev.text + payload.data,
+          stdoutText: payload.source === 'stdout' ? prev.stdoutText + payload.data : prev.stdoutText,
+          stderrText: payload.source === 'stderr' ? prev.stderrText + payload.data : prev.stderrText,
+          chunks: nextChunks,
           lastSeq: payload.seqGlobal,
           hydrated: true,
         };
@@ -141,6 +172,9 @@ export function useToolOutputStreaming({ runId, eventId, enabled }: Options) {
 
   return {
     text: state.text,
+    stdoutText: state.stdoutText,
+    stderrText: state.stderrText,
+    chunks: state.chunks,
     terminal: state.terminal,
     hydrated: state.hydrated,
     lastSeq: state.lastSeq,

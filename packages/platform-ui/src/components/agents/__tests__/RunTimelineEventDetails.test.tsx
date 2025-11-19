@@ -125,6 +125,9 @@ beforeEach(() => {
   useToolOutputStreamingMock.mockReset();
   useToolOutputStreamingMock.mockReturnValue({
     text: '',
+    stdoutText: '',
+    stderrText: '',
+    chunks: [],
     terminal: null,
     hydrated: false,
     lastSeq: 0,
@@ -315,6 +318,20 @@ describe('RunTimelineEventDetails', () => {
   it('renders streaming badge and live output when shell tool is active', () => {
     useToolOutputStreamingMock.mockReturnValue({
       text: 'stream output',
+      stdoutText: 'stream output',
+      stderrText: '',
+      chunks: [
+        {
+          runId: 'run-1',
+          threadId: 'thread-1',
+          eventId: 'evt-1',
+          seqGlobal: 1,
+          seqStream: 1,
+          source: 'stdout',
+          ts: '2024-01-01T00:00:00.000Z',
+          data: 'stream output',
+        },
+      ],
       terminal: null,
       hydrated: true,
       lastSeq: 1,
@@ -333,9 +350,96 @@ describe('RunTimelineEventDetails', () => {
     expect(screen.getByText('stream output')).toBeInTheDocument();
   });
 
+  it('allows filtering between stdout and stderr with visual differentiation', async () => {
+    const user = userEvent.setup();
+    useToolOutputStreamingMock.mockReturnValue({
+      text: 'line1\nwarn\ndone\n',
+      stdoutText: 'line1\ndone\n',
+      stderrText: 'warn\n',
+      chunks: [
+        {
+          runId: 'run-1',
+          threadId: 'thread-1',
+          eventId: 'evt-1',
+          seqGlobal: 1,
+          seqStream: 1,
+          source: 'stdout',
+          ts: '2024-01-01T00:00:00.000Z',
+          data: 'line1\n',
+        },
+        {
+          runId: 'run-1',
+          threadId: 'thread-1',
+          eventId: 'evt-1',
+          seqGlobal: 2,
+          seqStream: 1,
+          source: 'stderr',
+          ts: '2024-01-01T00:00:01.000Z',
+          data: 'warn\n',
+        },
+        {
+          runId: 'run-1',
+          threadId: 'thread-1',
+          eventId: 'evt-1',
+          seqGlobal: 3,
+          seqStream: 2,
+          source: 'stdout',
+          ts: '2024-01-01T00:00:02.000Z',
+          data: 'done\n',
+        },
+      ],
+      terminal: null,
+      hydrated: true,
+      lastSeq: 3,
+      loading: false,
+      error: null,
+    });
+
+    renderDetails(
+      buildEvent({
+        status: 'running',
+        toolExecution: { toolName: 'shell_command', output: '', raw: null },
+      }),
+    );
+
+    const streamSelect = screen.getByLabelText('Select stream view');
+    expect(streamSelect).toHaveValue('interleaved');
+
+    const stderrBadges = screen.getAllByText('stderr');
+    expect(stderrBadges.length).toBeGreaterThan(0);
+    const stderrContainer = stderrBadges[0]?.parentElement;
+    expect(stderrContainer).toHaveAttribute('data-source', 'stderr');
+    expect(stderrContainer?.className).toMatch(/text-(?:red|rose)/);
+
+    await user.selectOptions(streamSelect, 'Stdout only');
+    expect(screen.queryByText('stderr')).toBeNull();
+    expect(screen.getByText(/line1/)).toBeInTheDocument();
+    expect(screen.getByText(/done/)).toBeInTheDocument();
+    expect(screen.queryByText(/warn/)).toBeNull();
+
+    await user.selectOptions(streamSelect, 'Stderr only');
+    expect(screen.getByText(/warn/)).toBeInTheDocument();
+    expect(screen.queryByText(/line1/)).toBeNull();
+    expect(screen.queryByText(/done/)).toBeNull();
+  });
+
   it('shows terminal summary metadata when streaming finishes', () => {
     useToolOutputStreamingMock.mockReturnValue({
       text: 'final result',
+      stdoutText: 'final result',
+      stderrText: '',
+      chunks: [
+        {
+          runId: 'run-1',
+          threadId: 'thread-1',
+          eventId: 'evt-1',
+          seqGlobal: 1,
+          seqStream: 1,
+          source: 'stdout',
+          ts: '2024-01-01T00:00:03.000Z',
+          data: 'final result',
+        },
+      ],
       terminal: {
         runId: 'run-1',
         threadId: 'thread-1',

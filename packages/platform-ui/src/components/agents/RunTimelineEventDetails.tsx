@@ -1,7 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { stringify as stringifyYaml } from 'yaml';
 import { Link } from 'react-router-dom';
-import type { ContextItem, RunTimelineEvent, ToolOutputTerminal } from '@/api/types/agents';
+import type {
+  ContextItem,
+  RunTimelineEvent,
+  ToolOutputChunk,
+  ToolOutputTerminal,
+  ToolOutputSource,
+} from '@/api/types/agents';
 import { STATUS_COLORS, formatDuration, getEventTypeLabel } from './runTimelineFormatting';
 import { LLMContextViewer } from './LLMContextViewer';
 import { waitForStableScrollHeight } from './waitForStableScrollHeight';
@@ -67,6 +73,25 @@ const TERMINAL_STATUS_STYLES: Record<ToolOutputTerminal['status'], string> = {
   cancelled: 'bg-gray-200 text-gray-700',
   truncated: 'bg-indigo-100 text-indigo-700',
 };
+
+type StreamFilter = 'interleaved' | 'stdout' | 'stderr';
+
+const STREAM_FILTER_LABELS: Record<StreamFilter, string> = {
+  interleaved: 'Interleaved',
+  stdout: 'Stdout only',
+  stderr: 'Stderr only',
+};
+
+type StreamSegment = { id: string; source: ToolOutputSource; data: string };
+
+type StreamSegmentsValue = {
+  kind: 'stream_segments';
+  segments: StreamSegment[];
+};
+
+function isStreamSegmentsValue(value: unknown): value is StreamSegmentsValue {
+  return Boolean(value && typeof value === 'object' && (value as StreamSegmentsValue).kind === 'stream_segments');
+}
 
 function normalizeCallAgentStatus(value: string): { display: string; colorKey: CallAgentStatusKey } {
   const raw = (value ?? '').toLowerCase();
@@ -147,6 +172,9 @@ function determineDefaultMode(output: unknown): OutputMode {
   if (output === null || output === undefined) {
     return 'text';
   }
+  if (isStreamSegmentsValue(output)) {
+    return 'terminal';
+  }
   if (Array.isArray(output) || (typeof output === 'object' && output !== null)) {
     return 'json';
   }
@@ -166,12 +194,18 @@ function determineDefaultMode(output: unknown): OutputMode {
 
 function toText(value: unknown): string {
   if (value === null || value === undefined) return '';
+  if (isStreamSegmentsValue(value)) {
+    return value.segments.map((segment) => segment.data).join('');
+  }
   if (typeof value === 'string') return value;
   if (typeof value === 'number' || typeof value === 'boolean') return String(value);
   return formatJson(value);
 }
 
 function formatYaml(value: unknown): string {
+  if (isStreamSegmentsValue(value)) {
+    return value.segments.map((segment) => segment.data).join('');
+  }
   try {
     const data = typeof value === 'string' ? tryParseJson(value) ?? value : value;
     if (typeof data === 'string') {
@@ -198,6 +232,9 @@ function renderOutputByMode(mode: OutputMode, value: unknown, options: { framed?
     return <pre className={classes.join(' ')}>{formatYaml(value)}</pre>;
   }
   if (mode === 'terminal') {
+    if (isStreamSegmentsValue(value)) {
+      return renderStreamSegments('terminal', value.segments, { framed });
+    }
     const classes = ['content-pre', 'text-[11px]', 'font-mono'];
     if (framed) {
       classes.push('px-3', 'py-2', 'border', 'border-gray-800', 'bg-gray-900', 'text-emerald-100');
@@ -212,9 +249,55 @@ function renderOutputByMode(mode: OutputMode, value: unknown, options: { framed?
     if (framed) classes.push('px-3', 'py-2');
     return <pre className={classes.join(' ')}>{displayText}</pre>;
   }
+  if (mode === 'text' && isStreamSegmentsValue(value)) {
+    return renderStreamSegments('text', value.segments, { framed });
+  }
   const classes = ['content-wrap', 'text-[11px]', 'text-gray-800'];
   if (framed) classes.push('px-3', 'py-2');
   return <pre className={classes.join(' ')}>{displayText}</pre>;
+}
+
+function renderStreamSegments(mode: 'terminal' | 'text', segments: StreamSegment[], options: { framed?: boolean } = {}) {
+  const { framed = true } = options;
+  const isTerminal = mode === 'terminal';
+  const preClasses = isTerminal
+    ? ['content-pre', 'text-[11px]', 'font-mono']
+    : ['content-wrap', 'text-[11px]'];
+
+  if (isTerminal) {
+    if (framed) {
+      preClasses.push('px-3', 'py-2', 'border', 'border-gray-800', 'bg-gray-900', 'text-emerald-100');
+    } else {
+      preClasses.push('text-gray-800');
+    }
+  } else if (framed) {
+    preClasses.push('px-3', 'py-2', 'border', 'border-gray-200', 'bg-white', 'text-gray-800');
+  } else {
+    preClasses.push('text-gray-800');
+  }
+
+  const badgeClass = isTerminal
+    ? 'mr-1 inline-flex rounded bg-rose-500/20 px-1 text-[9px] font-semibold uppercase tracking-wide text-rose-200'
+    : 'mr-1 inline-flex rounded bg-red-100 px-1 text-[9px] font-semibold uppercase tracking-wide text-red-700';
+
+  const stderrClass = isTerminal ? 'text-rose-300 font-semibold' : 'text-red-600 font-semibold';
+
+  return (
+    <pre className={preClasses.join(' ')}>
+      {segments.map((segment) => (
+        <span key={segment.id} data-source={segment.source} className={segment.source === 'stderr' ? stderrClass : undefined}>
+          {segment.source === 'stderr' ? (
+            <>
+              <span className={badgeClass}>stderr</span>
+              {segment.data}
+            </>
+          ) : (
+            segment.data
+          )}
+        </span>
+      ))}
+    </pre>
+  );
 }
 
 function useToolOutputMode(eventId: string, value: unknown) {
@@ -241,7 +324,7 @@ function useToolOutputMode(eventId: string, value: unknown) {
 function ToolOutputSection({
   eventId,
   baseValue,
-  liveValue,
+  streamData,
   isStreaming,
   terminal,
   streamError,
@@ -252,7 +335,12 @@ function ToolOutputSection({
 }: {
   eventId: string;
   baseValue: unknown;
-  liveValue?: unknown;
+  streamData?: {
+    chunks: ToolOutputChunk[];
+    text: string;
+    stdoutText: string;
+    stderrText: string;
+  };
   isStreaming?: boolean;
   terminal?: ToolOutputTerminal | null;
   streamError?: Error | null;
@@ -261,7 +349,45 @@ function ToolOutputSection({
   errorMessage: string | null | undefined;
   attachments: Attachment[];
 }) {
-  const displayValue = liveValue !== undefined && liveValue !== null ? liveValue : baseValue;
+  const hasStreamControls = Boolean(streamData) && ((streamData?.chunks.length ?? 0) > 0 || isStreaming);
+  const [filter, setFilter] = useState<StreamFilter>('interleaved');
+
+  useEffect(() => {
+    if (!hasStreamControls) {
+      setFilter('interleaved');
+    }
+  }, [hasStreamControls]);
+
+  const streamTexts = useMemo(
+    () => ({
+      interleaved: streamData?.text ?? '',
+      stdout: streamData?.stdoutText ?? '',
+      stderr: streamData?.stderrText ?? '',
+    }),
+    [streamData],
+  );
+
+  const streamSegments = useMemo<StreamSegment[]>(() => {
+    if (!streamData) return [];
+    return streamData.chunks.map((chunk) => ({ id: `${chunk.seqGlobal}`, source: chunk.source, data: chunk.data }));
+  }, [streamData]);
+
+  const displayValue = useMemo(() => {
+    if (hasStreamControls) {
+      if (filter === 'stdout') return streamTexts.stdout;
+      if (filter === 'stderr') return streamTexts.stderr;
+      if (streamSegments.length > 0) {
+        return { kind: 'stream_segments', segments: streamSegments } as StreamSegmentsValue;
+      }
+      return streamTexts.interleaved;
+    }
+    return baseValue;
+  }, [hasStreamControls, filter, streamSegments, streamTexts, baseValue]);
+
+  const scrollKey = hasStreamControls
+    ? `${filter}:${filter === 'interleaved' ? streamTexts.interleaved : filter === 'stdout' ? streamTexts.stdout : streamTexts.stderr}`
+    : toText(displayValue);
+
   const { mode, setMode, rendered } = useToolOutputMode(eventId, displayValue);
   const contentRef = useRef<HTMLDivElement | null>(null);
 
@@ -274,7 +400,7 @@ function ToolOutputSection({
     } catch {
       // ignore scroll errors
     }
-  }, [isStreaming, displayValue]);
+  }, [isStreaming, scrollKey]);
 
   const statusBadge = isStreaming
     ? (
@@ -293,6 +419,8 @@ function ToolOutputSection({
         )
       : null;
 
+  const showStreamFilterControls = hasStreamControls && (mode === 'text' || mode === 'terminal');
+
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded border border-gray-200 bg-white">
       <header className="flex items-center justify-between gap-2 border-b border-gray-200 px-3 py-2 text-xs font-semibold uppercase tracking-wide text-gray-500">
@@ -300,18 +428,35 @@ function ToolOutputSection({
           <span>Output</span>
           {statusBadge}
         </div>
-        <select
-          aria-label="Select output view"
-          value={mode}
-          onChange={(event) => setMode(event.target.value as OutputMode)}
-          className="rounded border border-gray-300 bg-white px-2 py-1 text-[11px] text-gray-700 shadow-sm"
-        >
-          <option value="text">text</option>
-          <option value="terminal">terminal</option>
-          <option value="markdown">markdown</option>
-          <option value="json">json</option>
-          <option value="yaml">yaml</option>
-        </select>
+        <div className="flex items-center gap-2">
+          {showStreamFilterControls && (
+            <label className="flex items-center gap-1 text-[11px] font-medium normal-case text-gray-600">
+              <span>Stream</span>
+              <select
+                aria-label="Select stream view"
+                value={filter}
+                onChange={(event) => setFilter(event.target.value as StreamFilter)}
+                className="rounded border border-gray-300 bg-white px-2 py-1 text-[11px] text-gray-700 shadow-sm"
+              >
+                <option value="interleaved">{STREAM_FILTER_LABELS.interleaved}</option>
+                <option value="stdout">{STREAM_FILTER_LABELS.stdout}</option>
+                <option value="stderr">{STREAM_FILTER_LABELS.stderr}</option>
+              </select>
+            </label>
+          )}
+          <select
+            aria-label="Select output view"
+            value={mode}
+            onChange={(event) => setMode(event.target.value as OutputMode)}
+            className="rounded border border-gray-300 bg-white px-2 py-1 text-[11px] text-gray-700 shadow-sm"
+          >
+            <option value="text">text</option>
+            <option value="terminal">terminal</option>
+            <option value="markdown">markdown</option>
+            <option value="json">json</option>
+            <option value="yaml">yaml</option>
+          </select>
+        </div>
       </header>
       <div ref={contentRef} className="flex-1 min-h-0 space-y-3 overflow-y-auto px-3 py-2">
         {loading && !hydrated && <div className="text-[11px] text-gray-500">Loading output…</div>}
@@ -527,13 +672,23 @@ export function RunTimelineEventDetails({ event }: { event: RunTimelineEvent }) 
   const isShellTool = toolExecution?.toolName === 'shell_command';
   const {
     text: streamedOutput,
+    stdoutText: streamedStdout,
+    stderrText: streamedStderr,
+    chunks: streamedChunks,
     terminal: streamedTerminal,
     hydrated: streamHydrated,
     loading: streamLoading,
     error: streamError,
   } = useToolOutputStreaming({ runId: event.runId, eventId: event.id, enabled: Boolean(isShellTool) });
-  const liveOutput = streamHydrated ? streamedOutput : undefined;
-  const isStreamingActive = Boolean(isShellTool) && streamHydrated && !streamedTerminal && (event.status === 'running' || event.status === 'pending');
+  const isStreamingActive = Boolean(isShellTool) && !streamedTerminal && (event.status === 'running' || event.status === 'pending');
+  const streamData = isShellTool
+    ? {
+        chunks: streamedChunks,
+        text: streamedOutput,
+        stdoutText: streamedStdout,
+        stderrText: streamedStderr,
+      }
+    : undefined;
 
   const scrollContextToBottom = useCallback(() => {
     const apply = () => {
@@ -755,7 +910,7 @@ export function RunTimelineEventDetails({ event }: { event: RunTimelineEvent }) 
               <ToolOutputSection
                 eventId={event.id}
                 baseValue={toolExecution.output}
-                liveValue={liveOutput}
+                streamData={streamData}
                 isStreaming={isStreamingActive}
                 terminal={streamedTerminal}
                 streamError={streamError}
