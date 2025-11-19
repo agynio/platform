@@ -180,6 +180,7 @@ describe('ManageTool unit', () => {
     await first.setConfig({ title: 'Alpha' });
     node.addWorker(first);
     expect(node.listWorkers()).toEqual(['Alpha']);
+    expect(() => node.addWorker(first)).not.toThrow();
 
     const noTitle = await module.resolve(FakeAgent);
     await noTitle.setConfig({});

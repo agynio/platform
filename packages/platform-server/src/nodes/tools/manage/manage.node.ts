@@ -30,11 +30,12 @@ export class ManageToolNode extends BaseToolNode<z.infer<typeof ManageToolStatic
 
   addWorker(agent: AgentNode): void {
     if (!agent) throw new Error('ManageToolNode: agent instance is required');
+    if (this.workers.has(agent)) return;
     const title = this.resolveAgentTitle(agent);
-    if (this.getWorkerByTitle(title)) {
+    const existing = this.getWorkerByTitle(title);
+    if (existing && existing !== agent) {
       throw new Error(`ManageToolNode: worker with title "${title}" already exists`);
     }
-    if (this.workers.has(agent)) return;
     this.workers.add(agent);
   }
 
