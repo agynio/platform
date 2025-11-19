@@ -19,7 +19,7 @@ export const ManageToolStaticConfigSchema = z
 @Injectable({ scope: Scope.TRANSIENT })
 export class ManageToolNode extends BaseToolNode<z.infer<typeof ManageToolStaticConfigSchema>> {
   private tool?: ManageFunctionTool;
-  private readonly workers: { name: string; agent: AgentNode }[] = [];
+  private readonly workers: { agent: AgentNode }[] = [];
 
   constructor(
     @Inject(ManageFunctionTool) private readonly manageTool: ManageFunctionTool,
@@ -30,25 +30,27 @@ export class ManageToolNode extends BaseToolNode<z.infer<typeof ManageToolStatic
 
   addWorker(agent: AgentNode) {
     const name = this.getAgentTitle(agent);
-    const existing = this.workers.find((w) => w.name === name);
-    if (existing) throw new Error(`Worker with title ${name} already exists`);
-    this.workers.push({ name, agent });
+    const hasDuplicate = this.workers.some((w) => this.getAgentTitle(w.agent) === name);
+    if (hasDuplicate) throw new Error(`Worker with title ${name} already exists`);
+    this.workers.push({ agent });
+    this.ensureUniqueTitles();
   }
 
   removeWorker(agent: AgentNode) {
-    const name = this.getAgentTitle(agent);
-    const idx = this.workers.findIndex((w) => w.name === name);
+    const idx = this.workers.findIndex((w) => w.agent === agent);
     if (idx >= 0) this.workers.splice(idx, 1);
   }
 
   listWorkers(): string[] {
-    return this.workers.map((w) => w.name);
+    this.ensureUniqueTitles();
+    return this.workers.map((w) => this.getAgentTitle(w.agent));
   }
 
   getWorkerAgent(name: string): AgentNode | undefined {
     const title = name?.trim();
     if (!title) return undefined;
-    return this.workers.find((w) => w.name === title)?.agent;
+    this.ensureUniqueTitles();
+    return this.workers.find((w) => this.getAgentTitle(w.agent) === title)?.agent;
   }
 
   private getAgentTitle(agent: AgentNode): string {
@@ -58,6 +60,18 @@ export class ManageToolNode extends BaseToolNode<z.infer<typeof ManageToolStatic
       throw new Error('Connected agent must define a non-empty config.title');
     }
     return title;
+  }
+
+  private ensureUniqueTitles() {
+    const seen = new Map<string, AgentNode>();
+    for (const { agent } of this.workers) {
+      const title = this.getAgentTitle(agent);
+      const existing = seen.get(title);
+      if (existing && existing !== agent) {
+        throw new Error(`Worker with title ${title} already exists`);
+      }
+      seen.set(title, agent);
+    }
   }
 
   protected createTool() {

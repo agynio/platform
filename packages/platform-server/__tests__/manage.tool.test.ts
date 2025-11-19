@@ -98,6 +98,44 @@ describe('ManageTool unit', () => {
     expect(() => node.addWorker(dup)).toThrow('Worker with title Unique already exists');
   });
 
+  it('removeWorker handles retitled agent instances', async () => {
+    const module = await Test.createTestingModule({
+      providers: [
+        LoggerService,
+        { provide: ConfigService, useValue: new ConfigService().init(configSchema.parse({ llmProvider: 'openai', agentsDatabaseUrl: 'postgres://localhost/agents' })) },
+        { provide: LLMProvisioner, useClass: StubLLMProvisioner },
+        ManageFunctionTool,
+        ManageToolNode,
+        FakeAgent,
+        { provide: AgentsPersistenceService, useValue: { beginRunThread: async () => ({ runId: 't' }), recordInjected: async () => {}, completeRun: async () => {}, listThreads: async () => [], listRuns: async () => [], listRunMessages: async () => [] } },
+        RunSignalsRegistry,
+      ],
+    }).compile();
+    const node = await module.resolve(ManageToolNode);
+    await node.setConfig({ description: 'desc' });
+    const tool = node.getTool();
+
+    const agent = await module.resolve(FakeAgent);
+    await agent.setConfig({ title: 'Agent A' });
+    node.addWorker(agent);
+
+    const ctx: LLMContext = { threadId: 'p', runId: 'r', finishSignal: new Signal(), terminateSignal: new Signal(), callerAgent: { invoke: async () => new ResponseMessage({ output: [] }) } };
+    const beforeStr = await tool.execute({ command: 'list', threadAlias: 'list' }, ctx);
+    const listSchema = z.array(z.string());
+    const before = listSchema.parse(JSON.parse(beforeStr));
+    expect(before).toEqual(['Agent A']);
+
+    await agent.setConfig({ title: 'Agent A2' });
+    const afterTitleStr = await tool.execute({ command: 'list', threadAlias: 'list-after' }, ctx);
+    const afterTitle = listSchema.parse(JSON.parse(afterTitleStr));
+    expect(afterTitle).toEqual(['Agent A2']);
+
+    node.removeWorker(agent);
+    const finalStr = await tool.execute({ command: 'list', threadAlias: 'list-final' }, ctx);
+    const final = listSchema.parse(JSON.parse(finalStr));
+    expect(final).toEqual([]);
+  });
+
   it('send_message: routes to `${parent}__${worker}` and returns text', async () => {
     const module = await Test.createTestingModule({
       providers: [
