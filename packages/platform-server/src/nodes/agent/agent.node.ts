@@ -232,14 +232,17 @@ export class AgentNode extends Node<AgentStaticConfig> {
       }),
     );
 
-    // call_tools -> tools_save (static)
+    // call_tools -> inject_queued -> tools_save
     const callTools = await this.moduleRef.create(CallToolsLLMReducer);
     await callTools.init({ tools });
-    // Inject queued messages at boundary whenBusy=injectAfterTools
     const toolsRouter = await this.moduleRef.create(StaticLLMRouter);
-    toolsRouter.init('tools_save');
+    toolsRouter.init('inject_queued');
     callTools.next(toolsRouter);
     reducers['call_tools'] = callTools;
+
+    const injectQueued = new InjectQueuedReducer(this);
+    injectQueued.next((await this.moduleRef.create(StaticLLMRouter)).init('tools_save'));
+    reducers['inject_queued'] = injectQueued;
 
     // tools_save -> branch (summarize | exit)
     const toolsSave = await this.moduleRef.create(SaveLLMReducer);
@@ -314,13 +317,6 @@ export class AgentNode extends Node<AgentStaticConfig> {
       } else {
         const last = newState.messages.at(-1);
 
-        const injected = (this.config.whenBusy ?? 'wait') === 'injectAfterTools'
-          ? (newState.messages.filter((m) => m instanceof SystemMessage && !messages.includes(m)) as SystemMessage[])
-          : [];
-        if (injected.length > 0) {
-          await this.getPersistence().recordInjected(ensuredRunId, injected);
-        }
-
         const isToolResult = finishSignal.isActive && last instanceof ToolCallOutputMessage;
         const isResponseResult = last instanceof ResponseMessage;
         if (!isToolResult && !isResponseResult) {
@@ -357,6 +353,18 @@ export class AgentNode extends Node<AgentStaticConfig> {
     }
 
     return result;
+  }
+
+  drainQueuedMessagesForInjection(thread: string, now = Date.now()): BufferMessage[] {
+    const mode =
+      (this.config.processBuffer ?? 'allTogether') === 'oneByOne' ? ProcessBuffer.OneByOne : ProcessBuffer.AllTogether;
+    const { messages } = this.buffer.tryDrainDescriptor(thread, mode, now);
+    return messages;
+  }
+
+  async persistInjectedSystemMessages(runId: string, messages: SystemMessage[]): Promise<void> {
+    if (messages.length === 0) return;
+    await this.getPersistence().recordInjected(runId, messages);
   }
 
   addTool(toolNode: BaseToolNode<unknown>): void {
@@ -431,4 +439,32 @@ export class AgentNode extends Node<AgentStaticConfig> {
   }
 
   // Static introspection removed per hotfix; rely on TemplateRegistry meta.
+}
+
+export class InjectQueuedReducer extends Reducer<LLMState, LLMContext> {
+  constructor(private readonly agent: AgentNode) {
+    super();
+  }
+
+  async invoke(state: LLMState, ctx: LLMContext): Promise<LLMState> {
+    if (ctx.terminateSignal.isActive) {
+      return state;
+    }
+
+    if ((this.agent.config.whenBusy ?? 'wait') !== 'injectAfterTools') {
+      return state;
+    }
+
+    const drained = this.agent.drainQueuedMessagesForInjection(ctx.threadId);
+    if (drained.length === 0) {
+      return state;
+    }
+
+    const systemMessages = drained.filter((msg): msg is SystemMessage => msg instanceof SystemMessage);
+    if (systemMessages.length > 0) {
+      await this.agent.persistInjectedSystemMessages(ctx.runId, systemMessages);
+    }
+
+    return { ...state, messages: [...state.messages, ...drained] };
+  }
 }
