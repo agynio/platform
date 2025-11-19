@@ -36,6 +36,7 @@ type WsLike = {
 };
 
 const READY_STATE_OPEN = 1; // WebSocket.OPEN
+const EARLY_CLOSE_DETECTION_MS = 50;
 type RawDataLike = RawData | string;
 
 const getObjectKeys = (value: unknown): string[] | undefined => {
@@ -268,6 +269,7 @@ export class ContainerTerminalGateway {
     }
 
     const ws: WsLike = candidate;
+    const path = `/api/containers/${containerIdParamFromReq ?? 'unknown'}/terminal/ws`;
     const isOpen = () => ws.readyState === READY_STATE_OPEN;
     const send = (payload: Record<string, unknown>) => safeSend(ws, payload, this.logger);
     const close = (code: number, reason: string) => safeClose(ws, code, reason, this.logger);
@@ -286,6 +288,21 @@ export class ContainerTerminalGateway {
       }
     };
 
+    let sessionId: string | null = null;
+    let session: TerminalSessionRecord | null = null;
+    let containerId: string | null = null;
+    let idleTimer: NodeJS.Timeout | null = null;
+    let maxTimer: NodeJS.Timeout | null = null;
+    let execId: string | null = null;
+    let stdin: NodeJS.WritableStream | null = null;
+    let stdout: NodeJS.ReadableStream | null = null;
+    let stderr: NodeJS.ReadableStream | null = null;
+    let closeExec: (() => Promise<{ exitCode: number }>) | null = null;
+    let closed = false;
+    let onMessage: ((raw: RawDataLike) => void) | null = null;
+    let onClose: (() => void) | null = null;
+    let onError: ((err: Error) => void) | null = null;
+
     const params = request.params as { containerId?: string };
     const containerIdParam = params?.containerId;
     if (!containerIdParam) {
@@ -300,93 +317,54 @@ export class ContainerTerminalGateway {
       close(1008, 'invalid_query');
       return;
     }
-    const { sessionId, token } = parsedQuery.data;
+    sessionId = parsedQuery.data.sessionId;
+    const token = parsedQuery.data.token;
 
-    let session: TerminalSessionRecord;
-    try {
-      session = this.sessions.validate(sessionId, token);
-    } catch (err) {
-      const code = err instanceof Error ? err.message : 'session_error';
-      send({ type: 'error', code, message: 'Terminal session validation failed' });
-      close(1008, code);
-      return;
-    }
-
-    this.logger.info('Terminal session validated', {
-      sessionId,
-      containerId: session.containerId,
-    });
-
-    const containerId = session.containerId;
     const logStatus = (phase: string, extra: Record<string, unknown> = {}) => {
       this.logger.info('Terminal session status emitted', {
-        sessionId,
-        containerId,
+        sessionId: session?.sessionId ?? sessionId ?? 'unknown',
+        containerId: containerId ?? containerIdParam ?? 'unknown',
         phase,
         ...extra,
       });
     };
-    if (containerIdParam && containerIdParam !== containerId) {
-      send({ type: 'error', code: 'container_mismatch', message: 'Terminal session belongs to different container' });
-      close(1008, 'container_mismatch');
-      return;
-    }
 
-    try {
-      this.sessions.markConnected(sessionId);
-      session = this.sessions.get(sessionId)!;
-    } catch (err) {
-      const code = err instanceof Error ? err.message : 'session_error';
-      send({ type: 'error', code, message: 'Terminal session already connected' });
-      close(1008, code);
-      return;
-    }
-
-    this.logger.info('Terminal session connected', {
+    this.logger.info('Terminal socket listeners attaching', {
+      path,
+      containerIdParam,
       sessionId,
-      containerId,
+      readyState: ws.readyState,
     });
 
-    send({ type: 'status', phase: 'starting' });
-    logStatus('starting');
-
-    const refreshActivity = () => {
-      this.sessions.touch(sessionId);
-      resetIdleTimer();
-    };
-
-    const idleTimeoutMs = session.idleTimeoutMs;
-    const maxDurationRemaining = Math.max(0, session.maxDurationMs - (Date.now() - session.createdAt));
-    let idleTimer: NodeJS.Timeout | null = null;
-    const resetIdleTimer = () => {
-      if (idleTimer) clearTimeout(idleTimer);
-      if (idleTimeoutMs > 0) {
-        idleTimer = setTimeout(() => {
-          send({ type: 'error', code: 'idle_timeout', message: 'Terminal session idle timeout exceeded' });
-          void cleanup('idle_timeout');
-        }, idleTimeoutMs);
-        if (idleTimer.unref) idleTimer.unref();
+    const messageListener = (...args: unknown[]) => {
+      const [first] = args;
+      if (!isRawDataLike(first)) {
+        this.logger.warn('terminal socket message ignored: unsupported payload type', {
+          payloadType: typeof first,
+        });
+        return;
       }
+      if (onMessage) onMessage(first);
     };
-    resetIdleTimer();
 
-    const maxTimer = maxDurationRemaining
-      ? setTimeout(() => {
-          send({ type: 'error', code: 'max_duration', message: 'Terminal session maximum duration exceeded' });
-          void cleanup('max_duration');
-        }, maxDurationRemaining)
-      : null;
-    if (maxTimer?.unref) maxTimer.unref();
+    const closeListener = (..._args: unknown[]) => {
+      if (onClose) onClose();
+    };
 
-    let execId: string | null = null;
-    let stdin: NodeJS.WritableStream | null = null;
-    let stdout: NodeJS.ReadableStream | null = null;
-    let stderr: NodeJS.ReadableStream | null = null;
-    let closeExec: (() => Promise<{ exitCode: number }>) | null = null;
-    let closed = false;
-    let onMessage: ((raw: RawDataLike) => void) | null = null;
-    let onClose: (() => void) | null = null;
-    let onError: ((err: Error) => void) | null = null;
+    onError = (err) => {
+      const containerPrefix = String(containerId ?? containerIdParam ?? '').slice(0, 12);
+      this.logger.warn('terminal socket error', {
+        containerId: containerPrefix,
+        sessionId,
+        error: err instanceof Error ? err.message : String(err),
+      });
+      void cleanup('socket_error');
+    };
+
+    const errorListener = (...args: unknown[]) => {
+      const err = args[0] instanceof Error ? (args[0] as Error) : new Error(String(args[0] ?? 'unknown websocket error'));
+      if (onError) onError(err);
+    };
 
     const cleanup = async (reason: string) => {
       if (closed) return;
@@ -431,11 +409,20 @@ export class ContainerTerminalGateway {
           logStatus('exited', { exitCode });
         }
       } catch (err) {
-        const reason = err instanceof Error ? err.message : String(err);
-        send({ type: 'status', phase: 'error', reason });
-        logStatus('error', { reason });
+        const reasonMessage = err instanceof Error ? err.message : String(err);
+        send({ type: 'status', phase: 'error', reason: reasonMessage });
+        logStatus('error', { reason: reasonMessage });
       } finally {
-        this.sessions.close(sessionId);
+        if (sessionId) {
+          try {
+            this.sessions.close(sessionId);
+          } catch (err) {
+            this.logger.debug('terminal session close during cleanup failed', {
+              sessionId,
+              error: err instanceof Error ? err.message : String(err),
+            });
+          }
+        }
         try {
           if (isOpen()) close(1000, reason);
         } catch {
@@ -444,43 +431,136 @@ export class ContainerTerminalGateway {
       }
     };
 
-    const messageListener = (...args: unknown[]) => {
-      const [first] = args;
-      if (!isRawDataLike(first)) {
-        this.logger.warn('terminal socket message ignored: unsupported payload type', {
-          payloadType: typeof first,
-        });
-        return;
-      }
-      if (onMessage) onMessage(first);
-    };
-
     onClose = () => {
       this.logger.info('Terminal socket close received', { execId, sessionId });
       void cleanup('socket_closed');
     };
 
-    const closeListener = (..._args: unknown[]) => {
-      if (onClose) onClose();
-    };
-
-    onError = (err) => {
-      this.logger.warn('terminal socket error', {
-        containerId: containerId.substring(0, 12),
-        sessionId,
-        error: err instanceof Error ? err.message : String(err),
-      });
-      void cleanup('socket_error');
-    };
-
-    const errorListener = (...args: unknown[]) => {
-      const err = args[0] instanceof Error ? (args[0] as Error) : new Error(String(args[0] ?? 'unknown websocket error'));
-      if (onError) onError(err);
-    };
-
     ws.on('message', messageListener);
     ws.on('close', closeListener);
     ws.on('error', errorListener);
+
+    const waitForEarlyClose = async (): Promise<boolean> => {
+      if (closed || !isOpen()) return true;
+      return await new Promise<boolean>((resolve) => {
+        let settled = false;
+        const tempCloseListener = () => {
+          if (settled) return;
+          settled = true;
+          clearTimeout(timeout);
+          detach('close', tempCloseListener);
+          resolve(true);
+        };
+        const timeout = setTimeout(() => {
+          if (settled) return;
+          settled = true;
+          detach('close', tempCloseListener);
+          resolve(closed || !isOpen());
+        }, EARLY_CLOSE_DETECTION_MS);
+        ws.on('close', tempCloseListener);
+      });
+    };
+
+    const abortIfSocketClosed = async (context: string): Promise<boolean> => {
+      if (closed || !isOpen()) {
+        this.logger.info('Terminal connection aborted: socket closed before exec', {
+          sessionId,
+          containerIdParam,
+          readyState: ws.readyState,
+          context,
+        });
+        return true;
+      }
+      const aborted = await waitForEarlyClose();
+      if (!aborted) return false;
+      this.logger.info('Terminal connection aborted: socket closed before exec', {
+        sessionId,
+        containerIdParam,
+        readyState: ws.readyState,
+        context,
+      });
+      if (!closed) {
+        await cleanup(`socket_not_open_before_${context}`);
+      }
+      return true;
+    };
+
+    if (await abortIfSocketClosed('pre_validation')) {
+      return;
+    }
+
+    try {
+      session = this.sessions.validate(sessionId, token);
+    } catch (err) {
+      const code = err instanceof Error ? err.message : 'session_error';
+      send({ type: 'error', code, message: 'Terminal session validation failed' });
+      close(1008, code);
+      await cleanup('session_validation_failed');
+      return;
+    }
+
+    containerId = session.containerId;
+
+    this.logger.info('Terminal session validated', {
+      sessionId,
+      containerId,
+    });
+    if (containerIdParam && containerIdParam !== containerId) {
+      send({ type: 'error', code: 'container_mismatch', message: 'Terminal session belongs to different container' });
+      close(1008, 'container_mismatch');
+      await cleanup('container_mismatch');
+      return;
+    }
+
+    try {
+      this.sessions.markConnected(sessionId);
+      session = this.sessions.get(sessionId)!;
+    } catch (err) {
+      const code = err instanceof Error ? err.message : 'session_error';
+      send({ type: 'error', code, message: 'Terminal session already connected' });
+      close(1008, code);
+      await cleanup('session_already_connected');
+      return;
+    }
+
+    this.logger.info('Terminal session connected', {
+      sessionId,
+      containerId,
+    });
+
+    send({ type: 'status', phase: 'starting' });
+    logStatus('starting');
+
+    if (await abortIfSocketClosed('pre_exec')) {
+      return;
+    }
+
+    const refreshActivity = () => {
+      this.sessions.touch(sessionId);
+      resetIdleTimer();
+    };
+
+    const idleTimeoutMs = session.idleTimeoutMs;
+    const maxDurationRemaining = Math.max(0, session.maxDurationMs - (Date.now() - session.createdAt));
+    const resetIdleTimer = () => {
+      if (idleTimer) clearTimeout(idleTimer);
+      if (idleTimeoutMs > 0) {
+        idleTimer = setTimeout(() => {
+          send({ type: 'error', code: 'idle_timeout', message: 'Terminal session idle timeout exceeded' });
+          void cleanup('idle_timeout');
+        }, idleTimeoutMs);
+        if (idleTimer.unref) idleTimer.unref();
+      }
+    };
+    resetIdleTimer();
+
+    maxTimer = maxDurationRemaining
+      ? setTimeout(() => {
+          send({ type: 'error', code: 'max_duration', message: 'Terminal session maximum duration exceeded' });
+          void cleanup('max_duration');
+        }, maxDurationRemaining)
+      : null;
+    if (maxTimer?.unref) maxTimer.unref();
 
     try {
       const exec = await this.containers.openInteractiveExec(containerId, `exec ${session.shell}`, {

@@ -168,4 +168,48 @@ describe('ContainerTerminalGateway (custom websocket server)', () => {
 
     await app.close();
   });
+
+  it('aborts exec when socket closes before start', async () => {
+    const record = createSessionRecord({
+      containerId: 'c'.repeat(64),
+    });
+    const sessionMocks = {
+      validate: vi.fn().mockReturnValue(record),
+      markConnected: vi.fn().mockImplementation(() => {
+        record.state = 'connected';
+      }),
+      get: vi.fn().mockReturnValue(record),
+      touch: vi.fn(),
+      close: vi.fn(),
+    };
+
+    const containerMocks = {
+      openInteractiveExec: vi.fn(),
+      resizeExec: vi.fn(),
+    };
+
+    const gateway = new ContainerTerminalGateway(
+      sessionMocks as unknown as TerminalSessionsService,
+      containerMocks as unknown as ContainerService,
+      logger,
+    );
+
+    const app = Fastify();
+    gateway.registerRoutes(app);
+    const port = await listenFastify(app);
+
+    const ws = new WebSocket(
+      `ws://127.0.0.1:${port}/api/containers/${record.containerId}/terminal/ws?sessionId=${record.sessionId}&token=${record.token}`,
+    );
+
+    await new Promise<void>((resolve) => ws.once('open', resolve));
+    ws.close();
+
+    const closeInfo = await waitForWsClose(ws, 3000);
+    expect(containerMocks.openInteractiveExec).not.toHaveBeenCalled();
+    expect(sessionMocks.close).toHaveBeenCalledWith(record.sessionId);
+    expect([1000, 1005, 1006]).toContain(closeInfo.code);
+
+    await app.close();
+  });
 });
