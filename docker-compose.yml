@@ -45,7 +45,7 @@ services:
       [
         "postgres",
         "-c",
-        "shared_buffers=128MB",
+        "shared_buffers=512MB",
         "-c",
         "work_mem=4MB",
         "-c",
@@ -55,7 +55,7 @@ services:
         "-c",
         "wal_buffers=4MB",
         "-c",
-        "effective_cache_size=256MB",
+        "effective_cache_size=2GB",
       ]
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres"]
@@ -81,7 +81,7 @@ services:
       [
         "postgres",
         "-c",
-        "shared_buffers=128MB",
+        "shared_buffers=512MB",
         "-c",
         "work_mem=4MB",
         "-c",
@@ -91,10 +91,14 @@ services:
         "-c",
         "wal_buffers=4MB",
         "-c",
-        "effective_cache_size=256MB",
+        "effective_cache_size=2GB",
       ]
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${AGENTS_DB_USER:-agents} -d ${AGENTS_DB_NAME:-agents}"]
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -U ${AGENTS_DB_USER:-agents} -d ${AGENTS_DB_NAME:-agents}",
+        ]
       interval: 10s
       timeout: 5s
       retries: 5
