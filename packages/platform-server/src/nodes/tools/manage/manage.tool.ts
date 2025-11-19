@@ -9,11 +9,10 @@ import { AgentsPersistenceService } from '../../../agents/agents.persistence.ser
 
 export const ManageInvocationSchema = z
   .object({
-    command: z.enum(['list', 'send_message', 'check_status']).describe('Command to execute.'),
+    command: z.enum(['send_message', 'check_status']).describe('Command to execute.'),
     worker: z.string().min(1).optional().describe('Target worker name (required for send_message).'),
     message: z.string().min(1).optional().describe('Message to send (required for send_message).'),
     threadAlias: z.string().min(1).describe('Child thread alias'),
-    summary: z.string().min(1).optional().describe('Initial summary for created subthread (required when creating).'),
   })
   .strict();
 
@@ -50,17 +49,12 @@ export class ManageFunctionTool extends FunctionTool<typeof ManageInvocationSche
     const parentThreadId = ctx.threadId;
     const workers = this.node.listWorkers();
 
-    if (command === 'list') {
-      return JSON.stringify(workers.map((w) => w.name));
-    }
     if (command === 'send_message') {
       if (!workers.length) throw new Error('No agents connected');
       if (!worker || !message) throw new Error('worker and message are required for send_message');
       const target = workers.find((w) => w.name === worker);
       if (!target) throw new Error(`Unknown worker: ${worker}`);
-      const summary = (args.summary ?? '').toString();
-      if (!summary || summary.trim().length === 0) throw new Error('summary is required when creating subthreads');
-      const childThreadId = await this.persistence.getOrCreateSubthreadByAlias('manage', threadAlias, parentThreadId, summary);
+      const childThreadId = await this.persistence.getOrCreateSubthreadByAlias('manage', threadAlias, parentThreadId, '');
       try {
         const res = await target.agent.invoke(childThreadId, [HumanMessage.fromText(message)]);
         return res?.text;
