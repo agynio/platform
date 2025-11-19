@@ -28,9 +28,6 @@ class FakeAgent extends AgentNode {
   override getPortConfig() {
     return { sourcePorts: {}, targetPorts: { $self: { kind: 'instance' } } } as const;
   }
-  override getAgentNodeId(): string | undefined {
-    return 'agent-' + Math.random().toString(36).slice(2, 6);
-  }
   override async invoke(thread: string): Promise<ResponseMessage> {
     return new ResponseMessage({ output: [AIMessage.fromText(`ok-${thread}`).toPlain()] });
   }
@@ -62,14 +59,43 @@ describe('ManageTool unit', () => {
 
     const a1 = await module.resolve(FakeAgent);
     const a2 = await module.resolve(FakeAgent);
-    node.addWorker('agent-A', a1);
-    node.addWorker('agent_1', a2);
+    await a1.setConfig({ title: 'Ops' });
+    await a2.setConfig({ title: 'Support' });
+    node.addWorker(a1);
+    node.addWorker(a2);
 
     const afterStr = await tool.execute({ command: 'list', threadAlias: 'list' }, ctx);
     const after = listSchema.parse(JSON.parse(afterStr));
-    expect(after).toContain('agent-A');
-    const hasFallback = after.some((n) => /^agent_\d+$/.test(n));
-    expect(hasFallback).toBe(true);
+    expect(after).toEqual(expect.arrayContaining(['Ops', 'Support']));
+    expect(after.some((n) => /^agent_\d+$/.test(n))).toBe(false);
+  });
+
+  it('addWorker requires non-empty unique titles', async () => {
+    const module = await Test.createTestingModule({
+      providers: [
+        LoggerService,
+        { provide: ConfigService, useValue: new ConfigService().init(configSchema.parse({ llmProvider: 'openai', agentsDatabaseUrl: 'postgres://localhost/agents' })) },
+        { provide: LLMProvisioner, useClass: StubLLMProvisioner },
+        ManageFunctionTool,
+        ManageToolNode,
+        FakeAgent,
+        { provide: AgentsPersistenceService, useValue: { beginRunThread: async () => ({ runId: 't' }), recordInjected: async () => {}, completeRun: async () => {}, listThreads: async () => [], listRuns: async () => [], listRunMessages: async () => [] } },
+        RunSignalsRegistry,
+      ],
+    }).compile();
+    const node = await module.resolve(ManageToolNode);
+    await node.setConfig({ description: 'desc' });
+
+    const noTitleAgent = await module.resolve(FakeAgent);
+    expect(() => node.addWorker(noTitleAgent)).toThrow('Connected agent must define a non-empty config.title');
+
+    const first = await module.resolve(FakeAgent);
+    await first.setConfig({ title: 'Unique' });
+    node.addWorker(first);
+
+    const dup = await module.resolve(FakeAgent);
+    await dup.setConfig({ title: 'Unique' });
+    expect(() => node.addWorker(dup)).toThrow('Worker with title Unique already exists');
   });
 
   it('send_message: routes to `${parent}__${worker}` and returns text', async () => {
@@ -88,10 +114,11 @@ describe('ManageTool unit', () => {
     const node = await module.resolve(ManageToolNode);
     await node.setConfig({ description: 'desc' });
     const a = await module.resolve(FakeAgent);
-    node.addWorker('child-1', a);
+    await a.setConfig({ title: 'Child One' });
+    node.addWorker(a);
     const tool = node.getTool();
     const ctx: LLMContext = { threadId: 'parent', runId: 'r', finishSignal: new Signal(), terminateSignal: new Signal(), callerAgent: { invoke: async () => new ResponseMessage({ output: [] }) } };
-    const res = await tool.execute({ command: 'send_message', worker: 'child-1', message: 'hello', threadAlias: 'child-1', summary: 'Child one summary' }, ctx);
+    const res = await tool.execute({ command: 'send_message', worker: 'Child One', message: 'hello', threadAlias: 'child-1', summary: 'Child one summary' }, ctx);
     expect(res?.startsWith('ok-')).toBe(true);
   });
 
@@ -114,7 +141,8 @@ describe('ManageTool unit', () => {
     const ctx: LLMContext = { threadId: 'p', runId: 'r', finishSignal: new Signal(), terminateSignal: new Signal(), callerAgent: { invoke: async () => new ResponseMessage({ output: [] }) } };
     await expect(tool.execute({ command: 'send_message', worker: 'x', threadAlias: 'alias-x', summary: 'x' }, ctx)).rejects.toBeTruthy();
     const a = await module.resolve(FakeAgent);
-    node.addWorker('w1', a);
+    await a.setConfig({ title: 'Worker One' });
+    node.addWorker(a);
     await expect(tool.execute({ command: 'send_message', worker: 'unknown', message: 'm', threadAlias: 'alias-unknown', summary: 'unknown' }, ctx)).rejects.toBeTruthy();
   });
 
@@ -135,8 +163,10 @@ describe('ManageTool unit', () => {
     await node.setConfig({ description: 'desc' });
     const a1 = await module.resolve(FakeAgent);
     const a2 = await module.resolve(FakeAgent);
-    node.addWorker('A', a1);
-    node.addWorker('B', a2);
+    await a1.setConfig({ title: 'Alpha' });
+    await a2.setConfig({ title: 'Beta' });
+    node.addWorker(a1);
+    node.addWorker(a2);
     // Active threads tracking is not exposed by current AgentNode; check_status returns empty aggregates.
 
     const tool = node.getTool();
@@ -191,10 +221,11 @@ describe('ManageTool unit', () => {
       }
     }
     const a = new ThrowingAgent(module.get(ConfigService), module.get(LoggerService), module.get(LLMProvisioner), module.get(ModuleRef));
-    node.addWorker('W', a);
+    await a.setConfig({ title: 'Thrower' });
+    node.addWorker(a);
     const tool = node.getTool();
     const ctx: LLMContext = { threadId: 'p', runId: 'r', finishSignal: new Signal(), terminateSignal: new Signal(), callerAgent: { invoke: async () => new ResponseMessage({ output: [] }) } };
-    await expect(tool.execute({ command: 'send_message', worker: 'W', message: 'go', threadAlias: 'alias-W', summary: 'W summary' }, ctx)).rejects.toBeTruthy();
+    await expect(tool.execute({ command: 'send_message', worker: 'Thrower', message: 'go', threadAlias: 'alias-W', summary: 'W summary' }, ctx)).rejects.toBeTruthy();
   });
 });
 
@@ -212,7 +243,6 @@ describe('ManageTool graph wiring', () => {
         RunSignalsRegistry,
       ],
     }).compile();
-    const logger = module.get(LoggerService);
     class FakeAgentWithTools extends FakeAgent {
       addTool(_tool: unknown) {}
       removeTool(_tool: unknown) {}
@@ -221,17 +251,9 @@ describe('ManageTool graph wiring', () => {
     const moduleRef = module.get(ModuleRef);
     const registry = new TemplateRegistry(moduleRef);
 
-    class ManageToolNodeCompat extends ManageToolNode {
-      override addWorker(agent: AgentNode): void {
-        const id = agent.getAgentNodeId();
-        const name = id && id.length > 0 ? id : `agent_${Math.random().toString(36).slice(2, 6)}`;
-        super.addWorker(name, agent);
-      }
-    }
-
     registry
       .register('agent', { title: 'Agent', kind: 'agent' }, FakeAgentWithTools)
-      .register('manageTool', { title: 'Manage', kind: 'tool' }, ManageToolNodeCompat);
+      .register('manageTool', { title: 'Manage', kind: 'tool' }, ManageToolNode);
 
     const runtimeModule = await Test.createTestingModule({
       providers: [
@@ -248,8 +270,8 @@ describe('ManageTool graph wiring', () => {
 
     const graph = {
       nodes: [
-        { id: 'A', data: { template: 'agent', config: {} } },
-        { id: 'B', data: { template: 'agent', config: {} } },
+        { id: 'A', data: { template: 'agent', config: { title: 'Agent A' } } },
+        { id: 'B', data: { template: 'agent', config: { title: 'Agent B' } } },
         { id: 'M', data: { template: 'manageTool', config: { description: 'desc' } } },
       ],
       edges: [
@@ -267,8 +289,9 @@ describe('ManageTool graph wiring', () => {
     if (!isManage) throw new Error('Instance is not ManageToolNode');
     const tool = (inst as ManageToolNode).getTool();
     const ctx: LLMContext = { threadId: 'p', runId: 'r', finishSignal: new Signal(), terminateSignal: new Signal(), callerAgent: { invoke: async () => new ResponseMessage({ output: [] }) } };
-    const listStr = await tool.execute({ command: 'list' }, ctx);
+    const listStr = await tool.execute({ command: 'list', threadAlias: 'list' }, ctx);
     const list = z.array(z.string()).parse(JSON.parse(listStr));
     expect(Array.isArray(list)).toBe(true);
+    expect(list).toEqual(expect.arrayContaining(['Agent A', 'Agent B']));
   });
 });

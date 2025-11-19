@@ -28,19 +28,36 @@ export class ManageToolNode extends BaseToolNode<z.infer<typeof ManageToolStatic
     super(logger);
   }
 
-  addWorker(name: string, agent: AgentNode) {
+  addWorker(agent: AgentNode) {
+    const name = this.getAgentTitle(agent);
     const existing = this.workers.find((w) => w.name === name);
-    if (existing) throw new Error(`Worker with name ${name} already exists`);
+    if (existing) throw new Error(`Worker with title ${name} already exists`);
     this.workers.push({ name, agent });
   }
 
-  removeWorker(name: string) {
+  removeWorker(agent: AgentNode) {
+    const name = this.getAgentTitle(agent);
     const idx = this.workers.findIndex((w) => w.name === name);
     if (idx >= 0) this.workers.splice(idx, 1);
   }
 
-  listWorkers() {
-    return [...this.workers];
+  listWorkers(): string[] {
+    return this.workers.map((w) => w.name);
+  }
+
+  getWorkerAgent(name: string): AgentNode | undefined {
+    const title = name?.trim();
+    if (!title) return undefined;
+    return this.workers.find((w) => w.name === title)?.agent;
+  }
+
+  private getAgentTitle(agent: AgentNode): string {
+    const rawTitle = agent?.config?.title;
+    const title = typeof rawTitle === 'string' ? rawTitle.trim() : '';
+    if (!title) {
+      throw new Error('Connected agent must define a non-empty config.title');
+    }
+    return title;
   }
 
   protected createTool() {
