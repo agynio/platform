@@ -31,7 +31,6 @@ describe('call_agent integration: creates child thread with parentId', () => {
       new StubPrismaService(stub) as any,
       new LoggerService(),
       metricsStub,
-      new NoopGraphEventsPublisher(),
       templateRegistryStub,
       graphRepoStub,
       createRunEventsStub() as any,
@@ -52,6 +51,7 @@ describe('call_agent integration: creates child thread with parentId', () => {
         onChildRunCompleted: async () => null,
       } as unknown as CallAgentLinkingService,
     );
+    persistence.setEventsPublisher(new NoopGraphEventsPublisher());
     const linking = {
       buildInitialMetadata: (params: { toolName: string; parentThreadId: string; childThreadId: string }) => ({
         tool: params.toolName === 'call_engineer' ? 'call_engineer' : 'call_agent',

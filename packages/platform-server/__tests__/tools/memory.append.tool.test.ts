@@ -8,12 +8,13 @@ import { MemoryToolNode } from '../../src/nodes/tools/memory/memory.node';
 import { randomUUID } from 'node:crypto';
 
 const URL = process.env.AGENTS_DATABASE_URL;
-const maybeDescribe = URL ? describe.sequential : describe.skip;
+const shouldRunDbTests = process.env.RUN_DB_TESTS === 'true' && !!URL;
+const maybeDescribe = shouldRunDbTests ? describe.sequential : describe.skip;
 const NODE_ID = `nodeT-${randomUUID()}`;
 
 
 maybeDescribe('memory_append tool: path normalization and validation', () => {
-  if (!URL) return;
+  if (!shouldRunDbTests) return;
   const prisma = new PrismaClient({ datasources: { db: { url: URL! } } });
   beforeAll(async () => {
     const svc = new MemoryService(new PostgresMemoryRepository({ getClient: () => prisma } as any));

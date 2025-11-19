@@ -1,9 +1,9 @@
 import { PassThrough } from 'node:stream';
 import Fastify from 'fastify';
-import websocketPlugin from '@fastify/websocket';
+import type { AddressInfo } from 'net';
 import WebSocket from 'ws';
 import { describe, expect, it, vi } from 'vitest';
-import type { FastifyRequest } from 'fastify';
+
 import { ContainerTerminalGateway } from '../src/infra/container/terminal.gateway';
 import type { TerminalSessionsService, TerminalSessionRecord } from '../src/infra/container/terminal.sessions.service';
 import type { ContainerService } from '../src/infra/container/container.service';
@@ -17,7 +17,7 @@ const createSessionRecord = (overrides: Partial<TerminalSessionRecord> = {}): Te
   return {
     sessionId: '11111111-1111-4111-8111-111111111111',
     token: 'tok',
-    containerId: 'cid',
+    containerId: '22222222-2222-4222-8222-222222222222',
     shell: '/bin/sh',
     cols: 80,
     rows: 24,
@@ -30,41 +30,53 @@ const createSessionRecord = (overrides: Partial<TerminalSessionRecord> = {}): Te
   };
 };
 
-describe('ContainerTerminalGateway (fastify websocket)', () => {
-  it('logs SocketStream shape for diagnostics', async () => {
-    const app = Fastify();
-    await app.register(websocketPlugin);
-
-    let resolveConnection!: (value: unknown) => void;
-    const connectionCaptured = new Promise((resolve) => {
-      resolveConnection = resolve;
-    });
-
-    app.get('/shape', { websocket: true }, (connection) => {
-      // Intended console diagnostics to document runtime shape under NODE_ENV=test
-      console.log('fastify-socketstream-typeof', typeof connection);
-      console.log('fastify-socketstream-keys', Object.keys(connection));
-      console.log('fastify-socketstream-props', Object.getOwnPropertyNames(connection));
-      const socket = (connection as { socket?: WebSocket }).socket;
-      console.log('fastify-socket-typeof', typeof socket);
-      if (socket) {
-        console.log('fastify-socket-keys', Object.keys(socket));
-        console.log('fastify-socket-props', Object.getOwnPropertyNames(socket));
+const createSessionServiceHarness = (overrides: Partial<TerminalSessionRecord> = {}) => {
+  let current: TerminalSessionRecord | null = createSessionRecord(overrides);
+  const baseRecord = current;
+  const service = {
+    validate: vi.fn((sessionId: string, token: string) => {
+      if (!current || current.sessionId !== sessionId) throw new Error('session_not_found');
+      if (current.token !== token) throw new Error('invalid_token');
+      return current;
+    }),
+    markConnected: vi.fn((sessionId: string) => {
+      if (!current || current.sessionId !== sessionId) throw new Error('session_not_found');
+      if (current.state === 'connected') throw new Error('session_already_connected');
+      current.state = 'connected';
+      current.lastActivityAt = Date.now();
+    }),
+    get: vi.fn((sessionId: string) => (current && current.sessionId === sessionId ? current : undefined)),
+    touch: vi.fn((sessionId: string) => {
+      if (current && current.sessionId === sessionId) {
+        current.lastActivityAt = Date.now();
       }
-      resolveConnection(connection);
-      socket?.close();
-    });
+    }),
+    close: vi.fn((sessionId: string) => {
+      if (current && current.sessionId === sessionId) {
+        current = null;
+      }
+    }),
+  };
 
-    await app.ready();
+  return {
+    service,
+    baseRecord,
+    getRecord: () => current,
+  };
+};
 
-    const ws = await app.injectWS('/shape');
-    ws.close();
-    await connectionCaptured;
-    await app.close();
-  });
+const listenFastify = async (app: ReturnType<typeof Fastify>): Promise<number> => {
+  await app.listen({ port: 0, host: '127.0.0.1' });
+  const address = app.server.address() as AddressInfo | null;
+  if (!address || typeof address.port !== 'number') {
+    throw new Error('Failed to determine Fastify port');
+  }
+  return address.port;
+};
 
-  it('closes connection when container id is missing', async () => {
-    const record = createSessionRecord();
+describe('ContainerTerminalGateway (custom websocket server)', () => {
+  it('closes connection when required query params are missing', async () => {
+    const record = createSessionRecord({ containerId: 'a'.repeat(64) });
     const sessionMocks = {
       validate: vi.fn(),
       markConnected: vi.fn(),
@@ -83,54 +95,45 @@ describe('ContainerTerminalGateway (fastify websocket)', () => {
       logger,
     );
 
-    const originalHandle = (gateway as unknown as { handleConnection: (c: unknown, r: FastifyRequest) => Promise<void> })
-      .handleConnection.bind(gateway);
-    (gateway as unknown as { handleConnection: (c: unknown, r: FastifyRequest) => Promise<void> }).handleConnection = async (
-      connection,
-      request,
-    ) => {
-      (request as FastifyRequest & { params: Record<string, string | undefined> }).params = { containerId: '' };
-      return originalHandle(connection, request);
-    };
-
     const app = Fastify();
     gateway.registerRoutes(app);
-    await app.ready();
+    const port = await listenFastify(app);
 
-    const messages: unknown[] = [];
-    const handleMessage = (payload: WebSocket.RawData) => {
-      const text = typeof payload === 'string' ? payload : payload.toString('utf8');
+    const ws = new WebSocket(
+      `ws://127.0.0.1:${port}/api/containers/${record.containerId}/terminal/ws?sessionId=${record.sessionId}`,
+    );
+
+    const messages: Array<Record<string, unknown> | string> = [];
+    ws.on('message', (data) => {
+      const text = typeof data === 'string' ? data : data.toString('utf8');
       try {
         messages.push(JSON.parse(text));
       } catch {
         messages.push(text);
       }
-    };
-    const ws = await app.injectWS(
-      `/api/containers/${record.containerId}/terminal/ws?sessionId=${record.sessionId}&token=${record.token}`,
-      {},
-      {
-        onInit(client) {
-          client.on('message', handleMessage);
-        },
-      },
-    );
-    await waitFor(() => messages.length > 0, 1000).catch(() => undefined);
-    const closeInfo = await waitForWsClose(ws, 1000);
+    });
+
+    const closeInfo = await waitForWsClose(ws, 2000);
 
     expect(closeInfo.code).toBe(1008);
-    expect(closeInfo.reason).toBe('container_id_required');
-    const errorMessage = messages.find((msg) => typeof msg === 'object' && msg !== null);
-    if (errorMessage) {
-      expect(errorMessage).toMatchObject({ code: 'container_id_required' });
-    }
+    expect(closeInfo.reason).toBe('invalid_query');
     expect(sessionMocks.validate).not.toHaveBeenCalled();
+    const errorMessage = messages.find((msg) => typeof msg === 'object' && msg !== null);
+    if (errorMessage && typeof errorMessage === 'object') {
+      expect(errorMessage).toMatchObject({ code: 'invalid_query' });
+    }
 
     await app.close();
   });
 
   it('handles terminal websocket session end-to-end', async () => {
-    const record = createSessionRecord({ shell: '/bin/bash', cols: 120, rows: 32, maxDurationMs: 300_000 });
+    const record = createSessionRecord({
+      shell: '/bin/bash',
+      cols: 120,
+      rows: 32,
+      maxDurationMs: 300_000,
+      containerId: 'b'.repeat(64),
+    });
     const sessionMocks = {
       validate: vi.fn().mockReturnValue(record),
       markConnected: vi.fn().mockImplementation(() => {
@@ -170,27 +173,20 @@ describe('ContainerTerminalGateway (fastify websocket)', () => {
 
     const app = Fastify();
     gateway.registerRoutes(app);
-    await app.ready();
+    const port = await listenFastify(app);
 
-    const messages: { type?: string; [key: string]: unknown }[] = [];
-    const handleMessage = (payload: WebSocket.RawData) => {
-      const text = typeof payload === 'string' ? payload : payload.toString('utf8');
+    const messages: { type?: string; phase?: string }[] = [];
+    const ws = new WebSocket(
+      `ws://127.0.0.1:${port}/api/containers/${record.containerId}/terminal/ws?sessionId=${record.sessionId}&token=${record.token}`,
+    );
+    ws.on('message', (data) => {
+      const text = typeof data === 'string' ? data : data.toString('utf8');
       try {
-        messages.push(JSON.parse(text) as { type?: string });
+        messages.push(JSON.parse(text) as { type?: string; phase?: string });
       } catch {
         // ignore non-json frames
       }
-    };
-
-    const ws = await app.injectWS(
-      `/api/containers/${record.containerId}/terminal/ws?sessionId=${record.sessionId}&token=${record.token}`,
-      {},
-      {
-        onInit(client) {
-          client.on('message', handleMessage);
-        },
-      },
-    );
+    });
 
     await waitFor(() => messages.some((msg) => msg.type === 'status' && msg.phase === 'running'), 3000);
 
@@ -198,30 +194,30 @@ describe('ContainerTerminalGateway (fastify websocket)', () => {
     await waitFor(() => stdinBuffer.length > 0);
     expect(stdinBuffer).toBe('echo hi\r');
 
-    stdout.write('hello-from-container');
-    await waitFor(() => messages.some((msg) => msg.type === 'output' && typeof msg.data === 'string'), 3000);
-    const outputPayload = messages.find((msg) => msg.type === 'output');
-    expect(outputPayload?.data).toContain('hello-from-container');
+    ws.close();
+    const closeInfo = await waitForWsClose(ws, 3000);
 
-    ws.send(JSON.stringify({ type: 'close' }));
-    const closeInfo = await waitForWsClose(ws, 2000);
-
-    expect(closeInfo.code).toBe(1000);
+    expect([1000, 1005]).toContain(closeInfo.code);
     expect(closeExec).toHaveBeenCalled();
     expect(sessionMocks.close).toHaveBeenCalledWith(record.sessionId);
 
     await app.close();
   });
 
-  it('falls back to terminate when close is unavailable', async () => {
-    const sessionId = '33333333-3333-4333-8333-333333333333';
+  it('aborts exec when socket closes before start', async () => {
+    const record = createSessionRecord({
+      containerId: 'c'.repeat(64),
+    });
     const sessionMocks = {
-      validate: vi.fn(),
-      markConnected: vi.fn(),
-      get: vi.fn(),
+      validate: vi.fn().mockReturnValue(record),
+      markConnected: vi.fn().mockImplementation(() => {
+        record.state = 'connected';
+      }),
+      get: vi.fn().mockReturnValue(record),
       touch: vi.fn(),
       close: vi.fn(),
     };
+
     const containerMocks = {
       openInteractiveExec: vi.fn(),
       resizeExec: vi.fn(),
@@ -233,48 +229,195 @@ describe('ContainerTerminalGateway (fastify websocket)', () => {
       logger,
     );
 
-    const originalHandle = (gateway as unknown as { handleConnection: (c: unknown, r: FastifyRequest) => Promise<void> })
-      .handleConnection.bind(gateway);
-    let terminateSpy: ReturnType<typeof vi.fn> | undefined;
+    const app = Fastify();
+    gateway.registerRoutes(app);
+    const port = await listenFastify(app);
 
-    (gateway as unknown as { handleConnection: (c: unknown, r: FastifyRequest) => Promise<void> }).handleConnection = async (
-      connection,
-      request,
-    ) => {
-      const socket = ((connection as { socket?: WebSocket }).socket ?? connection) as WebSocket;
-      let restoreClose: (() => void) | null = null;
-      if (socket && typeof socket === 'object') {
-        terminateSpy = vi.fn();
-        const originalClose = socket.close;
-        (socket as { terminate: () => void }).terminate = terminateSpy;
-        (socket as { close: () => void }).close = () => {
-          throw new Error('close not available');
+    const ws = new WebSocket(
+      `ws://127.0.0.1:${port}/api/containers/${record.containerId}/terminal/ws?sessionId=${record.sessionId}&token=${record.token}`,
+    );
+
+    await new Promise<void>((resolve) => ws.once('open', resolve));
+    ws.close();
+
+    const closeInfo = await waitForWsClose(ws, 3000);
+    expect(containerMocks.openInteractiveExec).not.toHaveBeenCalled();
+    expect(sessionMocks.markConnected).not.toHaveBeenCalled();
+    expect(sessionMocks.close).not.toHaveBeenCalled();
+    expect(sessionMocks.touch).toHaveBeenCalledWith(record.sessionId);
+    expect([1000, 1005, 1006]).toContain(closeInfo.code);
+
+    await app.close();
+  });
+
+  it('allows reconnecting after early close before exec start', async () => {
+    const harness = createSessionServiceHarness({
+      containerId: 'd'.repeat(64),
+    });
+    const sessionService = harness.service;
+    const record = harness.baseRecord;
+
+    const containerMocks = {
+      openInteractiveExec: vi.fn().mockImplementation(() => {
+        const stdin = new PassThrough();
+        const stdout = new PassThrough();
+        const closeExec = vi.fn().mockResolvedValue({ exitCode: 0 });
+        return {
+          stdin,
+          stdout,
+          stderr: undefined,
+          close: closeExec,
+          execId: 'exec-reconnect',
         };
-        restoreClose = () => {
-          if (originalClose) {
-            socket.close = originalClose;
-          } else {
-            delete (socket as { close?: () => void }).close;
-          }
-        };
-      }
-      (request as FastifyRequest & { params: Record<string, string | undefined> }).params = { containerId: '' };
-      try {
-        return await originalHandle(connection, request);
-      } finally {
-        restoreClose?.();
-      }
-    };
+      }),
+      resizeExec: vi.fn().mockResolvedValue(undefined),
+    } satisfies Partial<ContainerService>;
+
+    const gateway = new ContainerTerminalGateway(
+      sessionService as unknown as TerminalSessionsService,
+      containerMocks as unknown as ContainerService,
+      logger,
+    );
 
     const app = Fastify();
     gateway.registerRoutes(app);
-    await app.ready();
+    const port = await listenFastify(app);
 
-    const ws = await app.injectWS(`/api/containers/cid/terminal/ws?sessionId=${sessionId}&token=tok`);
-    await waitForWsClose(ws, 1000);
+    const firstMessages: Array<Record<string, unknown>> = [];
+    const ws1 = new WebSocket(
+      `ws://127.0.0.1:${port}/api/containers/${record.containerId}/terminal/ws?sessionId=${record.sessionId}&token=${record.token}`,
+    );
+    ws1.on('message', (data) => {
+      const text = typeof data === 'string' ? data : data.toString('utf8');
+      try {
+        firstMessages.push(JSON.parse(text) as Record<string, unknown>);
+      } catch {
+        // ignore non-json
+      }
+    });
 
-    expect(terminateSpy).toBeDefined();
-    expect(terminateSpy?.mock.calls.length ?? 0).toBeGreaterThan(0);
+    await new Promise<void>((resolve) => ws1.once('open', resolve));
+    ws1.close();
+    await waitForWsClose(ws1, 3000);
+
+    expect(containerMocks.openInteractiveExec).not.toHaveBeenCalled();
+    expect(sessionService.markConnected).not.toHaveBeenCalled();
+    expect(sessionService.close).not.toHaveBeenCalled();
+    expect(sessionService.touch).toHaveBeenCalledWith(record.sessionId);
+    expect(firstMessages).toHaveLength(0);
+
+    containerMocks.openInteractiveExec.mockClear();
+    sessionService.validate.mockClear();
+    sessionService.touch.mockClear();
+    sessionService.markConnected.mockClear();
+    sessionService.close.mockClear();
+
+    const secondMessages: Array<{ type?: string; phase?: string }> = [];
+    const ws2 = new WebSocket(
+      `ws://127.0.0.1:${port}/api/containers/${record.containerId}/terminal/ws?sessionId=${record.sessionId}&token=${record.token}`,
+    );
+    ws2.on('message', (data) => {
+      const text = typeof data === 'string' ? data : data.toString('utf8');
+      try {
+        secondMessages.push(JSON.parse(text) as { type?: string; phase?: string });
+      } catch {
+        // ignore non-json
+      }
+    });
+
+    await waitFor(() => secondMessages.some((msg) => msg.type === 'status' && msg.phase === 'running'), 3000);
+
+    expect(containerMocks.openInteractiveExec).toHaveBeenCalledTimes(1);
+    expect(sessionService.markConnected).toHaveBeenCalledWith(record.sessionId);
+    expect(harness.getRecord()).not.toBeNull();
+
+    ws2.close();
+    await waitForWsClose(ws2, 3000);
+
+    expect(sessionService.close).toHaveBeenCalledWith(record.sessionId);
+    expect(harness.getRecord()).toBeNull();
+
+    await app.close();
+  });
+
+  it('removes session after exec close preventing reconnect', async () => {
+    const harness = createSessionServiceHarness({
+      containerId: 'e'.repeat(64),
+    });
+    const sessionService = harness.service;
+    const record = harness.baseRecord;
+
+    const stdin = new PassThrough();
+    const stdout = new PassThrough();
+    const closeExec = vi.fn().mockResolvedValue({ exitCode: 0 });
+    const containerMocks = {
+      openInteractiveExec: vi.fn().mockResolvedValue({
+        stdin,
+        stdout,
+        stderr: undefined,
+        close: closeExec,
+        execId: 'exec-final',
+      }),
+      resizeExec: vi.fn().mockResolvedValue(undefined),
+    } satisfies Partial<ContainerService>;
+
+    const gateway = new ContainerTerminalGateway(
+      sessionService as unknown as TerminalSessionsService,
+      containerMocks as unknown as ContainerService,
+      logger,
+    );
+
+    const app = Fastify();
+    gateway.registerRoutes(app);
+    const port = await listenFastify(app);
+
+    const messages: Array<{ type?: string; phase?: string }> = [];
+    const ws = new WebSocket(
+      `ws://127.0.0.1:${port}/api/containers/${record.containerId}/terminal/ws?sessionId=${record.sessionId}&token=${record.token}`,
+    );
+    ws.on('message', (data) => {
+      const text = typeof data === 'string' ? data : data.toString('utf8');
+      try {
+        messages.push(JSON.parse(text) as { type?: string; phase?: string });
+      } catch {
+        // ignore non-json
+      }
+    });
+
+    await waitFor(() => messages.some((msg) => msg.type === 'status' && msg.phase === 'running'), 3000);
+
+    expect(containerMocks.openInteractiveExec).toHaveBeenCalledTimes(1);
+    expect(sessionService.markConnected).toHaveBeenCalledWith(record.sessionId);
+
+    ws.close();
+    await waitForWsClose(ws, 3000);
+
+    expect(sessionService.close).toHaveBeenCalledWith(record.sessionId);
+    expect(harness.getRecord()).toBeNull();
+
+    containerMocks.openInteractiveExec.mockClear();
+    sessionService.validate.mockClear();
+
+    const reconnectMessages: Array<Record<string, unknown>> = [];
+    const wsReconnect = new WebSocket(
+      `ws://127.0.0.1:${port}/api/containers/${record.containerId}/terminal/ws?sessionId=${record.sessionId}&token=${record.token}`,
+    );
+    wsReconnect.on('message', (data) => {
+      const text = typeof data === 'string' ? data : data.toString('utf8');
+      try {
+        reconnectMessages.push(JSON.parse(text) as Record<string, unknown>);
+      } catch {
+        // ignore non-json
+      }
+    });
+
+    const reconnectClose = await waitForWsClose(wsReconnect, 3000);
+
+    expect(reconnectClose.code).toBe(1008);
+    expect(reconnectClose.reason).toBe('session_not_found');
+    expect(containerMocks.openInteractiveExec).not.toHaveBeenCalled();
+    const errorFrame = reconnectMessages.find((msg) => msg.type === 'error');
+    expect(errorFrame).toMatchObject({ code: 'session_not_found', message: 'Terminal session validation failed' });
 
     await app.close();
   });

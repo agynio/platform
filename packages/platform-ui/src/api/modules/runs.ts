@@ -11,7 +11,18 @@ export const runs = {
     ),
   timelineSummary: (runId: string) =>
     asData<RunTimelineSummary>(http.get<RunTimelineSummary>(`/api/agents/runs/${encodeURIComponent(runId)}/summary`)),
-  timelineEvents: (runId: string, params: { types?: string; statuses?: string; limit?: number; order?: 'asc' | 'desc'; cursorTs?: string; cursorId?: string }) =>
+  timelineEvents: (
+    runId: string,
+    params: {
+      types?: string;
+      statuses?: string;
+      limit?: number;
+      order?: 'asc' | 'desc';
+      cursorTs?: string;
+      cursorId?: string;
+      cursorParamMode?: 'both' | 'bracketed' | 'plain';
+    },
+  ) =>
     asData<RunTimelineEventsResponse>(
       http.get<RunTimelineEventsResponse>(`/api/agents/runs/${encodeURIComponent(runId)}/events`, {
         params: {
@@ -19,8 +30,7 @@ export const runs = {
           statuses: params.statuses,
           limit: params.limit,
           order: params.order,
-          ...(params.cursorTs ? { 'cursor[ts]': params.cursorTs } : {}),
-          ...(params.cursorId ? { 'cursor[id]': params.cursorId } : {}),
+          ...buildCursorParams(params),
         },
       }),
     ),
@@ -29,3 +39,17 @@ export const runs = {
       http.post<{ ok: boolean }>(`/api/agents/runs/${encodeURIComponent(runId)}/terminate`, {}),
     ),
 };
+
+function buildCursorParams(params: { cursorTs?: string; cursorId?: string; cursorParamMode?: 'both' | 'bracketed' | 'plain' }) {
+  const mode = params.cursorParamMode ?? 'both';
+  const next: Record<string, string> = {};
+  if (params.cursorTs) {
+    if (mode !== 'plain') next['cursor[ts]'] = params.cursorTs;
+    if (mode !== 'bracketed') next.cursorTs = params.cursorTs;
+  }
+  if (params.cursorId) {
+    if (mode !== 'plain') next['cursor[id]'] = params.cursorId;
+    if (mode !== 'bracketed') next.cursorId = params.cursorId;
+  }
+  return next;
+}

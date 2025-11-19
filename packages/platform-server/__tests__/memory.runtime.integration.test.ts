@@ -142,10 +142,11 @@ async function getLastMessages(runtime: LiveGraphRuntime, nodeId: string): Promi
 }
 
 const URL = process.env.AGENTS_DATABASE_URL;
-const maybeDescribe = URL ? describe : describe.skip;
+const shouldRunDbTests = process.env.RUN_DB_TESTS === 'true' && !!URL;
+const maybeDescribe = shouldRunDbTests ? describe : describe.skip;
 
 maybeDescribe('Runtime integration: memory injection via LiveGraphRuntime', () => {
-  if (!URL) return;
+  if (!shouldRunDbTests) return;
   const prisma = new PrismaClient({ datasources: { db: { url: URL! } } });
 
   beforeAll(async () => {

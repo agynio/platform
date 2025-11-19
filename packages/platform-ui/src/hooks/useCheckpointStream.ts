@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { io, type Socket } from 'socket.io-client';
+import { io, type Socket, type ManagerOptions, type SocketOptions } from 'socket.io-client';
 import { getSocketBaseUrl } from '@/config';
 
 export interface CheckpointWriteClient {
@@ -82,11 +82,17 @@ export function useCheckpointStream({
       setStatus('idle');
       return () => {};
     }
-    const socket = io(url, { transports: ['websocket'] });
+    const transports: ManagerOptions['transports'] = ['websocket'];
+    const socketOptions: Partial<ManagerOptions & SocketOptions> = { transports };
+    const socket = io(url, socketOptions);
     socketRef.current = socket;
 
-    socket.on('connect', () => setConnected(true));
-    socket.on('disconnect', () => setConnected(false));
+    socket.on('connect', () => {
+      setConnected(true);
+    });
+    socket.on('disconnect', () => {
+      setConnected(false);
+    });
 
     socket.on('initial', (payload: InitialPayload) => {
       if (sessionRef.current !== sid) return; // stale

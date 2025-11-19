@@ -1,4 +1,5 @@
 import { Controller, Get, Inject, Query, Res } from '@nestjs/common';
+import { fetch as nodeFetch, Response } from 'node-fetch-native';
 import type { FastifyReply } from 'fastify';
 import { z, ZodError } from 'zod';
 import semver from 'semver';
@@ -50,6 +51,7 @@ const VersionsResponseSchema = z.object({ versions: z.array(z.string()) });
 export class NixController {
   private cache: LruCache<unknown>;
   private timeoutMs: number;
+  private fetchImpl: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
 
   // Strict query schemas (unknown params -> 400)
   private packagesQuerySchema = z.object({ query: z.string().optional() }).strict();
@@ -61,6 +63,11 @@ export class NixController {
   constructor(@Inject(ConfigService) private cfg: ConfigService) {
     this.timeoutMs = cfg.nixHttpTimeoutMs;
     this.cache = new LruCache<unknown>(cfg.nixCacheMax, cfg.nixCacheTtlMs);
+    this.fetchImpl = nodeFetch as unknown as typeof fetch;
+  }
+
+  setFetchImpl(fn: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>) {
+    this.fetchImpl = fn;
   }
 
   private async fetchJson(url: string, signal: AbortSignal): Promise<unknown> {
@@ -70,7 +77,7 @@ export class NixController {
     let lastErr: unknown;
     for (let attempt = 1; attempt <= maxAttempts; attempt++) {
       try {
-        const res = await fetch(url, { signal, headers: { Accept: 'application/json' } });
+        const res = await this.fetchImpl(url, { signal, headers: { Accept: 'application/json' } });
         if ([502, 503, 504].includes(res.status)) {
           throw Object.assign(new Error(`upstream_${res.status}`), { status: res.status });
         }

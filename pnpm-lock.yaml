@@ -147,6 +147,9 @@ importers:
       md5:
         specifier: ^2.3.0
         version: 2.3.0
+      node-fetch-native:
+        specifier: ^1.6.7
+        version: 1.6.7
       openai:
         specifier: ^6.6.0
         version: 6.6.0(ws@8.18.3)(zod@4.1.12)

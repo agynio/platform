@@ -4,6 +4,7 @@ import { ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { FastifyAdapter } from '@nestjs/platform-fastify';
 import type { FastifyTypeProviderDefault } from 'fastify';
+import type { IncomingHttpHeaders } from 'http';
 // CORS is enabled via Nest's app.enableCors to avoid type-provider mismatches
 
 import { LoggerService } from './core/services/logger.service';
@@ -13,6 +14,17 @@ import { ConfigService } from './core/services/config.service';
 import { GraphSocketGateway } from './gateway/graph.socket.gateway';
 import { LiveGraphRuntime } from './graph';
 import { ContainerTerminalGateway } from './infra/container/terminal.gateway';
+
+const sanitizeHeaders = (headers: IncomingHttpHeaders | undefined): Record<string, unknown> => {
+  if (!headers) return {};
+  const sensitive = new Set(['authorization', 'cookie', 'set-cookie']);
+  const sanitized: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(headers)) {
+    if (!key) continue;
+    sanitized[key] = sensitive.has(key.toLowerCase()) ? '[REDACTED]' : value;
+  }
+  return sanitized;
+};
 // Remove central platform.services.factory usage; rely on DI providers
 
 async function bootstrap() {
@@ -44,14 +56,21 @@ async function bootstrap() {
   const terminalGateway = app.get(ContainerTerminalGateway);
   terminalGateway.registerRoutes(fastifyInstance);
 
-  // Start Fastify then attach Socket.io
+  // Attach Socket.IO gateway via DI before starting server
+  const gateway = app.get(GraphSocketGateway);
+  gateway.init({ server: fastify.server });
+
+  // Start Fastify HTTP server
   const PORT = Number(process.env.PORT) || 3010;
   await fastifyInstance.listen({ port: PORT, host: '0.0.0.0' });
   logger.info(`HTTP server listening on :${PORT}`);
 
-  // Attach Socket.IO gateway via DI and explicit init
-  const gateway = app.get(GraphSocketGateway);
-  gateway.init({ server: fastify.server });
+  fastifyInstance.server.on('upgrade', (req, _socket, _head) => {
+    logger.info('HTTP upgrade received', {
+      url: req.url,
+      headers: sanitizeHeaders(req.headers),
+    });
+  });
 
   // Load graph
   const liveGraphRuntime = app.get(LiveGraphRuntime);

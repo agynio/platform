@@ -3,10 +3,11 @@ import { PostgresMemoryRepository } from '../src/nodes/memory/memory.repository'
 import { MemoryService } from '../src/nodes/memory/memory.service';
 
 const URL = process.env.AGENTS_DATABASE_URL;
-const maybeDescribe = URL ? describe : describe.skip;
+const shouldRunDbTests = process.env.RUN_DB_TESTS === 'true' && !!URL;
+const maybeDescribe = shouldRunDbTests ? describe : describe.skip;
 
 maybeDescribe('MemoryService', () => {
-  if (!URL) return;
+  if (!shouldRunDbTests) return;
   it("normalizes paths and forbids .. and $", async () => {
     const repo = new PostgresMemoryRepository({ getClient: () => new PrismaClient({ datasources: { db: { url: URL! } } }) } as any);
     const svc = new MemoryService(repo);

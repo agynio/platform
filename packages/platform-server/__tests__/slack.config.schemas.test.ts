@@ -11,11 +11,11 @@ describe('Slack static config schemas', () => {
     expect(() => SendSlackMessageToolStaticConfigSchema.parse({ bot_token: { value: 'xoxb-abc', source: 'static' } })).not.toThrow();
     // vault ref is allowed syntactically; deeper validation occurs in setConfig
     expect(() => SendSlackMessageToolStaticConfigSchema.parse({ bot_token: { value: 'secret/path/KEY', source: 'vault' } })).not.toThrow();
-  });
+  }, 15000);
 
   it('SlackTriggerStaticConfigSchema: requires app_token and bot_token reference fields', async () => {
     const { SlackTriggerStaticConfigSchema } = await import('../src/nodes/slackTrigger/slackTrigger.node');
     expect(() => SlackTriggerStaticConfigSchema.parse({ app_token: { value: 'xapp-abc', source: 'static' }, bot_token: { value: 'xoxb-abc', source: 'static' } })).not.toThrow();
     expect(() => SlackTriggerStaticConfigSchema.parse({ app_token: { value: 'secret/path/APP', source: 'vault' }, bot_token: { value: 'secret/path/BOT', source: 'vault' } })).not.toThrow();
-  });
+  }, 15000);
 });

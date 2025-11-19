@@ -9,6 +9,7 @@
     "lint": "eslint .",
     "preview": "vite preview",
     "test": "vitest run",
+    "test:e2e": "vitest run e2e/graph-socket.e2e.test.ts",
     "typecheck": "tsc -p tsconfig.app.json --noEmit",
     "test:watch": "vitest"
   },

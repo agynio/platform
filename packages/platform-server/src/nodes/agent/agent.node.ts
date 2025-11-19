@@ -97,7 +97,7 @@ export type AgentStaticConfig = z.infer<typeof AgentStaticConfigSchema>;
 export type WhenBusyMode = 'wait' | 'injectAfterTools';
 
 // Consolidated Agent class (merges previous BaseAgent + Agent into single AgentNode)
-import { Inject, Injectable, Scope } from '@nestjs/common';
+import { Inject, Injectable, Optional, Scope, forwardRef } from '@nestjs/common';
 import { ModuleRef } from '@nestjs/core';
 import type { TemplatePortConfig } from '../../graph/ports.types';
 import type { RuntimeContext } from '../../graph/runtimeContext';
@@ -117,10 +117,32 @@ export class AgentNode extends Node<AgentStaticConfig> {
     @Inject(LoggerService) protected logger: LoggerService,
     @Inject(LLMProvisioner) protected llmProvisioner: LLMProvisioner,
     @Inject(ModuleRef) protected readonly moduleRef: ModuleRef,
-    @Inject(AgentsPersistenceService) private readonly persistence: AgentsPersistenceService,
-    @Inject(RunSignalsRegistry) private readonly runSignals: RunSignalsRegistry,
+    @Optional() @Inject(forwardRef(() => AgentsPersistenceService)) private persistence?: AgentsPersistenceService,
+    @Optional() @Inject(RunSignalsRegistry) private runSignals?: RunSignalsRegistry,
   ) {
     super(logger);
+  }
+
+  private getPersistence(): AgentsPersistenceService {
+    if (!this.persistence) {
+      const resolved = this.moduleRef.get(AgentsPersistenceService, { strict: false });
+      if (!resolved) {
+        throw new Error('AgentsPersistenceService unavailable');
+      }
+      this.persistence = resolved;
+    }
+    return this.persistence;
+  }
+
+  private getRunSignals(): RunSignalsRegistry {
+    if (!this.runSignals) {
+      const resolved = this.moduleRef.get(RunSignalsRegistry, { strict: false });
+      if (!resolved) {
+        throw new Error('RunSignalsRegistry unavailable');
+      }
+      this.runSignals = resolved;
+    }
+    return this.runSignals;
   }
 
   get config() {
@@ -269,13 +291,13 @@ export class AgentNode extends Node<AgentStaticConfig> {
     let terminateSignal: Signal | undefined;
     try {
       // Begin run with strictly-typed input messages for persistent threadId
-      const started = await this.persistence.beginRunThread(thread, messages);
+      const started = await this.getPersistence().beginRunThread(thread, messages);
       runId = started.runId;
       if (!runId) throw new Error('run_start_failed');
       const ensuredRunId = runId;
 
       terminateSignal = new Signal();
-      this.runSignals.register(ensuredRunId, terminateSignal);
+      this.getRunSignals().register(ensuredRunId, terminateSignal);
 
       const loop = await this.prepareLoop();
 
@@ -287,7 +309,7 @@ export class AgentNode extends Node<AgentStaticConfig> {
       );
 
       if (terminateSignal.isActive) {
-        await this.persistence.completeRun(ensuredRunId, 'terminated', []);
+        await this.getPersistence().completeRun(ensuredRunId, 'terminated', []);
         result = ResponseMessage.fromText('terminated');
       } else {
         const last = newState.messages.at(-1);
@@ -296,7 +318,7 @@ export class AgentNode extends Node<AgentStaticConfig> {
           ? (newState.messages.filter((m) => m instanceof SystemMessage && !messages.includes(m)) as SystemMessage[])
           : [];
         if (injected.length > 0) {
-          await this.persistence.recordInjected(ensuredRunId, injected);
+          await this.getPersistence().recordInjected(ensuredRunId, injected);
         }
 
         const isToolResult = finishSignal.isActive && last instanceof ToolCallOutputMessage;
@@ -310,9 +332,9 @@ export class AgentNode extends Node<AgentStaticConfig> {
           const outputs: Array<AIMessage | ToolCallMessage> = last.output.filter(
             (o) => o instanceof AIMessage || o instanceof ToolCallMessage,
           ) as Array<AIMessage | ToolCallMessage>;
-          await this.persistence.completeRun(ensuredRunId, 'finished', outputs);
+          await this.getPersistence().completeRun(ensuredRunId, 'finished', outputs);
         } else {
-          await this.persistence.completeRun(ensuredRunId, 'finished', [last]);
+          await this.getPersistence().completeRun(ensuredRunId, 'finished', [last]);
         }
 
         result = last;
@@ -323,7 +345,7 @@ export class AgentNode extends Node<AgentStaticConfig> {
       throw err;
     } finally {
       this.runningThreads.delete(thread);
-      if (runId) this.runSignals.clear(runId);
+      if (runId) this.getRunSignals().clear(runId);
     }
 
     const mode =

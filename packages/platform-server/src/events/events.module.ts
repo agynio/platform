@@ -1,11 +1,11 @@
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
 import { CoreModule } from '../core/core.module';
-import { GraphEventsPublisher, NoopGraphEventsPublisher } from '../gateway/graph.events.publisher';
+import { GraphModule } from '../graph/graph.module';
 import { RunEventsService } from './run-events.service';
 
 @Module({
-  imports: [CoreModule],
-  providers: [RunEventsService, { provide: GraphEventsPublisher, useClass: NoopGraphEventsPublisher }],
-  exports: [RunEventsService, GraphEventsPublisher],
+  imports: [CoreModule, forwardRef(() => GraphModule)],
+  providers: [RunEventsService],
+  exports: [RunEventsService],
 })
 export class EventsModule {}

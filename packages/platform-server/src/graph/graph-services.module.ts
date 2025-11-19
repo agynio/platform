@@ -14,6 +14,9 @@ import { NcpsKeyService } from '../infra/ncps/ncpsKey.service';
 import { LLMModule } from '../llm/llm.module';
 import { LLMProvisioner } from '../llm/provisioners/llm.provisioner';
 import { NodesModule } from '../nodes/nodes.module';
+import { GraphModule } from './graph.module';
+import { GraphSocketGateway } from '../gateway/graph.socket.gateway';
+import { GraphEventsPublisher } from '../gateway/graph.events.publisher';
 import { buildTemplateRegistry } from '../templates';
 import { VaultModule } from '../vault/vault.module';
 import { GitGraphRepository } from './gitGraph.repository';
@@ -26,11 +29,12 @@ import { CallAgentLinkingService } from '../agents/call-agent-linking.service';
   imports: [
     CoreModule,
     InfraModule,
-    EventsModule,
-    LLMModule,
+    forwardRef(() => EventsModule),
+    forwardRef(() => LLMModule),
     EnvModule,
     VaultModule,
     forwardRef(() => NodesModule),
+    forwardRef(() => GraphModule),
   ],
   providers: [
     ThreadsMetricsService,
@@ -56,6 +60,10 @@ import { CallAgentLinkingService } from '../agents/call-agent-linking.service';
     },
     PortsRegistry,
     {
+      provide: GraphEventsPublisher,
+      useExisting: GraphSocketGateway,
+    },
+    {
       provide: GraphRepository,
       useFactory: async (config: ConfigService, logger: LoggerService, templateRegistry: TemplateRegistry) => {
         const svc = new GitGraphRepository(config, logger, templateRegistry);
@@ -68,6 +76,6 @@ import { CallAgentLinkingService } from '../agents/call-agent-linking.service';
     RunSignalsRegistry,
     CallAgentLinkingService,
   ],
-  exports: [ThreadsMetricsService, TemplateRegistry, PortsRegistry, GraphRepository, AgentsPersistenceService, CallAgentLinkingService, RunSignalsRegistry],
+  exports: [ThreadsMetricsService, TemplateRegistry, PortsRegistry, GraphRepository, AgentsPersistenceService, CallAgentLinkingService, RunSignalsRegistry, GraphEventsPublisher, forwardRef(() => GraphModule)],
 })
 export class GraphServicesModule {}

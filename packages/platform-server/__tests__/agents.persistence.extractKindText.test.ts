@@ -90,16 +90,17 @@ function makeService(): InstanceType<typeof AgentsPersistenceService> {
   const logger = new LoggerService();
   const metrics = { getThreadsMetrics: async () => ({}) } as any;
   const publisher = new NoopGraphEventsPublisher();
-  return new AgentsPersistenceService(
+  const svc = new AgentsPersistenceService(
     { getClient: () => ({}) } as any,
     logger,
     metrics,
-    publisher as any,
     templateRegistryStub,
     graphRepoStub,
     createRunEventsStub() as any,
     createLinkingStub(),
   );
+  svc.setEventsPublisher(publisher as any);
+  return svc;
 }
 
 // Duck-typing tests removed; service now accepts strictly typed messages only.
@@ -153,12 +154,12 @@ describe('AgentsPersistenceService beginRun/completeRun populates Message.text',
       { getClient: () => prismaMock } as any,
       logger,
       metrics,
-      publisher as any,
       templateRegistryStub,
       graphRepoStub,
       createRunEventsStub() as any,
       linking,
     );
+    svc.setEventsPublisher(publisher as any);
 
     // Begin run with user + system messages
     const input = [HumanMessage.fromText('hello'), SystemMessage.fromText('sys')];
