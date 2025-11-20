@@ -401,6 +401,12 @@ enum ContainerStatus {
   failed
 }
 
+enum ContainerEventType {
+  oom
+  die
+  kill
+}
+
 model Container {
   id                Int             @id @default(autoincrement())
   containerId       String          @unique
@@ -418,8 +424,28 @@ model Container {
   deletedAt         DateTime?
   metadata          Json?
 
+  events ContainerEvent[]
+
   @@index([status, killAfterAt])
   @@index([nodeId, status, lastUsedAt])
+}
+
+model ContainerEvent {
+  id                Int                 @id @default(autoincrement())
+  containerDbId     Int
+  container         Container           @relation(fields: [containerDbId], references: [id], onDelete: Cascade)
+  dockerContainerId String
+  threadId          String?             @db.Uuid
+  eventType         ContainerEventType
+  exitCode          Int?
+  signal            String?
+  reason            String?
+  message           String?
+  createdAt         DateTime            @default(now())
+
+  @@index([containerDbId, createdAt])
+  @@index([dockerContainerId, createdAt])
+  @@index([threadId, createdAt])
 }
 
 // End of schema
