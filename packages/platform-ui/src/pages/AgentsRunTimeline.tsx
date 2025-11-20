@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { RunTimelineEventListItem } from '@/components/agents/RunTimelineEventListItem';
 import { RunTimelineEventDetails } from '@/components/agents/RunTimelineEventDetails';
@@ -8,7 +8,7 @@ import { graphSocket } from '@/lib/graph/socket';
 import type { RunEventStatus, RunEventType, RunTimelineEvent, RunTimelineEventsCursor, RunTimelineEventsResponse } from '@/api/types/agents';
 import { getEventTypeLabel } from '@/components/agents/runTimelineFormatting';
 import { notifyError, notifySuccess } from '@/lib/notify';
-import { Switch } from '@agyn/ui';
+import { Toggle } from '@agyn/ui';
 
 const EVENT_TYPES: RunEventType[] = ['invocation_message', 'injection', 'llm_call', 'tool_execution', 'summarization'];
 const STATUS_TYPES: RunEventStatus[] = ['pending', 'running', 'success', 'error', 'cancelled'];
@@ -37,7 +37,8 @@ function matchesFilters(event: RunTimelineEvent, types: RunEventType[], statuses
   return typeOk && statusOk;
 }
 
-const FOLLOW_STORAGE_PREFIX = 'timeline-follow:';
+const GLOBAL_FOLLOW_STORAGE_KEY = 'ui.timeline.follow.enabled';
+const LEGACY_FOLLOW_STORAGE_PREFIX = 'timeline-follow:';
 
 function parseFollowValue(value: string | null): boolean | null {
   if (value === 'true') return true;
@@ -45,23 +46,27 @@ function parseFollowValue(value: string | null): boolean | null {
   return null;
 }
 
-function readFollowFromStorage(runId: string | undefined): boolean | null {
+function readLegacyFollowFromStorage(runId: string | undefined): boolean | null {
   if (!runId || typeof window === 'undefined') return null;
-  const raw = window.localStorage.getItem(`${FOLLOW_STORAGE_PREFIX}${runId}`);
-  if (raw === 'true') return true;
-  if (raw === 'false') return false;
-  return null;
+  const raw = window.localStorage.getItem(`${LEGACY_FOLLOW_STORAGE_PREFIX}${runId}`);
+  return parseFollowValue(raw);
 }
 
-function writeFollowToStorage(runId: string | undefined, value: boolean) {
-  if (!runId || typeof window === 'undefined') return;
-  window.localStorage.setItem(`${FOLLOW_STORAGE_PREFIX}${runId}`, value ? 'true' : 'false');
+function readGlobalFollowFromStorage(): boolean | null {
+  if (typeof window === 'undefined') return null;
+  const raw = window.localStorage.getItem(GLOBAL_FOLLOW_STORAGE_KEY);
+  return parseFollowValue(raw);
 }
 
-function resolveFollowDefault(searchParams: URLSearchParams, runId: string | undefined, isMdUp: boolean): boolean {
+function writeGlobalFollowToStorage(value: boolean) {
+  if (typeof window === 'undefined') return;
+  window.localStorage.setItem(GLOBAL_FOLLOW_STORAGE_KEY, value ? 'true' : 'false');
+}
+
+function resolveFollowDefault(searchParams: URLSearchParams, isMdUp: boolean): boolean {
   const paramValue = parseFollowValue(searchParams.get('follow'));
   if (paramValue !== null) return paramValue;
-  const stored = readFollowFromStorage(runId);
+  const stored = readGlobalFollowFromStorage();
   if (stored !== null) return stored;
   return isMdUp;
 }
@@ -244,10 +249,10 @@ export function AgentsRunTimeline() {
     [setSearchParams],
   );
   const isMdUp = useMediaQuery('(min-width: 768px)');
-  const followToggleId = useId();
-  const [follow, setFollowState] = useState(() => resolveFollowDefault(searchParams, runId, isMdUp));
+  const [follow, setFollowState] = useState(() => resolveFollowDefault(searchParams, isMdUp));
   const followRef = useRef(follow);
   const [liveMessage, setLiveMessage] = useState('');
+  const hasMigratedLegacyRef = useRef(false);
 
   useEffect(() => {
     followRef.current = follow;
@@ -255,11 +260,22 @@ export function AgentsRunTimeline() {
 
   useEffect(() => {
     if (!runId) return;
-    const resolved = resolveFollowDefault(searchParams, runId, isMdUp);
+    const paramValue = parseFollowValue(searchParams.get('follow'));
+
+    if (!hasMigratedLegacyRef.current) {
+      if (paramValue === null && readGlobalFollowFromStorage() === null) {
+        const legacy = readLegacyFollowFromStorage(runId);
+        if (legacy !== null) {
+          writeGlobalFollowToStorage(legacy);
+        }
+      }
+      hasMigratedLegacyRef.current = true;
+    }
+
+    const resolved = resolveFollowDefault(searchParams, isMdUp);
     setFollowState((prev) => (prev === resolved ? prev : resolved));
     followRef.current = resolved;
-    writeFollowToStorage(runId, resolved);
-    const paramValue = parseFollowValue(searchParams.get('follow'));
+    writeGlobalFollowToStorage(resolved);
     if (paramValue === null) {
       updateSearchParams((next) => {
         next.set('follow', resolved ? 'true' : 'false');
@@ -272,11 +288,11 @@ export function AgentsRunTimeline() {
   }, []);
 
   const persistFollow = useCallback((value: boolean) => {
-    writeFollowToStorage(runId, value);
+    writeGlobalFollowToStorage(value);
     updateSearchParams((next) => {
       next.set('follow', value ? 'true' : 'false');
     });
-  }, [runId, updateSearchParams]);
+  }, [updateSearchParams]);
 
   const commitFollow = useCallback((value: boolean, options?: { announceMessage?: string }) => {
     if (followRef.current === value) {
@@ -700,7 +716,7 @@ export function AgentsRunTimeline() {
       if (followRef.current) {
         followRef.current = false;
         setFollowState(false);
-        writeFollowToStorage(runId, false);
+        writeGlobalFollowToStorage(false);
         announce('Follow disabled');
         selectEvent(eventId, {
           focus: options.focus,
@@ -712,7 +728,7 @@ export function AgentsRunTimeline() {
       }
       selectEvent(eventId, { focus: options.focus });
     },
-    [announce, runId, selectEvent],
+    [announce, selectEvent],
   );
 
   const ensureSelectionVisible = useCallback(
@@ -1030,18 +1046,14 @@ export function AgentsRunTimeline() {
             </button>
           ))}
           <div className="ml-auto flex flex-wrap items-center gap-4">
-            <div className="flex items-center gap-2">
-              <label htmlFor={followToggleId} className="text-xs font-medium text-gray-700">
-                Follow latest
-              </label>
-              <Switch
-                id={followToggleId}
-                checked={follow}
-                onCheckedChange={handleFollowToggle}
-                aria-label="Follow latest events"
-              />
-              <span className="text-xs font-medium uppercase tracking-wide text-gray-500">{follow ? 'Following' : 'Manual'}</span>
-            </div>
+            <Toggle
+              aria-label="Follow latest events"
+              pressed={follow}
+              onPressedChange={handleFollowToggle}
+              className="h-7 rounded-md border px-3 py-1 text-xs font-medium uppercase tracking-wide data-[state=on]:border-blue-600 data-[state=on]:bg-blue-600 data-[state=on]:text-white"
+            >
+              {follow ? 'Following latest' : 'Follow latest'}
+            </Toggle>
             <div className="flex gap-2">
               <button
                 type="button"

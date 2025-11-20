@@ -319,7 +319,7 @@ describe('AgentsRunTimeline layout and selection', () => {
     expect(listbox).toHaveAttribute('aria-labelledby', 'run-timeline-events-heading');
     await waitFor(() => expect(listbox).toHaveAttribute('aria-activedescendant', 'run-event-option-event-2'));
     await waitFor(() => expect(getByTestId('location').textContent).toContain('follow=true'));
-    await waitFor(() => expect(window.localStorage.getItem('timeline-follow:run-1')).toBe('true'));
+    await waitFor(() => expect(window.localStorage.getItem('ui.timeline.follow.enabled')).toBe('true'));
 
     const detailsBefore = getByTestId('timeline-event-details');
     expect(detailsBefore).toHaveTextContent('LLM Call');
@@ -332,7 +332,7 @@ describe('AgentsRunTimeline layout and selection', () => {
     expect(detailsAfter).toHaveTextContent('Tool Execution');
     expect(getByTestId('location').textContent).toContain('eventId=event-1');
     await waitFor(() => expect(getByTestId('location').textContent).toContain('follow=false'));
-    await waitFor(() => expect(window.localStorage.getItem('timeline-follow:run-1')).toBe('false'));
+    await waitFor(() => expect(window.localStorage.getItem('ui.timeline.follow.enabled')).toBe('false'));
 
     expect(getByText('Events')).toBeInTheDocument();
     expect(getByRole('region', { name: 'Run event details' })).toBeInTheDocument();
@@ -346,7 +346,7 @@ describe('AgentsRunTimeline layout and selection', () => {
 
     const listbox = getByRole('listbox');
     await waitFor(() => expect(getByTestId('location').textContent).toContain('follow=false'));
-    await waitFor(() => expect(window.localStorage.getItem('timeline-follow:run-1')).toBe('false'));
+    await waitFor(() => expect(window.localStorage.getItem('ui.timeline.follow.enabled')).toBe('false'));
 
     const firstItem = within(listbox).getByText('Tool Execution — Search Tool').closest('[role="option"]');
     if (!firstItem) throw new Error('List option not found');
@@ -482,7 +482,7 @@ describe('AgentsRunTimeline follow mode', () => {
     await waitFor(() => expect(listbox).toHaveAttribute('aria-activedescendant', 'run-event-option-event-2'));
     await waitFor(() => expect(getByTestId('location').textContent).toContain('follow=true'));
     await waitFor(() => expect(getByTestId('location').textContent).toContain('eventId=event-2'));
-    await waitFor(() => expect(window.localStorage.getItem('timeline-follow:run-1')).toBe('true'));
+    await waitFor(() => expect(window.localStorage.getItem('ui.timeline.follow.enabled')).toBe('true'));
   });
 
   it('defaults to manual mode on mobile without auto-selecting an event', async () => {
@@ -494,7 +494,7 @@ describe('AgentsRunTimeline follow mode', () => {
     const listbox = getByRole('listbox');
     await waitFor(() => expect(getByTestId('location').textContent).toContain('follow=false'));
     expect(listbox.getAttribute('aria-activedescendant')).toBeNull();
-    await waitFor(() => expect(window.localStorage.getItem('timeline-follow:run-1')).toBe('false'));
+    await waitFor(() => expect(window.localStorage.getItem('ui.timeline.follow.enabled')).toBe('false'));
   });
 
   it('turns follow off on manual selection and keeps focus on the chosen event', async () => {
@@ -531,7 +531,7 @@ describe('AgentsRunTimeline follow mode', () => {
 
     await waitFor(() => expect(within(listbox).getByText('Summarization')).toBeInTheDocument());
     expect(listbox).toHaveAttribute('aria-activedescendant', 'run-event-option-event-1');
-    await waitFor(() => expect(window.localStorage.getItem('timeline-follow:run-1')).toBe('false'));
+    await waitFor(() => expect(window.localStorage.getItem('ui.timeline.follow.enabled')).toBe('false'));
   });
 
   it('re-enables follow and selects the newest event when toggled back on', async () => {
@@ -564,13 +564,13 @@ describe('AgentsRunTimeline follow mode', () => {
     await waitFor(() => expect(within(listbox).getByText('Summarization')).toBeInTheDocument());
     expect(listbox).toHaveAttribute('aria-activedescendant', 'run-event-option-event-1');
 
-    const toggle = getByRole('switch', { name: 'Follow latest events' });
+    const toggle = getByRole('button', { name: 'Follow latest events' });
     fireEvent.click(toggle);
 
-    await waitFor(() => expect(toggle).toHaveAttribute('aria-checked', 'true'));
+    await waitFor(() => expect(toggle).toHaveAttribute('aria-pressed', 'true'));
     await waitFor(() => expect(listbox).toHaveAttribute('aria-activedescendant', 'run-event-option-event-3'));
     await waitFor(() => expect(getByTestId('location').textContent).toContain('follow=true'));
-    await waitFor(() => expect(window.localStorage.getItem('timeline-follow:run-1')).toBe('true'));
+    await waitFor(() => expect(window.localStorage.getItem('ui.timeline.follow.enabled')).toBe('true'));
   });
 
   it('updates selection on filter changes while following', async () => {
@@ -587,7 +587,7 @@ describe('AgentsRunTimeline follow mode', () => {
     await waitFor(() => expect(listbox).toHaveAttribute('aria-activedescendant', 'run-event-option-event-1'));
     await waitFor(() => expect(getByTestId('location').textContent).toContain('follow=true'));
     expect(getByTestId('location').textContent).toContain('eventId=event-1');
-    expect(getByText('Following')).toBeInTheDocument();
+    expect(getByText('Following latest')).toBeInTheDocument();
   });
 
   it('clears selection on filter changes when in manual mode', async () => {
@@ -610,23 +610,49 @@ describe('AgentsRunTimeline follow mode', () => {
     await waitFor(() => expect(getByTestId('location').textContent).not.toContain('eventId='));
   });
 
+  it('persists follow state across run routes', async () => {
+    const firstRender = renderPage([
+      '/agents/threads/thread-1/runs/run-1/timeline',
+    ]);
+
+    const firstToggle = firstRender.getByRole('button', { name: 'Follow latest events' });
+    await waitFor(() => expect(firstToggle).toHaveAttribute('aria-pressed', 'true'));
+
+    fireEvent.click(firstToggle);
+    await waitFor(() => expect(firstToggle).toHaveAttribute('aria-pressed', 'false'));
+    await waitFor(() => expect(window.localStorage.getItem('ui.timeline.follow.enabled')).toBe('false'));
+
+    firstRender.unmount();
+
+    const secondRender = renderPage([
+      '/agents/threads/thread-1/runs/run-2/timeline',
+    ]);
+
+    const secondToggle = secondRender.getByRole('button', { name: 'Follow latest events' });
+    await waitFor(() => expect(secondToggle).toHaveAttribute('aria-pressed', 'false'));
+    await waitFor(() => expect(secondRender.getByTestId('location').textContent).toContain('follow=false'));
+    expect(window.localStorage.getItem('ui.timeline.follow.enabled')).toBe('false');
+
+    secondRender.unmount();
+  });
+
   it('supports toggling follow with the "f" keyboard shortcut', async () => {
     const { getByRole, getByTestId, getByText } = renderPage([
       '/agents/threads/thread-1/runs/run-1/timeline',
     ]);
 
-    const toggle = getByRole('switch', { name: 'Follow latest events' });
-    await waitFor(() => expect(toggle).toHaveAttribute('aria-checked', 'true'));
+    const toggle = getByRole('button', { name: 'Follow latest events' });
+    await waitFor(() => expect(toggle).toHaveAttribute('aria-pressed', 'true'));
 
     fireEvent.keyDown(window, { key: 'f' });
-    await waitFor(() => expect(toggle).toHaveAttribute('aria-checked', 'false'));
+    await waitFor(() => expect(toggle).toHaveAttribute('aria-pressed', 'false'));
     await waitFor(() => expect(getByTestId('location').textContent).toContain('follow=false'));
-    expect(getByText('Manual')).toBeInTheDocument();
+    expect(getByText('Follow latest')).toBeInTheDocument();
 
     fireEvent.keyDown(window, { key: 'f' });
-    await waitFor(() => expect(toggle).toHaveAttribute('aria-checked', 'true'));
+    await waitFor(() => expect(toggle).toHaveAttribute('aria-pressed', 'true'));
     await waitFor(() => expect(getByTestId('location').textContent).toContain('follow=true'));
-    expect(getByText('Following')).toBeInTheDocument();
+    expect(getByText('Following latest')).toBeInTheDocument();
   });
 });
 
