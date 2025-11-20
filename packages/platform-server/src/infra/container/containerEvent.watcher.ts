@@ -1,4 +1,5 @@
 import { Inject, Injectable, OnModuleDestroy } from '@nestjs/common';
+import type { GetEventsOptions } from 'dockerode';
 import { ContainerService } from './container.service';
 import { ContainerEventProcessor, type DockerEventMessage } from './containerEvent.processor';
 import { LoggerService } from '../../core/services/logger.service';
@@ -63,8 +64,8 @@ export class DockerWorkspaceEventsWatcher implements OnModuleDestroy {
     if (!this.dockerFactory) return;
     const docker = this.dockerFactory();
     const since = this.lastEventSeconds ?? Math.floor(Date.now() / 1000);
-    const filters = {
-      type: ['container'],
+    const filters: GetEventsOptions['filters'] = {
+      type: ['container'] as Array<'container'>,
       event: ['oom', 'die', 'kill'],
       label: ['hautech.ai/role=workspace'],
     };
