@@ -11,7 +11,7 @@ import { stringify as YamlStringify } from 'yaml';
 import { AgentsPersistenceService } from '../../agents/agents.persistence.service';
 import { PrismaService } from '../../core/services/prisma.service';
 import { SlackAdapter } from '../../messaging/slack/slack.adapter';
-import { ChannelDescriptorSchema, type SendResult, type ChannelDescriptor } from '../../messaging/types';
+import { ChannelDescriptorSchema, type SendResult, type ChannelDescriptor, isSendResult } from '../../messaging/types';
 
 type TriggerHumanMessage = {
   kind: 'human';
@@ -279,6 +279,13 @@ export class SlackTrigger extends Node<SlackTriggerConfig> {
         text,
         thread_ts: ids.thread_ts,
       });
+      if (!isSendResult(res)) {
+        this.logger.error('SlackTrigger.sendToThread: adapter returned invalid response', {
+          threadId,
+          channel: ids.channel,
+        });
+        return { ok: false, error: 'adapter_invalid_response' };
+      }
       return res;
     } catch (e) {
       const msg = e instanceof Error && e.message ? e.message : 'unknown_error';

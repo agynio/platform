@@ -17,12 +17,36 @@ export class SlackAdapter {
 
     const client = new WebClient(token, { logLevel: undefined });
     try {
-      const resp: ChatPostMessageResponse = await client.chat.postMessage({
+      const respRaw: unknown = await client.chat.postMessage({
         channel,
         text,
         ...(thread_ts ? { thread_ts } : {}),
       });
-      if (!resp.ok) return { ok: false, error: resp.error || 'unknown_error' };
+      if (!respRaw || typeof respRaw !== 'object') {
+        this.logger.error('SlackAdapter.sendText: invalid Slack response', {
+          channel,
+          thread_ts,
+          responseType: respRaw === null ? 'null' : typeof respRaw,
+        });
+        return { ok: false, error: 'slack_api_invalid_response' };
+      }
+
+      const okValue = (respRaw as { ok?: unknown }).ok;
+      if (typeof okValue !== 'boolean') {
+        this.logger.error('SlackAdapter.sendText: response missing ok flag', {
+          channel,
+          thread_ts,
+          responseKeys: Object.keys(respRaw as Record<string, unknown>).slice(0, 10),
+        });
+        return { ok: false, error: 'slack_api_invalid_response' };
+      }
+
+      const resp = respRaw as ChatPostMessageResponse;
+      if (!resp.ok) {
+        const error = typeof resp.error === 'string' && resp.error.trim() ? resp.error : 'unknown_error';
+        return { ok: false, error };
+      }
+
       const ts: string | undefined = typeof resp.ts === 'string' ? resp.ts : undefined;
       // Stakeholder constraint: derive thread id deterministically without duck typing.
       // Only use known typed fields: request thread_ts and response ts.

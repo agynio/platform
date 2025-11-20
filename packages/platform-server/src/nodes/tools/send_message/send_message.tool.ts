@@ -1,7 +1,7 @@
 import z from 'zod';
 import { FunctionTool } from '@agyn/llm';
 import { LoggerService } from '../../../core/services/logger.service';
-import type { SendResult } from '../../../messaging/types';
+import { isSendResult, type SendResult } from '../../../messaging/types';
 import { SlackTrigger } from '../../slackTrigger/slackTrigger.node';
 import type { LLMContext } from '../../../llm/types';
 
@@ -30,6 +30,10 @@ export class SendMessageFunctionTool extends FunctionTool<typeof sendMessageInvo
     if (!threadId) return JSON.stringify({ ok: false, error: 'missing_thread_context' });
     try {
       const res: SendResult = await this.trigger.sendToThread(threadId, args.message);
+      if (!isSendResult(res)) {
+        this.logger.error('SendMessageFunctionTool.execute: trigger returned invalid response', { threadId });
+        return JSON.stringify({ ok: false, error: 'tool_invalid_response' });
+      }
       return JSON.stringify(res);
     } catch (e) {
       const msg = e instanceof Error && e.message ? e.message : 'unknown_error';

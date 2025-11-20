@@ -23,11 +23,17 @@ export const ChannelDescriptorSchema = z
 
 export type ChannelDescriptor = z.infer<typeof ChannelDescriptorSchema>;
 
-export type SendResult = {
-  ok: boolean;
-  channelMessageId?: string | null;
-  threadId?: string | null;
-  error?: string | null;
-};
+export const SendResultSchema = z
+  .object({
+    ok: z.boolean(),
+    channelMessageId: z.string().nullable().optional(),
+    threadId: z.string().nullable().optional(),
+    error: z.string().nullable().optional(),
+  })
+  .passthrough();
+
+export type SendResult = z.infer<typeof SendResultSchema>;
+
+export const isSendResult = (value: unknown): value is SendResult => SendResultSchema.safeParse(value).success;
 
 // Adapters are provided via DI; no custom deps bags or adapter interfaces needed for v1.

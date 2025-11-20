@@ -89,4 +89,40 @@ describe('send_message tool', () => {
     expect(obj.ok).toBe(true);
     expect(obj.channelMessageId).toBe('2001');
   });
+
+  it('returns tool_invalid_response when trigger yields invalid result', async () => {
+    const descriptor = { type: 'slack', identifiers: { channel: 'C1' }, meta: {}, version: 1 };
+    type PrismaClientStub3 = { thread: { findUnique: (args: { where: { id: string }; select: { channel: true } }) => Promise<{ channel: unknown | null }> } };
+    const prismaStub3 = ({ getClient: () => ({ thread: { findUnique: async () => ({ channel: descriptor }) } } as PrismaClientStub3) } satisfies Pick<import('../src/core/services/prisma.service').PrismaService, 'getClient'>) as import('../src/core/services/prisma.service').PrismaService;
+    const vaultMock3 = ({ getSecret: async (_ref: VaultRef) => 'xoxb-abc' } satisfies Pick<import('../src/vault/vault.service').VaultService, 'getSecret'>) as import('../src/vault/vault.service').VaultService;
+    class SlackAdapterStub3 implements SlackAdapter {
+      constructor(private readonly _logger: LoggerService = new LoggerService()) {}
+      async sendText(_opts: { token: string; channel: string; text: string; thread_ts?: string }): Promise<import('../src/messaging/types').SendResult> {
+        return { ok: true, channelMessageId: '2001', threadId: '2001' };
+      }
+    }
+    const trigger = new SlackTrigger(
+      new LoggerService(),
+      vaultMock3,
+      ({
+        getOrCreateThreadByAlias: async () => 't1',
+        updateThreadChannelDescriptor: async () => undefined,
+      } satisfies Pick<import('../src/agents/agents.persistence.service').AgentsPersistenceService, 'getOrCreateThreadByAlias' | 'updateThreadChannelDescriptor'>) as import('../src/agents/agents.persistence.service').AgentsPersistenceService,
+      prismaStub3,
+      new SlackAdapterStub3(),
+    );
+    const cfg3 = { app_token: { value: 'xapp-abc', source: 'static' }, bot_token: { value: 'xoxb-abc', source: 'static' } };
+    await trigger.setConfig(cfg3);
+    await trigger.provision();
+    const sendToThreadSpy = vi.spyOn(trigger, 'sendToThread').mockResolvedValueOnce(undefined as unknown as import('../src/messaging/types').SendResult);
+    try {
+      const tool = new SendMessageFunctionTool(new LoggerService(), trigger);
+      const res = await tool.execute({ message: 'hello' }, { threadId: 't1' });
+      const obj = JSON.parse(res);
+      expect(obj).toEqual({ ok: false, error: 'tool_invalid_response' });
+    } finally {
+      sendToThreadSpy.mockRestore();
+      await trigger.deprovision();
+    }
+  });
 });
