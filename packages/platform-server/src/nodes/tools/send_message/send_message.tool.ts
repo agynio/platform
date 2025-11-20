@@ -36,8 +36,9 @@ export class SendMessageFunctionTool extends FunctionTool<typeof sendMessageInvo
       }
       return JSON.stringify(res);
     } catch (e) {
-      const msg = e instanceof Error && e.message ? e.message : 'unknown_error';
-      return JSON.stringify({ ok: false, error: msg });
+      const msg = e instanceof Error && e.message ? e.message : String(e);
+      this.logger.error('SendMessageFunctionTool.execute: unexpected error', { threadId, error: msg });
+      return JSON.stringify({ ok: false, error: 'tool_execution_error' });
     }
   }
 }

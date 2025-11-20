@@ -56,6 +56,36 @@ describe('send_message tool', () => {
     const obj = JSON.parse(res);
     expect(obj.ok).toBe(false);
     expect(obj.error).toBe('missing_channel_descriptor');
+    await trigger.deprovision();
+  });
+
+  it('returns adapter_invalid_response when SlackAdapter returns undefined', async () => {
+    const descriptor = { type: 'slack', identifiers: { channel: 'C1' }, meta: {}, version: 1 };
+    type PrismaClientStub2a = { thread: { findUnique: (args: { where: { id: string }; select: { channel: true } }) => Promise<{ channel: unknown | null }> } };
+    const prismaStub2a = ({ getClient: () => ({ thread: { findUnique: async () => ({ channel: descriptor }) } } as PrismaClientStub2a) } satisfies Pick<import('../src/core/services/prisma.service').PrismaService, 'getClient'>) as import('../src/core/services/prisma.service').PrismaService;
+    const vaultMock2a = ({ getSecret: async (_ref: VaultRef) => 'xoxb-abc' } satisfies Pick<import('../src/vault/vault.service').VaultService, 'getSecret'>) as import('../src/vault/vault.service').VaultService;
+    class SlackAdapterStubInvalid implements SlackAdapter {
+      async sendText(_opts: { token: string; channel: string; text: string; thread_ts?: string }): Promise<import('../src/messaging/types').SendResult> {
+        return undefined as unknown as import('../src/messaging/types').SendResult;
+      }
+    }
+    const trigger = new SlackTrigger(
+      new LoggerService(),
+      vaultMock2a,
+      ({
+        getOrCreateThreadByAlias: async () => 't1',
+        updateThreadChannelDescriptor: async () => undefined,
+      } satisfies Pick<import('../src/agents/agents.persistence.service').AgentsPersistenceService, 'getOrCreateThreadByAlias' | 'updateThreadChannelDescriptor'>) as import('../src/agents/agents.persistence.service').AgentsPersistenceService,
+      prismaStub2a,
+      new SlackAdapterStubInvalid(),
+    );
+    const cfg = { app_token: { value: 'xapp-abc', source: 'static' }, bot_token: { value: 'xoxb-abc', source: 'static' } };
+    await trigger.setConfig(cfg);
+    await trigger.provision();
+    const tool = new SendMessageFunctionTool(new LoggerService(), trigger);
+    const result = await tool.execute({ message: 'hi' }, { threadId: 't1' });
+    expect(JSON.parse(result)).toEqual({ ok: false, error: 'adapter_invalid_response' });
+    await trigger.deprovision();
   });
 
   it('sends via slack adapter when descriptor present', async () => {
@@ -88,6 +118,7 @@ describe('send_message tool', () => {
     const obj = JSON.parse(res);
     expect(obj.ok).toBe(true);
     expect(obj.channelMessageId).toBe('2001');
+    await trigger.deprovision();
   });
 
   it('returns tool_invalid_response when trigger yields invalid result', async () => {

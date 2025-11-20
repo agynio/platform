@@ -64,21 +64,43 @@ export class SendSlackMessageFunctionTool extends FunctionTool<typeof sendSlackI
       });
       const client = new WebClient(token, { logLevel: undefined });
       if (ephemeral_user) {
-        const resp: ChatPostEphemeralResponse = await client.chat.postEphemeral({
+        const respRaw: unknown = await client.chat.postEphemeral({
           channel,
           user: ephemeral_user,
           text,
         });
-        if (!resp.ok) return JSON.stringify({ ok: false, error: resp.error });
+        if (!respRaw || typeof respRaw !== 'object' || typeof (respRaw as { ok?: unknown }).ok !== 'boolean') {
+          this.logger.error('SendSlackMessageFunctionTool: invalid Slack ephemeral response', {
+            channel,
+            ephemeral_user,
+          });
+          return JSON.stringify({ ok: false, error: 'slack_api_invalid_response' });
+        }
+        const resp = respRaw as ChatPostEphemeralResponse;
+        if (!resp.ok) {
+          const err = typeof resp.error === 'string' && resp.error.trim() ? resp.error : 'slack_api_invalid_response';
+          return JSON.stringify({ ok: false, error: err });
+        }
         return JSON.stringify({ ok: true, channel, message_ts: resp.message_ts, ephemeral: true });
       }
-      const resp: ChatPostMessageResponse = await client.chat.postMessage({
+      const respRaw: unknown = await client.chat.postMessage({
         channel,
         text,
         attachments: [],
         ...(thread_ts ? { thread_ts } : {}),
       });
-      if (!resp.ok) return JSON.stringify({ ok: false, error: resp.error });
+      if (!respRaw || typeof respRaw !== 'object' || typeof (respRaw as { ok?: unknown }).ok !== 'boolean') {
+        this.logger.error('SendSlackMessageFunctionTool: invalid Slack response', {
+          channel,
+          thread_ts,
+        });
+        return JSON.stringify({ ok: false, error: 'slack_api_invalid_response' });
+      }
+      const resp = respRaw as ChatPostMessageResponse;
+      if (!resp.ok) {
+        const err = typeof resp.error === 'string' && resp.error.trim() ? resp.error : 'slack_api_invalid_response';
+        return JSON.stringify({ ok: false, error: err });
+      }
       const thread =
         (resp.message && 'thread_ts' in resp.message
           ? (resp.message as { thread_ts?: string }).thread_ts
@@ -95,7 +117,7 @@ export class SendSlackMessageFunctionTool extends FunctionTool<typeof sendSlackI
     } catch (err: unknown) {
       const msg = (err as { message?: string })?.message || String(err);
       this.logger.error('Error sending Slack message', msg);
-      return JSON.stringify({ ok: false, error: msg });
+      return JSON.stringify({ ok: false, error: 'tool_execution_error' });
     }
   }
 }
