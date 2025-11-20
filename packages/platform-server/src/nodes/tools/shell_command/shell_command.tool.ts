@@ -670,7 +670,7 @@ export class ShellCommandTool extends FunctionTool<typeof bashCommandSchema> {
       const prisma = this.prismaService.getClient();
       const container = await prisma.container.findUnique({
         where: { containerId },
-        select: { id: true },
+        select: { id: true, dockerContainerId: true, threadId: true },
       });
       if (!container) {
         return 'Shell command interrupted: workspace container connection closed unexpectedly (container record missing).';
@@ -696,6 +696,8 @@ export class ShellCommandTool extends FunctionTool<typeof bashCommandSchema> {
       const extras: string[] = [];
       if (typeof exitCode === 'number') extras.push(`exitCode=${exitCode}`);
       if (signal) extras.push(`signal=${signal}`);
+      if (container.dockerContainerId) extras.push(`dockerId=${container.dockerContainerId.slice(0, 12)}`);
+      if (container.threadId) extras.push(`threadId=${container.threadId}`);
       if (extras.length > 0) segments.push(`Details: ${extras.join(', ')}`);
       const message = event.message ?? undefined;
       if (message) segments.push(`Docker message: ${message}`);

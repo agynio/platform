@@ -59,6 +59,7 @@ export class ContainerRegistry {
       where: { containerId: args.containerId },
       create: {
         containerId: args.containerId,
+        dockerContainerId: args.containerId,
         nodeId: args.nodeId,
         threadId: args.threadId || null,
         providerType: 'docker',
@@ -73,6 +74,7 @@ export class ContainerRegistry {
       },
       update: {
         nodeId: args.nodeId,
+        dockerContainerId: args.containerId,
         threadId: args.threadId || null,
         providerType: 'docker',
         image: args.image,

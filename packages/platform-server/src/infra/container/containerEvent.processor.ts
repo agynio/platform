@@ -62,9 +62,14 @@ export class ContainerEventProcessor {
     const eventTimeMs = this.eventTimestampMs(event);
     const hadRecentOom = this.hasRecentOom(dockerId, eventTimeMs);
 
-    const container = await this.prisma.container.findUnique({
-      where: { containerId: dockerId },
-      select: { id: true, threadId: true, status: true },
+    const container = await this.prisma.container.findFirst({
+      where: {
+        OR: [
+          { dockerContainerId: dockerId },
+          { containerId: dockerId },
+        ],
+      },
+      select: { id: true, threadId: true, status: true, dockerContainerId: true },
     });
 
     if (!container) {
@@ -76,6 +81,8 @@ export class ContainerEventProcessor {
       return;
     }
 
+    const threadId = this.resolveThreadId(container.threadId, attributes);
+
     const reasonContext: ContainerReasonContext = {
       eventType,
       exitCode,
@@ -84,14 +91,11 @@ export class ContainerEventProcessor {
     };
     const reason: ContainerTerminationReason = mapContainerEventReason(reasonContext);
     const createdAt = new Date(eventTimeMs);
-    const threadId = this.resolveThreadId(container.threadId, attributes);
     const message = this.buildMessage(event, attributes, exitCode, signal);
 
     await this.prisma.containerEvent.create({
       data: {
         containerDbId: container.id,
-        dockerContainerId: dockerId,
-        threadId,
         eventType,
         exitCode: typeof exitCode === 'number' ? exitCode : null,
         signal: signal ?? null,
@@ -108,9 +112,20 @@ export class ContainerEventProcessor {
     }
 
     const update = this.buildContainerUpdate(container.status, eventType, reason);
-    if (update) {
+    const updateData: Prisma.ContainerUpdateInput = {
+      ...(update ?? {}),
+    };
+
+    if (!container.dockerContainerId || container.dockerContainerId !== dockerId) {
+      updateData.dockerContainerId = dockerId;
+    }
+    if (threadId && container.threadId !== threadId) {
+      updateData.threadId = threadId;
+    }
+
+    if (Object.keys(updateData).length > 0) {
       try {
-        await this.prisma.container.update({ where: { id: container.id }, data: update });
+        await this.prisma.container.update({ where: { id: container.id }, data: updateData });
       } catch (err) {
         this.logger.error('ContainerEventProcessor: failed to update container status', {
           dockerId: this.shortId(dockerId),

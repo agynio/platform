@@ -25,11 +25,11 @@ if (!shouldRunDbTests) {
 
     it('deletes container events automatically when container is removed', async () => {
       const containerId = `cid-${randomUUID()}`;
-      const dockerId = `docker-${randomUUID()}`;
 
       const container = await prisma.container.create({
         data: {
           containerId,
+          dockerContainerId: containerId,
           nodeId: 'cascade-node',
           image: 'hautech/test-image:latest',
           lastUsedAt: new Date(),
@@ -39,7 +39,6 @@ if (!shouldRunDbTests) {
       await prisma.containerEvent.create({
         data: {
           containerDbId: container.id,
-          dockerContainerId: dockerId,
           eventType: 'die',
           exitCode: 137,
           signal: 'SIGKILL',
@@ -55,10 +54,6 @@ if (!shouldRunDbTests) {
 
       const remaining = await prisma.containerEvent.count({ where: { containerDbId: container.id } });
       expect(remaining).toBe(0);
-
-      const orphaned = await prisma.containerEvent.findMany({ where: { dockerContainerId: dockerId } });
-      expect(orphaned).toHaveLength(0);
     });
   });
 }
-

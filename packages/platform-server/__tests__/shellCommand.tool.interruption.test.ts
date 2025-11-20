@@ -45,7 +45,7 @@ describe('ShellCommandTool interruption messaging', () => {
   it('builds detailed interruption message when event is available', async () => {
     const createdAt = new Date('2025-01-01T00:00:00.000Z');
     const tool = makeTool({
-      container: { id: 7 },
+      container: { id: 7, dockerContainerId: 'docker-1234567890', threadId: '00000000-0000-0000-0000-000000000001' },
       event: {
         createdAt,
         reason: 'SIGKILL',
@@ -60,11 +60,13 @@ describe('ShellCommandTool interruption messaging', () => {
     expect(message).toContain(createdAt.toISOString());
     expect(message).toContain('exitCode=137');
     expect(message).toContain('signal=SIGKILL');
+    expect(message).toContain('dockerId=docker-12345');
+    expect(message).toContain('threadId=00000000-0000-0000-0000-000000000001');
     expect(message).toContain('Docker message: die');
   });
 
   it('falls back to generic message when no event found', async () => {
-    const tool = makeTool({ container: { id: 7 }, event: null });
+    const tool = makeTool({ container: { id: 7, dockerContainerId: 'docker-1234567890', threadId: null }, event: null });
     const message = await (tool as unknown as { buildInterruptionMessage(id: string): Promise<string> }).buildInterruptionMessage('cid');
     expect(message).toContain('No Docker termination event was recorded');
   });

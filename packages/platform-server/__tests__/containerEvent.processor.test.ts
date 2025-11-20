@@ -6,6 +6,7 @@ import type { ContainerEventType, ContainerStatus, PrismaClient } from '@prisma/
 type ContainerRow = {
   id: number;
   containerId: string;
+  dockerContainerId: string | null;
   status: ContainerStatus;
   threadId: string | null;
   terminationReason: string | null;
@@ -13,7 +14,6 @@ type ContainerRow = {
 
 type ContainerEventRow = {
   containerDbId: number;
-  dockerContainerId: string;
   eventType: ContainerEventType;
   exitCode: number | null;
   signal: string | null;
@@ -29,10 +29,14 @@ class FakePrismaClient {
 
   addContainer(row: ContainerRow) {
     this.containers.set(row.id, { ...row });
+    if (row.dockerContainerId) this.containersByDockerId.set(row.dockerContainerId, { ...row });
     this.containersByDockerId.set(row.containerId, { ...row });
   }
 
   getContainerByDockerId(id: string): ContainerRow | undefined {
+    for (const row of this.containers.values()) {
+      if (row.containerId === id || row.dockerContainerId === id) return { ...row };
+    }
     const row = this.containersByDockerId.get(id);
     return row ? { ...row } : undefined;
   }
@@ -52,6 +56,30 @@ class FakePrismaClient {
       }
       return null;
     },
+    findFirst: async (args: Parameters<PrismaClient['container']['findFirst']>[0]) => {
+      if (!args?.where) return null;
+      const { where } = args;
+      const ors = Array.isArray(where.OR) ? where.OR : [];
+      for (const clause of ors) {
+        if (clause.containerId) {
+          const row = this.containersByDockerId.get(clause.containerId);
+          if (row) return this.pick(row, args.select);
+        }
+        if (clause.dockerContainerId) {
+          const row = this.containersByDockerId.get(clause.dockerContainerId);
+          if (row) return this.pick(row, args.select);
+        }
+      }
+      if (where.containerId) {
+        const row = this.containersByDockerId.get(where.containerId);
+        if (row) return this.pick(row, args.select);
+      }
+      if (where.dockerContainerId) {
+        const row = this.containersByDockerId.get(where.dockerContainerId);
+        if (row) return this.pick(row, args.select);
+      }
+      return null;
+    },
     update: async (args: Parameters<PrismaClient['container']['update']>[0]) => {
       const id = args.where.id as number;
       const row = this.containers.get(id);
@@ -67,7 +95,20 @@ class FakePrismaClient {
           : (data.terminationReason as { set: string | null }).set;
         row.terminationReason = nextReason ?? row.terminationReason;
       }
+      const nextDocker = (data as Record<string, unknown>).dockerContainerId;
+      if (nextDocker === null) row.dockerContainerId = null;
+      else if (typeof nextDocker === 'string') row.dockerContainerId = nextDocker;
+      else if (nextDocker && typeof nextDocker === 'object' && 'set' in nextDocker) {
+        row.dockerContainerId = (nextDocker as { set: string | null }).set ?? row.dockerContainerId;
+      }
+      const nextThread = (data as Record<string, unknown>).threadId;
+      if (nextThread === null) row.threadId = null;
+      else if (typeof nextThread === 'string') row.threadId = nextThread;
+      else if (nextThread && typeof nextThread === 'object' && 'set' in nextThread) {
+        row.threadId = (nextThread as { set: string | null }).set ?? row.threadId;
+      }
       this.containersByDockerId.set(row.containerId, { ...row });
+      if (row.dockerContainerId) this.containersByDockerId.set(row.dockerContainerId, { ...row });
       return this.pick(row, args.select);
     },
   };
@@ -77,7 +118,6 @@ class FakePrismaClient {
       const data = args.data;
       const row: ContainerEventRow = {
         containerDbId: data.containerDbId,
-        dockerContainerId: data.dockerContainerId,
         eventType: data.eventType,
         exitCode: data.exitCode ?? null,
         signal: data.signal ?? null,
@@ -123,7 +163,7 @@ describe('ContainerEventProcessor', () => {
 
   beforeEach(() => {
     prisma = new FakePrismaClient();
-    prisma.addContainer({ id: 1, containerId: 'cid-123', status: 'running', threadId: null, terminationReason: null });
+    prisma.addContainer({ id: 1, containerId: 'cid-123', dockerContainerId: 'cid-123', status: 'running', threadId: null, terminationReason: null });
     processor = new ContainerEventProcessor(new FakePrismaService(prisma), new LoggerService());
   });
 
@@ -190,5 +230,31 @@ describe('ContainerEventProcessor', () => {
     expect(prisma.events.at(-1)?.reason).toBe('SIGTERM');
     expect(container?.status).toBe('stopped');
     expect(container?.terminationReason).toBe('SIGTERM');
+    expect(container?.dockerContainerId).toBe('cid-123');
+  });
+
+  it('updates container docker id and thread id from event context', async () => {
+    const localPrisma = new FakePrismaClient();
+    localPrisma.addContainer({ id: 2, containerId: 'cid-unknown', dockerContainerId: 'stale-id', status: 'running', threadId: null, terminationReason: null });
+    const localProcessor = new ContainerEventProcessor(new FakePrismaService(localPrisma), new LoggerService());
+
+    const threadId = '11111111-2222-4333-8444-555555555555';
+    localProcessor.enqueue(
+      makeEvent({
+        Action: 'die',
+        time: 500,
+        id: 'cid-unknown',
+        Id: 'cid-unknown',
+        Actor: {
+          ID: 'cid-unknown',
+          Attributes: { exitCode: '0', 'hautech.ai/thread_id': threadId },
+        },
+      }),
+    );
+    await localProcessor.drain();
+
+    const container = localPrisma.getContainerByDockerId('cid-unknown');
+    expect(container?.dockerContainerId).toBe('cid-unknown');
+    expect(container?.threadId).toBe(threadId);
   });
 });
