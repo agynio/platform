@@ -288,9 +288,9 @@ export class SlackTrigger extends Node<SlackTriggerConfig> {
       }
       return res;
     } catch (e) {
-      const msg = e instanceof Error && e.message ? e.message : 'unknown_error';
+      const msg = e instanceof Error && e.message ? e.message : String(e);
       this.logger.error('SlackTrigger.sendToThread failed', { threadId, error: msg });
-      return { ok: false, error: msg };
+      return { ok: false, error: 'slack_send_failed' };
     }
   }
 }
