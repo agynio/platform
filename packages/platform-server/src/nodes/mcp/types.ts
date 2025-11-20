@@ -1,4 +1,5 @@
 import type { JSONSchema } from '@agyn/json-schema-to-zod';
+import type { Reference } from '@agyn/shared';
 
 // If upstream exports JSONRPCMessage directly later, replace this with that import.
 export type JSONRPCMessage = {
@@ -37,7 +38,7 @@ export interface McpServerConfig {
   namespace: string;
   command?: string; // default: 'mcp start --stdio'
   workdir?: string;
-  env?: Array<{ key: string; value: string; source?: 'static' | 'vault' }>;
+  env?: Array<{ key: string; value: string | Reference }>;
   requestTimeoutMs?: number;
   startupTimeoutMs?: number;
   heartbeatIntervalMs?: number; // ping interval

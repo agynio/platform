@@ -198,7 +198,8 @@ describe('Boot respects MCP enabledTools from persisted state', () => {
       async upsertNodeState(): Promise<void> {}
     }
 
-    const runtime = new LiveGraphRuntime(logger, templateRegistry, new GraphRepoStub() as unknown as GraphRepository, moduleRef);
+    const resolver = { resolve: async (input: unknown) => ({ output: input, report: {} as unknown }) };
+    const runtime = new LiveGraphRuntime(logger, templateRegistry, new GraphRepoStub() as unknown as GraphRepository, moduleRef, resolver as any);
     const loaded = await runtime.load();
     expect(loaded.applied).toBe(true);
 

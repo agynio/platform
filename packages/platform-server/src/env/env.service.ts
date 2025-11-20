@@ -1,6 +1,28 @@
-import { Inject, Injectable } from '@nestjs/common';
-import { VaultService, type VaultRef } from '../vault/vault.service';
-import { parseVaultRef } from '../utils/refs';
+import { Inject, Injectable, Optional } from '@nestjs/common';
+import type { Reference } from '@agyn/shared';
+import { ReferenceResolverService } from '../utils/reference-resolver.service';
+import { ResolveError } from '../utils/references';
+
+function mapResolveErrorCode(code: string): string {
+  switch (code) {
+    case 'provider_missing':
+      return 'env_provider_missing';
+    case 'permission_denied':
+      return 'env_permission_denied';
+    case 'invalid_reference':
+      return 'env_invalid_reference';
+    case 'unresolved_reference':
+      return 'env_reference_unresolved';
+    case 'max_depth_exceeded':
+      return 'env_max_depth_exceeded';
+    case 'cycle_detected':
+      return 'env_cycle_detected';
+    case 'type_mismatch':
+      return 'env_type_mismatch';
+    default:
+      return 'env_resolution_failed';
+  }
+}
 
 export class EnvError extends Error {
   code: string;
@@ -13,57 +35,67 @@ export class EnvError extends Error {
   }
 }
 
-export type EnvItem = { key: string; value: string; source?: 'static' | 'vault' };
+export type EnvValue = string | Reference;
+export type EnvItem = { key: string; value: EnvValue };
 
 @Injectable()
 export class EnvService {
-  constructor(@Inject(VaultService) private vault: VaultService) {}
+  constructor(@Optional() @Inject(ReferenceResolverService) private readonly referenceResolver?: ReferenceResolverService) {}
 
   mergeEnv(base?: Record<string, string>, overlay?: Record<string, string>): Record<string, string> {
     return { ...(base || {}), ...(overlay || {}) };
   }
 
-  async resolveEnvItems(items: EnvItem[]): Promise<Record<string, string>> {
+  async resolveEnvItems(items: EnvItem[], opts?: { graphName?: string; strict?: boolean }): Promise<Record<string, string>> {
     if (!Array.isArray(items)) throw new EnvError('env items must be an array', 'env_items_invalid');
-    const out: Record<string, string> = {};
     const seen = new Set<string>();
-
-    const lookups: Array<{ key: string; ref: VaultRef }> = [];
+    const normalized: EnvItem[] = [];
     for (const it of items) {
-      const k = it?.key?.trim();
-      if (!k) throw new EnvError('env key must be non-empty', 'env_key_invalid', { item: it });
-      if (seen.has(k)) throw new EnvError(`duplicate env key: ${k}`, 'env_key_duplicate', { key: k });
-      seen.add(k);
-      const source = it?.source || 'static';
-      if (source === 'vault') {
-        try {
-          lookups.push({ key: k, ref: parseVaultRef(it.value) });
-        } catch (e) {
-          throw new EnvError('invalid vault ref', 'vault_ref_invalid', { value: it.value, error: e });
+      const key = typeof it?.key === 'string' ? it.key.trim() : '';
+      if (!key) throw new EnvError('env key must be non-empty', 'env_key_invalid', { item: it });
+      if (seen.has(key)) throw new EnvError(`duplicate env key: ${key}`, 'env_key_duplicate', { key });
+      seen.add(key);
+      normalized.push({ key, value: it?.value ?? '' });
+    }
+
+    if (!this.referenceResolver) {
+      const result: Record<string, string> = {};
+      for (const item of normalized) {
+        if (typeof item.value === 'object' && item.value !== null) {
+          throw new EnvError('env provider missing for references', 'env_provider_missing', { key: item.key });
         }
-      } else {
-        out[k] = it.value ?? '';
+        result[item.key] = typeof item.value === 'string' ? item.value : String(item.value ?? '');
       }
+      return result;
     }
 
-    if (lookups.length) {
-      const vlt = this.vault;
-      try {
-        const resolved = await Promise.all(
-          lookups.map(async ({ key, ref }) => {
-            const val = await vlt.getSecret(ref);
-            if (val == null) throw new EnvError('missing secret', 'vault_secret_missing', { ref });
-            return { key, val: String(val) };
-          }),
-        );
-        for (const { key, val } of resolved) out[key] = val;
-      } catch (e) {
-        if (e instanceof EnvError) throw e;
-        throw new EnvError('vault resolution failed', 'vault_resolution_failed', { error: e });
-      }
-    }
+    try {
+      const { output } = await this.referenceResolver.resolve(normalized, {
+        graphName: opts?.graphName,
+        strict: opts?.strict ?? true,
+        basePath: '/env',
+      });
 
-    return out;
+      const result: Record<string, string> = {};
+      for (const item of output) {
+        const val = item.value;
+        if (val === null || (typeof val === 'object' && val !== null)) {
+          throw new EnvError('env reference unresolved', 'env_reference_unresolved', { key: item.key, value: val });
+        }
+        result[item.key] = typeof val === 'string' ? val : String(val);
+      }
+      return result;
+    } catch (err: unknown) {
+      if (err instanceof EnvError) throw err;
+      if (err instanceof ResolveError) {
+        throw new EnvError(err.message, mapResolveErrorCode(err.code), { path: err.path, source: err.source });
+      }
+      const details =
+        err instanceof Error
+          ? { message: err.message, name: err.name }
+          : { value: err };
+      throw new EnvError('env resolution failed', 'env_resolution_failed', details);
+    }
   }
 
   async resolveProviderEnv(

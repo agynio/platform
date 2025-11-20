@@ -3,7 +3,6 @@ import { PassThrough } from 'node:stream';
 import { LoggerService } from '../src/core/services/logger.service';
 import { ConfigService, configSchema } from '../src/core/services/config.service';
 import { EnvService } from '../src/env/env.service';
-import { VaultService } from '../src/vault/vault.service';
 import { ShellCommandNode } from '../src/nodes/tools/shell_command/shell_command.node';
 import { LocalMCPServerNode } from '../src/nodes/mcp/localMcpServer.node';
 import { Signal } from '../src/signal';
@@ -35,8 +34,8 @@ describe('Mixed Shell + MCP overlay isolation', () => {
         agentsDatabaseUrl: 'postgres://localhost/agents',
       }),
     );
-    const vault = new VaultService(cfg, logger);
-    const envService = new EnvService(vault);
+    const resolver = { resolve: async (input: unknown) => ({ output: input, report: {} as unknown }) };
+    const envService = new EnvService(resolver as any);
 
     const shell = new ShellCommandNode(envService, logger);
     shell.init({ nodeId: 'shell' });
@@ -52,7 +51,7 @@ describe('Mixed Shell + MCP overlay isolation', () => {
       }),
     } as const;
     const cs = { getDocker: () => docker };
-    const mcp = new LocalMCPServerNode(cs, logger, vault, envService, cfg);
+    const mcp = new LocalMCPServerNode(cs as any, logger, envService as any, cfg as any);
     mcp.init({ nodeId: 'mcp' });
     (mcp as any).setContainerProvider(provider);
     await mcp.setConfig({ namespace: 'n', command: 'mcp start --stdio', env: [ { key: 'M_VAR', value: 'm' } ], startupTimeoutMs: 10 });

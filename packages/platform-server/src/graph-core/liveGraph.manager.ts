@@ -8,7 +8,7 @@ import {
 } from '../graph/liveGraph.types';
 import type { EdgeDef, GraphDefinition, NodeDef } from '../shared/types/graph.types';
 import { GraphError } from '../graph/types';
-import { Inject, Injectable } from '@nestjs/common';
+import { Inject, Injectable, Optional } from '@nestjs/common';
 import { ModuleRef } from '@nestjs/core';
 import { ZodError, type ZodIssue } from 'zod';
 
@@ -20,6 +20,8 @@ import { PortsRegistry } from '../graph/ports.registry';
 import type { TemplatePortConfig } from '../graph/ports.types';
 import { GraphRepository } from '../graph/graph.repository';
 import { TemplateRegistry } from './templateRegistry';
+import { ReferenceResolverService } from '../utils/reference-resolver.service';
+import { ResolveError } from '../utils/references';
 
 const configsEqual = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b); // unchanged
 
@@ -42,12 +44,14 @@ export class LiveGraphRuntime {
     (ev: { nodeId: string; prev: NodeStatusState; next: NodeStatusState; at: number }) => void
   >();
   private nodeStatusHandlers = new Map<string, (ev: StatusChangedEvent) => void>();
+  private graphName = 'main';
 
   constructor(
     @Inject(LoggerService) private readonly logger: LoggerService,
     @Inject(TemplateRegistry) private readonly templateRegistry: TemplateRegistry,
     @Inject(GraphRepository) private readonly graphs: GraphRepository,
     @Inject(ModuleRef) private readonly moduleRef: ModuleRef,
+    @Optional() @Inject(ReferenceResolverService) private readonly referenceResolver?: ReferenceResolverService,
   ) {
     this.portsRegistry = new PortsRegistry();
   }
@@ -77,6 +81,7 @@ export class LiveGraphRuntime {
    */
   public async load(): Promise<{ applied: boolean; version?: number }> {
     const name = 'main';
+    this.graphName = name;
     const toRuntimeGraph = (saved: {
       nodes: Array<{
         id: string;
@@ -221,7 +226,8 @@ export class LiveGraphRuntime {
       if (!live) continue;
       try {
         const cfg = nodeDef.data.config || {};
-        const cleaned = await this.applyConfigWithUnknownKeyStripping(live.instance, 'setConfig', cfg, nodeId);
+        const resolved = await this.resolveNodeConfig(nodeId, cfg);
+        const cleaned = await this.applyConfigWithUnknownKeyStripping(live.instance, 'setConfig', resolved, nodeId);
         // set live.config to cleaned object only on success
         live.config = cleaned;
       } catch (e) {
@@ -362,7 +368,9 @@ export class LiveGraphRuntime {
       this.attachNodeStatusForwarder(node.id, created);
 
       if (node.data.config) {
-        await created.setConfig(node.data.config);
+        const resolvedConfig = await this.resolveNodeConfig(node.id, node.data.config);
+        await created.setConfig(resolvedConfig);
+        live.config = resolvedConfig;
       }
       await created.setState(node.data.state ?? {});
     } catch (e) {
@@ -417,6 +425,28 @@ export class LiveGraphRuntime {
         attempt += 1;
         continue; // retry
       }
+    }
+  }
+
+  private async resolveNodeConfig(nodeId: string, config: Record<string, unknown>): Promise<Record<string, unknown>> {
+    if (!this.referenceResolver) return config;
+    try {
+      const { output } = await this.referenceResolver.resolve(config, {
+        graphName: this.graphName,
+        basePath: `/nodes/${encodeURIComponent(nodeId)}/config`,
+      });
+      return output;
+    } catch (err) {
+      if (err instanceof ResolveError) {
+        const path = err.path ?? '<unknown>';
+        throw new GraphError({
+          code: 'REFERENCE_RESOLUTION_ERROR',
+          message: `Reference resolution failed for node ${nodeId} at ${path}: ${err.message}`,
+          nodeId,
+          cause: err,
+        });
+      }
+      throw err;
     }
   }
 

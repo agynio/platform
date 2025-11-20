@@ -9,7 +9,11 @@ import { ModuleRef } from '@nestjs/core';
 import { ArchiveService } from '../../../infra/archive/archive.service';
 import { RunEventsService } from '../../../events/run-events.service';
 import { EventsBusService } from '../../../events/events-bus.service';
+<<<<<<< HEAD
 import { PrismaService } from '../../../core/services/prisma.service';
+=======
+import { SecretReferenceSchema, VariableReferenceSchema } from '../../../utils/reference-schemas';
+>>>>>>> e91f8a9 (feat(platform-server): integrate reference resolver)
 
 // NOTE: ANSI stripping now handled in ShellCommandTool; keep schema exports here only.
 
@@ -17,17 +21,16 @@ import { PrismaService } from '../../../core/services/prisma.service';
 const EnvItemSchema = z
   .object({
     key: z.string().min(1),
-    value: z.string(),
-    source: z.enum(['static', 'vault']).optional().default('static'),
+    value: z.union([z.string(), SecretReferenceSchema, VariableReferenceSchema]),
   })
   .strict()
-  .describe('Environment variable entry. When source=vault, value is "<MOUNT>/<PATH>/<KEY>".');
+  .describe('Environment variable entry supporting plain values, vault references, or variables.');
 export const ShellToolStaticConfigSchema = z
   .object({
     env: z
       .array(EnvItemSchema)
       .optional()
-      .describe('Environment variables (static or vault references).')
+      .describe('Environment variables (plain, vault, or variable references).')
       .meta({ 'ui:field': 'ReferenceEnvField' }),
     workdir: z.string().optional().describe('Working directory to use for each exec.'),
     executionTimeoutMs: z

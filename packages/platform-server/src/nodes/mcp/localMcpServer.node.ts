@@ -8,7 +8,6 @@ import { ConfigService } from '../../core/services/config.service';
 import { ContainerService } from '../../infra/container/container.service';
 import { EnvService, type EnvItem } from '../../env/env.service';
 import { LoggerService } from '../../core/services/logger.service';
-import { VaultService } from '../../vault/vault.service';
 import { DockerExecTransport } from './dockerExecTransport';
 import { LocalMCPServerTool } from './localMcpServer.tool';
 import { DEFAULT_MCP_COMMAND, McpError, type McpTool, McpToolCallResult, PersistedMcpState } from './types';
@@ -18,15 +17,15 @@ import { Inject, Injectable, Scope, Optional } from '@nestjs/common';
 import { jsonSchemaToZod } from '@agyn/json-schema-to-zod';
 import { isEqual } from 'lodash-es';
 import { ModuleRef } from '@nestjs/core';
+import { SecretReferenceSchema, VariableReferenceSchema } from '../../utils/reference-schemas';
 
 const EnvItemSchema = z
   .object({
     key: z.string().min(1),
-    value: z.string(),
-    source: z.enum(['static', 'vault']).optional().default('static'),
+    value: z.union([z.string(), SecretReferenceSchema, VariableReferenceSchema]),
   })
   .strict()
-  .describe('Environment variable entry. When source=vault, value is "<MOUNT>/<PATH>/<KEY>".');
+  .describe('Environment variable entry supporting plain values, vault references, or variables.');
 
 export const LocalMcpServerStaticConfigSchema = z.object({
   title: z.string().optional(),
@@ -39,7 +38,7 @@ export const LocalMcpServerStaticConfigSchema = z.object({
   env: z
     .array(EnvItemSchema)
     .optional()
-    .describe('Environment variables (static or vault references).')
+    .describe('Environment variables (plain, vault, or variable references).')
     .meta({ 'ui:field': 'ReferenceEnvField' }),
   requestTimeoutMs: z.number().int().positive().optional().describe('Per-request timeout in ms.'),
   startupTimeoutMs: z.number().int().positive().optional().describe('Startup handshake timeout in ms.'),
@@ -109,7 +108,6 @@ export class LocalMCPServerNode extends Node<z.infer<typeof LocalMcpServerStatic
   constructor(
     @Inject(ContainerService) protected containerService: ContainerService,
     @Inject(LoggerService) protected logger: LoggerService,
-    @Inject(VaultService) protected vault: VaultService,
     @Inject(EnvService) protected envService: EnvService,
     @Inject(ConfigService) protected configService: ConfigService,
     @Inject(ModuleRef) @Optional() private readonly moduleRef?: ModuleRef,

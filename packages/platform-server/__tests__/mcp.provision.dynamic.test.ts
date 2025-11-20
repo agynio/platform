@@ -16,7 +16,8 @@ describe('LocalMCPServer provision/deprovision + enabledTools filtering', () => 
 
   beforeEach(() => {
     logger = new MockLogger();
-    server = new LocalMCPServerNode(new MockContainerService() as any, logger as any);
+    const envStub = { resolveEnvItems: vi.fn(async () => ({})), resolveProviderEnv: vi.fn(async () => ({})) } as any;
+    server = new LocalMCPServerNode(new MockContainerService() as any, logger as any, envStub, {} as any, undefined as any);
     (server as any).setContainerProvider(mockProvider as any);
   });
 

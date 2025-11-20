@@ -59,33 +59,6 @@ vi.mock('@/api/modules/graph', () => ({
 
 const { getTemplatesMock, getFullGraphMock, saveFullGraphMock } = graphMocks;
 
-getTemplatesMock.mockImplementation(async () => [template]);
-getFullGraphMock.mockImplementation(async () => JSON.parse(JSON.stringify(persistedGraph)) as PersistedGraph);
-saveFullGraphMock.mockImplementation(async (payload: PersistedGraphUpsertRequestUI) => {
-  saveCalls.push(payload);
-  const nextVersion = (persistedGraph.version ?? 0) + 1;
-  const clonedNodes = payload.nodes.map((node) => ({
-    id: node.id,
-    template: node.template,
-    position: node.position ?? { x: 0, y: 0 },
-    config: node.config ? JSON.parse(JSON.stringify(node.config)) : undefined,
-  }));
-  const clonedEdges = payload.edges.map((edge) => ({
-    source: edge.source,
-    target: edge.target,
-    sourceHandle: edge.sourceHandle ?? '',
-    targetHandle: edge.targetHandle ?? '',
-  }));
-  persistedGraph = {
-    name: payload.name,
-    version: nextVersion,
-    updatedAt: new Date().toISOString(),
-    nodes: clonedNodes,
-    edges: clonedEdges,
-  };
-  return { ...payload, version: persistedGraph.version, updatedAt: persistedGraph.updatedAt };
-});
-
 function BuilderHarness({ expose }: { expose: (api: ReturnType<typeof useBuilderState>) => void }) {
   const api = useBuilderState('', { debounceMs: 50 });
   useEffect(() => {
@@ -106,9 +79,36 @@ describe('Builder autosave nix packages', () => {
   beforeEach(() => {
     persistedGraph = makeGraph();
     saveCalls.length = 0;
-    getTemplatesMock.mockClear();
-    getFullGraphMock.mockClear();
-    saveFullGraphMock.mockClear();
+    getTemplatesMock.mockReset();
+    getFullGraphMock.mockReset();
+    saveFullGraphMock.mockReset();
+
+    getTemplatesMock.mockImplementation(async () => [template]);
+    getFullGraphMock.mockImplementation(async () => JSON.parse(JSON.stringify(persistedGraph)) as PersistedGraph);
+    saveFullGraphMock.mockImplementation(async (payload: PersistedGraphUpsertRequestUI) => {
+      saveCalls.push(payload);
+      const nextVersion = (persistedGraph.version ?? 0) + 1;
+      const clonedNodes = payload.nodes.map((node) => ({
+        id: node.id,
+        template: node.template,
+        position: node.position ?? { x: 0, y: 0 },
+        config: node.config ? JSON.parse(JSON.stringify(node.config)) : undefined,
+      }));
+      const clonedEdges = payload.edges.map((edge) => ({
+        source: edge.source,
+        target: edge.target,
+        sourceHandle: edge.sourceHandle ?? '',
+        targetHandle: edge.targetHandle ?? '',
+      }));
+      persistedGraph = {
+        name: payload.name,
+        version: nextVersion,
+        updatedAt: new Date().toISOString(),
+        nodes: clonedNodes,
+        edges: clonedEdges,
+      };
+      return { ...payload, version: persistedGraph.version, updatedAt: persistedGraph.updatedAt };
+    });
   });
 
   afterEach(() => {

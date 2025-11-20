@@ -15,19 +15,11 @@ vi.mock('@slack/web-api', () => {
   return { WebClient };
 });
 
-type VaultRef = import('../src/vault/vault.service').VaultRef;
-
 describe('SendSlackMessageFunctionTool', () => {
-  const makeVault = () =>
-    ({
-      getSecret: vi.fn(async (_ref: VaultRef) => 'xoxb-bot'),
-    } satisfies Pick<import('../src/vault/vault.service').VaultService, 'getSecret'>) as import('../src/vault/vault.service').VaultService;
-
   it('omits thread_ts for ephemeral responses', async () => {
-    const vault = makeVault();
-    const node = new SendSlackMessageNode(new LoggerService(), vault);
-    await node.setConfig({ bot_token: { value: 'xoxb-bot', source: 'static' } });
-    const tool = new SendSlackMessageFunctionTool(node, new LoggerService(), vault);
+    const node = new SendSlackMessageNode(new LoggerService());
+    await node.setConfig({ bot_token: 'xoxb-bot' });
+    const tool = new SendSlackMessageFunctionTool(node, new LoggerService());
     const res = await tool.execute({
       channel: 'C1',
       text: 'ephemeral',

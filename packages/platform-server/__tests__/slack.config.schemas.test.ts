@@ -8,14 +8,28 @@ describe('Slack static config schemas', () => {
   it('SendSlackMessageToolStaticConfigSchema: accepts xoxb- tokens or reference field', async () => {
     const { SendSlackMessageToolStaticConfigSchema } = await import('../src/nodes/tools/send_slack_message/send_slack_message.tool');
     expect(() => SendSlackMessageToolStaticConfigSchema.parse({ bot_token: 'xoxb-123' })).not.toThrow();
-    expect(() => SendSlackMessageToolStaticConfigSchema.parse({ bot_token: { value: 'xoxb-abc', source: 'static' } })).not.toThrow();
-    // vault ref is allowed syntactically; deeper validation occurs in setConfig
-    expect(() => SendSlackMessageToolStaticConfigSchema.parse({ bot_token: { value: 'secret/path/KEY', source: 'vault' } })).not.toThrow();
-  }, 30000);
+    expect(() =>
+      SendSlackMessageToolStaticConfigSchema.parse({
+        bot_token: { kind: 'vault', path: 'secret/path', key: 'BOT' },
+      }),
+    ).not.toThrow();
+    expect(() => SendSlackMessageToolStaticConfigSchema.parse({ bot_token: { kind: 'var', name: 'SLACK_BOT_TOKEN' } })).not.toThrow();
+  }, 15000);
 
   it('SlackTriggerStaticConfigSchema: requires app_token and bot_token reference fields', async () => {
     const { SlackTriggerStaticConfigSchema } = await import('../src/nodes/slackTrigger/slackTrigger.node');
-    expect(() => SlackTriggerStaticConfigSchema.parse({ app_token: { value: 'xapp-abc', source: 'static' }, bot_token: { value: 'xoxb-abc', source: 'static' } })).not.toThrow();
-    expect(() => SlackTriggerStaticConfigSchema.parse({ app_token: { value: 'secret/path/APP', source: 'vault' }, bot_token: { value: 'secret/path/BOT', source: 'vault' } })).not.toThrow();
-  }, 30000);
+    expect(() => SlackTriggerStaticConfigSchema.parse({ app_token: 'xapp-abc', bot_token: 'xoxb-abc' })).not.toThrow();
+    expect(() =>
+      SlackTriggerStaticConfigSchema.parse({
+        app_token: { kind: 'vault', path: 'secret/path', key: 'APP' },
+        bot_token: { kind: 'vault', path: 'secret/path', key: 'BOT' },
+      }),
+    ).not.toThrow();
+    expect(() =>
+      SlackTriggerStaticConfigSchema.parse({
+        app_token: { kind: 'var', name: 'SLACK_APP' },
+        bot_token: { kind: 'var', name: 'SLACK_BOT' },
+      }),
+    ).not.toThrow();
+  }, 15000);
 });

@@ -82,7 +82,6 @@ describe('SlackTrigger threading integration', () => {
 
   const setup = async (store: DescriptorStore) => {
     const logger = makeLogger();
-    const vault = ({ getSecret: vi.fn(async (ref: { value: string }) => (String(ref.value).includes('APP') ? 'xapp-abc' : 'xoxb-bot')) } satisfies Pick<import('../src/vault/vault.service').VaultService, 'getSecret'>) as import('../src/vault/vault.service').VaultService;
     const getOrCreateThreadByAlias = vi.fn(async (_src: string, alias: string) => store.getOrCreateThread(alias));
     const updateThreadChannelDescriptor = vi.fn(async (threadId: string, descriptor: ChannelDescriptor) => {
       store.setDescriptor(threadId, descriptor);
@@ -100,9 +99,9 @@ describe('SlackTrigger threading integration', () => {
     } satisfies Pick<import('../src/core/services/prisma.service').PrismaService, 'getClient'>) as import('../src/core/services/prisma.service').PrismaService;
     const slackSend = vi.fn(async (opts: { token: string; channel: string; text: string; thread_ts?: string }) => ({ ok: true, channelMessageId: '200', threadId: opts.thread_ts ?? 'generated-thread' }));
     const slackAdapter = ({ sendText: slackSend } satisfies Pick<SlackAdapter, 'sendText'>) as SlackAdapter;
-    const trigger = new SlackTrigger(logger as LoggerService, vault, persistence, prismaStub, slackAdapter);
+    const trigger = new SlackTrigger(logger as LoggerService, persistence, prismaStub, slackAdapter);
     trigger.init({ nodeId: 'slack-node' });
-    await trigger.setConfig({ app_token: { value: 'xapp-abc', source: 'static' }, bot_token: { value: 'xoxb-bot', source: 'static' } });
+    await trigger.setConfig({ app_token: 'xapp-abc', bot_token: 'xoxb-bot' });
     await trigger.provision();
     const client = __getLastSocketClient();
     if (!client || !(client.handlers.message || []).length) throw new Error('socket not initialized');

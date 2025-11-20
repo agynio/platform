@@ -91,4 +91,18 @@ export class GraphVariablesService {
     const prisma = this.prismaService.getClient();
     await prisma.variableLocal.deleteMany({ where: { key } });
   }
+
+  async resolveValue(graphName: string, key: string): Promise<string | undefined> {
+    const prisma = this.prismaService.getClient();
+    const local = await prisma.variableLocal.findUnique({ where: { key } });
+    const localValue = local?.value ?? null;
+    if (typeof localValue === 'string' && localValue.length > 0) return localValue;
+
+    const graph = await this.graphs.get(graphName);
+    if (!graph) return undefined;
+    const entry = (graph.variables || []).find((v) => v.key === key);
+    const graphValue = entry?.value ?? null;
+    if (typeof graphValue === 'string' && graphValue.length > 0) return graphValue;
+    return undefined;
+  }
 }

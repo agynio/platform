@@ -12,7 +12,8 @@ describe('LocalMCPServerNode listTools filtering by enabledTools', () => {
     logger = new MockLogger();
     const nodeStateService = { getSnapshot: vi.fn((_id: string) => ({ mcp: { enabledTools: [] } })) } as any;
     const moduleRef = { get: vi.fn(() => nodeStateService) } as any;
-    server = new LocalMCPServerNode(new MockContainerService() as any, logger as any, undefined as any, undefined as any, undefined as any, moduleRef);
+    const envStub = { resolveEnvItems: vi.fn(), resolveProviderEnv: vi.fn() } as any;
+    server = new LocalMCPServerNode(new MockContainerService() as any, logger as any, envStub, {} as any, moduleRef as any);
     // Manually init nodeId since we are not running through runtime
     (server as any).init({ nodeId: 'node-1' });
     await server.setConfig({ namespace: 'ns' } as any);
@@ -41,7 +42,8 @@ describe('LocalMCPServerNode listTools filtering by enabledTools', () => {
 describe('LocalMCPServerNode setState enabledTools emits mcp.tools_updated', () => {
   it('emits on hook invocation', async () => {
     const logger = new MockLogger();
-    const server = new LocalMCPServerNode(new MockContainerService() as any, logger as any, undefined as any, undefined as any, undefined as any);
+    const envStub = { resolveEnvItems: vi.fn(), resolveProviderEnv: vi.fn() } as any;
+    const server = new LocalMCPServerNode(new MockContainerService() as any, logger as any, envStub, {} as any, undefined as any);
     // Preload one tool for payload consistency
     (server as any).preloadCachedTools([{ name: 'x', description: 'X', inputSchema: { type: 'object' } }], Date.now());
     let fired = false;

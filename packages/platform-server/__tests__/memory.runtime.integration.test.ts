@@ -125,7 +125,8 @@ function makeRuntime(
     async upsertNodeState(): Promise<void> {}
   }
   // Cast moduleRef back to real ModuleRef type for LiveGraphRuntime ctor compatibility
-  const runtime = new LiveGraphRuntime(logger, templates, new StubRepo(), moduleRef as import('@nestjs/core').ModuleRef);
+  const resolver = { resolve: async (input: unknown) => ({ output: input, report: {} as unknown }) };
+  const runtime = new LiveGraphRuntime(logger, templates, new StubRepo(), moduleRef as import('@nestjs/core').ModuleRef, resolver as any);
   return runtime;
 }
 

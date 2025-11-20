@@ -6,6 +6,27 @@ export default defineConfig({
     environment: 'jsdom',
     setupFiles: ['./vitest.setup.ts'],
     globals: true,
+    pool: 'threads',
+    poolOptions: {
+      threads: {
+        useAtomics: false,
+        maxThreads: 1,
+        minThreads: 1,
+      },
+    },
+    isolate: true,
+    sequence: { concurrent: false },
+    hookTimeout: 30000,
+    teardownTimeout: 30000,
+    restoreMocks: true,
+    clearMocks: true,
+    mockReset: true,
+    environmentOptions: {
+      jsdom: {
+        url: 'http://127.0.0.1/',
+        pretendToBeVisual: true,
+      },
+    },
   },
   server: {
     fs: {

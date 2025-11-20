@@ -3,15 +3,15 @@ import z from 'zod';
 import { FunctionTool } from '@agyn/llm';
 import { WebClient, type ChatPostEphemeralResponse, type ChatPostMessageResponse } from '@slack/web-api';
 import { LoggerService } from '../../../core/services/logger.service';
-import { VaultService } from '../../../vault/vault.service';
-import { ReferenceFieldSchema, normalizeTokenRef, parseVaultRef, resolveTokenRef } from '../../../utils/refs';
+import { SecretReferenceSchema, VariableReferenceSchema } from '../../../utils/reference-schemas';
 import { SendSlackMessageNode } from './send_slack_message.node';
 
 export const SendSlackMessageToolStaticConfigSchema = z
   .object({
     bot_token: z.union([
       z.string().min(1).startsWith('xoxb-', { message: 'Slack bot token must start with xoxb-' }),
-      ReferenceFieldSchema,
+      SecretReferenceSchema,
+      VariableReferenceSchema,
     ]),
   })
   .strict();
@@ -28,13 +28,10 @@ export const sendSlackInvocationSchema = z
   })
   .strict();
 
-type TokenRef = { value: string; source: 'static' | 'vault' };
-
 export class SendSlackMessageFunctionTool extends FunctionTool<typeof sendSlackInvocationSchema> {
   constructor(
     private node: SendSlackMessageNode,
     private logger: LoggerService,
-    private vault: VaultService,
   ) {
     super();
   }
@@ -51,18 +48,14 @@ export class SendSlackMessageFunctionTool extends FunctionTool<typeof sendSlackI
   async execute(args: z.infer<typeof sendSlackInvocationSchema>): Promise<string> {
     const { channel: channelInput, text, thread_ts, broadcast, ephemeral_user } = args;
 
-    const bot = normalizeTokenRef(this.node.config.bot_token) as TokenRef;
-    if ((bot.source || 'static') === 'vault') parseVaultRef(bot.value);
-    else if (!bot.value.startsWith('xoxb-')) throw new Error('Slack bot token must start with xoxb-');
+    const botToken = this.node.config.bot_token;
+    if (typeof botToken !== 'string' || !botToken.startsWith('xoxb-')) {
+      throw new Error('Slack bot token must start with xoxb-');
+    }
     const channel = channelInput;
     if (!channel) throw new Error('channel is required');
     try {
-      const token = await resolveTokenRef(bot, {
-        expectedPrefix: 'xoxb-',
-        fieldName: 'bot_token',
-        vault: this.vault,
-      });
-      const client = new WebClient(token, { logLevel: undefined });
+      const client = new WebClient(botToken, { logLevel: undefined });
       if (ephemeral_user) {
         const resp: ChatPostEphemeralResponse = await client.chat.postEphemeral({
           channel,

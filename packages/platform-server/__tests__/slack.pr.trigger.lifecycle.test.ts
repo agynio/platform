@@ -41,10 +41,11 @@ describe('SlackTrigger and PRTrigger lifecycle', () => {
 
   it('SlackTrigger start/stop manages socket-mode lifecycle', async () => {
     const logger = new MockLogger() as any;
-    const vault = { getSecret: async () => 'xapp-test' } as any;
     const persistence = { getOrCreateThreadByAlias: async (_src: string, _alias: string, _summary: string) => 't-slack' } as unknown as AgentsPersistenceService;
-    const trigger = new SlackTrigger(logger as any, vault as any, persistence);
-    await trigger.setConfig({ app_token: { value: 'xapp-test', source: 'static' } });
+    const prisma = { getClient: () => ({ thread: { findUnique: async () => ({ channel: null }) } }) } as any;
+    const slackAdapter = { sendText: vi.fn() } as any;
+    const trigger = new SlackTrigger(logger as any, persistence, prisma, slackAdapter);
+    await trigger.setConfig({ app_token: 'xapp-test', bot_token: 'xoxb-test' });
     await trigger.provision();
     await trigger.deprovision();
     expect(logger.info).toHaveBeenCalled();

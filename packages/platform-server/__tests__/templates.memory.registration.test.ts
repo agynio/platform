@@ -31,7 +31,8 @@ describe('templates: memory registration and agent memory port', () => {
     );
     const containerService = new ContainerService(logger);
     const provisioner = { getLLM: async () => ({ call: async () => ({ text: 'ok', output: [] }) }) } as unknown as LLMProvisioner;
-    const envService = new EnvService(configService);
+    const resolver = { resolve: async (input: unknown) => ({ output: input, report: {} as unknown }) };
+    const envService = new EnvService(resolver as any);
     const archiveService = new ArchiveService();
     const ncpsKeyService = new NcpsKeyService(logger, configService);
     const prisma = new PrismaClient({ datasources: { db: { url: process.env.AGENTS_DATABASE_URL || 'postgres://localhost/skip' } } });

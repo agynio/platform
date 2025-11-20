@@ -8,6 +8,7 @@ import { NcpsKeyService } from '../../infra/ncps/ncpsKey.service';
 import { EnvService, type EnvItem } from '../../env/env.service';
 import { LoggerService } from '../../core/services/logger.service';
 import { Inject, Injectable, Scope } from '@nestjs/common';
+import { SecretReferenceSchema, VariableReferenceSchema } from '../../utils/reference-schemas';
 
 // Static configuration schema for ContainerProviderEntity
 // Allows overriding the base image and supplying environment variables.
@@ -15,11 +16,10 @@ import { Inject, Injectable, Scope } from '@nestjs/common';
 const EnvItemSchema = z
   .object({
     key: z.string().min(1),
-    value: z.string(),
-    source: z.enum(['static', 'vault']).optional().default('static'),
+    value: z.union([z.string(), SecretReferenceSchema, VariableReferenceSchema]),
   })
   .strict()
-  .describe('Environment variable entry. When source=vault, value is "<MOUNT>/<PATH>/<KEY>".');
+  .describe('Environment variable entry supporting plain values, vault references, or variables.');
 
 const VolumeConfigSchema = z
   .object({
@@ -36,7 +36,7 @@ const VolumeConfigSchema = z
 export const ContainerProviderStaticConfigSchema = z
   .object({
     image: z.string().min(1).optional().describe('Optional container image override.'),
-    env: z.array(EnvItemSchema).optional().describe('Environment variables (static or vault references).'),
+    env: z.array(EnvItemSchema).optional().describe('Environment variables (plain, vault, or variable references).'),
     initialScript: z
       .string()
       .optional()
@@ -197,17 +197,8 @@ export class WorkspaceNode extends Node<ContainerProviderStaticConfig> {
       const volumeName = `ha_ws_${threadId}`;
       const binds = volumesEnabled ? [`${volumeName}:${normalizedMountPath}`] : undefined;
       let envMerged: Record<string, string> | undefined = await (async () => {
-        const base: Record<string, string> = Array.isArray(this.config.env)
-          ? Object.fromEntries(
-              (this.config.env || [])
-                .map((s) => String(s))
-                .map((pair) => {
-                  const idx = pair.indexOf('=');
-                  return idx > -1 ? [pair.slice(0, idx), pair.slice(idx + 1)] : [pair, ''];
-                }),
-            )
-          : {};
         const cfgEnv = this.config?.env as Record<string, string> | EnvItem[] | undefined;
+        const base: Record<string, string> = !Array.isArray(cfgEnv) && cfgEnv ? { ...cfgEnv } : {};
         return this.envService.resolveProviderEnv(cfgEnv, undefined, base);
       })();
       // Inject NIX_CONFIG only when not present and ncps is explicitly enabled and fully configured

@@ -3,8 +3,6 @@ import z from 'zod';
 import { FunctionTool } from '@agyn/llm';
 import { LLMContext } from '../../../llm/types';
 import { LoggerService } from '../../../core/services/logger.service';
-import { VaultService } from '../../../vault/vault.service';
-import { parseVaultRef } from '../../../utils/refs';
 import { GithubCloneRepoNode } from './github_clone_repo.node';
 import { Injectable, Scope } from '@nestjs/common';
 
@@ -22,7 +20,6 @@ export const githubCloneSchema = z
 export class GithubCloneRepoFunctionTool extends FunctionTool<typeof githubCloneSchema> {
   constructor(
     private logger: LoggerService,
-    private vault: VaultService,
     private node: GithubCloneRepoNode,
   ) {
     super();
@@ -38,16 +35,8 @@ export class GithubCloneRepoFunctionTool extends FunctionTool<typeof githubClone
   }
 
   private async resolveToken(): Promise<string> {
-    const tokenRef = this.node.config?.token;
-
-    // Preferred new token field
-    if (tokenRef) {
-      if (tokenRef.source === 'vault') {
-        const vr = parseVaultRef(tokenRef.value);
-        const token = await this.vault.getSecret(vr);
-        if (token) return token;
-      } else if (tokenRef.value) return tokenRef.value;
-    }
+    const token = this.node.config?.token;
+    if (typeof token === 'string' && token.length > 0) return token;
     return '';
   }
 

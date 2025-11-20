@@ -2,14 +2,17 @@ import z from 'zod';
 import { BaseToolNode } from '../baseToolNode';
 import { WorkspaceNode } from '../../workspace/workspace.node';
 import { LoggerService } from '../../../core/services/logger.service';
-import { VaultService } from '../../../vault/vault.service';
 import { GithubCloneRepoFunctionTool } from './github_clone_repo.tool';
 import { Inject, Injectable, Scope } from '@nestjs/common';
+import { SecretReferenceSchema, VariableReferenceSchema } from '../../../utils/reference-schemas';
 
 const TokenRefSchema = z
-  .object({ value: z.string(), source: z.enum(['static', 'vault']).optional().default('static') })
-  .strict()
-  .describe("GitHub token reference. When source=vault, value is '<MOUNT>/<PATH>/<KEY>'.");
+  .union([
+    z.string().min(1),
+    SecretReferenceSchema,
+    VariableReferenceSchema,
+  ])
+  .describe("GitHub token reference. When kind='vault', provide mount/path/key.");
 
 export const GithubCloneRepoToolStaticConfigSchema = z
   .object({
@@ -34,10 +37,16 @@ export class GithubCloneRepoNode extends BaseToolNode<StaticConfigType> {
 
   private toolInstance?: GithubCloneRepoFunctionTool;
   constructor(
-    @Inject(VaultService) private vault: VaultService,
     @Inject(LoggerService) protected logger: LoggerService,
   ) {
     super(logger);
+  }
+
+  async setConfig(cfg: StaticConfigType): Promise<void> {
+    if (cfg?.token !== undefined && typeof cfg.token !== 'string') {
+      throw new Error('GithubCloneRepoNode config requires resolved token');
+    }
+    await super.setConfig(cfg);
   }
 
   setContainerProvider(provider: WorkspaceNode | undefined) {
@@ -49,7 +58,7 @@ export class GithubCloneRepoNode extends BaseToolNode<StaticConfigType> {
 
   getTool(): GithubCloneRepoFunctionTool {
     if (!this.toolInstance) {
-      this.toolInstance = new GithubCloneRepoFunctionTool(this.logger, this.vault, this);
+      this.toolInstance = new GithubCloneRepoFunctionTool(this.logger, this);
     }
     return this.toolInstance;
   }

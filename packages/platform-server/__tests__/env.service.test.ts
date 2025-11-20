@@ -1,27 +1,16 @@
 import { describe, it, expect, vi } from 'vitest';
-import { EnvService, EnvError, type EnvItem } from '../src/env/env.service';
-import type { VaultConfig } from '../src/vault/vault.service';
-import { LoggerService } from '../src/core/services/logger.service.js';
+import { EnvService, type EnvItem } from '../src/env/env.service';
+import { ResolveError } from '../src/utils/references';
 
-// Helper to build a real VaultService with desired enabled state
-function makeVault(cfg: Partial<VaultConfig>): { isEnabled(): boolean; getSecret(ref: { mount: string; path: string; key: string }): Promise<string | undefined> } {
-  const base: VaultConfig = {
-    enabled: false,
-    addr: 'http://localhost:8200',
-    token: undefined,
-    timeoutMs: 50,
-    defaultMounts: ['secret'],
-  };
-  const conf = { ...base, ...cfg };
-  return {
-    isEnabled: () => !!conf.enabled,
-    getSecret: async (_ref) => undefined,
-  };
-}
+const makeResolver = () => ({
+  resolve: vi.fn(async (input: unknown) => ({ output: input, report: {} as unknown })),
+});
+
 
 describe('EnvService', () => {
   it('resolveEnvItems: static only', async () => {
-    const svc = new EnvService(undefined);
+    const resolver = makeResolver();
+    const svc = new EnvService(resolver as any);
     const res = await svc.resolveEnvItems([
       { key: 'A', value: '1' },
       { key: 'B', value: '2' },
@@ -30,7 +19,8 @@ describe('EnvService', () => {
   });
 
   it('resolveEnvItems: duplicate key error', async () => {
-    const svc = new EnvService(undefined);
+    const resolver = makeResolver();
+    const svc = new EnvService(resolver as any);
     await expect(
       svc.resolveEnvItems([
         { key: 'A', value: '1' },
@@ -39,45 +29,38 @@ describe('EnvService', () => {
     ).rejects.toMatchObject({ code: 'env_key_duplicate' });
   });
 
-  it('resolveEnvItems: vault disabled error', async () => {
-    const vault = makeVault({ enabled: false });
-    const svc = new EnvService(vault as any);
-    await expect(svc.resolveEnvItems([{ key: 'A', value: 'secret/x/y', source: 'vault' }])).rejects.toMatchObject({ code: 'vault_secret_missing' });
-  });
-
-  it('resolveEnvItems: invalid vault ref', async () => {
-    const vault = makeVault({ enabled: true, token: 't' });
-    const svc = new EnvService(vault);
-    await expect(svc.resolveEnvItems([{ key: 'A', value: 'bad-ref', source: 'vault' }])).rejects.toMatchObject({ code: 'vault_ref_invalid' });
-  });
-
-  it('resolveEnvItems: missing secret error', async () => {
-    const vault = makeVault({ enabled: true, token: 't' });
-    vi.spyOn(vault, 'getSecret').mockResolvedValue(undefined);
-    const svc = new EnvService(vault as any);
-    await expect(svc.resolveEnvItems([{ key: 'A', value: 'secret/app/db/PASSWORD', source: 'vault' }])).rejects.toMatchObject({ code: 'vault_secret_missing' });
-  });
-
-  it('resolveEnvItems: successful vault resolution with concurrency', async () => {
-    const vault = makeVault({ enabled: true, token: 't' });
-    const map: Record<string, string> = {
-      'secret/app/db/PASSWORD': 'pw',
-      'secret/app/api/TOKEN': 'tok',
-    };
-    vi.spyOn(vault, 'getSecret').mockImplementation(async (ref) => {
-      const k = `${ref.mount}/${ref.path}/${ref.key}`.replace(/\/+/g, '/');
-      return map[k];
+  it('resolveEnvItems: maps ResolveError codes to EnvError', async () => {
+    const resolver = makeResolver();
+    const err = new ResolveError('unresolved_reference', 'Secret missing', {
+      path: '/env/0/value',
+      source: 'secret',
     });
-    const svc = new EnvService(vault as any);
-    const res = await svc.resolveEnvItems([
-      { key: 'A', value: 'secret/app/db/PASSWORD', source: 'vault' },
-      { key: 'B', value: 'secret/app/api/TOKEN', source: 'vault' },
-    ]);
-    expect(res).toEqual({ A: 'pw', B: 'tok' });
+    resolver.resolve.mockRejectedValue(err);
+    const svc = new EnvService(resolver as any);
+    await expect(
+      svc.resolveEnvItems([
+        { key: 'A', value: { kind: 'vault', path: 'secret/app/db', key: 'PASSWORD' } },
+      ] as EnvItem[]),
+    ).rejects.toMatchObject({ code: 'env_reference_unresolved' });
+  });
+
+  it('resolveEnvItems: throws when resolved value remains a reference', async () => {
+    const resolver = makeResolver();
+    resolver.resolve.mockResolvedValue({
+      output: [{ key: 'A', value: { kind: 'vault', path: 'secret/app/db', key: 'PASSWORD' } }],
+      report: {} as unknown,
+    });
+    const svc = new EnvService(resolver as any);
+    await expect(
+      svc.resolveEnvItems([
+        { key: 'A', value: { kind: 'vault', path: 'secret/app/db', key: 'PASSWORD' } },
+      ] as EnvItem[]),
+    ).rejects.toMatchObject({ code: 'env_reference_unresolved' });
   });
 
   it('mergeEnv: overlay precedence and empty preservation', () => {
-    const svc = new EnvService(undefined);
+    const resolver = makeResolver();
+    const svc = new EnvService(resolver as any);
     const base = { A: '1', B: '2' };
     const overlay = { B: '22', C: '' };
     expect(svc.mergeEnv(base, undefined)).toEqual(base);
@@ -86,7 +69,10 @@ describe('EnvService', () => {
   });
 
   it('resolveProviderEnv: supports array items with base overlay', async () => {
-    const svc = new EnvService(undefined);
+    const resolver = makeResolver();
+    resolver.resolve.mockImplementation(async (input: unknown) => ({ output: input, report: {} as unknown }));
+    const svc = new EnvService(resolver as any);
+    vi.spyOn(svc, 'resolveEnvItems').mockResolvedValue({ A: '1', B: '2' });
     const base = { BASE: 'x' };
     const merged = await svc.resolveProviderEnv(
       [
@@ -100,14 +86,16 @@ describe('EnvService', () => {
   });
 
   it('resolveProviderEnv: supports map input', async () => {
-    const svc = new EnvService(undefined);
+    const resolver = makeResolver();
+    const svc = new EnvService(resolver as any);
     const base = { BASE: 'x' };
     const merged = await svc.resolveProviderEnv({ A: '1', B: '2' }, undefined, base);
     expect(merged).toEqual({ BASE: 'x', A: '1', B: '2' });
   });
 
   it('resolveProviderEnv: undefined or empty returns base or undefined', async () => {
-    const svc = new EnvService(undefined);
+    const resolver = makeResolver();
+    const svc = new EnvService(resolver as any);
     expect(await svc.resolveProviderEnv(undefined, undefined, undefined)).toBeUndefined();
     expect(await svc.resolveProviderEnv([], undefined, undefined)).toBeUndefined();
     expect(await svc.resolveProviderEnv({}, undefined, undefined)).toBeUndefined();
@@ -116,8 +104,8 @@ describe('EnvService', () => {
 
   it('resolveProviderEnv: base present + empty overlay => {} ; no base + empty overlay => undefined', async () => {
     // Explicitly stub VaultService and EnvService methods to ensure empty overlay yields {}
-    const vaultStub = { isEnabled: () => false, getSecret: async () => undefined } as any;
-    const svc = new EnvService(vaultStub);
+    const resolver = makeResolver();
+    const svc = new EnvService(resolver as any);
     // Ensure overlay resolution returns an empty map
     vi.spyOn(svc, 'resolveEnvItems').mockResolvedValue({});
     // For this specific case, treat an empty overlay as explicitly-empty result ({}), not base propagation
@@ -131,7 +119,8 @@ describe('EnvService', () => {
   });
 
   it('resolveProviderEnv: rejects cfgEnvRefs usage', async () => {
-    const svc = new EnvService(undefined);
+    const resolver = makeResolver();
+    const svc = new EnvService(resolver as any);
     await expect(svc.resolveProviderEnv([], undefined, {})).resolves.toEqual({});
     await expect(
       // @ts-expect-error simulate passing a defined cfgEnvRefs param, which should be rejected

@@ -30,7 +30,10 @@ const makeRuntime = () => {
     }
     async upsertNodeState(): Promise<void> {}
   }
-  const runtime = new LiveGraphRuntime(logger, templates, new StubRepo(), moduleRef as any);
+  const resolver = {
+    resolve: async (input: unknown) => ({ output: input, report: {} as unknown }),
+  };
+  const runtime = new LiveGraphRuntime(logger, templates, new StubRepo(), moduleRef as any, resolver as any);
   return runtime;
 };
 

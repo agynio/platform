@@ -11,7 +11,12 @@
     "skipLibCheck": true,
     "experimentalDecorators": true,
     "emitDecoratorMetadata": true,
-    "types": ["node"]
+    "types": ["node"],
+    "baseUrl": ".",
+    "paths": {
+      "@agyn/shared": ["../shared/src/index.ts"],
+      "@agyn/shared/*": ["../shared/src/*"]
+    }
   },
   "include": ["src"],
   "exclude": ["node_modules"]

@@ -10,7 +10,8 @@ describe('LocalMCPServer preload + staleness + persist', () => {
   beforeEach(async () => {
     const logger = new LoggerService();
     const cs = new ContainerService(logger);
-    server = new LocalMCPServerNode(cs as any, logger as any, undefined as any, undefined as any, undefined as any);
+    const envStub = { resolveEnvItems: async () => ({}), resolveProviderEnv: async () => ({}) } as any;
+    server = new LocalMCPServerNode(cs as any, logger as any, envStub, {} as any, undefined as any);
     await server.setConfig({ namespace: 'x', command: 'echo' } as any);
     (server as any).setContainerProvider({ provide: async () => ({ id: 'cid', stop: async () => {}, remove: async () => {} }) });
     (server as any).on('mcp.tools_updated', (p: { tools: any[]; updatedAt: number }) => { lastUpdate = p; });

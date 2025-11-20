@@ -124,7 +124,8 @@ describe('LocalMCPServer (mock)', () => {
         inspect: async () => ({ ExitCode: 0 }),
       }),
     });
-    server = new LocalMCPServerNode(containerService as any, logger as any, undefined as any, undefined as any, undefined as any);
+    const envStub = { resolveEnvItems: async () => ({}), resolveProviderEnv: async () => ({}) } as any;
+    server = new LocalMCPServerNode(containerService as any, logger as any, envStub, {} as any, undefined as any);
     // Provide a dummy container provider to satisfy start precondition (reuse mocked docker above)
     const mockProvider = {
       provide: async (threadId: string) => ({ 

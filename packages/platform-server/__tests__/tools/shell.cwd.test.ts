@@ -20,8 +20,8 @@ class RecordingContainer {
 }
 
 function createNodeWithContainer(container: RecordingContainer) {
-  const vaultStub = { getSecret: async () => '' } as const;
-  const envService = new EnvService(vaultStub as any);
+  const resolver = { resolve: async (input: unknown) => ({ output: input, report: {} as unknown }) };
+  const envService = new EnvService(resolver as any);
   const logger = new LoggerService();
   const archiveStub = { createSingleFileTar: async () => Buffer.from('') } as const;
   const runEventsStub = {

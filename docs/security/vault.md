@@ -3,7 +3,7 @@ HashiCorp Vault integration (dev)
 Overview
 - Dev-only Vault integration to source container env vars and GitHub Clone token via Vault KV v2.
 - Secrets are resolved server-side only; values are never returned to the browser and are redacted in logs.
-- New config shapes unify static and secret-backed references via a `source` selector.
+- Configuration now uses structured reference objects shared across server/runtime (`{ kind: 'vault' | 'var', ... }`).
 
 Dev setup
 1) Start Vault and seed example secrets:
@@ -17,16 +17,18 @@ Dev setup
 
 Workspace env vars
 - In the Workspace node (containerProvider) static config, use the unified env array:
-  - env: Array<{ key: string; value: string; source?: 'static' | 'vault' }>
-  - When source='static' (default), `value` is used as-is.
-  - When source='vault', `value` must be a Vault reference string: `mount/path/key`.
+  - `env: Array<{ key: string; value: string | SecretRef | VariableRef }>`
+  - Plain strings are injected verbatim.
+  - Vault references use `{ kind: 'vault', path: 'services/slack', key: 'BOT_TOKEN', mount?: 'secret' }`.
+  - Graph variable references use `{ kind: 'var', name: 'SLACK_BOT_TOKEN', default?: 'fallback' }`.
 - On provision, the server resolves vault-backed entries and injects values into the container environment.
 - Legacy compatibility removed: envRefs is no longer supported. Providing envRefs will fail validation. A legacy plain env map may still be accepted by the server for convenience, but new configurations should use the array form.
 
 GitHub Clone Repo auth
-- New: `token?: { value: string; source?: 'static' | 'vault' }`
-  - source='static' -> `value` is the token string.
-  - source='vault' -> `value` is `mount/path/key` and is resolved from Vault.
+- New: `token?: string | SecretRef | VariableRef`
+  - Plain strings are used directly.
+  - Vault references are resolved server-side before cloning.
+  - Variable references allow graph variables to supply tokens.
 - Fallbacks: if not provided or resolution fails, server falls back to `ConfigService.githubToken`.
 - Backward compatibility: legacy `authRef` remains supported at runtime but is not shown in templates.
 

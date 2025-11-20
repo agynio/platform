@@ -34,6 +34,7 @@ function makeRuntimeAndRegistry() {
     registry,
     new StubRepo(),
     moduleRef,
+    { resolve: async (input: unknown) => ({ output: input, report: {} as unknown }) } as any,
   );
   return { registry, runtime, logger };
 }

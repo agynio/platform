@@ -1,8 +1,6 @@
 import { SocketModeClient } from '@slack/socket-mode';
 import { z } from 'zod';
 import { LoggerService } from '../../core/services/logger.service';
-import { VaultService } from '../../vault/vault.service';
-import { ReferenceFieldSchema, resolveTokenRef } from '../../utils/refs';
 import Node from '../base/Node';
 import { Inject, Injectable, Scope } from '@nestjs/common';
 import { BufferMessage } from '../agent/messagesBuffer';
@@ -12,6 +10,7 @@ import { AgentsPersistenceService } from '../../agents/agents.persistence.servic
 import { PrismaService } from '../../core/services/prisma.service';
 import { SlackAdapter } from '../../messaging/slack/slack.adapter';
 import { ChannelDescriptorSchema, type SendResult, type ChannelDescriptor } from '../../messaging/types';
+import { SecretReferenceSchema, VariableReferenceSchema } from '../../utils/reference-schemas';
 
 type TriggerHumanMessage = {
   kind: 'human';
@@ -27,15 +26,26 @@ type TriggerHumanMessage = {
 };
 type TriggerListener = { invoke: (thread: string, messages: BufferMessage[]) => Promise<void> };
 
+const SlackAppTokenSchema = z.union([
+  z.string().min(1).startsWith('xapp-', { message: 'Slack app token must start with xapp-' }),
+  SecretReferenceSchema,
+  VariableReferenceSchema,
+]);
+
+const SlackBotTokenSchema = z.union([
+  z.string().min(1).startsWith('xoxb-', { message: 'Slack bot token must start with xoxb-' }),
+  SecretReferenceSchema,
+  VariableReferenceSchema,
+]);
+
 export const SlackTriggerStaticConfigSchema = z
   .object({
-    app_token: ReferenceFieldSchema,
-    bot_token: ReferenceFieldSchema,
+    app_token: SlackAppTokenSchema,
+    bot_token: SlackBotTokenSchema,
   })
   .strict();
 
-type SlackTokenRef = { value: string; source: 'static' | 'vault' };
-type SlackTriggerConfig = { app_token: SlackTokenRef; bot_token: SlackTokenRef };
+type SlackTriggerConfig = { app_token: string; bot_token: string };
 
 @Injectable({ scope: Scope.TRANSIENT })
 export class SlackTrigger extends Node<SlackTriggerConfig> {
@@ -45,7 +55,6 @@ export class SlackTrigger extends Node<SlackTriggerConfig> {
 
   constructor(
     @Inject(LoggerService) protected readonly logger: LoggerService,
-    @Inject(VaultService) protected readonly vault: VaultService,
     @Inject(AgentsPersistenceService) private readonly persistence: AgentsPersistenceService,
     @Inject(PrismaService) private readonly prismaService: PrismaService,
     @Inject(SlackAdapter) private readonly slackAdapter: SlackAdapter,
@@ -53,16 +62,23 @@ export class SlackTrigger extends Node<SlackTriggerConfig> {
     super(logger);
   }
 
+  private ensureToken(value: unknown, expectedPrefix: string, fieldName: 'app_token' | 'bot_token'): string {
+    if (typeof value !== 'string' || value.length === 0) throw new Error(`Slack ${fieldName} is required`);
+    if (!value.startsWith(expectedPrefix)) {
+      const label = fieldName === 'bot_token' ? 'bot token' : 'app token';
+      throw new Error(`Slack ${label} must start with ${expectedPrefix}`);
+    }
+    return value;
+  }
+
   private async resolveAppToken(): Promise<string> {
-    const resolved = await resolveTokenRef(this.config.app_token, {
-      expectedPrefix: 'xapp-',
-      fieldName: 'app_token',
-      vault: this.vault,
-    });
-    return resolved;
+    return this.ensureToken(this.config.app_token, 'xapp-', 'app_token');
   }
   // Store config only; token resolution happens during provision
   async setConfig(cfg: SlackTriggerConfig): Promise<void> {
+    if (typeof cfg?.app_token !== 'string' || typeof cfg?.bot_token !== 'string') {
+      throw new Error('SlackTrigger config requires resolved tokens');
+    }
     await super.setConfig(cfg);
   }
 
@@ -179,12 +195,7 @@ export class SlackTrigger extends Node<SlackTriggerConfig> {
     this.logger.info('SlackTrigger.doProvision: starting');
     // Resolve bot token during provision/setup only
     try {
-      const token = await resolveTokenRef(this.config.bot_token, {
-        expectedPrefix: 'xoxb-',
-        fieldName: 'bot_token',
-        vault: this.vault,
-      });
-      this.botToken = token;
+      this.botToken = this.ensureToken(this.config.bot_token, 'xoxb-', 'bot_token');
     } catch (e) {
       const msg = e instanceof Error && e.message ? e.message : 'invalid_or_missing_bot_token';
       this.logger.error('SlackTrigger.doProvision: bot token resolution failed', { error: msg });

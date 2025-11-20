@@ -164,7 +164,8 @@ describe('Graph MCP integration', () => {
       async upsertNodeState(): Promise<void> {}
     }
 
-    const runtime = new LiveGraphRuntime(logger, templateRegistry, new GraphRepoStub(), moduleRef);
+    const resolver = { resolve: async (input: unknown) => ({ output: input, report: {} as unknown }) };
+    const runtime = new LiveGraphRuntime(logger, templateRegistry, new GraphRepoStub(), moduleRef, resolver as any);
 
     const graph: GraphDefinition = {
       nodes: [

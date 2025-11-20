@@ -11,7 +11,8 @@ describe('LocalMCPServerNode listTools: snapshot-first, fallback-to-setState, na
   beforeEach(async () => {
     logger = new MockLogger();
     const nodeStateService = { getSnapshot: vi.fn((_id: string) => undefined) } as any; // snapshot not ready
-    server = new LocalMCPServerNode(new MockContainerService() as any, logger as any, undefined as any, undefined as any, undefined as any, nodeStateService as any);
+    const envStub = { resolveEnvItems: vi.fn(), resolveProviderEnv: vi.fn() } as any;
+    server = new LocalMCPServerNode(new MockContainerService() as any, logger as any, envStub, {} as any, nodeStateService as any);
     (server as any).init({ nodeId: 'node-x' });
     await server.setConfig({ namespace: 'ns' } as any);
     // Preload two tools into cache

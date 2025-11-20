@@ -31,14 +31,29 @@ describe('ShellTool env/workdir isolation with vault-backed overlay', () => {
     const logger = new LoggerService();
     const provider: any = new FakeProvider();
 
-    const fakeVault = { isEnabled: () => true, getSecret: vi.fn(async () => 'VAULTED') } as any;
-    const envSvc = new EnvService(fakeVault as any);
+    const resolverA = {
+      resolve: vi.fn(async (input: unknown) => {
+        const list = Array.isArray(input) ? (input as Array<{ key: string; value: unknown }>) : [];
+        const output = list.map((item) =>
+          item.key === 'BAR' ? { ...item, value: 'VAULTED' } : { ...item },
+        );
+        return { output, report: {} as unknown };
+      }),
+    };
+    const envSvc = new EnvService(resolverA as any);
 
     const archiveStub = { createSingleFileTar: async () => Buffer.from('tar') } as const;
     const moduleRefStub = { create: (cls: any) => new (cls as any)(archiveStub) } as const;
     const a = new ShellCommandNode(envSvc as any, new LoggerService() as any, moduleRefStub as any); a.setContainerProvider(provider as any);
-    await a.setConfig({ env: [ { key: 'FOO', value: 'A' }, { key: 'BAR', value: 'secret/path/key', source: 'vault' } ], workdir: '/w/a' });
-    const b = new ShellCommandNode(new EnvService(undefined as any) as any, new LoggerService() as any, moduleRefStub as any); b.setContainerProvider(provider as any);
+    await a.setConfig({
+      env: [
+        { key: 'FOO', value: 'A' },
+        { key: 'BAR', value: { kind: 'vault', path: 'secret/path', key: 'KEY' } },
+      ],
+      workdir: '/w/a',
+    });
+    const resolverB = { resolve: vi.fn(async (input: unknown) => ({ output: input, report: {} as unknown })) };
+    const b = new ShellCommandNode(new EnvService(resolverB as any) as any, new LoggerService() as any, moduleRefStub as any); b.setContainerProvider(provider as any);
     await b.setConfig({ env: [ { key: 'FOO', value: 'B' } ], workdir: '/w/b' });
 
     const at = a.getTool();

@@ -5,7 +5,7 @@
   "private": true,
   "scripts": {
     "build": "pnpm -r --filter ./packages/* run build",
-    "test": "vitest run",
+    "test": "pnpm -r --workspace-concurrency=1 run test",
     "postinstall": "pnpm -r --if-present run prepare",
     "deps:up:podman": "podman compose up -d"
   },
@@ -28,6 +28,13 @@
     "tailwind-merge": "^3.3.1",
     "tsx": "^4.19.2",
     "vaul": "^0.9.9",
-    "vitest": "^3.2.4"
+    "vitest": "3.2.4"
+  },
+  "pnpm": {
+    "overrides": {
+      "tinypool": "1.1.1",
+      "jsdom": "27.1.0",
+      "undici": "6.19.8"
+    }
   }
 }

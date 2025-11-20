@@ -9,7 +9,8 @@ describe('MCP Lifecycle Changes', () => {
   
   it('supports threadId parameter in callTool method', async () => {
     const containerService = new ContainerService(logger);
-    const server = new LocalMCPServerNode(containerService as any, logger as any, undefined as any, undefined as any, undefined as any);
+    const envStub = { resolveEnvItems: async () => ({}), resolveProviderEnv: async () => ({}) } as any;
+    const server = new LocalMCPServerNode(containerService as any, logger as any, envStub, {} as any, undefined as any);
     
     // Test that the interface accepts threadId parameter
     const mockProvider = {
@@ -34,7 +35,8 @@ describe('MCP Lifecycle Changes', () => {
   
   it('has discoverTools method for initial tool discovery', async () => {
     const containerService = new ContainerService(logger);
-    const server = new LocalMCPServerNode(containerService as any, logger as any, undefined as any, undefined as any, undefined as any);
+    const envStub = { resolveEnvItems: async () => ({}), resolveProviderEnv: async () => ({}) } as any;
+    const server = new LocalMCPServerNode(containerService as any, logger as any, envStub, {} as any, undefined as any);
     
     // Test that discoverTools method exists and can be called
     expect(typeof server.discoverTools).toBe('function');
@@ -55,7 +57,8 @@ describe('MCP Lifecycle Changes', () => {
     // 3. callTool() creates container per thread on-demand
     
     const containerService = new ContainerService(logger);
-    const server = new LocalMCPServerNode(containerService as any, logger as any, undefined as any, undefined as any, undefined as any);
+    const envStub = { resolveEnvItems: async () => ({}), resolveProviderEnv: async () => ({}) } as any;
+    const server = new LocalMCPServerNode(containerService as any, logger as any, envStub, {} as any, undefined as any);
     
     // Key behavior changes:
     // 1. Server has discoverTools method
