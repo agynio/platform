@@ -3,17 +3,103 @@ import { setupServer } from 'msw/node';
 import { http as _http, HttpResponse as _HttpResponse } from 'msw';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { TemplatesProvider } from '../../src/lib/graph/templates.provider';
-import * as socketModule from '../../src/lib/graph/socket';
 import type { NodeStatusEvent, TemplateSchema } from '../../src/lib/graph/types';
 import { TooltipProvider } from '@agyn/ui';
+import { createServer, type Server as HttpServer } from 'node:http';
+import { Server as SocketIOServer } from 'socket.io';
+import { graphSocket } from '../../src/lib/graph/socket';
 
-// Mock socket emitter
-export const emitted: Array<NodeStatusEvent> = [];
+let httpServer: HttpServer | null = null;
+let ioServer: SocketIOServer | null = null;
+let socketServerConsumers = 0;
+let socketServerReady: Promise<void> | null = null;
+
+const API_BASE = process.env.VITE_API_BASE_URL;
+const SOCKET_BASE_URL = (() => {
+  try {
+    return new URL(API_BASE ?? 'http://127.0.0.1:3010');
+  } catch (_err) {
+    return new URL('http://127.0.0.1:3010');
+  }
+})();
+const SOCKET_HOSTNAME = SOCKET_BASE_URL.hostname || '127.0.0.1';
+const parsedPort = Number.parseInt(
+  SOCKET_BASE_URL.port || (SOCKET_BASE_URL.protocol === 'https:' ? '443' : '80'),
+  10,
+);
+const SOCKET_PORT = Number.isFinite(parsedPort) ? parsedPort : 80;
+
+export async function startSocketTestServer() {
+  socketServerConsumers += 1;
+  if (ioServer) return;
+  if (!socketServerReady) {
+    socketServerReady = new Promise<void>((resolve, reject) => {
+      const serverInstance = createServer((_req, res) => {
+        res.statusCode = 404;
+        res.end('not-found');
+      });
+      httpServer = serverInstance;
+      const handleError = (err: Error) => {
+        socketServerReady = null;
+        reject(err);
+      };
+      serverInstance.once('error', handleError);
+      serverInstance.listen(SOCKET_PORT, SOCKET_HOSTNAME, () => {
+        serverInstance.removeListener('error', handleError);
+        const io = new SocketIOServer(serverInstance, { path: '/socket.io' });
+        io.on('connection', (socket) => {
+          socket.on('subscribe', (payload: { room?: string; rooms?: string[] }) => {
+            const rooms = new Set<string>();
+            if (payload) {
+              if (payload.room) rooms.add(payload.room);
+              if (Array.isArray(payload.rooms)) {
+                for (const room of payload.rooms) {
+                  if (typeof room === 'string' && room.length > 0) rooms.add(room);
+                }
+              }
+            }
+            for (const room of rooms) {
+              socket.join(room);
+            }
+          });
+        });
+        ioServer = io;
+        resolve();
+      });
+    }).finally(() => {
+      socketServerReady = null;
+    });
+  }
+  await socketServerReady;
+}
+
+export async function stopSocketTestServer() {
+  socketServerConsumers = Math.max(socketServerConsumers - 1, 0);
+  if (socketServerConsumers > 0) return;
+  if (socketServerReady) {
+    await socketServerReady;
+  }
+  if (ioServer) {
+    await new Promise<void>((resolve) => ioServer!.close(() => resolve()));
+    ioServer = null;
+  }
+  if (httpServer) {
+    await new Promise<void>((resolve) => httpServer!.close(() => resolve()));
+    httpServer = null;
+  }
+}
+
 export function emitNodeStatus(ev: NodeStatusEvent) {
-  emitted.push(ev);
-  const anySock: any = socketModule.graphSocket as any;
+  if (ioServer) {
+    ioServer.to(`node:${ev.nodeId}`).emit('node_status', ev);
+  }
+  const anySock: any = graphSocket as any;
   const set = (anySock.listeners as Map<string, Set<(...args: unknown[]) => unknown>>).get(ev.nodeId);
   if (set) for (const fn of set) fn(ev);
+}
+
+export function disposeGraphSocket() {
+  graphSocket.dispose();
 }
 
 export const mockTemplates: TemplateSchema[] = [
@@ -33,10 +119,10 @@ export const mockTemplates: TemplateSchema[] = [
 
 // MSW server setup (MSW v2 http handlers)
 // Read API base from env (tests)
-const API_BASE = process.env.VITE_API_BASE_URL;
 export const abs = (p: string) => (API_BASE ? `${API_BASE}${p}` : p);
 
 const relativeHandlers = [
+  _http.get('/socket.io/', () => new _HttpResponse(null, { status: 404 })),
   _http.get('/api/graph/templates', () => _HttpResponse.json(mockTemplates)),
   _http.get('/api/graph/nodes/:nodeId/status', ({ params }) => {
     const nodeId = params.nodeId as string;
@@ -137,6 +223,7 @@ const relativeHandlers = [
 ];
 
 const absoluteHandlers = [
+  _http.get(abs('/socket.io/'), () => new _HttpResponse(null, { status: 404 })),
   _http.get(abs('/api/graph/templates'), () => _HttpResponse.json(mockTemplates)),
   _http.get(abs('/api/graph/nodes/:nodeId/status'), ({ params }) => {
     const nodeId = params.nodeId as string;

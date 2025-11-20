@@ -26,7 +26,15 @@ describe('call_agent sync busy', () => {
         ConfigService,
         BusyAgent,
         { provide: LLMProvisioner, useValue: {} },
-        { provide: AgentsPersistenceService, useValue: { beginRunThread: async () => ({ runId: 't' }), recordInjected: async () => {}, completeRun: async () => {}, getOrCreateSubthreadByAlias: async (_src: string, _alias: string, _parent: string, _summary: string) => 'child-t' } },
+        {
+          provide: AgentsPersistenceService,
+          useValue: {
+            beginRunThread: async () => ({ runId: 't' }),
+            recordInjected: async () => ({ messageIds: [] }),
+            completeRun: async () => {},
+            getOrCreateSubthreadByAlias: async (_src: string, _alias: string, _parent: string, _summary: string) => 'child-t',
+          },
+        },
         RunSignalsRegistry,
       ],
     }).compile();

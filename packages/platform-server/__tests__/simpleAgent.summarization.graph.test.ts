@@ -31,7 +31,14 @@ describe('Agent summarization graph', () => {
         { provide: LLMProvisioner, useValue: provisioner },
         Agent,
         { provide: PrismaService, useValue: { getClient: () => ({ conversationState: { upsert: async () => {}, findUnique: async () => null } }) } },
-        { provide: AgentsPersistenceService, useValue: { beginRunThread: async () => ({ runId: 't' }), recordInjected: async () => {}, completeRun: async () => {} } },
+        {
+          provide: AgentsPersistenceService,
+          useValue: {
+            beginRunThread: async () => ({ runId: 't' }),
+            recordInjected: async () => ({ messageIds: [] }),
+            completeRun: async () => {},
+          },
+        },
         { provide: RunEventsService, useValue: createRunEventsStub() },
         RunSignalsRegistry,
       ],

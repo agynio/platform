@@ -9,6 +9,7 @@ const TEST_TIMEOUT_MS = 5000;
 
 describe('graphSocket real socket handshake', () => {
   it('connects and receives run events via websocket transport', async () => {
+    const originalApiBase = process.env.VITE_API_BASE_URL;
     const httpServer = createServer((_req, res) => {
       res.statusCode = 404;
       res.end('not-found');
@@ -152,11 +153,14 @@ describe('graphSocket real socket handshake', () => {
       graphSocket.unsubscribe([roomName]);
     } finally {
       socketClient?.disconnect();
+      graphSocket.dispose();
       await new Promise<void>((resolve) => ioServer.close(() => resolve()));
       await new Promise<void>((resolve) => httpServer.close(() => resolve()));
 
-      vi.stubEnv('VITE_API_BASE_URL', 'http://localhost:3010');
-      if (process?.env) process.env.VITE_API_BASE_URL = 'http://localhost:3010';
+      const workerId = Number.parseInt(process.env.VITEST_WORKER_ID ?? '0', 10);
+      const defaultBase = originalApiBase ?? `http://127.0.0.1:${3010 + (Number.isFinite(workerId) ? workerId : 0)}`;
+      vi.stubEnv('VITE_API_BASE_URL', defaultBase);
+      if (process?.env) process.env.VITE_API_BASE_URL = defaultBase;
       await vi.resetModules();
     }
   }, TEST_TIMEOUT_MS * 2);

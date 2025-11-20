@@ -1,13 +1,22 @@
 import React from 'react';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { http as _http, HttpResponse as _HttpResponse } from 'msw';
-import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { NodeDetailsPanel } from '../../src/components/graph';
-import { emitNodeStatus, server, TestProviders } from './testUtils';
+import { disposeGraphSocket, emitNodeStatus, server, startSocketTestServer, stopSocketTestServer, TestProviders } from './testUtils';
 
-beforeAll(() => server.listen());
-afterEach(() => server.resetHandlers());
-afterAll(() => server.close());
+beforeAll(async () => {
+  await startSocketTestServer();
+  server.listen();
+});
+afterEach(() => {
+  server.resetHandlers();
+  disposeGraphSocket();
+});
+afterAll(async () => {
+  server.close();
+  await stopSocketTestServer();
+});
 
 describe('Integration flows: Node actions, dynamic/static config', () => {
   it('Provision flow with optimistic UI and socket reconcile', async () => {
@@ -36,3 +45,4 @@ describe('Integration flows: Node actions, dynamic/static config', () => {
 
   // Schema-driven forms removed; covered by custom views tests elsewhere
 });
+vi.setConfig({ testTimeout: 30000 });

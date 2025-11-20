@@ -128,7 +128,14 @@ describe('Graph MCP integration', () => {
         TemplateRegistry,
         LiveGraphRuntime,
         GraphRepository,
-        { provide: AgentsPersistenceService, useValue: { beginRunThread: async () => ({ runId: 't' }), recordInjected: async () => {}, completeRun: async () => {} } },
+        {
+          provide: AgentsPersistenceService,
+          useValue: {
+            beginRunThread: async () => ({ runId: 't' }),
+            recordInjected: async () => ({ messageIds: [] }),
+            completeRun: async () => {},
+          },
+        },
         RunSignalsRegistry,
       ],
     }).compile();

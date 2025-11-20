@@ -68,6 +68,8 @@ class GraphSocket {
   private reconnectCallbacks = new Set<() => void>();
   private disconnectCallbacks = new Set<() => void>();
   private runCursors = new Map<string, RunTimelineEventsCursor>();
+  private socketCleanup: Array<() => void> = [];
+  private managerCleanup: Array<() => void> = [];
 
   private compareCursors(a: RunTimelineEventsCursor, b: RunTimelineEventsCursor): number {
     const parsedA = Date.parse(a.ts);
@@ -121,7 +123,14 @@ class GraphSocket {
       reconnectionDelayMax: 5000,
       withCredentials: false,
     };
-    this.socket = io(host, options) as unknown as Socket<ServerToClientEvents, ClientToServerEvents>;
+    this.socketCleanup = [];
+    this.managerCleanup = [];
+
+    const socket: Socket<ServerToClientEvents, ClientToServerEvents> = io(host, options);
+    this.socket = socket;
+
+    const manager = socket.io;
+
     const handleConnect = () => {
       this.resubscribeAll();
       for (const fn of this.connectCallbacks) fn();
@@ -133,58 +142,100 @@ class GraphSocket {
     const handleDisconnect = () => {
       for (const fn of this.disconnectCallbacks) fn();
     };
-    this.socket.on('connect', handleConnect);
-    this.socket.on('disconnect', handleDisconnect);
-    this.socket.on('connect_error', () => {});
-    const manager = this.socket.io;
+    const handleConnectError = () => {};
+    socket.on('connect', handleConnect);
+    this.socketCleanup.push(() => socket.off('connect', handleConnect));
+    socket.on('disconnect', handleDisconnect);
+    this.socketCleanup.push(() => socket.off('disconnect', handleDisconnect));
+    socket.on('connect_error', handleConnectError);
+    this.socketCleanup.push(() => socket.off('connect_error', handleConnectError));
     manager.on('reconnect', handleReconnect);
+    this.managerCleanup.push(() => manager.off('reconnect', handleReconnect));
     // No-op connect listener; optional
-    this.socket.on('node_status', (payload: NodeStatusEvent) => {
+    const handleNodeStatus: ServerToClientEvents['node_status'] = (payload) => {
       const set = this.listeners.get(payload.nodeId);
       if (set) for (const fn of set) fn(payload);
-    });
-    this.socket.on('node_state', (payload: { nodeId: string; state: Record<string, unknown>; updatedAt: string }) => {
+    };
+    socket.on('node_status', handleNodeStatus);
+    this.socketCleanup.push(() => socket.off('node_status', handleNodeStatus));
+
+    const handleNodeState: ServerToClientEvents['node_state'] = (payload) => {
       const set = this.stateListeners.get(payload.nodeId);
       if (set) for (const fn of set) fn(payload);
-    });
-    this.socket.on('node_reminder_count', (payload: ReminderCountEvent) => {
+    };
+    socket.on('node_state', handleNodeState);
+    this.socketCleanup.push(() => socket.off('node_state', handleNodeState));
+
+    const handleNodeReminderCount: ServerToClientEvents['node_reminder_count'] = (payload) => {
       const set = this.reminderListeners.get(payload.nodeId);
       if (set) for (const fn of set) fn(payload);
-    });
+    };
+    socket.on('node_reminder_count', handleNodeReminderCount);
+    this.socketCleanup.push(() => socket.off('node_reminder_count', handleNodeReminderCount));
     // Threads events
-    this.socket.on('thread_created', (payload: ThreadCreatedPayload) => {
+    const handleThreadCreated: ServerToClientEvents['thread_created'] = (payload) => {
       for (const fn of this.threadCreatedListeners) fn(payload);
-    });
-    this.socket.on('thread_updated', (payload: ThreadUpdatedPayload) => {
+    };
+    socket.on('thread_created', handleThreadCreated);
+    this.socketCleanup.push(() => socket.off('thread_created', handleThreadCreated));
+
+    const handleThreadUpdated: ServerToClientEvents['thread_updated'] = (payload) => {
       for (const fn of this.threadUpdatedListeners) fn(payload);
-    });
-    this.socket.on('thread_activity_changed', (payload: ThreadActivityPayload) => {
+    };
+    socket.on('thread_updated', handleThreadUpdated);
+    this.socketCleanup.push(() => socket.off('thread_updated', handleThreadUpdated));
+
+    const handleThreadActivityChanged: ServerToClientEvents['thread_activity_changed'] = (payload) => {
       for (const fn of this.threadActivityListeners) fn(payload);
-    });
-    this.socket.on('thread_reminders_count', (payload: ThreadRemindersPayload) => {
+    };
+    socket.on('thread_activity_changed', handleThreadActivityChanged);
+    this.socketCleanup.push(() => socket.off('thread_activity_changed', handleThreadActivityChanged));
+
+    const handleThreadRemindersCount: ServerToClientEvents['thread_reminders_count'] = (payload) => {
       for (const fn of this.threadRemindersListeners) fn(payload);
-    });
-    this.socket.on('message_created', (payload: MessageCreatedPayload) => {
+    };
+    socket.on('thread_reminders_count', handleThreadRemindersCount);
+    this.socketCleanup.push(() => socket.off('thread_reminders_count', handleThreadRemindersCount));
+
+    const handleMessageCreated: ServerToClientEvents['message_created'] = (payload) => {
       for (const fn of this.messageCreatedListeners) fn(payload);
-    });
-    this.socket.on('run_status_changed', (payload: RunStatusChangedPayload) => {
+    };
+    socket.on('message_created', handleMessageCreated);
+    this.socketCleanup.push(() => socket.off('message_created', handleMessageCreated));
+
+    const handleRunStatusChanged: ServerToClientEvents['run_status_changed'] = (payload) => {
       for (const fn of this.runStatusListeners) fn(payload);
-    });
+    };
+    socket.on('run_status_changed', handleRunStatusChanged);
+    this.socketCleanup.push(() => socket.off('run_status_changed', handleRunStatusChanged));
     const handleRunEvent = (eventName: 'run_event_appended' | 'run_event_updated', payload: RunEventSocketPayload) => {
       const cursor = { ts: payload.event.ts, id: payload.event.id } as RunTimelineEventsCursor;
       const force = eventName === 'run_event_updated';
       this.bumpRunCursor(payload.runId, cursor, force ? { force: true } : undefined);
       for (const fn of this.runEventListeners) fn(payload);
     };
-    this.socket.on('run_event_appended', (payload: RunEventSocketPayload) => handleRunEvent('run_event_appended', payload));
-    this.socket.on('run_event_updated', (payload: RunEventSocketPayload) => handleRunEvent('run_event_updated', payload));
-    this.socket.on('tool_output_chunk', (payload: ToolOutputChunk) => {
+    const handleRunEventAppended: ServerToClientEvents['run_event_appended'] = (payload) =>
+      handleRunEvent('run_event_appended', payload);
+    socket.on('run_event_appended', handleRunEventAppended);
+    this.socketCleanup.push(() => socket.off('run_event_appended', handleRunEventAppended));
+
+    const handleRunEventUpdated: ServerToClientEvents['run_event_updated'] = (payload) =>
+      handleRunEvent('run_event_updated', payload);
+    socket.on('run_event_updated', handleRunEventUpdated);
+    this.socketCleanup.push(() => socket.off('run_event_updated', handleRunEventUpdated));
+    const handleToolOutputChunk: ServerToClientEvents['tool_output_chunk'] = (payload) => {
       for (const fn of this.toolChunkListeners) fn(payload);
-    });
-    this.socket.on('tool_output_terminal', (payload: ToolOutputTerminal) => {
+    };
+    socket.on('tool_output_chunk', handleToolOutputChunk);
+    this.socketCleanup.push(() => socket.off('tool_output_chunk', handleToolOutputChunk));
+
+    const handleToolOutputTerminal: ServerToClientEvents['tool_output_terminal'] = (payload) => {
       for (const fn of this.toolTerminalListeners) fn(payload);
-    });
-    return this.socket;
+    };
+    socket.on('tool_output_terminal', handleToolOutputTerminal);
+    this.socketCleanup.push(() => socket.off('tool_output_terminal', handleToolOutputTerminal));
+
+    return socket;
   }
 
   onNodeStatus(nodeId: string, cb: Listener) {
@@ -247,6 +298,38 @@ class GraphSocket {
         this.runCursors.delete(runId);
       }
     }
+  }
+
+  dispose() {
+    const socket = this.socket;
+    if (socket) {
+      for (const cleanup of this.socketCleanup) {
+        cleanup();
+      }
+      for (const cleanup of this.managerCleanup) {
+        cleanup();
+      }
+      this.socketCleanup = [];
+      this.managerCleanup = [];
+      socket.disconnect();
+    }
+
+    this.socket = null;
+    this.subscribedRooms.clear();
+    this.runCursors.clear();
+    this.listeners.clear();
+    this.stateListeners.clear();
+    this.reminderListeners.clear();
+    this.threadCreatedListeners.clear();
+    this.threadUpdatedListeners.clear();
+    this.threadActivityListeners.clear();
+    this.threadRemindersListeners.clear();
+    this.messageCreatedListeners.clear();
+    this.runStatusListeners.clear();
+    this.runEventListeners.clear();
+    this.connectCallbacks.clear();
+    this.reconnectCallbacks.clear();
+    this.disconnectCallbacks.clear();
   }
 
   // Threads listeners

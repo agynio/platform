@@ -7,7 +7,6 @@ import { z } from 'zod';
 
 import {
   AIMessage,
-  SystemMessage,
   FunctionTool,
   Loop,
   Reducer,
@@ -150,6 +149,24 @@ export class AgentNode extends Node<AgentStaticConfig> {
     return this._config;
   }
 
+  private resolveBufferMode(): ProcessBuffer {
+    return (this.config.processBuffer ?? 'allTogether') === 'oneByOne'
+      ? ProcessBuffer.OneByOne
+      : ProcessBuffer.AllTogether;
+  }
+
+  private async injectBufferedMessages(state: LLMState, ctx: LLMContext): Promise<void> {
+    const drained = this.buffer.tryDrain(ctx.threadId, this.resolveBufferMode());
+    if (drained.length === 0) return;
+
+    this.logger.debug?.(
+      `[Agent: ${this.config.title ?? this.nodeId}] Injecting ${drained.length} buffered message(s) into active run for thread ${ctx.threadId}`,
+    );
+
+    await this.getPersistence().recordInjected(ctx.runId, drained, { threadId: ctx.threadId });
+    state.messages.push(...drained);
+  }
+
   // ---- Node identity ----
   public getAgentNodeId(): string | undefined {
     try {
@@ -243,10 +260,14 @@ export class AgentNode extends Node<AgentStaticConfig> {
 
     // tools_save -> branch (summarize | exit)
     const toolsSave = await this.moduleRef.create(SaveLLMReducer);
+    const agent = this;
     class AfterToolsRouter extends Router<LLMState, LLMContext> {
       async route(state: LLMState, ctx: LLMContext): Promise<{ state: LLMState; next: string | null }> {
         if (ctx.finishSignal.isActive) {
           return { state, next: null };
+        }
+        if ((agent.config.whenBusy ?? 'wait') === 'injectAfterTools') {
+          await agent.injectBufferedMessages(state, ctx);
         }
         return { state, next: 'summarize' };
       }
@@ -314,13 +335,6 @@ export class AgentNode extends Node<AgentStaticConfig> {
       } else {
         const last = newState.messages.at(-1);
 
-        const injected = (this.config.whenBusy ?? 'wait') === 'injectAfterTools'
-          ? (newState.messages.filter((m) => m instanceof SystemMessage && !messages.includes(m)) as SystemMessage[])
-          : [];
-        if (injected.length > 0) {
-          await this.getPersistence().recordInjected(ensuredRunId, injected);
-        }
-
         const isToolResult = finishSignal.isActive && last instanceof ToolCallOutputMessage;
         const isResponseResult = last instanceof ResponseMessage;
         if (!isToolResult && !isResponseResult) {
@@ -348,9 +362,7 @@ export class AgentNode extends Node<AgentStaticConfig> {
       if (runId) this.getRunSignals().clear(runId);
     }
 
-    const mode =
-      (this.config.processBuffer ?? 'allTogether') === 'oneByOne' ? ProcessBuffer.OneByOne : ProcessBuffer.AllTogether;
-    const nextMessages = this.buffer.tryDrain(thread, mode);
+    const nextMessages = this.buffer.tryDrain(thread, this.resolveBufferMode());
 
     if (nextMessages.length > 0) {
       void this.invoke(thread, nextMessages);

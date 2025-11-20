@@ -148,38 +148,47 @@ export class AgentsPersistenceService implements GraphEventsPublisherAware {
   /**
    * Persist injected messages. Only SystemMessage injections are supported.
    */
-  async recordInjected(runId: string, injectedMessages: SystemMessage[]): Promise<void> {
+  async recordInjected(
+    runId: string,
+    injectedMessages: Array<HumanMessage | SystemMessage | AIMessage>,
+    options?: { threadId?: string },
+  ): Promise<{ messageIds: string[] }> {
+    if (!injectedMessages.length) return { messageIds: [] };
+
     const createdMessages: Array<{ id: string; kind: MessageKind; text: string | null; source: Prisma.JsonValue; createdAt: Date }> = [];
     const eventIds: string[] = [];
     const patchedEventIds: string[] = [];
+    let threadId: string | null = options?.threadId ?? null;
+
     await this.prisma.$transaction(async (tx: Prisma.TransactionClient) => {
       const run = await tx.run.findUnique({ where: { id: runId }, select: { threadId: true } });
       if (!run) throw new Error(`run_not_found:${runId}`);
-      const threadId = run.threadId;
-      await Promise.all(
-        injectedMessages.map(async (msg) => {
-          const { kind, text } = this.deriveKindTextTyped(msg);
-          const source = toPrismaJsonValue(msg.toPlain());
-          const created = await tx.message.create({ data: { kind, text, source } });
-          await tx.runMessage.create({ data: { runId, messageId: created.id, type: 'injected' as RunMessageType } });
-          const event = await this.runEvents.recordInvocationMessage({
-            tx,
-            runId,
-            threadId,
-            messageId: created.id,
-            role: kind,
-            ts: created.createdAt,
-            metadata: { messageType: 'injected' },
-          });
-          eventIds.push(event.id);
-          createdMessages.push({ id: created.id, kind, text, source: created.source as Prisma.JsonValue, createdAt: created.createdAt });
-        }),
-      );
+      const resolvedThreadId = options?.threadId ?? run.threadId;
+      threadId = resolvedThreadId;
+
+      for (const msg of injectedMessages) {
+        const { kind, text } = this.deriveKindTextTyped(msg);
+        const source = toPrismaJsonValue(msg.toPlain());
+        const created = await tx.message.create({ data: { kind, text, source } });
+        await tx.runMessage.create({ data: { runId, messageId: created.id, type: 'injected' as RunMessageType } });
+        const event = await this.runEvents.recordInvocationMessage({
+          tx,
+          runId,
+          threadId: resolvedThreadId,
+          messageId: created.id,
+          role: kind,
+          ts: created.createdAt,
+          metadata: { messageType: 'injected' },
+        });
+        eventIds.push(event.id);
+        createdMessages.push({ id: created.id, kind, text, source: created.source as Prisma.JsonValue, createdAt: created.createdAt });
+      }
+
       if (createdMessages.length > 0) {
         const inj = await this.runEvents.recordInjection({
           tx,
           runId,
-          threadId,
+          threadId: resolvedThreadId,
           messageIds: createdMessages.map((m) => m.id),
           ts: createdMessages[0].createdAt,
         });
@@ -192,11 +201,24 @@ export class AgentsPersistenceService implements GraphEventsPublisherAware {
         if (linkedEventId) patchedEventIds.push(linkedEventId);
       }
     });
-    const run = await this.prisma.run.findUnique({ where: { id: runId }, select: { threadId: true } });
-    const threadId = run?.threadId;
-    if (threadId) for (const m of createdMessages) this.events.emitMessageCreated(threadId, { id: m.id, kind: m.kind, text: m.text, source: m.source as Prisma.JsonValue, createdAt: m.createdAt, runId });
+
+    if (!threadId) return { messageIds: [] };
+
+    for (const m of createdMessages) {
+      this.events.emitMessageCreated(threadId, {
+        id: m.id,
+        kind: m.kind,
+        text: m.text,
+        source: m.source as Prisma.JsonValue,
+        createdAt: m.createdAt,
+        runId,
+      });
+    }
+
     await Promise.all(eventIds.map((id) => this.runEvents.publishEvent(id, 'append')));
     await Promise.all(patchedEventIds.map((id) => this.runEvents.publishEvent(id, 'update')));
+
+    return { messageIds: createdMessages.map((m) => m.id) };
   }
 
   /**

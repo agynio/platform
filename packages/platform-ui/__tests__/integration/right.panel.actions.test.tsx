@@ -1,7 +1,7 @@
 import React from 'react';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
-import { emitNodeStatus, server, TestProviders } from './testUtils';
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+import { disposeGraphSocket, emitNodeStatus, server, startSocketTestServer, stopSocketTestServer, TestProviders } from './testUtils';
 import { http as _http, HttpResponse as _HttpResponse } from 'msw';
 import { RightPropertiesPanel } from '../../src/builder/panels/RightPropertiesPanel';
 import type { Node as RFNode } from 'reactflow';
@@ -19,9 +19,18 @@ function makeNode(template: string, id = 'n1'): RFNode<TestNodeData> {
 }
 
 describe('Right panel actions: Provision/Deprovision optimistic and reconcile', () => {
-  beforeAll(() => server.listen());
-  afterEach(() => server.resetHandlers());
-  afterAll(() => server.close());
+  beforeAll(async () => {
+    await startSocketTestServer();
+    server.listen();
+  });
+  afterEach(() => {
+    server.resetHandlers();
+    disposeGraphSocket();
+  });
+  afterAll(async () => {
+    server.close();
+    await stopSocketTestServer();
+  });
 
   it('clicking Provision moves status to provisioning then ready; Deprovision moves to deprovisioning then not_ready', async () => {
     render(
@@ -52,3 +61,4 @@ describe('Right panel actions: Provision/Deprovision optimistic and reconcile', 
     expect(screen.getByText('Provision')).not.toBeDisabled();
   });
 });
+vi.setConfig({ testTimeout: 30000 });

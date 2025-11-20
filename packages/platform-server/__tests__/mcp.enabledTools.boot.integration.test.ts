@@ -129,7 +129,14 @@ describe('Boot respects MCP enabledTools from persisted state', () => {
         TemplateRegistry,
         LiveGraphRuntime,
         GraphRepository,
-        { provide: AgentsPersistenceService, useValue: { beginRun: async () => ({ runId: 't' }), recordInjected: async () => {}, completeRun: async () => {} } },
+        {
+          provide: AgentsPersistenceService,
+          useValue: {
+            beginRun: async () => ({ runId: 't' }),
+            recordInjected: async () => ({ messageIds: [] }),
+            completeRun: async () => {},
+          },
+        },
         RunSignalsRegistry,
       ],
     }).compile();
