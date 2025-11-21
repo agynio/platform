@@ -3,7 +3,7 @@ import { HumanMessage } from '@agyn/llm';
 import { SummarizationLLMReducer } from '../src/llm/reducers/summarization.llm.reducer';
 import type { LLMProvisioner } from '../src/llm/provisioners/llm.provisioner';
 import { LoggerService } from '../src/core/services/logger.service';
-import { createRunEventsStub } from './helpers/runEvents.stub';
+import { createRunEventsStub, createEventsBusStub } from './helpers/runEvents.stub';
 
 describe('Agent summarization uses overridden model', () => {
   it('summarization path honors overridden model in reducer', async () => {
@@ -14,7 +14,12 @@ describe('Agent summarization uses overridden model', () => {
         } as any;
       }
     }
-    const reducer = await new SummarizationLLMReducer(new ProvisionerStub(), new LoggerService(), createRunEventsStub() as any).init({
+    const reducer = await new SummarizationLLMReducer(
+      new ProvisionerStub(),
+      new LoggerService(),
+      createRunEventsStub() as any,
+      createEventsBusStub() as any,
+    ).init({
       model: 'override-model',
       keepTokens: 1,
       maxTokens: 3,

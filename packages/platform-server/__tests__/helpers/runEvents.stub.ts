@@ -45,3 +45,10 @@ export function createRunEventsStub() {
     createContextItems,
   } as const;
 }
+
+export function createEventsBusStub() {
+  return {
+    publishEvent: vi.fn(async () => null),
+    subscribeToRunEvents: vi.fn(() => vi.fn()),
+  } as const;
+}

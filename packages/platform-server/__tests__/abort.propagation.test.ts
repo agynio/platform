@@ -4,7 +4,7 @@ import { tool } from '@langchain/core/tools';
 import { ResponseMessage, ToolCallMessage } from '@agyn/llm';
 import { z } from 'zod';
 import { CallToolsLLMReducer } from '../src/llm/reducers/callTools.llm.reducer';
-import { createRunEventsStub } from './helpers/runEvents.stub';
+import { createRunEventsStub, createEventsBusStub } from './helpers/runEvents.stub';
 
 describe('Abort propagation', () => {
   it('aborts long-running tool with AbortError and surfaces as throw', async () => {
@@ -22,7 +22,8 @@ describe('Abort propagation', () => {
     }, { name: 'long', description: 'long', schema: z.object({}) });
 
     const runEvents = createRunEventsStub();
-    const reducer = new CallToolsLLMReducer(new LoggerService(), runEvents as any).init({
+    const eventsBus = createEventsBusStub();
+    const reducer = new CallToolsLLMReducer(new LoggerService(), runEvents as any, eventsBus as any).init({
       tools: [
         {
           name: 'long',

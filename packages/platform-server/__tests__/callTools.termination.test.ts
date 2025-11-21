@@ -3,7 +3,7 @@ import { CallToolsLLMReducer } from '../src/llm/reducers/callTools.llm.reducer';
 import { LoggerService } from '../src/core/services/logger.service.js';
 import { Signal } from '../src/signal';
 import { HumanMessage, ResponseMessage, ToolCallMessage } from '@agyn/llm';
-import { createRunEventsStub } from './helpers/runEvents.stub';
+import { createRunEventsStub, createEventsBusStub } from './helpers/runEvents.stub';
 
 describe('CallToolsLLMReducer termination handling', () => {
   it('skips execution when terminateSignal already active', async () => {
@@ -15,7 +15,8 @@ describe('CallToolsLLMReducer termination handling', () => {
       execute: vi.fn(async () => 'ok'),
     };
 
-    const reducer = new CallToolsLLMReducer(new LoggerService(), runEvents as any).init({ tools: [tool] as any });
+    const eventsBus = createEventsBusStub();
+    const reducer = new CallToolsLLMReducer(new LoggerService(), runEvents as any, eventsBus as any).init({ tools: [tool] as any });
 
     const call = new ToolCallMessage({ type: 'function_call', call_id: 'call-1', name: 'noop', arguments: '{}' } as any);
     const response = new ResponseMessage({ output: [call.toPlain() as any] as any });
@@ -50,7 +51,8 @@ describe('CallToolsLLMReducer termination handling', () => {
       }),
     };
 
-    const reducer = new CallToolsLLMReducer(new LoggerService(), runEvents as any).init({ tools: [tool] as any });
+    const eventsBus = createEventsBusStub();
+    const reducer = new CallToolsLLMReducer(new LoggerService(), runEvents as any, eventsBus as any).init({ tools: [tool] as any });
     const call = new ToolCallMessage({ type: 'function_call', call_id: 'call-slow', name: 'slow-tool', arguments: '{}' } as any);
     const response = new ResponseMessage({ output: [call.toPlain() as any] as any });
     const state = { messages: [HumanMessage.fromText('start'), response], meta: {}, context: { messageIds: [], memory: [] } } as any;

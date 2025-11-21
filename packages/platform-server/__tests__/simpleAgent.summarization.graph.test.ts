@@ -9,6 +9,7 @@ import { LLMProvisioner } from '../src/llm/provisioners/llm.provisioner';
 import { PrismaService } from '../src/core/services/prisma.service';
 import { AgentsPersistenceService } from '../src/agents/agents.persistence.service';
 import { RunEventsService } from '../src/events/run-events.service';
+import { EventsBusService } from '../src/events/events-bus.service';
 import { createRunEventsStub } from './helpers/runEvents.stub';
 import { RunSignalsRegistry } from '../src/agents/run-signals.service';
 
@@ -40,6 +41,10 @@ describe('Agent summarization graph', () => {
           },
         },
         { provide: RunEventsService, useValue: createRunEventsStub() },
+        {
+          provide: EventsBusService,
+          useValue: { publishEvent: async () => null, subscribeToRunEvents: () => () => undefined },
+        },
         RunSignalsRegistry,
       ],
     }).compile();
