@@ -14,6 +14,11 @@ const createRunEventsStub = () => ({
   createContextItemsAndConnect: vi.fn(async () => ({ messageIds: [] })),
 });
 
+const createEventsBusStub = () => ({
+  publishEvent: vi.fn(async () => {}),
+  subscribeToRunEvents: vi.fn(() => vi.fn()),
+});
+
 describe('CallModelLLMReducer termination handling', () => {
   beforeEach(() => {
     vi.useRealTimers();
@@ -21,8 +26,9 @@ describe('CallModelLLMReducer termination handling', () => {
 
   it('returns existing state and cancels event when terminateSignal active before call', async () => {
     const runEvents = createRunEventsStub();
+    const eventsBus = createEventsBusStub();
     const llmCall = vi.fn();
-    const reducer = new CallModelLLMReducer(new LoggerService(), runEvents as any).init({ llm: { call: llmCall } as any, model: 'test-model', systemPrompt: 'SYS', tools: [] });
+    const reducer = new CallModelLLMReducer(new LoggerService(), runEvents as any, eventsBus as any).init({ llm: { call: llmCall } as any, model: 'test-model', systemPrompt: 'SYS', tools: [] });
 
     const state = { messages: [SystemMessage.fromText('SYS'), HumanMessage.fromText('hi')], context: { messageIds: [], memory: [] } } as any;
     const terminateSignal = new Signal();
@@ -39,11 +45,12 @@ describe('CallModelLLMReducer termination handling', () => {
     expect(result).toBe(state);
     expect(llmCall).not.toHaveBeenCalled();
     expect(runEvents.completeLLMCall).toHaveBeenCalledWith(expect.objectContaining({ status: RunEventStatus.cancelled }));
-    expect(runEvents.publishEvent).toHaveBeenLastCalledWith('evt-1', 'update');
+    expect(eventsBus.publishEvent).toHaveBeenLastCalledWith('evt-1', 'update');
   });
 
   it('marks LLM event cancelled when terminateSignal activates after call', async () => {
     const runEvents = createRunEventsStub();
+    const eventsBus = createEventsBusStub();
     const terminateSignal = new Signal();
     const llmCall = vi.fn(async () => {
       const response = ResponseMessage.fromText('ok');
@@ -51,7 +58,7 @@ describe('CallModelLLMReducer termination handling', () => {
       return response;
     });
 
-    const reducer = new CallModelLLMReducer(new LoggerService(), runEvents as any).init({ llm: { call: llmCall } as any, model: 'test-model', systemPrompt: 'SYS', tools: [] });
+    const reducer = new CallModelLLMReducer(new LoggerService(), runEvents as any, eventsBus as any).init({ llm: { call: llmCall } as any, model: 'test-model', systemPrompt: 'SYS', tools: [] });
 
     const state = { messages: [SystemMessage.fromText('SYS'), HumanMessage.fromText('step')], context: { messageIds: [], memory: [] } } as any;
 

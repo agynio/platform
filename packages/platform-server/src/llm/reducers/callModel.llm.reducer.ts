@@ -10,7 +10,9 @@ import {
 import { Inject, Injectable, Scope } from '@nestjs/common';
 import { LLMContext, LLMContextState, LLMMessage, LLMState } from '../types';
 import { LoggerService } from '../../core/services/logger.service';
-import { LLMCallUsageMetrics, RunEventsService, ToolCallRecord } from '../../events/run-events.service';
+import type { LLMCallUsageMetrics, ToolCallRecord } from '../../events/run-events.service';
+import { RunEventsService } from '../../events/run-events.service';
+import { EventsBusService } from '../../events/events-bus.service';
 import { RunEventStatus, Prisma } from '@prisma/client';
 import { toPrismaJsonValue } from '../services/messages.serialization';
 import {
@@ -32,6 +34,7 @@ export class CallModelLLMReducer extends Reducer<LLMState, LLMContext> {
   constructor(
     @Inject(LoggerService) protected logger: LoggerService,
     @Inject(RunEventsService) private readonly runEvents: RunEventsService,
+    @Inject(EventsBusService) private readonly eventsBus: EventsBusService,
   ) {
     super();
   }
@@ -94,7 +97,7 @@ export class CallModelLLMReducer extends Reducer<LLMState, LLMContext> {
         memoryPlacement: memoryResult?.msg ? memoryResult.place : null,
       },
     });
-    await this.runEvents.publishEvent(llmEvent.id, 'append');
+    await this.eventsBus.publishEvent(llmEvent.id, 'append');
 
     const cancelAndReturn = async (params?: {
       rawResponse?: Prisma.InputJsonValue | null;
@@ -108,7 +111,7 @@ export class CallModelLLMReducer extends Reducer<LLMState, LLMContext> {
         errorMessage: params?.errorMessage ?? null,
         usage: params?.usage,
       });
-      await this.runEvents.publishEvent(llmEvent.id, 'update');
+      await this.eventsBus.publishEvent(llmEvent.id, 'update');
       return state;
     };
 
@@ -151,7 +154,7 @@ export class CallModelLLMReducer extends Reducer<LLMState, LLMContext> {
         toolCalls,
         usage: usageMetrics,
       });
-      await this.runEvents.publishEvent(llmEvent.id, 'update');
+      await this.eventsBus.publishEvent(llmEvent.id, 'update');
 
       const updated: LLMState = {
         ...state,
@@ -173,7 +176,7 @@ export class CallModelLLMReducer extends Reducer<LLMState, LLMContext> {
         errorMessage: error instanceof Error ? error.message : String(error),
         rawResponse: this.trySerialize(error),
       });
-      await this.runEvents.publishEvent(llmEvent.id, 'update');
+      await this.eventsBus.publishEvent(llmEvent.id, 'update');
       if (error instanceof Error) throw error;
       throw new Error(String(error));
     }

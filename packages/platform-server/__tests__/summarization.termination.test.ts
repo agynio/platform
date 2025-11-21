@@ -16,8 +16,9 @@ describe('SummarizationLLMReducer termination handling', () => {
       publishEvent: vi.fn(),
       createContextItems: vi.fn(async () => []),
     };
+    const eventsBus = { publishEvent: vi.fn(), subscribeToRunEvents: vi.fn(() => vi.fn()) };
 
-    const reducer = new SummarizationLLMReducer(provisioner as any, new LoggerService(), runEvents as any);
+    const reducer = new SummarizationLLMReducer(provisioner as any, new LoggerService(), runEvents as any, eventsBus as any);
     await reducer.init({ model: 'summary-test', keepTokens: 100, maxTokens: 200, systemPrompt: 'Summarize' });
 
     const state = {

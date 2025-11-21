@@ -3,7 +3,7 @@ import { HumanMessage, ResponseMessage, ToolCallMessage } from '@agyn/llm';
 import { CallToolsLLMReducer } from '../src/llm/reducers/callTools.llm.reducer';
 import { CallModelLLMReducer } from '../src/llm/reducers/callModel.llm.reducer';
 import { LoggerService } from '../src/core/services/logger.service.js';
-import { createRunEventsStub } from './helpers/runEvents.stub';
+import { createRunEventsStub, createEventsBusStub } from './helpers/runEvents.stub';
 import { Signal } from '../src/signal';
 
 type MockFn = ReturnType<typeof vi.fn>;
@@ -26,7 +26,8 @@ describe('CallToolsLLMReducer context items', () => {
     });
 
     const tools = [buildTool('alpha'), buildTool('beta')];
-    const reducer = new CallToolsLLMReducer(new LoggerService(), runEvents as any).init({ tools });
+    const eventsBus = createEventsBusStub();
+    const reducer = new CallToolsLLMReducer(new LoggerService(), runEvents as any, eventsBus as any).init({ tools });
 
     const toolCalls = [
       new ToolCallMessage({ type: 'function_call', call_id: 'call-alpha', name: 'alpha', arguments: JSON.stringify({ foo: 1 }) } as any),
@@ -83,7 +84,8 @@ describe('CallToolsLLMReducer context items', () => {
       }),
     };
 
-    const reducer = new CallToolsLLMReducer(new LoggerService(), runEvents as any).init({ tools: [failingTool] });
+    const eventsBus = createEventsBusStub();
+    const reducer = new CallToolsLLMReducer(new LoggerService(), runEvents as any, eventsBus as any).init({ tools: [failingTool] });
     const call = new ToolCallMessage({ type: 'function_call', call_id: 'call-fail', name: 'failing', arguments: JSON.stringify({ ok: true }) } as any);
     const response = new ResponseMessage({ output: [call.toPlain() as any] as any });
     const state = {
@@ -142,14 +144,14 @@ describe('CallToolsLLMReducer context items', () => {
       .mockResolvedValueOnce(responseWithTool)
       .mockResolvedValue(ResponseMessage.fromText('done'));
 
-    const callModel = new CallModelLLMReducer(new LoggerService(), runEvents as any).init({
+    const callModel = new CallModelLLMReducer(new LoggerService(), runEvents as any, createEventsBusStub() as any).init({
       llm: { call: llmCall } as any,
       model: 'gpt-test',
       systemPrompt: 'Stay on task',
       tools: [tool as any],
     });
 
-    const callTools = new CallToolsLLMReducer(new LoggerService(), runEvents as any).init({ tools: [tool] as any });
+    const callTools = new CallToolsLLMReducer(new LoggerService(), runEvents as any, createEventsBusStub() as any).init({ tools: [tool] as any });
 
     const ctx = {
       threadId: 'thread-ctx',

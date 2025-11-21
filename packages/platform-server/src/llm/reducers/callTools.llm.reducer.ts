@@ -4,6 +4,7 @@ import { LoggerService } from '../../core/services/logger.service';
 import { Inject, Injectable, Scope } from '@nestjs/common';
 import { McpError } from '../../nodes/mcp/types';
 import { RunEventsService } from '../../events/run-events.service';
+import { EventsBusService } from '../../events/events-bus.service';
 import { ToolExecStatus, Prisma } from '@prisma/client';
 import { toPrismaJsonValue } from '../services/messages.serialization';
 import type { ResponseFunctionCallOutputItemList } from 'openai/resources/responses/responses.mjs';
@@ -45,6 +46,7 @@ export class CallToolsLLMReducer extends Reducer<LLMState, LLMContext> {
   constructor(
     @Inject(LoggerService) private logger: LoggerService,
     @Inject(RunEventsService) private readonly runEvents: RunEventsService,
+    @Inject(EventsBusService) private readonly eventsBus: EventsBusService,
   ) {
     super();
   }
@@ -218,7 +220,7 @@ export class CallToolsLLMReducer extends Reducer<LLMState, LLMContext> {
           input: serializedInput,
         });
         startedEventId = started.id;
-        await this.runEvents.publishEvent(started.id, 'append');
+        await this.eventsBus.publishEvent(started.id, 'append');
       } catch (err) {
         this.logger.warn('Failed to record tool execution start', err);
       }
@@ -353,7 +355,7 @@ export class CallToolsLLMReducer extends Reducer<LLMState, LLMContext> {
         errorMessage,
         raw: null,
       });
-      await this.runEvents.publishEvent(eventId, 'update');
+      await this.eventsBus.publishEvent(eventId, 'update');
       return;
     }
 
@@ -367,6 +369,6 @@ export class CallToolsLLMReducer extends Reducer<LLMState, LLMContext> {
       raw: this.toJson(response.raw),
       errorMessage: status === ToolExecStatus.success ? null : this.extractErrorMessage(response),
     });
-    await this.runEvents.publishEvent(eventId, 'update');
+    await this.eventsBus.publishEvent(eventId, 'update');
   }
 }

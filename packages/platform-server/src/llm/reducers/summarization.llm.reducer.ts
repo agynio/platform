@@ -14,6 +14,7 @@ import { Inject, Injectable, Scope } from '@nestjs/common';
 import { LLMProvisioner } from '../provisioners/llm.provisioner';
 import { LoggerService } from '../../core/services/logger.service';
 import { RunEventsService } from '../../events/run-events.service';
+import { EventsBusService } from '../../events/events-bus.service';
 import { toPrismaJsonValue } from '../services/messages.serialization';
 import { Prisma } from '@prisma/client';
 import { contextItemInputFromSummary } from '../services/context-items.utils';
@@ -24,6 +25,7 @@ export class SummarizationLLMReducer extends Reducer<LLMState, LLMContext> {
     @Inject(LLMProvisioner) private readonly provisioner: LLMProvisioner,
     @Inject(LoggerService) protected readonly logger: LoggerService,
     @Inject(RunEventsService) private readonly runEvents: RunEventsService,
+    @Inject(EventsBusService) private readonly eventsBus: EventsBusService,
   ) {
     super();
   }
@@ -141,7 +143,7 @@ export class SummarizationLLMReducer extends Reducer<LLMState, LLMContext> {
       newContextCount: head.length,
       raw: this.toJson(rawPayload),
     });
-    await this.runEvents.publishEvent(event.id, 'append');
+    await this.eventsBus.publishEvent(event.id, 'append');
 
     const summaryText = newSummary ?? '';
     let summaryId = summaryText && context.summary?.text === summaryText ? context.summary.id ?? null : null;

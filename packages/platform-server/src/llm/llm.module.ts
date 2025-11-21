@@ -1,4 +1,4 @@
-import { Module, forwardRef } from '@nestjs/common';
+import { Module } from '@nestjs/common';
 import { ConversationStateRepository } from './repositories/conversationState.repository';
 import { LoadLLMReducer } from './reducers/load.llm.reducer';
 import { SaveLLMReducer } from './reducers/save.llm.reducer';
@@ -17,7 +17,7 @@ import { CoreModule } from '../core/core.module';
 import { EventsModule } from '../events/events.module';
 
 @Module({
-  imports: [CoreModule, forwardRef(() => EventsModule)],
+  imports: [CoreModule, EventsModule],
   providers: [
     {
       provide: LLMProvisioner,
