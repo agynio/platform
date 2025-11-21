@@ -4,3 +4,4 @@ import { Module } from '@nestjs/common';
 export class SharedModule {}
 
 export * from './types/graph.types';
+export * from './types/common.types';

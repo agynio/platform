@@ -1,4 +1,4 @@
-import { BaseMessage } from '@langchain/core/messages';
+import type { BaseMessage } from '@langchain/core/messages';
 
 export type NodeOutput = {
   summary?: string;

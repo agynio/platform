@@ -2,7 +2,7 @@ import { ContainerOpts, ContainerService } from '../../infra/container/container
 import Node from '../base/Node';
 import { ContainerHandle } from '../../infra/container/container.handle';
 import { z } from 'zod';
-import { PLATFORM_LABEL, SUPPORTED_PLATFORMS } from '../../constants';
+import { PLATFORM_LABEL, SUPPORTED_PLATFORMS } from '../../core/constants';
 import { ConfigService } from '../../core/services/config.service';
 import { NcpsKeyService } from '../../infra/ncps/ncpsKey.service';
 import { EnvService, type EnvItem } from '../../env/env.service';

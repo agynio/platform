@@ -3,7 +3,7 @@ import { PassThrough } from 'node:stream';
 import Docker from 'dockerode';
 import { ContainerService } from '../src/infra/container/container.service';
 import { LoggerService } from '../src/core/services/logger.service.js';
-import { PLATFORM_LABEL } from '../src/constants.js';
+import { PLATFORM_LABEL } from '../src/core/constants.js';
 
 vi.mock('dockerode', () => {
   class MockContainer {

@@ -3,7 +3,7 @@ import Docker, { ContainerCreateOptions, Exec } from 'dockerode';
 import { PassThrough, Writable } from 'node:stream';
 import { ContainerHandle } from './container.handle';
 import { LoggerService } from '../../core/services/logger.service';
-import { PLATFORM_LABEL, type Platform } from '../../constants';
+import { PLATFORM_LABEL, type Platform } from '../../core/constants';
 import {
   isExecTimeoutError,
   ExecTimeoutError,
