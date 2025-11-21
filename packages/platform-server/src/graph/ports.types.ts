@@ -1,4 +1,4 @@
-import { EdgeDef } from './types';
+import type { EdgeDef } from '../shared/types/graph.types';
 
 export type PortKind = 'instance' | 'method';
 

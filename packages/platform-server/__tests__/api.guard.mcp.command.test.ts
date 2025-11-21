@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { enforceMcpCommandMutationGuard } from '../src/graph/graph.guard';
 import { GraphErrorCode } from '../src/graph/errors';
-import type { PersistedGraph, PersistedGraphUpsertRequest } from '../src/graph/types';
+import type { PersistedGraph, PersistedGraphUpsertRequest } from '../src/shared/types/graph.types';
 import type { LiveGraphRuntime } from '../src/graph/liveGraph.manager';
 
 describe('API guard: MCP command mutation forbidden', () => {

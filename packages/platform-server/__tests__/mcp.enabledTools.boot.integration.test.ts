@@ -16,7 +16,7 @@ import { TemplateRegistry } from '../src/graph/templateRegistry';
 import { LiveGraphRuntime } from '../src/graph/liveGraph.manager';
 import { GraphRepository } from '../src/graph/graph.repository';
 import { GraphSocketGateway } from '../src/gateway/graph.socket.gateway';
-import type { GraphDefinition, PersistedGraph } from '../src/graph/types';
+import type { GraphDefinition, PersistedGraph } from '../src/shared/types/graph.types';
 import { AgentsPersistenceService } from '../src/agents/agents.persistence.service';
 import { RunSignalsRegistry } from '../src/agents/run-signals.service';
 

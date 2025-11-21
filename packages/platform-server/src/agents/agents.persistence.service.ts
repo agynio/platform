@@ -6,7 +6,7 @@ import { PrismaService } from '../core/services/prisma.service';
 import { GraphEventsPublisher, NoopGraphEventsPublisher, type GraphEventsPublisherAware } from '../gateway/graph.events.publisher';
 import { GraphRepository } from '../graph/graph.repository';
 import { TemplateRegistry } from '../graph/templateRegistry';
-import type { PersistedGraphNode } from '../graph/types';
+import type { PersistedGraphNode } from '../shared/types/graph.types';
 import { toPrismaJsonValue } from '../llm/services/messages.serialization';
 import { ChannelDescriptorSchema, type ChannelDescriptor } from '../messaging/types';
 import { RunEventsService } from '../events/run-events.service';

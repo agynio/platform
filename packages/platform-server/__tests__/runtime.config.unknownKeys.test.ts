@@ -4,7 +4,8 @@ import { LoggerService } from '../src/core/services/logger.service.js';
 import { GraphRepository } from '../src/graph/graph.repository.js';
 import { LiveGraphRuntime } from '../src/graph/liveGraph.manager';
 import { TemplateRegistry } from '../src/graph/templateRegistry';
-import { GraphDefinition, GraphError } from '../src/graph/types';
+import type { GraphDefinition } from '../src/shared/types/graph.types';
+import { GraphError } from '../src/graph/types';
 import { ModuleRef } from '@nestjs/core';
 import { MemoryNode, MemoryNodeStaticConfigSchema } from '../src/nodes/memory/memory.node';
 

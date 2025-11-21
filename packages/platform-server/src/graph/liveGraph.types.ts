@@ -1,4 +1,5 @@
-import { EdgeDef, GraphDefinition, GraphError, NodeDef } from './types';
+import type { EdgeDef, GraphDefinition, NodeDef } from '../shared/types/graph.types';
+import { GraphError } from './types';
 import { Node } from '../nodes/base/Node';
 
 export interface LiveNode {

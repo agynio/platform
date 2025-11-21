@@ -1,34 +1,4 @@
-// Palette schema types (capabilities/staticConfigSchema removed per Issue #451)
-// Core graph type declarations are re-exported from the shared types package.
-
-import type { GraphBuildResult as SharedGraphBuildResult, GraphErrorDetails } from '../shared/types/graph.types';
-
-export type {
-  GraphDefinition,
-  NodeDef,
-  EdgeDef,
-  DependencyBag,
-  FactoryContext,
-  Configurable,
-  FactoryFn,
-  TemplateRegistryLike,
-  EndpointType,
-  EndpointBase,
-  MethodEndpoint,
-  PropertyEndpoint,
-  SelfEndpoint,
-  Endpoint,
-  GraphBuilderOptions,
-  GraphErrorDetails,
-  GraphBuildResult,
-  TemplateKind,
-  TemplateNodeSchema,
-  PersistedGraphNode,
-  PersistedGraphEdge,
-  PersistedGraph,
-  PersistedGraphUpsertRequest,
-  PersistedGraphUpsertResponse,
-} from '../shared/types/graph.types';
+import type { GraphErrorDetails } from '../shared/types/graph.types';
 
 export class GraphError extends Error implements GraphErrorDetails {
   code: string;
@@ -48,5 +18,3 @@ export class GraphError extends Error implements GraphErrorDetails {
     this.cause = details.cause;
   }
 }
-
-export type BuildResult = SharedGraphBuildResult<GraphError>;

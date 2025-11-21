@@ -1,7 +1,7 @@
 import { Controller, Get, Post, Put, Param, Body, HttpCode, HttpException, HttpStatus, Inject } from '@nestjs/common';
 import { z } from 'zod';
 import { TemplateRegistry } from '../templateRegistry';
-import type { TemplateNodeSchema } from '../types';
+import type { TemplateNodeSchema } from '../../shared/types/graph.types';
 import { LiveGraphRuntime } from '../liveGraph.manager';
 import { LoggerService } from '../../core/services/logger.service';
 import type { NodeStatusState } from '../../nodes/base/Node';
