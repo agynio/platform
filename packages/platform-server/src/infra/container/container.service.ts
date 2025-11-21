@@ -2,6 +2,7 @@ import { Inject, Injectable } from '@nestjs/common';
 import Docker, { ContainerCreateOptions, Exec } from 'dockerode';
 import { PassThrough, Writable } from 'node:stream';
 import { ContainerHandle } from './container.handle';
+import type { ContainerArchiveOptions, ContainerExecOptions, ContainerHandleDelegate } from './container.types';
 import { LoggerService } from '../../core/services/logger.service';
 import { PLATFORM_LABEL, type Platform } from '../../core/constants';
 import {
@@ -56,7 +57,7 @@ export type ContainerOpts = {
  * await c.remove();
  */
 @Injectable()
-export class ContainerService {
+export class ContainerService implements ContainerHandleDelegate {
   private docker: Docker;
 
   constructor(
@@ -211,16 +212,7 @@ export class ContainerService {
   async execContainer(
     containerId: string,
     command: string[] | string,
-    options?: {
-      workdir?: string;
-      env?: Record<string, string> | string[];
-      timeoutMs?: number;
-      idleTimeoutMs?: number;
-      tty?: boolean;
-      killOnTimeout?: boolean;
-      signal?: AbortSignal;
-      onOutput?: (source: 'stdout' | 'stderr', chunk: Buffer) => void;
-    },
+    options?: ContainerExecOptions,
   ): Promise<{ stdout: string; stderr: string; exitCode: number }> {
     const container = this.docker.getContainer(containerId);
     const inspectData = await container.inspect();
@@ -755,7 +747,7 @@ export class ContainerService {
   async putArchive(
     containerId: string,
     data: Buffer | NodeJS.ReadableStream,
-    options: { path: string },
+    options: ContainerArchiveOptions,
   ): Promise<void> {
     const container = this.docker.getContainer(containerId);
     const inspectData = await container.inspect();

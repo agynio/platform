@@ -1,41 +1,35 @@
-import { ContainerService } from '../../infra/container/container.service';
+import type { ContainerArchiveOptions, ContainerExecOptions, ContainerHandleDelegate } from './container.types';
 
 /**
  * Lightweight entity wrapper representing a running (or created) container.
- * Provides convenience methods delegating to ContainerService while binding the docker id.
+ * Provides convenience methods delegating to the configured container operations while binding the docker id.
  */
 export class ContainerHandle {
   constructor(
-    private service: ContainerService,
+    private readonly delegate: ContainerHandleDelegate,
     public readonly id: string,
   ) {}
 
   exec(
     command: string[] | string,
-    options?: {
-      workdir?: string;
-      env?: Record<string, string> | string[];
-      timeoutMs?: number;
-      idleTimeoutMs?: number;
-      killOnTimeout?: boolean;
-      tty?: boolean;
-      signal?: AbortSignal;
-      onOutput?: (source: 'stdout' | 'stderr', chunk: Buffer) => void;
-    },
+    options?: ContainerExecOptions,
   ) {
-    return this.service.execContainer(this.id, command, options);
+    return this.delegate.execContainer(this.id, command, options);
   }
 
   stop(timeoutSec = 10) {
-    return this.service.stopContainer(this.id, timeoutSec);
+    return this.delegate.stopContainer(this.id, timeoutSec);
   }
   remove(force = false) {
-    return this.service.removeContainer(this.id, force);
+    return this.delegate.removeContainer(this.id, force);
   }
 
   /** Upload a tar archive into the container filesystem (defaults to /tmp). */
-  putArchive(data: Buffer | NodeJS.ReadableStream, options: { path?: string } = { path: '/tmp' }) {
+  putArchive(
+    data: Buffer | NodeJS.ReadableStream,
+    options: Partial<ContainerArchiveOptions> = { path: '/tmp' },
+  ) {
     const path = options?.path || '/tmp';
-    return this.service.putArchive(this.id, data, { path });
+    return this.delegate.putArchive(this.id, data, { path });
   }
 }

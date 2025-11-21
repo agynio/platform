@@ -3,6 +3,7 @@ import { Test } from '@nestjs/testing';
 import { buildTemplateRegistry } from '../src/templates';
 import { LoggerService } from '../src/core/services/logger.service.js';
 import { ContainerService, type ContainerOpts } from '../src/infra/container/container.service';
+import type { ContainerArchiveOptions, ContainerExecOptions } from '../src/infra/container/container.types';
 import { ContainerHandle } from '../src/infra/container/container.handle';
 import { ConfigService } from '../src/core/services/config.service.js';
 import { EnvService } from '../src/env/env.service';
@@ -30,7 +31,7 @@ class StubContainerService extends ContainerService {
   override async execContainer(
     _id: string,
     _command: string[] | string,
-    _options?: { workdir?: string; env?: Record<string, string> | string[]; timeoutMs?: number; idleTimeoutMs?: number; tty?: boolean; killOnTimeout?: boolean; signal?: AbortSignal },
+    _options?: ContainerExecOptions,
   ): Promise<{ stdout: string; stderr: string; exitCode: number }> {
     return { stdout: '', stderr: '', exitCode: 0 };
   }
@@ -52,7 +53,11 @@ class StubContainerService extends ContainerService {
   override async touchLastUsed(_id: string): Promise<void> {}
   override async stopContainer(_id: string, _timeoutSec = 10): Promise<void> {}
   override async removeContainer(_id: string, _force = false): Promise<void> {}
-  override async putArchive(_id: string, _data: Buffer | NodeJS.ReadableStream, _options: { path: string }): Promise<void> {}
+  override async putArchive(
+    _id: string,
+    _data: Buffer | NodeJS.ReadableStream,
+    _options: ContainerArchiveOptions,
+  ): Promise<void> {}
 }
 class StubConfigService extends ConfigService {
   constructor() {

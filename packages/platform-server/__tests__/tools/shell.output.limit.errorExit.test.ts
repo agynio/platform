@@ -6,15 +6,18 @@ import { LoggerService } from '../../src/core/services/logger.service';
 import type { EnvService } from '../../src/env/env.service';
 import type { ArchiveService } from '../../src/infra/archive/archive.service';
 import type { ContainerHandle } from '../../src/infra/container/container.handle';
+import type { ContainerArchiveOptions, ContainerExecOptions } from '../../src/infra/container/container.types';
 
 class FakeContainer implements ContainerHandle {
-  public lastPut?: { data: Buffer; options: { path: string } };
-  async exec(_cmd: string, _opts?: { env?: Record<string,string>, workdir?: string, timeoutMs?: number, idleTimeoutMs?: number, killOnTimeout?: boolean }): Promise<{ stdout: string; stderr: string; exitCode: number }> {
+  public lastPut?: { data: Buffer | NodeJS.ReadableStream; options: ContainerArchiveOptions };
+  async exec(_cmd: string, _opts?: ContainerExecOptions): Promise<{ stdout: string; stderr: string; exitCode: number }> {
     const out = 'X'.repeat(800);
     const err = 'Y'.repeat(800);
     return { stdout: out, stderr: err, exitCode: 123 };
   }
-  async putArchive(data: Buffer, options: { path: string }): Promise<void> { this.lastPut = { data, options }; }
+  async putArchive(data: Buffer | NodeJS.ReadableStream, options: ContainerArchiveOptions): Promise<void> {
+    this.lastPut = { data, options };
+  }
 }
 class FakeProvider { public c = new FakeContainer(); async provide(_t: string): Promise<ContainerHandle> { return this.c; } }
 
