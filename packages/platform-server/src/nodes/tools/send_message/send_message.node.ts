@@ -1,4 +1,5 @@
 import { Inject, Injectable, Scope } from '@nestjs/common';
+import { ModuleRef } from '@nestjs/core';
 import z from 'zod';
 import { BaseToolNode } from '../baseToolNode';
 import { SendMessageFunctionTool } from './send_message.tool';
@@ -14,7 +15,7 @@ export class SendMessageNode extends BaseToolNode<SendMessageConfig> {
   private toolInstance?: SendMessageFunctionTool;
   constructor(
     @Inject(LoggerService) protected logger: LoggerService,
-    @Inject(SlackTrigger) protected trigger: SlackTrigger,
+    @Inject(ModuleRef) private readonly moduleRef: ModuleRef,
   ) {
     console.log('-----SendMessageNode constructor-----');
     console.log(trigger);
@@ -23,7 +24,11 @@ export class SendMessageNode extends BaseToolNode<SendMessageConfig> {
   }
 
   getTool(): SendMessageFunctionTool {
-    if (!this.toolInstance) this.toolInstance = new SendMessageFunctionTool(this.logger, this.trigger);
+    if (!this.toolInstance) {
+      const trigger = this.moduleRef.get<SlackTrigger>(SlackTrigger, { strict: false });
+      if (!trigger) throw new Error('SlackTrigger not available');
+      this.toolInstance = new SendMessageFunctionTool(this.logger, trigger);
+    }
     return this.toolInstance;
   }
 

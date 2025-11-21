@@ -1,10 +1,12 @@
 import { describe, it, expect, vi } from 'vitest';
 import { SendMessageFunctionTool } from '../src/nodes/tools/send_message/send_message.tool';
+import { SendMessageNode } from '../src/nodes/tools/send_message/send_message.node';
 import { LoggerService } from '../src/core/services/logger.service';
 // Avoid importing PrismaService to prevent prisma client load
 import { SlackTrigger } from '../src/nodes/slackTrigger/slackTrigger.node';
 import type { SlackAdapter } from '../src/messaging/slack/slack.adapter';
 import type { VaultRef } from '../src/vault/vault.service';
+import type { ModuleRef } from '@nestjs/core';
 
 // Mock slack web api
 vi.mock('@slack/socket-mode', () => {
@@ -119,5 +121,20 @@ describe('send_message tool', () => {
     expect(call?.[1]).toBeInstanceOf(Error);
     expect((call?.[1] as Error).message).toBe('boom');
     expect(call?.[2]).toEqual({ threadId: 'thread-2' });
+  });
+});
+
+describe('SendMessageNode', () => {
+  it('resolves SlackTrigger lazily via ModuleRef', () => {
+    const triggerStub = ({
+      sendToThread: vi.fn(),
+    } satisfies Pick<SlackTrigger, 'sendToThread'>) as SlackTrigger;
+    const moduleRef = ({ get: vi.fn(() => triggerStub) } satisfies Pick<ModuleRef, 'get'>) as ModuleRef;
+    const node = new SendMessageNode(new LoggerService(), moduleRef);
+
+    const tool = node.getTool();
+    expect(moduleRef.get).toHaveBeenCalledWith(SlackTrigger, { strict: false });
+    expect(tool).toBeInstanceOf(SendMessageFunctionTool);
+    expect(node.getTool()).toBe(tool);
   });
 });
