@@ -17,9 +17,6 @@ export class SendMessageNode extends BaseToolNode<SendMessageConfig> {
     @Inject(LoggerService) protected logger: LoggerService,
     @Inject(ModuleRef) private readonly moduleRef: ModuleRef,
   ) {
-    console.log('-----SendMessageNode constructor-----');
-    console.log(trigger);
-    console.log(trigger.test());
     super(logger);
   }
 

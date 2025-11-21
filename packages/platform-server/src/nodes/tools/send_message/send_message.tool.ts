@@ -12,9 +12,6 @@ export class SendMessageFunctionTool extends FunctionTool<typeof sendMessageInvo
     private logger: LoggerService,
     private trigger: SlackTrigger,
   ) {
-    console.log('-----SendMessageFunctionTool init-----');
-    console.log(logger, trigger);
-    console.log(trigger.test())
     super();
   }
 
@@ -32,8 +29,6 @@ export class SendMessageFunctionTool extends FunctionTool<typeof sendMessageInvo
     const threadId = ctx?.threadId;
     if (!threadId) return JSON.stringify({ ok: false, error: 'missing_thread_context' });
     try {
-      console.log('-----SendMessageFunctionTool execute-----');
-      console.log(this.trigger);
       const result = (await this.trigger.sendToThread(threadId, args.message)) as unknown;
       const parsed = SendResultSchema.safeParse(result);
       if (!parsed.success) {
