@@ -127,14 +127,43 @@ export abstract class PersistenceBaseLLMReducer extends Reducer<LLMState, LLMCon
     return this.isMessageLike(v) && v.role === 'system';
   }
 
-  protected isResponseValue(v: unknown): v is { output: Response['output'] } {
+  protected isResponseValue(v: unknown): v is { output: Response['output']; usage?: Response['usage'] | null } {
     if (!this.isRecord(v)) return false;
-    if (!this.hasKey(v, 'output')) return false;
-    return Array.isArray(v.output);
+    if (!this.hasKey(v, 'output') || !Array.isArray(v.output)) return false;
+    if (this.hasKey(v, 'usage')) {
+      const usage = v.usage;
+      if (usage !== null && !this.isUsageValue(usage)) return false;
+    }
+    return true;
   }
 
   protected isFunctionCallOutput(v: unknown): v is ResponseInputItem.FunctionCallOutput {
     if (!this.isRecord(v)) return false;
     return this.hasKey(v, 'type') && this.hasKey(v, 'output');
+  }
+
+  protected isUsageValue(v: unknown): v is Response['usage'] {
+    if (!this.isRecord(v)) return false;
+    if (!this.hasKey(v, 'input_tokens') || typeof v.input_tokens !== 'number') return false;
+    if (!this.hasKey(v, 'output_tokens') || typeof v.output_tokens !== 'number') return false;
+    if (!this.hasKey(v, 'total_tokens') || typeof v.total_tokens !== 'number') return false;
+
+    if (this.hasKey(v, 'input_tokens_details')) {
+      const details = v.input_tokens_details;
+      if (details !== null) {
+        if (!this.isRecord(details)) return false;
+        if (this.hasKey(details, 'cached_tokens') && typeof details.cached_tokens !== 'number') return false;
+      }
+    }
+
+    if (this.hasKey(v, 'output_tokens_details')) {
+      const details = v.output_tokens_details;
+      if (details !== null) {
+        if (!this.isRecord(details)) return false;
+        if (this.hasKey(details, 'reasoning_tokens') && typeof details.reasoning_tokens !== 'number') return false;
+      }
+    }
+
+    return true;
   }
 }

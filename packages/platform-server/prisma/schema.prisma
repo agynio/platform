@@ -249,6 +249,11 @@ model LLMCall {
   contextItemIds String[] @map("context_item_ids") @default([])
   responseText String? @map("response_text") @db.Text
   rawResponse  Json?   @map("raw_response")
+  inputTokens Int? @map("input_tokens")
+  cachedInputTokens Int? @map("cached_input_tokens")
+  outputTokens Int? @map("output_tokens")
+  reasoningTokens Int? @map("reasoning_tokens")
+  totalTokens Int? @map("total_tokens")
 
   event          RunEvent        @relation(fields: [eventId], references: [id], onDelete: Cascade)
   toolCalls      ToolCall[]

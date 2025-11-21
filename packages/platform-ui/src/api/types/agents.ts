@@ -96,6 +96,13 @@ export type RunTimelineEvent = {
     responseText: string | null;
     rawResponse: unknown;
     toolCalls: Array<{ callId: string; name: string; arguments: unknown }>;
+    usage?: {
+      inputTokens: number | null;
+      cachedInputTokens: number | null;
+      outputTokens: number | null;
+      reasoningTokens: number | null;
+      totalTokens: number | null;
+    };
   };
   toolExecution?: {
     toolName: string;

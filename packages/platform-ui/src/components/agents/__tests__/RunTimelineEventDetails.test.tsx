@@ -216,6 +216,39 @@ describe('RunTimelineEventDetails', () => {
     expect(screen.queryByText('Raw response')).toBeNull();
   });
 
+  it('displays LLM usage metrics when available', () => {
+    const event = buildEvent({
+      type: 'llm_call',
+      llmCall: {
+        provider: 'openai',
+        model: 'gpt-usage',
+        temperature: null,
+        topP: null,
+        stopReason: null,
+        contextItemIds: [],
+        responseText: 'usage test',
+        rawResponse: null,
+        toolCalls: [],
+        usage: {
+          inputTokens: 123,
+          cachedInputTokens: 45,
+          outputTokens: 67,
+          reasoningTokens: 8,
+          totalTokens: 190,
+        },
+      },
+      toolExecution: undefined,
+    });
+
+    renderDetails(event);
+
+    expect(screen.getByText('Input: 123')).toBeInTheDocument();
+    expect(screen.getByText('Cached: 45')).toBeInTheDocument();
+    expect(screen.getByText('Output: 67')).toBeInTheDocument();
+    expect(screen.getByText('Reasoning: 8')).toBeInTheDocument();
+    expect(screen.getByText('Total: 190')).toBeInTheDocument();
+  });
+
   it('wraps long response text using content-wrap', () => {
     const longText = 'A'.repeat(120);
     const event = buildEvent({

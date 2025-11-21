@@ -198,6 +198,13 @@ function renderOutputByMode(mode: OutputMode, value: unknown, options: { framed?
   return <pre className={classes.join(' ')}>{displayText}</pre>;
 }
 
+function formatUsageValue(value: number | null | undefined): string {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return value.toLocaleString();
+  }
+  return '—';
+}
+
 function useToolOutputMode(eventId: string, value: unknown) {
   const storageKey = useMemo(() => `timeline-output-mode:${eventId}`, [eventId]);
   const [mode, setMode] = useState<OutputMode>(() => {
@@ -399,6 +406,7 @@ export function RunTimelineEventDetails({ event }: { event: RunTimelineEvent }) 
   const llmCall = event.llmCall;
   const hasLlmResponse = Boolean(llmCall?.responseText);
   const hasLlmToolCalls = (llmCall?.toolCalls.length ?? 0) > 0;
+  const usageMetrics = llmCall?.usage;
   const toolExecution = event.toolExecution;
   const callAgentMeta = useMemo(() => {
     if (!toolExecution || !CALL_AGENT_TOOL_NAMES.has(toolExecution.toolName)) return null;
@@ -567,6 +575,25 @@ export function RunTimelineEventDetails({ event }: { event: RunTimelineEvent }) 
                 <span className="font-medium text-gray-800">Context items:</span> {llmCall.contextItemIds.length}
               </span>
             </div>
+            {usageMetrics && (
+              <div className="flex flex-wrap items-center gap-3 text-[11px] text-gray-600">
+                <span>
+                  <span className="font-medium text-gray-800">Input:</span> {formatUsageValue(usageMetrics.inputTokens)}
+                </span>
+                <span>
+                  <span className="font-medium text-gray-800">Cached:</span> {formatUsageValue(usageMetrics.cachedInputTokens)}
+                </span>
+                <span>
+                  <span className="font-medium text-gray-800">Output:</span> {formatUsageValue(usageMetrics.outputTokens)}
+                </span>
+                <span>
+                  <span className="font-medium text-gray-800">Reasoning:</span> {formatUsageValue(usageMetrics.reasoningTokens)}
+                </span>
+                <span>
+                  <span className="font-medium text-gray-800">Total:</span> {formatUsageValue(usageMetrics.totalTokens)}
+                </span>
+              </div>
+            )}
             <div className="flex min-h-[260px] flex-1 flex-col gap-4 md:min-h-[320px] md:flex-row md:gap-6">
               <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded border border-gray-200 bg-white">
                 <header className="border-b border-gray-200 px-3 py-2 text-xs font-semibold uppercase tracking-wide text-gray-500">Context</header>

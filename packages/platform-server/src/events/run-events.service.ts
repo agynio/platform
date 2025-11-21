@@ -109,6 +109,13 @@ export type RunTimelineEvent = {
     responseText: string | null;
     rawResponse: unknown;
     toolCalls: Array<{ callId: string; name: string; arguments: unknown }>;
+    usage?: {
+      inputTokens: number | null;
+      cachedInputTokens: number | null;
+      outputTokens: number | null;
+      reasoningTokens: number | null;
+      totalTokens: number | null;
+    };
   };
   toolExecution?: {
     toolName: string;
@@ -218,6 +225,14 @@ export interface ToolCallRecord {
   arguments: Prisma.InputJsonValue;
 }
 
+export interface LLMCallUsageMetrics {
+  inputTokens?: number | null;
+  cachedInputTokens?: number | null;
+  outputTokens?: number | null;
+  reasoningTokens?: number | null;
+  totalTokens?: number | null;
+}
+
 export interface LLMCallCompleteArgs {
   tx?: Tx;
   eventId: string;
@@ -230,6 +245,7 @@ export interface LLMCallCompleteArgs {
   errorMessage?: string | null;
   endedAt?: Date;
   metadataPatch?: RunEventMetadata;
+  usage?: LLMCallUsageMetrics;
 }
 
 export interface ToolExecutionStartArgs {
@@ -414,6 +430,7 @@ export class RunEventsService {
             name: tc.name,
             arguments: this.toPlainJson(tc.arguments),
           })),
+          usage: this.serializeUsage(event.llmCall),
         }
       : undefined;
     const toolExecution = event.toolExecution
@@ -475,6 +492,27 @@ export class RunEventsService {
       message,
       attachments,
     };
+  }
+
+  private serializeUsage(
+    llmCall: RunEventWithRelations['llmCall'] | undefined,
+  ): {
+    inputTokens: number | null;
+    cachedInputTokens: number | null;
+    outputTokens: number | null;
+    reasoningTokens: number | null;
+    totalTokens: number | null;
+  } | undefined {
+    if (!llmCall) return undefined;
+    const usage = {
+      inputTokens: llmCall.inputTokens ?? null,
+      cachedInputTokens: llmCall.cachedInputTokens ?? null,
+      outputTokens: llmCall.outputTokens ?? null,
+      reasoningTokens: llmCall.reasoningTokens ?? null,
+      totalTokens: llmCall.totalTokens ?? null,
+    } as const;
+    const hasValue = Object.values(usage).some((value) => typeof value === 'number');
+    return hasValue ? usage : undefined;
   }
 
   private async fetchEvent(eventId: string, tx?: Tx): Promise<RunEventWithRelations | null> {
@@ -800,6 +838,11 @@ export class RunEventsService {
         stopReason: args.stopReason ?? null,
         responseText: this.truncate(args.responseText ?? null),
         rawResponse: this.jsonOrNull(args.rawResponse ?? null),
+        inputTokens: args.usage?.inputTokens ?? null,
+        cachedInputTokens: args.usage?.cachedInputTokens ?? null,
+        outputTokens: args.usage?.outputTokens ?? null,
+        reasoningTokens: args.usage?.reasoningTokens ?? null,
+        totalTokens: args.usage?.totalTokens ?? null,
       },
     });
 

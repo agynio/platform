@@ -10,7 +10,7 @@ import {
 import { Inject, Injectable, Scope } from '@nestjs/common';
 import { LLMContext, LLMContextState, LLMMessage, LLMState } from '../types';
 import { LoggerService } from '../../core/services/logger.service';
-import { RunEventsService, ToolCallRecord } from '../../events/run-events.service';
+import { LLMCallUsageMetrics, RunEventsService, ToolCallRecord } from '../../events/run-events.service';
 import { RunEventStatus, Prisma } from '@prisma/client';
 import { toPrismaJsonValue } from '../services/messages.serialization';
 import {
@@ -96,12 +96,17 @@ export class CallModelLLMReducer extends Reducer<LLMState, LLMContext> {
     });
     await this.runEvents.publishEvent(llmEvent.id, 'append');
 
-    const cancelAndReturn = async (params?: { rawResponse?: Prisma.InputJsonValue | null; errorMessage?: string | null }) => {
+    const cancelAndReturn = async (params?: {
+      rawResponse?: Prisma.InputJsonValue | null;
+      errorMessage?: string | null;
+      usage?: LLMCallUsageMetrics;
+    }) => {
       await this.runEvents.completeLLMCall({
         eventId: llmEvent.id,
         status: RunEventStatus.cancelled,
         rawResponse: params?.rawResponse ?? null,
         errorMessage: params?.errorMessage ?? null,
+        usage: params?.usage,
       });
       await this.runEvents.publishEvent(llmEvent.id, 'update');
       return state;
@@ -113,9 +118,10 @@ export class CallModelLLMReducer extends Reducer<LLMState, LLMContext> {
 
     try {
       const rawMessage = await this.callModel(input);
+      const usageMetrics = this.extractUsage(rawMessage);
 
       if (ctx.terminateSignal?.isActive) {
-        return cancelAndReturn({ rawResponse: this.trySerialize(rawMessage) });
+        return cancelAndReturn({ rawResponse: this.trySerialize(rawMessage), usage: usageMetrics });
       }
 
       const toolCalls = this.serializeToolCalls(
@@ -143,6 +149,7 @@ export class CallModelLLMReducer extends Reducer<LLMState, LLMContext> {
         stopReason: this.extractStopReason(rawMessage),
         rawResponse,
         toolCalls,
+        usage: usageMetrics,
       });
       await this.runEvents.publishEvent(llmEvent.id, 'update');
 
@@ -392,5 +399,17 @@ export class CallModelLLMReducer extends Reducer<LLMState, LLMContext> {
     const obj = raw as Record<string, unknown>;
     const reason = obj.stop_reason ?? obj.finish_reason;
     return typeof reason === 'string' ? reason : null;
+  }
+
+  private extractUsage(message: ResponseMessage): LLMCallUsageMetrics | undefined {
+    const usage = message.usage;
+    if (!usage) return undefined;
+    return {
+      inputTokens: usage.input_tokens,
+      cachedInputTokens: usage.input_tokens_details?.cached_tokens ?? null,
+      outputTokens: usage.output_tokens,
+      reasoningTokens: usage.output_tokens_details?.reasoning_tokens ?? null,
+      totalTokens: usage.total_tokens,
+    };
   }
 }
