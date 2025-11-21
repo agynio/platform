@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { Test } from '@nestjs/testing';
 import { ModuleRef } from '@nestjs/core';
 
@@ -37,184 +37,204 @@ class FakeAgent extends AgentNode {
   }
 }
 
+function buildCtx(overrides: Partial<LLMContext> = {}): LLMContext {
+  return {
+    threadId: 'parent',
+    runId: 'run',
+    finishSignal: new Signal(),
+    terminateSignal: new Signal(),
+    callerAgent: { invoke: async () => new ResponseMessage({ output: [] }) },
+    ...overrides,
+  } as LLMContext;
+}
+
+async function createHarness(options: { persistence?: AgentsPersistenceService } = {}) {
+  const defaultSpy = vi.fn().mockResolvedValue('child-default');
+  const hasCustomPersistence = Object.prototype.hasOwnProperty.call(options, 'persistence');
+  const persistence = hasCustomPersistence
+    ? (options.persistence as AgentsPersistenceService)
+    : ({ getOrCreateSubthreadByAlias: defaultSpy } as unknown as AgentsPersistenceService);
+
+  const module = await Test.createTestingModule({
+    providers: [
+      LoggerService,
+      {
+        provide: ConfigService,
+        useValue: new ConfigService().init(
+          configSchema.parse({ llmProvider: 'openai', agentsDatabaseUrl: 'postgres://localhost/agents' }),
+        ),
+      },
+      { provide: LLMProvisioner, useClass: StubLLMProvisioner },
+      ManageFunctionTool,
+      ManageToolNode,
+      FakeAgent,
+      { provide: AgentsPersistenceService, useValue: persistence },
+      RunSignalsRegistry,
+    ],
+  }).compile();
+
+  const node = await module.resolve(ManageToolNode);
+  await node.setConfig({ description: 'desc' });
+  const tool = node.getTool();
+
+  return { module, node, tool, spy: hasCustomPersistence ? null : defaultSpy };
+}
+
+async function addWorker(module: Awaited<ReturnType<typeof createHarness>>['module'], node: ManageToolNode, title: string) {
+  const worker = await module.resolve(FakeAgent);
+  await worker.setConfig({ title });
+  node.addWorker(worker);
+  return worker;
+}
+
 describe('ManageTool unit', () => {
-  it('send_message: matches worker by trimmed title and returns text', async () => {
-    const module = await Test.createTestingModule({
-      providers: [
-        LoggerService,
-        { provide: ConfigService, useValue: new ConfigService().init(configSchema.parse({ llmProvider: 'openai', agentsDatabaseUrl: 'postgres://localhost/agents' })) },
-        { provide: LLMProvisioner, useClass: StubLLMProvisioner },
-        ManageFunctionTool,
-        ManageToolNode,
-        FakeAgent,
-        {
-          provide: AgentsPersistenceService,
-          useValue: {
-            beginRunThread: async () => ({ runId: 't' }),
-            recordInjected: async () => ({ messageIds: [] }),
-            completeRun: async () => {},
-            getOrCreateSubthreadByAlias: async () => 'child-t',
-          },
-        },
-        RunSignalsRegistry,
-      ],
-    }).compile();
+  it('send_message: uses explicit threadAlias verbatim after trim', async () => {
+    const getOrCreateSubthreadByAlias = vi.fn().mockResolvedValue('child-explicit');
+    const persistence = { getOrCreateSubthreadByAlias } as unknown as AgentsPersistenceService;
+    const harness = await createHarness({ persistence });
+    await addWorker(harness.module, harness.node, '  child-1  ');
 
-    const node = await module.resolve(ManageToolNode);
-    await node.setConfig({ description: 'desc' });
-    const worker = await module.resolve(FakeAgent);
-    await worker.setConfig({ title: '  child-1  ' });
-    node.addWorker(worker);
-    expect(node.listWorkers()).toEqual(['child-1']);
+    const ctx = buildCtx();
+    const res = await harness.tool.execute(
+      {
+        command: 'send_message',
+        worker: ' child-1 ',
+        message: 'hello',
+        threadAlias: '  Mixed.Alias-Case_123  ',
+      },
+      ctx,
+    );
 
-    const tool = node.getTool();
-    const ctx: LLMContext = { threadId: 'parent', runId: 'r', finishSignal: new Signal(), terminateSignal: new Signal(), callerAgent: { invoke: async () => new ResponseMessage({ output: [] }) } };
-    const res = await tool.execute({ command: 'send_message', worker: ' child-1 ', message: 'hello', threadAlias: 'child-1' }, ctx);
     expect(res?.startsWith('ok-')).toBe(true);
+    expect(getOrCreateSubthreadByAlias).toHaveBeenCalledWith('manage', 'Mixed.Alias-Case_123', 'parent', '');
   });
 
-  it('send_message: parameter validation and unknown worker', async () => {
-    const module = await Test.createTestingModule({
-      providers: [
-        LoggerService,
-        { provide: ConfigService, useValue: new ConfigService().init(configSchema.parse({ llmProvider: 'openai', agentsDatabaseUrl: 'postgres://localhost/agents' })) },
-        { provide: LLMProvisioner, useClass: StubLLMProvisioner },
-        ManageFunctionTool,
-        ManageToolNode,
-        FakeAgent,
-        {
-          provide: AgentsPersistenceService,
-          useValue: {
-            beginRunThread: async () => ({ runId: 't' }),
-            recordInjected: async () => ({ messageIds: [] }),
-            completeRun: async () => {},
-            getOrCreateSubthreadByAlias: async () => 'child-t',
-          },
-        },
-        RunSignalsRegistry,
-      ],
-    }).compile();
+  it('send_message: derives sanitized alias when omitted', async () => {
+    const getOrCreateSubthreadByAlias = vi.fn().mockResolvedValue('child-derived');
+    const persistence = { getOrCreateSubthreadByAlias } as unknown as AgentsPersistenceService;
+    const harness = await createHarness({ persistence });
+    await addWorker(harness.module, harness.node, 'Alpha Worker');
 
-    const node = await module.resolve(ManageToolNode);
-    await node.setConfig({ description: 'd' });
-    const tool = node.getTool();
-    const ctx: LLMContext = { threadId: 'p', runId: 'r', finishSignal: new Signal(), terminateSignal: new Signal(), callerAgent: { invoke: async () => new ResponseMessage({ output: [] }) } };
+    const ctx = buildCtx();
+    const res = await harness.tool.execute(
+      { command: 'send_message', worker: 'Alpha Worker', message: 'ping' },
+      ctx,
+    );
 
-    await expect(tool.execute({ command: 'send_message', worker: 'x', threadAlias: 'alias-x' }, ctx)).rejects.toThrow('No agents connected');
+    expect(res?.startsWith('ok-')).toBe(true);
+    expect(getOrCreateSubthreadByAlias).toHaveBeenCalledWith('manage', 'alpha-worker', 'parent', '');
+  });
 
-    const agent = await module.resolve(FakeAgent);
-    await agent.setConfig({ title: 'w1' });
-    node.addWorker(agent);
+  it('send_message: rejects empty alias after trim', async () => {
+    const harness = await createHarness();
+    await addWorker(harness.module, harness.node, 'Worker X');
+    const ctx = buildCtx();
 
-    await expect(tool.execute({ command: 'send_message', worker: 'x', threadAlias: 'alias-x' }, ctx)).rejects.toThrow('message is required for send_message');
-    await expect(tool.execute({ command: 'send_message', worker: '   ', message: 'hi', threadAlias: 'alias-x' }, ctx)).rejects.toThrow('worker is required for send_message');
-    await expect(tool.execute({ command: 'send_message', worker: 'w1', message: '   ', threadAlias: 'alias-x' }, ctx)).rejects.toThrow('message is required for send_message');
-    await expect(tool.execute({ command: 'send_message', worker: 'unknown', message: 'm', threadAlias: 'alias-unknown' }, ctx)).rejects.toThrow('Unknown worker: unknown');
+    await expect(
+      harness.tool.execute(
+        { command: 'send_message', worker: 'Worker X', message: 'hi', threadAlias: '   ' },
+        ctx,
+      ),
+    ).rejects.toThrow('Manage: invalid or empty threadAlias');
+    expect(harness.spy).not.toHaveBeenCalled();
+  });
+
+  it('send_message: validates worker/message parameters and unknown worker', async () => {
+    const harness = await createHarness();
+    const ctx = buildCtx();
+
+    await expect(
+      harness.tool.execute({ command: 'send_message', worker: 'x', message: 'hi' }, ctx),
+    ).rejects.toThrow('No agents connected');
+
+    await addWorker(harness.module, harness.node, 'w1');
+
+    await expect(
+      harness.tool.execute({ command: 'send_message', worker: 'w1' }, ctx),
+    ).rejects.toThrow('message is required for send_message');
+    await expect(
+      harness.tool.execute({ command: 'send_message', worker: '   ', message: 'hi' }, ctx),
+    ).rejects.toThrow('worker is required for send_message');
+    await expect(
+      harness.tool.execute({ command: 'send_message', worker: 'w1', message: '   ' }, ctx),
+    ).rejects.toThrow('message is required for send_message');
+    await expect(
+      harness.tool.execute({ command: 'send_message', worker: 'unknown', message: 'm' }, ctx),
+    ).rejects.toThrow('Unknown worker: unknown');
+  });
+
+  it('send_message: persistence unavailable guard', async () => {
+    const harness = await createHarness({ persistence: undefined as unknown as AgentsPersistenceService });
+    await addWorker(harness.module, harness.node, 'Worker Y');
+    const ctx = buildCtx();
+
+    await expect(
+      harness.tool.execute({ command: 'send_message', worker: 'Worker Y', message: 'msg' }, ctx),
+    ).rejects.toThrow('Manage: persistence unavailable');
+  });
+
+  it('execute: missing threadId guard', async () => {
+    const harness = await createHarness();
+    await addWorker(harness.module, harness.node, 'Worker Z');
+    const ctx = buildCtx({ threadId: undefined as unknown as string });
+
+    await expect(
+      harness.tool.execute({ command: 'send_message', worker: 'Worker Z', message: 'msg' }, ctx),
+    ).rejects.toThrow('Manage: missing threadId in LLM context');
   });
 
   it('check_status: aggregates active child threads scoped to current thread', async () => {
-    const module = await Test.createTestingModule({
-      providers: [
-        LoggerService,
-        { provide: ConfigService, useValue: new ConfigService().init(configSchema.parse({ llmProvider: 'openai', agentsDatabaseUrl: 'postgres://localhost/agents' })) },
-        { provide: LLMProvisioner, useClass: StubLLMProvisioner },
-        ManageFunctionTool,
-        ManageToolNode,
-        FakeAgent,
-        {
-          provide: AgentsPersistenceService,
-          useValue: {
-            beginRunThread: async () => ({ runId: 't' }),
-            recordInjected: async () => ({ messageIds: [] }),
-            completeRun: async () => {},
-            getOrCreateSubthreadByAlias: async () => 'child-t',
-          },
-        },
-        RunSignalsRegistry,
-      ],
-    }).compile();
+    const harness = await createHarness();
+    await addWorker(harness.module, harness.node, 'A');
+    await addWorker(harness.module, harness.node, 'B');
 
-    const node = await module.resolve(ManageToolNode);
-    await node.setConfig({ description: 'desc' });
-    const agentA = await module.resolve(FakeAgent);
-    const agentB = await module.resolve(FakeAgent);
-    await agentA.setConfig({ title: 'A' });
-    await agentB.setConfig({ title: 'B' });
-    node.addWorker(agentA);
-    node.addWorker(agentB);
-
-    const tool = node.getTool();
-    const ctx: LLMContext = { threadId: 'p', runId: 'r', finishSignal: new Signal(), terminateSignal: new Signal(), callerAgent: { invoke: async () => new ResponseMessage({ output: [] }) } };
-    const statusStr = await tool.execute({ command: 'check_status', threadAlias: 'status' }, ctx);
+    const ctx = buildCtx();
+    const statusStr = await harness.tool.execute({ command: 'check_status', threadAlias: 'status' }, ctx);
     const status = JSON.parse(statusStr) as { activeTasks: number; childThreadIds: string[] };
     expect(status.activeTasks).toBe(0);
     expect(status.childThreadIds.length).toBe(0);
   });
 
   it('ManageToolNode enforces titled workers and handles retitle/removal', async () => {
-    const module = await Test.createTestingModule({
-      providers: [
-        LoggerService,
-        { provide: ConfigService, useValue: new ConfigService().init(configSchema.parse({ llmProvider: 'openai', agentsDatabaseUrl: 'postgres://localhost/agents' })) },
-        { provide: LLMProvisioner, useClass: StubLLMProvisioner },
-        ManageFunctionTool,
-        ManageToolNode,
-        FakeAgent,
-        {
-          provide: AgentsPersistenceService,
-          useValue: {
-            beginRunThread: async () => ({ runId: 't' }),
-            recordInjected: async () => ({ messageIds: [] }),
-            completeRun: async () => {},
-            getOrCreateSubthreadByAlias: async () => 'child-t',
-          },
-        },
-        RunSignalsRegistry,
-      ],
-    }).compile();
+    const harness = await createHarness();
 
-    const node = await module.resolve(ManageToolNode);
-    await node.setConfig({ description: 'desc' });
+    const first = await addWorker(harness.module, harness.node, 'Alpha');
+    expect(harness.node.listWorkers()).toEqual(['Alpha']);
+    expect(() => harness.node.addWorker(first)).not.toThrow();
 
-    const first = await module.resolve(FakeAgent);
-    await first.setConfig({ title: 'Alpha' });
-    node.addWorker(first);
-    expect(node.listWorkers()).toEqual(['Alpha']);
-    expect(() => node.addWorker(first)).not.toThrow();
-
-    const noTitle = await module.resolve(FakeAgent);
+    const noTitle = await harness.module.resolve(FakeAgent);
     await noTitle.setConfig({});
-    expect(() => node.addWorker(noTitle)).toThrow('ManageToolNode: worker agent requires non-empty title');
+    expect(() => harness.node.addWorker(noTitle)).toThrow('ManageToolNode: worker agent requires non-empty title');
 
-    const dup = await module.resolve(FakeAgent);
+    const dup = await harness.module.resolve(FakeAgent);
     await dup.setConfig({ title: '  Alpha  ' });
-    expect(() => node.addWorker(dup)).toThrow('ManageToolNode: worker with title "Alpha" already exists');
+    expect(() => harness.node.addWorker(dup)).toThrow('ManageToolNode: worker with title "Alpha" already exists');
 
     await first.setConfig({ title: ' Beta ' });
-    expect(node.listWorkers()).toEqual(['Beta']);
-    expect(node.getWorkerByTitle('Beta')).toBe(first);
+    expect(harness.node.listWorkers()).toEqual(['Beta']);
+    expect(harness.node.getWorkerByTitle('Beta')).toBe(first);
 
-    node.removeWorker(first);
-    expect(node.listWorkers()).toEqual([]);
+    harness.node.removeWorker(first);
+    expect(harness.node.listWorkers()).toEqual([]);
   });
 
   it('send_message: surfaces child agent failure', async () => {
     const module = await Test.createTestingModule({
       providers: [
         LoggerService,
-        { provide: ConfigService, useValue: new ConfigService().init(configSchema.parse({ llmProvider: 'openai', agentsDatabaseUrl: 'postgres://localhost/agents' })) },
+        {
+          provide: ConfigService,
+          useValue: new ConfigService().init(
+            configSchema.parse({ llmProvider: 'openai', agentsDatabaseUrl: 'postgres://localhost/agents' }),
+          ),
+        },
         { provide: LLMProvisioner, useClass: StubLLMProvisioner },
         ManageFunctionTool,
         ManageToolNode,
         FakeAgent,
         {
           provide: AgentsPersistenceService,
-          useValue: {
-            beginRunThread: async () => ({ runId: 't' }),
-            recordInjected: async () => ({ messageIds: [] }),
-            completeRun: async () => {},
-            getOrCreateSubthreadByAlias: async () => 'child-t',
-          },
+          useValue: { getOrCreateSubthreadByAlias: async () => 'child-t' } as unknown as AgentsPersistenceService,
         },
         RunSignalsRegistry,
       ],
@@ -222,18 +242,27 @@ describe('ManageTool unit', () => {
 
     const node = await module.resolve(ManageToolNode);
     await node.setConfig({ description: 'desc' });
+
     class ThrowingAgent extends FakeAgent {
       override async invoke(): Promise<ResponseMessage> {
         throw new Error('child failure');
       }
     }
-    const failingAgent = new ThrowingAgent(module.get(ConfigService), module.get(LoggerService), module.get(LLMProvisioner), module.get(ModuleRef));
+
+    const failingAgent = new ThrowingAgent(
+      module.get(ConfigService),
+      module.get(LoggerService),
+      module.get(LLMProvisioner),
+      module.get(ModuleRef),
+    );
     await failingAgent.setConfig({ title: 'W' });
     node.addWorker(failingAgent);
 
     const tool = node.getTool();
-    const ctx: LLMContext = { threadId: 'p', runId: 'r', finishSignal: new Signal(), terminateSignal: new Signal(), callerAgent: { invoke: async () => new ResponseMessage({ output: [] }) } };
-    await expect(tool.execute({ command: 'send_message', worker: 'W', message: 'go', threadAlias: 'alias-W' }, ctx)).rejects.toThrow('child failure');
+    const ctx = buildCtx({ threadId: 'p' });
+    await expect(
+      tool.execute({ command: 'send_message', worker: 'W', message: 'go', threadAlias: 'alias-W' }, ctx),
+    ).rejects.toThrow('child failure');
   });
 });
 
@@ -242,19 +271,19 @@ describe('ManageTool graph wiring', () => {
     const module = await Test.createTestingModule({
       providers: [
         LoggerService,
-        { provide: ConfigService, useValue: new ConfigService().init(configSchema.parse({ llmProvider: 'openai', agentsDatabaseUrl: 'postgres://localhost/agents' })) },
+        {
+          provide: ConfigService,
+          useValue: new ConfigService().init(
+            configSchema.parse({ llmProvider: 'openai', agentsDatabaseUrl: 'postgres://localhost/agents' }),
+          ),
+        },
         { provide: LLMProvisioner, useClass: StubLLMProvisioner },
         ManageFunctionTool,
         ManageToolNode,
         FakeAgent,
         {
           provide: AgentsPersistenceService,
-          useValue: {
-            beginRunThread: async () => ({ runId: 't' }),
-            recordInjected: async () => ({ messageIds: [] }),
-            completeRun: async () => {},
-            getOrCreateSubthreadByAlias: async () => 'child-t',
-          },
+          useValue: { getOrCreateSubthreadByAlias: async () => 'child-t' } as unknown as AgentsPersistenceService,
         },
         RunSignalsRegistry,
       ],
@@ -264,7 +293,10 @@ describe('ManageTool graph wiring', () => {
       addTool(_tool: unknown) {}
       removeTool(_tool: unknown) {}
       override getPortConfig() {
-        return { sourcePorts: { tools: { kind: 'method', create: 'addTool', destroy: 'removeTool' } }, targetPorts: { $self: { kind: 'instance' } } } as const;
+        return {
+          sourcePorts: { tools: { kind: 'method', create: 'addTool', destroy: 'removeTool' } },
+          targetPorts: { $self: { kind: 'instance' } },
+        } as const;
       }
     }
 
@@ -294,12 +326,7 @@ describe('ManageTool graph wiring', () => {
         { provide: ModuleRef, useValue: moduleRef },
         {
           provide: AgentsPersistenceService,
-          useValue: {
-            beginRunThread: async () => ({ runId: 't' }),
-            recordInjected: async () => ({ messageIds: [] }),
-            completeRun: async () => {},
-            getOrCreateSubthreadByAlias: async () => 'child-t',
-          },
+          useValue: { getOrCreateSubthreadByAlias: async () => 'child-t' } as unknown as AgentsPersistenceService,
         },
         RunSignalsRegistry,
       ],

@@ -12,20 +12,29 @@ export const ManageInvocationSchema = z
     command: z.enum(['send_message', 'check_status']).describe('Command to execute.'),
     worker: z.string().min(1).optional().describe('Target worker name (required for send_message).'),
     message: z.string().min(1).optional().describe('Message to send (required for send_message).'),
-    threadAlias: z.string().min(1).describe('Child thread alias'),
+    threadAlias: z
+      .string()
+      .min(1)
+      .optional()
+      .describe('Optional child thread alias; defaults per worker title.'),
   })
   .strict();
 
 @Injectable({ scope: Scope.TRANSIENT })
 export class ManageFunctionTool extends FunctionTool<typeof ManageInvocationSchema> {
   private _node?: ManageToolNode;
+  private persistence?: AgentsPersistenceService;
 
-  constructor(@Inject(LoggerService) private readonly logger: LoggerService, @Inject(AgentsPersistenceService) private readonly persistence: AgentsPersistenceService) {
+  constructor(
+    @Inject(LoggerService) private readonly logger: LoggerService,
+    @Inject(AgentsPersistenceService) private readonly injectedPersistence: AgentsPersistenceService,
+  ) {
     super();
   }
 
-  init(node: ManageToolNode) {
+  init(node: ManageToolNode, options?: { persistence?: AgentsPersistenceService }) {
     this._node = node;
+    this.persistence = options?.persistence ?? this.injectedPersistence;
     return this;
   }
 
@@ -44,9 +53,26 @@ export class ManageFunctionTool extends FunctionTool<typeof ManageInvocationSche
     return this.node.config.description ?? 'Manage tool';
   }
 
+  private getPersistence(): AgentsPersistenceService | undefined {
+    return this.persistence ?? this.injectedPersistence;
+  }
+
+  private sanitizeAlias(raw: string | undefined): string {
+    const normalized = (raw ?? '').toLowerCase();
+    const withHyphen = normalized.replace(/\s+/g, '-');
+    const cleaned = withHyphen.replace(/[^a-z0-9._-]/g, '');
+    const collapsed = cleaned.replace(/-+/g, '-');
+    const truncated = collapsed.slice(0, 64);
+    if (!truncated || !/[a-z0-9]/.test(truncated)) {
+      throw new Error('Manage: invalid or empty threadAlias');
+    }
+    return truncated;
+  }
+
   async execute(args: z.infer<typeof ManageInvocationSchema>, ctx: LLMContext): Promise<string> {
     const { command, worker, message, threadAlias } = args;
     const parentThreadId = ctx.threadId;
+    if (!parentThreadId) throw new Error('Manage: missing threadId in LLM context');
     const workerTitles = this.node.listWorkers();
     if (command === 'send_message') {
       if (!workerTitles.length) throw new Error('No agents connected');
@@ -56,7 +82,17 @@ export class ManageFunctionTool extends FunctionTool<typeof ManageInvocationSche
       if (!messageText) throw new Error('message is required for send_message');
       const targetAgent = this.node.getWorkerByTitle(targetTitle);
       if (!targetAgent) throw new Error(`Unknown worker: ${targetTitle}`);
-      const childThreadId = await this.persistence.getOrCreateSubthreadByAlias('manage', threadAlias, parentThreadId, '');
+      const persistence = this.getPersistence();
+      if (!persistence) throw new Error('Manage: persistence unavailable');
+      const alias =
+        typeof threadAlias === 'string'
+          ? (() => {
+              const trimmed = threadAlias.trim();
+              if (!trimmed) throw new Error('Manage: invalid or empty threadAlias');
+              return trimmed;
+            })()
+          : this.sanitizeAlias(targetTitle);
+      const childThreadId = await persistence.getOrCreateSubthreadByAlias('manage', alias, parentThreadId, '');
       try {
         const res = await targetAgent.invoke(childThreadId, [HumanMessage.fromText(messageText)]);
         return res?.text;

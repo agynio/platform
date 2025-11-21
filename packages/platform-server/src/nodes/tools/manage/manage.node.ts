@@ -4,6 +4,7 @@ import { BaseToolNode } from '../baseToolNode';
 import { ManageFunctionTool } from './manage.tool';
 import { AgentNode } from '../../agent/agent.node';
 import { LoggerService } from '../../../core/services/logger.service';
+import { AgentsPersistenceService } from '../../../agents/agents.persistence.service';
 
 export const ManageToolStaticConfigSchema = z
   .object({
@@ -24,6 +25,7 @@ export class ManageToolNode extends BaseToolNode<z.infer<typeof ManageToolStatic
   constructor(
     @Inject(ManageFunctionTool) private readonly manageTool: ManageFunctionTool,
     @Inject(LoggerService) protected logger: LoggerService,
+    @Inject(AgentsPersistenceService) private readonly persistence: AgentsPersistenceService,
   ) {
     super(logger);
   }
@@ -77,7 +79,7 @@ export class ManageToolNode extends BaseToolNode<z.infer<typeof ManageToolStatic
   }
 
   protected createTool() {
-    return this.manageTool.init(this);
+    return this.manageTool.init(this, { persistence: this.persistence });
   }
 
   getTool() {
