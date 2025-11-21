@@ -5,7 +5,7 @@ import { LiveGraphRuntime } from '../src/graph/liveGraph.manager';
 import type { LLMContext } from '../src/llm/types';
 import { Signal } from '../src/signal';
 import { TemplateRegistry } from '../src/graph/templateRegistry';
-import type { GraphDefinition } from '../src/graph/types';
+import type { GraphDefinition } from '../src/shared/types/graph.types';
 import { LoggerService } from '../src/core/services/logger.service';
 import Node from '../src/nodes/base/Node';
 import { GraphRepository } from '../src/graph/graph.repository';

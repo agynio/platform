@@ -1,4 +1,4 @@
-import { PersistedGraphUpsertRequest, TemplateNodeSchema } from '../graph/types';
+import type { PersistedGraphUpsertRequest, TemplateNodeSchema } from '../shared/types/graph.types';
 
 export function validatePersistedGraph(req: PersistedGraphUpsertRequest, schema: TemplateNodeSchema[]): void {
   const templateSet = new Set(schema.map((s) => s.name));

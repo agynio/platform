@@ -3,13 +3,13 @@ import path from 'path';
 import { spawn } from 'child_process';
 import { LoggerService } from '../core/services/logger.service';
 import { TemplateRegistry } from './templateRegistry';
-import {
+import type {
   PersistedGraph,
   PersistedGraphEdge,
   PersistedGraphNode,
   PersistedGraphUpsertRequest,
   PersistedGraphUpsertResponse,
-} from '../graph/types';
+} from '../shared/types/graph.types';
 import { validatePersistedGraph } from './graphSchema.validator';
 import { GraphRepository } from './graph.repository';
 import { ConfigService } from '../core/services/config.service';

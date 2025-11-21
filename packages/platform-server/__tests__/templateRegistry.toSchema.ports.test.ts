@@ -3,7 +3,7 @@ import { ModuleRef } from '@nestjs/core';
 import { describe, expect, it } from 'vitest';
 import type { TemplatePortConfig } from '../src/graph/ports.types';
 import { TemplateRegistry } from '../src/graph/templateRegistry';
-import type { TemplateNodeSchema } from '../src/graph/types';
+import type { TemplateNodeSchema } from '../src/shared/types/graph.types';
 import Node from '../src/nodes/base/Node';
 
 // Define a minimal DummyNode class matching Node contract

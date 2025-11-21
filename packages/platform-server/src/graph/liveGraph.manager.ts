@@ -6,7 +6,8 @@ import {
   LiveNode,
   edgeKey,
 } from './liveGraph.types';
-import { EdgeDef, GraphDefinition, GraphError, NodeDef } from './types';
+import type { EdgeDef, GraphDefinition, NodeDef } from '../shared/types/graph.types';
+import { GraphError } from './types';
 // Ports based reversible universal edges
 import { ZodError, type ZodIssue } from 'zod';
 import { LoggerService } from '../core/services/logger.service';

@@ -3,7 +3,7 @@ import Fastify from 'fastify';
 import { GraphVariablesController } from '../src/graph/controllers/graphVariables.controller';
 import type { GraphRepository } from '../src/graph/graph.repository';
 import { GraphVariablesService } from '../src/graph/services/graphVariables.service';
-import type { PersistedGraph } from '../src/graph/types';
+import type { PersistedGraph } from '../src/shared/types/graph.types';
 
 class InMemoryPrismaClient {
   variableLocal = {

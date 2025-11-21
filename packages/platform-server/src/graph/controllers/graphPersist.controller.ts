@@ -4,12 +4,12 @@ import { LoggerService } from '../../core/services/logger.service';
 import { TemplateRegistry } from '../templateRegistry';
 import { LiveGraphRuntime } from '../liveGraph.manager';
 import { GraphRepository, type GraphAuthor } from '../graph.repository';
-import {
-  GraphError,
-  type GraphDefinition,
-  type PersistedGraphUpsertRequest,
-  type PersistedGraphUpsertResponse,
-} from '../types';
+import { GraphError } from '../types';
+import type {
+  GraphDefinition,
+  PersistedGraphUpsertRequest,
+  PersistedGraphUpsertResponse,
+} from '../../shared/types/graph.types';
 import { z } from 'zod';
 import { GraphErrorCode } from '../errors';
 import { GraphGuard } from '../graph.guard';

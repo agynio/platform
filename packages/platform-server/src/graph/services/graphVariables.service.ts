@@ -1,7 +1,7 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { PrismaService } from '../../core/services/prisma.service';
 import { GraphRepository } from '../graph.repository';
-import type { PersistedGraph } from '../types';
+import type { PersistedGraph } from '../../shared/types/graph.types';
 
 export type VarItem = { key: string; graph: string | null; local: string | null };
 
