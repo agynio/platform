@@ -242,11 +242,13 @@ describe('RunTimelineEventDetails', () => {
 
     renderDetails(event);
 
-    expect(screen.getByText('Input: 123')).toBeInTheDocument();
-    expect(screen.getByText('Cached: 45')).toBeInTheDocument();
-    expect(screen.getByText('Output: 67')).toBeInTheDocument();
-    expect(screen.getByText('Reasoning: 8')).toBeInTheDocument();
-    expect(screen.getByText('Total: 190')).toBeInTheDocument();
+    expect(screen.getByText('Input:', { selector: 'span' }).parentElement).toHaveTextContent(/Input:\s*123/);
+    expect(screen.getByText('Cached:', { selector: 'span' }).parentElement).toHaveTextContent(/Cached:\s*45/);
+    expect(screen.getByText('Output:', { selector: 'span' }).parentElement).toHaveTextContent(/Output:\s*67/);
+    expect(
+      screen.getByText('Reasoning:', { selector: 'span' }).parentElement,
+    ).toHaveTextContent(/Reasoning:\s*8/);
+    expect(screen.getByText('Total:', { selector: 'span' }).parentElement).toHaveTextContent(/Total:\s*190/);
   });
 
   it('wraps long response text using content-wrap', () => {
