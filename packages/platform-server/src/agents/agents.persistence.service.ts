@@ -4,7 +4,7 @@ import type { MessageKind, Prisma, PrismaClient, RunMessageType, RunStatus, Thre
 import { LoggerService } from '../core/services/logger.service';
 import { PrismaService } from '../core/services/prisma.service';
 import { GraphRepository } from '../graph/graph.repository';
-import { TemplateRegistry } from '../graph/templateRegistry';
+import { TemplateRegistry } from '../graph-core/templateRegistry';
 import type { PersistedGraphNode } from '../shared/types/graph.types';
 import { toPrismaJsonValue } from '../llm/services/messages.serialization';
 import { ChannelDescriptorSchema, type ChannelDescriptor } from '../messaging/types';

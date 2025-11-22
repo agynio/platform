@@ -3,7 +3,7 @@ import type { IncomingHttpHeaders, Server as HTTPServer } from 'http';
 import { Server as SocketIOServer, type ServerOptions, type Socket } from 'socket.io';
 import { z } from 'zod';
 import { LoggerService } from '../core/services/logger.service';
-import { LiveGraphRuntime } from '../graph/liveGraph.manager';
+import { LiveGraphRuntime } from '../graph-core/liveGraph.manager';
 import type { ThreadStatus, MessageKind, RunStatus } from '@prisma/client';
 import {
   EventsBusService,

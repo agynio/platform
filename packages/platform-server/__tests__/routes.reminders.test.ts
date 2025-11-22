@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import Fastify from 'fastify';
 import { RemindMeFunctionTool } from '../src/nodes/tools/remind_me/remind_me.tool';
 import { RemindersController } from '../src/graph/controllers/reminders.controller';
-import type { LiveGraphRuntime } from '../src/graph/liveGraph.manager';
+import type { LiveGraphRuntime } from '../src/graph-core/liveGraph.manager';
 import { Signal } from '../src/signal';
 // Use minimal callerAgent stub matching LLMContext requirements to avoid heavy DI
 import { LoggerService } from '../src/core/services/logger.service';

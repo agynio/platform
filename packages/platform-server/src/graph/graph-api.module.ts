@@ -8,15 +8,15 @@ import { GraphVariablesController } from './controllers/graphVariables.controlle
 import { MemoryController } from './controllers/memory.controller';
 import { RunsController } from './controllers/runs.controller';
 import { GraphGuard } from './graph.guard';
-import { LiveGraphRuntime } from './liveGraph.manager';
 import { NodeStateService } from './nodeState.service';
 import { GraphVariablesService } from './services/graphVariables.service';
 import { GraphDomainModule } from '../graph-domain/graph-domain.module';
 import { RemindersController } from './controllers/reminders.controller';
 import { EventsModule } from '../events/events.module';
+import { GraphCoreModule } from '../graph-core/graph-core.module';
 
 @Module({
-  imports: [GraphDomainModule, EventsModule],
+  imports: [GraphCoreModule, GraphDomainModule, EventsModule],
   controllers: [
     RunsController,
     GraphPersistController,
@@ -28,12 +28,7 @@ import { EventsModule } from '../events/events.module';
     AgentsRemindersController,
     RemindersController,
   ],
-  providers: [
-    GraphGuard,
-    LiveGraphRuntime,
-    NodeStateService,
-    GraphVariablesService,
-  ],
-  exports: [LiveGraphRuntime, NodeStateService, GraphVariablesService],
+  providers: [GraphGuard, NodeStateService, GraphVariablesService],
+  exports: [GraphCoreModule, NodeStateService, GraphVariablesService],
 })
 export class GraphApiModule {}

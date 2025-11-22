@@ -1,9 +1,10 @@
 import { Inject, Injectable } from '@nestjs/common';
-import type { TemplatePortConfig } from './ports.types';
+import { ModuleRef } from '@nestjs/core';
+import type { Constructor } from 'type-fest';
+
+import type { TemplatePortConfig } from '../graph/ports.types';
 import type { TemplateKind, TemplateNodeSchema } from '../shared/types/graph.types';
 import Node from '../nodes/base/Node';
-import type { Constructor } from 'type-fest';
-import { ModuleRef } from '@nestjs/core';
 
 export interface TemplateMeta {
   title: string;
@@ -19,7 +20,6 @@ export class TemplateRegistry {
 
   constructor(@Inject(ModuleRef) private readonly moduleRef: ModuleRef) {}
 
-  // Register associates template -> node class and meta (ports are read from instance via getPortConfig)
   register(template: string, meta: TemplateMeta, nodeClass: TemplateCtor): this {
     if (this.classes.has(template)) {
       // Allow override deliberately; could warn here if desired
@@ -29,7 +29,6 @@ export class TemplateRegistry {
     return this;
   }
 
-  // Provide class lookup for runtime
   getClass(template: string): TemplateCtor | undefined {
     return this.classes.get(template);
   }
@@ -38,13 +37,11 @@ export class TemplateRegistry {
     return this.meta.get(template);
   }
 
-  // Introspect ports by instantiating classes via DI; async to support resolution.
   async toSchema(): Promise<TemplateNodeSchema[]> {
     const schemas: TemplateNodeSchema[] = [];
     for (const name of this.classes.keys()) {
       let sourcePorts: string[] = [];
       let targetPorts: string[] = [];
-      // Attempt DI instantiation to read ports from instance
 
       const cls = this.classes.get(name)!;
       const inst = await this.moduleRef.create<Node>(cls);

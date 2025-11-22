@@ -20,8 +20,8 @@ import { AgentNode } from '../src/nodes/agent/agent.node';
 import { LLMProvisioner } from '../src/llm/provisioners/llm.provisioner';
 import { GraphSocketGateway } from '../src/gateway/graph.socket.gateway';
 import { GraphRepository } from '../src/graph/graph.repository';
-import { TemplateRegistry } from '../src/graph/templateRegistry';
-import { LiveGraphRuntime } from '../src/graph/liveGraph.manager';
+import { TemplateRegistry } from '../src/graph-core/templateRegistry';
+import { LiveGraphRuntime } from '../src/graph-core/liveGraph.manager';
 
 process.env.LLM_PROVIDER = process.env.LLM_PROVIDER || 'openai';
 process.env.AGENTS_DATABASE_URL = process.env.AGENTS_DATABASE_URL || 'postgres://localhost:5432/test';

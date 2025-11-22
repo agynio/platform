@@ -5,25 +5,21 @@ import {
   InternalDiffComputation,
   LiveNode,
   edgeKey,
-} from './liveGraph.types';
+} from '../graph/liveGraph.types';
 import type { EdgeDef, GraphDefinition, NodeDef } from '../shared/types/graph.types';
-import { GraphError } from './types';
-// Ports based reversible universal edges
-import { ZodError, type ZodIssue } from 'zod';
-import { LoggerService } from '../core/services/logger.service';
-
+import { GraphError } from '../graph/types';
 import { Inject, Injectable } from '@nestjs/common';
 import { ModuleRef } from '@nestjs/core';
-import type { NodeStatusState, StatusChangedEvent } from '../nodes/base/Node';
+import { ZodError, type ZodIssue } from 'zod';
 
+import { LoggerService } from '../core/services/logger.service';
+import type { NodeStatusState, StatusChangedEvent } from '../nodes/base/Node';
 import type Node from '../nodes/base/Node';
-import { Errors } from './errors';
-import { PortsRegistry } from './ports.registry';
-import type { TemplatePortConfig } from './ports.types';
+import { Errors } from '../graph/errors';
+import { PortsRegistry } from '../graph/ports.registry';
+import type { TemplatePortConfig } from '../graph/ports.types';
+import { GraphRepository } from '../graph/graph.repository';
 import { TemplateRegistry } from './templateRegistry';
-// Legacy lifecycle guard removed; rely on Node class lifecycle only.
-// hasSetDynamicConfig guard is optional; check presence inline to avoid hard dependency
-import { GraphRepository } from './graph.repository';
 
 const configsEqual = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b); // unchanged
 

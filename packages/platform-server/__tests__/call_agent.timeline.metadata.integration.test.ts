@@ -7,7 +7,7 @@ import { EventsBusService } from '../src/events/events-bus.service';
 import { AgentsPersistenceService } from '../src/agents/agents.persistence.service';
 import { LoggerService } from '../src/core/services/logger.service';
 import type { ThreadsMetricsService } from '../src/agents/threads.metrics.service';
-import type { TemplateRegistry } from '../src/graph/templateRegistry';
+import type { TemplateRegistry } from '../src/graph-core/templateRegistry';
 import type { GraphRepository } from '../src/graph/graph.repository';
 import { HumanMessage, SystemMessage, AIMessage } from '@agyn/llm';
 import { CallAgentLinkingService } from '../src/agents/call-agent-linking.service';

@@ -5,9 +5,10 @@ import { GraphApiModule } from '../graph/graph-api.module';
 import { GatewayModule } from '../gateway/gateway.module';
 import { InfraModule } from '../infra/infra.module';
 import { StartupRecoveryService } from '../core/services/startupRecovery.service';
+import { NodesModule } from '../nodes/nodes.module';
 
 @Module({
-  imports: [CoreModule, EventsModule, InfraModule, GraphApiModule, GatewayModule],
+  imports: [CoreModule, EventsModule, InfraModule, GraphApiModule, NodesModule, GatewayModule],
   providers: [StartupRecoveryService],
 })
 export class AppModule {}

@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { Test } from '@nestjs/testing';
 import { ModuleRef } from '@nestjs/core';
-import { LiveGraphRuntime } from '../src/graph/liveGraph.manager';
+import { LiveGraphRuntime } from '../src/graph-core/liveGraph.manager';
 import { GraphRepository } from '../src/graph/graph.repository';
 import type { GraphDefinition } from '../src/shared/types/graph.types';
 import { buildTemplateRegistry } from '../src/templates';

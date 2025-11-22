@@ -1,4 +1,5 @@
-import { Module } from '@nestjs/common';
+import { Inject, Injectable, Module, OnModuleInit } from '@nestjs/common';
+import { ModuleRef } from '@nestjs/core';
 import { CoreModule } from '../core/core.module';
 import { EnvModule } from '../env/env.module';
 import { EventsModule } from '../events/events.module';
@@ -28,9 +29,23 @@ import { ConfigService } from '../core/services/config.service';
 import { NcpsKeyService } from '../infra/ncps/ncpsKey.service';
 import { LoggerService } from '../core/services/logger.service';
 import { EnvService } from '../env/env.service';
+import { GraphCoreModule } from '../graph-core/graph-core.module';
+import { TemplateRegistry } from '../graph-core/templateRegistry';
+import { registerDefaultTemplates } from '../templates';
+
+@Injectable()
+class NodesTemplateRegistrar implements OnModuleInit {
+  constructor(@Inject(ModuleRef) private readonly moduleRef: ModuleRef) {}
+
+  async onModuleInit(): Promise<void> {
+    const registry = await this.moduleRef.resolve(TemplateRegistry, undefined, { strict: false });
+    if (!registry) return;
+    registerDefaultTemplates(registry);
+  }
+}
 
 @Module({
-  imports: [CoreModule, EnvModule, EventsModule, InfraModule, LLMModule],
+  imports: [CoreModule, EnvModule, EventsModule, InfraModule, LLMModule, GraphCoreModule],
   providers: [
     SlackAdapter,
     PostgresMemoryRepository,
@@ -50,6 +65,7 @@ import { EnvService } from '../env/env.service';
     ShellCommandNode,
     GithubCloneRepoNode,
     RemindMeNode,
+    NodesTemplateRegistrar,
     {
       provide: WorkspaceNode,
       useFactory: (

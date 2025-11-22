@@ -10,7 +10,7 @@ describe('GraphSocketGateway', () => {
     const adapter = new FastifyAdapter();
     const fastify = adapter.getInstance();
     const logger = new LoggerService();
-    const runtimeStub = { subscribe: () => () => {} } as unknown as import('../src/graph/liveGraph.manager').LiveGraphRuntime;
+    const runtimeStub = { subscribe: () => () => {} } as unknown as import('../src/graph-core/liveGraph.manager').LiveGraphRuntime;
     const prismaStub = { getClient: () => ({ $queryRaw: async () => [] }) } as unknown as PrismaService;
     const metrics = new ThreadsMetricsService(prismaStub as any, logger);
     const gateway = new GraphSocketGateway(logger, runtimeStub, metrics, prismaStub);

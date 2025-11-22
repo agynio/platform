@@ -1,6 +1,6 @@
 import { Controller, Inject } from '@nestjs/common';
 import { IsEnum, IsOptional, IsString } from 'class-validator';
-import { LiveGraphRuntime } from '../liveGraph.manager';
+import { LiveGraphRuntime } from '../../graph-core/liveGraph.manager';
 
 // DTOs
 export class ListRunsParamsDto {

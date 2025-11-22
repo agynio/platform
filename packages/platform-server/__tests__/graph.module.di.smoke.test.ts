@@ -21,7 +21,7 @@ import { LLMProvisioner } from '../src/llm/provisioners/llm.provisioner';
 import { GithubService } from '../src/infra/github/github.client';
 import { PRService } from '../src/infra/github/pr.usecase';
 import { ArchiveService } from '../src/infra/archive/archive.service';
-import { TemplateRegistry } from '../src/graph/templateRegistry';
+import { TemplateRegistry } from '../src/graph-core/templateRegistry';
 import { GraphRepository } from '../src/graph/graph.repository';
 import { ModuleRef } from '@nestjs/core';
 import { GraphSocketGateway } from '../src/gateway/graph.socket.gateway';

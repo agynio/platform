@@ -1,6 +1,6 @@
 import { ModuleRef } from '@nestjs/core';
 import { describe, expect, it } from 'vitest';
-import { TemplateRegistry } from '../src/graph/templateRegistry';
+import { TemplateRegistry } from '../src/graph-core/templateRegistry';
 import type { TemplateKind, TemplateNodeSchema } from '../src/shared/types/graph.types';
 class DummyNode {
   getPortConfig() {

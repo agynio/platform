@@ -1,6 +1,6 @@
 import { Inject, Injectable, Scope } from '@nestjs/common';
 import { LoggerService } from '../core/services/logger.service';
-import { LiveGraphRuntime } from './liveGraph.manager';
+import { LiveGraphRuntime } from '../graph-core/liveGraph.manager';
 import { GraphRepository } from './graph.repository';
 import { mergeWith, isArray } from 'lodash-es';
 import { EventsBusService } from '../events/events-bus.service';

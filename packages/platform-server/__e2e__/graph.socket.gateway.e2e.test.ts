@@ -12,7 +12,7 @@ import { EventsBusService } from '../src/events/events-bus.service';
 import { RunEventsService } from '../src/events/run-events.service';
 import { GraphSocketGateway } from '../src/gateway/graph.socket.gateway';
 import { LoggerService } from '../src/core/services/logger.service';
-import { LiveGraphRuntime } from '../src/graph/liveGraph.manager';
+import { LiveGraphRuntime } from '../src/graph-core/liveGraph.manager';
 import { ThreadsMetricsService } from '../src/agents/threads.metrics.service';
 import { PrismaService } from '../src/core/services/prisma.service';
 import { ContainerTerminalGateway } from '../src/infra/container/terminal.gateway';

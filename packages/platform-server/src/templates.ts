@@ -1,5 +1,5 @@
 import { ModuleRef } from '@nestjs/core';
-import { TemplateRegistry } from './graph';
+import { TemplateRegistry } from './graph-core/templateRegistry';
 import { AgentNode } from './nodes/agent/agent.node';
 import { WorkspaceNode } from './nodes/workspace/workspace.node';
 
@@ -13,29 +13,17 @@ import { GithubCloneRepoNode } from './nodes/tools/github_clone_repo/github_clon
 import { ManageToolNode } from './nodes/tools/manage/manage.node';
 import { MemoryToolNode } from './nodes/tools/memory/memory.node';
 
-import { ConfigService } from './core/services/config.service';
-import { LoggerService } from './core/services/logger.service';
-
-import { ContainerService } from './infra/container/container.service';
-import { NcpsKeyService } from './infra/ncps/ncpsKey.service';
 import { RemindMeNode } from './nodes/tools/remind_me/remind_me.node';
 import { ShellCommandNode } from './nodes/tools/shell_command/shell_command.node';
 import { SendSlackMessageNode } from './nodes/tools/send_slack_message/send_slack_message.node';
 import { SendMessageNode } from './nodes/tools/send_message/send_message.node';
-import { LLMProvisioner } from './llm/provisioners/llm.provisioner';
 // Unified Memory tool
 
 export interface TemplateRegistryDeps {
-  logger: LoggerService;
-  containerService: ContainerService;
-  configService: ConfigService;
-  ncpsKeyService?: NcpsKeyService;
-  provisioner: LLMProvisioner;
   moduleRef: ModuleRef;
 }
 
-export function buildTemplateRegistry(deps: TemplateRegistryDeps): TemplateRegistry {
-  const registry = new TemplateRegistry(deps.moduleRef);
+export function registerDefaultTemplates(registry: TemplateRegistry): TemplateRegistry {
   registry.register(
     'workspace',
     {
@@ -175,4 +163,9 @@ export function buildTemplateRegistry(deps: TemplateRegistryDeps): TemplateRegis
   );
 
   return registry;
+}
+
+export function buildTemplateRegistry(deps: TemplateRegistryDeps): TemplateRegistry {
+  const registry = new TemplateRegistry(deps.moduleRef);
+  return registerDefaultTemplates(registry);
 }

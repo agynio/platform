@@ -9,7 +9,7 @@ describe('GraphSocketGateway metrics coalescing', () => {
     const adapter = new FastifyAdapter();
     const fastify = adapter.getInstance();
     const logger = new LoggerService();
-    const runtimeStub = { subscribe: () => () => {} } as unknown as import('../src/graph/liveGraph.manager').LiveGraphRuntime;
+    const runtimeStub = { subscribe: () => () => {} } as unknown as import('../src/graph-core/liveGraph.manager').LiveGraphRuntime;
     // Stub metrics service to capture calls
     const getThreadsMetrics = vi.fn(async (_ids: string[]) =>
       Object.fromEntries(_ids.map((id) => [id, { remindersCount: 0, containersCount: 0, activity: 'idle' as const }])),

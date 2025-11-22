@@ -1,10 +1,10 @@
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
 import { PrismaClient, Prisma } from '@prisma/client';
 import { SystemMessage } from '@agyn/llm';
-import { LiveGraphRuntime } from '../src/graph/liveGraph.manager';
+import { LiveGraphRuntime } from '../src/graph-core/liveGraph.manager';
 import type { LLMContext } from '../src/llm/types';
 import { Signal } from '../src/signal';
-import { TemplateRegistry } from '../src/graph/templateRegistry';
+import { TemplateRegistry } from '../src/graph-core/templateRegistry';
 import type { GraphDefinition } from '../src/shared/types/graph.types';
 import { LoggerService } from '../src/core/services/logger.service';
 import Node from '../src/nodes/base/Node';

@@ -2,7 +2,7 @@ import { promises as fs } from 'fs';
 import path from 'path';
 import { spawn } from 'child_process';
 import { LoggerService } from '../core/services/logger.service';
-import { TemplateRegistry } from './templateRegistry';
+import { TemplateRegistry } from '../graph-core/templateRegistry';
 import type {
   PersistedGraph,
   PersistedGraphEdge,

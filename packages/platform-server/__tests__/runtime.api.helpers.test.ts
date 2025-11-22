@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
-import { LiveGraphRuntime } from '../src/graph/liveGraph.manager';
-import { TemplateRegistry } from '../src/graph/templateRegistry';
+import { LiveGraphRuntime } from '../src/graph-core/liveGraph.manager';
+import { TemplateRegistry } from '../src/graph-core/templateRegistry';
 import type { FactoryFn } from '../src/shared/types/graph.types';
 import Node from '../src/nodes/base/Node';
 // Capabilities removed; test updated to use Node lifecycle

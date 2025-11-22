@@ -11,7 +11,7 @@ describe('Gateway node_status integration', () => {
     const adapter = new FastifyAdapter();
     const fastify = adapter.getInstance();
     const logger = new LoggerService();
-    const runtimeStub = { subscribe: () => () => {} } as unknown as import('../src/graph/liveGraph.manager').LiveGraphRuntime;
+    const runtimeStub = { subscribe: () => () => {} } as unknown as import('../src/graph-core/liveGraph.manager').LiveGraphRuntime;
     const gateway = new GraphSocketGateway(logger, runtimeStub);
     gateway.init({ server: fastify.server });
     const node = new DummyNode();

@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { UnifiedMemoryFunctionTool as UnifiedMemoryTool } from '../../src/nodes/tools/memory/memory.tool';
 import { MemoryToolNodeStaticConfigSchema as UnifiedMemoryToolNodeStaticConfigSchema } from '../../src/nodes/tools/memory/memory.node';
 import { LoggerService } from '../../src/core/services/logger.service';
-import { TemplateRegistry } from '../../src/graph/templateRegistry';
+import { TemplateRegistry } from '../../src/graph-core/templateRegistry';
 import { toJSONSchema } from 'zod';
 // Note: schema below tests node-level config, not function tool input schema.
 
