@@ -4,6 +4,7 @@ import { ModuleRef } from '@nestjs/core';
 import type { MemoryScope } from '../../nodes/memory/memory.types';
 import { MemoryService } from '../../nodes/memory/memory.service';
 import { PrismaService } from '../../core/services/prisma.service';
+import { GraphRepository } from '../graph.repository';
 
 class DocParamsDto {
   @IsString()
@@ -75,6 +76,7 @@ export class MemoryController {
   constructor(
     @Inject(ModuleRef) private readonly moduleRef: ModuleRef,
     @Inject(PrismaService) private readonly prismaSvc: PrismaService,
+    @Inject(GraphRepository) private readonly graphRepo: GraphRepository,
   ) {}
 
   private resolveThreadId(scope: MemoryScope, ...candidates: Array<string | undefined>): string | undefined {
@@ -91,17 +93,56 @@ export class MemoryController {
   @Get('docs')
   async listDocs(): Promise<{ items: Array<{ nodeId: string; scope: MemoryScope; threadId?: string }> }> {
     const prisma = this.prismaSvc.getClient();
-    // Use raw query to avoid requiring Prisma model
-    const rows = await prisma.$queryRaw<Array<{ node_id: string; scope: string; thread_id: string | null }>>`
-      SELECT node_id, scope, thread_id FROM memories ORDER BY node_id ASC
-    `;
-    return {
-      items: rows.map((row) => ({
-        nodeId: row.node_id,
-        scope: row.scope as MemoryScope,
-        threadId: row.thread_id ?? undefined,
-      })),
-    };
+    const [graph, rows] = await Promise.all([
+      this.graphRepo
+        .get('main')
+        .catch(() => null),
+      prisma.$queryRaw<Array<{ node_id: string; scope: string; thread_id: string | null }>>`
+        SELECT node_id, scope, thread_id FROM memories ORDER BY node_id ASC
+      `,
+    ]);
+
+    if (!graph) {
+      return {
+        items: rows.map((row) => ({
+          nodeId: row.node_id,
+          scope: row.scope as MemoryScope,
+          threadId: row.thread_id ?? undefined,
+        })),
+      };
+    }
+
+    const memoryNodes = (graph.nodes ?? []).filter((node) => node.template === 'memory');
+    const scopeByNode = new Map<string, MemoryScope>();
+    for (const node of memoryNodes) {
+      const config = node.config as { scope?: unknown } | undefined;
+      const scope: MemoryScope = config?.scope === 'perThread' ? 'perThread' : 'global';
+      if (!scopeByNode.has(node.id)) scopeByNode.set(node.id, scope);
+    }
+
+    const threadIdsByNode = new Map<string, Set<string>>();
+    for (const row of rows) {
+      const nodeScope = scopeByNode.get(row.node_id);
+      if (!nodeScope || nodeScope !== 'perThread') continue;
+      if (row.scope !== 'perThread' || typeof row.thread_id !== 'string') continue;
+      const trimmed = row.thread_id.trim();
+      if (!trimmed) continue;
+      if (!threadIdsByNode.has(row.node_id)) threadIdsByNode.set(row.node_id, new Set());
+      threadIdsByNode.get(row.node_id)!.add(trimmed);
+    }
+
+    const items: Array<{ nodeId: string; scope: MemoryScope; threadId?: string }> = [];
+    const sortedNodes = Array.from(scopeByNode.entries()).sort(([a], [b]) => a.localeCompare(b));
+    for (const [nodeId, scope] of sortedNodes) {
+      items.push({ nodeId, scope });
+      if (scope !== 'perThread') continue;
+      const threadIds = Array.from(threadIdsByNode.get(nodeId) ?? []).sort((a, b) => a.localeCompare(b));
+      for (const threadId of threadIds) {
+        items.push({ nodeId, scope, threadId });
+      }
+    }
+
+    return { items };
   }
 
   @Get(':nodeId/:scope/list')

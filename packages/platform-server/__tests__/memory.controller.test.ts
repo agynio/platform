@@ -17,6 +17,9 @@ class StubModuleRef implements Partial<ModuleRef> {
   }
 }
 
+const emptyGraph = { name: 'main', version: 0, updatedAt: new Date().toISOString(), nodes: [], edges: [] } as const;
+const stubGraphRepo = { get: async () => emptyGraph };
+
 maybeDescribe('MemoryController endpoints', () => {
   if (!shouldRunDbTests) return;
   const prisma = new PrismaClient({ datasources: { db: { url: URL! } } });
@@ -34,7 +37,7 @@ maybeDescribe('MemoryController endpoints', () => {
   });
 
   it('append/read via controller', async () => {
-    const controller = new MemoryController(new StubModuleRef(prisma) as any, { getClient: () => prisma } as any);
+    const controller = new MemoryController(new StubModuleRef(prisma) as any, { getClient: () => prisma } as any, stubGraphRepo as any);
     await controller.append({ nodeId: 'nodeC', scope: 'global' } as any, { path: '/greet.txt', data: 'hi' } as any, {} as any);
     await controller.append({ nodeId: 'nodeC', scope: 'global' } as any, { path: '/greet.txt', data: 'there' } as any, {} as any);
     const read = await controller.read({ nodeId: 'nodeC', scope: 'global' } as any, { path: '/greet.txt' } as any);
@@ -44,7 +47,7 @@ maybeDescribe('MemoryController endpoints', () => {
   });
 
   it('enforces thread scoping for per-thread routes', async () => {
-    const controller = new MemoryController(new StubModuleRef(prisma) as any, { getClient: () => prisma } as any);
+    const controller = new MemoryController(new StubModuleRef(prisma) as any, { getClient: () => prisma } as any, stubGraphRepo as any);
 
     let caught: unknown;
     try {
