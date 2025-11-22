@@ -22,6 +22,13 @@ import { SettingsSecrets } from './pages/SettingsSecrets';
 import { SettingsVariables } from './pages/SettingsVariables';
 import { MemoryNodesListPage } from './pages/MemoryNodesListPage';
 import { MemoryNodeDetailPage } from './pages/MemoryNodeDetailPage';
+import { uiNewFlags } from './config/uiNewFlags';
+import { AgentsThreadsNew } from './pages-new/AgentsThreadsNew';
+import { AgentsRunNew } from './pages-new/AgentsRunNew';
+import { AgentsRemindersNew } from './pages-new/AgentsRemindersNew';
+import { MonitoringContainersNew } from './pages-new/MonitoringContainersNew';
+import { SettingsSecretsNew } from './pages-new/SettingsSecretsNew';
+import { SettingsVariablesNew } from './pages-new/SettingsVariablesNew';
 
 const queryClient = new QueryClient();
 
@@ -43,6 +50,18 @@ function App() {
             <Route path="/agents/threads/:threadId" element={<AgentsThreads />} />
             <Route path="/agents/threads/:threadId/runs/:runId/timeline" element={<AgentsRunTimeline />} />
             <Route path="/agents/reminders" element={<AgentsReminders />} />
+            {uiNewFlags.threads && (
+              <>
+                <Route path="/agents/threads-new" element={<AgentsThreadsNew />} />
+                <Route path="/agents/threads/:threadId-new" element={<AgentsThreadsNew />} />
+              </>
+            )}
+            {uiNewFlags.runs && (
+              <Route path="/agents/runs/:runId-new" element={<AgentsRunNew />} />
+            )}
+            {uiNewFlags.reminders && (
+              <Route path="/agents/reminders-new" element={<AgentsRemindersNew />} />
+            )}
 
             {/* Tracing */}
             <Route path="/tracing/traces" element={<TracingTraces />} />
@@ -63,6 +82,9 @@ function App() {
             {/* Monitoring */}
             <Route path="/monitoring/containers" element={<MonitoringContainers />} />
             <Route path="/monitoring/resources" element={<MonitoringResources />} />
+            {uiNewFlags.containers && (
+              <Route path="/monitoring/containers-new" element={<MonitoringContainersNew />} />
+            )}
 
             {/* Memory */}
             <Route path="/memory" element={<MemoryNodesListPage />} />
@@ -71,6 +93,12 @@ function App() {
             {/* Settings */}
             <Route path="/settings/secrets" element={<SettingsSecrets />} />
             <Route path="/settings/variables" element={<SettingsVariables />} />
+            {uiNewFlags.secrets && (
+              <Route path="/settings/secrets-new" element={<SettingsSecretsNew />} />
+            )}
+            {uiNewFlags.variables && (
+              <Route path="/settings/variables-new" element={<SettingsVariablesNew />} />
+            )}
           </Route>
         </Routes>
       </RuntimeTemplatesProvider>

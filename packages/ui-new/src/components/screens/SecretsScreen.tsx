@@ -13,7 +13,7 @@ export interface Secret {
   status: 'used' | 'missing';
 }
 
-interface SecretsScreenProps {
+export interface SecretsScreenProps {
   secrets: Secret[];
   onCreateSecret?: (secret: Omit<Secret, 'id'>) => void;
   onUpdateSecret?: (id: string, secret: Omit<Secret, 'id'>) => void;
@@ -21,6 +21,7 @@ interface SecretsScreenProps {
   onBack?: () => void;
   selectedMenuItem?: string;
   onMenuItemSelect?: (itemId: string) => void;
+  renderSidebar?: boolean;
 }
 
 const ITEMS_PER_PAGE = 20;
@@ -33,6 +34,7 @@ export default function SecretsScreen({
   onBack,
   selectedMenuItem,
   onMenuItemSelect,
+  renderSidebar = true,
 }: SecretsScreenProps) {
   const [currentPage, setCurrentPage] = useState(1);
   const [statusFilter, setStatusFilter] = useState<'all' | 'used' | 'missing'>('all');
@@ -112,7 +114,7 @@ export default function SecretsScreen({
   const missingCount = secrets.filter((s) => s.status === 'missing').length;
 
   return (
-    <div className="h-screen flex flex-col">
+    <div className="h-full flex flex-col">
       {/* Showcase Navigation - NOT PART OF FINAL SCREEN */}
       {onBack && (
         <div className="h-[40px] bg-[var(--agyn-dark)] border-b border-[var(--agyn-border-subtle)] flex items-center px-4 gap-3">
@@ -123,11 +125,12 @@ export default function SecretsScreen({
 
       {/* Main Screen Content */}
       <div className="flex-1 flex overflow-hidden">
-        {/* Left Sidebar */}
-        <Sidebar 
-          selectedMenuItem={selectedMenuItem}
-          onMenuItemSelect={onMenuItemSelect}
-        />
+        {renderSidebar && (
+          <Sidebar 
+            selectedMenuItem={selectedMenuItem}
+            onMenuItemSelect={onMenuItemSelect}
+          />
+        )}
 
         {/* Main Content */}
         <div className="flex-1 flex flex-col overflow-hidden bg-white">

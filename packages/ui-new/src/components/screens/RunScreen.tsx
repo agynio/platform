@@ -22,7 +22,7 @@ import {
 export type EventFilter = 'message' | 'llm' | 'tool' | 'summary';
 export type StatusFilter = 'running' | 'finished' | 'failed' | 'terminated';
 
-interface RunScreenProps {
+export interface RunScreenProps {
   runId: string;
   status: Status;
   createdAt: string;
@@ -44,6 +44,7 @@ interface RunScreenProps {
   events: RunEvent[];
   onTerminate?: () => void;
   onBack?: () => void;
+  renderSidebar?: boolean;
 }
 
 export default function RunScreen({
@@ -56,6 +57,7 @@ export default function RunScreen({
   events,
   onTerminate,
   onBack,
+  renderSidebar = true,
 }: RunScreenProps) {
   const [selectedEventId, setSelectedEventId] = useState<string | undefined>(events[0]?.id);
   const [isFollowing, setIsFollowing] = useState(true);
@@ -130,7 +132,7 @@ export default function RunScreen({
   };
 
   return (
-    <div className="h-screen bg-[var(--agyn-bg-light)] flex flex-col">
+    <div className="h-full bg-[var(--agyn-bg-light)] flex flex-col">
       {/* Showcase Navigation - NOT PART OF FINAL SCREEN */}
       {onBack && (
         <div className="h-[40px] bg-[var(--agyn-dark)] border-b border-[var(--agyn-border-subtle)] flex items-center px-4 gap-3">
@@ -142,7 +144,7 @@ export default function RunScreen({
       {/* Main Screen Content */}
       <div className="flex-1 flex overflow-hidden">
         {/* Sidebar */}
-        <Sidebar />
+        {renderSidebar && <Sidebar />}
 
         {/* Main Content */}
         <div className="flex-1 flex flex-col overflow-hidden">

@@ -3,7 +3,7 @@ import { createRoot } from 'react-dom/client'
 import './index.css'
 import App from './App.tsx'
 import { initConfigViewsRegistry } from './configViews.init';
-import { TooltipProvider } from '@agyn/ui';
+import { TooltipProvider } from '@agyn/ui-new';
 import { BrowserRouter } from 'react-router-dom';
 import { UserProvider } from './user/UserProvider';
 

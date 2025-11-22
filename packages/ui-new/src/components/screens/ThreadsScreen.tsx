@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { ArrowLeft, Play, Container, Bell, Send, PanelRightClose, PanelRight } from 'lucide-react';
 import { IconButton } from '../IconButton';
 import { ThreadsList } from '../ThreadsList';
@@ -6,14 +6,24 @@ import { Thread } from '../ThreadItem';
 import { SegmentedControl } from '../SegmentedControl';
 import { Conversation, Run } from '../Conversation';
 import { Popover, PopoverTrigger, PopoverContent } from '../ui/popover';
-import { StatusIndicator } from '../StatusIndicator';
+import { StatusIndicator, Status } from '../StatusIndicator';
 import { AutosizeTextarea } from '../AutosizeTextarea';
 import Sidebar from '../Sidebar';
 
-interface ThreadsScreenProps {
-  onBack: () => void;
+export interface ThreadsScreenProps {
+  threads?: Thread[];
+  runs?: Run[];
+  containers?: { id: string; name: string; status: Status }[];
+  reminders?: { id: string; title: string; time: string }[];
+  selectedThreadId?: string;
+  onSelectThread?: (threadId: string) => void;
+  onSendMessage?: (message: string) => void;
+  onBack?: () => void;
   selectedMenuItem?: string;
   onMenuItemSelect?: (itemId: string) => void;
+  renderSidebar?: boolean;
+  isRunsInfoCollapsed?: boolean;
+  onRunsInfoCollapsedChange?: (collapsed: boolean) => void;
 }
 
 // Mock data
@@ -404,55 +414,111 @@ Now analyzing best practices for middleware implementation...`,
   },
 ];
 
-const mockContainers = [
-  { id: 'c-1', name: 'auth-service', status: 'running' as const },
-  { id: 'c-2', name: 'api-gateway', status: 'running' as const },
-  { id: 'c-3', name: 'database', status: 'finished' as const },
+const mockContainers: Array<{ id: string; name: string; status: Status }> = [
+  { id: 'c-1', name: 'auth-service', status: 'running' },
+  { id: 'c-2', name: 'api-gateway', status: 'running' },
+  { id: 'c-3', name: 'database', status: 'finished' },
 ];
 
-const mockReminders = [
+const mockReminders: Array<{ id: string; title: string; time: string }> = [
   { id: 'r-1', title: 'Review PR #123', time: 'Tomorrow at 10:00 AM' },
   { id: 'r-2', title: 'Update documentation', time: 'Friday at 2:00 PM' },
 ];
 
-export default function ThreadsScreen({ onBack, selectedMenuItem, onMenuItemSelect }: ThreadsScreenProps) {
+export default function ThreadsScreen({
+  threads = mockThreads,
+  runs = mockRuns,
+  containers = mockContainers,
+  reminders = mockReminders,
+  selectedThreadId,
+  onSelectThread,
+  onSendMessage,
+  onBack,
+  selectedMenuItem,
+  onMenuItemSelect,
+  renderSidebar = true,
+  isRunsInfoCollapsed,
+  onRunsInfoCollapsedChange,
+}: ThreadsScreenProps) {
   const [filterMode, setFilterMode] = useState<'all' | 'open' | 'closed'>('all');
-  const [selectedThreadId, setSelectedThreadId] = useState<string>('1');
+  const [internalSelectedThreadId, setInternalSelectedThreadId] = useState<string>(() => selectedThreadId ?? threads[0]?.id ?? '');
   const [inputValue, setInputValue] = useState('');
-  const [isRunsInfoCollapsed, setIsRunsInfoCollapsed] = useState(false);
+  const [internalRunsInfoCollapsed, setInternalRunsInfoCollapsed] = useState<boolean>(isRunsInfoCollapsed ?? false);
 
-  const filteredThreads = mockThreads.filter((thread) => {
+  useEffect(() => {
+    if (selectedThreadId !== undefined) {
+      setInternalSelectedThreadId(selectedThreadId);
+      return;
+    }
+
+    if (!threads.length) return;
+
+    setInternalSelectedThreadId((current) => (current ? current : threads[0].id));
+  }, [selectedThreadId, threads]);
+
+  useEffect(() => {
+    if (isRunsInfoCollapsed !== undefined) {
+      setInternalRunsInfoCollapsed(isRunsInfoCollapsed);
+    }
+  }, [isRunsInfoCollapsed]);
+
+  const runsInfoCollapsed = isRunsInfoCollapsed ?? internalRunsInfoCollapsed;
+  const activeSelectedThreadId = selectedThreadId ?? internalSelectedThreadId;
+
+  const setRunsInfoCollapsed = (next: boolean) => {
+    if (isRunsInfoCollapsed === undefined) {
+      setInternalRunsInfoCollapsed(next);
+    }
+    onRunsInfoCollapsedChange?.(next);
+  };
+
+  const handleSelectThread = (threadId: string) => {
+    onSelectThread?.(threadId);
+    if (selectedThreadId === undefined) {
+      setInternalSelectedThreadId(threadId);
+    }
+  };
+
+  const handleToggleRunsInfo = () => {
+    const next = !runsInfoCollapsed;
+    setRunsInfoCollapsed(next);
+  };
+
+  const filteredThreads = threads.filter((thread) => {
     if (filterMode === 'all') return true;
     if (filterMode === 'open') return thread.isOpen;
-    if (filterMode === 'closed') return !thread.isOpen;
-    return true;
+    return !thread.isOpen;
   });
 
-  const selectedThread = mockThreads.find((t) => t.id === selectedThreadId);
+  const selectedThread = threads.find((t) => t.id === activeSelectedThreadId);
+  const threadRuns = selectedThread ? runs : [];
+  const activeContainers = selectedThread ? containers : [];
+  const activeReminders = selectedThread ? reminders : [];
+
+  const handleSendMessage = () => {
+    const trimmed = inputValue.trim();
+    if (!trimmed) return;
+    onSendMessage?.(trimmed);
+    setInputValue('');
+  };
 
   return (
-    <div className="h-screen bg-[var(--agyn-bg-light)] flex flex-col">
-      {/* Showcase Navigation - NOT PART OF FINAL SCREEN */}
-      <div className="h-[40px] bg-[var(--agyn-dark)] border-b border-[var(--agyn-border-subtle)] flex items-center px-4 gap-3">
-        <IconButton icon={<ArrowLeft />} onClick={onBack} variant="ghost" size="sm" />
-        <span className="text-sm text-white">Threads</span>
-      </div>
+    <div className="h-full bg-[var(--agyn-bg-light)] flex flex-col">
+      {onBack ? (
+        <div className="h-[40px] bg-[var(--agyn-dark)] border-b border-[var(--agyn-border-subtle)] flex items-center px-4 gap-3">
+          <IconButton icon={<ArrowLeft />} onClick={onBack} variant="ghost" size="sm" />
+          <span className="text-sm text-white">Threads</span>
+        </div>
+      ) : null}
 
-      {/* Main Screen Content - Full height below navigation */}
       <div className="flex-1 flex overflow-hidden">
-        {/* Main Menu Sidebar - Full Height */}
-        <Sidebar 
-          selectedMenuItem={selectedMenuItem}
-          onMenuItemSelect={onMenuItemSelect}
-        />
+        {renderSidebar && (
+          <Sidebar selectedMenuItem={selectedMenuItem} onMenuItemSelect={onMenuItemSelect} />
+        )}
 
-        {/* Right Side Content */}
         <div className="flex-1 min-w-0 flex flex-col">
-          {/* Main Content - 2 columns */}
           <div className="flex-1 min-w-0 flex overflow-hidden">
-            {/* Threads List Column */}
             <div className="w-[360px] border-r border-[var(--agyn-border-subtle)] flex flex-col bg-white">
-              {/* Threads List Header - 66px */}
               <div className="h-[66px] flex items-center px-4 border-b border-[var(--agyn-border-subtle)]">
                 <SegmentedControl
                   items={[
@@ -466,27 +532,24 @@ export default function ThreadsScreen({ onBack, selectedMenuItem, onMenuItemSele
                 />
               </div>
 
-              {/* Threads List */}
               <div className="flex-1 overflow-hidden">
                 <ThreadsList
                   threads={filteredThreads}
-                  selectedThreadId={selectedThreadId}
-                  onSelectThread={setSelectedThreadId}
+                  selectedThreadId={activeSelectedThreadId}
+                  onSelectThread={handleSelectThread}
                   className="h-full rounded-none border-none"
                 />
               </div>
             </div>
 
-            {/* Selected Thread Content */}
             <div className="flex-1 min-w-0 flex flex-col bg-[var(--agyn-bg-light)]">
               {selectedThread ? (
                 <>
-                  {/* Thread Header */}
                   <div className="bg-white border-b border-[var(--agyn-border-subtle)] p-4">
                     <div className="flex items-start justify-between mb-3">
                       <div className="flex-1">
                         <div className="flex items-center gap-2 mb-1">
-                          <StatusIndicator status={selectedThread.status as any} size="sm" />
+                          <StatusIndicator status={selectedThread.status as Status} size="sm" />
                           <span className="text-xs text-[var(--agyn-gray)]">{selectedThread.agentName}</span>
                           <span className="text-xs text-[var(--agyn-gray)]">•</span>
                           <span className="text-xs text-[var(--agyn-gray)]">{selectedThread.createdAt}</span>
@@ -495,91 +558,88 @@ export default function ThreadsScreen({ onBack, selectedMenuItem, onMenuItemSele
                       </div>
                     </div>
 
-                    {/* Stats Row */}
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-4">
-                        {/* Runs Count */}
                         <div className="flex items-center gap-2">
                           <Play className="w-4 h-4 text-[var(--agyn-gray)]" />
-                          <span className="text-sm text-[var(--agyn-dark)]">{mockRuns.length}</span>
+                          <span className="text-sm text-[var(--agyn-dark)]">{threadRuns.length}</span>
                           <span className="text-xs text-[var(--agyn-gray)]">runs</span>
                         </div>
 
-                        {/* Containers Count with Popover */}
-                        <Popover>
-                          <PopoverTrigger asChild>
-                            <button className="flex items-center gap-2 hover:bg-[var(--agyn-bg-light)] px-2 py-1 rounded-[6px] transition-colors">
-                              <Container className="w-4 h-4 text-[var(--agyn-gray)]" />
-                              <span className="text-sm text-[var(--agyn-dark)]">
-                                {mockContainers.filter((c) => c.status === 'running').length}
-                              </span>
-                              <span className="text-xs text-[var(--agyn-gray)]">containers</span>
-                            </button>
-                          </PopoverTrigger>
-                          <PopoverContent className="w-[280px]">
-                            <div className="space-y-2">
-                              <h4 className="text-sm text-[var(--agyn-dark)] mb-3">Containers</h4>
-                              {mockContainers.map((container) => (
-                                <div
-                                  key={container.id}
-                                  className="flex items-center justify-between py-2 px-3 bg-[var(--agyn-bg-light)] rounded-[6px]"
-                                >
-                                  <span className="text-sm text-[var(--agyn-dark)]">{container.name}</span>
-                                  <StatusIndicator status={container.status} size="sm" />
-                                </div>
-                              ))}
-                            </div>
-                          </PopoverContent>
-                        </Popover>
+                        {!!activeContainers.length && (
+                          <Popover>
+                            <PopoverTrigger asChild>
+                              <button className="flex items-center gap-2 hover:bg-[var(--agyn-bg-light)] px-2 py-1 rounded-[6px] transition-colors">
+                                <Container className="w-4 h-4 text-[var(--agyn-gray)]" />
+                                <span className="text-sm text-[var(--agyn-dark)]">
+                                  {activeContainers.filter((c) => c.status === 'running').length}
+                                </span>
+                                <span className="text-xs text-[var(--agyn-gray)]">containers</span>
+                              </button>
+                            </PopoverTrigger>
+                            <PopoverContent className="w-[280px]">
+                              <div className="space-y-2">
+                                <h4 className="text-sm text-[var(--agyn-dark)] mb-3">Containers</h4>
+                                {activeContainers.map((container) => (
+                                  <div
+                                    key={container.id}
+                                    className="flex items-center justify-between py-2 px-3 bg-[var(--agyn-bg-light)] rounded-[6px]"
+                                  >
+                                    <span className="text-sm text-[var(--agyn-dark)]">{container.name}</span>
+                                    <StatusIndicator status={container.status as Status} size="sm" />
+                                  </div>
+                                ))}
+                              </div>
+                            </PopoverContent>
+                          </Popover>
+                        )}
 
-                        {/* Reminders Count with Popover */}
-                        <Popover>
-                          <PopoverTrigger asChild>
-                            <button className="flex items-center gap-2 hover:bg-[var(--agyn-bg-light)] px-2 py-1 rounded-[6px] transition-colors">
-                              <Bell className="w-4 h-4 text-[var(--agyn-gray)]" />
-                              <span className="text-sm text-[var(--agyn-dark)]">{mockReminders.length}</span>
-                              <span className="text-xs text-[var(--agyn-gray)]">reminders</span>
-                            </button>
-                          </PopoverTrigger>
-                          <PopoverContent className="w-[280px]">
-                            <div className="space-y-2">
-                              <h4 className="text-sm text-[var(--agyn-dark)] mb-3">Reminders</h4>
-                              {mockReminders.map((reminder) => (
-                                <div
-                                  key={reminder.id}
-                                  className="py-2 px-3 bg-[var(--agyn-bg-light)] rounded-[6px]"
-                                >
-                                  <p className="text-sm text-[var(--agyn-dark)] mb-1">{reminder.title}</p>
-                                  <p className="text-xs text-[var(--agyn-gray)]">{reminder.time}</p>
-                                </div>
-                              ))}
-                            </div>
-                          </PopoverContent>
-                        </Popover>
+                        {!!activeReminders.length && (
+                          <Popover>
+                            <PopoverTrigger asChild>
+                              <button className="flex items-center gap-2 hover:bg-[var(--agyn-bg-light)] px-2 py-1 rounded-[6px] transition-colors">
+                                <Bell className="w-4 h-4 text-[var(--agyn-gray)]" />
+                                <span className="text-sm text-[var(--agyn-dark)]">{activeReminders.length}</span>
+                                <span className="text-xs text-[var(--agyn-gray)]">reminders</span>
+                              </button>
+                            </PopoverTrigger>
+                            <PopoverContent className="w-[280px]">
+                              <div className="space-y-2">
+                                <h4 className="text-sm text-[var(--agyn-dark)] mb-3">Reminders</h4>
+                                {activeReminders.map((reminder) => (
+                                  <div
+                                    key={reminder.id}
+                                    className="py-2 px-3 bg-[var(--agyn-bg-light)] rounded-[6px]"
+                                  >
+                                    <p className="text-sm text-[var(--agyn-dark)] mb-1">{reminder.title}</p>
+                                    <p className="text-xs text-[var(--agyn-gray)]">{reminder.time}</p>
+                                  </div>
+                                ))}
+                              </div>
+                            </PopoverContent>
+                          </Popover>
+                        )}
                       </div>
 
-                      {/* Toggle Runs Info Button */}
                       <IconButton
-                        icon={isRunsInfoCollapsed ? <PanelRight className="w-4 h-4" /> : <PanelRightClose className="w-4 h-4" />}
+                        icon={runsInfoCollapsed ? <PanelRight className="w-4 h-4" /> : <PanelRightClose className="w-4 h-4" />}
                         variant="ghost"
                         size="sm"
-                        onClick={() => setIsRunsInfoCollapsed(!isRunsInfoCollapsed)}
-                        title={isRunsInfoCollapsed ? 'Show runs info' : 'Hide runs info'}
+                        onClick={handleToggleRunsInfo}
+                        title={runsInfoCollapsed ? 'Show runs info' : 'Hide runs info'}
                       />
                     </div>
                   </div>
 
-                  {/* Conversation - flex-1 to take remaining space */}
                   <div className="flex-1 min-w-0 overflow-hidden min-h-0">
-                    <Conversation 
-                      runs={mockRuns} 
+                    <Conversation
+                      runs={threadRuns}
                       className="h-full rounded-none border-none"
-                      collapsed={isRunsInfoCollapsed}
-                      onCollapsedChange={setIsRunsInfoCollapsed}
+                      collapsed={runsInfoCollapsed}
+                      onCollapsedChange={setRunsInfoCollapsed}
                     />
                   </div>
 
-                  {/* Message Input */}
                   <div className="bg-[var(--agyn-bg-light)] border-t border-[var(--agyn-border-subtle)] p-4">
                     <div className="relative">
                       <AutosizeTextarea
@@ -592,10 +652,12 @@ export default function ThreadsScreen({ onBack, selectedMenuItem, onMenuItemSele
                         className="pr-12"
                       />
                       <div className="absolute bottom-[11px] right-[5px]">
-                        <IconButton 
+                        <IconButton
                           icon={<Send className="w-4 h-4" />}
-                          variant="primary" 
+                          variant="primary"
                           size="sm"
+                          onClick={handleSendMessage}
+                          disabled={!inputValue.trim()}
                         />
                       </div>
                     </div>
