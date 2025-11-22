@@ -1,11 +1,9 @@
 import { useState } from 'react';
 import { ArrowLeft, Square, Eye, EyeOff, MessageSquare, Bot, Wrench, FileText, Settings2, ScrollText } from 'lucide-react';
 import Sidebar from '../Sidebar';
-import { RunEventsList } from '../RunEventsList';
-import type { RunEvent } from '../RunEventsList';
+import { RunEventsList, RunEvent } from '../RunEventsList';
 import { RunEventDetails } from '../RunEventDetails';
-import { StatusIndicator } from '../StatusIndicator';
-import type { Status } from '../StatusIndicator';
+import { StatusIndicator, Status } from '../StatusIndicator';
 import { Badge } from '../Badge';
 import { Button } from '../Button';
 import { IconButton } from '../IconButton';
@@ -24,7 +22,7 @@ import {
 export type EventFilter = 'message' | 'llm' | 'tool' | 'summary';
 export type StatusFilter = 'running' | 'finished' | 'failed' | 'terminated';
 
-export interface RunScreenProps {
+interface RunScreenProps {
   runId: string;
   status: Status;
   createdAt: string;
@@ -46,7 +44,6 @@ export interface RunScreenProps {
   events: RunEvent[];
   onTerminate?: () => void;
   onBack?: () => void;
-  renderSidebar?: boolean;
 }
 
 export default function RunScreen({
@@ -59,7 +56,6 @@ export default function RunScreen({
   events,
   onTerminate,
   onBack,
-  renderSidebar = true,
 }: RunScreenProps) {
   const [selectedEventId, setSelectedEventId] = useState<string | undefined>(events[0]?.id);
   const [isFollowing, setIsFollowing] = useState(true);
@@ -134,7 +130,7 @@ export default function RunScreen({
   };
 
   return (
-    <div className="h-full bg-[var(--agyn-bg-light)] flex flex-col">
+    <div className="h-screen bg-[var(--agyn-bg-light)] flex flex-col">
       {/* Showcase Navigation - NOT PART OF FINAL SCREEN */}
       {onBack && (
         <div className="h-[40px] bg-[var(--agyn-dark)] border-b border-[var(--agyn-border-subtle)] flex items-center px-4 gap-3">
@@ -146,7 +142,7 @@ export default function RunScreen({
       {/* Main Screen Content */}
       <div className="flex-1 flex overflow-hidden">
         {/* Sidebar */}
-        {renderSidebar && <Sidebar />}
+        <Sidebar />
 
         {/* Main Content */}
         <div className="flex-1 flex flex-col overflow-hidden">

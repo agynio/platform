@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import RunScreen from '../screens/RunScreen';
-import type { RunEvent } from '../RunEventsList';
-import type { Status } from '../StatusIndicator';
+import { RunEvent } from '../RunEventsList';
+import { Status } from '../StatusIndicator';
 
 const EVENT_TYPES = ['message', 'llm', 'tool', 'summarization'] as const;
 const STATUSES: Status[] = ['running', 'finished', 'failed', 'pending', 'terminated'];

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useState } from 'react';
 import { ArrowLeft } from 'lucide-react';
 import Sidebar from '../Sidebar';
 import NodePropertiesSidebar from '../NodePropertiesSidebar';
@@ -18,30 +18,20 @@ export interface GraphNode {
   data?: Record<string, any>;
 }
 
-export interface GraphScreenProps {
+interface GraphScreenProps {
   nodes?: GraphNode[];
-  selectedNodeId?: string | null;
-  onSelectNode?: (nodeId: string | null) => void;
   onBack?: () => void;
   selectedMenuItem?: string;
   onMenuItemSelect?: (itemId: string) => void;
-  renderSidebar?: boolean;
-  showNodeProperties?: boolean;
 }
 
-export default function GraphScreen({
-  nodes: initialNodes,
-  selectedNodeId,
-  onSelectNode,
+export default function GraphScreen({ 
+  nodes: initialNodes, 
   onBack,
   selectedMenuItem,
-  onMenuItemSelect,
-  renderSidebar = true,
-  showNodeProperties = true,
+  onMenuItemSelect
 }: GraphScreenProps) {
-  const [internalSelectedNodeId, setInternalSelectedNodeId] = useState<string | null>(
-    selectedNodeId ?? null
-  );
+  const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   
   const defaultNodes: GraphNode[] = [
     { id: 'node-1', kind: 'Agent', title: 'GPT-4 Agent', x: 100, y: 100, status: 'ready', data: { model: 'gpt-4', temperature: 0.7 } },
@@ -52,29 +42,20 @@ export default function GraphScreen({
     { id: 'node-6', kind: 'Agent', title: 'Claude Agent', x: 700, y: 300, status: 'not_ready', data: { model: 'claude-3' } },
   ];
 
-  const nodes = initialNodes ?? defaultNodes;
-
-  useEffect(() => {
-    if (selectedNodeId !== undefined) {
-      setInternalSelectedNodeId(selectedNodeId);
-    }
-  }, [selectedNodeId]);
-
-  const activeSelectedNodeId = selectedNodeId ?? internalSelectedNodeId;
-  const selectedNode = useMemo(
-    () => nodes.find((node) => node.id === activeSelectedNodeId) ?? null,
-    [nodes, activeSelectedNodeId]
-  );
+  const nodes = initialNodes || defaultNodes;
+  const selectedNode = nodes.find(node => node.id === selectedNodeId);
 
   const handleNodeClick = (nodeId: string) => {
-    if (selectedNodeId === undefined) {
-      setInternalSelectedNodeId(nodeId);
-    }
-    onSelectNode?.(nodeId);
+    setSelectedNodeId(nodeId);
+  };
+
+  const handleCloseProperties = () => {
+    setSelectedNodeId(null);
   };
 
   return (
     <div className="h-screen flex flex-col">
+      {/* Showcase Navigation - NOT PART OF FINAL SCREEN */}
       {onBack && (
         <div className="h-[40px] bg-[var(--agyn-dark)] border-b border-[var(--agyn-border-subtle)] flex items-center px-4 gap-3">
           <IconButton icon={<ArrowLeft />} onClick={onBack} variant="ghost" size="sm" />
@@ -85,9 +66,10 @@ export default function GraphScreen({
       {/* Main Screen Content */}
       <div className="flex-1 flex overflow-hidden">
         {/* Left Sidebar */}
-        {renderSidebar && (
-          <Sidebar selectedMenuItem={selectedMenuItem} onMenuItemSelect={onMenuItemSelect} />
-        )}
+        <Sidebar 
+          selectedMenuItem={selectedMenuItem}
+          onMenuItemSelect={onMenuItemSelect}
+        />
 
         {/* Canvas */}
         <div className="flex-1 relative bg-[var(--agyn-bg-light)] overflow-hidden">
@@ -111,7 +93,7 @@ export default function GraphScreen({
                 Graph Canvas
               </div>
               <div className="text-sm text-[var(--agyn-text-subtle)]">
-                {nodes.length ? 'Click on nodes to view their properties' : 'No nodes to display'}
+                Click on nodes to view their properties
               </div>
             </div>
 
@@ -127,25 +109,27 @@ export default function GraphScreen({
                 }}
                 onClick={() => handleNodeClick(node.id)}
               >
-                <Node kind={node.kind} title={node.title} selected={activeSelectedNodeId === node.id} />
+                <Node
+                  kind={node.kind}
+                  title={node.title}
+                  selected={selectedNodeId === node.id}
+                />
               </div>
             ))}
           </div>
         </div>
 
         {/* Right Sidebar - Node Properties */}
-        {showNodeProperties && (
-          <NodePropertiesSidebar
-            nodeKind={selectedNode?.kind || 'Agent'}
-            nodeTitle={selectedNode?.title || 'Select a node'}
-            status={selectedNode?.status || 'ready'}
-            onSave={() => {
-              if (selectedNode) {
-                console.log('Save changes to node:', selectedNode.id);
-              }
-            }}
-          />
-        )}
+        <NodePropertiesSidebar
+          nodeKind={selectedNode?.kind || 'Agent'}
+          nodeTitle={selectedNode?.title || 'Select a node'}
+          status={selectedNode?.status || 'ready'}
+          onSave={() => {
+            if (selectedNode) {
+              console.log('Save changes to node:', selectedNode.id);
+            }
+          }}
+        />
       </div>
     </div>
   );

@@ -13,7 +13,7 @@ export interface Secret {
   status: 'used' | 'missing';
 }
 
-export interface SecretsScreenProps {
+interface SecretsScreenProps {
   secrets: Secret[];
   onCreateSecret?: (secret: Omit<Secret, 'id'>) => void;
   onUpdateSecret?: (id: string, secret: Omit<Secret, 'id'>) => void;
@@ -21,7 +21,6 @@ export interface SecretsScreenProps {
   onBack?: () => void;
   selectedMenuItem?: string;
   onMenuItemSelect?: (itemId: string) => void;
-  renderSidebar?: boolean;
 }
 
 const ITEMS_PER_PAGE = 20;
@@ -34,7 +33,6 @@ export default function SecretsScreen({
   onBack,
   selectedMenuItem,
   onMenuItemSelect,
-  renderSidebar = true,
 }: SecretsScreenProps) {
   const [currentPage, setCurrentPage] = useState(1);
   const [statusFilter, setStatusFilter] = useState<'all' | 'used' | 'missing'>('all');
@@ -114,7 +112,7 @@ export default function SecretsScreen({
   const missingCount = secrets.filter((s) => s.status === 'missing').length;
 
   return (
-    <div className="h-full flex flex-col">
+    <div className="h-screen flex flex-col">
       {/* Showcase Navigation - NOT PART OF FINAL SCREEN */}
       {onBack && (
         <div className="h-[40px] bg-[var(--agyn-dark)] border-b border-[var(--agyn-border-subtle)] flex items-center px-4 gap-3">
@@ -125,12 +123,11 @@ export default function SecretsScreen({
 
       {/* Main Screen Content */}
       <div className="flex-1 flex overflow-hidden">
-        {renderSidebar && (
-          <Sidebar 
-            selectedMenuItem={selectedMenuItem}
-            onMenuItemSelect={onMenuItemSelect}
-          />
-        )}
+        {/* Left Sidebar */}
+        <Sidebar 
+          selectedMenuItem={selectedMenuItem}
+          onMenuItemSelect={onMenuItemSelect}
+        />
 
         {/* Main Content */}
         <div className="flex-1 flex flex-col overflow-hidden bg-white">
@@ -241,7 +238,6 @@ export default function SecretsScreen({
                               <button
                                 onClick={handleSaveCreate}
                                 className="w-8 h-8 flex items-center justify-center rounded-md text-[var(--agyn-status-success)] hover:bg-[var(--agyn-status-success)]/10 transition-colors"
-                                aria-label="Save secret"
                               >
                                 <Check className="w-4 h-4" />
                               </button>
@@ -263,7 +259,6 @@ export default function SecretsScreen({
                               <button
                                 onClick={handleCancel}
                                 className="w-8 h-8 flex items-center justify-center rounded-md text-[var(--agyn-text-subtle)] hover:bg-[var(--agyn-bg-light)] transition-colors"
-                                aria-label="Cancel editing"
                               >
                                 <X className="w-4 h-4" />
                               </button>
@@ -324,7 +319,6 @@ export default function SecretsScreen({
                                     <button
                                       onClick={handleSaveEdit}
                                       className="w-8 h-8 flex items-center justify-center rounded-md text-[var(--agyn-status-success)] hover:bg-[var(--agyn-status-success)]/10 transition-colors"
-                                      aria-label="Save secret"
                                     >
                                       <Check className="w-4 h-4" />
                                     </button>
@@ -346,7 +340,6 @@ export default function SecretsScreen({
                                     <button
                                       onClick={handleCancel}
                                       className="w-8 h-8 flex items-center justify-center rounded-md text-[var(--agyn-text-subtle)] hover:bg-[var(--agyn-bg-light)] transition-colors"
-                                      aria-label="Cancel editing"
                                     >
                                       <X className="w-4 h-4" />
                                     </button>
@@ -400,7 +393,6 @@ export default function SecretsScreen({
                                       <button
                                         onClick={() => toggleUnmask(secret.id)}
                                         className="w-8 h-8 flex items-center justify-center rounded-md text-[var(--agyn-text-subtle)] hover:bg-[var(--agyn-bg-light)] hover:text-[var(--agyn-blue)] transition-colors"
-                                        aria-label={isUnmasked ? 'Mask secret value' : 'Unmask secret value'}
                                       >
                                         {isUnmasked ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                                       </button>
@@ -423,7 +415,6 @@ export default function SecretsScreen({
                                         onClick={() => handleStartEdit(secret)}
                                         disabled={isCreating || editingId !== null}
                                         className="w-8 h-8 flex items-center justify-center rounded-md text-[var(--agyn-text-subtle)] hover:bg-[var(--agyn-bg-light)] hover:text-[var(--agyn-blue)] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                                        aria-label="Edit secret"
                                       >
                                         <Pencil className="w-4 h-4" />
                                       </button>
@@ -446,7 +437,6 @@ export default function SecretsScreen({
                                         onClick={() => handleDelete(secret.id)}
                                         disabled={isCreating || editingId !== null}
                                         className="w-8 h-8 flex items-center justify-center rounded-md text-[var(--agyn-text-subtle)] hover:bg-[var(--agyn-status-failed)]/10 hover:text-[var(--agyn-status-failed)] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                                        aria-label="Delete secret"
                                       >
                                         <Trash2 className="w-4 h-4" />
                                       </button>

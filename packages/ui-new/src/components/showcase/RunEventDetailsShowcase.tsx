@@ -1,10 +1,8 @@
 import { useState } from 'react';
 import { ArrowLeft } from 'lucide-react';
 import { IconButton } from '../IconButton';
-import { RunEventDetails } from '../RunEventDetails';
-import type { EventType } from '../RunEventDetails';
-import { RunEventsList } from '../RunEventsList';
-import type { RunEvent } from '../RunEventsList';
+import { RunEventDetails, EventType } from '../RunEventDetails';
+import { RunEventsList, RunEvent } from '../RunEventsList';
 
 interface ShowcaseProps {
   onBack: () => void;

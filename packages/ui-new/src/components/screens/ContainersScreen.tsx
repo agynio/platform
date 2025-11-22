@@ -23,7 +23,7 @@ export interface Container {
   threadId?: string; // Associated thread ID for View thread functionality
 }
 
-export interface ContainersScreenProps {
+interface ContainersScreenProps {
   containers: Container[];
   onOpenTerminal?: (containerId: string) => void;
   onDeleteContainer?: (containerId: string) => void;
@@ -31,7 +31,6 @@ export interface ContainersScreenProps {
   onBack?: () => void;
   selectedMenuItem?: string;
   onMenuItemSelect?: (itemId: string) => void;
-  renderSidebar?: boolean;
 }
 
 const ITEMS_PER_PAGE = 20;
@@ -44,7 +43,6 @@ export default function ContainersScreen({
   onBack,
   selectedMenuItem,
   onMenuItemSelect,
-  renderSidebar = true,
 }: ContainersScreenProps) {
   const [currentPage, setCurrentPage] = useState(1);
   const [statusFilter, setStatusFilter] = useState<ContainerStatus | 'all'>('all');
@@ -157,7 +155,7 @@ export default function ContainersScreen({
   const stoppingCount = containers.filter((c) => c.status === 'stopping').length;
 
   return (
-    <div className="h-full flex flex-col">
+    <div className="h-screen flex flex-col">
       {/* Showcase Navigation - NOT PART OF FINAL SCREEN */}
       {onBack && (
         <div className="h-[40px] bg-[var(--agyn-dark)] border-b border-[var(--agyn-border-subtle)] flex items-center px-4 gap-3">
@@ -168,12 +166,11 @@ export default function ContainersScreen({
 
       {/* Main Screen Content */}
       <div className="flex-1 flex overflow-hidden">
-        {renderSidebar && (
-          <Sidebar 
-            selectedMenuItem={selectedMenuItem}
-            onMenuItemSelect={onMenuItemSelect}
-          />
-        )}
+        {/* Left Sidebar */}
+        <Sidebar 
+          selectedMenuItem={selectedMenuItem}
+          onMenuItemSelect={onMenuItemSelect}
+        />
 
         {/* Main Content */}
         <div className="flex-1 flex flex-col overflow-hidden bg-white">

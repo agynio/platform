@@ -12,7 +12,7 @@ export interface Variable {
   localValue: string;
 }
 
-export interface VariablesScreenProps {
+interface VariablesScreenProps {
   variables: Variable[];
   onCreateVariable?: (variable: Omit<Variable, 'id'>) => void;
   onUpdateVariable?: (id: string, variable: Omit<Variable, 'id'>) => void;
@@ -20,7 +20,6 @@ export interface VariablesScreenProps {
   onBack?: () => void;
   selectedMenuItem?: string;
   onMenuItemSelect?: (itemId: string) => void;
-  renderSidebar?: boolean;
 }
 
 const ITEMS_PER_PAGE = 20;
@@ -33,7 +32,6 @@ export default function VariablesScreen({
   onBack,
   selectedMenuItem,
   onMenuItemSelect,
-  renderSidebar = true,
 }: VariablesScreenProps) {
   const [currentPage, setCurrentPage] = useState(1);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -85,7 +83,7 @@ export default function VariablesScreen({
   };
 
   return (
-    <div className="h-full flex flex-col">
+    <div className="h-screen flex flex-col">
       {/* Showcase Navigation - NOT PART OF FINAL SCREEN */}
       {onBack && (
         <div className="h-[40px] bg-[var(--agyn-dark)] border-b border-[var(--agyn-border-subtle)] flex items-center px-4 gap-3">
@@ -96,12 +94,11 @@ export default function VariablesScreen({
 
       {/* Main Screen Content */}
       <div className="flex-1 flex overflow-hidden">
-        {renderSidebar && (
-          <Sidebar 
-            selectedMenuItem={selectedMenuItem}
-            onMenuItemSelect={onMenuItemSelect}
-          />
-        )}
+        {/* Left Sidebar */}
+        <Sidebar 
+          selectedMenuItem={selectedMenuItem}
+          onMenuItemSelect={onMenuItemSelect}
+        />
 
         {/* Main Content */}
         <div className="flex-1 flex flex-col overflow-hidden bg-white">

@@ -1,11 +1,9 @@
 import { ReactNode, useRef, useEffect, useState } from 'react';
-import { Message } from './Message';
-import type { MessageRole } from './Message';
+import { Message, MessageRole } from './Message';
 import { RunInfo } from './RunInfo';
 import { QueuedMessage } from './QueuedMessage';
 import { Reminder } from './Reminder';
-import { StatusIndicator } from './StatusIndicator';
-import type { Status } from './StatusIndicator';
+import { StatusIndicator, Status } from './StatusIndicator';
 
 export interface ConversationMessage {
   id: string;
@@ -17,7 +15,7 @@ export interface ConversationMessage {
 export interface Run {
   id: string;
   messages: ConversationMessage[];
-  status: 'finished' | 'running' | 'failed' | 'pending' | 'terminated';
+  status: 'finished' | 'running' | 'failed' | 'pending';
   duration?: string;
   tokens?: number;
   cost?: string;

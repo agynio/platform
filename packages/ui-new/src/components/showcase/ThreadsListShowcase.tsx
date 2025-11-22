@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Panel, PanelHeader, PanelBody } from '../Panel';
 import { ThreadsList } from '../ThreadsList';
-import type { Thread } from '../ThreadItem';
+import { Thread } from '../ThreadItem';
 import ComponentPreviewHeader from '../ComponentPreviewHeader';
 import { User, Bot, Wrench, Circle, CheckCircle2 } from 'lucide-react';
 import { StatusIndicator } from '../StatusIndicator';

@@ -1,8 +1,7 @@
 import { useState } from 'react';
 import { Send } from 'lucide-react';
 import { Panel, PanelHeader, PanelBody } from '../Panel';
-import { Conversation } from '../Conversation';
-import type { Run, QueuedMessageData, ReminderData } from '../Conversation';
+import { Conversation, Run, QueuedMessageData, ReminderData } from '../Conversation';
 import { AutosizeTextarea } from '../AutosizeTextarea';
 import { IconButton } from '../IconButton';
 import { Button } from '../Button';
