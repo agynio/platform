@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll, afterEach } from 'vitest';
 import React from 'react';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { server, TestProviders, abs } from '../../../__tests__/integration/testUtils';
 import { SettingsSecrets } from '../../pages/SettingsSecrets';
@@ -62,30 +62,33 @@ describe('Settings/Secrets page', () => {
       </TestProviders>,
     );
 
-    // Default filter should be Used (shows required keys regardless of presence)
-    await screen.findByRole('button', { name: 'Used' });
+    // Default filter should be All (shows all known keys)
+    await screen.findByRole('button', { name: /^All/i });
     expect(await screen.findByText('secret/github/GH_TOKEN')).toBeInTheDocument();
     expect(await screen.findByText('secret/slack/BOT_TOKEN')).toBeInTheDocument();
 
-    // Edit github token inline and save
-    const editButtons = screen.getAllByRole('button', { name: 'Edit' });
-    fireEvent.click(editButtons[0]);
-    const showBtn = await screen.findByRole('button', { name: 'Show' });
-    fireEvent.click(showBtn); // unmask
-    const input = screen.getByPlaceholderText('Enter secret value');
-    fireEvent.change(input, { target: { value: 'topsecret' } });
-    const saveBtn = screen.getByRole('button', { name: 'Save' });
+    // Create github token inline and save
+    const ghRow = screen.getByText('secret/github/GH_TOKEN').closest('tr');
+    expect(ghRow).toBeTruthy();
+    const createButton = within(ghRow!).getByRole('button', { name: 'Create' });
+    fireEvent.click(createButton);
+    const editRow = screen.getByDisplayValue('secret/github/GH_TOKEN').closest('tr');
+    expect(editRow).toBeTruthy();
+    const valueInput = within(editRow!).getAllByRole('textbox')[1] as HTMLInputElement;
+    fireEvent.change(valueInput, { target: { value: 'topsecret' } });
+    const saveBtn = within(editRow!).getByRole('button', { name: /Save secret/i });
     fireEvent.click(saveBtn);
 
     // After save, missing count should drop to 1 (label updates though Used is active)
-    await waitFor(() => expect(screen.getByText('Missing (1)')).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText(/Missing \(1\)/)).toBeInTheDocument());
 
     // Toggle to Used: shows only required keys (2 rows)
-    fireEvent.click(screen.getByRole('button', { name: 'Used' }));
+    fireEvent.click(screen.getByRole('button', { name: /^Used/i }));
     expect(screen.getByText('secret/github/GH_TOKEN')).toBeInTheDocument();
-    expect(screen.getByText('secret/slack/BOT_TOKEN')).toBeInTheDocument();
+    expect(screen.getByText('secret/openai/API_KEY')).toBeInTheDocument();
+    expect(screen.queryByText('secret/slack/BOT_TOKEN')).not.toBeInTheDocument();
     // Toggle to All: includes non-required openai key
-    fireEvent.click(screen.getByRole('button', { name: 'All' }));
+    fireEvent.click(screen.getByRole('button', { name: /^All/i }));
     expect(screen.getByText('secret/openai/API_KEY')).toBeInTheDocument();
   });
 
@@ -109,11 +112,11 @@ describe('Settings/Secrets page', () => {
       </TestProviders>,
     );
 
-    await screen.findByText(/Vault (error|not configured)/);
+    await screen.findByText(/Vault unavailable/i);
     expect(screen.getByText('secret/slack/BOT_TOKEN')).toBeInTheDocument();
   });
 
-  it('fetches value on reveal/edit and clears plaintext on cancel', async () => {
+  it('allows inline editing and cancel resets the draft value', async () => {
     // Graph with one required
     server.use(
       http.get(abs('/api/graph'), () =>
@@ -126,7 +129,6 @@ describe('Settings/Secrets page', () => {
       http.get(abs('/api/vault/mounts'), () => HttpResponse.json({ items: ['secret'] })),
       http.get(abs('/api/vault/kv/:mount/paths'), () => HttpResponse.json({ items: ['github'] })),
       http.get(abs('/api/vault/kv/:mount/keys'), () => HttpResponse.json({ items: ['GH_TOKEN'] })),
-      http.get(abs('/api/vault/kv/:mount/read'), () => HttpResponse.json({ value: 'gh-secret' })),
     );
 
     render(
@@ -135,23 +137,21 @@ describe('Settings/Secrets page', () => {
       </TestProviders>,
     );
 
-    // Click Edit to fetch
-    const editBtn = await screen.findByRole('button', { name: 'Edit' });
+    const editBtn = await screen.findByRole('button', { name: /Edit secret/i });
     fireEvent.click(editBtn);
+    const editRow = screen.getByDisplayValue('secret/github/GH_TOKEN').closest('tr');
+    expect(editRow).toBeTruthy();
+    const valueInput = within(editRow!).getAllByRole('textbox')[1] as HTMLInputElement;
+    fireEvent.change(valueInput, { target: { value: 'gh-secret' } });
 
-    // Toggle Show to unmask and verify fetched value appears
-    const showBtn = await screen.findByRole('button', { name: 'Show' });
-    fireEvent.click(showBtn);
+    const cancelBtn = within(editRow!).getByRole('button', { name: /Cancel editing/i });
+    fireEvent.click(cancelBtn);
 
-    const input = await screen.findByPlaceholderText('Enter secret value');
-    await waitFor(() => expect((input as HTMLInputElement).value).toBe('gh-secret'));
-
-    // Cancel clears plaintext
-    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
-    expect(screen.queryByDisplayValue('gh-secret')).not.toBeInTheDocument();
+    await waitFor(() => expect(screen.queryByDisplayValue('gh-secret')).not.toBeInTheDocument());
+    expect(screen.getByText('secret/github/GH_TOKEN')).toBeInTheDocument();
   });
 
-  it('shows neutral message on missing secret (404) and keeps input empty', async () => {
+  it('allows creating a missing secret inline and updates counts', async () => {
     // Graph with one required
     server.use(
       http.get(abs('/api/graph'), () =>
@@ -160,15 +160,17 @@ describe('Settings/Secrets page', () => {
         ], edges: [] }),
       ),
     );
+    let ghKeys: string[] = [];
     server.use(
       http.get(abs('/api/vault/mounts'), () => HttpResponse.json({ items: ['secret'] })),
       http.get(abs('/api/vault/kv/:mount/paths'), () => HttpResponse.json({ items: ['github'] })),
-      http.get(abs('/api/vault/kv/:mount/keys'), () => HttpResponse.json({ items: ['GH_TOKEN'] })),
-      http.get(abs('/api/vault/kv/:mount/read'), () => new HttpResponse(null, { status: 404 })),
+      http.get(abs('/api/vault/kv/:mount/keys'), () => HttpResponse.json({ items: ghKeys })),
+      http.post(abs('/api/vault/kv/:mount/write'), async ({ request }) => {
+        const body = (await request.json()) as { path: string; key: string; value: string };
+        if (body.path === 'github') ghKeys = Array.from(new Set([...ghKeys, body.key]));
+        return HttpResponse.json({ mount: 'secret', path: body.path, key: body.key, version: Date.now() });
+      }),
     );
-
-    // Spy on alert to capture notifyError
-    const alertSpy = vi.spyOn(window, 'alert').mockImplementation(() => {});
 
     render(
       <TestProviders>
@@ -176,21 +178,17 @@ describe('Settings/Secrets page', () => {
       </TestProviders>,
     );
 
-    // Click Edit to attempt fetch
-    const editBtn = await screen.findByRole('button', { name: 'Edit' });
-    fireEvent.click(editBtn);
+    const createBtn = await screen.findByRole('button', { name: 'Create' });
+    fireEvent.click(createBtn);
 
-    // Toggle Show to trigger fetch on reveal if needed
-    const showBtn = await screen.findByRole('button', { name: 'Show' });
-    fireEvent.click(showBtn);
+    const editRow = screen.getByDisplayValue('secret/github/GH_TOKEN').closest('tr');
+    expect(editRow).toBeTruthy();
+    const valueInput = within(editRow!).getAllByRole('textbox')[1] as HTMLInputElement;
+    fireEvent.change(valueInput, { target: { value: 'super-secret' } });
+    const saveBtn = within(editRow!).getByRole('button', { name: /Save secret/i });
+    fireEvent.click(saveBtn);
 
-    // Expect neutral message and empty input
-    await waitFor(() => {
-      expect(alertSpy).toHaveBeenCalledWith('No value available');
-    });
-    const input = screen.getByPlaceholderText('Enter secret value');
-    expect((input as HTMLInputElement).value).toBe('');
-
-    alertSpy.mockRestore();
+    await waitFor(() => expect(screen.getByText(/Missing \(0\)/)).toBeInTheDocument());
+    expect(screen.getByText('secret/github/GH_TOKEN')).toBeInTheDocument();
   });
 });
