@@ -387,24 +387,48 @@ function ToolOutputSection({
     }),
     [streamData],
   );
-  const hasStderrOutput = Boolean(streamTexts.stderr && streamTexts.stderr.length > 0);
-
   const streamSegments = useMemo<StreamSegment[]>(() => {
     if (!streamData) return [];
     return streamData.chunks.map((chunk) => ({ id: `${chunk.seqGlobal}`, source: chunk.source, data: chunk.data }));
   }, [streamData]);
 
+  const streamSegmentsByFilter = useMemo<Record<StreamFilter, StreamSegment[]>>(() => {
+    if (streamSegments.length === 0) {
+      return { interleaved: [], stdout: [], stderr: [] };
+    }
+    const stdout: StreamSegment[] = [];
+    const stderr: StreamSegment[] = [];
+    for (const segment of streamSegments) {
+      if (segment.source === 'stdout') stdout.push(segment);
+      if (segment.source === 'stderr') stderr.push(segment);
+    }
+    return {
+      interleaved: streamSegments,
+      stdout,
+      stderr,
+    };
+  }, [streamSegments]);
+
+  const hasStderrOutput = useMemo(() => {
+    if (streamSegmentsByFilter.stderr.length > 0) return true;
+    return Boolean(streamTexts.stderr && streamTexts.stderr.length > 0);
+  }, [streamSegmentsByFilter, streamTexts.stderr]);
+
   const displayValue = useMemo(() => {
     if (hasStreamControls) {
+      const segmentsForFilter = streamSegmentsByFilter[filter];
+      if (segmentsForFilter.length > 0) {
+        return { kind: 'stream_segments', segments: segmentsForFilter } as StreamSegmentsValue;
+      }
       if (filter === 'stdout') return streamTexts.stdout;
       if (filter === 'stderr') return streamTexts.stderr;
-      if (streamSegments.length > 0) {
-        return { kind: 'stream_segments', segments: streamSegments } as StreamSegmentsValue;
+      if (streamSegmentsByFilter.interleaved.length > 0) {
+        return { kind: 'stream_segments', segments: streamSegmentsByFilter.interleaved } as StreamSegmentsValue;
       }
       return streamTexts.interleaved;
     }
     return baseValue;
-  }, [hasStreamControls, filter, streamSegments, streamTexts, baseValue]);
+  }, [hasStreamControls, filter, streamSegmentsByFilter, streamTexts, baseValue]);
 
   const scrollKey = hasStreamControls
     ? `${filter}:${filter === 'interleaved' ? streamTexts.interleaved : filter === 'stdout' ? streamTexts.stdout : streamTexts.stderr}`
