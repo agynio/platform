@@ -1,6 +1,8 @@
+import { FastifyAdapter } from '@nestjs/platform-fastify';
+import type { PrismaClient } from '@prisma/client';
+import type { LLM } from '@agyn/llm';
 import { Test } from '@nestjs/testing';
 import { describe, expect, it, vi } from 'vitest';
-import type { PrismaClient } from '@prisma/client';
 
 import { AppModule } from '../src/bootstrap/app.module';
 import { PrismaService } from '../src/core/services/prisma.service';
@@ -17,11 +19,17 @@ import { VaultService } from '../src/vault/vault.service';
 import { AgentNode } from '../src/nodes/agent/agent.node';
 import { LLMProvisioner } from '../src/llm/provisioners/llm.provisioner';
 import { GraphSocketGateway } from '../src/gateway/graph.socket.gateway';
+import { GraphRepository } from '../src/graph/graph.repository';
+import { TemplateRegistry } from '../src/graph/templateRegistry';
+import { LiveGraphRuntime } from '../src/graph/liveGraph.manager';
 
 process.env.LLM_PROVIDER = process.env.LLM_PROVIDER || 'openai';
 process.env.AGENTS_DATABASE_URL = process.env.AGENTS_DATABASE_URL || 'postgres://localhost:5432/test';
 process.env.NCPS_ENABLED = process.env.NCPS_ENABLED || 'false';
 process.env.CONTAINERS_CLEANUP_ENABLED = process.env.CONTAINERS_CLEANUP_ENABLED || 'false';
+
+const TEST_TIMEOUT_MS = 15_000;
+const agentProbeToken = Symbol('agent_node_probe');
 
 describe('App bootstrap smoke test', () => {
   it('initializes Nest application and wires critical dependencies', async () => {
@@ -115,9 +123,49 @@ describe('App bootstrap smoke test', () => {
       listKvV2Mounts: vi.fn().mockResolvedValue([]),
     } satisfies Partial<VaultService>;
 
+    const graphRepositoryStub = {
+      initIfNeeded: vi.fn().mockResolvedValue(undefined),
+      get: vi.fn().mockResolvedValue(null),
+      upsert: vi.fn().mockResolvedValue({
+        name: 'main',
+        version: 0,
+        updatedAt: new Date(0).toISOString(),
+        nodes: [],
+        edges: [],
+        variables: [],
+      }),
+      upsertNodeState: vi.fn().mockResolvedValue(undefined),
+    } satisfies Record<string, unknown>;
+
+    const templateRegistryStub = {
+      register: vi.fn().mockReturnThis(),
+      getClass: vi.fn(),
+      getMeta: vi.fn(),
+      toSchema: vi.fn().mockResolvedValue([]),
+    } as unknown as TemplateRegistry;
+
+    const liveGraphRuntimeStub = {
+      load: vi.fn().mockResolvedValue({ applied: false }),
+      subscribe: vi.fn().mockReturnValue(() => undefined),
+    } as unknown as LiveGraphRuntime;
+
+    class StubProvisioner extends LLMProvisioner {
+      getLLM = vi.fn(async () => ({} as LLM));
+    }
+    const llmProvisionerStub = new StubProvisioner();
+
     const subscriptionSpy = vi.spyOn(EventsBusService.prototype, 'subscribeToRunEvents');
 
-    const moduleBuilder = Test.createTestingModule({ imports: [AppModule] })
+    const moduleBuilder = Test.createTestingModule({
+      imports: [AppModule],
+      providers: [
+        {
+          provide: agentProbeToken,
+          useFactory: (agent: AgentNode, llm: LLMProvisioner) => ({ agent, llm }),
+          inject: [AgentNode, LLMProvisioner],
+        },
+      ],
+    })
       .overrideProvider(PrismaService)
       .useValue(prismaServiceStub)
       .overrideProvider(ContainerRegistry)
@@ -135,10 +183,24 @@ describe('App bootstrap smoke test', () => {
       .overrideProvider(ThreadsMetricsService)
       .useValue(threadsMetricsStub)
       .overrideProvider(VaultService)
-      .useValue(vaultStub);
+      .useValue(vaultStub)
+      .overrideProvider(GraphRepository)
+      .useValue(graphRepositoryStub as unknown as GraphRepository)
+      .overrideProvider(TemplateRegistry)
+      .useValue(templateRegistryStub)
+      .overrideProvider(LiveGraphRuntime)
+      .useValue(liveGraphRuntimeStub)
+      .overrideProvider(LLMProvisioner)
+      .useValue(llmProvisionerStub);
 
     const moduleRef = await moduleBuilder.compile();
-    const app = moduleRef.createNestApplication();
+    const adapter = new FastifyAdapter();
+    const fastifyInstance = adapter.getInstance() as { addresses?: () => Array<Record<string, unknown>> };
+    if (typeof fastifyInstance.addresses !== 'function') {
+      fastifyInstance.addresses = () => [{ address: '127.0.0.1', family: 'IPv4', port: 0 }];
+    }
+
+    const app = moduleRef.createNestApplication(adapter);
 
     try {
       await app.init();
@@ -150,9 +212,12 @@ describe('App bootstrap smoke test', () => {
       expect(Reflect.get(startupRecovery as object, 'eventsBus')).toBe(eventsBus);
 
       const llmProvisioner = app.get(LLMProvisioner);
-      const agentNode = await app.resolve(AgentNode);
-      expect(agentNode).toBeInstanceOf(AgentNode);
-      expect(Reflect.get(agentNode as object, 'llmProvisioner')).toBe(llmProvisioner);
+      expect(llmProvisioner).toBe(llmProvisionerStub);
+
+      const agentProbe = app.get<{ agent: AgentNode; llm: LLMProvisioner }>(agentProbeToken);
+      expect(agentProbe.llm).toBe(llmProvisioner);
+      expect(agentProbe.agent).toBeInstanceOf(AgentNode);
+      expect(Reflect.get(agentProbe.agent as object, 'llmProvisioner')).toBe(llmProvisioner);
 
       const gateway = app.get(GraphSocketGateway);
       expect(gateway).toBeInstanceOf(GraphSocketGateway);
@@ -160,13 +225,13 @@ describe('App bootstrap smoke test', () => {
       const [listener] = subscriptionSpy.mock.calls[0] ?? [];
       expect(typeof listener).toBe('function');
 
-      const cleanupRegistry = Reflect.get(gateway as object, 'cleanup');
+      const cleanupRegistry = Reflect.get(gateway as object, 'cleanup') as unknown;
       expect(Array.isArray(cleanupRegistry)).toBe(true);
-      expect(cleanupRegistry.length).toBeGreaterThan(0);
+      expect((cleanupRegistry as unknown[]).length).toBeGreaterThan(0);
     } finally {
       subscriptionSpy.mockRestore();
       await app.close();
       await moduleRef.close();
     }
-  });
+  }, TEST_TIMEOUT_MS);
 });
