@@ -1,1 +1,4 @@
-@import "@agyn/ui-new/styles.css";
+@import "tailwindcss";
+@plugin "tailwindcss-animate";
+@import "@agyn/ui-new/styles/globals.css";
+@import "@agyn/ui-new/styles/shadcn-compat.css";

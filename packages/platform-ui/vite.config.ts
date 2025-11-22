@@ -10,6 +10,7 @@ export default defineConfig({
     alias: {
       '@': path.resolve(__dirname, './src'),
       '@agyn/ui': path.resolve(__dirname, '../ui/src'),
+      '@agyn/ui-new': path.resolve(__dirname, '../ui-new/src'),
       // Ensure React JSX runtime resolves when importing TSX from workspace packages
       'react/jsx-runtime': path.resolve(__dirname, './node_modules/react/jsx-runtime.js'),
       'react/jsx-dev-runtime': path.resolve(
