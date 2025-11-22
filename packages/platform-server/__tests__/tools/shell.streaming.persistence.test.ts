@@ -32,7 +32,8 @@ const createTool = (
   const container = new (class {
     async exec(_command: string, options?: { onOutput?: (source: string, chunk: Buffer) => void }) {
       options?.onOutput?.('stdout', Buffer.from('chunk-line\n'));
-      return { stdout: 'final output\n', stderr: '', exitCode: 0 };
+      options?.onOutput?.('stdout', Buffer.from('final output\n'));
+      return { stdout: 'chunk-line\nfinal output\n', stderr: '', exitCode: 0 };
     }
     async putArchive() {
       return;
@@ -61,7 +62,7 @@ describe('ShellCommandTool streaming persistence resilience', () => {
       eventId: 'event-1',
     });
 
-    expect(result.trim()).toBe('final output');
+    expect(result).toBe('chunk-line\nfinal output\n');
     expect(append).toHaveBeenCalled();
     expect(finalize).toHaveBeenCalled();
     expect(logger.warn).toHaveBeenCalledWith(
