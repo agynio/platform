@@ -1,4 +1,3 @@
-@import "tailwindcss";
-@plugin "tailwindcss-animate";
-@import "@agyn/ui-new/styles/globals.css";
-@import "@agyn/ui-new/styles/shadcn-compat.css";
+@import './styles/tailwind.css';
+@import './styles/globals.css';
+@import './styles/shadcn-compat.css';

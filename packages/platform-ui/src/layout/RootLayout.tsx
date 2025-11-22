@@ -2,7 +2,7 @@ import React, { useCallback, useState } from 'react';
 import { Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { Button, Drawer, DrawerTrigger, DrawerContent, DrawerClose, Logo, Separator } from '@agyn/ui';
 import { Menu } from 'lucide-react';
-import { MainSidebar } from '@agyn/ui-new/components/MainSidebar';
+import { MainSidebar } from '../components/MainSidebar';
 import { useUser } from '../user/user.runtime';
 
 const MENU_ITEM_ROUTES: Record<string, string> = {
