@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type { EventsBusService, RunEventBusPayload } from '../src/events/events-bus.service';
+import type { EventsBusService, ReminderCountEvent, RunEventBusPayload } from '../src/events/events-bus.service';
 import type { ToolOutputChunkPayload, ToolOutputTerminalPayload } from '../src/events/run-events.service';
 import { GraphEventsBusListener } from '../src/graph-domain/listeners/graph-events-bus.listener';
 import { GraphEventsPublisher } from '../src/gateway/graph.events.publisher';
@@ -29,23 +29,27 @@ describe('GraphEventsBusListener', () => {
   let runEventListener: ((payload: RunEventBusPayload) => void) | null;
   let chunkListener: ((payload: ToolOutputChunkPayload) => void) | null;
   let terminalListener: ((payload: ToolOutputTerminalPayload) => void) | null;
+  let reminderListener: ((payload: ReminderCountEvent) => void) | null;
   let runDispose: ReturnType<typeof vi.fn>;
   let chunkDispose: ReturnType<typeof vi.fn>;
   let terminalDispose: ReturnType<typeof vi.fn>;
+  let reminderDispose: ReturnType<typeof vi.fn>;
 
   beforeEach(() => {
     publisher = new MockGraphEventsPublisher();
     runEventListener = null;
     chunkListener = null;
     terminalListener = null;
+    reminderListener = null;
     runDispose = vi.fn();
     chunkDispose = vi.fn();
     terminalDispose = vi.fn();
+    reminderDispose = vi.fn();
     vi.clearAllMocks();
   });
 
   const createListener = async () => {
-    const eventsBus: Pick<EventsBusService, 'subscribeToRunEvents' | 'subscribeToToolOutputChunk' | 'subscribeToToolOutputTerminal'> = {
+    const eventsBus: Pick<EventsBusService, 'subscribeToRunEvents' | 'subscribeToToolOutputChunk' | 'subscribeToToolOutputTerminal' | 'subscribeToReminderCount'> = {
       subscribeToRunEvents: (listener) => {
         runEventListener = listener;
         return runDispose;
@@ -57,6 +61,10 @@ describe('GraphEventsBusListener', () => {
       subscribeToToolOutputTerminal: (listener) => {
         terminalListener = listener;
         return terminalDispose;
+      },
+      subscribeToReminderCount: (listener) => {
+        reminderListener = listener;
+        return reminderDispose;
       },
     };
     const moduleRef = {
@@ -171,11 +179,20 @@ describe('GraphEventsBusListener', () => {
     );
   });
 
+  it('bridges reminder_count events to publisher', async () => {
+    await createListener();
+    expect(reminderListener).toBeInstanceOf(Function);
+    reminderListener!({ nodeId: 'node-1', count: 2, updatedAtMs: 123, threadId: 't-1' });
+    expect(publisher.emitReminderCount).toHaveBeenCalledWith('node-1', 2, 123);
+    expect(publisher.scheduleThreadAndAncestorsMetrics).toHaveBeenCalledWith('t-1');
+  });
+
   it('cleans up subscriptions on destroy', async () => {
     const { listener } = await createListener();
     listener.onModuleDestroy();
     expect(runDispose).toHaveBeenCalledTimes(1);
     expect(chunkDispose).toHaveBeenCalledTimes(1);
     expect(terminalDispose).toHaveBeenCalledTimes(1);
+    expect(reminderDispose).toHaveBeenCalledTimes(1);
   });
 });

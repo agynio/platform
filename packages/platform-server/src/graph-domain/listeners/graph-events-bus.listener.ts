@@ -1,7 +1,7 @@
 import { Inject, Injectable, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { ModuleRef } from '@nestjs/core';
 import { LoggerService } from '../../core/services/logger.service';
-import { EventsBusService, type RunEventBusPayload } from '../../events/events-bus.service';
+import { EventsBusService, type ReminderCountEvent, type RunEventBusPayload } from '../../events/events-bus.service';
 import type { ToolOutputChunkPayload, ToolOutputTerminalPayload } from '../../events/run-events.service';
 import { GraphEventsPublisher } from '../../gateway/graph.events.publisher';
 
@@ -26,6 +26,7 @@ export class GraphEventsBusListener implements OnModuleInit, OnModuleDestroy {
     this.cleanup.push(this.eventsBus.subscribeToRunEvents(this.handleRunEvent));
     this.cleanup.push(this.eventsBus.subscribeToToolOutputChunk(this.handleToolOutputChunk));
     this.cleanup.push(this.eventsBus.subscribeToToolOutputTerminal(this.handleToolOutputTerminal));
+    this.cleanup.push(this.eventsBus.subscribeToReminderCount(this.handleReminderCount));
   }
 
   onModuleDestroy(): void {
@@ -149,5 +150,45 @@ export class GraphEventsBusListener implements OnModuleInit, OnModuleDestroy {
         error: err instanceof Error ? err.message : String(err),
       });
     }
+  };
+
+  private readonly handleReminderCount = (payload: ReminderCountEvent): void => {
+    const publisher = this.publisher;
+    if (!publisher) {
+      void this.ensurePublisher();
+      return;
+    }
+    try {
+      publisher.emitReminderCount(payload.nodeId, payload.count, payload.updatedAtMs);
+    } catch (err) {
+      this.logger.warn('GraphEventsBusListener failed to emit reminder_count', {
+        nodeId: payload.nodeId,
+        error: err instanceof Error ? err.message : String(err),
+      });
+      return;
+    }
+
+    const threadId = payload.threadId;
+    if (!threadId) return;
+
+    let scheduleResult: void | Promise<void>;
+    try {
+      scheduleResult = publisher.scheduleThreadAndAncestorsMetrics(threadId);
+    } catch (err) {
+      this.logger.warn('GraphEventsBusListener failed to schedule metrics from reminder count', {
+        nodeId: payload.nodeId,
+        threadId,
+        error: err instanceof Error ? err.message : String(err),
+      });
+      return;
+    }
+
+    void Promise.resolve(scheduleResult).catch((err) => {
+      this.logger.warn('GraphEventsBusListener failed to schedule metrics from reminder count', {
+        nodeId: payload.nodeId,
+        threadId,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    });
   };
 }

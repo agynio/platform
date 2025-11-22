@@ -1,4 +1,4 @@
-import { Module, forwardRef } from '@nestjs/common';
+import { Module } from '@nestjs/common';
 import { CoreModule } from '../core/core.module';
 import { InfraModule } from '../infra/infra.module';
 import { AgentsRemindersController } from '../agents/reminders.controller';
@@ -17,14 +17,11 @@ import { GraphGuard } from './graph.guard';
 import { LiveGraphRuntime } from './liveGraph.manager';
 import { NodeStateService } from './nodeState.service';
 import { GraphVariablesService } from './services/graphVariables.service';
-import { NodesModule } from '../nodes/nodes.module';
-import { GraphServicesModule } from './graph-services.module';
 import { GraphDomainModule } from '../graph-domain/graph-domain.module';
 import { RemindersController } from './controllers/reminders.controller';
-import { LLMModule } from '../llm/llm.module';
 
 @Module({
-  imports: [CoreModule, InfraModule, EnvModule, GraphDomainModule, forwardRef(() => NodesModule), forwardRef(() => GraphServicesModule), forwardRef(() => LLMModule)],
+  imports: [CoreModule, InfraModule, EnvModule, GraphDomainModule],
   controllers: [
     RunsController,
     GraphPersistController,
@@ -62,7 +59,6 @@ import { LLMModule } from '../llm/llm.module';
     GraphVariablesService,
   ],
   exports: [
-    GraphServicesModule,
     LiveGraphRuntime,
     NodeStateService,
     GraphEventsPublisher,
