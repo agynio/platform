@@ -1,140 +1,138 @@
-import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import React from 'react';
-import { render, screen, fireEvent, within } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { http, HttpResponse } from 'msw';
 import { TestProviders, server, abs } from './integration/testUtils';
 import { AgentsReminders } from '../src/pages/AgentsReminders';
 
+const renderSpy = vi.fn();
+const navigateMock = vi.fn();
+
+vi.mock('react-router-dom', async () => {
+  const actual = await vi.importActual<any>('react-router-dom');
+  return {
+    ...actual,
+    useNavigate: () => navigateMock,
+  };
+});
+
+vi.mock('@agyn/ui-new', async () => {
+  const actual = await vi.importActual<any>('@agyn/ui-new');
+  return {
+    ...actual,
+    RemindersScreen: (props: Parameters<typeof actual.RemindersScreen>[0]) => {
+      renderSpy(props);
+      return <div data-testid="reminders-screen" />;
+    },
+  };
+});
+
 function t(offsetMs: number) {
   return new Date(1700000000000 + offsetMs).toISOString();
 }
 
-describe('AgentsReminders page', () => {
+describe('AgentsRemindersNew', () => {
   beforeAll(() => server.listen());
-  afterEach(() => server.resetHandlers());
+  afterEach(() => {
+    server.resetHandlers();
+    renderSpy.mockReset();
+    navigateMock.mockReset();
+  });
   afterAll(() => server.close());
 
-  it('defaults to Active filter and renders table', async () => {
+  it('fetches all reminders once and maps to UI model', async () => {
+    const response = {
+      items: [
+        { id: 'r1', threadId: 'th1', note: 'Upcoming', at: t(200), createdAt: t(100), completedAt: null },
+        { id: 'r2', threadId: 'th2', note: 'Finished', at: t(150), createdAt: t(120), completedAt: t(160) },
+      ],
+    };
     server.use(
       http.get('/api/agents/reminders', ({ request }) => {
         const url = new URL(request.url);
-        const filter = url.searchParams.get('filter');
-        // Default should be active
-        if (filter !== 'active') return new HttpResponse(null, { status: 400 });
-        return HttpResponse.json({ items: [
-          { id: 'r1', threadId: 'th1', note: 'Soon', at: t(100), createdAt: t(50), completedAt: null },
-        ] });
+        expect(url.searchParams.get('filter')).toBe('all');
+        return HttpResponse.json(response);
       }),
-      http.get(abs('/api/agents/reminders'), ({ request }) => {
-        const url = new URL(request.url);
-        const filter = url.searchParams.get('filter');
-        if (filter !== 'active') return new HttpResponse(null, { status: 400 });
-        return HttpResponse.json({ items: [
-          { id: 'r1', threadId: 'th1', note: 'Soon', at: t(100), createdAt: t(50), completedAt: null },
-        ] });
-      }),
+      http.get(abs('/api/agents/reminders'), () => HttpResponse.json(response)),
     );
 
-    render(<MemoryRouter initialEntries={[{ pathname: '/agents/reminders' }]}><TestProviders><AgentsReminders /></TestProviders></MemoryRouter>);
-    // Table should render
-    const table = await screen.findByRole('table');
-    const rows = within(table).getAllByRole('row');
-    expect(rows.length).toBeGreaterThan(1);
-    // Completed At should show em dash when null
-    const cells = within(rows[1]).getAllByRole('cell');
-    expect(cells[3].textContent).toBe('—');
+    render(
+      <MemoryRouter>
+        <TestProviders>
+          <AgentsReminders />
+        </TestProviders>
+      </MemoryRouter>,
+    );
+
+    await screen.findByTestId('reminders-screen');
+    const [{ reminders, renderSidebar }] = renderSpy.mock.calls.at(-1) ?? [];
+    expect(renderSidebar).toBe(false);
+    expect(reminders).toHaveLength(2);
+    expect(reminders[0]).toMatchObject({ id: 'r1', status: 'scheduled' });
+    expect(reminders[1]).toMatchObject({ id: 'r2', status: 'executed', executedAt: t(160) });
+    expect(new Date(reminders[0].scheduledAt).getTime()).toBeGreaterThan(new Date(reminders[1].scheduledAt).getTime());
   });
 
-  it('toggles filters: All and Completed', async () => {
+  it('navigates to thread when RemindersScreen invokes onViewThread', async () => {
     server.use(
-      http.get('/api/agents/reminders', ({ request }) => {
-        const url = new URL(request.url);
-        const filter = url.searchParams.get('filter');
-        if (filter === 'active') {
-          return HttpResponse.json({ items: [
-            { id: 'a1', threadId: 'tA', note: 'A', at: t(200), createdAt: t(100), completedAt: null },
-          ] });
-        } else if (filter === 'all') {
-          return HttpResponse.json({ items: [
-            { id: 'a1', threadId: 'tA', note: 'A', at: t(200), createdAt: t(100), completedAt: null },
-            { id: 'c1', threadId: 'tC', note: 'C', at: t(150), createdAt: t(120), completedAt: t(160) },
-          ] });
-        } else if (filter === 'completed') {
-          return HttpResponse.json({ items: [
-            { id: 'c1', threadId: 'tC', note: 'C', at: t(150), createdAt: t(120), completedAt: t(160) },
-          ] });
-        }
-        return new HttpResponse(null, { status: 400 });
-      }),
-      http.get(abs('/api/agents/reminders'), ({ request }) => {
-        const url = new URL(request.url);
-        const filter = url.searchParams.get('filter');
-        if (filter === 'active') {
-          return HttpResponse.json({ items: [
-            { id: 'a1', threadId: 'tA', note: 'A', at: t(200), createdAt: t(100), completedAt: null },
-          ] });
-        } else if (filter === 'all') {
-          return HttpResponse.json({ items: [
-            { id: 'a1', threadId: 'tA', note: 'A', at: t(200), createdAt: t(100), completedAt: null },
-            { id: 'c1', threadId: 'tC', note: 'C', at: t(150), createdAt: t(120), completedAt: t(160) },
-          ] });
-        } else if (filter === 'completed') {
-          return HttpResponse.json({ items: [
-            { id: 'c1', threadId: 'tC', note: 'C', at: t(150), createdAt: t(120), completedAt: t(160) },
-          ] });
-        }
-        return new HttpResponse(null, { status: 400 });
-      }),
+      http.get('/api/agents/reminders', () =>
+        HttpResponse.json({ items: [{ id: 'r1', threadId: 'th1', note: 'Upcoming', at: t(200), createdAt: t(100), completedAt: null }] }),
+      ),
+      http.get(abs('/api/agents/reminders'), () => HttpResponse.json({ items: [{ id: 'r1', threadId: 'th1', note: 'Upcoming', at: t(200), createdAt: t(100), completedAt: null }] })),
     );
 
-    render(<MemoryRouter initialEntries={[{ pathname: '/agents/reminders' }]}><TestProviders><AgentsReminders /></TestProviders></MemoryRouter>);
-    // Default Active
-    const table1 = await screen.findByRole('table');
-    expect(within(table1).getAllByRole('row').length).toBe(2);
+    render(
+      <MemoryRouter>
+        <TestProviders>
+          <AgentsReminders />
+        </TestProviders>
+      </MemoryRouter>,
+    );
 
-    // Toggle All
-    fireEvent.click(screen.getByRole('button', { name: /All/i }));
-    const table2 = await screen.findByRole('table');
-    const rows2 = within(table2).getAllByRole('row');
-    expect(rows2.length).toBe(3);
-
-    // Toggle Completed
-    fireEvent.click(screen.getByRole('button', { name: /Completed/i }));
-    const table3 = await screen.findByRole('table');
-    const rows3 = within(table3).getAllByRole('row');
-    expect(rows3.length).toBe(2);
+    await screen.findByTestId('reminders-screen');
+    const [{ onViewThread }] = renderSpy.mock.calls.at(-1) ?? [];
+    expect(onViewThread).toBeTypeOf('function');
+    onViewThread?.('th1');
+    expect(navigateMock).toHaveBeenCalledWith('/agents/threads/th1');
   });
 
-  it('shows loading, error, and empty states', async () => {
-    // First return 500 to trigger error
+  it('renders loading and error states when query status changes', async () => {
     server.use(
       http.get('/api/agents/reminders', () => new HttpResponse(null, { status: 500 })),
       http.get(abs('/api/agents/reminders'), () => new HttpResponse(null, { status: 500 })),
     );
-    render(<MemoryRouter initialEntries={[{ pathname: '/agents/reminders' }]}><TestProviders><AgentsReminders /></TestProviders></MemoryRouter>);
-    expect(await screen.findByRole('alert')).toBeInTheDocument();
 
-    // Then empty (for Active)
-    server.use(
-      http.get('/api/agents/reminders', ({ request }) => {
-        const url = new URL(request.url);
-        const filter = url.searchParams.get('filter');
-        if (filter !== 'active') return new HttpResponse(null, { status: 400 });
-        return HttpResponse.json({ items: [] });
-      }),
-      http.get(abs('/api/agents/reminders'), ({ request }) => {
-        const url = new URL(request.url);
-        const filter = url.searchParams.get('filter');
-        if (filter !== 'active') return new HttpResponse(null, { status: 400 });
-        return HttpResponse.json({ items: [] });
-      }),
+    render(
+      <MemoryRouter>
+        <TestProviders>
+          <AgentsReminders />
+        </TestProviders>
+      </MemoryRouter>,
     );
 
-    // Trigger refetch by toggling away then back to Active
-    fireEvent.click(screen.getByRole('button', { name: /Completed/i }));
-    fireEvent.click(screen.getByRole('button', { name: /Active/i }));
-    // No reminders message
-    expect(await screen.findByText(/No reminders/)).toBeInTheDocument();
+    const alert = await screen.findByRole('alert');
+    expect(alert).toHaveTextContent(/Request failed/);
+
+    renderSpy.mockReset();
+
+    server.use(
+      http.get('/api/agents/reminders', () => HttpResponse.json({ items: [] })),
+      http.get(abs('/api/agents/reminders'), () => HttpResponse.json({ items: [] })),
+    );
+
+    render(
+      <MemoryRouter>
+        <TestProviders>
+          <AgentsReminders />
+        </TestProviders>
+      </MemoryRouter>,
+    );
+
+    await screen.findByTestId('reminders-screen');
+    await waitFor(() => {
+      const [{ error }] = renderSpy.mock.calls.at(-1) ?? [];
+      expect(error).toBeFalsy();
+    });
   });
 });
