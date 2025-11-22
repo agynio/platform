@@ -1,7 +1,6 @@
 import { Test } from '@nestjs/testing';
 import { describe, expect, it, vi } from 'vitest';
 import { GraphModule } from '../src/graph/graph.module';
-import { GraphServicesModule } from '../src/graph/graph-services.module';
 import { PrismaService } from '../src/core/services/prisma.service';
 import type { PrismaClient } from '@prisma/client';
 import { ContainerService } from '../src/infra/container/container.service';
@@ -182,7 +181,7 @@ if (!shouldRunDbTests) {
       } satisfies Partial<GraphRepository>;
 
       const builder = Test.createTestingModule({
-        imports: [GraphModule, GraphServicesModule],
+        imports: [GraphModule],
       });
 
       vi.spyOn(PrismaService.prototype, 'getClient').mockReturnValue(prismaClientStub as PrismaClient);

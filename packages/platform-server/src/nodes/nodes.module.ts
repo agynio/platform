@@ -1,11 +1,9 @@
-import { Module, forwardRef } from '@nestjs/common';
+import { Module } from '@nestjs/common';
 import { CoreModule } from '../core/core.module';
 import { EnvModule } from '../env/env.module';
 import { EventsModule } from '../events/events.module';
 import { InfraModule } from '../infra/infra.module';
 import { LLMModule } from '../llm/llm.module';
-import { GraphServicesModule } from '../graph/graph-services.module';
-import { GraphModule } from '../graph/graph.module';
 import { PostgresMemoryRepository } from './memory/memory.repository';
 import { MemoryService } from './memory/memory.service';
 import { MemoryNode } from './memory/memory.node';
@@ -32,7 +30,7 @@ import { LoggerService } from '../core/services/logger.service';
 import { EnvService } from '../env/env.service';
 
 @Module({
-imports: [CoreModule, EnvModule, EventsModule, InfraModule, LLMModule, forwardRef(() => GraphServicesModule), forwardRef(() => GraphModule)],
+  imports: [CoreModule, EnvModule, EventsModule, InfraModule, LLMModule],
   providers: [
     SlackAdapter,
     PostgresMemoryRepository,

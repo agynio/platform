@@ -213,17 +213,18 @@ describe('RemindMeTool', () => {
     expect(parsed.status).toBe('scheduled');
   });
 
-  it('schedules metrics via publisher on schedule and completion', async () => {
+  it('emits reminder_count payloads with thread id on schedule and completion', async () => {
     const logger = new LoggerService();
     const prismaStub = { getClient() { return { reminder: { create: vi.fn(async (args) => ({ ...args.data, createdAt: new Date() })), update: vi.fn(async () => ({})) } } as any; } };
-    const gatewayStub: any = {
-      emitReminderCount: vi.fn(() => {}),
-      scheduleThreadAndAncestorsMetrics: vi.fn(() => {}),
-      scheduleThreadMetrics: vi.fn(() => {}),
+    const emitted: Array<{ nodeId: string; count: number; threadId?: string }> = [];
+    const eventsBusStub: any = {
+      emitReminderCount: vi.fn((payload: { nodeId: string; count: number; threadId?: string }) => {
+        emitted.push(payload);
+      }),
     };
     // Use node to wire tool registry events to gateway
     const { RemindMeNode } = await import('../src/nodes/tools/remind_me/remind_me.node');
-    const node = new RemindMeNode(logger as any, gatewayStub, prismaStub as any);
+    const node = new RemindMeNode(logger as any, eventsBusStub, prismaStub as any);
     node.init({ nodeId: 'node-m' });
     await node.provision();
     const tool = node.getTool();
@@ -231,11 +232,13 @@ describe('RemindMeTool', () => {
     const caller_agent: CallerAgentStub = { invoke: vi.fn(async () => undefined) };
     const threadId = 't-metrics';
     await tool.execute({ delayMs: 10, note: 'm' } as any, { threadId, callerAgent: caller_agent as any, finishSignal: { activate() {}, deactivate() {}, isActive: false } } as any);
-    // Should schedule metrics for thread on schedule
-    expect(gatewayStub.scheduleThreadAndAncestorsMetrics).toHaveBeenCalledWith(threadId);
-    // And again on completion
+    // Should emit reminder_count with thread id on schedule
+    expect(eventsBusStub.emitReminderCount).toHaveBeenCalled();
+    const scheduleCall = emitted.find((p) => p.count === 1);
+    expect(scheduleCall?.threadId).toBe(threadId);
+    // And again on completion (count returns to 0 but still includes thread id)
     await vi.advanceTimersByTimeAsync(10);
-    const calls = (gatewayStub.scheduleThreadAndAncestorsMetrics as any).mock.calls as unknown as any[][];
-    expect(calls.filter((c) => c[0] === threadId).length).toBeGreaterThanOrEqual(2);
+    const completionCall = emitted.find((p) => p.count === 0);
+    expect(completionCall?.threadId).toBe(threadId);
   });
 });

@@ -11,10 +11,18 @@ export type RunEventBusPayload = {
   event: RunTimelineEvent | null;
 };
 
+export type ReminderCountEvent = {
+  nodeId: string;
+  count: number;
+  updatedAtMs?: number;
+  threadId?: string;
+};
+
 type EventsBusEvents = {
   run_event: [RunEventBusPayload];
   tool_output_chunk: [ToolOutputChunkPayload];
   tool_output_terminal: [ToolOutputTerminalPayload];
+  reminder_count: [ReminderCountEvent];
 };
 
 @Injectable()
@@ -62,6 +70,17 @@ export class EventsBusService implements OnModuleDestroy {
 
   emitToolOutputTerminal(payload: ToolOutputTerminalPayload): void {
     this.emitter.emit('tool_output_terminal', payload);
+  }
+
+  subscribeToReminderCount(listener: (payload: ReminderCountEvent) => void): () => void {
+    this.emitter.on('reminder_count', listener);
+    return () => {
+      this.emitter.off('reminder_count', listener);
+    };
+  }
+
+  emitReminderCount(payload: ReminderCountEvent): void {
+    this.emitter.emit('reminder_count', payload);
   }
 
   onModuleDestroy(): void {

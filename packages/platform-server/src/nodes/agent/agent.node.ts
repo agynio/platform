@@ -96,7 +96,7 @@ export type AgentStaticConfig = z.infer<typeof AgentStaticConfigSchema>;
 export type WhenBusyMode = 'wait' | 'injectAfterTools';
 
 // Consolidated Agent class (merges previous BaseAgent + Agent into single AgentNode)
-import { Inject, Injectable, Optional, Scope, forwardRef } from '@nestjs/common';
+import { Inject, Injectable, Optional, Scope } from '@nestjs/common';
 import { ModuleRef } from '@nestjs/core';
 import type { TemplatePortConfig } from '../../graph/ports.types';
 import type { RuntimeContext } from '../../graph/runtimeContext';
@@ -116,7 +116,7 @@ export class AgentNode extends Node<AgentStaticConfig> {
     @Inject(LoggerService) protected logger: LoggerService,
     @Inject(LLMProvisioner) protected llmProvisioner: LLMProvisioner,
     @Inject(ModuleRef) protected readonly moduleRef: ModuleRef,
-    @Optional() @Inject(forwardRef(() => AgentsPersistenceService)) private persistence?: AgentsPersistenceService,
+    @Optional() @Inject(AgentsPersistenceService) private persistence?: AgentsPersistenceService,
     @Optional() @Inject(RunSignalsRegistry) private runSignals?: RunSignalsRegistry,
   ) {
     super(logger);

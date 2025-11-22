@@ -9,14 +9,14 @@ describe('RemindMe socket reminder_count events', () => {
   it('emits count on schedule and on fire (decrement)', async () => {
     const logger = new LoggerService();
     const prismaStub = { getClient() { return { reminder: { create: vi.fn(async (args) => ({ ...args.data, createdAt: new Date() })), update: vi.fn(async () => ({})) } } as any; } };
-    const emitted: Array<{ nodeId: string; count: number }> = [];
-    const gatewayStub: any = {
-      emitReminderCount: (nodeId: string, count: number) => { emitted.push({ nodeId, count }); },
-      scheduleThreadAndAncestorsMetrics: (_threadId: string) => {},
-      scheduleThreadMetrics: (_threadId: string) => {},
+    const emitted: Array<{ nodeId: string; count: number; threadId?: string; updatedAtMs?: number }> = [];
+    const eventsBusStub: any = {
+      emitReminderCount: (payload: { nodeId: string; count: number; threadId?: string; updatedAtMs?: number }) => {
+        emitted.push(payload);
+      },
     };
 
-    const node = new RemindMeNode(logger as any, gatewayStub, prismaStub as any);
+    const node = new RemindMeNode(logger as any, eventsBusStub, prismaStub as any);
     node.init({ nodeId: 'node-a' });
     await node.provision();
     const tool = node.getTool();
@@ -39,14 +39,14 @@ describe('RemindMe socket reminder_count events', () => {
   it('emits count=0 on deprovision/destroy', async () => {
     const logger = new LoggerService();
     const prismaStub = { getClient() { return { reminder: { create: vi.fn(async (args) => ({ ...args.data, createdAt: new Date() })), update: vi.fn(async () => ({})) } } as any; } };
-    const emitted: Array<{ nodeId: string; count: number }> = [];
-    const gatewayStub: any = {
-      emitReminderCount: (nodeId: string, count: number) => { emitted.push({ nodeId, count }); },
-      scheduleThreadAndAncestorsMetrics: (_threadId: string) => {},
-      scheduleThreadMetrics: (_threadId: string) => {},
+    const emitted: Array<{ nodeId: string; count: number; threadId?: string; updatedAtMs?: number }> = [];
+    const eventsBusStub: any = {
+      emitReminderCount: (payload: { nodeId: string; count: number; threadId?: string; updatedAtMs?: number }) => {
+        emitted.push(payload);
+      },
     };
 
-    const node = new RemindMeNode(logger as any, gatewayStub, prismaStub as any);
+    const node = new RemindMeNode(logger as any, eventsBusStub, prismaStub as any);
     node.init({ nodeId: 'node-b' });
     await node.provision();
     const tool = node.getTool();

@@ -5,7 +5,7 @@ import { RemindMeFunctionTool, RemindMeToolStaticConfigSchema } from './remind_m
 import z from 'zod';
 import { AgentNode } from '../../agent/agent.node';
 import { Inject, Injectable, Scope } from '@nestjs/common';
-import { GraphEventsPublisher } from '../../../gateway/graph.events.publisher';
+import { EventsBusService } from '../../../events/events-bus.service';
 
 @Injectable({ scope: Scope.TRANSIENT })
 export class RemindMeNode extends BaseToolNode<z.infer<typeof RemindMeToolStaticConfigSchema>> {
@@ -14,7 +14,7 @@ export class RemindMeNode extends BaseToolNode<z.infer<typeof RemindMeToolStatic
 
   constructor(
     @Inject(LoggerService) protected logger: LoggerService,
-    @Inject(GraphEventsPublisher) private readonly events: GraphEventsPublisher,
+    @Inject(EventsBusService) private readonly eventsBus: EventsBusService,
     @Inject(PrismaService) private readonly prismaService: PrismaService,
   ) {
     super(logger);
@@ -27,10 +27,7 @@ export class RemindMeNode extends BaseToolNode<z.infer<typeof RemindMeToolStatic
       this.toolInstance.setOnRegistryChanged((count: number, atMs?: number, threadId?: string) => {
         const id = this._nodeId; // emit only when initialized
         if (!id) return;
-        // Emit count change via socket gateway
-        this.events.emitReminderCount(id, count, atMs);
-        // Also schedule metrics for affected thread
-        if (threadId) this.events.scheduleThreadAndAncestorsMetrics(threadId);
+        this.eventsBus.emitReminderCount({ nodeId: id, count, updatedAtMs: atMs, threadId });
       });
     }
     return this.toolInstance;
