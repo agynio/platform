@@ -3,7 +3,7 @@ import { ModuleRef } from '@nestjs/core';
 import { LoggerService } from '../../core/services/logger.service';
 import { EventsBusService, type ReminderCountEvent, type RunEventBusPayload } from '../../events/events-bus.service';
 import type { ToolOutputChunkPayload, ToolOutputTerminalPayload } from '../../events/run-events.service';
-import { GraphEventsPublisher } from '../../gateway/graph.events.publisher';
+import { GraphEventsPublisher } from './graph.events.publisher';
 
 function toDate(value: string): Date | null {
   const ts = new Date(value);

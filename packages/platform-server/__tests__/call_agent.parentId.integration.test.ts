@@ -3,7 +3,7 @@ import { LoggerService } from '../src/core/services/logger.service';
 import { CallAgentTool } from '../src/nodes/tools/call_agent/call_agent.node';
 import { ResponseMessage, HumanMessage } from '@agyn/llm';
 import { AgentsPersistenceService } from '../src/agents/agents.persistence.service';
-import { NoopGraphEventsPublisher } from '../src/gateway/graph.events.publisher';
+import { NoopGraphEventsPublisher } from '../src/graph/events/graph.events.publisher';
 import { Signal } from '../src/signal';
 import { createPrismaStub, StubPrismaService } from './helpers/prisma.stub';
 import { createRunEventsStub } from './helpers/runEvents.stub';

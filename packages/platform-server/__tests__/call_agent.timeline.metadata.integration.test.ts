@@ -6,7 +6,7 @@ import { RunEventsService } from '../src/events/run-events.service';
 import { EventsBusService } from '../src/events/events-bus.service';
 import { AgentsPersistenceService } from '../src/agents/agents.persistence.service';
 import { LoggerService } from '../src/core/services/logger.service';
-import { NoopGraphEventsPublisher } from '../src/gateway/graph.events.publisher';
+import { NoopGraphEventsPublisher } from '../src/graph/events/graph.events.publisher';
 import type { ThreadsMetricsService } from '../src/agents/threads.metrics.service';
 import type { TemplateRegistry } from '../src/graph/templateRegistry';
 import type { GraphRepository } from '../src/graph/graph.repository';

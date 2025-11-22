@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { AgentsPersistenceService } from '../src/agents/agents.persistence.service';
 import { LoggerService } from '../src/core/services/logger.service';
-import { NoopGraphEventsPublisher } from '../src/gateway/graph.events.publisher';
+import { NoopGraphEventsPublisher } from '../src/graph/events/graph.events.publisher';
 import { StubPrismaService, createPrismaStub } from './helpers/prisma.stub';
 import { createRunEventsStub } from './helpers/runEvents.stub';
 

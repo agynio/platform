@@ -1,9 +1,10 @@
-import { Inject, Injectable, Scope } from '@nestjs/common';
+import { Inject, Injectable, Scope, Optional } from '@nestjs/common';
+import { ModuleRef } from '@nestjs/core';
 import { LoggerService } from '../core/services/logger.service';
 import { LiveGraphRuntime } from './liveGraph.manager';
-import { GraphSocketGateway } from '../gateway/graph.socket.gateway';
 import { GraphRepository } from './graph.repository';
 import { mergeWith, isArray } from 'lodash-es';
+import { GraphEventsPublisher } from './events/graph.events.publisher';
 
 export function deepMergeNodeState(
   prev: Record<string, unknown>,
@@ -33,12 +34,31 @@ export function deepMergeNodeState(
  */
 @Injectable({ scope: Scope.DEFAULT })
 export class NodeStateService {
+  private publisher: GraphEventsPublisher | null;
+
   constructor(
     @Inject(GraphRepository) private readonly graphRepository: GraphRepository,
     @Inject(LiveGraphRuntime) private readonly runtime: LiveGraphRuntime,
     @Inject(LoggerService) private readonly logger: LoggerService,
-    @Inject(GraphSocketGateway) private readonly gateway?: GraphSocketGateway,
-  ) {}
+    @Inject(ModuleRef) private readonly moduleRef: ModuleRef,
+    @Optional() @Inject(GraphEventsPublisher) publisher?: GraphEventsPublisher,
+  ) {
+    this.publisher = publisher ?? null;
+  }
+
+  private async ensurePublisher(): Promise<GraphEventsPublisher | null> {
+    if (this.publisher) return this.publisher;
+    try {
+      const resolved = await this.moduleRef.resolve(GraphEventsPublisher, undefined, { strict: false });
+      if (resolved) {
+        this.publisher = resolved;
+        return resolved;
+      }
+    } catch (err) {
+      this.logger.warn('NodeStateService: failed to resolve GraphEventsPublisher', err);
+    }
+    return null;
+  }
 
   /** Return last known runtime snapshot for a node (for filtering). */
   getSnapshot(nodeId: string): Record<string, unknown> | undefined {
@@ -63,8 +83,13 @@ export class NodeStateService {
       } catch (e) {
         this.logger.error('NodeStateService: instance.setState failed for %s: %s', nodeId, String(e));
       }
-      // Emit gateway node_state with merged state
-      this.gateway?.emitNodeState(nodeId, merged);
+      // Emit node_state with merged state via publisher bridge
+      const publisher = await this.ensurePublisher();
+      try {
+        publisher?.emitNodeState(nodeId, merged);
+      } catch (err) {
+        this.logger.warn('NodeStateService: emitNodeState failed for %s: %s', nodeId, String(err));
+      }
     } catch (e) {
       this.logger.error('NodeStateService: upsertNodeState failed for %s: %s', nodeId, String(e));
     }

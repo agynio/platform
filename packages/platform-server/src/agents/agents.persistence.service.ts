@@ -3,7 +3,7 @@ import { Inject, Injectable } from '@nestjs/common';
 import type { MessageKind, Prisma, PrismaClient, RunMessageType, RunStatus, ThreadStatus } from '@prisma/client';
 import { LoggerService } from '../core/services/logger.service';
 import { PrismaService } from '../core/services/prisma.service';
-import { GraphEventsPublisher, NoopGraphEventsPublisher, type GraphEventsPublisherAware } from '../gateway/graph.events.publisher';
+import { GraphEventsPublisher, NoopGraphEventsPublisher, type GraphEventsPublisherAware } from '../graph/events/graph.events.publisher';
 import { GraphRepository } from '../graph/graph.repository';
 import { TemplateRegistry } from '../graph/templateRegistry';
 import type { PersistedGraphNode } from '../shared/types/graph.types';

@@ -5,8 +5,8 @@ import type { PrismaService } from '../src/core/services/prisma.service';
 import type { LoggerService } from '../src/core/services/logger.service';
 import { RunEventsService, type RunTimelineEvent } from '../src/events/run-events.service';
 import { EventsBusService } from '../src/events/events-bus.service';
-import { GraphEventsBusListener } from '../src/graph-domain/listeners/graph-events-bus.listener';
-import { NoopGraphEventsPublisher, type RunEventBroadcast } from '../src/gateway/graph.events.publisher';
+import { GraphEventsBusListener } from '../src/graph/events/graph-events-bus.listener';
+import { NoopGraphEventsPublisher, type RunEventBroadcast } from '../src/graph/events/graph.events.publisher';
 
 const databaseUrl = process.env.AGENTS_DATABASE_URL;
 const shouldRunDbTests = process.env.RUN_DB_TESTS === 'true' && !!databaseUrl;

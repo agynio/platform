@@ -57,7 +57,7 @@ vi.mock('@prisma/client', () => {
 });
 const { AgentsPersistenceService } = await import('../src/agents/agents.persistence.service');
 const { LoggerService } = await import('../src/core/services/logger.service');
-const { NoopGraphEventsPublisher } = await import('../src/gateway/graph.events.publisher');
+const { NoopGraphEventsPublisher } = await import('../src/graph/events/graph.events.publisher');
 import { AIMessage, HumanMessage, SystemMessage, ToolCallMessage, ToolCallOutputMessage } from '@agyn/llm';
 import type { ResponseFunctionToolCall } from 'openai/resources/responses/responses.mjs';
 import { createRunEventsStub } from './helpers/runEvents.stub';

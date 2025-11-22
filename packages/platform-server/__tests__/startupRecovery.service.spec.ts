@@ -3,7 +3,7 @@ import { PrismaClient, RunStatus } from '@prisma/client';
 import { randomUUID } from 'node:crypto';
 import { StartupRecoveryService } from '../src/core/services/startupRecovery.service';
 import { LoggerService } from '../src/core/services/logger.service';
-import { GraphEventsPublisher, NoopGraphEventsPublisher } from '../src/gateway/graph.events.publisher';
+import { GraphEventsPublisher, NoopGraphEventsPublisher } from '../src/graph/events/graph.events.publisher';
 
 const databaseUrl = process.env.AGENTS_DATABASE_URL;
 const shouldRunDbTests = process.env.RUN_DB_TESTS === 'true' && !!databaseUrl;

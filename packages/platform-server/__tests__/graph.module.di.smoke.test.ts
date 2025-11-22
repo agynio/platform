@@ -1,6 +1,6 @@
 import { Test } from '@nestjs/testing';
 import { describe, expect, it, vi } from 'vitest';
-import { GraphModule } from '../src/graph/graph.module';
+import { GraphApiModule } from '../src/graph/graph-api.module';
 import { PrismaService } from '../src/core/services/prisma.service';
 import type { PrismaClient } from '@prisma/client';
 import { ContainerService } from '../src/infra/container/container.service';
@@ -25,6 +25,7 @@ import { TemplateRegistry } from '../src/graph/templateRegistry';
 import { GraphRepository } from '../src/graph/graph.repository';
 import { ModuleRef } from '@nestjs/core';
 import { GraphSocketGateway } from '../src/gateway/graph.socket.gateway';
+import { GatewayModule } from '../src/gateway/gateway.module';
 
 process.env.LLM_PROVIDER = process.env.LLM_PROVIDER || 'openai';
 process.env.AGENTS_DATABASE_URL = process.env.AGENTS_DATABASE_URL || 'postgres://localhost:5432/test';
@@ -44,13 +45,13 @@ const makeStub = <T extends Record<string, unknown>>(overrides: T): T =>
   });
 
 if (!shouldRunDbTests) {
-  describe.skip('GraphModule DI smoke test', () => {
+  describe.skip('GraphApiModule DI smoke test', () => {
     it('skipped because RUN_DB_TESTS is not true', () => {
       expect(true).toBe(true);
     });
   });
 } else {
-  describe('GraphModule DI smoke test', () => {
+  describe('GraphApiModule DI smoke test', () => {
     it('resolves LLMProvisioner and creates AgentNode instances', async () => {
       const transactionClientStub = {
         $queryRaw: vi.fn().mockResolvedValue([{ acquired: true }]),
@@ -181,7 +182,7 @@ if (!shouldRunDbTests) {
       } satisfies Partial<GraphRepository>;
 
       const builder = Test.createTestingModule({
-        imports: [GraphModule],
+        imports: [GraphApiModule, GatewayModule],
       });
 
       vi.spyOn(PrismaService.prototype, 'getClient').mockReturnValue(prismaClientStub as PrismaClient);
@@ -206,6 +207,7 @@ if (!shouldRunDbTests) {
       builder.overrideProvider(TemplateRegistry).useFactory(() => templateRegistryStub as TemplateRegistry);
       builder.overrideProvider(GraphRepository).useFactory(() => graphRepositoryStub as GraphRepository);
       builder.overrideProvider(GraphSocketGateway).useValue({
+        emitNodeState: vi.fn(),
         emitThreadCreated: vi.fn(),
         emitThreadUpdated: vi.fn(),
         emitRunEvent: vi.fn(),

@@ -9,9 +9,9 @@ import WebSocket, { type RawData } from 'ws';
 
 import type { MessageKind, RunStatus } from '@prisma/client';
 import { EventsBusService } from '../src/events/events-bus.service';
-import { GraphEventsBusListener } from '../src/graph-domain/listeners/graph-events-bus.listener';
+import { GraphEventsBusListener } from '../src/graph/events/graph-events-bus.listener';
 import { RunEventsService } from '../src/events/run-events.service';
-import { GraphEventsPublisher } from '../src/gateway/graph.events.publisher';
+import { GraphEventsPublisher } from '../src/graph/events/graph.events.publisher';
 import { GraphSocketGateway } from '../src/gateway/graph.socket.gateway';
 import { LoggerService } from '../src/core/services/logger.service';
 import { LiveGraphRuntime } from '../src/graph/liveGraph.manager';

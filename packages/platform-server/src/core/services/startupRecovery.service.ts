@@ -3,7 +3,7 @@ import type { Prisma, PrismaClient, RunStatus } from '@prisma/client';
 import { RunStatus as RunStatusEnum } from '@prisma/client';
 import { PrismaService } from './prisma.service';
 import { LoggerService } from './logger.service';
-import { GraphEventsPublisher } from '../../gateway/graph.events.publisher';
+import { GraphEventsPublisher } from '../../graph/events/graph.events.publisher';
 
 type TransactionClient = Prisma.TransactionClient;
 

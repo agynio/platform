@@ -54,7 +54,7 @@ describe('AgentsPersistenceService.listReminders', () => {
       },
     };
     const { LoggerService } = await import('../src/core/services/logger.service');
-    const { NoopGraphEventsPublisher } = await import('../src/gateway/graph.events.publisher');
+    const { NoopGraphEventsPublisher } = await import('../src/graph/events/graph.events.publisher');
     const publisher = new NoopGraphEventsPublisher();
     const eventsBusStub = { publishEvent: vi.fn() } as any;
     const svc = new AgentsPersistenceService(
@@ -92,7 +92,7 @@ describe('AgentsPersistenceService.listReminders', () => {
       },
     };
     const logger = { error: vi.fn(), warn: vi.fn(), info: vi.fn(), debug: vi.fn() } as any;
-    const { NoopGraphEventsPublisher } = await import('../src/gateway/graph.events.publisher');
+    const { NoopGraphEventsPublisher } = await import('../src/graph/events/graph.events.publisher');
     const publisher = new NoopGraphEventsPublisher();
     const eventsBusStub = { publishEvent: vi.fn() } as any;
     const svc = new AgentsPersistenceService(

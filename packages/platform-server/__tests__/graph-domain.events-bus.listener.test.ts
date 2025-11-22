@@ -1,10 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { EventsBusService, ReminderCountEvent, RunEventBusPayload } from '../src/events/events-bus.service';
 import type { ToolOutputChunkPayload, ToolOutputTerminalPayload } from '../src/events/run-events.service';
-import { GraphEventsBusListener } from '../src/graph-domain/listeners/graph-events-bus.listener';
-import { GraphEventsPublisher } from '../src/gateway/graph.events.publisher';
+import { GraphEventsBusListener } from '../src/graph/events/graph-events-bus.listener';
+import { GraphEventsPublisher } from '../src/graph/events/graph.events.publisher';
 
 class MockGraphEventsPublisher extends GraphEventsPublisher {
+  emitNodeState = vi.fn();
   emitThreadCreated = vi.fn();
   emitThreadUpdated = vi.fn();
   emitMessageCreated = vi.fn();

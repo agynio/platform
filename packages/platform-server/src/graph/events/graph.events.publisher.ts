@@ -10,8 +10,9 @@ export interface GraphEventsPublisherAware {
   setEventsPublisher(publisher: GraphEventsPublisher): void;
 }
 
-// Abstract class token to decouple persistence from socket gateway
+// Abstract class token to decouple persistence from specific gateway implementations
 export abstract class GraphEventsPublisher {
+  abstract emitNodeState(nodeId: string, state: Record<string, unknown>, updatedAtMs?: number): void;
   abstract emitThreadCreated(thread: { id: string; alias: string; summary: string | null; status: ThreadStatus; createdAt: Date; parentId?: string | null }): void;
   abstract emitThreadUpdated(thread: { id: string; alias: string; summary: string | null; status: ThreadStatus; createdAt: Date; parentId?: string | null }): void;
   abstract emitMessageCreated(threadId: string, message: { id: string; kind: MessageKind; text: string | null; source: unknown; createdAt: Date; runId?: string }): void;
@@ -48,6 +49,7 @@ export abstract class GraphEventsPublisher {
 
 // No-op publisher for tests or environments without sockets
 export class NoopGraphEventsPublisher extends GraphEventsPublisher {
+  emitNodeState(_nodeId: string, _state: Record<string, unknown>, _updatedAtMs?: number): void {}
   emitThreadCreated(_thread: { id: string; alias: string; summary: string | null; status: ThreadStatus; createdAt: Date; parentId?: string | null }): void {}
   emitThreadUpdated(_thread: { id: string; alias: string; summary: string | null; status: ThreadStatus; createdAt: Date; parentId?: string | null }): void {}
   emitMessageCreated(_threadId: string, _message: { id: string; kind: MessageKind; text: string | null; source: unknown; createdAt: Date; runId?: string }): void {}
