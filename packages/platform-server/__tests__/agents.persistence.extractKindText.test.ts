@@ -90,6 +90,7 @@ function makeService(): InstanceType<typeof AgentsPersistenceService> {
   const logger = new LoggerService();
   const metrics = { getThreadsMetrics: async () => ({}) } as any;
   const publisher = new NoopGraphEventsPublisher();
+  const eventsBusStub = { publishEvent: vi.fn().mockResolvedValue(null) } as any;
   const svc = new AgentsPersistenceService(
     { getClient: () => ({}) } as any,
     logger,
@@ -98,6 +99,7 @@ function makeService(): InstanceType<typeof AgentsPersistenceService> {
     graphRepoStub,
     createRunEventsStub() as any,
     createLinkingStub(),
+    eventsBusStub,
   );
   svc.setEventsPublisher(publisher as any);
   return svc;
@@ -150,6 +152,7 @@ describe('AgentsPersistenceService beginRun/completeRun populates Message.text',
     const metrics = { getThreadsMetrics: async () => ({}) } as any;
     const publisher = new NoopGraphEventsPublisher();
     const linking = createLinkingStub();
+    const eventsBusStub = { publishEvent: vi.fn().mockResolvedValue(null) } as any;
     const svc = new AgentsPersistenceService(
       { getClient: () => prismaMock } as any,
       logger,
@@ -158,6 +161,7 @@ describe('AgentsPersistenceService beginRun/completeRun populates Message.text',
       graphRepoStub,
       createRunEventsStub() as any,
       linking,
+      eventsBusStub,
     );
     svc.setEventsPublisher(publisher as any);
 

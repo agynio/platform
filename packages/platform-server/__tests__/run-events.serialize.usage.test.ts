@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { EventSourceKind, RunEventStatus, RunEventType } from '@prisma/client';
 import { RunEventsService } from '../src/events/run-events.service';
-import { NoopGraphEventsPublisher } from '../src/gateway/graph.events.publisher';
 
 const loggerStub = {
   info: () => undefined,
@@ -16,7 +15,7 @@ const prismaStub = {
 
 describe('RunEventsService serializeEvent usage metrics', () => {
   it('includes usage metrics when present', () => {
-    const service = new RunEventsService(prismaStub, loggerStub as any, new NoopGraphEventsPublisher());
+    const service = new RunEventsService(prismaStub, loggerStub as any);
     const baseDate = new Date('2024-01-01T00:00:00.000Z');
 
     const event = {
@@ -69,7 +68,7 @@ describe('RunEventsService serializeEvent usage metrics', () => {
   });
 
   it('omits usage metrics when not available', () => {
-    const service = new RunEventsService(prismaStub, loggerStub as any, new NoopGraphEventsPublisher());
+    const service = new RunEventsService(prismaStub, loggerStub as any);
     const baseDate = new Date('2024-01-01T00:00:00.000Z');
 
     const event = {

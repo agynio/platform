@@ -10,6 +10,7 @@ import type { PersistedGraphNode } from '../shared/types/graph.types';
 import { toPrismaJsonValue } from '../llm/services/messages.serialization';
 import { ChannelDescriptorSchema, type ChannelDescriptor } from '../messaging/types';
 import { RunEventsService } from '../events/run-events.service';
+import { EventsBusService } from '../events/events-bus.service';
 import { CallAgentLinkingService } from './call-agent-linking.service';
 import { ThreadsMetricsService, type ThreadMetrics } from './threads.metrics.service';
 
@@ -29,6 +30,7 @@ export class AgentsPersistenceService implements GraphEventsPublisherAware {
     @Inject(GraphRepository) private readonly graphs: GraphRepository,
     @Inject(RunEventsService) private readonly runEvents: RunEventsService,
     @Inject(CallAgentLinkingService) private readonly callAgentLinking: CallAgentLinkingService,
+    @Inject(EventsBusService) private readonly eventsBus: EventsBusService,
   ) {
     this.events = new NoopGraphEventsPublisher();
   }
@@ -140,8 +142,8 @@ export class AgentsPersistenceService implements GraphEventsPublisherAware {
     this.events.emitRunStatusChanged(threadId, { id: runId, status: 'running' as RunStatus, createdAt: new Date(), updatedAt: new Date() });
     for (const m of createdMessages) this.events.emitMessageCreated(threadId, { id: m.id, kind: m.kind, text: m.text, source: m.source as Prisma.JsonValue, createdAt: m.createdAt, runId });
     this.events.scheduleThreadMetrics(threadId);
-    await Promise.all(eventIds.map((id) => this.runEvents.publishEvent(id, 'append')));
-    await Promise.all(patchedEventIds.map((id) => this.runEvents.publishEvent(id, 'update')));
+    await Promise.all(eventIds.map((id) => this.eventsBus.publishEvent(id, 'append')));
+    await Promise.all(patchedEventIds.map((id) => this.eventsBus.publishEvent(id, 'update')));
     return { runId };
   }
 
@@ -215,8 +217,8 @@ export class AgentsPersistenceService implements GraphEventsPublisherAware {
       });
     }
 
-    await Promise.all(eventIds.map((id) => this.runEvents.publishEvent(id, 'append')));
-    await Promise.all(patchedEventIds.map((id) => this.runEvents.publishEvent(id, 'update')));
+    await Promise.all(eventIds.map((id) => this.eventsBus.publishEvent(id, 'append')));
+    await Promise.all(patchedEventIds.map((id) => this.eventsBus.publishEvent(id, 'update')));
 
     return { messageIds: createdMessages.map((m) => m.id) };
   }
@@ -264,8 +266,8 @@ export class AgentsPersistenceService implements GraphEventsPublisherAware {
     for (const m of createdMessages) this.events.emitMessageCreated(threadId, { id: m.id, kind: m.kind, text: m.text, source: m.source as Prisma.JsonValue, createdAt: m.createdAt, runId });
     this.events.emitRunStatusChanged(threadId, { id: runId, status, createdAt: run.createdAt, updatedAt: run.updatedAt });
     this.events.scheduleThreadMetrics(threadId);
-    await Promise.all(eventIds.map((id) => this.runEvents.publishEvent(id, 'append')));
-    await Promise.all(patchedEventIds.map((id) => this.runEvents.publishEvent(id, 'update')));
+    await Promise.all(eventIds.map((id) => this.eventsBus.publishEvent(id, 'append')));
+    await Promise.all(patchedEventIds.map((id) => this.eventsBus.publishEvent(id, 'update')));
   }
 
   async listThreads(opts?: { rootsOnly?: boolean; status?: 'open' | 'closed' | 'all'; limit?: number }): Promise<Array<{ id: string; alias: string; summary: string | null; status: ThreadStatus; createdAt: Date; parentId?: string | null }>> {

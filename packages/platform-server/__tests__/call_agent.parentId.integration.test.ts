@@ -50,6 +50,7 @@ describe('call_agent integration: creates child thread with parentId', () => {
         onChildRunMessage: async () => null,
         onChildRunCompleted: async () => null,
       } as unknown as CallAgentLinkingService,
+      { publishEvent: async () => null } as any,
     );
     persistence.setEventsPublisher(new NoopGraphEventsPublisher());
     const linking = {

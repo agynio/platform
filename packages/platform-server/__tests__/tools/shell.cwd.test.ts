@@ -24,7 +24,22 @@ function createNodeWithContainer(container: RecordingContainer) {
   const envService = new EnvService(vaultStub as any);
   const logger = new LoggerService();
   const archiveStub = { createSingleFileTar: async () => Buffer.from('') } as const;
-  const node = new ShellCommandNode(envService as any, logger as any, {} as any, archiveStub as any);
+  const runEventsStub = {
+    appendToolOutputChunk: async () => ({}),
+    finalizeToolOutputTerminal: async () => ({}),
+  } as const;
+  const eventsBusStub = {
+    emitToolOutputChunk: () => undefined,
+    emitToolOutputTerminal: () => undefined,
+  } as const;
+  const node = new ShellCommandNode(
+    envService as any,
+    logger as any,
+    {} as any,
+    archiveStub as any,
+    runEventsStub as any,
+    eventsBusStub as any,
+  );
   const provider = {
     provide: async () => container as unknown as ContainerHandle,
   };

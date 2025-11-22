@@ -50,5 +50,9 @@ export function createEventsBusStub() {
   return {
     publishEvent: vi.fn(async () => null),
     subscribeToRunEvents: vi.fn(() => vi.fn()),
+    subscribeToToolOutputChunk: vi.fn(() => vi.fn()),
+    subscribeToToolOutputTerminal: vi.fn(() => vi.fn()),
+    emitToolOutputChunk: vi.fn(),
+    emitToolOutputTerminal: vi.fn(),
   } as const;
 }

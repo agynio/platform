@@ -39,6 +39,7 @@ const createLinkingStub = () => {
 };
 
 const createPersistence = (linking?: CallAgentLinkingService) => {
+  const eventsBusStub = { publishEvent: vi.fn().mockResolvedValue(null) } as any;
   const svc = new AgentsPersistenceService(
     new StubPrismaService(createPrismaStub()) as any,
     new LoggerService(),
@@ -47,6 +48,7 @@ const createPersistence = (linking?: CallAgentLinkingService) => {
     graphRepoStub,
     createRunEventsStub() as any,
     linking ?? createLinkingStub().instance,
+    eventsBusStub,
   );
   svc.setEventsPublisher(new NoopGraphEventsPublisher());
   return svc;

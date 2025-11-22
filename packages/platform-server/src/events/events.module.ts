@@ -1,11 +1,10 @@
-import { Module, forwardRef } from '@nestjs/common';
+import { Module } from '@nestjs/common';
 import { CoreModule } from '../core/core.module';
-import { GraphModule } from '../graph/graph.module';
 import { RunEventsService } from './run-events.service';
 import { EventsBusService } from './events-bus.service';
 
 @Module({
-  imports: [CoreModule, forwardRef(() => GraphModule)],
+  imports: [CoreModule],
   providers: [RunEventsService, EventsBusService],
   exports: [RunEventsService, EventsBusService],
 })

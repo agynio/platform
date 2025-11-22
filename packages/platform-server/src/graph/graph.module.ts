@@ -19,12 +19,12 @@ import { NodeStateService } from './nodeState.service';
 import { GraphVariablesService } from './services/graphVariables.service';
 import { NodesModule } from '../nodes/nodes.module';
 import { GraphServicesModule } from './graph-services.module';
-import { EventsModule } from '../events/events.module';
+import { GraphDomainModule } from '../graph-domain/graph-domain.module';
 import { RemindersController } from './controllers/reminders.controller';
 import { LLMModule } from '../llm/llm.module';
 
 @Module({
-  imports: [CoreModule, InfraModule, EnvModule, forwardRef(() => NodesModule), forwardRef(() => GraphServicesModule), forwardRef(() => LLMModule), forwardRef(() => EventsModule)],
+  imports: [CoreModule, InfraModule, EnvModule, GraphDomainModule, forwardRef(() => NodesModule), forwardRef(() => GraphServicesModule), forwardRef(() => LLMModule)],
   controllers: [
     RunsController,
     GraphPersistController,

@@ -3,6 +3,7 @@ import { AgentsPersistenceService } from '../src/agents/agents.persistence.servi
 import { LoggerService } from '../src/core/services/logger.service';
 import { NoopGraphEventsPublisher } from '../src/gateway/graph.events.publisher';
 import { StubPrismaService, createPrismaStub } from './helpers/prisma.stub';
+import { createRunEventsStub } from './helpers/runEvents.stub';
 
 function createService(stub: any, overrides?: { metrics?: any; templateRegistry?: any; graphRepo?: any }) {
   const metrics =
@@ -15,12 +16,15 @@ function createService(stub: any, overrides?: { metrics?: any; templateRegistry?
   const graphRepo =
     overrides?.graphRepo ??
     ({ get: async () => ({ name: 'main', version: 1, updatedAt: new Date().toISOString(), nodes: [], edges: [] }) } as any);
+  const eventsBusStub = { publishEvent: async () => null } as any;
   const svc = new AgentsPersistenceService(
     new StubPrismaService(stub) as any,
     new LoggerService(),
     metrics,
     templateRegistry,
     graphRepo,
+    createRunEventsStub() as any,
+    eventsBusStub,
   );
   svc.setEventsPublisher(new NoopGraphEventsPublisher());
   return svc;

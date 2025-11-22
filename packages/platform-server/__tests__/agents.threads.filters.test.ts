@@ -15,6 +15,7 @@ describe('AgentsPersistenceService threads filters and updates', () => {
   it('filters roots and status; updates summary/status', async () => {
     const stub = createPrismaStub();
     const publisher = new NoopGraphEventsPublisher();
+    const eventsBusStub = { publishEvent: async () => null } as any;
     const svc = new AgentsPersistenceService(
       new StubPrismaService(stub) as any,
       new LoggerService(),
@@ -22,6 +23,7 @@ describe('AgentsPersistenceService threads filters and updates', () => {
       templateRegistryStub,
       graphRepoStub,
       createRunEventsStub() as any,
+      eventsBusStub,
     );
     svc.setEventsPublisher(publisher);
     // seed

@@ -4,7 +4,6 @@ import { randomUUID } from 'node:crypto';
 import type { PrismaService } from '../src/core/services/prisma.service';
 import type { LoggerService } from '../src/core/services/logger.service';
 import { RunEventsService } from '../src/events/run-events.service';
-import { NoopGraphEventsPublisher } from '../src/gateway/graph.events.publisher';
 
 const databaseUrl = process.env.AGENTS_DATABASE_URL;
 const shouldRunDbTests = process.env.RUN_DB_TESTS === 'true' && !!databaseUrl;
@@ -25,7 +24,7 @@ if (!shouldRunDbTests) {
     error: () => undefined,
   } as unknown as LoggerService;
 
-  const runEvents = new RunEventsService(prismaService, logger, new NoopGraphEventsPublisher());
+  const runEvents = new RunEventsService(prismaService, logger);
 
   async function createThreadAndRun() {
     const thread = await prisma.thread.create({ data: { alias: `thread-${randomUUID()}` } });

@@ -30,6 +30,7 @@ const createLinkingStub = () =>
   }) as unknown as CallAgentLinkingService;
 
 const createService = (stub: any) => {
+  const eventsBusStub = { publishEvent: async () => null } as any;
   const svc = new AgentsPersistenceService(
     new StubPrismaService(stub) as any,
     new LoggerService(),
@@ -38,6 +39,7 @@ const createService = (stub: any) => {
     graphRepoStub,
     createRunEventsStub() as any,
     createLinkingStub(),
+    eventsBusStub,
   );
   svc.setEventsPublisher(new NoopGraphEventsPublisher());
   return svc;

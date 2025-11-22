@@ -4,6 +4,8 @@ import { randomUUID } from 'node:crypto';
 import type { PrismaService } from '../src/core/services/prisma.service';
 import type { LoggerService } from '../src/core/services/logger.service';
 import { RunEventsService, type RunTimelineEvent } from '../src/events/run-events.service';
+import { EventsBusService } from '../src/events/events-bus.service';
+import { GraphEventsBusListener } from '../src/graph-domain/listeners/graph-events-bus.listener';
 import { NoopGraphEventsPublisher, type RunEventBroadcast } from '../src/gateway/graph.events.publisher';
 
 const databaseUrl = process.env.AGENTS_DATABASE_URL;
@@ -49,14 +51,27 @@ maybeDescribe('RunEventsService publishEvent broadcasting', () => {
 
   let publisher: CapturingPublisher;
   let runEvents: RunEventsService;
+  let eventsBus: EventsBusService;
+  let listener: GraphEventsBusListener;
 
-  beforeEach(() => {
+  beforeEach(async () => {
     publisher = new CapturingPublisher();
-    runEvents = new RunEventsService(prismaService, logger, publisher);
+    runEvents = new RunEventsService(prismaService, logger);
+    eventsBus = new EventsBusService(runEvents);
+    listener = new GraphEventsBusListener(
+      eventsBus,
+      { resolve: async () => publisher } as any,
+      logger,
+    );
+    await listener.onModuleInit();
   });
 
   afterAll(async () => {
     await prisma.$disconnect();
+  });
+
+  afterAll(() => {
+    listener?.onModuleDestroy();
   });
 
   it('emits append and update payloads with tool execution data', async () => {
@@ -71,7 +86,7 @@ maybeDescribe('RunEventsService publishEvent broadcasting', () => {
         input: { query: 'status' },
       });
 
-      const appendEvent = await runEvents.publishEvent(started.id, 'append');
+      const appendEvent = await eventsBus.publishEvent(started.id, 'append');
       expect(appendEvent?.status).toBe('running');
       expect(publisher.events).toHaveLength(1);
       const appendRecord = publisher.events[0];
@@ -94,7 +109,7 @@ maybeDescribe('RunEventsService publishEvent broadcasting', () => {
         raw: { latencyMs: 1200 },
       });
 
-      const updateEvent = await runEvents.publishEvent(started.id, 'update');
+      const updateEvent = await eventsBus.publishEvent(started.id, 'update');
       expect(updateEvent?.status).toBe('success');
       expect(updateEvent?.toolExecution?.output).toEqual({ answer: 42 });
       expect(publisher.events).toHaveLength(1);

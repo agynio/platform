@@ -10,6 +10,7 @@ import type { PrismaService } from '../src/core/services/prisma.service';
 import type { LoggerService } from '../src/core/services/logger.service';
 import { PrismaClient, ToolExecStatus } from '@prisma/client';
 import { RunEventsService } from '../src/events/run-events.service';
+import { EventsBusService } from '../src/events/events-bus.service';
 import { AgentsPersistenceService } from '../src/agents/agents.persistence.service';
 import type { TemplateRegistry } from '../src/graph/templateRegistry';
 import type { GraphRepository } from '../src/graph/graph.repository';
@@ -192,10 +193,20 @@ if (!shouldRunRealtimeTests) {
     const thread = await prisma.thread.create({ data: { alias: `thread-${randomUUID()}`, summary: 'initial' } });
     await subscribeRooms(threadClient, [`thread:${thread.id}`]);
 
-    const runEvents = new RunEventsService(prismaService, logger, gateway);
+    const runEvents = new RunEventsService(prismaService, logger);
+    const eventsBus = new EventsBusService(runEvents);
     const templateRegistryStub = ({ getMeta: () => undefined }) as unknown as TemplateRegistry;
     const graphRepositoryStub = ({ get: async () => ({ nodes: [] }) }) as unknown as GraphRepository;
-    const agents = new AgentsPersistenceService(prismaService, logger, metricsDouble.service, templateRegistryStub, graphRepositoryStub, runEvents, createLinkingStub());
+    const agents = new AgentsPersistenceService(
+      prismaService,
+      logger,
+      metricsDouble.service,
+      templateRegistryStub,
+      graphRepositoryStub,
+      runEvents,
+      createLinkingStub(),
+      eventsBus,
+    );
     agents.setEventsPublisher(gateway);
 
     const startResult = await agents.beginRunThread(thread.id, [HumanMessage.fromText('hello')]);
@@ -238,10 +249,20 @@ if (!shouldRunRealtimeTests) {
     const { port } = server.address() as AddressInfo;
     gateway.init({ server });
 
-    const runEvents = new RunEventsService(prismaService, logger, gateway);
+    const runEvents = new RunEventsService(prismaService, logger);
+    const eventsBus = new EventsBusService(runEvents);
     const templateRegistryStub = ({ getMeta: () => undefined }) as unknown as TemplateRegistry;
     const graphRepositoryStub = ({ get: async () => ({ nodes: [] }) }) as unknown as GraphRepository;
-    const agents = new AgentsPersistenceService(prismaService, logger, metricsDouble.service, templateRegistryStub, graphRepositoryStub, runEvents, createLinkingStub());
+    const agents = new AgentsPersistenceService(
+      prismaService,
+      logger,
+      metricsDouble.service,
+      templateRegistryStub,
+      graphRepositoryStub,
+      runEvents,
+      createLinkingStub(),
+      eventsBus,
+    );
     agents.setEventsPublisher(gateway);
 
     const thread = await prisma.thread.create({ data: { alias: `thread-${randomUUID()}`, summary: 'timeline' } });
@@ -272,7 +293,7 @@ if (!shouldRunRealtimeTests) {
 
     const appendThreadEvent = waitForEvent<{ mutation: string; event: { id: string } }>(threadClient, 'run_event_appended');
     const appendRunEvent = waitForEvent<{ mutation: string; event: { id: string } }>(runClient, 'run_event_appended');
-    const appendPayload = await runEvents.publishEvent(toolExecution.id, 'append');
+    const appendPayload = await eventsBus.publishEvent(toolExecution.id, 'append');
     expect(appendPayload?.toolExecution?.input).toEqual({ query: 'status' });
     const [appendThread, appendRun] = await Promise.all([appendThreadEvent, appendRunEvent]);
     expect(appendThread.mutation).toBe('append');
@@ -287,7 +308,7 @@ if (!shouldRunRealtimeTests) {
 
     const updateThreadEvent = waitForEvent<{ mutation: string; event: { toolExecution?: { output?: unknown } } }>(threadClient, 'run_event_updated');
     const updateRunEvent = waitForEvent<{ mutation: string; event: { toolExecution?: { output?: unknown } } }>(runClient, 'run_event_updated');
-    await runEvents.publishEvent(toolExecution.id, 'update');
+    await eventsBus.publishEvent(toolExecution.id, 'update');
     const [updateThread, updateRun] = await Promise.all([updateThreadEvent, updateRunEvent]);
     expect(updateThread.mutation).toBe('update');
     expect(updateRun.event.toolExecution?.output).toEqual({ answer: 42 });

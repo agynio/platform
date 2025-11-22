@@ -14,6 +14,7 @@ import { Injectable, Scope } from '@nestjs/common';
 import { ArchiveService } from '../../../infra/archive/archive.service';
 import { ContainerHandle } from '../../../infra/container/container.handle';
 import { RunEventsService } from '../../../events/run-events.service';
+import { EventsBusService } from '../../../events/events-bus.service';
 import { ToolOutputStatus } from '@prisma/client';
 
 // Schema for tool arguments
@@ -50,6 +51,7 @@ export class ShellCommandTool extends FunctionTool<typeof bashCommandSchema> {
   constructor(
     private readonly archive: ArchiveService,
     private readonly runEvents: RunEventsService,
+    private readonly eventsBus: EventsBusService,
     private readonly logger: LoggerService,
   ) {
     super();
@@ -256,7 +258,7 @@ export class ShellCommandTool extends FunctionTool<typeof bashCommandSchema> {
         seqPerSource[source] += 1;
         emittedBytes += textBytes;
         try {
-          await this.runEvents.appendToolOutputChunk({
+          const payload = await this.runEvents.appendToolOutputChunk({
             runId: options.runId,
             threadId: options.threadId,
             eventId: options.eventId,
@@ -267,6 +269,7 @@ export class ShellCommandTool extends FunctionTool<typeof bashCommandSchema> {
             bytes: textBytes,
             ts: new Date(),
           });
+          this.eventsBus.emitToolOutputChunk(payload);
         } catch (err) {
           droppedChunks += 1;
           this.logger.warn('ShellCommandTool chunk persistence failed; continuing without storing chunk', {
@@ -425,7 +428,7 @@ export class ShellCommandTool extends FunctionTool<typeof bashCommandSchema> {
       }
 
       try {
-        await this.runEvents.finalizeToolOutputTerminal({
+        const payload = await this.runEvents.finalizeToolOutputTerminal({
           runId: options.runId,
           threadId: options.threadId,
           eventId: options.eventId,
@@ -438,6 +441,7 @@ export class ShellCommandTool extends FunctionTool<typeof bashCommandSchema> {
           savedPath,
           message: truncationMessage,
         });
+        this.eventsBus.emitToolOutputTerminal(payload);
       } catch (eventErr) {
         this.logger.warn('ShellCommandTool failed to record terminal summary; continuing', {
           eventId: options.eventId,

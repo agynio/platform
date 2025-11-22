@@ -56,6 +56,7 @@ describe('AgentsPersistenceService.listReminders', () => {
     const { LoggerService } = await import('../src/core/services/logger.service');
     const { NoopGraphEventsPublisher } = await import('../src/gateway/graph.events.publisher');
     const publisher = new NoopGraphEventsPublisher();
+    const eventsBusStub = { publishEvent: vi.fn() } as any;
     const svc = new AgentsPersistenceService(
       prismaStub as any,
       new LoggerService(),
@@ -63,6 +64,7 @@ describe('AgentsPersistenceService.listReminders', () => {
       templateRegistryStub,
       graphRepoStub,
       createRunEventsStub() as any,
+      eventsBusStub,
     );
     svc.setEventsPublisher(publisher);
 
@@ -92,6 +94,7 @@ describe('AgentsPersistenceService.listReminders', () => {
     const logger = { error: vi.fn(), warn: vi.fn(), info: vi.fn(), debug: vi.fn() } as any;
     const { NoopGraphEventsPublisher } = await import('../src/gateway/graph.events.publisher');
     const publisher = new NoopGraphEventsPublisher();
+    const eventsBusStub = { publishEvent: vi.fn() } as any;
     const svc = new AgentsPersistenceService(
       prismaStub as any,
       logger,
@@ -99,6 +102,7 @@ describe('AgentsPersistenceService.listReminders', () => {
       templateRegistryStub,
       graphRepoStub,
       createRunEventsStub() as any,
+      eventsBusStub,
     );
     svc.setEventsPublisher(publisher);
 

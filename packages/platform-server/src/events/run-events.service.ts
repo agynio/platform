@@ -15,7 +15,6 @@ import {
 } from '@prisma/client';
 import { LoggerService } from '../core/services/logger.service';
 import { PrismaService } from '../core/services/prisma.service';
-import { GraphEventsPublisher } from '../gateway/graph.events.publisher';
 import { toPrismaJsonValue } from '../llm/services/messages.serialization';
 import { ContextItemInput, NormalizedContextItem, normalizeContextItems, upsertNormalizedContextItems } from '../llm/services/context-items.utils';
 
@@ -350,7 +349,6 @@ export interface SummarizationEventArgs {
 
 @Injectable()
 export class RunEventsService {
-  private readonly events: GraphEventsPublisher;
   private readonly chunkPersistenceWarnings = new Set<string>();
   private readonly terminalPersistenceWarnings = new Set<string>();
   private readonly snapshotWarnings = new Set<string>();
@@ -358,12 +356,7 @@ export class RunEventsService {
   constructor(
     @Inject(PrismaService) private readonly prismaService: PrismaService,
     @Inject(LoggerService) private readonly logger: LoggerService,
-    @Inject(GraphEventsPublisher) events: GraphEventsPublisher,
   ) {
-    if (!events) {
-      throw new Error('RunEventsService requires a GraphEventsPublisher provider');
-    }
-    this.events = events;
   }
 
   private get prisma(): PrismaClient {
@@ -410,44 +403,6 @@ export class RunEventsService {
         error: error instanceof Error ? error.message : String(error),
       },
     );
-  }
-
-  private emitToolOutputChunkEvent(payload: ToolOutputChunkPayload, ts: Date): void {
-    try {
-      this.events.emitToolOutputChunk({
-        runId: payload.runId,
-        threadId: payload.threadId,
-        eventId: payload.eventId,
-        seqGlobal: payload.seqGlobal,
-        seqStream: payload.seqStream,
-        source: payload.source,
-        ts,
-        data: payload.data,
-      });
-    } catch (err) {
-      this.logger.warn('Failed to emit tool_output_chunk event', err);
-    }
-  }
-
-  private emitToolOutputTerminalEvent(payload: ToolOutputTerminalPayload, ts: Date): void {
-    try {
-      this.events.emitToolOutputTerminal({
-        runId: payload.runId,
-        threadId: payload.threadId,
-        eventId: payload.eventId,
-        exitCode: payload.exitCode,
-        status: payload.status,
-        bytesStdout: payload.bytesStdout,
-        bytesStderr: payload.bytesStderr,
-        totalChunks: payload.totalChunks,
-        droppedChunks: payload.droppedChunks,
-        savedPath: payload.savedPath,
-        message: payload.message,
-        ts,
-      });
-    } catch (err) {
-      this.logger.warn('Failed to emit tool_output_terminal event', err);
-    }
   }
 
   private truncate(text: string | null | undefined): string | null {
@@ -666,12 +621,11 @@ export class RunEventsService {
     return client.runEvent.findUnique({ where: { id: eventId }, include: RUN_EVENT_INCLUDE });
   }
 
-  async publishEvent(eventId: string, mutation: 'append' | 'update' = 'append'): Promise<RunTimelineEvent | null> {
+  async publishEvent(eventId: string, _mutation: 'append' | 'update' = 'append'): Promise<RunTimelineEvent | null> {
     try {
       const event = await this.fetchEvent(eventId);
       if (!event) return null;
       const payload = this.serializeEvent(event);
-      this.events.emitRunEvent(event.runId, event.threadId, { runId: event.runId, mutation, event: payload });
       return payload;
     } catch (err) {
       this.logger.warn('Failed to publish run event', { eventId, err });
@@ -844,11 +798,9 @@ export class RunEventsService {
         data: record.data,
       };
 
-      this.emitToolOutputChunkEvent(payload, record.ts);
       return payload;
     } catch (err) {
       this.logChunkPersistenceFailure(args.runId, args.eventId, err);
-      this.emitToolOutputChunkEvent(basePayload, ts);
       return basePayload;
     }
   }
@@ -923,11 +875,9 @@ export class RunEventsService {
         ts: record.ts.toISOString(),
       };
 
-      this.emitToolOutputTerminalEvent(payload, record.ts);
       return payload;
     } catch (err) {
       this.logTerminalPersistenceFailure(args.runId, args.eventId, err);
-      this.emitToolOutputTerminalEvent(basePayload, ts);
       return basePayload;
     }
   }

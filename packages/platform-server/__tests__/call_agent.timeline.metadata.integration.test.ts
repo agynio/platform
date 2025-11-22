@@ -3,6 +3,7 @@ import { Prisma, PrismaClient } from '@prisma/client';
 import { randomUUID } from 'node:crypto';
 import type { PrismaService } from '../src/core/services/prisma.service';
 import { RunEventsService } from '../src/events/run-events.service';
+import { EventsBusService } from '../src/events/events-bus.service';
 import { AgentsPersistenceService } from '../src/agents/agents.persistence.service';
 import { LoggerService } from '../src/core/services/logger.service';
 import { NoopGraphEventsPublisher } from '../src/gateway/graph.events.publisher';
@@ -31,8 +32,9 @@ if (!shouldRunDbTests) {
   const graphRepoStub = { get: async () => ({ nodes: [], edges: [] }) } as unknown as GraphRepository;
 
   const eventsPublisher = new NoopGraphEventsPublisher();
-  const runEvents = new RunEventsService(prismaService, logger, eventsPublisher);
-  const callAgentLinking = new CallAgentLinkingService(prismaService, runEvents, logger);
+  const runEvents = new RunEventsService(prismaService, logger);
+  const eventsBus = new EventsBusService(runEvents);
+  const callAgentLinking = new CallAgentLinkingService(prismaService, runEvents, logger, eventsBus);
   const agents = new AgentsPersistenceService(
     prismaService,
     logger,
@@ -41,6 +43,7 @@ if (!shouldRunDbTests) {
     graphRepoStub,
     runEvents,
     callAgentLinking,
+    eventsBus,
   );
   agents.setEventsPublisher(eventsPublisher);
 

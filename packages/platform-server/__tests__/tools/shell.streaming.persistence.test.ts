@@ -2,6 +2,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { ShellCommandTool } from '../../src/nodes/tools/shell_command/shell_command.tool';
 import type { RunEventsService } from '../../src/events/run-events.service';
 import type { LoggerService } from '../../src/core/services/logger.service';
+import type { EventsBusService } from '../../src/events/events-bus.service';
 
 const ctx = {
   threadId: 'thread-1',
@@ -9,7 +10,10 @@ const ctx = {
   callerAgent: {},
 } as const;
 
-const createTool = (runEvents: Pick<RunEventsService, 'appendToolOutputChunk' | 'finalizeToolOutputTerminal'>) => {
+const createTool = (
+  runEvents: Pick<RunEventsService, 'appendToolOutputChunk' | 'finalizeToolOutputTerminal'>,
+  eventsBus?: Pick<EventsBusService, 'emitToolOutputChunk' | 'emitToolOutputTerminal'>,
+) => {
   const archive = { createSingleFileTar: vi.fn().mockResolvedValue(Buffer.from('')) } as any;
   const logger = {
     info: vi.fn(),
@@ -17,7 +21,13 @@ const createTool = (runEvents: Pick<RunEventsService, 'appendToolOutputChunk' | 
     warn: vi.fn(),
     error: vi.fn(),
   } as unknown as LoggerService;
-  const tool = new ShellCommandTool(archive, runEvents as RunEventsService, logger);
+  const bus =
+    eventsBus ??
+    ({
+      emitToolOutputChunk: vi.fn(),
+      emitToolOutputTerminal: vi.fn(),
+    } as unknown as EventsBusService);
+  const tool = new ShellCommandTool(archive, runEvents as RunEventsService, bus, logger);
 
   const container = new (class {
     async exec(_command: string, options?: { onOutput?: (source: string, chunk: Buffer) => void }) {
@@ -36,14 +46,14 @@ const createTool = (runEvents: Pick<RunEventsService, 'appendToolOutputChunk' | 
   };
 
   tool.init(nodeStub as any);
-  return { tool, logger };
+  return { tool, logger, eventsBus: bus };
 };
 
 describe('ShellCommandTool streaming persistence resilience', () => {
   it('logs and continues when run events persistence fails', async () => {
     const append = vi.fn().mockRejectedValue(new Error('db unavailable'));
     const finalize = vi.fn().mockRejectedValue(new Error('db unavailable'));
-    const { tool, logger } = createTool({ appendToolOutputChunk: append, finalizeToolOutputTerminal: finalize });
+    const { tool, logger, eventsBus } = createTool({ appendToolOutputChunk: append, finalizeToolOutputTerminal: finalize });
 
     const result = await tool.executeStreaming({ command: 'echo test' }, ctx as any, {
       runId: 'run-1',
@@ -62,5 +72,7 @@ describe('ShellCommandTool streaming persistence resilience', () => {
       'ShellCommandTool failed to record terminal summary; continuing',
       expect.objectContaining({ eventId: 'event-1' }),
     );
+    expect(eventsBus.emitToolOutputChunk).not.toHaveBeenCalled();
+    expect(eventsBus.emitToolOutputTerminal).not.toHaveBeenCalled();
   });
 });

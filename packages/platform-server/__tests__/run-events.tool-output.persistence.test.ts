@@ -1,21 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { RunEventsService } from '../src/events/run-events.service';
-import { NoopGraphEventsPublisher } from '../src/gateway/graph.events.publisher';
 import type { PrismaService } from '../src/core/services/prisma.service';
 import type { LoggerService } from '../src/core/services/logger.service';
-
-class CapturingPublisher extends NoopGraphEventsPublisher {
-  public chunks: Array<Parameters<NoopGraphEventsPublisher['emitToolOutputChunk']>[0]> = [];
-  public terminals: Array<Parameters<NoopGraphEventsPublisher['emitToolOutputTerminal']>[0]> = [];
-
-  override emitToolOutputChunk(payload: Parameters<NoopGraphEventsPublisher['emitToolOutputChunk']>[0]): void {
-    this.chunks.push(payload);
-  }
-
-  override emitToolOutputTerminal(payload: Parameters<NoopGraphEventsPublisher['emitToolOutputTerminal']>[0]): void {
-    this.terminals.push(payload);
-  }
-}
 
 const createLoggerStub = () =>
   ({
@@ -67,15 +53,13 @@ describe('RunEventsService tool output persistence resilience', () => {
       },
     } as Record<string, unknown>;
     const prismaService = { getClient: () => prismaClient } as unknown as PrismaService;
-    const publisher = new CapturingPublisher();
-    const service = new RunEventsService(prismaService, logger, publisher);
+    const service = new RunEventsService(prismaService, logger);
 
     const first = await service.appendToolOutputChunk(baseChunkArgs);
     const second = await service.appendToolOutputChunk({ ...baseChunkArgs, seqGlobal: 2, seqStream: 2, data: 'chunk-2' });
 
     expect(first.data).toBe('chunk-1');
     expect(second.data).toBe('chunk-2');
-    expect(publisher.chunks).toHaveLength(2);
     expect(prismaClient.toolOutputChunk.create).toHaveBeenCalledTimes(2);
     expect(logger.warn).toHaveBeenCalledTimes(1);
     expect(logger.warn).toHaveBeenCalledWith(
@@ -96,13 +80,13 @@ describe('RunEventsService tool output persistence resilience', () => {
       },
     } as Record<string, unknown>;
     const prismaService = { getClient: () => prismaClient } as unknown as PrismaService;
-    const publisher = new CapturingPublisher();
-    const service = new RunEventsService(prismaService, logger, publisher);
+    const service = new RunEventsService(prismaService, logger);
 
-    await service.finalizeToolOutputTerminal(baseTerminalArgs);
-    await service.finalizeToolOutputTerminal({ ...baseTerminalArgs, exitCode: 1, status: 'failed' });
+    const first = await service.finalizeToolOutputTerminal(baseTerminalArgs);
+    const second = await service.finalizeToolOutputTerminal({ ...baseTerminalArgs, exitCode: 1, status: 'failed' });
 
-    expect(publisher.terminals).toHaveLength(2);
+    expect(first.status).toBe('success');
+    expect(second.status).toBe('failed');
     expect(prismaClient.toolOutputTerminal.upsert).toHaveBeenCalledTimes(2);
     expect(logger.warn).toHaveBeenCalledTimes(1);
     expect(logger.warn).toHaveBeenCalledWith(
@@ -126,8 +110,7 @@ describe('RunEventsService tool output persistence resilience', () => {
       },
     } as Record<string, unknown>;
     const prismaService = { getClient: () => prismaClient } as unknown as PrismaService;
-    const publisher = new CapturingPublisher();
-    const service = new RunEventsService(prismaService, logger, publisher);
+    const service = new RunEventsService(prismaService, logger);
 
     await expect(
       service.getToolOutputSnapshot({ runId: 'run-1', eventId: 'event-1' }),

@@ -29,7 +29,7 @@ import { CallAgentLinkingService } from '../agents/call-agent-linking.service';
   imports: [
     CoreModule,
     InfraModule,
-    forwardRef(() => EventsModule),
+    EventsModule,
     forwardRef(() => LLMModule),
     EnvModule,
     VaultModule,

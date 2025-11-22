@@ -5,6 +5,7 @@ import { Prisma as PrismaNamespace } from '@prisma/client';
 import { LoggerService } from '../core/services/logger.service';
 import { PrismaService } from '../core/services/prisma.service';
 import { RunEventsService } from '../events/run-events.service';
+import { EventsBusService } from '../events/events-bus.service';
 
 type Tx = PrismaClient | Prisma.TransactionClient;
 
@@ -42,6 +43,7 @@ export class CallAgentLinkingService {
     @Inject(PrismaService) private readonly prismaService: PrismaService,
     @Inject(RunEventsService) private readonly runEvents: RunEventsService,
     @Inject(LoggerService) private readonly logger: LoggerService,
+    @Inject(EventsBusService) private readonly eventsBus: EventsBusService,
   ) {}
 
   private get prisma(): PrismaClient {
@@ -89,7 +91,7 @@ export class CallAgentLinkingService {
         await this.saveMetadata(tx, event.id, metadata);
         return event.id;
       });
-      if (eventId) await this.runEvents.publishEvent(eventId, 'update');
+      if (eventId) await this.eventsBus.publishEvent(eventId, 'update');
       return eventId;
     } catch (err) {
       this.logger.warn('call_agent_linking: failed to register parent tool execution', {
