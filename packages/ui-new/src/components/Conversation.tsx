@@ -1,5 +1,6 @@
 import { ReactNode, useRef, useEffect, useState } from 'react';
-import { Message, MessageRole } from './Message';
+import { Message } from './Message';
+import type { MessageRole } from './Message';
 import { RunInfo } from './RunInfo';
 import { QueuedMessage } from './QueuedMessage';
 import { Reminder } from './Reminder';
