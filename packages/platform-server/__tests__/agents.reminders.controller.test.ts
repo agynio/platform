@@ -3,11 +3,31 @@ import { Test } from '@nestjs/testing';
 import { AgentsRemindersController } from '../src/agents/reminders.controller';
 import { AgentsPersistenceService } from '../src/agents/agents.persistence.service';
 import { createRunEventsStub } from './helpers/runEvents.stub';
+import { createEventsBusStub } from './helpers/eventsBus.stub';
+import { CallAgentLinkingService } from '../src/agents/call-agent-linking.service';
 
 const templateRegistryStub = { toSchema: async () => [], getMeta: () => undefined } as any;
 const graphRepoStub = {
   get: async () => ({ name: 'main', version: 1, updatedAt: new Date().toISOString(), nodes: [], edges: [] }),
 } as any;
+
+const createLinkingStub = () =>
+  ({
+    buildInitialMetadata: (params: { toolName: string; parentThreadId: string; childThreadId: string }) => ({
+      tool: params.toolName === 'call_engineer' ? 'call_engineer' : 'call_agent',
+      parentThreadId: params.parentThreadId,
+      childThreadId: params.childThreadId,
+      childRun: { id: null, status: 'queued', linkEnabled: false, latestMessageId: null },
+      childRunId: null,
+      childRunStatus: 'queued',
+      childRunLinkEnabled: false,
+      childMessageId: null,
+    }),
+    registerParentToolExecution: async () => null,
+    onChildRunStarted: async () => null,
+    onChildRunMessage: async () => null,
+    onChildRunCompleted: async () => null,
+  }) as unknown as CallAgentLinkingService;
 
 describe('AgentsRemindersController', () => {
   it('defaults filter=active and take=100', async () => {
@@ -54,9 +74,7 @@ describe('AgentsPersistenceService.listReminders', () => {
       },
     };
     const { LoggerService } = await import('../src/core/services/logger.service');
-    const { NoopGraphEventsPublisher } = await import('../src/graph/events/graph.events.publisher');
-    const publisher = new NoopGraphEventsPublisher();
-    const eventsBusStub = { publishEvent: vi.fn() } as any;
+    const eventsBusStub = createEventsBusStub();
     const svc = new AgentsPersistenceService(
       prismaStub as any,
       new LoggerService(),
@@ -64,9 +82,9 @@ describe('AgentsPersistenceService.listReminders', () => {
       templateRegistryStub,
       graphRepoStub,
       createRunEventsStub() as any,
+      createLinkingStub(),
       eventsBusStub,
     );
-    svc.setEventsPublisher(publisher);
 
     await svc.listReminders('active', 50);
     await svc.listReminders('completed', 25);
@@ -92,9 +110,7 @@ describe('AgentsPersistenceService.listReminders', () => {
       },
     };
     const logger = { error: vi.fn(), warn: vi.fn(), info: vi.fn(), debug: vi.fn() } as any;
-    const { NoopGraphEventsPublisher } = await import('../src/graph/events/graph.events.publisher');
-    const publisher = new NoopGraphEventsPublisher();
-    const eventsBusStub = { publishEvent: vi.fn() } as any;
+    const eventsBusStub = createEventsBusStub();
     const svc = new AgentsPersistenceService(
       prismaStub as any,
       logger,
@@ -102,9 +118,9 @@ describe('AgentsPersistenceService.listReminders', () => {
       templateRegistryStub,
       graphRepoStub,
       createRunEventsStub() as any,
+      createLinkingStub(),
       eventsBusStub,
     );
-    svc.setEventsPublisher(publisher);
 
     await expect(svc.listReminders('active', 5, 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa')).rejects.toThrow('db down');
     expect(logger.error).toHaveBeenCalledTimes(1);

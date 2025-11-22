@@ -50,6 +50,21 @@ const createMetricsDouble = () => {
   };
 };
 
+const createEventsBusNoop = (): EventsBusService =>
+  ({
+    subscribeToRunEvents: () => () => undefined,
+    subscribeToToolOutputChunk: () => () => undefined,
+    subscribeToToolOutputTerminal: () => () => undefined,
+    subscribeToReminderCount: () => () => undefined,
+    subscribeToNodeState: () => () => undefined,
+    subscribeToThreadCreated: () => () => undefined,
+    subscribeToThreadUpdated: () => () => undefined,
+    subscribeToMessageCreated: () => () => undefined,
+    subscribeToRunStatusChanged: () => () => undefined,
+    subscribeToThreadMetrics: () => () => undefined,
+    subscribeToThreadMetricsAncestors: () => () => undefined,
+  }) as unknown as EventsBusService;
+
 const createPrismaStub = () =>
   ({
     getClient: () => ({
@@ -137,7 +152,9 @@ if (!shouldRunRealtimeTests) {
     const server = createServer();
     await new Promise((resolve) => server.listen(0, resolve));
     const { port } = server.address() as AddressInfo;
-    const gateway = new GraphSocketGateway(logger, runtime, metricsDouble.service, prismaStub);
+    const eventsBus = createEventsBusNoop();
+    const gateway = new GraphSocketGateway(logger, runtime, metricsDouble.service, prismaStub, eventsBus);
+    gateway.onModuleInit();
     gateway.init({ server });
 
     const client = createClient(`http://127.0.0.1:${port}`, { path: '/socket.io', transports: ['websocket'] });
@@ -168,6 +185,7 @@ if (!shouldRunRealtimeTests) {
     expect(remindersPayload).toEqual({ threadId, remindersCount: 2 });
 
     await closeClient(client);
+    gateway.onModuleDestroy();
     (gateway as unknown as { io?: { close(): void } }).io?.close();
     await closeServer(server);
   });
@@ -177,7 +195,10 @@ if (!shouldRunRealtimeTests) {
     const runtime = createRuntimeStub();
     const metricsDouble = createMetricsDouble();
     const prismaService = ({ getClient: () => prisma }) as PrismaService;
-    const gateway = new GraphSocketGateway(logger, runtime, metricsDouble.service, prismaService);
+    const runEvents = new RunEventsService(prismaService, logger);
+    const eventsBus = new EventsBusService(runEvents);
+    const gateway = new GraphSocketGateway(logger, runtime, metricsDouble.service, prismaService, eventsBus);
+    gateway.onModuleInit();
 
     const server = createServer();
     await new Promise((resolve) => server.listen(0, resolve));
@@ -193,8 +214,6 @@ if (!shouldRunRealtimeTests) {
     const thread = await prisma.thread.create({ data: { alias: `thread-${randomUUID()}`, summary: 'initial' } });
     await subscribeRooms(threadClient, [`thread:${thread.id}`]);
 
-    const runEvents = new RunEventsService(prismaService, logger);
-    const eventsBus = new EventsBusService(runEvents);
     const templateRegistryStub = ({ getMeta: () => undefined }) as unknown as TemplateRegistry;
     const graphRepositoryStub = ({ get: async () => ({ nodes: [] }) }) as unknown as GraphRepository;
     const agents = new AgentsPersistenceService(
@@ -207,7 +226,6 @@ if (!shouldRunRealtimeTests) {
       createLinkingStub(),
       eventsBus,
     );
-    agents.setEventsPublisher(gateway);
 
     const startResult = await agents.beginRunThread(thread.id, [HumanMessage.fromText('hello')]);
     const runId = startResult.runId;
@@ -233,6 +251,7 @@ if (!shouldRunRealtimeTests) {
     await prisma.thread.delete({ where: { id: thread.id } });
 
     await Promise.all([closeClient(runClient), closeClient(threadClient)]);
+    gateway.onModuleDestroy();
     (gateway as unknown as { io?: { close(): void } }).io?.close();
     await closeServer(server);
   });
@@ -242,15 +261,16 @@ if (!shouldRunRealtimeTests) {
     const runtime = createRuntimeStub();
     const metricsDouble = createMetricsDouble();
     const prismaService = ({ getClient: () => prisma }) as PrismaService;
-    const gateway = new GraphSocketGateway(logger, runtime, metricsDouble.service, prismaService);
+    const runEvents = new RunEventsService(prismaService, logger);
+    const eventsBus = new EventsBusService(runEvents);
+    const gateway = new GraphSocketGateway(logger, runtime, metricsDouble.service, prismaService, eventsBus);
+    gateway.onModuleInit();
 
     const server = createServer();
     await new Promise((resolve) => server.listen(0, resolve));
     const { port } = server.address() as AddressInfo;
     gateway.init({ server });
 
-    const runEvents = new RunEventsService(prismaService, logger);
-    const eventsBus = new EventsBusService(runEvents);
     const templateRegistryStub = ({ getMeta: () => undefined }) as unknown as TemplateRegistry;
     const graphRepositoryStub = ({ get: async () => ({ nodes: [] }) }) as unknown as GraphRepository;
     const agents = new AgentsPersistenceService(
@@ -263,7 +283,6 @@ if (!shouldRunRealtimeTests) {
       createLinkingStub(),
       eventsBus,
     );
-    agents.setEventsPublisher(gateway);
 
     const thread = await prisma.thread.create({ data: { alias: `thread-${randomUUID()}`, summary: 'timeline' } });
     const startResult = await agents.beginRunThread(thread.id, [HumanMessage.fromText('start')]);
@@ -318,6 +337,7 @@ if (!shouldRunRealtimeTests) {
     await prisma.thread.delete({ where: { id: thread.id } });
 
     await Promise.all([closeClient(runClient), closeClient(threadClient)]);
+    gateway.onModuleDestroy();
     (gateway as unknown as { io?: { close(): void } }).io?.close();
     await closeServer(server);
   });

@@ -136,12 +136,11 @@ if (!shouldRunDbTests) {
         getOrCreateThreadByAlias: vi.fn().mockResolvedValue('thread'),
         updateThreadChannelDescriptor: vi.fn(),
         getOrCreateSubthreadByAlias: vi.fn().mockResolvedValue('thread-child'),
-        beginRunThread: vi.fn().mockResolvedValue({ runId: 'run' }),
-        recordInjected: vi.fn().mockResolvedValue({ messageIds: [] }),
-        completeRun: vi.fn(),
-        resolveThreadId: vi.fn().mockResolvedValue('thread'),
-        setEventsPublisher: vi.fn(),
-      } satisfies Partial<AgentsPersistenceService>;
+      beginRunThread: vi.fn().mockResolvedValue({ runId: 'run' }),
+      recordInjected: vi.fn().mockResolvedValue({ messageIds: [] }),
+      completeRun: vi.fn(),
+      resolveThreadId: vi.fn().mockResolvedValue('thread'),
+    } satisfies Partial<AgentsPersistenceService>;
 
       const threadsMetricsStub = {
         getThreadsMetrics: vi.fn().mockResolvedValue({}),
@@ -155,6 +154,7 @@ if (!shouldRunDbTests) {
       const slackAdapterStub = {
         sendText: vi.fn().mockResolvedValue({ ok: true, channelMessageId: null, threadId: null }),
       } satisfies Partial<SlackAdapter>;
+
 
       const envServiceStub = makeStub({
         resolveProviderEnv: vi.fn().mockResolvedValue({}),

@@ -47,12 +47,29 @@ export function createRunEventsStub() {
 }
 
 export function createEventsBusStub() {
+  const disposer = () => vi.fn();
   return {
     publishEvent: vi.fn(async () => null),
-    subscribeToRunEvents: vi.fn(() => vi.fn()),
-    subscribeToToolOutputChunk: vi.fn(() => vi.fn()),
-    subscribeToToolOutputTerminal: vi.fn(() => vi.fn()),
+    subscribeToRunEvents: vi.fn(() => disposer()),
+    subscribeToToolOutputChunk: vi.fn(() => disposer()),
+    subscribeToToolOutputTerminal: vi.fn(() => disposer()),
     emitToolOutputChunk: vi.fn(),
     emitToolOutputTerminal: vi.fn(),
+    emitRunStatusChanged: vi.fn(),
+    emitThreadMetrics: vi.fn(),
+    emitThreadMetricsAncestors: vi.fn(),
+    emitReminderCount: vi.fn(),
+    emitNodeState: vi.fn(),
+    emitThreadCreated: vi.fn(),
+    emitThreadUpdated: vi.fn(),
+    emitMessageCreated: vi.fn(),
+    subscribeToReminderCount: vi.fn(() => disposer()),
+    subscribeToNodeState: vi.fn(() => disposer()),
+    subscribeToThreadCreated: vi.fn(() => disposer()),
+    subscribeToThreadUpdated: vi.fn(() => disposer()),
+    subscribeToMessageCreated: vi.fn(() => disposer()),
+    subscribeToRunStatusChanged: vi.fn(() => disposer()),
+    subscribeToThreadMetrics: vi.fn(() => disposer()),
+    subscribeToThreadMetricsAncestors: vi.fn(() => disposer()),
   } as const;
 }

@@ -14,7 +14,6 @@ import { GraphVariablesService } from './services/graphVariables.service';
 import { GraphDomainModule } from '../graph-domain/graph-domain.module';
 import { RemindersController } from './controllers/reminders.controller';
 import { EventsModule } from '../events/events.module';
-import { GraphEventsBusListener } from './events/graph-events-bus.listener';
 
 @Module({
   imports: [GraphDomainModule, EventsModule],
@@ -30,7 +29,6 @@ import { GraphEventsBusListener } from './events/graph-events-bus.listener';
     RemindersController,
   ],
   providers: [
-    GraphEventsBusListener,
     GraphGuard,
     LiveGraphRuntime,
     NodeStateService,

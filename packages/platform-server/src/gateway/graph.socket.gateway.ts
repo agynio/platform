@@ -1,11 +1,23 @@
-import { Inject, Injectable, Scope } from '@nestjs/common';
+import { Inject, Injectable, OnModuleDestroy, OnModuleInit, Scope } from '@nestjs/common';
 import type { IncomingHttpHeaders, Server as HTTPServer } from 'http';
 import { Server as SocketIOServer, type ServerOptions, type Socket } from 'socket.io';
 import { z } from 'zod';
 import { LoggerService } from '../core/services/logger.service';
 import { LiveGraphRuntime } from '../graph/liveGraph.manager';
 import type { ThreadStatus, MessageKind, RunStatus } from '@prisma/client';
-import type { GraphEventsPublisher, RunEventBroadcast } from '../graph/events/graph.events.publisher';
+import {
+  EventsBusService,
+  type MessageBroadcast,
+  type NodeStateBusEvent,
+  type ReminderCountEvent,
+  type RunEventBroadcast,
+  type RunEventBusPayload,
+  type RunStatusBroadcast,
+  type ThreadBroadcast,
+  type ThreadMetricsAncestorsEvent,
+  type ThreadMetricsEvent,
+} from '../events/events-bus.service';
+import type { ToolOutputChunkPayload, ToolOutputTerminalPayload } from '../events/run-events.service';
 import { ThreadsMetricsService } from '../agents/threads.metrics.service';
 import { PrismaService } from '../core/services/prisma.service';
 
@@ -85,20 +97,51 @@ export type ToolOutputTerminalEvent = z.infer<typeof ToolOutputTerminalEventSche
  * Socket.IO gateway attached to Fastify/Nest HTTP server for graph events.
  * Constructors DI-only; call init({ server }) explicitly from bootstrap.
  */
+function toDate(value: string): Date | null {
+  const ts = new Date(value);
+  return Number.isNaN(ts.getTime()) ? null : ts;
+}
+
 @Injectable({ scope: Scope.DEFAULT })
-export class GraphSocketGateway implements GraphEventsPublisher {
+export class GraphSocketGateway implements OnModuleInit, OnModuleDestroy {
   private io: SocketIOServer | null = null;
   private initialized = false;
   private pendingThreads = new Set<string>();
   private metricsTimer: NodeJS.Timeout | null = null;
   private readonly COALESCE_MS = 100;
+  private readonly cleanup: Array<() => void> = [];
 
   constructor(
     @Inject(LoggerService) private readonly logger: LoggerService,
     @Inject(LiveGraphRuntime) private readonly runtime: LiveGraphRuntime,
     @Inject(ThreadsMetricsService) private readonly metrics: ThreadsMetricsService,
     @Inject(PrismaService) private readonly prismaService: PrismaService,
+    @Inject(EventsBusService) private readonly eventsBus: EventsBusService,
   ) {}
+
+  onModuleInit(): void {
+    this.cleanup.push(this.eventsBus.subscribeToRunEvents(this.handleRunEvent));
+    this.cleanup.push(this.eventsBus.subscribeToToolOutputChunk(this.handleToolOutputChunk));
+    this.cleanup.push(this.eventsBus.subscribeToToolOutputTerminal(this.handleToolOutputTerminal));
+    this.cleanup.push(this.eventsBus.subscribeToReminderCount(this.handleReminderCount));
+    this.cleanup.push(this.eventsBus.subscribeToNodeState(this.handleNodeState));
+    this.cleanup.push(this.eventsBus.subscribeToThreadCreated(this.handleThreadCreated));
+    this.cleanup.push(this.eventsBus.subscribeToThreadUpdated(this.handleThreadUpdated));
+    this.cleanup.push(this.eventsBus.subscribeToMessageCreated(this.handleMessageCreated));
+    this.cleanup.push(this.eventsBus.subscribeToRunStatusChanged(this.handleRunStatusChanged));
+    this.cleanup.push(this.eventsBus.subscribeToThreadMetrics(this.handleThreadMetrics));
+    this.cleanup.push(this.eventsBus.subscribeToThreadMetricsAncestors(this.handleThreadMetricsAncestors));
+  }
+
+  onModuleDestroy(): void {
+    for (const dispose of this.cleanup.splice(0)) {
+      try {
+        dispose();
+      } catch (err) {
+        this.logger.warn('GraphSocketGateway: cleanup failed', this.toSafeError(err));
+      }
+    }
+  }
 
   /** Attach Socket.IO to the provided HTTP server. */
   init(params: { server: HTTPServer }): this {
@@ -158,6 +201,214 @@ export class GraphSocketGateway implements GraphEventsPublisher {
     this.attachRuntimeSubscriptions();
     return this;
   }
+
+  private readonly handleRunEvent = (payload: RunEventBusPayload): void => {
+    const event = payload.event;
+    if (!event) {
+      this.logger.warn('GraphSocketGateway received run event payload without snapshot', {
+        eventId: payload.eventId,
+        mutation: payload.mutation,
+      });
+      return;
+    }
+    try {
+      const broadcast: RunEventBroadcast = {
+        runId: event.runId,
+        mutation: payload.mutation,
+        event,
+      };
+      this.emitRunEvent(event.runId, event.threadId, broadcast);
+    } catch (err) {
+      this.logger.warn('GraphSocketGateway failed to emit run event', {
+        eventId: payload.eventId,
+        mutation: payload.mutation,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+  };
+
+  private readonly handleToolOutputChunk = (payload: ToolOutputChunkPayload): void => {
+    const ts = toDate(payload.ts);
+    if (!ts) {
+      this.logger.warn('GraphSocketGateway received invalid chunk timestamp', {
+        eventId: payload.eventId,
+        ts: payload.ts,
+      });
+      return;
+    }
+    try {
+      this.emitToolOutputChunk({
+        runId: payload.runId,
+        threadId: payload.threadId,
+        eventId: payload.eventId,
+        seqGlobal: payload.seqGlobal,
+        seqStream: payload.seqStream,
+        source: payload.source,
+        ts,
+        data: payload.data,
+      });
+    } catch (err) {
+      this.logger.warn('GraphSocketGateway failed to emit tool_output_chunk', {
+        eventId: payload.eventId,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+  };
+
+  private readonly handleToolOutputTerminal = (payload: ToolOutputTerminalPayload): void => {
+    const ts = toDate(payload.ts);
+    if (!ts) {
+      this.logger.warn('GraphSocketGateway received invalid terminal timestamp', {
+        eventId: payload.eventId,
+        ts: payload.ts,
+      });
+      return;
+    }
+    try {
+      this.emitToolOutputTerminal({
+        runId: payload.runId,
+        threadId: payload.threadId,
+        eventId: payload.eventId,
+        exitCode: payload.exitCode,
+        status: payload.status,
+        bytesStdout: payload.bytesStdout,
+        bytesStderr: payload.bytesStderr,
+        totalChunks: payload.totalChunks,
+        droppedChunks: payload.droppedChunks,
+        savedPath: payload.savedPath ?? undefined,
+        message: payload.message ?? undefined,
+        ts,
+      });
+    } catch (err) {
+      this.logger.warn('GraphSocketGateway failed to emit tool_output_terminal', {
+        eventId: payload.eventId,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+  };
+
+  private readonly handleReminderCount = (payload: ReminderCountEvent): void => {
+    try {
+      this.emitReminderCount(payload.nodeId, payload.count, payload.updatedAtMs);
+    } catch (err) {
+      this.logger.warn('GraphSocketGateway failed to emit reminder_count', {
+        nodeId: payload.nodeId,
+        error: err instanceof Error ? err.message : String(err),
+      });
+      return;
+    }
+
+    const threadId = payload.threadId;
+    if (!threadId) return;
+
+    let scheduleResult: void | Promise<void>;
+    try {
+      scheduleResult = this.scheduleThreadAndAncestorsMetrics(threadId);
+    } catch (err) {
+      this.logger.warn('GraphSocketGateway failed to schedule metrics from reminder count', {
+        nodeId: payload.nodeId,
+        threadId,
+        error: err instanceof Error ? err.message : String(err),
+      });
+      return;
+    }
+
+    void Promise.resolve(scheduleResult).catch((err) => {
+      this.logger.warn('GraphSocketGateway failed to schedule metrics from reminder count', {
+        nodeId: payload.nodeId,
+        threadId,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    });
+  };
+
+  private readonly handleNodeState = (payload: NodeStateBusEvent): void => {
+    try {
+      this.emitNodeState(payload.nodeId, payload.state, payload.updatedAtMs);
+    } catch (err) {
+      this.logger.warn('GraphSocketGateway failed to emit node_state', {
+        nodeId: payload.nodeId,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+  };
+
+  private readonly handleThreadCreated = (thread: ThreadBroadcast): void => {
+    try {
+      this.emitThreadCreated(thread);
+    } catch (err) {
+      this.logger.warn('GraphSocketGateway failed to emit thread_created', {
+        threadId: thread.id,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+  };
+
+  private readonly handleThreadUpdated = (thread: ThreadBroadcast): void => {
+    try {
+      this.emitThreadUpdated(thread);
+    } catch (err) {
+      this.logger.warn('GraphSocketGateway failed to emit thread_updated', {
+        threadId: thread.id,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+  };
+
+  private readonly handleMessageCreated = (payload: { threadId: string; message: MessageBroadcast }): void => {
+    try {
+      this.emitMessageCreated(payload.threadId, payload.message);
+    } catch (err) {
+      this.logger.warn('GraphSocketGateway failed to emit message_created', {
+        threadId: payload.threadId,
+        messageId: payload.message.id,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+  };
+
+  private readonly handleRunStatusChanged = (payload: RunStatusBroadcast): void => {
+    try {
+      this.emitRunStatusChanged(payload.threadId, payload.run);
+    } catch (err) {
+      this.logger.warn('GraphSocketGateway failed to emit run_status_changed', {
+        threadId: payload.threadId,
+        runId: payload.run.id,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+  };
+
+  private readonly handleThreadMetrics = (payload: ThreadMetricsEvent): void => {
+    try {
+      this.scheduleThreadMetrics(payload.threadId);
+    } catch (err) {
+      this.logger.warn('GraphSocketGateway failed to schedule thread metrics', {
+        threadId: payload.threadId,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+  };
+
+  private readonly handleThreadMetricsAncestors = (payload: ThreadMetricsAncestorsEvent): void => {
+    let scheduleResult: void | Promise<void>;
+    try {
+      scheduleResult = this.scheduleThreadAndAncestorsMetrics(payload.threadId);
+    } catch (err) {
+      this.logger.warn('GraphSocketGateway failed to schedule ancestor thread metrics', {
+        threadId: payload.threadId,
+        error: err instanceof Error ? err.message : String(err),
+      });
+      return;
+    }
+
+    void Promise.resolve(scheduleResult).catch((err) => {
+      this.logger.warn('GraphSocketGateway failed to schedule ancestor thread metrics', {
+        threadId: payload.threadId,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    });
+  };
 
   private broadcast<T extends { nodeId: string }>(
     event: 'node_status' | 'node_state' | 'node_reminder_count',

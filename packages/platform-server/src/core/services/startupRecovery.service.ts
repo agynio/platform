@@ -1,9 +1,9 @@
-import { Inject, Injectable, OnApplicationBootstrap, Optional } from '@nestjs/common';
+import { Inject, Injectable, OnApplicationBootstrap } from '@nestjs/common';
 import type { Prisma, PrismaClient, RunStatus } from '@prisma/client';
 import { RunStatus as RunStatusEnum } from '@prisma/client';
 import { PrismaService } from './prisma.service';
 import { LoggerService } from './logger.service';
-import { GraphEventsPublisher } from '../../graph/events/graph.events.publisher';
+import { EventsBusService } from '../../events/events-bus.service';
 
 type TransactionClient = Prisma.TransactionClient;
 
@@ -30,7 +30,7 @@ export class StartupRecoveryService implements OnApplicationBootstrap {
   constructor(
     @Inject(PrismaService) private readonly prismaService: PrismaService,
     @Inject(LoggerService) private readonly logger: LoggerService,
-    @Optional() @Inject(GraphEventsPublisher) private readonly events?: GraphEventsPublisher,
+    @Inject(EventsBusService) private readonly eventsBus: EventsBusService,
   ) {}
 
   async onApplicationBootstrap(): Promise<void> {
@@ -144,19 +144,20 @@ export class StartupRecoveryService implements OnApplicationBootstrap {
   }
 
   private emitEvents(runs: RecoveredRun[], reminders: RecoveredReminder[]): void {
-    if (!this.events) return;
-
     const runStatus = RunStatusEnum.terminated;
     const metricThreads = new Set<string>();
 
     for (const run of runs) {
       metricThreads.add(run.threadId);
       try {
-        this.events.emitRunStatusChanged(run.threadId, {
-          id: run.id,
-          status: runStatus,
-          createdAt: run.createdAt,
-          updatedAt: run.updatedAt,
+        this.eventsBus.emitRunStatusChanged({
+          threadId: run.threadId,
+          run: {
+            id: run.id,
+            status: runStatus,
+            createdAt: run.createdAt,
+            updatedAt: run.updatedAt,
+          },
         });
       } catch (err) {
         this.logger.warn('Failed to emit run status change event during startup recovery', { runId: run.id, error: err });
@@ -169,7 +170,7 @@ export class StartupRecoveryService implements OnApplicationBootstrap {
 
     for (const threadId of metricThreads) {
       try {
-        this.events.scheduleThreadMetrics(threadId);
+        this.eventsBus.emitThreadMetrics({ threadId });
       } catch (err) {
         this.logger.warn('Failed to schedule thread metrics during startup recovery', { threadId, error: err });
       }

@@ -6,7 +6,6 @@ import { RunEventsService } from '../src/events/run-events.service';
 import { EventsBusService } from '../src/events/events-bus.service';
 import { AgentsPersistenceService } from '../src/agents/agents.persistence.service';
 import { LoggerService } from '../src/core/services/logger.service';
-import { NoopGraphEventsPublisher } from '../src/graph/events/graph.events.publisher';
 import type { ThreadsMetricsService } from '../src/agents/threads.metrics.service';
 import type { TemplateRegistry } from '../src/graph/templateRegistry';
 import type { GraphRepository } from '../src/graph/graph.repository';
@@ -31,7 +30,6 @@ if (!shouldRunDbTests) {
   const templateRegistryStub = { toSchema: async () => [], getMeta: () => undefined } as unknown as TemplateRegistry;
   const graphRepoStub = { get: async () => ({ nodes: [], edges: [] }) } as unknown as GraphRepository;
 
-  const eventsPublisher = new NoopGraphEventsPublisher();
   const runEvents = new RunEventsService(prismaService, logger);
   const eventsBus = new EventsBusService(runEvents);
   const callAgentLinking = new CallAgentLinkingService(prismaService, runEvents, logger, eventsBus);
@@ -45,7 +43,6 @@ if (!shouldRunDbTests) {
     callAgentLinking,
     eventsBus,
   );
-  agents.setEventsPublisher(eventsPublisher);
 
   async function createCallAgentParentEvent(parentThreadId: string, childThreadId: string, runId: string) {
     const toolEvent = await prisma.runEvent.create({

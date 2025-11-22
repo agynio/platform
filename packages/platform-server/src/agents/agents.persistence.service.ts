@@ -3,7 +3,6 @@ import { Inject, Injectable } from '@nestjs/common';
 import type { MessageKind, Prisma, PrismaClient, RunMessageType, RunStatus, ThreadStatus } from '@prisma/client';
 import { LoggerService } from '../core/services/logger.service';
 import { PrismaService } from '../core/services/prisma.service';
-import { GraphEventsPublisher, NoopGraphEventsPublisher, type GraphEventsPublisherAware } from '../graph/events/graph.events.publisher';
 import { GraphRepository } from '../graph/graph.repository';
 import { TemplateRegistry } from '../graph/templateRegistry';
 import type { PersistedGraphNode } from '../shared/types/graph.types';
@@ -19,8 +18,7 @@ export type RunStartResult = { runId: string };
 type RunEventDelegate = Prisma.TransactionClient['runEvent'];
 
 @Injectable()
-export class AgentsPersistenceService implements GraphEventsPublisherAware {
-  private events: GraphEventsPublisher;
+export class AgentsPersistenceService {
 
   constructor(
     @Inject(PrismaService) private prismaService: PrismaService,
@@ -31,13 +29,7 @@ export class AgentsPersistenceService implements GraphEventsPublisherAware {
     @Inject(RunEventsService) private readonly runEvents: RunEventsService,
     @Inject(CallAgentLinkingService) private readonly callAgentLinking: CallAgentLinkingService,
     @Inject(EventsBusService) private readonly eventsBus: EventsBusService,
-  ) {
-    this.events = new NoopGraphEventsPublisher();
-  }
-
-  setEventsPublisher(publisher: GraphEventsPublisher): void {
-    this.events = publisher;
-  }
+  ) {}
 
   private get prisma(): PrismaClient {
     return this.prismaService.getClient();
@@ -55,7 +47,7 @@ export class AgentsPersistenceService implements GraphEventsPublisherAware {
     if (existing) return existing.id;
     const sanitized = this.sanitizeSummary(summary);
     const created = await this.prisma.thread.create({ data: { alias, summary: sanitized } });
-    this.events.emitThreadCreated({ id: created.id, alias: created.alias, summary: created.summary ?? null, status: created.status, createdAt: created.createdAt, parentId: created.parentId ?? null });
+    this.eventsBus.emitThreadCreated({ id: created.id, alias: created.alias, summary: created.summary ?? null, status: created.status, createdAt: created.createdAt, parentId: created.parentId ?? null });
     return created.id;
   }
 
@@ -72,7 +64,7 @@ export class AgentsPersistenceService implements GraphEventsPublisherAware {
     }
     const channelJson = toPrismaJsonValue(parsed.data);
     const updated = await this.prisma.thread.update({ where: { id: threadId }, data: { channel: channelJson } });
-    this.events.emitThreadUpdated({ id: updated.id, alias: updated.alias, summary: updated.summary ?? null, status: updated.status, createdAt: updated.createdAt, parentId: updated.parentId ?? null });
+    this.eventsBus.emitThreadUpdated({ id: updated.id, alias: updated.alias, summary: updated.summary ?? null, status: updated.status, createdAt: updated.createdAt, parentId: updated.parentId ?? null });
   }
 
   /**
@@ -85,8 +77,8 @@ export class AgentsPersistenceService implements GraphEventsPublisherAware {
     if (existing) return existing.id;
     const sanitized = this.sanitizeSummary(summary);
     const created = await this.prisma.thread.create({ data: { alias: composed, parentId: parentThreadId, summary: sanitized } });
-    this.events.emitThreadCreated({ id: created.id, alias: created.alias, summary: created.summary ?? null, status: created.status, createdAt: created.createdAt, parentId: created.parentId ?? null });
-    this.events.scheduleThreadAndAncestorsMetrics(created.id);
+    this.eventsBus.emitThreadCreated({ id: created.id, alias: created.alias, summary: created.summary ?? null, status: created.status, createdAt: created.createdAt, parentId: created.parentId ?? null });
+    this.eventsBus.emitThreadMetricsAncestors({ threadId: created.id });
     return created.id;
   }
 
@@ -139,9 +131,17 @@ export class AgentsPersistenceService implements GraphEventsPublisherAware {
       if (linkedEventId) patchedEventIds.push(linkedEventId);
       return { runId: run.id, createdMessages, eventIds, patchedEventIds };
     });
-    this.events.emitRunStatusChanged(threadId, { id: runId, status: 'running' as RunStatus, createdAt: new Date(), updatedAt: new Date() });
-    for (const m of createdMessages) this.events.emitMessageCreated(threadId, { id: m.id, kind: m.kind, text: m.text, source: m.source as Prisma.JsonValue, createdAt: m.createdAt, runId });
-    this.events.scheduleThreadMetrics(threadId);
+    this.eventsBus.emitRunStatusChanged({
+      threadId,
+      run: { id: runId, status: 'running' as RunStatus, createdAt: new Date(), updatedAt: new Date() },
+    });
+    for (const m of createdMessages) {
+      this.eventsBus.emitMessageCreated({
+        threadId,
+        message: { id: m.id, kind: m.kind, text: m.text, source: m.source as Prisma.JsonValue, createdAt: m.createdAt, runId },
+      });
+    }
+    this.eventsBus.emitThreadMetrics({ threadId });
     await Promise.all(eventIds.map((id) => this.eventsBus.publishEvent(id, 'append')));
     await Promise.all(patchedEventIds.map((id) => this.eventsBus.publishEvent(id, 'update')));
     return { runId };
@@ -207,13 +207,16 @@ export class AgentsPersistenceService implements GraphEventsPublisherAware {
     if (!threadId) return { messageIds: [] };
 
     for (const m of createdMessages) {
-      this.events.emitMessageCreated(threadId, {
-        id: m.id,
-        kind: m.kind,
-        text: m.text,
-        source: m.source as Prisma.JsonValue,
-        createdAt: m.createdAt,
-        runId,
+      this.eventsBus.emitMessageCreated({
+        threadId,
+        message: {
+          id: m.id,
+          kind: m.kind,
+          text: m.text,
+          source: m.source as Prisma.JsonValue,
+          createdAt: m.createdAt,
+          runId,
+        },
       });
     }
 
@@ -263,9 +266,14 @@ export class AgentsPersistenceService implements GraphEventsPublisherAware {
       return updated;
     });
     const threadId = run.threadId;
-    for (const m of createdMessages) this.events.emitMessageCreated(threadId, { id: m.id, kind: m.kind, text: m.text, source: m.source as Prisma.JsonValue, createdAt: m.createdAt, runId });
-    this.events.emitRunStatusChanged(threadId, { id: runId, status, createdAt: run.createdAt, updatedAt: run.updatedAt });
-    this.events.scheduleThreadMetrics(threadId);
+    for (const m of createdMessages) {
+      this.eventsBus.emitMessageCreated({
+        threadId,
+        message: { id: m.id, kind: m.kind, text: m.text, source: m.source as Prisma.JsonValue, createdAt: m.createdAt, runId },
+      });
+    }
+    this.eventsBus.emitRunStatusChanged({ threadId, run: { id: runId, status, createdAt: run.createdAt, updatedAt: run.updatedAt } });
+    this.eventsBus.emitThreadMetrics({ threadId });
     await Promise.all(eventIds.map((id) => this.eventsBus.publishEvent(id, 'append')));
     await Promise.all(patchedEventIds.map((id) => this.eventsBus.publishEvent(id, 'update')));
   }
@@ -361,7 +369,7 @@ export class AgentsPersistenceService implements GraphEventsPublisherAware {
     });
 
     const updated = result.updated;
-    this.events.emitThreadUpdated({
+    this.eventsBus.emitThreadUpdated({
       id: updated.id,
       alias: updated.alias,
       summary: updated.summary ?? null,
