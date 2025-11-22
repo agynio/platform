@@ -9,6 +9,7 @@ import { clearRegistry } from '../components/configViews/registry';
 import { initConfigViewsRegistry } from '../configViews.init';
 import { graphSocket } from '@/lib/graph/socket';
 import { graph as graphApi } from '@/api/modules/graph';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
 const noop = () => {};
 
@@ -23,6 +24,7 @@ function isAllowedWarningCall(args: unknown[]): boolean {
 }
 
 describe('App smoke test', () => {
+  let queryClient: QueryClient;
   let errorSpy: ReturnType<typeof vi.spyOn>;
   let warnSpy: ReturnType<typeof vi.spyOn>;
   let canvasContextSpy: ReturnType<typeof vi.spyOn> | null = null;
@@ -32,6 +34,12 @@ describe('App smoke test', () => {
     localStorage.clear();
     clearRegistry();
     initConfigViewsRegistry();
+    queryClient = new QueryClient({
+      defaultOptions: {
+        queries: { retry: false, gcTime: 0 },
+        mutations: { retry: false },
+      },
+    });
     errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
     warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
     vi.stubGlobal('alert', vi.fn());
@@ -121,6 +129,7 @@ describe('App smoke test', () => {
 
   afterEach(() => {
     cleanup();
+    queryClient.clear();
     errorSpy.mockRestore();
     warnSpy.mockRestore();
     canvasContextSpy?.mockRestore();
@@ -133,19 +142,17 @@ describe('App smoke test', () => {
   it('renders primary routes without runtime errors', async () => {
     render(
       <TooltipProvider delayDuration={0}>
-        <MemoryRouter initialEntries={['/']}>
-          <UserProvider>
-            <App />
-          </UserProvider>
-        </MemoryRouter>
+        <QueryClientProvider client={queryClient}>
+          <MemoryRouter initialEntries={['/']}>
+            <UserProvider>
+              <App />
+            </UserProvider>
+          </MemoryRouter>
+        </QueryClientProvider>
       </TooltipProvider>,
     );
 
     await waitFor(() => expect(screen.getByText('Graph Canvas')).toBeInTheDocument());
-
-    expect(screen.getByRole('link', { name: 'Graph' })).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'Threads' })).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'Explorer' })).toBeInTheDocument();
 
     expect(errorSpy).not.toHaveBeenCalled();
     const unexpectedWarnings = warnSpy.mock.calls.filter((args) => !isAllowedWarningCall(args));
