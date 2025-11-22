@@ -31,6 +31,92 @@ export const bashCommandSchema = z.object({
 // Regex to strip ANSI escape sequences (colors, cursor moves, etc.)
 // Matches ESC followed by a bracket and command bytes or other OSC sequences.
 const ANSI_REGEX = /[\u001B\u009B][[[\]()#;?]*(?:[0-9]{1,4}(?:;[0-9]{0,4})*)?[0-9A-ORZcf-nq-uy=><]/g;
+const ANSI_OSC_REGEX = /\u001b\][^\u001b\u0007]*(?:\u0007|\u001b\\)/g;
+const ANSI_STRING_REGEX = /\u001b[PX^_][^\u001b]*(?:\u001b\\)/g;
+
+const ESC = '\u001b';
+const BEL = '\u0007';
+
+const isFinalByte = (code: number) => code >= 0x40 && code <= 0x7e;
+const isIntermediateByte = (code: number) => code >= 0x20 && code <= 0x2f;
+
+const isCompleteAnsiSequence = (sequence: string): boolean => {
+  if (sequence.length < 2) return false;
+  const second = sequence[1];
+  if (!second) return false;
+  if (second === '[') {
+    for (let i = 2; i < sequence.length; i += 1) {
+      const code = sequence.charCodeAt(i);
+      if (isFinalByte(code)) return true;
+    }
+    return false;
+  }
+  if (second === ']') {
+    for (let i = 2; i < sequence.length; i += 1) {
+      const ch = sequence[i];
+      if (ch === BEL) return true;
+      if (ch === ESC && i + 1 < sequence.length && sequence[i + 1] === '\\') return true;
+    }
+    return false;
+  }
+  if (second === 'P' || second === '^' || second === '_') {
+    for (let i = 2; i < sequence.length - 1; i += 1) {
+      if (sequence[i] === ESC && sequence[i + 1] === '\\') return true;
+    }
+    return false;
+  }
+  const secondCode = second.charCodeAt(0);
+  if (isFinalByte(secondCode)) return true;
+  if (isIntermediateByte(secondCode)) {
+    for (let i = 2; i < sequence.length; i += 1) {
+      const code = sequence.charCodeAt(i);
+      if (isFinalByte(code)) return true;
+    }
+    return false;
+  }
+  return sequence.length >= 2;
+};
+
+const splitAnsiSafePortion = (input: string): { safe: string; remainder: string } => {
+  let remainderStart = input.length;
+  for (let i = input.length - 1; i >= 0; i -= 1) {
+    if (input.charCodeAt(i) !== 0x1b) continue;
+    const candidate = input.slice(i);
+    if (!isCompleteAnsiSequence(candidate)) {
+      remainderStart = i;
+      continue;
+    }
+    break;
+  }
+  if (remainderStart === input.length) return { safe: input, remainder: '' };
+  return { safe: input.slice(0, remainderStart), remainder: input.slice(remainderStart) };
+};
+
+class AnsiSequenceCleaner {
+  private remainder = '';
+
+  constructor(private readonly stripFn: (input: string) => string) {}
+
+  consume(chunk: string): string {
+    if (!chunk) return '';
+    const combined = this.remainder + chunk;
+    if (!combined) return '';
+    const { safe, remainder } = splitAnsiSafePortion(combined);
+    this.remainder = remainder;
+    if (!safe) return '';
+    return this.stripFn(safe);
+  }
+
+  flush(): string {
+    const leftover = this.remainder;
+    this.remainder = '';
+    if (!leftover) return '';
+    if (isCompleteAnsiSequence(leftover)) {
+      return this.stripFn(leftover);
+    }
+    return '';
+  }
+}
 
 const DEFAULT_CHUNK_COALESCE_MS = 40;
 const DEFAULT_CHUNK_SIZE_BYTES = 4 * 1024;
@@ -74,11 +160,12 @@ export class ShellCommandTool extends FunctionTool<typeof bashCommandSchema> {
     return bashCommandSchema;
   }
   get description() {
-    return 'Execute a non-interactive shell command in the workspace container identified by thread_id and return stdout (or error tail).';
+    return 'Execute a non-interactive shell command in the workspace container identified by thread_id and return combined stdout+stderr output.';
   }
 
   private stripAnsi(input: string): string {
-    return input.replace(ANSI_REGEX, '');
+    if (!input) return '';
+    return input.replace(ANSI_OSC_REGEX, '').replace(ANSI_STRING_REGEX, '').replace(ANSI_REGEX, '');
   }
 
   private getResolvedConfig() {
@@ -121,7 +208,67 @@ export class ShellCommandTool extends FunctionTool<typeof bashCommandSchema> {
     const timeoutMs = cfg.executionTimeoutMs;
     const idleTimeoutMs = cfg.idleTimeoutMs;
 
+    const decoders: Record<OutputSource, TextDecoder> = {
+      stdout: new TextDecoder('utf-8'),
+      stderr: new TextDecoder('utf-8'),
+    };
+
+    const cleanBySource: Record<OutputSource, string> = { stdout: '', stderr: '' };
+    const orderedSegments: Array<{ source: OutputSource; text: string }> = [];
+    const cleaners: Record<OutputSource, AnsiSequenceCleaner> = {
+      stdout: new AnsiSequenceCleaner((value) => this.stripAnsi(value)),
+      stderr: new AnsiSequenceCleaner((value) => this.stripAnsi(value)),
+    };
+
+    const pushSegment = (source: OutputSource, text: string) => {
+      if (!text) return;
+      orderedSegments.push({ source, text });
+      cleanBySource[source] += text;
+    };
+
+    const consumeDecoded = (source: OutputSource, decoded: string) => {
+      if (!decoded) return;
+      const cleaned = cleaners[source].consume(decoded);
+      if (!cleaned) return;
+      pushSegment(source, cleaned);
+    };
+
+    const flushDecoderRemainder = () => {
+      (['stdout', 'stderr'] as OutputSource[]).forEach((source) => {
+        const tail = decoders[source].decode();
+        if (tail) consumeDecoded(source, tail);
+        const flushed = cleaners[source].flush();
+        if (flushed) pushSegment(source, flushed);
+      });
+    };
+
+    const handleChunk = (source: OutputSource, chunk: Buffer) => {
+      if (!chunk || chunk.length === 0) return;
+      const decoded = decoders[source].decode(chunk, { stream: true });
+      if (!decoded) return;
+      consumeDecoded(source, decoded);
+    };
+
     let response: { stdout: string; stderr: string; exitCode: number };
+    const getCombinedOutput = (fallback?: { stdout?: string; stderr?: string }): string => {
+      if (orderedSegments.length > 0) {
+        return orderedSegments.map((segment) => segment.text).join('');
+      }
+      if (cleanBySource.stdout.length || cleanBySource.stderr.length) {
+        return cleanBySource.stdout + cleanBySource.stderr;
+      }
+      if (fallback) {
+        const stdoutClean = this.stripAnsi(fallback.stdout ?? '');
+        const stderrClean = this.stripAnsi(fallback.stderr ?? '');
+        if (stdoutClean.length || stderrClean.length) {
+          return stdoutClean + stderrClean;
+        }
+      }
+      const stdoutClean = this.stripAnsi(response?.stdout ?? '');
+      const stderrClean = this.stripAnsi(response?.stderr ?? '');
+      return stdoutClean + stderrClean;
+    };
+
     try {
       response = await container.exec(command, {
         env: envOverlay,
@@ -129,22 +276,22 @@ export class ShellCommandTool extends FunctionTool<typeof bashCommandSchema> {
         timeoutMs,
         idleTimeoutMs,
         killOnTimeout: true,
+        onOutput: (source, chunk) => handleChunk(source as OutputSource, chunk),
       });
+      flushDecoderRemainder();
     } catch (err: unknown) {
       if (isExecTimeoutError(err) || isExecIdleTimeoutError(err)) {
-        let combined = '';
-        if (err instanceof ExecTimeoutError || err instanceof ExecIdleTimeoutError) {
-          combined = `${err.stdout || ''}${err.stderr || ''}`;
-        }
-        const cleaned = this.stripAnsi(combined);
-        const tail = cleaned.length > 10000 ? cleaned.slice(-10000) : cleaned;
+        flushDecoderRemainder();
+        const timeoutErr = err as ExecTimeoutError | ExecIdleTimeoutError;
+        const combined = getCombinedOutput({ stdout: timeoutErr.stdout ?? '', stderr: timeoutErr.stderr ?? '' });
+        const tail = combined.length > 10000 ? combined.slice(-10000) : combined;
         if (isExecIdleTimeoutError(err)) {
-          const idleMs = (err as ExecIdleTimeoutError | (Error & { timeoutMs?: number }))?.timeoutMs ?? idleTimeoutMs;
+          const idleMs = timeoutErr.timeoutMs ?? idleTimeoutMs;
           throw new Error(
             `Error (idle timeout): no output for ${idleMs}ms; command was terminated. See output tail below.\n----------\n${tail}`,
           );
         } else {
-          const usedMs = (err as ExecTimeoutError | (Error & { timeoutMs?: number }))?.timeoutMs ?? timeoutMs;
+          const usedMs = timeoutErr.timeoutMs ?? timeoutMs;
           throw new Error(
             `Error (timeout after ${usedMs}ms): command exceeded ${usedMs}ms and was terminated. See output tail below.\n----------\n${tail}`,
           );
@@ -153,9 +300,7 @@ export class ShellCommandTool extends FunctionTool<typeof bashCommandSchema> {
       throw err;
     }
 
-    const cleanedStdout = this.stripAnsi(response.stdout);
-    const cleanedStderr = this.stripAnsi(response.stderr);
-    const combined = `${cleanedStdout}${cleanedStderr}`;
+    const combined = getCombinedOutput({ stdout: response.stdout, stderr: response.stderr });
     const limit = cfg.outputLimitChars;
     if (limit > 0 && combined.length > limit) {
       const id = randomUUID();
@@ -163,11 +308,8 @@ export class ShellCommandTool extends FunctionTool<typeof bashCommandSchema> {
       const path = await this.saveOversizedOutputInContainer(container, file, combined);
       return `Error: output length exceeds ${limit} characters. It was saved on disk: ${path}`;
     }
-    if (response.exitCode !== 0) {
-      return `Error (exit code ${response.exitCode}):\n${cleanedStdout}\n${cleanedStderr}`;
-    }
 
-    return cleanedStdout;
+    return combined;
   }
 
   async executeStreaming(
@@ -192,6 +334,10 @@ export class ShellCommandTool extends FunctionTool<typeof bashCommandSchema> {
       stdout: new TextDecoder('utf-8'),
       stderr: new TextDecoder('utf-8'),
     };
+    const cleaners: Record<OutputSource, AnsiSequenceCleaner> = {
+      stdout: new AnsiSequenceCleaner((value) => this.stripAnsi(value)),
+      stderr: new AnsiSequenceCleaner((value) => this.stripAnsi(value)),
+    };
 
     type BufferState = { text: string; bytes: number; timer: NodeJS.Timeout | null };
     const buffers: Record<OutputSource, BufferState> = {
@@ -201,6 +347,12 @@ export class ShellCommandTool extends FunctionTool<typeof bashCommandSchema> {
 
     const bytesBySource: Record<OutputSource, number> = { stdout: 0, stderr: 0 };
     const seqPerSource: Record<OutputSource, number> = { stdout: 0, stderr: 0 };
+    let segmentOrder = 0;
+    const pendingSegments: Record<OutputSource, { order: number; text: string }[]> = {
+      stdout: [],
+      stderr: [],
+    };
+    const orderedOutput: Array<{ order: number; text: string }> = [];
 
     let seqGlobal = 0;
     let totalChunks = 0;
@@ -233,6 +385,8 @@ export class ShellCommandTool extends FunctionTool<typeof bashCommandSchema> {
       buffer.text = '';
       buffer.bytes = 0;
       if (!text) return;
+      const segmentsForFlush = pendingSegments[source];
+      pendingSegments[source] = [];
       flushChain = flushChain.then(async () => {
         totalChunks += 1;
         if (truncated) {
@@ -257,6 +411,9 @@ export class ShellCommandTool extends FunctionTool<typeof bashCommandSchema> {
         seqGlobal += 1;
         seqPerSource[source] += 1;
         emittedBytes += textBytes;
+        if (segmentsForFlush.length > 0) {
+          orderedOutput.push(...segmentsForFlush);
+        }
         try {
           const payload = await this.runEvents.appendToolOutputChunk({
             runId: options.runId,
@@ -300,6 +457,9 @@ export class ShellCommandTool extends FunctionTool<typeof bashCommandSchema> {
       buffer.text += cleaned;
       buffer.bytes += byteLength;
 
+      segmentOrder += 1;
+      pendingSegments[source].push({ order: segmentOrder, text: cleaned });
+
       if (buffer.bytes >= chunkSizeBytes || buffer.text.length >= chunkSizeBytes) {
         flushBuffer(source);
       } else {
@@ -321,10 +481,21 @@ export class ShellCommandTool extends FunctionTool<typeof bashCommandSchema> {
       if (!chunk || chunk.length === 0) return;
       const decoded = decoders[source].decode(chunk, { stream: true });
       if (!decoded) return;
-      const cleaned = this.stripAnsi(decoded);
+      const cleaned = cleaners[source].consume(decoded);
       if (!cleaned) return;
       const byteLength = Buffer.byteLength(cleaned, 'utf8');
       handleDecoratedChunk(source, cleaned, byteLength);
+    };
+
+    const getCombinedOutput = (): string => {
+      if (orderedOutput.length > 0) {
+        return orderedOutput
+          .slice()
+          .sort((a, b) => a.order - b.order)
+          .map((entry) => entry.text)
+          .join('');
+      }
+      return `${cleanedStdout}${cleanedStderr}`;
     };
 
     let execError: unknown = null;
@@ -370,13 +541,25 @@ export class ShellCommandTool extends FunctionTool<typeof bashCommandSchema> {
     } finally {
       const stdoutTail = decoders.stdout.decode();
       if (stdoutTail) {
-        const cleanedTail = this.stripAnsi(stdoutTail);
-        if (cleanedTail) handleDecoratedChunk('stdout', cleanedTail, Buffer.byteLength(cleanedTail, 'utf8'));
+        const cleanedTail = cleaners.stdout.consume(stdoutTail);
+        if (cleanedTail) {
+          handleDecoratedChunk('stdout', cleanedTail, Buffer.byteLength(cleanedTail, 'utf8'));
+        }
+      }
+      const flushedStdout = cleaners.stdout.flush();
+      if (flushedStdout) {
+        handleDecoratedChunk('stdout', flushedStdout, Buffer.byteLength(flushedStdout, 'utf8'));
       }
       const stderrTail = decoders.stderr.decode();
       if (stderrTail) {
-        const cleanedTail = this.stripAnsi(stderrTail);
-        if (cleanedTail) handleDecoratedChunk('stderr', cleanedTail, Buffer.byteLength(cleanedTail, 'utf8'));
+        const cleanedTail = cleaners.stderr.consume(stderrTail);
+        if (cleanedTail) {
+          handleDecoratedChunk('stderr', cleanedTail, Buffer.byteLength(cleanedTail, 'utf8'));
+        }
+      }
+      const flushedStderr = cleaners.stderr.flush();
+      if (flushedStderr) {
+        handleDecoratedChunk('stderr', flushedStderr, Buffer.byteLength(flushedStderr, 'utf8'));
       }
       flushBuffer('stdout', { force: true });
       flushBuffer('stderr', { force: true });
@@ -400,7 +583,7 @@ export class ShellCommandTool extends FunctionTool<typeof bashCommandSchema> {
       }
 
       if (truncated) {
-        const combined = `${cleanedStdout}${cleanedStderr}`;
+        const combined = getCombinedOutput();
         if (combined.length > 0) {
           try {
             const file = `${randomUUID()}.txt`;
@@ -458,10 +641,6 @@ export class ShellCommandTool extends FunctionTool<typeof bashCommandSchema> {
       return truncationMessage ?? (savedPath ? `Output truncated. Full output saved to ${savedPath}.` : 'Output truncated.');
     }
 
-    if (exitCode !== null && exitCode !== 0) {
-      return `Error (exit code ${exitCode}):\n${cleanedStdout}\n${cleanedStderr}`;
-    }
-
-    return cleanedStdout;
+    return getCombinedOutput();
   }
 }
