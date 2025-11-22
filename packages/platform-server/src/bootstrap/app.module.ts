@@ -3,9 +3,10 @@ import { CoreModule } from '../core/core.module';
 import { InfraModule } from '../infra/infra.module';
 import { GraphApiModule } from '../graph/graph-api.module';
 import { GatewayModule } from '../gateway/gateway.module';
+import { EventsModule } from '../events/events.module';
 import { StartupRecoveryService } from '../core/services/startupRecovery.service';
 
-@Module({ imports: [CoreModule, InfraModule, GraphApiModule, GatewayModule], providers: [StartupRecoveryService] })
+@Module({ imports: [CoreModule, InfraModule, GraphApiModule, GatewayModule, EventsModule], providers: [StartupRecoveryService] })
 export class AppModule {
   constructor() {}
 }
