@@ -3,7 +3,7 @@ import { ExternalLink } from 'lucide-react';
 
 interface RunInfoProps {
   runId: string;
-  status: 'finished' | 'running' | 'failed' | 'pending';
+  status: 'finished' | 'running' | 'failed' | 'pending' | 'terminated';
   duration?: string;
   tokens?: number;
   cost?: string;
@@ -16,6 +16,7 @@ const statusLabels: Record<string, string> = {
   running: 'Running',
   failed: 'Failed',
   pending: 'Pending',
+  terminated: 'Terminated',
 };
 
 export function RunInfo({

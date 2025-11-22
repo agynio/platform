@@ -241,6 +241,7 @@ export default function SecretsScreen({
                               <button
                                 onClick={handleSaveCreate}
                                 className="w-8 h-8 flex items-center justify-center rounded-md text-[var(--agyn-status-success)] hover:bg-[var(--agyn-status-success)]/10 transition-colors"
+                                aria-label="Save secret"
                               >
                                 <Check className="w-4 h-4" />
                               </button>
@@ -262,6 +263,7 @@ export default function SecretsScreen({
                               <button
                                 onClick={handleCancel}
                                 className="w-8 h-8 flex items-center justify-center rounded-md text-[var(--agyn-text-subtle)] hover:bg-[var(--agyn-bg-light)] transition-colors"
+                                aria-label="Cancel editing"
                               >
                                 <X className="w-4 h-4" />
                               </button>
@@ -322,6 +324,7 @@ export default function SecretsScreen({
                                     <button
                                       onClick={handleSaveEdit}
                                       className="w-8 h-8 flex items-center justify-center rounded-md text-[var(--agyn-status-success)] hover:bg-[var(--agyn-status-success)]/10 transition-colors"
+                                      aria-label="Save secret"
                                     >
                                       <Check className="w-4 h-4" />
                                     </button>
@@ -343,6 +346,7 @@ export default function SecretsScreen({
                                     <button
                                       onClick={handleCancel}
                                       className="w-8 h-8 flex items-center justify-center rounded-md text-[var(--agyn-text-subtle)] hover:bg-[var(--agyn-bg-light)] transition-colors"
+                                      aria-label="Cancel editing"
                                     >
                                       <X className="w-4 h-4" />
                                     </button>
@@ -396,6 +400,7 @@ export default function SecretsScreen({
                                       <button
                                         onClick={() => toggleUnmask(secret.id)}
                                         className="w-8 h-8 flex items-center justify-center rounded-md text-[var(--agyn-text-subtle)] hover:bg-[var(--agyn-bg-light)] hover:text-[var(--agyn-blue)] transition-colors"
+                                        aria-label={isUnmasked ? 'Mask secret value' : 'Unmask secret value'}
                                       >
                                         {isUnmasked ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                                       </button>
@@ -418,6 +423,7 @@ export default function SecretsScreen({
                                         onClick={() => handleStartEdit(secret)}
                                         disabled={isCreating || editingId !== null}
                                         className="w-8 h-8 flex items-center justify-center rounded-md text-[var(--agyn-text-subtle)] hover:bg-[var(--agyn-bg-light)] hover:text-[var(--agyn-blue)] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                                        aria-label="Edit secret"
                                       >
                                         <Pencil className="w-4 h-4" />
                                       </button>
@@ -440,6 +446,7 @@ export default function SecretsScreen({
                                         onClick={() => handleDelete(secret.id)}
                                         disabled={isCreating || editingId !== null}
                                         className="w-8 h-8 flex items-center justify-center rounded-md text-[var(--agyn-text-subtle)] hover:bg-[var(--agyn-status-failed)]/10 hover:text-[var(--agyn-status-failed)] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                                        aria-label="Delete secret"
                                       >
                                         <Trash2 className="w-4 h-4" />
                                       </button>

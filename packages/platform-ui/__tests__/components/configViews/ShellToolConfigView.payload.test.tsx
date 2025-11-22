@@ -1,6 +1,6 @@
 import React from 'react';
 import { render, screen, fireEvent } from '@testing-library/react';
-import { TooltipProvider } from '@agyn/ui';
+import { TooltipProvider } from '@agyn/ui-new';
 import ShellToolConfigView from '@/components/configViews/ShellToolConfigView';
 
 describe('ShellToolConfigView payload', () => {

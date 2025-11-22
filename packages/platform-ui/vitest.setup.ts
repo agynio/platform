@@ -53,6 +53,14 @@ if (typeof window !== 'undefined') {
     removeListener: vi.fn(), // deprecated
     dispatchEvent: vi.fn(),
   }));
+
+  if (!('scrollBy' in HTMLElement.prototype)) {
+    Object.defineProperty(HTMLElement.prototype, 'scrollBy', {
+      value: () => {},
+      configurable: true,
+      writable: true,
+    });
+  }
 }
 
 // createRange for Floating-UI contextual fragment creation

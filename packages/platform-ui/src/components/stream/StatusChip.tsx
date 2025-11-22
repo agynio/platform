@@ -1,4 +1,4 @@
-import { Badge } from '@agyn/ui';
+import { Badge } from '@agyn/ui-new';
 
 interface StatusChipProps {
   status: string;

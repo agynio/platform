@@ -1,4 +1,4 @@
-import { useMemo, useCallback } from 'react';
+import { useMemo, useCallback, type ChangeEvent } from 'react';
 import type { DynamicConfigViewProps } from './types';
 import { useMcpNodeState } from '@/lib/graph/hooks';
 
@@ -48,7 +48,7 @@ export default function McpServerDynamicConfigView({
               type="checkbox"
               className="h-4 w-4 mt-0.5"
               checked={checked}
-              onChange={(e) => onToggle(t.name, e.target.checked)}
+              onChange={(e: ChangeEvent<HTMLInputElement>) => onToggle(t.name, e.target.checked)}
               disabled={isDisabled}
             />
             <label htmlFor={`mcp-${t.name}`} className="text-xs">

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState, type ChangeEvent } from 'react';
 import {
   useMutation,
   useQuery,
@@ -6,7 +6,7 @@ import {
   type UseMutationResult,
   type UseQueryResult,
 } from '@tanstack/react-query';
-import { Button, Input, Label, Textarea } from '@agyn/ui';
+import { Button, Input, Label, Textarea } from '@agyn/ui-new';
 import { memoryApi } from '@/api/modules/memory';
 import { notifyError, notifySuccess } from '@/lib/notify';
 import { joinMemoryPath, memoryPathParent, normalizeMemoryPath } from './path';
@@ -268,7 +268,7 @@ function FileEditor({
         <Textarea
           id="memory-append"
           value={appendText}
-          onChange={(e) => setAppendText(e.target.value)}
+          onChange={(e: ChangeEvent<HTMLTextAreaElement>) => setAppendText(e.target.value)}
           placeholder="New content to append"
         />
         <Button onClick={onAppend} disabled={appendDisabled}>
@@ -280,12 +280,12 @@ function FileEditor({
         <Label>Replace</Label>
         <Input
           value={replaceOld}
-          onChange={(e) => setReplaceOld(e.target.value)}
+          onChange={(e: ChangeEvent<HTMLInputElement>) => setReplaceOld(e.target.value)}
           placeholder="Old text"
         />
         <Input
           value={replaceNew}
-          onChange={(e) => setReplaceNew(e.target.value)}
+          onChange={(e: ChangeEvent<HTMLInputElement>) => setReplaceNew(e.target.value)}
           placeholder="New text"
         />
         <Button onClick={onReplace} disabled={replaceDisabled}>
@@ -361,7 +361,7 @@ function DirectoryEditor({
         <Input
           id="memory-new-dir"
           value={newDirName}
-          onChange={(e) => setNewDirName(e.target.value)}
+          onChange={(e: ChangeEvent<HTMLInputElement>) => setNewDirName(e.target.value)}
           placeholder="Directory name"
         />
         <Button onClick={onCreateDir} disabled={!canCreateDir || ensureDirMutation.isPending}>
@@ -374,12 +374,12 @@ function DirectoryEditor({
         <Input
           id="memory-new-file"
           value={newFileName}
-          onChange={(e) => setNewFileName(e.target.value)}
+          onChange={(e: ChangeEvent<HTMLInputElement>) => setNewFileName(e.target.value)}
           placeholder="File name"
         />
         <Textarea
           value={newFileContent}
-          onChange={(e) => setNewFileContent(e.target.value)}
+          onChange={(e: ChangeEvent<HTMLTextAreaElement>) => setNewFileContent(e.target.value)}
           placeholder="Initial content"
         />
         <Button onClick={onCreateFile} disabled={createFileDisabled}>
@@ -424,7 +424,7 @@ function MissingPath({
         <Textarea
           id="memory-missing-file"
           value={newFileContent}
-          onChange={(e) => setNewFileContent(e.target.value)}
+          onChange={(e: ChangeEvent<HTMLTextAreaElement>) => setNewFileContent(e.target.value)}
           placeholder="File content"
         />
         <Button onClick={createFile} disabled={!canCreateFile || createPending}>

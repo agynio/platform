@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from 'react';
-import { Input } from '@agyn/ui';
+import { useEffect, useMemo, useState, type ChangeEvent } from 'react';
+import { Input } from '@agyn/ui-new';
 import type { StaticConfigViewProps } from './types';
 import ReferenceField, { type ReferenceValue } from './shared/ReferenceField';
 
@@ -55,7 +55,7 @@ export default function SendSlackMessageToolConfigView({ value, onChange, readOn
       {errors.length > 0 && <div className="text-[10px] text-red-600">{errors.join(', ')}</div>}
       <div>
         <label className="block text-xs mb-1">Default channel</label>
-        <Input value={default_channel} onChange={(e) => setDefaultChannel(e.target.value)} disabled={isDisabled} placeholder="C123 or #general" />
+        <Input value={default_channel} onChange={(e: ChangeEvent<HTMLInputElement>) => setDefaultChannel(e.target.value)} disabled={isDisabled} placeholder="C123 or #general" />
       </div>
     </div>
   );

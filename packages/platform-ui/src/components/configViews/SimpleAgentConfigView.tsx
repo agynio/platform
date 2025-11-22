@@ -1,7 +1,7 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, type ChangeEvent } from 'react';
 import type { StaticConfigViewProps } from './types';
 // Use shared UI lib components; do not import from app alias paths.
-import { Button, Label, Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@agyn/ui';
+import { Button, Label, Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@agyn/ui-new';
 import { Maximize2 } from 'lucide-react';
 import { PromptEditorModal } from './shared/PromptEditorModal';
 
@@ -89,7 +89,7 @@ export default function SimpleAgentConfigView({
         <input
           className="w-full border rounded px-2 py-1 bg-background"
           value={title}
-          onChange={(e) => setTitle(e.target.value)}
+          onChange={(e: ChangeEvent<HTMLInputElement>) => setTitle(e.target.value)}
           disabled={isDisabled}
         />
       </div>
@@ -99,7 +99,7 @@ export default function SimpleAgentConfigView({
           type="text"
           className="w-full border rounded px-2 py-1 bg-background"
           value={model}
-          onChange={(e) => setModel(e.target.value.trim())}
+          onChange={(e: ChangeEvent<HTMLInputElement>) => setModel(e.target.value.trim())}
           disabled={isDisabled}
           data-testid="simple-agent-model"
           placeholder="e.g., openai/gpt-4o-mini or claude-3-5-sonnet"
@@ -137,7 +137,7 @@ export default function SimpleAgentConfigView({
           className="w-full border rounded px-2 py-1 bg-background"
           rows={5}
           value={systemPrompt}
-          onChange={(e) => setSystemPrompt(e.target.value)}
+          onChange={(e: ChangeEvent<HTMLTextAreaElement>) => setSystemPrompt(e.target.value)}
           readOnly={isDisabled}
           data-testid="simple-agent-system"
         />
@@ -150,13 +150,13 @@ export default function SimpleAgentConfigView({
             className="w-full border rounded px-2 py-1 bg-background"
             value={debounceMs}
             min={0}
-            onChange={(e) => setDebounceMs(parseInt(e.target.value || '0', 10))}
+            onChange={(e: ChangeEvent<HTMLInputElement>) => setDebounceMs(parseInt(e.target.value || '0', 10))}
             disabled={isDisabled}
           />
         </div>
         <div>
           <label className="block text-xs text-muted-foreground mb-1">When busy</label>
-          <select className="w-full border rounded px-2 py-1 bg-background" value={whenBusy} onChange={(e) => setWhenBusy(e.target.value)} disabled={isDisabled}>
+          <select className="w-full border rounded px-2 py-1 bg-background" value={whenBusy} onChange={(e: ChangeEvent<HTMLSelectElement>) => setWhenBusy(e.target.value)} disabled={isDisabled}>
             <option value="wait">wait</option>
             <option value="injectAfterTools">injectAfterTools</option>
           </select>
@@ -165,7 +165,7 @@ export default function SimpleAgentConfigView({
       <div className="grid grid-cols-2 gap-2">
         <div>
           <label className="block text-xs text-muted-foreground mb-1">Process buffer</label>
-          <select className="w-full border rounded px-2 py-1 bg-background" value={processBuffer} onChange={(e) => setProcessBuffer(e.target.value)} disabled={isDisabled}>
+          <select className="w-full border rounded px-2 py-1 bg-background" value={processBuffer} onChange={(e: ChangeEvent<HTMLSelectElement>) => setProcessBuffer(e.target.value)} disabled={isDisabled}>
             <option value="allTogether">allTogether</option>
             <option value="oneByOne">oneByOne</option>
           </select>
@@ -177,7 +177,7 @@ export default function SimpleAgentConfigView({
             className="w-full border rounded px-2 py-1 bg-background"
             value={summarizationKeepTokens}
             min={0}
-            onChange={(e) => setSummarizationKeepTokens(parseInt(e.target.value || '0', 10))}
+            onChange={(e: ChangeEvent<HTMLInputElement>) => setSummarizationKeepTokens(parseInt(e.target.value || '0', 10))}
             disabled={isDisabled}
           />
         </div>
@@ -190,7 +190,7 @@ export default function SimpleAgentConfigView({
             className="w-full border rounded px-2 py-1 bg-background"
             value={summarizationMaxTokens}
             min={1}
-            onChange={(e) => setSummarizationMaxTokens(parseInt(e.target.value || '1', 10))}
+            onChange={(e: ChangeEvent<HTMLInputElement>) => setSummarizationMaxTokens(parseInt(e.target.value || '1', 10))}
             disabled={isDisabled}
           />
         </div>
@@ -202,7 +202,7 @@ export default function SimpleAgentConfigView({
           type="checkbox"
           className="h-4 w-4"
           checked={restrictOutput}
-          onChange={(e) => setRestrictOutput(e.target.checked)}
+          onChange={(e: ChangeEvent<HTMLInputElement>) => setRestrictOutput(e.target.checked)}
           disabled={isDisabled}
         />
         <label htmlFor="restrictOutput" className="text-xs">
@@ -216,7 +216,7 @@ export default function SimpleAgentConfigView({
           className="w-full border rounded px-2 py-1 bg-background"
           rows={3}
           value={restrictionMessage}
-          onChange={(e) => setRestrictionMessage(e.target.value)}
+          onChange={(e: ChangeEvent<HTMLTextAreaElement>) => setRestrictionMessage(e.target.value)}
           disabled={isDisabled}
         />
       </div>
@@ -227,7 +227,7 @@ export default function SimpleAgentConfigView({
           className="w-full border rounded px-2 py-1 bg-background"
           value={restrictionMaxInjections}
           min={0}
-          onChange={(e) => setRestrictionMaxInjections(parseInt(e.target.value || '0', 10))}
+          onChange={(e: ChangeEvent<HTMLInputElement>) => setRestrictionMaxInjections(parseInt(e.target.value || '0', 10))}
           disabled={isDisabled}
           data-testid="simple-agent-maxinj"
         />

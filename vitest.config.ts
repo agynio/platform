@@ -20,7 +20,7 @@ export default defineConfig({
   resolve: {
     alias: {
       '@': path.resolve(__dirname, 'packages/platform-ui/src'),
-      '@agyn/ui': path.resolve(__dirname, 'packages/ui/src'),
+      '@agyn/ui-new': path.resolve(__dirname, 'packages/ui-new/src'),
       // Tracing packages removed; no alias needed.
     },
   },
@@ -28,7 +28,7 @@ export default defineConfig({
     fs: {
       allow: [
         path.resolve(__dirname),
-        path.resolve(__dirname, 'packages/ui'),
+        path.resolve(__dirname, 'packages/ui-new'),
       ],
     },
   },

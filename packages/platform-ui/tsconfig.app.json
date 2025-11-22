@@ -27,7 +27,9 @@
     /* custom paths */
     "baseUrl": ".",
     "paths": {
-      "@/*": ["./src/*"]
+      "@/*": ["./src/*"],
+      "@agyn/ui-new": ["./src/types/agyn-ui-new"],
+      "@agyn/ui-new/*": ["./src/types/agyn-ui-new"]
     }
   },
   "include": ["src"],

@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from 'react';
-import { Input } from '@agyn/ui';
+import { useEffect, useMemo, useState, type ChangeEvent } from 'react';
+import { Input } from '@agyn/ui-new';
 import type { StaticConfigViewProps } from './types';
 
 export default function RemindMeToolConfigView({ value, onChange, readOnly, disabled }: StaticConfigViewProps) {
@@ -17,7 +17,7 @@ export default function RemindMeToolConfigView({ value, onChange, readOnly, disa
     <div className="space-y-3 text-sm">
       <div>
         <label className="block text-xs mb-1">Max active reminders</label>
-        <Input type="number" min={1} value={maxActive} onChange={(e) => setMaxActive(parseInt(e.target.value || '1', 10))} disabled={isDisabled} />
+        <Input type="number" min={1} value={maxActive} onChange={(e: ChangeEvent<HTMLInputElement>) => setMaxActive(parseInt(e.target.value || '1', 10))} disabled={isDisabled} />
       </div>
     </div>
   );

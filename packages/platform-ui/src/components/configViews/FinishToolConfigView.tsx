@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from 'react';
-import { Input } from '@agyn/ui';
+import { useEffect, useMemo, useState, type ChangeEvent } from 'react';
+import { Input } from '@agyn/ui-new';
 import type { StaticConfigViewProps } from './types';
 
 export default function FinishToolConfigView({ value, onChange, readOnly, disabled }: StaticConfigViewProps) {
@@ -17,7 +17,7 @@ export default function FinishToolConfigView({ value, onChange, readOnly, disabl
     <div className="space-y-3 text-sm">
       <div>
         <label className="block text-xs mb-1">Note (optional)</label>
-        <Input value={note} onChange={(e) => setNote(e.target.value)} disabled={isDisabled} />
+        <Input value={note} onChange={(e: ChangeEvent<HTMLInputElement>) => setNote(e.target.value)} disabled={isDisabled} />
       </div>
     </div>
   );

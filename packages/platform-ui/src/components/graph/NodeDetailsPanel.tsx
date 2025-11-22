@@ -1,5 +1,5 @@
 // React import not needed with react-jsx runtime
-import { Button, Badge } from '@agyn/ui';
+import { Button, Badge } from '@agyn/ui-new';
 import { useNodeStatus, useNodeAction } from '../../lib/graph/hooks';
 
 interface Props { nodeId: string; templateName: string; }

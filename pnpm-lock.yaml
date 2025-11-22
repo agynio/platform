@@ -256,9 +256,9 @@ importers:
       '@agyn/shared':
         specifier: workspace:*
         version: link:../shared
-      '@agyn/ui':
+      '@agyn/ui-new':
         specifier: workspace:*
-        version: link:../ui
+        version: link:../ui-new
       '@monaco-editor/react':
         specifier: ^4.7.0
         version: 4.7.0(monaco-editor@0.53.0)(react-dom@19.1.1(react@19.1.1))(react@19.1.1)

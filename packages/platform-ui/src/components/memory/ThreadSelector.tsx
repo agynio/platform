@@ -1,4 +1,4 @@
-import { Label, Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@agyn/ui';
+import { Label, Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@agyn/ui-new';
 
 type ThreadSelectorProps = {
   threads: string[];
@@ -16,7 +16,7 @@ export function ThreadSelector({ threads, value, onChange }: ThreadSelectorProps
       <Label htmlFor="memory-thread-selector">Thread</Label>
       <Select
         value={value ?? undefined}
-        onValueChange={(next) => {
+        onValueChange={(next: string) => {
           onChange(next);
         }}
       >

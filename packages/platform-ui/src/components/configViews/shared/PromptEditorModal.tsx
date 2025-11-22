@@ -18,7 +18,7 @@ import {
   DialogHeader,
   DialogTitle,
   DialogDescription,
-} from '@agyn/ui';
+} from '@agyn/ui-new';
 
 const MonacoEditor = lazy(() => import('@monaco-editor/react'));
 

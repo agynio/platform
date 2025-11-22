@@ -1,39 +1,36 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { Fragment, useEffect, useMemo, useState } from 'react';
 import { Outlet, NavLink } from 'react-router-dom';
 import {
-  Sidebar,
-  SidebarHeader,
-  SidebarFooter,
-  SidebarContent,
-  SidebarMenu,
-  SidebarMenuItem,
-  SidebarMenuButton,
-  Button,
-  Logo,
-  Drawer,
-  DrawerTrigger,
-  DrawerContent,
-  DrawerClose,
-  Tooltip,
-  TooltipTrigger,
-  TooltipContent,
   Avatar,
-  AvatarImage,
   AvatarFallback,
-  Separator
-} from '@agyn/ui';
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@agyn/ui';
+  AvatarImage,
+  Button,
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+  Drawer,
+  DrawerClose,
+  DrawerContent,
+  DrawerTrigger,
+  Separator,
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+  cn,
+} from '@agyn/ui-new';
 import {
+  Bell,
   Bot,
   Boxes,
-  Settings as SettingsIcon,
+  ChevronDown,
+  ChevronLeft,
+  ChevronRight,
+  Database,
   GitBranch,
-  MessageSquare,
-  Gauge,
   KeyRound,
   Menu,
-  ChevronDown,
-  Database,
+  MessageSquare,
+  Settings as SettingsIcon,
 } from 'lucide-react';
 import { useUser } from '../user/user.runtime';
 
@@ -42,7 +39,7 @@ const STORAGE_KEYS = {
   agentsOpen: 'ui.sidebar.section.agents.open',
   monitoringOpen: 'ui.sidebar.section.monitoring.open',
   memoryOpen: 'ui.sidebar.section.memory.open',
-  settingsOpen: 'ui.sidebar.section.settings.open'
+  settingsOpen: 'ui.sidebar.section.settings.open',
 };
 
 function useStoredBoolean(key: string, defaultValue: boolean) {
@@ -52,17 +49,19 @@ function useStoredBoolean(key: string, defaultValue: boolean) {
       if (v === 'true') return true;
       if (v === 'false') return false;
     } catch {
-      /* ignore localStorage read errors */
+      /* ignore storage errors */
     }
     return defaultValue;
   });
+
   useEffect(() => {
     try {
       localStorage.setItem(key, value ? 'true' : 'false');
     } catch {
-      /* ignore localStorage write errors */
+      /* ignore storage errors */
     }
   }, [key, value]);
+
   return [value, setValue] as const;
 }
 
@@ -93,10 +92,9 @@ export function RootLayout() {
         setOpen: setAgentsOpen,
         items: [
           { label: 'Graph', to: '/agents/graph', icon: GitBranch },
-          { label: 'Chat', to: '/agents/chat', icon: MessageSquare },
           { label: 'Threads', to: '/agents/threads', icon: MessageSquare },
-          { label: 'Reminders', to: '/agents/reminders', icon: MessageSquare }
-        ]
+          { label: 'Reminders', to: '/agents/reminders', icon: Bell },
+        ],
       },
       {
         id: 'monitoring',
@@ -104,10 +102,7 @@ export function RootLayout() {
         icon: Boxes,
         isOpen: monitoringOpen,
         setOpen: setMonitoringOpen,
-        items: [
-          { label: 'Containers', to: '/monitoring/containers', icon: Boxes },
-          { label: 'Resources', to: '/monitoring/resources', icon: Gauge }
-        ]
+        items: [{ label: 'Containers', to: '/monitoring/containers', icon: Boxes }],
       },
       {
         id: 'memory',
@@ -115,9 +110,7 @@ export function RootLayout() {
         icon: Database,
         isOpen: memoryOpen,
         setOpen: setMemoryOpen,
-        items: [
-          { label: 'Explorer', to: '/memory', icon: Database }
-        ]
+        items: [{ label: 'Explorer', to: '/memory', icon: Database }],
       },
       {
         id: 'settings',
@@ -128,142 +121,138 @@ export function RootLayout() {
         items: [
           { label: 'Secrets', to: '/settings/secrets', icon: KeyRound },
           { label: 'Variables', to: '/settings/variables', icon: KeyRound },
-        ]
-      }
-    ], [agentsOpen, monitoringOpen, memoryOpen, settingsOpen, setAgentsOpen, setMonitoringOpen, setMemoryOpen, setSettingsOpen]
+        ],
+      },
+    ],
+    [agentsOpen, monitoringOpen, memoryOpen, settingsOpen, setAgentsOpen, setMonitoringOpen, setMemoryOpen, setSettingsOpen],
   );
 
   const { user } = useUser();
 
-  // Local sidebar sub menu components (UI-only wrappers)
-  function SidebarMenuSub(props: React.HTMLAttributes<HTMLUListElement>) {
-    const { className = '', ...rest } = props;
-    return <ul className={`ml-6 mt-1 space-y-1 border-l pl-2 ${className}`} {...rest} />;
-  }
-  function SidebarMenuSubItem(props: React.LiHTMLAttributes<HTMLLIElement>) {
-    const { className = '', ...rest } = props;
-    return <li className={`list-none ${className}`} {...rest} />;
-  }
+  const renderNavItems = (
+    navSections: Section[],
+    navCollapsed: boolean,
+    linkWrapper?: (children: React.ReactNode) => React.ReactNode,
+  ) => (
+    <div className="flex-1 overflow-y-auto px-2 py-2 space-y-2">
+      {navSections.map((section) => (
+        <Collapsible key={section.id} open={navCollapsed ? true : section.isOpen} onOpenChange={section.setOpen}>
+          <CollapsibleTrigger asChild>
+            <button
+              type="button"
+              className={cn(
+                'flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm font-medium transition-colors',
+                'hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40',
+                navCollapsed ? 'justify-center' : 'justify-start',
+              )}
+            >
+              <section.icon className="h-4 w-4" />
+              {!navCollapsed && <span className="flex-1 text-left">{section.label}</span>}
+              {!navCollapsed && (
+                <ChevronDown
+                  className={cn('h-4 w-4 transition-transform', section.isOpen ? 'rotate-0' : '-rotate-90')}
+                />
+              )}
+            </button>
+          </CollapsibleTrigger>
+          <CollapsibleContent className="mt-1 space-y-1">
+            {section.items.map((item) => {
+              const link = (
+                <NavLink
+                  to={item.to}
+                  className={({ isActive }) =>
+                    cn(
+                      'flex items-center gap-2 rounded-md px-2 py-1.5 text-sm transition-colors',
+                      navCollapsed ? 'justify-center' : 'justify-start',
+                      isActive
+                        ? 'bg-primary text-primary-foreground shadow-sm'
+                        : 'text-muted-foreground hover:bg-muted hover:text-foreground',
+                    )
+                  }
+                >
+                  <item.icon className="h-4 w-4" />
+                  {!navCollapsed && <span className="truncate">{item.label}</span>}
+                </NavLink>
+              );
 
-  function SidebarInner({ linkWrapper }: { linkWrapper?: (children: React.ReactNode) => React.ReactNode }) {
+              if (navCollapsed) {
+                return (
+                  <Tooltip key={item.to} delayDuration={0}>
+                    <TooltipTrigger asChild>{linkWrapper ? linkWrapper(link) : link}</TooltipTrigger>
+                    <TooltipContent side="right">{item.label}</TooltipContent>
+                  </Tooltip>
+                );
+              }
+
+              return <Fragment key={item.to}>{linkWrapper ? linkWrapper(link) : link}</Fragment>;
+            })}
+          </CollapsibleContent>
+        </Collapsible>
+      ))}
+    </div>
+  );
+
+  const renderSidebar = (options?: { collapsedOverride?: boolean; linkWrapper?: (node: React.ReactNode) => React.ReactNode }) => {
+    const navCollapsed = options?.collapsedOverride ?? collapsed;
+    const brandLabel = navCollapsed ? 'HA' : 'Hautech Agents';
+
     return (
-      <div className="flex h-full flex-col">
-        {/* Keep py-4; adjust logo size based on collapsed state to avoid clipping when w-16 */}
-        <SidebarHeader className="flex items-center justify-between py-4">
-          <div className="flex items-center gap-2">
-            {/* Shrink logo to 28px when collapsed; use gradient 64px when expanded */}
-            <Logo
-              size={collapsed ? 28 : 64}
-              variant="gradient"
-              aria-label="Hautech Agents"
-            />
-          </div>
-          {/* Removed header expand/collapse icon per spec */}
-        </SidebarHeader>
-        <SidebarContent>
-          <SidebarMenu>
-            {sections.map((section) => (
-              <Collapsible key={section.id} open={section.isOpen || collapsed} onOpenChange={section.setOpen}>
-                <SidebarMenuItem>
-                  <CollapsibleTrigger asChild>
-                    <button className="inline-flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring/50">
-                      <section.icon className="h-4 w-4" />
-                      {!collapsed && <span className="flex-1 text-left">{section.label}</span>}
-                      {!collapsed && (
-                        <ChevronDown className={`h-4 w-4 transition-transform ${section.isOpen ? 'rotate-0' : '-rotate-90'}`} />
-                      )}
-                    </button>
-                  </CollapsibleTrigger>
-                  <CollapsibleContent>
-                    <SidebarMenuSub>
-                      {section.items.map((item) => (
-                        <SidebarMenuSubItem key={item.to}>
-                          {(linkWrapper ?? ((c) => c))(
-                            <NavLink to={item.to} className="block">
-                              {({ isActive }) => (
-                                <Tooltip>
-                                  <TooltipTrigger asChild>
-                                    <SidebarMenuButton isActive={isActive}>
-                                      <item.icon className="h-4 w-4" />
-                                      {!collapsed && <span>{item.label}</span>}
-                                    </SidebarMenuButton>
-                                  </TooltipTrigger>
-                                  {collapsed && <TooltipContent side="right">{item.label}</TooltipContent>}
-                                </Tooltip>
-                              )}
-                            </NavLink>
-                          )}
-                        </SidebarMenuSubItem>
-                      ))}
-                    </SidebarMenuSub>
-                  </CollapsibleContent>
-                </SidebarMenuItem>
-              </Collapsible>
-            ))}
-          </SidebarMenu>
-        </SidebarContent>
-        <SidebarFooter>
-          <div className="flex items-center gap-2">
+      <div className={cn('flex h-full flex-col border-r', navCollapsed ? 'w-16' : 'w-64')}>
+        <div className={cn('flex items-center gap-2 border-b px-3 py-4', navCollapsed ? 'justify-center' : 'justify-between')}>
+          <span className="text-sm font-semibold tracking-wide uppercase text-muted-foreground">{brandLabel}</span>
+          {options?.collapsedOverride === undefined && (
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              aria-label={navCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+              onClick={() => setCollapsed((prev) => !prev)}
+            >
+              {navCollapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}
+            </Button>
+          )}
+        </div>
+
+        {renderNavItems(sections, navCollapsed, options?.linkWrapper)}
+
+        <div className="mt-auto border-t px-3 py-4">
+          <div className={cn('flex items-center gap-2', navCollapsed ? 'justify-center' : 'justify-start')}>
             <Avatar className="h-8 w-8">
               {user?.avatarUrl ? <AvatarImage src={user.avatarUrl} alt={user?.name || 'User'} /> : null}
               <AvatarFallback>{(user?.name || 'G').slice(0, 2).toUpperCase()}</AvatarFallback>
             </Avatar>
-            {!collapsed && (
+            {!navCollapsed && (
               <div className="min-w-0">
                 <div className="truncate text-sm font-medium">{user?.name || 'Guest'}</div>
                 <div className="truncate text-xs text-muted-foreground">{user?.email || 'guest@example.com'}</div>
               </div>
             )}
           </div>
-        </SidebarFooter>
+        </div>
       </div>
     );
-  }
+  };
 
   return (
     <div className="flex min-h-screen w-full">
-      {/* Desktop sidebar */}
-      <aside className={`hidden md:flex md:sticky md:top-0 md:h-screen md:shrink-0 md:z-10`}>
-        <Sidebar className={`${collapsed ? 'w-16' : 'w-64'} h-screen overflow-y-auto shrink-0`}>
-          <SidebarInner />
-        </Sidebar>
-        {/* Right-border clickable collapse/expand button (desktop only) */}
-        <button
-          type="button"
-          aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-          onClick={() => setCollapsed((c) => !c)}
-          className="absolute right-0 top-0 hidden h-full w-2 cursor-pointer md:block"
-          title={collapsed ? 'Expand' : 'Collapse'}
-        />
-      </aside>
+      <aside className="sticky top-0 hidden h-screen shrink-0 md:flex">{renderSidebar()}</aside>
 
-      {/* Mobile top bar + Drawer */}
-      <div className="flex flex-1 min-w-0 flex-col">
+      <div className="flex min-w-0 flex-1 flex-col">
         <div className="flex items-center gap-2 border-b px-3 py-4 md:hidden">
-          <Drawer>
+          <Drawer direction="left">
             <DrawerTrigger asChild>
               <Button variant="ghost" size="icon" aria-label="Open navigation">
                 <Menu className="h-5 w-5" />
               </Button>
             </DrawerTrigger>
-            <DrawerContent className="p-0">
-              <div className="h-[85vh]">
-                <Sidebar className="w-full">
-                  <SidebarInner linkWrapper={(node) => <DrawerClose asChild>{node}</DrawerClose>} />
-                </Sidebar>
-                <div className="p-2">
-                  <DrawerClose asChild>
-                    <Button variant="secondary" className="w-full">Close</Button>
-                  </DrawerClose>
-                </div>
-              </div>
+            <DrawerContent className="w-64 max-w-[85vw] p-0">
+              {renderSidebar({ collapsedOverride: false, linkWrapper: (node) => <DrawerClose asChild>{node}</DrawerClose> })}
             </DrawerContent>
           </Drawer>
           <Separator orientation="vertical" className="h-6" />
-          <Logo size={64} variant="gradient" aria-label="Hautech Agents" />
+          <span className="text-base font-semibold tracking-wide">Hautech Agents</span>
         </div>
 
-        {/* Main content */}
         <main className="relative flex-1 min-w-0">
           <Outlet />
         </main>

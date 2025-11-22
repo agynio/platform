@@ -1,6 +1,6 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, type ChangeEvent, type UIEvent } from 'react';
 import { useCheckpointStream } from '@/hooks/useCheckpointStream';
-import { Button, Input } from '@agyn/ui';
+import { Button, Input } from '@agyn/ui-new';
 import { CheckpointItem } from './CheckpointItem';
 import { StatusChip } from './StatusChip';
 
@@ -42,7 +42,7 @@ export function CheckpointStreamPanel({ defaultThreadId = '', agentId, url }: Pr
           className="flex-1 min-w-[160px]"
           placeholder="threadId (optional)"
           value={threadId}
-          onChange={(e) => setThreadId(e.target.value)}
+          onChange={(e: ChangeEvent<HTMLInputElement>) => setThreadId(e.target.value)}
         />
         <Button
           type="button"
@@ -81,7 +81,7 @@ export function CheckpointStreamPanel({ defaultThreadId = '', agentId, url }: Pr
       <div
         ref={listRef}
         className="max-h-[480px] overflow-auto rounded border border-border bg-card p-2"
-        onScroll={(e) => {
+        onScroll={(e: UIEvent<HTMLDivElement>) => {
           const el = e.currentTarget;
           const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 12;
           if (!atBottom) setAutoScroll(false);

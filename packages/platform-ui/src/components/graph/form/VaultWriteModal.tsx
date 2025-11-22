@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { graph as api } from '@/api/modules/graph';
 import { notifyError, notifySuccess } from '@/lib/notify';
@@ -93,7 +93,7 @@ export function VaultWriteModal({ mount, path, secretKey, onClose }: { mount: st
           className="w-full h-32 border rounded p-2 text-xs"
           placeholder="Enter secret value"
           value={value}
-          onChange={(e) => setValue(e.target.value)}
+          onChange={(e: ChangeEvent<HTMLTextAreaElement>) => setValue(e.target.value)}
         />
         <div className="flex items-center justify-end gap-2 mt-3">
           <button className="text-xs px-3 py-1 rounded border" onClick={() => onClose(false)} disabled={submitting}>

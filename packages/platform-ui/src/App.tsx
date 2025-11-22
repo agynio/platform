@@ -3,26 +3,17 @@
 //   <h1 className="mb-4 text-xl font-semibold tracking-tight">Checkpoint Writes</h1>
 //   <CheckpointStreamPanel />
 
-import { AgentBuilder } from './builder/AgentBuilder';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-// Runtime graph templates provider (distinct from builder TemplatesProvider)
+// Runtime graph templates provider for graph data caching
 import { TemplatesProvider as RuntimeTemplatesProvider } from './lib/graph/templates.provider';
 import { Navigate, Route, Routes } from 'react-router-dom';
 import { RootLayout } from './layout/RootLayout';
-import { AgentsChat } from './pages/AgentsChat';
-import { AgentsThreads } from './pages/AgentsThreads';
-import { AgentsReminders } from './pages/AgentsReminders';
-import { AgentsRunTimeline } from './pages/AgentsRunTimeline';
 import { TracingTraces } from './pages/TracingTraces';
 import { TracingErrors } from './pages/TracingErrors';
 import { TracingDisabledPage } from './pages/TracingDisabled';
-import { MonitoringContainers } from './pages/MonitoringContainers';
-import { MonitoringResources } from './pages/MonitoringResources';
-import { SettingsSecrets } from './pages/SettingsSecrets';
-import { SettingsVariables } from './pages/SettingsVariables';
 import { MemoryNodesListPage } from './pages/MemoryNodesListPage';
 import { MemoryNodeDetailPage } from './pages/MemoryNodeDetailPage';
-import { uiNewFlags } from './config/uiNewFlags';
+import { AgentsGraphNew } from './pages-new/AgentsGraphNew';
 import { AgentsThreadsNew } from './pages-new/AgentsThreadsNew';
 import { AgentsRunNew } from './pages-new/AgentsRunNew';
 import { AgentsRemindersNew } from './pages-new/AgentsRemindersNew';
@@ -44,24 +35,11 @@ function App() {
           {/* Root layout wraps all primary routes */}
           <Route element={<RootLayout />}>
             {/* Agents */}
-            <Route path="/agents/graph" element={<AgentBuilder />} />
-            <Route path="/agents/chat" element={<AgentsChat />} />
-            <Route path="/agents/threads" element={<AgentsThreads />} />
-            <Route path="/agents/threads/:threadId" element={<AgentsThreads />} />
-            <Route path="/agents/threads/:threadId/runs/:runId/timeline" element={<AgentsRunTimeline />} />
-            <Route path="/agents/reminders" element={<AgentsReminders />} />
-            {uiNewFlags.threads && (
-              <>
-                <Route path="/agents/threads-new" element={<AgentsThreadsNew />} />
-                <Route path="/agents/threads/:threadId-new" element={<AgentsThreadsNew />} />
-              </>
-            )}
-            {uiNewFlags.runs && (
-              <Route path="/agents/runs/:runId-new" element={<AgentsRunNew />} />
-            )}
-            {uiNewFlags.reminders && (
-              <Route path="/agents/reminders-new" element={<AgentsRemindersNew />} />
-            )}
+            <Route path="/agents/graph" element={<AgentsGraphNew />} />
+            <Route path="/agents/threads" element={<AgentsThreadsNew />} />
+            <Route path="/agents/threads/:threadId" element={<AgentsThreadsNew />} />
+            <Route path="/agents/threads/:threadId/runs/:runId/timeline" element={<AgentsRunNew />} />
+            <Route path="/agents/reminders" element={<AgentsRemindersNew />} />
 
             {/* Tracing */}
             <Route path="/tracing/traces" element={<TracingTraces />} />
@@ -80,25 +58,15 @@ function App() {
             />
 
             {/* Monitoring */}
-            <Route path="/monitoring/containers" element={<MonitoringContainers />} />
-            <Route path="/monitoring/resources" element={<MonitoringResources />} />
-            {uiNewFlags.containers && (
-              <Route path="/monitoring/containers-new" element={<MonitoringContainersNew />} />
-            )}
+            <Route path="/monitoring/containers" element={<MonitoringContainersNew />} />
 
             {/* Memory */}
             <Route path="/memory" element={<MemoryNodesListPage />} />
             <Route path="/memory/:nodeId" element={<MemoryNodeDetailPage />} />
 
             {/* Settings */}
-            <Route path="/settings/secrets" element={<SettingsSecrets />} />
-            <Route path="/settings/variables" element={<SettingsVariables />} />
-            {uiNewFlags.secrets && (
-              <Route path="/settings/secrets-new" element={<SettingsSecretsNew />} />
-            )}
-            {uiNewFlags.variables && (
-              <Route path="/settings/variables-new" element={<SettingsVariablesNew />} />
-            )}
+            <Route path="/settings/secrets" element={<SettingsSecretsNew />} />
+            <Route path="/settings/variables" element={<SettingsVariablesNew />} />
           </Route>
         </Routes>
       </RuntimeTemplatesProvider>

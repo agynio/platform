@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, type ReactNode } from 'react';
 import { stringify as stringifyYaml } from 'yaml';
 import { Link } from 'react-router-dom';
 import type {
@@ -442,7 +442,7 @@ function ToolOutputSection({
               <select
                 aria-label="Select stream view"
                 value={filter}
-                onChange={(event) => setFilter(event.target.value as StreamFilter)}
+                onChange={(event: ChangeEvent<HTMLSelectElement>) => setFilter(event.target.value as StreamFilter)}
                 className="rounded border border-gray-300 bg-white px-2 py-1 text-[11px] text-gray-700 shadow-sm"
               >
                 <option value="interleaved">{STREAM_FILTER_LABELS.interleaved}</option>
@@ -454,7 +454,7 @@ function ToolOutputSection({
           <select
             aria-label="Select output view"
             value={mode}
-            onChange={(event) => setMode(event.target.value as OutputMode)}
+            onChange={(event: ChangeEvent<HTMLSelectElement>) => setMode(event.target.value as OutputMode)}
             className="rounded border border-gray-300 bg-white px-2 py-1 text-[11px] text-gray-700 shadow-sm"
           >
             <option value="text">text</option>

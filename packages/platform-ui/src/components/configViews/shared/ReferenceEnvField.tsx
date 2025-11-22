@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useState, type ChangeEvent } from 'react';
 import {
   Button,
   Input,
@@ -11,7 +11,7 @@ import {
   DropdownMenuContent,
   DropdownMenuRadioGroup,
   DropdownMenuRadioItem,
-} from '@agyn/ui';
+} from '@agyn/ui-new';
 import { Brackets, Lock, X } from 'lucide-react';
 
 export type EnvItem = { key: string; value: string; source?: 'static' | 'vault' };
@@ -100,7 +100,7 @@ export default function ReferenceEnvField({ label, value, onChange, readOnly, di
             <Input
               className="text-xs w-1/3"
               value={it.key}
-              onChange={(e) => updateAt(idx, { key: e.target.value })}
+              onChange={(e: ChangeEvent<HTMLInputElement>) => updateAt(idx, { key: e.target.value })}
               disabled={isDisabled}
               placeholder="KEY"
               data-testid={`env-key-${idx}`}
@@ -108,7 +108,7 @@ export default function ReferenceEnvField({ label, value, onChange, readOnly, di
             <Input
               className="text-xs flex-1"
               value={it.value}
-              onChange={(e) => updateAt(idx, { value: e.target.value })}
+              onChange={(e: ChangeEvent<HTMLInputElement>) => updateAt(idx, { value: e.target.value })}
               disabled={isDisabled}
               placeholder={it.source === 'vault' ? 'mount/path/key' : 'value'}
               data-testid={`env-value-${idx}`}
@@ -140,7 +140,7 @@ export default function ReferenceEnvField({ label, value, onChange, readOnly, di
               <DropdownMenuContent align="end">
                 <DropdownMenuRadioGroup
                   value={it.source || 'static'}
-                  onValueChange={(v) => {
+                  onValueChange={(v: string) => {
                     const s = v === 'vault' || v === 'static' ? v : 'static';
                     updateAt(idx, { source: s });
                   }}

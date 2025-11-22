@@ -3,8 +3,12 @@ export * from './components/ui';
 export { default as ThreadsScreen } from './components/screens/ThreadsScreen';
 export type { ThreadsScreenProps } from './components/screens/ThreadsScreen';
 
+export { default as GraphScreen } from './components/screens/GraphScreen';
+export type { GraphScreenProps, GraphNode, NodeKind, NodeStatus } from './components/screens/GraphScreen';
+
 export { default as RunScreen } from './components/screens/RunScreen';
 export type { RunScreenProps, EventFilter as RunEventFilter, StatusFilter as RunStatusFilter } from './components/screens/RunScreen';
+export type { RunEvent } from './components/RunEventsList';
 
 export { default as RemindersScreen } from './components/screens/RemindersScreen';
 export type { RemindersScreenProps, Reminder, ReminderStatus } from './components/screens/RemindersScreen';

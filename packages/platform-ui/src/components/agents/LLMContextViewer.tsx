@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef } from 'react';
-import { Badge } from '@agyn/ui';
+import { Badge } from '@agyn/ui-new';
 import { useContextItems } from '@/api/hooks/contextItems';
 import type { ContextItem } from '@/api/types/agents';
 

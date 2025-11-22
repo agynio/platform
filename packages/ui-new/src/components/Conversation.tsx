@@ -15,7 +15,7 @@ export interface ConversationMessage {
 export interface Run {
   id: string;
   messages: ConversationMessage[];
-  status: 'finished' | 'running' | 'failed' | 'pending';
+  status: 'finished' | 'running' | 'failed' | 'pending' | 'terminated';
   duration?: string;
   tokens?: number;
   cost?: string;

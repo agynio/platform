@@ -4,8 +4,9 @@ import {
   useMemo,
   useRef,
   useState,
+  type SyntheticEvent,
 } from 'react';
-import { Badge, Button, Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@agyn/ui';
+import { Badge, Button, Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@agyn/ui-new';
 import type { ContainerItem, ContainerTerminalSessionResponse } from '@/api/modules/containers';
 import { useCreateContainerTerminalSession } from '@/api/hooks/containers';
 import { Terminal } from '@xterm/xterm';
@@ -100,10 +101,10 @@ export function ContainerTerminalDialog({ container, open, onClose }: Props) {
   const title = container ? `Terminal for ${container.containerId.substring(0, 12)}` : 'Terminal';
 
   return (
-    <Dialog open={open} onOpenChange={(value) => { if (!value) onClose(); }}>
+    <Dialog open={open} onOpenChange={(value: boolean) => { if (!value) onClose(); }}>
       <DialogContent
         className="max-w-3xl"
-        onOpenAutoFocus={(event) => {
+        onOpenAutoFocus={(event: SyntheticEvent) => {
           event.preventDefault();
         }}
       >

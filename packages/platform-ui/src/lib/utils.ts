@@ -1,4 +1,4 @@
-export { cn } from '@agyn/ui';
+export { cn } from '@agyn/ui-new';
 
 // Minimal equality helpers (JSON-based deep equality acceptable for hotfix)
 export function deepEqual(a: unknown, b: unknown): boolean {

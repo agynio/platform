@@ -53,7 +53,7 @@ export default defineConfig([
   },
   // Utility/context override for templates provider
   {
-    files: ['src/lib/graph/templates.provider.tsx', 'src/builder/TemplatesContext.tsx'],
+    files: ['src/lib/graph/templates.provider.tsx'],
     rules: {
       'react-refresh/only-export-components': 'off',
     },
