@@ -8,6 +8,8 @@ import { io as createClient, type Socket } from 'socket.io-client';
 import WebSocket, { type RawData } from 'ws';
 
 import type { MessageKind, RunStatus } from '@prisma/client';
+import { EventsBusService } from '../src/events/events-bus.service';
+import { GraphEventsBusListener } from '../src/graph-domain/listeners/graph-events-bus.listener';
 import { RunEventsService } from '../src/events/run-events.service';
 import { GraphEventsPublisher } from '../src/gateway/graph.events.publisher';
 import { GraphSocketGateway } from '../src/gateway/graph.socket.gateway';
@@ -237,7 +239,7 @@ describe('Socket gateway real server handshakes', () => {
   let baseUrl: string;
   let terminalSessions: TerminalSessionsServiceStub;
   let graphGateway: GraphSocketGateway;
-  let runEventsService: RunEventsService;
+  let eventsBusService: EventsBusService;
   let prismaStub: PrismaServiceStub;
 
   beforeAll(async () => {
@@ -252,6 +254,8 @@ describe('Socket gateway real server handshakes', () => {
         ContainerTerminalGateway,
         { provide: TerminalSessionsService, useClass: TerminalSessionsServiceStub },
         { provide: ContainerService, useClass: ContainerServiceStub },
+        EventsBusService,
+        GraphEventsBusListener,
         RunEventsService,
       ],
     }).compile();
@@ -262,7 +266,8 @@ describe('Socket gateway real server handshakes', () => {
     fastify = app.getHttpAdapter().getInstance<FastifyInstance>();
     terminalSessions = app.get(TerminalSessionsService) as unknown as TerminalSessionsServiceStub;
     prismaStub = app.get(PrismaService) as unknown as PrismaServiceStub;
-    runEventsService = app.get(RunEventsService);
+    eventsBusService = app.get(EventsBusService);
+    void app.get(GraphEventsBusListener);
 
     const terminalGateway = app.get(ContainerTerminalGateway);
     terminalGateway.registerRoutes(fastify);
@@ -405,7 +410,7 @@ describe('Socket gateway real server handshakes', () => {
         startedAt: createdAt,
       });
       prismaStub.setRunEvent(appendRecord);
-      const publishAppendResult = await runEventsService.publishEvent(runEventId, 'append');
+      const publishAppendResult = await eventsBusService.publishEvent(runEventId, 'append');
       expect(publishAppendResult).not.toBeNull();
 
       const [messagePayload, statusPayload, appendedPayload] = await Promise.all([messagePromise, statusPromise, runEventAppendedPromise]);
@@ -424,7 +429,7 @@ describe('Socket gateway real server handshakes', () => {
         endedAt: updatedAt,
       });
       prismaStub.setRunEvent(updateRecord);
-      const publishUpdateResult = await runEventsService.publishEvent(runEventId, 'update');
+      const publishUpdateResult = await eventsBusService.publishEvent(runEventId, 'update');
       expect(publishUpdateResult).not.toBeNull();
       const updatedPayload = await runEventUpdatedPromise;
       expect(updatedPayload).toMatchObject({ runId, mutation: 'update' });
