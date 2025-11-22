@@ -12,7 +12,6 @@
   "sideEffects": [
     "src/styles.css"
   ],
-  
   "scripts": {
     "dev": "vite",
     "build": "vite build",
@@ -55,8 +54,8 @@
     "clsx": "^2.1.1",
     "cmdk": "1.1.1",
     "lucide-react": "^0.451.0",
-    "react": "^18.3.1",
-    "react-dom": "^18.3.1",
+    "react": "^19.1.1",
+    "react-dom": "^19.1.1",
     "react-markdown": "^9.0.0",
     "react-syntax-highlighter": "^15.5.0",
     "react-virtuoso": "^4.14.1",

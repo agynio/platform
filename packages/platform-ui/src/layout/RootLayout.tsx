@@ -36,6 +36,7 @@ import {
   Database,
 } from 'lucide-react';
 import { useUser } from '../user/user.runtime';
+import { MainSidebar } from '@agyn/ui-new';
 
 const STORAGE_KEYS = {
   collapsed: 'ui.sidebar.collapsed',
@@ -224,9 +225,7 @@ export function RootLayout() {
     <div className="flex min-h-screen w-full">
       {/* Desktop sidebar */}
       <aside className={`hidden md:flex md:sticky md:top-0 md:h-screen md:shrink-0 md:z-10`}>
-        <Sidebar className={`${collapsed ? 'w-16' : 'w-64'} h-screen overflow-y-auto shrink-0`}>
-          <SidebarInner />
-        </Sidebar>
+        <MainSidebar />
         {/* Right-border clickable collapse/expand button (desktop only) */}
         <button
           type="button"
