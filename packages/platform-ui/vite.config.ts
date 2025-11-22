@@ -20,4 +20,13 @@ export default defineConfig({
       react: path.resolve(__dirname, './node_modules/react/index.js'),
     },
   },
+  server: {
+    fs: {
+      allow: [
+        path.resolve(__dirname, '../..'),
+        path.resolve(__dirname, '../ui'),
+        path.resolve(__dirname, '../ui-new'),
+      ],
+    },
+  },
 });

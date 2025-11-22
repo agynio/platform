@@ -1,3 +1,6 @@
+@source "./**/*.{ts,tsx,js,jsx}";
+@source "../../ui/src/**/*.{ts,tsx,js,jsx}";
+@source "../../ui-new/src/**/*.{ts,tsx,js,jsx}";
 @import "tailwindcss";
 @plugin "tailwindcss-animate";
 @import "@agyn/ui-new/styles/globals.css";
