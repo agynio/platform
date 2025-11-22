@@ -1,0 +1,26 @@
+/* Compatibility layer for shadcn UI components with Tailwind v4 */
+/* These utilities bridge the gap between shadcn's expected classes and our Tailwind setup */
+
+.bg-primary {
+  background-color: var(--primary);
+}
+
+.bg-popover {
+  background-color: var(--popover);
+}
+
+.text-primary-foreground {
+  color: var(--primary-foreground);
+}
+
+.text-popover-foreground {
+  color: var(--popover-foreground);
+}
+
+.fill-primary {
+  fill: var(--primary);
+}
+
+.border-primary {
+  border-color: var(--primary);
+}
