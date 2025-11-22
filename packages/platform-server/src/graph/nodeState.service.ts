@@ -1,9 +1,9 @@
 import { Inject, Injectable, Scope } from '@nestjs/common';
 import { LoggerService } from '../core/services/logger.service';
 import { LiveGraphRuntime } from './liveGraph.manager';
-import { GraphSocketGateway } from '../gateway/graph.socket.gateway';
 import { GraphRepository } from './graph.repository';
 import { mergeWith, isArray } from 'lodash-es';
+import { EventsBusService } from '../events/events-bus.service';
 
 export function deepMergeNodeState(
   prev: Record<string, unknown>,
@@ -37,7 +37,7 @@ export class NodeStateService {
     @Inject(GraphRepository) private readonly graphRepository: GraphRepository,
     @Inject(LiveGraphRuntime) private readonly runtime: LiveGraphRuntime,
     @Inject(LoggerService) private readonly logger: LoggerService,
-    @Inject(GraphSocketGateway) private readonly gateway?: GraphSocketGateway,
+    @Inject(EventsBusService) private readonly eventsBus: EventsBusService,
   ) {}
 
   /** Return last known runtime snapshot for a node (for filtering). */
@@ -63,8 +63,7 @@ export class NodeStateService {
       } catch (e) {
         this.logger.error('NodeStateService: instance.setState failed for %s: %s', nodeId, String(e));
       }
-      // Emit gateway node_state with merged state
-      this.gateway?.emitNodeState(nodeId, merged);
+      this.eventsBus.emitNodeState({ nodeId, state: merged, updatedAtMs: Date.now() });
     } catch (e) {
       this.logger.error('NodeStateService: upsertNodeState failed for %s: %s', nodeId, String(e));
     }

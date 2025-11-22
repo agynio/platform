@@ -12,7 +12,6 @@ import { LLMModule } from '../llm/llm.module';
 import { LLMProvisioner } from '../llm/provisioners/llm.provisioner';
 import { VaultModule } from '../vault/vault.module';
 import { NodesModule } from '../nodes/nodes.module';
-import { GraphEventsBusListener } from './listeners/graph-events-bus.listener';
 import { TemplateRegistry } from '../graph/templateRegistry';
 import { buildTemplateRegistry } from '../templates';
 import { GraphRepository } from '../graph/graph.repository';
@@ -26,7 +25,6 @@ import { CallAgentLinkingService } from '../agents/call-agent-linking.service';
 @Module({
   imports: [CoreModule, EnvModule, EventsModule, InfraModule, VaultModule, LLMModule, NodesModule],
   providers: [
-    GraphEventsBusListener,
     ThreadsMetricsService,
     RunSignalsRegistry,
     CallAgentLinkingService,
@@ -66,7 +64,12 @@ import { CallAgentLinkingService } from '../agents/call-agent-linking.service';
     AgentsPersistenceService,
   ],
   exports: [
-    EventsModule,
+    CoreModule,
+    EnvModule,
+    InfraModule,
+    VaultModule,
+    LLMModule,
+    NodesModule,
     TemplateRegistry,
     GraphRepository,
     AgentsPersistenceService,

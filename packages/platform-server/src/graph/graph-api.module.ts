@@ -1,13 +1,7 @@
 import { Module } from '@nestjs/common';
-import { CoreModule } from '../core/core.module';
-import { InfraModule } from '../infra/infra.module';
 import { AgentsRemindersController } from '../agents/reminders.controller';
 import { AgentsThreadsController } from '../agents/threads.controller';
 import { ContextItemsController } from '../agents/contextItems.controller';
-import { EnvModule } from '../env/env.module';
-import { GraphSocketGateway } from '../gateway/graph.socket.gateway';
-import { GraphEventsPublisher } from '../gateway/graph.events.publisher';
-import { AgentsPersistenceService } from '../agents/agents.persistence.service';
 import { GraphController } from './controllers/graph.controller';
 import { GraphPersistController } from './controllers/graphPersist.controller';
 import { GraphVariablesController } from './controllers/graphVariables.controller';
@@ -19,9 +13,10 @@ import { NodeStateService } from './nodeState.service';
 import { GraphVariablesService } from './services/graphVariables.service';
 import { GraphDomainModule } from '../graph-domain/graph-domain.module';
 import { RemindersController } from './controllers/reminders.controller';
+import { EventsModule } from '../events/events.module';
 
 @Module({
-  imports: [CoreModule, InfraModule, EnvModule, GraphDomainModule],
+  imports: [GraphDomainModule, EventsModule],
   controllers: [
     RunsController,
     GraphPersistController,
@@ -34,35 +29,11 @@ import { RemindersController } from './controllers/reminders.controller';
     RemindersController,
   ],
   providers: [
-    {
-      provide: GraphGuard,
-      useClass: GraphGuard,
-    },
+    GraphGuard,
     LiveGraphRuntime,
     NodeStateService,
-    // Gateway and publisher binding
-    GraphSocketGateway,
-    {
-      provide: GraphEventsPublisher,
-      useExisting: GraphSocketGateway,
-    },
-    {
-      provide: 'GRAPH_EVENTS_PUBLISHER_BINDING',
-      useFactory: (persistence: AgentsPersistenceService, publisher: GraphEventsPublisher) => {
-        persistence.setEventsPublisher(publisher);
-        return true;
-      },
-      inject: [AgentsPersistenceService, GraphEventsPublisher],
-    },
-    // PrismaService is injected by type; no string token aliasing required
-    // Standard DI for GraphVariablesService
     GraphVariablesService,
   ],
-  exports: [
-    LiveGraphRuntime,
-    NodeStateService,
-    GraphEventsPublisher,
-    GraphSocketGateway,
-  ],
+  exports: [LiveGraphRuntime, NodeStateService, GraphVariablesService],
 })
-export class GraphModule {}
+export class GraphApiModule {}

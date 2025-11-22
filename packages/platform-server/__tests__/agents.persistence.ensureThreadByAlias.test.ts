@@ -1,10 +1,10 @@
 import { describe, it, expect } from 'vitest';
 import { AgentsPersistenceService } from '../src/agents/agents.persistence.service';
 import { LoggerService } from '../src/core/services/logger.service';
-import { NoopGraphEventsPublisher } from '../src/gateway/graph.events.publisher';
 import { createPrismaStub, StubPrismaService } from './helpers/prisma.stub';
 import { createRunEventsStub } from './helpers/runEvents.stub';
 import { CallAgentLinkingService } from '../src/agents/call-agent-linking.service';
+import { createEventsBusStub } from './helpers/eventsBus.stub';
 
 const metricsStub = { getThreadsMetrics: async () => ({}) } as any;
 const templateRegistryStub = { toSchema: async () => [], getMeta: () => undefined } as any;
@@ -30,7 +30,7 @@ const createLinkingStub = () =>
   }) as unknown as CallAgentLinkingService;
 
 const createService = (stub: any) => {
-  const eventsBusStub = { publishEvent: async () => null } as any;
+  const eventsBusStub = createEventsBusStub();
   const svc = new AgentsPersistenceService(
     new StubPrismaService(stub) as any,
     new LoggerService(),
@@ -41,7 +41,6 @@ const createService = (stub: any) => {
     createLinkingStub(),
     eventsBusStub,
   );
-  svc.setEventsPublisher(new NoopGraphEventsPublisher());
   return svc;
 };
 

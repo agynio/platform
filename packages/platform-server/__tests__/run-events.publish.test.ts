@@ -1,12 +1,11 @@
-import { describe, it, expect, beforeEach, afterAll } from 'vitest';
+import { describe, it, expect, beforeEach, afterAll, afterEach, vi } from 'vitest';
 import { PrismaClient, ToolExecStatus } from '@prisma/client';
 import { randomUUID } from 'node:crypto';
 import type { PrismaService } from '../src/core/services/prisma.service';
 import type { LoggerService } from '../src/core/services/logger.service';
 import { RunEventsService, type RunTimelineEvent } from '../src/events/run-events.service';
 import { EventsBusService } from '../src/events/events-bus.service';
-import { GraphEventsBusListener } from '../src/graph-domain/listeners/graph-events-bus.listener';
-import { NoopGraphEventsPublisher, type RunEventBroadcast } from '../src/gateway/graph.events.publisher';
+import { GraphSocketGateway } from '../src/gateway/graph.socket.gateway';
 
 const databaseUrl = process.env.AGENTS_DATABASE_URL;
 const shouldRunDbTests = process.env.RUN_DB_TESTS === 'true' && !!databaseUrl;
@@ -24,20 +23,6 @@ maybeDescribe('RunEventsService publishEvent broadcasting', () => {
     error: () => undefined,
   } as unknown as LoggerService;
 
-  type CapturedEvent = { runId: string; threadId: string; payload: RunEventBroadcast };
-
-  class CapturingPublisher extends NoopGraphEventsPublisher {
-    public events: CapturedEvent[] = [];
-
-    override emitRunEvent(runId: string, threadId: string, payload: RunEventBroadcast): void {
-      this.events.push({ runId, threadId, payload });
-    }
-
-    clear() {
-      this.events = [];
-    }
-  }
-
   async function createThreadAndRun() {
     const thread = await prisma.thread.create({ data: { alias: `thread-${randomUUID()}` } });
     const run = await prisma.run.create({ data: { threadId: thread.id } });
@@ -49,29 +34,29 @@ maybeDescribe('RunEventsService publishEvent broadcasting', () => {
     await prisma.thread.delete({ where: { id: threadId } }).catch(() => undefined);
   }
 
-  let publisher: CapturingPublisher;
   let runEvents: RunEventsService;
   let eventsBus: EventsBusService;
-  let listener: GraphEventsBusListener;
+  let gateway: GraphSocketGateway;
+  let emitRunEventSpy: ReturnType<typeof vi.spyOn>;
 
   beforeEach(async () => {
-    publisher = new CapturingPublisher();
     runEvents = new RunEventsService(prismaService, logger);
     eventsBus = new EventsBusService(runEvents);
-    listener = new GraphEventsBusListener(
-      eventsBus,
-      { resolve: async () => publisher } as any,
-      logger,
-    );
-    await listener.onModuleInit();
+    const runtime = { subscribe: vi.fn() } as any;
+    const metrics = { getThreadsMetrics: vi.fn().mockResolvedValue({}) } as any;
+    const prismaStub = { getClient: vi.fn().mockReturnValue({ $queryRaw: vi.fn().mockResolvedValue([]) }) } as any;
+    gateway = new GraphSocketGateway(logger, runtime, metrics, prismaStub, eventsBus);
+    emitRunEventSpy = vi.spyOn(gateway, 'emitRunEvent');
+    await gateway.onModuleInit();
   });
 
   afterAll(async () => {
     await prisma.$disconnect();
   });
 
-  afterAll(() => {
-    listener?.onModuleDestroy();
+  afterEach(() => {
+    gateway.onModuleDestroy();
+    emitRunEventSpy.mockRestore();
   });
 
   it('emits append and update payloads with tool execution data', async () => {
@@ -88,19 +73,19 @@ maybeDescribe('RunEventsService publishEvent broadcasting', () => {
 
       const appendEvent = await eventsBus.publishEvent(started.id, 'append');
       expect(appendEvent?.status).toBe('running');
-      expect(publisher.events).toHaveLength(1);
-      const appendRecord = publisher.events[0];
-      expect(appendRecord.payload.mutation).toBe('append');
-      expect(appendRecord.runId).toBe(run.id);
-      expect(appendRecord.threadId).toBe(thread.id);
-      const appendedEvent = appendRecord.payload.event as RunTimelineEvent;
+      expect(emitRunEventSpy).toHaveBeenCalledTimes(1);
+      const appendRecord = emitRunEventSpy.mock.calls[0];
+      expect(appendRecord[0]).toBe(run.id);
+      expect(appendRecord[1]).toBe(thread.id);
+      expect(appendRecord[2].mutation).toBe('append');
+      const appendedEvent = appendRecord[2].event as RunTimelineEvent;
       expect(appendedEvent.id).toBe(started.id);
       expect(appendedEvent.status).toBe('running');
       expect(appendedEvent.toolExecution?.toolName).toBe('search');
       expect(appendedEvent.toolExecution?.input).toEqual({ query: 'status' });
       expect(appendedEvent.toolExecution?.output).toBeNull();
 
-      publisher.clear();
+      emitRunEventSpy.mockClear();
 
       await runEvents.completeToolExecution({
         eventId: started.id,
@@ -112,10 +97,12 @@ maybeDescribe('RunEventsService publishEvent broadcasting', () => {
       const updateEvent = await eventsBus.publishEvent(started.id, 'update');
       expect(updateEvent?.status).toBe('success');
       expect(updateEvent?.toolExecution?.output).toEqual({ answer: 42 });
-      expect(publisher.events).toHaveLength(1);
-      const updateRecord = publisher.events[0];
-      expect(updateRecord.payload.mutation).toBe('update');
-      const updatedEvent = updateRecord.payload.event as RunTimelineEvent;
+      expect(emitRunEventSpy).toHaveBeenCalledTimes(1);
+      const updateRecord = emitRunEventSpy.mock.calls[0];
+      expect(updateRecord[0]).toBe(run.id);
+      expect(updateRecord[1]).toBe(thread.id);
+      expect(updateRecord[2].mutation).toBe('update');
+      const updatedEvent = updateRecord[2].event as RunTimelineEvent;
       expect(updatedEvent.status).toBe('success');
       expect(updatedEvent.toolExecution?.execStatus).toBe('success');
       expect(updatedEvent.toolExecution?.output).toEqual({ answer: 42 });

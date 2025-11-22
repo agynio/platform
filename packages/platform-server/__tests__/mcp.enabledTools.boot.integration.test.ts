@@ -19,6 +19,8 @@ import { GraphSocketGateway } from '../src/gateway/graph.socket.gateway';
 import type { GraphDefinition, PersistedGraph } from '../src/shared/types/graph.types';
 import { AgentsPersistenceService } from '../src/agents/agents.persistence.service';
 import { RunSignalsRegistry } from '../src/agents/run-signals.service';
+import { EventsBusService } from '../src/events/events-bus.service';
+import { createEventsBusStub } from './helpers/eventsBus.stub';
 
 class StubContainerService extends ContainerService {
   constructor(logger: LoggerService, registry: ContainerRegistry) {
@@ -129,6 +131,7 @@ describe('Boot respects MCP enabledTools from persisted state', () => {
         TemplateRegistry,
         LiveGraphRuntime,
         GraphRepository,
+        { provide: EventsBusService, useValue: createEventsBusStub() as unknown as EventsBusService },
         {
           provide: AgentsPersistenceService,
           useValue: {

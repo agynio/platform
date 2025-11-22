@@ -9,9 +9,7 @@ import WebSocket, { type RawData } from 'ws';
 
 import type { MessageKind, RunStatus } from '@prisma/client';
 import { EventsBusService } from '../src/events/events-bus.service';
-import { GraphEventsBusListener } from '../src/graph-domain/listeners/graph-events-bus.listener';
 import { RunEventsService } from '../src/events/run-events.service';
-import { GraphEventsPublisher } from '../src/gateway/graph.events.publisher';
 import { GraphSocketGateway } from '../src/gateway/graph.socket.gateway';
 import { LoggerService } from '../src/core/services/logger.service';
 import { LiveGraphRuntime } from '../src/graph/liveGraph.manager';
@@ -246,7 +244,6 @@ describe('Socket gateway real server handshakes', () => {
     const moduleRef = await Test.createTestingModule({
       providers: [
         GraphSocketGateway,
-        { provide: GraphEventsPublisher, useExisting: GraphSocketGateway },
         LoggerService,
         { provide: LiveGraphRuntime, useClass: LiveGraphRuntimeStub },
         { provide: ThreadsMetricsService, useClass: ThreadsMetricsServiceStub },
@@ -255,7 +252,6 @@ describe('Socket gateway real server handshakes', () => {
         { provide: TerminalSessionsService, useClass: TerminalSessionsServiceStub },
         { provide: ContainerService, useClass: ContainerServiceStub },
         EventsBusService,
-        GraphEventsBusListener,
         RunEventsService,
       ],
     }).compile();
@@ -267,7 +263,6 @@ describe('Socket gateway real server handshakes', () => {
     terminalSessions = app.get(TerminalSessionsService) as unknown as TerminalSessionsServiceStub;
     prismaStub = app.get(PrismaService) as unknown as PrismaServiceStub;
     eventsBusService = app.get(EventsBusService);
-    void app.get(GraphEventsBusListener);
 
     const terminalGateway = app.get(ContainerTerminalGateway);
     terminalGateway.registerRoutes(fastify);

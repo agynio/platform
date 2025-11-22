@@ -1,9 +1,10 @@
 import { describe, it, expect } from 'vitest';
 import { AgentsPersistenceService } from '../src/agents/agents.persistence.service';
 import { LoggerService } from '../src/core/services/logger.service';
-import { NoopGraphEventsPublisher } from '../src/gateway/graph.events.publisher';
 import { StubPrismaService, createPrismaStub } from './helpers/prisma.stub';
 import { createRunEventsStub } from './helpers/runEvents.stub';
+import { createEventsBusStub } from './helpers/eventsBus.stub';
+import { CallAgentLinkingService } from '../src/agents/call-agent-linking.service';
 
 const metricsStub = { getThreadsMetrics: async () => ({}) } as any;
 const templateRegistryStub = { toSchema: async () => [], getMeta: () => undefined } as any;
@@ -11,11 +12,28 @@ const graphRepoStub = {
   get: async () => ({ name: 'main', version: 1, updatedAt: new Date().toISOString(), nodes: [], edges: [] }),
 } as any;
 
+const createLinkingStub = () =>
+  ({
+    buildInitialMetadata: (params: { toolName: string; parentThreadId: string; childThreadId: string }) => ({
+      tool: params.toolName === 'call_engineer' ? 'call_engineer' : 'call_agent',
+      parentThreadId: params.parentThreadId,
+      childThreadId: params.childThreadId,
+      childRun: { id: null, status: 'queued', linkEnabled: false, latestMessageId: null },
+      childRunId: null,
+      childRunStatus: 'queued',
+      childRunLinkEnabled: false,
+      childMessageId: null,
+    }),
+    registerParentToolExecution: async () => null,
+    onChildRunStarted: async () => null,
+    onChildRunMessage: async () => null,
+    onChildRunCompleted: async () => null,
+  }) as unknown as CallAgentLinkingService;
+
 describe('AgentsPersistenceService threads filters and updates', () => {
   it('filters roots and status; updates summary/status', async () => {
     const stub = createPrismaStub();
-    const publisher = new NoopGraphEventsPublisher();
-    const eventsBusStub = { publishEvent: async () => null } as any;
+    const eventsBusStub = createEventsBusStub();
     const svc = new AgentsPersistenceService(
       new StubPrismaService(stub) as any,
       new LoggerService(),
@@ -23,9 +41,9 @@ describe('AgentsPersistenceService threads filters and updates', () => {
       templateRegistryStub,
       graphRepoStub,
       createRunEventsStub() as any,
+      createLinkingStub(),
       eventsBusStub,
     );
-    svc.setEventsPublisher(publisher);
     // seed
     const rootOpen = await stub.thread.create({ data: { alias: 'a1', parentId: null, summary: 'A1', status: 'open' } });
     const rootClosed = await stub.thread.create({ data: { alias: 'a2', parentId: null, summary: 'A2', status: 'closed' } });

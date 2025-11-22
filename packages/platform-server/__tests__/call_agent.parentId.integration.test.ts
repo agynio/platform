@@ -3,11 +3,11 @@ import { LoggerService } from '../src/core/services/logger.service';
 import { CallAgentTool } from '../src/nodes/tools/call_agent/call_agent.node';
 import { ResponseMessage, HumanMessage } from '@agyn/llm';
 import { AgentsPersistenceService } from '../src/agents/agents.persistence.service';
-import { NoopGraphEventsPublisher } from '../src/gateway/graph.events.publisher';
 import { Signal } from '../src/signal';
 import { createPrismaStub, StubPrismaService } from './helpers/prisma.stub';
 import { createRunEventsStub } from './helpers/runEvents.stub';
 import { CallAgentLinkingService } from '../src/agents/call-agent-linking.service';
+import { createEventsBusStub } from './helpers/eventsBus.stub';
 
 const metricsStub = { getThreadsMetrics: async () => ({}) } as any;
 const templateRegistryStub = { toSchema: async () => [], getMeta: () => undefined } as any;
@@ -27,6 +27,7 @@ class FakeAgentWithPersistence {
 describe('call_agent integration: creates child thread with parentId', () => {
   it('creates parent and child threads and sets child.parentId', async () => {
     const stub = createPrismaStub();
+    const eventsBus = createEventsBusStub();
     const persistence = new AgentsPersistenceService(
       new StubPrismaService(stub) as any,
       new LoggerService(),
@@ -50,9 +51,8 @@ describe('call_agent integration: creates child thread with parentId', () => {
         onChildRunMessage: async () => null,
         onChildRunCompleted: async () => null,
       } as unknown as CallAgentLinkingService,
-      { publishEvent: async () => null } as any,
+      eventsBus as any,
     );
-    persistence.setEventsPublisher(new NoopGraphEventsPublisher());
     const linking = {
       buildInitialMetadata: (params: { toolName: string; parentThreadId: string; childThreadId: string }) => ({
         tool: params.toolName === 'call_engineer' ? 'call_engineer' : 'call_agent',

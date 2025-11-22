@@ -1,9 +1,28 @@
 import { describe, it, expect } from 'vitest';
 import { AgentsPersistenceService } from '../src/agents/agents.persistence.service';
 import { LoggerService } from '../src/core/services/logger.service';
-import { NoopGraphEventsPublisher } from '../src/gateway/graph.events.publisher';
 import { StubPrismaService, createPrismaStub } from './helpers/prisma.stub';
 import { createRunEventsStub } from './helpers/runEvents.stub';
+import { createEventsBusStub } from './helpers/eventsBus.stub';
+import { CallAgentLinkingService } from '../src/agents/call-agent-linking.service';
+
+const createLinkingStub = () =>
+  ({
+    buildInitialMetadata: (params: { toolName: string; parentThreadId: string; childThreadId: string }) => ({
+      tool: params.toolName === 'call_engineer' ? 'call_engineer' : 'call_agent',
+      parentThreadId: params.parentThreadId,
+      childThreadId: params.childThreadId,
+      childRun: { id: null, status: 'queued', linkEnabled: false, latestMessageId: null },
+      childRunId: null,
+      childRunStatus: 'queued',
+      childRunLinkEnabled: false,
+      childMessageId: null,
+    }),
+    registerParentToolExecution: async () => null,
+    onChildRunStarted: async () => null,
+    onChildRunMessage: async () => null,
+    onChildRunCompleted: async () => null,
+  }) as unknown as CallAgentLinkingService;
 
 function createService(stub: any, overrides?: { metrics?: any; templateRegistry?: any; graphRepo?: any }) {
   const metrics =
@@ -16,7 +35,7 @@ function createService(stub: any, overrides?: { metrics?: any; templateRegistry?
   const graphRepo =
     overrides?.graphRepo ??
     ({ get: async () => ({ name: 'main', version: 1, updatedAt: new Date().toISOString(), nodes: [], edges: [] }) } as any);
-  const eventsBusStub = { publishEvent: async () => null } as any;
+  const eventsBusStub = createEventsBusStub();
   const svc = new AgentsPersistenceService(
     new StubPrismaService(stub) as any,
     new LoggerService(),
@@ -24,9 +43,9 @@ function createService(stub: any, overrides?: { metrics?: any; templateRegistry?
     templateRegistry,
     graphRepo,
     createRunEventsStub() as any,
+    createLinkingStub(),
     eventsBusStub,
   );
-  svc.setEventsPublisher(new NoopGraphEventsPublisher());
   return svc;
 }
 

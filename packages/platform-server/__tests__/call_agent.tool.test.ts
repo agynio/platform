@@ -3,11 +3,11 @@ import { CallAgentTool } from '../src/nodes/tools/call_agent/call_agent.node';
 import { LoggerService } from '../src/core/services/logger.service.js';
 import { ResponseMessage, AIMessage, HumanMessage } from '@agyn/llm';
 import { AgentsPersistenceService } from '../src/agents/agents.persistence.service';
-import { NoopGraphEventsPublisher } from '../src/gateway/graph.events.publisher';
 import { StubPrismaService, createPrismaStub } from './helpers/prisma.stub';
 import { createRunEventsStub } from './helpers/runEvents.stub';
 import { Signal } from '../src/signal';
 import { CallAgentLinkingService } from '../src/agents/call-agent-linking.service';
+import { createEventsBusStub } from './helpers/eventsBus.stub';
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
@@ -39,7 +39,7 @@ const createLinkingStub = () => {
 };
 
 const createPersistence = (linking?: CallAgentLinkingService) => {
-  const eventsBusStub = { publishEvent: vi.fn().mockResolvedValue(null) } as any;
+  const eventsBusStub = createEventsBusStub();
   const svc = new AgentsPersistenceService(
     new StubPrismaService(createPrismaStub()) as any,
     new LoggerService(),
@@ -48,9 +48,8 @@ const createPersistence = (linking?: CallAgentLinkingService) => {
     graphRepoStub,
     createRunEventsStub() as any,
     linking ?? createLinkingStub().instance,
-    eventsBusStub,
+    eventsBusStub as any,
   );
-  svc.setEventsPublisher(new NoopGraphEventsPublisher());
   return svc;
 };
 

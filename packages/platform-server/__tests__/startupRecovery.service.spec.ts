@@ -3,7 +3,7 @@ import { PrismaClient, RunStatus } from '@prisma/client';
 import { randomUUID } from 'node:crypto';
 import { StartupRecoveryService } from '../src/core/services/startupRecovery.service';
 import { LoggerService } from '../src/core/services/logger.service';
-import { GraphEventsPublisher, NoopGraphEventsPublisher } from '../src/gateway/graph.events.publisher';
+import type { EventsBusService } from '../src/events/events-bus.service';
 
 const databaseUrl = process.env.AGENTS_DATABASE_URL;
 const shouldRunDbTests = process.env.RUN_DB_TESTS === 'true' && !!databaseUrl;
@@ -31,16 +31,16 @@ class TestLogger extends LoggerService {
   }
 }
 
-class CaptureEventsPublisher extends NoopGraphEventsPublisher {
+class CaptureEventsBus {
   readonly runStatusChanges: Array<{ threadId: string; runId: string; status: RunStatus }> = [];
   readonly metricsScheduled: string[] = [];
 
-  override emitRunStatusChanged(threadId: string, run: { id: string; status: RunStatus; createdAt: Date; updatedAt: Date }): void {
-    this.runStatusChanges.push({ threadId, runId: run.id, status: run.status });
+  emitRunStatusChanged(payload: { threadId: string; run: { id: string; status: RunStatus; createdAt: Date; updatedAt: Date } }): void {
+    this.runStatusChanges.push({ threadId: payload.threadId, runId: payload.run.id, status: payload.run.status });
   }
 
-  override scheduleThreadMetrics(threadId: string): void {
-    this.metricsScheduled.push(threadId);
+  emitThreadMetrics(payload: { threadId: string }): void {
+    this.metricsScheduled.push(payload.threadId);
   }
 }
 
@@ -75,8 +75,8 @@ if (!shouldRunDbTests) {
       });
 
       const logger = new TestLogger();
-      const events = new CaptureEventsPublisher();
-      const service = new StartupRecoveryService(prismaService as any, logger, events);
+      const events = new CaptureEventsBus();
+      const service = new StartupRecoveryService(prismaService as any, logger, events as unknown as EventsBusService);
 
       await service.onApplicationBootstrap();
 
@@ -110,8 +110,8 @@ if (!shouldRunDbTests) {
       expect(new Set(events.metricsScheduled)).toEqual(new Set([thread.id, secondThread.id]));
 
       const loggerSecond = new TestLogger();
-      const eventsSecond = new CaptureEventsPublisher();
-      const serviceSecond = new StartupRecoveryService(prismaService as any, loggerSecond, eventsSecond);
+      const eventsSecond = new CaptureEventsBus();
+      const serviceSecond = new StartupRecoveryService(prismaService as any, loggerSecond, eventsSecond as unknown as EventsBusService);
 
       await serviceSecond.onApplicationBootstrap();
 
@@ -141,8 +141,8 @@ if (!shouldRunDbTests) {
       });
 
       const logger = new TestLogger();
-      const events = new CaptureEventsPublisher();
-      const service = new StartupRecoveryService(prismaService as any, logger, events);
+      const events = new CaptureEventsBus();
+      const service = new StartupRecoveryService(prismaService as any, logger, events as unknown as EventsBusService);
 
       await service.onApplicationBootstrap();
 
@@ -177,8 +177,8 @@ if (!shouldRunDbTests) {
       });
 
       const logger = new TestLogger();
-      const events = new CaptureEventsPublisher();
-      const service = new StartupRecoveryService(prismaService as any, logger, events);
+      const events = new CaptureEventsBus();
+      const service = new StartupRecoveryService(prismaService as any, logger, events as unknown as EventsBusService);
 
       await service.onApplicationBootstrap();
 

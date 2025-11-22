@@ -63,7 +63,6 @@ describe('AppModule', () => {
       recordInjected: vi.fn().mockResolvedValue({ messageIds: [] }),
       completeRun: vi.fn(),
       resolveThreadId: vi.fn().mockResolvedValue('thread'),
-      setEventsPublisher: vi.fn(),
     } satisfies Partial<AgentsPersistenceService>;
 
     const threadsMetricsStub = {

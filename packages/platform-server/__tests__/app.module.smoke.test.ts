@@ -14,6 +14,9 @@ import { AgentsPersistenceService } from '../src/agents/agents.persistence.servi
 import { ThreadsMetricsService } from '../src/agents/threads.metrics.service';
 import { VaultService } from '../src/vault/vault.service';
 import { SlackAdapter } from '../src/messaging/slack/slack.adapter';
+import { EventsBusService } from '../src/events/events-bus.service';
+import { createEventsBusStub } from './helpers/eventsBus.stub';
+import { StartupRecoveryService } from '../src/core/services/startupRecovery.service';
 
 process.env.LLM_PROVIDER = process.env.LLM_PROVIDER || 'openai';
 process.env.AGENTS_DATABASE_URL = process.env.AGENTS_DATABASE_URL || 'postgres://localhost:5432/test';
@@ -101,7 +104,6 @@ describe('AppModule bootstrap smoke test', () => {
       recordInjected: vi.fn().mockResolvedValue({ messageIds: [] }),
       completeRun: vi.fn(),
       resolveThreadId: vi.fn().mockResolvedValue('thread'),
-      setEventsPublisher: vi.fn(),
     } satisfies Partial<AgentsPersistenceService>;
 
     const threadsMetricsStub = {
@@ -116,6 +118,9 @@ describe('AppModule bootstrap smoke test', () => {
     const slackAdapterStub = {
       sendText: vi.fn().mockResolvedValue({ ok: true, channelMessageId: null, threadId: null }),
     } satisfies Partial<SlackAdapter>;
+    const eventsBusStub = createEventsBusStub();
+    const startupRecoveryStub = { onApplicationBootstrap: vi.fn() } satisfies Partial<StartupRecoveryService>;
+
 
     const moduleRef = await Test.createTestingModule({ imports: [AppModule] })
       .overrideProvider(PrismaService)
@@ -140,6 +145,10 @@ describe('AppModule bootstrap smoke test', () => {
       .useValue(vaultStub)
       .overrideProvider(SlackAdapter)
       .useValue(slackAdapterStub)
+      .overrideProvider(EventsBusService)
+      .useValue(eventsBusStub as unknown as EventsBusService)
+      .overrideProvider(StartupRecoveryService)
+      .useValue(startupRecoveryStub)
       .compile();
 
     const adapter = new FastifyAdapter();

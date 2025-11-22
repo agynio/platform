@@ -57,11 +57,11 @@ vi.mock('@prisma/client', () => {
 });
 const { AgentsPersistenceService } = await import('../src/agents/agents.persistence.service');
 const { LoggerService } = await import('../src/core/services/logger.service');
-const { NoopGraphEventsPublisher } = await import('../src/gateway/graph.events.publisher');
 import { AIMessage, HumanMessage, SystemMessage, ToolCallMessage, ToolCallOutputMessage } from '@agyn/llm';
 import type { ResponseFunctionToolCall } from 'openai/resources/responses/responses.mjs';
 import { createRunEventsStub } from './helpers/runEvents.stub';
 import { CallAgentLinkingService } from '../src/agents/call-agent-linking.service';
+import { createEventsBusStub } from './helpers/eventsBus.stub';
 
 const templateRegistryStub = { toSchema: async () => [], getMeta: () => undefined } as any;
 const graphRepoStub = {
@@ -89,8 +89,7 @@ function makeService(): InstanceType<typeof AgentsPersistenceService> {
   // Minimal stub; extractKindText does not use prisma
   const logger = new LoggerService();
   const metrics = { getThreadsMetrics: async () => ({}) } as any;
-  const publisher = new NoopGraphEventsPublisher();
-  const eventsBusStub = { publishEvent: vi.fn().mockResolvedValue(null) } as any;
+  const eventsBusStub = createEventsBusStub();
   const svc = new AgentsPersistenceService(
     { getClient: () => ({}) } as any,
     logger,
@@ -101,7 +100,6 @@ function makeService(): InstanceType<typeof AgentsPersistenceService> {
     createLinkingStub(),
     eventsBusStub,
   );
-  svc.setEventsPublisher(publisher as any);
   return svc;
 }
 
@@ -150,9 +148,8 @@ describe('AgentsPersistenceService beginRun/completeRun populates Message.text',
 
     const logger = new LoggerService();
     const metrics = { getThreadsMetrics: async () => ({}) } as any;
-    const publisher = new NoopGraphEventsPublisher();
     const linking = createLinkingStub();
-    const eventsBusStub = { publishEvent: vi.fn().mockResolvedValue(null) } as any;
+    const eventsBusStub = createEventsBusStub();
     const svc = new AgentsPersistenceService(
       { getClient: () => prismaMock } as any,
       logger,
@@ -163,7 +160,6 @@ describe('AgentsPersistenceService beginRun/completeRun populates Message.text',
       linking,
       eventsBusStub,
     );
-    svc.setEventsPublisher(publisher as any);
 
     // Begin run with user + system messages
     const input = [HumanMessage.fromText('hello'), SystemMessage.fromText('sys')];
