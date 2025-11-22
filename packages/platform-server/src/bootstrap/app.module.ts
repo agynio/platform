@@ -10,5 +10,6 @@ import { NodesModule } from '../nodes/nodes.module';
 @Module({
   imports: [CoreModule, EventsModule, InfraModule, GraphApiModule, NodesModule, GatewayModule],
   providers: [StartupRecoveryService],
+  exports: [NodesModule],
 })
 export class AppModule {}
