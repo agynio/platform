@@ -1,6 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { SlackTrigger } from '../src/nodes/slackTrigger/slackTrigger.node';
 import type { AgentsPersistenceService } from '../src/agents/agents.persistence.service';
+import type { PrismaService } from '../src/core/services/prisma.service';
+import type { EventsBusService } from '../src/events/events-bus.service';
+import type { SlackAdapter } from '../src/messaging/slack/slack.adapter';
 
 // Mock @slack/socket-mode to avoid network/real client
 vi.mock('@slack/socket-mode', () => {
@@ -43,8 +46,14 @@ describe('SlackTrigger and PRTrigger lifecycle', () => {
     const logger = new MockLogger() as any;
     const vault = { getSecret: async () => 'xapp-test' } as any;
     const persistence = { getOrCreateThreadByAlias: async (_src: string, _alias: string, _summary: string) => 't-slack' } as unknown as AgentsPersistenceService;
-    const trigger = new SlackTrigger(logger as any, vault as any, persistence);
-    await trigger.setConfig({ app_token: { value: 'xapp-test', source: 'static' } });
+    const prisma = ({ getClient: () => ({ thread: { findUnique: async () => ({ channel: null }) } }) } satisfies Pick<PrismaService, 'getClient'>) as PrismaService;
+    const eventsBus = ({ subscribeToSlackSendRequested: vi.fn(() => () => {}) } satisfies Pick<EventsBusService, 'subscribeToSlackSendRequested'>) as EventsBusService;
+    const slackAdapter = ({ sendText: vi.fn() } satisfies Pick<SlackAdapter, 'sendText'>) as SlackAdapter;
+    const trigger = new SlackTrigger(logger as any, vault as any, persistence, prisma, eventsBus, slackAdapter);
+    await trigger.setConfig({
+      app_token: { value: 'xapp-test', source: 'static' },
+      bot_token: { value: 'xoxb-test', source: 'static' },
+    });
     await trigger.provision();
     await trigger.deprovision();
     expect(logger.info).toHaveBeenCalled();

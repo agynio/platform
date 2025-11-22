@@ -12,6 +12,7 @@ import { AgentsPersistenceService } from '../../agents/agents.persistence.servic
 import { PrismaService } from '../../core/services/prisma.service';
 import { SlackAdapter } from '../../messaging/slack/slack.adapter';
 import { ChannelDescriptorSchema, type SendResult, type ChannelDescriptor } from '../../messaging/types';
+import { EventsBusService, type SlackSendRequestEvent } from '../../events/events-bus.service';
 
 type TriggerHumanMessage = {
   kind: 'human';
@@ -48,6 +49,7 @@ export class SlackTrigger extends Node<SlackTriggerConfig> {
     @Inject(VaultService) protected readonly vault: VaultService,
     @Inject(AgentsPersistenceService) private readonly persistence: AgentsPersistenceService,
     @Inject(PrismaService) private readonly prismaService: PrismaService,
+    @Inject(EventsBusService) private readonly eventsBus: EventsBusService,
     @Inject(SlackAdapter) private readonly slackAdapter: SlackAdapter,
   ) {
     super(logger);
@@ -199,9 +201,11 @@ export class SlackTrigger extends Node<SlackTriggerConfig> {
       this.setStatus('provisioning_error');
       throw e;
     }
+    this.registerSlackSendListener();
   }
   protected async doDeprovision(): Promise<void> {
     this.logger.info('SlackTrigger.doDeprovision: stopping');
+    this.disposeSlackSendListener();
     try {
       await this.client?.disconnect();
     } catch (e) {
@@ -285,5 +289,31 @@ export class SlackTrigger extends Node<SlackTriggerConfig> {
       this.logger.error('SlackTrigger.sendToThread failed', { threadId, error: msg });
       return { ok: false, error: msg };
     }
+  }
+
+  private slackSendSubscription?: () => void;
+
+  private handleSlackSendRequest = async ({ threadId, text }: SlackSendRequestEvent): Promise<void> => {
+    if (!threadId || !text.trim()) {
+      this.logger.warn('SlackTrigger.handleSlackSendRequest: missing payload', { threadId, textLength: text.length });
+      return;
+    }
+    const result = await this.sendToThread(threadId, text);
+    if (!result.ok) {
+      this.logger.warn('SlackTrigger.handleSlackSendRequest: send failed', { threadId, error: result.error });
+    }
+  };
+
+  private registerSlackSendListener(): void {
+    if (this.slackSendSubscription) return;
+    this.slackSendSubscription = this.eventsBus.subscribeToSlackSendRequested((payload) => {
+      void this.handleSlackSendRequest(payload);
+    });
+  }
+
+  private disposeSlackSendListener(): void {
+    if (!this.slackSendSubscription) return;
+    this.slackSendSubscription();
+    this.slackSendSubscription = undefined;
   }
 }

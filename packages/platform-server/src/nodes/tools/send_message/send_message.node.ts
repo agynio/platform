@@ -3,7 +3,7 @@ import z from 'zod';
 import { BaseToolNode } from '../baseToolNode';
 import { SendMessageFunctionTool } from './send_message.tool';
 import { LoggerService } from '../../../core/services/logger.service';
-import { SlackTrigger } from '../../slackTrigger/slackTrigger.node';
+import { EventsBusService } from '../../../events/events-bus.service';
 
 export const SendMessageToolStaticConfigSchema = z.object({}).strict();
 
@@ -14,13 +14,13 @@ export class SendMessageNode extends BaseToolNode<SendMessageConfig> {
   private toolInstance?: SendMessageFunctionTool;
   constructor(
     @Inject(LoggerService) protected logger: LoggerService,
-    @Inject(SlackTrigger) protected trigger: SlackTrigger,
+    @Inject(EventsBusService) protected eventsBus: EventsBusService,
   ) {
     super(logger);
   }
 
   getTool(): SendMessageFunctionTool {
-    if (!this.toolInstance) this.toolInstance = new SendMessageFunctionTool(this.logger, this.trigger);
+    if (!this.toolInstance) this.toolInstance = new SendMessageFunctionTool(this.logger, this.eventsBus);
     return this.toolInstance;
   }
 
