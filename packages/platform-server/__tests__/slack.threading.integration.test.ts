@@ -101,6 +101,7 @@ describe('SlackTrigger threading integration', () => {
     const slackSend = vi.fn(async (opts: { token: string; channel: string; text: string; thread_ts?: string }) => ({ ok: true, channelMessageId: '200', threadId: opts.thread_ts ?? 'generated-thread' }));
     const slackAdapter = ({ sendText: slackSend } satisfies Pick<SlackAdapter, 'sendText'>) as SlackAdapter;
     const trigger = new SlackTrigger(logger as LoggerService, vault, persistence, prismaStub, slackAdapter);
+    trigger.init({ nodeId: 'slack-node' });
     await trigger.setConfig({ app_token: { value: 'xapp-abc', source: 'static' }, bot_token: { value: 'xoxb-bot', source: 'static' } });
     await trigger.provision();
     const client = __getLastSocketClient();
@@ -136,7 +137,7 @@ describe('SlackTrigger threading integration', () => {
     };
     await handler(env);
     const threadId = 'thread-U1_1000.1';
-    await trigger.sendToThread(threadId, 'ack');
+    await trigger.sendToChannel(threadId, 'ack');
     expect(slackSend).toHaveBeenCalledWith({ token: 'xoxb-bot', channel: 'C1', text: 'ack', thread_ts: '1000.1' });
     const descriptor = store.getDescriptor(threadId);
     expect(descriptor?.identifiers.thread_ts).toBe('1000.1');
@@ -182,7 +183,7 @@ describe('SlackTrigger threading integration', () => {
     };
     await handler(env);
     const threadId = 'thread-U2_2000.9';
-    await trigger.sendToThread(threadId, 'follow-up');
+    await trigger.sendToChannel(threadId, 'follow-up');
     expect(slackSend).toHaveBeenCalledWith({ token: 'xoxb-bot', channel: 'C2', text: 'follow-up', thread_ts: '2000.9' });
     const descriptor = store.getDescriptor(threadId);
     expect(descriptor?.identifiers.thread_ts).toBe('2000.9');
