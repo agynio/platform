@@ -16,7 +16,7 @@ Lifecycle
   - When `platform` is set in static config, image pulls and container creation use the requested platform. Non-native platforms may be slower and depend on engine emulation.
 - Exec behavior
   - Each exec can set per-call env/workdir and timeouts. See docs/config/env-overlays.md.
-  - Non-interactive execs support a `logToPid1` flag that mirrors stdout/stderr to `/proc/1/fd/{1,2}` so container logging drivers capture docker exec output. When bash is present the wrapper preserves exit codes via `set -o pipefail`; otherwise a fallback `sh` pipeline is used (exit codes may always be zero) and combines stderr into stdout before writing to `/proc/1/fd/1`, so operators may see stderr-only lines on stdout in minimal images (for example, Alpine).
+  - Non-interactive execs support a `logToPid1` flag that mirrors stdout/stderr to `/proc/1/fd/{1,2}` so container logging drivers capture docker exec output. The wrapper is bash-only (`/bin/bash -lc 'set -o pipefail; { <CMD> ; } 2> >(tee -a /proc/1/fd/2 >&2) | tee -a /proc/1/fd/1'`) and requires bash to be present in the image; if bash is missing the exec will fail.
 - TTL, cleanup, and backoff
   - Containers record `last_used_at` and `kill_after_at` (derived from TTL). A background cleanup job removes expired containers.
   - Termination errors are retried with exponential backoff up to a max delay of 15 minutes; benign 304/404/409 errors on stop/remove are swallowed.

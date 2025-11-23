@@ -23,7 +23,7 @@ export const bashCommandSchema = z.object({
     .string()
     .min(1)
     .describe(
-      `Shell command to execute. Avoid interactive commands or watch mode. Use single quotes for cli arguments to prevent unexpected interpolation (do not wrap entire command in quotes). Commands run via a non-interactive shell wrapper (bash when available, sh fallback) that also mirrors output to PID 1 for container logging, so you do not need to prefix with bash yourself.`,
+      `Shell command to execute. Avoid interactive commands or watch mode. Use single quotes for cli arguments to prevent unexpected interpolation (do not wrap entire command in quotes). Commands run via a non-interactive bash wrapper that mirrors output to PID 1 for container logging, so you do not need to prefix with bash yourself (images must include /bin/bash).`,
     ),
   cwd: z.string().optional().describe('Optional working directory override applied for this command.'),
 });

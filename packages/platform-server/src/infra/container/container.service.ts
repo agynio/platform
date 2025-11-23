@@ -58,8 +58,6 @@ export type ContainerOpts = {
 @Injectable()
 export class ContainerService {
   private docker: Docker;
-  private readonly logShellPreference = new Map<string, 'bash' | 'sh'>();
-  private readonly logShellDetection = new Map<string, Promise<'bash' | 'sh'>>();
 
   constructor(
     @Inject(LoggerService) private logger: LoggerService,
@@ -233,7 +231,7 @@ export class ContainerService {
 
     const logToPid1 = options?.logToPid1 ?? false;
     const Cmd = logToPid1
-      ? await this.buildLogToPid1Command(container, inspectData.Id, command)
+      ? this.buildLogToPid1Command(command)
       : Array.isArray(command)
         ? command
         : ['/bin/sh', '-lc', command];
@@ -394,71 +392,13 @@ export class ContainerService {
     await exec.resize({ w: size.cols, h: size.rows });
   }
 
-  private async buildLogToPid1Command(
-    container: Docker.Container,
-    containerId: string,
-    command: string[] | string,
-  ): Promise<string[]> {
-    const preferredShell = await this.detectPreferredLogShell(container, containerId);
+  private buildLogToPid1Command(command: string[] | string): string[] {
+    const script = 'set -o pipefail; { "$@" ; } 2> >(tee -a /proc/1/fd/2 >&2) | tee -a /proc/1/fd/1';
     const placeholder = '__hautech_exec__';
-    if (preferredShell === 'bash') {
-      const script = Array.isArray(command)
-        ? 'set -o pipefail; { "$@" ; } 2> >(tee -a /proc/1/fd/2 >&2) | tee -a /proc/1/fd/1'
-        : 'set -o pipefail; { eval "$1" ; } 2> >(tee -a /proc/1/fd/2 >&2) | tee -a /proc/1/fd/1';
-      const args = Array.isArray(command) ? command : [command];
-      return ['bash', '-lc', script, placeholder, ...args];
+    if (Array.isArray(command)) {
+      return ['/bin/bash', '-lc', script, placeholder, ...command];
     }
-    const script = Array.isArray(command)
-      ? '("$@") 2>&1 | tee -a /proc/1/fd/1'
-      : '( eval "$1" 2>&1 ) | tee -a /proc/1/fd/1';
-    const args = Array.isArray(command) ? command : [command];
-    return ['sh', '-lc', script, placeholder, ...args];
-  }
-
-  private async detectPreferredLogShell(
-    container: Docker.Container,
-    containerId: string,
-  ): Promise<'bash' | 'sh'> {
-    const cached = this.logShellPreference.get(containerId);
-    if (cached) return cached;
-    const inflight = this.logShellDetection.get(containerId);
-    if (inflight) return inflight;
-    const detectionPromise = (async (): Promise<'bash' | 'sh'> => {
-      try {
-        const exec = await container.exec({
-          Cmd: ['/bin/sh', '-lc', 'command -v bash >/dev/null 2>&1'],
-          AttachStdout: true,
-          AttachStderr: true,
-          AttachStdin: false,
-          Tty: false,
-        });
-        const { exitCode } = await this.startAndCollectExec(exec, 5_000);
-        if (exitCode === 0) {
-          this.logShellPreference.set(containerId, 'bash');
-          return 'bash';
-        }
-      } catch (err) {
-        this.logger.debug('bash detection failed', {
-          containerId: containerId.substring(0, 12),
-          error: err instanceof Error ? err.message : String(err),
-        });
-      }
-      this.logShellPreference.set(containerId, 'sh');
-      return 'sh';
-    })()
-      .catch((err) => {
-        this.logger.debug('bash detection encountered unexpected error', {
-          containerId: containerId.substring(0, 12),
-          error: err instanceof Error ? err.message : String(err),
-        });
-        this.logShellPreference.set(containerId, 'sh');
-        return 'sh' as const;
-      })
-      .finally(() => {
-        this.logShellDetection.delete(containerId);
-      });
-    this.logShellDetection.set(containerId, detectionPromise);
-    return detectionPromise;
+    return ['/bin/bash', '-lc', script, placeholder, '/bin/bash', '-lc', command];
   }
 
   private startAndCollectExec(
@@ -739,8 +679,6 @@ export class ContainerService {
   /** Stop a container by docker id (gracefully). */
   async stopContainer(containerId: string, timeoutSec = 10): Promise<void> {
     this.logger.info(`Stopping container cid=${containerId.substring(0, 12)} (timeout=${timeoutSec}s)`);
-    this.logShellPreference.delete(containerId);
-    this.logShellDetection.delete(containerId);
     const c = this.docker.getContainer(containerId);
     try {
       await c.stop({ t: timeoutSec });
@@ -760,8 +698,6 @@ export class ContainerService {
   /** Remove a container by docker id. */
   async removeContainer(containerId: string, force = false): Promise<void> {
     this.logger.info(`Removing container cid=${containerId.substring(0, 12)} force=${force}`);
-    this.logShellPreference.delete(containerId);
-    this.logShellDetection.delete(containerId);
     const container = this.docker.getContainer(containerId);
     try {
       await container.remove({ force });
