@@ -13,7 +13,7 @@ export class SendMessageFunctionTool extends FunctionTool<typeof sendMessageInvo
   constructor(
     private logger: LoggerService,
     private prisma: PrismaService,
-    private runtime: LiveGraphRuntime,
+    private runtime: LiveGraphRuntime | undefined,
   ) {
     super();
   }
@@ -31,6 +31,10 @@ export class SendMessageFunctionTool extends FunctionTool<typeof sendMessageInvo
   async execute(args: z.infer<typeof sendMessageInvocationSchema>, ctx: LLMContext): Promise<string> {
     const threadId = ctx?.threadId;
     if (!threadId) return JSON.stringify({ ok: false, error: 'missing_thread_context' });
+    if (!this.runtime) {
+      this.logger.error('SendMessageFunctionTool: runtime unavailable', { threadId });
+      return JSON.stringify({ ok: false, error: 'runtime_unavailable' });
+    }
     try {
       const prisma = this.prisma.getClient();
       const thread = await prisma.thread.findUnique({

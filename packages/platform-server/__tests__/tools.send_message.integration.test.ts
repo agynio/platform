@@ -1,10 +1,15 @@
 import { describe, it, expect } from 'vitest';
+import { Test } from '@nestjs/testing';
+import { ModuleRef } from '@nestjs/core';
 import { SendMessageFunctionTool } from '../src/nodes/tools/send_message/send_message.tool';
 import { LoggerService } from '../src/core/services/logger.service';
 // Avoid importing PrismaService to prevent prisma client load
 import { SlackTrigger } from '../src/nodes/slackTrigger/slackTrigger.node';
 import type { SlackAdapter } from '../src/messaging/slack/slack.adapter';
-import type { LiveGraphRuntime } from '../src/graph-core/liveGraph.manager';
+import { LiveGraphRuntime } from '../src/graph-core/liveGraph.manager';
+import type Node from '../src/nodes/base/Node';
+import { TemplateRegistry } from '../src/graph-core/templateRegistry';
+import { SendMessageNode } from '../src/nodes/tools/send_message/send_message.node';
 
 // Mock slack web api
 import { vi } from 'vitest';
@@ -48,9 +53,9 @@ describe('send_message tool', () => {
     return { prismaService, threadFindUnique, state };
   };
 
-  const makeRuntimeStub = (instance: unknown) =>
+  const makeRuntimeStub = (instance: unknown): LiveGraphRuntime =>
     ({
-      getNodeInstance: vi.fn(() => instance),
+      getNodeInstance: vi.fn(() => instance as Node | undefined),
     } satisfies Partial<LiveGraphRuntime>) as LiveGraphRuntime;
 
   const makeTrigger = async (
@@ -142,5 +147,47 @@ describe('send_message tool', () => {
     const obj = JSON.parse(res);
     expect(obj).toEqual({ ok: true, channelMessageId: '2001', threadId: '2001' });
     expect(slackSend).toHaveBeenCalledWith({ token: 'xoxb-abc', channel: 'C1', text: 'hello', thread_ts: '123' });
+  });
+
+  it('returns runtime_unavailable when TemplateRegistry instantiates without runtime binding', async () => {
+    const loggerStub = {
+      info: vi.fn(),
+      debug: vi.fn(),
+      warn: vi.fn(),
+      error: vi.fn(),
+    };
+    const { prismaService } = makePrismaStub({ channelNodeId: 'channel-node' });
+
+    const testingModule = await Test.createTestingModule({
+      providers: [TemplateRegistry, SendMessageNode],
+    })
+      .useMocker((token) => {
+        if (typeof token === 'function' && token.name === 'LoggerService') return loggerStub;
+        if (typeof token === 'function' && token.name === 'PrismaService') return prismaService;
+        return undefined;
+      })
+      .compile();
+
+    const registry = testingModule.get(TemplateRegistry);
+    registry.register(
+      'sendMessageTool',
+      { title: 'Send Message', kind: 'tool' },
+      SendMessageNode,
+    );
+
+    await expect(registry.toSchema()).resolves.not.toThrow();
+
+    const nodeCtor = registry.getClass('sendMessageTool');
+    expect(nodeCtor).toBe(SendMessageNode);
+
+    const node = await testingModule.get(ModuleRef).create<SendMessageNode>(nodeCtor as typeof SendMessageNode);
+    const result = await node.getTool().execute({ message: 'hello' }, { threadId: 'thread-1' });
+
+    expect(JSON.parse(result)).toEqual({ ok: false, error: 'runtime_unavailable' });
+    expect(loggerStub.error).toHaveBeenCalledWith('SendMessageFunctionTool: runtime unavailable', {
+      threadId: 'thread-1',
+    });
+
+    await testingModule.close();
   });
 });

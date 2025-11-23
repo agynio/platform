@@ -1,5 +1,4 @@
-import { forwardRef, Inject, Injectable, Module, OnModuleInit } from '@nestjs/common';
-import { ModuleRef } from '@nestjs/core';
+import { Inject, Injectable, Module, OnModuleInit } from '@nestjs/common';
 import { CoreModule } from '../core/core.module';
 import { EnvModule } from '../env/env.module';
 import { EventsModule } from '../events/events.module';
@@ -35,17 +34,15 @@ import { registerDefaultTemplates } from '../templates';
 
 @Injectable()
 class NodesTemplateRegistrar implements OnModuleInit {
-  constructor(@Inject(ModuleRef) private readonly moduleRef: ModuleRef) {}
+  constructor(@Inject(TemplateRegistry) private readonly registry: TemplateRegistry) {}
 
-  async onModuleInit(): Promise<void> {
-    const registry = await this.moduleRef.resolve(TemplateRegistry, undefined, { strict: false });
-    if (!registry) return;
-    registerDefaultTemplates(registry);
+  onModuleInit(): void {
+    registerDefaultTemplates(this.registry);
   }
 }
 
 @Module({
-  imports: [CoreModule, EnvModule, EventsModule, InfraModule, LLMModule, forwardRef(() => GraphCoreModule)],
+  imports: [CoreModule, EnvModule, EventsModule, InfraModule, LLMModule, GraphCoreModule],
   providers: [
     SlackAdapter,
     PostgresMemoryEntitiesRepository,

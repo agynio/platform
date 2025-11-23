@@ -4,7 +4,7 @@ import type { Constructor } from 'type-fest';
 
 import type { TemplatePortConfig } from '../graph/ports.types';
 import type { TemplateKind, TemplateNodeSchema } from '../shared/types/graph.types';
-import Node from '../nodes/base/Node';
+import type Node from '../nodes/base/Node';
 
 export interface TemplateMeta {
   title: string;
