@@ -664,14 +664,14 @@ export class ShellCommandTool extends FunctionTool<typeof bashCommandSchema> {
         cleanedStdout = cleanedStdoutFinal;
         cleanedStderr = cleanedStderrFinal;
         exitCode = response.exitCode;
-        if (terminalStatus !== 'timeout' && terminalStatus !== 'idle_timeout') {
-          if (typeof response.exitCode === 'number' && response.exitCode !== 0) {
-            terminalStatus = 'error';
-          } else if (truncated) {
-            terminalStatus = 'truncated';
-          } else {
-            terminalStatus = 'success';
+        const allowOverride = terminalStatus !== 'timeout' && terminalStatus !== 'idle_timeout';
+        const nonZeroExit = typeof response.exitCode === 'number' && response.exitCode !== 0;
+        if (truncated) {
+          if (allowOverride) {
+            terminalStatus = nonZeroExit ? 'error' : 'truncated';
           }
+        } else if (allowOverride) {
+          terminalStatus = nonZeroExit ? 'error' : 'success';
         }
       }
 
