@@ -144,6 +144,8 @@ describe('SlackTrigger events', () => {
     const prismaStub = ({ getClient: () => ({ thread: { findUnique: async () => ({ channel: null }) } }) } satisfies Pick<import('../src/core/services/prisma.service').PrismaService, 'getClient'>) as import('../src/core/services/prisma.service').PrismaService;
     const slackAdapterStub = ({ sendText: vi.fn() } satisfies Pick<SlackAdapter, 'sendText'>) as SlackAdapter;
     const trig = new SlackTrigger(logger as LoggerService, vault, persistence, prismaStub, slackAdapterStub);
+    const nodeId = 'slack-node';
+    trig.init({ nodeId });
     await trig.setConfig({ app_token: { value: 'xapp-abc', source: 'static' }, bot_token: { value: 'xoxb-bot', source: 'static' } });
     const received: BufferMessage[] = [];
     const listener = { invoke: vi.fn(async (_t: string, msgs: BufferMessage[]) => { received.push(...msgs); }) };
@@ -159,11 +161,12 @@ describe('SlackTrigger events', () => {
       getOrCreateThreadByAlias,
       updateThreadChannelDescriptor,
       trig,
+      nodeId,
     };
   };
 
   it('persists descriptor for top-level events with root thread ts set to event ts', async () => {
-    const { handler, received, getOrCreateThreadByAlias, updateThreadChannelDescriptor } = await setupTrigger();
+    const { handler, received, getOrCreateThreadByAlias, updateThreadChannelDescriptor, nodeId } = await setupTrigger();
     const ack = vi.fn<[], Promise<void>>(async () => {});
     const env: SlackEnvelope = {
       envelope_id: 'e1',
@@ -185,7 +188,9 @@ describe('SlackTrigger events', () => {
     await handler(env);
     expect(received.length).toBe(1);
     expect(ack).toHaveBeenCalledTimes(1);
-    expect(getOrCreateThreadByAlias).toHaveBeenCalledWith('slack', 'U_1.0', 'hello');
+    expect(getOrCreateThreadByAlias).toHaveBeenCalledWith('slack', 'U_1.0', 'hello', {
+      channelNodeId: nodeId,
+    });
     expect(updateThreadChannelDescriptor).toHaveBeenCalledWith(
       't-slack',
       expect.objectContaining({
@@ -196,7 +201,7 @@ describe('SlackTrigger events', () => {
   });
 
   it('does not overwrite descriptor for reply events', async () => {
-    const { handler, received, getOrCreateThreadByAlias, updateThreadChannelDescriptor } = await setupTrigger();
+    const { handler, received, getOrCreateThreadByAlias, updateThreadChannelDescriptor, nodeId } = await setupTrigger();
     const ack = vi.fn<[], Promise<void>>(async () => {});
     const env: SlackEnvelope = {
       envelope_id: 'reply',
@@ -216,12 +221,14 @@ describe('SlackTrigger events', () => {
     await handler(env);
     expect(received.length).toBe(1);
     expect(ack).toHaveBeenCalledTimes(1);
-    expect(getOrCreateThreadByAlias).toHaveBeenCalledWith('slack', 'UR_root-5', 'reply content');
+    expect(getOrCreateThreadByAlias).toHaveBeenCalledWith('slack', 'UR_root-5', 'reply content', {
+      channelNodeId: nodeId,
+    });
     expect(updateThreadChannelDescriptor).not.toHaveBeenCalled();
   });
 
   it('relays message events from socket-mode events_api payload', async () => {
-    const { handler, received, getOrCreateThreadByAlias, updateThreadChannelDescriptor } = await setupTrigger();
+    const { handler, received, getOrCreateThreadByAlias, updateThreadChannelDescriptor, nodeId } = await setupTrigger();
     const ack = vi.fn<[], Promise<void>>(async () => {});
     const env: SlackEnvelope = {
       envelope_id: 'e2',
@@ -242,7 +249,9 @@ describe('SlackTrigger events', () => {
     await handler(env);
     expect(received.length).toBe(1);
     expect(ack).toHaveBeenCalledTimes(1);
-    expect(getOrCreateThreadByAlias).toHaveBeenCalledWith('slack', 'U2_2.0', 'hello socket');
+    expect(getOrCreateThreadByAlias).toHaveBeenCalledWith('slack', 'U2_2.0', 'hello socket', {
+      channelNodeId: nodeId,
+    });
     expect(updateThreadChannelDescriptor).toHaveBeenCalledWith(
       't-slack',
       expect.objectContaining({ identifiers: { channel: 'C2', thread_ts: '2.0' } }),
@@ -250,7 +259,7 @@ describe('SlackTrigger events', () => {
   });
 
   it('falls back to envelope.event when body payload missing', async () => {
-    const { handler, received, getOrCreateThreadByAlias, updateThreadChannelDescriptor } = await setupTrigger();
+    const { handler, received, getOrCreateThreadByAlias, updateThreadChannelDescriptor, nodeId } = await setupTrigger();
     const ack = vi.fn<[], Promise<void>>(async () => {});
     const env: SlackEnvelope = {
       envelope_id: 'e3',
@@ -266,7 +275,9 @@ describe('SlackTrigger events', () => {
     await handler(env);
     expect(received.length).toBe(1);
     expect(ack).toHaveBeenCalledTimes(1);
-    expect(getOrCreateThreadByAlias).toHaveBeenCalledWith('slack', 'UF_3.0', 'fallback');
+    expect(getOrCreateThreadByAlias).toHaveBeenCalledWith('slack', 'UF_3.0', 'fallback', {
+      channelNodeId: nodeId,
+    });
     expect(updateThreadChannelDescriptor).toHaveBeenCalledWith(
       't-slack',
       expect.objectContaining({ identifiers: { channel: 'CF', thread_ts: '3.0' } }),

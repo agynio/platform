@@ -167,12 +167,28 @@ if (!shouldRunRealtimeTests) {
     await subscribeRooms(client, ['threads', `thread:${threadId}`]);
 
     const createdPromise = waitForEvent<{ thread: { id: string } }>(client, 'thread_created');
-    gateway.emitThreadCreated({ id: threadId, alias: 't', summary: null, status: 'open', createdAt: new Date(), parentId: null });
+    gateway.emitThreadCreated({
+      id: threadId,
+      alias: 't',
+      summary: null,
+      status: 'open',
+      createdAt: new Date(),
+      parentId: null,
+      channelNodeId: null,
+    });
     const createdPayload = await createdPromise;
     expect(createdPayload.thread.id).toBe(threadId);
 
     const updatedPromise = waitForEvent<{ thread: { summary: string | null } }>(client, 'thread_updated');
-    gateway.emitThreadUpdated({ id: threadId, alias: 't', summary: 'Updated summary', status: 'open', createdAt: new Date(), parentId: null });
+    gateway.emitThreadUpdated({
+      id: threadId,
+      alias: 't',
+      summary: 'Updated summary',
+      status: 'open',
+      createdAt: new Date(),
+      parentId: null,
+      channelNodeId: null,
+    });
     const updatedPayload = await updatedPromise;
     expect(updatedPayload.thread.summary).toBe('Updated summary');
 

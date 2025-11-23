@@ -26,6 +26,7 @@ import { GraphRepository } from '../src/graph/graph.repository';
 import { ModuleRef } from '@nestjs/core';
 import { GraphSocketGateway } from '../src/gateway/graph.socket.gateway';
 import { GatewayModule } from '../src/gateway/gateway.module';
+import { LiveGraphRuntime } from '../src/graph-core/liveGraph.manager';
 
 process.env.LLM_PROVIDER = process.env.LLM_PROVIDER || 'openai';
 process.env.AGENTS_DATABASE_URL = process.env.AGENTS_DATABASE_URL || 'postgres://localhost:5432/test';
@@ -185,6 +186,13 @@ if (!shouldRunDbTests) {
         imports: [GraphApiModule, GatewayModule],
       });
 
+      const liveRuntimeStub = ({
+        load: vi.fn().mockResolvedValue({ applied: false }),
+        apply: vi.fn().mockResolvedValue({ addedNodes: [], removedNodeIds: [], configUpdateNodeIds: [], addedEdges: [], removedEdges: [] }),
+        getNodeInstance: vi.fn(),
+        subscribe: vi.fn(() => () => {}),
+      } satisfies Partial<LiveGraphRuntime>) as LiveGraphRuntime;
+
       vi.spyOn(PrismaService.prototype, 'getClient').mockReturnValue(prismaClientStub as PrismaClient);
       vi.spyOn(ContainerRegistry.prototype, 'ensureIndexes').mockResolvedValue(undefined);
 
@@ -199,6 +207,7 @@ if (!shouldRunDbTests) {
       builder.overrideProvider(ThreadsMetricsService).useFactory(() => threadsMetricsStub as ThreadsMetricsService);
       builder.overrideProvider(VaultService).useFactory(() => vaultStub as VaultService);
       builder.overrideProvider(SlackAdapter).useFactory(() => slackAdapterStub as SlackAdapter);
+      builder.overrideProvider(LiveGraphRuntime).useFactory(() => liveRuntimeStub);
       builder.overrideProvider(ConfigService).useFactory(() => configServiceStub);
       builder.overrideProvider(EnvService).useFactory(() => envServiceStub as EnvService);
       builder.overrideProvider(GithubService).useFactory(() => makeStub({}));

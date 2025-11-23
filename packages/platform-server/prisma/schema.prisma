@@ -82,6 +82,7 @@ model Thread {
   alias     String       @unique
   summary   String?
   status    ThreadStatus @default(open)
+  channelNodeId String? @map("channel_node_id") @db.Uuid
   // Channel descriptor for replying to origin channel
   channel   Json?
   createdAt DateTime     @default(now())

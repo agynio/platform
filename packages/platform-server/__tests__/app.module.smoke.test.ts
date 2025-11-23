@@ -17,6 +17,7 @@ import { SlackAdapter } from '../src/messaging/slack/slack.adapter';
 import { EventsBusService } from '../src/events/events-bus.service';
 import { createEventsBusStub } from './helpers/eventsBus.stub';
 import { StartupRecoveryService } from '../src/core/services/startupRecovery.service';
+import { LiveGraphRuntime } from '../src/graph-core/liveGraph.manager';
 
 process.env.LLM_PROVIDER = process.env.LLM_PROVIDER || 'openai';
 process.env.AGENTS_DATABASE_URL = process.env.AGENTS_DATABASE_URL || 'postgres://localhost:5432/test';
@@ -120,6 +121,11 @@ describe('AppModule bootstrap smoke test', () => {
     } satisfies Partial<SlackAdapter>;
     const eventsBusStub = createEventsBusStub();
     const startupRecoveryStub = { onApplicationBootstrap: vi.fn() } satisfies Partial<StartupRecoveryService>;
+    const liveRuntimeStub = ({
+      load: vi.fn().mockResolvedValue({ applied: false }),
+      getNodeInstance: vi.fn(),
+      subscribe: vi.fn(() => () => {}),
+    } satisfies Partial<LiveGraphRuntime>) as LiveGraphRuntime;
 
 
     const moduleRef = await Test.createTestingModule({ imports: [AppModule] })
@@ -149,6 +155,8 @@ describe('AppModule bootstrap smoke test', () => {
       .useValue(eventsBusStub as unknown as EventsBusService)
       .overrideProvider(StartupRecoveryService)
       .useValue(startupRecoveryStub)
+      .overrideProvider(LiveGraphRuntime)
+      .useValue(liveRuntimeStub)
       .compile();
 
     const adapter = new FastifyAdapter();

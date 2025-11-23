@@ -255,8 +255,24 @@ describe('GraphSocketGateway event bus integration', () => {
     const messageCreated = vi.spyOn(ctx.gateway, 'emitMessageCreated');
     const runStatus = vi.spyOn(ctx.gateway, 'emitRunStatusChanged');
 
-    ctx.handlers.threadCreated?.({ id: 'thread-1', alias: 't', summary: null, status: 'open', createdAt: new Date(), parentId: null } as any);
-    ctx.handlers.threadUpdated?.({ id: 'thread-2', alias: 't2', summary: null, status: 'open', createdAt: new Date(), parentId: null } as any);
+    ctx.handlers.threadCreated?.({
+      id: 'thread-1',
+      alias: 't',
+      summary: null,
+      status: 'open',
+      createdAt: new Date(),
+      parentId: null,
+      channelNodeId: null,
+    } as any);
+    ctx.handlers.threadUpdated?.({
+      id: 'thread-2',
+      alias: 't2',
+      summary: null,
+      status: 'open',
+      createdAt: new Date(),
+      parentId: null,
+      channelNodeId: null,
+    } as any);
     ctx.handlers.messageCreated?.({ threadId: 'thread-1', message: { id: 'msg-1', kind: 'user', text: 'hi', source: {}, createdAt: new Date() } as any });
     ctx.handlers.runStatus?.({ threadId: 'thread-1', run: { id: 'run-1', status: 'running', createdAt: new Date(), updatedAt: new Date() } });
 

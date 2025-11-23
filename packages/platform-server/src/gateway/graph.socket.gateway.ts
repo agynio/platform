@@ -459,11 +459,27 @@ export class GraphSocketGateway implements OnModuleInit, OnModuleDestroy {
   }
 
   // Threads realtime events
-  emitThreadCreated(thread: { id: string; alias: string; summary: string | null; status: ThreadStatus; createdAt: Date; parentId?: string | null }) {
+  emitThreadCreated(thread: {
+    id: string;
+    alias: string;
+    summary: string | null;
+    status: ThreadStatus;
+    createdAt: Date;
+    parentId?: string | null;
+    channelNodeId?: string | null;
+  }) {
     const payload = { thread: { ...thread, createdAt: thread.createdAt.toISOString() } };
     this.emitToRooms(['threads'], 'thread_created', payload);
   }
-  emitThreadUpdated(thread: { id: string; alias: string; summary: string | null; status: ThreadStatus; createdAt: Date; parentId?: string | null }) {
+  emitThreadUpdated(thread: {
+    id: string;
+    alias: string;
+    summary: string | null;
+    status: ThreadStatus;
+    createdAt: Date;
+    parentId?: string | null;
+    channelNodeId?: string | null;
+  }) {
     const payload = { thread: { ...thread, createdAt: thread.createdAt.toISOString() } };
     this.emitToRooms(['threads'], 'thread_updated', payload);
   }

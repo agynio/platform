@@ -138,7 +138,9 @@ export class SlackTrigger extends Node<SlackTriggerConfig> {
             event_ts: event.event_ts,
           },
         };
-        const threadId = await this.persistence.getOrCreateThreadByAlias('slack', alias, text);
+        const threadId = await this.persistence.getOrCreateThreadByAlias('slack', alias, text, {
+          channelNodeId: this.nodeId,
+        });
         // Persist descriptor only when channel present and event is top-level (no thread_ts)
         if (typeof event.channel === 'string' && event.channel) {
           if (!event.thread_ts && rootTs) {
@@ -244,7 +246,7 @@ export class SlackTrigger extends Node<SlackTriggerConfig> {
   }
 
   // Send a text message using stored thread descriptor and this trigger's bot token
-  async sendToThread(threadId: string, text: string): Promise<SendResult> {
+  async sendToChannel(threadId: string, text: string): Promise<SendResult> {
     try {
       const prisma = this.prismaService.getClient();
       type ThreadChannelRow = { channel: unknown | null };
@@ -253,22 +255,22 @@ export class SlackTrigger extends Node<SlackTriggerConfig> {
         select: { channel: true },
       })) as ThreadChannelRow | null;
       if (!thread) {
-        this.logger.error('SlackTrigger.sendToThread: missing descriptor', { threadId });
+        this.logger.error('SlackTrigger.sendToChannel: missing descriptor', { threadId });
         return { ok: false, error: 'missing_channel_descriptor' };
       }
       // Bot token must be set after provision/setup; do not resolve here
       if (!this.botToken) {
-        this.logger.error('SlackTrigger.sendToThread: trigger not provisioned');
+        this.logger.error('SlackTrigger.sendToChannel: trigger not provisioned');
         return { ok: false, error: 'slacktrigger_unprovisioned' };
       }
       const channelRaw: unknown = thread.channel as unknown;
       if (channelRaw == null) {
-        this.logger.error('SlackTrigger.sendToThread: missing descriptor', { threadId });
+        this.logger.error('SlackTrigger.sendToChannel: missing descriptor', { threadId });
         return { ok: false, error: 'missing_channel_descriptor' };
       }
       const parsed = ChannelDescriptorSchema.safeParse(channelRaw);
       if (!parsed.success) {
-        this.logger.error('SlackTrigger.sendToThread: invalid descriptor', { threadId });
+        this.logger.error('SlackTrigger.sendToChannel: invalid descriptor', { threadId });
         return { ok: false, error: 'invalid_channel_descriptor' };
       }
       const descriptor = parsed.data;
@@ -282,7 +284,7 @@ export class SlackTrigger extends Node<SlackTriggerConfig> {
       return res;
     } catch (e) {
       const msg = e instanceof Error && e.message ? e.message : 'unknown_error';
-      this.logger.error('SlackTrigger.sendToThread failed', { threadId, error: msg });
+      this.logger.error('SlackTrigger.sendToChannel failed', { threadId, error: msg });
       return { ok: false, error: msg };
     }
   }

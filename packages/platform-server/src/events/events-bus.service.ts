@@ -38,6 +38,7 @@ export type ThreadBroadcast = {
   status: ThreadStatus;
   createdAt: Date;
   parentId?: string | null;
+  channelNodeId?: string | null;
 };
 
 export type MessageBroadcast = {
