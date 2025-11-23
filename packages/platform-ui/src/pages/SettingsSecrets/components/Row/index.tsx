@@ -2,8 +2,8 @@ import { Eye, EyeOff, Copy } from 'lucide-react';
 import type { SecretEntry } from '@/api/modules/graph';
 import { IconButton } from '@/components/IconButton';
 import { Badge } from '@/components/Badge';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
+import { Button } from '@/components/Button';
+import { Input } from '@/components/Input';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { TableCell, TableRow } from '@/components/ui/table';
 import { useRowLogic } from './logic';
@@ -33,11 +33,11 @@ export function Row({ entry }: RowProps) {
 
   return (
     <TableRow
-      className={`${
+      className={`border-b border-[var(--agyn-border-subtle)] transition-colors hover:bg-[var(--agyn-bg-light)]/50 ${
         isMissing ? 'bg-[var(--agyn-status-pending-bg)]/50' : 'bg-white'
       }`}
     >
-      <TableCell className="px-6 py-4 align-middle">
+      <TableCell className="px-6 h-[60px] align-middle">
         <div className="flex items-center gap-3">
           <span className="font-mono text-sm text-[var(--agyn-dark)] break-all">
             {entry.mount}/{entry.path}/{entry.key}
@@ -49,17 +49,19 @@ export function Row({ entry }: RowProps) {
           )}
         </div>
       </TableCell>
-      <TableCell className="px-6 py-4 align-middle">
+      <TableCell className="px-6 h-[60px] align-middle">
         {isEditing ? (
           <div className="flex items-center gap-2">
-            <Input
-              type={isReveal ? 'text' : 'password'}
-              value={value}
-              placeholder={isReveal ? 'Enter secret value' : '••••'}
-              onChange={(event) => onValueChange(event.target.value)}
-              disabled={isSaving}
-              className="max-w-[360px]"
-            />
+            <div className="w-[360px] max-w-full">
+              <Input
+                type={isReveal ? 'text' : 'password'}
+                value={value}
+                placeholder={isReveal ? 'Enter secret value' : '••••'}
+                onChange={(event) => onValueChange(event.target.value)}
+                disabled={isSaving}
+                size="sm"
+              />
+            </div>
             <Tooltip>
               <TooltipTrigger asChild>
                 <IconButton
@@ -71,7 +73,12 @@ export function Row({ entry }: RowProps) {
                   disabled={isSaving || isReading}
                 />
               </TooltipTrigger>
-              <TooltipContent sideOffset={4}>{revealLabel}</TooltipContent>
+              <TooltipContent
+                sideOffset={4}
+                className="bg-[var(--agyn-dark)] text-white text-xs px-2 py-1 rounded-md"
+              >
+                {revealLabel}
+              </TooltipContent>
             </Tooltip>
             <Tooltip>
               <TooltipTrigger asChild>
@@ -84,15 +91,20 @@ export function Row({ entry }: RowProps) {
                   disabled={!isReveal || !value}
                 />
               </TooltipTrigger>
-              <TooltipContent sideOffset={4}>Copy</TooltipContent>
+              <TooltipContent
+                sideOffset={4}
+                className="bg-[var(--agyn-dark)] text-white text-xs px-2 py-1 rounded-md"
+              >
+                Copy
+              </TooltipContent>
             </Tooltip>
             {isReading && <span className="text-xs text-[var(--agyn-text-subtle)]">Fetching…</span>}
           </div>
         ) : (
-          <span className="text-sm text-[var(--agyn-text-subtle)] select-none">••••</span>
+          <span className="text-sm font-mono text-[var(--agyn-dark)] select-none">••••</span>
         )}
       </TableCell>
-      <TableCell className="px-6 py-4 align-middle text-right">
+      <TableCell className="px-6 h-[60px] align-middle text-right">
         {isEditing ? (
           <div className="flex justify-end gap-2">
             <Button size="sm" onClick={save} disabled={!canSave}>

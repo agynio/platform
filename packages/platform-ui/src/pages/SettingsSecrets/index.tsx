@@ -55,9 +55,9 @@ export function SettingsSecrets() {
           </colgroup>
           <TableHeader className="sticky top-0 z-10">
             <TableRow className="bg-white shadow-[0_1px_0_0_var(--agyn-border-subtle)]">
-              <TableHead className="px-6 py-3 text-xs font-medium uppercase tracking-wide text-[var(--agyn-text-subtle)]">Key</TableHead>
-              <TableHead className="px-6 py-3 text-xs font-medium uppercase tracking-wide text-[var(--agyn-text-subtle)]">Value</TableHead>
-              <TableHead className="px-6 py-3 text-right text-xs font-medium uppercase tracking-wide text-[var(--agyn-text-subtle)]">Actions</TableHead>
+              <TableHead className="px-6 py-3 text-xs font-medium text-[var(--agyn-text-subtle)]">Key</TableHead>
+              <TableHead className="px-6 py-3 text-xs font-medium text-[var(--agyn-text-subtle)]">Value</TableHead>
+              <TableHead className="px-6 py-3 text-right text-xs font-medium text-[var(--agyn-text-subtle)]">Actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
