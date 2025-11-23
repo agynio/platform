@@ -1,4 +1,4 @@
-import { Inject, Injectable, Module, OnModuleInit } from '@nestjs/common';
+import { forwardRef, Inject, Injectable, Module, OnModuleInit } from '@nestjs/common';
 import { ModuleRef } from '@nestjs/core';
 import { CoreModule } from '../core/core.module';
 import { EnvModule } from '../env/env.module';
@@ -45,7 +45,7 @@ class NodesTemplateRegistrar implements OnModuleInit {
 }
 
 @Module({
-  imports: [CoreModule, EnvModule, EventsModule, InfraModule, LLMModule, GraphCoreModule],
+  imports: [CoreModule, EnvModule, EventsModule, InfraModule, LLMModule, forwardRef(() => GraphCoreModule)],
   providers: [
     SlackAdapter,
     PostgresMemoryEntitiesRepository,
