@@ -862,7 +862,7 @@ describe('RunTimelineEventDetails', () => {
     }
   });
 
-  it('highlights the last N context items when flagged as new', () => {
+  it('highlights only the last N conversational context items', () => {
     const contextItems: ContextItem[] = [
       {
         id: 'ctx-1',
@@ -875,21 +875,48 @@ describe('RunTimelineEventDetails', () => {
       },
       {
         id: 'ctx-2',
+        role: 'summary',
+        contentText: 'Summary of earlier conversation',
+        contentJson: null,
+        metadata: null,
+        sizeBytes: 30,
+        createdAt: '2024-01-01T00:01:00.000Z',
+      },
+      {
+        id: 'ctx-3',
+        role: 'memory',
+        contentText: 'Memory snippet',
+        contentJson: null,
+        metadata: null,
+        sizeBytes: 28,
+        createdAt: '2024-01-01T00:01:30.000Z',
+      },
+      {
+        id: 'ctx-4',
         role: 'user',
-        contentText: 'User asks a question',
+        contentText: 'Latest user question',
         contentJson: null,
         metadata: null,
         sizeBytes: 64,
         createdAt: '2024-01-01T00:02:00.000Z',
       },
       {
-        id: 'ctx-3',
+        id: 'ctx-5',
         role: 'assistant',
-        contentText: 'Assistant responds',
+        contentText: 'Assistant reply',
         contentJson: null,
         metadata: null,
-        sizeBytes: 128,
+        sizeBytes: 96,
         createdAt: '2024-01-01T00:03:00.000Z',
+      },
+      {
+        id: 'ctx-6',
+        role: 'tool',
+        contentText: 'Tool output artifact',
+        contentJson: null,
+        metadata: null,
+        sizeBytes: 80,
+        createdAt: '2024-01-01T00:04:00.000Z',
       },
     ];
 
@@ -915,7 +942,7 @@ describe('RunTimelineEventDetails', () => {
           topP: null,
           stopReason: null,
           contextItemIds: contextItems.map((item) => item.id),
-          newContextItemCount: 2,
+          newContextItemCount: 3,
           responseText: null,
           rawResponse: null,
           toolCalls: [],
@@ -926,14 +953,22 @@ describe('RunTimelineEventDetails', () => {
       renderDetails(event);
 
       const contextRegion = screen.getByTestId('llm-context-scroll');
-      const headers = Array.from(contextRegion.querySelectorAll('header'));
-      expect(headers).toHaveLength(3);
-      expect(headers[0]?.textContent ?? '').not.toContain('New');
-      expect(headers[1]?.textContent ?? '').toContain('New');
-      expect(headers[2]?.textContent ?? '').toContain('New');
-      const highlightedWrappers = headers.slice(1).map((header) => header.parentElement);
-      highlightedWrappers.forEach((wrapper) => {
+      const highlightedIds = ['ctx-4', 'ctx-5', 'ctx-6'];
+      const nonHighlightedIds = ['ctx-1', 'ctx-2', 'ctx-3'];
+
+      const newBadges = within(contextRegion).getAllByText('New');
+      expect(newBadges).toHaveLength(highlightedIds.length);
+
+      highlightedIds.forEach((id) => {
+        const wrapper = contextRegion.querySelector(`[data-context-item-id="${id}"]`);
         expect(wrapper?.className).toContain('border-sky-200');
+      });
+
+      nonHighlightedIds.forEach((id) => {
+        const wrapper = contextRegion.querySelector(`[data-context-item-id="${id}"]`);
+        expect(wrapper?.className ?? '').not.toContain('border-sky-200');
+        const headerText = wrapper?.querySelector('header')?.textContent ?? '';
+        expect(headerText).not.toContain('New');
       });
     } finally {
       useContextItemsSpy.mockRestore();

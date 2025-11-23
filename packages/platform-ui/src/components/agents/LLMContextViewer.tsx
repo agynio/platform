@@ -42,6 +42,8 @@ const ROLE_COLORS: Record<ContextItem['role'], string> = {
   other: 'bg-gray-500 text-white',
 };
 
+const HIGHLIGHT_ROLES: ReadonlySet<ContextItem['role']> = new Set(['user', 'assistant', 'tool']);
+
 export function LLMContextViewer({ ids, highlightLastCount, onItemsRendered, onBeforeLoadMore }: LLMContextViewerProps) {
   const { items, hasMore, isInitialLoading, isFetching, error, loadMore, total, targetCount } = useContextItems(ids, {
     initialCount: 10,
@@ -53,6 +55,21 @@ export function LLMContextViewer({ ids, highlightLastCount, onItemsRendered, onB
     if (!highlightLastCount || !Number.isFinite(highlightLastCount)) return 0;
     return Math.max(0, Math.floor(highlightLastCount));
   }, [highlightLastCount]);
+  const highlightSet = useMemo(() => {
+    if (highlightCount <= 0 || items.length === 0) return new Set<string>();
+    const collected = new Set<string>();
+    let remaining = highlightCount;
+    for (let index = items.length - 1; index >= 0 && remaining > 0; index -= 1) {
+      const candidate = items[index];
+      if (!candidate) continue;
+      if (!HIGHLIGHT_ROLES.has(candidate.role)) continue;
+      if (typeof candidate.id === 'string' && candidate.id.length > 0) {
+        collected.add(candidate.id);
+        remaining -= 1;
+      }
+    }
+    return collected;
+  }, [items, highlightCount]);
   const renderedCallbackRef = useRef<((items: ContextItem[]) => void) | undefined>(undefined);
 
   renderedCallbackRef.current = onItemsRendered;
@@ -81,16 +98,21 @@ export function LLMContextViewer({ ids, highlightLastCount, onItemsRendered, onB
         </button>
       )}
 
-      {items.map((item, index) => {
+      {items.map((item) => {
         const textContent = toPlainText(item.contentText, item.contentJson);
         const roleColor = ROLE_COLORS[item.role] ?? 'bg-gray-900 text-white';
-        const isHighlighted = highlightCount > 0 && index >= Math.max(0, items.length - highlightCount);
+        const isHighlighted = highlightSet.has(item.id);
         const wrapperClasses = ['space-y-2 text-[11px] text-gray-800'];
         if (isHighlighted) {
           wrapperClasses.push('rounded-md border border-sky-200 bg-sky-50/80 px-3 py-2');
         }
         return (
-          <div key={item.id} className={wrapperClasses.join(' ')}>
+          <div
+            key={item.id}
+            data-context-item-id={item.id}
+            data-context-item-role={item.role}
+            className={wrapperClasses.join(' ')}
+          >
             <header className="flex flex-wrap items-center gap-2 text-[10px] font-medium uppercase tracking-wide text-gray-500">
               <Badge className={`px-2 py-0.5 text-[10px] font-semibold capitalize leading-tight ${roleColor}`}>{item.role}</Badge>
               <span className="normal-case text-gray-600">{new Date(item.createdAt).toLocaleString()}</span>
