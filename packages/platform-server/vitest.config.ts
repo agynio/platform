@@ -4,7 +4,8 @@ export default defineConfig({
   test: {
     environment: "node",
     globals: true,
-    include: ["__tests__/**/*.test.ts", "__e2e__/**/*.test.ts"],
+    include: ["__tests__/**/*.{test,spec}.ts", "__e2e__/**/*.test.ts"],
+    setupFiles: ["./__tests__/vitest.setup.ts"],
     coverage: {
       enabled: false,
     },
