@@ -9,6 +9,7 @@
 CREATE TYPE "ContainerEventType" AS ENUM ('oom', 'die', 'kill');
 
 -- AlterTable
+TRUNCATE TABLE "Container";
 ALTER TABLE "Container" ADD COLUMN     "dockerContainerId" TEXT NOT NULL;
 
 -- CreateTable
