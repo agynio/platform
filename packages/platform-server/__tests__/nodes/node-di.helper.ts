@@ -27,7 +27,7 @@ type InjectionToken = Type<unknown> | string | symbol;
 
 const SKIP_TOKENS = new Set<InjectionToken>([ModuleRef]);
 
-const USE_CLASS_TOKENS = new Set<InjectionToken>([LoggerService, ManageFunctionTool]);
+const USE_CLASS_TOKENS = new Set<InjectionToken>([LoggerService]);
 
 const DEFAULT_TOKEN_FACTORIES = new Map<InjectionToken, () => unknown>([
   [
@@ -92,6 +92,14 @@ const DEFAULT_TOKEN_FACTORIES = new Map<InjectionToken, () => unknown>([
   [SlackAdapter, () => createDefaultStub('SlackAdapter')],
   [CallAgentLinkingService, () => createDefaultStub('CallAgentLinkingService')],
   [LiveGraphRuntime, () => createDefaultStub('LiveGraphRuntime')],
+  [
+    ManageFunctionTool,
+    () =>
+      new ManageFunctionTool(
+        createDefaultStub('LoggerService') as LoggerService,
+        createDefaultStub('AgentsPersistenceService') as AgentsPersistenceService,
+      ),
+  ],
 ]);
 
 function tokenName(token: InjectionToken): string {
@@ -113,34 +121,31 @@ function createDefaultStub(name: string, base: Record<PropertyKey, unknown> = {}
   });
 }
 
-function providerForToken(token: InjectionToken): Provider | undefined {
-  if (SKIP_TOKENS.has(token)) return undefined;
-  if (USE_CLASS_TOKENS.has(token)) {
-    return { provide: token, useClass: token as Type<unknown> };
-  }
-  const factory = DEFAULT_TOKEN_FACTORIES.get(token) ?? (() => createDefaultStub(tokenName(token)));
-  return {
-    provide: token,
-    useFactory: factory,
-  };
-}
-
 export async function createNodeTestingModule<T>(
   nodeClass: Type<T>,
   extraProviders: Provider[] = [],
 ): Promise<TestingModule> {
-  const deps = (Reflect.getMetadata('design:paramtypes', nodeClass) as InjectionToken[] | undefined) ?? [];
-  const providers = new Map<InjectionToken, Provider>();
-
-  for (const dep of deps) {
-    if (!dep) continue;
-    const provider = providerForToken(dep);
-    if (provider) providers.set(provider.provide as InjectionToken, provider);
-  }
-
   const moduleBuilder = Test.createTestingModule({
-    providers: [nodeClass, ...providers.values(), ...extraProviders],
+    providers: [nodeClass, ...extraProviders],
   });
 
-  return moduleBuilder.compile();
+  moduleBuilder.useMocker((token) => {
+    if (SKIP_TOKENS.has(token as InjectionToken)) return undefined;
+    if (process.env.VITEST_NODE_DI_DEBUG === 'true') {
+      console.debug(`useMocker -> ${tokenName(token as InjectionToken)}`);
+    }
+    const factory = DEFAULT_TOKEN_FACTORIES.get(token as InjectionToken);
+    if (factory) return factory();
+    if (USE_CLASS_TOKENS.has(token as InjectionToken)) {
+      const Target = token as Type<unknown>;
+      return new Target();
+    }
+    throw new Error(`No mock available for token ${tokenName(token as InjectionToken)}`);
+  });
+
+  const module = await moduleBuilder.compile();
+  if (process.env.VITEST_NODE_DI_DEBUG === 'true') {
+    console.debug(`createNodeTestingModule: compiled ${tokenName(nodeClass)}`);
+  }
+  return module;
 }
