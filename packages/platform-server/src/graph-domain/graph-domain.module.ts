@@ -10,6 +10,7 @@ import { LLMModule } from '../llm/llm.module';
 import { VaultModule } from '../vault/vault.module';
 import { GraphRepository } from '../graph/graph.repository';
 import { GitGraphRepository } from '../graph/gitGraph.repository';
+import { NodesModule } from '../nodes/nodes.module';
 import { AgentsPersistenceService } from '../agents/agents.persistence.service';
 import { ThreadsMetricsService } from '../agents/threads.metrics.service';
 import { RunSignalsRegistry } from '../agents/run-signals.service';
@@ -18,7 +19,7 @@ import { TemplateRegistry } from '../graph-core/templateRegistry';
 
 @Global()
 @Module({
-  imports: [CoreModule, EnvModule, EventsModule, InfraModule, VaultModule, LLMModule],
+  imports: [CoreModule, EnvModule, EventsModule, InfraModule, VaultModule, LLMModule, NodesModule],
   providers: [
     ThreadsMetricsService,
     RunSignalsRegistry,
@@ -42,6 +43,7 @@ import { TemplateRegistry } from '../graph-core/templateRegistry';
     VaultModule,
     LLMModule,
     GraphRepository,
+    NodesModule,
     AgentsPersistenceService,
     ThreadsMetricsService,
     RunSignalsRegistry,
