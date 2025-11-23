@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeAll, beforeEach, afterAll } from 'vitest';
 import { PrismaClient, Prisma } from '@prisma/client';
-import { PostgresMemoryRepository } from '../../src/nodes/memory/memory.repository';
+import { PostgresMemoryEntitiesRepository } from '../../src/nodes/memory/memory.repository';
 import { MemoryService } from '../../src/nodes/memory/memory.service';
 import { UnifiedMemoryFunctionTool as UnifiedMemoryTool } from '../../src/nodes/tools/memory/memory.tool';
 import { LoggerService } from '../../src/core/services/logger.service';
@@ -17,12 +17,15 @@ maybeDescribe('memory_append tool: path normalization and validation', () => {
   if (!shouldRunDbTests) return;
   const prisma = new PrismaClient({ datasources: { db: { url: URL! } } });
   beforeAll(async () => {
-    const svc = new MemoryService(new PostgresMemoryRepository({ getClient: () => prisma } as any));
+    const svc = new MemoryService(
+      new PostgresMemoryEntitiesRepository({ getClient: () => prisma } as any),
+      { get: async () => null } as any,
+    );
     svc.forMemory('bootstrap', 'global');
-    await prisma.$executeRaw`DELETE FROM memories WHERE node_id IN (${Prisma.join([NODE_ID, 'bootstrap'])})`;
+    await prisma.$executeRaw`DELETE FROM memory_entities WHERE node_id IN (${Prisma.join([NODE_ID, 'bootstrap'])})`;
   });
   beforeEach(async () => {
-    await prisma.$executeRaw`DELETE FROM memories WHERE node_id IN (${Prisma.join([NODE_ID])})`;
+    await prisma.$executeRaw`DELETE FROM memory_entities WHERE node_id IN (${Prisma.join([NODE_ID])})`;
   });
   afterAll(async () => {
     await prisma.$disconnect();
@@ -30,19 +33,18 @@ maybeDescribe('memory_append tool: path normalization and validation', () => {
   const mkTools = () => {
     const db = { getClient: () => prisma } as any;
     const factory = (opts: { threadId?: string }) => {
-      const svc = new MemoryService(new PostgresMemoryRepository(db as any));
+      const svc = new MemoryService(new PostgresMemoryEntitiesRepository(db as any), { get: async () => null } as any);
       return svc.forMemory(NODE_ID, opts.threadId ? 'perThread' : 'global', opts.threadId) as any;
     };
     const logger = new LoggerService();
     const node = new MemoryToolNode(logger);
     node.setMemorySource(factory);
     const tool = node.getTool();
-    const cfg = { threadId: 'T1' } as any;
-    return { unified: tool, cfg };
+    return { unified: tool };
   };
 
   it('Case A: path without leading slash is normalized and succeeds', async () => {
-    const { unified, cfg } = mkTools();
+    const { unified } = mkTools();
     await unified.execute({ path: 'U08ES6U5SSF', command: 'append', content: '{"user":"v"}' } as any);
     const content = JSON.parse(await unified.execute({ path: '/U08ES6U5SSF', command: 'read' } as any) as any);
     expect(typeof content.result.content).toBe('string');
@@ -50,14 +52,14 @@ maybeDescribe('memory_append tool: path normalization and validation', () => {
   });
 
   it('Case B: path with leading slash works as control', async () => {
-    const { unified, cfg } = mkTools();
+    const { unified } = mkTools();
     await unified.execute({ path: '/U08ES6U5SSF', command: 'append', content: 'hello' } as any);
     const content = JSON.parse(await unified.execute({ path: '/U08ES6U5SSF', command: 'read' } as any) as any);
     expect(content.result.content).toBe('hello');
   });
 
   it('Case C: invalid characters in path trigger validation error', async () => {
-    const { unified, cfg } = mkTools();
+    const { unified } = mkTools();
     const res1 = JSON.parse((await unified.execute({ path: '../hack', command: 'append', content: 'x' } as any)) as any);
     expect(res1.ok).toBe(false);
     expect(res1.error.code).toBe('EINVAL');
@@ -67,7 +69,7 @@ maybeDescribe('memory_append tool: path normalization and validation', () => {
   });
 
   it('Case D: append to new then existing file succeeds', async () => {
-    const { unified, cfg } = mkTools();
+    const { unified } = mkTools();
     await unified.execute({ path: '/file', command: 'append', content: 'one' } as any);
     await unified.execute({ path: '/file', command: 'append', content: 'two' } as any);
     const content = JSON.parse(await unified.execute({ path: '/file', command: 'read' } as any) as any);
@@ -75,14 +77,14 @@ maybeDescribe('memory_append tool: path normalization and validation', () => {
   });
 
   it('Case E: nested path without leading slash is normalized and parent dirs ensured', async () => {
-    const { unified, cfg } = mkTools();
+    const { unified } = mkTools();
     await unified.execute({ path: 'users/U08ES6U5SSF', command: 'append', content: '{"user_id":"U08ES6U5SSF","name":"Vitalii"}\n' } as any);
     const content = JSON.parse(await unified.execute({ path: '/users/U08ES6U5SSF', command: 'read' } as any) as any);
     expect(String(content.result.content)).toContain('Vitalii');
   });
 
   it('Case F: nested path with leading slash works identically', async () => {
-    const { unified, cfg } = mkTools();
+    const { unified } = mkTools();
     await unified.execute({ path: '/users/U08ES6U5SSF', command: 'append', content: '{"user_id":"U08ES6U5SSF","name":"Vitalii"}\n' } as any);
     const content = JSON.parse(await unified.execute({ path: '/users/U08ES6U5SSF', command: 'read' } as any) as any);
     expect(String(content.result.content)).toContain('U08ES6U5SSF');

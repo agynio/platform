@@ -20,6 +20,7 @@ type DirectoryNodeProps = {
   path: string;
   name: string;
   level: number;
+  hasSubdocs: boolean;
   expandedPaths: Set<string>;
   togglePath: (path: string) => void;
   selectedPath: string;
@@ -58,6 +59,7 @@ export function MemoryTree({ nodeId, scope, threadId, selectedPath, onSelectPath
         path="/"
         name="/"
         level={0}
+        hasSubdocs
         expandedPaths={expandedPaths}
         togglePath={(path) =>
           setExpandedPaths((prev) => {
@@ -87,6 +89,7 @@ function DirectoryNode({
   path,
   name,
   level,
+  hasSubdocs,
   expandedPaths,
   togglePath,
   selectedPath,
@@ -105,14 +108,14 @@ function DirectoryNode({
     if (!listQuery.data?.items) return [] as ListEntry[];
     const items = [...listQuery.data.items];
     items.sort((a, b) => {
-      if (a.kind === b.kind) return a.name.localeCompare(b.name);
-      return a.kind === 'dir' ? -1 : 1;
+      if (a.hasSubdocs === b.hasSubdocs) return a.name.localeCompare(b.name);
+      return a.hasSubdocs ? -1 : 1;
     });
     return items;
   }, [listQuery.data]);
 
   const isSelected = selectedPath === normalizedPath;
-
+  const canExpand = normalizedPath === '/' || hasSubdocs || (listQuery.data?.items?.length ?? 0) > 0;
   const paddingLeft = Math.max(0, level * 16);
 
   return (
@@ -125,11 +128,30 @@ function DirectoryNode({
       >
         <button
           type="button"
-          onClick={() => togglePath(normalizedPath)}
-          className="flex size-5 items-center justify-center text-muted-foreground hover:text-foreground"
-          aria-label={isExpanded ? 'Collapse directory' : 'Expand directory'}
+          onClick={() => {
+            if (canExpand) togglePath(normalizedPath);
+          }}
+          disabled={!canExpand}
+          className={`flex size-5 items-center justify-center text-muted-foreground ${
+            canExpand ? 'hover:text-foreground' : 'opacity-50'
+          }`}
+          aria-label={
+            canExpand
+              ? isExpanded
+                ? 'Collapse subdocuments'
+                : 'Expand subdocuments'
+              : 'No subdocuments'
+          }
         >
-          {isExpanded ? <ChevronDown className="size-4" /> : <ChevronRight className="size-4" />}
+          {canExpand ? (
+            isExpanded ? (
+              <ChevronDown className="size-4" />
+            ) : (
+              <ChevronRight className="size-4" />
+            )
+          ) : (
+            <span className="size-4" />
+          )}
         </button>
         <button
           type="button"
@@ -160,7 +182,7 @@ function DirectoryNode({
           ) : (
             entries.map((entry) => {
               const childPath = joinMemoryPath(normalizedPath, entry.name);
-              if (entry.kind === 'dir') {
+              if (entry.hasSubdocs) {
                 return (
                   <DirectoryNode
                     key={childPath}
@@ -170,6 +192,7 @@ function DirectoryNode({
                     path={childPath}
                     name={entry.name}
                     level={level + 1}
+                    hasSubdocs={entry.hasSubdocs}
                     expandedPaths={expandedPaths}
                     togglePath={togglePath}
                     selectedPath={selectedPath}

@@ -13,10 +13,13 @@ import {
   MemoryConnectorNode,
   type MemoryConnectorStaticConfig,
 } from '../src/nodes/memoryConnector/memoryConnector.node';
-import { PostgresMemoryRepository } from '../src/nodes/memory/memory.repository';
+import { PostgresMemoryEntitiesRepository } from '../src/nodes/memory/memory.repository';
 import { MemoryService } from '../src/nodes/memory/memory.service';
 import type { MemoryScope } from '../src/nodes/memory/memory.types';
 import type { TemplatePortConfig } from '../src/graph/ports.types';
+
+const createMemoryService = (prisma: PrismaClient) =>
+  new MemoryService(new PostgresMemoryEntitiesRepository({ getClient: () => prisma } as any), { get: async () => null } as any);
 
 // Minimal ModuleRef surface used by TemplateRegistry/LiveGraphRuntime in this test
 interface MinimalModuleRef {
@@ -72,7 +75,7 @@ class TestCallModelNode extends Node<Record<string, never>> {
     // Provide MemoryService factory
     conn.setMemorySource((opts: { threadId?: string }) => {
       const scope: MemoryScope = opts.threadId ? 'perThread' : 'global';
-      const svc = new MemoryService(new PostgresMemoryRepository({ getClient: () => this.prisma! } as any));
+      const svc = createMemoryService(this.prisma!);
       return svc.forMemory(conn.nodeId, scope, opts.threadId);
     });
   }
@@ -150,13 +153,13 @@ maybeDescribe('Runtime integration: memory injection via LiveGraphRuntime', () =
   const prisma = new PrismaClient({ datasources: { db: { url: URL! } } });
 
   beforeAll(async () => {
-    const svc = new MemoryService(new PostgresMemoryRepository({ getClient: () => prisma } as any));
+    const svc = createMemoryService(prisma);
     svc.forMemory('bootstrap', 'global');
-    await prisma.$executeRaw`DELETE FROM memories WHERE node_id IN (${Prisma.join(['bootstrap', 'mem'])})`;
+    await prisma.$executeRaw`DELETE FROM memory_entities WHERE node_id IN (${Prisma.join(['bootstrap', 'mem'])})`;
   });
 
   beforeEach(async () => {
-    await prisma.$executeRaw`DELETE FROM memories WHERE node_id IN (${Prisma.join(['mem'])})`;
+    await prisma.$executeRaw`DELETE FROM memory_entities WHERE node_id IN (${Prisma.join(['mem'])})`;
   });
 
   afterAll(async () => {
@@ -179,7 +182,7 @@ maybeDescribe('Runtime integration: memory injection via LiveGraphRuntime', () =
     (runtime.getNodeInstance('cm') as TestCallModelNode).initExtras({ prisma, placement: 'after_system' });
 
     // Pre-populate memory under mem nodeId in global scope
-    const svc = new MemoryService(new PostgresMemoryRepository({ getClient: () => prisma } as any));
+    const svc = createMemoryService(prisma);
     const bound = svc.forMemory('mem', 'global');
     await bound.append('/notes/today', 'hello');
 
@@ -188,7 +191,7 @@ maybeDescribe('Runtime integration: memory injection via LiveGraphRuntime', () =
     // Memory system message is inserted at index 1
     const memText = msgs[1].text;
     expect(memText).toMatch(/Memory/);
-    expect(memText).toMatch(/\[D\] notes|\[F\] notes/); // tree view shows notes dir or file
+    expect(memText).toMatch(/\[\+\] notes|\[ \] notes/); // tree view shows notes entry
   });
 
   it('appends memory to last when placement=last_message', async () => {
@@ -206,7 +209,7 @@ maybeDescribe('Runtime integration: memory injection via LiveGraphRuntime', () =
     (runtime.getNodeInstance('cm') as TestCallModelNode).initExtras({ prisma, placement: 'last_message' });
 
     // Pre-populate memory
-    const svc = new MemoryService(new PostgresMemoryRepository({ getClient: () => prisma } as any));
+    const svc = createMemoryService(prisma);
     const bound = svc.forMemory('mem', 'global');
     await bound.append('/alpha', 'a');
 
@@ -214,7 +217,7 @@ maybeDescribe('Runtime integration: memory injection via LiveGraphRuntime', () =
     const last = msgs[msgs.length - 1];
     expect(last).toBeInstanceOf(SystemMessage);
     expect(last.text).toMatch(/Memory/);
-    expect(last.text).toMatch(/\[F\] alpha|\[D\] alpha/);
+    expect(last.text).toMatch(/\[\+\] alpha|\[ \] alpha/);
   });
 
   it('maxChars fallback: full -> tree when exceeded; per-thread empty falls back to global', async () => {
@@ -232,7 +235,7 @@ maybeDescribe('Runtime integration: memory injection via LiveGraphRuntime', () =
     (runtime.getNodeInstance('cm') as TestCallModelNode).initExtras({ prisma, placement: 'after_system', content: 'full', maxChars: 20 });
 
     // Populate global memory with a file whose full content would exceed 20 chars.
-    const globalSvc = new MemoryService(new PostgresMemoryRepository({ getClient: () => prisma } as any));
+    const globalSvc = createMemoryService(prisma);
     const boundGlobal = globalSvc.forMemory('mem', 'global');
     await boundGlobal.append('/long/file', 'aaaaaaaaaaaaaaaaaaaa-long');
 
@@ -241,7 +244,7 @@ maybeDescribe('Runtime integration: memory injection via LiveGraphRuntime', () =
     const sys = msgs[1];
     const text = sys.text;
     expect(text).toMatch(/^Memory\n\//); // starts with Memory and a path line
-    expect(text).toContain('[D] long'); // tree view, not full contents
+    expect(text).toContain('[+] long'); // tree view, not full contents
     expect(text).not.toContain('aaaaaaaaaaaa'); // should not leak full content
   });
 });

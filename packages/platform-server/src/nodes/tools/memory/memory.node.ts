@@ -7,10 +7,10 @@ import { Inject, Injectable, Scope } from '@nestjs/common';
 // Minimal service surface consumed by the tool
 type MemoryToolService = {
   read: (path: string) => Promise<string>;
-  list: (path?: string) => Promise<Array<{ name: string; kind: 'file' | 'dir' }>>;
+  list: (path?: string) => Promise<Array<{ name: string; hasSubdocs: boolean }>>;
   append: (path: string, content: string) => Promise<void>;
   update: (path: string, oldContent: string, content: string) => Promise<number>;
-  delete: (path: string) => Promise<{ files: number; dirs: number }>;
+  delete: (path: string) => Promise<{ removed: number }>;
 };
 
 // Node-level static config for the tool instance (UI). Mirrors call_agent pattern.

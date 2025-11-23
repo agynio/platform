@@ -16,7 +16,7 @@ export type MemoryConnectorStaticConfig = z.infer<typeof MemoryConnectorStaticCo
 
 type BoundMemoryService = {
   getAll: () => Promise<Record<string, string>>;
-  list: (path?: string) => Promise<Array<{ name: string; kind: 'file' | 'dir' }>>;
+  list: (path?: string) => Promise<Array<{ name: string; hasSubdocs: boolean }>>;
 };
 
 @Injectable()
@@ -67,7 +67,7 @@ export class MemoryConnectorNode extends Node<MemoryConnectorStaticConfig> {
     const children = await svc.list(path);
     const lines = children
       .sort((a, b) => a.name.localeCompare(b.name))
-      .map((c) => `${c.kind === 'dir' ? '[D]' : '[F]'} ${c.name}`);
+      .map((c) => `${c.hasSubdocs ? '[+]' : '[ ]'} ${c.name}`);
     return `${path}\n${lines.join('\n')}`;
   }
 

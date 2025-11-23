@@ -45,18 +45,21 @@ enum ContextItemRole {
   other
 }
 
-model Memory {
-  id        String      @id @default(uuid()) @db.Uuid
-  nodeId    String      @map("node_id")
-  scope     MemoryScope
-  threadId  String?     @map("thread_id")
-  data      Json        @default("{}")
-  dirs      Json        @default("{}")
-  createdAt DateTime    @default(now()) @map("created_at")
-  updatedAt DateTime    @updatedAt @map("updated_at")
+model MemoryEntity {
+  id        String         @id @default(uuid()) @db.Uuid
+  parentId  String?        @db.Uuid @map("parent_id")
+  parent    MemoryEntity?  @relation("MemoryEntitiesHierarchy", fields: [parentId], references: [id], onDelete: Cascade)
+  children  MemoryEntity[] @relation("MemoryEntitiesHierarchy")
+  nodeId    String         @map("node_id")
+  threadId  String?        @map("thread_id")
+  name      String
+  content   String?        @db.Text
+  createdAt DateTime       @default(now()) @map("created_at")
+  updatedAt DateTime       @updatedAt @map("updated_at")
 
-  @@index([nodeId, scope], map: "idx_memories_lookup")
-  @@map("memories")
+  @@unique([nodeId, threadId, parentId, name], map: "uniq_memory_entity_path")
+  @@index([nodeId, threadId, parentId], map: "idx_memory_entity_parent")
+  @@map("memory_entities")
 }
 
 model ContextItem {

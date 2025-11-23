@@ -1,103 +1,209 @@
-import { PrismaService } from '../../core/services/prisma.service';
-import type { Prisma, PrismaClient } from '@prisma/client';
-import type { MemoryDoc, MemoryDirsMap, MemoryDataMap, MemoryFilter } from './memory.types';
 import { Inject, Injectable } from '@nestjs/common';
-import { randomUUID } from 'node:crypto';
+import type { MemoryEntity as PrismaMemoryEntity, PrismaClient } from '@prisma/client';
+import { PrismaService } from '../../core/services/prisma.service';
+import type { DeleteResult, MemoryEntity, MemoryEntityWithChildren } from './memory.types';
 
-export interface MemoryRepositoryPort {
-  withDoc<T>(
-    filter: MemoryFilter,
-    fn: (doc: MemoryDoc) => Promise<{ doc: MemoryDoc; result?: T } | { doc?: MemoryDoc; result?: T }>,
-  ): Promise<T>;
-  getDoc(filter: MemoryFilter): Promise<MemoryDoc | null>;
-  getOrCreateDoc(filter: MemoryFilter): Promise<MemoryDoc>;
+export interface MemoryEntitiesRepositoryPort {
+  resolvePath(filter: RepoFilter, segments: string[]): Promise<MemoryEntity | null>;
+  ensurePath(filter: RepoFilter, segments: string[]): Promise<MemoryEntity | null>;
+  listChildren(filter: RepoFilter, parentId: string | null): Promise<MemoryEntityWithChildren[]>;
+  deleteSubtree(filter: RepoFilter, entityId: string | null): Promise<DeleteResult>;
+  entityHasChildren(entityId: string): Promise<boolean>;
+  updateContent(entityId: string, content: string): Promise<void>;
+  listAll(filter: RepoFilter): Promise<MemoryEntity[]>;
+  listDistinctNodeThreads(): Promise<Array<{ nodeId: string; threadId: string | null }>>;
 }
 
+export type RepoFilter = { nodeId: string; threadId: string | null };
+
 @Injectable()
-export class PostgresMemoryRepository implements MemoryRepositoryPort {
-  constructor(@Inject(PrismaService) private prismaSvc: PrismaService) {}
+export class PostgresMemoryEntitiesRepository implements MemoryEntitiesRepositoryPort {
+  constructor(@Inject(PrismaService) private readonly prismaSvc: PrismaService) {}
 
   private async getClient(): Promise<PrismaClient> {
     return this.prismaSvc.getClient();
   }
 
-  private static rowToDoc(row: MemoryRow): MemoryDoc {
+  private toEntity(row: PrismaMemoryEntity): MemoryEntity {
     return {
-      nodeId: row.node_id,
-      scope: row.scope,
-      threadId: row.thread_id ?? undefined,
-      data: (row.data || {}) as MemoryDataMap,
-      dirs: (row.dirs || {}) as MemoryDirsMap,
+      id: row.id,
+      nodeId: row.nodeId,
+      threadId: row.threadId,
+      parentId: row.parentId,
+      name: row.name,
+      content: row.content,
+      createdAt: row.createdAt,
+      updatedAt: row.updatedAt,
     };
   }
 
-  private async selectForUpdate(filter: MemoryFilter, tx: Prisma.TransactionClient) {
-    const rows = await tx.$queryRaw<MemoryRow[]>`
-      SELECT id, node_id, scope, thread_id, data, dirs, created_at, updated_at
-      FROM memories
-      WHERE node_id = ${filter.nodeId}
-        AND scope = ${filter.scope}::"MemoryScope"
-        AND (thread_id IS NOT DISTINCT FROM ${filter.scope === 'perThread' ? filter.threadId ?? null : null})
-      FOR UPDATE
-    `;
-    return rows[0] ?? null;
+  private mapChildren(row: PrismaMemoryEntity & { _count: { children: number } }): MemoryEntityWithChildren {
+    return {
+      ...this.toEntity(row),
+      hasChildren: row._count.children > 0,
+    };
   }
 
-  async getDoc(filter: MemoryFilter): Promise<MemoryDoc | null> {
+  private async traverse(
+    filter: RepoFilter,
+    segments: string[],
+    opts: { createMissing: boolean },
+  ): Promise<PrismaMemoryEntity | null> {
+    if (segments.length === 0) return null;
     const prisma = await this.getClient();
-    const rows = await prisma.$queryRaw<MemoryRow[]>`
-      SELECT id, node_id, scope, thread_id, data, dirs, created_at, updated_at
-      FROM memories
-      WHERE node_id = ${filter.nodeId}
-        AND scope = ${filter.scope}::"MemoryScope"
-        AND (thread_id IS NOT DISTINCT FROM ${filter.scope === 'perThread' ? filter.threadId ?? null : null})
-    `;
-    if (!rows[0]) return null;
-    return PostgresMemoryRepository.rowToDoc(rows[0]);
-  }
-
-  async getOrCreateDoc(filter: MemoryFilter): Promise<MemoryDoc> {
-    const prisma = await this.getClient();
-    return await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
-      let row = await this.selectForUpdate(filter, tx);
-      if (!row) {
-        const newId = randomUUID();
-        await tx.$executeRaw`INSERT INTO memories (id, node_id, scope, thread_id, data, dirs, created_at, updated_at) VALUES (${newId}::uuid, ${filter.nodeId}, ${filter.scope}::"MemoryScope", ${filter.scope === 'perThread' ? filter.threadId ?? null : null}, '{}'::jsonb, '{}'::jsonb, NOW(), NOW())`;
-        row = await this.selectForUpdate(filter, tx);
+    if (!opts.createMissing) {
+      let parentId: string | null = null;
+      let current: PrismaMemoryEntity | null = null;
+      for (const segment of segments) {
+        current = await prisma.memoryEntity.findFirst({
+          where: {
+            nodeId: filter.nodeId,
+            threadId: filter.threadId,
+            parentId,
+            name: segment,
+          },
+        });
+        if (!current) return null;
+        parentId = current.id;
       }
-      if (!row) throw new Error('failed to create memory document');
-      return PostgresMemoryRepository.rowToDoc(row as MemoryRow);
+      return current;
+    }
+
+    return prisma.$transaction(async (tx) => {
+      let parentId: string | null = null;
+      let current: PrismaMemoryEntity | null = null;
+      for (const segment of segments) {
+        current = await tx.memoryEntity.findFirst({
+          where: {
+            nodeId: filter.nodeId,
+            threadId: filter.threadId,
+            parentId,
+            name: segment,
+          },
+        });
+        if (!current) {
+          current = await tx.memoryEntity.create({
+            data: {
+              nodeId: filter.nodeId,
+              threadId: filter.threadId,
+              parentId,
+              name: segment,
+            },
+          });
+        }
+        parentId = current.id;
+      }
+      return current;
     });
   }
 
-  async withDoc<T>(filter: MemoryFilter, fn: (doc: MemoryDoc) => Promise<{ doc: MemoryDoc; result?: T } | { doc?: MemoryDoc; result?: T }>): Promise<T> {
+  async resolvePath(filter: RepoFilter, segments: string[]): Promise<MemoryEntity | null> {
+    const row = await this.traverse(filter, segments, { createMissing: false });
+    return row ? this.toEntity(row) : null;
+  }
+
+  async ensurePath(filter: RepoFilter, segments: string[]): Promise<MemoryEntity | null> {
+    const row = await this.traverse(filter, segments, { createMissing: true });
+    return row ? this.toEntity(row) : null;
+  }
+
+  async listChildren(filter: RepoFilter, parentId: string | null): Promise<MemoryEntityWithChildren[]> {
     const prisma = await this.getClient();
-    return await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
-      let row = await this.selectForUpdate(filter, tx);
-      if (!row) {
-        const newId = randomUUID();
-        await tx.$executeRaw`INSERT INTO memories (id, node_id, scope, thread_id, data, dirs, created_at, updated_at) VALUES (${newId}::uuid, ${filter.nodeId}, ${filter.scope}::"MemoryScope", ${filter.scope === 'perThread' ? filter.threadId ?? null : null}, '{}'::jsonb, '{}'::jsonb, NOW(), NOW())`;
-        row = await this.selectForUpdate(filter, tx);
-      }
-      if (!row) throw new Error('failed to create memory document');
-      const current: MemoryDoc = PostgresMemoryRepository.rowToDoc(row as MemoryRow);
-      const { doc, result } = await fn(current);
-      if (doc) {
-        await tx.$executeRaw`UPDATE memories SET data = ${JSON.stringify(doc.data)}::jsonb, dirs = ${JSON.stringify(doc.dirs)}::jsonb, updated_at = NOW() WHERE node_id = ${filter.nodeId} AND scope = ${filter.scope}::"MemoryScope" AND (thread_id IS NOT DISTINCT FROM ${filter.scope === 'perThread' ? filter.threadId ?? null : null})`;
-      }
-      return result as T;
+    const rows = await prisma.memoryEntity.findMany({
+      where: {
+        nodeId: filter.nodeId,
+        threadId: filter.threadId,
+        parentId,
+      },
+      orderBy: { name: 'asc' },
+      include: { _count: { select: { children: true } } },
     });
+    return rows.map((row) => this.mapChildren(row));
+  }
+
+  async entityHasChildren(entityId: string): Promise<boolean> {
+    const prisma = await this.getClient();
+    const child = await prisma.memoryEntity.findFirst({
+      where: { parentId: entityId },
+      select: { id: true },
+    });
+    return !!child;
+  }
+
+  async updateContent(entityId: string, content: string): Promise<void> {
+    const prisma = await this.getClient();
+    await prisma.memoryEntity.update({
+      where: { id: entityId },
+      data: { content },
+    });
+  }
+
+  async listAll(filter: RepoFilter): Promise<MemoryEntity[]> {
+    const prisma = await this.getClient();
+    const rows = await prisma.memoryEntity.findMany({
+      where: {
+        nodeId: filter.nodeId,
+        threadId: filter.threadId,
+      },
+      orderBy: [{ parentId: 'asc' }, { name: 'asc' }],
+    });
+    return rows.map((row) => this.toEntity(row));
+  }
+
+  async listDistinctNodeThreads(): Promise<Array<{ nodeId: string; threadId: string | null }>> {
+    const prisma = await this.getClient();
+    const rows = await prisma.$queryRaw<Array<{ node_id: string; thread_id: string | null }>>`
+      SELECT node_id, thread_id
+      FROM memory_entities
+      GROUP BY node_id, thread_id
+      ORDER BY node_id ASC, thread_id ASC
+    `;
+    return rows.map((row) => ({ nodeId: row.node_id, threadId: row.thread_id }));
+  }
+
+  async deleteSubtree(filter: RepoFilter, entityId: string | null): Promise<DeleteResult> {
+    const prisma = await this.getClient();
+    const threadId = filter.threadId;
+
+    const rows = entityId
+      ? await prisma.$queryRaw<Array<{ id: string; parent_id: string | null; content: string | null }>>`
+          WITH RECURSIVE tree AS (
+            SELECT id, parent_id, content
+            FROM memory_entities
+            WHERE id = ${entityId}
+              AND node_id = ${filter.nodeId}
+              AND ((thread_id IS NULL AND ${threadId} IS NULL) OR thread_id = ${threadId})
+            UNION ALL
+            SELECT child.id, child.parent_id, child.content
+            FROM memory_entities child
+            INNER JOIN tree ON child.parent_id = tree.id
+            WHERE child.node_id = ${filter.nodeId}
+              AND ((child.thread_id IS NULL AND ${threadId} IS NULL) OR child.thread_id = ${threadId})
+          )
+          SELECT id, parent_id, content FROM tree
+        `
+      : await prisma.$queryRaw<Array<{ id: string; parent_id: string | null; content: string | null }>>`
+          SELECT id, parent_id, content
+          FROM memory_entities
+          WHERE node_id = ${filter.nodeId}
+            AND ((thread_id IS NULL AND ${threadId} IS NULL) OR thread_id = ${threadId})
+        `;
+
+    if (rows.length === 0) {
+      return { removed: 0 };
+    }
+
+    if (entityId) {
+      await prisma.memoryEntity.delete({ where: { id: entityId } });
+    } else {
+      await prisma.memoryEntity.deleteMany({
+        where: {
+          nodeId: filter.nodeId,
+          threadId,
+        },
+      });
+    }
+
+    return { removed: rows.length };
   }
 }
-
-// Strongly-typed row mapped from raw SQL
-type MemoryRow = {
-  id: string;
-  node_id: string;
-  scope: 'global' | 'perThread';
-  thread_id: string | null;
-  data: Record<string, unknown>;
-  dirs: Record<string, unknown>;
-  created_at: Date;
-  updated_at: Date;
-};

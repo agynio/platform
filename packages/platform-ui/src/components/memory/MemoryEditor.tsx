@@ -45,12 +45,10 @@ export function MemoryEditor({ nodeId, scope, threadId, path, onPathChange }: Me
     staleTime: 10_000,
   });
 
-  const isFile = statQuery.data?.kind === 'file';
-
   const readQuery = useQuery({
     queryKey: ['memory/read', nodeId, scope, threadId, normalizedPath],
     queryFn: () => memoryApi.read(nodeId, scope, threadId, normalizedPath),
-    enabled: isFile,
+    retry: false,
   });
 
   const invalidateLists = useCallback(() => {
@@ -69,7 +67,7 @@ export function MemoryEditor({ nodeId, scope, threadId, path, onPathChange }: Me
   const appendMutation = useMutation({
     mutationFn: async (nextPath: string) => memoryApi.append(nodeId, scope, threadId, nextPath, appendText),
     onSuccess: (_data, nextPath) => {
-      notifySuccess('Content appended to file');
+      notifySuccess('Content appended');
       invalidateLists();
       invalidatePath(nextPath);
       setAppendText('');
@@ -80,35 +78,37 @@ export function MemoryEditor({ nodeId, scope, threadId, path, onPathChange }: Me
   const updateMutation = useMutation({
     mutationFn: async () => memoryApi.update(nodeId, scope, threadId, normalizedPath, replaceOld, replaceNew),
     onSuccess: () => {
-      notifySuccess('File updated');
+      notifySuccess('Document updated');
       invalidatePath(normalizedPath);
       setReplaceOld('');
       setReplaceNew('');
     },
-    onError: (err: unknown) => notifyError((err as Error)?.message || 'Failed to update file'),
+    onError: (err: unknown) => notifyError((err as Error)?.message || 'Failed to update document'),
   });
 
   const ensureDirMutation = useMutation({
     mutationFn: async (target: string) => memoryApi.ensureDir(nodeId, scope, threadId, target),
     onSuccess: (_data, target) => {
-      notifySuccess('Directory ensured');
+      notifySuccess('Location ensured');
       invalidateLists();
       invalidatePath(target);
+      invalidatePath(normalizedPath);
       setNewDirName('');
       if (onPathChange) {
         onPathChange(target);
       }
     },
-    onError: (err: unknown) => notifyError((err as Error)?.message || 'Failed to ensure directory'),
+    onError: (err: unknown) => notifyError((err as Error)?.message || 'Failed to ensure location'),
   });
 
   const deleteMutation = useMutation({
     mutationFn: async () => memoryApi.delete(nodeId, scope, threadId, normalizedPath),
     onSuccess: () => {
       notifySuccess('Deleted successfully');
+      const parent = memoryPathParent(normalizedPath);
       invalidateLists();
       invalidatePath(normalizedPath);
-      const parent = memoryPathParent(normalizedPath);
+      invalidatePath(parent);
       if (onPathChange) {
         onPathChange(parent);
       }
@@ -120,23 +120,29 @@ export function MemoryEditor({ nodeId, scope, threadId, path, onPathChange }: Me
     mutationFn: async (target: { path: string; content: string }) =>
       memoryApi.append(nodeId, scope, threadId, target.path, target.content),
     onSuccess: (_data, target) => {
-      notifySuccess('File created');
+      notifySuccess('Document created');
       invalidateLists();
       invalidatePath(target.path);
+      invalidatePath(normalizedPath);
       setNewFileName('');
       setNewFileContent('');
       onPathChange?.(target.path);
     },
-    onError: (err: unknown) => notifyError((err as Error)?.message || 'Failed to create file'),
+    onError: (err: unknown) => notifyError((err as Error)?.message || 'Failed to create document'),
   });
+
+  const docExists = statQuery.data?.exists ?? false;
+  const hasSubdocs = statQuery.data?.hasSubdocs ?? false;
+  const contentLength = statQuery.data?.contentLength ?? 0;
 
   const derivedInfo = useMemo(() => {
     if (statQuery.isLoading) return 'Loading…';
     if (statQuery.error) return 'Error';
-    if (statQuery.data?.kind === 'file') return 'File';
-    if (statQuery.data?.kind === 'dir') return 'Directory';
-    return 'Missing';
-  }, [statQuery.data, statQuery.error, statQuery.isLoading]);
+    if (!docExists) return 'Missing';
+    if (hasSubdocs && contentLength > 0) return 'Document with subdocs';
+    if (hasSubdocs) return 'Document (subdocs)';
+    return 'Document';
+  }, [contentLength, docExists, hasSubdocs, statQuery.error, statQuery.isLoading]);
 
   return (
     <div className="flex h-full flex-col">
@@ -157,52 +163,55 @@ export function MemoryEditor({ nodeId, scope, threadId, path, onPathChange }: Me
               Retry
             </Button>
           </div>
-        ) : statQuery.data?.kind === 'file' ? (
-          <FileEditor
-            readState={readQuery}
-            appendText={appendText}
-            setAppendText={setAppendText}
-            onAppend={() => appendMutation.mutate(normalizedPath)}
-            appendDisabled={appendMutation.isPending || !appendText.trim()}
-            replaceOld={replaceOld}
-            setReplaceOld={setReplaceOld}
-            replaceNew={replaceNew}
-            setReplaceNew={setReplaceNew}
-            onReplace={() => updateMutation.mutate()}
-            replaceDisabled={updateMutation.isPending || !replaceOld}
-            onDelete={() => deleteMutation.mutate()}
-            deleteDisabled={deleteMutation.isPending || normalizedPath === '/'}
-          />
-        ) : statQuery.data?.kind === 'dir' ? (
-          <DirectoryEditor
-            path={normalizedPath}
-            ensureDirMutation={ensureDirMutation}
-            deleteMutation={deleteMutation}
-            canDelete={normalizedPath !== '/'}
-            newDirName={newDirName}
-            setNewDirName={setNewDirName}
-            onCreateDir={() => {
-              const name = newDirName.trim();
-              if (!name) return;
-              const target = joinMemoryPath(normalizedPath, name);
-              ensureDirMutation.mutate(target);
-            }}
-            canCreateDir={Boolean(newDirName.trim())}
-            newFileName={newFileName}
-            setNewFileName={setNewFileName}
-            newFileContent={newFileContent}
-            setNewFileContent={setNewFileContent}
-            onCreateFile={() =>
-              createFileMutation.mutate({
-                path: joinMemoryPath(normalizedPath, newFileName.trim()),
-                content: newFileContent,
-              })
-            }
-            createFileDisabled={
-              createFileMutation.isPending || !newFileName.trim() || !newFileContent.trim()
-            }
-            ensureCurrent={() => ensureDirMutation.mutate(normalizedPath)}
-          />
+        ) : docExists ? (
+          <div className="space-y-6">
+            <DocumentEditor
+              readState={readQuery}
+              appendText={appendText}
+              setAppendText={setAppendText}
+              onAppend={() => appendMutation.mutate(normalizedPath)}
+              appendDisabled={appendMutation.isPending || !appendText.trim()}
+              replaceOld={replaceOld}
+              setReplaceOld={setReplaceOld}
+              replaceNew={replaceNew}
+              setReplaceNew={setReplaceNew}
+              onReplace={() => updateMutation.mutate()}
+              replaceDisabled={updateMutation.isPending || !replaceOld}
+              onDelete={() => deleteMutation.mutate()}
+              deleteDisabled={deleteMutation.isPending || normalizedPath === '/'}
+            />
+
+            <SubdocsEditor
+              path={normalizedPath}
+              ensureDirMutation={ensureDirMutation}
+              deleteMutation={deleteMutation}
+              canDelete={normalizedPath !== '/'}
+              newDirName={newDirName}
+              setNewDirName={setNewDirName}
+              onCreateDir={() => {
+                const name = newDirName.trim();
+                if (!name) return;
+                const target = joinMemoryPath(normalizedPath, name);
+                ensureDirMutation.mutate(target);
+              }}
+              canCreateDir={Boolean(newDirName.trim())}
+              newFileName={newFileName}
+              setNewFileName={setNewFileName}
+              newFileContent={newFileContent}
+              setNewFileContent={setNewFileContent}
+              onCreateFile={() =>
+                createFileMutation.mutate({
+                  path: joinMemoryPath(normalizedPath, newFileName.trim()),
+                  content: newFileContent,
+                })
+              }
+              createFileDisabled={
+                createFileMutation.isPending || !newFileName.trim() || !newFileContent.trim()
+              }
+              ensureCurrent={() => ensureDirMutation.mutate(normalizedPath)}
+              hasSubdocs={hasSubdocs}
+            />
+          </div>
         ) : (
           <MissingPath
             path={normalizedPath}
@@ -222,7 +231,7 @@ export function MemoryEditor({ nodeId, scope, threadId, path, onPathChange }: Me
   );
 }
 
-function FileEditor({
+function DocumentEditor({
   readState,
   appendText,
   setAppendText,
@@ -254,10 +263,10 @@ function FileEditor({
   return (
     <div className="space-y-4">
       {readState.isLoading ? (
-        <div className="text-sm text-muted-foreground">Reading file…</div>
+        <div className="text-sm text-muted-foreground">Reading document…</div>
       ) : readState.error ? (
         <div className="text-sm text-red-600" role="alert">
-          {(readState.error as Error).message || 'Failed to read file'}
+          {(readState.error as Error).message || 'Failed to read document'}
         </div>
       ) : (
         <Textarea value={readState.data?.content ?? ''} readOnly className="h-48" />
@@ -289,21 +298,21 @@ function FileEditor({
           placeholder="New text"
         />
         <Button onClick={onReplace} disabled={replaceDisabled}>
-          Replace in file
+          Replace content
         </Button>
       </div>
 
       <Button variant="destructive" onClick={onDelete} disabled={deleteDisabled}>
-        Delete file
+        Delete document
       </Button>
     </div>
   );
 }
 
-type DirEditorProps = {
+type SubdocsEditorProps = {
   path: string;
   ensureDirMutation: UseMutationResult<void, unknown, string>;
-  deleteMutation: UseMutationResult<{ files: number; dirs: number }, unknown, void>;
+  deleteMutation: UseMutationResult<{ removed: number }, unknown, void>;
   canDelete: boolean;
   newDirName: string;
   setNewDirName: (val: string) => void;
@@ -316,9 +325,10 @@ type DirEditorProps = {
   onCreateFile: () => void;
   createFileDisabled: boolean;
   ensureCurrent: () => void;
+  hasSubdocs: boolean;
 };
 
-function DirectoryEditor({
+function SubdocsEditor({
   path,
   ensureDirMutation,
   deleteMutation,
@@ -334,48 +344,52 @@ function DirectoryEditor({
   onCreateFile,
   createFileDisabled,
   ensureCurrent,
-}: DirEditorProps) {
+  hasSubdocs,
+}: SubdocsEditorProps) {
   return (
     <div className="space-y-4">
       <div className="space-y-2">
-        <p className="text-sm text-muted-foreground">Directory actions for {path}</p>
+        <p className="text-sm text-muted-foreground">Subdocument tools for {path}</p>
+        <div className="text-xs text-muted-foreground">
+          {hasSubdocs ? 'Subdocuments available.' : 'No subdocuments yet.'}
+        </div>
         <div className="flex flex-wrap gap-2">
           <Button onClick={ensureCurrent} disabled={ensureDirMutation.isPending}>
-            Ensure directory exists
+            Ensure location exists
           </Button>
           <Button
             variant="destructive"
             onClick={() => deleteMutation.mutate()}
             disabled={deleteMutation.isPending || !canDelete}
           >
-            Delete directory
+            Delete document and subdocuments
           </Button>
         </div>
         {!canDelete && (
-          <div className="text-xs text-muted-foreground">Root directory cannot be deleted.</div>
+          <div className="text-xs text-muted-foreground">Root path cannot be deleted.</div>
         )}
       </div>
 
       <div className="space-y-2">
-        <Label htmlFor="memory-new-dir">Create subdirectory</Label>
+        <Label htmlFor="memory-new-dir">Create nested location</Label>
         <Input
           id="memory-new-dir"
           value={newDirName}
           onChange={(e) => setNewDirName(e.target.value)}
-          placeholder="Directory name"
+          placeholder="Location name"
         />
         <Button onClick={onCreateDir} disabled={!canCreateDir || ensureDirMutation.isPending}>
-          Create directory
+          Create location
         </Button>
       </div>
 
       <div className="space-y-2">
-        <Label htmlFor="memory-new-file">Create file</Label>
+        <Label htmlFor="memory-new-file">Create document</Label>
         <Input
           id="memory-new-file"
           value={newFileName}
           onChange={(e) => setNewFileName(e.target.value)}
-          placeholder="File name"
+          placeholder="Document name"
         />
         <Textarea
           value={newFileContent}
@@ -383,7 +397,7 @@ function DirectoryEditor({
           placeholder="Initial content"
         />
         <Button onClick={onCreateFile} disabled={createFileDisabled}>
-          Create file
+          Create document
         </Button>
       </div>
     </div>
@@ -412,23 +426,23 @@ function MissingPath({
   return (
     <div className="space-y-4">
       <div className="text-sm text-muted-foreground" role="alert">
-        Path “{path}” not found. You can create it as a directory or file.
+        Path “{path}” not found. You can create it as a document or nested location.
       </div>
       <div className="flex flex-wrap gap-2">
         <Button onClick={ensureDir} disabled={ensurePending}>
-          Create directory
+          Ensure location
         </Button>
       </div>
       <div className="space-y-2">
-        <Label htmlFor="memory-missing-file">Create file with content</Label>
+        <Label htmlFor="memory-missing-file">Create document with content</Label>
         <Textarea
           id="memory-missing-file"
           value={newFileContent}
           onChange={(e) => setNewFileContent(e.target.value)}
-          placeholder="File content"
+          placeholder="Document content"
         />
         <Button onClick={createFile} disabled={!canCreateFile || createPending}>
-          Create file
+          Create document
         </Button>
       </div>
     </div>

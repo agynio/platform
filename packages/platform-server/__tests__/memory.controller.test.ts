@@ -1,97 +1,152 @@
-import { describe, it, expect, beforeAll, beforeEach, afterAll } from 'vitest';
-import { PrismaClient, Prisma } from '@prisma/client';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { MemoryController } from '../src/graph/controllers/memory.controller';
-import { ModuleRef } from '@nestjs/core';
-import { PostgresMemoryRepository } from '../src/nodes/memory/memory.repository';
-import { MemoryService } from '../src/nodes/memory/memory.service';
 import { HttpException } from '@nestjs/common';
+import type { MemoryScope } from '../src/nodes/memory/memory.types';
+import type { MemoryService } from '../src/nodes/memory/memory.service';
 
-const URL = process.env.AGENTS_DATABASE_URL;
-const shouldRunDbTests = process.env.RUN_DB_TESTS === 'true' && !!URL;
-const maybeDescribe = shouldRunDbTests ? describe : describe.skip;
+type MemoryServiceStub = {
+  listDocs: ReturnType<typeof vi.fn>;
+  list: ReturnType<typeof vi.fn>;
+  stat: ReturnType<typeof vi.fn>;
+  read: ReturnType<typeof vi.fn>;
+  append: ReturnType<typeof vi.fn>;
+  update: ReturnType<typeof vi.fn>;
+  ensureDir: ReturnType<typeof vi.fn>;
+  delete: ReturnType<typeof vi.fn>;
+  dump: ReturnType<typeof vi.fn>;
+};
 
-class StubModuleRef implements Partial<ModuleRef> {
-  constructor(private prisma: PrismaClient) {}
-  get<T>(_token: any): T {
-    return new MemoryService(new PostgresMemoryRepository({ getClient: () => this.prisma } as any)) as unknown as T;
-  }
-}
+const createServiceStub = (): MemoryServiceStub => ({
+  listDocs: vi.fn(),
+  list: vi.fn(),
+  stat: vi.fn(),
+  read: vi.fn(),
+  append: vi.fn(),
+  update: vi.fn(),
+  ensureDir: vi.fn(),
+  delete: vi.fn(),
+  dump: vi.fn(),
+});
 
-const emptyGraph = { name: 'main', version: 0, updatedAt: new Date().toISOString(), nodes: [], edges: [] } as const;
-const stubGraphRepo = { get: async () => emptyGraph };
+describe('MemoryController', () => {
+  let service: MemoryServiceStub;
+  let controller: MemoryController;
 
-maybeDescribe('MemoryController endpoints', () => {
-  if (!shouldRunDbTests) return;
-  const prisma = new PrismaClient({ datasources: { db: { url: URL! } } });
-
-  beforeAll(async () => {
-    const svc = new MemoryService(new PostgresMemoryRepository({ getClient: () => prisma } as any));
-    svc.forMemory('bootstrap', 'global');
-    await prisma.$executeRaw`DELETE FROM memories WHERE node_id IN (${Prisma.join(['bootstrap', 'nodeC', 'nodeT'])})`;
-  });
-  beforeEach(async () => {
-    await prisma.$executeRaw`DELETE FROM memories WHERE node_id IN (${Prisma.join(['nodeC', 'nodeT'])})`;
-  });
-  afterAll(async () => {
-    await prisma.$disconnect();
-  });
-
-  it('append/read via controller', async () => {
-    const controller = new MemoryController(new StubModuleRef(prisma) as any, { getClient: () => prisma } as any, stubGraphRepo as any);
-    await controller.append({ nodeId: 'nodeC', scope: 'global' } as any, { path: '/greet.txt', data: 'hi' } as any, {} as any);
-    await controller.append({ nodeId: 'nodeC', scope: 'global' } as any, { path: '/greet.txt', data: 'there' } as any, {} as any);
-    const read = await controller.read({ nodeId: 'nodeC', scope: 'global' } as any, { path: '/greet.txt' } as any);
-    expect(read.content).toContain('hi');
-    const stat = await controller.stat({ nodeId: 'nodeC', scope: 'global' } as any, { path: '/greet.txt' } as any);
-    expect(stat.kind).toBe('file');
+  beforeEach(() => {
+    service = createServiceStub();
+    controller = new MemoryController(service as unknown as MemoryService);
   });
 
-  it('enforces thread scoping for per-thread routes', async () => {
-    const controller = new MemoryController(new StubModuleRef(prisma) as any, { getClient: () => prisma } as any, stubGraphRepo as any);
+  it('listDocs returns service payload', async () => {
+    service.listDocs.mockResolvedValue([
+      { nodeId: 'a', scope: 'global' as MemoryScope },
+      { nodeId: 'b', scope: 'perThread' as MemoryScope, threadId: 'thread-1' },
+    ]);
 
-    let caught: unknown;
-    try {
-      await controller.append({ nodeId: 'nodeT', scope: 'perThread' } as any, { path: '/note.txt', data: 'hello' } as any, {} as any);
-    } catch (err) {
-      caught = err;
-    }
-    expect(caught).toBeInstanceOf(HttpException);
-    expect((caught as HttpException).getStatus()).toBe(400);
+    const result = await controller.listDocs();
 
-    await controller.ensureDir({ nodeId: 'nodeT', scope: 'perThread' } as any, { path: '/logs' } as any, { threadId: 'thread-1' } as any);
+    expect(service.listDocs).toHaveBeenCalledTimes(1);
+    expect(result).toEqual({
+      items: [
+        { nodeId: 'a', scope: 'global' },
+        { nodeId: 'b', scope: 'perThread', threadId: 'thread-1' },
+      ],
+    });
+  });
+
+  it('append requires thread id for perThread scope', async () => {
+    await expect(
+      controller.append({ nodeId: 'node', scope: 'perThread' } as any, { path: '/note.txt', data: 'hello' } as any, {} as any),
+    ).rejects.toBeInstanceOf(HttpException);
+    expect(service.append).not.toHaveBeenCalled();
+  });
+
+  it('append trims provided thread id', async () => {
+    service.append.mockResolvedValue(undefined);
+
     await controller.append(
-      { nodeId: 'nodeT', scope: 'perThread' } as any,
-      { path: '/logs/day.txt', data: 'first', threadId: 'thread-1' } as any,
+      { nodeId: 'node', scope: 'perThread' } as any,
+      { path: '/note.txt', data: 'hello', threadId: ' thread-1 ' } as any,
       {} as any,
     );
 
-    const updateResult = await controller.update(
-      { nodeId: 'nodeT', scope: 'perThread' } as any,
-      { path: '/logs/day.txt', oldStr: 'first', newStr: 'second' } as any,
-      { threadId: 'thread-1' } as any,
+    expect(service.append).toHaveBeenCalledWith('node', 'perThread', 'thread-1', '/note.txt', 'hello');
+  });
+
+  it('list forwards defaults and thread resolution for global scope', async () => {
+    service.list.mockResolvedValue([{ name: 'logs', hasSubdocs: true }]);
+
+    const result = await controller.list({ nodeId: 'node', scope: 'global' } as any, {} as any);
+
+    expect(service.list).toHaveBeenCalledWith('node', 'global', undefined, '/');
+    expect(result).toEqual({ items: [{ name: 'logs', hasSubdocs: true }] });
+  });
+
+  it('read passes through content', async () => {
+    service.read.mockResolvedValueOnce('hello world');
+    const ok = await controller.read({ nodeId: 'node', scope: 'global' } as any, { path: '/note.txt' } as any);
+    expect(ok).toEqual({ content: 'hello world' });
+  });
+
+  it('read allows root path', async () => {
+    service.read.mockResolvedValueOnce('');
+
+    const ok = await controller.read({ nodeId: 'node', scope: 'global' } as any, { path: '/' } as any);
+
+    expect(service.read).toHaveBeenCalledWith('node', 'global', undefined, '/');
+    expect(ok).toEqual({ content: '' });
+  });
+
+  it('read maps ENOENT to 404', async () => {
+    service.read.mockRejectedValueOnce(new Error('ENOENT: missing'));
+
+    await expect(controller.read({ nodeId: 'node', scope: 'global' } as any, { path: '/missing' } as any)).rejects.toSatisfy((err) => {
+      expect(err).toBeInstanceOf(HttpException);
+      expect((err as HttpException).getStatus()).toBe(404);
+      return true;
+    });
+  });
+
+  it('update maps service errors and returns replaced count', async () => {
+    service.update.mockResolvedValueOnce(2);
+    const ok = await controller.update(
+      { nodeId: 'node', scope: 'perThread' } as any,
+      { path: '/note.txt', oldStr: 'a', newStr: 'b', threadId: ' thread-1 ' } as any,
+      {} as any,
     );
-    expect(updateResult.replaced).toBe(1);
+    expect(ok).toEqual({ replaced: 2 });
+    expect(service.update).toHaveBeenCalledWith('node', 'perThread', 'thread-1', '/note.txt', 'a', 'b');
 
-    const rootList = await controller.list({ nodeId: 'nodeT', scope: 'perThread' } as any, { path: '/', threadId: 'thread-1' } as any);
-    expect(rootList.items).toEqual(expect.arrayContaining([{ name: 'logs', kind: 'dir' }]));
+    service.update.mockRejectedValueOnce(new Error('ENOENT: missing'));
+    await expect(
+      controller.update(
+        { nodeId: 'node', scope: 'perThread' } as any,
+        { path: '/note.txt', oldStr: 'a', newStr: 'b', threadId: 'thread-1' } as any,
+        {} as any,
+      ),
+    ).rejects.toSatisfy((err) => {
+      expect(err).toBeInstanceOf(HttpException);
+      expect((err as HttpException).getStatus()).toBe(404);
+      return true;
+    });
+  });
 
-    const nestedList = await controller.list({ nodeId: 'nodeT', scope: 'perThread' } as any, { path: '/logs', threadId: 'thread-1' } as any);
-    expect(nestedList.items).toEqual(expect.arrayContaining([{ name: 'day.txt', kind: 'file' }]));
+  it('delete delegates to service', async () => {
+    service.delete.mockResolvedValue({ removed: 1 });
 
-    const read = await controller.read({ nodeId: 'nodeT', scope: 'perThread' } as any, { path: '/logs/day.txt', threadId: 'thread-1' } as any);
-    expect(read.content.trim()).toBe('second');
+    const result = await controller.remove({ nodeId: 'node', scope: 'global' } as any, { path: '/file.txt' } as any);
 
-    const dump = await controller.dump({ nodeId: 'nodeT', scope: 'perThread' } as any, { threadId: 'thread-1' } as any);
-    expect((dump as any).data['logs.day.txt']).toBe('second');
-    expect((dump as any).dirs['logs']).toBe(true);
+    expect(service.delete).toHaveBeenCalledWith('node', 'global', undefined, '/file.txt');
+    expect(result).toEqual({ removed: 1 });
+  });
 
-    const deletion = await controller.remove({ nodeId: 'nodeT', scope: 'perThread' } as any, { path: '/logs/day.txt', threadId: 'thread-1' } as any);
-    expect(deletion.files).toBe(1);
+  it('dump delegates to service with resolved thread id', async () => {
+    const payload = { nodeId: 'node', scope: 'perThread' as MemoryScope, threadId: 'thread-1', data: {}, dirs: {} };
+    service.dump.mockResolvedValue(payload);
 
-    const postStat = await controller.stat({ nodeId: 'nodeT', scope: 'perThread' } as any, { path: '/logs/day.txt', threadId: 'thread-1' } as any);
-    expect(postStat.kind).toBe('none');
+    const result = await controller.dump({ nodeId: 'node', scope: 'perThread' } as any, { threadId: ' thread-1 ' } as any);
 
-    const dumpAfter = await controller.dump({ nodeId: 'nodeT', scope: 'perThread' } as any, { threadId: 'thread-1' } as any);
-    expect(Object.keys((dumpAfter as any).data)).toHaveLength(0);
+    expect(service.dump).toHaveBeenCalledWith('node', 'perThread', 'thread-1');
+    expect(result).toBe(payload);
   });
 });

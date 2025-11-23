@@ -5,7 +5,7 @@ import { EnvModule } from '../env/env.module';
 import { EventsModule } from '../events/events.module';
 import { InfraModule } from '../infra/infra.module';
 import { LLMModule } from '../llm/llm.module';
-import { PostgresMemoryRepository } from './memory/memory.repository';
+import { PostgresMemoryEntitiesRepository } from './memory/memory.repository';
 import { MemoryService } from './memory/memory.service';
 import { MemoryNode } from './memory/memory.node';
 import { MemoryConnectorNode } from './memoryConnector/memoryConnector.node';
@@ -48,7 +48,7 @@ class NodesTemplateRegistrar implements OnModuleInit {
   imports: [CoreModule, EnvModule, EventsModule, InfraModule, LLMModule, GraphCoreModule],
   providers: [
     SlackAdapter,
-    PostgresMemoryRepository,
+    PostgresMemoryEntitiesRepository,
     MemoryService,
     MemoryNode,
     MemoryConnectorNode,
@@ -80,7 +80,7 @@ class NodesTemplateRegistrar implements OnModuleInit {
   ],
   exports: [
     SlackAdapter,
-    PostgresMemoryRepository,
+    PostgresMemoryEntitiesRepository,
     MemoryService,
     MemoryNode,
     MemoryConnectorNode,

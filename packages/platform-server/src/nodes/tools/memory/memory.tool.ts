@@ -22,10 +22,10 @@ type Cmd = z.infer<typeof UnifiedMemoryToolStaticConfigSchema>['command'];
 type MemoryToolService = {
   getDebugInfo?: () => { nodeId: string; scope: string; threadId?: string };
   read: (path: string) => Promise<string>;
-  list: (path?: string) => Promise<Array<{ name: string; kind: 'file' | 'dir' }>>;
+  list: (path?: string) => Promise<Array<{ name: string; hasSubdocs: boolean }>>;
   append: (path: string, content: string) => Promise<void>;
   update: (path: string, oldContent: string, content: string) => Promise<number>;
-  delete: (path: string) => Promise<{ files: number; dirs: number }>;
+  delete: (path: string) => Promise<{ removed: number }>;
 };
 
 interface UnifiedMemoryFunctionToolDeps {
@@ -83,7 +83,6 @@ export class UnifiedMemoryFunctionTool extends FunctionTool<typeof UnifiedMemory
     }
     if (!code) {
       if (/ENOENT/.test(message)) code = 'ENOENT';
-      else if (/EISDIR/.test(message)) code = 'EISDIR';
     }
     return { message, code };
   }
@@ -149,8 +148,7 @@ export class UnifiedMemoryFunctionTool extends FunctionTool<typeof UnifiedMemory
         }
         case 'list': {
           const entries = await service.list(path || '/');
-          // Map to expected { name, type } structure (type alias for kind)
-          const mapped = entries.map((e) => ({ name: e.name, type: e.kind }));
+          const mapped = entries.map((e) => ({ name: e.name, hasSubdocs: !!e.hasSubdocs }));
           return this.makeEnvelope(command, path, true, { entries: mapped });
         }
         case 'append': {
@@ -176,7 +174,7 @@ export class UnifiedMemoryFunctionTool extends FunctionTool<typeof UnifiedMemory
         }
         case 'delete': {
           const res = await service.delete(path);
-          return this.makeEnvelope(command, path, true, { files: res.files, dirs: res.dirs });
+          return this.makeEnvelope(command, path, true, { removed: res.removed });
         }
         default:
           return this.makeEnvelope(command, path, false, undefined, {

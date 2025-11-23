@@ -1,23 +1,33 @@
 export type MemoryScope = 'global' | 'perThread';
 
-export type MemoryFilter = { nodeId: string; scope: MemoryScope; threadId?: string };
-export type MemoryDataMap = Record<string, string | Record<string, unknown>>;
-export type MemoryDirsMap = Record<string, true | Record<string, unknown>>;
+export type MemoryFilter = { nodeId: string; threadId: string | null };
 
-export interface MemoryDoc {
+export interface MemoryEntity {
+  id: string;
   nodeId: string;
-  scope: MemoryScope;
-  threadId?: string;
-  data: MemoryDataMap;
-  dirs: MemoryDirsMap;
+  threadId: string | null;
+  parentId: string | null;
+  name: string;
+  content: string | null;
+  createdAt?: Date;
+  updatedAt?: Date;
+}
+
+export interface MemoryEntityWithChildren extends MemoryEntity {
+  hasChildren: boolean;
 }
 
 export interface StatResult {
-  kind: 'file' | 'dir' | 'none';
-  size?: number;
+  exists: boolean;
+  hasSubdocs: boolean;
+  contentLength: number;
 }
 
 export interface ListEntry {
   name: string;
-  kind: 'file' | 'dir';
+  hasSubdocs: boolean;
+}
+
+export interface DeleteResult {
+  removed: number;
 }
