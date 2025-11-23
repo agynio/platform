@@ -71,12 +71,22 @@ describe('ShellTool output limit - non-zero exit oversized', () => {
     await node.setConfig({ outputLimitChars: 1000 });
     const t = node.getTool();
 
-    const msg = await t.execute({ command: 'fail' }, { threadId: 't', finishSignal: { activate() {}, deactivate() {}, isActive: false }, callerAgent: {} } as any);
-    const lines = msg.split('\n');
-    expect(lines[0]).toBe('[exit code 123]');
-    expect(msg).toContain('Output exceeded 1000 characters.');
-    expect(msg).toMatch(/Full output saved to: \/tmp\/.+\.txt/);
-    expect(msg).toContain('--- output tail ---');
+    let error: Error | null = null;
+    try {
+      await t.execute(
+        { command: 'fail' },
+        { threadId: 't', finishSignal: { activate() {}, deactivate() {}, isActive: false }, callerAgent: {} } as any,
+      );
+    } catch (err) {
+      error = err as Error;
+    }
+
+    expect(error).toBeInstanceOf(Error);
+    const message = (error as Error).message;
+    expect(message.split('\n')[0]).toBe('[exit code 123]');
+    expect(message).toContain('Output exceeded 1000 characters.');
+    expect(message).toMatch(/Full output saved to: \/tmp\/.+\.txt/);
+    expect(message.toLowerCase()).toContain('output tail');
     expect((provider.c as FakeContainer).lastPut?.options.path).toBe('/tmp');
     expect((provider.c as FakeContainer).lastPut?.data instanceof Buffer).toBe(true);
   });

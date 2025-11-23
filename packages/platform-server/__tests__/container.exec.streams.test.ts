@@ -142,6 +142,54 @@ describe('ContainerService.startAndCollectExec stream handling', () => {
     expect(res.stdout).toContain('plain-text-without-headers');
   });
 
+  it('invokes onOutput when combined fallback stream is used', async () => {
+    const logger = new LoggerService();
+    const svc = new ContainerService(logger);
+    const hijacked = new PassThrough();
+
+    const execInspect = vi
+      .fn()
+      .mockImplementationOnce(async () => {
+        throw new Error('inspect failure');
+      })
+      .mockImplementationOnce(async () => ({ ProcessConfig: { tty: false }, ExitCode: 0 }));
+
+    const docker: any = {
+      getContainer: vi.fn(() => ({
+        inspect: vi.fn(async () => ({ Id: 'fb', State: { Running: true } })),
+        exec: vi.fn(async () => ({
+          start: (_: any, cb: any) => {
+            cb(undefined, hijacked as any);
+            setTimeout(() => {
+              hijacked.write('stderr-only\n');
+              hijacked.end();
+            }, 0);
+          },
+          inspect: execInspect,
+        })),
+      })),
+      modem: { demuxStream: vi.fn() },
+    };
+    (svc as any).docker = docker;
+
+    const onOutput = vi.fn();
+    const res = await svc.execContainer('fb', 'echo', {
+      timeoutMs: 2000,
+      idleTimeoutMs: 0,
+      tty: false,
+      onOutput,
+    });
+
+    expect(res.stdout).toBe('stderr-only\n');
+    expect(res.stderr).toBe('');
+    expect(execInspect).toHaveBeenCalledTimes(2);
+    expect(onOutput).toHaveBeenCalledTimes(1);
+    const [source, chunk] = onOutput.mock.calls[0];
+    expect(source).toBe('stdout');
+    expect(Buffer.isBuffer(chunk)).toBe(true);
+    expect(chunk.toString('utf8')).toBe('stderr-only\n');
+  });
+
   it('handles large output streams without garbling', async () => {
     const svc = createService();
     const out = new PassThrough();

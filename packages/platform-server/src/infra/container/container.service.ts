@@ -582,6 +582,13 @@ export class ContainerService {
             stream.on('data', (c: Buffer | string) => {
               if (finished) return;
               const buf = Buffer.isBuffer(c) ? c : Buffer.from(String(c));
+              if (onOutput) {
+                try {
+                  onOutput('stdout', buf);
+                } catch (cbErr) {
+                  this.logger.warn('exec onOutput callback failed', { source: 'stdout', error: cbErr });
+                }
+              }
               stdoutCollector.append(buf);
               armIdle();
             });

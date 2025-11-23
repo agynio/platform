@@ -138,11 +138,16 @@ describe('ShellCommandTool combined output', () => {
       { source: 'stdout', data: 'gamma\n' },
     ];
     const container = new SequenceContainer(chunks);
-    const { tool } = createToolWithContainer(container);
+    const { tool, runEvents } = createToolWithContainer(container);
 
     const result = await tool.executeStreaming({ command: 'mixed' }, ctx as any, streamingOptions);
 
     expect(result).toBe('alpha\nbeta\ngamma\n');
+    expect(runEvents.finalizeToolOutputTerminal).toHaveBeenCalledTimes(1);
+    const terminalArgs = runEvents.finalizeToolOutputTerminal.mock.calls[0][0];
+    expect(terminalArgs).toMatchObject({ status: 'success', exitCode: 0 });
+    expect(terminalArgs.bytesStdout).toBe(Buffer.byteLength('alpha\ngamma\n', 'utf8'));
+    expect(terminalArgs.bytesStderr).toBe(Buffer.byteLength('beta\n', 'utf8'));
   });
 
   it('removes CSI sequences that span chunk boundaries (streaming)', async () => {
@@ -186,30 +191,59 @@ describe('ShellCommandTool combined output', () => {
     const container = new SequenceContainer(chunks);
     const { tool } = createToolWithContainer(container);
 
-    const result = await tool.executeStreaming({ command: 'partial' }, ctx as any, streamingOptions);
+  const result = await tool.executeStreaming({ command: 'partial' }, ctx as any, streamingOptions);
 
-    expect(result).toBe('output line\n');
-    expect(result).not.toContain('\x1b');
+  expect(result).toBe('output line\n');
+  expect(result).not.toContain('\x1b');
   });
 
-  it('returns exit-coded error message when exit code is non-zero', async () => {
-    const chunks: OutputChunk[] = [
-      { source: 'stdout', data: 'run started\n' },
-      { source: 'stderr', data: 'failure details\n' },
-    ];
-    const container = new SequenceContainer(chunks, 2);
+  it('executeStreaming throws with exit code and tail for stderr-only failure', async () => {
+    const chunks: OutputChunk[] = [{ source: 'stderr', data: 'fatal: repo not found\n' }];
+    const container = new SequenceContainer(chunks, 128);
     const { tool, runEvents } = createToolWithContainer(container);
 
-    const result = await tool.executeStreaming({ command: 'failing' }, ctx as any, streamingOptions);
+    let error: Error | null = null;
+    try {
+      await tool.executeStreaming({ command: 'failing' }, ctx as any, streamingOptions);
+    } catch (err) {
+      error = err as Error;
+    }
 
-    expect(result.split('\n')[0]).toBe('[exit code 2]');
-    expect(result).toContain('run started');
-    expect(result).toContain('failure details');
+    expect(error).toBeInstanceOf(Error);
+    const message = (error as Error).message;
+    expect(message).toMatch(/\[exit code 128]/);
+    expect(message).toContain('fatal: repo not found');
+    expect(message.toLowerCase()).toContain('output tail');
+
     expect(runEvents.finalizeToolOutputTerminal).toHaveBeenCalledTimes(1);
-    expect(runEvents.finalizeToolOutputTerminal.mock.calls[0][0]).toMatchObject({ status: 'error', exitCode: 2, savedPath: null });
+    const terminalArgs = runEvents.finalizeToolOutputTerminal.mock.calls[0][0];
+    expect(terminalArgs).toMatchObject({ status: 'error', exitCode: 128, bytesStdout: 0 });
+    expect(terminalArgs.bytesStderr).toBe(Buffer.byteLength('fatal: repo not found\n', 'utf8'));
   });
 
-  it('execute returns exit-coded error message with full output when under limit', async () => {
+  it('execute throws with exit code and tail when command fails', async () => {
+    const chunks: OutputChunk[] = [
+      { source: 'stdout', data: 'starting\n' },
+      { source: 'stderr', data: 'boom\n' },
+    ];
+    const container = new SequenceContainer(chunks, 2);
+    const { tool } = createToolWithContainer(container);
+
+    let error: Error | null = null;
+    try {
+      await tool.execute({ command: 'fail' }, ctx as any);
+    } catch (err) {
+      error = err as Error;
+    }
+
+    expect(error).toBeInstanceOf(Error);
+    const message = (error as Error).message;
+    expect(message).toMatch(/\[exit code 2]/);
+    expect(message).toContain('boom');
+    expect(message.toLowerCase()).toContain('output tail');
+  });
+
+  it('execute throws exit-coded error with full output when under limit', async () => {
     const chunks: OutputChunk[] = [
       { source: 'stdout', data: 'alpha\n' },
       { source: 'stderr', data: 'omega\n' },
@@ -217,33 +251,75 @@ describe('ShellCommandTool combined output', () => {
     const container = new SequenceContainer(chunks, 7);
     const { tool } = createToolWithContainer(container);
 
-    const result = await tool.execute({ command: 'fails' }, ctx as any);
+    let error: Error | null = null;
+    try {
+      await tool.execute({ command: 'fails' }, ctx as any);
+    } catch (err) {
+      error = err as Error;
+    }
 
-    const lines = result.split('\n');
-    expect(lines[0]).toBe('[exit code 7]');
-    expect(result).toContain('alpha');
-    expect(result).toContain('omega');
+    expect(error).toBeInstanceOf(Error);
+    const message = (error as Error).message;
+    expect(message.split('\n')[0]).toBe('[exit code 7]');
+    expect(message).toContain('alpha');
+    expect(message).toContain('omega');
   });
 
-  it('references saved output file when non-zero exit exceeds limit in streaming mode', async () => {
+  it('executeStreaming throws and references saved output when failure exceeds limit', async () => {
     const largeOutput = Array.from({ length: 30 }, (_, idx) => `line-${idx}`).join('\n');
     const container = new SequenceContainer([{ source: 'stdout', data: largeOutput }], 3);
     const { tool, runEvents, node } = createToolWithContainer(container);
     await node.setConfig({ outputLimitChars: 20 } as any);
 
-    const result = await tool.executeStreaming({ command: 'huge' }, ctx as any, streamingOptions);
+    let error: Error | null = null;
+    try {
+      await tool.executeStreaming({ command: 'huge' }, ctx as any, streamingOptions);
+    } catch (err) {
+      error = err as Error;
+    }
 
-    expect(result.split('\n')[0]).toBe('[exit code 3]');
-    expect(result).toContain('Full output saved to:');
+    expect(error).toBeInstanceOf(Error);
+    const message = (error as Error).message;
+    expect(message.split('\n')[0]).toBe('[exit code 3]');
+    expect(message).toContain('Full output saved to:');
 
     expect(runEvents.finalizeToolOutputTerminal).toHaveBeenCalledTimes(1);
     const terminalArgs = runEvents.finalizeToolOutputTerminal.mock.calls[0][0];
     expect(terminalArgs.status).toBe('error');
     expect(typeof terminalArgs.savedPath).toBe('string');
-    expect(terminalArgs.savedPath).not.toBeNull();
-    const savedPath = terminalArgs.savedPath as string;
-    expect(result).toContain(savedPath);
+    const savedPath = terminalArgs.savedPath as string | null;
+    expect(savedPath).not.toBeNull();
+    if (savedPath) {
+      expect(message).toContain(savedPath);
+    }
     expect(terminalArgs.message).toContain('Full output saved to');
+  });
+
+  it('executeStreaming throws and includes saved path when truncated stderr exceeds limit', async () => {
+    const large = 'E'.repeat(2000);
+    const container = new SequenceContainer([{ source: 'stderr', data: large }], 9);
+    const { tool, runEvents, node } = createToolWithContainer(container);
+    await node.setConfig({ outputLimitChars: 1000 } as any);
+
+    let error: Error | null = null;
+    try {
+      await tool.executeStreaming({ command: 'fail-large' }, ctx as any, streamingOptions);
+    } catch (err) {
+      error = err as Error;
+    }
+
+    expect(error).toBeInstanceOf(Error);
+    const message = (error as Error).message;
+    expect(message).toMatch(/\[exit code 9]/);
+    expect(message.toLowerCase()).toContain('output tail');
+    expect(message).toMatch(/Full output saved to \/tmp\/.+\.txt/);
+
+    expect(runEvents.finalizeToolOutputTerminal).toHaveBeenCalledTimes(1);
+    const terminalArgs = runEvents.finalizeToolOutputTerminal.mock.calls[0][0];
+    expect(terminalArgs).toMatchObject({ status: 'error', exitCode: 9 });
+    expect(typeof terminalArgs.savedPath).toBe('string');
+    expect(terminalArgs.savedPath).toMatch(/^\/tmp\/.+\.txt$/);
+    expect(terminalArgs.message).toContain('Output truncated');
   });
 
   it('removes CSI sequences split across chunks in non-streaming execute', async () => {

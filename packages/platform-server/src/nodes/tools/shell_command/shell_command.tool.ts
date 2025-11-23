@@ -386,7 +386,7 @@ export class ShellCommandTool extends FunctionTool<typeof bashCommandSchema> {
         limit,
         container,
       });
-      return message;
+      throw new Error(message);
     }
 
     if (limit > 0 && combined.length > limit) {
@@ -768,7 +768,7 @@ export class ShellCommandTool extends FunctionTool<typeof bashCommandSchema> {
     }
 
     if (formattedExitCodeMessage) {
-      return formattedExitCodeMessage;
+      throw new Error(formattedExitCodeMessage);
     }
 
     if (terminalStatus === 'truncated') {
