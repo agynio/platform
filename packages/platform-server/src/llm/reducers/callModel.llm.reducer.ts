@@ -1,4 +1,5 @@
 import {
+  AIMessage,
   FunctionTool,
   HumanMessage,
   LLM,
@@ -31,12 +32,19 @@ type SequenceEntry =
 
 @Injectable({ scope: Scope.TRANSIENT })
 export class CallModelLLMReducer extends Reducer<LLMState, LLMContext> {
+  protected logger: LoggerService;
+  private readonly runEvents: RunEventsService;
+  private readonly eventsBus: EventsBusService;
+
   constructor(
-    @Inject(LoggerService) protected logger: LoggerService,
-    @Inject(RunEventsService) private readonly runEvents: RunEventsService,
-    @Inject(EventsBusService) private readonly eventsBus: EventsBusService,
+    @Inject(LoggerService) logger: LoggerService,
+    @Inject(RunEventsService) runEvents: RunEventsService,
+    @Inject(EventsBusService) eventsBus: EventsBusService,
   ) {
     super();
+    this.logger = logger;
+    this.runEvents = runEvents;
+    this.eventsBus = eventsBus;
   }
 
   private tools: FunctionTool[] = [];
@@ -82,7 +90,11 @@ export class CallModelLLMReducer extends Reducer<LLMState, LLMContext> {
     }
 
     const sequence = this.buildSequence(system, summaryMsg, memoryResult, state.messages);
-    const { contextItemIds, context: nextContext } = await this.resolveContextIds(context, sequence, summaryText);
+    const { contextItemIds, context: nextContext, newContextCount } = await this.resolveContextIds(
+      context,
+      sequence,
+      summaryText,
+    );
     const input = sequence.map((entry) => entry.message);
 
     const nodeId = ctx.callerAgent.getAgentNodeId?.() ?? null;
@@ -92,6 +104,7 @@ export class CallModelLLMReducer extends Reducer<LLMState, LLMContext> {
       nodeId,
       model: this.model,
       contextItemIds,
+      newContextItemCount: newContextCount,
       metadata: {
         summaryIncluded: Boolean(summaryMsg),
         memoryPlacement: memoryResult?.msg ? memoryResult.place : null,
@@ -234,9 +247,10 @@ export class CallModelLLMReducer extends Reducer<LLMState, LLMContext> {
     context: LLMContextState,
     sequence: SequenceEntry[],
     summaryText: string | null,
-  ): Promise<{ contextItemIds: string[]; context: LLMContextState }> {
-    const pending: Array<{ input: ContextItemInput; assign: (id: string) => void }> = [];
+  ): Promise<{ contextItemIds: string[]; context: LLMContextState; newContextCount: number }> {
+    const pending: Array<{ input: ContextItemInput; assign: (id: string) => void; isConversation?: boolean }> = [];
     let conversationIndex = 0;
+    const initialConversationCount = context.messageIds.length;
 
     if (!summaryText) {
       context.summary = undefined;
@@ -303,6 +317,7 @@ export class CallModelLLMReducer extends Reducer<LLMState, LLMContext> {
                 context.messageIds.push(id);
               }
             },
+            isConversation: existingId === null || idx >= initialConversationCount,
           });
           conversationIndex += 1;
           break;
@@ -314,10 +329,16 @@ export class CallModelLLMReducer extends Reducer<LLMState, LLMContext> {
       context.messageIds = context.messageIds.slice(0, conversationIndex);
     }
 
+    let newContextCount = 0;
     if (pending.length > 0) {
       const inputs = pending.map((item) => item.input);
       const created = await this.runEvents.createContextItems(inputs);
-      created.forEach((id, index) => pending[index].assign(id));
+      created.forEach((id, index) => {
+        pending[index].assign(id);
+        if (pending[index].isConversation && typeof id === 'string' && id.length > 0) {
+          newContextCount += 1;
+        }
+      });
     }
 
     const contextItemIds: string[] = [];
@@ -346,16 +367,17 @@ export class CallModelLLMReducer extends Reducer<LLMState, LLMContext> {
       }
     }
 
-    return { contextItemIds, context };
+    return { contextItemIds, context, newContextCount };
   }
 
   private collectContextId(params: {
     existingId: string | null;
-    pending: Array<{ input: ContextItemInput; assign: (id: string) => void }>;
+    pending: Array<{ input: ContextItemInput; assign: (id: string) => void; isConversation?: boolean }>;
     input: () => ContextItemInput;
     assign: (id: string) => void;
+    isConversation?: boolean;
   }): void {
-    const { existingId, pending, input, assign } = params;
+    const { existingId, pending, input, assign, isConversation } = params;
     const normalizedId = existingId && existingId.length > 0 ? existingId : null;
     if (normalizedId) {
       assign(normalizedId);
@@ -364,6 +386,7 @@ export class CallModelLLMReducer extends Reducer<LLMState, LLMContext> {
     pending.push({
       input: input(),
       assign,
+      isConversation,
     });
   }
 
@@ -397,22 +420,44 @@ export class CallModelLLMReducer extends Reducer<LLMState, LLMContext> {
     }
   }
 
-  private extractStopReason(raw: unknown): string | null {
-    if (!raw || typeof raw !== 'object') return null;
-    const obj = raw as Record<string, unknown>;
-    const reason = obj.stop_reason ?? obj.finish_reason;
-    return typeof reason === 'string' ? reason : null;
-  }
-
   private extractUsage(message: ResponseMessage): LLMCallUsageMetrics | undefined {
     const usage = message.usage;
     if (!usage) return undefined;
+
     return {
-      inputTokens: usage.input_tokens,
+      inputTokens: usage.input_tokens ?? null,
       cachedInputTokens: usage.input_tokens_details?.cached_tokens ?? null,
-      outputTokens: usage.output_tokens,
+      outputTokens: usage.output_tokens ?? null,
       reasoningTokens: usage.output_tokens_details?.reasoning_tokens ?? null,
-      totalTokens: usage.total_tokens,
+      totalTokens: usage.total_tokens ?? null,
     };
+  }
+
+  private extractStopReason(message: ResponseMessage): string | null {
+    const output = (message as { output?: unknown }).output;
+    if (!Array.isArray(output) || output.length === 0) return null;
+
+    const first = output[0] as unknown;
+    if (!first) return null;
+
+    if (first instanceof AIMessage) {
+      return first.stopReason ?? null;
+    }
+
+    if (typeof first === 'object') {
+      const candidate = first as Record<string, unknown>;
+      const stopSnake = candidate['stop_reason'];
+      if (typeof stopSnake === 'string' && stopSnake.length > 0) return stopSnake;
+      if (stopSnake === null) return null;
+
+      const stopCamel = candidate['stopReason'];
+      if (typeof stopCamel === 'string' && stopCamel.length > 0) return stopCamel;
+      if (stopCamel === null) return null;
+
+      const status = candidate['status'];
+      if (typeof status === 'string' && status !== 'completed') return status;
+    }
+
+    return null;
   }
 }

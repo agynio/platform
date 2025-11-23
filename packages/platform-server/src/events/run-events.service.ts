@@ -107,6 +107,7 @@ export type RunTimelineEvent = {
     topP: number | null;
     stopReason: string | null;
     contextItemIds: string[];
+    newContextItemCount: number;
     responseText: string | null;
     rawResponse: unknown;
     toolCalls: Array<{ callId: string; name: string; arguments: unknown }>;
@@ -245,6 +246,7 @@ export interface LLMCallStartArgs {
   topP?: number | null;
   contextItemIds?: string[];
   contextItems?: ContextItemInput[];
+  newContextItemCount?: number;
   metadata?: RunEventMetadata;
   sourceKind?: EventSourceKind;
   sourceSpanId?: string | null;
@@ -524,6 +526,7 @@ export class RunEventsService {
           topP: event.llmCall.topP ?? null,
           stopReason: event.llmCall.stopReason ?? null,
           contextItemIds,
+          newContextItemCount: event.llmCall.newContextItemCount,
           responseText: event.llmCall.responseText ?? null,
           rawResponse: this.toPlainJson(event.llmCall.rawResponse ?? null),
           toolCalls: event.llmCall.toolCalls.map((tc) => ({
@@ -1106,6 +1109,7 @@ export class RunEventsService {
         topP: args.topP ?? null,
         stopReason: null,
         contextItemIds,
+        newContextItemCount: args.newContextItemCount ?? 0,
         responseText: null,
         rawResponse: Prisma.JsonNull,
       },

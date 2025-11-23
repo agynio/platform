@@ -267,6 +267,7 @@ model LLMCall {
   topP         Float?  @map("top_p")
   stopReason   String? @map("stop_reason")
   contextItemIds String[] @map("context_item_ids") @default([])
+  newContextItemCount Int @map("new_context_item_count") @default(0)
   responseText String? @map("response_text") @db.Text
   rawResponse  Json?   @map("raw_response")
   inputTokens Int? @map("input_tokens")

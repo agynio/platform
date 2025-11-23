@@ -888,6 +888,7 @@ export function RunTimelineEventDetails({ event }: { event: RunTimelineEvent }) 
                 <div ref={contextScrollRef} data-testid="llm-context-scroll" className="flex-1 min-h-0 overflow-y-auto px-3 py-2">
                   <LLMContextViewer
                     ids={llmCall.contextItemIds}
+                    highlightLastCount={llmCall.newContextItemCount}
                     onItemsRendered={handleContextItemsRendered}
                     onBeforeLoadMore={handleBeforeLoadMore}
                   />

@@ -19,19 +19,21 @@ export function createRunEventsStub() {
     return created;
   });
 
-  const startLLMCall = vi.fn(async (args?: { contextItemIds?: string[]; contextItems?: Array<{ id?: string }> }) => {
-    const event = {
-      ...makeEvent(),
-      contextItemIds: [...(args?.contextItemIds ?? [])],
-    } as EventLike & { contextItemIds: string[] };
+  const startLLMCall = vi.fn(
+    async (args?: { contextItemIds?: string[]; contextItems?: Array<{ id?: string }>; newContextItemCount?: number }) => {
+      const event = {
+        ...makeEvent(),
+        contextItemIds: [...(args?.contextItemIds ?? [])],
+      } as EventLike & { contextItemIds: string[] };
 
-    if (args?.contextItems?.length) {
-      const created = await createContextItems(args.contextItems);
-      event.contextItemIds.push(...created);
-    }
+      if (args?.contextItems?.length) {
+        const created = await createContextItems(args.contextItems);
+        event.contextItemIds.push(...created);
+      }
 
-    return event;
-  });
+      return event;
+    },
+  );
 
   return {
     recordInvocationMessage: vi.fn(async () => makeEvent()),

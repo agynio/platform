@@ -166,5 +166,31 @@ if (!shouldRunDbTests) {
 
       await cleanup(thread.id, run.id, Array.from(new Set(callRecord.contextItemIds)));
     });
+
+    it('persists new context item count on llm call events', async () => {
+      const { thread, run } = await createThreadAndRun();
+      const contextInputs: ContextItemInput[] = [
+        { role: ContextItemRole.user, contentText: 'fresh question' },
+        { role: ContextItemRole.assistant, contentText: 'previous assistant reply' },
+      ];
+
+      const event = await runEvents.startLLMCall({
+        runId: run.id,
+        threadId: thread.id,
+        contextItems: contextInputs,
+        newContextItemCount: contextInputs.length,
+      });
+
+      const callRecord = await prisma.lLMCall.findUniqueOrThrow({ where: { eventId: event.id } });
+      expect(callRecord.newContextItemCount).toBe(contextInputs.length);
+
+      const snapshot = await runEvents.getEventSnapshot(event.id);
+      expect(snapshot?.llmCall?.newContextItemCount).toBe(contextInputs.length);
+
+      const page = await runEvents.listRunEvents({ runId: run.id, limit: 10, order: 'asc' });
+      expect(page.items[0]?.llmCall?.newContextItemCount).toBe(contextInputs.length);
+
+      await cleanup(thread.id, run.id, Array.from(new Set(callRecord.contextItemIds)));
+    });
   });
 }
