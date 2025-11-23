@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, InputHTMLAttributes, ReactNode } from 'react';
+import { useState, useRef, useEffect, type InputHTMLAttributes, type ReactNode } from 'react';
 import { Loader2, X } from 'lucide-react';
 
 export interface AutocompleteOption {

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import VariablesScreen, { Variable } from './screens/VariablesScreen';
+import VariablesScreen, { type Variable } from './screens/VariablesScreen';
 
 // Generate sample variables
 const generateSampleVariables = (): Variable[] => {

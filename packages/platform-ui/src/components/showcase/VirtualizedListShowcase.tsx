@@ -22,29 +22,27 @@ const generateItem = (id: number, timestamp: Date): ListItem => ({
   timestamp,
 });
 
-export function VirtualizedListShowcase({ onBack }: ShowcaseProps) {
-  const [allItems, setAllItems] = useState<ListItem[]>(() => {
-    const initial: ListItem[] = [];
-    const now = new Date();
-    for (let i = 0; i < 200; i++) {
-      initial.push(generateItem(i, new Date(now.getTime() - (200 - i) * 5000)));
-    }
-    return initial;
-  });
-  
-  const [displayedItems, setDisplayedItems] = useState<ListItem[]>([]);
-  const [isLoadingMore, setIsLoadingMore] = useState(false);
-  const [hasMore, setHasMore] = useState(true);
-  const [isAutoAdding, setIsAutoAdding] = useState(false);
-  const nextIdRef = useRef(200);
-  const autoAddIntervalRef = useRef<number>();
+const INITIAL_ITEMS: ListItem[] = (() => {
+  const initial: ListItem[] = [];
+  const now = new Date();
+  for (let i = 0; i < 200; i++) {
+    initial.push(generateItem(i, new Date(now.getTime() - (200 - i) * 5000)));
+  }
+  return initial;
+})();
 
-  // Initialize with last 25 items
-  useEffect(() => {
-    const startIndex = Math.max(0, allItems.length - ITEMS_PER_PAGE);
-    setDisplayedItems(allItems.slice(startIndex));
-    setHasMore(startIndex > 0);
-  }, []);
+const INITIAL_ITEMS_START_INDEX = Math.max(0, INITIAL_ITEMS.length - ITEMS_PER_PAGE);
+const INITIAL_DISPLAYED_ITEMS = INITIAL_ITEMS.slice(INITIAL_ITEMS_START_INDEX);
+const INITIAL_ITEMS_HAS_MORE = INITIAL_ITEMS_START_INDEX > 0;
+
+export function VirtualizedListShowcase({ onBack }: ShowcaseProps) {
+  const [allItems, setAllItems] = useState<ListItem[]>(INITIAL_ITEMS);
+  const [displayedItems, setDisplayedItems] = useState<ListItem[]>(INITIAL_DISPLAYED_ITEMS);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const [hasMore, setHasMore] = useState(INITIAL_ITEMS_HAS_MORE);
+  const [isAutoAdding, setIsAutoAdding] = useState(false);
+  const nextIdRef = useRef(INITIAL_ITEMS.length);
+  const autoAddIntervalRef = useRef<number>();
 
   const loadMore = () => {
     if (isLoadingMore || !hasMore) return;

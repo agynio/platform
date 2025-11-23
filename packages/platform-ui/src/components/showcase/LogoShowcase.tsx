@@ -1,4 +1,3 @@
-import { ArrowLeft } from 'lucide-react';
 import { Panel, PanelHeader, PanelBody } from '../Panel';
 import ComponentPreviewHeader from '../ComponentPreviewHeader';
 import AgynLogo from '../AgynLogo';

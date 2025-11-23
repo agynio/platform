@@ -12,10 +12,9 @@ import {
   ScrollText,
 } from 'lucide-react';
 import { MainSidebar } from '../../MainSidebar';
-import { RunEventsList, RunEvent } from '../../RunEventsList';
+import { RunEventsList, type RunEvent } from '../../RunEventsList';
 import { RunEventDetails } from '../../RunEventDetails';
-import { StatusIndicator, Status } from '../../StatusIndicator';
-import { Badge } from '../../Badge';
+import { StatusIndicator, type Status } from '../../StatusIndicator';
 import { Button } from '../../Button';
 import { IconButton } from '../../IconButton';
 import * as Popover from '@radix-ui/react-popover';

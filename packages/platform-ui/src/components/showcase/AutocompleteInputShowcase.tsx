@@ -1,7 +1,7 @@
 import { useState, useCallback } from 'react';
 import ComponentPreviewHeader from '../ComponentPreviewHeader';
 import { Panel, PanelHeader, PanelBody } from '../Panel';
-import { AutocompleteInput, AutocompleteOption } from '../AutocompleteInput';
+import { AutocompleteInput, type AutocompleteOption } from '../AutocompleteInput';
 import { Search } from 'lucide-react';
 
 interface AutocompleteInputShowcaseProps {
@@ -19,13 +19,12 @@ export default function AutocompleteInputShowcase({ onBack }: AutocompleteInputS
   const [selectedOption, setSelectedOption] = useState<AutocompleteOption | null>(null);
   const [searchValue, setSearchValue] = useState('');
 
-  // Mock countries data
-  const countries = [
-    'United States', 'United Kingdom', 'Canada', 'Australia', 'Germany',
-    'France', 'Japan', 'China', 'India', 'Brazil', 'Mexico', 'Italy',
-    'Spain', 'Netherlands', 'Sweden', 'Norway', 'Denmark', 'Finland',
-    'Switzerland', 'Austria', 'Belgium', 'Poland', 'Portugal', 'Ireland'
-  ];
+const COUNTRIES = [
+  'United States', 'United Kingdom', 'Canada', 'Australia', 'Germany',
+  'France', 'Japan', 'China', 'India', 'Brazil', 'Mexico', 'Italy',
+  'Spain', 'Netherlands', 'Sweden', 'Norway', 'Denmark', 'Finland',
+  'Switzerland', 'Austria', 'Belgium', 'Poland', 'Portugal', 'Ireland'
+];
 
   // Simple fruit autocomplete
   const fetchFruits = useCallback(async (query: string): Promise<AutocompleteOption[]> => {
@@ -41,11 +40,11 @@ export default function AutocompleteInputShowcase({ onBack }: AutocompleteInputS
   }, []);
 
   // Simple synchronous-to-async wrapper for countries
-  const fetchCountries = useCallback(async (query: string): Promise<AutocompleteOption[]> => {
+  const fetchCountries = async (query: string): Promise<AutocompleteOption[]> => {
     // Simulate network delay
     await new Promise(resolve => setTimeout(resolve, 300));
     
-    const filtered = countries
+    const filtered = COUNTRIES
       .filter(country => country.toLowerCase().includes(query.toLowerCase()))
       .slice(0, 10);
     
@@ -53,7 +52,7 @@ export default function AutocompleteInputShowcase({ onBack }: AutocompleteInputS
       value: country,
       label: country
     }));
-  }, [countries]);
+  };
 
   // Mock user search
   const fetchUsers = useCallback(async (query: string): Promise<AutocompleteOption[]> => {

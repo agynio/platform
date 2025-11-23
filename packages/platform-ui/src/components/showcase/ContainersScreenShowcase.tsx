@@ -1,4 +1,4 @@
-import ContainersScreen, { Container, ContainerStatus } from './screens/ContainersScreen';
+import ContainersScreen, { type Container, type ContainerStatus } from './screens/ContainersScreen';
 
 // Generate sample containers
 const generateSampleContainers = (): Container[] => {

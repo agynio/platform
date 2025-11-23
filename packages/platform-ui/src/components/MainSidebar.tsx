@@ -1,6 +1,5 @@
 import { useState } from 'react';
 import {
-  ChevronDown,
   ChevronRight,
   Network,
   GitBranch,

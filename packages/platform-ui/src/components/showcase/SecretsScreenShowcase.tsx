@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import SecretsScreen, { Secret } from './screens/SecretsScreen';
+import SecretsScreen, { type Secret } from './screens/SecretsScreen';
 
 // Generate sample secrets
 const generateSampleSecrets = (): Secret[] => {

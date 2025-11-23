@@ -1,4 +1,4 @@
-import { ArrowLeft, Download, Plus, Send } from 'lucide-react';
+import { Download, Plus, Send } from 'lucide-react';
 import { Panel, PanelHeader, PanelBody } from '../Panel';
 import { Button } from '../Button';
 import ComponentPreviewHeader from '../ComponentPreviewHeader';

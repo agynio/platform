@@ -2,8 +2,8 @@ import { useState, useEffect, useRef } from 'react';
 import { ArrowLeft } from 'lucide-react';
 import { IconButton } from '../IconButton';
 import { Button } from '../Button';
-import { RunEventsList, RunEvent } from '../RunEventsList';
-import { EventType } from '../RunEventDetails';
+import { RunEventsList, type RunEvent } from '../RunEventsList';
+import { type EventType } from '../RunEventDetails';
 
 interface ShowcaseProps {
   onBack: () => void;
@@ -21,7 +21,7 @@ const generateEvent = (id: number, timestamp: Date): RunEvent => {
   const type = EVENT_TYPES[Math.floor(Math.random() * EVENT_TYPES.length)];
   const status = STATUSES[Math.floor(Math.random() * STATUSES.length)];
   
-  let data: any = {};
+  let data: RunEvent['data'] = {};
   
   if (type === 'message') {
     const messageSubtype = MESSAGE_SUBTYPES[Math.floor(Math.random() * MESSAGE_SUBTYPES.length)];
@@ -52,30 +52,28 @@ const generateEvent = (id: number, timestamp: Date): RunEvent => {
   };
 };
 
+const INITIAL_EVENTS: RunEvent[] = (() => {
+  const initial: RunEvent[] = [];
+  const now = new Date();
+  for (let i = 0; i < 200; i++) {
+    initial.push(generateEvent(i, new Date(now.getTime() - (200 - i) * 5000)));
+  }
+  return initial;
+})();
+
+const INITIAL_START_INDEX = Math.max(0, INITIAL_EVENTS.length - ITEMS_PER_PAGE);
+const INITIAL_DISPLAYED_EVENTS = INITIAL_EVENTS.slice(INITIAL_START_INDEX);
+const INITIAL_HAS_MORE = INITIAL_START_INDEX > 0;
+
 export function RunEventsListShowcase({ onBack }: ShowcaseProps) {
-  const [allEvents, setAllEvents] = useState<RunEvent[]>(() => {
-    const initial: RunEvent[] = [];
-    const now = new Date();
-    for (let i = 0; i < 200; i++) {
-      initial.push(generateEvent(i, new Date(now.getTime() - (200 - i) * 5000)));
-    }
-    return initial;
-  });
-  
-  const [displayedEvents, setDisplayedEvents] = useState<RunEvent[]>([]);
+  const [allEvents, setAllEvents] = useState<RunEvent[]>(INITIAL_EVENTS);
+  const [displayedEvents, setDisplayedEvents] = useState<RunEvent[]>(INITIAL_DISPLAYED_EVENTS);
   const [selectedEventId, setSelectedEventId] = useState<string>();
   const [isLoadingMore, setIsLoadingMore] = useState(false);
-  const [hasMore, setHasMore] = useState(true);
+  const [hasMore, setHasMore] = useState(INITIAL_HAS_MORE);
   const [isAutoAdding, setIsAutoAdding] = useState(false);
-  const nextIdRef = useRef(200);
+  const nextIdRef = useRef(INITIAL_EVENTS.length);
   const autoAddIntervalRef = useRef<number>();
-
-  // Initialize with last 25 events
-  useEffect(() => {
-    const startIndex = Math.max(0, allEvents.length - ITEMS_PER_PAGE);
-    setDisplayedEvents(allEvents.slice(startIndex));
-    setHasMore(startIndex > 0);
-  }, []);
 
   const loadMore = () => {
     if (isLoadingMore || !hasMore) return;

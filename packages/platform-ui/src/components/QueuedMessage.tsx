@@ -1,4 +1,4 @@
-import { ReactNode } from 'react';
+import { type ReactNode } from 'react';
 import { Clock } from 'lucide-react';
 
 interface QueuedMessageProps {

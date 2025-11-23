@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Panel, PanelHeader, PanelBody } from '../Panel';
 import { ThreadsList } from '../ThreadsList';
-import { Thread } from '../ThreadItem';
+import { type Thread } from '../ThreadItem';
 import ComponentPreviewHeader from '../ComponentPreviewHeader';
 import { User, Bot, Wrench, Circle, CheckCircle2 } from 'lucide-react';
 import { StatusIndicator } from '../StatusIndicator';
@@ -159,25 +159,6 @@ export default function ThreadsListShowcase({ onBack }: ThreadsListShowcaseProps
     }, 800);
   };
 
-  const handleToggleOpenState = (threadId: string, threads: Thread[]): Thread[] => {
-    return threads.map((thread) => {
-      if (thread.id === threadId) {
-        return { ...thread, isOpen: !thread.isOpen };
-      }
-      if (thread.subthreads) {
-        return {
-          ...thread,
-          subthreads: handleToggleOpenState(threadId, thread.subthreads),
-        };
-      }
-      return thread;
-    });
-  };
-
-  const handleRealisticToggle = (threadId: string) => {
-    setRealisticThreads((prev) => handleToggleOpenState(threadId, prev));
-  };
-
   const findThread = (threads: Thread[], id: string): Thread | null => {
     for (const thread of threads) {
       if (thread.id === id) return thread;
@@ -250,7 +231,6 @@ export default function ThreadsListShowcase({ onBack }: ThreadsListShowcaseProps
                   onLoadMore={handleLoadMore}
                   hasMore={hasMore}
                   isLoading={isLoading}
-                  onToggleOpenState={handleRealisticToggle}
                   onSelectThread={handleThreadClick}
                   selectedThreadId={selectedThread?.id}
                 />

@@ -1,16 +1,80 @@
-import { Clock, MessageSquare, Bot, Wrench, FileText, Terminal, Users, ChevronDown, ChevronRight, Copy, User, Settings, Cog, Brain, ExternalLink } from 'lucide-react';
-import { useState } from 'react';
-import { Badge } from './Badge';
+import { Clock, MessageSquare, Bot, Wrench, FileText, Terminal, Users, ChevronDown, ChevronRight, Copy, User, Settings, Brain, ExternalLink } from 'lucide-react';
+import { useState, type ReactNode } from 'react';
 import { IconButton } from './IconButton';
 import { JsonViewer } from './JsonViewer';
 import { MarkdownContent } from './MarkdownContent';
 import { Dropdown } from './Dropdown';
-import { StatusIndicator, Status } from './StatusIndicator';
+import { StatusIndicator, type Status } from './StatusIndicator';
 
 export type EventType = 'message' | 'llm' | 'tool' | 'summarization';
 export type ToolSubtype = 'generic' | 'shell' | 'manage' | string;
 export type MessageSubtype = 'source' | 'intermediate' | 'result';
 export type OutputViewMode = 'text' | 'terminal' | 'markdown' | 'json' | 'yaml';
+
+type JsonPrimitive = string | number | boolean | null;
+type JsonValue = JsonPrimitive | JsonValue[] | { [key: string]: JsonValue };
+
+interface AssistantToolCall {
+  name?: string;
+  function?: {
+    name?: string;
+    arguments?: JsonValue;
+  };
+  arguments?: JsonValue;
+  output?: JsonValue;
+  status?: Status;
+  duration?: string;
+  [key: string]: unknown;
+}
+
+interface ContextMessage {
+  role?: string;
+  name?: string;
+  content?: string;
+  response?: string;
+  timestamp?: string | number;
+  reasoning?: {
+    tokens?: number;
+  } | null;
+  tool_calls?: AssistantToolCall[];
+  tool_result?: JsonValue;
+  [key: string]: unknown;
+}
+
+export interface RunEventData {
+  messageSubtype?: MessageSubtype;
+  content?: string;
+  context?: ContextMessage[];
+  response?: string;
+  tokens?: {
+    total?: number;
+    prompt?: number;
+    completion?: number;
+    [key: string]: number | undefined;
+  } | null;
+  cost?: string;
+  model?: string;
+  prompt?: string;
+  systemPrompt?: string;
+  temperature?: number;
+  topP?: number;
+  frequencyPenalty?: number;
+  presencePenalty?: number;
+  maxTokens?: number;
+  stopSequences?: string[];
+  toolCalls?: AssistantToolCall[];
+  toolSubtype?: ToolSubtype;
+  toolName?: string;
+  input?: JsonValue | string;
+  output?: JsonValue | string;
+  command?: string;
+  workingDir?: string;
+  notes?: string;
+  oldContext?: ContextMessage[];
+  newContext?: ContextMessage[];
+  summary?: string;
+  [key: string]: unknown;
+}
 
 export interface RunEventDetailsProps {
   event: {
@@ -19,24 +83,13 @@ export interface RunEventDetailsProps {
     timestamp: string;
     duration?: string;
     status?: Status;
-    data: any;
+    data: RunEventData;
   };
 }
 
 export function RunEventDetails({ event }: RunEventDetailsProps) {
-  const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set(['main']));
   const [outputViewMode, setOutputViewMode] = useState<OutputViewMode>('text');
   const [expandedToolCalls, setExpandedToolCalls] = useState<Set<number>>(new Set());
-
-  const toggleSection = (section: string) => {
-    const newExpanded = new Set(expandedSections);
-    if (newExpanded.has(section)) {
-      newExpanded.delete(section);
-    } else {
-      newExpanded.add(section);
-    }
-    setExpandedSections(newExpanded);
-  };
 
   const toggleToolCall = (index: number) => {
     const newExpanded = new Set(expandedToolCalls);
@@ -48,15 +101,16 @@ export function RunEventDetails({ event }: RunEventDetailsProps) {
     setExpandedToolCalls(newExpanded);
   };
 
-  const renderOutputContent = (output: any) => {
-    const outputString = typeof output === 'string' ? output : JSON.stringify(output, null, 2);
+  const renderOutputContent = (output: JsonValue | string | undefined): ReactNode => {
+    const serialisedOutput = typeof output === 'string' ? output : JSON.stringify(output, null, 2);
+    const outputString = serialisedOutput ?? '';
 
     switch (outputViewMode) {
       case 'json':
         try {
           const jsonData = typeof output === 'string' ? JSON.parse(output) : output;
-          return <JsonViewer data={jsonData} className="flex-1 overflow-auto" />;
-        } catch (e) {
+          return <JsonViewer data={jsonData as JsonValue} className="flex-1 overflow-auto" />;
+        } catch {
           return (
             <pre className="text-sm text-[var(--agyn-dark)] overflow-auto whitespace-pre-wrap flex-1">
               {outputString}
@@ -146,8 +200,10 @@ export function RunEventDetails({ event }: RunEventDetailsProps) {
   };
 
   const renderLLMEvent = () => {
-    const context = Array.isArray(event.data.context) ? event.data.context : [];
-    const response = event.data.response;
+    const context = Array.isArray(event.data.context)
+      ? (event.data.context as ContextMessage[])
+      : [];
+    const response = typeof event.data.response === 'string' ? event.data.response : '';
     
     return (
       <div className="space-y-6 h-full flex flex-col">
@@ -237,157 +293,169 @@ export function RunEventDetails({ event }: RunEventDetailsProps) {
     );
   };
 
-  const renderContextMessages = (contextArray: any[]) => {
-      return contextArray.map((message: any, index: number) => {
-        const role = message.role?.toLowerCase();
-        
-        // Role color and icon mapping
-        const getRoleConfig = () => {
-          switch (role) {
-            case 'system': 
-              return { 
-                color: 'text-[var(--agyn-gray)]', 
-                icon: <Settings className="w-3.5 h-3.5" /> 
-              };
-            case 'user': 
-              return { 
-                color: 'text-[var(--agyn-blue)]', 
-                icon: <User className="w-3.5 h-3.5" /> 
-              };
-            case 'assistant': 
-              return { 
-                color: 'text-[var(--agyn-purple)]', 
-                icon: <Bot className="w-3.5 h-3.5" /> 
-              };
-            case 'tool': 
-              return { 
-                color: 'text-[var(--agyn-cyan)]', 
-                icon: <Wrench className="w-3.5 h-3.5" /> 
-              };
-            default: 
-              return { 
-                color: 'text-[var(--agyn-gray)]', 
-                icon: <MessageSquare className="w-3.5 h-3.5" /> 
-              };
-          }
-        };
-        
-        const roleConfig = getRoleConfig();
-        
-        // Format timestamp if available
-        const formatTimestamp = (timestamp: string | number | undefined) => {
-          if (!timestamp) return null;
-          const date = new Date(timestamp);
-          return date.toLocaleString('en-US', { 
-            month: 'short', 
-            day: 'numeric', 
-            hour: '2-digit', 
+  const renderContextMessages = (contextArray: ContextMessage[]) => {
+    return contextArray.map((message, index) => {
+      const roleValue = message.role;
+      const role = typeof roleValue === 'string' ? roleValue.toLowerCase() : undefined;
+
+      const roleConfig = (() => {
+        switch (role) {
+          case 'system':
+            return {
+              color: 'text-[var(--agyn-gray)]',
+              icon: <Settings className="w-3.5 h-3.5" />,
+            };
+          case 'user':
+            return {
+              color: 'text-[var(--agyn-blue)]',
+              icon: <User className="w-3.5 h-3.5" />,
+            };
+          case 'assistant':
+            return {
+              color: 'text-[var(--agyn-purple)]',
+              icon: <Bot className="w-3.5 h-3.5" />,
+            };
+          case 'tool':
+            return {
+              color: 'text-[var(--agyn-cyan)]',
+              icon: <Wrench className="w-3.5 h-3.5" />,
+            };
+          default:
+            return {
+              color: 'text-[var(--agyn-gray)]',
+              icon: <MessageSquare className="w-3.5 h-3.5" />,
+            };
+        }
+      })();
+
+      const timestampValue = message.timestamp;
+      const formattedTimestamp = typeof timestampValue === 'string' || typeof timestampValue === 'number'
+        ? new Date(timestampValue).toLocaleString('en-US', {
+            month: 'short',
+            day: 'numeric',
+            hour: '2-digit',
             minute: '2-digit',
             second: '2-digit',
-            hour12: false 
-          });
-        };
-        
-        return (
-          <div key={index} className="mb-4 last:mb-0">
-            <div className={`flex items-center gap-1.5 ${roleConfig.color} mb-2`}>
-              {roleConfig.icon}
-              <span className={`text-xs font-medium ${role === 'tool' ? '' : 'capitalize'}`}>
-                {role === 'tool' ? (message.name || 'Tool') : role}
+            hour12: false,
+          })
+        : null;
+
+      const reasoningTokens = typeof message.reasoning?.tokens === 'number'
+        ? message.reasoning.tokens
+        : undefined;
+
+      const toolCalls = Array.isArray(message.tool_calls)
+        ? (message.tool_calls as AssistantToolCall[])
+        : [];
+
+      const assistantResponse =
+        typeof message.content === 'string'
+          ? message.content
+          : typeof message.response === 'string'
+            ? message.response
+            : '';
+
+      const toolName = typeof message.name === 'string' ? message.name : 'Tool';
+
+      return (
+        <div key={index} className="mb-4 last:mb-0">
+          <div className={`flex items-center gap-1.5 ${roleConfig.color} mb-2`}>
+            {roleConfig.icon}
+            <span className={`text-xs font-medium ${role === 'tool' ? '' : 'capitalize'}`}>
+              {role === 'tool' ? toolName : role}
+            </span>
+            {formattedTimestamp && (
+              <span className="text-xs text-[var(--agyn-gray)] ml-1">
+                {formattedTimestamp}
               </span>
-              {message.timestamp && (
-                <span className="text-xs text-[var(--agyn-gray)] ml-1">
-                  {formatTimestamp(message.timestamp)}
-                </span>
-              )}
-              {role === 'tool' && (
-                <div className="ml-auto">
-                  <Dropdown
-                    value={outputViewMode}
-                    onValueChange={(value) => setOutputViewMode(value as OutputViewMode)}
-                    options={outputViewModeOptions}
-                    variant="flat"
-                    className="text-xs"
-                  />
-                </div>
-              )}
-            </div>
-            <div className="ml-5">
-              {/* System and User - render as markdown */}
-              {(role === 'system' || role === 'user') && (
-                <div className="prose prose-sm max-w-none">
-                  <MarkdownContent content={message.content || ''} />
-                </div>
-              )}
-              
-              {/* Tool - render with view selector */}
-              {role === 'tool' && (
-                <div className="text-sm">
-                  {renderOutputContent(message.content || message.tool_result || '')}
-                </div>
-              )}
-              
-              {/* Assistant - complex rendering */}
-              {role === 'assistant' && (
-                <div className="space-y-3">
-                  {/* Reasoning */}
-                  {message.reasoning && message.reasoning.tokens && (
-                    <div className="flex items-center gap-1.5 text-sm text-[var(--agyn-purple)]">
-                      <Brain className="w-3.5 h-3.5" />
-                      <span>{message.reasoning.tokens.toLocaleString()} tokens</span>
-                    </div>
-                  )}
-                  
-                  {/* Response */}
-                  {(message.content || message.response) && (
-                    <div className="prose prose-sm max-w-none">
-                      <MarkdownContent content={message.content || message.response || ''} />
-                    </div>
-                  )}
-                  
-                  {/* Tool Calls */}
-                  {message.tool_calls && message.tool_calls.length > 0 && (
-                    <div className="space-y-1">
-                      {message.tool_calls.map((toolCall: any, tcIndex: number) => {
-                        const isExpanded = expandedToolCalls.has(tcIndex);
-                        return (
-                          <div key={tcIndex} className="space-y-1">
-                            <button
-                              onClick={() => toggleToolCall(tcIndex)}
-                              className="flex items-center gap-1.5 text-sm text-[var(--agyn-dark)] hover:text-[var(--agyn-blue)] transition-colors"
-                            >
-                              {isExpanded ? (
-                                <ChevronDown className="w-3.5 h-3.5" />
-                              ) : (
-                                <ChevronRight className="w-3.5 h-3.5" />
-                              )}
-                              <Wrench className="w-3.5 h-3.5" />
-                              <span className="font-medium">{toolCall.name || toolCall.function?.name}</span>
-                            </button>
-                            {isExpanded && (
-                              <div className="ml-5 mt-2">
-                                <JsonViewer data={toolCall.arguments || toolCall.function?.arguments || {}} />
-                              </div>
-                            )}
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
+            )}
+            {role === 'tool' && (
+              <div className="ml-auto">
+                <Dropdown
+                  value={outputViewMode}
+                  onValueChange={(value) => setOutputViewMode(value as OutputViewMode)}
+                  options={outputViewModeOptions}
+                  variant="flat"
+                  className="text-xs"
+                />
+              </div>
+            )}
           </div>
-        );
-      });
-    };
+          <div className="ml-5">
+            {(role === 'system' || role === 'user') && (
+              <div className="prose prose-sm max-w-none">
+                <MarkdownContent content={typeof message.content === 'string' ? message.content : ''} />
+              </div>
+            )}
+
+            {role === 'tool' && (
+              <div className="text-sm">
+                {renderOutputContent((message.tool_result ?? message.content) as JsonValue | string | undefined)}
+              </div>
+            )}
+
+            {role === 'assistant' && (
+              <div className="space-y-3">
+                {typeof reasoningTokens === 'number' && (
+                  <div className="flex items-center gap-1.5 text-sm text-[var(--agyn-purple)]">
+                    <Brain className="w-3.5 h-3.5" />
+                    <span>{reasoningTokens.toLocaleString()} tokens</span>
+                  </div>
+                )}
+
+                {assistantResponse && (
+                  <div className="prose prose-sm max-w-none">
+                    <MarkdownContent content={assistantResponse} />
+                  </div>
+                )}
+
+                {toolCalls.length > 0 && (
+                  <div className="space-y-1">
+                    {toolCalls.map((toolCall, tcIndex) => {
+                      const isExpanded = expandedToolCalls.has(tcIndex);
+                      const functionName = toolCall.name || toolCall.function?.name;
+                      return (
+                        <div key={tcIndex} className="space-y-1">
+                          <button
+                            onClick={() => toggleToolCall(tcIndex)}
+                            className="flex items-center gap-1.5 text-sm text-[var(--agyn-dark)] hover:text-[var(--agyn-blue)] transition-colors"
+                          >
+                            {isExpanded ? (
+                              <ChevronDown className="w-3.5 h-3.5" />
+                            ) : (
+                              <ChevronRight className="w-3.5 h-3.5" />
+                            )}
+                            <Wrench className="w-3.5 h-3.5" />
+                            <span className="font-medium">{functionName ?? 'Tool Call'}</span>
+                          </button>
+                          {isExpanded && (
+                            <div className="ml-5 mt-2">
+                              <JsonViewer
+                                data={(toolCall.arguments ?? toolCall.function?.arguments ?? {}) as JsonValue}
+                              />
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+      );
+    });
+  };
 
   const renderGenericToolView = () => {
     const parseInput = () => {
       try {
-        return typeof event.data.input === 'string' ? JSON.parse(event.data.input) : event.data.input;
-      } catch (e) {
-        return event.data.input;
+        return typeof event.data.input === 'string'
+          ? JSON.parse(event.data.input)
+          : event.data.input ?? null;
+      } catch {
+        return event.data.input ?? null;
       }
     };
 
@@ -433,15 +501,33 @@ export function RunEventDetails({ event }: RunEventDetailsProps) {
   const renderShellToolView = () => {
     const parseInput = () => {
       try {
-        return typeof event.data.input === 'string' ? JSON.parse(event.data.input) : event.data.input;
-      } catch (e) {
-        return event.data.input;
+        return typeof event.data.input === 'string'
+          ? JSON.parse(event.data.input)
+          : event.data.input ?? null;
+      } catch {
+        return event.data.input ?? null;
       }
     };
 
     const input = parseInput();
-    const command = input?.command || event.data.command || '';
-    const cwd = input?.cwd || event.data.workingDir || '';
+    const inputObject =
+      input && typeof input === 'object' && !Array.isArray(input)
+        ? (input as Record<string, JsonValue>)
+        : undefined;
+
+    const commandCandidate = inputObject?.command;
+    const command = typeof commandCandidate === 'string'
+      ? commandCandidate
+      : typeof event.data.command === 'string'
+        ? event.data.command
+        : '';
+
+    const cwdCandidate = inputObject?.cwd;
+    const cwd = typeof cwdCandidate === 'string'
+      ? cwdCandidate
+      : typeof event.data.workingDir === 'string'
+        ? event.data.workingDir
+        : '';
 
     return (
       <>
@@ -501,28 +587,57 @@ export function RunEventDetails({ event }: RunEventDetailsProps) {
   const renderManageToolView = () => {
     const parseInput = () => {
       try {
-        return typeof event.data.input === 'string' ? JSON.parse(event.data.input) : event.data.input;
-      } catch (e) {
-        return event.data.input;
+        return typeof event.data.input === 'string'
+          ? JSON.parse(event.data.input)
+          : event.data.input ?? null;
+      } catch {
+        return event.data.input ?? null;
       }
     };
 
     const parseOutput = () => {
       try {
-        return typeof event.data.output === 'string' ? JSON.parse(event.data.output) : event.data.output;
-      } catch (e) {
-        return event.data.output;
+        return typeof event.data.output === 'string'
+          ? JSON.parse(event.data.output)
+          : event.data.output ?? null;
+      } catch {
+        return event.data.output ?? null;
       }
     };
 
     const input = parseInput();
-    const command = input?.command;
-    const worker = input?.worker;
-    const threadAlias = input?.threadAlias;
-    const message = input?.message;
+    const inputObject =
+      input && typeof input === 'object' && !Array.isArray(input)
+        ? (input as Record<string, JsonValue>)
+        : undefined;
+
     const output = parseOutput();
-    const subthreadId = output?.subthreadId || output?.threadId;
-    const runId = output?.runId;
+    const outputObject =
+      output && typeof output === 'object' && !Array.isArray(output)
+        ? (output as Record<string, JsonValue>)
+        : undefined;
+
+    const commandCandidate = inputObject?.command;
+    const command = typeof commandCandidate === 'string' ? commandCandidate : undefined;
+
+    const workerCandidate = inputObject?.worker;
+    const worker = typeof workerCandidate === 'string' ? workerCandidate : undefined;
+
+    const threadAliasCandidate = inputObject?.threadAlias;
+    const threadAlias = typeof threadAliasCandidate === 'string' ? threadAliasCandidate : undefined;
+
+    const messageCandidate = inputObject?.message;
+    const message = typeof messageCandidate === 'string'
+      ? messageCandidate
+      : messageCandidate !== undefined
+        ? JSON.stringify(messageCandidate, null, 2)
+        : undefined;
+
+    const subthreadCandidate = outputObject?.subthreadId ?? outputObject?.threadId;
+    const subthreadId = typeof subthreadCandidate === 'string' ? subthreadCandidate : undefined;
+
+    const runIdCandidate = outputObject?.runId;
+    const runId = typeof runIdCandidate === 'string' ? runIdCandidate : undefined;
 
     return (
       <>
@@ -644,17 +759,6 @@ export function RunEventDetails({ event }: RunEventDetailsProps) {
 
   const renderToolEvent = () => {
     const toolSubtype: ToolSubtype = event.data.toolSubtype || 'generic';
-    
-    // Extract runId for manage tools
-    let runId;
-    if (toolSubtype === 'manage') {
-      try {
-        const output = typeof event.data.output === 'string' ? JSON.parse(event.data.output) : event.data.output;
-        runId = output?.runId;
-      } catch (e) {
-        // ignore parse errors
-      }
-    }
     
     return (
       <div className="space-y-6 flex flex-col h-full">

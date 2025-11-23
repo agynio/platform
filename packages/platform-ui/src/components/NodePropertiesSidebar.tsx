@@ -1,5 +1,5 @@
-import { Info, Play, Square, X, Trash2 } from 'lucide-react';
-import { useState, useCallback, useRef, useEffect } from 'react';
+import { Info, Play, Square, Trash2 } from 'lucide-react';
+import { useState, useCallback } from 'react';
 import { Input } from './Input';
 import { Textarea } from './Textarea';
 import { MarkdownInput } from './MarkdownInput';
@@ -30,7 +30,6 @@ interface NodePropertiesSidebarProps {
   nodeKind: NodeKind;
   nodeTitle: string;
   status: NodeStatus;
-  onSave?: (data: any) => void;
 }
 
 const statusConfig: Record<NodeStatus, { label: string; color: string; bgColor: string }> = {
@@ -71,7 +70,6 @@ export default function NodePropertiesSidebar({
   nodeKind, 
   nodeTitle, 
   status,
-  onSave 
 }: NodePropertiesSidebarProps) {
   const [requireToolCallToFinish, setRequireToolCallToFinish] = useState(false);
   const [systemPrompt, setSystemPrompt] = useState(
@@ -124,7 +122,6 @@ export default function NodePropertiesSidebar({
   const [envVarsOpen, setEnvVarsOpen] = useState(true);
   const [nixPackagesOpen, setNixPackagesOpen] = useState(true);
   const [mcpLimitsOpen, setMcpLimitsOpen] = useState(false);
-  const [mcpToolsOpen, setMcpToolsOpen] = useState(true);
 
   // Mock secret keys for demo
   const mockSecretKeys = [
@@ -134,12 +131,6 @@ export default function NodePropertiesSidebar({
     'SLACK_WEBHOOK_URL',
     'GITHUB_TOKEN',
     'OPENAI_API_KEY',
-  ];
-
-  // Mock Nix packages for autocomplete
-  const mockNixPackages = [
-    'nodejs', 'python3', 'go', 'rust', 'gcc', 'git', 'vim', 'neovim', 
-    'docker', 'kubectl', 'terraform', 'ansible', 'postgresql', 'redis'
   ];
 
   // Fetch Nix packages for autocomplete

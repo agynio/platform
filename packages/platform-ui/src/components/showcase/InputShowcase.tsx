@@ -1,4 +1,4 @@
-import { ArrowLeft, Search, Mail, Lock, Calendar, Phone, Link as LinkIcon } from 'lucide-react';
+import { Search, Mail, Lock, Calendar, Phone, Link as LinkIcon } from 'lucide-react';
 import { Panel, PanelHeader, PanelBody } from '../Panel';
 import { Input } from '../Input';
 import { Textarea } from '../Textarea';

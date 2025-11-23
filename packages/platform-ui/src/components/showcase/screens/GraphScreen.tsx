@@ -21,7 +21,7 @@ export interface GraphNode {
   x: number;
   y: number;
   status: NodeStatus;
-  data?: Record<string, any>;
+  data?: Record<string, unknown>;
 }
 
 interface GraphScreenProps {
@@ -87,10 +87,6 @@ export default function GraphScreen({
     setSelectedNodeId(nodeId);
   };
 
-  const handleCloseProperties = () => {
-    setSelectedNodeId(null);
-  };
-
   return (
     <div className="h-screen flex flex-col">
       {/* Showcase Navigation - NOT PART OF FINAL SCREEN */}
@@ -151,11 +147,6 @@ export default function GraphScreen({
           nodeKind={selectedNode?.kind || 'Agent'}
           nodeTitle={selectedNode?.title || 'Select a node'}
           status={selectedNode?.status || 'ready'}
-          onSave={() => {
-            if (selectedNode) {
-              console.log('Save changes to node:', selectedNode.id);
-            }
-          }}
         />
       </div>
     </div>

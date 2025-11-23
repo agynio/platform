@@ -1,4 +1,4 @@
-import { useState, TextareaHTMLAttributes } from 'react';
+import { useState, type TextareaHTMLAttributes, type ChangeEvent } from 'react';
 import { Maximize2 } from 'lucide-react';
 import { FullscreenMarkdownEditor } from './FullscreenMarkdownEditor';
 
@@ -27,7 +27,7 @@ export function MarkdownInput({
     const syntheticEvent = {
       target: { value: newValue },
       currentTarget: { value: newValue },
-    } as React.ChangeEvent<HTMLTextAreaElement>;
+    } as ChangeEvent<HTMLTextAreaElement>;
     onChange?.(syntheticEvent);
   };
 

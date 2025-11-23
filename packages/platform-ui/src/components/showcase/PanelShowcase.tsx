@@ -1,4 +1,4 @@
-import { ArrowLeft, Settings, Bell, User } from 'lucide-react';
+import { Settings, Bell, User } from 'lucide-react';
 import { Panel, PanelHeader, PanelBody, PanelFooter } from '../Panel';
 import { Button } from '../Button';
 import ComponentPreviewHeader from '../ComponentPreviewHeader';

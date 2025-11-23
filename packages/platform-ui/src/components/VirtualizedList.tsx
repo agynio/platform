@@ -1,5 +1,5 @@
-import { Virtuoso, VirtuosoHandle } from 'react-virtuoso';
-import { useRef, useEffect, useState, ReactNode } from 'react';
+import { Virtuoso, type VirtuosoHandle } from 'react-virtuoso';
+import { useRef, useEffect, useState, type ReactNode, type CSSProperties } from 'react';
 
 export interface VirtualizedListProps<T> {
   items: T[];
@@ -12,7 +12,7 @@ export interface VirtualizedListProps<T> {
   footer?: ReactNode;
   emptyPlaceholder?: ReactNode;
   className?: string;
-  style?: React.CSSProperties;
+  style?: CSSProperties;
 }
 
 export function VirtualizedList<T>({

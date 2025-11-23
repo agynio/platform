@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import RemindersScreen, { Reminder, ReminderStatus } from './screens/RemindersScreen';
+import RemindersScreen, { type Reminder, type ReminderStatus } from './screens/RemindersScreen';
 
 // Generate sample reminders
 const generateSampleReminders = (): Reminder[] => {

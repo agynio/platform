@@ -1,9 +1,9 @@
-import { ReactNode, useRef, useEffect, useState } from 'react';
-import { Message, MessageRole } from './Message';
+import { type ReactNode, useRef, useEffect, useState } from 'react';
+import { Message, type MessageRole } from './Message';
 import { RunInfo } from './RunInfo';
 import { QueuedMessage } from './QueuedMessage';
 import { Reminder } from './Reminder';
-import { StatusIndicator, Status } from './StatusIndicator';
+import { StatusIndicator, type Status } from './StatusIndicator';
 
 export interface ConversationMessage {
   id: string;
@@ -63,7 +63,7 @@ export function Conversation({
   // Use controlled or uncontrolled state
   const isCollapsed = collapsed !== undefined ? collapsed : internalCollapsed;
   
-  const handleToggle = (newValue: boolean) => {
+  const _handleToggle = (newValue: boolean) => {
     if (collapsed === undefined) {
       setInternalCollapsed(newValue);
     }

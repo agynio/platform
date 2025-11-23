@@ -2,11 +2,11 @@ import { useState } from 'react';
 import { ArrowLeft, Play, Container, Bell, Send, PanelRightClose, PanelRight } from 'lucide-react';
 import { IconButton } from '../../IconButton';
 import { ThreadsList } from '../../ThreadsList';
-import { Thread } from '../../ThreadItem';
+import { type Thread } from '../../ThreadItem';
 import { SegmentedControl } from '../../SegmentedControl';
-import { Conversation, Run } from '../../Conversation';
+import { Conversation, type Run } from '../../Conversation';
 import { Popover, PopoverTrigger, PopoverContent } from '../../ui/popover';
-import { StatusIndicator } from '../../StatusIndicator';
+import { StatusIndicator, type Status } from '../../StatusIndicator';
 import { AutosizeTextarea } from '../../AutosizeTextarea';
 import { MainSidebar } from '../../MainSidebar';
 
@@ -484,7 +484,7 @@ export default function ThreadsScreen({ onBack, selectedMenuItem, onMenuItemSele
                     <div className="flex items-start justify-between mb-3">
                       <div className="flex-1">
                         <div className="flex items-center gap-2 mb-1">
-                          <StatusIndicator status={selectedThread.status as any} size="sm" />
+                          <StatusIndicator status={selectedThread.status as Status} size="sm" />
                           <span className="text-xs text-[var(--agyn-gray)]">{selectedThread.agentName}</span>
                           <span className="text-xs text-[var(--agyn-gray)]">•</span>
                           <span className="text-xs text-[var(--agyn-gray)]">{selectedThread.createdAt}</span>
