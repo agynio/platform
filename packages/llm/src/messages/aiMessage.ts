@@ -16,6 +16,32 @@ export class AIMessage {
     return this._source.content.find((c) => c.type === 'output_text')?.text ?? '';
   }
 
+  get stopReason(): string | null {
+    const source = this._source as unknown as Record<string, unknown>;
+    const stopSnake = source['stop_reason'];
+    if (typeof stopSnake === 'string' && stopSnake.length > 0) {
+      return stopSnake;
+    }
+    if (stopSnake === null) {
+      return null;
+    }
+
+    const stopCamel = source['stopReason'];
+    if (typeof stopCamel === 'string' && stopCamel.length > 0) {
+      return stopCamel;
+    }
+    if (stopCamel === null) {
+      return null;
+    }
+
+    const status = source['status'];
+    if (typeof status === 'string' && status !== 'completed') {
+      return status;
+    }
+
+    return null;
+  }
+
   static fromText(text: string): AIMessage {
     const msg: ResponseOutputMessage = {
       id: uuidv4(),

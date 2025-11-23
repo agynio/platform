@@ -109,6 +109,7 @@ vi.mock('@/lib/graph/socket', () => ({
 }));
 
 function buildEvent(overrides: Partial<RunTimelineEvent> = {}): RunTimelineEvent {
+  const { llmCall, ...rest } = overrides;
   return {
     id: 'event-1',
     runId: 'run-1',
@@ -125,7 +126,6 @@ function buildEvent(overrides: Partial<RunTimelineEvent> = {}): RunTimelineEvent
     metadata: {},
     errorCode: null,
     errorMessage: null,
-    llmCall: undefined,
     toolExecution: {
       toolName: 'Search Tool',
       toolCallId: 'call-1',
@@ -139,7 +139,22 @@ function buildEvent(overrides: Partial<RunTimelineEvent> = {}): RunTimelineEvent
     injection: undefined,
     message: undefined,
     attachments: [],
-    ...overrides,
+    ...rest,
+    llmCall: llmCall
+      ? {
+          provider: null,
+          model: null,
+          temperature: null,
+          topP: null,
+          stopReason: null,
+          contextItemIds: [] as string[],
+          newContextItemCount: 0,
+          responseText: null,
+          rawResponse: null,
+          toolCalls: [] as Array<{ callId: string; name: string; arguments: unknown }>,
+          ...llmCall,
+        }
+      : undefined,
   } satisfies RunTimelineEvent;
 }
 

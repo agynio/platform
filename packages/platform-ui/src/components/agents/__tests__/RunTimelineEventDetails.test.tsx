@@ -110,11 +110,26 @@ function buildEvent(overrides: Partial<RunTimelineEvent> = {}): RunTimelineEvent
   const { toolExecution, llmCall, message, attachments, ...rest } = overrides;
   const hasToolOverride = Object.prototype.hasOwnProperty.call(overrides, 'toolExecution');
   const finalToolExecution = hasToolOverride ? toolExecution : base.toolExecution;
+  const finalLlmCall = llmCall
+    ? {
+        provider: null,
+        model: null,
+        temperature: null,
+        topP: null,
+        stopReason: null,
+        contextItemIds: [] as string[],
+        newContextItemCount: 0,
+        responseText: null,
+        rawResponse: null,
+        toolCalls: [] as Array<{ callId: string; name: string; arguments: unknown }>,
+        ...llmCall,
+      }
+    : base.llmCall;
 
   return {
     ...base,
     ...rest,
-    llmCall: llmCall ?? base.llmCall,
+    llmCall: finalLlmCall,
     toolExecution: finalToolExecution ? { ...base.toolExecution!, ...finalToolExecution } : finalToolExecution,
     message: message ?? base.message,
     attachments: attachments ?? base.attachments,
@@ -842,6 +857,119 @@ describe('RunTimelineEventDetails', () => {
       const badge = within(contextRegion).getByText('user');
       expect(badge).toHaveClass('capitalize');
       expect(within(contextRegion).queryByText('Metadata')).toBeNull();
+    } finally {
+      useContextItemsSpy.mockRestore();
+    }
+  });
+
+  it('highlights only the last N conversational context items', () => {
+    const contextItems: ContextItem[] = [
+      {
+        id: 'ctx-1',
+        role: 'system',
+        contentText: 'System prompt',
+        contentJson: null,
+        metadata: null,
+        sizeBytes: 42,
+        createdAt: '2024-01-01T00:00:00.000Z',
+      },
+      {
+        id: 'ctx-2',
+        role: 'summary',
+        contentText: 'Summary of earlier conversation',
+        contentJson: null,
+        metadata: null,
+        sizeBytes: 30,
+        createdAt: '2024-01-01T00:01:00.000Z',
+      },
+      {
+        id: 'ctx-3',
+        role: 'memory',
+        contentText: 'Memory snippet',
+        contentJson: null,
+        metadata: null,
+        sizeBytes: 28,
+        createdAt: '2024-01-01T00:01:30.000Z',
+      },
+      {
+        id: 'ctx-4',
+        role: 'user',
+        contentText: 'Latest user question',
+        contentJson: null,
+        metadata: null,
+        sizeBytes: 64,
+        createdAt: '2024-01-01T00:02:00.000Z',
+      },
+      {
+        id: 'ctx-5',
+        role: 'assistant',
+        contentText: 'Assistant reply',
+        contentJson: null,
+        metadata: null,
+        sizeBytes: 96,
+        createdAt: '2024-01-01T00:03:00.000Z',
+      },
+      {
+        id: 'ctx-6',
+        role: 'tool',
+        contentText: 'Tool output artifact',
+        contentJson: null,
+        metadata: null,
+        sizeBytes: 80,
+        createdAt: '2024-01-01T00:04:00.000Z',
+      },
+    ];
+
+    const useContextItemsSpy = vi.spyOn(contextItemsModule, 'useContextItems').mockReturnValue({
+      items: contextItems,
+      total: contextItems.length,
+      loadedCount: contextItems.length,
+      targetCount: contextItems.length,
+      hasMore: false,
+      isInitialLoading: false,
+      isFetching: false,
+      error: null,
+      loadMore: vi.fn(),
+    });
+
+    try {
+      const event = buildEvent({
+        type: 'llm_call',
+        llmCall: {
+          provider: 'openai',
+          model: 'gpt-highlight',
+          temperature: null,
+          topP: null,
+          stopReason: null,
+          contextItemIds: contextItems.map((item) => item.id),
+          newContextItemCount: 3,
+          responseText: null,
+          rawResponse: null,
+          toolCalls: [],
+        },
+        toolExecution: undefined,
+      });
+
+      renderDetails(event);
+
+      const contextRegion = screen.getByTestId('llm-context-scroll');
+      const highlightedIds = ['ctx-4', 'ctx-5', 'ctx-6'];
+      const nonHighlightedIds = ['ctx-1', 'ctx-2', 'ctx-3'];
+
+      const newBadges = within(contextRegion).getAllByText('New');
+      expect(newBadges).toHaveLength(highlightedIds.length);
+
+      highlightedIds.forEach((id) => {
+        const wrapper = contextRegion.querySelector(`[data-context-item-id="${id}"]`);
+        expect(wrapper?.className).toContain('border-sky-200');
+      });
+
+      nonHighlightedIds.forEach((id) => {
+        const wrapper = contextRegion.querySelector(`[data-context-item-id="${id}"]`);
+        expect(wrapper?.className ?? '').not.toContain('border-sky-200');
+        const headerText = wrapper?.querySelector('header')?.textContent ?? '';
+        expect(headerText).not.toContain('New');
+      });
     } finally {
       useContextItemsSpy.mockRestore();
     }
