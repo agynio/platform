@@ -21,6 +21,7 @@ export class ContainerHandle {
       tty?: boolean;
       signal?: AbortSignal;
       onOutput?: (source: 'stdout' | 'stderr', chunk: Buffer) => void;
+      logToPid1?: boolean;
     },
   ) {
     return this.service.execContainer(this.id, command, options);

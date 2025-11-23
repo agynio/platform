@@ -29,7 +29,16 @@ class StubContainerService extends ContainerService {
   override async execContainer(
     _id: string,
     _command: string[] | string,
-    _options?: { workdir?: string; env?: Record<string, string> | string[]; timeoutMs?: number; idleTimeoutMs?: number; tty?: boolean; killOnTimeout?: boolean; signal?: AbortSignal },
+    _options?: {
+      workdir?: string;
+      env?: Record<string, string> | string[];
+      timeoutMs?: number;
+      idleTimeoutMs?: number;
+      tty?: boolean;
+      killOnTimeout?: boolean;
+      signal?: AbortSignal;
+      logToPid1?: boolean;
+    },
   ): Promise<{ stdout: string; stderr: string; exitCode: number }> {
     return { stdout: '', stderr: '', exitCode: 0 };
   }

@@ -23,7 +23,7 @@ export const bashCommandSchema = z.object({
     .string()
     .min(1)
     .describe(
-      `Shell command to execute. Avoid interactive commands or watch mode. Use single quotes for cli arguments to prevent unexpected interpolation (do not wrap entire command in quotes). Command is executed in wrapper \`bash -lc '<COMMAND>'\`, no need to add bash invocation.`,
+      `Shell command to execute. Avoid interactive commands or watch mode. Use single quotes for cli arguments to prevent unexpected interpolation (do not wrap entire command in quotes). Commands run via a non-interactive shell wrapper (bash when available, sh fallback) that also mirrors output to PID 1 for container logging, so you do not need to prefix with bash yourself.`,
     ),
   cwd: z.string().optional().describe('Optional working directory override applied for this command.'),
 });
@@ -179,6 +179,7 @@ export class ShellCommandTool extends FunctionTool<typeof bashCommandSchema> {
       chunkSizeBytes: typeof cfg.chunkSizeBytes === 'number' ? cfg.chunkSizeBytes : DEFAULT_CHUNK_SIZE_BYTES,
       clientBufferLimitBytes:
         typeof cfg.clientBufferLimitBytes === 'number' ? cfg.clientBufferLimitBytes : DEFAULT_CLIENT_BUFFER_BYTES,
+      logToPid1: typeof cfg.logToPid1 === 'boolean' ? cfg.logToPid1 : true,
     };
   }
 
@@ -276,6 +277,7 @@ export class ShellCommandTool extends FunctionTool<typeof bashCommandSchema> {
         timeoutMs,
         idleTimeoutMs,
         killOnTimeout: true,
+        logToPid1: cfg.logToPid1,
         onOutput: (source, chunk) => handleChunk(source as OutputSource, chunk),
       });
       flushDecoderRemainder();
@@ -508,6 +510,7 @@ export class ShellCommandTool extends FunctionTool<typeof bashCommandSchema> {
         timeoutMs: cfg.executionTimeoutMs,
         idleTimeoutMs: cfg.idleTimeoutMs,
         killOnTimeout: true,
+        logToPid1: cfg.logToPid1,
         onOutput: (source, chunk) => {
           if (truncated && !allowNextChunkAfterTruncate) return;
           handleChunk(source as OutputSource, chunk);

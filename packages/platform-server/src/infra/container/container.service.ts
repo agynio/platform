@@ -58,6 +58,8 @@ export type ContainerOpts = {
 @Injectable()
 export class ContainerService {
   private docker: Docker;
+  private readonly logShellPreference = new Map<string, 'bash' | 'sh'>();
+  private readonly logShellDetection = new Map<string, Promise<'bash' | 'sh'>>();
 
   constructor(
     @Inject(LoggerService) private logger: LoggerService,
@@ -220,6 +222,7 @@ export class ContainerService {
       killOnTimeout?: boolean;
       signal?: AbortSignal;
       onOutput?: (source: 'stdout' | 'stderr', chunk: Buffer) => void;
+      logToPid1?: boolean;
     },
   ): Promise<{ stdout: string; stderr: string; exitCode: number }> {
     const container = this.docker.getContainer(containerId);
@@ -228,14 +231,21 @@ export class ContainerService {
       throw new Error(`Container '${containerId}' is not running`);
     }
 
-    const Cmd = Array.isArray(command) ? command : ['/bin/sh', '-lc', command];
+    const logToPid1 = options?.logToPid1 ?? false;
+    const Cmd = logToPid1
+      ? await this.buildLogToPid1Command(container, inspectData.Id, command)
+      : Array.isArray(command)
+        ? command
+        : ['/bin/sh', '-lc', command];
     const Env: string[] | undefined = Array.isArray(options?.env)
       ? options?.env
       : options?.env
         ? Object.entries(options.env).map(([k, v]) => `${k}=${v}`)
         : undefined;
 
-    this.logger.debug(`Exec in container cid=${inspectData.Id.substring(0, 12)}: ${Cmd.join(' ')}`);
+    this.logger.debug(
+      `Exec in container cid=${inspectData.Id.substring(0, 12)} logToPid1=${logToPid1}: ${Cmd.join(' ')}`,
+    );
     // Update last-used before starting exec
     void this.touchLastUsed(inspectData.Id);
     const exec: Exec = await container.exec({
@@ -244,7 +254,7 @@ export class ContainerService {
       AttachStderr: true,
       WorkingDir: options?.workdir,
       Env,
-      Tty: options?.tty ?? false,
+      Tty: logToPid1 ? false : options?.tty ?? false,
       AttachStdin: false,
     });
 
@@ -382,6 +392,73 @@ export class ContainerService {
     const exec = this.docker.getExec(execId);
     if (!exec) throw new Error('exec_not_found');
     await exec.resize({ w: size.cols, h: size.rows });
+  }
+
+  private async buildLogToPid1Command(
+    container: Docker.Container,
+    containerId: string,
+    command: string[] | string,
+  ): Promise<string[]> {
+    const preferredShell = await this.detectPreferredLogShell(container, containerId);
+    const placeholder = '__hautech_exec__';
+    if (preferredShell === 'bash') {
+      const script = Array.isArray(command)
+        ? 'set -o pipefail; { "$@" ; } 2> >(tee -a /proc/1/fd/2 >&2) | tee -a /proc/1/fd/1'
+        : 'set -o pipefail; { eval "$1" ; } 2> >(tee -a /proc/1/fd/2 >&2) | tee -a /proc/1/fd/1';
+      const args = Array.isArray(command) ? command : [command];
+      return ['bash', '-lc', script, placeholder, ...args];
+    }
+    const script = Array.isArray(command)
+      ? '("$@") 2>&1 | tee -a /proc/1/fd/1'
+      : '( eval "$1" 2>&1 ) | tee -a /proc/1/fd/1';
+    const args = Array.isArray(command) ? command : [command];
+    return ['sh', '-lc', script, placeholder, ...args];
+  }
+
+  private async detectPreferredLogShell(
+    container: Docker.Container,
+    containerId: string,
+  ): Promise<'bash' | 'sh'> {
+    const cached = this.logShellPreference.get(containerId);
+    if (cached) return cached;
+    const inflight = this.logShellDetection.get(containerId);
+    if (inflight) return inflight;
+    const detectionPromise = (async (): Promise<'bash' | 'sh'> => {
+      try {
+        const exec = await container.exec({
+          Cmd: ['/bin/sh', '-lc', 'command -v bash >/dev/null 2>&1'],
+          AttachStdout: true,
+          AttachStderr: true,
+          AttachStdin: false,
+          Tty: false,
+        });
+        const { exitCode } = await this.startAndCollectExec(exec, 5_000);
+        if (exitCode === 0) {
+          this.logShellPreference.set(containerId, 'bash');
+          return 'bash';
+        }
+      } catch (err) {
+        this.logger.debug('bash detection failed', {
+          containerId: containerId.substring(0, 12),
+          error: err instanceof Error ? err.message : String(err),
+        });
+      }
+      this.logShellPreference.set(containerId, 'sh');
+      return 'sh';
+    })()
+      .catch((err) => {
+        this.logger.debug('bash detection encountered unexpected error', {
+          containerId: containerId.substring(0, 12),
+          error: err instanceof Error ? err.message : String(err),
+        });
+        this.logShellPreference.set(containerId, 'sh');
+        return 'sh' as const;
+      })
+      .finally(() => {
+        this.logShellDetection.delete(containerId);
+      });
+    this.logShellDetection.set(containerId, detectionPromise);
+    return detectionPromise;
   }
 
   private startAndCollectExec(
@@ -662,6 +739,8 @@ export class ContainerService {
   /** Stop a container by docker id (gracefully). */
   async stopContainer(containerId: string, timeoutSec = 10): Promise<void> {
     this.logger.info(`Stopping container cid=${containerId.substring(0, 12)} (timeout=${timeoutSec}s)`);
+    this.logShellPreference.delete(containerId);
+    this.logShellDetection.delete(containerId);
     const c = this.docker.getContainer(containerId);
     try {
       await c.stop({ t: timeoutSec });
@@ -681,6 +760,8 @@ export class ContainerService {
   /** Remove a container by docker id. */
   async removeContainer(containerId: string, force = false): Promise<void> {
     this.logger.info(`Removing container cid=${containerId.substring(0, 12)} force=${force}`);
+    this.logShellPreference.delete(containerId);
+    this.logShellDetection.delete(containerId);
     const container = this.docker.getContainer(containerId);
     try {
       await container.remove({ force });

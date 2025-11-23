@@ -64,6 +64,10 @@ export const ShellToolStaticConfigSchema = z
       .max(50 * 1024 * 1024)
       .default(10 * 1024 * 1024)
       .describe('Maximum streamed bytes delivered to clients before truncation.'),
+    logToPid1: z
+      .boolean()
+      .default(true)
+      .describe('Duplicate exec stdout/stderr to PID 1 for container logging drivers (best-effort when bash is unavailable).'),
   })
   .strict();
 
