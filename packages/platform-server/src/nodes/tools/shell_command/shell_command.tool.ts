@@ -16,6 +16,7 @@ import { ContainerHandle } from '../../../infra/container/container.handle';
 import { RunEventsService } from '../../../events/run-events.service';
 import { EventsBusService } from '../../../events/events-bus.service';
 import { ToolOutputStatus } from '@prisma/client';
+import { PrismaService } from '../../../core/services/prisma.service';
 
 // Schema for tool arguments
 export const bashCommandSchema = z.object({
@@ -139,6 +140,7 @@ export class ShellCommandTool extends FunctionTool<typeof bashCommandSchema> {
     private readonly runEvents: RunEventsService,
     private readonly eventsBus: EventsBusService,
     private readonly logger: LoggerService,
+    private readonly prismaService: PrismaService,
   ) {
     super();
   }
@@ -298,6 +300,11 @@ export class ShellCommandTool extends FunctionTool<typeof bashCommandSchema> {
             `Error (timeout after ${usedMs}ms): command exceeded ${usedMs}ms and was terminated. See output tail below.\n----------\n${tail}`,
           );
         }
+      }
+
+      if (this.isConnectionInterruption(err)) {
+        const message = await this.buildInterruptionMessage(container.id);
+        throw new Error(message);
       }
       throw err;
     }
@@ -645,5 +652,62 @@ export class ShellCommandTool extends FunctionTool<typeof bashCommandSchema> {
     }
 
     return getCombinedOutput();
+  }
+
+  private isConnectionInterruption(err: unknown): boolean {
+    if (!err || typeof err !== 'object') return false;
+    const anyErr = err as { code?: unknown; message?: unknown; stack?: unknown };
+    const code = typeof anyErr.code === 'string' ? anyErr.code : undefined;
+    const msg = typeof anyErr.message === 'string' ? anyErr.message : undefined;
+
+    const interruptionCodes = new Set(['ERR_IPC_CHANNEL_CLOSED', 'ECONNRESET', 'EPIPE', 'ECONNABORTED', 'ESHUTDOWN']);
+
+    if (code && interruptionCodes.has(code)) return true;
+    if (!msg) return false;
+    const lowered = msg.toLowerCase();
+    return lowered.includes('channel closed') || lowered.includes('broken pipe') || lowered.includes('econnreset');
+  }
+
+  private async buildInterruptionMessage(containerId: string): Promise<string> {
+    try {
+      const prisma = this.prismaService.getClient();
+      const container = await prisma.container.findUnique({
+        where: { containerId },
+        select: { id: true, dockerContainerId: true, threadId: true },
+      });
+      if (!container) {
+        return 'Shell command interrupted: workspace container connection closed unexpectedly (container record missing).';
+      }
+
+      const event = await prisma.containerEvent.findFirst({
+        where: { containerDbId: container.id },
+        orderBy: { createdAt: 'desc' },
+      });
+
+      if (!event) {
+        return 'Shell command interrupted: workspace container connection closed unexpectedly. No Docker termination event was recorded.';
+      }
+
+      const segments: string[] = [];
+      const timestamp = event.createdAt ? event.createdAt.toISOString() : undefined;
+      const reason = event.reason ?? 'Unknown reason';
+      let headline = `Shell command interrupted: workspace container reported ${reason}`;
+      if (timestamp) headline = `${headline} at ${timestamp}`;
+      segments.push(headline);
+      const signal = event.signal ?? undefined;
+      const exitCode = typeof event.exitCode === 'number' ? event.exitCode : undefined;
+      const extras: string[] = [];
+      if (typeof exitCode === 'number') extras.push(`exitCode=${exitCode}`);
+      if (signal) extras.push(`signal=${signal}`);
+      if (container.dockerContainerId) extras.push(`dockerId=${container.dockerContainerId.slice(0, 12)}`);
+      if (container.threadId) extras.push(`threadId=${container.threadId}`);
+      if (extras.length > 0) segments.push(`Details: ${extras.join(', ')}`);
+      const message = event.message ?? undefined;
+      if (message) segments.push(`Docker message: ${message}`);
+      return `${segments.join('. ')}.`;
+    } catch (error) {
+      this.logger.error('ShellCommandTool: failed to build interruption message', { error, containerId });
+      return 'Shell command interrupted: workspace container connection closed unexpectedly. Failed to read termination details.';
+    }
   }
 }

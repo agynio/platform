@@ -9,6 +9,7 @@ import { ModuleRef } from '@nestjs/core';
 import { ArchiveService } from '../../../infra/archive/archive.service';
 import { RunEventsService } from '../../../events/run-events.service';
 import { EventsBusService } from '../../../events/events-bus.service';
+import { PrismaService } from '../../../core/services/prisma.service';
 
 // NOTE: ANSI stripping now handled in ShellCommandTool; keep schema exports here only.
 
@@ -83,6 +84,7 @@ export class ShellCommandNode extends BaseToolNode<z.infer<typeof ShellToolStati
     @Inject(ArchiveService) private readonly archive: ArchiveService,
     @Inject(RunEventsService) private readonly runEvents: RunEventsService,
     @Inject(EventsBusService) private readonly eventsBus: EventsBusService,
+    @Inject(PrismaService) private readonly prismaService: PrismaService,
   ) {
     super(logger);
   }
@@ -101,7 +103,7 @@ export class ShellCommandNode extends BaseToolNode<z.infer<typeof ShellToolStati
 
   getTool(): ShellCommandTool {
     if (!this.toolInstance) {
-      const tool = new ShellCommandTool(this.archive, this.runEvents, this.eventsBus, this.logger);
+      const tool = new ShellCommandTool(this.archive, this.runEvents, this.eventsBus, this.logger, this.prismaService);
       tool.init(this);
       this.toolInstance = tool;
     }

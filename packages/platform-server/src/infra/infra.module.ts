@@ -17,6 +17,8 @@ import { ArchiveService } from './archive/archive.service';
 import { TerminalSessionsService } from './container/terminal.sessions.service';
 import { ContainerTerminalGateway } from './container/terminal.gateway';
 import { ContainerTerminalController } from './container/containerTerminal.controller';
+import { ContainerEventProcessor } from './container/containerEvent.processor';
+import { DockerWorkspaceEventsWatcher } from './container/containerEvent.watcher';
 
 @Module({
   imports: [CoreModule, VaultModule],
@@ -52,6 +54,20 @@ import { ContainerTerminalController } from './container/containerTerminal.contr
     TerminalSessionsService,
     ContainerTerminalGateway,
     ContainerThreadTerminationService,
+    ContainerEventProcessor,
+    {
+      provide: DockerWorkspaceEventsWatcher,
+      useFactory: (
+        containerService: ContainerService,
+        processor: ContainerEventProcessor,
+        logger: LoggerService,
+      ) => {
+        const watcher = new DockerWorkspaceEventsWatcher(containerService, processor, logger);
+        watcher.start();
+        return watcher;
+      },
+      inject: [ContainerService, ContainerEventProcessor, LoggerService],
+    },
     {
       provide: NcpsKeyService,
       useFactory: async (config: ConfigService, logger: LoggerService) => {
@@ -73,6 +89,8 @@ import { ContainerTerminalController } from './container/containerTerminal.contr
     TerminalSessionsService,
     ContainerTerminalGateway,
     ContainerThreadTerminationService,
+    ContainerEventProcessor,
+    DockerWorkspaceEventsWatcher,
     NcpsKeyService,
     GithubService,
     PRService,

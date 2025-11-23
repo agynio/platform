@@ -4,6 +4,7 @@ import { LoggerService } from '../src/core/services/logger.service';
 
 type ContainerRow = {
   containerId: string;
+  dockerContainerId: string | null;
   nodeId: string;
   threadId: string | null;
   providerType: 'docker';
@@ -29,6 +30,7 @@ class FakePrismaClient {
         const now = new Date();
         const row: ContainerRow = {
           containerId: create.containerId,
+          dockerContainerId: (create.dockerContainerId as string | null) ?? null,
           nodeId: create.nodeId as string,
           threadId: (create.threadId as string | null) ?? null,
           providerType: 'docker',
@@ -47,6 +49,7 @@ class FakePrismaClient {
       } else {
         const update = args.update;
         existing.nodeId = (update.nodeId as string) ?? existing.nodeId;
+        existing.dockerContainerId = (update.dockerContainerId as string | null) ?? existing.dockerContainerId;
         existing.threadId = (update.threadId as string | null) ?? existing.threadId;
         existing.image = (update.image as string) ?? existing.image;
         existing.status = (update.status as ContainerStatus) ?? existing.status;
@@ -75,6 +78,8 @@ class FakePrismaClient {
       if ('lastUsedAt' in data) existing.lastUsedAt = (data.lastUsedAt as Date) ?? existing.lastUsedAt;
       if ('killAfterAt' in data) existing.killAfterAt = (data.killAfterAt as Date | null) ?? existing.killAfterAt;
       if ('metadata' in data) existing.metadata = (data.metadata as ContainerMetadata | null) ?? existing.metadata;
+      if ('dockerContainerId' in data) existing.dockerContainerId = (data.dockerContainerId as string | null) ?? existing.dockerContainerId;
+      if ('threadId' in data) existing.threadId = (data.threadId as string | null) ?? existing.threadId;
       return existing;
     },
     updateMany: async (args: { where: { containerId: string; status: ContainerStatus }; data: { status: ContainerStatus; metadata?: ContainerMetadata | null } }) => {
@@ -152,6 +157,7 @@ describe('ContainerRegistry (Prisma-backed)', () => {
     expect(row!.status).toBe('running');
     expect(row!.killAfterAt).not.toBeNull();
     expect(row!.metadata!.ttlSeconds).toBe(10);
+    expect(row!.dockerContainerId).toBe('abc');
   });
 
   it('updateLastUsed does not create when missing', async () => {
