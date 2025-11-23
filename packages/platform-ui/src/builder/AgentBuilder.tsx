@@ -21,16 +21,18 @@ import { makeNodeTypes } from './nodeTypes';
 import { TemplatesProvider } from './TemplatesProvider';
 import type { NodeTypes } from 'reactflow';
 import { NodeTracingSidebar } from '@/components/graph/NodeTracingSidebar';
-import { RightPropertiesPanel } from './panels/RightPropertiesPanel';
+import NodePropertiesSidebar from '@/components/NodePropertiesSidebar';
 import { useBuilderState } from './hooks/useBuilderState';
 import type { TemplateNodeSchema } from '@agyn/shared';
-import { getDisplayTitle } from './lib/display';
+import { getDisplayTitle, getKind } from './lib/display';
 import { Button, Popover, PopoverTrigger, PopoverContent, ScrollArea, Card, Drawer, DrawerTrigger, DrawerContent } from '@agyn/ui';
 import { Plus, Bot, Wrench, Zap } from 'lucide-react';
 import { kindBadgeClasses, kindLabel } from './lib/display';
 import { SaveStatusIndicator } from './SaveStatusIndicator';
 import { useDrag } from 'react-dnd';
 import { BuilderDragLayer } from './BuilderDragLayer';
+import { useNodeStatus } from '@/lib/graph/hooks';
+import type { ProvisionState } from '@/lib/graph/types';
 
 interface CanvasAreaProps {
   nodes: RFNode[];
@@ -386,6 +388,80 @@ function KindIcon({ kind }: { kind?: TemplateNodeSchema['kind'] }) {
 }
 
 // Hoisted RightPanelContent to keep identity stable across AgentBuilder re-renders
+type SidebarNodeKind = 'Agent' | 'Tool' | 'MCP' | 'Trigger' | 'Workspace';
+type SidebarProvisionState =
+  | 'not_ready'
+  | 'provisioning'
+  | 'ready'
+  | 'deprovisioning'
+  | 'provisioning_error'
+  | 'deprovisioning_error';
+
+const sidebarKinds: Record<string, SidebarNodeKind> = {
+  agent: 'Agent',
+  tool: 'Tool',
+  trigger: 'Trigger',
+  mcp: 'MCP',
+  workspace: 'Workspace',
+};
+
+function normalizeProvisionState(state?: ProvisionState): SidebarProvisionState {
+  if (!state) return 'not_ready';
+  switch (state) {
+    case 'not_ready':
+    case 'provisioning':
+    case 'ready':
+    case 'deprovisioning':
+    case 'provisioning_error':
+    case 'deprovisioning_error':
+      return state;
+    case 'error':
+      return 'provisioning_error';
+    default:
+      return 'not_ready';
+  }
+}
+
+function mapTemplateKindToSidebarKind(kind?: string): SidebarNodeKind {
+  if (!kind) return 'Agent';
+  return sidebarKinds[kind] ?? 'Agent';
+}
+
+const PropertiesTabContent = memo(function PropertiesTabContent({
+  node,
+  templates,
+  displayTitle,
+  updateNodeData,
+}: {
+  node: RFNode;
+  templates: TemplateNodeSchema[];
+  displayTitle: string;
+  updateNodeData: (nodeId: string, data: Record<string, unknown>) => void;
+}) {
+  const { data: status } = useNodeStatus(node.id);
+  const templateKind = getKind(templates, node.data.template);
+  const nodeKind = mapTemplateKindToSidebarKind(templateKind);
+
+  const handleSave = useCallback(
+    (next: unknown) => {
+      if (!next || typeof next !== 'object') return;
+      updateNodeData(node.id, next as Record<string, unknown>);
+    },
+    [node.id, updateNodeData],
+  );
+
+  return (
+    <div className="h-full">
+      <NodePropertiesSidebar
+        nodeKind={nodeKind}
+        nodeTitle={displayTitle}
+        status={normalizeProvisionState(status?.provisionStatus?.state)}
+        onSave={handleSave}
+      />
+    </div>
+  );
+});
+
 const RightPanelContent = memo(function RightPanelContent({
   rightTab,
   setRightTab,
@@ -393,6 +469,7 @@ const RightPanelContent = memo(function RightPanelContent({
   selectedDisplayTitle,
   selectedNode,
   updateNodeData,
+  templates,
 }: {
   rightTab: 'properties' | 'activity';
   setRightTab: (tab: 'properties' | 'activity') => void;
@@ -400,7 +477,9 @@ const RightPanelContent = memo(function RightPanelContent({
   selectedDisplayTitle: string;
   selectedNode: RFNode | null;
   updateNodeData: (nodeId: string, data: Record<string, unknown>) => void;
+  templates: TemplateNodeSchema[];
 }) {
+  const showProperties = rightTab === 'properties';
   return (
     <div className="flex h-full min-h-0 w-full flex-col overflow-hidden">
       <div className="border-b flex items-center gap-2 px-4 h-10 shrink-0">
@@ -416,14 +495,25 @@ const RightPanelContent = memo(function RightPanelContent({
           </div>
         )}
       </div>
-      <div className="flex-1 overflow-y-auto p-4">
-        {rightTab === 'activity' && activityEligible && selectedNode ? (
-          <div className="space-y-4">
-            {/* Show tracing spans for agent/tool nodes */}
-            <NodeTracingSidebar node={selectedNode} />
-          </div>
+      <div className={showProperties && selectedNode ? 'flex-1 overflow-hidden' : 'flex-1 overflow-y-auto p-4'}>
+        {rightTab === 'activity' ? (
+          activityEligible && selectedNode ? (
+            <div className="space-y-4">
+              {/* Show tracing spans for agent/tool nodes */}
+              <NodeTracingSidebar node={selectedNode} />
+            </div>
+          ) : (
+            <div className="text-xs text-muted-foreground">Activity is available for eligible nodes.</div>
+          )
+        ) : selectedNode ? (
+          <PropertiesTabContent
+            node={selectedNode}
+            templates={templates}
+            displayTitle={selectedDisplayTitle}
+            updateNodeData={updateNodeData}
+          />
         ) : (
-          <RightPropertiesPanel node={selectedNode} onChange={updateNodeData} />
+          <div className="text-xs text-muted-foreground">Select a node to edit its properties.</div>
         )}
       </div>
     </div>
@@ -474,6 +564,7 @@ export function AgentBuilder() {
   const selectedDisplayTitle = selectedNode
     ? getDisplayTitle(templates, selectedNode.data.template, selectedNode.data.config)
     : 'No Selection';
+  const showProperties = rightTab === 'properties' && !!selectedNode;
 
   return (
     <DndProvider backend={HTML5Backend}>
@@ -494,7 +585,7 @@ export function AgentBuilder() {
             />
           </TemplatesProvider>
           {/* Inline right panel on xl+ */}
-          <aside className="hidden xl:flex h-full w-96 shrink-0 border-l bg-sidebar p-0 flex-col overflow-hidden">
+          <aside className={`hidden xl:flex h-full ${showProperties ? 'w-[420px]' : 'w-96'} shrink-0 border-l bg-sidebar p-0 flex-col overflow-hidden`}>
             <RightPanelContent
               rightTab={rightTab}
               setRightTab={setRightTab}
@@ -502,6 +593,7 @@ export function AgentBuilder() {
               selectedDisplayTitle={selectedDisplayTitle}
               selectedNode={selectedNode}
               updateNodeData={updateNodeData}
+              templates={templates}
             />
           </aside>
 
@@ -522,6 +614,7 @@ export function AgentBuilder() {
                     selectedDisplayTitle={selectedDisplayTitle}
                     selectedNode={selectedNode}
                     updateNodeData={updateNodeData}
+                    templates={templates}
                   />
                 </div>
               </DrawerContent>
