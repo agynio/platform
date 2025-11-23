@@ -126,7 +126,6 @@ function buildEvent(overrides: Partial<RunTimelineEvent> = {}): RunTimelineEvent
     metadata: {},
     errorCode: null,
     errorMessage: null,
-    llmCall: undefined,
     toolExecution: {
       toolName: 'Search Tool',
       toolCallId: 'call-1',

@@ -1,4 +1,5 @@
 import {
+  AIMessage,
   FunctionTool,
   HumanMessage,
   LLM,
@@ -433,6 +434,30 @@ export class CallModelLLMReducer extends Reducer<LLMState, LLMContext> {
   }
 
   private extractStopReason(message: ResponseMessage): string | null {
-    return message.output[0]?.stopReason ?? null;
+    const output = (message as { output?: unknown }).output;
+    if (!Array.isArray(output) || output.length === 0) return null;
+
+    const first = output[0] as unknown;
+    if (!first) return null;
+
+    if (first instanceof AIMessage) {
+      return first.stopReason ?? null;
+    }
+
+    if (typeof first === 'object') {
+      const candidate = first as Record<string, unknown>;
+      const stopSnake = candidate['stop_reason'];
+      if (typeof stopSnake === 'string' && stopSnake.length > 0) return stopSnake;
+      if (stopSnake === null) return null;
+
+      const stopCamel = candidate['stopReason'];
+      if (typeof stopCamel === 'string' && stopCamel.length > 0) return stopCamel;
+      if (stopCamel === null) return null;
+
+      const status = candidate['status'];
+      if (typeof status === 'string' && status !== 'completed') return status;
+    }
+
+    return null;
   }
 }
