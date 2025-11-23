@@ -2,11 +2,11 @@ import { describe, it, expect } from 'vitest';
 import React from 'react';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { TooltipProvider } from '@agyn/ui';
-import { SecretsRow } from '@/pages/SettingsSecrets';
+import { TooltipProvider } from '@/components/ui/tooltip';
+import { Row } from '@/pages/SettingsSecrets/components/Row';
 import type { SecretEntry } from '@/api/modules/graph';
 
-describe('SecretsRow masking', () => {
+describe('Secrets row masking', () => {
   it('toggle mask affects only its row and copy disabled when masked', async () => {
     const entryA: SecretEntry = { mount: 'secret', path: 'github', key: 'A', required: true, present: false };
     const entryB: SecretEntry = { mount: 'secret', path: 'slack', key: 'B', required: false, present: true };
@@ -16,8 +16,8 @@ describe('SecretsRow masking', () => {
       <QueryClientProvider client={qc}>
         <TooltipProvider>
           <table><tbody>
-            <SecretsRow entry={entryA} />
-            <SecretsRow entry={entryB} />
+            <Row entry={entryA} />
+            <Row entry={entryB} />
           </tbody></table>
         </TooltipProvider>
       </QueryClientProvider>
@@ -41,7 +41,7 @@ describe('SecretsRow masking', () => {
     expect(copyButtons[0]).toBeDisabled();
 
     // Type a value and ensure copy enabled only for first row
-    const inputs = screen.getAllByRole('textbox');
+    const inputs = await screen.findAllByRole('textbox');
     fireEvent.change(inputs[0], { target: { value: 'secret_value' } });
     expect(copyButtons[0]).not.toBeDisabled();
     // Second row still shows Edit (not in edit mode)

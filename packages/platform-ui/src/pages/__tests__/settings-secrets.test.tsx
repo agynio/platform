@@ -63,7 +63,7 @@ describe('Settings/Secrets page', () => {
     );
 
     // Default filter should be Used (shows required keys regardless of presence)
-    await screen.findByRole('button', { name: 'Used' });
+    await screen.findByRole('button', { name: /Used/ });
     expect(await screen.findByText('secret/github/GH_TOKEN')).toBeInTheDocument();
     expect(await screen.findByText('secret/slack/BOT_TOKEN')).toBeInTheDocument();
 
@@ -72,7 +72,7 @@ describe('Settings/Secrets page', () => {
     fireEvent.click(editButtons[0]);
     const showBtn = await screen.findByRole('button', { name: 'Show' });
     fireEvent.click(showBtn); // unmask
-    const input = screen.getByPlaceholderText('Enter secret value');
+    const input = await screen.findByPlaceholderText('Enter secret value');
     fireEvent.change(input, { target: { value: 'topsecret' } });
     const saveBtn = screen.getByRole('button', { name: 'Save' });
     fireEvent.click(saveBtn);
@@ -81,11 +81,11 @@ describe('Settings/Secrets page', () => {
     await waitFor(() => expect(screen.getByText('Missing (1)')).toBeInTheDocument());
 
     // Toggle to Used: shows only required keys (2 rows)
-    fireEvent.click(screen.getByRole('button', { name: 'Used' }));
+    fireEvent.click(screen.getByRole('button', { name: /Used/ }));
     expect(screen.getByText('secret/github/GH_TOKEN')).toBeInTheDocument();
     expect(screen.getByText('secret/slack/BOT_TOKEN')).toBeInTheDocument();
     // Toggle to All: includes non-required openai key
-    fireEvent.click(screen.getByRole('button', { name: 'All' }));
+    fireEvent.click(screen.getByRole('button', { name: /All/ }));
     expect(screen.getByText('secret/openai/API_KEY')).toBeInTheDocument();
   });
 
@@ -188,7 +188,7 @@ describe('Settings/Secrets page', () => {
     await waitFor(() => {
       expect(alertSpy).toHaveBeenCalledWith('No value available');
     });
-    const input = screen.getByPlaceholderText('Enter secret value');
+    const input = await screen.findByPlaceholderText('Enter secret value');
     expect((input as HTMLInputElement).value).toBe('');
 
     alertSpy.mockRestore();
