@@ -67,7 +67,7 @@ export const ShellToolStaticConfigSchema = z
     logToPid1: z
       .boolean()
       .default(true)
-      .describe('Duplicate exec stdout/stderr to PID 1 for container logging drivers (best-effort when bash is unavailable).'),
+      .describe('Duplicate exec stdout/stderr to PID 1 for container logging drivers (requires /bin/bash in the image).'),
   })
   .strict();
 
