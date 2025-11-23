@@ -37,7 +37,11 @@ describe('ShellTool output limit - non-zero exit oversized', () => {
     const t = node.getTool();
 
     const msg = await t.execute({ command: 'fail' }, { threadId: 't', finishSignal: { activate() {}, deactivate() {}, isActive: false }, callerAgent: {} } as any);
-    expect(msg).toMatch(/^Error: output length exceeds 1000 characters\. It was saved on disk: \/tmp\/.+\.txt$/);
+    const lines = msg.split('\n');
+    expect(lines[0]).toBe('[exit code 123]');
+    expect(msg).toContain('Output exceeded 1000 characters.');
+    expect(msg).toMatch(/Full output saved to: \/tmp\/.+\.txt/);
+    expect(msg).toContain('--- output tail ---');
     expect((provider.c as FakeContainer).lastPut?.options.path).toBe('/tmp');
     expect((provider.c as FakeContainer).lastPut?.data instanceof Buffer).toBe(true);
   });
