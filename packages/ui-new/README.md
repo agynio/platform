@@ -1,1 +1,0 @@
-Agyn Design System
