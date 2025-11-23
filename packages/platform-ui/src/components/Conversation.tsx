@@ -62,14 +62,19 @@ export function Conversation({
 
   // Use controlled or uncontrolled state
   const isCollapsed = collapsed !== undefined ? collapsed : internalCollapsed;
-  
-  const _handleToggle = (newValue: boolean) => {
-    if (collapsed === undefined) {
-      setInternalCollapsed(newValue);
-    }
-    onCollapsedChange?.(newValue);
-  };
 
+  useEffect(() => {
+    if (collapsed !== undefined) {
+      setInternalCollapsed(collapsed);
+    }
+  }, [collapsed]);
+
+  useEffect(() => {
+    if (collapsed === undefined) {
+      onCollapsedChange?.(internalCollapsed);
+    }
+  }, [collapsed, internalCollapsed, onCollapsedChange]);
+  
   // Measure run heights for the sticky run info column
   useEffect(() => {
     const newHeights = new Map<string, number>();

@@ -35,6 +35,7 @@ interface ContextMessage {
   timestamp?: string | number;
   reasoning?: {
     tokens?: number;
+    id?: string;
   } | null;
   tool_calls?: AssistantToolCall[];
   tool_result?: JsonValue;

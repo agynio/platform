@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from 'react';
+import { useCallback, useState } from 'react';
 import { Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { Button, Drawer, DrawerTrigger, DrawerContent, DrawerClose, Logo, Separator } from '@agyn/ui';
 import { Menu } from 'lucide-react';

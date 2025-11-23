@@ -16,7 +16,7 @@ export default function ConversationShowcase({ onBack }: ConversationShowcasePro
   const [isCollapsed, setIsCollapsed] = useState(false);
 
   // Sample data for a complete conversation
-  const multiRunData = [
+  const multiRunData: Run[] = [
     {
       id: 'run-001-abc-def',
       status: 'finished' as const,

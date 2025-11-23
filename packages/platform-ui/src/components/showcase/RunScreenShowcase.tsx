@@ -5,7 +5,7 @@ import { type Status } from '../StatusIndicator';
 
 const EVENT_TYPES = ['message', 'llm', 'tool', 'summarization'] as const;
 const STATUSES: Status[] = ['running', 'finished', 'failed', 'pending', 'terminated'];
-const MESSAGE_SUBTYPES = ['source', 'intermediate', 'result'];
+const MESSAGE_SUBTYPES = ['source', 'intermediate', 'result'] as const;
 const TOOL_NAMES = [
   'read_file',
   'write_file',

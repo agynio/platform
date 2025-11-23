@@ -10,8 +10,8 @@ interface ShowcaseProps {
 }
 
 const EVENT_TYPES: EventType[] = ['message', 'llm', 'tool', 'summarization'];
-const TOOL_SUBTYPES = ['generic', 'shell', 'manage'];
-const MESSAGE_SUBTYPES = ['source', 'intermediate', 'result'];
+const TOOL_SUBTYPES = ['generic', 'shell', 'manage'] as const;
+const MESSAGE_SUBTYPES = ['source', 'intermediate', 'result'] as const;
 const STATUSES = ['running', 'finished', 'failed', 'pending'] as const;
 
 const ITEMS_PER_PAGE = 25;
@@ -73,7 +73,7 @@ export function RunEventsListShowcase({ onBack }: ShowcaseProps) {
   const [hasMore, setHasMore] = useState(INITIAL_HAS_MORE);
   const [isAutoAdding, setIsAutoAdding] = useState(false);
   const nextIdRef = useRef(INITIAL_EVENTS.length);
-  const autoAddIntervalRef = useRef<number>();
+  const autoAddIntervalRef = useRef<number | null>(null);
 
   const loadMore = () => {
     if (isLoadingMore || !hasMore) return;
@@ -104,9 +104,9 @@ export function RunEventsListShowcase({ onBack }: ShowcaseProps) {
 
   const toggleAutoAdd = () => {
     if (isAutoAdding) {
-      if (autoAddIntervalRef.current) {
+      if (autoAddIntervalRef.current !== null) {
         clearInterval(autoAddIntervalRef.current);
-        autoAddIntervalRef.current = undefined;
+        autoAddIntervalRef.current = null;
       }
       setIsAutoAdding(false);
     } else {
@@ -119,7 +119,7 @@ export function RunEventsListShowcase({ onBack }: ShowcaseProps) {
 
   useEffect(() => {
     return () => {
-      if (autoAddIntervalRef.current) {
+      if (autoAddIntervalRef.current !== null) {
         clearInterval(autoAddIntervalRef.current);
       }
     };

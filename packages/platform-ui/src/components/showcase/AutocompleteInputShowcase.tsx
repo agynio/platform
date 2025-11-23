@@ -168,7 +168,7 @@ const COUNTRIES = [
           <PanelHeader>
             <h3>User Search</h3>
             <p className="text-sm text-[var(--agyn-gray)] mt-1">
-              Search users by name or email with onSelect callback
+              Search users by name or email with onOptionSelect callback
             </p>
           </PanelHeader>
           <PanelBody>
@@ -177,7 +177,7 @@ const COUNTRIES = [
                 label="Search User"
                 value={userValue}
                 onChange={setUserValue}
-                onSelect={(option) => setSelectedOption(option)}
+                onOptionSelect={(option) => setSelectedOption(option)}
                 fetchOptions={fetchUsers}
                 placeholder="Search by name or email..."
                 clearable
@@ -340,7 +340,7 @@ function MyComponent() {
       debounceMs={300}
       minChars={2}
       clearable
-      onSelect={(option) => console.log('Selected:', option)}
+      onOptionSelect={(option) => console.log('Selected:', option)}
     />
   );
 }`}</code>

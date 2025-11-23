@@ -1,7 +1,7 @@
 import { type ReactNode } from 'react';
 
 interface PanelProps {
-  variant?: 'standard' | 'elevated' | 'subtle' | 'highlighted';
+  variant?: 'standard' | 'elevated' | 'subtle' | 'highlighted' | 'flat';
   children: ReactNode;
   className?: string;
 }
@@ -12,6 +12,7 @@ export function Panel({ variant = 'standard', children, className = '' }: PanelP
     elevated: 'bg-white shadow-md',
     subtle: 'bg-[var(--agyn-bg-light)] border border-[var(--agyn-border-subtle)]',
     highlighted: 'bg-[var(--agyn-bg-accent)] border-2 border-[var(--agyn-blue)]',
+    flat: 'bg-white',
   };
   
   return (

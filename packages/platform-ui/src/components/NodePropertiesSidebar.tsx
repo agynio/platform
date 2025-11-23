@@ -876,7 +876,7 @@ export default function NodePropertiesSidebar({
                         onChange={setNixPackageSearch}
                         fetchOptions={fetchNixPackages}
                         placeholder="Search packages..."
-                        onSelect={(option) => {
+                        onOptionSelect={(option) => {
                           // Add package to list if not already there
                           if (!nixPackages.some(pkg => pkg.name === option.value)) {
                             setNixPackages([...nixPackages, { name: option.value, version: 'latest' }]);

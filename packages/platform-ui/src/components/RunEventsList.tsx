@@ -90,7 +90,7 @@ export function RunEventsList({
     }
   };
 
-  const renderEventItem = (index: number, event: RunEvent) => {
+  const renderEventItem = (_index: number, event: RunEvent) => {
     const isSelected = selectedEventId === event.id;
     
     return (

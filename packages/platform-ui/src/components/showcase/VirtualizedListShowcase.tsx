@@ -42,7 +42,7 @@ export function VirtualizedListShowcase({ onBack }: ShowcaseProps) {
   const [hasMore, setHasMore] = useState(INITIAL_ITEMS_HAS_MORE);
   const [isAutoAdding, setIsAutoAdding] = useState(false);
   const nextIdRef = useRef(INITIAL_ITEMS.length);
-  const autoAddIntervalRef = useRef<number>();
+  const autoAddIntervalRef = useRef<number | null>(null);
 
   const loadMore = () => {
     if (isLoadingMore || !hasMore) return;
@@ -70,9 +70,9 @@ export function VirtualizedListShowcase({ onBack }: ShowcaseProps) {
 
   const toggleAutoAdd = () => {
     if (isAutoAdding) {
-      if (autoAddIntervalRef.current) {
+      if (autoAddIntervalRef.current !== null) {
         clearInterval(autoAddIntervalRef.current);
-        autoAddIntervalRef.current = undefined;
+        autoAddIntervalRef.current = null;
       }
       setIsAutoAdding(false);
     } else {
@@ -85,13 +85,13 @@ export function VirtualizedListShowcase({ onBack }: ShowcaseProps) {
 
   useEffect(() => {
     return () => {
-      if (autoAddIntervalRef.current) {
+      if (autoAddIntervalRef.current !== null) {
         clearInterval(autoAddIntervalRef.current);
       }
     };
   }, []);
 
-  const renderItem = (index: number, item: ListItem) => (
+  const renderItem = (_index: number, item: ListItem) => (
     <div className="px-4 py-3 border-b border-[var(--agyn-border-subtle)] hover:bg-[var(--agyn-bg-light)] transition-colors">
       <div className="text-sm text-[var(--agyn-dark)]">{item.text}</div>
       <div className="text-xs text-[var(--agyn-gray)] mt-1">

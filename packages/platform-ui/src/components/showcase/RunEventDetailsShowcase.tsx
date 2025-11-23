@@ -205,7 +205,16 @@ const mockEvents: RunEvent[] = [
     duration: '3.1s',
     status: 'running',
     data: {
-      context: 'Previous conversation about JWT implementation...',
+      context: [
+        {
+          role: 'system',
+          content: 'You are assisting with an enterprise authentication system implementation.',
+        },
+        {
+          role: 'user',
+          content: 'Previous conversation about JWT implementation...'
+        },
+      ],
       response: "Great! Now let's implement the OAuth 2.0 integration. I'll create a configuration file for different providers and implement the OAuth flow handlers.",
       model: 'gpt-4-turbo',
       tokens: {
@@ -394,7 +403,12 @@ The test "should fail with invalid secret" is currently failing because the gene
     timestamp: '2:34:41 PM',
     duration: '2.7s',
     data: {
-      context: 'Summarized conversation about auth implementation and test failure...',
+      context: [
+        {
+          role: 'system',
+          content: 'Summarized conversation about auth implementation and test failure...'
+        }
+      ],
       response: "I see the test is failing because we're not properly validating the JWT secret. Let me fix the generateToken function to throw an error when the secret is empty or invalid.",
       model: 'gpt-4-turbo',
       tokens: {
