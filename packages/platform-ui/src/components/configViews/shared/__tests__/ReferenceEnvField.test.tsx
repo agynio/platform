@@ -7,7 +7,7 @@ describe('ReferenceEnvField', () => {
   it('adds rows and emits array', () => {
     let last: any = null;
     render(
-      <TooltipProvider delayDuration={0}>
+      <TooltipProvider delayDuration={0} skipDelayDuration={0}>
         <ReferenceEnvField value={{ FOO: '1' }} onChange={(v) => (last = v)} />
       </TooltipProvider>,
     );
@@ -20,7 +20,7 @@ describe('ReferenceEnvField', () => {
 
   it('renders controls in order and uses icon-only remove', () => {
     render(
-      <TooltipProvider delayDuration={0}>
+      <TooltipProvider delayDuration={0} skipDelayDuration={0}>
         <ReferenceEnvField value={[{ key: 'FOO', value: '1', source: 'static' }]} onChange={() => {}} />
       </TooltipProvider>,
     );
@@ -39,7 +39,7 @@ describe('ReferenceEnvField', () => {
 
   it('keyboard a11y: Enter opens menu and Enter selects option', async () => {
     render(
-      <TooltipProvider delayDuration={0}>
+      <TooltipProvider delayDuration={0} skipDelayDuration={0}>
         <ReferenceEnvField value={[{ key: 'FOO', value: '', source: 'static' }]} onChange={() => {}} />
       </TooltipProvider>,
     );
