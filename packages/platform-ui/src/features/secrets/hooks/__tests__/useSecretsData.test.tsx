@@ -3,15 +3,15 @@ import type { ReactNode } from 'react';
 import { renderHook, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
-const graphMocks = {
+const graphMocks = vi.hoisted(() => ({
   getFullGraph: vi.fn(),
   listVaultMounts: vi.fn(),
   listVaultPaths: vi.fn(),
   listVaultKeys: vi.fn(),
-};
+}));
 
-const computeRequiredKeysMock = vi.fn();
-const computeSecretsUnionMock = vi.fn();
+const computeRequiredKeysMock = vi.hoisted(() => vi.fn());
+const computeSecretsUnionMock = vi.hoisted(() => vi.fn());
 
 vi.mock('@/api/modules/graph', () => ({
   graph: graphMocks,
@@ -23,6 +23,8 @@ import { useSecretsData } from '../useSecretsData';
 
 describe('useSecretsData', () => {
   beforeEach(() => {
+    vi.resetAllMocks();
+
     graphMocks.getFullGraph.mockResolvedValue({} as unknown);
     graphMocks.listVaultMounts.mockResolvedValue({ items: ['secret'] });
     graphMocks.listVaultPaths.mockResolvedValue({ items: ['github'] });
