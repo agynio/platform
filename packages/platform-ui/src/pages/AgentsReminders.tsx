@@ -1,114 +1,131 @@
 import { useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { useSearchParams, Link } from 'react-router-dom';
-import { http, asData } from '@/api/http';
+import { Link, useSearchParams } from 'react-router-dom';
+import { Alert, AlertDescription, AlertTitle, Button, Table, Tbody, Td, Th, Thead, Tr } from '@agyn/ui';
 import type { ReminderItem } from '@/api/types/agents';
+import { coerceRemindersFilter, listReminders, type RemindersFilter } from '@/api/modules/reminders';
 
-async function api<T>(path: string): Promise<T> { return asData<T>(http.get(`/api/${path}`)); }
+type ReminderRow = ReminderItem & {
+  noteLabel: string;
+  scheduledLabel: string;
+  completedLabel: string;
+};
+
+const FILTER_OPTIONS: Array<{ value: RemindersFilter; label: string }> = [
+  { value: 'active', label: 'Active' },
+  { value: 'all', label: 'All' },
+  { value: 'completed', label: 'Completed' },
+];
+
+function formatDateTime(value: string | null | undefined): string {
+  if (!value) return '—';
+  const date = new Date(value);
+  if (!Number.isFinite(date.getTime())) return '—';
+  return date.toLocaleString();
+}
+
+function normalizeNote(value: string | null | undefined): string {
+  const trimmed = value?.trim();
+  return trimmed && trimmed.length > 0 ? trimmed : '(no note)';
+}
+
+function toRow(reminder: ReminderItem): ReminderRow {
+  return {
+    ...reminder,
+    noteLabel: normalizeNote(reminder.note),
+    scheduledLabel: formatDateTime(reminder.at),
+    completedLabel: formatDateTime(reminder.completedAt),
+  };
+}
 
 export function AgentsReminders() {
-  const [sp, setSp] = useSearchParams();
-  const filter = (sp.get('filter') as 'active' | 'completed' | 'all' | null) || 'active';
+  const [searchParams, setSearchParams] = useSearchParams();
+  const filter = coerceRemindersFilter(searchParams.get('filter'));
 
-  const remindersQ = useQuery({
+  const remindersQ = useQuery<{ items: ReminderItem[] }, Error>({
     queryKey: ['agents', 'reminders', filter],
-    queryFn: async () => api<{ items: ReminderItem[] }>(`agents/reminders?filter=${filter}`),
-    retry: false,
+    queryFn: () => listReminders(filter),
+    retry: 1,
   });
 
-  const items = useMemo(() => {
-    const list = remindersQ.data?.items ?? [];
-    // Ensure sorted by at desc (server enforces, keep client-side for safety)
-    return [...list].sort((a, b) => new Date(b.at).getTime() - new Date(a.at).getTime());
+  const rows = useMemo<ReminderRow[]>(() => {
+    const items = remindersQ.data?.items ?? [];
+    return items.map(toRow);
   }, [remindersQ.data]);
 
-  function setFilter(next: 'active' | 'completed' | 'all') {
-    const nextSp = new URLSearchParams(sp);
-    nextSp.set('filter', next);
-    setSp(nextSp, { replace: false });
+  function setFilter(next: RemindersFilter) {
+    if (next === filter) return;
+    const nextParams = new URLSearchParams(searchParams);
+    nextParams.set('filter', next);
+    setSearchParams(nextParams, { replace: false });
   }
 
   return (
-    <div className="absolute inset-0 flex min-h-0 min-w-0 flex-col overflow-hidden">
-      {/* Header bar */}
-      <div className="shrink-0 border-b px-4 py-3">
+    <div className="p-4 space-y-4">
+      <div>
         <h1 className="text-xl font-semibold">Agents / Reminders</h1>
+        <p className="text-sm text-muted-foreground">Track scheduled reminders across agent threads.</p>
       </div>
 
-      {/* Content area */}
-      <div className="flex-1 min-h-0 p-4">
-        <div className="h-full min-h-0 overflow-y-auto">
-          <div className="flex h-full min-h-0 flex-col gap-4">
-            {/* Filters */}
-            <div className="flex items-center gap-2">
-              <span className="text-sm">Filter:</span>
-              <button
-                type="button"
-                className={`px-2 py-1 rounded text-sm ${filter === 'active' ? 'bg-gray-200' : 'hover:bg-gray-100'}`}
-                onClick={() => setFilter('active')}
-                aria-pressed={filter === 'active'}
-              >
-                Active
-              </button>
-              <button
-                type="button"
-                className={`px-2 py-1 rounded text-sm ${filter === 'all' ? 'bg-gray-200' : 'hover:bg-gray-100'}`}
-                onClick={() => setFilter('all')}
-                aria-pressed={filter === 'all'}
-              >
-                All
-              </button>
-              <button
-                type="button"
-                className={`px-2 py-1 rounded text-sm ${filter === 'completed' ? 'bg-gray-200' : 'hover:bg-gray-100'}`}
-                onClick={() => setFilter('completed')}
-                aria-pressed={filter === 'completed'}
-              >
-                Completed
-              </button>
-            </div>
+      <div className="flex flex-wrap items-center gap-2">
+        {FILTER_OPTIONS.map(({ value, label }) => (
+          <Button
+            key={value}
+            variant={filter === value ? 'default' : 'outline'}
+            size="sm"
+            aria-pressed={filter === value}
+            onClick={() => setFilter(value)}
+          >
+            {label}
+          </Button>
+        ))}
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => remindersQ.refetch()}
+          disabled={remindersQ.isFetching}
+        >
+          Refresh
+        </Button>
+      </div>
 
-            {/* Table */}
-            <div className="flex-1 min-h-0">
-              {remindersQ.isLoading && <div className="text-sm text-gray-500 mt-2">Loading…</div>}
-              {remindersQ.error && (
-                <div className="text-sm text-red-600 mt-2" role="alert">{(remindersQ.error as Error).message}</div>
-              )}
-              {!remindersQ.isLoading && !remindersQ.error && items.length === 0 && (
-                <div className="text-sm text-gray-500 mt-2">No reminders</div>
-              )}
-              {items.length > 0 && (
-                <div className="overflow-auto">
-                  <table className="min-w-full text-sm">
-                    <thead>
-                      <tr className="text-left border-b">
-                        <th className="px-2 py-2">ThreadId</th>
-                        <th className="px-2 py-2">Note</th>
-                        <th className="px-2 py-2">Scheduled At</th>
-                        <th className="px-2 py-2">Completed At</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {items.map((r) => (
-                        <tr key={r.id} className="border-b">
-                          <td className="px-2 py-2">
-                            <Link to={`/agents/threads/${r.threadId}`} className="underline">
-                              {r.threadId}
-                            </Link>
-                          </td>
-                          <td className="px-2 py-2">{r.note}</td>
-                          <td className="px-2 py-2">{new Date(r.at).toLocaleString()}</td>
-                          <td className="px-2 py-2">{r.completedAt ? new Date(r.completedAt).toLocaleString() : '—'}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </div>
-          </div>
+      {remindersQ.isLoading ? (
+        <div className="text-sm text-muted-foreground">Loading…</div>
+      ) : remindersQ.error ? (
+        <Alert variant="destructive">
+          <AlertTitle>Failed to load reminders</AlertTitle>
+          <AlertDescription>{remindersQ.error.message}</AlertDescription>
+        </Alert>
+      ) : rows.length === 0 ? (
+        <div className="text-sm text-muted-foreground">No reminders.</div>
+      ) : (
+        <div className="overflow-hidden rounded-md border">
+          <Table>
+            <Thead>
+              <Tr>
+                <Th className="w-48">Thread</Th>
+                <Th>Note</Th>
+                <Th className="w-48">Scheduled At</Th>
+                <Th className="w-48">Completed At</Th>
+              </Tr>
+            </Thead>
+            <Tbody>
+              {rows.map((reminder) => (
+                <Tr key={reminder.id}>
+                  <Td>
+                    <Link className="font-mono text-xs underline" to={`/agents/threads/${reminder.threadId}`}>
+                      {reminder.threadId}
+                    </Link>
+                  </Td>
+                  <Td>{reminder.noteLabel}</Td>
+                  <Td>{reminder.scheduledLabel}</Td>
+                  <Td>{reminder.completedLabel}</Td>
+                </Tr>
+              ))}
+            </Tbody>
+          </Table>
         </div>
-      </div>
+      )}
     </div>
   );
 }
