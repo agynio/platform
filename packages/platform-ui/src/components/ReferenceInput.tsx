@@ -1,4 +1,4 @@
-import { InputHTMLAttributes, ReactNode, useState, useRef, useEffect } from 'react';
+import { type InputHTMLAttributes, type ReactNode, useState, useRef, useEffect } from 'react';
 import {
   Select,
   SelectContent,

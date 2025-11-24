@@ -1,4 +1,4 @@
-import { useState, TextareaHTMLAttributes } from 'react';
+import { useState, type TextareaHTMLAttributes } from 'react';
 import { Maximize2 } from 'lucide-react';
 import { FullscreenBashEditor } from './FullscreenBashEditor';
 

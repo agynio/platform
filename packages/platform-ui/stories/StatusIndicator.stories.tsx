@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react';
-import { StatusIndicator, Status } from '../src/components/StatusIndicator';
+import { StatusIndicator, type Status } from '../src/components/StatusIndicator';
 
 const meta: Meta<typeof StatusIndicator> = {
   title: 'Components/StatusIndicator',

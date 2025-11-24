@@ -1,6 +1,6 @@
 import { MessageSquare, Bot, Wrench, FileText, Terminal, Users, Loader2 } from 'lucide-react';
-import { EventType, MessageSubtype } from './RunEventDetails';
-import { StatusIndicator, Status } from './StatusIndicator';
+import { type EventType, type MessageSubtype } from './RunEventDetails';
+import { StatusIndicator, type Status } from './StatusIndicator';
 import { VirtualizedList } from './VirtualizedList';
 
 export interface RunEvent {

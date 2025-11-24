@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react';
-import RemindersScreen, { Reminder } from '../src/components/screens/RemindersScreen';
+import RemindersScreen, { type Reminder } from '../src/components/screens/RemindersScreen';
 import { withMainLayout } from './decorators/withMainLayout';
 
 const meta: Meta<typeof RemindersScreen> = {

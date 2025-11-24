@@ -1,9 +1,19 @@
-import { useCallback, useState } from 'react';
+import { useCallback } from 'react';
 import { Outlet, useLocation, useNavigate } from 'react-router-dom';
-import { Button, Drawer, DrawerTrigger, DrawerContent, DrawerClose, Logo, Separator } from '@agyn/ui';
-import { Menu } from 'lucide-react';
-import { MainSidebar } from '../components/MainSidebar';
-import { useUser } from '../user/user.runtime';
+import {
+  Network,
+  GitBranch,
+  MessageSquare,
+  Bell,
+  Activity,
+  Container,
+  HardDrive,
+  Settings,
+  Key,
+  Variable,
+} from 'lucide-react';
+import { MainLayout } from '../components/layouts/MainLayout';
+import type { MenuItem } from '../components/Sidebar';
 
 const MENU_ITEM_ROUTES: Record<string, string> = {
   graph: '/agents/graph',
@@ -15,6 +25,37 @@ const MENU_ITEM_ROUTES: Record<string, string> = {
   variables: '/settings/variables',
 };
 
+const MENU_ITEMS: MenuItem[] = [
+  {
+    id: 'agents',
+    label: 'Agents',
+    icon: <Network className="w-5 h-5" />,
+    items: [
+      { id: 'graph', label: 'Graph', icon: <GitBranch className="w-4 h-4" /> },
+      { id: 'threads', label: 'Threads', icon: <MessageSquare className="w-4 h-4" /> },
+      { id: 'reminders', label: 'Reminders', icon: <Bell className="w-4 h-4" /> },
+    ],
+  },
+  {
+    id: 'monitoring',
+    label: 'Monitoring',
+    icon: <Activity className="w-5 h-5" />,
+    items: [
+      { id: 'containers', label: 'Containers', icon: <Container className="w-4 h-4" /> },
+      { id: 'resources', label: 'Resources', icon: <HardDrive className="w-4 h-4" /> },
+    ],
+  },
+  {
+    id: 'settings',
+    label: 'Settings',
+    icon: <Settings className="w-5 h-5" />,
+    items: [
+      { id: 'secrets', label: 'Secrets', icon: <Key className="w-4 h-4" /> },
+      { id: 'variables', label: 'Variables', icon: <Variable className="w-4 h-4" /> },
+    ],
+  },
+];
+
 const DEFAULT_MENU_ITEM = 'graph';
 const MENU_ITEM_ENTRIES = Object.entries(MENU_ITEM_ROUTES);
 
@@ -24,16 +65,8 @@ function getMenuItemFromPath(pathname: string) {
 }
 
 export function RootLayout() {
-  const { user } = useUser();
   const location = useLocation();
   const navigate = useNavigate();
-  const [isMobileNavOpen, setIsMobileNavOpen] = useState(false);
-
-  const currentUser = {
-    name: user?.name ?? 'Guest',
-    email: user?.email ?? 'guest@example.com',
-    avatar: user?.avatarUrl ?? undefined,
-  };
 
   const selectedMenuItem = getMenuItemFromPath(location.pathname);
 
@@ -45,54 +78,17 @@ export function RootLayout() {
       if (location.pathname !== targetPath) {
         navigate(targetPath);
       }
-      setIsMobileNavOpen(false);
     },
     [location.pathname, navigate]
   );
 
   return (
-    <div className="flex min-h-screen w-full">
-      <aside className="hidden md:flex md:sticky md:top-0 md:h-screen md:shrink-0 md:z-10">
-        <MainSidebar
-          currentUser={currentUser}
-          selectedMenuItem={selectedMenuItem}
-          onMenuItemSelect={handleMenuItemSelect}
-        />
-      </aside>
-
-      <div className="flex flex-1 min-w-0 flex-col">
-        <div className="flex items-center gap-2 border-b px-3 py-4 md:hidden">
-          <Drawer open={isMobileNavOpen} onOpenChange={setIsMobileNavOpen}>
-            <DrawerTrigger asChild>
-              <Button variant="ghost" size="icon" aria-label="Open navigation">
-                <Menu className="h-5 w-5" />
-              </Button>
-            </DrawerTrigger>
-            <DrawerContent className="p-0">
-              <div className="h-[85vh] overflow-y-auto">
-                <MainSidebar
-                  currentUser={currentUser}
-                  selectedMenuItem={selectedMenuItem}
-                  onMenuItemSelect={handleMenuItemSelect}
-                />
-              </div>
-              <div className="p-4">
-                <DrawerClose asChild>
-                  <Button variant="secondary" className="w-full">
-                    Close
-                  </Button>
-                </DrawerClose>
-              </div>
-            </DrawerContent>
-          </Drawer>
-          <Separator orientation="vertical" className="h-6" />
-          <Logo size={64} variant="gradient" aria-label="Hautech Agents" />
-        </div>
-
-        <main className="relative flex-1 min-w-0">
-          <Outlet />
-        </main>
-      </div>
-    </div>
+    <MainLayout
+      menuItems={MENU_ITEMS}
+      selectedMenuItem={selectedMenuItem}
+      onMenuItemSelect={handleMenuItemSelect}
+    >
+      <Outlet />
+    </MainLayout>
   );
 }

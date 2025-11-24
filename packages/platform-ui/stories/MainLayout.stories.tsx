@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react';
 import { MainLayout } from '../src/components/layouts/MainLayout';
-import { MenuItem } from '../src/components/Sidebar';
+import { type MenuItem } from '../src/components/Sidebar';
 import { 
   Network,
   GitBranch,

@@ -1,4 +1,4 @@
-import { TextareaHTMLAttributes, useEffect, useRef } from 'react';
+import { type TextareaHTMLAttributes, useEffect, useRef } from 'react';
 
 interface AutosizeTextareaProps extends Omit<TextareaHTMLAttributes<HTMLTextAreaElement>, 'rows'> {
   label?: string;

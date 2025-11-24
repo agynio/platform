@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react';
-import Sidebar, { MenuItem } from '../src/components/Sidebar';
+import Sidebar, { type MenuItem } from '../src/components/Sidebar';
 import { 
   Network,
   GitBranch,

@@ -5,8 +5,8 @@ import { useState } from 'react';
 import { Button } from '../Button';
 import { IconButton } from '../IconButton';
 import { RunEventDetails } from '../RunEventDetails';
-import { RunEvent, RunEventsList } from '../RunEventsList';
-import { Status, StatusIndicator } from '../StatusIndicator';
+import { type RunEvent, RunEventsList } from '../RunEventsList';
+import { type Status, StatusIndicator } from '../StatusIndicator';
 import {
   DropdownMenu,
   DropdownMenuContent,

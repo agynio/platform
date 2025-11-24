@@ -1,5 +1,5 @@
-import { useState, useEffect, useRef, ReactNode } from 'react';
-import { ThreadItem, Thread } from './ThreadItem';
+import { useState, useEffect, useRef, type ReactNode } from 'react';
+import { ThreadItem, type Thread } from './ThreadItem';
 import { Loader2 } from 'lucide-react';
 
 interface ThreadsListProps {
