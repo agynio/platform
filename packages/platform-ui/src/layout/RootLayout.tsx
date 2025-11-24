@@ -79,12 +79,12 @@ export function RootLayout() {
         navigate(targetPath);
       }
     },
-    [location.pathname, navigate]
+    [location.pathname, navigate],
   );
 
   return (
     <MainLayout
-      menuItems={MENU_ITEMS}
+      menuItems={MENU_ITEMS} //
       selectedMenuItem={selectedMenuItem}
       onMenuItemSelect={handleMenuItemSelect}
     >

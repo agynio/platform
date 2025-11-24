@@ -21,7 +21,7 @@ export function MainLayout({
           selectedMenuItem={selectedMenuItem} 
           onMenuItemSelect={onMenuItemSelect} 
         />
-        <div className="flex-1 min-w-0 flex flex-col overflow-hidden">
+        <div className="relative flex-1 min-w-0 flex flex-col overflow-hidden">
           {children}
         </div>
       </div>
