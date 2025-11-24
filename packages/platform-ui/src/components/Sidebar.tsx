@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import { 
   ChevronRight,
   User
@@ -7,14 +7,14 @@ import {
 export interface MenuItem {
   id: string;
   label: string;
-  icon: React.ReactNode;
+  icon: ReactNode;
   items?: SubMenuItem[];
 }
 
 export interface SubMenuItem {
   id: string;
   label: string;
-  icon: React.ReactNode;
+  icon: ReactNode;
 }
 
 interface SidebarProps {

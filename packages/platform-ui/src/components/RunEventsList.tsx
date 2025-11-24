@@ -1,5 +1,5 @@
 import { MessageSquare, Bot, Wrench, FileText, Terminal, Users, Loader2 } from 'lucide-react';
-import { type EventType, type MessageSubtype } from './RunEventDetails';
+import { type EventType, type MessageSubtype, type RunEventData } from './RunEventDetails';
 import { StatusIndicator, type Status } from './StatusIndicator';
 import { VirtualizedList } from './VirtualizedList';
 
@@ -9,7 +9,7 @@ export interface RunEvent {
   timestamp: string;
   duration?: string;
   status?: Status;
-  data: any;
+  data: RunEventData;
 }
 
 export interface RunEventsListProps {
@@ -63,7 +63,9 @@ export function RunEventsList({
 
   const getEventLabel = (event: RunEvent) => {
     if (event.type === 'message') {
-      const messageSubtype: MessageSubtype = event.data?.messageSubtype || 'source';
+      const subtype = event.data.messageSubtype;
+      const messageSubtype: MessageSubtype =
+        subtype === 'intermediate' || subtype === 'result' ? subtype : 'source';
       switch (messageSubtype) {
         case 'source':
           return 'Message • Source';
@@ -86,7 +88,7 @@ export function RunEventsList({
     }
   };
 
-  const getEventSubtitle = (event: RunEvent) => {
+  const getEventSubtitle = () => {
     return null;
   };
 

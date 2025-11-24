@@ -7,7 +7,6 @@ interface ThreadsListProps {
   onLoadMore?: () => void;
   hasMore?: boolean;
   isLoading?: boolean;
-  onToggleOpenState?: (threadId: string) => void;
   onSelectThread?: (threadId: string) => void;
   selectedThreadId?: string;
   className?: string;
@@ -19,7 +18,6 @@ export function ThreadsList({
   onLoadMore,
   hasMore = false,
   isLoading = false,
-  onToggleOpenState,
   onSelectThread,
   selectedThreadId,
   className = '',
@@ -43,13 +41,14 @@ export function ThreadsList({
       { threshold: 0.1 }
     );
 
-    if (loadMoreRef.current) {
-      observer.observe(loadMoreRef.current);
+    const target = loadMoreRef.current;
+    if (target) {
+      observer.observe(target);
     }
 
     return () => {
-      if (loadMoreRef.current) {
-        observer.unobserve(loadMoreRef.current);
+      if (target) {
+        observer.unobserve(target);
       }
     };
   }, [onLoadMore, hasMore, isLoading]);
@@ -79,7 +78,6 @@ export function ThreadsList({
         isExpanded={isExpanded}
         isSelected={selectedThreadId === thread.id}
         onToggleExpand={handleToggleExpand}
-        onToggleOpenState={onToggleOpenState}
         onSelect={onSelectThread}
       />
     );

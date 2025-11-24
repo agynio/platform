@@ -18,8 +18,6 @@ interface SecretsScreenProps {
   onUpdateSecret?: (id: string, secret: Omit<Secret, 'id'>) => void;
   onDeleteSecret?: (id: string) => void;
   onBack?: () => void;
-  selectedMenuItem?: string;
-  onMenuItemSelect?: (itemId: string) => void;
 }
 
 const ITEMS_PER_PAGE = 20;
@@ -30,8 +28,6 @@ export default function SecretsScreen({
   onUpdateSecret,
   onDeleteSecret,
   onBack,
-  selectedMenuItem,
-  onMenuItemSelect,
 }: SecretsScreenProps) {
   const [currentPage, setCurrentPage] = useState(1);
   const [statusFilter, setStatusFilter] = useState<'all' | 'used' | 'missing'>('all');

@@ -1,14 +1,17 @@
 import { useState } from 'react';
-import { ChevronRight, ChevronDown, Copy } from 'lucide-react';
+import { ChevronRight, ChevronDown } from 'lucide-react';
 
 interface JsonViewerProps {
-  data: any;
+  data: unknown;
   className?: string;
 }
 
 export function JsonViewer({ data, className = '' }: JsonViewerProps) {
+  const isPlainObject = (value: unknown): value is Record<string, unknown> =>
+    typeof value === 'object' && value !== null && !Array.isArray(value);
+
   // Expand all paths by default
-  const getAllPaths = (obj: any, prefix = 'root'): string[] => {
+  const getAllPaths = (obj: unknown, prefix = 'root'): string[] => {
     const paths = [prefix];
     if (Array.isArray(obj)) {
       obj.forEach((item, index) => {
@@ -16,10 +19,10 @@ export function JsonViewer({ data, className = '' }: JsonViewerProps) {
           paths.push(...getAllPaths(item, `${prefix}.${index}`));
         }
       });
-    } else if (typeof obj === 'object' && obj !== null) {
-      Object.keys(obj).forEach(key => {
-        if (typeof obj[key] === 'object' && obj[key] !== null) {
-          paths.push(...getAllPaths(obj[key], `${prefix}.${key}`));
+    } else if (isPlainObject(obj)) {
+      Object.entries(obj).forEach(([key, value]) => {
+        if (typeof value === 'object' && value !== null) {
+          paths.push(...getAllPaths(value, `${prefix}.${key}`));
         }
       });
     }
@@ -38,11 +41,17 @@ export function JsonViewer({ data, className = '' }: JsonViewerProps) {
     setExpandedPaths(newExpanded);
   };
 
-  const isComplexValue = (val: any): boolean => {
-    return (Array.isArray(val) && val.length > 0) || (typeof val === 'object' && val !== null && Object.keys(val).length > 0);
+  const isComplexValue = (val: unknown): boolean => {
+    if (Array.isArray(val)) {
+      return val.length > 0;
+    }
+    if (isPlainObject(val)) {
+      return Object.keys(val).length > 0;
+    }
+    return false;
   };
 
-  const renderValue = (value: any, path: string, depth: number = 0, keyLength: number = 0): JSX.Element => {
+  const renderValue = (value: unknown, path: string, depth = 0): JSX.Element => {
     const indent = depth * 16;
 
     if (value === null) {
@@ -109,14 +118,14 @@ export function JsonViewer({ data, className = '' }: JsonViewerProps) {
                       <div>
                         <div className="text-[var(--agyn-gray)]">{keyText}</div>
                         <div style={{ paddingLeft: '16px' }}>
-                          {renderValue(item, `${path}.${index}`, depth, 0)}
+                          {renderValue(item, `${path}.${index}`, depth)}
                         </div>
                       </div>
                     ) : (
                       <div>
                         <span className="text-[var(--agyn-gray)]">{keyText}</span>
                         <div className="inline-block ml-3 align-top max-w-full">
-                          {renderValue(item, `${path}.${index}`, depth, 0)}
+                          {renderValue(item, `${path}.${index}`, depth)}
                         </div>
                       </div>
                     )}
@@ -129,7 +138,7 @@ export function JsonViewer({ data, className = '' }: JsonViewerProps) {
       );
     }
 
-    if (typeof value === 'object') {
+    if (isPlainObject(value)) {
       const isExpanded = expandedPaths.has(path);
       const keys = Object.keys(value);
       const isEmpty = keys.length === 0;
@@ -157,21 +166,22 @@ export function JsonViewer({ data, className = '' }: JsonViewerProps) {
             <div>
               {keys.map((key) => {
                 const keyText = `${key}:`;
-                const isComplex = isComplexValue(value[key]);
+                const entryValue = value[key];
+                const isComplex = isComplexValue(entryValue);
                 return (
                   <div key={key}>
                     {isComplex ? (
                       <div>
                         <div className="text-[var(--agyn-blue)]">{keyText}</div>
                         <div style={{ paddingLeft: '16px' }}>
-                          {renderValue(value[key], `${path}.${key}`, depth, 0)}
+                          {renderValue(entryValue, `${path}.${key}`, depth)}
                         </div>
                       </div>
                     ) : (
                       <div>
                         <span className="text-[var(--agyn-blue)]">{keyText}</span>
                         <div className="inline-block ml-3 align-top max-w-full">
-                          {renderValue(value[key], `${path}.${key}`, depth, 0)}
+                          {renderValue(entryValue, `${path}.${key}`, depth)}
                         </div>
                       </div>
                     )}

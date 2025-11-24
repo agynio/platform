@@ -1,17 +1,20 @@
 import React from 'react';
 import {
-	ReactFlow, 
+	ReactFlow,
 	ReactFlowProvider,
 	Background,
 	Controls,
 	MiniMap,
 	SelectionMode,
 	useReactFlow,
-	type Node,
 	type Edge,
-	type OnNodesChange,
-	type OnEdgesChange,
+	type EdgeTypes,
+	type Node,
+	type NodeTypes,
 	type OnConnect,
+	type OnEdgesChange,
+	type OnNodesChange,
+	type XYPosition,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 
@@ -27,16 +30,49 @@ export type GraphNodeData = {
 	avatarSeed?: string;
 };
 
+const DRAGGABLE_NODE_KINDS: NodeKind[] = ['Trigger', 'Agent', 'Tool', 'MCP', 'Workspace'];
+
+function isDraggedNodeData(value: unknown): value is GraphCanvasDragData {
+	if (!value || typeof value !== 'object') {
+		return false;
+	}
+	const candidate = value as Record<string, unknown>;
+	const { id, kind, title } = candidate;
+	return (
+		typeof id === 'string' &&
+		typeof title === 'string' &&
+		typeof kind === 'string' &&
+		DRAGGABLE_NODE_KINDS.includes(kind as NodeKind)
+	);
+}
+
+export interface GraphCanvasDragData {
+	id: string;
+	kind: NodeKind;
+	title: string;
+	description?: string;
+}
+
+export interface GraphCanvasDropContext {
+	position: XYPosition;
+	data: GraphCanvasDragData;
+}
+
+export type GraphCanvasDropHandler = (
+	event: React.DragEvent<HTMLDivElement>,
+	context: GraphCanvasDropContext,
+) => void;
+
 interface GraphCanvasProps {
 	nodes: Node<GraphNodeData>[];
 	edges: Edge[];
 	onNodesChange: OnNodesChange;
 	onEdgesChange: OnEdgesChange;
 	onConnect: OnConnect;
-	nodeTypes?: Record<string, React.ComponentType<any>>;
-	edgeTypes?: Record<string, React.ComponentType<any>>;
-	onDrop?: (event: React.DragEvent) => void;
-	onDragOver?: (event: React.DragEvent) => void;
+	nodeTypes?: NodeTypes;
+	edgeTypes?: EdgeTypes;
+	onDrop?: GraphCanvasDropHandler;
+	onDragOver?: (event: React.DragEvent<HTMLDivElement>) => void;
 	savingStatus?: SavingStatus;
 	savingErrorMessage?: string;
 }
@@ -104,10 +140,10 @@ function ReactFlowInner({
 	onDragOver,
 	savingStatus,
 	savingErrorMessage,
-}: Omit<GraphCanvasProps, 'nodeTypes'> & { nodeTypes: Record<string, React.ComponentType<any>> }) {
+}: Omit<GraphCanvasProps, 'nodeTypes'> & { nodeTypes: NodeTypes }) {
 	const reactFlowInstance = useReactFlow();
 
-	const handleDragOver = React.useCallback((event: React.DragEvent) => {
+	const handleDragOver = React.useCallback((event: React.DragEvent<HTMLDivElement>) => {
 		event.preventDefault();
 		event.dataTransfer.dropEffect = 'move';
 		if (onDragOver) {
@@ -115,26 +151,31 @@ function ReactFlowInner({
 		}
 	}, [onDragOver]);
 
-	const handleDrop = React.useCallback((event: React.DragEvent) => {
+	const handleDrop = React.useCallback((event: React.DragEvent<HTMLDivElement>) => {
 		event.preventDefault();
 
 		const data = event.dataTransfer.getData('application/reactflow');
-		if (!data) return;
+		if (!data) {
+			return;
+		}
 
-		const nodeData = JSON.parse(data);
+		let parsed: unknown;
+		try {
+			parsed = JSON.parse(data);
+		} catch {
+			return;
+		}
+
+		if (!isDraggedNodeData(parsed)) {
+			return;
+		}
 		const position = reactFlowInstance.screenToFlowPosition({
 			x: event.clientX,
 			y: event.clientY,
 		});
 
-		if (onDrop) {
-			// Pass both the event and position data
-			const customEvent = event as any;
-			customEvent.flowPosition = position;
-			customEvent.nodeData = nodeData;
-			onDrop(customEvent);
-		}
-	}, [reactFlowInstance, onDrop]);
+		onDrop?.(event, { position, data: parsed });
+	}, [onDrop, reactFlowInstance]);
 
 	return (
 		<div className="w-full h-full">

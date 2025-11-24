@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { X, Eye, Code, SplitSquareVertical } from 'lucide-react';
+import { Eye, Code, SplitSquareVertical } from 'lucide-react';
 import { Button } from './Button';
 import { SegmentedControl } from './SegmentedControl';
 

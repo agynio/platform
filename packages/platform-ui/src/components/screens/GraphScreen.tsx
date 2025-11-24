@@ -1,12 +1,12 @@
 import { useCallback, useMemo, useState, useEffect } from 'react';
 import { ArrowLeft } from 'lucide-react';
-import type { Edge, Node } from '@xyflow/react';
 import { addEdge, applyEdgeChanges, applyNodeChanges, BaseEdge, getBezierPath } from '@xyflow/react';
+import type { Edge, EdgeProps, EdgeTypes, Node } from '@xyflow/react';
 
 import NodePropertiesSidebar from '../NodePropertiesSidebar';
 import EmptySelectionSidebar from '../EmptySelectionSidebar';
 import { IconButton } from '../IconButton';
-import { GraphCanvas, type GraphNodeData } from '../GraphCanvas';
+import { GraphCanvas, type GraphCanvasDropContext, type GraphNodeData } from '../GraphCanvas';
 import type { NodeKind, NodeStatus } from '../Node';
 import type { SavingStatus } from '../SavingStatusControl';
 
@@ -18,12 +18,12 @@ const nodeKindToColor: Record<NodeKind, string> = {
   Workspace: 'var(--agyn-purple)',
 };
 
-function GradientEdge(props: any) {
+function GradientEdge(props: EdgeProps<Edge>) {
   const [edgePath] = getBezierPath(props);
   const { source, target, data } = props;
-
-  const sourceColor = data?.sourceColor ?? 'var(--agyn-blue)';
-  const targetColor = data?.targetColor ?? 'var(--agyn-purple)';
+  const edgeData = (data ?? {}) as Record<string, unknown>;
+  const sourceColor = typeof edgeData.sourceColor === 'string' ? edgeData.sourceColor : 'var(--agyn-blue)';
+  const targetColor = typeof edgeData.targetColor === 'string' ? edgeData.targetColor : 'var(--agyn-purple)';
 
   return (
     <>
@@ -57,15 +57,13 @@ export interface GraphNodeConfig {
   x: number;
   y: number;
   status: NodeStatus;
-  data?: Record<string, any>;
+  data?: Record<string, unknown>;
   avatarSeed?: string;
 }
 
 interface GraphScreenProps {
   nodes: GraphNodeConfig[];
   onBack?: () => void;
-  selectedMenuItem?: string;
-  onMenuItemSelect?: (itemId: string) => void;
   savingStatus?: SavingStatus;
   savingErrorMessage?: string;
   onNodeUpdate?: (nodeId: string, updates: Partial<GraphNodeConfig>) => void;
@@ -74,8 +72,6 @@ interface GraphScreenProps {
 export default function GraphScreen({ 
   nodes: initialNodesConfig, 
   onBack,
-  selectedMenuItem,
-  onMenuItemSelect,
   savingStatus = 'saved',
   savingErrorMessage,
   onNodeUpdate,
@@ -165,6 +161,7 @@ export default function GraphScreen({
 
   const [nodes, setNodes] = useState<Node<GraphNodeData>[]>(initialFlowNodes);
   const [edges, setEdges] = useState<Edge[]>(initialFlowEdges);
+  const edgeTypeMap = useMemo<EdgeTypes>(() => ({ gradient: GradientEdge }), []);
 
   // Update nodes when nodeConfigs change (e.g., title updates)
   useEffect(() => {
@@ -214,9 +211,13 @@ export default function GraphScreen({
     [],
   );
 
-  const onDrop = useCallback((event: any) => {
-    const { nodeData, flowPosition } = event;
-    if (!nodeData || !flowPosition) return;
+  const onDrop = useCallback((
+    _event: React.DragEvent<HTMLDivElement>,
+    { data: nodeData, position: flowPosition }: GraphCanvasDropContext,
+  ) => {
+    if (!nodeData || !flowPosition) {
+      return;
+    }
 
     const newNodeId = `node-${Date.now()}`;
     const newNode: Node<GraphNodeData> = {
@@ -272,7 +273,7 @@ export default function GraphScreen({
             onConnect={onConnect}
             onDrop={onDrop}
             onDragOver={onDragOver}
-            edgeTypes={{ gradient: GradientEdge }}
+            edgeTypes={edgeTypeMap}
             savingStatus={savingStatus}
             savingErrorMessage={savingErrorMessage}
           />
@@ -290,13 +291,6 @@ export default function GraphScreen({
               status: selectedNode.status,
             }}
             onConfigChange={
-              onNodeUpdate
-                ? (updates) => {
-                    onNodeUpdate(selectedNode.id, updates);
-                  }
-                : undefined
-            }
-            onStateChange={
               onNodeUpdate
                 ? (updates) => {
                     onNodeUpdate(selectedNode.id, updates);

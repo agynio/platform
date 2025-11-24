@@ -17,8 +17,6 @@ interface VariablesScreenProps {
   onUpdateVariable?: (id: string, variable: Omit<Variable, 'id'>) => void;
   onDeleteVariable?: (id: string) => void;
   onBack?: () => void;
-  selectedMenuItem?: string;
-  onMenuItemSelect?: (itemId: string) => void;
 }
 
 const ITEMS_PER_PAGE = 20;
@@ -29,8 +27,6 @@ export default function VariablesScreen({
   onUpdateVariable,
   onDeleteVariable,
   onBack,
-  selectedMenuItem,
-  onMenuItemSelect,
 }: VariablesScreenProps) {
   const [currentPage, setCurrentPage] = useState(1);
   const [editingId, setEditingId] = useState<string | null>(null);

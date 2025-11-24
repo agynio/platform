@@ -1,6 +1,4 @@
-import { ReactNode, useState } from 'react';
 import { ChevronRight, ChevronDown } from 'lucide-react';
-import { Badge } from './Badge';
 import { StatusIndicator, type Status } from './StatusIndicator';
 
 export type ThreadStatus = 'running' | 'pending' | 'finished' | 'failed';
@@ -20,19 +18,10 @@ interface ThreadItemProps {
   thread: Thread;
   depth?: number;
   onToggleExpand?: (threadId: string) => void;
-  onToggleOpenState?: (threadId: string) => void;
   onSelect?: (threadId: string) => void;
   isExpanded?: boolean;
   isSelected?: boolean;
-  isLastAtDepth?: boolean;
 }
-
-const statusConfig: Record<ThreadStatus, { color: string; label: string }> = {
-  running: { color: 'var(--agyn-blue)', label: 'Running' },
-  pending: { color: 'var(--agyn-gray)', label: 'Pending' },
-  finished: { color: '#10B981', label: 'Finished' },
-  failed: { color: '#EF4444', label: 'Failed' },
-};
 
 const getAgentAvatarColor = (agentName: string): string => {
   // Use consistent colors based on agent name
@@ -51,11 +40,9 @@ export function ThreadItem({
   thread,
   depth = 0,
   onToggleExpand,
-  onToggleOpenState,
   onSelect,
   isExpanded = false,
   isSelected = false,
-  isLastAtDepth = false,
 }: ThreadItemProps) {
   const hasSubthreads = thread.subthreads && thread.subthreads.length > 0;
   const indentWidth = depth * 24; // Reduced from 32px to 24px
@@ -64,12 +51,6 @@ export function ThreadItem({
   const handleToggleExpand = () => {
     if (hasSubthreads && onToggleExpand) {
       onToggleExpand(thread.id);
-    }
-  };
-
-  const handleToggleOpenState = () => {
-    if (onToggleOpenState) {
-      onToggleOpenState(thread.id);
     }
   };
 

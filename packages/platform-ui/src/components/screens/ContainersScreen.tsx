@@ -28,8 +28,6 @@ interface ContainersScreenProps {
   onDeleteContainer?: (containerId: string) => void;
   onViewThread?: (threadId: string) => void;
   onBack?: () => void;
-  selectedMenuItem?: string;
-  onMenuItemSelect?: (itemId: string) => void;
 }
 
 const ITEMS_PER_PAGE = 20;
@@ -40,8 +38,6 @@ export default function ContainersScreen({
   onDeleteContainer,
   onViewThread,
   onBack,
-  selectedMenuItem,
-  onMenuItemSelect,
 }: ContainersScreenProps) {
   const [currentPage, setCurrentPage] = useState(1);
   const [statusFilter, setStatusFilter] = useState<ContainerStatus | 'all'>('all');
