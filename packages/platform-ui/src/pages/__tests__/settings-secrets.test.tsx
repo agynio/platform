@@ -229,4 +229,35 @@ describe('Settings/Secrets page', () => {
     fireEvent.click(revealButton);
     await within(secretRow).findByText('new-value');
   });
+
+  it('shows a warning when reading an existing secret value fails', async () => {
+    server.use(
+      http.get(abs('/api/graph'), () =>
+        HttpResponse.json({
+          name: 'g',
+          version: 1,
+          updatedAt: new Date().toISOString(),
+          nodes: [
+            { id: 'n1', template: 'githubCloneRepoTool', config: { token: { value: 'secret/github/GH_TOKEN', source: 'vault' } } },
+          ],
+          edges: [],
+        }),
+      ),
+    );
+    server.use(
+      http.get(abs('/api/vault/mounts'), () => HttpResponse.json({ items: ['secret'] })),
+      http.get(abs('/api/vault/kv/:mount/paths'), () => HttpResponse.json({ items: ['github'] })),
+      http.get(abs('/api/vault/kv/:mount/keys'), () => HttpResponse.json({ items: ['GH_TOKEN'] })),
+      http.get(abs('/api/vault/kv/:mount/read'), () => new HttpResponse(null, { status: 500 })),
+    );
+
+    render(
+      <TestProviders>
+        <SettingsSecrets />
+      </TestProviders>,
+    );
+
+    await screen.findByText('secret/github/GH_TOKEN');
+    await screen.findByText('Failed to read 1 secret value(s). Showing placeholders.');
+  });
 });

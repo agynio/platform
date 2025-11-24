@@ -56,6 +56,7 @@ describe('useSecretsData', () => {
 
     expect(result.current.secrets).toHaveLength(1);
     expect(result.current.secrets[0]).toMatchObject({ value: 'gh-secret' });
+    expect(result.current.valueReadErrors).toEqual([]);
     expect(result.current.missingCount).toBe(0);
     expect(result.current.requiredCount).toBe(1);
     expect(result.current.vaultUnavailable).toBe(false);
@@ -83,5 +84,22 @@ describe('useSecretsData', () => {
       required: true,
       present: false,
     });
+    expect(result.current.valueReadErrors).toEqual([]);
+  });
+
+  it('records read failures and leaves values empty', async () => {
+    graphMocks.readVaultKey.mockRejectedValueOnce(new Error('read failed'));
+
+    const wrapper = ({ children }: { children: ReactNode }) => (
+      <QueryClientProvider client={new QueryClient()}>{children}</QueryClientProvider>
+    );
+
+    const { result } = renderHook(() => useSecretsData(), { wrapper });
+
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+
+    expect(result.current.secrets).toHaveLength(1);
+    expect(result.current.secrets[0]).toMatchObject({ value: '' });
+    expect(result.current.valueReadErrors).toEqual(['secret::github::TOKEN']);
   });
 });

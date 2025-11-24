@@ -29,14 +29,21 @@ export function SettingsSecretsContainer() {
   const secretsData = useSecretsData();
 
   const warningMessage = useMemo(() => {
+    const messages: string[] = [];
+
     if (secretsData.discoveryError) {
-      return 'Vault error: failed to discover keys. Showing graph-required secrets only.';
+      messages.push('Vault error: failed to discover keys. Showing graph-required secrets only.');
+    } else if (secretsData.vaultUnavailable) {
+      messages.push('Vault not configured/unavailable. Showing graph-required secrets only.');
     }
-    if (secretsData.vaultUnavailable) {
-      return 'Vault not configured/unavailable. Showing graph-required secrets only.';
+
+    if (secretsData.valueReadErrors.length > 0) {
+      messages.push(`Failed to read ${secretsData.valueReadErrors.length} secret value(s). Showing placeholders.`);
     }
-    return null;
-  }, [secretsData.discoveryError, secretsData.vaultUnavailable]);
+
+    if (messages.length === 0) return null;
+    return messages.join(' ');
+  }, [secretsData.discoveryError, secretsData.vaultUnavailable, secretsData.valueReadErrors]);
 
   const persistSecret = useCallback(
     async (keyPath: string, rawValue: string) => {

@@ -43,6 +43,7 @@ export interface SecretsData {
   isLoading: boolean;
   vaultUnavailable: boolean;
   mounts: string[];
+  valueReadErrors: string[];
   graphError: unknown;
   mountsError: unknown;
   discoveryError: unknown;
@@ -86,31 +87,37 @@ export function useSecretsData(): SecretsData {
   const valuesQuery = useQuery({
     queryKey: ['vault', 'values', presentEntries.map((entry) => toId(entry))],
     queryFn: async () => {
-      const pairs = await Promise.all(
+      const results = await Promise.all(
         presentEntries.map(async (entry) => {
+          const id = toId(entry);
           try {
             const res = await api.graph.readVaultKey(entry.mount, entry.path, entry.key);
-            return [toId(entry), res.value] as const;
+            return { id, value: res.value ?? '' } as const;
           } catch (_error) {
-            return [toId(entry), null] as const;
+            return { id, error: true } as const;
           }
         }),
       );
 
-      const map = new Map<string, string>();
-      for (const [id, value] of pairs) {
-        if (typeof value === 'string') {
-          map.set(id, value);
+      const values = new Map<string, string>();
+      const errors: string[] = [];
+      for (const result of results) {
+        if ('error' in result) {
+          errors.push(result.id);
+        } else {
+          values.set(result.id, result.value);
         }
       }
-      return map;
+
+      return { values, errors };
     },
     enabled: presentEntries.length > 0,
     staleTime: 5 * 60 * 1000,
   });
 
   const secrets = useMemo(() => {
-    const valuesMap = valuesQuery.data;
+    const valuesData = valuesQuery.data;
+    const valuesMap = valuesData?.values;
     return entries.map((entry) => {
       const secret = mapEntryToScreenSecret(entry);
       if (!entry.present) return secret;
@@ -118,6 +125,8 @@ export function useSecretsData(): SecretsData {
       return { ...secret, value };
     });
   }, [entries, valuesQuery.data]);
+
+  const valueReadErrors = valuesQuery.data?.errors ?? [];
 
   const missingCount = useMemo(() => entries.filter((entry) => entry.required && !entry.present).length, [entries]);
   const requiredCount = requiredKeys.length;
@@ -142,6 +151,7 @@ export function useSecretsData(): SecretsData {
     isLoading,
     vaultUnavailable,
     mounts,
+    valueReadErrors,
     graphError: graphQuery.error,
     mountsError: mountsQuery.error,
     discoveryError: discoveryQuery.error,
