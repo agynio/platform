@@ -38,12 +38,13 @@ export function SettingsSecretsContainer() {
     }
 
     if (secretsData.valuesIsError) {
-      messages.push('Vault error: failed to read one or more secret values. Showing placeholders.');
+      const count = secretsData.failedValueCount > 0 ? secretsData.failedValueCount : 1;
+      messages.push(`Failed to read ${count} secret value(s). Showing placeholders.`);
     }
 
     if (messages.length === 0) return null;
     return messages.join(' ');
-  }, [secretsData.discoveryError, secretsData.vaultUnavailable, secretsData.valuesIsError]);
+  }, [secretsData.discoveryError, secretsData.vaultUnavailable, secretsData.valuesIsError, secretsData.failedValueCount]);
 
   const persistSecret = useCallback(
     async (keyPath: string, rawValue: string) => {

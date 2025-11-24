@@ -86,7 +86,7 @@ describe('Settings/Secrets page', () => {
       </TestProviders>,
     );
 
-    await screen.findByText('secret/github/GH_TOKEN');
+    await screen.findByText('secret/github/GH_TOKEN', undefined, { timeout: 6000 });
     await screen.findByText('secret/openai/API_KEY');
     expect(screen.getByRole('button', { name: /Missing \(2\)/ })).toBeInTheDocument();
 
@@ -257,8 +257,8 @@ describe('Settings/Secrets page', () => {
       </TestProviders>,
     );
 
-    await screen.findByText('secret/github/GH_TOKEN');
-    await screen.findByText('Vault error: failed to read one or more secret values. Showing placeholders.');
+    await screen.findByText('Failed to read 1 secret value(s). Showing placeholders.', undefined, { timeout: 6000 });
+    expect(screen.getByText('secret/github/GH_TOKEN')).toBeInTheDocument();
   });
 
   it('treats 404 value reads as placeholders without showing a warning', async () => {
@@ -288,13 +288,11 @@ describe('Settings/Secrets page', () => {
       </TestProviders>,
     );
 
-    const secretCell = await screen.findByText('secret/github/GH_TOKEN');
+    const secretCell = await screen.findByText('secret/github/GH_TOKEN', undefined, { timeout: 6000 });
     const secretRow = secretCell.closest('tr');
     expect(secretRow).not.toBeNull();
 
-    expect(
-      screen.queryByText('Vault error: failed to read one or more secret values. Showing placeholders.'),
-    ).not.toBeInTheDocument();
+    expect(screen.queryByText('Failed to read 1 secret value(s). Showing placeholders.')).not.toBeInTheDocument();
 
     const valueCell = within(secretRow as HTMLTableRowElement).getAllByRole('cell')[1];
     expect(valueCell.textContent?.trim()).toBe('');
@@ -302,5 +300,51 @@ describe('Settings/Secrets page', () => {
     const unmaskButton = within(secretRow as HTMLTableRowElement).getByRole('button', { name: 'Unmask' });
     fireEvent.click(unmaskButton);
     await waitFor(() => expect(valueCell.textContent?.trim()).toBe(''));
+  });
+
+  it('retries hydration and surfaces aggregated failure counts', async () => {
+    server.use(
+      http.get(abs('/api/graph'), () =>
+        HttpResponse.json({
+          name: 'g',
+          version: 1,
+          updatedAt: new Date().toISOString(),
+          nodes: [
+            { id: 'n1', template: 'githubCloneRepoTool', config: { token: { value: 'secret/github/GH_TOKEN', source: 'vault' } } },
+            { id: 'n2', template: 'sendSlackMessageTool', config: { bot_token: { value: 'secret/slack/BOT_TOKEN', source: 'vault' } } },
+          ],
+          edges: [],
+        }),
+      ),
+    );
+
+    let readAttempts = 0;
+    server.use(
+      http.get(abs('/api/vault/mounts'), () => HttpResponse.json({ items: ['secret'] })),
+      http.get(abs('/api/vault/kv/:mount/paths'), () => HttpResponse.json({ items: ['github', 'slack'] })),
+      http.get(abs('/api/vault/kv/:mount/keys'), ({ request }) => {
+        const url = new URL(request.url);
+        const path = url.searchParams.get('path');
+        if (path === 'github') return HttpResponse.json({ items: ['GH_TOKEN'] });
+        if (path === 'slack') return HttpResponse.json({ items: ['BOT_TOKEN'] });
+        return HttpResponse.json({ items: [] });
+      }),
+      http.get(abs('/api/vault/kv/:mount/read'), () => {
+        readAttempts += 1;
+        return new HttpResponse(null, { status: 500 });
+      }),
+    );
+
+    render(
+      <TestProviders>
+        <SettingsSecrets />
+      </TestProviders>,
+    );
+
+    await screen.findByText('secret/github/GH_TOKEN', undefined, { timeout: 6000 });
+    await screen.findByText('secret/slack/BOT_TOKEN', undefined, { timeout: 6000 });
+    await screen.findByText('Failed to read 2 secret value(s). Showing placeholders.', undefined, { timeout: 6000 });
+
+    expect(readAttempts).toBeGreaterThanOrEqual(6);
   });
 });

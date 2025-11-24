@@ -52,12 +52,13 @@ describe('useSecretsData', () => {
 
     const { result } = renderHook(() => useSecretsData(), { wrapper });
 
-    await waitFor(() => expect(result.current.isLoading).toBe(false));
+    await waitFor(() => expect(result.current.isLoading).toBe(false), { timeout: 6000 });
 
     expect(result.current.secrets).toHaveLength(1);
     expect(result.current.secrets[0]).toMatchObject({ value: 'gh-secret' });
     expect(result.current.valuesIsError).toBe(false);
     expect(result.current.valuesError).toBeNull();
+    expect(result.current.failedValueCount).toBe(0);
     expect(result.current.missingCount).toBe(0);
     expect(result.current.requiredCount).toBe(1);
     expect(result.current.vaultUnavailable).toBe(false);
@@ -76,7 +77,7 @@ describe('useSecretsData', () => {
 
     const { result } = renderHook(() => useSecretsData(), { wrapper });
 
-    await waitFor(() => expect(result.current.isLoading).toBe(false));
+    await waitFor(() => expect(result.current.isLoading).toBe(false), { timeout: 6000 });
     expect(result.current.vaultUnavailable).toBe(true);
     expect(result.current.secrets).toHaveLength(1);
     expect(result.current.secrets[0]).toMatchObject({
@@ -87,6 +88,7 @@ describe('useSecretsData', () => {
     });
     expect(result.current.valuesIsError).toBe(false);
     expect(result.current.valuesError).toBeNull();
+    expect(result.current.failedValueCount).toBe(0);
   });
 
   it('treats 404 reads as missing values without surfacing an error', async () => {
@@ -102,12 +104,13 @@ describe('useSecretsData', () => {
 
     const { result } = renderHook(() => useSecretsData(), { wrapper });
 
-    await waitFor(() => expect(result.current.isLoading).toBe(false));
+    await waitFor(() => expect(result.current.isLoading).toBe(false), { timeout: 6000 });
 
     expect(result.current.secrets).toHaveLength(1);
     expect(result.current.secrets[0]).toMatchObject({ value: '' });
     expect(result.current.valuesIsError).toBe(false);
     expect(result.current.valuesError).toBeNull();
+    expect(result.current.failedValueCount).toBe(0);
   });
 
   it('surfaces non-404 read failures while leaving placeholders', async () => {
@@ -115,7 +118,7 @@ describe('useSecretsData', () => {
       isAxiosError: true,
       response: { status: 500 },
     });
-    graphMocks.readVaultKey.mockRejectedValueOnce(serverError);
+    graphMocks.readVaultKey.mockRejectedValue(serverError);
 
     const wrapper = ({ children }: { children: ReactNode }) => (
       <QueryClientProvider client={new QueryClient()}>{children}</QueryClientProvider>
@@ -123,12 +126,13 @@ describe('useSecretsData', () => {
 
     const { result } = renderHook(() => useSecretsData(), { wrapper });
 
-    await waitFor(() => expect(result.current.isLoading).toBe(false));
+    await waitFor(() => expect(result.current.isLoading).toBe(false), { timeout: 6000 });
 
     expect(result.current.secrets).toHaveLength(1);
     expect(result.current.secrets[0]).toMatchObject({ value: '' });
     expect(result.current.valuesIsError).toBe(true);
     expect(result.current.valuesError).toBeInstanceOf(Error);
     expect((result.current.valuesError as Error).message).toBe('vault-read-failure:1');
+    expect(result.current.failedValueCount).toBe(1);
   });
 });

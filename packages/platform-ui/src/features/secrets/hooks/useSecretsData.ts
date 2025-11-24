@@ -58,6 +58,7 @@ export interface SecretsData {
   mounts: string[];
   valuesIsError: boolean;
   valuesError: unknown;
+  failedValueCount: number;
   graphError: unknown;
   mountsError: unknown;
   discoveryError: unknown;
@@ -133,7 +134,7 @@ export function useSecretsData(): SecretsData {
     },
     enabled: presentEntries.length > 0,
     staleTime: 5 * 60 * 1000,
-    retry: false,
+    retry: 2,
   });
 
   const valuesMap = useMemo(() => {
@@ -170,6 +171,14 @@ export function useSecretsData(): SecretsData {
       (mountsQuery.data && (mountsQuery.data.items || []).length === 0),
   );
 
+  const failedValueCount = useMemo(() => {
+    const error = valuesQuery.error;
+    if (error instanceof VaultReadHydrationError) {
+      return error.failureCount;
+    }
+    return 0;
+  }, [valuesQuery.error]);
+
   return {
     secrets,
     entries,
@@ -180,6 +189,7 @@ export function useSecretsData(): SecretsData {
     mounts,
     valuesIsError: valuesQuery.isError,
     valuesError: valuesQuery.error,
+    failedValueCount,
     graphError: graphQuery.error,
     mountsError: mountsQuery.error,
     discoveryError: discoveryQuery.error,
