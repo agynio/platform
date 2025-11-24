@@ -221,14 +221,14 @@ export class WorkspaceNode extends Node<ContainerProviderStaticConfig> {
             },
           }
         : undefined;
-      const createExtras =
+      const createExtras: ContainerOpts['createExtras'] | undefined =
         createExtrasHostConfig || createExtrasNetworking
           ? {
               ...(createExtrasHostConfig ?? {}),
               ...(createExtrasNetworking ?? {}),
             }
           : undefined;
-      container = await this.containerService.start({
+      const started = await this.containerService.start({
         ...DEFAULTS,
         workingDir: normalizedMountPath,
         binds,
@@ -241,11 +241,12 @@ export class WorkspaceNode extends Node<ContainerProviderStaticConfig> {
         networkMode: networkSpec.networkMode,
         createExtras,
       });
-      if (enableDinD) await this.ensureDinD(container, labels, DOCKER_MIRROR_URL);
+      container = started;
+      if (enableDinD) await this.ensureDinD(started, labels, DOCKER_MIRROR_URL);
       if (nixConfigInjected) {
-        await this.runWorkspaceNetworkDiagnostics(container).catch((err: unknown) => {
+        await this.runWorkspaceNetworkDiagnostics(started).catch((err: unknown) => {
           this.logger.warn('Workspace Nix diagnostics failed', {
-            containerId: container.id.substring(0, 12),
+            containerId: started.id.substring(0, 12),
             error: err instanceof Error ? err.message : String(err),
           });
         });
@@ -253,10 +254,10 @@ export class WorkspaceNode extends Node<ContainerProviderStaticConfig> {
 
       if (this.config?.initialScript) {
         const script = this.config.initialScript;
-        const { exitCode, stderr } = await container.exec(script, { tty: false });
+        const { exitCode, stderr } = await started.exec(script, { tty: false });
         if (exitCode !== 0) {
           this.logger.error(
-            `Initial script failed (exitCode=${exitCode}) for container ${container.id.substring(0, 12)}${stderr ? ` stderr: ${stderr}` : ''}`,
+            `Initial script failed (exitCode=${exitCode}) for container ${started.id.substring(0, 12)}${stderr ? ` stderr: ${stderr}` : ''}`,
           );
         }
       }
@@ -273,7 +274,7 @@ export class WorkspaceNode extends Node<ContainerProviderStaticConfig> {
         const pkgsArr: unknown[] = Array.isArray(pkgsUnknown) ? (pkgsUnknown as unknown[]) : [];
         const specs = this.normalizeToInstallSpecs(pkgsArr);
         const originalCount = Array.isArray(pkgsUnknown) ? pkgsArr.length : 0;
-        await this.ensureNixPackages(container, specs, originalCount);
+        await this.ensureNixPackages(started, specs, originalCount);
       } catch (e) {
         // Do not fail startup on install errors; logs provide context
         this.logger.error('Nix install step failed (post-start)', e);
@@ -281,7 +282,11 @@ export class WorkspaceNode extends Node<ContainerProviderStaticConfig> {
     } else {
       const DOCKER_MIRROR_URL =
         this.configService?.dockerMirrorUrl || process.env.DOCKER_MIRROR_URL || 'http://registry-mirror:5000';
-      if (this.config?.enableDinD && container) await this.ensureDinD(container, labels, DOCKER_MIRROR_URL);
+      const existing = container;
+      if (!existing) {
+        throw new Error('Workspace container expected but not found for reuse path');
+      }
+      if (this.config?.enableDinD) await this.ensureDinD(existing, labels, DOCKER_MIRROR_URL);
       // Also attempt install on reuse (idempotent)
       try {
         const nixUnknown = this.config?.nix as unknown;
@@ -292,17 +297,21 @@ export class WorkspaceNode extends Node<ContainerProviderStaticConfig> {
         const pkgsArr: unknown[] = Array.isArray(pkgsUnknown) ? (pkgsUnknown as unknown[]) : [];
         const specs = this.normalizeToInstallSpecs(pkgsArr);
         const originalCount = Array.isArray(pkgsUnknown) ? pkgsArr.length : 0;
-        await this.ensureNixPackages(container, specs, originalCount);
+        await this.ensureNixPackages(existing, specs, originalCount);
       } catch (e) {
         this.logger.error('Nix install step failed (reuse)', e);
       }
     }
+    const handle = container;
+    if (!handle) {
+      throw new Error('Workspace container not provisioned');
+    }
     try {
-      await this.containerService.touchLastUsed(container.id);
+      await this.containerService.touchLastUsed(handle.id);
     } catch {
       // ignore touch last-used errors
     }
-    return container;
+    return handle;
   }
 
   private async ensureDinD(workspace: ContainerHandle, baseLabels: Record<string, string>, mirrorUrl: string) {
