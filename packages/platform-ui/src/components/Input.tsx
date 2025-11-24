@@ -1,6 +1,6 @@
-import { type InputHTMLAttributes, type ReactNode } from 'react';
+import { InputHTMLAttributes, ReactNode } from 'react';
 
-interface InputProps extends Omit<InputHTMLAttributes<HTMLInputElement>, 'size'> {
+interface InputProps extends InputHTMLAttributes<HTMLInputElement> {
   label?: string;
   error?: string;
   helperText?: string;

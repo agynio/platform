@@ -1,9 +1,10 @@
-import { type InputHTMLAttributes, type ReactNode, useState, useRef, useEffect } from 'react';
+import { InputHTMLAttributes, ReactNode, useState, useRef, useEffect } from 'react';
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
+  SelectValue,
 } from './ui/select';
 import { Type, Lock, Variable } from 'lucide-react';
 

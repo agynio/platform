@@ -1,9 +1,9 @@
-import { type ReactNode, useRef, useEffect, useState } from 'react';
-import { Message, type MessageRole } from './Message';
+import { ReactNode, useRef, useEffect, useState } from 'react';
+import { Message, MessageRole } from './Message';
 import { RunInfo } from './RunInfo';
 import { QueuedMessage } from './QueuedMessage';
 import { Reminder } from './Reminder';
-import { StatusIndicator, type Status } from './StatusIndicator';
+import { StatusIndicator, Status } from './StatusIndicator';
 
 export interface ConversationMessage {
   id: string;
@@ -62,19 +62,14 @@ export function Conversation({
 
   // Use controlled or uncontrolled state
   const isCollapsed = collapsed !== undefined ? collapsed : internalCollapsed;
-
-  useEffect(() => {
-    if (collapsed !== undefined) {
-      setInternalCollapsed(collapsed);
-    }
-  }, [collapsed]);
-
-  useEffect(() => {
-    if (collapsed === undefined) {
-      onCollapsedChange?.(internalCollapsed);
-    }
-  }, [collapsed, internalCollapsed, onCollapsedChange]);
   
+  const handleToggle = (newValue: boolean) => {
+    if (collapsed === undefined) {
+      setInternalCollapsed(newValue);
+    }
+    onCollapsedChange?.(newValue);
+  };
+
   // Measure run heights for the sticky run info column
   useEffect(() => {
     const newHeights = new Map<string, number>();

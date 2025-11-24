@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, type InputHTMLAttributes, type ReactNode } from 'react';
+import { useState, useRef, useEffect, InputHTMLAttributes, ReactNode } from 'react';
 import { Loader2, X } from 'lucide-react';
 
 export interface AutocompleteOption {
@@ -6,14 +6,14 @@ export interface AutocompleteOption {
   label: string;
 }
 
-interface AutocompleteInputProps extends Omit<InputHTMLAttributes<HTMLInputElement>, 'size' | 'onChange' | 'onSelect'> {
+interface AutocompleteInputProps extends Omit<InputHTMLAttributes<HTMLInputElement>, 'size' | 'onChange'> {
   label?: string;
   error?: string;
   helperText?: string;
   size?: 'sm' | 'default';
   value: string;
   onChange: (value: string) => void;
-  onOptionSelect?: (option: AutocompleteOption) => void;
+  onSelect?: (option: AutocompleteOption) => void;
   fetchOptions: (query: string) => Promise<AutocompleteOption[]>;
   debounceMs?: number;
   minChars?: number;
@@ -29,7 +29,7 @@ export function AutocompleteInput({
   className = '',
   value,
   onChange,
-  onOptionSelect,
+  onSelect,
   fetchOptions,
   debounceMs = 300,
   minChars = 0,
@@ -46,7 +46,7 @@ export function AutocompleteInput({
   const [hasInteracted, setHasInteracted] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
-  const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const debounceTimerRef = useRef<NodeJS.Timeout>();
 
   const paddingClasses = size === 'sm' ? 'px-3 py-2' : 'px-4 py-3';
   const heightClasses = size === 'sm' ? 'h-10' : 'h-auto';
@@ -78,7 +78,6 @@ export function AutocompleteInput({
     if (value.length >= minChars) {
       if (debounceTimerRef.current) {
         clearTimeout(debounceTimerRef.current);
-        debounceTimerRef.current = null;
       }
 
       debounceTimerRef.current = setTimeout(async () => {
@@ -103,7 +102,6 @@ export function AutocompleteInput({
     return () => {
       if (debounceTimerRef.current) {
         clearTimeout(debounceTimerRef.current);
-        debounceTimerRef.current = null;
       }
     };
   }, [value, fetchOptions, debounceMs, minChars, hasInteracted]);
@@ -115,7 +113,7 @@ export function AutocompleteInput({
 
   const handleSelectOption = (option: AutocompleteOption) => {
     onChange(option.value);
-    onOptionSelect?.(option);
+    onSelect?.(option);
     setIsOpen(false);
     setHasInteracted(false); // Reset to prevent triggering search on programmatic value change
     inputRef.current?.focus();

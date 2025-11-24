@@ -1,4 +1,4 @@
-import { type ReactNode, useEffect, useState } from 'react';
+import { ReactNode, useEffect, useState } from 'react';
 import { Bell } from 'lucide-react';
 
 interface ReminderProps {

@@ -1,6 +1,6 @@
 import { MessageSquare, Bot, Wrench, FileText, Terminal, Users, Loader2 } from 'lucide-react';
-import { type EventType, type MessageSubtype, type RunEventData } from './RunEventDetails';
-import { StatusIndicator, type Status } from './StatusIndicator';
+import { EventType, MessageSubtype } from './RunEventDetails';
+import { StatusIndicator, Status } from './StatusIndicator';
 import { VirtualizedList } from './VirtualizedList';
 
 export interface RunEvent {
@@ -9,7 +9,7 @@ export interface RunEvent {
   timestamp: string;
   duration?: string;
   status?: Status;
-  data: RunEventData;
+  data: any;
 }
 
 export interface RunEventsListProps {
@@ -31,18 +31,15 @@ export function RunEventsList({
 }: RunEventsListProps) {
 
   const getEventIcon = (event: RunEvent) => {
-    const { data } = event;
     switch (event.type) {
       case 'message':
         return <MessageSquare className="w-4 h-4 text-[var(--agyn-blue)]" />;
       case 'llm':
         return <Bot className="w-4 h-4 text-[var(--agyn-purple)]" />;
       case 'tool':
-        if (data.toolSubtype === 'shell') {
+        if (event.data?.toolSubtype === 'shell') {
           return <Terminal className="w-4 h-4 text-[var(--agyn-cyan)]" />;
-        }
-
-        if (data.toolSubtype === 'manage') {
+        } else if (event.data?.toolSubtype === 'manage') {
           return <Users className="w-4 h-4 text-[var(--agyn-cyan)]" />;
         }
         return <Wrench className="w-4 h-4 text-[var(--agyn-cyan)]" />;
@@ -65,9 +62,8 @@ export function RunEventsList({
   };
 
   const getEventLabel = (event: RunEvent) => {
-    const { data } = event;
     if (event.type === 'message') {
-      const messageSubtype: MessageSubtype = data.messageSubtype ?? 'source';
+      const messageSubtype: MessageSubtype = event.data?.messageSubtype || 'source';
       switch (messageSubtype) {
         case 'source':
           return 'Message • Source';
@@ -82,7 +78,7 @@ export function RunEventsList({
       case 'llm':
         return 'LLM Call';
       case 'tool':
-        return data.toolName || 'Tool Call';
+        return event.data?.toolName || 'Tool Call';
       case 'summarization':
         return 'Summarization';
       default:
@@ -90,7 +86,12 @@ export function RunEventsList({
     }
   };
 
-  const renderEventItem = (_index: number, event: RunEvent) => {
+  const getEventSubtitle = (event: RunEvent) => {
+    return null;
+  };
+
+  const renderEventItem = (index: number, event: RunEvent) => {
+    const subtitle = getEventSubtitle(event);
     const isSelected = selectedEventId === event.id;
     
     return (
@@ -118,6 +119,11 @@ export function RunEventsList({
                 <StatusIndicator status={event.status} size="sm" showTooltip={false} />
               )}
             </div>
+            {subtitle && (
+              <div className="text-xs text-[var(--agyn-gray)] truncate mb-1">
+                {subtitle}
+              </div>
+            )}
             <div className="text-xs text-[var(--agyn-gray)]">
               {event.timestamp}
               {event.duration && ` • ${event.duration}`}

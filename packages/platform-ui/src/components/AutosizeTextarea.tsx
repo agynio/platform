@@ -1,4 +1,4 @@
-import { type TextareaHTMLAttributes, useEffect, useRef, useCallback } from 'react';
+import { TextareaHTMLAttributes, useEffect, useRef } from 'react';
 
 interface AutosizeTextareaProps extends Omit<TextareaHTMLAttributes<HTMLTextAreaElement>, 'rows'> {
   label?: string;
@@ -24,7 +24,7 @@ export function AutosizeTextarea({
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const paddingClasses = size === 'sm' ? 'px-3 py-2' : 'px-4 py-3';
 
-  const adjustHeight = useCallback(() => {
+  const adjustHeight = () => {
     const textarea = textareaRef.current;
     if (!textarea) return;
 
@@ -61,16 +61,16 @@ export function AutosizeTextarea({
     } else {
       textarea.style.overflowY = 'hidden';
     }
-  }, [maxLines, minLines]);
+  };
 
   useEffect(() => {
     adjustHeight();
-  }, [adjustHeight, value]);
+  }, [value, minLines, maxLines]);
 
   // Call adjustHeight on mount
   useEffect(() => {
     adjustHeight();
-  }, [adjustHeight]);
+  }, []);
 
   const handleChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     adjustHeight();

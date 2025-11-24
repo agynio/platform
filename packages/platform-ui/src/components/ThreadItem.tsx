@@ -1,5 +1,7 @@
+import { ReactNode, useState } from 'react';
 import { ChevronRight, ChevronDown } from 'lucide-react';
-import { StatusIndicator, type Status } from './StatusIndicator';
+import { Badge } from './Badge';
+import { StatusIndicator, Status } from './StatusIndicator';
 
 export type ThreadStatus = 'running' | 'pending' | 'finished' | 'failed';
 
@@ -18,16 +20,18 @@ interface ThreadItemProps {
   thread: Thread;
   depth?: number;
   onToggleExpand?: (threadId: string) => void;
+  onToggleOpenState?: (threadId: string) => void;
   onSelect?: (threadId: string) => void;
   isExpanded?: boolean;
   isSelected?: boolean;
+  isLastAtDepth?: boolean;
 }
 
-const statusMap: Record<ThreadStatus, Status> = {
-  running: 'running',
-  pending: 'pending',
-  finished: 'finished',
-  failed: 'failed',
+const statusConfig: Record<ThreadStatus, { color: string; label: string }> = {
+  running: { color: 'var(--agyn-blue)', label: 'Running' },
+  pending: { color: 'var(--agyn-gray)', label: 'Pending' },
+  finished: { color: '#10B981', label: 'Finished' },
+  failed: { color: '#EF4444', label: 'Failed' },
 };
 
 const getAgentAvatarColor = (agentName: string): string => {
@@ -47,9 +51,11 @@ export function ThreadItem({
   thread,
   depth = 0,
   onToggleExpand,
+  onToggleOpenState,
   onSelect,
   isExpanded = false,
   isSelected = false,
+  isLastAtDepth = false,
 }: ThreadItemProps) {
   const hasSubthreads = thread.subthreads && thread.subthreads.length > 0;
   const indentWidth = depth * 24; // Reduced from 32px to 24px
@@ -58,6 +64,12 @@ export function ThreadItem({
   const handleToggleExpand = () => {
     if (hasSubthreads && onToggleExpand) {
       onToggleExpand(thread.id);
+    }
+  };
+
+  const handleToggleOpenState = () => {
+    if (onToggleOpenState) {
+      onToggleOpenState(thread.id);
     }
   };
 
@@ -111,7 +123,7 @@ export function ThreadItem({
 
           {/* Status Indicator */}
           <div className="flex-shrink-0 flex items-center gap-2">
-            <StatusIndicator status={statusMap[thread.status]} size="sm" />
+            <StatusIndicator status={thread.status as Status} size="sm" />
           </div>
         </div>
 

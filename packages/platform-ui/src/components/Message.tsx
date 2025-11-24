@@ -1,4 +1,4 @@
-import { type ReactNode } from 'react';
+import { ReactNode } from 'react';
 import { User, Bot, Terminal, Settings } from 'lucide-react';
 import { MarkdownContent } from './MarkdownContent';
 

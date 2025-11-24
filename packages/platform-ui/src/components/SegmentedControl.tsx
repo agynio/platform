@@ -1,4 +1,4 @@
-import { type ReactNode } from 'react';
+import { ReactNode } from 'react';
 
 interface SegmentedControlItem {
   value: string;

@@ -1,35 +1,25 @@
-import { useState, type ReactNode } from 'react';
-import { ChevronRight, ChevronDown } from 'lucide-react';
-
-type JsonPrimitive = string | number | boolean | null;
-type JsonObject = { [key: string]: JsonValue };
-type JsonArray = JsonValue[];
-type JsonValue = JsonPrimitive | JsonObject | JsonArray;
-
-const isJsonArray = (value: JsonValue): value is JsonArray => Array.isArray(value);
-
-const isJsonObject = (value: JsonValue): value is JsonObject =>
-  typeof value === 'object' && value !== null && !Array.isArray(value);
+import { useState } from 'react';
+import { ChevronRight, ChevronDown, Copy } from 'lucide-react';
 
 interface JsonViewerProps {
-  data: JsonValue;
+  data: any;
   className?: string;
 }
 
 export function JsonViewer({ data, className = '' }: JsonViewerProps) {
   // Expand all paths by default
-  const getAllPaths = (obj: JsonValue, prefix = 'root'): string[] => {
+  const getAllPaths = (obj: any, prefix = 'root'): string[] => {
     const paths = [prefix];
-    if (isJsonArray(obj)) {
+    if (Array.isArray(obj)) {
       obj.forEach((item, index) => {
-        if (isJsonObject(item) || isJsonArray(item)) {
+        if (typeof item === 'object' && item !== null) {
           paths.push(...getAllPaths(item, `${prefix}.${index}`));
         }
       });
-    } else if (isJsonObject(obj)) {
-      Object.entries(obj).forEach(([key, value]) => {
-        if (isJsonObject(value) || isJsonArray(value)) {
-          paths.push(...getAllPaths(value, `${prefix}.${key}`));
+    } else if (typeof obj === 'object' && obj !== null) {
+      Object.keys(obj).forEach(key => {
+        if (typeof obj[key] === 'object' && obj[key] !== null) {
+          paths.push(...getAllPaths(obj[key], `${prefix}.${key}`));
         }
       });
     }
@@ -48,17 +38,11 @@ export function JsonViewer({ data, className = '' }: JsonViewerProps) {
     setExpandedPaths(newExpanded);
   };
 
-  const isComplexValue = (val: JsonValue): boolean => {
-    if (isJsonArray(val)) {
-      return val.length > 0;
-    }
-    if (isJsonObject(val)) {
-      return Object.keys(val).length > 0;
-    }
-    return false;
+  const isComplexValue = (val: any): boolean => {
+    return (Array.isArray(val) && val.length > 0) || (typeof val === 'object' && val !== null && Object.keys(val).length > 0);
   };
 
-  const renderValue = (value: JsonValue, path: string, depth = 0): ReactNode => {
+  const renderValue = (value: any, path: string, depth: number = 0, keyLength: number = 0): JSX.Element => {
     const indent = depth * 16;
 
     if (value === null) {
@@ -93,7 +77,7 @@ export function JsonViewer({ data, className = '' }: JsonViewerProps) {
       );
     }
 
-    if (isJsonArray(value)) {
+    if (Array.isArray(value)) {
       const isExpanded = expandedPaths.has(path);
       const isEmpty = value.length === 0;
 
@@ -125,14 +109,14 @@ export function JsonViewer({ data, className = '' }: JsonViewerProps) {
                       <div>
                         <div className="text-[var(--agyn-gray)]">{keyText}</div>
                         <div style={{ paddingLeft: '16px' }}>
-                          {renderValue(item, `${path}.${index}`, depth)}
+                          {renderValue(item, `${path}.${index}`, depth, 0)}
                         </div>
                       </div>
                     ) : (
                       <div>
                         <span className="text-[var(--agyn-gray)]">{keyText}</span>
                         <div className="inline-block ml-3 align-top max-w-full">
-                          {renderValue(item, `${path}.${index}`, depth)}
+                          {renderValue(item, `${path}.${index}`, depth, 0)}
                         </div>
                       </div>
                     )}
@@ -145,9 +129,8 @@ export function JsonViewer({ data, className = '' }: JsonViewerProps) {
       );
     }
 
-    if (isJsonObject(value)) {
+    if (typeof value === 'object') {
       const isExpanded = expandedPaths.has(path);
-      const entries = Object.entries(value);
       const keys = Object.keys(value);
       const isEmpty = keys.length === 0;
 
@@ -172,23 +155,23 @@ export function JsonViewer({ data, className = '' }: JsonViewerProps) {
           </button>
           {isExpanded && (
             <div>
-              {entries.map(([key, childValue]) => {
+              {keys.map((key) => {
                 const keyText = `${key}:`;
-                const isComplex = isComplexValue(childValue);
+                const isComplex = isComplexValue(value[key]);
                 return (
                   <div key={key}>
                     {isComplex ? (
                       <div>
                         <div className="text-[var(--agyn-blue)]">{keyText}</div>
                         <div style={{ paddingLeft: '16px' }}>
-                          {renderValue(childValue, `${path}.${key}`, depth)}
+                          {renderValue(value[key], `${path}.${key}`, depth, 0)}
                         </div>
                       </div>
                     ) : (
                       <div>
                         <span className="text-[var(--agyn-blue)]">{keyText}</span>
                         <div className="inline-block ml-3 align-top max-w-full">
-                          {renderValue(childValue, `${path}.${key}`, depth)}
+                          {renderValue(value[key], `${path}.${key}`, depth, 0)}
                         </div>
                       </div>
                     )}
