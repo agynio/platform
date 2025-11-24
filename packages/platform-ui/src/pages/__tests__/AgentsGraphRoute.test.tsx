@@ -1,22 +1,21 @@
 import React from 'react';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
-import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, vi } from 'vitest';
 
 const graphHooksMocks = vi.hoisted(() => ({
-  useGraphData: () => ({
+  useGraphData: vi.fn(() => ({
     nodes: [],
     loading: false,
-    savingState: { status: 'saved' as const },
+    savingState: { status: 'saved' as const, error: null },
     savingErrorMessage: null,
     updateNode: vi.fn(),
     applyNodeStatus: vi.fn(),
     applyNodeState: vi.fn(),
-  }),
+  })),
   useGraphSocket: vi.fn(),
 }));
 
-const originalFlag = import.meta.env.VITE_ENABLE_NEW_GRAPH;
 let getContextSpy: ReturnType<typeof vi.spyOn> | null = null;
 
 beforeAll(() => {
@@ -26,20 +25,12 @@ beforeAll(() => {
 });
 
 afterAll(() => {
-  (import.meta as any).env.VITE_ENABLE_NEW_GRAPH = originalFlag;
-  vi.unstubAllEnvs();
   getContextSpy?.mockRestore();
 });
 
-async function renderWithFlag(flag: string) {
+async function renderGraphRoute() {
   vi.resetModules();
-  vi.stubEnv('VITE_ENABLE_NEW_GRAPH', flag);
-  (import.meta as any).env.VITE_ENABLE_NEW_GRAPH = flag;
   delete (globalThis as { __graphMockHits?: number }).__graphMockHits;
-  vi.doMock('@/builder/AgentBuilder', () => ({
-    __esModule: true,
-    AgentBuilder: () => <div data-testid="builder-page">legacy builder</div>,
-  }));
   vi.doMock('@/components/agents/GraphLayout', () => ({
     __esModule: true,
     GraphLayout: () => {
@@ -58,22 +49,22 @@ async function renderWithFlag(flag: string) {
   }));
   const { default: App } = await import('@/App');
   return render(
-    <MemoryRouter initialEntries={['/agents/graph2']}>
+    <MemoryRouter initialEntries={['/agents/graph']}>
       <App />
     </MemoryRouter>,
   );
 }
 
-describe('Agents graph routing flag', () => {
-  it('renders new graph container when flag enabled', async () => {
-    await renderWithFlag('true');
-    await waitFor(() => expect((globalThis as { __graphMockHits?: number }).__graphMockHits ?? 0).toBeGreaterThan(0));
-    expect(screen.queryByTestId('builder-page')).not.toBeInTheDocument();
+describe('Agents graph routing', () => {
+  beforeEach(() => {
+    graphHooksMocks.useGraphData.mockClear();
+    graphHooksMocks.useGraphSocket.mockClear();
   });
 
-  it('falls back to legacy builder when flag disabled', async () => {
-    await renderWithFlag('false');
-    expect(await screen.findByTestId('builder-page')).toBeInTheDocument();
-    expect((globalThis as { __graphMockHits?: number }).__graphMockHits ?? 0).toBe(0);
+  it('renders the new graph layout for /agents/graph', async () => {
+    await renderGraphRoute();
+    await waitFor(() => expect((globalThis as { __graphMockHits?: number }).__graphMockHits ?? 0).toBeGreaterThan(0));
+    expect(graphHooksMocks.useGraphData).toHaveBeenCalled();
+    expect(graphHooksMocks.useGraphSocket).toHaveBeenCalled();
   });
 });
