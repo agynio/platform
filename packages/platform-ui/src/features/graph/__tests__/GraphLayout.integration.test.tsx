@@ -9,19 +9,6 @@ const hookMocks = vi.hoisted(() => ({
   useGraphData: vi.fn(),
   useGraphSocket: vi.fn(),
   useNodeStatus: vi.fn(),
-  useNodeState: vi.fn(),
-}));
-
-const graphApiMocks = vi.hoisted(() => ({
-  postNodeAction: vi.fn(),
-  listNodeRuns: vi.fn(),
-  terminateRun: vi.fn(),
-  terminateThread: vi.fn(),
-}));
-
-const notifyMocks = vi.hoisted(() => ({
-  notifyError: vi.fn(),
-  notifySuccess: vi.fn(),
 }));
 
 vi.mock('@/components/GraphCanvas', () => ({
@@ -51,29 +38,20 @@ vi.mock('@/features/graph/hooks/useNodeStatus', () => ({
   useNodeStatus: hookMocks.useNodeStatus,
 }));
 
-vi.mock('@/features/graph/hooks/useNodeState', () => ({
-  useNodeState: hookMocks.useNodeState,
-}));
-
-vi.mock('@/api/modules/graph', () => ({
-  graph: graphApiMocks,
-}));
-
-vi.mock('@/lib/notify', () => notifyMocks);
-
 import { GraphLayout } from '@/components/agents/GraphLayout';
 
 describe('GraphLayout', () => {
   beforeEach(() => {
     sidebarProps.length = 0;
     Object.values(hookMocks).forEach((mock) => mock.mockReset());
-    Object.values(graphApiMocks).forEach((mock) => mock.mockReset());
-    Object.values(notifyMocks).forEach((mock) => mock.mockReset());
     canvasSpy.mockReset();
   });
 
-  it('wires node updates, actions, and polling for agent nodes', async () => {
+  it('passes sidebar config/state and persists config updates', async () => {
     const updateNode = vi.fn();
+    const applyNodeStatus = vi.fn();
+    const applyNodeState = vi.fn();
+
     hookMocks.useGraphData.mockReturnValue({
       nodes: [
         {
@@ -84,10 +62,7 @@ describe('GraphLayout', () => {
           x: 0,
           y: 0,
           status: 'not_ready',
-          config: { title: 'Agent Node' },
-          state: {},
-          runtime: { provisionStatus: { state: 'not_ready' }, isPaused: false },
-          capabilities: { provisionable: true },
+          config: { title: 'Agent Node', systemPrompt: 'You are helpful.' },
           ports: { inputs: [], outputs: [] },
         },
       ],
@@ -96,98 +71,62 @@ describe('GraphLayout', () => {
       savingState: { status: 'saved', error: null },
       savingErrorMessage: null,
       updateNode,
-      applyNodeStatus: vi.fn(),
-      applyNodeState: vi.fn(),
+      applyNodeStatus,
+      applyNodeState,
     });
-    hookMocks.useGraphSocket.mockImplementation(() => undefined);
-    hookMocks.useNodeStatus.mockReturnValue({ data: { provisionStatus: { state: 'ready' } } });
-    const updateState = vi.fn().mockResolvedValue(undefined);
-    hookMocks.useNodeState.mockReturnValue({ state: {}, query: { isPending: false }, updateState });
-    graphApiMocks.postNodeAction.mockResolvedValue({ ok: true });
-    graphApiMocks.listNodeRuns.mockResolvedValue({ items: [] });
-    graphApiMocks.terminateRun.mockResolvedValue({ ok: true });
-    graphApiMocks.terminateThread.mockResolvedValue({ ok: true });
 
-    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
+    hookMocks.useGraphSocket.mockImplementation(({ onStatus, onState }) => {
+      onStatus?.({
+        nodeId: 'node-1',
+        updatedAt: new Date().toISOString(),
+        provisionStatus: { state: 'ready' },
+        isPaused: false,
+      } as any);
+      onState?.({ nodeId: 'node-1', state: { foo: 'bar' } } as any);
+    });
+
+    hookMocks.useNodeStatus.mockReturnValue({ data: { provisionStatus: { state: 'ready' } } });
+
     const { unmount } = render(<GraphLayout />);
 
     await waitFor(() => expect(canvasSpy).toHaveBeenCalled());
     await waitFor(() => expect(sidebarProps.length).toBeGreaterThan(0));
-    await waitFor(() => expect(graphApiMocks.listNodeRuns).toHaveBeenCalledWith('node-1', 'all'));
 
-    const sidebar = sidebarProps.at(-1);
-    expect(sidebar?.identity?.id).toBe('node-1');
+    expect(hookMocks.useGraphSocket).toHaveBeenCalledWith(
+      expect.objectContaining({ nodeIds: ['node-1'] }),
+    );
 
-    sidebar?.onTitleChange?.('Updated Agent');
+    const sidebar = sidebarProps.at(-1) as {
+      config: Record<string, unknown>;
+      state: Record<string, unknown>;
+      onConfigChange?: (next: Record<string, unknown>) => void;
+    };
+
+    expect(Object.keys(sidebar).sort()).toEqual(['config', 'onConfigChange', 'state']);
+
+    expect(sidebar.config).toEqual({
+      kind: 'Agent',
+      title: 'Agent Node',
+      systemPrompt: 'You are helpful.',
+    });
+
+    expect(sidebar.state).toEqual({ status: 'ready' });
+
+    sidebar.onConfigChange?.({ title: 'Updated Agent', systemPrompt: 'New prompt' });
+
     await waitFor(() =>
-      expect(updateNode).toHaveBeenCalledWith('node-1', {
-        title: 'Updated Agent',
-        config: { title: 'Updated Agent' },
-      }),
+      expect(updateNode).toHaveBeenCalledWith(
+        'node-1',
+        expect.objectContaining({
+          config: expect.objectContaining({
+            kind: 'Agent',
+            title: 'Updated Agent',
+            systemPrompt: 'New prompt',
+          }),
+          title: 'Updated Agent',
+        }),
+      ),
     );
-
-    await sidebar?.actions?.onProvision?.();
-    expect(graphApiMocks.postNodeAction).toHaveBeenCalledWith('node-1', 'provision');
-    expect(updateNode).toHaveBeenCalledWith(
-      'node-1',
-      expect.objectContaining({ status: 'provisioning' }),
-    );
-
-    await sidebar?.actions?.onTerminateRun?.('run-1');
-    expect(graphApiMocks.terminateRun).toHaveBeenCalledWith('run-1');
-
-    await sidebar?.actions?.onTerminateThread?.('thread-1');
-    expect(graphApiMocks.terminateThread).toHaveBeenCalledWith('node-1', 'thread-1');
-
-    confirmSpy.mockRestore();
-    unmount();
-  });
-
-  it('toggles MCP tools via updateState', async () => {
-    const updateNode = vi.fn();
-    const updateState = vi.fn().mockResolvedValue(undefined);
-    hookMocks.useGraphData.mockReturnValue({
-      nodes: [
-        {
-          id: 'node-mcp',
-          template: 'mcp-template',
-          kind: 'MCP',
-          title: 'MCP Node',
-          x: 0,
-          y: 0,
-          status: 'not_ready',
-          config: { title: 'MCP Node' },
-          state: {},
-          runtime: undefined,
-          capabilities: { provisionable: false },
-          ports: { inputs: [], outputs: [] },
-        },
-      ],
-      edges: [],
-      loading: false,
-      savingState: { status: 'idle', error: null },
-      savingErrorMessage: null,
-      updateNode,
-      applyNodeStatus: vi.fn(),
-      applyNodeState: vi.fn(),
-    });
-    hookMocks.useGraphSocket.mockImplementation(() => undefined);
-    hookMocks.useNodeStatus.mockReturnValue({ data: undefined });
-    hookMocks.useNodeState.mockReturnValue({
-      state: { mcp: { tools: [{ name: 'toolA', title: 'Tool A' }], enabledTools: ['toolA'] } },
-      query: { isPending: false },
-      updateState,
-    });
-    graphApiMocks.listNodeRuns.mockResolvedValue({ items: [] });
-
-    const { unmount } = render(<GraphLayout />);
-
-    await waitFor(() => expect(sidebarProps.length).toBeGreaterThan(0));
-    const sidebar = sidebarProps.at(-1);
-    expect(sidebar?.tools).toEqual([{ name: 'toolA', title: 'Tool A' }]);
-
-    await sidebar?.onToggleTool?.('toolA', false);
-    expect(updateState).toHaveBeenCalledWith({ mcp: { tools: [{ name: 'toolA', title: 'Tool A' }], enabledTools: [] } });
 
     unmount();
   });
