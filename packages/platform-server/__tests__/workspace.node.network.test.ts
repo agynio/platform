@@ -16,7 +16,6 @@ type WorkspaceNetworkContext = {
 
 async function createWorkspaceNodeWithNetwork(
   config: Partial<ContainerProviderStaticConfig>,
-  workspaceDockerNetwork: string | undefined,
 ): Promise<WorkspaceNetworkContext> {
   const fakeHandle = {
     id: 'cid123',
@@ -41,7 +40,6 @@ async function createWorkspaceNodeWithNetwork(
     dockerMirrorUrl: undefined,
     ncpsEnabled: false,
     ncpsUrl: undefined,
-    workspaceDockerNetwork,
   } as unknown as ConfigService;
 
   const ncpsKeyService = {
@@ -63,8 +61,8 @@ async function createWorkspaceNodeWithNetwork(
 }
 
 describe('WorkspaceNode network configuration', () => {
-  it('attaches user-defined network via NetworkingConfig', async () => {
-    const { node, startMock } = await createWorkspaceNodeWithNetwork({}, 'agents_net');
+  it('attaches agents_net with sanitized alias', async () => {
+    const { node, startMock } = await createWorkspaceNodeWithNetwork({});
 
     await node.provide('Thread ABC/123');
 
@@ -76,14 +74,15 @@ describe('WorkspaceNode network configuration', () => {
     ]);
   });
 
-  it('threads built-in network mode directly to ContainerService', async () => {
-    const { node, startMock } = await createWorkspaceNodeWithNetwork({}, 'host');
+  it('derives a stable alias when thread id is irregular', async () => {
+    const { node, startMock } = await createWorkspaceNodeWithNetwork({});
 
-    await node.provide('thread-42');
+    await node.provide('  **THREAD__!@# ');
 
     expect(startMock).toHaveBeenCalledTimes(1);
     const startArgs = startMock.mock.calls[0][0];
-    expect(startArgs.networkMode).toBe('host');
-    expect(startArgs.createExtras?.NetworkingConfig).toBeUndefined();
+    const alias = startArgs.createExtras?.NetworkingConfig?.EndpointsConfig?.agents_net?.Aliases?.[0];
+    expect(alias).toBeDefined();
+    expect(alias).toMatch(/^[a-z0-9][a-z0-9_.-]*$/);
   });
 });

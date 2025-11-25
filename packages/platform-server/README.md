@@ -12,13 +12,11 @@ Graph persistence
 - Error responses:
    - 409 VERSION_CONFLICT with `{ error, current }` body when version mismatch.
    - 409 LOCK_TIMEOUT when advisory lock not acquired within timeout.
-   - 500 COMMIT_FAILED when git commit fails; persistence is rolled back to last committed state.
+  - 500 COMMIT_FAILED when git commit fails; persistence is rolled back to last committed state.
 
 ## Networking and cache
 
-- `WORKSPACE_DOCKER_NETWORK` attaches workspace containers to a specific Docker network.
-  - Built-in modes (`bridge`, `host`, `none`, `container:<id>`) map to Docker's `HostConfig.NetworkMode`.
-  - User-defined networks (e.g., `agents_net`) are attached at create-time with an alias derived from the thread id, enabling name resolution for services like `ncps`.
+- Workspace containers automatically join the `agents_net` Docker network with an alias derived from the thread id. This enables name resolution for in-cluster services such as `ncps`—ensure `agents_net` exists on the host.
 - DinD sidecars keep `networkMode=container:<workspaceId>` so the workspace and sidecar share namespaces regardless of the workspace network.
 - Set `NCPS_URL_SERVER` (host-reachable) and `NCPS_URL_CONTAINER` (in-network, e.g., `http://ncps:8501`) together so Nix substituters resolve correctly inside workspaces.
 - When the server injects `NIX_CONFIG`, workspace startup logs the resolved substituters/trusted keys and runs `getent hosts ncps` plus `curl http://ncps:8501/nix-cache-info`, emitting warnings if connectivity fails.

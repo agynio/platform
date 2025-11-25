@@ -204,7 +204,7 @@ export class WorkspaceNode extends Node<ContainerProviderStaticConfig> {
       const normalizedEnv: Record<string, string> | undefined = envMerged;
       const cpuLimitNano = this.normalizeCpuLimit(this.config?.cpu_limit);
       const memoryLimitBytes = this.normalizeMemoryLimit(this.config?.memory_limit);
-      const networkSpec = this.resolveWorkspaceNetwork(threadId);
+      const networkAlias = this.sanitizeNetworkAlias(threadId);
       const createExtrasHostConfig =
         cpuLimitNano !== undefined || memoryLimitBytes !== undefined
           ? {
@@ -214,20 +214,22 @@ export class WorkspaceNode extends Node<ContainerProviderStaticConfig> {
               },
             }
           : undefined;
-      const createExtrasNetworking = networkSpec.endpointsConfig
-        ? {
-            NetworkingConfig: {
-              EndpointsConfig: networkSpec.endpointsConfig,
+      const createExtrasNetworking: ContainerOpts['createExtras'] = {
+        NetworkingConfig: {
+          EndpointsConfig: {
+            agents_net: {
+              Aliases: [networkAlias],
             },
-          }
-        : undefined;
+          },
+        },
+      };
       const createExtras: ContainerOpts['createExtras'] | undefined =
-        createExtrasHostConfig || createExtrasNetworking
+        createExtrasHostConfig
           ? {
-              ...(createExtrasHostConfig ?? {}),
-              ...(createExtrasNetworking ?? {}),
+              ...createExtrasHostConfig,
+              ...createExtrasNetworking,
             }
-          : undefined;
+          : createExtrasNetworking;
       const started = await this.containerService.start({
         ...DEFAULTS,
         workingDir: normalizedMountPath,
@@ -238,7 +240,6 @@ export class WorkspaceNode extends Node<ContainerProviderStaticConfig> {
         labels: { ...workspaceLabels },
         platform: requestedPlatform,
         ttlSeconds: this.config?.ttlSeconds ?? 86400,
-        networkMode: networkSpec.networkMode,
         createExtras,
       });
       container = started;
@@ -361,33 +362,6 @@ export class WorkspaceNode extends Node<ContainerProviderStaticConfig> {
       await sleep(1000);
     }
     throw new Error('DinD sidecar did not become ready within timeout');
-  }
-
-  private resolveWorkspaceNetwork(threadId: string): {
-    networkMode?: string;
-    endpointsConfig?: Record<string, { Aliases: string[] }>;
-  } {
-    const raw = this.configService?.workspaceDockerNetwork;
-    if (!raw) return {};
-    const trimmed = raw.trim();
-    if (!trimmed) return {};
-    const lower = trimmed.toLowerCase();
-    if (lower === 'bridge' || lower === 'host' || lower === 'none') {
-      return { networkMode: lower };
-    }
-    if (lower.startsWith('container:')) {
-      const idx = trimmed.indexOf(':');
-      const target = idx >= 0 ? trimmed.slice(idx + 1).trim() : '';
-      if (!target) return {};
-      return { networkMode: `container:${target}` };
-    }
-    return {
-      endpointsConfig: {
-        [trimmed]: {
-          Aliases: [this.sanitizeNetworkAlias(threadId)],
-        },
-      },
-    };
   }
 
   private sanitizeNetworkAlias(threadId: string): string {

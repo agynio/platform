@@ -42,7 +42,7 @@ export NCPS_URL_CONTAINER=http://ncps:8501
 # export NCPS_AUTH_TOKEN="Bearer ..."
 ```
 
-- When `WORKSPACE_DOCKER_NETWORK=agents_net`, containers resolve `ncps` directly on that network, so keep `NCPS_URL_CONTAINER=http://ncps:8501`.
+- Workspace containers automatically join `agents_net`, so keep `NCPS_URL_CONTAINER=http://ncps:8501` and ensure that network exists on the host.
 
 Injection behavior
 
