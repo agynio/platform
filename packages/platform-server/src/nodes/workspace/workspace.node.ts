@@ -162,6 +162,28 @@ export class WorkspaceNode extends Node<ContainerProviderStaticConfig> {
       }
     }
 
+    if (container) {
+      let networks: string[] | undefined;
+      try {
+        networks = await this.containerService.getContainerNetworks(container.id);
+      } catch (err) {
+        this.logger.warn('Failed to inspect workspace networks', {
+          containerId: container.id.substring(0, 12),
+          error: err instanceof Error ? err.message : String(err),
+        });
+      }
+      const attachedToAgentsNet = Array.isArray(networks) && networks.includes('agents_net');
+      if (!attachedToAgentsNet) {
+        this.logger.info('Recreating workspace to enforce agents_net network', {
+          containerId: container.id.substring(0, 12),
+          networks: Array.isArray(networks) ? networks : [],
+        });
+        if (enableDinD) await this.cleanupDinDSidecars(labels, container.id).catch(() => {});
+        await this.stopAndRemoveContainer(container);
+        container = undefined;
+      }
+    }
+
     if (!container) {
       const DOCKER_HOST_ENV = 'tcp://localhost:2375';
       const DOCKER_MIRROR_URL =
