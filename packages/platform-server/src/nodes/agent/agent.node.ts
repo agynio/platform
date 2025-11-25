@@ -1,4 +1,5 @@
 import { LocalMCPServerNode } from '../mcp';
+import { LocalMCPServerTool } from '../mcp/localMcpServer.tool';
 
 import { ConfigService } from '../../core/services/config.service';
 import { LoggerService } from '../../core/services/logger.service';
@@ -21,7 +22,7 @@ import { CallModelLLMReducer } from '../../llm/reducers/callModel.llm.reducer';
 import { CallToolsLLMReducer } from '../../llm/reducers/callTools.llm.reducer';
 import { ConditionalLLMRouter } from '../../llm/routers/conditional.llm.router';
 import { StaticLLMRouter } from '../../llm/routers/static.llm.router';
-import { LLMContext, LLMState } from '../../llm/types';
+import { CallerAgent, LLMContext, LLMState } from '../../llm/types';
 
 import { EnforceToolsLLMReducer } from '../../llm/reducers/enforceTools.llm.reducer';
 import { LoadLLMReducer } from '../../llm/reducers/load.llm.reducer';
@@ -30,9 +31,20 @@ import { SummarizationLLMReducer } from '../../llm/reducers/summarization.llm.re
 import { Signal } from '../../signal';
 import { AgentsPersistenceService } from '../../agents/agents.persistence.service';
 import { RunSignalsRegistry } from '../../agents/run-signals.service';
+import {
+  THREAD_CONFIG_SNAPSHOT_VERSION,
+  type ThreadConfigSnapshot,
+  type ThreadConfigSnapshotTool,
+} from '../../agents/thread-config.snapshot';
 
 import { BaseToolNode } from '../tools/baseToolNode';
 import { BufferMessage, MessagesBuffer, ProcessBuffer } from './messagesBuffer';
+
+const DEFAULT_SYSTEM_PROMPT = 'You are a helpful AI assistant.';
+const DEFAULT_SUMMARIZATION_PROMPT =
+  'You update a running summary of a conversation. Keep key facts, goals, decisions, constraints, names, deadlines, and follow-ups. Be concise; use compact sentences; omit chit-chat. Structure summary with 3 high level sections: initial task, plan (if any), context (progress, findings, observations).';
+const DEFAULT_RESTRICTION_MESSAGE =
+  "Do not produce a final answer directly. Before finishing, call a tool. If no tool is needed, call the 'finish' tool.";
 
 /**
  * Zod schema describing static configuration for Agent.
@@ -44,7 +56,7 @@ export const AgentStaticConfigSchema = z
     model: z.string().default('gpt-5').describe('LLM model identifier to use for this agent (provider-specific name).'),
     systemPrompt: z
       .string()
-      .default('You are a helpful AI assistant.')
+      .default(DEFAULT_SYSTEM_PROMPT)
       .describe('System prompt injected at the start of each conversation turn.')
       .meta({ 'ui:widget': 'textarea', 'ui:options': { rows: 6 } }),
     // Agent-side message buffer handling (exposed for Agent static config)
@@ -76,9 +88,7 @@ export const AgentStaticConfigSchema = z
     restrictOutput: z.boolean().default(false).describe('When true, enforce calling a tool before finishing the turn.'),
     restrictionMessage: z
       .string()
-      .default(
-        "Do not produce a final answer directly. Before finishing, call a tool. If no tool is needed, call the 'finish' tool.",
-      )
+      .default(DEFAULT_RESTRICTION_MESSAGE)
       .describe('Instruction injected to steer the model when restrictOutput=true.')
       .meta({ 'ui:widget': 'textarea', 'ui:options': { rows: 4 } }),
     restrictionMaxInjections: z
@@ -94,6 +104,28 @@ export const AgentStaticConfigSchema = z
 export type AgentStaticConfig = z.infer<typeof AgentStaticConfigSchema>;
 
 export type WhenBusyMode = 'wait' | 'injectAfterTools';
+
+type EffectiveAgentConfig = {
+  model: string;
+  prompts: {
+    system: string;
+    summarization: string;
+  };
+  summarization: {
+    keepTokens: number;
+    maxTokens: number;
+  };
+  behavior: {
+    debounceMs: number;
+    whenBusy: WhenBusyMode;
+    processBuffer: 'allTogether' | 'oneByOne';
+    restrictOutput: boolean;
+    restrictionMessage: string;
+    restrictionMaxInjections: number;
+  };
+  memoryPlacement: 'after_system' | 'last_message' | 'none';
+  allowedTools: ThreadConfigSnapshotTool[];
+};
 
 // Consolidated Agent class (merges previous BaseAgent + Agent into single AgentNode)
 import { Inject, Injectable, Optional, Scope } from '@nestjs/common';
@@ -149,14 +181,13 @@ export class AgentNode extends Node<AgentStaticConfig> {
     return this._config;
   }
 
-  private resolveBufferMode(): ProcessBuffer {
-    return (this.config.processBuffer ?? 'allTogether') === 'oneByOne'
-      ? ProcessBuffer.OneByOne
-      : ProcessBuffer.AllTogether;
-  }
-
-  private async injectBufferedMessages(state: LLMState, ctx: LLMContext): Promise<void> {
-    const drained = this.buffer.tryDrain(ctx.threadId, this.resolveBufferMode());
+  private async injectBufferedMessages(
+    behavior: EffectiveAgentConfig['behavior'],
+    state: LLMState,
+    ctx: LLMContext,
+  ): Promise<void> {
+    const mode = behavior.processBuffer === 'oneByOne' ? ProcessBuffer.OneByOne : ProcessBuffer.AllTogether;
+    const drained = this.buffer.tryDrain(ctx.threadId, mode);
     if (drained.length === 0) return;
 
     this.logger.debug?.(
@@ -165,6 +196,99 @@ export class AgentNode extends Node<AgentStaticConfig> {
 
     await this.getPersistence().recordInjected(ctx.runId, drained, { threadId: ctx.threadId });
     state.messages.push(...drained);
+  }
+
+  private resolveBufferModeFromBehavior(behavior?: EffectiveAgentConfig['behavior']): ProcessBuffer {
+    const mode = behavior?.processBuffer ?? this.config.processBuffer ?? 'allTogether';
+    return mode === 'oneByOne' ? ProcessBuffer.OneByOne : ProcessBuffer.AllTogether;
+  }
+
+  private collectSnapshotTools(): ThreadConfigSnapshotTool[] {
+    const tools = new Map<string, ThreadConfigSnapshotTool>();
+    for (const tool of this.tools) {
+      if (tool instanceof LocalMCPServerTool) {
+        tools.set(tool.name, {
+          name: tool.name,
+          namespace: tool.node.namespace ?? null,
+          kind: 'mcp',
+        });
+      } else {
+        tools.set(tool.name, {
+          name: tool.name,
+          namespace: null,
+          kind: 'native',
+        });
+      }
+    }
+    return Array.from(tools.values()).sort((a, b) => a.name.localeCompare(b.name));
+  }
+
+  private async buildThreadConfigSnapshotCandidate(agentNodeId: string): Promise<ThreadConfigSnapshot> {
+    const graphMeta = await this.getPersistence().getActiveGraphMeta();
+    const memoryPlacement: ThreadConfigSnapshot['memory']['placement'] = this.memoryConnector
+      ? this.memoryConnector.getPlacement()
+      : 'none';
+
+    return {
+      version: THREAD_CONFIG_SNAPSHOT_VERSION,
+      agentNodeId,
+      graph: graphMeta,
+      llm: {
+        provider: this.configService.llmProvider,
+        model: this.config.model ?? 'gpt-5',
+      },
+      prompts: {
+        system: this.config.systemPrompt ?? DEFAULT_SYSTEM_PROMPT,
+        summarization: DEFAULT_SUMMARIZATION_PROMPT,
+      },
+      summarization: {
+        keepTokens: this.config.summarizationKeepTokens ?? 0,
+        maxTokens: this.config.summarizationMaxTokens ?? 512,
+      },
+      behavior: {
+        debounceMs: this.config.debounceMs ?? 0,
+        whenBusy: this.config.whenBusy ?? 'wait',
+        processBuffer: this.config.processBuffer ?? 'allTogether',
+        restrictOutput: this.config.restrictOutput ?? false,
+        restrictionMessage: this.config.restrictionMessage ?? DEFAULT_RESTRICTION_MESSAGE,
+        restrictionMaxInjections: this.config.restrictionMaxInjections ?? 0,
+      },
+      tools: {
+        allowed: this.collectSnapshotTools(),
+      },
+      memory: {
+        placement: memoryPlacement,
+      },
+    } satisfies ThreadConfigSnapshot;
+  }
+
+  private toEffectiveConfig(snapshot: ThreadConfigSnapshot): EffectiveAgentConfig {
+    return {
+      model: snapshot.llm.model,
+      prompts: { ...snapshot.prompts },
+      summarization: { ...snapshot.summarization },
+      behavior: { ...snapshot.behavior },
+      memoryPlacement: snapshot.memory.placement,
+      allowedTools: [...snapshot.tools.allowed],
+    };
+  }
+
+  private filterToolsForSnapshot(
+    tools: FunctionTool[],
+    allowed: ThreadConfigSnapshotTool[],
+  ): { filteredTools: FunctionTool[]; missing: string[] } {
+    const byName = new Map<string, FunctionTool>();
+    for (const tool of tools) {
+      if (!byName.has(tool.name)) byName.set(tool.name, tool);
+    }
+    const filtered: FunctionTool[] = [];
+    const missing: string[] = [];
+    for (const entry of allowed) {
+      const tool = byName.get(entry.name);
+      if (tool) filtered.push(tool);
+      else missing.push(entry.name);
+    }
+    return { filteredTools: filtered, missing };
   }
 
   // ---- Node identity ----
@@ -204,39 +328,40 @@ export class AgentNode extends Node<AgentStaticConfig> {
     };
   }
 
-  private async prepareLoop(): Promise<Loop<LLMState, LLMContext>> {
+  protected async prepareLoop(tools: FunctionTool[], effective: EffectiveAgentConfig): Promise<Loop<LLMState, LLMContext>> {
     const llm = await this.llmProvisioner.getLLM();
     const reducers: Record<string, Reducer<LLMState, LLMContext>> = {};
-    const tools = Array.from(this.tools);
-    // load -> summarize
+
     reducers['load'] = (await this.moduleRef.create(LoadLLMReducer)).next(
       (await this.moduleRef.create(StaticLLMRouter)).init('summarize'),
     );
 
-    // summarize -> call_model
     const summarize = await this.moduleRef.create(SummarizationLLMReducer);
     await summarize.init({
-      model: this.config.model ?? 'gpt-5',
-      keepTokens: this.config.summarizationKeepTokens ?? 1000,
-      maxTokens: this.config.summarizationMaxTokens ?? 10000,
-      systemPrompt:
-        'You update a running summary of a conversation. Keep key facts, goals, decisions, constraints, names, deadlines, and follow-ups. Be concise; use compact sentences; omit chit-chat. Structure summary with 3 high level sections: initial task, plan (if any), context (progress, findings, observations).',
+      model: effective.model,
+      keepTokens: effective.summarization.keepTokens,
+      maxTokens: effective.summarization.maxTokens,
+      systemPrompt: effective.prompts.summarization,
     });
     reducers['summarize'] = summarize.next((await this.moduleRef.create(StaticLLMRouter)).init('call_model'));
 
-    // call_model -> branch (call_tools | save)
     const callModel = await this.moduleRef.create(CallModelLLMReducer);
     callModel.init({
       llm,
-      model: this.config.model ?? 'gpt-5',
-      systemPrompt: this.config.systemPrompt ?? 'You are a helpful AI assistant.',
+      model: effective.model,
+      systemPrompt: effective.prompts.system,
       tools,
       memoryProvider: async (ctx) => {
-        if (!this.memoryConnector) return null;
+        if (effective.memoryPlacement === 'none') return null;
+        if (!this.memoryConnector) {
+          this.logger.warn?.(
+            `[Agent: ${this.config.title ?? this.nodeId}] Snapshot memory placement '${effective.memoryPlacement}' but no memory connector attached; skipping memory injection for thread ${ctx.threadId}.`,
+          );
+          return null;
+        }
         const msg = await this.memoryConnector.renderMessage({ threadId: ctx.threadId });
         if (!msg) return null;
-        const place = this.memoryConnector.getPlacement();
-        return { msg, place };
+        return { msg, place: effective.memoryPlacement };
       },
     });
     reducers['call_model'] = callModel.next(
@@ -249,25 +374,23 @@ export class AgentNode extends Node<AgentStaticConfig> {
       }),
     );
 
-    // call_tools -> tools_save (static)
     const callTools = await this.moduleRef.create(CallToolsLLMReducer);
     await callTools.init({ tools });
-    // Inject queued messages at boundary whenBusy=injectAfterTools
     const toolsRouter = await this.moduleRef.create(StaticLLMRouter);
     toolsRouter.init('tools_save');
     callTools.next(toolsRouter);
     reducers['call_tools'] = callTools;
 
-    // tools_save -> branch (summarize | exit)
     const toolsSave = await this.moduleRef.create(SaveLLMReducer);
     const agent = this;
+    const behavior = effective.behavior;
     class AfterToolsRouter extends Router<LLMState, LLMContext> {
       async route(state: LLMState, ctx: LLMContext): Promise<{ state: LLMState; next: string | null }> {
         if (ctx.finishSignal.isActive) {
           return { state, next: null };
         }
-        if ((agent.config.whenBusy ?? 'wait') === 'injectAfterTools') {
-          await agent.injectBufferedMessages(state, ctx);
+        if (behavior.whenBusy === 'injectAfterTools') {
+          await agent.injectBufferedMessages(behavior, state, ctx);
         }
         return { state, next: 'summarize' };
       }
@@ -275,15 +398,13 @@ export class AgentNode extends Node<AgentStaticConfig> {
     toolsSave.next(new AfterToolsRouter());
     reducers['tools_save'] = toolsSave;
 
-    // save -> enforceTools (if enabled) or end (static)
     reducers['save'] = (await this.moduleRef.create(SaveLLMReducer)).next(
       (await this.moduleRef.create(ConditionalLLMRouter)).init((_state, _ctx) =>
-        this.config.restrictOutput ? 'enforceTools' : null,
+        behavior.restrictOutput ? 'enforceTools' : null,
       ),
     );
 
-    // enforceTools -> summarize OR end (conditional) if enabled
-    if (this.config.restrictOutput) {
+    if (behavior.restrictOutput) {
       reducers['enforceTools'] = (await this.moduleRef.create(EnforceToolsLLMReducer)).next(
         (await this.moduleRef.create(ConditionalLLMRouter)).init((state) => {
           const injected = state.meta?.restrictionInjected === true;
@@ -294,11 +415,9 @@ export class AgentNode extends Node<AgentStaticConfig> {
       );
     }
 
-    const loop = new Loop<LLMState, LLMContext>(reducers);
-    return loop;
+    return new Loop<LLMState, LLMContext>(reducers);
   }
   async invoke(thread: string, messages: BufferMessage[]): Promise<ResponseMessage | ToolCallOutputMessage> {
-    this.buffer.setDebounceMs(this.config.debounceMs ?? 0);
     const busy = this.runningThreads.has(thread);
     if (busy) {
       this.buffer.enqueue(thread, messages);
@@ -307,34 +426,75 @@ export class AgentNode extends Node<AgentStaticConfig> {
 
     this.runningThreads.add(thread);
     let result: ResponseMessage | ToolCallOutputMessage;
-    // Begin run deterministically; persistence must succeed or throw
     let runId: string | undefined;
     let terminateSignal: Signal | undefined;
+    let effectiveBehavior: EffectiveAgentConfig['behavior'] | undefined;
     try {
-      // Begin run with strictly-typed input messages for persistent threadId
-      const started = await this.getPersistence().beginRunThread(thread, messages);
+      const persistence = this.getPersistence();
+      const started = await persistence.beginRunThread(thread, messages);
       runId = started.runId;
       if (!runId) throw new Error('run_start_failed');
       const ensuredRunId = runId;
 
+      const agentNodeId = this.getAgentNodeId();
+      if (!agentNodeId) throw new Error('agent_node_id_missing');
+
+      const snapshotCandidate = await this.buildThreadConfigSnapshotCandidate(agentNodeId);
+      const ensuredSnapshot = await persistence.ensureThreadConfigSnapshot({
+        threadId: thread,
+        agentNodeId,
+        snapshot: snapshotCandidate,
+      });
+      const snapshot = ensuredSnapshot.snapshot;
+      if (!snapshot) throw new Error('thread_snapshot_unavailable');
+
+      const effective = this.toEffectiveConfig(snapshot);
+      effectiveBehavior = effective.behavior;
+
+      this.buffer.setDebounceMs(effective.behavior.debounceMs);
+
+      const { filteredTools, missing } = this.filterToolsForSnapshot(Array.from(this.tools), effective.allowedTools);
+      if (missing.length > 0) {
+        this.logger.warn?.(
+          `[Agent: ${this.config.title ?? this.nodeId}] Snapshot missing ${missing.join(', ')} for thread ${thread}; run ${ensuredRunId} will proceed without them.`,
+        );
+        for (const toolName of missing) {
+          await persistence.recordSnapshotToolWarning({
+            runId: ensuredRunId,
+            threadId: thread,
+            toolName,
+            agentNodeId,
+            allowedTools: effective.allowedTools.map((t) => t.name),
+          });
+        }
+      }
+
       terminateSignal = new Signal();
       this.getRunSignals().register(ensuredRunId, terminateSignal);
 
-      const loop = await this.prepareLoop();
-
+      const loop = await this.prepareLoop(filteredTools, effective);
       const finishSignal = new Signal();
+      const callerAgent: CallerAgent = {
+        getAgentNodeId: () => agentNodeId,
+        invoke: this.invoke.bind(this),
+        config: {
+          restrictOutput: effective.behavior.restrictOutput,
+          restrictionMaxInjections: effective.behavior.restrictionMaxInjections,
+          restrictionMessage: effective.behavior.restrictionMessage,
+        },
+      };
+
       const newState = await loop.invoke(
         { messages, context: { messageIds: [], memory: [] } },
-        { threadId: thread, runId: ensuredRunId, finishSignal, terminateSignal, callerAgent: this },
+        { threadId: thread, runId: ensuredRunId, finishSignal, terminateSignal, callerAgent },
         { start: 'load' },
       );
 
       if (terminateSignal.isActive) {
-        await this.getPersistence().completeRun(ensuredRunId, 'terminated', []);
+        await persistence.completeRun(ensuredRunId, 'terminated', []);
         result = ResponseMessage.fromText('terminated');
       } else {
         const last = newState.messages.at(-1);
-
         const isToolResult = finishSignal.isActive && last instanceof ToolCallOutputMessage;
         const isResponseResult = last instanceof ResponseMessage;
         if (!isToolResult && !isResponseResult) {
@@ -346,15 +506,14 @@ export class AgentNode extends Node<AgentStaticConfig> {
           const outputs: Array<AIMessage | ToolCallMessage> = last.output.filter(
             (o) => o instanceof AIMessage || o instanceof ToolCallMessage,
           ) as Array<AIMessage | ToolCallMessage>;
-          await this.getPersistence().completeRun(ensuredRunId, 'finished', outputs);
+          await persistence.completeRun(ensuredRunId, 'finished', outputs);
         } else {
-          await this.getPersistence().completeRun(ensuredRunId, 'finished', [last]);
+          await persistence.completeRun(ensuredRunId, 'finished', [last]);
         }
 
         result = last;
       }
     } catch (err) {
-      // Log and propagate; do not wrap persistence in try/catch
       this.logger.error(`Agent invocation error in thread ${thread}:`, err);
       throw err;
     } finally {
@@ -362,8 +521,7 @@ export class AgentNode extends Node<AgentStaticConfig> {
       if (runId) this.getRunSignals().clear(runId);
     }
 
-    const nextMessages = this.buffer.tryDrain(thread, this.resolveBufferMode());
-
+    const nextMessages = this.buffer.tryDrain(thread, this.resolveBufferModeFromBehavior(effectiveBehavior));
     if (nextMessages.length > 0) {
       void this.invoke(thread, nextMessages);
     }

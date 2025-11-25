@@ -189,4 +189,69 @@ describe('AgentsThreadsController list endpoints', () => {
     const ctrl = await module.resolve(AgentsThreadsController);
     await expect(ctrl.getThread('missing', {} as any)).rejects.toThrowError('thread_not_found');
   });
+
+  it('getThreadConfigSnapshot returns persisted snapshot payload', async () => {
+    const snapshot = {
+      version: 1,
+      agentNodeId: 'agent-node',
+      graph: { name: 'main', version: 2, updatedAt: '2025-02-03T00:00:00.000Z' },
+      llm: { provider: 'openai', model: 'gpt-5' },
+      prompts: { system: 'You are a helpful AI assistant.', summarization: 'summary' },
+      summarization: { keepTokens: 0, maxTokens: 512 },
+      behavior: {
+        debounceMs: 0,
+        whenBusy: 'wait' as const,
+        processBuffer: 'allTogether' as const,
+        restrictOutput: false,
+        restrictionMessage: 'default',
+        restrictionMaxInjections: 0,
+      },
+      tools: { allowed: [] },
+      memory: { placement: 'none' as const },
+    };
+    const persistence = {
+      getThreadConfigSnapshot: vi.fn(async () => ({
+        agentNodeId: 'agent-node',
+        snapshotAt: new Date('2025-02-03T00:00:01Z'),
+        snapshot,
+      })),
+    } as unknown as AgentsPersistenceService;
+
+    const module = await Test.createTestingModule({
+      controllers: [AgentsThreadsController],
+      providers: [
+        { provide: AgentsPersistenceService, useValue: persistence },
+        { provide: ContainerThreadTerminationService, useValue: { terminateByThread: vi.fn() } },
+        { provide: RunEventsService, useValue: runEventsStub },
+        { provide: RunSignalsRegistry, useValue: { register: vi.fn(), activateTerminate: vi.fn(), clear: vi.fn() } },
+      ],
+    }).compile();
+
+    const ctrl = await module.resolve(AgentsThreadsController);
+    const res = await ctrl.getThreadConfigSnapshot('thread-1');
+    expect(res).toEqual({
+      agentNodeId: 'agent-node',
+      snapshotAt: '2025-02-03T00:00:01.000Z',
+      snapshot,
+    });
+  });
+
+  it('getThreadConfigSnapshot throws when snapshot missing', async () => {
+    const persistence = {
+      getThreadConfigSnapshot: vi.fn(async () => ({ agentNodeId: null, snapshotAt: null, snapshot: null })),
+    } as unknown as AgentsPersistenceService;
+
+    const module = await Test.createTestingModule({
+      controllers: [AgentsThreadsController],
+      providers: [
+        { provide: AgentsPersistenceService, useValue: persistence },
+        { provide: ContainerThreadTerminationService, useValue: { terminateByThread: vi.fn() } },
+        { provide: RunEventsService, useValue: runEventsStub },
+        { provide: RunSignalsRegistry, useValue: { register: vi.fn(), activateTerminate: vi.fn(), clear: vi.fn() } },
+      ],
+    }).compile();
+
+    const ctrl = await module.resolve(AgentsThreadsController);
+    await expect(ctrl.getThreadConfigSnapshot('thread-1')).rejects.toThrowError('thread_config_snapshot_not_found');
+  });
 });

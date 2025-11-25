@@ -105,6 +105,15 @@ describe('AppModule bootstrap smoke test', () => {
       recordInjected: vi.fn().mockResolvedValue({ messageIds: [] }),
       completeRun: vi.fn(),
       resolveThreadId: vi.fn().mockResolvedValue('thread'),
+      getActiveGraphMeta: vi.fn().mockResolvedValue({ name: 'main', version: 1, updatedAt: new Date().toISOString() }),
+      ensureThreadConfigSnapshot: vi
+        .fn()
+        .mockImplementation(async (params: { agentNodeId: string; snapshot: unknown }) => ({
+          agentNodeId: params.agentNodeId,
+          snapshot: params.snapshot,
+          snapshotAt: new Date(),
+        })),
+      recordSnapshotToolWarning: vi.fn(),
     } satisfies Partial<AgentsPersistenceService>;
 
     const threadsMetricsStub = {

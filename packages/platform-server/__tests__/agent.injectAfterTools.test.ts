@@ -4,7 +4,7 @@ import { Injectable } from '@nestjs/common';
 
 import { AgentNode } from '../src/nodes/agent/agent.node';
 import { LoggerService } from '../src/core/services/logger.service';
-import { ConfigService } from '../src/core/services/config.service';
+import { ConfigService, configSchema } from '../src/core/services/config.service';
 import { LLMProvisioner } from '../src/llm/provisioners/llm.provisioner';
 import { RunSignalsRegistry } from '../src/agents/run-signals.service';
 import { AgentsPersistenceService } from '../src/agents/agents.persistence.service';
@@ -58,7 +58,7 @@ class EndRouter extends Router<LLMState, LLMContext> {
 
 @Injectable()
 class TestAgentNode extends AgentNode {
-  protected override async prepareLoop(): Promise<Loop<LLMState, LLMContext>> {
+  protected override async prepareLoop(_tools: unknown[], effective: any): Promise<Loop<LLMState, LLMContext>> {
     const load = new PassThroughReducer();
     load.next(new NextRouter('call_tools'));
 
@@ -67,16 +67,23 @@ class TestAgentNode extends AgentNode {
 
     const toolsSave = new PassThroughReducer();
     const agent = this;
+    const behavior = effective?.behavior ?? {
+      debounceMs: 0,
+      whenBusy: 'wait',
+      processBuffer: 'allTogether',
+      restrictOutput: false,
+      restrictionMessage: '',
+      restrictionMaxInjections: 0,
+    };
     class AfterToolsRouter extends Router<LLMState, LLMContext> {
       async route(state: LLMState, ctx: LLMContext): Promise<{ state: LLMState; next: string | null }> {
         if (ctx.finishSignal.isActive) {
           return { state, next: null };
         }
         if ((agent.config.whenBusy ?? 'wait') === 'injectAfterTools') {
-          await (agent as unknown as { injectBufferedMessages(state: LLMState, ctx: LLMContext): Promise<void> }).injectBufferedMessages(
-            state,
-            ctx,
-          );
+          await (agent as unknown as {
+            injectBufferedMessages(behavior: any, state: LLMState, ctx: LLMContext): Promise<void>;
+          }).injectBufferedMessages(behavior, state, ctx);
         }
         return { state, next: 'call_model' };
       }
@@ -101,18 +108,37 @@ const createAgentFixture = async () => {
   const recordInjected = vi.fn(async () => ({ messageIds: [] }));
   const completeRun = vi.fn(async () => {});
   const getLLM = vi.fn(async () => ({ call: vi.fn(async () => ({ text: 'ok', output: [] })) }));
+  const ensureThreadConfigSnapshot = vi.fn(async (params: { agentNodeId: string; snapshot: unknown }) => ({
+    agentNodeId: params.agentNodeId,
+    snapshot: params.snapshot,
+    snapshotAt: new Date(),
+  }));
+  const getActiveGraphMeta = vi.fn(async () => ({ name: 'main', version: 1, updatedAt: new Date().toISOString() }));
+  const recordSnapshotToolWarning = vi.fn(async () => {});
 
   const moduleRef = await Test.createTestingModule({
     providers: [
       LoggerService,
-      ConfigService,
+      {
+        provide: ConfigService,
+        useValue: new ConfigService().init(
+          configSchema.parse({ llmProvider: 'openai', agentsDatabaseUrl: 'postgres://user:pass@host/db' }),
+        ),
+      },
       TestAgentNode,
       RunSignalsRegistry,
       { provide: AgentNode, useExisting: TestAgentNode },
       { provide: LLMProvisioner, useValue: { getLLM } },
       {
         provide: AgentsPersistenceService,
-        useValue: { beginRunThread, recordInjected, completeRun },
+        useValue: {
+          beginRunThread,
+          recordInjected,
+          completeRun,
+          ensureThreadConfigSnapshot,
+          getActiveGraphMeta,
+          recordSnapshotToolWarning,
+        },
       },
     ],
   }).compile();
@@ -120,7 +146,16 @@ const createAgentFixture = async () => {
   const agent = await moduleRef.resolve(TestAgentNode);
   agent.init({ nodeId: 'agent-test' });
 
-  return { moduleRef, agent, beginRunThread, recordInjected, completeRun };
+  return {
+    moduleRef,
+    agent,
+    beginRunThread,
+    recordInjected,
+    completeRun,
+    ensureThreadConfigSnapshot,
+    getActiveGraphMeta,
+    recordSnapshotToolWarning,
+  };
 };
 
 const getCallModelInputs = () => StubCallModelReducer.instances.flatMap((instance) => instance.calls);

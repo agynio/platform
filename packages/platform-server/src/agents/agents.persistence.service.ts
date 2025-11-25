@@ -12,6 +12,12 @@ import { RunEventsService } from '../events/run-events.service';
 import { EventsBusService } from '../events/events-bus.service';
 import { CallAgentLinkingService } from './call-agent-linking.service';
 import { ThreadsMetricsService, type ThreadMetrics } from './threads.metrics.service';
+import {
+  THREAD_CONFIG_SNAPSHOT_VERSION,
+  parseThreadConfigSnapshot,
+  type ThreadConfigSnapshot,
+  type ThreadConfigSnapshotRecord,
+} from './thread-config.snapshot';
 
 export type RunStartResult = { runId: string };
 
@@ -37,6 +43,145 @@ export class AgentsPersistenceService {
 
   private sanitizeSummary(summary: string | null | undefined): string {
     return (summary ?? '').trim().slice(0, 256);
+  }
+
+  async getActiveGraphMeta(): Promise<{ name: string; version: number; updatedAt: string }> {
+    try {
+      const graph = await this.graphs.get('main');
+      if (graph) {
+        return { name: graph.name, version: graph.version, updatedAt: graph.updatedAt };
+      }
+    } catch (err) {
+      this.logger.warn('AgentsPersistenceService.getActiveGraphMeta failed; using defaults', err);
+    }
+    return { name: 'main', version: 0, updatedAt: new Date().toISOString() };
+  }
+
+  async getThreadConfigSnapshot(threadId: string): Promise<ThreadConfigSnapshotRecord | null> {
+    const row = await this.prisma.thread.findUnique({
+      where: { id: threadId },
+      select: {
+        agentNodeId: true,
+        agentConfigSnapshot: true,
+        configSnapshotAt: true,
+      },
+    });
+    if (!row) return null;
+    const snapshot = parseThreadConfigSnapshot(row.agentConfigSnapshot);
+    return {
+      agentNodeId: row.agentNodeId ?? null,
+      snapshot,
+      snapshotAt: row.configSnapshotAt ?? null,
+    };
+  }
+
+  async ensureThreadConfigSnapshot(params: {
+    threadId: string;
+    agentNodeId: string;
+    snapshot: ThreadConfigSnapshot;
+  }): Promise<ThreadConfigSnapshotRecord> {
+    const { threadId, agentNodeId, snapshot } = params;
+    if (!agentNodeId) throw new Error('agent_node_id_required');
+    if (snapshot.version !== THREAD_CONFIG_SNAPSHOT_VERSION) {
+      throw new Error(`unsupported_snapshot_version_${snapshot.version}`);
+    }
+
+    return this.prisma.$transaction(async (tx) => {
+      const existing = await tx.thread.findUnique({
+        where: { id: threadId },
+        select: {
+          agentNodeId: true,
+          agentConfigSnapshot: true,
+          configSnapshotAt: true,
+        },
+      });
+      if (!existing) throw new Error('thread_not_found');
+
+      const parsed = parseThreadConfigSnapshot(existing.agentConfigSnapshot);
+      if (parsed && existing.configSnapshotAt) {
+        if (!existing.agentNodeId) {
+          await tx.thread.update({ where: { id: threadId }, data: { agentNodeId } });
+          existing.agentNodeId = agentNodeId;
+        }
+        if (existing.agentNodeId && existing.agentNodeId !== parsed.agentNodeId) {
+          this.logger.warn('Thread snapshot agent node mismatch', {
+            threadId,
+            snapshotAgentNodeId: parsed.agentNodeId,
+            currentAgentNodeId: existing.agentNodeId,
+          });
+        }
+        return {
+          agentNodeId: existing.agentNodeId ?? null,
+          snapshot: parsed,
+          snapshotAt: existing.configSnapshotAt,
+        };
+      }
+
+      const stored = await tx.thread.update({
+        where: { id: threadId },
+        data: {
+          agentNodeId,
+          agentConfigSnapshot: toPrismaJsonValue(snapshot),
+          configSnapshotAt: new Date(),
+        },
+        select: {
+          agentNodeId: true,
+          agentConfigSnapshot: true,
+          configSnapshotAt: true,
+        },
+      });
+
+      const persisted = parseThreadConfigSnapshot(stored.agentConfigSnapshot);
+      if (!persisted) throw new Error('snapshot_persist_failed');
+
+      return {
+        agentNodeId: stored.agentNodeId ?? null,
+        snapshot: persisted,
+        snapshotAt: stored.configSnapshotAt ?? null,
+      };
+    });
+  }
+
+  async recordSnapshotToolWarning(params: {
+    runId: string;
+    threadId: string;
+    toolName: string;
+    agentNodeId: string;
+    allowedTools: string[];
+  }): Promise<void> {
+    const { runId, threadId, toolName, agentNodeId, allowedTools } = params;
+    await this.prisma.$transaction(async (tx) => {
+      const message = await tx.message.create({
+        data: {
+          kind: 'system' as MessageKind,
+          text: `Snapshot tool '${toolName}' is no longer available; run constrained to recorded tools.`,
+          source: toPrismaJsonValue({
+            type: 'warning',
+            code: 'snapshot_tool_missing',
+            tool: toolName,
+            agentNodeId,
+            allowedTools,
+          }),
+        },
+      });
+
+      const event = await this.runEvents.recordInvocationMessage({
+        tx,
+        runId,
+        threadId,
+        messageId: message.id,
+        role: 'system',
+        metadata: toPrismaJsonValue({
+          category: 'warning',
+          code: 'snapshot_tool_missing',
+          tool: toolName,
+          agentNodeId,
+          allowedTools,
+        }),
+      });
+
+      await this.eventsBus.publishEvent(event.id, 'append');
+    });
   }
 
   /**

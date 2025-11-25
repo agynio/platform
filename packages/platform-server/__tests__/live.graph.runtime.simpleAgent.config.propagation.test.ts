@@ -86,6 +86,13 @@ describe('LiveGraphRuntime -> Agent config propagation', () => {
             beginRunThread: async () => ({ runId: 't' }),
             recordInjected: async () => ({ messageIds: [] }),
             completeRun: async () => {},
+            getActiveGraphMeta: async () => ({ name: 'main', version: 1, updatedAt: new Date().toISOString() }),
+            ensureThreadConfigSnapshot: async (params: { agentNodeId: string; snapshot: unknown }) => ({
+              agentNodeId: params.agentNodeId,
+              snapshot: params.snapshot,
+              snapshotAt: new Date(),
+            }),
+            recordSnapshotToolWarning: async () => {},
           },
         },
         RunSignalsRegistry,

@@ -225,6 +225,17 @@ export class AgentsThreadsController {
     return { items: runs };
   }
 
+  @Get('threads/:threadId/config')
+  async getThreadConfigSnapshot(@Param('threadId') threadId: string) {
+    const record = await this.persistence.getThreadConfigSnapshot(threadId);
+    if (!record || !record.snapshot) throw new NotFoundException('thread_config_snapshot_not_found');
+    return {
+      agentNodeId: record.agentNodeId,
+      snapshotAt: record.snapshotAt?.toISOString() ?? null,
+      snapshot: record.snapshot,
+    };
+  }
+
   @Get('runs/:runId/messages')
   async listRunMessages(@Param('runId') runId: string, @Query() query: ListRunMessagesQueryDto) {
     const items = await this.persistence.listRunMessages(runId, query.type);

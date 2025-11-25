@@ -29,9 +29,18 @@ describe('Fail-fast behavior', () => {
         {
           provide: AgentsPersistenceService,
           useValue: {
-            beginRunThread: async () => { throw new Error('persistence_fail'); },
+            beginRunThread: async () => {
+              throw new Error('persistence_fail');
+            },
+            getActiveGraphMeta: async () => ({ name: 'main', version: 1, updatedAt: new Date().toISOString() }),
+            ensureThreadConfigSnapshot: async (params: { agentNodeId: string; snapshot: unknown }) => ({
+              agentNodeId: params.agentNodeId,
+              snapshot: params.snapshot,
+              snapshotAt: new Date(),
+            }),
             recordInjected: async () => ({ messageIds: [] }),
             completeRun: async () => {},
+            recordSnapshotToolWarning: vi.fn(),
           },
         },
         { provide: RunSignalsRegistry, useValue: { register: vi.fn(), activateTerminate: vi.fn(), clear: vi.fn() } },

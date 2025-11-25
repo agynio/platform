@@ -1,8 +1,8 @@
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { Test } from '@nestjs/testing';
 import { LoggerService } from '../src/core/services/logger.service';
-import { ConfigService } from '../src/core/services/config.service';
+import { ConfigService, configSchema } from '../src/core/services/config.service';
 import { AgentNode } from '../src/nodes/agent/agent.node';
 import { AIMessage, HumanMessage, ResponseMessage } from '@agyn/llm';
 import { Loop, Reducer } from '@agyn/llm';
@@ -13,6 +13,7 @@ import { RunSignalsRegistry } from '../src/agents/run-signals.service';
 
 class PassthroughReducer extends Reducer<LLMState, LLMContext> {
   async invoke(state: LLMState): Promise<LLMState> {
+    await new Promise((resolve) => setTimeout(resolve, 5));
     return {
       ...state,
       messages: [...state.messages, new ResponseMessage({ output: [AIMessage.fromText('done').toPlain()] })],
@@ -23,7 +24,7 @@ class PassthroughReducer extends Reducer<LLMState, LLMContext> {
 
 class NoToolAgent extends AgentNode {
   starts = 0;
-  protected override async prepareLoop(): Promise<Loop<LLMState, LLMContext>> {
+  protected override async prepareLoop(_tools: unknown[], _effective: any): Promise<Loop<LLMState, LLMContext>> {
     this.starts += 1;
     return new Loop<LLMState, LLMContext>({ load: new PassthroughReducer() });
   }
@@ -31,18 +32,33 @@ class NoToolAgent extends AgentNode {
 
 describe('Agent busy gating (wait mode)', () => {
   it('does not start a new loop while running; schedules next after finish', async () => {
+    const beginRunThread = vi.fn(async () => ({ runId: 't' }));
+    const completeRun = vi.fn(async () => {});
+
     const module = await Test.createTestingModule({
       providers: [
         LoggerService,
-        ConfigService,
+        {
+          provide: ConfigService,
+          useValue: new ConfigService().init(
+            configSchema.parse({ llmProvider: 'openai', agentsDatabaseUrl: 'postgres://user:pass@host/db' }),
+          ),
+        },
         { provide: LLMProvisioner, useValue: {} },
         NoToolAgent,
         {
           provide: AgentsPersistenceService,
           useValue: {
-            beginRunThread: async () => ({ runId: 't' }),
+            beginRunThread,
             recordInjected: async () => ({ messageIds: [] }),
-            completeRun: async () => {},
+            completeRun,
+            getActiveGraphMeta: async () => ({ name: 'main', version: 1, updatedAt: new Date().toISOString() }),
+            ensureThreadConfigSnapshot: async (params: { agentNodeId: string; snapshot: unknown }) => ({
+              agentNodeId: params.agentNodeId,
+              snapshot: params.snapshot,
+              snapshotAt: new Date(),
+            }),
+            recordSnapshotToolWarning: async () => {},
           },
         },
         RunSignalsRegistry,
@@ -56,12 +72,12 @@ describe('Agent busy gating (wait mode)', () => {
     // Immediately enqueue another message; should not start a second run now
     const p2 = agent.invoke('t', [HumanMessage.fromText('m2')]);
     const r2 = await p2; // queued response
-    expect(agent.starts).toBe(1);
+    expect(beginRunThread).toHaveBeenCalledTimes(1);
     expect(r2.text).toBe('queued');
     const r1 = await p1; // first run completes
     expect(r1.text).toBe('done');
 
-    await new Promise((r) => setTimeout(r, 50));
-    expect(agent.starts).toBeGreaterThanOrEqual(2);
+    await new Promise((r) => setTimeout(r, 20));
+    expect(beginRunThread).toHaveBeenCalledTimes(2);
   });
 });
