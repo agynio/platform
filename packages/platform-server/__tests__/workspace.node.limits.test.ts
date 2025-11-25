@@ -39,6 +39,7 @@ async function createWorkspaceNode(config: Partial<ContainerProviderStaticConfig
     dockerMirrorUrl: undefined,
     ncpsEnabled: false,
     ncpsUrl: undefined,
+    workspaceNetworkName: 'agents_net',
   } as unknown as ConfigService;
 
   const ncpsKeyService = {
@@ -70,10 +71,17 @@ describe('WorkspaceNode resource limits', () => {
 
     expect(startMock).toHaveBeenCalledTimes(1);
     const startArgs = startMock.mock.calls[0][0];
-    expect(startArgs.createExtras).toEqual({
+    expect(startArgs.createExtras).toMatchObject({
       HostConfig: {
         NanoCPUs: 500_000_000,
         Memory: 536_870_912,
+      },
+      NetworkingConfig: {
+        EndpointsConfig: {
+          agents_net: {
+            Aliases: ['thread-1'],
+          },
+        },
       },
     });
     expect(logger.warn).not.toHaveBeenCalled();
@@ -88,10 +96,17 @@ describe('WorkspaceNode resource limits', () => {
     await node.provide('thread-2');
 
     const startArgs = startMock.mock.calls[0][0];
-    expect(startArgs.createExtras).toEqual({
+    expect(startArgs.createExtras).toMatchObject({
       HostConfig: {
         NanoCPUs: 750_000_000,
         Memory: 1_073_741_824,
+      },
+      NetworkingConfig: {
+        EndpointsConfig: {
+          agents_net: {
+            Aliases: ['thread-2'],
+          },
+        },
       },
     });
   });
@@ -105,7 +120,16 @@ describe('WorkspaceNode resource limits', () => {
     await node.provide('thread-3');
 
     const startArgs = startMock.mock.calls[0][0];
-    expect(startArgs.createExtras).toBeUndefined();
+    expect(startArgs.createExtras?.HostConfig).toBeUndefined();
+    expect(startArgs.createExtras).toMatchObject({
+      NetworkingConfig: {
+        EndpointsConfig: {
+          agents_net: {
+            Aliases: ['thread-3'],
+          },
+        },
+      },
+    });
     expect(logger.warn).toHaveBeenCalledTimes(2);
   });
 });

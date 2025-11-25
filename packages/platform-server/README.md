@@ -9,10 +9,17 @@ Graph persistence
   - GRAPH_AUTHOR_NAME / GRAPH_AUTHOR_EMAIL: default git author (can be overridden per request with headers `x-graph-author-name`/`x-graph-author-email`)
 - On startup, the server initializes `GRAPH_REPO_PATH` as a git repo if missing, ensures branch checkout, seeds root-level per-entity layout (format: 2) with empty `nodes/` and `edges/`, writes `graph.meta.json` for the active graph name (default `main`), and commits the initial state.
  - The existing API `/api/graph` supports GET and POST. POST maintains optimistic locking via the `version` field. Each successful write creates one commit with message `chore(graph): <name> v<version> (+/- nodes, +/- edges)` on the configured branch.
- - Error responses:
+- Error responses:
    - 409 VERSION_CONFLICT with `{ error, current }` body when version mismatch.
    - 409 LOCK_TIMEOUT when advisory lock not acquired within timeout.
-   - 500 COMMIT_FAILED when git commit fails; persistence is rolled back to last committed state.
+  - 500 COMMIT_FAILED when git commit fails; persistence is rolled back to last committed state.
+
+## Networking and cache
+
+- Workspace containers automatically join the Docker network specified by `WORKSPACE_NETWORK_NAME` (default `agents_net`) with an alias derived from the thread id. Ensure this network exists on the host so in-cluster services such as `ncps` resolve.
+- DinD sidecars keep `networkMode=container:<workspaceId>` so the workspace and sidecar share namespaces regardless of the workspace network.
+- Set `NCPS_URL_SERVER` (host-reachable) and `NCPS_URL_CONTAINER` (in-network, e.g., `http://ncps:8501`) together so Nix substituters resolve correctly inside workspaces.
+- When the server injects `NIX_CONFIG`, workspace startup logs the resolved substituters/trusted keys and runs `getent hosts ncps` plus `curl http://ncps:8501/nix-cache-info`, emitting warnings if connectivity fails.
 
 Storage layout (format: 2)
 - Preferred working tree layout is root-level per-entity: `graph.meta.json`, `nodes/`, `edges/`.
