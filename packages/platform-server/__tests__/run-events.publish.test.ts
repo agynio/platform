@@ -2,7 +2,6 @@ import { describe, it, expect, beforeEach, afterAll, afterEach, vi } from 'vites
 import { PrismaClient, ToolExecStatus } from '@prisma/client';
 import { randomUUID } from 'node:crypto';
 import type { PrismaService } from '../src/core/services/prisma.service';
-import type { LoggerService } from '../src/core/services/logger.service';
 import { RunEventsService, type RunTimelineEvent } from '../src/events/run-events.service';
 import { EventsBusService } from '../src/events/events-bus.service';
 import { GraphSocketGateway } from '../src/gateway/graph.socket.gateway';
@@ -21,7 +20,7 @@ maybeDescribe('RunEventsService publishEvent broadcasting', () => {
     debug: () => undefined,
     warn: () => undefined,
     error: () => undefined,
-  } as unknown as LoggerService;
+  };
 
   async function createThreadAndRun() {
     const thread = await prisma.thread.create({ data: { alias: `thread-${randomUUID()}` } });
@@ -40,7 +39,7 @@ maybeDescribe('RunEventsService publishEvent broadcasting', () => {
   let emitRunEventSpy: ReturnType<typeof vi.spyOn>;
 
   beforeEach(async () => {
-    runEvents = new RunEventsService(prismaService, logger);
+    runEvents = new RunEventsService(prismaService);
     eventsBus = new EventsBusService(runEvents);
     const runtime = { subscribe: vi.fn() } as any;
     const metrics = { getThreadsMetrics: vi.fn().mockResolvedValue({}) } as any;

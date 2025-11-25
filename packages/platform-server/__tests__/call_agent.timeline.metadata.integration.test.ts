@@ -30,7 +30,7 @@ if (!shouldRunDbTests) {
   const templateRegistryStub = { toSchema: async () => [], getMeta: () => undefined } as unknown as TemplateRegistry;
   const graphRepoStub = { get: async () => ({ nodes: [], edges: [] }) } as unknown as GraphRepository;
 
-  const runEvents = new RunEventsService(prismaService, logger);
+  const runEvents = new RunEventsService(prismaService);
   const eventsBus = new EventsBusService(runEvents);
   const callAgentLinking = new CallAgentLinkingService(prismaService, runEvents, logger, eventsBus);
   const agents = new AgentsPersistenceService(

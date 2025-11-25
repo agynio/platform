@@ -2,7 +2,6 @@ import { describe, it, expect, afterAll, beforeEach } from 'vitest';
 import { PrismaClient, ContextItemRole } from '@prisma/client';
 import { randomUUID } from 'node:crypto';
 import type { PrismaService } from '../src/core/services/prisma.service';
-import type { LoggerService } from '../src/core/services/logger.service';
 import { RunEventsService } from '../src/events/run-events.service';
 import type { ContextItemInput } from '../src/llm/services/context-items.utils';
 
@@ -18,14 +17,7 @@ if (!shouldRunDbTests) {
 } else {
   const prisma = new PrismaClient({ datasources: { db: { url: databaseUrl! } } });
   const prismaService = { getClient: () => prisma } as unknown as PrismaService;
-  const logger = {
-    info: () => undefined,
-    debug: () => undefined,
-    warn: () => undefined,
-    error: () => undefined,
-  } as unknown as LoggerService;
-
-  const runEvents = new RunEventsService(prismaService, logger);
+  const runEvents = new RunEventsService(prismaService);
 
   async function createThreadAndRun() {
     const thread = await prisma.thread.create({ data: { alias: `thread-${randomUUID()}` } });
