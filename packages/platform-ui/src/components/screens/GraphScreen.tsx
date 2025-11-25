@@ -9,6 +9,7 @@ import { IconButton } from '../IconButton';
 import { GraphCanvas, type GraphCanvasDropContext, type GraphNodeData } from '../GraphCanvas';
 import type { NodeKind } from '../Node';
 import type { SavingStatus } from '../SavingStatusControl';
+import type { GraphNodeConfig, GraphNodeUpdate } from '@/features/graph/types';
 
 const nodeKindToColor: Record<NodeKind, string> = {
   Trigger: 'var(--agyn-yellow)',
@@ -17,14 +18,6 @@ const nodeKindToColor: Record<NodeKind, string> = {
   MCP: 'var(--agyn-cyan)',
   Workspace: 'var(--agyn-purple)',
 };
-
-type NodeStatus =
-  | 'not_ready'
-  | 'provisioning'
-  | 'ready'
-  | 'deprovisioning'
-  | 'provisioning_error'
-  | 'deprovisioning_error';
 
 function GradientEdge(props: EdgeProps<Edge>) {
   const [edgePath] = getBezierPath(props);
@@ -58,23 +51,12 @@ function GradientEdge(props: EdgeProps<Edge>) {
   );
 }
 
-export interface GraphNodeConfig {
-  id: string;
-  kind: NodeKind;
-  title: string;
-  x: number;
-  y: number;
-  status: NodeStatus;
-  data?: Record<string, unknown>;
-  avatarSeed?: string;
-}
-
 interface GraphScreenProps {
   nodes: GraphNodeConfig[];
   onBack?: () => void;
   savingStatus?: SavingStatus;
   savingErrorMessage?: string;
-  onNodeUpdate?: (nodeId: string, updates: Partial<GraphNodeConfig>) => void;
+  onNodeUpdate?: (nodeId: string, updates: GraphNodeUpdate) => void;
 }
 
 export default function GraphScreen({ 
@@ -97,20 +79,8 @@ export default function GraphScreen({
           kind: n.kind,
           title: n.title,
           avatarSeed: n.avatarSeed,
-          // Simple, fixed ports per kind to demonstrate connections
-          inputs:
-            n.kind === 'Trigger'
-              ? []
-              : n.kind === 'Workspace'
-              ? [
-                  { id: `${n.id}-in-config`, title: 'CONFIG' },
-                  { id: `${n.id}-in-artifacts`, title: 'ARTIFACTS' },
-                ]
-              : [{ id: `${n.id}-in`, title: 'IN' }],
-          outputs:
-            n.kind === 'Workspace'
-              ? []
-              : [{ id: `${n.id}-out`, title: 'OUT' }],
+          inputs: n.ports.inputs.map((port) => ({ ...port })),
+          outputs: n.ports.outputs.map((port) => ({ ...port })),
         },
       })),
     [nodeConfigs],
@@ -184,6 +154,8 @@ export default function GraphScreen({
               title: config.title,
               kind: config.kind,
               avatarSeed: config.avatarSeed,
+              inputs: config.ports.inputs.map((port) => ({ ...port })),
+              outputs: config.ports.outputs.map((port) => ({ ...port })),
             },
           };
         }
@@ -290,15 +262,8 @@ export default function GraphScreen({
         {/* Right Sidebar - Node Properties or Empty State */}
         {selectedNode ? (
           <NodePropertiesSidebar
-            config={{
-              kind: selectedNode.kind,
-              title: selectedNode.title,
-              ...selectedNode.data,
-            }}
-            state={{
-              status: selectedNode.status,
-            }}
-            onConfigChange={
+            node={selectedNode}
+            onUpdate={
               onNodeUpdate
                 ? (updates) => {
                     onNodeUpdate(selectedNode.id, updates);

@@ -1,12 +1,13 @@
-import GraphScreen, { type GraphNodeConfig } from '../screens/GraphScreen';
+import GraphScreen from '../screens/GraphScreen';
 import type { SavingStatus } from '../SavingStatusControl';
+import type { GraphNodeConfig, GraphNodeUpdate } from '@/features/graph/types';
 
 interface GraphLayoutProps {
   nodes: GraphNodeConfig[];
   savingStatus: SavingStatus;
   savingErrorMessage?: string | null;
   onBack?: () => void;
-  onNodeUpdate?: (nodeId: string, updates: Partial<GraphNodeConfig>) => void;
+  onNodeUpdate?: (nodeId: string, updates: GraphNodeUpdate) => void;
 }
 
 export function GraphLayout({

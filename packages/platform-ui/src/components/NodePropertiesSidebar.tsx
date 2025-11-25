@@ -1,7 +1,7 @@
 import { useCallback, useMemo, useState } from 'react';
 import Badge from './Badge';
 import { Input } from './Input';
-import type { GraphNodeConfig, GraphNodeUpdate } from './screens/GraphScreen';
+import type { GraphNodeConfig, GraphNodeUpdate } from '@/features/graph/types';
 import { NodeActionButtons } from './graph/NodeActionButtons';
 import { NodeStatusBadges } from './graph/NodeStatusBadges';
 import { ToolItem } from './ToolItem';

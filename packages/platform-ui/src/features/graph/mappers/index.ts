@@ -58,6 +58,57 @@ function deriveTitle(node: GraphPersistedNode, template?: TemplateSchema): strin
   return node.template;
 }
 
+function normalizePortTitle(id: string, definition: unknown): string {
+  if (typeof definition === 'string') {
+    return definition.trim().length > 0 ? definition : id;
+  }
+  if (definition && typeof definition === 'object') {
+    const record = definition as Record<string, unknown>;
+    const title = record.title ?? record.label ?? record.name;
+    if (typeof title === 'string' && title.trim().length > 0) {
+      return title;
+    }
+  }
+  return id;
+}
+
+function toPortList(portDefinition: TemplateSchema['sourcePorts']): GraphNodeConfig['ports']['inputs'] {
+  if (!portDefinition) return [];
+  if (Array.isArray(portDefinition)) {
+    return portDefinition
+      .filter((port): port is string => typeof port === 'string' && port.trim().length > 0)
+      .map((port) => ({ id: port, title: port }));
+  }
+  if (typeof portDefinition === 'object') {
+    const entries = Object.entries(portDefinition as Record<string, unknown>);
+    return entries
+      .filter(([id]) => typeof id === 'string' && id.trim().length > 0)
+      .map(([id, definition]) => ({ id, title: normalizePortTitle(id, definition) }));
+  }
+  return [];
+}
+
+function deriveCapabilities(template?: TemplateSchema): GraphNodeConfig['capabilities'] | undefined {
+  if (!template?.capabilities) {
+    return undefined;
+  }
+  const source = template.capabilities;
+  const result: GraphNodeConfig['capabilities'] = {};
+  if (source.provisionable !== undefined) {
+    result.provisionable = source.provisionable;
+  }
+  if (source.pausable !== undefined) {
+    result.pausable = source.pausable;
+  }
+  if (source.dynamicConfigurable !== undefined) {
+    result.dynamicConfigurable = source.dynamicConfigurable;
+  }
+  if (source.staticConfigurable !== undefined) {
+    result.staticConfigurable = source.staticConfigurable;
+  }
+  return Object.keys(result).length > 0 ? result : undefined;
+}
+
 export function mapPersistedGraphToNodes(
   graph: GraphPersisted,
   templates: TemplateSchema[],
@@ -73,20 +124,31 @@ export function mapPersistedGraphToNodes(
     const tpl = byTemplate.get(node.template);
     const position = normalizePosition(node.position);
     const title = deriveTitle(node, tpl);
+    const config = node.config ? { ...(node.config as Record<string, unknown>) } : undefined;
+    const state = node.state ? { ...(node.state as Record<string, unknown>) } : undefined;
     metadata.set(node.id, {
       template: node.template,
-      config: node.config ? { ...(node.config as Record<string, unknown>) } : undefined,
-      state: node.state ? { ...(node.state as Record<string, unknown>) } : undefined,
+      config,
+      state,
       position,
     });
+    const ports = {
+      inputs: toPortList(tpl?.targetPorts),
+      outputs: toPortList(tpl?.sourcePorts),
+    };
     return {
       id: node.id,
+      template: node.template,
       kind: toNodeKind(tpl?.kind),
       title,
       x: position.x,
       y: position.y,
       status: DEFAULT_STATUS,
-      data: node.config ? { ...(node.config as Record<string, unknown>) } : {},
+      config,
+      state,
+      runtime: undefined,
+      capabilities: deriveCapabilities(tpl),
+      ports,
       avatarSeed: node.id,
     } satisfies GraphNodeConfig;
   });

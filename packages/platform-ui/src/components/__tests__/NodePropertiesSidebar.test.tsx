@@ -1,7 +1,7 @@
 import React from 'react';
 import { render, fireEvent, screen } from '@testing-library/react';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import type { GraphNodeConfig } from '../screens/GraphScreen';
+import type { GraphNodeConfig } from '@/features/graph/types';
 
 const hookMocks = vi.hoisted(() => ({
   useNodeAction: vi.fn(),

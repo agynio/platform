@@ -13,18 +13,27 @@ vi.mock('@/components/screens/GraphScreen', () => ({
 }));
 
 import { GraphLayout } from '@/components/agents/GraphLayout';
+import type { GraphNodeConfig } from '@/features/graph/types';
 
 describe('GraphLayout', () => {
   it('passes props through to GraphScreen without side effects', () => {
-    const nodes = [
+    const nodes: GraphNodeConfig[] = [
       {
         id: 'node-1',
-        kind: 'Agent' as const,
+        template: 'sampleAgent',
+        kind: 'Agent',
         title: 'Agent Node',
         x: 10,
         y: 20,
-        status: 'ready' as const,
-        data: {},
+        status: 'ready',
+        config: { title: 'Agent Node' },
+        state: {},
+        runtime: { provisionStatus: { state: 'ready' }, isPaused: false },
+        capabilities: { provisionable: true },
+        ports: {
+          inputs: [{ id: 'node-1-in', title: 'IN' }],
+          outputs: [{ id: 'node-1-out', title: 'OUT' }],
+        },
       },
     ];
     const onBack = vi.fn();

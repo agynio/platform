@@ -67,6 +67,9 @@ export function useGraphData(): UseGraphDataResult {
   const dirtyRef = useRef(false);
   const hydratedRef = useRef(false);
   const abortRef = useRef(false);
+  const savingInFlightRef = useRef(false);
+  const pendingSaveRef = useRef(false);
+  const isMountedRef = useRef(true);
 
   useEffect(() => {
     nodesRef.current = nodes;
@@ -81,8 +84,20 @@ export function useGraphData(): UseGraphDataResult {
 
   const performSave = useCallback(async () => {
     clearScheduledSave();
-    if (!dirtyRef.current) return;
+    if (!dirtyRef.current) {
+      pendingSaveRef.current = false;
+      return;
+    }
+
+    if (savingInFlightRef.current) {
+      pendingSaveRef.current = true;
+      return;
+    }
+
+    savingInFlightRef.current = true;
+    pendingSaveRef.current = false;
     dirtyRef.current = false;
+
     try {
       const payload = buildGraphSavePayload({
         name: baseRef.current.name,
@@ -97,12 +112,29 @@ export function useGraphData(): UseGraphDataResult {
         version: result.version,
         edges: (result.edges ?? []).map(cloneEdge),
       };
-      setEdges((result.edges ?? []).map(cloneEdge));
-      setSavingState({ status: 'saved', error: null });
+
+      if (isMountedRef.current && !abortRef.current) {
+        setEdges((result.edges ?? []).map(cloneEdge));
+        if (dirtyRef.current || pendingSaveRef.current) {
+          setSavingState({ status: 'saving', error: null });
+        } else {
+          setSavingState({ status: 'saved', error: null });
+        }
+      }
     } catch (error) {
       dirtyRef.current = true;
       const message = error instanceof Error ? error.message : 'Save failed';
-      setSavingState({ status: 'error', error: { message } });
+      if (isMountedRef.current && !abortRef.current) {
+        setSavingState({ status: 'error', error: { message } });
+      }
+    } finally {
+      savingInFlightRef.current = false;
+      const shouldContinue = isMountedRef.current && !abortRef.current;
+      if (shouldContinue && pendingSaveRef.current) {
+        pendingSaveRef.current = false;
+        dirtyRef.current = true;
+        void performSave();
+      }
     }
   }, [clearScheduledSave]);
 
@@ -111,7 +143,15 @@ export function useGraphData(): UseGraphDataResult {
       return;
     }
     dirtyRef.current = true;
-    setSavingState({ status: 'saving', error: null });
+    if (isMountedRef.current && !abortRef.current) {
+      setSavingState({ status: 'saving', error: null });
+    }
+
+    if (savingInFlightRef.current) {
+      pendingSaveRef.current = true;
+      return;
+    }
+
     clearScheduledSave();
     saveTimeoutRef.current = window.setTimeout(() => {
       void performSave();
@@ -248,9 +288,13 @@ export function useGraphData(): UseGraphDataResult {
   }, [applyNodeStatus]);
 
   useEffect(() => {
+    isMountedRef.current = true;
     void refresh();
     return () => {
       abortRef.current = true;
+      isMountedRef.current = false;
+      savingInFlightRef.current = false;
+      pendingSaveRef.current = false;
       clearScheduledSave();
     };
   }, [refresh, clearScheduledSave]);
