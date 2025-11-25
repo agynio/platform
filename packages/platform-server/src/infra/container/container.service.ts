@@ -719,6 +719,14 @@ export class ContainerService {
     return details.Config?.Labels ?? undefined;
   }
 
+  /** Inspect and return the list of docker networks the container is attached to */
+  async getContainerNetworks(containerId: string): Promise<string[]> {
+    const container = this.docker.getContainer(containerId);
+    const details = await container.inspect();
+    const networks = details.NetworkSettings?.Networks ?? {};
+    return Object.keys(networks);
+  }
+
   /**
    * Find running (default) or all containers that match ALL provided labels.
    * Returns an array of ContainerEntity instances (may be empty).

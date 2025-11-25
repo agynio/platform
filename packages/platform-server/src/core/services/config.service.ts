@@ -39,6 +39,8 @@ export const configSchema = z.object({
   vaultToken: z.string().optional(),
   // Docker registry mirror URL (used by DinD sidecar)
   dockerMirrorUrl: z.string().min(1).default('http://registry-mirror:5000'),
+  // Workspace container network name
+  workspaceNetworkName: z.string().min(1).default('agents_net'),
   // Nix search/proxy settings
   nixAllowedChannels: z
     .string()
@@ -232,6 +234,10 @@ export class ConfigService implements Config {
     return this.params.dockerMirrorUrl;
   }
 
+  get workspaceNetworkName(): string {
+    return this.params.workspaceNetworkName;
+  }
+
   // Nix proxy getters
   get nixAllowedChannels(): string[] {
     return this.params.nixAllowedChannels;
@@ -334,6 +340,7 @@ export class ConfigService implements Config {
       vaultAddr: process.env.VAULT_ADDR,
       vaultToken: process.env.VAULT_TOKEN,
       dockerMirrorUrl: process.env.DOCKER_MIRROR_URL,
+      workspaceNetworkName: process.env.WORKSPACE_NETWORK_NAME,
       nixAllowedChannels: process.env.NIX_ALLOWED_CHANNELS,
       nixHttpTimeoutMs: process.env.NIX_HTTP_TIMEOUT_MS,
       nixCacheTtlMs: process.env.NIX_CACHE_TTL_MS,
