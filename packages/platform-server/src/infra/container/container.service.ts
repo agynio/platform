@@ -696,16 +696,25 @@ export class ContainerService {
   }
 
   /** Remove a container by docker id. */
-  async removeContainer(containerId: string, force = false): Promise<void> {
-    this.logger.info(`Removing container cid=${containerId.substring(0, 12)} force=${force}`);
+  async removeContainer(
+    containerId: string,
+    options?: boolean | { force?: boolean; removeVolumes?: boolean },
+  ): Promise<void> {
+    const opts = typeof options === 'boolean' ? { force: options } : options;
+    const force = opts?.force ?? false;
+    const removeVolumes = opts?.removeVolumes ?? false;
+    this.logger.info(
+      `Removing container cid=${containerId.substring(0, 12)} force=${force} removeVolumes=${removeVolumes}`,
+    );
     const container = this.docker.getContainer(containerId);
     try {
-      await container.remove({ force });
+      await container.remove({ force, v: removeVolumes });
     } catch (e: unknown) {
       const sc = typeof e === 'object' && e && 'statusCode' in e ? (e as { statusCode?: number }).statusCode : undefined;
       if (sc === 404) {
-        // Already removed – benign
         this.logger.debug(`Container already removed cid=${containerId.substring(0, 12)}`);
+      } else if (sc === 409) {
+        this.logger.info(`Container removal conflict cid=${containerId.substring(0, 12)} (likely removing)`);
       } else {
         throw e;
       }
@@ -756,6 +765,28 @@ export class ContainerService {
       return aid.localeCompare(bid);
     });
     return sorted.map((c) => new ContainerHandle(this, c.Id));
+  }
+
+  async listContainersByVolume(volumeName: string): Promise<string[]> {
+    if (!volumeName) return [];
+    const result = await this.docker.listContainers({ all: true, filters: { volume: [volumeName] } });
+    return Array.isArray(result) ? result.map((it) => it.Id) : [];
+  }
+
+  async removeVolume(volumeName: string, options?: { force?: boolean }): Promise<void> {
+    const force = options?.force ?? false;
+    this.logger.info(`Removing volume name=${volumeName} force=${force}`);
+    const volume = this.docker.getVolume(volumeName);
+    try {
+      await volume.remove({ force });
+    } catch (e: unknown) {
+      const sc = typeof e === 'object' && e && 'statusCode' in e ? (e as { statusCode?: number }).statusCode : undefined;
+      if (sc === 404) {
+        this.logger.debug(`Volume already removed name=${volumeName}`);
+      } else {
+        throw e;
+      }
+    }
   }
 
   /**

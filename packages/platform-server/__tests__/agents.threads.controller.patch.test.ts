@@ -3,7 +3,7 @@ import { Test } from '@nestjs/testing';
 import { AgentsThreadsController } from '../src/agents/threads.controller';
 import { AgentsPersistenceService } from '../src/agents/agents.persistence.service';
 import { RunSignalsRegistry } from '../src/agents/run-signals.service';
-import { ContainerThreadTerminationService } from '../src/infra/container/containerThreadTermination.service';
+import { ThreadCleanupCoordinator } from '../src/agents/threadCleanup.coordinator';
 import { RunEventsService } from '../src/events/run-events.service';
 
 const runEventsStub = {
@@ -28,7 +28,7 @@ const runEventsStub = {
 describe('AgentsThreadsController PATCH threads/:id', () => {
   it('accepts null summary and toggles status', async () => {
     const updates: any[] = [];
-    const terminate = vi.fn();
+    const closeCascade = vi.fn();
     const module = await Test.createTestingModule({
       controllers: [AgentsThreadsController],
       providers: [
@@ -49,26 +49,26 @@ describe('AgentsThreadsController PATCH threads/:id', () => {
             listChildren: async () => [],
           },
         },
-        { provide: ContainerThreadTerminationService, useValue: { terminateByThread: terminate } },
+        { provide: ThreadCleanupCoordinator, useValue: { closeThreadWithCascade: closeCascade } },
         { provide: RunSignalsRegistry, useValue: { register: vi.fn(), activateTerminate: vi.fn(), clear: vi.fn() } },
       ],
     }).compile();
 
     const ctrl = await module.resolve(AgentsThreadsController);
     await ctrl.patchThread('t1', { summary: null });
-    expect(terminate).not.toHaveBeenCalled();
+    expect(closeCascade).not.toHaveBeenCalled();
     await ctrl.patchThread('t2', { status: 'closed' });
 
     expect(updates).toEqual([
       { id: 't1', data: { summary: null } },
       { id: 't2', data: { status: 'closed' } },
     ]);
-    expect(terminate).toHaveBeenCalledTimes(1);
-    expect(terminate).toHaveBeenCalledWith('t2', { synchronous: false });
+    expect(closeCascade).toHaveBeenCalledTimes(1);
+    expect(closeCascade).toHaveBeenCalledWith('t2');
   });
 
   it('invokes container termination when closing a thread', async () => {
-    const terminate = vi.fn();
+    const closeCascade = vi.fn();
     const updateThread = vi.fn(async () => ({ previousStatus: 'open', status: 'closed' }));
     const module = await Test.createTestingModule({
       controllers: [AgentsThreadsController],
@@ -84,7 +84,7 @@ describe('AgentsThreadsController PATCH threads/:id', () => {
           },
         },
         { provide: RunEventsService, useValue: runEventsStub },
-        { provide: ContainerThreadTerminationService, useValue: { terminateByThread: terminate } },
+        { provide: ThreadCleanupCoordinator, useValue: { closeThreadWithCascade: closeCascade } },
         { provide: RunSignalsRegistry, useValue: { register: vi.fn(), activateTerminate: vi.fn(), clear: vi.fn() } },
       ],
     }).compile();
@@ -93,11 +93,11 @@ describe('AgentsThreadsController PATCH threads/:id', () => {
     await ctrl.patchThread('closed-thread', { status: 'closed' });
 
     expect(updateThread).toHaveBeenCalledWith('closed-thread', { status: 'closed' });
-    expect(terminate).toHaveBeenCalledWith('closed-thread', { synchronous: false });
+    expect(closeCascade).toHaveBeenCalledWith('closed-thread');
   });
 
   it('does not invoke termination when status already closed', async () => {
-    const terminate = vi.fn();
+    const closeCascade = vi.fn();
     const updateThread = vi.fn(async () => ({ previousStatus: 'closed', status: 'closed' }));
     const module = await Test.createTestingModule({
       controllers: [AgentsThreadsController],
@@ -113,7 +113,7 @@ describe('AgentsThreadsController PATCH threads/:id', () => {
           },
         },
         { provide: RunEventsService, useValue: runEventsStub },
-        { provide: ContainerThreadTerminationService, useValue: { terminateByThread: terminate } },
+        { provide: ThreadCleanupCoordinator, useValue: { closeThreadWithCascade: closeCascade } },
         { provide: RunSignalsRegistry, useValue: { register: vi.fn(), activateTerminate: vi.fn(), clear: vi.fn() } },
       ],
     }).compile();
@@ -121,6 +121,6 @@ describe('AgentsThreadsController PATCH threads/:id', () => {
     const ctrl = await module.resolve(AgentsThreadsController);
     await ctrl.patchThread('already-closed', { status: 'closed' });
 
-    expect(terminate).not.toHaveBeenCalled();
+    expect(closeCascade).not.toHaveBeenCalled();
   });
 });

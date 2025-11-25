@@ -191,4 +191,28 @@ export class ContainerRegistry {
     meta.terminationAttempts = nextAttempts;
     await this.prisma.container.update({ where: { containerId }, data: { metadata: meta as unknown as Prisma.InputJsonValue } });
   }
+
+  async listByThread(threadId: string): Promise<Array<{ containerId: string; status: ContainerStatus }>> {
+    if (!threadId) return [];
+    return this.prisma.container.findMany({
+      where: { threadId },
+      select: { containerId: true, status: true },
+    });
+  }
+
+  async findByVolume(
+    volumeName: string,
+  ): Promise<Array<{ containerId: string; threadId: string | null; status: ContainerStatus }>> {
+    if (!volumeName) return [];
+    const q = Prisma.sql`
+      SELECT "containerId", "threadId", "status"
+      FROM "Container"
+      WHERE EXISTS (
+        SELECT 1
+        FROM jsonb_array_elements(COALESCE("metadata"->'mounts', '[]'::jsonb)) AS mount
+        WHERE mount->>'source' = ${volumeName}
+      )
+    `;
+    return this.prisma.$queryRaw<Array<{ containerId: string; threadId: string | null; status: ContainerStatus }>>(q);
+  }
 }
