@@ -20,6 +20,7 @@ const hookMocks = vi.hoisted(() => ({
   useGraphData: vi.fn(),
   useGraphSocket: vi.fn(),
   useNodeStatus: vi.fn(),
+  useMcpNodeState: vi.fn(),
 }));
 
 vi.mock('@/components/GraphCanvas', () => ({
@@ -47,6 +48,10 @@ vi.mock('@/features/graph/hooks/useGraphSocket', () => ({
 
 vi.mock('@/features/graph/hooks/useNodeStatus', () => ({
   useNodeStatus: hookMocks.useNodeStatus,
+}));
+
+vi.mock('@/lib/graph/hooks', () => ({
+  useMcpNodeState: hookMocks.useMcpNodeState,
 }));
 
 const createServiceMocks = vi.hoisted((): (() => GraphLayoutServiceMocks) => () => {
@@ -87,6 +92,12 @@ describe('GraphLayout', () => {
   beforeEach(() => {
     sidebarProps.length = 0;
     Object.values(hookMocks).forEach((mock) => mock.mockReset());
+    hookMocks.useMcpNodeState.mockReturnValue({
+      tools: [],
+      enabledTools: [],
+      setEnabledTools: vi.fn(),
+      isLoading: false,
+    });
     canvasSpy.mockReset();
     services = createServiceMocks();
   });
@@ -141,6 +152,10 @@ describe('GraphLayout', () => {
       onNodesChange?: (changes: any[]) => void;
     };
 
+    expect(canvasProps).toBeDefined();
+    expect(canvasProps).toHaveProperty('edgeTypes');
+    expect((canvasProps as any).edgeTypes).toHaveProperty('gradient');
+
     expect(sidebarProps.length).toBe(0);
 
     act(() => {
@@ -169,25 +184,21 @@ describe('GraphLayout', () => {
       secretSuggestionProvider: (...args: unknown[]) => Promise<unknown>;
       variableSuggestionProvider: (...args: unknown[]) => Promise<unknown>;
       providerDebounceMs: number;
+      tools?: unknown[];
+      enabledTools?: unknown[];
+      onToggleTool?: (name: string, enabled: boolean) => void;
+      toolsLoading?: boolean;
     };
-
-    expect(Object.keys(sidebar).sort()).toEqual([
-      'config',
-      'fetchNixPackageVersions',
-      'nixPackageSearch',
-      'onConfigChange',
-      'providerDebounceMs',
-      'resolveNixPackageSelection',
-      'secretSuggestionProvider',
-      'state',
-      'variableSuggestionProvider',
-    ]);
 
     expect(typeof sidebar.nixPackageSearch).toBe('function');
     expect(typeof sidebar.fetchNixPackageVersions).toBe('function');
     expect(typeof sidebar.resolveNixPackageSelection).toBe('function');
     expect(typeof sidebar.secretSuggestionProvider).toBe('function');
     expect(typeof sidebar.variableSuggestionProvider).toBe('function');
+    expect(Array.isArray(sidebar.tools)).toBe(true);
+    expect(Array.isArray(sidebar.enabledTools)).toBe(true);
+    expect(typeof sidebar.onToggleTool).toBe('function');
+    expect(typeof sidebar.toolsLoading).toBe('boolean');
     expect(sidebar.providerDebounceMs).toBeGreaterThanOrEqual(200);
     expect(sidebar.providerDebounceMs).toBeLessThanOrEqual(350);
 
@@ -368,6 +379,177 @@ describe('GraphLayout', () => {
     });
 
     await waitFor(() => expect(setEdges).toHaveBeenCalledWith([]));
+  });
+
+  it('wires MCP tools state into the sidebar and toggles enabled tools', async () => {
+    const updateNode = vi.fn();
+    const setEdges = vi.fn();
+    const setEnabledTools = vi.fn();
+
+    hookMocks.useGraphData.mockReturnValue({
+      nodes: [
+        {
+          id: 'mcp-1',
+          template: 'mcp-template',
+          kind: 'MCP',
+          title: 'MCP Node',
+          x: 0,
+          y: 0,
+          status: 'not_ready',
+          config: { title: 'MCP Node' },
+          ports: { inputs: [], outputs: [] },
+        },
+      ],
+      edges: [],
+      loading: false,
+      savingState: { status: 'saved', error: null },
+      savingErrorMessage: null,
+      updateNode,
+      applyNodeStatus: vi.fn(),
+      applyNodeState: vi.fn(),
+      setEdges,
+    });
+
+    hookMocks.useGraphSocket.mockReturnValue(undefined);
+    hookMocks.useNodeStatus.mockReturnValue({ data: null });
+    hookMocks.useMcpNodeState.mockReturnValue({
+      tools: [
+        { name: 'search', title: 'Search' },
+        { name: 'summarize', title: 'Summarize' },
+      ],
+      enabledTools: ['search'],
+      setEnabledTools,
+      isLoading: false,
+    });
+
+    render(<GraphLayout services={services} />);
+
+    await waitFor(() => expect(canvasSpy).toHaveBeenCalled());
+    const canvasProps = canvasSpy.mock.calls.at(-1)?.[0] as {
+      onNodesChange?: (changes: any[]) => void;
+    };
+
+    act(() => {
+      canvasProps.onNodesChange?.([
+        {
+          id: 'mcp-1',
+          type: 'select',
+          selected: true,
+        },
+      ]);
+    });
+
+    await waitFor(() => expect(sidebarProps.length).toBeGreaterThan(0));
+
+    const sidebar = sidebarProps.at(-1) as {
+      tools?: unknown;
+      enabledTools?: unknown;
+      toolsLoading?: boolean;
+      onToggleTool?: (name: string, enabled: boolean) => void;
+    };
+
+    expect(sidebar.tools).toEqual([
+      { name: 'search', title: 'Search' },
+      { name: 'summarize', title: 'Summarize' },
+    ]);
+    expect(sidebar.enabledTools).toEqual(['search']);
+    expect(sidebar.toolsLoading).toBe(false);
+
+    sidebar.onToggleTool?.('summarize', true);
+    sidebar.onToggleTool?.('search', false);
+
+    expect(setEnabledTools).toHaveBeenNthCalledWith(1, ['search', 'summarize']);
+    expect(setEnabledTools).toHaveBeenNthCalledWith(2, []);
+  });
+
+  it('preserves selection when switching between nodes in any event order', async () => {
+    const updateNode = vi.fn();
+    const applyNodeStatus = vi.fn();
+    const applyNodeState = vi.fn();
+    const setEdges = vi.fn();
+
+    hookMocks.useGraphData.mockReturnValue({
+      nodes: [
+        {
+          id: 'agent-1',
+          template: 'agent-template',
+          kind: 'Agent',
+          title: 'Agent Node',
+          x: 0,
+          y: 0,
+          status: 'not_ready',
+          config: { title: 'Agent Node' },
+          ports: { inputs: [], outputs: [] },
+        },
+        {
+          id: 'tool-1',
+          template: 'tool-template',
+          kind: 'Tool',
+          title: 'Tool Node',
+          x: 200,
+          y: 200,
+          status: 'not_ready',
+          config: { title: 'Tool Node' },
+          ports: { inputs: [], outputs: [] },
+        },
+      ],
+      edges: [],
+      loading: false,
+      savingState: { status: 'saved', error: null },
+      savingErrorMessage: null,
+      updateNode,
+      applyNodeStatus,
+      applyNodeState,
+      setEdges,
+    });
+
+    hookMocks.useGraphSocket.mockReturnValue(undefined);
+    hookMocks.useNodeStatus.mockReturnValue({ data: null });
+
+    render(<GraphLayout services={services} />);
+
+    await waitFor(() => expect(canvasSpy).toHaveBeenCalled());
+    const canvasProps = canvasSpy.mock.calls.at(-1)?.[0] as {
+      onNodesChange?: (changes: any[]) => void;
+    };
+
+    act(() => {
+      canvasProps.onNodesChange?.([
+        { id: 'agent-1', type: 'select', selected: true },
+      ]);
+    });
+
+    await waitFor(() =>
+      expect(sidebarProps.at(-1)).toMatchObject({
+        config: expect.objectContaining({ title: 'Agent Node', kind: 'Agent' }),
+      }),
+    );
+
+    act(() => {
+      canvasProps.onNodesChange?.([
+        { id: 'agent-1', type: 'select', selected: false },
+        { id: 'tool-1', type: 'select', selected: true },
+      ]);
+    });
+
+    await waitFor(() =>
+      expect(sidebarProps.at(-1)).toMatchObject({
+        config: expect.objectContaining({ title: 'Tool Node', kind: 'Tool' }),
+      }),
+    );
+
+    act(() => {
+      canvasProps.onNodesChange?.([
+        { id: 'agent-1', type: 'select', selected: true },
+        { id: 'tool-1', type: 'select', selected: false },
+      ]);
+    });
+
+    await waitFor(() =>
+      expect(sidebarProps.at(-1)).toMatchObject({
+        config: expect.objectContaining({ title: 'Agent Node', kind: 'Agent' }),
+      }),
+    );
   });
 
   it('wires sidebar providers through graph services', async () => {

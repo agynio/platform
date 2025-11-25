@@ -1,17 +1,39 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { addEdge, applyEdgeChanges, applyNodeChanges, type Edge, type Node } from '@xyflow/react';
+import { addEdge, applyEdgeChanges, applyNodeChanges, type Edge, type EdgeTypes, type Node } from '@xyflow/react';
 
 import { GraphCanvas, type GraphNodeData } from '../GraphCanvas';
+import { GradientEdge } from './edges/GradientEdge';
 import EmptySelectionSidebar from '../EmptySelectionSidebar';
 import NodePropertiesSidebar, { type NodeConfig as SidebarNodeConfig } from '../NodePropertiesSidebar';
 
 import { useGraphData } from '@/features/graph/hooks/useGraphData';
 import { useGraphSocket } from '@/features/graph/hooks/useGraphSocket';
 import { useNodeStatus } from '@/features/graph/hooks/useNodeStatus';
+import { useMcpNodeState } from '@/lib/graph/hooks';
 import type { GraphNodeConfig, GraphNodeStatus, GraphPersistedEdge } from '@/features/graph/types';
 import type { NodeStatus as ApiNodeStatus } from '@/api/types/graph';
 
 type FlowNode = Node<GraphNodeData>;
+
+type FlowEdgeData = {
+  sourceColor: string;
+  targetColor: string;
+  sourceKind?: GraphNodeConfig['kind'];
+  targetKind?: GraphNodeConfig['kind'];
+};
+
+type FlowEdge = Edge<FlowEdgeData>;
+
+const nodeKindToColor: Record<GraphNodeConfig['kind'], string> = {
+  Trigger: 'var(--agyn-yellow)',
+  Agent: 'var(--agyn-blue)',
+  Tool: 'var(--agyn-cyan)',
+  MCP: 'var(--agyn-cyan)',
+  Workspace: 'var(--agyn-purple)',
+};
+
+const defaultSourceColor = 'var(--agyn-blue)';
+const defaultTargetColor = 'var(--agyn-purple)';
 
 export interface GraphLayoutServices {
   searchNixPackages: (query: string) => Promise<Array<{ name: string }>>;
@@ -27,7 +49,7 @@ export interface GraphLayoutProps {
   services: GraphLayoutServices;
 }
 
-function toFlowNode(node: GraphNodeConfig, selectedId: string | null): FlowNode {
+function toFlowNode(node: GraphNodeConfig): FlowNode {
   return {
     id: node.id,
     type: 'graphNode',
@@ -39,7 +61,7 @@ function toFlowNode(node: GraphNodeConfig, selectedId: string | null): FlowNode 
       outputs: node.ports.outputs,
       avatarSeed: node.avatarSeed,
     },
-    selected: node.id === selectedId,
+    selected: false,
   } satisfies FlowNode;
 }
 
@@ -66,19 +88,35 @@ function buildEdgeId(
   return `${source}-${encodeHandle(sourceHandle)}__${target}-${encodeHandle(targetHandle)}`;
 }
 
-function toFlowEdge(edge: GraphPersistedEdge): Edge {
+function makeEdgeData(
+  sourceNode?: GraphNodeConfig,
+  targetNode?: GraphNodeConfig,
+): FlowEdgeData {
+  const sourceKind = sourceNode?.kind;
+  const targetKind = targetNode?.kind;
+  return {
+    sourceColor: sourceKind ? nodeKindToColor[sourceKind] ?? defaultSourceColor : defaultSourceColor,
+    targetColor: targetKind ? nodeKindToColor[targetKind] ?? defaultTargetColor : defaultTargetColor,
+    sourceKind,
+    targetKind,
+  } satisfies FlowEdgeData;
+}
+
+function toFlowEdge(edge: GraphPersistedEdge, data: FlowEdgeData): FlowEdge {
   const sourceHandle = decodeHandle(edge.sourceHandle);
   const targetHandle = decodeHandle(edge.targetHandle);
   return {
     id: buildEdgeId(edge.source, sourceHandle, edge.target, targetHandle),
+    type: 'gradient',
     source: edge.source,
     target: edge.target,
     sourceHandle,
     targetHandle,
-  } satisfies Edge;
+    data,
+  } satisfies FlowEdge;
 }
 
-function fromFlowEdge(edge: Edge): GraphPersistedEdge {
+function fromFlowEdge(edge: FlowEdge): GraphPersistedEdge {
   return {
     id: buildEdgeId(edge.source, edge.sourceHandle, edge.target, edge.targetHandle),
     source: edge.source,
@@ -322,11 +360,13 @@ export function GraphLayout({ services }: GraphLayoutProps) {
   });
 
   const [flowNodes, setFlowNodes] = useState<FlowNode[]>([]);
-  const [flowEdges, setFlowEdges] = useState<Edge[]>([]);
+  const [flowEdges, setFlowEdges] = useState<FlowEdge[]>([]);
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const selectedNodeIdRef = useRef<string | null>(null);
   const flowNodesRef = useRef<FlowNode[]>([]);
-  const flowEdgesRef = useRef<Edge[]>([]);
+  const flowEdgesRef = useRef<FlowEdge[]>([]);
+
+  const edgeTypeMap = useMemo<EdgeTypes>(() => ({ gradient: GradientEdge }), []);
 
   useEffect(() => {
     selectedNodeIdRef.current = selectedNodeId;
@@ -344,16 +384,17 @@ export function GraphLayout({ services }: GraphLayoutProps) {
   }, [nodes]);
 
   useEffect(() => {
-    setFlowNodes((prev) => {
-      return nodes.map((node) => {
+    setFlowNodes((prev) =>
+      nodes.map((node) => {
         const existing = prev.find((item) => item.id === node.id);
-        const base = toFlowNode(node, selectedNodeIdRef.current);
+        const base = toFlowNode(node);
         if (existing) {
           base.position = existing.position;
+          base.selected = existing.selected;
         }
         return base;
-      });
-    });
+      }),
+    );
   }, [nodes]);
 
   useEffect(() => {
@@ -365,10 +406,15 @@ export function GraphLayout({ services }: GraphLayoutProps) {
   }, [flowNodes]);
 
   useEffect(() => {
-    const nextEdges = edges.map(toFlowEdge);
+    const nodeMap = new Map(nodes.map((node) => [node.id, node] as const));
+    const nextEdges = edges.map((edge) => {
+      const sourceNode = nodeMap.get(edge.source);
+      const targetNode = nodeMap.get(edge.target);
+      return toFlowEdge(edge, makeEdgeData(sourceNode, targetNode));
+    });
     flowEdgesRef.current = nextEdges;
     setFlowEdges(nextEdges);
-  }, [edges]);
+  }, [edges, nodes]);
 
   const selectedNode = useMemo(
     () => (selectedNodeId ? nodes.find((node) => node.id === selectedNodeId) ?? null : null),
@@ -376,13 +422,39 @@ export function GraphLayout({ services }: GraphLayoutProps) {
   );
 
   const statusQuery = useNodeStatus(selectedNodeId ?? '');
+  const mcpNodeId = selectedNode?.kind === 'MCP' ? selectedNode.id : null;
+  const {
+    tools: mcpTools,
+    enabledTools: mcpEnabledTools,
+    setEnabledTools: setMcpEnabledTools,
+    isLoading: mcpToolsLoading,
+  } = useMcpNodeState(mcpNodeId);
+
+  const handleToggleMcpTool = useCallback(
+    (toolName: string, enabled: boolean) => {
+      if (!mcpNodeId) return;
+      const current = mcpEnabledTools ?? [];
+      const next = new Set(current);
+      if (enabled) {
+        next.add(toolName);
+      } else {
+        next.delete(toolName);
+      }
+      setMcpEnabledTools(Array.from(next));
+    },
+    [mcpEnabledTools, mcpNodeId, setMcpEnabledTools],
+  );
 
   const handleNodesChange = useCallback(
     (changes: Parameters<typeof applyNodeChanges>[0]) => {
       let nextSelectedId = selectedNodeIdRef.current;
       for (const change of changes) {
         if (change.type === 'select' && 'id' in change) {
-          nextSelectedId = change.selected ? change.id : null;
+          if (change.selected) {
+            nextSelectedId = change.id;
+          } else if (nextSelectedId === change.id) {
+            nextSelectedId = null;
+          }
         }
       }
 
@@ -412,7 +484,7 @@ export function GraphLayout({ services }: GraphLayoutProps) {
   const handleEdgesChange = useCallback(
     (changes: Parameters<typeof applyEdgeChanges>[0]) => {
       const current = flowEdgesRef.current;
-      const applied = applyEdgeChanges(changes, current);
+      const applied = applyEdgeChanges(changes, current) as FlowEdge[];
       flowEdgesRef.current = applied;
       setFlowEdges(applied);
       const shouldPersist = changes.some((change) =>
@@ -442,13 +514,19 @@ export function GraphLayout({ services }: GraphLayoutProps) {
       if (current.some((edge) => edge.id === edgeId)) {
         return;
       }
-      const nextEdges = addEdge({ ...connection, id: edgeId }, current);
+      const sourceNode = nodes.find((node) => node.id === connection.source);
+      const targetNode = nodes.find((node) => node.id === connection.target);
+      const edgeData = makeEdgeData(sourceNode, targetNode);
+      const nextEdges = addEdge(
+        { ...connection, id: edgeId, type: 'gradient', data: edgeData },
+        current,
+      ) as FlowEdge[];
       flowEdgesRef.current = nextEdges;
       setFlowEdges(nextEdges);
       const persisted = nextEdges.map(fromFlowEdge);
       setEdges(persisted);
     },
-    [setEdges],
+    [nodes, setEdges],
   );
 
   const sidebarStatus: GraphNodeStatus = useMemo(() => {
@@ -517,6 +595,7 @@ export function GraphLayout({ services }: GraphLayoutProps) {
           onNodesChange={handleNodesChange}
           onEdgesChange={handleEdgesChange}
           onConnect={handleConnect}
+          edgeTypes={edgeTypeMap}
           savingStatus={savingState.status}
           savingErrorMessage={savingErrorMessage ?? undefined}
         />
@@ -526,6 +605,10 @@ export function GraphLayout({ services }: GraphLayoutProps) {
           config={sidebarConfig}
           state={{ status: sidebarStatus }}
           onConfigChange={handleConfigChange}
+          tools={mcpTools}
+          enabledTools={mcpEnabledTools ?? []}
+          onToggleTool={handleToggleMcpTool}
+          toolsLoading={mcpToolsLoading}
           nixPackageSearch={handleNixPackageSearch}
           fetchNixPackageVersions={handleFetchNixPackageVersions}
           resolveNixPackageSelection={handleResolveNixPackageSelection}

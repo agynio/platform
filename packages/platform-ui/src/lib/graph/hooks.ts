@@ -211,18 +211,20 @@ const McpStateSchema = z.object({
 
 type McpTool = z.infer<typeof McpToolSchema>;
 
-export function useMcpNodeState(nodeId: string) {
+export function useMcpNodeState(nodeId: string | null | undefined) {
   const qc = useQueryClient();
+  const effectiveId = nodeId ?? '';
   const q = useQuery<{ tools: McpTool[]; enabledTools?: string[] }>({
-    queryKey: ['graph', 'node', nodeId, 'state', 'mcp'],
+    queryKey: ['graph', 'node', effectiveId, 'state', 'mcp'],
     queryFn: async () => {
-      const res = await api.getNodeState(nodeId);
+      const res = await api.getNodeState(effectiveId);
       const state = (res?.state ?? {}) as Record<string, unknown>;
       const parsed = McpStateSchema.safeParse(state);
       if (!parsed.success) return { tools: [], enabledTools: undefined };
       return { tools: parsed.data.mcp?.tools ?? [], enabledTools: parsed.data.mcp?.enabledTools };
     },
     staleTime: 2000,
+    enabled: Boolean(nodeId),
   });
 
   useEffect(() => {
@@ -247,18 +249,26 @@ export function useMcpNodeState(nodeId: string) {
 
   const m = useMutation({
     mutationFn: async (enabledTools: string[]) => {
+      if (!nodeId) {
+        throw new Error('Cannot update MCP tools without a node id');
+      }
       await api.putNodeState(nodeId, { mcp: { enabledTools } });
       return enabledTools;
     },
     onMutate: async (enabledTools) => {
-      await qc.cancelQueries({ queryKey: ['graph', 'node', nodeId, 'state', 'mcp'] });
+      if (!nodeId) {
+        return { prev: undefined } as const;
+      }
       const key = ['graph', 'node', nodeId, 'state', 'mcp'] as const;
+      await qc.cancelQueries({ queryKey: key });
       const prev = qc.getQueryData<{ tools: McpTool[]; enabledTools?: string[] }>(key);
       qc.setQueryData(key, { tools: prev?.tools ?? [], enabledTools });
       return { prev };
     },
     onError: (err: unknown, _vars, ctx) => {
-      if (ctx?.prev) qc.setQueryData(['graph', 'node', nodeId, 'state', 'mcp'], ctx.prev);
+      if (nodeId && ctx?.prev) {
+        qc.setQueryData(['graph', 'node', nodeId, 'state', 'mcp'], ctx.prev);
+      }
       const message = err instanceof Error ? err.message : String(err);
       notifyError(`Failed to update MCP tools: ${message}`);
     },
@@ -267,7 +277,10 @@ export function useMcpNodeState(nodeId: string) {
   return {
     tools: q.data?.tools ?? [],
     enabledTools: q.data?.enabledTools,
-    setEnabledTools: (next: string[]) => m.mutate(next),
-    isLoading: q.isPending,
+    setEnabledTools: (next: string[]) => {
+      if (!nodeId) return;
+      m.mutate(next);
+    },
+    isLoading: Boolean(nodeId) && q.isPending,
   } as const;
 }
