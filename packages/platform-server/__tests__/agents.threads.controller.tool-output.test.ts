@@ -2,7 +2,7 @@ import { Test } from '@nestjs/testing';
 import { describe, it, expect, vi } from 'vitest';
 import { AgentsThreadsController } from '../src/agents/threads.controller';
 import { AgentsPersistenceService } from '../src/agents/agents.persistence.service';
-import { ContainerThreadTerminationService } from '../src/infra/container/containerThreadTermination.service';
+import { ThreadCleanupCoordinator } from '../src/agents/threadCleanup.coordinator';
 import { RunEventsService } from '../src/events/run-events.service';
 import { RunSignalsRegistry } from '../src/agents/run-signals.service';
 import { NotImplementedException } from '@nestjs/common';
@@ -17,7 +17,7 @@ describe('AgentsThreadsController tool output snapshot endpoint', () => {
       controllers: [AgentsThreadsController],
       providers: [
         { provide: AgentsPersistenceService, useValue: {} },
-        { provide: ContainerThreadTerminationService, useValue: { terminateByThread: vi.fn() } },
+        { provide: ThreadCleanupCoordinator, useValue: { closeThreadWithCascade: vi.fn() } },
         { provide: RunEventsService, useValue: runEventsStub },
         { provide: RunSignalsRegistry, useValue: { register: vi.fn(), activateTerminate: vi.fn(), clear: vi.fn() } },
       ],
@@ -51,7 +51,7 @@ describe('AgentsThreadsController tool output snapshot endpoint', () => {
       controllers: [AgentsThreadsController],
       providers: [
         { provide: AgentsPersistenceService, useValue: {} },
-        { provide: ContainerThreadTerminationService, useValue: { terminateByThread: vi.fn() } },
+        { provide: ThreadCleanupCoordinator, useValue: { closeThreadWithCascade: vi.fn() } },
         { provide: RunEventsService, useValue: runEventsStub },
         { provide: RunSignalsRegistry, useValue: { register: vi.fn(), activateTerminate: vi.fn(), clear: vi.fn() } },
       ],

@@ -21,6 +21,14 @@ Lifecycle
   - Containers record `last_used_at` and `kill_after_at` (derived from TTL). A background cleanup job removes expired containers.
   - Termination errors are retried with exponential backoff up to a max delay of 15 minutes; benign 304/404/409 errors on stop/remove are swallowed.
 
+Thread closure cascade cleanup
+- Closing a thread (or any ancestor) triggers the thread cleanup coordinator.
+  - Descendant threads are closed leaf-first so children finish before their parents.
+  - Active runs receive a terminate signal; after a short grace period the cleanup flow forces container shutdown.
+  - Registry records for the thread are handed to `sweepSelective`, which removes associated workspace containers and DinD sidecars immediately.
+  - DinD sidecars are stopped first and removed with `v=true` so their anonymous `/var/lib/docker` volumes are deleted along with the sidecar.
+  - After containers are gone, the coordinator removes the thread workspace volume (`ha_ws_<threadId>`) once no other containers (running or stopped) reference it and no registry entries point at the volume.
+
 DinD and DOCKER_HOST
 - Optional sidecar Docker-in-Docker may be used for nested workloads. When enabled, set `DOCKER_HOST=tcp://localhost:2375` inside the workspace container.
 

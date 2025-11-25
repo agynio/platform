@@ -15,6 +15,7 @@ import { AgentsPersistenceService } from '../agents/agents.persistence.service';
 import { ThreadsMetricsService } from '../agents/threads.metrics.service';
 import { RunSignalsRegistry } from '../agents/run-signals.service';
 import { CallAgentLinkingService } from '../agents/call-agent-linking.service';
+import { ThreadCleanupCoordinator } from '../agents/threadCleanup.coordinator';
 import { TemplateRegistry } from '../graph-core/templateRegistry';
 
 @Global()
@@ -24,6 +25,7 @@ import { TemplateRegistry } from '../graph-core/templateRegistry';
     ThreadsMetricsService,
     RunSignalsRegistry,
     CallAgentLinkingService,
+    ThreadCleanupCoordinator,
     {
       provide: GraphRepository,
       useFactory: async (config: ConfigService, logger: LoggerService, moduleRef: ModuleRef) => {
@@ -45,6 +47,7 @@ import { TemplateRegistry } from '../graph-core/templateRegistry';
     GraphRepository,
     NodesModule,
     AgentsPersistenceService,
+    ThreadCleanupCoordinator,
     ThreadsMetricsService,
     RunSignalsRegistry,
     CallAgentLinkingService,

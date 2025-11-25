@@ -3,7 +3,7 @@ import { IsBooleanString, IsIn, IsInt, IsOptional, IsString, IsISO8601, Max, Min
 import { AgentsPersistenceService } from './agents.persistence.service';
 import { Transform, Expose } from 'class-transformer';
 import type { RunEventStatus, RunEventType, RunMessageType, ThreadStatus } from '@prisma/client';
-import { ContainerThreadTerminationService } from '../infra/container/containerThreadTermination.service';
+import { ThreadCleanupCoordinator } from './threadCleanup.coordinator';
 import type { ThreadMetrics } from './threads.metrics.service';
 import { RunEventsService } from '../events/run-events.service';
 import { RunSignalsRegistry } from './run-signals.service';
@@ -144,7 +144,7 @@ export class PatchThreadBodyDto {
 export class AgentsThreadsController {
   constructor(
     @Inject(AgentsPersistenceService) private readonly persistence: AgentsPersistenceService,
-    @Inject(ContainerThreadTerminationService) private readonly terminationService: ContainerThreadTerminationService,
+    @Inject(ThreadCleanupCoordinator) private readonly cleanupCoordinator: ThreadCleanupCoordinator,
     @Inject(RunEventsService) private readonly runEvents: RunEventsService,
     @Inject(RunSignalsRegistry) private readonly runSignals: RunSignalsRegistry,
   ) {}
@@ -322,7 +322,7 @@ export class AgentsThreadsController {
     const result = await this.persistence.updateThread(threadId, update);
 
     if (result.status === 'closed' && result.previousStatus !== 'closed') {
-      void this.terminationService.terminateByThread(threadId, { synchronous: false });
+      void this.cleanupCoordinator.closeThreadWithCascade(threadId);
     }
     return { ok: true };
   }

@@ -8,7 +8,7 @@ import { AgentsPersistenceService } from '../src/agents/agents.persistence.servi
 import { AgentNode } from '../src/nodes/agent/agent.node';
 import { HumanMessage } from '@agyn/llm';
 import { AgentsThreadsController } from '../src/agents/threads.controller';
-import { ContainerThreadTerminationService } from '../src/infra/container/containerThreadTermination.service';
+import { ThreadCleanupCoordinator } from '../src/agents/threadCleanup.coordinator';
 import { RunEventsService } from '../src/events/run-events.service';
 import { RunSignalsRegistry } from '../src/agents/run-signals.service';
 
@@ -81,7 +81,7 @@ describe('Fail-fast behavior', () => {
             listRunMessages: async () => [],
           },
         },
-        { provide: ContainerThreadTerminationService, useValue: { terminateByThread: vi.fn() } },
+        { provide: ThreadCleanupCoordinator, useValue: { closeThreadWithCascade: vi.fn() } },
         { provide: RunSignalsRegistry, useValue: { register: vi.fn(), activateTerminate: vi.fn(), clear: vi.fn() } },
       ],
     }).compile();

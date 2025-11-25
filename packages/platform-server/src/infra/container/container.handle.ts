@@ -30,8 +30,8 @@ export class ContainerHandle {
   stop(timeoutSec = 10) {
     return this.service.stopContainer(this.id, timeoutSec);
   }
-  remove(force = false) {
-    return this.service.removeContainer(this.id, force);
+  remove(options?: boolean | { force?: boolean; removeVolumes?: boolean }) {
+    return this.service.removeContainer(this.id, options);
   }
 
   /** Upload a tar archive into the container filesystem (defaults to /tmp). */
