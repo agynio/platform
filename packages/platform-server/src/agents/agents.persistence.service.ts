@@ -3,8 +3,8 @@ import { Inject, Injectable } from '@nestjs/common';
 import type { MessageKind, Prisma, PrismaClient, RunMessageType, RunStatus, ThreadStatus } from '@prisma/client';
 import { LoggerService } from '../core/services/logger.service';
 import { PrismaService } from '../core/services/prisma.service';
-import { GraphRepository } from '../graph/graph.repository';
 import { TemplateRegistry } from '../graph-core/templateRegistry';
+import { GraphRepository } from '../graph/graph.repository';
 import type { PersistedGraphNode } from '../shared/types/graph.types';
 import { toPrismaJsonValue } from '../llm/services/messages.serialization';
 import { ChannelDescriptorSchema, type ChannelDescriptor } from '../messaging/types';
@@ -37,24 +37,6 @@ export class AgentsPersistenceService {
 
   private sanitizeSummary(summary: string | null | undefined): string {
     return (summary ?? '').trim().slice(0, 256);
-  }
-
-  async getActiveGraphMeta(): Promise<{ name: string; version: number; updatedAt: string }> {
-    try {
-      const graph = await this.graphs.get('main');
-      if (graph) {
-        return { name: graph.name, version: graph.version, updatedAt: graph.updatedAt };
-      }
-    } catch (err) {
-      this.logger.warn('AgentsPersistenceService.getActiveGraphMeta failed; using defaults', err);
-    }
-    return { name: 'main', version: 0, updatedAt: new Date().toISOString() };
-  }
-
-  async getThreadModel(threadId: string): Promise<string | null> {
-    const row = await this.prisma.thread.findUnique({ where: { id: threadId }, select: { modelUsed: true } });
-    if (!row) throw new Error('thread_not_found');
-    return row.modelUsed ?? null;
   }
 
   async ensureThreadModel(threadId: string, model: string): Promise<string> {

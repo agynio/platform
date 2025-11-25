@@ -88,7 +88,6 @@ describe('Agent thread model binding', () => {
             completeRun,
             recordInjected,
             ensureThreadModel,
-            getThreadModel: vi.fn(async (threadId: string) => threadModels.get(threadId) ?? null),
           },
         },
       ],

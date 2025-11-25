@@ -47,7 +47,6 @@ describe('AgentNode termination flow', () => {
             completeRun,
             recordInjected: vi.fn().mockResolvedValue({ messageIds: [] }),
             ensureThreadModel: async (_threadId: string, model: string) => model,
-            getThreadModel: async () => null,
           },
         },
         RunSignalsRegistry,

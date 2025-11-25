@@ -130,7 +130,6 @@ const createAgentFixture = async () => {
           recordInjected,
           completeRun,
           ensureThreadModel,
-          getThreadModel: vi.fn(async () => null),
         },
       },
     ],

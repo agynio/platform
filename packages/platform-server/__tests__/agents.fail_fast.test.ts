@@ -33,7 +33,6 @@ describe('Fail-fast behavior', () => {
               throw new Error('persistence_fail');
             },
             ensureThreadModel: async (_threadId: string, model: string) => model,
-            getThreadModel: async () => null,
             recordInjected: async () => ({ messageIds: [] }),
             completeRun: async () => {},
           },

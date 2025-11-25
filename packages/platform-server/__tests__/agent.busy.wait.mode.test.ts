@@ -53,7 +53,6 @@ describe('Agent busy gating (wait mode)', () => {
             recordInjected: async () => ({ messageIds: [] }),
             completeRun,
             ensureThreadModel: async (_threadId: string, model: string) => model,
-            getThreadModel: async () => null,
           },
         },
         RunSignalsRegistry,

@@ -144,7 +144,6 @@ describe('Graph MCP integration', () => {
             recordInjected: async () => ({ messageIds: [] }),
             completeRun: async () => {},
             ensureThreadModel: async (_threadId: string, model: string) => model,
-            getThreadModel: async () => null,
           },
         },
         RunSignalsRegistry,
