@@ -1,3 +1,4 @@
+import { action } from 'storybook/actions';
 import type { Meta, StoryObj } from '@storybook/react';
 import { useArgs } from '@storybook/preview-api';
 import ThreadsScreen from '../src/components/screens/ThreadsScreen';
@@ -125,26 +126,38 @@ const reminders = [
 
 const ControlledRender: Story['render'] = () => {
   const [currentArgs, updateArgs] = useArgs<ThreadsScreenProps>();
+  const logFilterModeChange = action('onFilterModeChange');
+  const logSelectThread = action('onSelectThread');
+  const logToggleRunsInfoCollapsed = action('onToggleRunsInfoCollapsed');
+  const logInputValueChange = action('onInputValueChange');
+  const logSendMessage = action('onSendMessage');
+  const logThreadsLoadMore = action('onThreadsLoadMore');
 
   return (
     <ThreadsScreen
       {...currentArgs}
       onFilterModeChange={(mode) => {
+        logFilterModeChange(mode);
         updateArgs({ filterMode: mode });
       }}
       onSelectThread={(threadId) => {
+        logSelectThread(threadId);
         updateArgs({ selectedThreadId: threadId });
       }}
       onToggleRunsInfoCollapsed={(collapsed) => {
+        logToggleRunsInfoCollapsed(collapsed);
         updateArgs({ isRunsInfoCollapsed: collapsed });
       }}
       onInputValueChange={(value) => {
+        logInputValueChange(value);
         updateArgs({ inputValue: value });
       }}
       onSendMessage={(value, context) => {
+        logSendMessage(value, context);
         updateArgs({ inputValue: '' });
       }}
       onThreadsLoadMore={() => {
+        logThreadsLoadMore();
       }}
     />
   );

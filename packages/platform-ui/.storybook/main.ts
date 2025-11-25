@@ -25,6 +25,7 @@ const config: StorybookConfig = {
           ...(config.resolve?.alias ?? {}),
           '@storybook/react/dist/entry-preview.mjs': '@storybook/react/entry-preview',
           '@storybook/react/dist/entry-preview.js': '@storybook/react/entry-preview',
+          '@storybook/preview-api': 'storybook/internal/preview-api',
           '@storybook/react/dist/entry-preview-docs.mjs': '@storybook/react/entry-preview-docs',
           '@storybook/react/dist/entry-preview-docs.js': '@storybook/react/entry-preview-docs',
           '@storybook/react/dist/entry-preview-argtypes.mjs': '@storybook/react/entry-preview-argtypes',

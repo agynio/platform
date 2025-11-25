@@ -1,3 +1,4 @@
+import { action } from 'storybook/actions';
 import type { Meta, StoryObj } from '@storybook/react';
 import { useArgs } from '@storybook/preview-api';
 import RunScreen from '../src/components/screens/RunScreen';
@@ -141,33 +142,51 @@ const sampleEvents: RunEvent[] = [
 
 const ControlledRender: Story['render'] = () => {
   const [currentArgs, updateArgs] = useArgs<RunScreenProps>();
+  const logSelectEvent = action('onSelectEvent');
+  const logFollowingChange = action('onFollowingChange');
+  const logEventFiltersChange = action('onEventFiltersChange');
+  const logStatusFiltersChange = action('onStatusFiltersChange');
+  const logTokensPopoverOpenChange = action('onTokensPopoverOpenChange');
+  const logRunsPopoverOpenChange = action('onRunsPopoverOpenChange');
+  const logLoadMoreEvents = action('onLoadMoreEvents');
+  const logTerminate = action('onTerminate');
+  const logBack = action('onBack');
 
   return (
     <RunScreen
       {...currentArgs}
       onSelectEvent={(eventId) => {
+        logSelectEvent(eventId);
         updateArgs({ selectedEventId: eventId });
       }}
       onFollowingChange={(follow) => {
+        logFollowingChange(follow);
         updateArgs({ isFollowing: follow });
       }}
       onEventFiltersChange={(filters) => {
+        logEventFiltersChange(filters);
         updateArgs({ eventFilters: filters });
       }}
       onStatusFiltersChange={(filters) => {
+        logStatusFiltersChange(filters);
         updateArgs({ statusFilters: filters });
       }}
       onTokensPopoverOpenChange={(open) => {
+        logTokensPopoverOpenChange(open);
         updateArgs({ tokensPopoverOpen: open });
       }}
       onRunsPopoverOpenChange={(open) => {
+        logRunsPopoverOpenChange(open);
         updateArgs({ runsPopoverOpen: open });
       }}
       onLoadMoreEvents={() => {
+        logLoadMoreEvents();
       }}
       onTerminate={() => {
+        logTerminate();
       }}
       onBack={() => {
+        logBack();
       }}
     />
   );
