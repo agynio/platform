@@ -1,9 +1,20 @@
 import React from 'react';
-import { act, render, waitFor } from '@testing-library/react';
+import { act, render, screen, waitFor } from '@testing-library/react';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
+
+import { GraphLayout, type GraphLayoutServices } from '@/components/agents/GraphLayout';
 
 const sidebarProps: any[] = [];
 const canvasSpy = vi.hoisted(() => vi.fn());
+
+type GraphLayoutServiceMocks = {
+  [K in keyof GraphLayoutServices]: vi.Mock<
+    Parameters<GraphLayoutServices[K]>,
+    ReturnType<GraphLayoutServices[K]>
+  >;
+};
+
+let services: GraphLayoutServiceMocks;
 
 const hookMocks = vi.hoisted(() => ({
   useGraphData: vi.fn(),
@@ -38,13 +49,46 @@ vi.mock('@/features/graph/hooks/useNodeStatus', () => ({
   useNodeStatus: hookMocks.useNodeStatus,
 }));
 
-import { GraphLayout } from '@/components/agents/GraphLayout';
+const createServiceMocks = vi.hoisted((): (() => GraphLayoutServiceMocks) => () => {
+  const searchNixPackages = vi
+    .fn<Parameters<GraphLayoutServices['searchNixPackages']>, ReturnType<GraphLayoutServices['searchNixPackages']>>()
+    .mockResolvedValue([]);
+  const listNixPackageVersions = vi
+    .fn<Parameters<GraphLayoutServices['listNixPackageVersions']>, ReturnType<GraphLayoutServices['listNixPackageVersions']>>()
+    .mockResolvedValue([]);
+  const resolveNixSelection = vi
+    .fn<Parameters<GraphLayoutServices['resolveNixSelection']>, ReturnType<GraphLayoutServices['resolveNixSelection']>>()
+    .mockResolvedValue({ version: 'latest', commit: 'abc123', attr: 'pkg' });
+  const listVaultMounts = vi
+    .fn<Parameters<GraphLayoutServices['listVaultMounts']>, ReturnType<GraphLayoutServices['listVaultMounts']>>()
+    .mockResolvedValue([]);
+  const listVaultPaths = vi
+    .fn<Parameters<GraphLayoutServices['listVaultPaths']>, ReturnType<GraphLayoutServices['listVaultPaths']>>()
+    .mockResolvedValue([]);
+  const listVaultKeys = vi
+    .fn<Parameters<GraphLayoutServices['listVaultKeys']>, ReturnType<GraphLayoutServices['listVaultKeys']>>()
+    .mockResolvedValue([]);
+  const listVariableKeys = vi
+    .fn<Parameters<GraphLayoutServices['listVariableKeys']>, ReturnType<GraphLayoutServices['listVariableKeys']>>()
+    .mockResolvedValue([]);
+
+  return {
+    searchNixPackages,
+    listNixPackageVersions,
+    resolveNixSelection,
+    listVaultMounts,
+    listVaultPaths,
+    listVaultKeys,
+    listVariableKeys,
+  } satisfies GraphLayoutServiceMocks;
+});
 
 describe('GraphLayout', () => {
   beforeEach(() => {
     sidebarProps.length = 0;
     Object.values(hookMocks).forEach((mock) => mock.mockReset());
     canvasSpy.mockReset();
+    services = createServiceMocks();
   });
 
   it('passes sidebar config/state and persists config updates', async () => {
@@ -89,9 +133,26 @@ describe('GraphLayout', () => {
 
     hookMocks.useNodeStatus.mockReturnValue({ data: { provisionStatus: { state: 'ready' } } });
 
-    const { unmount } = render(<GraphLayout />);
+    const { unmount } = render(<GraphLayout services={services} />);
 
     await waitFor(() => expect(canvasSpy).toHaveBeenCalled());
+
+    const canvasProps = canvasSpy.mock.calls.at(-1)?.[0] as {
+      onNodesChange?: (changes: any[]) => void;
+    };
+
+    expect(sidebarProps.length).toBe(0);
+
+    act(() => {
+      canvasProps.onNodesChange?.([
+        {
+          id: 'node-1',
+          type: 'select',
+          selected: true,
+        },
+      ]);
+    });
+
     await waitFor(() => expect(sidebarProps.length).toBeGreaterThan(0));
 
     expect(hookMocks.useGraphSocket).toHaveBeenCalledWith(
@@ -102,9 +163,33 @@ describe('GraphLayout', () => {
       config: Record<string, unknown>;
       state: Record<string, unknown>;
       onConfigChange?: (next: Record<string, unknown>) => void;
+      nixPackageSearch: (...args: unknown[]) => Promise<unknown>;
+      fetchNixPackageVersions: (...args: unknown[]) => Promise<unknown>;
+      resolveNixPackageSelection: (...args: unknown[]) => Promise<unknown>;
+      secretSuggestionProvider: (...args: unknown[]) => Promise<unknown>;
+      variableSuggestionProvider: (...args: unknown[]) => Promise<unknown>;
+      providerDebounceMs: number;
     };
 
-    expect(Object.keys(sidebar).sort()).toEqual(['config', 'onConfigChange', 'state']);
+    expect(Object.keys(sidebar).sort()).toEqual([
+      'config',
+      'fetchNixPackageVersions',
+      'nixPackageSearch',
+      'onConfigChange',
+      'providerDebounceMs',
+      'resolveNixPackageSelection',
+      'secretSuggestionProvider',
+      'state',
+      'variableSuggestionProvider',
+    ]);
+
+    expect(typeof sidebar.nixPackageSearch).toBe('function');
+    expect(typeof sidebar.fetchNixPackageVersions).toBe('function');
+    expect(typeof sidebar.resolveNixPackageSelection).toBe('function');
+    expect(typeof sidebar.secretSuggestionProvider).toBe('function');
+    expect(typeof sidebar.variableSuggestionProvider).toBe('function');
+    expect(sidebar.providerDebounceMs).toBeGreaterThanOrEqual(200);
+    expect(sidebar.providerDebounceMs).toBeLessThanOrEqual(350);
 
     expect(sidebar.config).toEqual({
       kind: 'Agent',
@@ -164,7 +249,7 @@ describe('GraphLayout', () => {
     hookMocks.useGraphSocket.mockReturnValue(undefined);
     hookMocks.useNodeStatus.mockReturnValue({ data: null });
 
-    render(<GraphLayout />);
+    render(<GraphLayout services={services} />);
 
     await waitFor(() => expect(canvasSpy).toHaveBeenCalled());
     const props = canvasSpy.mock.calls.at(-1)?.[0] as {
@@ -244,7 +329,7 @@ describe('GraphLayout', () => {
     hookMocks.useGraphSocket.mockReturnValue(undefined);
     hookMocks.useNodeStatus.mockReturnValue({ data: null });
 
-    render(<GraphLayout />);
+    render(<GraphLayout services={services} />);
 
     await waitFor(() => expect(canvasSpy).toHaveBeenCalled());
     const props = canvasSpy.mock.calls.at(-1)?.[0] as {
@@ -283,5 +368,184 @@ describe('GraphLayout', () => {
     });
 
     await waitFor(() => expect(setEdges).toHaveBeenCalledWith([]));
+  });
+
+  it('wires sidebar providers through graph services', async () => {
+    const updateNode = vi.fn();
+    const applyNodeStatus = vi.fn();
+    const applyNodeState = vi.fn();
+    const setEdges = vi.fn();
+
+    hookMocks.useGraphData.mockReturnValue({
+      nodes: [
+        {
+          id: 'node-1',
+          template: 'agent-template',
+          kind: 'Agent',
+          title: 'Agent Node',
+          x: 0,
+          y: 0,
+          status: 'not_ready',
+          config: { title: 'Agent Node' },
+          ports: { inputs: [], outputs: [] },
+        },
+      ],
+      edges: [],
+      loading: false,
+      savingState: { status: 'saved', error: null },
+      savingErrorMessage: null,
+      updateNode,
+      applyNodeStatus,
+      applyNodeState,
+      setEdges,
+    });
+
+    hookMocks.useGraphSocket.mockReturnValue(undefined);
+    hookMocks.useNodeStatus.mockReturnValue({ data: null });
+
+    services.searchNixPackages.mockResolvedValue([{ name: 'nodejs' }]);
+    services.listNixPackageVersions.mockResolvedValue([{ version: '18.16.0' }]);
+    services.resolveNixSelection.mockResolvedValue({ version: '18.16.0', commit: 'abc123', attr: 'pkgs.nodejs' });
+    services.listVaultMounts.mockResolvedValue(['secret', 'kv']);
+    services.listVaultPaths.mockImplementation(async (mount: string, prefix = '') => {
+      if (mount !== 'secret') return [];
+      const normalized = prefix.replace(/\/+$/, '');
+      if (!normalized) {
+        return ['github/'];
+      }
+      if (normalized === 'github') {
+        return ['github/tokens/'];
+      }
+      return [];
+    });
+    services.listVaultKeys.mockImplementation(async (mount: string, path = '') => {
+      if (mount === 'secret' && path === 'github') {
+        return ['token-app'];
+      }
+      return [];
+    });
+    services.listVariableKeys.mockResolvedValue(['API_TOKEN', 'DB_URL']);
+
+    render(<GraphLayout services={services} />);
+
+    await waitFor(() => expect(canvasSpy).toHaveBeenCalled());
+    const canvasProps = canvasSpy.mock.calls.at(-1)?.[0] as {
+      onNodesChange?: (changes: any[]) => void;
+    };
+
+    act(() => {
+      canvasProps.onNodesChange?.([
+        {
+          id: 'node-1',
+          type: 'select',
+          selected: true,
+        },
+      ]);
+    });
+
+    await waitFor(() => expect(sidebarProps.length).toBeGreaterThan(0));
+    const sidebar = sidebarProps.at(-1) as {
+      nixPackageSearch: (...args: unknown[]) => Promise<unknown>;
+      fetchNixPackageVersions: (...args: unknown[]) => Promise<unknown>;
+      resolveNixPackageSelection: (...args: unknown[]) => Promise<unknown>;
+      secretSuggestionProvider: (...args: unknown[]) => Promise<unknown>;
+      variableSuggestionProvider: (...args: unknown[]) => Promise<unknown>;
+    };
+
+    await expect(sidebar.nixPackageSearch('node')).resolves.toEqual([
+      { value: 'nodejs', label: 'nodejs' },
+    ]);
+    expect(services.searchNixPackages).toHaveBeenCalledWith('node');
+
+    await expect(sidebar.fetchNixPackageVersions('nodejs')).resolves.toEqual(['18.16.0']);
+    expect(services.listNixPackageVersions).toHaveBeenCalledWith('nodejs');
+
+    await expect(sidebar.resolveNixPackageSelection('nodejs', '18.16.0')).resolves.toEqual({
+      version: '18.16.0',
+      commitHash: 'abc123',
+      attributePath: 'pkgs.nodejs',
+    });
+    expect(services.resolveNixSelection).toHaveBeenCalledWith('nodejs', '18.16.0');
+
+    await expect(sidebar.secretSuggestionProvider('')).resolves.toEqual(['secret/', 'kv/']);
+    await expect(sidebar.secretSuggestionProvider('secret/')).resolves.toEqual(['secret/github/']);
+    await expect(sidebar.secretSuggestionProvider('secret/github')).resolves.toEqual([
+      'secret/github/tokens/',
+    ]);
+    await expect(sidebar.secretSuggestionProvider('secret/github/token')).resolves.toEqual([
+      'secret/github/token-app',
+    ]);
+    expect(services.listVaultMounts).toHaveBeenCalledTimes(1);
+    expect(services.listVaultPaths).toHaveBeenCalledWith('secret', '');
+    expect(services.listVaultPaths).toHaveBeenCalledWith('secret', 'github');
+    expect(services.listVaultKeys).toHaveBeenCalledWith('secret', 'github', { maskErrors: true });
+
+    await expect(sidebar.variableSuggestionProvider('API')).resolves.toEqual(['API_TOKEN']);
+    expect(services.listVariableKeys).toHaveBeenCalledTimes(1);
+
+    services.searchNixPackages.mockRejectedValueOnce(new Error('boom'));
+    await expect(sidebar.nixPackageSearch('whatever')).resolves.toEqual([]);
+  });
+
+  it('clears sidebar selection when the node disappears', async () => {
+    const updateNode = vi.fn();
+    const applyNodeStatus = vi.fn();
+    const applyNodeState = vi.fn();
+    const setEdges = vi.fn();
+
+    const graphState = {
+      nodes: [
+        {
+          id: 'node-1',
+          template: 'agent-template',
+          kind: 'Agent',
+          title: 'Agent Node',
+          x: 0,
+          y: 0,
+          status: 'not_ready',
+          config: { title: 'Agent Node' },
+          ports: { inputs: [], outputs: [] },
+        },
+      ],
+      edges: [] as any[],
+      loading: false,
+      savingState: { status: 'saved', error: null } as const,
+      savingErrorMessage: null as string | null,
+      updateNode,
+      applyNodeStatus,
+      applyNodeState,
+      setEdges,
+    };
+
+    hookMocks.useGraphData.mockImplementation(() => graphState);
+    hookMocks.useGraphSocket.mockReturnValue(undefined);
+    hookMocks.useNodeStatus.mockReturnValue({ data: null });
+
+    const { rerender } = render(<GraphLayout services={services} />);
+
+    await waitFor(() => expect(canvasSpy).toHaveBeenCalled());
+    const canvasProps = canvasSpy.mock.calls.at(-1)?.[0] as {
+      onNodesChange?: (changes: any[]) => void;
+    };
+
+    act(() => {
+      canvasProps.onNodesChange?.([
+        {
+          id: 'node-1',
+          type: 'select',
+          selected: true,
+        },
+      ]);
+    });
+
+    await waitFor(() => expect(screen.getByTestId('node-sidebar-mock')).toBeInTheDocument());
+
+    act(() => {
+      graphState.nodes = [];
+      rerender(<GraphLayout services={services} />);
+    });
+
+    await waitFor(() => expect(screen.getByText('Build Your AI Team')).toBeInTheDocument());
+    expect(screen.queryByTestId('node-sidebar-mock')).not.toBeInTheDocument();
   });
 });

@@ -20,7 +20,8 @@ async function renderGraphRoute() {
   delete (globalThis as { __graphMockHits?: number }).__graphMockHits;
   vi.doMock('@/components/agents/GraphLayout', () => ({
     __esModule: true,
-    GraphLayout: () => {
+    GraphLayout: (props: { services: unknown }) => {
+      expect(props.services).toBeDefined();
       (globalThis as { __graphMockHits?: number }).__graphMockHits =
         ((globalThis as { __graphMockHits?: number }).__graphMockHits ?? 0) + 1;
       return <div data-testid="graph-container">new graph layout</div>;

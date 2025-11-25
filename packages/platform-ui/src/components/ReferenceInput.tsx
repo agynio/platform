@@ -19,6 +19,9 @@ interface ReferenceInputProps extends Omit<InputHTMLAttributes<HTMLInputElement>
   onSourceTypeChange?: (type: SourceType) => void;
   secretKeys?: string[];
   variableKeys?: string[];
+  secretProvider?: (query: string) => Promise<string[]>;
+  variableProvider?: (query: string) => Promise<string[]>;
+  providerDebounceMs?: number;
 }
 
 export function ReferenceInput({ 
@@ -32,6 +35,9 @@ export function ReferenceInput({
   className = '',
   secretKeys = [],
   variableKeys = [],
+  secretProvider,
+  variableProvider,
+  providerDebounceMs = 250,
   ...props 
 }: ReferenceInputProps) {
   const [internalSourceType, setInternalSourceType] = useState<SourceType>('text');
@@ -40,6 +46,10 @@ export function ReferenceInput({
   const [selectedIndex, setSelectedIndex] = useState(-1);
   const inputRef = useRef<HTMLInputElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const providerTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const requestCounterRef = useRef(0);
+  const [dynamicSecretKeys, setDynamicSecretKeys] = useState<string[]>([]);
+  const [dynamicVariableKeys, setDynamicVariableKeys] = useState<string[]>([]);
 
   const handleSourceTypeChange = (value: string) => {
     const newType = value as SourceType;
@@ -52,11 +62,23 @@ export function ReferenceInput({
 
   // Filter keys based on input value
   const inputValue = (props.value as string) || '';
-  const filteredKeys = sourceType === 'secret' && inputValue
-    ? secretKeys.filter(key => key.toLowerCase().includes(inputValue.toLowerCase()))
-    : sourceType === 'variable' && inputValue
-    ? variableKeys.filter(key => key.toLowerCase().includes(inputValue.toLowerCase()))
-    : [];
+  const hasSecretProvider = typeof secretProvider === 'function';
+  const hasVariableProvider = typeof variableProvider === 'function';
+  const effectiveSecretKeys = hasSecretProvider ? dynamicSecretKeys : secretKeys;
+  const effectiveVariableKeys = hasVariableProvider ? dynamicVariableKeys : variableKeys;
+  const filteredKeys = sourceType === 'secret'
+    ? (hasSecretProvider
+        ? effectiveSecretKeys
+        : inputValue
+          ? effectiveSecretKeys.filter((key) => key.toLowerCase().includes(inputValue.toLowerCase()))
+          : effectiveSecretKeys)
+    : sourceType === 'variable'
+      ? (hasVariableProvider
+          ? effectiveVariableKeys
+          : inputValue
+            ? effectiveVariableKeys.filter((key) => key.toLowerCase().includes(inputValue.toLowerCase()))
+            : effectiveVariableKeys)
+      : [];
 
   // Handle click outside to close autocomplete
   useEffect(() => {
@@ -76,22 +98,42 @@ export function ReferenceInput({
   }, []);
 
   const handleInputFocus = () => {
-    if (sourceType === 'secret' && secretKeys.length > 0) {
-      setShowAutocomplete(true);
-      setSelectedIndex(-1);
-    } else if (sourceType === 'variable' && variableKeys.length > 0) {
-      setShowAutocomplete(true);
-      setSelectedIndex(-1);
+    if (sourceType === 'secret') {
+      if (hasSecretProvider) {
+        setShowAutocomplete(dynamicSecretKeys.length > 0);
+        setSelectedIndex(-1);
+      } else if (effectiveSecretKeys.length > 0) {
+        setShowAutocomplete(true);
+        setSelectedIndex(-1);
+      }
+    } else if (sourceType === 'variable') {
+      if (hasVariableProvider) {
+        setShowAutocomplete(dynamicVariableKeys.length > 0);
+        setSelectedIndex(-1);
+      } else if (effectiveVariableKeys.length > 0) {
+        setShowAutocomplete(true);
+        setSelectedIndex(-1);
+      }
     }
   };
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (sourceType === 'secret' && secretKeys.length > 0) {
-      setShowAutocomplete(true);
-      setSelectedIndex(-1);
-    } else if (sourceType === 'variable' && variableKeys.length > 0) {
-      setShowAutocomplete(true);
-      setSelectedIndex(-1);
+    if (sourceType === 'secret') {
+      if (hasSecretProvider) {
+        setShowAutocomplete(true);
+        setSelectedIndex(-1);
+      } else if (secretKeys.length > 0) {
+        setShowAutocomplete(true);
+        setSelectedIndex(-1);
+      }
+    } else if (sourceType === 'variable') {
+      if (hasVariableProvider) {
+        setShowAutocomplete(true);
+        setSelectedIndex(-1);
+      } else if (variableKeys.length > 0) {
+        setShowAutocomplete(true);
+        setSelectedIndex(-1);
+      }
     }
     if (props.onChange) {
       props.onChange(e);
@@ -144,6 +186,88 @@ export function ReferenceInput({
       props.onKeyDown(e);
     }
   };
+
+  useEffect(() => {
+    return () => {
+      if (providerTimerRef.current) {
+        clearTimeout(providerTimerRef.current);
+        providerTimerRef.current = null;
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    if (sourceType !== 'secret') {
+      setDynamicSecretKeys([]);
+    }
+    if (sourceType !== 'variable') {
+      setDynamicVariableKeys([]);
+    }
+  }, [sourceType]);
+
+  useEffect(() => {
+    if (sourceType === 'secret' && hasSecretProvider) {
+      const requestId = ++requestCounterRef.current;
+      if (providerTimerRef.current) {
+        clearTimeout(providerTimerRef.current);
+      }
+      providerTimerRef.current = setTimeout(async () => {
+        try {
+          const result = await secretProvider(inputValue);
+          if (requestCounterRef.current === requestId) {
+            const values = Array.isArray(result)
+              ? result.filter((item): item is string => typeof item === 'string')
+              : [];
+            setDynamicSecretKeys(values);
+            setShowAutocomplete(values.length > 0);
+            setSelectedIndex(-1);
+          }
+        } catch {
+          if (requestCounterRef.current === requestId) {
+            setDynamicSecretKeys([]);
+          }
+        }
+      }, providerDebounceMs);
+      return () => {
+        if (providerTimerRef.current) {
+          clearTimeout(providerTimerRef.current);
+          providerTimerRef.current = null;
+        }
+      };
+    }
+
+    if (sourceType === 'variable' && hasVariableProvider) {
+      const requestId = ++requestCounterRef.current;
+      if (providerTimerRef.current) {
+        clearTimeout(providerTimerRef.current);
+      }
+      providerTimerRef.current = setTimeout(async () => {
+        try {
+          const result = await variableProvider(inputValue);
+          if (requestCounterRef.current === requestId) {
+            const values = Array.isArray(result)
+              ? result.filter((item): item is string => typeof item === 'string')
+              : [];
+            setDynamicVariableKeys(values);
+            setShowAutocomplete(values.length > 0);
+            setSelectedIndex(-1);
+          }
+        } catch {
+          if (requestCounterRef.current === requestId) {
+            setDynamicVariableKeys([]);
+          }
+        }
+      }, providerDebounceMs);
+      return () => {
+        if (providerTimerRef.current) {
+          clearTimeout(providerTimerRef.current);
+          providerTimerRef.current = null;
+        }
+      };
+    }
+
+    return undefined;
+  }, [sourceType, hasSecretProvider, hasVariableProvider, secretProvider, variableProvider, inputValue, providerDebounceMs]);
 
   const paddingClasses = size === 'sm' ? 'px-3 py-2' : 'px-4 py-3';
   const inputLeftPadding = size === 'sm' ? 'pl-[52px]' : 'pl-[64px]';

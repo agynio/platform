@@ -1,5 +1,5 @@
 import { Info, Play, Square, Trash2, ChevronDown, ChevronUp } from 'lucide-react';
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect, useMemo } from 'react';
 
 import { Input } from './Input';
 import { Textarea } from './Textarea';
@@ -13,6 +13,7 @@ import { IconButton } from './IconButton';
 import { ReferenceInput } from './ReferenceInput';
 import { BashInput } from './BashInput';
 import { AutocompleteInput } from './AutocompleteInput';
+import type { AutocompleteOption } from './AutocompleteInput';
 import { Collapsible, CollapsibleTrigger, CollapsibleContent } from './ui/collapsible';
 import { ToolItem } from './ToolItem';
 
@@ -40,12 +41,14 @@ type ReferenceConfigValue = string | Record<string, unknown>;
 type EnvVar = {
   key: string;
   value: string;
-  source?: 'static' | 'vault';
+  source: 'static' | 'vault' | 'variable';
 };
 
-type SimpleNixPackage = {
+type WorkspaceNixPackage = {
   name: string;
   version: string;
+  commitHash: string;
+  attributePath: string;
 };
 
 type AgentQueueConfig = {
@@ -74,6 +77,16 @@ interface NodePropertiesSidebarProps {
   enabledTools?: string[] | null;
   onToggleTool?: (toolName: string, nextEnabled: boolean) => void;
   toolsLoading?: boolean;
+  nixPackageSearch?: (query: string) => Promise<AutocompleteOption[]>;
+  fetchNixPackageVersions?: (name: string) => Promise<string[]>;
+  resolveNixPackageSelection?: (name: string, version: string) => Promise<{
+    version: string;
+    commitHash: string;
+    attributePath: string;
+  }>;
+  secretSuggestionProvider?: (query: string) => Promise<string[]>;
+  variableSuggestionProvider?: (query: string) => Promise<string[]>;
+  providerDebounceMs?: number;
 }
 
 const statusConfig: Record<NodeStatus, { label: string; color: string; bgColor: string }> = {
@@ -154,19 +167,22 @@ function writeReferenceValue(prev: ReferenceConfigValue, nextValue: string): Ref
 function readEnvList(raw: unknown): EnvVar[] {
   if (Array.isArray(raw)) {
     return raw.map((item) => {
-      if (!isRecord(item)) return { key: '', value: '' };
+      if (!isRecord(item)) return { key: '', value: '', source: 'static' } satisfies EnvVar;
       const key = typeof item.key === 'string' ? item.key : typeof item.name === 'string' ? item.name : '';
       const value = typeof item.value === 'string' ? item.value : '';
-      const source = item.source === 'vault' ? 'vault' : item.source === 'static' ? 'static' : undefined;
-      const env: EnvVar = { key, value };
-      if (source) env.source = source;
-      return env;
+      const source: EnvVar['source'] = item.source === 'vault'
+        ? 'vault'
+        : item.source === 'variable'
+        ? 'variable'
+        : 'static';
+      return { key, value, source } satisfies EnvVar;
     });
   }
   if (isRecord(raw)) {
     return Object.entries(raw).map(([key, value]) => ({
       key,
       value: typeof value === 'string' ? value : '',
+      source: 'static',
     }));
   }
   return [];
@@ -176,8 +192,32 @@ function serializeEnvVars(list: EnvVar[]): EnvVar[] {
   return list.map((item) => ({
     key: item.key,
     value: item.value,
-    ...(item.source ? { source: item.source } : {}),
+    source: item.source ?? 'static',
   }));
+}
+
+function toReferenceSourceType(source: EnvVar['source']): 'text' | 'secret' | 'variable' {
+  switch (source) {
+    case 'vault':
+      return 'secret';
+    case 'variable':
+      return 'variable';
+    case 'static':
+    default:
+      return 'text';
+  }
+}
+
+function fromReferenceSourceType(type: 'text' | 'secret' | 'variable'): EnvVar['source'] {
+  switch (type) {
+    case 'secret':
+      return 'vault';
+    case 'variable':
+      return 'variable';
+    case 'text':
+    default:
+      return 'static';
+  }
 }
 
 function readQueueConfig(config: NodeConfig): AgentQueueConfig {
@@ -237,7 +277,7 @@ function applySummarizationUpdate(config: NodeConfig, partial: Partial<AgentSumm
   return updates;
 }
 
-function readNixPackages(nixConfig: unknown): SimpleNixPackage[] {
+function readNixPackages(nixConfig: unknown): WorkspaceNixPackage[] {
   if (!isRecord(nixConfig)) return [];
   const packagesRaw = nixConfig.packages;
   if (!Array.isArray(packagesRaw)) return [];
@@ -246,10 +286,17 @@ function readNixPackages(nixConfig: unknown): SimpleNixPackage[] {
       if (!isRecord(pkg)) return null;
       const name = typeof pkg.name === 'string' ? pkg.name : '';
       if (!name) return null;
-      const version = typeof pkg.version === 'string' ? pkg.version : 'latest';
-      return { name, version } as SimpleNixPackage;
+      const version = typeof pkg.version === 'string' ? pkg.version : '';
+      const commitHash = typeof pkg.commitHash === 'string' ? pkg.commitHash : '';
+      const attributePath = typeof pkg.attributePath === 'string' ? pkg.attributePath : '';
+      return {
+        name,
+        version,
+        commitHash,
+        attributePath,
+      } satisfies WorkspaceNixPackage;
     })
-    .filter((pkg): pkg is SimpleNixPackage => pkg !== null);
+    .filter((pkg): pkg is WorkspaceNixPackage => pkg !== null);
 }
 
 function applyVolumesUpdate(config: NodeConfig, partial: Partial<{ enabled: boolean; mountPath: string }>): Partial<NodeConfig> {
@@ -260,7 +307,7 @@ function applyVolumesUpdate(config: NodeConfig, partial: Partial<{ enabled: bool
   return { volumes: mergedVolumes };
 }
 
-function applyNixUpdate(config: NodeConfig, packages: SimpleNixPackage[]): Partial<NodeConfig> {
+function applyNixUpdate(config: NodeConfig, packages: WorkspaceNixPackage[]): Partial<NodeConfig> {
   const existingNix = isRecord((config as Record<string, unknown>).nix)
     ? ((config as Record<string, unknown>).nix as Record<string, unknown>)
     : {};
@@ -287,6 +334,12 @@ export default function NodePropertiesSidebar({
   enabledTools,
   onToggleTool,
   toolsLoading = false,
+  nixPackageSearch,
+  fetchNixPackageVersions,
+  resolveNixPackageSelection,
+  secretSuggestionProvider,
+  variableSuggestionProvider,
+  providerDebounceMs = 250,
 }: NodePropertiesSidebarProps) {
   const { kind: nodeKind, title: nodeTitle } = config;
   const { status } = state;
@@ -296,30 +349,85 @@ export default function NodePropertiesSidebar({
   const [mcpEnvOpen, setMcpEnvOpen] = useState(true);
   const [nixPackagesOpen, setNixPackagesOpen] = useState(true);
   const [mcpLimitsOpen, setMcpLimitsOpen] = useState(false);
-  const [nixPackageSearch, setNixPackageSearch] = useState('');
+  const [nixPackageQuery, setNixPackageQuery] = useState('');
+  const [nixVersionOptions, setNixVersionOptions] = useState<Record<string, string[]>>({});
+  const [nixVersionLoading, setNixVersionLoading] = useState<Set<string>>(() => new Set());
+  const [nixResolutionLoading, setNixResolutionLoading] = useState<Set<string>>(() => new Set());
+  const [nixErrors, setNixErrors] = useState<Record<string, string | null>>({});
 
-  const fetchNixPackages = useCallback(async (query: string) => {
-    await new Promise((resolve) => setTimeout(resolve, 300));
-    const mockPackages = [
-      'nodejs',
-      'python3',
-      'go',
-      'rust',
-      'gcc',
-      'git',
-      'vim',
-      'neovim',
-      'docker',
-      'kubectl',
-      'terraform',
-      'ansible',
-      'postgresql',
-      'redis',
-    ];
-    return mockPackages
-      .filter((pkg) => pkg.toLowerCase().includes(query.toLowerCase()))
-      .map((pkg) => ({ value: pkg, label: pkg }));
+  const setVersionLoading = useCallback((name: string, loading: boolean) => {
+    setNixVersionLoading((prev) => {
+      const next = new Set(prev);
+      if (loading) {
+        next.add(name);
+      } else {
+        next.delete(name);
+      }
+      return next;
+    });
   }, []);
+
+  const setPackageResolving = useCallback((name: string, loading: boolean) => {
+    setNixResolutionLoading((prev) => {
+      const next = new Set(prev);
+      if (loading) {
+        next.add(name);
+      } else {
+        next.delete(name);
+      }
+      return next;
+    });
+  }, []);
+
+  const fetchNixPackageOptions = useMemo(() => {
+    if (!nixPackageSearch) {
+      return async (_query: string): Promise<AutocompleteOption[]> => [];
+    }
+    return async (query: string): Promise<AutocompleteOption[]> => {
+      try {
+        const result = await nixPackageSearch(query);
+        return Array.isArray(result) ? result : [];
+      } catch {
+        return [];
+      }
+    };
+  }, [nixPackageSearch]);
+
+  const loadPackageVersions = useCallback(
+    async (name: string) => {
+      if (!fetchNixPackageVersions) return;
+      if (nixVersionLoading.has(name)) return;
+      setVersionLoading(name, true);
+      try {
+        const versions = await fetchNixPackageVersions(name);
+        setNixVersionOptions((prev) => ({ ...prev, [name]: Array.isArray(versions) ? versions : [] }));
+        setNixErrors((prev) => ({ ...prev, [name]: null }));
+      } catch {
+        setNixErrors((prev) => ({ ...prev, [name]: 'Failed to load versions' }));
+      } finally {
+        setVersionLoading(name, false);
+      }
+    },
+    [fetchNixPackageVersions, nixVersionLoading, setVersionLoading],
+  );
+
+  const clearPackageState = useCallback(
+    (name: string) => {
+      setNixVersionOptions((prev) => {
+        if (!(name in prev)) return prev;
+        const { [name]: _removed, ...rest } = prev;
+        return rest;
+      });
+      setNixErrors((prev) => {
+        if (!(name in prev)) return prev;
+        const { [name]: _removed, ...rest } = prev;
+        return rest;
+      });
+      setVersionLoading(name, false);
+      setPackageResolving(name, false);
+    },
+    [setVersionLoading, setPackageResolving],
+  );
 
   const toolList = tools ?? [];
   const enabledToolSet = enabledTools ? new Set(enabledTools) : new Set(toolList.map((tool) => tool.name));
@@ -369,14 +477,14 @@ export default function NodePropertiesSidebar({
   const volumesMountPath = typeof volumesConfig.mountPath === 'string' ? (volumesConfig.mountPath as string) : '/workspace';
   const workspaceNixPackages = readNixPackages(configRecord.nix);
 
-  const mockSecretKeys = [
-    'SLACK_APP_TOKEN',
-    'SLACK_BOT_TOKEN',
-    'SLACK_SIGNING_SECRET',
-    'SLACK_WEBHOOK_URL',
-    'GITHUB_TOKEN',
-    'OPENAI_API_KEY',
-  ];
+  useEffect(() => {
+    if (!fetchNixPackageVersions) return;
+    workspaceNixPackages.forEach((pkg) => {
+      if (!nixVersionOptions[pkg.name]) {
+        void loadPackageVersions(pkg.name);
+      }
+    });
+  }, [workspaceNixPackages, fetchNixPackageVersions, loadPackageVersions, nixVersionOptions]);
 
   const statusInfo = statusConfig[status];
   const canProvision = status === 'not_ready' || status === 'deprovisioning_error';
@@ -625,7 +733,8 @@ export default function NodePropertiesSidebar({
                       onConfigChange?.({ app_token: writeReferenceValue(slackAppReference.raw, e.target.value) })
                     }
                     sourceType="secret"
-                    secretKeys={mockSecretKeys}
+                    secretProvider={secretSuggestionProvider}
+                    providerDebounceMs={providerDebounceMs}
                     placeholder="Select or enter app token..."
                     size="sm"
                   />
@@ -642,7 +751,8 @@ export default function NodePropertiesSidebar({
                       onConfigChange?.({ bot_token: writeReferenceValue(slackBotReference.raw, e.target.value) })
                     }
                     sourceType="secret"
-                    secretKeys={mockSecretKeys}
+                    secretProvider={secretSuggestionProvider}
+                    providerDebounceMs={providerDebounceMs}
                     placeholder="Select or enter bot token..."
                     size="sm"
                   />
@@ -738,8 +848,15 @@ export default function NodePropertiesSidebar({
                                 next[index] = { ...next[index], value: e.target.value };
                                 onConfigChange?.({ env: serializeEnvVars(next) });
                               }}
-                              sourceType="secret"
-                              secretKeys={mockSecretKeys}
+                              sourceType={toReferenceSourceType(envVar.source)}
+                              onSourceTypeChange={(type) => {
+                                const next = [...mcpEnvVars];
+                                next[index] = { ...next[index], source: fromReferenceSourceType(type) };
+                                onConfigChange?.({ env: serializeEnvVars(next) });
+                              }}
+                              secretProvider={secretSuggestionProvider}
+                              variableProvider={variableSuggestionProvider}
+                              providerDebounceMs={providerDebounceMs}
                               placeholder="Value or reference..."
                               size="sm"
                             />
@@ -749,7 +866,14 @@ export default function NodePropertiesSidebar({
                       <Button
                         variant="ghost"
                         size="sm"
-                        onClick={() => onConfigChange?.({ env: serializeEnvVars([...mcpEnvVars, { key: '', value: '' }]) })}
+                        onClick={() =>
+                          onConfigChange?.({
+                            env: serializeEnvVars([
+                              ...mcpEnvVars,
+                              { key: '', value: '', source: 'static' },
+                            ]),
+                          })
+                        }
                       >
                         Add Variable
                       </Button>
@@ -975,8 +1099,15 @@ export default function NodePropertiesSidebar({
                                 next[index] = { ...next[index], value: e.target.value };
                                 onConfigChange?.({ env: serializeEnvVars(next) });
                               }}
-                              sourceType="secret"
-                              secretKeys={mockSecretKeys}
+                              sourceType={toReferenceSourceType(envVar.source)}
+                              onSourceTypeChange={(type) => {
+                                const next = [...workspaceEnvVars];
+                                next[index] = { ...next[index], source: fromReferenceSourceType(type) };
+                                onConfigChange?.({ env: serializeEnvVars(next) });
+                              }}
+                              secretProvider={secretSuggestionProvider}
+                              variableProvider={variableSuggestionProvider}
+                              providerDebounceMs={providerDebounceMs}
                               placeholder="Value or reference..."
                               size="sm"
                             />
@@ -987,7 +1118,12 @@ export default function NodePropertiesSidebar({
                         variant="ghost"
                         size="sm"
                         onClick={() =>
-                          onConfigChange?.({ env: serializeEnvVars([...workspaceEnvVars, { key: '', value: '' }]) })
+                          onConfigChange?.({
+                            env: serializeEnvVars([
+                              ...workspaceEnvVars,
+                              { key: '', value: '', source: 'static' },
+                            ]),
+                          })
                         }
                       >
                         Add Variable
@@ -1068,17 +1204,28 @@ export default function NodePropertiesSidebar({
                   <CollapsibleContent>
                     <div className="space-y-4">
                       <AutocompleteInput
-                        value={nixPackageSearch}
-                        onChange={setNixPackageSearch}
-                        fetchOptions={fetchNixPackages}
+                        value={nixPackageQuery}
+                        onChange={setNixPackageQuery}
+                        fetchOptions={fetchNixPackageOptions}
                         placeholder="Search packages..."
-                        onSelect={(option) => {
+                        onSelect={async (option) => {
                           if (!workspaceNixPackages.some((pkg) => pkg.name === option.value)) {
-                            const next = [...workspaceNixPackages, { name: option.value, version: 'latest' }];
+                            const next = [
+                              ...workspaceNixPackages,
+                              {
+                                name: option.value,
+                                version: '',
+                                commitHash: '',
+                                attributePath: '',
+                              } satisfies WorkspaceNixPackage,
+                            ];
                             onConfigChange?.(applyNixUpdate(config, next));
+                            setNixErrors((prev) => ({ ...prev, [option.value]: null }));
+                            await loadPackageVersions(option.value);
                           }
-                          setNixPackageSearch('');
+                          setNixPackageQuery('');
                         }}
+                        debounceMs={300}
                         clearable
                         size="sm"
                       />
@@ -1088,21 +1235,63 @@ export default function NodePropertiesSidebar({
                             <FieldLabel label={pkg.name} />
                             <div className="flex items-center gap-2">
                               <Dropdown
-                                options={[
-                                  { value: 'latest', label: 'Latest' },
-                                  { value: '20.10.0', label: '20.10.0' },
-                                  { value: '18.16.0', label: '18.16.0' },
-                                  { value: '16.20.0', label: '16.20.0' },
-                                ]}
+                                options={(nixVersionOptions[pkg.name] ?? []).map((version) => ({
+                                  value: version,
+                                  label: version,
+                                }))}
+                                placeholder={
+                                  nixVersionLoading.has(pkg.name)
+                                    ? 'Loading versions...'
+                                    : (nixVersionOptions[pkg.name]?.length ?? 0) === 0
+                                      ? 'No versions found'
+                                      : 'Select version'
+                                }
                                 value={pkg.version}
-                                onValueChange={(value) => {
-                                  const next = workspaceNixPackages.map((entry, idx) =>
-                                    idx === index ? { ...entry, version: value } : entry,
+                                onValueChange={async (value) => {
+                                  const staged = workspaceNixPackages.map((entry, idx) =>
+                                    idx === index
+                                      ? {
+                                          ...entry,
+                                          version: value,
+                                          commitHash: '',
+                                          attributePath: '',
+                                        }
+                                      : entry,
                                   );
-                                  onConfigChange?.(applyNixUpdate(config, next));
+                                  onConfigChange?.(applyNixUpdate(config, staged));
+
+                                  if (!resolveNixPackageSelection) {
+                                    return;
+                                  }
+
+                                  setPackageResolving(pkg.name, true);
+                                  try {
+                                    const resolved = await resolveNixPackageSelection(pkg.name, value);
+                                    setNixErrors((prev) => ({ ...prev, [pkg.name]: null }));
+                                    const nextResolved = staged.map((entry, idx) =>
+                                      idx === index
+                                        ? {
+                                            name: entry.name,
+                                            version: resolved.version,
+                                            commitHash: resolved.commitHash,
+                                            attributePath: resolved.attributePath,
+                                          }
+                                        : entry,
+                                    );
+                                    onConfigChange?.(applyNixUpdate(config, nextResolved));
+                                  } catch {
+                                    setNixErrors((prev) => ({ ...prev, [pkg.name]: 'Failed to resolve package' }));
+                                  } finally {
+                                    setPackageResolving(pkg.name, false);
+                                  }
                                 }}
                                 size="sm"
                                 className="flex-1"
+                                disabled={
+                                  nixVersionLoading.has(pkg.name) ||
+                                  nixResolutionLoading.has(pkg.name) ||
+                                  (nixVersionOptions[pkg.name]?.length ?? 0) === 0
+                                }
                               />
                               <div className="w-[40px] flex items-center justify-center">
                                 <IconButton
@@ -1112,11 +1301,24 @@ export default function NodePropertiesSidebar({
                                   onClick={() => {
                                     const next = workspaceNixPackages.filter((_, idx) => idx !== index);
                                     onConfigChange?.(applyNixUpdate(config, next));
+                                    clearPackageState(pkg.name);
                                   }}
                                   className="hover:text-[var(--agyn-status-failed)]"
+                                  disabled={nixResolutionLoading.has(pkg.name)}
                                 />
                               </div>
                             </div>
+                            {nixErrors[pkg.name] ? (
+                              <div className="mt-1 text-xs text-[var(--agyn-status-failed)]">{nixErrors[pkg.name]}</div>
+                            ) : null}
+                            {nixResolutionLoading.has(pkg.name) ? (
+                              <div className="mt-1 text-xs text-[var(--agyn-gray)]">Resolving selection…</div>
+                            ) : null}
+                            {pkg.commitHash && pkg.attributePath ? (
+                              <div className="mt-1 text-[10px] text-[var(--agyn-gray)]">
+                                {pkg.commitHash.slice(0, 12)} · {pkg.attributePath}
+                              </div>
+                            ) : null}
                           </div>
                         ))}
                       </div>

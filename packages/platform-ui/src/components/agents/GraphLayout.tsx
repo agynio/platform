@@ -13,6 +13,20 @@ import type { NodeStatus as ApiNodeStatus } from '@/api/types/graph';
 
 type FlowNode = Node<GraphNodeData>;
 
+export interface GraphLayoutServices {
+  searchNixPackages: (query: string) => Promise<Array<{ name: string }>>;
+  listNixPackageVersions: (name: string) => Promise<Array<{ version: string }>>;
+  resolveNixSelection: (name: string, version: string) => Promise<{ version: string; commit: string; attr: string }>;
+  listVaultMounts: () => Promise<string[]>;
+  listVaultPaths: (mount: string, prefix?: string) => Promise<string[]>;
+  listVaultKeys: (mount: string, path?: string, opts?: { maskErrors?: boolean }) => Promise<string[]>;
+  listVariableKeys: () => Promise<string[]>;
+}
+
+export interface GraphLayoutProps {
+  services: GraphLayoutServices;
+}
+
 function toFlowNode(node: GraphNodeConfig, selectedId: string | null): FlowNode {
   return {
     id: node.id,
@@ -95,7 +109,7 @@ function mapProvisionState(status?: ApiNodeStatus): GraphNodeStatus | undefined 
   }
 }
 
-export function GraphLayout() {
+export function GraphLayout({ services }: GraphLayoutProps) {
   const {
     nodes,
     edges,
@@ -107,6 +121,192 @@ export function GraphLayout() {
     applyNodeState,
     setEdges,
   } = useGraphData();
+
+  const providerDebounceMs = 275;
+  const vaultMountsRef = useRef<string[] | null>(null);
+  const vaultMountsPromiseRef = useRef<Promise<string[]> | null>(null);
+  const variableKeysRef = useRef<string[]>([]);
+  const variableKeysPromiseRef = useRef<Promise<string[]> | null>(null);
+
+  const ensureVaultMounts = useCallback(async (): Promise<string[]> => {
+    if (vaultMountsRef.current) {
+      return vaultMountsRef.current;
+    }
+    if (!vaultMountsPromiseRef.current) {
+      vaultMountsPromiseRef.current = services
+        .listVaultMounts()
+        .then((items) => {
+          const sanitized = Array.isArray(items)
+            ? items.filter((item): item is string => typeof item === 'string' && item.length > 0)
+            : [];
+          vaultMountsRef.current = sanitized;
+          return sanitized;
+        })
+        .catch(() => {
+          vaultMountsRef.current = [];
+          return [];
+        })
+        .finally(() => {
+          vaultMountsPromiseRef.current = null;
+        });
+    }
+    try {
+      return await vaultMountsPromiseRef.current;
+    } catch {
+      return [];
+    }
+  }, [services]);
+
+  const handleNixPackageSearch = useCallback(
+    async (query: string): Promise<Array<{ value: string; label: string }>> => {
+      const trimmed = query.trim();
+      if (trimmed.length < 2) return [];
+      try {
+        const result = await services.searchNixPackages(trimmed);
+        return result
+          .filter((item) => item && typeof item.name === 'string')
+          .map((item) => ({ value: item.name, label: item.name }));
+      } catch {
+        return [];
+      }
+    },
+    [services],
+  );
+
+  const handleFetchNixPackageVersions = useCallback(
+    async (name: string): Promise<string[]> => {
+      if (!name) return [];
+      try {
+        const result = await services.listNixPackageVersions(name);
+        return result
+          .map((item) => item?.version)
+          .filter((version): version is string => typeof version === 'string' && version.length > 0);
+      } catch {
+        return [];
+      }
+    },
+    [services],
+  );
+
+  const handleResolveNixPackageSelection = useCallback(
+    async (name: string, version: string) => {
+      const resolved = await services.resolveNixSelection(name, version);
+      if (!resolved || typeof resolved.version !== 'string') {
+        throw new Error('nix-resolve-invalid');
+      }
+      return {
+        version: resolved.version,
+        commitHash: resolved.commit,
+        attributePath: resolved.attr,
+      };
+    },
+    [services],
+  );
+
+  const ensureVariableKeys = useCallback(async (): Promise<string[]> => {
+    if (variableKeysRef.current.length > 0) {
+      return variableKeysRef.current;
+    }
+    if (!variableKeysPromiseRef.current) {
+      variableKeysPromiseRef.current = services
+        .listVariableKeys()
+        .then((items) => {
+          const sanitized = Array.isArray(items)
+            ? items.filter((item): item is string => typeof item === 'string' && item.length > 0)
+            : [];
+          variableKeysRef.current = sanitized;
+          return sanitized;
+        })
+        .catch(() => {
+          variableKeysRef.current = [];
+          return [];
+        })
+        .finally(() => {
+          variableKeysPromiseRef.current = null;
+        });
+    }
+    try {
+      return await variableKeysPromiseRef.current;
+    } catch {
+      return [];
+    }
+  }, [services]);
+
+  const fetchVariableSuggestions = useCallback(
+    async (raw: string) => {
+      try {
+        const keys = await ensureVariableKeys();
+        const query = (raw ?? '').trim().toLowerCase();
+        const filtered = query.length === 0
+          ? keys
+          : keys.filter((key) => key.toLowerCase().includes(query));
+        return filtered.slice(0, 50);
+      } catch {
+        return [];
+      }
+    },
+    [ensureVariableKeys],
+  );
+
+  const fetchVaultSuggestions = useCallback(
+    async (raw: string) => {
+      try {
+        const mounts = await ensureVaultMounts();
+        const input = (raw ?? '').trim();
+        if (!input) {
+          return mounts.map((mount) => `${mount}/`);
+        }
+
+        const normalized = input.replace(/^\/+/, '');
+        const lowerNormalized = normalized.toLowerCase();
+
+        if (!normalized.includes('/')) {
+          return mounts
+            .filter((mount) => mount.toLowerCase().startsWith(lowerNormalized))
+            .map((mount) => `${mount}/`);
+        }
+
+        const [mountName, ...restParts] = normalized.split('/');
+        if (!mountName) {
+          return mounts.map((mount) => `${mount}/`);
+        }
+
+        if (!mounts.includes(mountName)) {
+          return mounts
+            .filter((mount) => mount.toLowerCase().startsWith(lowerNormalized))
+            .map((mount) => `${mount}/`);
+        }
+
+        const remainder = restParts.join('/');
+        if (!remainder) {
+          const paths = await services.listVaultPaths(mountName, '');
+          return Array.from(new Set(paths.map((item) => `${mountName}/${item}`)));
+        }
+
+        if (input.endsWith('/')) {
+          const paths = await services.listVaultPaths(mountName, remainder);
+          return Array.from(new Set(paths.map((item) => `${mountName}/${item}`)));
+        }
+
+        if (!remainder.includes('/')) {
+          const paths = await services.listVaultPaths(mountName, remainder);
+          return Array.from(new Set(paths.map((item) => `${mountName}/${item}`)));
+        }
+
+        const lastSlash = remainder.lastIndexOf('/');
+        const pathPrefix = lastSlash >= 0 ? remainder.slice(0, lastSlash) : '';
+        const keyFragment = lastSlash >= 0 ? remainder.slice(lastSlash + 1) : remainder;
+        const keys = await services.listVaultKeys(mountName, pathPrefix, { maskErrors: true });
+        const lowerFragment = keyFragment.toLowerCase();
+        return keys
+          .filter((key) => (lowerFragment ? key.toLowerCase().startsWith(lowerFragment) : true))
+          .map((key) => `${mountName}/${pathPrefix ? `${pathPrefix}/` : ''}${key}`);
+      } catch {
+        return [];
+      }
+    },
+    [ensureVaultMounts, services],
+  );
 
   const nodeIds = useMemo(() => nodes.map((node) => node.id), [nodes]);
 
@@ -133,14 +333,15 @@ export function GraphLayout() {
   }, [selectedNodeId]);
 
   useEffect(() => {
-    if (!selectedNodeId && nodes.length > 0) {
-      setSelectedNodeId(nodes[0].id);
+    const currentSelected = selectedNodeIdRef.current;
+    if (!currentSelected) {
       return;
     }
-    if (selectedNodeId && !nodes.some((node) => node.id === selectedNodeId)) {
-      setSelectedNodeId(nodes[0]?.id ?? null);
+    const exists = nodes.some((node) => node.id === currentSelected);
+    if (!exists) {
+      setSelectedNodeId(null);
     }
-  }, [nodes, selectedNodeId]);
+  }, [nodes]);
 
   useEffect(() => {
     setFlowNodes((prev) => {
@@ -325,6 +526,12 @@ export function GraphLayout() {
           config={sidebarConfig}
           state={{ status: sidebarStatus }}
           onConfigChange={handleConfigChange}
+          nixPackageSearch={handleNixPackageSearch}
+          fetchNixPackageVersions={handleFetchNixPackageVersions}
+          resolveNixPackageSelection={handleResolveNixPackageSelection}
+          secretSuggestionProvider={fetchVaultSuggestions}
+          variableSuggestionProvider={fetchVariableSuggestions}
+          providerDebounceMs={providerDebounceMs}
         />
       ) : (
         <EmptySelectionSidebar />
