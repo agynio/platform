@@ -1,6 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
 import { Test } from '@nestjs/testing';
-import { LoggerService } from '../src/core/services/logger.service.js';
 import { ConfigService } from '../src/core/services/config.service';
 import { ModuleRef } from '@nestjs/core';
 import { LLMProvisioner } from '../src/llm/provisioners/llm.provisioner';
@@ -22,7 +21,6 @@ describe('Fail-fast behavior', () => {
   it('AgentNode.invoke propagates persistence beginRun error', async () => {
     const module = await Test.createTestingModule({
       providers: [
-        LoggerService,
         ConfigService,
         { provide: LLMProvisioner, useClass: StubLLMProvisioner },
         AgentNode,
@@ -41,14 +39,14 @@ describe('Fail-fast behavior', () => {
       ],
     }).compile();
 
-    const logger = module.get(LoggerService);
-    const spy = vi.spyOn(logger, 'error').mockImplementation(() => {});
     const agent = await module.resolve(AgentNode);
     await agent.setConfig({});
+    const loggerStub = { error: vi.fn(), warn: vi.fn(), log: vi.fn(), debug: vi.fn() };
+    (agent as any).logger = loggerStub;
     agent.setRuntimeContext({ nodeId: 'A', get: (_id: string) => undefined });
 
     await expect(agent.invoke('thread-1', [HumanMessage.fromText('hi')])).rejects.toBeTruthy();
-    expect(spy).toHaveBeenCalled();
+    expect(loggerStub.error).toHaveBeenCalled();
   });
 
   it('AgentsThreadsController.listThreads bubbles persistence errors as 500', async () => {

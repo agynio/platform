@@ -1,8 +1,8 @@
 import { describe, it, expect, vi } from 'vitest';
 import { ShellCommandTool } from '../../src/nodes/tools/shell_command/shell_command.tool';
 import type { RunEventsService } from '../../src/events/run-events.service';
-import type { LoggerService } from '../../src/core/services/logger.service';
 import type { EventsBusService } from '../../src/events/events-bus.service';
+import type { PrismaService } from '../../src/core/services/prisma.service';
 
 const ctx = {
   threadId: 'thread-1',
@@ -15,19 +15,21 @@ const createTool = (
   eventsBus?: Pick<EventsBusService, 'emitToolOutputChunk' | 'emitToolOutputTerminal'>,
 ) => {
   const archive = { createSingleFileTar: vi.fn().mockResolvedValue(Buffer.from('')) } as any;
-  const logger = {
-    info: vi.fn(),
-    debug: vi.fn(),
-    warn: vi.fn(),
-    error: vi.fn(),
-  } as unknown as LoggerService;
+  const prismaStub = {
+    getClient: vi.fn(() => ({
+      container: { findUnique: vi.fn(async () => null) },
+      containerEvent: { findFirst: vi.fn(async () => null) },
+    })),
+  } as unknown as PrismaService;
   const bus =
     eventsBus ??
     ({
       emitToolOutputChunk: vi.fn(),
       emitToolOutputTerminal: vi.fn(),
     } as unknown as EventsBusService);
-  const tool = new ShellCommandTool(archive, runEvents as RunEventsService, bus, logger);
+  const tool = new ShellCommandTool(archive, runEvents as RunEventsService, bus, prismaStub as PrismaService);
+  const logger = { info: vi.fn(), debug: vi.fn(), warn: vi.fn(), error: vi.fn(), log: vi.fn() };
+  (tool as any).logger = logger;
 
   const container = new (class {
     async exec(_command: string, options?: { onOutput?: (source: string, chunk: Buffer) => void }) {
@@ -65,14 +67,8 @@ describe('ShellCommandTool streaming persistence resilience', () => {
     expect(result).toBe('chunk-line\nfinal output\n');
     expect(append).toHaveBeenCalled();
     expect(finalize).toHaveBeenCalled();
-    expect(logger.warn).toHaveBeenCalledWith(
-      'ShellCommandTool chunk persistence failed; continuing without storing chunk',
-      expect.objectContaining({ eventId: 'event-1', seqGlobal: 1, source: 'stdout' }),
-    );
-    expect(logger.warn).toHaveBeenCalledWith(
-      'ShellCommandTool failed to record terminal summary; continuing',
-      expect.objectContaining({ eventId: 'event-1' }),
-    );
+    expect(logger.warn.mock.calls.some(([msg]) => String(msg).includes('ShellCommandTool chunk persistence failed; continuing without storing chunk eventId=event-1 seqGlobal=1 source=stdout error=db unavailable'))).toBe(true);
+    expect(logger.warn.mock.calls.some(([msg]) => String(msg).includes('ShellCommandTool failed to record terminal summary; continuing eventId=event-1 error=db unavailable'))).toBe(true);
     expect(eventsBus.emitToolOutputChunk).not.toHaveBeenCalled();
     expect(eventsBus.emitToolOutputTerminal).not.toHaveBeenCalled();
   });

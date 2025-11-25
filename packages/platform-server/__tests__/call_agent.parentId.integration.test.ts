@@ -69,7 +69,7 @@ describe('call_agent integration: creates child thread with parentId', () => {
       onChildRunMessage: async () => null,
       onChildRunCompleted: async () => null,
     } as unknown as CallAgentLinkingService;
-    const tool = new CallAgentTool(new LoggerService(), persistence, linking);
+    const tool = new CallAgentTool(persistence, linking);
     await tool.setConfig({ description: 'desc', response: 'sync' });
     // Attach fake agent that persists runs/threads
     // @ts-expect-error accessing private for test setup

@@ -4,7 +4,6 @@ import type { ContainerProviderStaticConfig } from '../src/nodes/workspace/works
 import type { ConfigService } from '../src/core/services/config.service';
 import type { ContainerService } from '../src/infra/container/container.service';
 import type { NcpsKeyService } from '../src/infra/ncps/ncpsKey.service';
-import type { LoggerService } from '../src/core/services/logger.service';
 import type { EnvService } from '../src/env/env.service';
 import type { ContainerHandle } from '../src/infra/container/container.handle';
 
@@ -22,11 +21,12 @@ type WorkspaceNetworkContext = {
   startMock: ReturnType<typeof vi.fn>;
   configService: ConfigService;
   containerService: MockedContainerService;
-  logger: LoggerService & {
+  logger: {
     info: ReturnType<typeof vi.fn>;
     warn: ReturnType<typeof vi.fn>;
     error: ReturnType<typeof vi.fn>;
     debug: ReturnType<typeof vi.fn>;
+    log: ReturnType<typeof vi.fn>;
   };
 };
 
@@ -69,16 +69,17 @@ async function createWorkspaceNodeWithNetwork(
     warn: vi.fn(),
     error: vi.fn(),
     debug: vi.fn(),
-  } as unknown as LoggerService;
+    log: vi.fn(),
+  };
 
   const node = new WorkspaceNode(
     containerService as unknown as ContainerService,
     configService,
     ncpsKeyService,
-    logger,
     envService,
   );
   node.init({ nodeId: 'workspace-node' });
+  (node as any).logger = logger;
   await node.setConfig(config as ContainerProviderStaticConfig);
 
   return { node, startMock, configService, containerService, logger };
@@ -129,10 +130,12 @@ describe('WorkspaceNode network configuration', () => {
     expect(remove).toHaveBeenCalledTimes(1);
     expect(startMock).toHaveBeenCalledTimes(1);
     const shortId = existingHandle.id.substring(0, 12);
-    expect(logger.info).toHaveBeenCalledWith('Recreating workspace to enforce workspace network', {
-      containerId: shortId,
-      networks: ['bridge'],
-      requiredNetwork: 'custom_net',
-    });
+    expect(
+      logger.log.mock.calls.some(([msg]) =>
+        String(msg).includes(
+          `Recreating workspace to enforce workspace network containerId=${shortId} requiredNetwork=custom_net networks=bridge`,
+        ),
+      ),
+    ).toBe(true);
   });
 });
