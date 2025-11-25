@@ -1,5 +1,4 @@
 import { LocalMCPServerNode } from '../mcp';
-import { LocalMCPServerTool } from '../mcp/localMcpServer.tool';
 
 import { ConfigService } from '../../core/services/config.service';
 import { LoggerService } from '../../core/services/logger.service';
@@ -31,11 +30,6 @@ import { SummarizationLLMReducer } from '../../llm/reducers/summarization.llm.re
 import { Signal } from '../../signal';
 import { AgentsPersistenceService } from '../../agents/agents.persistence.service';
 import { RunSignalsRegistry } from '../../agents/run-signals.service';
-import {
-  THREAD_CONFIG_SNAPSHOT_VERSION,
-  type ThreadConfigSnapshot,
-  type ThreadConfigSnapshotTool,
-} from '../../agents/thread-config.snapshot';
 
 import { BaseToolNode } from '../tools/baseToolNode';
 import { BufferMessage, MessagesBuffer, ProcessBuffer } from './messagesBuffer';
@@ -124,7 +118,6 @@ type EffectiveAgentConfig = {
     restrictionMaxInjections: number;
   };
   memoryPlacement: 'after_system' | 'last_message' | 'none';
-  allowedTools: ThreadConfigSnapshotTool[];
 };
 
 // Consolidated Agent class (merges previous BaseAgent + Agent into single AgentNode)
@@ -203,40 +196,13 @@ export class AgentNode extends Node<AgentStaticConfig> {
     return mode === 'oneByOne' ? ProcessBuffer.OneByOne : ProcessBuffer.AllTogether;
   }
 
-  private collectSnapshotTools(): ThreadConfigSnapshotTool[] {
-    const tools = new Map<string, ThreadConfigSnapshotTool>();
-    for (const tool of this.tools) {
-      if (tool instanceof LocalMCPServerTool) {
-        tools.set(tool.name, {
-          name: tool.name,
-          namespace: tool.node.namespace ?? null,
-          kind: 'mcp',
-        });
-      } else {
-        tools.set(tool.name, {
-          name: tool.name,
-          namespace: null,
-          kind: 'native',
-        });
-      }
-    }
-    return Array.from(tools.values()).sort((a, b) => a.name.localeCompare(b.name));
+  private getMemoryPlacement(): 'after_system' | 'last_message' | 'none' {
+    return this.memoryConnector ? this.memoryConnector.getPlacement() : 'none';
   }
 
-  private async buildThreadConfigSnapshotCandidate(agentNodeId: string): Promise<ThreadConfigSnapshot> {
-    const graphMeta = await this.getPersistence().getActiveGraphMeta();
-    const memoryPlacement: ThreadConfigSnapshot['memory']['placement'] = this.memoryConnector
-      ? this.memoryConnector.getPlacement()
-      : 'none';
-
+  private buildEffectiveConfig(model: string): EffectiveAgentConfig {
     return {
-      version: THREAD_CONFIG_SNAPSHOT_VERSION,
-      agentNodeId,
-      graph: graphMeta,
-      llm: {
-        provider: this.configService.llmProvider,
-        model: this.config.model ?? 'gpt-5',
-      },
+      model,
       prompts: {
         system: this.config.systemPrompt ?? DEFAULT_SYSTEM_PROMPT,
         summarization: DEFAULT_SUMMARIZATION_PROMPT,
@@ -253,42 +219,8 @@ export class AgentNode extends Node<AgentStaticConfig> {
         restrictionMessage: this.config.restrictionMessage ?? DEFAULT_RESTRICTION_MESSAGE,
         restrictionMaxInjections: this.config.restrictionMaxInjections ?? 0,
       },
-      tools: {
-        allowed: this.collectSnapshotTools(),
-      },
-      memory: {
-        placement: memoryPlacement,
-      },
-    } satisfies ThreadConfigSnapshot;
-  }
-
-  private toEffectiveConfig(snapshot: ThreadConfigSnapshot): EffectiveAgentConfig {
-    return {
-      model: snapshot.llm.model,
-      prompts: { ...snapshot.prompts },
-      summarization: { ...snapshot.summarization },
-      behavior: { ...snapshot.behavior },
-      memoryPlacement: snapshot.memory.placement,
-      allowedTools: [...snapshot.tools.allowed],
-    };
-  }
-
-  private filterToolsForSnapshot(
-    tools: FunctionTool[],
-    allowed: ThreadConfigSnapshotTool[],
-  ): { filteredTools: FunctionTool[]; missing: string[] } {
-    const byName = new Map<string, FunctionTool>();
-    for (const tool of tools) {
-      if (!byName.has(tool.name)) byName.set(tool.name, tool);
-    }
-    const filtered: FunctionTool[] = [];
-    const missing: string[] = [];
-    for (const entry of allowed) {
-      const tool = byName.get(entry.name);
-      if (tool) filtered.push(tool);
-      else missing.push(entry.name);
-    }
-    return { filteredTools: filtered, missing };
+      memoryPlacement: this.getMemoryPlacement(),
+    } satisfies EffectiveAgentConfig;
   }
 
   // ---- Node identity ----
@@ -439,40 +371,19 @@ export class AgentNode extends Node<AgentStaticConfig> {
       const agentNodeId = this.getAgentNodeId();
       if (!agentNodeId) throw new Error('agent_node_id_missing');
 
-      const snapshotCandidate = await this.buildThreadConfigSnapshotCandidate(agentNodeId);
-      const ensuredSnapshot = await persistence.ensureThreadConfigSnapshot({
-        threadId: thread,
-        agentNodeId,
-        snapshot: snapshotCandidate,
-      });
-      const snapshot = ensuredSnapshot.snapshot;
-      if (!snapshot) throw new Error('thread_snapshot_unavailable');
-
-      const effective = this.toEffectiveConfig(snapshot);
+      const configModel = this.config.model ?? 'gpt-5';
+      const persistedModel = await persistence.ensureThreadModel(thread, configModel);
+      const effective = this.buildEffectiveConfig(persistedModel ?? configModel);
       effectiveBehavior = effective.behavior;
 
       this.buffer.setDebounceMs(effective.behavior.debounceMs);
 
-      const { filteredTools, missing } = this.filterToolsForSnapshot(Array.from(this.tools), effective.allowedTools);
-      if (missing.length > 0) {
-        this.logger.warn?.(
-          `[Agent: ${this.config.title ?? this.nodeId}] Snapshot missing ${missing.join(', ')} for thread ${thread}; run ${ensuredRunId} will proceed without them.`,
-        );
-        for (const toolName of missing) {
-          await persistence.recordSnapshotToolWarning({
-            runId: ensuredRunId,
-            threadId: thread,
-            toolName,
-            agentNodeId,
-            allowedTools: effective.allowedTools.map((t) => t.name),
-          });
-        }
-      }
+      const activeTools = Array.from(this.tools);
 
       terminateSignal = new Signal();
       this.getRunSignals().register(ensuredRunId, terminateSignal);
 
-      const loop = await this.prepareLoop(filteredTools, effective);
+      const loop = await this.prepareLoop(activeTools, effective);
       const finishSignal = new Signal();
       const callerAgent: CallerAgent = {
         getAgentNodeId: () => agentNodeId,

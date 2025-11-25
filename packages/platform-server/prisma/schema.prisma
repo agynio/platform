@@ -88,9 +88,8 @@ model Thread {
   channelNodeId String? @map("channel_node_id") @db.Uuid
   // Channel descriptor for replying to origin channel
   channel   Json?
-  agentNodeId String? @map("agent_node_id") @db.Uuid
-  agentConfigSnapshot Json? @map("agent_config_snapshot")
-  configSnapshotAt DateTime? @map("config_snapshot_at")
+  modelUsed String? @map("model_used")
+  modelSnapshottedAt DateTime? @map("model_snapshotted_at")
   createdAt DateTime     @default(now())
 
   runs       Run[]
@@ -101,7 +100,6 @@ model Thread {
   @@index([parentId])
   // Filter by thread status (open/closed)
   @@index([status])
-  @@index([agentNodeId])
 }
 
 enum ThreadStatus {

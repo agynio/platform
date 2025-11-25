@@ -108,13 +108,7 @@ const createAgentFixture = async () => {
   const recordInjected = vi.fn(async () => ({ messageIds: [] }));
   const completeRun = vi.fn(async () => {});
   const getLLM = vi.fn(async () => ({ call: vi.fn(async () => ({ text: 'ok', output: [] })) }));
-  const ensureThreadConfigSnapshot = vi.fn(async (params: { agentNodeId: string; snapshot: unknown }) => ({
-    agentNodeId: params.agentNodeId,
-    snapshot: params.snapshot,
-    snapshotAt: new Date(),
-  }));
-  const getActiveGraphMeta = vi.fn(async () => ({ name: 'main', version: 1, updatedAt: new Date().toISOString() }));
-  const recordSnapshotToolWarning = vi.fn(async () => {});
+  const ensureThreadModel = vi.fn(async (_threadId: string, model: string) => model);
 
   const moduleRef = await Test.createTestingModule({
     providers: [
@@ -135,9 +129,8 @@ const createAgentFixture = async () => {
           beginRunThread,
           recordInjected,
           completeRun,
-          ensureThreadConfigSnapshot,
-          getActiveGraphMeta,
-          recordSnapshotToolWarning,
+          ensureThreadModel,
+          getThreadModel: vi.fn(async () => null),
         },
       },
     ],
@@ -152,9 +145,7 @@ const createAgentFixture = async () => {
     beginRunThread,
     recordInjected,
     completeRun,
-    ensureThreadConfigSnapshot,
-    getActiveGraphMeta,
-    recordSnapshotToolWarning,
+    ensureThreadModel,
   };
 };
 

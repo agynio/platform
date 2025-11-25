@@ -32,15 +32,10 @@ describe('Fail-fast behavior', () => {
             beginRunThread: async () => {
               throw new Error('persistence_fail');
             },
-            getActiveGraphMeta: async () => ({ name: 'main', version: 1, updatedAt: new Date().toISOString() }),
-            ensureThreadConfigSnapshot: async (params: { agentNodeId: string; snapshot: unknown }) => ({
-              agentNodeId: params.agentNodeId,
-              snapshot: params.snapshot,
-              snapshotAt: new Date(),
-            }),
+            ensureThreadModel: async (_threadId: string, model: string) => model,
+            getThreadModel: async () => null,
             recordInjected: async () => ({ messageIds: [] }),
             completeRun: async () => {},
-            recordSnapshotToolWarning: vi.fn(),
           },
         },
         { provide: RunSignalsRegistry, useValue: { register: vi.fn(), activateTerminate: vi.fn(), clear: vi.fn() } },

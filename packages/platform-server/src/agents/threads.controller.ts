@@ -225,15 +225,17 @@ export class AgentsThreadsController {
     return { items: runs };
   }
 
-  @Get('threads/:threadId/config')
-  async getThreadConfigSnapshot(@Param('threadId') threadId: string) {
-    const record = await this.persistence.getThreadConfigSnapshot(threadId);
-    if (!record || !record.snapshot) throw new NotFoundException('thread_config_snapshot_not_found');
-    return {
-      agentNodeId: record.agentNodeId,
-      snapshotAt: record.snapshotAt?.toISOString() ?? null,
-      snapshot: record.snapshot,
-    };
+  @Get('threads/:threadId/model')
+  async getThreadModel(@Param('threadId') threadId: string) {
+    try {
+      const model = await this.persistence.getThreadModel(threadId);
+      return { model };
+    } catch (err) {
+      if (err instanceof Error && err.message === 'thread_not_found') {
+        throw new NotFoundException('thread_not_found');
+      }
+      throw err;
+    }
   }
 
   @Get('runs/:runId/messages')

@@ -190,31 +190,9 @@ describe('AgentsThreadsController list endpoints', () => {
     await expect(ctrl.getThread('missing', {} as any)).rejects.toThrowError('thread_not_found');
   });
 
-  it('getThreadConfigSnapshot returns persisted snapshot payload', async () => {
-    const snapshot = {
-      version: 1,
-      agentNodeId: 'agent-node',
-      graph: { name: 'main', version: 2, updatedAt: '2025-02-03T00:00:00.000Z' },
-      llm: { provider: 'openai', model: 'gpt-5' },
-      prompts: { system: 'You are a helpful AI assistant.', summarization: 'summary' },
-      summarization: { keepTokens: 0, maxTokens: 512 },
-      behavior: {
-        debounceMs: 0,
-        whenBusy: 'wait' as const,
-        processBuffer: 'allTogether' as const,
-        restrictOutput: false,
-        restrictionMessage: 'default',
-        restrictionMaxInjections: 0,
-      },
-      tools: { allowed: [] },
-      memory: { placement: 'none' as const },
-    };
+  it('getThreadModel returns persisted model payload', async () => {
     const persistence = {
-      getThreadConfigSnapshot: vi.fn(async () => ({
-        agentNodeId: 'agent-node',
-        snapshotAt: new Date('2025-02-03T00:00:01Z'),
-        snapshot,
-      })),
+      getThreadModel: vi.fn(async () => 'gpt-4'),
     } as unknown as AgentsPersistenceService;
 
     const module = await Test.createTestingModule({
@@ -228,17 +206,16 @@ describe('AgentsThreadsController list endpoints', () => {
     }).compile();
 
     const ctrl = await module.resolve(AgentsThreadsController);
-    const res = await ctrl.getThreadConfigSnapshot('thread-1');
-    expect(res).toEqual({
-      agentNodeId: 'agent-node',
-      snapshotAt: '2025-02-03T00:00:01.000Z',
-      snapshot,
-    });
+    const res = await ctrl.getThreadModel('thread-1');
+    expect(res).toEqual({ model: 'gpt-4' });
   });
 
-  it('getThreadConfigSnapshot throws when snapshot missing', async () => {
+  it('getThreadModel returns null when unset and throws when thread is missing', async () => {
     const persistence = {
-      getThreadConfigSnapshot: vi.fn(async () => ({ agentNodeId: null, snapshotAt: null, snapshot: null })),
+      getThreadModel: vi
+        .fn()
+        .mockResolvedValueOnce(null)
+        .mockRejectedValueOnce(new Error('thread_not_found')),
     } as unknown as AgentsPersistenceService;
 
     const module = await Test.createTestingModule({
@@ -252,6 +229,8 @@ describe('AgentsThreadsController list endpoints', () => {
     }).compile();
 
     const ctrl = await module.resolve(AgentsThreadsController);
-    await expect(ctrl.getThreadConfigSnapshot('thread-1')).rejects.toThrowError('thread_config_snapshot_not_found');
+    const first = await ctrl.getThreadModel('thread-1');
+    expect(first).toEqual({ model: null });
+    await expect(ctrl.getThreadModel('thread-1')).rejects.toThrowError('thread_not_found');
   });
 });
