@@ -22,6 +22,7 @@ import { GraphRepository } from '../graph/graph.repository';
 import { TemplateRegistry } from './templateRegistry';
 import { ReferenceResolverService } from '../utils/reference-resolver.service';
 import { ResolveError } from '../utils/references';
+import { normalizeLegacyRefs } from '../utils/legacy-config.normalizer';
 
 const configsEqual = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b); // unchanged
 
@@ -429,9 +430,12 @@ export class LiveGraphRuntime {
   }
 
   private async resolveNodeConfig(nodeId: string, config: Record<string, unknown>): Promise<Record<string, unknown>> {
-    if (!this.referenceResolver) return config;
+    const normalized = normalizeLegacyRefs(config, {
+      basePath: `/nodes/${nodeId}/config`,
+    });
+    if (!this.referenceResolver) return normalized;
     try {
-      const { output } = await this.referenceResolver.resolve(config, {
+      const { output } = await this.referenceResolver.resolve(normalized, {
         graphName: this.graphName,
         basePath: `/nodes/${encodeURIComponent(nodeId)}/config`,
       });
