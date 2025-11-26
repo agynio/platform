@@ -2,16 +2,14 @@ import z from 'zod';
 
 import { FunctionTool } from '@agyn/llm';
 import { LLMContext } from '../../../llm/types';
-import { LoggerService } from '../../../core/services/logger.service';
+import { Logger } from '@nestjs/common';
 
 export const finishSchema = z.object({ note: z.string() }).strict();
 
-interface FinishFunctionToolDeps {
-  logger: LoggerService;
-}
-
 export class FinishFunctionTool extends FunctionTool<typeof finishSchema> {
-  constructor(private deps: FinishFunctionToolDeps) {
+  private readonly logger = new Logger(FinishFunctionTool.name);
+
+  constructor() {
     super();
   }
   get name() {
@@ -25,7 +23,7 @@ export class FinishFunctionTool extends FunctionTool<typeof finishSchema> {
   }
   async execute(args: z.infer<typeof finishSchema>, ctx: LLMContext): Promise<string> {
     const { note } = args;
-    this.deps.logger.info('finish tool invoked', { note });
+    this.logger.log(`finish tool invoked note=${note}`);
     ctx.finishSignal.activate();
     return note;
   }

@@ -1,8 +1,7 @@
-import { Inject, Injectable, OnModuleDestroy } from '@nestjs/common';
+import { Inject, Injectable, Logger, OnModuleDestroy } from '@nestjs/common';
 import type { GetEventsOptions } from 'dockerode';
 import { ContainerService } from './container.service';
 import { ContainerEventProcessor, type DockerEventMessage } from './containerEvent.processor';
-import { LoggerService } from '../../core/services/logger.service';
 
 const MAX_BACKOFF_MS = 30_000;
 const INITIAL_BACKOFF_MS = 1_000;
@@ -19,11 +18,11 @@ export class DockerWorkspaceEventsWatcher implements OnModuleDestroy {
   private eventsProcessed = 0;
   private lastEventSeconds?: number;
   private readonly dockerFactory: (() => ReturnType<ContainerService['getDocker']>) | null;
+  private readonly logger = new Logger(DockerWorkspaceEventsWatcher.name);
 
   constructor(
     @Inject(ContainerService) private readonly containerService: ContainerService,
     @Inject(ContainerEventProcessor) private readonly processor: ContainerEventProcessor,
-    @Inject(LoggerService) private readonly logger: LoggerService,
   ) {
     const candidate = (this.containerService as unknown as { getDocker?: () => ReturnType<ContainerService['getDocker']> })
       ?.getDocker;
@@ -38,11 +37,11 @@ export class DockerWorkspaceEventsWatcher implements OnModuleDestroy {
   start(): void {
     if (this.running) return;
     if (!this.dockerFactory) {
-      this.logger.info('DockerWorkspaceEventsWatcher: skipped start (docker unavailable)');
+      this.logger.log('DockerWorkspaceEventsWatcher: skipped start (docker unavailable)');
       return;
     }
     this.running = true;
-    this.logger.info('DockerWorkspaceEventsWatcher: starting');
+    this.logger.log('DockerWorkspaceEventsWatcher: starting');
     this.connect(true);
   }
 
@@ -70,7 +69,7 @@ export class DockerWorkspaceEventsWatcher implements OnModuleDestroy {
       label: ['hautech.ai/role=workspace'],
     };
 
-    this.logger.info('DockerWorkspaceEventsWatcher: subscribing to docker events', {
+    this.logger.log('DockerWorkspaceEventsWatcher: subscribing to docker events', {
       since,
       attempt: this.reconnectAttempt,
       initial,
@@ -147,7 +146,7 @@ export class DockerWorkspaceEventsWatcher implements OnModuleDestroy {
     if (this.reconnectTimer) return;
     this.reconnectAttempt += 1;
     const delay = Math.min(MAX_BACKOFF_MS, INITIAL_BACKOFF_MS * Math.pow(2, this.reconnectAttempt - 1));
-    this.logger.info('DockerWorkspaceEventsWatcher: scheduling reconnect', { delay, attempt: this.reconnectAttempt });
+    this.logger.log('DockerWorkspaceEventsWatcher: scheduling reconnect', { delay, attempt: this.reconnectAttempt });
     this.reconnectTimer = setTimeout(() => {
       this.reconnectTimer = undefined;
       this.connect();

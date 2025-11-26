@@ -1,18 +1,18 @@
 import { randomUUID } from 'node:crypto';
-import { Inject, Injectable } from '@nestjs/common';
+import { Inject, Injectable, Logger } from '@nestjs/common';
 import { Prisma, type PrismaClient } from '@prisma/client';
 import { ContainerRegistry, type ContainerMetadata, type ContainerStatus } from './container.registry';
 import { ContainerService } from './container.service';
-import { LoggerService } from '../../core/services/logger.service';
 import { PrismaService } from '../../core/services/prisma.service';
 import { ContainerHandle } from './container.handle';
 
 @Injectable()
 export class ContainerThreadTerminationService {
+  private readonly logger = new Logger(ContainerThreadTerminationService.name);
+
   constructor(
     @Inject(ContainerRegistry) private readonly registry: ContainerRegistry,
     @Inject(ContainerService) private readonly containerService: ContainerService,
-    @Inject(LoggerService) private readonly logger: LoggerService,
     @Inject(PrismaService) private readonly prismaService: PrismaService,
   ) {}
 
@@ -123,7 +123,7 @@ export class ContainerThreadTerminationService {
           metadata: metadata as unknown as Prisma.InputJsonValue,
         },
       });
-      this.logger.info(
+      this.logger.log(
         `ContainerThreadTermination: thread=${threadId} container=${this.shortId(containerId)} marked terminating (claim=${claimId ? 'acquired' : 'skipped'})`,
       );
     } catch (error: unknown) {

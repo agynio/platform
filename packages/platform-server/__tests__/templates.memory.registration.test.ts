@@ -1,10 +1,10 @@
 import { describe, it, expect } from 'vitest';
 import { buildTemplateRegistry } from '../src/templates';
 import { ModuleRef } from '@nestjs/core';
-import { LoggerService } from '../src/core/services/logger.service';
 import { ContainerService } from '../src/infra/container/container.service';
+import { LoggerService } from '../src/core/services/logger.service';
+import type { ContainerRegistry } from '../src/infra/container/container.registry';
 import { ConfigService, configSchema } from '../src/core/services/config.service';
-import { LLMProvisioner } from '../src/llm/provisioners/llm.provisioner';
 import { WorkspaceNode } from '../src/nodes/workspace/workspace.node';
 import { ShellCommandNode } from '../src/nodes/tools/shell_command/shell_command.node';
 import { MemoryNode } from '../src/nodes/memory/memory.node';
@@ -22,19 +22,22 @@ const maybeIt = shouldRunDbTests ? it : it.skip;
 // Build a registry and assert memory templates and agent memory port wiring are present.
 describe('templates: memory registration and agent memory port', () => {
   maybeIt('registers memory and memoryConnector templates and exposes Agent memory target port', async () => {
-    const logger = new LoggerService();
     const configService = new ConfigService().init(
       configSchema.parse({
         llmProvider: 'openai',
         agentsDatabaseUrl: process.env.AGENTS_DATABASE_URL || 'postgres://localhost/skip',
       }),
     );
-    const containerService = new ContainerService(logger);
-    const provisioner = { getLLM: async () => ({ call: async () => ({ text: 'ok', output: [] }) }) } as unknown as LLMProvisioner;
-    const resolver = { resolve: async (input: unknown) => ({ output: input, report: {} as unknown }) };
+    const containerService = new ContainerService(undefined as unknown as ContainerRegistry, new LoggerService());
+    const resolver = {
+      resolve: async (input: unknown) => ({
+        output: input,
+        report: { events: [], counts: { total: 0, resolved: 0, unresolved: 0, cacheHits: 0, errors: 0 } },
+      }),
+    };
     const envService = new EnvService(resolver as any);
     const archiveService = new ArchiveService();
-    const ncpsKeyService = new NcpsKeyService(logger, configService);
+    const ncpsKeyService = new NcpsKeyService(configService);
     const prisma = new PrismaClient({ datasources: { db: { url: process.env.AGENTS_DATABASE_URL || 'postgres://localhost/skip' } } });
     const memoryService = new MemoryService(
       new PostgresMemoryEntitiesRepository({ getClient: () => prisma } as any),
@@ -44,10 +47,30 @@ describe('templates: memory registration and agent memory port', () => {
     class MinimalModuleRef implements Pick<ModuleRef, 'create' | 'get'> {
       create<T = any>(cls: new (...args: any[]) => T): T {
         // Provide minimal constructor args for known node classes
-        if (cls === WorkspaceNode) return new WorkspaceNode(containerService, configService, ncpsKeyService, logger, envService) as unknown as T;
-        if (cls === ShellCommandNode) return new ShellCommandNode(envService, logger, this as unknown as ModuleRef, archiveService) as unknown as T;
-        if (cls === MemoryConnectorNode) return new MemoryConnectorNode(logger) as unknown as T;
-        if (cls === MemoryNode) return new MemoryNode(this as unknown as ModuleRef, logger) as unknown as T;
+        if (cls === WorkspaceNode)
+          return new WorkspaceNode(containerService, configService, ncpsKeyService, envService) as unknown as T;
+        if (cls === ShellCommandNode)
+          return new ShellCommandNode(
+            envService as any,
+            this as unknown as ModuleRef,
+            archiveService as any,
+            {
+              appendToolOutputChunk: async (payload: unknown) => payload,
+              finalizeToolOutputTerminal: async (payload: unknown) => payload,
+            } as any,
+            {
+              emitToolOutputChunk: () => {},
+              emitToolOutputTerminal: () => {},
+            } as any,
+            {
+              getClient: () => ({
+                container: { findUnique: async () => null },
+                containerEvent: { findFirst: async () => null },
+              }),
+            } as any,
+          ) as unknown as T;
+        if (cls === MemoryConnectorNode) return new MemoryConnectorNode() as unknown as T;
+        if (cls === MemoryNode) return new MemoryNode(this as unknown as ModuleRef) as unknown as T;
         // Reducers/routers/tools not needed for schema introspection; construct without args
         return new (cls as any)();
       }
@@ -62,10 +85,6 @@ describe('templates: memory registration and agent memory port', () => {
     const moduleRef = new MinimalModuleRef();
 
     const deps = {
-      logger,
-      containerService,
-      configService,
-      provisioner,
       moduleRef: moduleRef as unknown as ModuleRef,
     };
 

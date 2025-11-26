@@ -1,8 +1,7 @@
 import z from 'zod';
-import { LoggerService } from '../../../core/services/logger.service';
 import { BaseToolNode } from '../baseToolNode';
 import { UnifiedMemoryFunctionTool } from './memory.tool';
-import { Inject, Injectable, Scope } from '@nestjs/common';
+import { Injectable, Scope } from '@nestjs/common';
 
 // Minimal service surface consumed by the tool
 type MemoryToolService = {
@@ -31,8 +30,8 @@ export class MemoryToolNode extends BaseToolNode<z.infer<typeof MemoryToolNodeSt
   private toolInstance?: UnifiedMemoryFunctionTool;
 
   private memoryFactory?: (opts: { threadId?: string }) => MemoryToolService;
-  constructor(@Inject(LoggerService) protected logger: LoggerService) {
-    super(logger);
+  constructor() {
+    super();
   }
   setMemorySource(
     source:

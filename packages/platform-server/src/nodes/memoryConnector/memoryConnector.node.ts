@@ -1,8 +1,7 @@
 import { z } from 'zod';
 import Node from '../base/Node';
 import { SystemMessage } from '@agyn/llm';
-import { Inject, Injectable } from '@nestjs/common';
-import { LoggerService } from '../../core/services/logger.service';
+import { Injectable } from '@nestjs/common';
 
 // Static config exposed to UI for MemoryConnectorNode
 export const MemoryConnectorStaticConfigSchema = z
@@ -22,10 +21,6 @@ type BoundMemoryService = {
 @Injectable()
 export class MemoryConnectorNode extends Node<MemoryConnectorStaticConfig> {
   private getMemoryServiceFn?: (opts: { threadId?: string }) => BoundMemoryService;
-
-  constructor(@Inject(LoggerService) protected logger: LoggerService) {
-    super(logger);
-  }
 
   init(params: { nodeId: string }): void {
     super.init(params);

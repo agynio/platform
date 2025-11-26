@@ -1,14 +1,12 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { RemindMeFunctionTool } from '../src/nodes/tools/remind_me/remind_me.tool';
 import { HumanMessage } from '@agyn/llm';
-import { LoggerService } from '../src/core/services/logger.service';
 
 // Minimal typed stub for the caller agent used by the tool
 interface CallerAgentStub { invoke(thread: string, messages: HumanMessage[]): Promise<unknown>; }
 
 // Helper to extract callable tool
 function getToolInstance() {
-  const logger = new LoggerService();
   const prismaStub = {
     getClient() {
       return {
@@ -19,7 +17,7 @@ function getToolInstance() {
       } as any;
     },
   };
-  const tool = new RemindMeFunctionTool(logger, prismaStub as any);
+  const tool = new RemindMeFunctionTool(prismaStub as any);
   return tool;
 }
 
@@ -214,7 +212,6 @@ describe('RemindMeTool', () => {
   });
 
   it('emits reminder_count payloads with thread id on schedule and completion', async () => {
-    const logger = new LoggerService();
     const prismaStub = { getClient() { return { reminder: { create: vi.fn(async (args) => ({ ...args.data, createdAt: new Date() })), update: vi.fn(async () => ({})) } } as any; } };
     const emitted: Array<{ nodeId: string; count: number; threadId?: string }> = [];
     const eventsBusStub: any = {
@@ -224,7 +221,7 @@ describe('RemindMeTool', () => {
     };
     // Use node to wire tool registry events to gateway
     const { RemindMeNode } = await import('../src/nodes/tools/remind_me/remind_me.node');
-    const node = new RemindMeNode(logger as any, eventsBusStub, prismaStub as any);
+    const node = new RemindMeNode(eventsBusStub, prismaStub as any);
     node.init({ nodeId: 'node-m' });
     await node.provision();
     const tool = node.getTool();

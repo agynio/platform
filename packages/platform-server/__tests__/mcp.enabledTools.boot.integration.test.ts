@@ -23,8 +23,8 @@ import { EventsBusService } from '../src/events/events-bus.service';
 import { createEventsBusStub } from './helpers/eventsBus.stub';
 
 class StubContainerService extends ContainerService {
-  constructor(logger: LoggerService, registry: ContainerRegistry) {
-    super(logger, registry);
+  constructor(registry: ContainerRegistry, logger: LoggerService) {
+    super(registry, logger);
   }
   override async start(_opts?: ContainerOpts): Promise<ContainerHandle> {
     return new ContainerHandle(this, 'cid');

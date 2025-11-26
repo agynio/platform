@@ -1,7 +1,6 @@
-import { Inject, Injectable, OnModuleDestroy } from '@nestjs/common';
+import { Inject, Injectable, Logger, OnModuleDestroy } from '@nestjs/common';
 import { randomBytes, randomUUID } from 'node:crypto';
 import { ContainerService } from './container.service';
-import { LoggerService } from '../../core/services/logger.service';
 
 const DEFAULT_IDLE_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes
 const DEFAULT_MAX_DURATION_MS = 30 * 60 * 1000; // 30 minutes
@@ -36,10 +35,10 @@ type CreateSessionOptions = {
 export class TerminalSessionsService implements OnModuleDestroy {
   private readonly sessions = new Map<string, TerminalSessionRecord>();
   private readonly cleanupTimer: NodeJS.Timeout;
+  private readonly logger = new Logger(TerminalSessionsService.name);
 
   constructor(
     @Inject(ContainerService) private readonly containers: ContainerService,
-    @Inject(LoggerService) private readonly logger: LoggerService,
   ) {
     this.cleanupTimer = setInterval(() => {
       try {
@@ -150,7 +149,7 @@ export class TerminalSessionsService implements OnModuleDestroy {
       const expired = now - record.createdAt >= record.maxDurationMs;
       const idle = now - record.lastActivityAt >= record.idleTimeoutMs;
       if (expired || idle) {
-        this.logger.info('pruning terminal session', {
+        this.logger.log('pruning terminal session', {
           sessionId,
           containerId: record.containerId.substring(0, 12),
           reason: expired ? 'max_duration' : 'idle_timeout',

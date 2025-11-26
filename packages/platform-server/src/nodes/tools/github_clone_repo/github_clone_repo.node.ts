@@ -1,10 +1,11 @@
 import z from 'zod';
 import { BaseToolNode } from '../baseToolNode';
 import { WorkspaceNode } from '../../workspace/workspace.node';
-import { LoggerService } from '../../../core/services/logger.service';
 import { GithubCloneRepoFunctionTool } from './github_clone_repo.tool';
-import { Inject, Injectable, Scope } from '@nestjs/common';
+import { Inject, Injectable, Optional, Scope } from '@nestjs/common';
 import { SecretReferenceSchema, VariableReferenceSchema } from '../../../utils/reference-schemas';
+import { ReferenceResolverService } from '../../../utils/reference-resolver.service';
+import { ResolveError } from '../../../utils/references';
 
 const TokenRefSchema = z
   .union([
@@ -36,17 +37,40 @@ export class GithubCloneRepoNode extends BaseToolNode<StaticConfigType> {
   private _containerProvider?: WorkspaceNode;
 
   private toolInstance?: GithubCloneRepoFunctionTool;
+  private resolvedToken: string = '';
   constructor(
-    @Inject(LoggerService) protected logger: LoggerService,
+    @Inject(ReferenceResolverService) @Optional() private readonly referenceResolver?: ReferenceResolverService,
   ) {
-    super(logger);
+    super();
+  }
+
+  private async resolveTokenValue(token: StaticConfigType['token']): Promise<string> {
+    if (token === undefined) return '';
+    if (!this.referenceResolver) {
+      if (typeof token !== 'string') throw new Error('GithubCloneRepoNode config requires resolved token');
+      return token;
+    }
+    try {
+      const { output } = await this.referenceResolver.resolve({ token }, { basePath: '/github_clone_repo/token' });
+      const resolved = output.token;
+      if (resolved == null) return '';
+      if (typeof resolved !== 'string') throw new Error('GithubCloneRepoNode token unresolved');
+      return resolved;
+    } catch (err) {
+      if (err instanceof ResolveError) {
+        throw new Error(`GithubCloneRepo token resolution failed: ${err.message}`);
+      }
+      throw err;
+    }
   }
 
   async setConfig(cfg: StaticConfigType): Promise<void> {
-    if (cfg?.token !== undefined && typeof cfg.token !== 'string') {
-      throw new Error('GithubCloneRepoNode config requires resolved token');
-    }
+    this.resolvedToken = await this.resolveTokenValue(cfg.token);
     await super.setConfig(cfg);
+  }
+
+  getResolvedToken(): string {
+    return this.resolvedToken;
   }
 
   setContainerProvider(provider: WorkspaceNode | undefined) {
@@ -58,7 +82,7 @@ export class GithubCloneRepoNode extends BaseToolNode<StaticConfigType> {
 
   getTool(): GithubCloneRepoFunctionTool {
     if (!this.toolInstance) {
-      this.toolInstance = new GithubCloneRepoFunctionTool(this.logger, this);
+      this.toolInstance = new GithubCloneRepoFunctionTool(this);
     }
     return this.toolInstance;
   }

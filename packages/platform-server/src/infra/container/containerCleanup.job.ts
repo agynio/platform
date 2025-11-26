@@ -1,8 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { ContainerRegistry as ContainerRegistryService } from './container.registry';
 import { ContainerService } from './container.service';
-import { Inject, Injectable } from '@nestjs/common';
-import { LoggerService } from '../../core/services/logger.service';
+import { Inject, Injectable, Logger } from '@nestjs/common';
 import pLimit from 'p-limit';
 
 export interface SweepSelectiveOptions {
@@ -15,11 +14,11 @@ export interface SweepSelectiveOptions {
 export class ContainerCleanupService {
   private timer?: NodeJS.Timeout;
   private enabled: boolean;
+  private readonly logger = new Logger(ContainerCleanupService.name);
 
   constructor(
     @Inject(ContainerRegistryService) private registry: ContainerRegistryService,
     @Inject(ContainerService) private containers: ContainerService,
-    @Inject(LoggerService) private logger: LoggerService,
   ) {
     const env = process.env.CONTAINERS_CLEANUP_ENABLED;
     this.enabled = env == null ? true : String(env).toLowerCase() === 'true';
@@ -27,7 +26,7 @@ export class ContainerCleanupService {
 
   start(intervalMs = 5 * 60 * 1000): void {
     if (!this.enabled) {
-      this.logger.info('ContainerCleanup: disabled by CONTAINERS_CLEANUP_ENABLED');
+      this.logger.log('ContainerCleanup: disabled by CONTAINERS_CLEANUP_ENABLED');
       return;
     }
     const run = async () => {
@@ -41,7 +40,7 @@ export class ContainerCleanupService {
     };
     // initial sweep soon after start
     this.timer = setTimeout(run, 5_000);
-    this.logger.info('ContainerCleanup: started background sweeper');
+    this.logger.log('ContainerCleanup: started background sweeper');
   }
 
   stop(): void {
@@ -52,7 +51,7 @@ export class ContainerCleanupService {
   async sweep(now: Date = new Date()): Promise<void> {
     const expired = await this.registry.getExpired(now);
     if (!expired.length) return;
-    this.logger.info(`ContainerCleanup: found ${expired.length} expired containers`);
+    this.logger.log(`ContainerCleanup: found ${expired.length} expired containers`);
 
     // Controlled concurrency to avoid long sequential sweeps
     const limit = pLimit(5);
@@ -88,7 +87,7 @@ export class ContainerCleanupService {
   async sweepSelective(threadId: string, opts: SweepSelectiveOptions): Promise<void> {
     const records = await this.registry.listByThread(threadId);
     if (!records.length) {
-      this.logger.info('ContainerCleanup: no containers found for selective sweep', { threadId });
+      this.logger.log('ContainerCleanup: no containers found for selective sweep', { threadId });
       return;
     }
 
@@ -171,7 +170,7 @@ export class ContainerCleanupService {
       }),
     );
     const scCleaned = results.reduce((acc, r) => acc + (r.status === 'fulfilled' && r.value ? 1 : 0), 0);
-    if (scCleaned > 0) this.logger.info(`ContainerCleanup: removed ${scCleaned} DinD sidecar(s) for ${parentId}`);
+    if (scCleaned > 0) this.logger.log(`ContainerCleanup: removed ${scCleaned} DinD sidecar(s) for ${parentId}`);
     const rejected = results.filter((r) => r.status === 'rejected') as PromiseRejectedResult[];
     if (rejected.length) throw new AggregateError(rejected.map((r) => r.reason), 'One or more sidecar cleanup tasks failed');
   }

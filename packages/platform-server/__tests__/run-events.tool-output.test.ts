@@ -2,7 +2,6 @@ import { describe, it, expect, beforeEach, afterAll } from 'vitest';
 import { PrismaClient } from '@prisma/client';
 import { randomUUID } from 'node:crypto';
 import type { PrismaService } from '../src/core/services/prisma.service';
-import type { LoggerService } from '../src/core/services/logger.service';
 import { RunEventsService } from '../src/events/run-events.service';
 
 const databaseUrl = process.env.AGENTS_DATABASE_URL;
@@ -17,14 +16,7 @@ if (!shouldRunDbTests) {
 } else {
   const prisma = new PrismaClient({ datasources: { db: { url: databaseUrl! } } });
   const prismaService = { getClient: () => prisma } as unknown as PrismaService;
-  const logger = {
-    info: () => undefined,
-    debug: () => undefined,
-    warn: () => undefined,
-    error: () => undefined,
-  } as unknown as LoggerService;
-
-  const runEvents = new RunEventsService(prismaService, logger);
+  const runEvents = new RunEventsService(prismaService);
 
   async function createThreadAndRun() {
     const thread = await prisma.thread.create({ data: { alias: `thread-${randomUUID()}` } });

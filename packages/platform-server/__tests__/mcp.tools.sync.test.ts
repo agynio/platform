@@ -1,19 +1,27 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { LocalMCPServerNode } from '../src/nodes/mcp/localMcpServer.node';
 
-class MockLogger { info=vi.fn(); debug=vi.fn(); error=vi.fn(); }
-class MockContainerService { getDocker(){ return {}; } }
+class MockLogger {
+  info = vi.fn();
+  debug = vi.fn();
+  error = vi.fn();
+}
+class MockContainerService {
+  getDocker() {
+    return {};
+  }
+}
 
 describe('LocalMCPServerNode listTools filtering by enabledTools', () => {
   let server: LocalMCPServerNode;
-  let logger: any;
 
   beforeEach(async () => {
-    logger = new MockLogger();
     const nodeStateService = { getSnapshot: vi.fn((_id: string) => ({ mcp: { enabledTools: [] } })) } as any;
     const moduleRef = { get: vi.fn(() => nodeStateService) } as any;
     const envStub = { resolveEnvItems: vi.fn(), resolveProviderEnv: vi.fn() } as any;
-    server = new LocalMCPServerNode(new MockContainerService() as any, logger as any, envStub, {} as any, moduleRef as any);
+    const logger = new MockLogger();
+    server = new LocalMCPServerNode(new MockContainerService() as any, envStub, {} as any, moduleRef as any);
+    (server as any).logger = logger;
     // Manually init nodeId since we are not running through runtime
     (server as any).init({ nodeId: 'node-1' });
     await server.setConfig({ namespace: 'ns' } as any);
@@ -43,7 +51,8 @@ describe('LocalMCPServerNode setState enabledTools emits mcp.tools_updated', () 
   it('emits on hook invocation', async () => {
     const logger = new MockLogger();
     const envStub = { resolveEnvItems: vi.fn(), resolveProviderEnv: vi.fn() } as any;
-    const server = new LocalMCPServerNode(new MockContainerService() as any, logger as any, envStub, {} as any, undefined as any);
+    const server = new LocalMCPServerNode(new MockContainerService() as any, envStub, {} as any, undefined as any);
+    (server as any).logger = logger;
     // Preload one tool for payload consistency
     (server as any).preloadCachedTools([{ name: 'x', description: 'X', inputSchema: { type: 'object' } }], Date.now());
     let fired = false;

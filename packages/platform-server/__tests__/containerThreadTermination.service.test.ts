@@ -3,7 +3,6 @@ import { ContainerThreadTerminationService } from '../src/infra/container/contai
 import type { ContainerMetadata, ContainerStatus } from '../src/infra/container/container.registry';
 import type { PrismaClient } from '@prisma/client';
 import type { ContainerService } from '../src/infra/container/container.service';
-import type { LoggerService } from '../src/core/services/logger.service';
 import type { PrismaService } from '../src/core/services/prisma.service';
 
 type Row = {
@@ -88,13 +87,6 @@ const createHarness = () => {
     getContainerLabels: vi.fn(async (containerId: string) => labels.get(containerId)),
   };
 
-  const logger: Partial<LoggerService> = {
-    info: vi.fn(),
-    error: vi.fn(),
-    debug: vi.fn(),
-    warn: vi.fn(),
-  };
-
   const prismaService: Partial<PrismaService> = {
     getClient: () => prisma,
   };
@@ -102,11 +94,10 @@ const createHarness = () => {
   const service = new ContainerThreadTerminationService(
     registry as unknown as any,
     containerService as ContainerService,
-    logger as LoggerService,
     prismaService as PrismaService,
   );
 
-  return { service, rows, labels, registry, containerService, logger };
+  return { service, rows, labels, registry, containerService };
 };
 
 describe('ContainerThreadTerminationService', () => {

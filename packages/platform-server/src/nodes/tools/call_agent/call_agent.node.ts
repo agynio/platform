@@ -1,6 +1,5 @@
 import z from 'zod';
 import { BaseToolNode } from '../baseToolNode';
-import { LoggerService } from '../../../core/services/logger.service';
 
 import { CallAgentFunctionTool } from './call_agent.tool';
 import { AgentNode } from '../../agent/agent.node';
@@ -29,11 +28,10 @@ export class CallAgentNode extends BaseToolNode<z.infer<typeof CallAgentToolStat
   private toolInstance?: CallAgentFunctionTool;
 
   constructor(
-    @Inject(LoggerService) protected logger: LoggerService,
     @Inject(AgentsPersistenceService) private readonly persistence: AgentsPersistenceService,
     @Inject(CallAgentLinkingService) private readonly linking: CallAgentLinkingService,
   ) {
-    super(logger);
+    super();
   }
 
   setAgent(agent: AgentNode | undefined) {
@@ -48,7 +46,7 @@ export class CallAgentNode extends BaseToolNode<z.infer<typeof CallAgentToolStat
 
   getTool(): CallAgentFunctionTool {
     if (!this.toolInstance) {
-      this.toolInstance = new CallAgentFunctionTool(this.logger, this, this.persistence, this.linking);
+      this.toolInstance = new CallAgentFunctionTool(this, this.persistence, this.linking);
     }
     return this.toolInstance;
   }

@@ -2,7 +2,7 @@ import z from 'zod';
 
 import { FunctionTool } from '@agyn/llm';
 import { LLMContext } from '../../../llm/types';
-import { LoggerService } from '../../../core/services/logger.service';
+import { Logger } from '@nestjs/common';
 import { GithubCloneRepoNode } from './github_clone_repo.node';
 import { Injectable, Scope } from '@nestjs/common';
 
@@ -18,10 +18,9 @@ export const githubCloneSchema = z
 
 @Injectable({ scope: Scope.TRANSIENT })
 export class GithubCloneRepoFunctionTool extends FunctionTool<typeof githubCloneSchema> {
-  constructor(
-    private logger: LoggerService,
-    private node: GithubCloneRepoNode,
-  ) {
+  private readonly logger = new Logger(GithubCloneRepoFunctionTool.name);
+
+  constructor(private node: GithubCloneRepoNode) {
     super();
   }
   get name() {
@@ -35,9 +34,7 @@ export class GithubCloneRepoFunctionTool extends FunctionTool<typeof githubClone
   }
 
   private async resolveToken(): Promise<string> {
-    const token = this.node.config?.token;
-    if (typeof token === 'string' && token.length > 0) return token;
-    return '';
+    return this.node.getResolvedToken();
   }
 
   async execute(args: z.infer<typeof githubCloneSchema>, ctx: LLMContext): Promise<string> {
@@ -47,7 +44,7 @@ export class GithubCloneRepoFunctionTool extends FunctionTool<typeof githubClone
       throw new Error('GithubCloneRepoTool: containerProvider not set. Connect via graph edge before use.');
 
     const container = await provider.provide(ctx.threadId);
-    this.logger.info('Tool called', 'github_clone_repo', { owner, repo, path, branch, depth });
+    this.logger.log(`github_clone_repo invoked owner=${owner} repo=${repo} path=${path} branch=${branch ?? 'none'} depth=${depth ?? 'full'}`);
     const token = await this.resolveToken();
     const username = 'oauth2';
     const encodedUser = encodeURIComponent(username);

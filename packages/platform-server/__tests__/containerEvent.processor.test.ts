@@ -1,6 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { ContainerEventProcessor, type DockerEventMessage } from '../src/infra/container/containerEvent.processor';
-import { LoggerService } from '../src/core/services/logger.service';
 import type { ContainerEventType, ContainerStatus, PrismaClient } from '@prisma/client';
 
 type ContainerRow = {
@@ -164,7 +163,7 @@ describe('ContainerEventProcessor', () => {
   beforeEach(() => {
     prisma = new FakePrismaClient();
     prisma.addContainer({ id: 1, containerId: 'cid-123', dockerContainerId: 'cid-123', status: 'running', threadId: null, terminationReason: null });
-    processor = new ContainerEventProcessor(new FakePrismaService(prisma), new LoggerService());
+    processor = new ContainerEventProcessor(new FakePrismaService(prisma));
   });
 
   it('records oom event and marks container failed', async () => {
@@ -236,7 +235,7 @@ describe('ContainerEventProcessor', () => {
   it('updates container docker id and thread id from event context', async () => {
     const localPrisma = new FakePrismaClient();
     localPrisma.addContainer({ id: 2, containerId: 'cid-unknown', dockerContainerId: 'stale-id', status: 'running', threadId: null, terminationReason: null });
-    const localProcessor = new ContainerEventProcessor(new FakePrismaService(localPrisma), new LoggerService());
+    const localProcessor = new ContainerEventProcessor(new FakePrismaService(localPrisma));
 
     const threadId = '11111111-2222-4333-8444-555555555555';
     localProcessor.enqueue(

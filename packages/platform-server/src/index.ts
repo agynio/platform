@@ -7,6 +7,7 @@ import type { FastifyTypeProviderDefault } from 'fastify';
 import type { IncomingHttpHeaders } from 'http';
 // CORS is enabled via Nest's app.enableCors to avoid type-provider mismatches
 
+import { Logger as PinoLogger } from 'nestjs-pino';
 import { LoggerService } from './core/services/logger.service';
 
 import { AppModule } from './bootstrap/app.module';
@@ -45,7 +46,9 @@ async function bootstrap() {
   };
   // Enable CORS via Nest to avoid Fastify type-provider generic mismatches
 
-  const app = await NestFactory.create(AppModule, adapter);
+  const app = await NestFactory.create(AppModule, adapter, { bufferLogs: true });
+  const pinoLogger = app.get(PinoLogger);
+  app.useLogger(pinoLogger);
   app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
   app.enableCors(corsOptions);
   await app.init();
@@ -92,8 +95,22 @@ async function bootstrap() {
   //   process.on('SIGTERM', shutdown);
 }
 
-bootstrap().catch((e) => {
-  console.error('Bootstrap failure', e);
+bootstrap().catch((error: unknown) => {
+  const payload: Record<string, unknown> =
+    error instanceof Error
+      ? {
+          level: 'error',
+          msg: 'Bootstrap failure',
+          name: error.name,
+          message: error.message,
+          stack: error.stack,
+        }
+      : {
+          level: 'error',
+          msg: 'Bootstrap failure',
+          error,
+        };
+  console.error(JSON.stringify(payload));
   process.exit(1);
 });
 

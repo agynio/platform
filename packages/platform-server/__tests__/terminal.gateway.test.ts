@@ -7,10 +7,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { ContainerTerminalGateway } from '../src/infra/container/terminal.gateway';
 import type { TerminalSessionsService, TerminalSessionRecord } from '../src/infra/container/terminal.sessions.service';
 import type { ContainerService } from '../src/infra/container/container.service';
-import { LoggerService } from '../src/core/services/logger.service';
 import { waitFor, waitForWsClose } from './helpers/ws';
-
-const logger = new LoggerService();
 
 const createSessionRecord = (overrides: Partial<TerminalSessionRecord> = {}): TerminalSessionRecord => {
   const now = Date.now();
@@ -92,7 +89,6 @@ describe('ContainerTerminalGateway (custom websocket server)', () => {
     const gateway = new ContainerTerminalGateway(
       sessionMocks as unknown as TerminalSessionsService,
       containerMocks as unknown as ContainerService,
-      logger,
     );
 
     const app = Fastify();
@@ -168,7 +164,6 @@ describe('ContainerTerminalGateway (custom websocket server)', () => {
     const gateway = new ContainerTerminalGateway(
       sessionMocks as unknown as TerminalSessionsService,
       containerMocks as unknown as ContainerService,
-      logger,
     );
 
     const app = Fastify();
@@ -226,7 +221,6 @@ describe('ContainerTerminalGateway (custom websocket server)', () => {
     const gateway = new ContainerTerminalGateway(
       sessionMocks as unknown as TerminalSessionsService,
       containerMocks as unknown as ContainerService,
-      logger,
     );
 
     const app = Fastify();
@@ -276,7 +270,6 @@ describe('ContainerTerminalGateway (custom websocket server)', () => {
     const gateway = new ContainerTerminalGateway(
       sessionService as unknown as TerminalSessionsService,
       containerMocks as unknown as ContainerService,
-      logger,
     );
 
     const app = Fastify();
@@ -364,7 +357,6 @@ describe('ContainerTerminalGateway (custom websocket server)', () => {
     const gateway = new ContainerTerminalGateway(
       sessionService as unknown as TerminalSessionsService,
       containerMocks as unknown as ContainerService,
-      logger,
     );
 
     const app = Fastify();

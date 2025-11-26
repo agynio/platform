@@ -4,7 +4,6 @@ import { EnvService, type EnvItem } from '../../../env/env.service';
 import { BaseToolNode } from '../baseToolNode';
 import { ShellCommandTool } from './shell_command.tool';
 import { Inject, Injectable, Scope } from '@nestjs/common';
-import { LoggerService } from '../../../core/services/logger.service';
 import { ModuleRef } from '@nestjs/core';
 import { ArchiveService } from '../../../infra/archive/archive.service';
 import { RunEventsService } from '../../../events/run-events.service';
@@ -79,14 +78,13 @@ export class ShellCommandNode extends BaseToolNode<z.infer<typeof ShellToolStati
 
   constructor(
     @Inject(EnvService) protected envService: EnvService,
-    @Inject(LoggerService) protected logger: LoggerService,
     @Inject(ModuleRef) protected readonly moduleRef: ModuleRef,
     @Inject(ArchiveService) private readonly archive: ArchiveService,
     @Inject(RunEventsService) private readonly runEvents: RunEventsService,
     @Inject(EventsBusService) private readonly eventsBus: EventsBusService,
     @Inject(PrismaService) private readonly prismaService: PrismaService,
   ) {
-    super(logger);
+    super();
   }
   getPortConfig() {
     return {
@@ -103,7 +101,7 @@ export class ShellCommandNode extends BaseToolNode<z.infer<typeof ShellToolStati
 
   getTool(): ShellCommandTool {
     if (!this.toolInstance) {
-      const tool = new ShellCommandTool(this.archive, this.runEvents, this.eventsBus, this.logger, this.prismaService);
+      const tool = new ShellCommandTool(this.archive, this.runEvents, this.eventsBus, this.prismaService);
       tool.init(this);
       this.toolInstance = tool;
     }

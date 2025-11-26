@@ -1,6 +1,5 @@
 import z from 'zod';
-
-import { LoggerService } from '../../../core/services/logger.service';
+import { Logger } from '@nestjs/common';
 
 import { CallAgentNode, CallAgentToolStaticConfigSchema } from './call_agent.node';
 import { FunctionTool, HumanMessage } from '@agyn/llm';
@@ -15,8 +14,9 @@ export const callAgentInvocationSchema = z.object({
 });
 
 export class CallAgentFunctionTool extends FunctionTool<typeof callAgentInvocationSchema> {
+  private readonly logger = new Logger(CallAgentFunctionTool.name);
+
   constructor(
-    private logger: LoggerService,
     private node: CallAgentNode,
     private persistence: AgentsPersistenceService,
     private linking: CallAgentLinkingService,
@@ -49,10 +49,12 @@ export class CallAgentFunctionTool extends FunctionTool<typeof callAgentInvocati
         toolName: this.name,
       });
     } catch (err) {
-      this.logger.warn('Failed to register call_agent parent link', { err, runId: ctx.runId, parentThreadId, childThreadId: targetThreadId });
+      this.logger.warn(
+        `Failed to register call_agent parent link runId=${ctx.runId} parentThreadId=${parentThreadId} childThreadId=${targetThreadId} err=${err instanceof Error && err.message ? err.message : String(err)}`,
+      );
     }
 
-    this.logger.info('call_agent invoked', { targetAttached: !!targetAgent, responseMode });
+    this.logger.log(`call_agent invoked targetAttached=${!!targetAgent} responseMode=${responseMode}`);
     if (!targetAgent) return 'Target agent is not connected';
 
     // Resolve subthread UUID by alias under parent UUID
@@ -66,13 +68,15 @@ export class CallAgentFunctionTool extends FunctionTool<typeof callAgentInvocati
       // async / ignore: fire and forget
       void targetAgent.invoke(targetThreadId, [message]).catch((err: unknown) => {
         const e = err as { message?: string; stack?: string } | string | undefined;
-        this.logger.error('Error calling agent (async/ignore mode)', e);
+        const msg = e && typeof e === 'object' && 'message' in e ? String((e as { message?: unknown }).message) : String(e);
+        this.logger.error(`Error calling agent (async/ignore mode): ${msg}`);
       });
       return JSON.stringify({ status: 'sent' });
     } catch (err: unknown) {
       const e = err as { message?: string; stack?: string } | string | undefined;
-      this.logger.error('Error calling agent', e);
-      return `Error calling agent: ${e}`;
+      const msg = e && typeof e === 'object' && 'message' in e ? String((e as { message?: unknown }).message) : String(e);
+      this.logger.error(`Error calling agent: ${msg}`);
+      return `Error calling agent: ${msg}`;
     }
   }
 }

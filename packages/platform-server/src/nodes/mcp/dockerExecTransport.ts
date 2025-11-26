@@ -1,7 +1,7 @@
 import type { JSONRPCMessage } from './types';
 import type Docker from 'dockerode';
 import { PassThrough } from 'node:stream';
-import { LoggerService } from '../../core/services/logger.service';
+import { Logger } from '@nestjs/common';
 
 class ReadBufferInline {
   private _buffer?: Buffer;
@@ -39,10 +39,10 @@ export class DockerExecTransport {
   private static _seq = 0;
   private _id = ++DockerExecTransport._seq;
   private _started = false;
+  private readonly logger = new Logger(DockerExecTransport.name);
 
   constructor(
     private docker: Docker,
-    private logger: LoggerService,
     private startExec: () => Promise<{
       stream?: unknown;
       stdin?: unknown;
@@ -60,7 +60,7 @@ export class DockerExecTransport {
       return;
     }
     this._started = true;
-    this.logger.info(`[DockerExecTransport#${this._id}] START initiating exec`);
+    this.logger.log(`[DockerExecTransport#${this._id}] START initiating exec`);
     const started = await this.startExec();
     const stream = (started as { stream?: NodeJS.ReadWriteStream }).stream;
     const stdin: NodeJS.WritableStream | undefined = (started as { stdin?: NodeJS.WritableStream }).stdin || stream;
@@ -81,7 +81,7 @@ export class DockerExecTransport {
     }
 
     this._stdout.on('data', (chunk: Buffer) => {
-      this.logger.debug(`[DockerExecTransport#${this._id} stdout]`, chunk.toString().trim());
+      this.logger.debug(`[DockerExecTransport#${this._id} stdout] ${chunk.toString().trim()}`);
       this._readBuffer.append(chunk);
       this.processReadBuffer();
     });
@@ -90,7 +90,7 @@ export class DockerExecTransport {
       // Provide minimal stderr visibility without overwhelming logs; only log first few lines until handshake.
       const text = chunk.toString();
       if (text.trim().length > 0) {
-        this.logger.error(`[DockerExecTransport#${this._id} stderr]`, text.trim());
+        this.logger.error(`[DockerExecTransport#${this._id} stderr] ${text.trim()}`);
       }
     });
     const closer: NodeJS.ReadableStream = (stream as NodeJS.ReadableStream) || stdout || this._stdout;
@@ -139,14 +139,14 @@ export class DockerExecTransport {
     } catch {
       // ignore
     }
-    this.logger.info(`[DockerExecTransport#${this._id}] CLOSED`);
+    this.logger.log(`[DockerExecTransport#${this._id}] CLOSED`);
     this.onclose?.();
   }
 
   private handleClose() {
     if (this._closed) return;
     this._closed = true;
-    this.logger.info(`[DockerExecTransport#${this._id}] STREAM CLOSED`);
+    this.logger.log(`[DockerExecTransport#${this._id}] STREAM CLOSED`);
     this.onclose?.();
   }
 }

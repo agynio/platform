@@ -27,7 +27,6 @@ import { WorkspaceNode } from './workspace/workspace.node';
 import { ContainerService } from '../infra/container/container.service';
 import { ConfigService } from '../core/services/config.service';
 import { NcpsKeyService } from '../infra/ncps/ncpsKey.service';
-import { LoggerService } from '../core/services/logger.service';
 import { EnvService } from '../env/env.service';
 import { GraphCoreModule } from '../graph-core/graph-core.module';
 import { TemplateRegistry } from '../graph-core/templateRegistry';
@@ -72,10 +71,9 @@ class NodesTemplateRegistrar implements OnModuleInit {
         containerService: ContainerService,
         configService: ConfigService,
         ncpsKeyService: NcpsKeyService,
-        logger: LoggerService,
         envService: EnvService,
-      ) => new WorkspaceNode(containerService, configService, ncpsKeyService, logger, envService),
-      inject: [ContainerService, ConfigService, NcpsKeyService, LoggerService, EnvService],
+      ) => new WorkspaceNode(containerService, configService, ncpsKeyService, envService),
+      inject: [ContainerService, ConfigService, NcpsKeyService, EnvService],
     },
   ],
   exports: [

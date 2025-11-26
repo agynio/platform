@@ -211,7 +211,7 @@ if (!shouldRunRealtimeTests) {
     const runtime = createRuntimeStub();
     const metricsDouble = createMetricsDouble();
     const prismaService = ({ getClient: () => prisma }) as PrismaService;
-    const runEvents = new RunEventsService(prismaService, logger);
+    const runEvents = new RunEventsService(prismaService);
     const eventsBus = new EventsBusService(runEvents);
     const gateway = new GraphSocketGateway(logger, runtime, metricsDouble.service, prismaService, eventsBus);
     gateway.onModuleInit();
@@ -277,7 +277,7 @@ if (!shouldRunRealtimeTests) {
     const runtime = createRuntimeStub();
     const metricsDouble = createMetricsDouble();
     const prismaService = ({ getClient: () => prisma }) as PrismaService;
-    const runEvents = new RunEventsService(prismaService, logger);
+    const runEvents = new RunEventsService(prismaService);
     const eventsBus = new EventsBusService(runEvents);
     const gateway = new GraphSocketGateway(logger, runtime, metricsDouble.service, prismaService, eventsBus);
     gateway.onModuleInit();

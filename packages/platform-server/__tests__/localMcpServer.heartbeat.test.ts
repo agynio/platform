@@ -1,7 +1,8 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { LocalMCPServerNode } from '../src/nodes/mcp/localMcpServer.node';
-import { LoggerService } from '../src/core/services/logger.service.js';
 import { ContainerService } from '../src/infra/container/container.service';
+import { LoggerService } from '../src/core/services/logger.service';
+import type { ContainerRegistry } from '../src/infra/container/container.registry';
 import { PassThrough } from 'node:stream';
 
 function createBlockingMcpMock() {
@@ -68,9 +69,23 @@ describe('LocalMCPServer heartbeat behavior', () => {
   beforeEach(() => vi.useFakeTimers());
   afterEach(() => vi.useRealTimers());
 
+  const createContainerService = () => {
+    const registryStub = {
+      registerStart: async () => {},
+      updateLastUsed: async () => {},
+      markStopped: async () => {},
+      markTerminating: async () => {},
+      claimForTermination: async () => true,
+      recordTerminationFailure: async () => {},
+      findByVolume: async () => null,
+      listByThread: async () => [],
+      ensureIndexes: async () => {},
+    } as unknown as ContainerRegistry;
+    return new ContainerService(registryStub, new LoggerService());
+  };
+
   it('touches last_used during session and stops after completion', async () => {
-    const logger = new LoggerService();
-    const containerService = new ContainerService(logger);
+    const containerService = createContainerService();
     const docker: any = containerService.getDocker();
     const mock = createBlockingMcpMock();
     if (docker.modem) docker.modem.demuxStream = (s: any, out: any) => s.pipe(out);
@@ -83,9 +98,8 @@ describe('LocalMCPServer heartbeat behavior', () => {
         inspect: async () => ({ ExitCode: 0 }),
       }),
     });
-
     const envStub = { resolveEnvItems: async () => ({}), resolveProviderEnv: async () => ({}) } as any;
-    const server = new LocalMCPServerNode(containerService as any, logger as any, envStub, {} as any, undefined as any);
+    const server = new LocalMCPServerNode(containerService as any, envStub, {} as any, undefined as any);
     server.setContainerProvider({ provide: async (t: string) => ({ id: `cid-${t}` }) } as any);
     await server.setConfig({ namespace: 'mock', command: 'ignored', heartbeatIntervalMs: 100 } as any);
 

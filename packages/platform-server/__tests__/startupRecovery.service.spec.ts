@@ -1,35 +1,20 @@
-import { afterAll, describe, expect, it, vi } from 'vitest';
+import { afterAll, describe, expect, it, vi, type SpyInstance } from 'vitest';
 import { PrismaClient, RunStatus } from '@prisma/client';
 import { randomUUID } from 'node:crypto';
 import { StartupRecoveryService } from '../src/core/services/startupRecovery.service';
-import { LoggerService } from '../src/core/services/logger.service';
 import type { EventsBusService } from '../src/events/events-bus.service';
+import { Logger } from '@nestjs/common';
 
 const databaseUrl = process.env.AGENTS_DATABASE_URL;
 const shouldRunDbTests = process.env.RUN_DB_TESTS === 'true' && !!databaseUrl;
 
-class TestLogger extends LoggerService {
-  readonly infoCalls: Array<{ message: string; params: unknown[] }> = [];
-  readonly warnCalls: Array<{ message: string; params: unknown[] }> = [];
-  readonly errorCalls: Array<{ message: string; params: unknown[] }> = [];
-  readonly debugCalls: Array<{ message: string; params: unknown[] }> = [];
-
-  override info(message: string, ...optionalParams: unknown[]): void {
-    this.infoCalls.push({ message, params: optionalParams });
-  }
-
-  override debug(message: string, ...optionalParams: unknown[]): void {
-    this.debugCalls.push({ message, params: optionalParams });
-  }
-
-  override warn(message: string, ...optionalParams: unknown[]): void {
-    this.warnCalls.push({ message, params: optionalParams });
-  }
-
-  override error(message: string, ...optionalParams: unknown[]): void {
-    this.errorCalls.push({ message, params: optionalParams });
-  }
-}
+type LoggerSpies = {
+  logSpy: SpyInstance;
+  warnSpy: SpyInstance;
+  errorSpy: SpyInstance;
+  debugSpy: SpyInstance;
+  restore: () => void;
+};
 
 class CaptureEventsBus {
   readonly runStatusChanges: Array<{ threadId: string; runId: string; status: RunStatus }> = [];
@@ -43,6 +28,26 @@ class CaptureEventsBus {
     this.metricsScheduled.push(payload.threadId);
   }
 }
+
+const initLoggerSpies = (): LoggerSpies => {
+  const logSpy = vi.spyOn(Logger.prototype, 'log').mockImplementation(() => undefined);
+  const warnSpy = vi.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
+  const errorSpy = vi.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined);
+  const debugSpy = vi.spyOn(Logger.prototype, 'debug').mockImplementation(() => undefined);
+
+  return {
+    logSpy,
+    warnSpy,
+    errorSpy,
+    debugSpy,
+    restore() {
+      logSpy.mockRestore();
+      warnSpy.mockRestore();
+      errorSpy.mockRestore();
+      debugSpy.mockRestore();
+    },
+  };
+};
 
 if (!shouldRunDbTests) {
   describe.skip('StartupRecoveryService', () => {
@@ -74,57 +79,64 @@ if (!shouldRunDbTests) {
         data: { threadId: thread.id, note: 'done', at: new Date(Date.now() + 120_000), completedAt: new Date() },
       });
 
-      const logger = new TestLogger();
+      const spies = initLoggerSpies();
       const events = new CaptureEventsBus();
-      const service = new StartupRecoveryService(prismaService as any, logger, events as unknown as EventsBusService);
+      const service = new StartupRecoveryService(prismaService as any, events as unknown as EventsBusService);
 
-      await service.onApplicationBootstrap();
+      try {
+        await service.onApplicationBootstrap();
 
-      const recoveredRun = await prisma.run.findUniqueOrThrow({ where: { id: runningRun.id } });
-      expect(recoveredRun.status).toBe(RunStatus.terminated);
+        const recoveredRun = await prisma.run.findUniqueOrThrow({ where: { id: runningRun.id } });
+        expect(recoveredRun.status).toBe(RunStatus.terminated);
 
-      const finishedRunUnchanged = await prisma.run.findUniqueOrThrow({ where: { id: finishedRun.id } });
-      expect(finishedRunUnchanged.status).toBe(RunStatus.finished);
+        const finishedRunUnchanged = await prisma.run.findUniqueOrThrow({ where: { id: finishedRun.id } });
+        expect(finishedRunUnchanged.status).toBe(RunStatus.finished);
 
-      const additionalRecovered = await prisma.run.findUniqueOrThrow({ where: { id: additionalRunning.id } });
-      expect(additionalRecovered.status).toBe(RunStatus.terminated);
+        const additionalRecovered = await prisma.run.findUniqueOrThrow({ where: { id: additionalRunning.id } });
+        expect(additionalRecovered.status).toBe(RunStatus.terminated);
 
-      const pendingReminderUpdated = await prisma.reminder.findUniqueOrThrow({ where: { id: pendingReminder.id } });
-      expect(pendingReminderUpdated.completedAt).toBeInstanceOf(Date);
+        const pendingReminderUpdated = await prisma.reminder.findUniqueOrThrow({ where: { id: pendingReminder.id } });
+        expect(pendingReminderUpdated.completedAt).toBeInstanceOf(Date);
 
-      const completedReminderUnchanged = await prisma.reminder.findUniqueOrThrow({ where: { id: completedReminder.id } });
-      expect(completedReminderUnchanged.completedAt).not.toBeNull();
+        const completedReminderUnchanged = await prisma.reminder.findUniqueOrThrow({ where: { id: completedReminder.id } });
+        expect(completedReminderUnchanged.completedAt).not.toBeNull();
 
-      const summaryCall = logger.infoCalls.find((call) => call.message === 'Startup recovery completed');
-      expect(summaryCall).toBeDefined();
-      const summaryPayload = (summaryCall?.params[0] ?? {}) as Record<string, unknown>;
-      expect(summaryPayload?.terminatedRuns).toBe(2);
-      expect(summaryPayload?.completedReminders).toBe(1);
+        const summaryCall = spies.logSpy.mock.calls.find(([message]) => message === 'Startup recovery completed');
+        expect(summaryCall).toBeDefined();
+        const summaryPayload = (summaryCall?.[1] ?? {}) as Record<string, unknown>;
+        expect(summaryPayload?.terminatedRuns).toBe(2);
+        expect(summaryPayload?.completedReminders).toBe(1);
 
-      expect(events.runStatusChanges).toEqual(
-        expect.arrayContaining([
-          { threadId: thread.id, runId: runningRun.id, status: RunStatus.terminated },
-          { threadId: secondThread.id, runId: additionalRunning.id, status: RunStatus.terminated },
-        ]),
-      );
-      expect(new Set(events.metricsScheduled)).toEqual(new Set([thread.id, secondThread.id]));
+        expect(events.runStatusChanges).toEqual(
+          expect.arrayContaining([
+            { threadId: thread.id, runId: runningRun.id, status: RunStatus.terminated },
+            { threadId: secondThread.id, runId: additionalRunning.id, status: RunStatus.terminated },
+          ]),
+        );
+        expect(new Set(events.metricsScheduled)).toEqual(new Set([thread.id, secondThread.id]));
 
-      const loggerSecond = new TestLogger();
-      const eventsSecond = new CaptureEventsBus();
-      const serviceSecond = new StartupRecoveryService(prismaService as any, loggerSecond, eventsSecond as unknown as EventsBusService);
+        const secondSpies = initLoggerSpies();
+        const eventsSecond = new CaptureEventsBus();
+        const serviceSecond = new StartupRecoveryService(prismaService as any, eventsSecond as unknown as EventsBusService);
 
-      await serviceSecond.onApplicationBootstrap();
+        try {
+          await serviceSecond.onApplicationBootstrap();
 
-      const secondSummary = loggerSecond.infoCalls.find((call) => call.message === 'Startup recovery completed');
-      const secondPayload = (secondSummary?.params[0] ?? {}) as Record<string, unknown>;
-      expect(secondPayload?.terminatedRuns).toBe(0);
-      expect(secondPayload?.completedReminders).toBe(0);
-      expect(eventsSecond.runStatusChanges).toHaveLength(0);
-      expect(eventsSecond.metricsScheduled).toHaveLength(0);
-
-      await prisma.reminder.deleteMany({ where: { id: { in: [pendingReminder.id, completedReminder.id] } } });
-      await prisma.run.deleteMany({ where: { threadId: { in: [thread.id, secondThread.id] } } });
-      await prisma.thread.deleteMany({ where: { id: { in: [thread.id, secondThread.id] } } });
+          const secondSummary = secondSpies.logSpy.mock.calls.find(([message]) => message === 'Startup recovery completed');
+          const secondPayload = (secondSummary?.[1] ?? {}) as Record<string, unknown>;
+          expect(secondPayload?.terminatedRuns).toBe(0);
+          expect(secondPayload?.completedReminders).toBe(0);
+          expect(eventsSecond.runStatusChanges).toHaveLength(0);
+          expect(eventsSecond.metricsScheduled).toHaveLength(0);
+        } finally {
+          secondSpies.restore();
+        }
+      } finally {
+        spies.restore();
+        await prisma.reminder.deleteMany({ where: { id: { in: [pendingReminder.id, completedReminder.id] } } });
+        await prisma.run.deleteMany({ where: { threadId: { in: [thread.id, secondThread.id] } } });
+        await prisma.thread.deleteMany({ where: { id: { in: [thread.id, secondThread.id] } } });
+      }
     });
 
     it('skips recovery when advisory lock is not acquired', async () => {
@@ -140,18 +152,24 @@ if (!shouldRunDbTests) {
         return (fn as (tx: LockSkippingTx) => Promise<unknown>)(new LockSkippingTx());
       });
 
-      const logger = new TestLogger();
+      const spies = initLoggerSpies();
       const events = new CaptureEventsBus();
-      const service = new StartupRecoveryService(prismaService as any, logger, events as unknown as EventsBusService);
+      const service = new StartupRecoveryService(prismaService as any, events as unknown as EventsBusService);
 
-      await service.onApplicationBootstrap();
+      try {
+        await service.onApplicationBootstrap();
 
-      expect(prismaSpy).toHaveBeenCalledTimes(1);
-      expect(logger.infoCalls.some((call) => call.message.includes('Startup recovery skipped'))).toBe(true);
-      expect(events.runStatusChanges).toHaveLength(0);
-      expect(events.metricsScheduled).toHaveLength(0);
-
-      prismaSpy.mockRestore();
+        expect(prismaSpy).toHaveBeenCalledTimes(1);
+        const skipLogged = spies.logSpy.mock.calls.some(([message]) =>
+          typeof message === 'string' && message.includes('Startup recovery skipped'),
+        );
+        expect(skipLogged).toBe(true);
+        expect(events.runStatusChanges).toHaveLength(0);
+        expect(events.metricsScheduled).toHaveLength(0);
+      } finally {
+        spies.restore();
+        prismaSpy.mockRestore();
+      }
     });
 
     it('logs errors encountered during recovery without throwing', async () => {
@@ -176,22 +194,27 @@ if (!shouldRunDbTests) {
         return (fn as (tx: ThrowingTx) => Promise<unknown>)(new ThrowingTx());
       });
 
-      const logger = new TestLogger();
+      const spies = initLoggerSpies();
       const events = new CaptureEventsBus();
-      const service = new StartupRecoveryService(prismaService as any, logger, events as unknown as EventsBusService);
+      const service = new StartupRecoveryService(prismaService as any, events as unknown as EventsBusService);
 
-      await service.onApplicationBootstrap();
+      try {
+        await service.onApplicationBootstrap();
 
-      expect(prismaSpy).toHaveBeenCalledTimes(1);
-      expect(logger.errorCalls).toEqual(
-        expect.arrayContaining([
-          expect.objectContaining({ message: 'Startup recovery failed: simulated failure' }),
-        ]),
-      );
-      expect(events.runStatusChanges).toHaveLength(0);
-      expect(events.metricsScheduled).toHaveLength(0);
-
-      prismaSpy.mockRestore();
+        expect(prismaSpy).toHaveBeenCalledTimes(1);
+        const errorLogged = spies.errorSpy.mock.calls.some(([message, payload]) => {
+          if (message !== 'Startup recovery failed') return false;
+          const details = (payload ?? {}) as { error?: unknown };
+          const err = details?.error as Error | undefined;
+          return err instanceof Error && err.message === 'simulated failure';
+        });
+        expect(errorLogged).toBe(true);
+        expect(events.runStatusChanges).toHaveLength(0);
+        expect(events.metricsScheduled).toHaveLength(0);
+      } finally {
+        spies.restore();
+        prismaSpy.mockRestore();
+      }
     });
   });
 }

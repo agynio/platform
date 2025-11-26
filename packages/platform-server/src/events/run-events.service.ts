@@ -1,4 +1,4 @@
-import { Inject, Injectable } from '@nestjs/common';
+import { Inject, Injectable, Logger } from '@nestjs/common';
 import {
   AttachmentKind,
   ContextItemRole,
@@ -13,7 +13,6 @@ import {
   ToolOutputSource,
   ToolOutputStatus,
 } from '@prisma/client';
-import { LoggerService } from '../core/services/logger.service';
 import { PrismaService } from '../core/services/prisma.service';
 import { toPrismaJsonValue } from '../llm/services/messages.serialization';
 import { ContextItemInput, NormalizedContextItem, normalizeContextItems, upsertNormalizedContextItems } from '../llm/services/context-items.utils';
@@ -354,12 +353,11 @@ export class RunEventsService {
   private readonly chunkPersistenceWarnings = new Set<string>();
   private readonly terminalPersistenceWarnings = new Set<string>();
   private readonly snapshotWarnings = new Set<string>();
+  private readonly logger = new Logger(RunEventsService.name);
 
   constructor(
     @Inject(PrismaService) private readonly prismaService: PrismaService,
-    @Inject(LoggerService) private readonly logger: LoggerService,
-  ) {
-  }
+  ) {}
 
   private get prisma(): PrismaClient {
     return this.prismaService.getClient();

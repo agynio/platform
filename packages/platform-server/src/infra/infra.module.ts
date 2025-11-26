@@ -1,7 +1,6 @@
 import { Module } from '@nestjs/common';
 import { CoreModule } from '../core/core.module';
 import { ConfigService } from '../core/services/config.service';
-import { LoggerService } from '../core/services/logger.service';
 import { PrismaService } from '../core/services/prisma.service';
 import { VaultModule } from '../vault/vault.module';
 import { ContainerRegistry } from './container/container.registry';
@@ -19,6 +18,7 @@ import { ContainerTerminalGateway } from './container/terminal.gateway';
 import { ContainerTerminalController } from './container/containerTerminal.controller';
 import { ContainerEventProcessor } from './container/containerEvent.processor';
 import { DockerWorkspaceEventsWatcher } from './container/containerEvent.watcher';
+import { LoggerService } from '../core/services/logger.service';
 
 @Module({
   imports: [CoreModule, VaultModule],
@@ -26,30 +26,29 @@ import { DockerWorkspaceEventsWatcher } from './container/containerEvent.watcher
     ArchiveService,
     {
       provide: ContainerRegistry,
-      useFactory: async (prismaSvc: PrismaService, logger: LoggerService) => {
-        const svc = new ContainerRegistry(prismaSvc.getClient(), logger);
+      useFactory: async (prismaSvc: PrismaService) => {
+        const svc = new ContainerRegistry(prismaSvc.getClient());
         await svc.ensureIndexes();
         return svc;
       },
-      inject: [PrismaService, LoggerService],
+      inject: [PrismaService],
     },
     {
       provide: ContainerCleanupService,
-      useFactory: (registry: ContainerRegistry, containers: ContainerService, logger: LoggerService) => {
-        const svc = new ContainerCleanupService(registry, containers, logger);
+      useFactory: (registry: ContainerRegistry, containers: ContainerService) => {
+        const svc = new ContainerCleanupService(registry, containers);
         svc.start();
 
         return svc;
       },
-      inject: [ContainerRegistry, ContainerService, LoggerService],
+      inject: [ContainerRegistry, ContainerService],
     },
     {
       provide: ContainerService,
-      useFactory: (logger: LoggerService, containerRegistry: ContainerRegistry) => {
-        const svc = new ContainerService(logger, containerRegistry);
-        return svc;
+      useFactory: (containerRegistry: ContainerRegistry, logger: LoggerService) => {
+        return new ContainerService(containerRegistry, logger);
       },
-      inject: [LoggerService, ContainerRegistry],
+      inject: [ContainerRegistry, LoggerService],
     },
     TerminalSessionsService,
     ContainerTerminalGateway,
@@ -60,23 +59,22 @@ import { DockerWorkspaceEventsWatcher } from './container/containerEvent.watcher
       useFactory: (
         containerService: ContainerService,
         processor: ContainerEventProcessor,
-        logger: LoggerService,
       ) => {
-        const watcher = new DockerWorkspaceEventsWatcher(containerService, processor, logger);
+        const watcher = new DockerWorkspaceEventsWatcher(containerService, processor);
         watcher.start();
         return watcher;
       },
-      inject: [ContainerService, ContainerEventProcessor, LoggerService],
+      inject: [ContainerService, ContainerEventProcessor],
     },
     {
       provide: NcpsKeyService,
-      useFactory: async (config: ConfigService, logger: LoggerService) => {
-        const svc = new NcpsKeyService(config, logger);
+      useFactory: async (config: ConfigService) => {
+        const svc = new NcpsKeyService(config);
         await svc.init();
 
         return svc;
       },
-      inject: [ConfigService, LoggerService],
+      inject: [ConfigService],
     },
     GithubService,
     PRService,

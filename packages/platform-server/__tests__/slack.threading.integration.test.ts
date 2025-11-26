@@ -1,5 +1,4 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import type { LoggerService } from '../src/core/services/logger.service';
 import { SlackTrigger } from '../src/nodes/slackTrigger/slackTrigger.node';
 import type { SlackAdapter } from '../src/messaging/slack/slack.adapter';
 
@@ -74,14 +73,7 @@ describe('SlackTrigger threading integration', () => {
     vi.clearAllMocks();
   });
 
-  const makeLogger = (): Pick<LoggerService, 'info' | 'debug' | 'error'> => ({
-    info: vi.fn(),
-    debug: vi.fn(),
-    error: vi.fn(),
-  });
-
   const setup = async (store: DescriptorStore) => {
-    const logger = makeLogger();
     const getOrCreateThreadByAlias = vi.fn(async (_src: string, alias: string) => store.getOrCreateThread(alias));
     const updateThreadChannelDescriptor = vi.fn(async (threadId: string, descriptor: ChannelDescriptor) => {
       store.setDescriptor(threadId, descriptor);
@@ -99,7 +91,7 @@ describe('SlackTrigger threading integration', () => {
     } satisfies Pick<import('../src/core/services/prisma.service').PrismaService, 'getClient'>) as import('../src/core/services/prisma.service').PrismaService;
     const slackSend = vi.fn(async (opts: { token: string; channel: string; text: string; thread_ts?: string }) => ({ ok: true, channelMessageId: '200', threadId: opts.thread_ts ?? 'generated-thread' }));
     const slackAdapter = ({ sendText: slackSend } satisfies Pick<SlackAdapter, 'sendText'>) as SlackAdapter;
-    const trigger = new SlackTrigger(logger as LoggerService, persistence, prismaStub, slackAdapter);
+    const trigger = new SlackTrigger(undefined as any, persistence, prismaStub, slackAdapter);
     trigger.init({ nodeId: 'slack-node' });
     await trigger.setConfig({ app_token: 'xapp-abc', bot_token: 'xoxb-bot' });
     await trigger.provision();

@@ -1,4 +1,4 @@
-import { Inject, Injectable } from '@nestjs/common';
+import { Inject, Injectable, Logger } from '@nestjs/common';
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import type { IncomingMessage } from 'http';
 import type { Duplex } from 'stream';
@@ -6,7 +6,6 @@ import WebSocket, { WebSocketServer, type RawData } from 'ws';
 import { z } from 'zod';
 import { TerminalSessionsService, type TerminalSessionRecord } from './terminal.sessions.service';
 import { ContainerService } from './container.service';
-import { LoggerService } from '../../core/services/logger.service';
 
 const QuerySchema = z
   .object({ sessionId: z.string().uuid(), token: z.string().min(1) })
@@ -54,7 +53,7 @@ const isWsLike = (value: unknown): value is WsLike => {
   return typeof candidate.readyState === 'number' && typeof candidate.send === 'function' && typeof candidate.on === 'function';
 };
 
-const safeSend = (candidate: unknown, payload: Record<string, unknown>, logger: LoggerService): void => {
+const safeSend = (candidate: unknown, payload: Record<string, unknown>, logger: Logger): void => {
   if (!isWsLike(candidate)) {
     return;
   }
@@ -68,7 +67,7 @@ const safeSend = (candidate: unknown, payload: Record<string, unknown>, logger: 
   }
 };
 
-const safeClose = (candidate: unknown, code: number | undefined, reason: string | undefined, logger: LoggerService): void => {
+const safeClose = (candidate: unknown, code: number | undefined, reason: string | undefined, logger: Logger): void => {
   if (!isWsLike(candidate)) {
     return;
   }
@@ -136,10 +135,10 @@ const rawDataToUtf8 = (raw: RawDataLike): string => {
 @Injectable()
 export class ContainerTerminalGateway {
   private registered = false;
+  private readonly logger = new Logger(ContainerTerminalGateway.name);
   constructor(
     @Inject(TerminalSessionsService) private readonly sessions: TerminalSessionsService,
     @Inject(ContainerService) private readonly containers: ContainerService,
-    @Inject(LoggerService) private readonly logger: LoggerService,
   ) {}
 
   private wss: WebSocketServer | null = null;
@@ -277,9 +276,9 @@ export class ContainerTerminalGateway {
         ...extra,
       };
       if (phase === 'running') {
-        this.logger.info('Terminal session started', context);
+        this.logger.log('Terminal session started', context);
       } else if (phase === 'exited') {
-        this.logger.info('Terminal session exited', context);
+        this.logger.log('Terminal session exited', context);
       } else if (phase === 'error') {
         this.logger.warn('Terminal session errored', context);
       }

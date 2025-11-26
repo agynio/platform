@@ -1,7 +1,6 @@
 
 import { describe, it, expect } from 'vitest';
 import { Test } from '@nestjs/testing';
-import { LoggerService } from '../src/core/services/logger.service';
 import { ConfigService } from '../src/core/services/config.service';
 import { AgentNode } from '../src/nodes/agent/agent.node';
 import { ResponseMessage, AIMessage } from '@agyn/llm';
@@ -22,7 +21,6 @@ describe('call_agent sync busy', () => {
   it('returns queued when target thread running (sync)', async () => {
     const module = await Test.createTestingModule({
       providers: [
-        LoggerService,
         ConfigService,
         BusyAgent,
         { provide: LLMProvisioner, useValue: {} },
@@ -57,7 +55,7 @@ describe('call_agent sync busy', () => {
       onChildRunMessage: async () => null,
       onChildRunCompleted: async () => null,
     } as unknown as CallAgentLinkingService;
-    const node = new CallAgentNode(new LoggerService(), module.get(AgentsPersistenceService), linkingStub);
+    const node = new CallAgentNode(module.get(AgentsPersistenceService), linkingStub);
     await node.setConfig({ response: 'sync' });
     node.setAgent(agent);
     const tool = node.getTool();

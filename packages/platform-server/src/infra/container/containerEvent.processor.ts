@@ -1,7 +1,6 @@
-import { Inject, Injectable } from '@nestjs/common';
+import { Inject, Injectable, Logger } from '@nestjs/common';
 import { type PrismaClient, ContainerEventType, type ContainerStatus, Prisma } from '@prisma/client';
 import { PrismaService } from '../../core/services/prisma.service';
-import { LoggerService } from '../../core/services/logger.service';
 import { ContainerReasonContext, ContainerTerminationReason, mapContainerEventReason, statusForEvent } from './containerEvent.reason';
 import { validate as validateUuid } from 'uuid';
 
@@ -26,10 +25,10 @@ export class ContainerEventProcessor {
   private prisma: PrismaClient;
   private queue: Promise<void> = Promise.resolve();
   private lastOomByContainer = new Map<string, number>();
+  private readonly logger = new Logger(ContainerEventProcessor.name);
 
   constructor(
     @Inject(PrismaService) prismaService: PrismaService,
-    @Inject(LoggerService) private readonly logger: LoggerService,
   ) {
     this.prisma = prismaService.getClient();
   }
@@ -136,7 +135,7 @@ export class ContainerEventProcessor {
       }
     }
 
-    this.logger.info('ContainerEventProcessor: recorded container event', {
+    this.logger.log('ContainerEventProcessor: recorded container event', {
       dockerId: this.shortId(dockerId),
       eventType,
       reason,

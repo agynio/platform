@@ -1,6 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { EnvService } from '../../src/env/env.service';
-import { LoggerService } from '../../src/core/services/logger.service';
 import { ShellCommandNode } from '../../src/nodes/tools/shell_command/shell_command.node';
 import type { ContainerHandle } from '../../src/infra/container/container.handle';
 
@@ -33,18 +32,39 @@ class SequenceContainer implements ContainerHandle {
 function createToolWithContainer(container: ContainerHandle) {
   const vaultStub = { getSecret: async () => '' } as const;
   const envService = new EnvService(vaultStub as any);
-  const logger = new LoggerService();
-  const archiveStub = { createSingleFileTar: async () => Buffer.from('tar') } as const;
+  const moduleRefStub = {};
+  const archiveStub = { createSingleFileTar: vi.fn(async () => Buffer.from('tar')) } as const;
   const runEvents = {
     appendToolOutputChunk: vi.fn(async (payload) => payload),
     finalizeToolOutputTerminal: vi.fn(async (payload) => payload),
   };
-  const node = new ShellCommandNode(envService as any, logger as any, {} as any, archiveStub as any, runEvents as any);
+  const eventsBus = {
+    emitToolOutputChunk: vi.fn(),
+    emitToolOutputTerminal: vi.fn(),
+  };
+  const prismaStub = {
+    getClient: vi.fn(() => ({
+      container: {
+        findUnique: vi.fn(async () => null),
+      },
+      containerEvent: {
+        findFirst: vi.fn(async () => null),
+      },
+    })),
+  };
+  const node = new ShellCommandNode(
+    envService as any,
+    moduleRefStub as any,
+    archiveStub as any,
+    runEvents as any,
+    eventsBus as any,
+    prismaStub as any,
+  );
   node.setContainerProvider({
     provide: async () => container,
   } as any);
 
-  return { tool: node.getTool(), runEvents, node };
+  return { tool: node.getTool(), runEvents, node, eventsBus, prismaStub };
 }
 
 const ctx = {

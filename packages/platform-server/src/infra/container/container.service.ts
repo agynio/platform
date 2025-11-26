@@ -2,7 +2,6 @@ import { Inject, Injectable } from '@nestjs/common';
 import Docker, { ContainerCreateOptions, Exec } from 'dockerode';
 import { PassThrough, Writable } from 'node:stream';
 import { ContainerHandle } from './container.handle';
-import { LoggerService } from '../../core/services/logger.service';
 import { PLATFORM_LABEL, type Platform } from '../../core/constants';
 import {
   isExecTimeoutError,
@@ -13,6 +12,7 @@ import {
 import { ContainerRegistry } from './container.registry';
 import { mapInspectMounts } from './container.mounts';
 import { createUtf8Collector, demuxDockerMultiplex } from './containerStream.util';
+import { LoggerService } from '../../core/services/logger.service';
 
 const DEFAULT_IMAGE = 'mcr.microsoft.com/vscode/devcontainers/base';
 
@@ -49,7 +49,7 @@ export type ContainerOpts = {
  * used flexibly by tools/agents. All methods log their high-level actions.
  *
  * Usage example:
- * const svc = new ContainerService(logger);
+ * const svc = new ContainerService(containerRegistry, logger);
  * const c = await svc.start({ image: "node:20-alpine", cmd: ["sleep", "3600"], autoRemove: true });
  * const result = await c.exec("node -v");
  * await c.stop();
@@ -58,10 +58,9 @@ export type ContainerOpts = {
 @Injectable()
 export class ContainerService {
   private docker: Docker;
-
   constructor(
-    @Inject(LoggerService) private logger: LoggerService,
     @Inject(ContainerRegistry) private registry: ContainerRegistry,
+    @Inject(LoggerService) private readonly logger: LoggerService,
   ) {
     this.docker = new Docker({
       ...(process.env.DOCKER_SOCKET
@@ -273,7 +272,7 @@ export class ContainerService {
       if (isTimeout && options?.killOnTimeout) {
         // Gracefully stop the container to ensure process-tree cleanup.
         try {
-          this.logger.info('Exec timeout detected; stopping container', {
+          this.logger.warn('Exec timeout detected; stopping container', {
             containerId,
             timeoutMs: options?.timeoutMs,
             idleTimeoutMs: options?.idleTimeoutMs,
@@ -688,7 +687,7 @@ export class ContainerService {
         this.logger.debug(`Container already stopped cid=${containerId.substring(0, 12)}`);
       } else if (sc === 409) {
         // Conflict typically indicates removal already in progress; treat as benign
-        this.logger.info(`Container stop conflict (likely removing) cid=${containerId.substring(0, 12)}`);
+        this.logger.warn(`Container stop conflict (likely removing) cid=${containerId.substring(0, 12)}`);
       } else {
         throw e;
       }
@@ -714,7 +713,7 @@ export class ContainerService {
       if (sc === 404) {
         this.logger.debug(`Container already removed cid=${containerId.substring(0, 12)}`);
       } else if (sc === 409) {
-        this.logger.info(`Container removal conflict cid=${containerId.substring(0, 12)} (likely removing)`);
+        this.logger.warn(`Container removal conflict cid=${containerId.substring(0, 12)} (likely removing)`);
       } else {
         throw e;
       }

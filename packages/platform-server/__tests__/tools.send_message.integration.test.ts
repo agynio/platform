@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { SendMessageFunctionTool } from '../src/nodes/tools/send_message/send_message.tool';
-import { LoggerService } from '../src/core/services/logger.service';
+import { LoggerService } from '../src/core/services/logger.service.js';
 // Avoid importing PrismaService to prevent prisma client load
 import { SlackTrigger } from '../src/nodes/slackTrigger/slackTrigger.node';
 import type { SlackAdapter } from '../src/messaging/slack/slack.adapter';
@@ -76,7 +76,7 @@ describe('send_message tool', () => {
     } satisfies Pick<import('../src/agents/agents.persistence.service').AgentsPersistenceService, 'getOrCreateThreadByAlias' | 'updateThreadChannelDescriptor'>) as import('../src/agents/agents.persistence.service').AgentsPersistenceService;
     const slackSend = vi.fn(async () => sendResult);
     const slackAdapter = ({ sendText: slackSend } satisfies Pick<SlackAdapter, 'sendText'>) as SlackAdapter;
-    const trigger = new SlackTrigger(new LoggerService(), persistence, prismaService, slackAdapter);
+    const trigger = new SlackTrigger(undefined as any, persistence, prismaService, slackAdapter);
     trigger.init({ nodeId: 'channel-node' });
 
     // Override prisma behavior for descriptor lookup inside sendToChannel
@@ -123,7 +123,7 @@ describe('send_message tool', () => {
       updateThreadChannelDescriptor: async () => undefined,
     } satisfies Pick<import('../src/agents/agents.persistence.service').AgentsPersistenceService, 'getOrCreateThreadByAlias' | 'updateThreadChannelDescriptor'>) as import('../src/agents/agents.persistence.service').AgentsPersistenceService;
     const slackAdapter = ({ sendText: vi.fn() } satisfies Pick<SlackAdapter, 'sendText'>) as SlackAdapter;
-    const trigger = new SlackTrigger(new LoggerService(), persistence, prismaService, slackAdapter);
+    const trigger = new SlackTrigger(undefined as any, persistence, prismaService, slackAdapter);
     trigger.init({ nodeId: 'channel-node' });
     const runtime = makeRuntimeStub(trigger);
     const tool = new SendMessageFunctionTool(new LoggerService(), prismaService, runtime);

@@ -22,8 +22,8 @@ import { RunSignalsRegistry } from '../src/agents/run-signals.service';
 describe('LiveGraphRuntime -> Agent config propagation', () => {
   function makeRuntime() {
     class StubContainerService extends ContainerService {
-      constructor(logger: LoggerService, registry: any) {
-        super(logger, registry as any);
+      constructor(registry: any, logger: LoggerService) {
+        super(registry as any, logger);
       }
     }
     class StubLLMProvisioner extends LLMProvisioner {

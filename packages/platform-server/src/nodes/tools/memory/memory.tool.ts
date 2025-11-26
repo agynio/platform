@@ -1,7 +1,7 @@
 import z from 'zod';
 
 import { FunctionTool } from '@agyn/llm';
-import { LoggerService } from '../../../core/services/logger.service';
+import { Logger } from '@nestjs/common';
 // Note: MemoryService is consumed via a bound adapter supplied by MemoryNode/graph; no direct import here.
 
 export const UnifiedMemoryToolStaticConfigSchema = z
@@ -32,7 +32,7 @@ interface UnifiedMemoryFunctionToolDeps {
   getDescription: () => string;
   getName: () => string;
   getMemoryFactory: () => ((opts: { threadId?: string }) => MemoryToolService) | undefined;
-  logger: LoggerService;
+  logger: Logger;
 }
 
 export class UnifiedMemoryFunctionTool extends FunctionTool<typeof UnifiedMemoryToolStaticConfigSchema> {
@@ -138,7 +138,7 @@ export class UnifiedMemoryFunctionTool extends FunctionTool<typeof UnifiedMemory
     if (typeof serviceOrEnvelope === 'string') return serviceOrEnvelope;
     const service = serviceOrEnvelope as MemoryToolService;
     const logger = this.deps.logger;
-    if (isMemoryDebugEnabled()) logger.debug('memory tool invoke', { command, path, threadId });
+    if (isMemoryDebugEnabled()) logger.debug(`memory tool invoke command=${command} path=${path} threadId=${threadId ?? 'n/a'}`);
 
     try {
       switch (command) {

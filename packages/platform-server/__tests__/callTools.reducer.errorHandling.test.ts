@@ -152,7 +152,7 @@ describe('CallToolsLLMReducer call_agent metadata', () => {
 
     const linking = linkingMock as unknown as CallAgentLinkingService;
 
-    const callAgentNode = new CallAgentTool(new LoggerService(), persistence, linking);
+    const callAgentNode = new CallAgentTool(persistence, linking);
     await callAgentNode.setConfig({ description: 'desc', response: 'sync' });
 
     const agent = {

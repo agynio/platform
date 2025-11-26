@@ -1,6 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { ContainerRegistry, type ContainerStatus, type ContainerMetadata } from '../src/infra/container/container.registry';
-import { LoggerService } from '../src/core/services/logger.service';
 
 type ContainerRow = {
   containerId: string;
@@ -128,19 +127,13 @@ class FakePrismaClient {
   }
 }
 
-class NoopLogger implements LoggerService {
-  info(): void {}
-  error(): void {}
-  debug(): void {}
-}
-
 describe('ContainerRegistry (Prisma-backed)', () => {
   let prisma: FakePrismaClient;
   let registry: ContainerRegistry;
 
   beforeEach(() => {
     prisma = new FakePrismaClient();
-    registry = new ContainerRegistry(prisma as unknown as import('@prisma/client').PrismaClient, new NoopLogger());
+    registry = new ContainerRegistry(prisma as unknown as import('@prisma/client').PrismaClient);
   });
 
   it('registerStart creates records deterministically', async () => {

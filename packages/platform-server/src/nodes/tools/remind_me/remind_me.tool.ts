@@ -1,7 +1,7 @@
 import z from 'zod';
 import { FunctionTool, HumanMessage } from '@agyn/llm';
 import { v4 as uuidv4 } from 'uuid';
-import { LoggerService } from '../../../core/services/logger.service';
+import { Logger } from '@nestjs/common';
 import { PrismaService } from '../../../core/services/prisma.service';
 import type { Reminder } from '@prisma/client';
 import { LLMContext } from '../../../llm/types';
@@ -25,7 +25,9 @@ export class RemindMeFunctionTool extends FunctionTool<typeof remindMeInvocation
   private destroyed = false;
   private maxActive = 1000;
   private onRegistryChanged?: (count: number, updatedAtMs?: number, threadId?: string) => void;
-  constructor(private logger: LoggerService, private prismaService: PrismaService) {
+  private readonly logger = new Logger(RemindMeFunctionTool.name);
+
+  constructor(private prismaService: PrismaService) {
     super();
   }
   get name() {
@@ -63,7 +65,6 @@ export class RemindMeFunctionTool extends FunctionTool<typeof remindMeInvocation
 
     const etaDate = new Date(Date.now() + delayMs);
     const eta = etaDate.toISOString();
-    const logger = this.logger;
     const prisma = this.prismaService.getClient();
     // Create DB row first; id is UUID
     const created = await prisma.reminder.create({
@@ -76,7 +77,8 @@ export class RemindMeFunctionTool extends FunctionTool<typeof remindMeInvocation
       try {
         await prisma.reminder.update({ where: { id: created.id }, data: { completedAt: new Date() } });
       } catch (e) {
-        logger.error('RemindMe completion failed', e);
+        const message = e instanceof Error ? e.message : String(e);
+        this.logger.error(`RemindMe completion failed: ${message}`);
       } finally {
         // Always remove from registry and notify
         this.active.delete(created.id);
@@ -87,7 +89,7 @@ export class RemindMeFunctionTool extends FunctionTool<typeof remindMeInvocation
         await ctx.callerAgent.invoke(threadId, [msg]);
       } catch (e: unknown) {
         const msg = e instanceof Error ? e.message : JSON.stringify(e);
-        logger.error('RemindMe scheduled invoke error', msg);
+        this.logger.error(`RemindMe scheduled invoke error: ${msg}`);
       }
     }, delayMs);
     // Store created entity in registry keyed by DB id

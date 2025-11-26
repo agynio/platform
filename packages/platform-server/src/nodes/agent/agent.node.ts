@@ -1,7 +1,6 @@
 import { LocalMCPServerNode } from '../mcp';
 
 import { ConfigService } from '../../core/services/config.service';
-import { LoggerService } from '../../core/services/logger.service';
 
 import { z } from 'zod';
 
@@ -138,13 +137,12 @@ export class AgentNode extends Node<AgentStaticConfig> {
 
   constructor(
     @Inject(ConfigService) protected configService: ConfigService,
-    @Inject(LoggerService) protected logger: LoggerService,
     @Inject(LLMProvisioner) protected llmProvisioner: LLMProvisioner,
     @Inject(ModuleRef) protected readonly moduleRef: ModuleRef,
     @Optional() @Inject(AgentsPersistenceService) private persistence?: AgentsPersistenceService,
     @Optional() @Inject(RunSignalsRegistry) private runSignals?: RunSignalsRegistry,
   ) {
-    super(logger);
+    super();
   }
 
   private getPersistence(): AgentsPersistenceService {
@@ -183,7 +181,7 @@ export class AgentNode extends Node<AgentStaticConfig> {
     const drained = this.buffer.tryDrain(ctx.threadId, mode);
     if (drained.length === 0) return;
 
-    this.logger.debug?.(
+    this.logger.debug(
       `[Agent: ${this.config.title ?? this.nodeId}] Injecting ${drained.length} buffered message(s) into active run for thread ${ctx.threadId}`,
     );
 
@@ -412,7 +410,7 @@ export class AgentNode extends Node<AgentStaticConfig> {
           throw new Error('Agent did not produce a valid response message.');
         }
 
-        this.logger.info(`Agent response in thread ${thread}: ${last?.text}`);
+        this.logger.log(`Agent response in thread ${thread}: ${last?.text}`);
         if (last instanceof ResponseMessage) {
           const outputs: Array<AIMessage | ToolCallMessage> = last.output.filter(
             (o) => o instanceof AIMessage || o instanceof ToolCallMessage,
@@ -454,7 +452,7 @@ export class AgentNode extends Node<AgentStaticConfig> {
   async addMcpServer(server: LocalMCPServerNode): Promise<void> {
     const namespace = server.namespace;
     if (this.mcpServerTools.has(server)) {
-      this.logger.debug?.(`MCP server ${namespace} already added; skipping duplicate add.`);
+      this.logger.debug(`MCP server ${namespace} already added; skipping duplicate add.`);
       return;
     }
     // Track server with empty tools initially; sync on events
@@ -491,7 +489,7 @@ export class AgentNode extends Node<AgentStaticConfig> {
       for (const t of prev) {
         if (!latestNames.has(t.name)) {
           this.tools.delete(t);
-          this.logger.debug?.(`[Agent: ${this.config.title}] MCP tool removed (${namespace}/${t.name})`);
+          this.logger.debug(`[Agent: ${this.config.title}] MCP tool removed (${namespace}/${t.name})`);
         }
       }
 

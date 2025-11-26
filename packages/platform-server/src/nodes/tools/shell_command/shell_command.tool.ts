@@ -1,7 +1,7 @@
 import { FunctionTool } from '@agyn/llm';
 import z from 'zod';
 import { LLMContext } from '../../../llm/types';
-import { LoggerService } from '../../../core/services/logger.service';
+import { Logger } from '@nestjs/common';
 import {
   ExecIdleTimeoutError,
   ExecTimeoutError,
@@ -134,12 +134,12 @@ type StreamingOptions = {
 @Injectable({ scope: Scope.TRANSIENT })
 export class ShellCommandTool extends FunctionTool<typeof bashCommandSchema> {
   private _node?: ShellCommandNode;
+  private readonly logger = new Logger(ShellCommandTool.name);
 
   constructor(
     private readonly archive: ArchiveService,
     private readonly runEvents: RunEventsService,
     private readonly eventsBus: EventsBusService,
-    private readonly logger: LoggerService,
     private readonly prismaService: PrismaService,
   ) {
     super();
@@ -268,7 +268,7 @@ export class ShellCommandTool extends FunctionTool<typeof bashCommandSchema> {
     const provider = this.node.provider;
     if (!provider) throw new Error('ShellCommandTool: containerProvider not set. Connect via graph edge before use.');
     const container = await provider.provide(threadId);
-    this.logger.info('Tool called', 'shell_command', { command });
+    this.logger.log(`shell_command invoked command=${command}`);
 
     // Base env pulled from container; overlay from node config
     const baseEnv = undefined; // ContainerHandle does not expose getEnv; resolution handled via EnvService
@@ -408,7 +408,7 @@ export class ShellCommandTool extends FunctionTool<typeof bashCommandSchema> {
     const provider = this.node.provider;
     if (!provider) throw new Error('ShellCommandTool: containerProvider not set. Connect via graph edge before use.');
     const container = await provider.provide(options.threadId);
-    this.logger.info('Tool streaming start', 'shell_command', { command, eventId: options.eventId });
+    this.logger.log(`shell_command streaming start command=${command} eventId=${options.eventId}`);
 
     const envOverlay = await this.node.resolveEnv(undefined);
     const cfg = this.getResolvedConfig();
@@ -516,12 +516,10 @@ export class ShellCommandTool extends FunctionTool<typeof bashCommandSchema> {
           this.eventsBus.emitToolOutputChunk(payload);
         } catch (err) {
           droppedChunks += 1;
-          this.logger.warn('ShellCommandTool chunk persistence failed; continuing without storing chunk', {
-            eventId: options.eventId,
-            seqGlobal,
-            source,
-            err,
-          });
+          const errMessage = err instanceof Error ? err.message : String(err);
+          this.logger.warn(
+            `ShellCommandTool chunk persistence failed; continuing without storing chunk eventId=${options.eventId} seqGlobal=${seqGlobal} source=${source} error=${errMessage}`,
+          );
         }
       });
     };
@@ -656,7 +654,8 @@ export class ShellCommandTool extends FunctionTool<typeof bashCommandSchema> {
       try {
         await flushChain;
       } catch (flushErr) {
-        this.logger.warn('ShellCommandTool flushChain error', { eventId: options.eventId, error: flushErr });
+        const errMessage = flushErr instanceof Error ? flushErr.message : String(flushErr);
+        this.logger.warn(`ShellCommandTool flushChain error eventId=${options.eventId} error=${errMessage}`);
       }
 
       if (response) {
@@ -694,10 +693,8 @@ export class ShellCommandTool extends FunctionTool<typeof bashCommandSchema> {
             const file = `${randomUUID()}.txt`;
             savedPath = await this.saveOversizedOutputInContainer(container, file, finalCombinedOutput);
           } catch (saveErr) {
-            this.logger.warn('ShellCommandTool failed to persist truncated output', {
-              eventId: options.eventId,
-              error: saveErr,
-            });
+            const errMessage = saveErr instanceof Error ? saveErr.message : String(saveErr);
+            this.logger.warn(`ShellCommandTool failed to persist truncated output eventId=${options.eventId} error=${errMessage}`);
           }
         }
         if (!truncationMessage) {
@@ -739,10 +736,8 @@ export class ShellCommandTool extends FunctionTool<typeof bashCommandSchema> {
             }
           }
         } catch (formatErr) {
-          this.logger.warn('ShellCommandTool failed to format exit code error', {
-            eventId: options.eventId,
-            error: formatErr,
-          });
+          const errMessage = formatErr instanceof Error ? formatErr.message : String(formatErr);
+          this.logger.warn(`ShellCommandTool failed to format exit code error eventId=${options.eventId} error=${errMessage}`);
           formattedExitCodeMessage = `[exit code ${exitCode}]`;
         }
       }
@@ -763,10 +758,8 @@ export class ShellCommandTool extends FunctionTool<typeof bashCommandSchema> {
         });
         this.eventsBus.emitToolOutputTerminal(payload);
       } catch (eventErr) {
-        this.logger.warn('ShellCommandTool failed to record terminal summary; continuing', {
-          eventId: options.eventId,
-          error: eventErr,
-        });
+        const errMessage = eventErr instanceof Error ? eventErr.message : String(eventErr);
+        this.logger.warn(`ShellCommandTool failed to record terminal summary; continuing eventId=${options.eventId} error=${errMessage}`);
       }
     }
 
@@ -837,7 +830,8 @@ export class ShellCommandTool extends FunctionTool<typeof bashCommandSchema> {
       if (message) segments.push(`Docker message: ${message}`);
       return `${segments.join('. ')}.`;
     } catch (error) {
-      this.logger.error('ShellCommandTool: failed to build interruption message', { error, containerId });
+      const errMessage = error instanceof Error ? error.message : String(error);
+      this.logger.error(`ShellCommandTool: failed to build interruption message containerId=${containerId} error=${errMessage}`);
       return 'Shell command interrupted: workspace container connection closed unexpectedly. Failed to read termination details.';
     }
   }

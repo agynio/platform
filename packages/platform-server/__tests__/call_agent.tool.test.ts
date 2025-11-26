@@ -65,7 +65,7 @@ class FakeAgent {
 describe('CallAgentTool unit', () => {
   it('returns error when no agent attached', async () => {
     const { instance: linking } = createLinkingStub();
-    const tool = new CallAgentTool(new LoggerService(), createPersistence(linking), linking);
+    const tool = new CallAgentTool(createPersistence(linking), linking);
     await expect(tool.setConfig({ description: 'desc' })).resolves.toBeUndefined();
     const dynamic = tool.getTool();
     await expect(dynamic.execute({ input: 'hi', threadAlias: 'x', summary: 'x summary' }, { threadId: 't1', runId: 'r', finishSignal: new Signal(), terminateSignal: new Signal(), callerAgent: {} } as any)).rejects.toThrowError(
@@ -76,7 +76,7 @@ describe('CallAgentTool unit', () => {
   it('calls attached agent and returns its response.text', async () => {
     const { instance: linking, spies } = createLinkingStub();
     const persistence = createPersistence(linking);
-    const tool = new CallAgentTool(new LoggerService(), persistence, linking);
+    const tool = new CallAgentTool(persistence, linking);
     await tool.setConfig({ description: 'desc', response: 'sync' });
     const agent = new FakeAgent(async (_thread, _msgs) => {
       const ai = AIMessage.fromText('OK');
@@ -97,7 +97,7 @@ describe('CallAgentTool unit', () => {
 
   it('uses provided description in tool metadata', async () => {
     const { instance: linking } = createLinkingStub();
-    const tool = new CallAgentTool(new LoggerService(), createPersistence(linking), linking);
+    const tool = new CallAgentTool(createPersistence(linking), linking);
     await tool.setConfig({ description: 'My desc' });
     const dynamic = tool.getTool();
     expect(dynamic.description).toBe('My desc');
@@ -107,7 +107,7 @@ describe('CallAgentTool unit', () => {
   it('resolves subthread by alias under parent UUID', async () => {
     const { instance: linking } = createLinkingStub();
     const persistence = createPersistence(linking);
-    const tool = new CallAgentTool(new LoggerService(), persistence, linking);
+    const tool = new CallAgentTool(persistence, linking);
     await tool.setConfig({ description: 'desc', response: 'sync' });
     const agent = new FakeAgent(async (_thread, _msgs) => {
       const ai = AIMessage.fromText('OK');
@@ -125,7 +125,7 @@ describe('CallAgentTool unit', () => {
 
   it('async mode returns sent immediately', async () => {
     const { instance: linking } = createLinkingStub();
-    const tool = new CallAgentTool(new LoggerService(), createPersistence(linking), linking);
+    const tool = new CallAgentTool(createPersistence(linking), linking);
     await tool.setConfig({ description: 'desc', response: 'async' });
     const child = new FakeAgent(async (thread, msgs) => {
       expect(msgs[0]?.text).toBe('do work');
@@ -145,7 +145,7 @@ describe('CallAgentTool unit', () => {
 
   it('ignore mode returns sent and does not trigger parent', async () => {
     const { instance: linking } = createLinkingStub();
-    const tool = new CallAgentTool(new LoggerService(), createPersistence(linking), linking);
+    const tool = new CallAgentTool(createPersistence(linking), linking);
     await tool.setConfig({ description: 'desc', response: 'ignore' });
     const child = new FakeAgent(async () => {
       const ai = AIMessage.fromText('ignored');
@@ -166,7 +166,7 @@ describe('CallAgentTool unit', () => {
     const getSubthreadMock = vi.fn().mockResolvedValue('child-thread');
     const persistence = { getOrCreateSubthreadByAlias: getSubthreadMock } as unknown as AgentsPersistenceService;
     const { instance: linking, spies } = createLinkingStub();
-    const tool = new CallAgentTool(new LoggerService(), persistence, linking);
+    const tool = new CallAgentTool(persistence, linking);
     await tool.setConfig({ description: 'desc', response: 'sync' });
     const agent = new FakeAgent(async (_thread, _msgs) => {
       const ai = AIMessage.fromText('OK');

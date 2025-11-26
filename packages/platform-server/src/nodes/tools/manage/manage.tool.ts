@@ -2,8 +2,7 @@ import z from 'zod';
 
 import { FunctionTool, HumanMessage } from '@agyn/llm';
 import { ManageToolNode } from './manage.node';
-import { LoggerService } from '../../../core/services/logger.service';
-import { Inject, Injectable, Scope } from '@nestjs/common';
+import { Inject, Injectable, Logger, Scope } from '@nestjs/common';
 import { LLMContext } from '../../../llm/types';
 import { AgentsPersistenceService } from '../../../agents/agents.persistence.service';
 
@@ -24,9 +23,9 @@ export const ManageInvocationSchema = z
 export class ManageFunctionTool extends FunctionTool<typeof ManageInvocationSchema> {
   private _node?: ManageToolNode;
   private persistence?: AgentsPersistenceService;
+  private readonly logger = new Logger(ManageFunctionTool.name);
 
   constructor(
-    @Inject(LoggerService) private readonly logger: LoggerService,
     @Inject(AgentsPersistenceService) private readonly injectedPersistence: AgentsPersistenceService,
   ) {
     super();

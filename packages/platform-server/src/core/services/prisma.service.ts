@@ -1,17 +1,14 @@
-import { LoggerService } from './logger.service';
 import { ConfigService } from './config.service';
-import { Inject, Injectable } from '@nestjs/common';
+import { Inject, Injectable, Logger } from '@nestjs/common';
 import { PrismaClient } from '@prisma/client';
 
 @Injectable()
 export class PrismaService {
   // Lazy-initialized Prisma client; optional to avoid non-null assertion
   private prisma?: PrismaClient;
+  private readonly logger = new Logger(PrismaService.name);
 
-  constructor(
-    @Inject(LoggerService) private logger: LoggerService,
-    @Inject(ConfigService) private cfg: ConfigService,
-  ) {}
+  constructor(@Inject(ConfigService) private cfg: ConfigService) {}
 
   getClient(): PrismaClient {
     try {
@@ -20,9 +17,9 @@ export class PrismaService {
         this.prisma = new PrismaClient({ datasources: { db: { url } } });
       }
       return this.prisma;
-    } catch (e) {
-      this.logger.error('Failed to initialize Prisma client: %s', (e as Error)?.message || String(e));
-      throw e;
+    } catch (error) {
+      this.logger.error('Failed to initialize Prisma client', error);
+      throw error;
     }
   }
 }

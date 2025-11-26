@@ -9,7 +9,6 @@ import { ContainerTerminalController } from '../../src/infra/container/container
 import { ContainerTerminalGateway } from '../../src/infra/container/terminal.gateway';
 import { TerminalSessionsService } from '../../src/infra/container/terminal.sessions.service';
 import { ContainerService } from '../../src/infra/container/container.service';
-import { LoggerService } from '../../src/core/services/logger.service';
 import { waitFor, waitForWsClose } from '../helpers/ws';
 
 type TerminalMessage = {
@@ -81,7 +80,6 @@ describe('ContainerTerminalGateway E2E', () => {
       providers: [
         ContainerTerminalGateway,
         TerminalSessionsService,
-        LoggerService,
         { provide: ContainerService, useClass: TestContainerService },
       ],
     }).compile();

@@ -1,5 +1,4 @@
 import { describe, it, expect, vi } from 'vitest';
-import type { LoggerService } from '../src/core/services/logger.service';
 // BaseTrigger legacy removed in Issue #451; use SlackTrigger semantics only
 // Typed helper for Slack socket-mode envelope used by our handler
 type SlackMessageEvent = {
@@ -119,20 +118,14 @@ declare module '@slack/socket-mode' {
 import { SlackTrigger } from '../src/nodes/slackTrigger/slackTrigger.node';
 import { __getLastSocketClient } from '@slack/socket-mode';
 import type { SlackAdapter } from '../src/messaging/slack/slack.adapter';
+import { ResolveError } from '../src/utils/references';
 // Avoid importing AgentsPersistenceService to prevent @prisma/client load in unit tests
 // We pass a stub object where needed.
 
 import type { BufferMessage } from '../src/nodes/agent/messagesBuffer';
 
 describe('SlackTrigger events', () => {
-  const makeLogger = (): Pick<LoggerService, 'info' | 'debug' | 'error'> => ({
-    info: vi.fn(),
-    debug: vi.fn(),
-    error: vi.fn(),
-  });
-
   const setupTrigger = async () => {
-    const logger = makeLogger();
     const getOrCreateThreadByAlias = vi.fn(async () => 't-slack');
     const updateThreadChannelDescriptor = vi.fn(async () => undefined);
     const persistence = ({
@@ -141,7 +134,7 @@ describe('SlackTrigger events', () => {
     } satisfies Pick<import('../src/agents/agents.persistence.service').AgentsPersistenceService, 'getOrCreateThreadByAlias' | 'updateThreadChannelDescriptor'>) as import('../src/agents/agents.persistence.service').AgentsPersistenceService;
     const prismaStub = ({ getClient: () => ({ thread: { findUnique: async () => ({ channel: null }) } }) } satisfies Pick<import('../src/core/services/prisma.service').PrismaService, 'getClient'>) as import('../src/core/services/prisma.service').PrismaService;
     const slackAdapterStub = ({ sendText: vi.fn() } satisfies Pick<SlackAdapter, 'sendText'>) as SlackAdapter;
-    const trig = new SlackTrigger(logger as LoggerService, persistence, prismaStub, slackAdapterStub);
+    const trig = new SlackTrigger(undefined as any, persistence, prismaStub, slackAdapterStub);
     const nodeId = 'slack-node';
     trig.init({ nodeId });
     await trig.setConfig({ app_token: 'xapp-abc', bot_token: 'xoxb-bot' });
@@ -308,27 +301,66 @@ describe('SlackTrigger events', () => {
     expect(updateThreadChannelDescriptor).not.toHaveBeenCalled();
   });
 
-  it('setConfig rejects unresolved tokens', async () => {
-    const logger = makeLogger();
+  it('setConfig rejects unresolved tokens when resolver unavailable', async () => {
     const persistence = ({ getOrCreateThreadByAlias: async () => 't-slack' } satisfies Pick<import('../src/agents/agents.persistence.service').AgentsPersistenceService, 'getOrCreateThreadByAlias'>) as import('../src/agents/agents.persistence.service').AgentsPersistenceService;
     const prismaStub = ({ getClient: () => ({ thread: { findUnique: async () => ({ channel: null }) } }) } satisfies Pick<import('../src/core/services/prisma.service').PrismaService, 'getClient'>) as import('../src/core/services/prisma.service').PrismaService;
     const slackAdapterStub = ({ sendText: vi.fn() } satisfies Pick<SlackAdapter, 'sendText'>) as SlackAdapter;
-    const trig = new SlackTrigger(logger as LoggerService, persistence, prismaStub, slackAdapterStub);
+    const trig = new SlackTrigger(undefined as any, persistence, prismaStub, slackAdapterStub);
     const badConfig = {
       app_token: { kind: 'vault', path: 'secret/slack', key: 'APP' },
       bot_token: 'xoxb-good',
-    } as unknown as { app_token: string; bot_token: string };
-    await expect(trig.setConfig(badConfig)).rejects.toThrow(/requires resolved tokens/);
+    } as any;
+    await expect(trig.setConfig(badConfig)).rejects.toThrow(/requires resolved tokens|Slack app token must start/);
   });
 
   it('fails provisioning when bot token prefix invalid', async () => {
-    const logger = makeLogger();
     const persistence = ({ getOrCreateThreadByAlias: async () => 't-slack' } satisfies Pick<import('../src/agents/agents.persistence.service').AgentsPersistenceService, 'getOrCreateThreadByAlias'>) as import('../src/agents/agents.persistence.service').AgentsPersistenceService;
     const prismaStub = ({ getClient: () => ({ thread: { findUnique: async () => ({ channel: null }) } }) } satisfies Pick<import('../src/core/services/prisma.service').PrismaService, 'getClient'>) as import('../src/core/services/prisma.service').PrismaService;
     const slackAdapterStub = ({ sendText: vi.fn() } satisfies Pick<SlackAdapter, 'sendText'>) as SlackAdapter;
-    const trig = new SlackTrigger(logger as LoggerService, persistence, prismaStub, slackAdapterStub);
-    await trig.setConfig({ app_token: 'xapp-valid', bot_token: 'bot-invalid' });
+    const trig = new SlackTrigger(undefined as any, persistence, prismaStub, slackAdapterStub);
+    await expect(trig.setConfig({ app_token: 'xapp-valid', bot_token: 'bot-invalid' })).rejects.toThrow(
+      /Slack bot token must start with xoxb-/,
+    );
+  });
+
+  it('resolves tokens via reference resolver', async () => {
+    const resolver = {
+      resolve: vi.fn(async () => ({
+        output: { app_token: 'xapp-from-resolver', bot_token: 'xoxb-from-resolver' },
+        report: { events: [], counts: { total: 0, resolved: 0, unresolved: 0, cacheHits: 0, errors: 0 } },
+      })),
+    } as any;
+    const persistence = ({ getOrCreateThreadByAlias: async () => 't-slack' } satisfies Pick<import('../src/agents/agents.persistence.service').AgentsPersistenceService, 'getOrCreateThreadByAlias'>) as import('../src/agents/agents.persistence.service').AgentsPersistenceService;
+    const prismaStub = ({ getClient: () => ({ thread: { findUnique: async () => ({ channel: null }) } }) } satisfies Pick<import('../src/core/services/prisma.service').PrismaService, 'getClient'>) as import('../src/core/services/prisma.service').PrismaService;
+    const slackAdapterStub = ({ sendText: vi.fn() } satisfies Pick<SlackAdapter, 'sendText'>) as SlackAdapter;
+    const trig = new SlackTrigger(resolver, persistence, prismaStub, slackAdapterStub);
+    await trig.setConfig({
+      app_token: { kind: 'vault', path: 'secret/slack', key: 'APP' } as any,
+      bot_token: { kind: 'var', name: 'SLACK_BOT', default: 'xoxb-from-resolver' } as any,
+    });
     await trig.provision();
-    expect(trig.status).toBe('provisioning_error');
+    expect(resolver.resolve).toHaveBeenCalled();
+    expect(trig.status).toBe('ready');
+  });
+
+  it('surface resolver errors during setConfig', async () => {
+    const resolver = {
+      resolve: vi.fn(async () => {
+        throw new ResolveError('provider_missing', 'vault unavailable', {
+          path: '/slack/app_token',
+          source: 'secret',
+        });
+      }),
+    } as any;
+    const persistence = ({ getOrCreateThreadByAlias: async () => 't-slack' } satisfies Pick<import('../src/agents/agents.persistence.service').AgentsPersistenceService, 'getOrCreateThreadByAlias'>) as import('../src/agents/agents.persistence.service').AgentsPersistenceService;
+    const prismaStub = ({ getClient: () => ({ thread: { findUnique: async () => ({ channel: null }) } }) } satisfies Pick<import('../src/core/services/prisma.service').PrismaService, 'getClient'>) as import('../src/core/services/prisma.service').PrismaService;
+    const slackAdapterStub = ({ sendText: vi.fn() } satisfies Pick<SlackAdapter, 'sendText'>) as SlackAdapter;
+    const trig = new SlackTrigger(resolver, persistence, prismaStub, slackAdapterStub);
+    await expect(
+      trig.setConfig({
+        app_token: { kind: 'vault', path: 'secret/slack', key: 'APP' } as any,
+        bot_token: 'xoxb-good',
+      }),
+    ).rejects.toThrow(/Slack token resolution failed/);
   });
 });

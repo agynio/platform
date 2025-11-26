@@ -7,7 +7,6 @@ import { WorkspaceNode } from '../workspace/workspace.node';
 import { ConfigService } from '../../core/services/config.service';
 import { ContainerService } from '../../infra/container/container.service';
 import { EnvService, type EnvItem } from '../../env/env.service';
-import { LoggerService } from '../../core/services/logger.service';
 import { DockerExecTransport } from './dockerExecTransport';
 import { LocalMCPServerTool } from './localMcpServer.tool';
 import { DEFAULT_MCP_COMMAND, McpError, type McpTool, McpToolCallResult, PersistedMcpState } from './types';
@@ -107,12 +106,16 @@ export class LocalMCPServerNode extends Node<z.infer<typeof LocalMcpServerStatic
 
   constructor(
     @Inject(ContainerService) protected containerService: ContainerService,
-    @Inject(LoggerService) protected logger: LoggerService,
     @Inject(EnvService) protected envService: EnvService,
     @Inject(ConfigService) protected configService: ConfigService,
     @Inject(ModuleRef) @Optional() private readonly moduleRef?: ModuleRef,
   ) {
-    super(logger);
+    super();
+  }
+
+  private formatError(error: unknown): string {
+    if (error instanceof Error) return `${error.name}: ${error.message}`;
+    return String(error);
   }
 
   private nodeStateService?: NodeStateService;
@@ -177,7 +180,9 @@ export class LocalMCPServerNode extends Node<z.infer<typeof LocalMcpServerStatic
       try {
         this.preloadCachedTools(summaries, updatedAt);
       } catch (e) {
-        this.logger.error('Error during MCP cache preload for node %s', this.nodeId, e);
+        this.logger.error(
+          `Error during MCP cache preload for node ${this.nodeId}: ${this.formatError(e)}`,
+        );
       }
     }
     // Detect enabledTools changes in state.mcp (optional field)
@@ -207,7 +212,7 @@ export class LocalMCPServerNode extends Node<z.infer<typeof LocalMcpServerStatic
     }
 
     const t0 = Date.now();
-    this.logger.info(
+    this.logger.log(
       `[MCP:${this.config.namespace}] Starting tool discovery (toolsDiscovered=${this.toolsDiscovered})`,
     );
 
@@ -228,7 +233,6 @@ export class LocalMCPServerNode extends Node<z.infer<typeof LocalMcpServerStatic
       // Create temporary transport and client for discovery
       tempTransport = new DockerExecTransport(
         docker,
-        this.logger,
         async () => {
           this.logger.debug(`[MCP:${this.config.namespace}] launching docker exec`);
           const exec = await docker.getContainer(tempContainerId).exec({
@@ -259,9 +263,9 @@ export class LocalMCPServerNode extends Node<z.infer<typeof LocalMcpServerStatic
       );
 
       tempClient = new Client({ name: 'local-agent-discovery', version: '0.1.0' });
-      this.logger.info(`[MCP:${this.config.namespace}] Connecting for tool discovery`);
+      this.logger.log(`[MCP:${this.config.namespace}] Connecting for tool discovery`);
       await tempClient.connect(tempTransport, { timeout: this.config.startupTimeoutMs ?? 15000 });
-      this.logger.info(`[MCP:${this.config.namespace}] Handshake complete`);
+      this.logger.log(`[MCP:${this.config.namespace}] Handshake complete`);
 
       // Fetch tools
       const result = await tempClient.listTools({}, { timeout: this.config.requestTimeoutMs ?? 15000 });
@@ -270,7 +274,7 @@ export class LocalMCPServerNode extends Node<z.infer<typeof LocalMcpServerStatic
       );
       this.toolsCache = result.tools.map((t) => this.createLocalTool(t as McpTool));
 
-      this.logger.info(`[MCP:${this.config.namespace}] Discovered ${this.toolsCache.length} tools`);
+      this.logger.log(`[MCP:${this.config.namespace}] Discovered ${this.toolsCache.length} tools`);
       this.toolsDiscovered = true;
       this.lastToolsUpdatedAt = Date.now();
       // Persist state using NodeStateService (if available)
@@ -294,26 +298,34 @@ export class LocalMCPServerNode extends Node<z.infer<typeof LocalMcpServerStatic
           await nodeStateService.upsertNodeState(this.nodeId, state as Record<string, unknown>);
         }
       } catch (e) {
-        this.logger.error(`[MCP:${this.config.namespace}] Failed to persist state`, e);
+        this.logger.error(
+          `[MCP:${this.config.namespace}] Failed to persist state error=${this.formatError(e)}`,
+        );
       }
       // Notify listeners with unified tools update event
       this.notifyToolsUpdated(this.lastToolsUpdatedAt || Date.now());
     } catch (err) {
-      this.logger.error(`[MCP:${this.config.namespace}] Tool discovery failed`, err);
+      this.logger.error(
+        `[MCP:${this.config.namespace}] Tool discovery failed error=${this.formatError(err)}`,
+      );
     } finally {
       // Clean up temporary resources
       if (tempClient) {
         try {
           await tempClient.close();
         } catch (e) {
-          this.logger.error(`[MCP:${this.config.namespace}] Error closing temp client`, e);
+          this.logger.error(
+            `[MCP:${this.config.namespace}] Error closing temp client error=${this.formatError(e)}`,
+          );
         }
       }
       if (tempTransport) {
         try {
           await tempTransport.close();
         } catch (e) {
-          this.logger.error(`[MCP:${this.config.namespace}] Error closing temp transport`, e);
+          this.logger.error(
+            `[MCP:${this.config.namespace}] Error closing temp transport error=${this.formatError(e)}`,
+          );
         }
       }
       // Stop the temporary container
@@ -321,15 +333,19 @@ export class LocalMCPServerNode extends Node<z.infer<typeof LocalMcpServerStatic
         await tempContainer.stop(5);
         await tempContainer.remove(true);
         const ms = Date.now() - t0;
-        this.logger.info(
+        this.logger.log(
           `[MCP:${this.config.namespace}] Temporary discovery container stopped and removed (duration=${ms}ms)`,
         );
       } catch (e) {
-        this.logger.error(`[MCP:${this.config.namespace}] Error cleaning up temp container`, e);
+        this.logger.error(
+          `[MCP:${this.config.namespace}] Error cleaning up temp container error=${this.formatError(e)}`,
+        );
       }
-      await this.cleanTempDinDSidecars(tempContainerId).catch((e) =>
-        this.logger.error(`[MCP:${this.config.namespace}] Error cleaning DinD sidecars for temp container`, e),
-      );
+      await this.cleanTempDinDSidecars(tempContainerId).catch((e) => {
+        this.logger.error(
+          `[MCP:${this.config.namespace}] Error cleaning DinD sidecars for temp container error=${this.formatError(e)}`,
+        );
+      });
     }
 
     return this.toolsCache ?? [];
@@ -378,9 +394,9 @@ export class LocalMCPServerNode extends Node<z.infer<typeof LocalMcpServerStatic
       // Log and ignore unknown names
       const unknown: string[] = Array.from(wantedRuntimeNames).filter((n) => !availableNames.has(n));
       if (unknown.length) {
-        this.logger.info(
-          `[MCP:${ns}] enabledTools contains unknown tool(s); ignoring`,
-          { unknown, available: Array.from(availableNames) },
+        const availableList = Array.from(availableNames).join(',');
+        this.logger.log(
+          `[MCP:${ns}] enabledTools contains unknown tool(s); ignoring unknown=${unknown.join(',')} available=${availableList}`,
         );
       }
       return allTools.filter((t) => wantedRuntimeNames.has(t.name));
@@ -398,7 +414,7 @@ export class LocalMCPServerNode extends Node<z.infer<typeof LocalMcpServerStatic
     if (!this.containerProvider) throw new Error('LocalMCPServer: no containerProvider set; cannot call tool');
 
     const threadId = options.threadId;
-    this.logger.info(`[MCP:${this.config.namespace}] Calling tool ${name} for thread ${threadId}`);
+    this.logger.log(`[MCP:${this.config.namespace}] Calling tool ${name} for thread ${threadId}`);
 
     // Get thread-specific container
     const container = await this.containerProvider.provide(threadId);
@@ -424,7 +440,6 @@ export class LocalMCPServerNode extends Node<z.infer<typeof LocalMcpServerStatic
       // Create transport and client for this tool call
       transport = new DockerExecTransport(
         docker,
-        this.logger,
         async () => {
           const exec = await docker.getContainer(containerId).exec({
             Cmd: ['sh', '-lc', cmdToRun],
@@ -522,14 +537,18 @@ export class LocalMCPServerNode extends Node<z.infer<typeof LocalMcpServerStatic
         try {
           await client.close();
         } catch (e) {
-          this.logger.error(`[MCP:${this.config.namespace}] Error closing client after tool call`, e);
+          this.logger.error(
+            `[MCP:${this.config.namespace}] Error closing client after tool call error=${this.formatError(e)}`,
+          );
         }
       }
       if (transport) {
         try {
           await transport.close();
         } catch (e) {
-          this.logger.error(`[MCP:${this.config.namespace}] Error closing transport after tool call`, e);
+          this.logger.error(
+            `[MCP:${this.config.namespace}] Error closing transport after tool call error=${this.formatError(e)}`,
+          );
         }
       }
       if (hbTimer) clearInterval(hbTimer);
@@ -552,7 +571,7 @@ export class LocalMCPServerNode extends Node<z.infer<typeof LocalMcpServerStatic
     }
     const hasAllDeps = !!(this.config && this.containerProvider && this.config.command);
     if (!hasAllDeps) {
-      this.logger.info(`[MCP:${this.config.namespace}] Missing dependencies for provisioning`);
+      this.logger.log(`[MCP:${this.config.namespace}] Missing dependencies for provisioning`);
       this.setStatus('provisioning_error');
       return;
     }
@@ -563,7 +582,9 @@ export class LocalMCPServerNode extends Node<z.infer<typeof LocalMcpServerStatic
         await this.startOnce();
         if (this.started) this.setStatus('ready');
       } catch (err) {
-        this.logger.info(`[MCP:${this.config.namespace}] Provisioning failed`, err);
+        this.logger.log(
+          `[MCP:${this.config.namespace}] Provisioning failed error=${this.formatError(err)}`,
+        );
         this.setStatus('provisioning_error');
       } finally {
         this._provInFlight = null;
@@ -595,7 +616,9 @@ export class LocalMCPServerNode extends Node<z.infer<typeof LocalMcpServerStatic
     try {
       this.emitter.emit('mcp.tools_updated', { tools, updatedAt: ts });
     } catch (e) {
-      this.logger.error(`[MCP:${this.config.namespace}] Error emitting tools_updated`, e);
+      this.logger.error(
+        `[MCP:${this.config.namespace}] Error emitting tools_updated error=${this.formatError(e)}`,
+      );
     }
   }
 
@@ -614,11 +637,13 @@ export class LocalMCPServerNode extends Node<z.infer<typeof LocalMcpServerStatic
         this.logger.debug(`[MCP:${this.config.namespace}] Discovery phase duration ${tDiscMs}ms`);
       }
       this.started = true;
-      this.logger.info(
+      this.logger.log(
         `[MCP:${this.config.namespace}] Started successfully with ${this.toolsCache?.length || 0} tools`,
       );
     } catch (e: unknown) {
-      this.logger.error(`[MCP:${this.config.namespace}] Start attempt failed`, e);
+      this.logger.error(
+        `[MCP:${this.config.namespace}] Start attempt failed error=${this.formatError(e)}`,
+      );
     }
   }
   private async cleanTempDinDSidecars(tempContainerId: string): Promise<void> {
@@ -671,7 +696,7 @@ export class LocalMCPServerNode extends Node<z.infer<typeof LocalMcpServerStatic
     );
     const cleaned = results.reduce((acc, r) => acc + (r.status === 'fulfilled' && r.value ? 1 : 0), 0);
     if (cleaned > 0) {
-      this.logger.info(
+      this.logger.log(
         `[MCP:${this.config.namespace}] Cleaned ${cleaned} DinD sidecar(s) for temp container ${String(tempContainerId).substring(0, 12)}`,
       );
     }

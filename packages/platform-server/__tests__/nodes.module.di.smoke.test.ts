@@ -1,7 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { SlackTrigger } from '../src/nodes/slackTrigger/slackTrigger.node';
 import { RemindMeNode } from '../src/nodes/tools/remind_me/remind_me.node';
-import { LoggerService } from '../src/core/services/logger.service';
 import { VaultService } from '../src/vault/vault.service';
 import { AgentsPersistenceService } from '../src/agents/agents.persistence.service';
 import { PrismaService } from '../src/core/services/prisma.service';
@@ -22,14 +21,6 @@ const makeStub = <T extends Record<string, unknown>>(overrides: T): T =>
       return fn;
     },
   });
-
-const loggerStub = makeStub({
-  info: vi.fn(),
-  warn: vi.fn(),
-  error: vi.fn(),
-  debug: vi.fn(),
-  child: vi.fn(),
-});
 
 const slackAdapterStub = makeStub({
   sendText: vi.fn(),
@@ -75,7 +66,6 @@ if (!shouldRunDbTests) {
   describe('NodesModule DI smoke test', () => {
     it('constructs SlackTrigger and RemindMeNode with stubs', () => {
       const slackTrigger = new SlackTrigger(
-        loggerStub as unknown as LoggerService,
         vaultServiceStub as unknown as VaultService,
         persistenceStub as unknown as AgentsPersistenceService,
         prismaStub as unknown as PrismaService,
@@ -84,7 +74,6 @@ if (!shouldRunDbTests) {
       expect(slackTrigger).toBeInstanceOf(SlackTrigger);
 
       const remindMeNode = new RemindMeNode(
-        loggerStub as unknown as LoggerService,
         eventsBusStub as unknown as EventsBusService,
         prismaStub as unknown as PrismaService,
       );

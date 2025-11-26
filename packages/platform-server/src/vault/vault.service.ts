@@ -1,6 +1,5 @@
-import { Inject, Injectable } from '@nestjs/common';
+import { Inject, Injectable, Logger } from '@nestjs/common';
 import { z } from 'zod';
-import { LoggerService } from '../core/services/logger.service';
 import { ConfigService } from '../core/services/config.service';
 
 // Typed KV v2 response shapes
@@ -29,9 +28,10 @@ export type VaultRef = { mount: string; path: string; key: string };
 // - getSecret returns a single key's value for server-side injection only.
 @Injectable()
 export class VaultService {
+  private readonly logger = new Logger(VaultService.name);
+
   constructor(
     @Inject(ConfigService) private configService: ConfigService,
-    @Inject(LoggerService) private logger: LoggerService,
   ) {}
 
   private get base(): string {
@@ -87,7 +87,7 @@ export class VaultService {
       return items;
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e);
-      this.logger?.debug?.('Vault list mounts failed: %s', msg);
+      this.logger.debug(`Vault list mounts failed: ${msg}`);
       return [];
     }
   }
@@ -110,7 +110,7 @@ export class VaultService {
       const sc = (e as { statusCode?: number }).statusCode;
       if (sc === 404) return [];
       const msg = e instanceof Error ? e.message : String(e);
-      this.logger?.debug?.('Vault list paths failed: %s', msg);
+      this.logger.debug(`Vault list paths failed: ${msg}`);
       return [];
     }
   }
@@ -129,7 +129,7 @@ export class VaultService {
       const sc = (e as { statusCode?: number }).statusCode;
       if (sc === 404) return [];
       const msg = e instanceof Error ? e.message : String(e);
-      this.logger?.debug?.('Vault list keys failed: %s', msg);
+      this.logger.debug(`Vault list keys failed: ${msg}`);
       return [];
     }
   }

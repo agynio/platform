@@ -2,7 +2,7 @@ import z from 'zod';
 
 import { FunctionTool } from '@agyn/llm';
 import { WebClient, type ChatPostEphemeralResponse, type ChatPostMessageResponse } from '@slack/web-api';
-import { LoggerService } from '../../../core/services/logger.service';
+import { Logger } from '@nestjs/common';
 import { SecretReferenceSchema, VariableReferenceSchema } from '../../../utils/reference-schemas';
 import { SendSlackMessageNode } from './send_slack_message.node';
 
@@ -29,10 +29,9 @@ export const sendSlackInvocationSchema = z
   .strict();
 
 export class SendSlackMessageFunctionTool extends FunctionTool<typeof sendSlackInvocationSchema> {
-  constructor(
-    private node: SendSlackMessageNode,
-    private logger: LoggerService,
-  ) {
+  private readonly logger = new Logger(SendSlackMessageFunctionTool.name);
+
+  constructor(private node: SendSlackMessageNode) {
     super();
   }
   get name() {
@@ -48,10 +47,7 @@ export class SendSlackMessageFunctionTool extends FunctionTool<typeof sendSlackI
   async execute(args: z.infer<typeof sendSlackInvocationSchema>): Promise<string> {
     const { channel: channelInput, text, thread_ts, broadcast, ephemeral_user } = args;
 
-    const botToken = this.node.config.bot_token;
-    if (typeof botToken !== 'string' || !botToken.startsWith('xoxb-')) {
-      throw new Error('Slack bot token must start with xoxb-');
-    }
+    const botToken = this.node.getBotToken();
     const channel = channelInput;
     if (!channel) throw new Error('channel is required');
     try {

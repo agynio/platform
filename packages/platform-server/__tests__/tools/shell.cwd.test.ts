@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { ShellCommandNode } from '../../src/nodes/tools/shell_command/shell_command.node';
 import { EnvService } from '../../src/env/env.service';
-import { LoggerService } from '../../src/core/services/logger.service';
+import { RunEventsService } from '../../src/events/run-events.service';
+import { EventsBusService } from '../../src/events/events-bus.service';
+import { PrismaService } from '../../src/core/services/prisma.service';
 import type { ContainerHandle } from '../../src/infra/container/container.handle';
 
 class RecordingContainer {
@@ -20,25 +22,36 @@ class RecordingContainer {
 }
 
 function createNodeWithContainer(container: RecordingContainer) {
-  const resolver = { resolve: async (input: unknown) => ({ output: input, report: {} as unknown }) };
+  const resolver = {
+    resolve: async (input: unknown) => ({
+      output: input,
+      report: { events: [], counts: { total: 0, resolved: 0, unresolved: 0, cacheHits: 0, errors: 0 } },
+    }),
+  };
   const envService = new EnvService(resolver as any);
-  const logger = new LoggerService();
+  const moduleRefStub = {};
   const archiveStub = { createSingleFileTar: async () => Buffer.from('') } as const;
-  const runEventsStub = {
-    appendToolOutputChunk: async () => ({}),
-    finalizeToolOutputTerminal: async () => ({}),
-  } as const;
-  const eventsBusStub = {
+  const runEventsStub: Pick<RunEventsService, 'appendToolOutputChunk' | 'finalizeToolOutputTerminal'> = {
+    appendToolOutputChunk: async (payload: unknown) => payload,
+    finalizeToolOutputTerminal: async (payload: unknown) => payload,
+  };
+  const eventsBusStub: Pick<EventsBusService, 'emitToolOutputChunk' | 'emitToolOutputTerminal'> = {
     emitToolOutputChunk: () => undefined,
     emitToolOutputTerminal: () => undefined,
-  } as const;
+  };
+  const prismaStub: Pick<PrismaService, 'getClient'> = {
+    getClient: () => ({
+      container: { findUnique: async () => null },
+      containerEvent: { findFirst: async () => null },
+    }),
+  } as any;
   const node = new ShellCommandNode(
     envService as any,
-    logger as any,
-    {} as any,
+    moduleRefStub as any,
     archiveStub as any,
     runEventsStub as any,
     eventsBusStub as any,
+    prismaStub as any,
   );
   const provider = {
     provide: async () => container as unknown as ContainerHandle,

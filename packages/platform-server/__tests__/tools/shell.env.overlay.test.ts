@@ -1,7 +1,9 @@
 import { describe, it, expect, vi } from 'vitest';
-import { LoggerService } from '../../src/core/services/logger.service';
 import { ShellCommandNode } from '../../src/nodes/tools/shell_command/shell_command.node';
 import { EnvService } from '../../src/env/env.service';
+import { RunEventsService } from '../../src/events/run-events.service';
+import { EventsBusService } from '../../src/events/events-bus.service';
+import { PrismaService } from '../../src/core/services/prisma.service';
 
 class FakeContainer {
   public lastExec: { cmd: string; env?: Record<string, string>; workdir?: string } | null = null;
@@ -28,23 +30,52 @@ class FakeProvider {
 
 describe('ShellTool env/workdir isolation with vault-backed overlay', () => {
   it('applies per-node overlay and sets workdir without leaking; supports vault refs', async () => {
-    const logger = new LoggerService();
     const provider: any = new FakeProvider();
 
+    const emptyReport = { events: [], counts: { total: 0, resolved: 0, unresolved: 0, cacheHits: 0, errors: 0 } };
     const resolverA = {
       resolve: vi.fn(async (input: unknown) => {
-        const list = Array.isArray(input) ? (input as Array<{ key: string; value: unknown }>) : [];
+        if (!Array.isArray(input)) return { output: input, report: emptyReport };
+        const list = input as Array<{ key: string; value: unknown }>;
         const output = list.map((item) =>
           item.key === 'BAR' ? { ...item, value: 'VAULTED' } : { ...item },
         );
-        return { output, report: {} as unknown };
+        return { output, report: emptyReport };
       }),
     };
     const envSvc = new EnvService(resolverA as any);
 
     const archiveStub = { createSingleFileTar: async () => Buffer.from('tar') } as const;
-    const moduleRefStub = { create: (cls: any) => new (cls as any)(archiveStub) } as const;
-    const a = new ShellCommandNode(envSvc as any, new LoggerService() as any, moduleRefStub as any); a.setContainerProvider(provider as any);
+    const moduleRefStub = {};
+    const runEventsStub: Pick<RunEventsService, 'appendToolOutputChunk' | 'finalizeToolOutputTerminal'> = {
+      appendToolOutputChunk: async (payload: unknown) => payload,
+      finalizeToolOutputTerminal: async (payload: unknown) => payload,
+    };
+    const eventsBusStub: Pick<EventsBusService, 'emitToolOutputChunk' | 'emitToolOutputTerminal'> = {
+      emitToolOutputChunk: () => undefined,
+      emitToolOutputTerminal: () => undefined,
+    };
+    const prismaStub: Pick<PrismaService, 'getClient'> = {
+      getClient: () => ({
+        container: { findUnique: async () => null },
+        containerEvent: { findFirst: async () => null },
+      }),
+    } as any;
+
+    const createNode = (envServiceInstance: EnvService) => {
+      const node = new ShellCommandNode(
+        envServiceInstance as any,
+        moduleRefStub as any,
+        archiveStub as any,
+        runEventsStub as any,
+        eventsBusStub as any,
+        prismaStub as any,
+      );
+      node.setContainerProvider(provider as any);
+      return node;
+    };
+
+    const a = createNode(envSvc);
     await a.setConfig({
       env: [
         { key: 'FOO', value: 'A' },
@@ -52,8 +83,10 @@ describe('ShellTool env/workdir isolation with vault-backed overlay', () => {
       ],
       workdir: '/w/a',
     });
-    const resolverB = { resolve: vi.fn(async (input: unknown) => ({ output: input, report: {} as unknown })) };
-    const b = new ShellCommandNode(new EnvService(resolverB as any) as any, new LoggerService() as any, moduleRefStub as any); b.setContainerProvider(provider as any);
+    const resolverB = {
+      resolve: vi.fn(async (input: unknown) => ({ output: input, report: emptyReport })),
+    };
+    const b = createNode(new EnvService(resolverB as any) as any);
     await b.setConfig({ env: [ { key: 'FOO', value: 'B' } ], workdir: '/w/b' });
 
     const at = a.getTool();

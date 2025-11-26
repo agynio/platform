@@ -2,7 +2,9 @@ import { describe, it, expect } from 'vitest';
 import { Test } from '@nestjs/testing';
 import { ModuleRef } from '@nestjs/core';
 import { ShellCommandNode } from '../../src/nodes/tools/shell_command/shell_command.node';
-import { LoggerService } from '../../src/core/services/logger.service';
+import { RunEventsService } from '../../src/events/run-events.service';
+import { EventsBusService } from '../../src/events/events-bus.service';
+import { PrismaService } from '../../src/core/services/prisma.service';
 import type { EnvService } from '../../src/env/env.service';
 import type { ArchiveService } from '../../src/infra/archive/archive.service';
 import type { ContainerHandle } from '../../src/infra/container/container.handle';
@@ -22,11 +24,44 @@ describe('ShellTool output limit - non-zero exit oversized', () => {
   it('overrides exit error formatting when oversized and writes file', async () => {
     const testingModule = await Test.createTestingModule({
       providers: [
-        LoggerService,
         { provide: ModuleRef, useValue: { create: (Cls: any) => new Cls() } },
-        { provide: 'EnvService', useValue: { resolveProviderEnv: async () => ({}) } as Pick<EnvService,'resolveProviderEnv'> },
-        { provide: 'ArchiveService', useValue: { createSingleFileTar: async (_f: string, _c: string, _m: number) => Buffer.from('tar') } as Pick<ArchiveService,'createSingleFileTar'> },
-        { provide: ShellCommandNode, useFactory: (env: any, logger: LoggerService, moduleRef: ModuleRef, archive: any) => new ShellCommandNode(env as EnvService, logger, moduleRef, archive as ArchiveService), inject: ['EnvService', LoggerService, ModuleRef, 'ArchiveService'] },
+        { provide: 'EnvService', useValue: { resolveProviderEnv: async () => ({}) } as Pick<EnvService, 'resolveProviderEnv'> },
+        { provide: 'ArchiveService', useValue: { createSingleFileTar: async (_f: string, _c: string, _m: number) => Buffer.from('tar') } as Pick<ArchiveService, 'createSingleFileTar'> },
+        {
+          provide: RunEventsService,
+          useValue: {
+            appendToolOutputChunk: async (payload: unknown) => payload,
+            finalizeToolOutputTerminal: async (payload: unknown) => payload,
+          },
+        },
+        {
+          provide: EventsBusService,
+          useValue: {
+            emitToolOutputChunk: () => {},
+            emitToolOutputTerminal: () => {},
+          },
+        },
+        {
+          provide: PrismaService,
+          useValue: {
+            getClient: () => ({
+              container: { findUnique: async () => null },
+              containerEvent: { findFirst: async () => null },
+            }),
+          },
+        },
+        {
+          provide: ShellCommandNode,
+          useFactory: (
+            env: any,
+            moduleRef: ModuleRef,
+            archive: any,
+            runEvents: RunEventsService,
+            eventsBus: EventsBusService,
+            prisma: PrismaService,
+          ) => new ShellCommandNode(env as EnvService, moduleRef, archive as ArchiveService, runEvents, eventsBus, prisma),
+          inject: ['EnvService', ModuleRef, 'ArchiveService', RunEventsService, EventsBusService, PrismaService],
+        },
       ],
     }).compile();
 

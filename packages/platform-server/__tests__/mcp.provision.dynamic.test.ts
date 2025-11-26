@@ -2,8 +2,16 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { LocalMCPServerNode } from '../src/nodes/mcp/localMcpServer.node';
 import type { McpServerConfig, McpTool } from '../src/mcp/types';
 
-class MockLogger { info=vi.fn(); debug=vi.fn(); error=vi.fn(); }
-class MockContainerService { getDocker(){ return {}; } }
+class MockLogger {
+  info = vi.fn();
+  debug = vi.fn();
+  error = vi.fn();
+}
+class MockContainerService {
+  getDocker() {
+    return {};
+  }
+}
 
 // Minimal mock provider
 const mockProvider = {
@@ -12,12 +20,16 @@ const mockProvider = {
 
 describe('LocalMCPServer provision/deprovision + enabledTools filtering', () => {
   let server: LocalMCPServerNode;
-  let logger: any;
+  let logger: MockLogger;
 
   beforeEach(() => {
     logger = new MockLogger();
-    const envStub = { resolveEnvItems: vi.fn(async () => ({})), resolveProviderEnv: vi.fn(async () => ({})) } as any;
-    server = new LocalMCPServerNode(new MockContainerService() as any, logger as any, envStub, {} as any, undefined as any);
+    const envStub = {
+      resolveEnvItems: vi.fn(async () => ({})),
+      resolveProviderEnv: vi.fn(async () => ({})),
+    } as any;
+    server = new LocalMCPServerNode(new MockContainerService() as any, envStub, {} as any, undefined as any);
+    (server as any).logger = logger;
     (server as any).setContainerProvider(mockProvider as any);
   });
 

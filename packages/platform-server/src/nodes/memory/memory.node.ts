@@ -4,7 +4,6 @@ import { z } from 'zod';
 import type { MemoryScope } from './memory.types';
 import { MemoryService } from './memory.service';
 import Node from '../base/Node';
-import { LoggerService } from '../../core/services/logger.service';
 
 export interface MemoryNodeConfig {
   scope: MemoryScope; // 'global' | 'perThread'
@@ -30,9 +29,8 @@ export type MemoryNodeStaticConfig = z.infer<typeof MemoryNodeStaticConfigSchema
 export class MemoryNode extends Node<MemoryNodeStaticConfig> {
   constructor(
     @Inject(ModuleRef) private moduleRef: ModuleRef,
-    @Inject(LoggerService) protected logger: LoggerService,
   ) {
-    super(logger);
+    super();
   }
 
   init(params: { nodeId: string }): void {

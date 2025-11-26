@@ -20,8 +20,8 @@ import { AgentsPersistenceService } from '../src/agents/agents.persistence.servi
 import { RunSignalsRegistry } from '../src/agents/run-signals.service';
 
 class StubContainerService extends ContainerService {
-  constructor(logger: LoggerService, registry: ContainerRegistry) {
-    super(logger, registry);
+  constructor(registry: ContainerRegistry, logger: LoggerService) {
+    super(registry, logger);
   }
   override async start(_opts?: ContainerOpts): Promise<ContainerHandle> {
     return new ContainerHandle(this, 'cid');

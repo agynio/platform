@@ -1,74 +1,66 @@
 import { describe, it, expect } from 'vitest';
 import { LocalMCPServerNode } from '../src/nodes/mcp/localMcpServer.node';
 import { McpServerConfig } from '../src/mcp/types.js';
-import { LoggerService } from '../src/core/services/logger.service.js';
 import { ContainerService } from '../src/infra/container/container.service';
+import { LoggerService } from '../src/core/services/logger.service';
+import type { ContainerRegistry } from '../src/infra/container/container.registry';
 
 describe('MCP Lifecycle Changes', () => {
-  const logger = new LoggerService();
-  
+  const createContainerService = () => {
+    const registryStub = {
+      registerStart: async () => {},
+      updateLastUsed: async () => {},
+      markStopped: async () => {},
+      markTerminating: async () => {},
+      claimForTermination: async () => true,
+      recordTerminationFailure: async () => {},
+      findByVolume: async () => null,
+      listByThread: async () => [],
+      ensureIndexes: async () => {},
+    } as unknown as ContainerRegistry;
+    return new ContainerService(registryStub, new LoggerService());
+  };
+  const envStub = { resolveEnvItems: async () => ({}), resolveProviderEnv: async () => ({}) } as any;
+
   it('supports threadId parameter in callTool method', async () => {
-    const containerService = new ContainerService(logger);
-    const envStub = { resolveEnvItems: async () => ({}), resolveProviderEnv: async () => ({}) } as any;
-    const server = new LocalMCPServerNode(containerService as any, logger as any, envStub, {} as any, undefined as any);
-    
-    // Test that the interface accepts threadId parameter
+    const containerService = createContainerService();
+    const server = new LocalMCPServerNode(containerService as any, envStub, {} as any, undefined as any);
     const mockProvider = {
-      provide: async (threadId: string) => ({ 
+      provide: async (threadId: string) => ({
         id: `container-${threadId}`,
         stop: async () => {},
-        remove: async () => {}
-      })
+        remove: async () => {},
+      }),
     };
-    
+
     server.setContainerProvider(mockProvider as any);
     await server.setConfig({ namespace: 'test' } as McpServerConfig);
-    
-    // This would fail if threadId wasn't supported in the interface
+
     try {
       await server.callTool('nonexistent', {}, { threadId: 'thread-123' });
     } catch (e) {
-      // Expected to fail due to missing container setup, but interface should accept threadId
       expect(e).toBeDefined();
     }
   });
-  
+
   it('has discoverTools method for initial tool discovery', async () => {
-    const containerService = new ContainerService(logger);
-    const envStub = { resolveEnvItems: async () => ({}), resolveProviderEnv: async () => ({}) } as any;
-    const server = new LocalMCPServerNode(containerService as any, logger as any, envStub, {} as any, undefined as any);
-    
-    // Test that discoverTools method exists and can be called
+    const containerService = createContainerService();
+    const server = new LocalMCPServerNode(containerService as any, envStub, {} as any, undefined as any);
     expect(typeof server.discoverTools).toBe('function');
-    
-    // This would fail due to missing setup, but method should exist
+
     try {
       await server.discoverTools();
     } catch (e) {
       expect(e).toBeDefined();
     }
   });
-  
+
   it('demonstrates new vs old lifecycle pattern', () => {
-    // Old lifecycle: start() creates persistent container with "default" thread
-    // New lifecycle: 
-    // 1. discoverTools() creates temporary container, fetches tools, destroys container
-    // 2. start() uses cached tools from discovery
-    // 3. callTool() creates container per thread on-demand
-    
-    const containerService = new ContainerService(logger);
-    const envStub = { resolveEnvItems: async () => ({}), resolveProviderEnv: async () => ({}) } as any;
-    const server = new LocalMCPServerNode(containerService as any, logger as any, envStub, {} as any, undefined as any);
-    
-    // Key behavior changes:
-    // 1. Server has discoverTools method
+    const containerService = createContainerService();
+    const server = new LocalMCPServerNode(containerService as any, envStub, {} as any, undefined as any);
     expect(typeof server.discoverTools).toBe('function');
-    
-    // 2. callTool accepts threadId option
-    expect(server.callTool.length >= 2).toBe(true); // at least name, args params
-    
-    // 3. No persistent container/client - all per-request
-    expect((server as any).client).toBeUndefined(); // Should not have persistent client
-    expect((server as any).containerId).toBeUndefined(); // Should not have persistent container
+    expect(server.callTool.length >= 2).toBe(true);
+    expect((server as any).client).toBeUndefined();
+    expect((server as any).containerId).toBeUndefined();
   });
 });

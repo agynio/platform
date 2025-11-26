@@ -13,7 +13,6 @@ describe('GET /graph/nodes/:nodeId/reminders', () => {
 
   it('returns active reminders for RemindMe tool node', async () => {
     const fastify = Fastify({ logger: false });
-    const logger = new LoggerService();
     const prismaStub = {
       getClient() {
         return {
@@ -24,7 +23,8 @@ describe('GET /graph/nodes/:nodeId/reminders', () => {
         } as any;
       },
     };
-    const tool = new RemindMeFunctionTool(logger, prismaStub as any);
+    const tool = new RemindMeFunctionTool(prismaStub as any);
+    const logger = new LoggerService();
     const caller_agent = { invoke: vi.fn(async () => undefined), getAgentNodeId: () => 'agent' };
     await tool.execute({ delayMs: 10_000, note: 'Soon' }, { threadId: 't-1', callerAgent: caller_agent, finishSignal: new Signal(), terminateSignal: new Signal() });
 
@@ -62,8 +62,8 @@ describe('GET /graph/nodes/:nodeId/reminders', () => {
 
   it('404 when node missing or not RemindMe', async () => {
     const fastify = Fastify({ logger: false });
-    const logger = new LoggerService();
     class RuntimeStubMissing { getNodeInstance(_: string) { return undefined; } }
+    const logger = new LoggerService();
     const controller = new RemindersController(logger, new RuntimeStubMissing() as LiveGraphRuntime);
     fastify.get('/graph/nodes/:nodeId/reminders', async (req, res) => {
       const p = req.params as { nodeId: string };
@@ -82,8 +82,8 @@ describe('GET /graph/nodes/:nodeId/reminders', () => {
 
   it('404 when node exists but is not RemindMe', async () => {
     const fastify = Fastify({ logger: false });
-    const logger = new LoggerService();
     class RuntimeStubNotRem { getNodeInstance(_: string) { return {}; } }
+    const logger = new LoggerService();
     const controller = new RemindersController(logger, new RuntimeStubNotRem() as LiveGraphRuntime);
     fastify.get('/graph/nodes/:nodeId/reminders', async (req, res) => {
       const p = req.params as { nodeId: string };

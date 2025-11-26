@@ -1,9 +1,9 @@
 import z from 'zod';
-import { LoggerService } from '../../core/services/logger.service';
+import { Logger } from '@nestjs/common';
 
 // Minimal BaseTool interface used by legacy lgnodes (CallModelNode, ToolsNode)
 export abstract class BaseTool {
-  constructor(protected logger?: LoggerService) {}
+  protected readonly logger = new Logger(this.constructor.name);
   abstract init(config?: unknown): {
     name: string;
     description: string;

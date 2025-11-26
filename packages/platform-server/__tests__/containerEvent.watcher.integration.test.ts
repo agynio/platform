@@ -3,7 +3,6 @@ import { PassThrough } from 'node:stream';
 import type { PrismaClient } from '@prisma/client';
 import { ContainerEventProcessor } from '../src/infra/container/containerEvent.processor';
 import { DockerWorkspaceEventsWatcher } from '../src/infra/container/containerEvent.watcher';
-import { LoggerService } from '../src/core/services/logger.service';
 import type { ContainerStatus, ContainerEventType } from '@prisma/client';
 import type { ContainerService } from '../src/infra/container/container.service';
 
@@ -180,10 +179,10 @@ describe('DockerWorkspaceEventsWatcher integration', () => {
     prisma = new FakePrismaClient();
     prisma.addContainer({ id: 1, containerId: 'cid-abc', dockerContainerId: 'cid-abc', status: 'running', threadId: null, terminationReason: null });
     stream = new PassThrough();
-    processor = new ContainerEventProcessor(new FakePrismaService(prisma), new LoggerService());
+    processor = new ContainerEventProcessor(new FakePrismaService(prisma));
     const docker = new FakeDocker(stream);
     const containerService = new FakeContainerService(docker);
-    watcher = new DockerWorkspaceEventsWatcher(containerService as unknown as ContainerService, processor, new LoggerService());
+    watcher = new DockerWorkspaceEventsWatcher(containerService as unknown as ContainerService, processor);
     watcher.start();
   });
 

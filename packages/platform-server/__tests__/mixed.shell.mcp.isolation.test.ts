@@ -1,6 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
 import { PassThrough } from 'node:stream';
-import { LoggerService } from '../src/core/services/logger.service';
 import { ConfigService, configSchema } from '../src/core/services/config.service';
 import { EnvService } from '../src/env/env.service';
 import { ShellCommandNode } from '../src/nodes/tools/shell_command/shell_command.node';
@@ -26,7 +25,6 @@ class SharedProvider {
 
 describe('Mixed Shell + MCP overlay isolation', () => {
   it('does not leak env between Shell and MCP nodes', async () => {
-    const logger = new LoggerService();
     const provider = new SharedProvider();
     const cfg = new ConfigService().init(
       configSchema.parse({
@@ -37,7 +35,34 @@ describe('Mixed Shell + MCP overlay isolation', () => {
     const resolver = { resolve: async (input: unknown) => ({ output: input, report: {} as unknown }) };
     const envService = new EnvService(resolver as any);
 
-    const shell = new ShellCommandNode(envService, logger);
+    const moduleRefStub = {};
+    const archiveStub = { createSingleFileTar: vi.fn(async () => Buffer.from('tar')) } as const;
+    const runEventsStub = {
+      appendToolOutputChunk: vi.fn(async (payload) => payload),
+      finalizeToolOutputTerminal: vi.fn(async (payload) => payload),
+    };
+    const eventsBusStub = {
+      emitToolOutputChunk: vi.fn(),
+      emitToolOutputTerminal: vi.fn(),
+    };
+    const prismaStub = {
+      getClient: vi.fn(() => ({
+        container: {
+          findUnique: vi.fn(async () => null),
+        },
+        containerEvent: {
+          findFirst: vi.fn(async () => null),
+        },
+      })),
+    };
+    const shell = new ShellCommandNode(
+      envService as any,
+      moduleRefStub as any,
+      archiveStub as any,
+      runEventsStub as any,
+      eventsBusStub as any,
+      prismaStub as any,
+    );
     shell.init({ nodeId: 'shell' });
     shell.setContainerProvider(provider);
     await shell.setConfig({ env: [ { key: 'S_VAR', value: 's' } ] });
@@ -51,7 +76,7 @@ describe('Mixed Shell + MCP overlay isolation', () => {
       }),
     } as const;
     const cs = { getDocker: () => docker };
-    const mcp = new LocalMCPServerNode(cs as any, logger, envService as any, cfg as any);
+    const mcp = new LocalMCPServerNode(cs as any, envService as any, cfg as any, undefined as any);
     mcp.init({ nodeId: 'mcp' });
     (mcp as any).setContainerProvider(provider);
     await mcp.setConfig({ namespace: 'n', command: 'mcp start --stdio', env: [ { key: 'M_VAR', value: 'm' } ], startupTimeoutMs: 10 });

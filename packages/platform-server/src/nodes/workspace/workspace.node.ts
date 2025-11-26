@@ -6,7 +6,6 @@ import { PLATFORM_LABEL, SUPPORTED_PLATFORMS } from '../../core/constants';
 import { ConfigService } from '../../core/services/config.service';
 import { NcpsKeyService } from '../../infra/ncps/ncpsKey.service';
 import { EnvService, type EnvItem } from '../../env/env.service';
-import { LoggerService } from '../../core/services/logger.service';
 import { Inject, Injectable, Scope } from '@nestjs/common';
 import { SecretReferenceSchema, VariableReferenceSchema } from '../../utils/reference-schemas';
 
@@ -86,10 +85,9 @@ export class WorkspaceNode extends Node<ContainerProviderStaticConfig> {
     @Inject(ContainerService) protected containerService: ContainerService,
     @Inject(ConfigService) protected configService: ConfigService,
     @Inject(NcpsKeyService) protected ncpsKeyService: NcpsKeyService,
-    @Inject(LoggerService) protected logger: LoggerService,
     @Inject(EnvService) protected envService: EnvService,
   ) {
-    super(logger);
+    super();
     this.idLabels = (id: string) => ({ 'hautech.ai/thread_id': id, 'hautech.ai/node_id': this.nodeId });
   }
 
@@ -107,26 +105,16 @@ export class WorkspaceNode extends Node<ContainerProviderStaticConfig> {
     const workspaceLabels = { ...labels, 'hautech.ai/role': 'workspace' } as Record<string, string>;
     // Primary lookup: thread-scoped workspace container only
     // Debug note: ContainerService logs the exact filters as well.
-    // Optional local debug:
-    // Avoid requiring DOM globals in server tests; guard console access
-    if (typeof console !== 'undefined' && typeof console.debug === 'function') {
-      try {
-        console.debug('[ContainerProviderEntity] lookup labels (workspace)', workspaceLabels);
-      } catch {
-        // ignore console debug errors in non-tty envs
-      }
-    }
+    this.logger.debug(
+      `[ContainerProviderEntity] lookup labels (workspace) labels=${JSON.stringify(workspaceLabels)}`,
+    );
     let container: ContainerHandle | undefined = await this.containerService.findContainerByLabels(workspaceLabels);
 
     // Typed fallback: retry by thread_id only and exclude DinD sidecars.
     if (!container) {
-      if (typeof console !== 'undefined' && typeof console.debug === 'function') {
-        try {
-          console.debug('[ContainerProviderEntity] fallback lookup by thread_id only', labels);
-        } catch {
-          // ignore console debug errors in non-tty envs
-        }
-      }
+      this.logger.debug(
+        `[ContainerProviderEntity] fallback lookup by thread_id only labels=${JSON.stringify(labels)}`,
+      );
       const candidates = await this.containerService.findContainersByLabels(labels);
       if (Array.isArray(candidates) && candidates.length) {
         const results = await Promise.all(
@@ -164,22 +152,20 @@ export class WorkspaceNode extends Node<ContainerProviderStaticConfig> {
     }
 
     if (container) {
+      const shortId = container.id.substring(0, 12);
       let networks: string[] | undefined;
       try {
         networks = await this.containerService.getContainerNetworks(container.id);
       } catch (err) {
-        this.logger.warn('Failed to inspect workspace networks', {
-          containerId: container.id.substring(0, 12),
-          error: err instanceof Error ? err.message : String(err),
-        });
+        const errMessage = err instanceof Error ? err.message : String(err);
+        this.logger.warn(`Failed to inspect workspace networks containerId=${shortId} error=${errMessage}`);
       }
       const attachedToNetwork = Array.isArray(networks) && networks.includes(networkName);
       if (!attachedToNetwork) {
-        this.logger.info('Recreating workspace to enforce workspace network', {
-          containerId: container.id.substring(0, 12),
-          networks: Array.isArray(networks) ? networks : [],
-          requiredNetwork: networkName,
-        });
+        const networksList = Array.isArray(networks) ? networks.join(',') : 'none';
+        this.logger.log(
+          `Recreating workspace to enforce workspace network containerId=${shortId} requiredNetwork=${networkName} networks=${networksList}`,
+        );
         if (enableDinD) await this.cleanupDinDSidecars(labels, container.id).catch(() => {});
         await this.stopAndRemoveContainer(container);
         container = undefined;
@@ -261,10 +247,10 @@ export class WorkspaceNode extends Node<ContainerProviderStaticConfig> {
       if (enableDinD) await this.ensureDinD(started, labels, DOCKER_MIRROR_URL);
       if (nixConfigInjected) {
         await this.runWorkspaceNetworkDiagnostics(started).catch((err: unknown) => {
-          this.logger.warn('Workspace Nix diagnostics failed', {
-            containerId: started.id.substring(0, 12),
-            error: err instanceof Error ? err.message : String(err),
-          });
+          const errMessage = err instanceof Error ? err.message : String(err);
+          this.logger.warn(
+            `Workspace Nix diagnostics failed containerId=${started.id.substring(0, 12)} error=${errMessage}`,
+          );
         });
       }
 
@@ -293,7 +279,8 @@ export class WorkspaceNode extends Node<ContainerProviderStaticConfig> {
         await this.ensureNixPackages(started, specs, originalCount);
       } catch (e) {
         // Do not fail startup on install errors; logs provide context
-        this.logger.error('Nix install step failed (post-start)', e);
+        const errMessage = e instanceof Error ? e.message : String(e);
+        this.logger.error(`Nix install step failed (post-start): ${errMessage}`);
       }
     } else {
       const DOCKER_MIRROR_URL =
@@ -315,7 +302,8 @@ export class WorkspaceNode extends Node<ContainerProviderStaticConfig> {
         const originalCount = Array.isArray(pkgsUnknown) ? pkgsArr.length : 0;
         await this.ensureNixPackages(existing, specs, originalCount);
       } catch (e) {
-        this.logger.error('Nix install step failed (reuse)', e);
+        const errMessage = e instanceof Error ? e.message : String(e);
+        this.logger.error(`Nix install step failed (reuse): ${errMessage}`);
       }
     }
     const handle = container;
@@ -412,18 +400,16 @@ export class WorkspaceNode extends Node<ContainerProviderStaticConfig> {
         .filter((line) => line.length > 0);
       if (lines.length) {
         for (const line of lines) {
-          this.logger.info('Workspace Nix config', { containerId: shortId, line });
+          this.logger.log(`Workspace Nix config containerId=${shortId} line=${line}`);
         }
       } else {
-        this.logger.warn('Workspace Nix config produced no substituters/trusted-public-keys output', {
-          containerId: shortId,
-        });
+        this.logger.warn(
+          `Workspace Nix config produced no substituters/trusted-public-keys output containerId=${shortId}`,
+        );
       }
     } catch (err) {
-      this.logger.warn('Workspace Nix config check failed', {
-        containerId: shortId,
-        error: err instanceof Error ? err.message : String(err),
-      });
+      const errMessage = err instanceof Error ? err.message : String(err);
+      this.logger.warn(`Workspace Nix config check failed containerId=${shortId} error=${errMessage}`);
     }
 
     await this.runWorkspaceDiagnosticCommand(container, 'getent hosts ncps', 'ncps host lookup');
@@ -446,23 +432,17 @@ export class WorkspaceNode extends Node<ContainerProviderStaticConfig> {
       const { stdout, stderr, exitCode } = await container.exec(['sh', '-lc', command]);
       if (exitCode === 0) {
         const payload = options.logStdoutSnippet ? this.snip(stdout) : stdout.trim();
-        this.logger.info(`Workspace ${description} succeeded`, {
-          containerId: shortId,
-          stdout: payload,
-        });
+        this.logger.log(`Workspace ${description} succeeded containerId=${shortId} stdout=${payload}`);
       } else {
-        this.logger.warn(`Workspace ${description} failed`, {
-          containerId: shortId,
-          exitCode,
-          stdout: stdout.trim(),
-          stderr: stderr.trim(),
-        });
+        const stdoutTrimmed = stdout.trim();
+        const stderrTrimmed = stderr.trim();
+        this.logger.warn(
+          `Workspace ${description} failed containerId=${shortId} exitCode=${exitCode} stdout=${stdoutTrimmed} stderr=${stderrTrimmed}`,
+        );
       }
     } catch (err) {
-      this.logger.warn(`Workspace ${description} error`, {
-        containerId: shortId,
-        error: err instanceof Error ? err.message : String(err),
-      });
+      const errMessage = err instanceof Error ? err.message : String(err);
+      this.logger.warn(`Workspace ${description} error containerId=${shortId} error=${errMessage}`);
     }
   }
 
@@ -543,7 +523,8 @@ export class WorkspaceNode extends Node<ContainerProviderStaticConfig> {
   private normalizeCpuLimit(raw: unknown): number | undefined {
     if (raw === undefined || raw === null) return undefined;
     const logInvalid = (reason: string) => {
-      this.logger.warn('Workspace cpu_limit invalid; ignoring', { reason, value: raw });
+      const value = typeof raw === 'object' ? JSON.stringify(raw) : String(raw);
+      this.logger.warn(`Workspace cpu_limit invalid; ignoring reason=${reason} value=${value}`);
     };
     if (typeof raw === 'number') {
       if (!Number.isFinite(raw) || raw <= 0) {
@@ -587,7 +568,8 @@ export class WorkspaceNode extends Node<ContainerProviderStaticConfig> {
   private normalizeMemoryLimit(raw: unknown): number | undefined {
     if (raw === undefined || raw === null) return undefined;
     const logInvalid = (reason: string) => {
-      this.logger.warn('Workspace memory_limit invalid; ignoring', { reason, value: raw });
+      const value = typeof raw === 'object' ? JSON.stringify(raw) : String(raw);
+      this.logger.warn(`Workspace memory_limit invalid; ignoring reason=${reason} value=${value}`);
     };
     if (typeof raw === 'number') {
       if (!Number.isFinite(raw) || raw <= 0) {
@@ -680,14 +662,14 @@ export class WorkspaceNode extends Node<ContainerProviderStaticConfig> {
       if (!Array.isArray(specs) || specs.length === 0) {
         // If original config had entries but none were resolved, log once
         if ((originalCount || 0) > 0) {
-          this.logger.info('nix.packages present but unresolved; skipping install');
+          this.logger.log('nix.packages present but unresolved; skipping install');
         }
         return;
       }
       // Log when some items are ignored due to missing fields
       if ((originalCount || 0) > specs.length) {
         const ignored = (originalCount || 0) - specs.length;
-        this.logger.info('%d nix.packages item(s) missing commitHash/attributePath; ignored', ignored);
+        this.logger.log(`${ignored} nix.packages item(s) missing commitHash/attributePath; ignored`);
       }
       // Detect Nix presence quickly
       const detect = await container.exec('command -v nix >/dev/null 2>&1 && nix --version', {
@@ -695,7 +677,7 @@ export class WorkspaceNode extends Node<ContainerProviderStaticConfig> {
         idleTimeoutMs: 0,
       });
       if (detect.exitCode !== 0) {
-        this.logger.info('Nix not present; skipping install');
+        this.logger.log('Nix not present; skipping install');
         return;
       }
       const refs = specs.map((s) => `github:NixOS/nixpkgs/${s.commitHash}#${s.attributePath}`);
@@ -703,25 +685,26 @@ export class WorkspaceNode extends Node<ContainerProviderStaticConfig> {
       const BASE =
         "nix profile install --accept-flake-config --extra-experimental-features 'nix-command flakes' --no-write-lock-file";
       const combined = `${PATH_PREFIX} && ${BASE} ${refs.join(' ')}`;
-      this.logger.info('Nix install: %d packages (combined)', refs.length);
+      this.logger.log(`Nix install: ${refs.length} packages (combined)`);
       const combinedRes = await container.exec(combined, { timeoutMs: 10 * 60_000, idleTimeoutMs: 60_000 });
       if (combinedRes.exitCode === 0) return;
       // Fallback per package
-      this.logger.error('Nix install (combined) failed', { exitCode: combinedRes.exitCode });
+      this.logger.error(`Nix install (combined) failed exitCode=${combinedRes.exitCode}`);
       const cmdFor = (ref: string) => `${PATH_PREFIX} && ${BASE} ${ref}`;
       const timeoutOpts = { timeoutMs: 3 * 60_000, idleTimeoutMs: 60_000 } as const;
       await refs.reduce<Promise<void>>(
         (p, ref) =>
           p.then(async () => {
             const r = await container.exec(cmdFor(ref), timeoutOpts);
-            if (r.exitCode === 0) this.logger.info('Nix install succeeded for %s', ref);
-            else this.logger.error('Nix install failed for %s', ref, { exitCode: r.exitCode });
+            if (r.exitCode === 0) this.logger.log(`Nix install succeeded for ${ref}`);
+            else this.logger.error(`Nix install failed for ${ref} exitCode=${r.exitCode}`);
           }),
         Promise.resolve(),
       );
     } catch (e) {
       // Surface via logger; caller swallows to avoid failing startup
-      this.logger.error('Nix install threw', e);
+      const errMessage = e instanceof Error ? e.message : String(e);
+      this.logger.error(`Nix install threw: ${errMessage}`);
     }
   }
 }

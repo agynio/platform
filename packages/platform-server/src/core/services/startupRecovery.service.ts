@@ -1,8 +1,7 @@
-import { Inject, Injectable, OnApplicationBootstrap } from '@nestjs/common';
+import { Inject, Injectable, Logger, OnApplicationBootstrap } from '@nestjs/common';
 import type { Prisma, PrismaClient, RunStatus } from '@prisma/client';
 import { RunStatus as RunStatusEnum } from '@prisma/client';
 import { PrismaService } from './prisma.service';
-import { LoggerService } from './logger.service';
 import { EventsBusService } from '../../events/events-bus.service';
 
 type TransactionClient = Prisma.TransactionClient;
@@ -27,9 +26,10 @@ const LOCK_KEY_ID = 0x0000_0001;
 
 @Injectable()
 export class StartupRecoveryService implements OnApplicationBootstrap {
+  private readonly logger = new Logger(StartupRecoveryService.name);
+
   constructor(
     @Inject(PrismaService) private readonly prismaService: PrismaService,
-    @Inject(LoggerService) private readonly logger: LoggerService,
     @Inject(EventsBusService) private readonly eventsBus: EventsBusService,
   ) {}
 
@@ -55,7 +55,7 @@ export class StartupRecoveryService implements OnApplicationBootstrap {
     }
 
     if (recovery.skipped) {
-      this.logger.info('Startup recovery skipped (lock not acquired)', { reason: RECOVERY_REASON });
+      this.logger.log('Startup recovery skipped (lock not acquired)', { reason: RECOVERY_REASON });
       return;
     }
 
@@ -63,7 +63,7 @@ export class StartupRecoveryService implements OnApplicationBootstrap {
     const terminatedRuns = recovery.runs.length;
     const completedReminders = recovery.reminders.length;
 
-    this.logger.info('Startup recovery completed', {
+    this.logger.log('Startup recovery completed', {
       reason: RECOVERY_REASON,
       terminatedRuns,
       completedReminders,

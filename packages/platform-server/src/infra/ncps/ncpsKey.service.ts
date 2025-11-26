@@ -1,5 +1,4 @@
-import { Inject, Injectable } from '@nestjs/common';
-import { LoggerService } from '../../core/services/logger.service';
+import { Inject, Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '../../core/services/config.service';
 import type { Dispatcher } from 'undici';
 import { Agent } from 'undici';
@@ -20,9 +19,10 @@ export class NcpsKeyService {
     init?: RequestInit & { dispatcher?: import('undici').Dispatcher },
   ) => Promise<Response> = (input, init) => fetch(input, init);
 
+  private readonly logger = new Logger(NcpsKeyService.name);
+
   constructor(
     @Inject(ConfigService) private cfg: ConfigService,
-    @Inject(LoggerService) private logger: LoggerService,
   ) {}
 
   hasKey(): boolean {
@@ -45,7 +45,7 @@ export class NcpsKeyService {
 
   async init(): Promise<void> {
     if (!this.cfg.ncpsEnabled) {
-      this.logger.info('NcpsKeyService disabled by config');
+      this.logger.log('NcpsKeyService disabled by config');
       this.inited = true;
       return;
     }
@@ -73,7 +73,10 @@ export class NcpsKeyService {
       if (this.isRefreshing) return;
       this.isRefreshing = true;
       this.fetchWithRetries()
-        .catch((e) => this.logger.error('NcpsKeyService refresh error: %s', (e as Error)?.message || String(e)))
+        .catch((e) => {
+          const message = e instanceof Error ? e.message : String(e);
+          this.logger.error(`NcpsKeyService refresh error: ${message}`);
+        })
         .finally(() => {
           this.isRefreshing = false;
         });
@@ -97,16 +100,15 @@ export class NcpsKeyService {
         const msg = (e as Error)?.message || String(e);
         const nextDelay = base * Math.pow(factor, attempt - 1);
         if (attempt > maxRetries) {
-          this.logger.error('NcpsKeyService fetch failed: %s (giving up)', msg);
+          this.logger.error(`NcpsKeyService fetch failed: ${msg} (giving up)`);
           return false;
         }
-        this.logger.debug(
-          'NcpsKeyService fetch failed (attempt %d/%d): %s; retrying in %dms',
+        this.logger.debug('NcpsKeyService fetch failed; retrying', {
           attempt,
           maxRetries,
-          msg,
+          error: msg,
           nextDelay,
-        );
+        });
         await new Promise((r) => setTimeout(r, nextDelay));
       }
     }
@@ -119,7 +121,7 @@ export class NcpsKeyService {
       this.prevUntil = minutes > 0 ? Date.now() + minutes * 60_000 : 0;
     }
     this.currentKey = key;
-    this.logger.info('NcpsKeyService updated key (length=%d)', key.length);
+    this.logger.log('NcpsKeyService updated key', { length: key.length });
   }
 
   // Allow tests to inject a fetch shim with an undici dispatcher

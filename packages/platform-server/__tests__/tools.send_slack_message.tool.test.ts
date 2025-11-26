@@ -1,7 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import { SendSlackMessageNode } from '../src/nodes/tools/send_slack_message/send_slack_message.node';
 import { SendSlackMessageFunctionTool } from '../src/nodes/tools/send_slack_message/send_slack_message.tool';
-import { LoggerService } from '../src/core/services/logger.service';
 
 vi.mock('@slack/web-api', () => {
   const postEphemeral = vi.fn(async (_opts: { channel: string; user: string; text: string }) => ({ ok: true, message_ts: '999' }));
@@ -17,9 +16,9 @@ vi.mock('@slack/web-api', () => {
 
 describe('SendSlackMessageFunctionTool', () => {
   it('omits thread_ts for ephemeral responses', async () => {
-    const node = new SendSlackMessageNode(new LoggerService());
+    const node = new SendSlackMessageNode(undefined as any);
     await node.setConfig({ bot_token: 'xoxb-bot' });
-    const tool = new SendSlackMessageFunctionTool(node, new LoggerService());
+    const tool = new SendSlackMessageFunctionTool(node);
     const res = await tool.execute({
       channel: 'C1',
       text: 'ephemeral',

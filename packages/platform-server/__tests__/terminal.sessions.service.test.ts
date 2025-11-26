@@ -1,10 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { TerminalSessionsService } from '../src/infra/container/terminal.sessions.service';
 import type { ContainerService } from '../src/infra/container/container.service';
-import { LoggerService } from '../src/core/services/logger.service';
 
 describe('TerminalSessionsService', () => {
-  const logger = new LoggerService();
   let containers: Pick<ContainerService, 'execContainer'>;
   let service: TerminalSessionsService;
 
@@ -13,7 +11,7 @@ describe('TerminalSessionsService', () => {
     containers = {
       execContainer: vi.fn().mockResolvedValue({ stdout: '/bin/bash\n', stderr: '', exitCode: 0 }),
     } as unknown as Pick<ContainerService, 'execContainer'>;
-    service = new TerminalSessionsService(containers as ContainerService, logger);
+    service = new TerminalSessionsService(containers as ContainerService);
   });
 
   afterEach(() => {

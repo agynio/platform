@@ -1,5 +1,4 @@
 import { Injectable } from '@nestjs/common';
-import { LoggerService } from '../../core/services/logger.service';
 import { Prisma, type PrismaClient } from '@prisma/client';
 import { sanitizeContainerMounts, type ContainerMount } from './container.mounts';
 
@@ -19,10 +18,7 @@ export interface ContainerMetadata {
 
 @Injectable()
 export class ContainerRegistry {
-  constructor(
-    private prisma: PrismaClient,
-    private logger: LoggerService,
-  ) {}
+  constructor(private prisma: PrismaClient) {}
 
   async ensureIndexes(): Promise<void> {
     // No-op: indexes are managed via Prisma migrations
