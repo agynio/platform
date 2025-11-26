@@ -1,5 +1,5 @@
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { Test } from '@nestjs/testing';
 import { ConfigService } from '../src/core/services/config.service';
 import { AgentNode } from '../src/nodes/agent/agent.node';
@@ -10,6 +10,7 @@ import { AgentsPersistenceService } from '../src/agents/agents.persistence.servi
 import { RunSignalsRegistry } from '../src/agents/run-signals.service';
 import { Signal } from '../src/signal';
 import { CallAgentLinkingService } from '../src/agents/call-agent-linking.service';
+import { LoggerService } from '../src/core/services/logger.service';
 
 class BusyAgent extends AgentNode {
   override async invoke(): Promise<ResponseMessage> {
@@ -25,6 +26,16 @@ describe('call_agent sync busy', () => {
         BusyAgent,
         { provide: LLMProvisioner, useValue: {} },
         {
+          provide: LoggerService,
+          useValue: {
+            log: vi.fn(),
+            error: vi.fn(),
+            warn: vi.fn(),
+            debug: vi.fn(),
+            verbose: vi.fn(),
+          },
+        },
+        {
           provide: AgentsPersistenceService,
           useValue: {
             beginRunThread: async () => ({ runId: 't' }),
@@ -37,6 +48,8 @@ describe('call_agent sync busy', () => {
       ],
     }).compile();
     const agent = await module.resolve(BusyAgent);
+    const loggerStub = module.get(LoggerService) as LoggerService;
+    (agent as unknown as { logger: LoggerService }).logger = loggerStub;
     await agent.setConfig({});
     agent.init({ nodeId: 'caller' });
     const linkingStub = {

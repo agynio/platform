@@ -1,7 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import { Test } from '@nestjs/testing';
 import { ConfigService } from '../src/core/services/config.service';
-import { ModuleRef } from '@nestjs/core';
 import { LLMProvisioner } from '../src/llm/provisioners/llm.provisioner';
 import { AgentsPersistenceService } from '../src/agents/agents.persistence.service';
 import { AgentNode } from '../src/nodes/agent/agent.node';
@@ -10,6 +9,7 @@ import { AgentsThreadsController } from '../src/agents/threads.controller';
 import { ThreadCleanupCoordinator } from '../src/agents/threadCleanup.coordinator';
 import { RunEventsService } from '../src/events/run-events.service';
 import { RunSignalsRegistry } from '../src/agents/run-signals.service';
+import { LoggerService } from '../src/core/services/logger.service';
 
 class StubLLMProvisioner extends LLMProvisioner {
   async getLLM(): Promise<{ call: (messages: unknown) => Promise<{ text: string; output: unknown[] }> }> {
@@ -23,6 +23,16 @@ describe('Fail-fast behavior', () => {
       providers: [
         ConfigService,
         { provide: LLMProvisioner, useClass: StubLLMProvisioner },
+        {
+          provide: LoggerService,
+          useValue: {
+            log: vi.fn(),
+            error: vi.fn(),
+            warn: vi.fn(),
+            debug: vi.fn(),
+            verbose: vi.fn(),
+          },
+        },
         AgentNode,
         {
           provide: AgentsPersistenceService,
@@ -41,8 +51,7 @@ describe('Fail-fast behavior', () => {
 
     const agent = await module.resolve(AgentNode);
     await agent.setConfig({});
-    const loggerStub = { error: vi.fn(), warn: vi.fn(), log: vi.fn(), debug: vi.fn() };
-    (agent as any).logger = loggerStub;
+    const loggerStub = module.get(LoggerService) as LoggerService & Record<string, ReturnType<typeof vi.fn>>;
     agent.setRuntimeContext({ nodeId: 'A', get: (_id: string) => undefined });
 
     await expect(agent.invoke('thread-1', [HumanMessage.fromText('hi')])).rejects.toBeTruthy();
