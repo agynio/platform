@@ -4,7 +4,9 @@ import { addEdge, applyEdgeChanges, applyNodeChanges, type Edge, type EdgeTypes,
 import { GraphCanvas, type GraphNodeData } from '../GraphCanvas';
 import { GradientEdge } from './edges/GradientEdge';
 import EmptySelectionSidebar from '../EmptySelectionSidebar';
-import NodePropertiesSidebar, { type NodeConfig as SidebarNodeConfig } from '../NodePropertiesSidebar';
+import NodePropertiesSidebar, {
+  type NodeConfig as SidebarNodeConfig,
+} from '../NodePropertiesSidebar';
 
 import { useGraphData } from '@/features/graph/hooks/useGraphData';
 import { useGraphSocket } from '@/features/graph/hooks/useGraphSocket';
@@ -145,6 +147,48 @@ function mapProvisionState(status?: ApiNodeStatus): GraphNodeStatus | undefined 
     default:
       return state ? 'not_ready' : undefined;
   }
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function readDynamicConfig(config: Record<string, unknown> | undefined): Record<string, unknown> | null {
+  if (!config) return null;
+  const candidate = (config as Record<string, unknown>)['dynamic'];
+  return isRecord(candidate) ? candidate : null;
+}
+
+function toEnabledToolsMap(value: unknown): Record<string, boolean> {
+  if (Array.isArray(value)) {
+    return value.reduce<Record<string, boolean>>((acc, item) => {
+      if (typeof item === 'string') {
+        const key = item.trim();
+        if (key) acc[key] = true;
+      }
+      return acc;
+    }, {});
+  }
+
+  if (isRecord(value)) {
+    return Object.entries(value).reduce<Record<string, boolean>>((acc, [key, flag]) => {
+      if (typeof key === 'string' && key.trim()) {
+        if (flag) {
+          acc[key.trim()] = true;
+        }
+      }
+      return acc;
+    }, {});
+  }
+
+  return {};
+}
+
+function readEnabledTools(config: Record<string, unknown> | undefined): string[] {
+  const dynamic = readDynamicConfig(config);
+  if (!dynamic) return [];
+  const enabled = toEnabledToolsMap(dynamic['tools']);
+  return Object.keys(enabled);
 }
 
 export function GraphLayout({ services }: GraphLayoutProps) {
@@ -382,7 +426,6 @@ export function GraphLayout({ services }: GraphLayoutProps) {
   const flowEdgesRef = useRef<FlowEdge[]>([]);
 
   const edgeTypes = useMemo<EdgeTypes>(() => ({ gradient: GradientEdge }), []);
-  const fallbackEnabledTools = useMemo<string[]>(() => [], []);
 
   useEffect(() => {
     selectedNodeIdRef.current = selectedNodeId;
@@ -526,28 +569,86 @@ export function GraphLayout({ services }: GraphLayoutProps) {
     [nodes, selectedNodeId],
   );
 
+  useEffect(() => {
+    if (!selectedNode && selectedNodeIdRef.current) {
+      setSelectedNodeId(null);
+    }
+  }, [selectedNode]);
+
+  const selectedTemplate = selectedNode?.template ?? null;
+  const selectedNodeConfigRecord = selectedNode?.config as Record<string, unknown> | undefined;
+
+  const enabledToolsFromConfig = useMemo(() => readEnabledTools(selectedNodeConfigRecord), [selectedNodeConfigRecord]);
+
   const statusQuery = useNodeStatus(selectedNodeId ?? '');
   const mcpNodeId = selectedNode?.kind === 'MCP' ? selectedNode.id : null;
-  const {
-    tools: mcpTools,
-    enabledTools: mcpEnabledTools,
-    setEnabledTools: setMcpEnabledTools,
-    isLoading: mcpToolsLoading,
-  } = useMcpNodeState(mcpNodeId);
+  const { tools: mcpTools, isLoading: mcpToolsLoading } = useMcpNodeState(mcpNodeId);
+
+  const handleConfigChange = useCallback(
+    (nextConfig: Partial<SidebarNodeConfig>) => {
+      const nodeId = selectedNodeIdRef.current;
+      if (!nodeId) return;
+      const node = nodesRef.current.find((item) => item.id === nodeId);
+      if (!node) return;
+
+      const mergedConfig: Record<string, unknown> = {
+        kind: node.kind,
+        title: node.title,
+        ...(node.config ?? {}),
+        ...nextConfig,
+      };
+
+      const normalizedConfig = Object.fromEntries(
+        Object.entries(mergedConfig).filter(([, value]) => value !== undefined),
+      ) as Record<string, unknown>;
+
+      const nextTitle = typeof normalizedConfig.title === 'string' ? normalizedConfig.title : node.title;
+      normalizedConfig.kind = node.kind;
+      normalizedConfig.title = nextTitle;
+
+      updateNodeRef.current(nodeId, {
+        config: normalizedConfig,
+        ...(nextTitle !== node.title ? { title: nextTitle } : {}),
+      });
+    },
+    [],
+  );
 
   const handleToggleMcpTool = useCallback(
     (toolName: string, enabled: boolean) => {
-      if (!mcpNodeId) return;
-      const current = mcpEnabledTools ?? [];
-      const next = new Set(current);
+      const nodeId = selectedNodeIdRef.current;
+      if (!nodeId) return;
+      const node = nodesRef.current.find((item) => item.id === nodeId && item.kind === 'MCP');
+      if (!node) return;
+
+      const currentConfig = (node.config ?? {}) as Record<string, unknown>;
+      const dynamic = readDynamicConfig(currentConfig) ?? {};
+      const toolsMap = toEnabledToolsMap(dynamic['tools']);
+      const nextToolsMap = { ...toolsMap };
+
       if (enabled) {
-        next.add(toolName);
+        if (nextToolsMap[toolName]) {
+          return;
+        }
+        nextToolsMap[toolName] = true;
       } else {
-        next.delete(toolName);
+        if (!nextToolsMap[toolName]) {
+          return;
+        }
+        delete nextToolsMap[toolName];
       }
-      setMcpEnabledTools(Array.from(next));
+
+      const nextDynamic: Record<string, unknown> = { ...dynamic };
+      if (Object.keys(nextToolsMap).length > 0) {
+        nextDynamic['tools'] = nextToolsMap;
+      } else {
+        delete nextDynamic['tools'];
+      }
+
+      const payload = Object.keys(nextDynamic).length > 0 ? nextDynamic : {};
+      handleConfigChange({ dynamic: payload } as Partial<SidebarNodeConfig>);
     },
-    [mcpEnabledTools, mcpNodeId, setMcpEnabledTools],
+    [handleConfigChange],
   );
 
   const handleNodesChange = useCallback((changes: Parameters<typeof applyNodeChanges>[0]) => {
@@ -651,32 +752,6 @@ export function GraphLayout({ services }: GraphLayoutProps) {
 
   const sidebarState = useMemo(() => ({ status: sidebarStatus }), [sidebarStatus]);
 
-  const handleConfigChange = useCallback(
-    (nextConfig: Partial<SidebarNodeConfig>) => {
-      const nodeId = selectedNodeIdRef.current;
-      if (!nodeId) return;
-      const node = nodesRef.current.find((item) => item.id === nodeId);
-      if (!node) return;
-
-      const updatedConfig: Record<string, unknown> = {
-        kind: node.kind,
-        title: node.title,
-        ...(node.config ?? {}),
-        ...nextConfig,
-      };
-
-      const nextTitle = typeof updatedConfig.title === 'string' ? updatedConfig.title : node.title;
-      updatedConfig.kind = node.kind;
-      updatedConfig.title = nextTitle;
-
-      updateNodeRef.current(nodeId, {
-        config: updatedConfig,
-        ...(nextTitle !== node.title ? { title: nextTitle } : {}),
-      });
-    },
-    [],
-  );
-
   if (loading && nodes.length === 0) {
     return (
       <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
@@ -705,7 +780,7 @@ export function GraphLayout({ services }: GraphLayoutProps) {
           state={sidebarState}
           onConfigChange={handleConfigChange}
           tools={mcpTools}
-          enabledTools={mcpEnabledTools ?? fallbackEnabledTools}
+          enabledTools={enabledToolsFromConfig}
           onToggleTool={handleToggleMcpTool}
           toolsLoading={mcpToolsLoading}
           nixPackageSearch={handleNixPackageSearch}
@@ -714,6 +789,8 @@ export function GraphLayout({ services }: GraphLayoutProps) {
           secretSuggestionProvider={fetchVaultSuggestions}
           variableSuggestionProvider={fetchVariableSuggestions}
           providerDebounceMs={providerDebounceMs}
+          templateName={selectedTemplate ?? undefined}
+          nodeId={selectedNode.id}
         />
       ) : (
         <EmptySelectionSidebar />

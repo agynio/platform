@@ -22,6 +22,7 @@ interface ReferenceInputProps extends Omit<InputHTMLAttributes<HTMLInputElement>
   secretProvider?: (query: string) => Promise<string[]>;
   variableProvider?: (query: string) => Promise<string[]>;
   providerDebounceMs?: number;
+  openOnFocus?: boolean;
 }
 
 export function ReferenceInput({ 
@@ -38,6 +39,7 @@ export function ReferenceInput({
   secretProvider,
   variableProvider,
   providerDebounceMs = 250,
+  openOnFocus = false,
   ...props 
 }: ReferenceInputProps) {
   const [internalSourceType, setInternalSourceType] = useState<SourceType>('text');
@@ -48,6 +50,9 @@ export function ReferenceInput({
   const dropdownRef = useRef<HTMLDivElement>(null);
   const providerTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const requestCounterRef = useRef(0);
+  const hasRequestedSuggestionsRef = useRef(false);
+  const hasFocusedRef = useRef(false);
+  const isFocusedRef = useRef(false);
   const [dynamicSecretKeys, setDynamicSecretKeys] = useState<string[]>([]);
   const [dynamicVariableKeys, setDynamicVariableKeys] = useState<string[]>([]);
 
@@ -90,6 +95,8 @@ export function ReferenceInput({
         !inputRef.current.contains(event.target as Node)
       ) {
         setShowAutocomplete(false);
+        hasRequestedSuggestionsRef.current = false;
+        isFocusedRef.current = false;
       }
     };
 
@@ -98,40 +105,51 @@ export function ReferenceInput({
   }, []);
 
   const handleInputFocus = () => {
+    isFocusedRef.current = true;
+    hasFocusedRef.current = true;
+    if (!openOnFocus) {
+      return;
+    }
+    hasRequestedSuggestionsRef.current = true;
     if (sourceType === 'secret') {
       if (hasSecretProvider) {
-        setShowAutocomplete(dynamicSecretKeys.length > 0);
+        setShowAutocomplete(isFocusedRef.current && hasFocusedRef.current && dynamicSecretKeys.length > 0);
         setSelectedIndex(-1);
       } else if (effectiveSecretKeys.length > 0) {
-        setShowAutocomplete(true);
+        setShowAutocomplete(isFocusedRef.current && hasFocusedRef.current && effectiveSecretKeys.length > 0);
         setSelectedIndex(-1);
       }
     } else if (sourceType === 'variable') {
       if (hasVariableProvider) {
-        setShowAutocomplete(dynamicVariableKeys.length > 0);
+        setShowAutocomplete(isFocusedRef.current && hasFocusedRef.current && dynamicVariableKeys.length > 0);
         setSelectedIndex(-1);
       } else if (effectiveVariableKeys.length > 0) {
-        setShowAutocomplete(true);
+        setShowAutocomplete(isFocusedRef.current && hasFocusedRef.current && effectiveVariableKeys.length > 0);
         setSelectedIndex(-1);
       }
     }
   };
 
+  const handleInputBlur = () => {
+    isFocusedRef.current = false;
+  };
+
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    hasRequestedSuggestionsRef.current = true;
     if (sourceType === 'secret') {
       if (hasSecretProvider) {
-        setShowAutocomplete(true);
+        setShowAutocomplete(isFocusedRef.current && hasFocusedRef.current);
         setSelectedIndex(-1);
       } else if (secretKeys.length > 0) {
-        setShowAutocomplete(true);
+        setShowAutocomplete(isFocusedRef.current && hasFocusedRef.current);
         setSelectedIndex(-1);
       }
     } else if (sourceType === 'variable') {
       if (hasVariableProvider) {
-        setShowAutocomplete(true);
+        setShowAutocomplete(isFocusedRef.current && hasFocusedRef.current);
         setSelectedIndex(-1);
       } else if (variableKeys.length > 0) {
-        setShowAutocomplete(true);
+        setShowAutocomplete(isFocusedRef.current && hasFocusedRef.current);
         setSelectedIndex(-1);
       }
     }
@@ -150,6 +168,7 @@ export function ReferenceInput({
     }
     setShowAutocomplete(false);
     setSelectedIndex(-1);
+    hasRequestedSuggestionsRef.current = false;
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -166,6 +185,7 @@ export function ReferenceInput({
       } else if (e.key === 'Escape') {
         setShowAutocomplete(false);
         setSelectedIndex(-1);
+        hasRequestedSuggestionsRef.current = false;
       }
     } else if (sourceType === 'variable' && showAutocomplete && filteredKeys.length > 0) {
       if (e.key === 'ArrowDown') {
@@ -180,6 +200,7 @@ export function ReferenceInput({
       } else if (e.key === 'Escape') {
         setShowAutocomplete(false);
         setSelectedIndex(-1);
+        hasRequestedSuggestionsRef.current = false;
       }
     }
     if (props.onKeyDown) {
@@ -219,7 +240,9 @@ export function ReferenceInput({
               ? result.filter((item): item is string => typeof item === 'string')
               : [];
             setDynamicSecretKeys(values);
-            setShowAutocomplete(values.length > 0);
+            setShowAutocomplete(
+              isFocusedRef.current && hasFocusedRef.current && hasRequestedSuggestionsRef.current && values.length > 0,
+            );
             setSelectedIndex(-1);
           }
         } catch {
@@ -249,7 +272,9 @@ export function ReferenceInput({
               ? result.filter((item): item is string => typeof item === 'string')
               : [];
             setDynamicVariableKeys(values);
-            setShowAutocomplete(values.length > 0);
+            setShowAutocomplete(
+              isFocusedRef.current && hasFocusedRef.current && hasRequestedSuggestionsRef.current && values.length > 0,
+            );
             setSelectedIndex(-1);
           }
         } catch {
@@ -267,7 +292,16 @@ export function ReferenceInput({
     }
 
     return undefined;
-  }, [sourceType, hasSecretProvider, hasVariableProvider, secretProvider, variableProvider, inputValue, providerDebounceMs]);
+  }, [
+    sourceType,
+    hasSecretProvider,
+    hasVariableProvider,
+    secretProvider,
+    variableProvider,
+    inputValue,
+    providerDebounceMs,
+    openOnFocus,
+  ]);
 
   const paddingClasses = size === 'sm' ? 'px-3 py-2' : 'px-4 py-3';
   const inputLeftPadding = size === 'sm' ? 'pl-[52px]' : 'pl-[64px]';
@@ -314,6 +348,7 @@ export function ReferenceInput({
           {...props}
           ref={inputRef}
           onFocus={handleInputFocus}
+          onBlur={handleInputBlur}
           onChange={handleInputChange}
           onKeyDown={handleKeyDown}
         />

@@ -3,6 +3,8 @@ import { act, render, screen, waitFor } from '@testing-library/react';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 
 import { GraphLayout, type GraphLayoutServices } from '@/components/agents/GraphLayout';
+import { clearRegistry, registerConfigView } from '@/components/configViews/registry';
+import { installDefaultConfigViews } from '@/components/configViews/registerDefaults';
 
 const sidebarProps: any[] = [];
 const canvasSpy = vi.hoisted(() => vi.fn());
@@ -91,6 +93,8 @@ const createServiceMocks = vi.hoisted((): (() => GraphLayoutServiceMocks) => () 
 describe('GraphLayout', () => {
   beforeEach(() => {
     sidebarProps.length = 0;
+    clearRegistry();
+    installDefaultConfigViews(registerConfigView);
     Object.values(hookMocks).forEach((mock) => mock.mockReset());
     hookMocks.useMcpNodeState.mockReturnValue({
       tools: [],
@@ -188,6 +192,8 @@ describe('GraphLayout', () => {
       enabledTools?: unknown[];
       onToggleTool?: (name: string, enabled: boolean) => void;
       toolsLoading?: boolean;
+      templateName?: string;
+      nodeId?: string;
     };
 
     expect(typeof sidebar.nixPackageSearch).toBe('function');
@@ -201,6 +207,8 @@ describe('GraphLayout', () => {
     expect(typeof sidebar.toolsLoading).toBe('boolean');
     expect(sidebar.providerDebounceMs).toBeGreaterThanOrEqual(200);
     expect(sidebar.providerDebounceMs).toBeLessThanOrEqual(350);
+    expect(sidebar.templateName).toBe('agent-template');
+    expect(sidebar.nodeId).toBe('node-1');
 
     expect(sidebar.config).toEqual({
       kind: 'Agent',
@@ -382,24 +390,41 @@ describe('GraphLayout', () => {
   });
 
   it('wires MCP tools state into the sidebar and toggles enabled tools', async () => {
-    const updateNode = vi.fn();
+    const node = {
+      id: 'mcp-1',
+      template: 'mcp-template',
+      kind: 'MCP' as const,
+      title: 'MCP Node',
+      x: 0,
+      y: 0,
+      status: 'not_ready' as const,
+      config: { title: 'MCP Node', dynamic: { tools: { search: true } } },
+      ports: { inputs: [] as unknown[], outputs: [] as unknown[] },
+    };
+    const updateNode = vi.fn(
+      (
+        id: string,
+        payload: { config?: Record<string, unknown>; title?: string },
+      ) => {
+        if (id !== node.id) {
+          return;
+        }
+        if (payload.title && typeof payload.title === 'string') {
+          node.title = payload.title;
+        }
+        if (payload.config && typeof payload.config === 'object') {
+          node.config = {
+            ...(node.config ?? {}),
+            ...payload.config,
+          } as typeof node.config;
+        }
+      },
+    );
     const setEdges = vi.fn();
     const setEnabledTools = vi.fn();
 
     hookMocks.useGraphData.mockReturnValue({
-      nodes: [
-        {
-          id: 'mcp-1',
-          template: 'mcp-template',
-          kind: 'MCP',
-          title: 'MCP Node',
-          x: 0,
-          y: 0,
-          status: 'not_ready',
-          config: { title: 'MCP Node' },
-          ports: { inputs: [], outputs: [] },
-        },
-      ],
+      nodes: [node],
       edges: [],
       loading: false,
       savingState: { status: 'saved', error: null },
@@ -456,10 +481,98 @@ describe('GraphLayout', () => {
     expect(sidebar.toolsLoading).toBe(false);
 
     sidebar.onToggleTool?.('summarize', true);
-    sidebar.onToggleTool?.('search', false);
+    await waitFor(() =>
+      expect(updateNode).toHaveBeenLastCalledWith(
+        'mcp-1',
+        expect.objectContaining({
+          config: expect.objectContaining({
+            dynamic: { tools: { search: true, summarize: true } },
+            kind: 'MCP',
+            title: 'MCP Node',
+          }),
+        }),
+      ),
+    );
 
-    expect(setEnabledTools).toHaveBeenNthCalledWith(1, ['search', 'summarize']);
-    expect(setEnabledTools).toHaveBeenNthCalledWith(2, []);
+    updateNode.mockClear();
+
+    sidebar.onToggleTool?.('search', false);
+    await waitFor(() =>
+      expect(updateNode).toHaveBeenLastCalledWith(
+        'mcp-1',
+        expect.objectContaining({
+          config: expect.objectContaining({
+            dynamic: { tools: { summarize: true } },
+            kind: 'MCP',
+            title: 'MCP Node',
+          }),
+        }),
+      ),
+    );
+
+    expect(setEnabledTools).not.toHaveBeenCalled();
+  });
+
+  it('provides a registered custom config view for memory templates', async () => {
+    const updateNode = vi.fn();
+    const applyNodeStatus = vi.fn();
+    const applyNodeState = vi.fn();
+    const setEdges = vi.fn();
+
+    hookMocks.useGraphData.mockReturnValue({
+      nodes: [
+        {
+          id: 'memory-1',
+          template: 'memory',
+          kind: 'Workspace',
+          title: 'Memory Node',
+          x: 0,
+          y: 0,
+          status: 'not_ready',
+          config: { title: 'Memory Node', scope: 'global' },
+          ports: { inputs: [], outputs: [] },
+        },
+      ],
+      edges: [],
+      loading: false,
+      savingState: { status: 'saved', error: null },
+      savingErrorMessage: null,
+      updateNode,
+      applyNodeStatus,
+      applyNodeState,
+      setEdges,
+    });
+
+    hookMocks.useGraphSocket.mockReturnValue(undefined);
+    hookMocks.useNodeStatus.mockReturnValue({ data: null });
+
+    render(<GraphLayout services={services} />);
+
+    await waitFor(() => expect(canvasSpy).toHaveBeenCalled());
+    const canvasProps = canvasSpy.mock.calls.at(-1)?.[0] as {
+      onNodesChange?: (changes: any[]) => void;
+    };
+
+    act(() => {
+      canvasProps.onNodesChange?.([
+        {
+          id: 'memory-1',
+          type: 'select',
+          selected: true,
+        },
+      ]);
+    });
+
+    await waitFor(() => expect(sidebarProps.length).toBeGreaterThan(0));
+
+    const sidebar = sidebarProps.at(-1) as {
+      config: Record<string, unknown>;
+      templateName?: string;
+      nodeId?: string;
+    };
+
+    expect(sidebar.templateName).toBe('memory');
+    expect(sidebar.nodeId).toBe('memory-1');
   });
 
   it('preserves selection when switching between nodes in any event order', async () => {

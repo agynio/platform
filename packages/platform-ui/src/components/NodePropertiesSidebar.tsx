@@ -1,5 +1,5 @@
 import { Info, Play, Square, Trash2, ChevronDown, ChevronUp } from 'lucide-react';
-import { memo, useState, useCallback, useEffect, useMemo } from 'react';
+import { memo, useState, useCallback, useEffect, useMemo, type ReactNode } from 'react';
 
 import { Input } from './Input';
 import { Textarea } from './Textarea';
@@ -16,6 +16,7 @@ import { AutocompleteInput } from './AutocompleteInput';
 import type { AutocompleteOption } from './AutocompleteInput';
 import { Collapsible, CollapsibleTrigger, CollapsibleContent } from './ui/collapsible';
 import { ToolItem } from './ToolItem';
+import { getConfigView } from './configViews/registry';
 
 type NodeStatus =
   | 'not_ready'
@@ -71,6 +72,13 @@ interface McpToolDescriptor {
 
 type SimpleOption = { value: string; label: string };
 
+export type CustomConfigViewRender = (props: {
+  value: Record<string, unknown>;
+  onChange: (next: Record<string, unknown>) => void;
+  readOnly?: boolean;
+  disabled?: boolean;
+}) => ReactNode;
+
 const QUEUE_WHEN_BUSY_OPTIONS: SimpleOption[] = [
   { value: 'wait', label: 'Wait' },
   { value: 'injectAfterTools', label: 'Inject After Tools' },
@@ -105,6 +113,9 @@ interface NodePropertiesSidebarProps {
   secretSuggestionProvider?: (query: string) => Promise<string[]>;
   variableSuggestionProvider?: (query: string) => Promise<string[]>;
   providerDebounceMs?: number;
+  customConfigView?: CustomConfigViewRender;
+  templateName?: string;
+  nodeId?: string;
 }
 
 const statusConfig: Record<NodeStatus, { label: string; color: string; bgColor: string }> = {
@@ -358,10 +369,50 @@ function NodePropertiesSidebarComponent({
   secretSuggestionProvider,
   variableSuggestionProvider,
   providerDebounceMs = 250,
+  customConfigView,
+  templateName,
+  nodeId,
 }: NodePropertiesSidebarProps) {
   const { kind: nodeKind, title: nodeTitle } = config;
   const { status } = state;
   const configRecord = config as Record<string, unknown>;
+
+  const registryConfigView = useMemo<CustomConfigViewRender | undefined>(() => {
+    if (!templateName) {
+      return undefined;
+    }
+    const ViewComponent = getConfigView(templateName, 'static');
+    if (!ViewComponent) {
+      return undefined;
+    }
+    const keyBase = `${templateName}-${nodeId ?? ''}`;
+    return ({ value, onChange, readOnly, disabled }) => (
+      <ViewComponent
+        key={keyBase}
+        templateName={templateName}
+        value={value}
+        onChange={onChange}
+        readOnly={readOnly}
+        disabled={disabled}
+      />
+    );
+  }, [templateName, nodeId]);
+
+  const effectiveCustomConfigView = customConfigView ?? registryConfigView;
+
+  const customConfigValue = useMemo(() => {
+    const { kind: _ignoredKind, ...rest } = configRecord;
+    return { ...rest } as Record<string, unknown>;
+  }, [configRecord]);
+
+  const handleCustomConfigChange = useCallback(
+    (next: Record<string, unknown>) => {
+      if (!onConfigChange) return;
+      const { kind: _ignored, ...rest } = next;
+      onConfigChange(rest as Partial<NodeConfig>);
+    },
+    [onConfigChange],
+  );
 
   const [workspaceEnvOpen, setWorkspaceEnvOpen] = useState(true);
   const [mcpEnvOpen, setMcpEnvOpen] = useState(true);
@@ -493,6 +544,14 @@ function NodePropertiesSidebarComponent({
   const workspacePlatform = typeof configRecord.platform === 'string' ? (configRecord.platform as string) : '';
   const workspaceInitialScript =
     typeof configRecord.initialScript === 'string' ? (configRecord.initialScript as string) : '';
+  const workspaceCpuLimitValue =
+    typeof configRecord.cpu_limit === 'string' || typeof configRecord.cpu_limit === 'number'
+      ? String(configRecord.cpu_limit)
+      : '';
+  const workspaceMemoryLimitValue =
+    typeof configRecord.memory_limit === 'string' || typeof configRecord.memory_limit === 'number'
+      ? String(configRecord.memory_limit)
+      : '';
   const workspaceEnableDinD = configRecord.enableDinD === true;
   const workspaceTtlSeconds = readNumber(configRecord.ttlSeconds);
   const workspaceEnvVars = readEnvList(configRecord.env);
@@ -540,246 +599,265 @@ function NodePropertiesSidebarComponent({
       </div>
       <div className="flex-1 overflow-y-auto px-6 py-6">
         <div className="space-y-8">
-          <section>
-            <FieldLabel label="Title" hint="The display name for this node" />
-            <Input value={nodeTitle} onChange={(e) => onConfigChange?.({ title: e.target.value })} size="sm" />
-          </section>
-
-          {nodeKind === 'Agent' && (
+          {effectiveCustomConfigView ? (
+            <section>
+              {effectiveCustomConfigView({
+                value: customConfigValue,
+                onChange: handleCustomConfigChange,
+                readOnly: false,
+                disabled: false,
+              })}
+            </section>
+          ) : (
             <>
               <section>
-                <h3 className="text-[var(--agyn-dark)] mb-4 font-semibold">LLM</h3>
-                <div className="space-y-4">
-                  <div>
-                    <FieldLabel
-                      label="Model"
-                      hint="The LLM model identifier (e.g., gpt-4, claude-3-opus)"
-                      required
-                    />
-                    <Input
-                      placeholder="gpt-4"
-                      value={agentModel}
-                      onChange={(e) => onConfigChange?.({ model: e.target.value })}
-                      size="sm"
-                    />
-                  </div>
-                  <div>
-                    <FieldLabel
-                      label="System Prompt"
-                      hint="Initial instructions that define the agent's behavior and personality"
-                    />
-                    <MarkdownInput
-                      rows={3}
-                      placeholder="You are a helpful assistant..."
-                      value={agentSystemPrompt}
-                      onChange={(e) => onConfigChange?.({ systemPrompt: e.target.value })}
-                      size="sm"
-                    />
-                  </div>
-                </div>
+                <FieldLabel label="Title" hint="The display name for this node" />
+                <Input value={nodeTitle} onChange={(e) => onConfigChange?.({ title: e.target.value })} size="sm" />
               </section>
-              <section>
-                <div className="flex items-center justify-between mb-4">
-                  <div>
-                    <h3 className="text-[var(--agyn-dark)] font-semibold">Finish Restriction</h3>
-                    <p className="text-xs text-[var(--agyn-gray)] mt-1">
-                      Do not allow to finish agent work without tool call
-                    </p>
-                  </div>
-                  <Toggle
-                    label=""
-                    description=""
-                    checked={restrictOutput}
-                    onCheckedChange={(checked) => onConfigChange?.({ restrictOutput: checked })}
-                  />
-                </div>
-                {restrictOutput && (
-                  <div className="space-y-4 pl-4 border-l-2 border-[var(--agyn-border-default)]">
-                    <div>
-                      <FieldLabel
-                        label="Restriction Message"
-                        hint="Message shown when the agent tries to finish without calling required tools"
-                      />
-                      <Textarea
-                        rows={2}
-                        placeholder="You must use at least one tool before finishing."
-                        value={restrictionMessage}
-                        onChange={(e) => onConfigChange?.({ restrictionMessage: e.target.value })}
+
+              {nodeKind === 'Agent' && (
+                <>
+                  <section>
+                    <h3 className="text-[var(--agyn-dark)] mb-4 font-semibold">LLM</h3>
+                    <div className="space-y-4">
+                      <div>
+                        <FieldLabel
+                          label="Model"
+                          hint="The LLM model identifier (e.g., gpt-4, claude-3-opus)"
+                          required
+                        />
+                        <Input
+                          placeholder="gpt-4"
+                          value={agentModel}
+                          onChange={(e) => onConfigChange?.({ model: e.target.value })}
+                          size="sm"
+                        />
+                      </div>
+                      <div>
+                        <FieldLabel
+                          label="System Prompt"
+                          hint="Initial instructions that define the agent's behavior and personality"
+                        />
+                        <MarkdownInput
+                          rows={3}
+                          placeholder="You are a helpful assistant..."
+                          value={agentSystemPrompt}
+                          onChange={(e) => onConfigChange?.({ systemPrompt: e.target.value })}
+                          size="sm"
+                        />
+                      </div>
+                    </div>
+                  </section>
+                  <section>
+                    <div className="flex items-center justify-between mb-4">
+                      <div>
+                        <h3 className="text-[var(--agyn-dark)] font-semibold">Finish Restriction</h3>
+                        <p className="text-xs text-[var(--agyn-gray)] mt-1">
+                          Do not allow to finish agent work without tool call
+                        </p>
+                      </div>
+                      <Toggle
+                        label=""
+                        description=""
+                        checked={restrictOutput}
+                        onCheckedChange={(checked) => onConfigChange?.({ restrictOutput: checked })}
                       />
                     </div>
+                    {restrictOutput && (
+                      <div className="space-y-4 pl-4 border-l-2 border-[var(--agyn-border-default)]">
+                        <div>
+                          <FieldLabel
+                            label="Restriction Message"
+                            hint="Message shown when the agent tries to finish without calling required tools"
+                          />
+                          <Textarea
+                            rows={2}
+                            placeholder="You must use at least one tool before finishing."
+                            value={restrictionMessage}
+                            onChange={(e) => onConfigChange?.({ restrictionMessage: e.target.value })}
+                          />
+                        </div>
+                        <div>
+                          <FieldLabel
+                            label="Max Injections"
+                            hint="Maximum number of times the restriction message can be injected"
+                          />
+                          <Input
+                            type="number"
+                            min="0"
+                            size="sm"
+                            value={restrictionMaxInjections !== undefined ? String(restrictionMaxInjections) : ''}
+                            onChange={(e) =>
+                              onConfigChange?.({ restrictionMaxInjections: toNumberOrUndefined(e.target.value) })
+                            }
+                          />
+                        </div>
+                      </div>
+                    )}
+                  </section>
+                  <section>
+                    <h3 className="text-[var(--agyn-dark)] mb-4 font-semibold">Messages Queue</h3>
+                    <div className="space-y-4">
+                      <div>
+                        <FieldLabel
+                          label="Debounce (ms)"
+                          hint="Wait time in milliseconds before processing new messages"
+                        />
+                        <Input
+                          type="number"
+                          placeholder="1000"
+                          min="0"
+                          step="100"
+                          size="sm"
+                          value={queueDebounceValue}
+                          onChange={(e) =>
+                            onConfigChange?.(
+                              applyQueueUpdate(config, { debounceMs: toNumberOrUndefined(e.target.value) }),
+                            )
+                          }
+                        />
+                      </div>
+                      <div>
+                        <FieldLabel
+                          label="When Busy"
+                          hint="Behavior when a new message arrives while agent is processing"
+                        />
+                        <Dropdown
+                          options={QUEUE_WHEN_BUSY_OPTIONS}
+                          value={queueWhenBusyValue}
+                          onValueChange={(value) =>
+                            onConfigChange?.(
+                              applyQueueUpdate(config, { whenBusy: value as AgentQueueConfig['whenBusy'] }),
+                            )
+                          }
+                          size="sm"
+                        />
+                      </div>
+                      <div>
+                        <FieldLabel
+                          label="Process Buffer"
+                          hint="How to process multiple queued messages"
+                        />
+                        <Dropdown
+                          options={QUEUE_PROCESS_BUFFER_OPTIONS}
+                          value={queueProcessBufferValue}
+                          onValueChange={(value) =>
+                            onConfigChange?.(
+                              applyQueueUpdate(config, { processBuffer: value as AgentQueueConfig['processBuffer'] }),
+                            )
+                          }
+                          size="sm"
+                        />
+                      </div>
+                    </div>
+                  </section>
+                  <section>
+                    <h3 className="text-[var(--agyn-dark)] mb-4 font-semibold">Summarization</h3>
+                    <div className="space-y-4">
+                      <div>
+                        <FieldLabel
+                          label="Keep Tokens"
+                          hint="Number of tokens to preserve from the start of the conversation"
+                        />
+                        <Input
+                          type="number"
+                          placeholder="1000"
+                          min="0"
+                          step="100"
+                          size="sm"
+                          value={summarizationKeepValue}
+                          onChange={(e) =>
+                            onConfigChange?.(
+                              applySummarizationUpdate(config, { keepTokens: toNumberOrUndefined(e.target.value) }),
+                            )
+                          }
+                        />
+                      </div>
+                      <div>
+                        <FieldLabel
+                          label="Max Tokens"
+                          hint="Maximum tokens before triggering summarization"
+                        />
+                        <Input
+                          type="number"
+                          placeholder="4000"
+                          min="0"
+                          step="100"
+                          size="sm"
+                          value={summarizationMaxValue}
+                          onChange={(e) =>
+                            onConfigChange?.(
+                              applySummarizationUpdate(config, { maxTokens: toNumberOrUndefined(e.target.value) }),
+                            )
+                          }
+                        />
+                      </div>
+                      <div>
+                        <FieldLabel
+                          label="Prompt"
+                          hint="Instructions for how to summarize the conversation"
+                        />
+                        <Textarea
+                          rows={2}
+                          placeholder="Summarize the conversation above..."
+                          value={summarizationPromptValue}
+                          onChange={(e) =>
+                            onConfigChange?.(applySummarizationUpdate(config, { prompt: e.target.value }))
+                          }
+                        />
+                      </div>
+                    </div>
+                  </section>
+                </>
+              )}
+
+              {nodeKind === 'Trigger' && (
+                <section>
+                  <h3 className="text-[var(--agyn-dark)] mb-4 font-semibold">Slack Configuration</h3>
+                  <div className="space-y-4">
                     <div>
                       <FieldLabel
-                        label="Max Injections"
-                        hint="Maximum number of times the restriction message can be injected"
+                        label="App Token"
+                        hint="Slack App-Level token for connecting to the Events API"
+                        required
                       />
-                      <Input
-                        type="number"
-                        min="0"
-                        size="sm"
-                        value={restrictionMaxInjections !== undefined ? String(restrictionMaxInjections) : ''}
+                      <ReferenceInput
+                        value={slackAppReference.value}
                         onChange={(e) =>
-                          onConfigChange?.({ restrictionMaxInjections: toNumberOrUndefined(e.target.value) })
+                          onConfigChange?.({ app_token: writeReferenceValue(slackAppReference.raw, e.target.value) })
                         }
+                        sourceType="secret"
+                        secretProvider={secretSuggestionProvider}
+                        providerDebounceMs={providerDebounceMs}
+                        placeholder="Select or enter app token..."
+                        size="sm"
+                      />
+                    </div>
+                    <div>
+                      <FieldLabel
+                        label="Bot Token"
+                        hint="Slack Bot User OAuth token for authentication"
+                        required
+                      />
+                      <ReferenceInput
+                        value={slackBotReference.value}
+                        onChange={(e) =>
+                          onConfigChange?.({ bot_token: writeReferenceValue(slackBotReference.raw, e.target.value) })
+                        }
+                        sourceType="secret"
+                        secretProvider={secretSuggestionProvider}
+                        providerDebounceMs={providerDebounceMs}
+                        placeholder="Select or enter bot token..."
+                        size="sm"
                       />
                     </div>
                   </div>
-                )}
-              </section>
-              <section>
-                <h3 className="text-[var(--agyn-dark)] mb-4 font-semibold">Messages Queue</h3>
-                <div className="space-y-4">
-                  <div>
-                    <FieldLabel
-                      label="Debounce (ms)"
-                      hint="Wait time in milliseconds before processing new messages"
-                    />
-                    <Input
-                      type="number"
-                      placeholder="1000"
-                      min="0"
-                      step="100"
-                      size="sm"
-                      value={queueDebounceValue}
-                      onChange={(e) =>
-                        onConfigChange?.(applyQueueUpdate(config, { debounceMs: toNumberOrUndefined(e.target.value) }))
-                      }
-                    />
-                  </div>
-                  <div>
-                    <FieldLabel
-                      label="When Busy"
-                      hint="Behavior when a new message arrives while agent is processing"
-                    />
-                    <Dropdown
-                      options={QUEUE_WHEN_BUSY_OPTIONS}
-                      value={queueWhenBusyValue}
-                      onValueChange={(value) =>
-                        onConfigChange?.(applyQueueUpdate(config, { whenBusy: value as AgentQueueConfig['whenBusy'] }))
-                      }
-                      size="sm"
-                    />
-                  </div>
-                  <div>
-                    <FieldLabel
-                      label="Process Buffer"
-                      hint="How to process multiple queued messages"
-                    />
-                    <Dropdown
-                      options={QUEUE_PROCESS_BUFFER_OPTIONS}
-                      value={queueProcessBufferValue}
-                      onValueChange={(value) =>
-                        onConfigChange?.(
-                          applyQueueUpdate(config, { processBuffer: value as AgentQueueConfig['processBuffer'] }),
-                        )
-                      }
-                      size="sm"
-                    />
-                  </div>
-                </div>
-              </section>
-              <section>
-                <h3 className="text-[var(--agyn-dark)] mb-4 font-semibold">Summarization</h3>
-                <div className="space-y-4">
-                  <div>
-                    <FieldLabel
-                      label="Keep Tokens"
-                      hint="Number of tokens to preserve from the start of the conversation"
-                    />
-                    <Input
-                      type="number"
-                      placeholder="1000"
-                      min="0"
-                      step="100"
-                      size="sm"
-                      value={summarizationKeepValue}
-                      onChange={(e) =>
-                        onConfigChange?.(
-                          applySummarizationUpdate(config, { keepTokens: toNumberOrUndefined(e.target.value) }),
-                        )
-                      }
-                    />
-                  </div>
-                  <div>
-                    <FieldLabel
-                      label="Max Tokens"
-                      hint="Maximum tokens before triggering summarization"
-                    />
-                    <Input
-                      type="number"
-                      placeholder="4000"
-                      min="0"
-                      step="100"
-                      size="sm"
-                      value={summarizationMaxValue}
-                      onChange={(e) =>
-                        onConfigChange?.(
-                          applySummarizationUpdate(config, { maxTokens: toNumberOrUndefined(e.target.value) }),
-                        )
-                      }
-                    />
-                  </div>
-                  <div>
-                    <FieldLabel
-                      label="Prompt"
-                      hint="Instructions for how to summarize the conversation"
-                    />
-                    <Textarea
-                      rows={2}
-                      placeholder="Summarize the conversation above..."
-                      value={summarizationPromptValue}
-                      onChange={(e) => onConfigChange?.(applySummarizationUpdate(config, { prompt: e.target.value }))}
-                    />
-                  </div>
-                </div>
-              </section>
+                </section>
+              )}
             </>
           )}
 
-          {nodeKind === 'Trigger' && (
-            <section>
-              <h3 className="text-[var(--agyn-dark)] mb-4 font-semibold">Slack Configuration</h3>
-              <div className="space-y-4">
-                <div>
-                  <FieldLabel
-                    label="App Token"
-                    hint="Slack App-Level token for connecting to the Events API"
-                    required
-                  />
-                  <ReferenceInput
-                    value={slackAppReference.value}
-                    onChange={(e) =>
-                      onConfigChange?.({ app_token: writeReferenceValue(slackAppReference.raw, e.target.value) })
-                    }
-                    sourceType="secret"
-                    secretProvider={secretSuggestionProvider}
-                    providerDebounceMs={providerDebounceMs}
-                    placeholder="Select or enter app token..."
-                    size="sm"
-                  />
-                </div>
-                <div>
-                  <FieldLabel
-                    label="Bot Token"
-                    hint="Slack Bot User OAuth token for authentication"
-                    required
-                  />
-                  <ReferenceInput
-                    value={slackBotReference.value}
-                    onChange={(e) =>
-                      onConfigChange?.({ bot_token: writeReferenceValue(slackBotReference.raw, e.target.value) })
-                    }
-                    sourceType="secret"
-                    secretProvider={secretSuggestionProvider}
-                    providerDebounceMs={providerDebounceMs}
-                    placeholder="Select or enter bot token..."
-                    size="sm"
-                  />
-                </div>
-              </div>
-            </section>
-          )}
-
-          {nodeKind === 'MCP' && (
+          {nodeKind === 'MCP' && !effectiveCustomConfigView && (
             <>
               <section>
                 <div className="space-y-4">
@@ -1027,7 +1105,7 @@ function NodePropertiesSidebarComponent({
             </>
           )}
 
-          {nodeKind === 'Workspace' && (
+          {nodeKind === 'Workspace' && !effectiveCustomConfigView && (
             <>
               <section>
                 <h3 className="text-[var(--agyn-dark)] mb-4 font-semibold">Container</h3>
@@ -1192,15 +1270,43 @@ function NodePropertiesSidebarComponent({
               </section>
               <section>
                 <h3 className="text-[var(--agyn-dark)] mb-4 font-semibold">Limits</h3>
-                <div>
-                  <FieldLabel label="TTL" hint="Time-to-live for the workspace in seconds" />
-                  <Input
-                    type="number"
-                    placeholder="3600"
-                    value={workspaceTtlSeconds !== undefined ? String(workspaceTtlSeconds) : ''}
-                    onChange={(e) => onConfigChange?.({ ttlSeconds: toNumberOrUndefined(e.target.value) })}
-                    size="sm"
-                  />
+                <div className="space-y-4">
+                  <div>
+                    <FieldLabel label="TTL" hint="Time-to-live for the workspace in seconds" />
+                    <Input
+                      type="number"
+                      placeholder="3600"
+                      value={workspaceTtlSeconds !== undefined ? String(workspaceTtlSeconds) : ''}
+                      onChange={(e) => onConfigChange?.({ ttlSeconds: toNumberOrUndefined(e.target.value) })}
+                      size="sm"
+                    />
+                  </div>
+                  <div>
+                    <FieldLabel label="CPU Limit" hint="Optional CPU limit (e.g., 500m, 0.5)" />
+                    <Input
+                      placeholder="500m"
+                      value={workspaceCpuLimitValue}
+                      onChange={(e) => {
+                        const raw = e.target.value;
+                        const trimmed = raw.trim();
+                        onConfigChange?.({ cpu_limit: trimmed.length > 0 ? trimmed : undefined });
+                      }}
+                      size="sm"
+                    />
+                  </div>
+                  <div>
+                    <FieldLabel label="Memory Limit" hint="Optional memory limit (e.g., 512Mi, 1Gi)" />
+                    <Input
+                      placeholder="1Gi"
+                      value={workspaceMemoryLimitValue}
+                      onChange={(e) => {
+                        const raw = e.target.value;
+                        const trimmed = raw.trim();
+                        onConfigChange?.({ memory_limit: trimmed.length > 0 ? trimmed : undefined });
+                      }}
+                      size="sm"
+                    />
+                  </div>
                 </div>
               </section>
               <section>

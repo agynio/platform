@@ -1,11 +1,12 @@
 import React from 'react';
 import { render, fireEvent, screen } from '@testing-library/react';
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, afterEach } from 'vitest';
 
 import NodePropertiesSidebar, {
   type NodeConfig,
   type NodeState,
 } from '../NodePropertiesSidebar';
+import { registerConfigView, clearRegistry } from '../configViews/registry';
 
 const baseConfig: NodeConfig = {
   kind: 'Agent',
@@ -17,6 +18,10 @@ const baseState: NodeState = {
 };
 
 describe('NodePropertiesSidebar', () => {
+  afterEach(() => {
+    clearRegistry();
+  });
+
   it('renders the node status badge using provided state', () => {
     render(<NodePropertiesSidebar config={baseConfig} state={baseState} />);
 
@@ -134,6 +139,8 @@ describe('NodePropertiesSidebar', () => {
           initialScript: '',
           enableDinD: false,
           ttlSeconds: 3600,
+          cpu_limit: '500m',
+          memory_limit: '1Gi',
           volumes: { enabled: true, mountPath: '/mnt/data' },
           nix: { packages: [{ name: 'nodejs', version: 'latest' }] },
           env: [],
@@ -171,5 +178,110 @@ describe('NodePropertiesSidebar', () => {
     });
 
     expect(handleConfigChange).toHaveBeenCalledWith({ ttlSeconds: 5400 });
+
+    handleConfigChange.mockClear();
+
+    fireEvent.change(screen.getByPlaceholderText('500m'), {
+      target: { value: '750m' },
+    });
+
+    expect(handleConfigChange).toHaveBeenCalledWith({ cpu_limit: '750m' });
+
+    handleConfigChange.mockClear();
+
+    fireEvent.change(screen.getByPlaceholderText('1Gi'), {
+      target: { value: '2Gi' },
+    });
+
+    expect(handleConfigChange).toHaveBeenCalledWith({ memory_limit: '2Gi' });
+
+    handleConfigChange.mockClear();
+
+    fireEvent.change(screen.getByPlaceholderText('500m'), {
+      target: { value: ' ' },
+    });
+
+    expect(handleConfigChange).toHaveBeenCalledWith({ cpu_limit: undefined });
+
+    handleConfigChange.mockClear();
+
+    fireEvent.change(screen.getByPlaceholderText('1Gi'), {
+      target: { value: '' },
+    });
+
+    expect(handleConfigChange).toHaveBeenCalledWith({ memory_limit: undefined });
+  });
+
+  it('delegates to a registered config view when templateName is provided', () => {
+    const handleConfigChange = vi.fn();
+    const registryView = vi.fn(({ onChange }) => (
+      <button
+        type="button"
+        data-testid="registry-view"
+        onClick={() => onChange({ title: 'Memory Updated', scope: 'shared' })}
+      >
+        Registry View
+      </button>
+    ));
+
+    registerConfigView({ template: 'memory', mode: 'static', component: registryView });
+
+    render(
+      <NodePropertiesSidebar
+        config={{ kind: 'Agent', title: 'Memory Node', scope: 'default' }}
+        state={baseState}
+        onConfigChange={handleConfigChange}
+        templateName="memory"
+        nodeId="memory-1"
+      />,
+    );
+
+    expect(screen.getByTestId('registry-view')).toBeInTheDocument();
+    expect(screen.queryByDisplayValue('Memory Node')).not.toBeInTheDocument();
+    expect(registryView).toHaveBeenCalledWith(
+      expect.objectContaining({
+        templateName: 'memory',
+        readOnly: false,
+        disabled: false,
+        value: expect.objectContaining({ title: 'Memory Node', scope: 'default' }),
+      }),
+      undefined,
+    );
+
+    fireEvent.click(screen.getByTestId('registry-view'));
+
+    expect(handleConfigChange).toHaveBeenCalledWith({ title: 'Memory Updated', scope: 'shared' });
+  });
+
+  it('renders a custom config view when provided', () => {
+    const handleConfigChange = vi.fn();
+    const customView = vi.fn(({ onChange }) => (
+      <button type="button" data-testid="custom-view" onClick={() => onChange({ title: 'Updated Title' })}>
+        Custom View
+      </button>
+    ));
+
+    render(
+      <NodePropertiesSidebar
+        config={{ kind: 'Workspace', title: 'Custom Node', scope: 'global' }}
+        state={baseState}
+        onConfigChange={handleConfigChange}
+        customConfigView={customView}
+      />,
+    );
+
+    expect(screen.getByTestId('custom-view')).toBeInTheDocument();
+    expect(screen.queryByDisplayValue('Custom Node')).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByTestId('custom-view'));
+
+    expect(handleConfigChange).toHaveBeenCalledWith({ title: 'Updated Title' });
+    expect(customView).toHaveBeenCalledWith(
+      expect.objectContaining({
+        value: expect.objectContaining({ title: 'Custom Node', scope: 'global' }),
+        readOnly: false,
+        disabled: false,
+      }),
+    );
   });
 });

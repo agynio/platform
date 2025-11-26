@@ -37,7 +37,8 @@ async function renderGraphRoute() {
 
 describe('Agents graph routing', () => {
   it('renders the new graph layout for /agents/graph', async () => {
-    await renderGraphRoute();
+    const { findByTestId } = await renderGraphRoute();
+    await findByTestId('graph-container');
     await waitFor(() => expect((globalThis as { __graphMockHits?: number }).__graphMockHits ?? 0).toBeGreaterThan(0));
   });
 });
