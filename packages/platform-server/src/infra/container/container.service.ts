@@ -774,7 +774,7 @@ export class ContainerService {
 
   async removeVolume(volumeName: string, options?: { force?: boolean }): Promise<void> {
     const force = options?.force ?? false;
-    this.logger.info(`Removing volume name=${volumeName} force=${force}`);
+    this.logger.log(`Removing volume name=${volumeName} force=${force}`);
     const volume = this.docker.getVolume(volumeName);
     try {
       await volume.remove({ force });

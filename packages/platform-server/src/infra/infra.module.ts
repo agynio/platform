@@ -18,6 +18,7 @@ import { ContainerTerminalGateway } from './container/terminal.gateway';
 import { ContainerTerminalController } from './container/containerTerminal.controller';
 import { ContainerEventProcessor } from './container/containerEvent.processor';
 import { DockerWorkspaceEventsWatcher } from './container/containerEvent.watcher';
+import { LoggerService } from '../core/services/logger.service';
 
 @Module({
   imports: [CoreModule, VaultModule],
@@ -44,11 +45,11 @@ import { DockerWorkspaceEventsWatcher } from './container/containerEvent.watcher
     },
     {
       provide: ContainerService,
-      useFactory: (containerRegistry: ContainerRegistry) => {
-        const svc = new ContainerService(containerRegistry);
+      useFactory: (logger: LoggerService, containerRegistry: ContainerRegistry) => {
+        const svc = new ContainerService(logger, containerRegistry);
         return svc;
       },
-      inject: [ContainerRegistry],
+      inject: [LoggerService, ContainerRegistry],
     },
     TerminalSessionsService,
     ContainerTerminalGateway,

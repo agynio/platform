@@ -4,6 +4,7 @@ import { ExecTimeoutError } from '../../src/utils/execTimeout';
 import { ContainerHandle } from '../../src/infra/container/container.handle';
 import { ContainerService } from '../../src/infra/container/container.service';
 import type { ContainerRegistry } from '../../src/infra/container/container.registry';
+import { LoggerService } from '../../src/core/services/logger.service.js';
 import { RunEventsService } from '../../src/events/run-events.service';
 import { EventsBusService } from '../../src/events/events-bus.service';
 import { PrismaService } from '../../src/core/services/prisma.service';
@@ -22,7 +23,10 @@ describe('ShellTool timeout tail inclusion and ANSI stripping', () => {
     class FakeContainer extends ContainerHandle { override async exec(): Promise<never> { throw err; } }
     class FakeProvider {
       async provide(): Promise<ContainerHandle> {
-        return new FakeContainer(new ContainerService(undefined as unknown as ContainerRegistry), 'fake');
+        return new FakeContainer(
+          new ContainerService(new LoggerService(), undefined as unknown as ContainerRegistry),
+          'fake',
+        );
       }
     }
     const provider = new FakeProvider();

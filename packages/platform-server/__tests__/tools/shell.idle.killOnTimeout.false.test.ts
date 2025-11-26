@@ -1,11 +1,12 @@
 import { describe, it, expect, vi } from 'vitest';
 import { ContainerService } from '../../src/infra/container/container.service';
 import type { ContainerRegistry } from '../../src/infra/container/container.registry';
+import { LoggerService } from '../../src/core/services/logger.service.js';
 import { ExecIdleTimeoutError } from '../../src/utils/execTimeout';
 
 describe('ContainerService idle timeout with killOnTimeout=false', () => {
   it('does not stop container on idle timeout when killOnTimeout=false', async () => {
-    const svc = new ContainerService(undefined as unknown as ContainerRegistry);
+    const svc = new ContainerService(new LoggerService(), undefined as unknown as ContainerRegistry);
     const docker: any = {
       getContainer: vi.fn((id: string) => ({
         inspect: vi.fn(async () => ({ Id: id, State: { Running: true } })),

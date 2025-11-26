@@ -1,8 +1,10 @@
 import { describe, it, expect, vi } from 'vitest';
 import { ContainerService } from '../src/infra/container/container.service';
 import type { ContainerRegistry } from '../src/infra/container/container.registry';
+import { LoggerService } from '../src/core/services/logger.service.js';
 
-const createService = (): ContainerService => new ContainerService(undefined as unknown as ContainerRegistry);
+const createService = (): ContainerService =>
+  new ContainerService(new LoggerService(), undefined as unknown as ContainerRegistry);
 import { PassThrough } from 'node:stream';
 
 function makeFrame(type: number, payload: Buffer) {
