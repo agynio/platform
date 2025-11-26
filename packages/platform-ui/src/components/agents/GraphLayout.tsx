@@ -9,6 +9,7 @@ import NodePropertiesSidebar, { type NodeConfig as SidebarNodeConfig } from '../
 import { useGraphData } from '@/features/graph/hooks/useGraphData';
 import { useGraphSocket } from '@/features/graph/hooks/useGraphSocket';
 import { useNodeStatus } from '@/features/graph/hooks/useNodeStatus';
+import { useNodeAction } from '@/features/graph/hooks/useNodeAction';
 import { useMcpNodeState } from '@/lib/graph/hooks';
 import type { GraphNodeConfig, GraphNodeStatus, GraphPersistedEdge } from '@/features/graph/types';
 import type { NodeStatus as ApiNodeStatus } from '@/api/types/graph';
@@ -34,6 +35,7 @@ const nodeKindToColor: Record<GraphNodeConfig['kind'], string> = {
 
 const defaultSourceColor = 'var(--agyn-blue)';
 const defaultTargetColor = 'var(--agyn-purple)';
+const ACTION_GUARD_INTERVAL_MS = 600;
 
 export interface GraphLayoutServices {
   searchNixPackages: (query: string) => Promise<Array<{ name: string }>>;
@@ -380,6 +382,7 @@ export function GraphLayout({ services }: GraphLayoutProps) {
   const selectedNodeIdRef = useRef<string | null>(null);
   const flowNodesRef = useRef<FlowNode[]>([]);
   const flowEdgesRef = useRef<FlowEdge[]>([]);
+  const lastActionAtRef = useRef<number>(0);
 
   const edgeTypes = useMemo<EdgeTypes>(() => ({ gradient: GradientEdge }), []);
   const fallbackEnabledTools = useMemo<string[]>(() => [], []);
@@ -527,6 +530,10 @@ export function GraphLayout({ services }: GraphLayoutProps) {
   );
 
   const statusQuery = useNodeStatus(selectedNodeId ?? '');
+  const actionNodeId = selectedNode?.id ?? null;
+  const nodeAction = useNodeAction(actionNodeId);
+  const { mutateAsync: runNodeAction, isPending: isActionPending } = nodeAction;
+  const { refetch: refetchStatus } = statusQuery;
   const mcpNodeId = selectedNode?.kind === 'MCP' ? selectedNode.id : null;
   const {
     tools: mcpTools,
@@ -637,6 +644,13 @@ export function GraphLayout({ services }: GraphLayoutProps) {
     return 'not_ready';
   }, [selectedNode?.status, statusQuery.data]);
 
+  const canProvision =
+    sidebarStatus === 'not_ready' ||
+    sidebarStatus === 'provisioning_error' ||
+    sidebarStatus === 'deprovisioning_error';
+
+  const canDeprovision = sidebarStatus === 'ready' || sidebarStatus === 'provisioning';
+
   const sidebarConfig = useMemo(() => {
     if (!selectedNode) {
       return null;
@@ -677,6 +691,32 @@ export function GraphLayout({ services }: GraphLayoutProps) {
     [],
   );
 
+  const handleNodeAction = useCallback(
+    (action: 'provision' | 'deprovision') => {
+      if (!actionNodeId) return;
+      if (isActionPending) return;
+      const now = Date.now();
+      if (now - lastActionAtRef.current < ACTION_GUARD_INTERVAL_MS) {
+        return;
+      }
+      lastActionAtRef.current = now;
+      void runNodeAction(action).finally(() => {
+        if (actionNodeId) {
+          void refetchStatus();
+        }
+      });
+    },
+    [actionNodeId, isActionPending, refetchStatus, runNodeAction],
+  );
+
+  const handleProvision = useCallback(() => {
+    handleNodeAction('provision');
+  }, [handleNodeAction]);
+
+  const handleDeprovision = useCallback(() => {
+    handleNodeAction('deprovision');
+  }, [handleNodeAction]);
+
   if (loading && nodes.length === 0) {
     return (
       <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
@@ -704,6 +744,11 @@ export function GraphLayout({ services }: GraphLayoutProps) {
           config={sidebarConfig}
           state={sidebarState}
           onConfigChange={handleConfigChange}
+          onProvision={handleProvision}
+          onDeprovision={handleDeprovision}
+          canProvision={canProvision}
+          canDeprovision={canDeprovision}
+          isActionPending={isActionPending}
           tools={mcpTools}
           enabledTools={mcpEnabledTools ?? fallbackEnabledTools}
           onToggleTool={handleToggleMcpTool}
