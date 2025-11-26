@@ -89,6 +89,27 @@ class ConvertTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, msg=result.stderr or result.stdout)
         self.assertFalse(path_exists(self.tmpdir / 'graph.meta.yaml'))
 
+    def test_backup_flag_creates_backups_and_is_idempotent(self) -> None:
+        self.build_sample_graph()
+        meta_json = (self.tmpdir / 'graph.meta.json').read_text(encoding='utf-8')
+        trigger_json = (self.tmpdir / 'nodes' / 'trigger.json').read_text(encoding='utf-8')
+
+        first = self.run_converter('--root', str(self.tmpdir), '--backup')
+        self.assertEqual(first.returncode, 0, msg=first.stderr or first.stdout)
+
+        meta_backup = self.tmpdir / 'graph.meta.json.bak'
+        trigger_backup = self.tmpdir / 'nodes' / 'trigger.json.bak'
+        self.assertTrue(path_exists(meta_backup))
+        self.assertTrue(path_exists(trigger_backup))
+        self.assertEqual(meta_backup.read_text(encoding='utf-8'), meta_json)
+        self.assertEqual(trigger_backup.read_text(encoding='utf-8'), trigger_json)
+
+        second = self.run_converter('--root', str(self.tmpdir), '--backup')
+        self.assertEqual(second.returncode, 0, msg=second.stderr or second.stdout)
+        self.assertIn('skip:', second.stdout)
+        self.assertEqual(meta_backup.read_text(encoding='utf-8'), meta_json)
+        self.assertEqual(trigger_backup.read_text(encoding='utf-8'), trigger_json)
+
 
 if __name__ == '__main__':  # pragma: no cover
     unittest.main()

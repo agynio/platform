@@ -8,6 +8,7 @@ export function stringifyYaml(input: unknown): string {
   const out = stringifyYamlImpl(input, {
     indent: 2,
     sortMapEntries: false,
+    lineWidth: 0,
   });
   return out.endsWith('\n') ? out : `${out}\n`;
 }
