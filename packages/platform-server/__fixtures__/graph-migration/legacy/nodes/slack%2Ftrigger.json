@@ -9,7 +9,7 @@
       },
       "app": {
         "source": "vault",
-        "value": "workspace/app-token"
+        "value": "secret/api-key"
       }
     },
     "channel": {

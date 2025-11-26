@@ -87,30 +87,18 @@ const transformValue = (input: unknown, ctx: TransformContext, pointer: Pointer)
         return { value: input, changed: false, conversions, errors };
       }
       const segments = raw.split('/').filter((segment) => segment.length > 0);
-      if (segments.length < 2) {
-        errors.push({ pointer: pointerToString(pointer), message: 'Legacy vault reference path must have at least key and one segment' });
+      if (segments.length < 3) {
+        errors.push({ pointer: pointerToString(pointer), message: 'Legacy vault reference must include mount, path, and key segments' });
         return { value: input, changed: false, conversions, errors };
       }
-      let mount: string;
-      let pathSegments: string[];
-      let key: string;
-      let usedDefaultMount = false;
 
-      if (segments.length === 2) {
-        mount = ctx.defaultMount;
-        pathSegments = [segments[0]];
-        key = segments[1];
-        usedDefaultMount = true;
-      } else {
-        mount = segments[0];
-        pathSegments = segments.slice(1, -1);
-        key = segments[segments.length - 1];
-      }
-
+      const [mount, ...rest] = segments;
+      const key = rest.pop();
       if (!key) {
         errors.push({ pointer: pointerToString(pointer), message: 'Legacy vault reference missing key segment' });
         return { value: input, changed: false, conversions, errors };
       }
+      const pathSegments = rest;
       if (pathSegments.length === 0) {
         errors.push({ pointer: pointerToString(pointer), message: 'Legacy vault reference missing path segment' });
         return { value: input, changed: false, conversions, errors };
@@ -128,7 +116,7 @@ const transformValue = (input: unknown, ctx: TransformContext, pointer: Pointer)
         return { value: input, changed: false, conversions, errors };
       }
 
-      conversions.push({ pointer: pointerToString(pointer), kind: 'vault', legacy: 'vault', usedDefaultMount });
+      conversions.push({ pointer: pointerToString(pointer), kind: 'vault', legacy: 'vault' });
       return { value: nextValue, changed: true, conversions, errors };
     }
 

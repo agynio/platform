@@ -56,10 +56,20 @@ describe('graph-ref-migrate integration', () => {
     const summary = await runMigration(options, createLogger());
 
     expect(summary.files.length).toBe(4);
-    const changed = summary.files.filter((file) => file.changed);
-    expect(changed.length).toBe(2);
-    expect(changed.every((file) => file.errors.length === 0)).toBe(true);
-    expect(changed.flatMap((file) => file.conversions).length).toBeGreaterThan(0);
+    const slackNode = summary.files.find((file) => file.path.endsWith('nodes/slack%2Ftrigger.json'));
+    expect(slackNode).toBeDefined();
+    expect(slackNode?.errors).toContainEqual({
+      pointer: '/config/auth/app',
+      message: 'Legacy vault reference must include mount, path, and key segments',
+    });
+    expect(slackNode?.errors).toContainEqual({ pointer: '/config/auth/app', message: 'Legacy reference remains after migration' });
+    expect(slackNode?.skipped).toBe(true);
+
+    const githubNode = summary.files.find((file) => file.path.endsWith('nodes/github%2Fclone.json'));
+    expect(githubNode).toBeDefined();
+    expect(githubNode?.errors).toEqual([]);
+    expect(githubNode?.changed).toBe(true);
+    expect(githubNode?.conversions.length).toBeGreaterThan(0);
 
     // Ensure files remain unmodified (legacy refs still present)
     const sample = await fs.readFile(path.join(cwd, 'nodes/slack%2Ftrigger.json'), 'utf8');
@@ -72,21 +82,35 @@ describe('graph-ref-migrate integration', () => {
     const cwd = await copyFixture('legacy');
     const writeSummary = await runMigration(createOptions({ cwd, mode: 'write', backup: true }), createLogger());
 
-    const changed = writeSummary.files.filter((file) => file.changed && !file.skipped);
-    expect(changed.length).toBe(2);
+    const slackNode = writeSummary.files.find((file) => file.path.endsWith('nodes/slack%2Ftrigger.json'));
+    expect(slackNode?.skipped).toBe(true);
+    expect(slackNode?.errors).toContainEqual({
+      pointer: '/config/auth/app',
+      message: 'Legacy vault reference must include mount, path, and key segments',
+    });
 
-    const nodePath = path.join(cwd, 'nodes/slack%2Ftrigger.json');
+    const githubNode = writeSummary.files.find((file) => file.path.endsWith('nodes/github%2Fclone.json'));
+    expect(githubNode?.skipped).not.toBe(true);
+    expect(githubNode?.errors).toEqual([]);
+    expect(githubNode?.changed).toBe(true);
+
+    const nodePath = path.join(cwd, 'nodes/github%2Fclone.json');
     const updated = JSON.parse(await fs.readFile(nodePath, 'utf8')) as Record<string, unknown>;
-    const auth = (updated.config as { auth: Record<string, unknown> }).auth as Record<string, unknown>;
-    expect(auth.bot).toEqual({ kind: 'vault', mount: 'secret', path: 'slack/apps', key: 'bot-token' });
-    expect(auth.app).toEqual({ kind: 'vault', mount: 'secret', path: 'workspace', key: 'app-token' });
+    const token = (updated.config as { token: Record<string, unknown> }).token as Record<string, unknown>;
+    expect(token).toEqual({ kind: 'vault', mount: 'workflows', path: 'github', key: 'token' });
 
     const dirEntries = await fs.readdir(path.join(cwd, 'nodes'));
     expect(dirEntries.filter((name) => name.includes('.backup-')).length).toBeGreaterThan(0);
+    expect(dirEntries.some((name) => name.startsWith('slack%2Ftrigger.json.backup-'))).toBe(false);
 
     const secondSummary = await runMigration(createOptions({ cwd, mode: 'dry-run', backup: false }), createLogger());
-    expect(secondSummary.files.every((file) => !file.changed)).toBe(true);
-    expect(secondSummary.files.flatMap((file) => file.errors)).toEqual([]);
+    const secondSlack = secondSummary.files.find((file) => file.path.endsWith('nodes/slack%2Ftrigger.json'));
+    expect(secondSlack?.skipped).toBe(true);
+    expect(secondSlack?.errors).toContainEqual({
+      pointer: '/config/auth/app',
+      message: 'Legacy vault reference must include mount, path, and key segments',
+    });
+    expect(secondSummary.files.filter((file) => file.errors.length === 0 && file.changed).length).toBe(0);
   });
 
   it('flags errors and skips writes when migration fails', async () => {

@@ -27,18 +27,18 @@ describe('migrateValue', () => {
     });
   });
 
-  it('uses default mount when legacy vault omits mount segment', () => {
-    const input = { token: { source: 'vault', value: 'workflows/token' } };
+  it('flags two-segment legacy vault references as invalid', () => {
+    const input = { token: { source: 'vault', value: 'secret/api-key' } };
 
     const result = migrate(input);
 
-    expect(result.errors).toEqual([]);
-    expect(result.conversions).toEqual([
-      { pointer: '/token', kind: 'vault', legacy: 'vault', usedDefaultMount: true },
-    ]);
-    expect(result.value).toEqual({
-      token: { kind: 'vault', mount: 'secret', path: 'workflows', key: 'token' },
+    expect(result.changed).toBe(false);
+    expect(result.conversions).toEqual([]);
+    expect(result.errors).toContainEqual({
+      pointer: '/token',
+      message: 'Legacy vault reference must include mount, path, and key segments',
     });
+    expect(result.errors).toContainEqual({ pointer: '/token', message: 'Legacy reference remains after migration' });
   });
 
   it('converts legacy env and static references and recurses through arrays', () => {
@@ -90,7 +90,7 @@ describe('migrateValue', () => {
     expect(result.conversions).toEqual([]);
     expect(result.errors).toContainEqual({
       pointer: '/secret',
-      message: 'Legacy vault reference path must have at least key and one segment',
+      message: 'Legacy vault reference must include mount, path, and key segments',
     });
     expect(result.errors).toContainEqual({ pointer: '/secret', message: 'Legacy reference remains after migration' });
   });
