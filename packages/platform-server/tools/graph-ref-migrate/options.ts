@@ -18,6 +18,7 @@ type RawOptionValues = {
   write?: boolean;
   backup?: boolean;
   'default-mount'?: string;
+  'known-mounts'?: string;
   'validate-schema'?: boolean;
   verbose?: boolean;
 };
@@ -81,6 +82,7 @@ export const parseCliOptions = (argv: readonly string[], cwd: string): Migration
       write: { type: 'boolean' },
       backup: { type: 'boolean' },
       'default-mount': { type: 'string' },
+      'known-mounts': { type: 'string' },
       'validate-schema': { type: 'boolean' },
       verbose: { type: 'boolean' },
     },
@@ -97,6 +99,15 @@ export const parseCliOptions = (argv: readonly string[], cwd: string): Migration
 
   const defaultMount = (values['default-mount'] ?? 'secret').trim();
   if (!defaultMount) throw new CliError('--default-mount cannot be empty');
+
+  const knownMountsInput = values['known-mounts'] ?? 'secret';
+  const knownMounts = knownMountsInput
+    .split(',')
+    .map((mount) => mount.trim())
+    .filter((mount) => mount.length > 0);
+  if (knownMounts.length === 0) throw new CliError('--known-mounts must include at least one mount');
+
+  const dedupedKnownMounts = Array.from(new Set(knownMounts));
 
   const mode = resolveMode(values);
 
@@ -116,6 +127,7 @@ export const parseCliOptions = (argv: readonly string[], cwd: string): Migration
     mode,
     backup,
     defaultMount,
+    knownMounts: dedupedKnownMounts,
     validateSchema,
     verbose,
     cwd,

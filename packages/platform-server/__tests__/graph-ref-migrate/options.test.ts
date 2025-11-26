@@ -13,6 +13,7 @@ describe('parseCliOptions', () => {
     expect(options.mode).toBe('dry-run');
     expect(options.backup).toBe(true);
     expect(options.defaultMount).toBe('secret');
+    expect(options.knownMounts).toEqual(['secret']);
     expect(options.validateSchema).toBe(true);
     expect(options.verbose).toBe(false);
     expect(options.includes).toEqual([]);
@@ -35,6 +36,8 @@ describe('parseCliOptions', () => {
         '--no-backup',
         '--default-mount',
         'kv',
+        '--known-mounts',
+        'secret, kv ,internal,secret',
         '--no-validate-schema',
         '--verbose',
       ],
@@ -44,6 +47,7 @@ describe('parseCliOptions', () => {
     expect(options.mode).toBe('write');
     expect(options.backup).toBe(false);
     expect(options.defaultMount).toBe('kv');
+    expect(options.knownMounts).toEqual(['secret', 'kv', 'internal']);
     expect(options.validateSchema).toBe(false);
     expect(options.verbose).toBe(true);
     expect(options.includes).toEqual(['nodes/**/*.json', 'edges/**/*.json']);

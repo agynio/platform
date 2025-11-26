@@ -20,7 +20,8 @@ Run with `--write` to persist changes. Dry-run is the default when neither
 | `--exclude <glob>` | Optional glob patterns to skip (repeatable). |
 | `--dry-run` / `--write` | Preview vs. persist (mutually exclusive). |
 | `--backup` / `--no-backup` | Create timestamped `.backup-…` copies before writes (default `true`). |
-| `--default-mount <name>` | Canonical vault mount name (default `secret`). |
+| `--default-mount <name>` | Canonical vault mount name when legacy refs omit it (default `secret`). |
+| `--known-mounts <list>` | Comma-separated canonical mounts to treat as explicit (default `secret`). |
 | `--validate-schema` / `--no-validate-schema` | Enable canonical ref + node sanity checks (default `true`). |
 | `--verbose` | Emit per-reference conversion details. |
 
@@ -52,6 +53,9 @@ pnpm --filter @agyn/platform-server exec graph-ref-migrate \
 If a file cannot be migrated (e.g., invalid legacy path), the tool records the
 error, leaves the original file untouched, and exits with a non-zero status.
 
-> Legacy vault references must contain at least three path segments (`mount/path/key`).
-> Two-segment strings such as `secret/api-key` are flagged as errors and left
-> unchanged so they can be reviewed manually.
+> Legacy vault references are parsed according to the following rules:
+> - Values with three or more segments map to `mount/path/key` directly.
+> - Two-segment values use the configured default mount **unless** the first
+>   segment is in `--known-mounts`, in which case they are flagged as errors
+>   (to avoid misinterpreting `mount/key` pairs without a path).
+> - Strings starting with `/` or containing fewer than two segments are invalid.

@@ -5,7 +5,7 @@
     "auth": {
       "bot": {
         "source": "vault",
-        "value": "secret/slack/apps/bot-token"
+        "value": "workspace/app-token"
       },
       "app": {
         "source": "vault",

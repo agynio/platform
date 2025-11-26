@@ -2,7 +2,18 @@ import { describe, expect, it } from 'vitest';
 
 import { migrateValue } from '../../tools/graph-ref-migrate/transform';
 
-const migrate = (value: unknown) => migrateValue(value, { defaultMount: 'secret' }, { validate: true });
+const migrate = (
+  value: unknown,
+  options?: { defaultMount?: string; knownMounts?: string[]; validate?: boolean },
+) =>
+  migrateValue(
+    value,
+    {
+      defaultMount: options?.defaultMount ?? 'secret',
+      knownMounts: new Set(options?.knownMounts ?? ['secret']),
+    },
+    { validate: options?.validate ?? true },
+  );
 
 describe('migrateValue', () => {
   it('converts legacy vault references with explicit mount', () => {
@@ -27,7 +38,26 @@ describe('migrateValue', () => {
     });
   });
 
-  it('flags two-segment legacy vault references as invalid', () => {
+  it('converts two-segment legacy vault references using default mount when first segment is unknown', () => {
+    const input = { token: { source: 'vault', value: 'workspace/app-token' } };
+
+    const result = migrate(input);
+
+    expect(result.errors).toEqual([]);
+    expect(result.conversions).toEqual([
+      {
+        pointer: '/token',
+        kind: 'vault',
+        legacy: 'vault',
+        usedDefaultMount: true,
+      },
+    ]);
+    expect(result.value).toEqual({
+      token: { kind: 'vault', mount: 'secret', path: 'workspace', key: 'app-token' },
+    });
+  });
+
+  it('flags two-segment legacy vault references as invalid when first segment matches known mount', () => {
     const input = { token: { source: 'vault', value: 'secret/api-key' } };
 
     const result = migrate(input);
@@ -36,7 +66,21 @@ describe('migrateValue', () => {
     expect(result.conversions).toEqual([]);
     expect(result.errors).toContainEqual({
       pointer: '/token',
-      message: 'Legacy vault reference must include mount, path, and key segments',
+      message: 'Legacy vault reference missing path segment between mount and key',
+    });
+    expect(result.errors).toContainEqual({ pointer: '/token', message: 'Legacy reference remains after migration' });
+  });
+
+  it('honors custom known mounts when evaluating two-segment legacy vault references', () => {
+    const input = { token: { source: 'vault', value: 'internal/api-key' } };
+
+    const result = migrate(input, { knownMounts: ['secret', 'internal'] });
+
+    expect(result.changed).toBe(false);
+    expect(result.conversions).toEqual([]);
+    expect(result.errors).toContainEqual({
+      pointer: '/token',
+      message: 'Legacy vault reference missing path segment between mount and key',
     });
     expect(result.errors).toContainEqual({ pointer: '/token', message: 'Legacy reference remains after migration' });
   });

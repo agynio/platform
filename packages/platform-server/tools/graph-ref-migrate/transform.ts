@@ -3,6 +3,7 @@ import type { ConversionRecord, MigrationError, TransformOutcome } from './types
 
 type TransformContext = {
   defaultMount: string;
+  knownMounts: ReadonlySet<string>;
 };
 
 type Pointer = readonly (string | number)[];
@@ -58,6 +59,79 @@ const isLegacyStaticRef = (value: unknown): value is LegacyStaticRef =>
 
 const joinPathSegments = (segments: string[]): string => segments.join('/');
 
+const transformLegacyVaultRef = (input: LegacyVaultRef, ctx: TransformContext, pointer: Pointer): TransformOutcome => {
+  const pointerStr = pointerToString(pointer);
+  const conversions: ConversionRecord[] = [];
+  const errors: MigrationError[] = [];
+
+  const raw = input.value.trim();
+  if (!raw) {
+    errors.push({ pointer: pointerStr, message: 'Legacy vault reference is empty' });
+    return { value: input, changed: false, conversions, errors };
+  }
+
+  if (raw.startsWith('/')) {
+    errors.push({ pointer: pointerStr, message: 'Legacy vault reference cannot start with "/"' });
+    return { value: input, changed: false, conversions, errors };
+  }
+
+  const segments = raw.split('/').filter((segment) => segment.length > 0);
+  if (segments.length < 2) {
+    errors.push({ pointer: pointerStr, message: 'Legacy vault reference must include mount, path, and key segments' });
+    return { value: input, changed: false, conversions, errors };
+  }
+
+  let mount: string;
+  let pathSegments: string[];
+  let key: string | undefined;
+  let usedDefaultMount = false;
+
+  if (segments.length === 2) {
+    const [first, second] = segments;
+    if (ctx.knownMounts.has(first)) {
+      errors.push({ pointer: pointerStr, message: 'Legacy vault reference missing path segment between mount and key' });
+      return { value: input, changed: false, conversions, errors };
+    }
+    mount = ctx.defaultMount;
+    pathSegments = [first];
+    key = second;
+    usedDefaultMount = true;
+  } else {
+    mount = segments[0];
+    key = segments[segments.length - 1];
+    pathSegments = segments.slice(1, -1);
+  }
+
+  if (!key) {
+    errors.push({ pointer: pointerStr, message: 'Legacy vault reference missing key segment' });
+    return { value: input, changed: false, conversions, errors };
+  }
+  if (pathSegments.length === 0) {
+    errors.push({ pointer: pointerStr, message: 'Legacy vault reference missing path segment' });
+    return { value: input, changed: false, conversions, errors };
+  }
+
+  const nextValue = {
+    kind: 'vault' as const,
+    mount,
+    path: joinPathSegments(pathSegments),
+    key,
+  };
+
+  if (!SecretReferenceSchema.safeParse(nextValue).success) {
+    errors.push({ pointer: pointerStr, message: 'Canonical vault reference validation failed' });
+    return { value: input, changed: false, conversions, errors };
+  }
+
+  conversions.push({
+    pointer: pointerStr,
+    kind: 'vault',
+    legacy: 'vault',
+    ...(usedDefaultMount ? { usedDefaultMount: true } : {}),
+  });
+  return { value: nextValue, changed: true, conversions, errors };
+};
+
 const transformValue = (input: unknown, ctx: TransformContext, pointer: Pointer): TransformOutcome => {
   const conversions: ConversionRecord[] = [];
   const errors: MigrationError[] = [];
@@ -80,45 +154,7 @@ const transformValue = (input: unknown, ctx: TransformContext, pointer: Pointer)
       return { value: input, changed: false, conversions, errors };
     }
 
-    if (isLegacyVaultRef(input)) {
-      const raw = input.value.trim();
-      if (!raw) {
-        errors.push({ pointer: pointerToString(pointer), message: 'Legacy vault reference is empty' });
-        return { value: input, changed: false, conversions, errors };
-      }
-      const segments = raw.split('/').filter((segment) => segment.length > 0);
-      if (segments.length < 3) {
-        errors.push({ pointer: pointerToString(pointer), message: 'Legacy vault reference must include mount, path, and key segments' });
-        return { value: input, changed: false, conversions, errors };
-      }
-
-      const [mount, ...rest] = segments;
-      const key = rest.pop();
-      if (!key) {
-        errors.push({ pointer: pointerToString(pointer), message: 'Legacy vault reference missing key segment' });
-        return { value: input, changed: false, conversions, errors };
-      }
-      const pathSegments = rest;
-      if (pathSegments.length === 0) {
-        errors.push({ pointer: pointerToString(pointer), message: 'Legacy vault reference missing path segment' });
-        return { value: input, changed: false, conversions, errors };
-      }
-
-      const nextValue = {
-        kind: 'vault' as const,
-        mount,
-        path: joinPathSegments(pathSegments),
-        key,
-      };
-
-      if (!SecretReferenceSchema.safeParse(nextValue).success) {
-        errors.push({ pointer: pointerToString(pointer), message: 'Canonical vault reference validation failed' });
-        return { value: input, changed: false, conversions, errors };
-      }
-
-      conversions.push({ pointer: pointerToString(pointer), kind: 'vault', legacy: 'vault' });
-      return { value: nextValue, changed: true, conversions, errors };
-    }
+    if (isLegacyVaultRef(input)) return transformLegacyVaultRef(input, ctx, pointer);
 
     if (isLegacyEnvRef(input)) {
       const envVar = input.envVar.trim();

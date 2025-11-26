@@ -7,6 +7,7 @@ export type MigrationOptions = {
   mode: MigrationMode;
   backup: boolean;
   defaultMount: string;
+  knownMounts: string[];
   validateSchema: boolean;
   verbose: boolean;
   cwd: string;

@@ -124,6 +124,7 @@ export const runMigration = async (options: MigrationOptions, logger: Logger): P
 
   const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
   const results: FileOutcome[] = [];
+  const knownMounts = new Set(options.knownMounts);
 
   for (const filePath of files) {
     const relativePath = path.relative(options.cwd, filePath);
@@ -152,7 +153,11 @@ export const runMigration = async (options: MigrationOptions, logger: Logger): P
       continue;
     }
 
-    const migrated = migrateValue(parsed, { defaultMount: options.defaultMount }, { validate: options.validateSchema });
+    const migrated = migrateValue(
+      parsed,
+      { defaultMount: options.defaultMount, knownMounts },
+      { validate: options.validateSchema },
+    );
     outcome.changed = migrated.changed;
     outcome.conversions = migrated.conversions;
     outcome.errors.push(...migrated.errors);

@@ -35,6 +35,7 @@ const createOptions = (overrides: Partial<MigrationOptions> & { cwd: string }): 
   mode: 'dry-run',
   backup: true,
   defaultMount: 'secret',
+  knownMounts: ['secret'],
   validateSchema: true,
   verbose: false,
   cwd: overrides.cwd,
@@ -58,9 +59,16 @@ describe('graph-ref-migrate integration', () => {
     expect(summary.files.length).toBe(4);
     const slackNode = summary.files.find((file) => file.path.endsWith('nodes/slack%2Ftrigger.json'));
     expect(slackNode).toBeDefined();
+    expect(slackNode?.changed).toBe(true);
+    expect(slackNode?.conversions).toContainEqual({
+      pointer: '/config/auth/bot',
+      kind: 'vault',
+      legacy: 'vault',
+      usedDefaultMount: true,
+    });
     expect(slackNode?.errors).toContainEqual({
       pointer: '/config/auth/app',
-      message: 'Legacy vault reference must include mount, path, and key segments',
+      message: 'Legacy vault reference missing path segment between mount and key',
     });
     expect(slackNode?.errors).toContainEqual({ pointer: '/config/auth/app', message: 'Legacy reference remains after migration' });
     expect(slackNode?.skipped).toBe(true);
@@ -84,9 +92,15 @@ describe('graph-ref-migrate integration', () => {
 
     const slackNode = writeSummary.files.find((file) => file.path.endsWith('nodes/slack%2Ftrigger.json'));
     expect(slackNode?.skipped).toBe(true);
+    expect(slackNode?.conversions).toContainEqual({
+      pointer: '/config/auth/bot',
+      kind: 'vault',
+      legacy: 'vault',
+      usedDefaultMount: true,
+    });
     expect(slackNode?.errors).toContainEqual({
       pointer: '/config/auth/app',
-      message: 'Legacy vault reference must include mount, path, and key segments',
+      message: 'Legacy vault reference missing path segment between mount and key',
     });
 
     const githubNode = writeSummary.files.find((file) => file.path.endsWith('nodes/github%2Fclone.json'));
@@ -108,7 +122,13 @@ describe('graph-ref-migrate integration', () => {
     expect(secondSlack?.skipped).toBe(true);
     expect(secondSlack?.errors).toContainEqual({
       pointer: '/config/auth/app',
-      message: 'Legacy vault reference must include mount, path, and key segments',
+      message: 'Legacy vault reference missing path segment between mount and key',
+    });
+    expect(secondSlack?.conversions).toContainEqual({
+      pointer: '/config/auth/bot',
+      kind: 'vault',
+      legacy: 'vault',
+      usedDefaultMount: true,
     });
     expect(secondSummary.files.filter((file) => file.errors.length === 0 && file.changed).length).toBe(0);
   });
