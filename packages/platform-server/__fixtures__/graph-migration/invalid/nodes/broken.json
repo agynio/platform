@@ -1,0 +1,10 @@
+{
+  "id": "broken-node",
+  "template": "github.clone_repo",
+  "config": {
+    "token": {
+      "source": "vault",
+      "value": "onlykey"
+    }
+  }
+}

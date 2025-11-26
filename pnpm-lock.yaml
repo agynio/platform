@@ -143,6 +143,9 @@ importers:
       dotenv:
         specifier: ^17.2.2
         version: 17.2.2
+      fast-glob:
+        specifier: ^3.3.2
+        version: 3.3.3
       fastify:
         specifier: ^5.6.1
         version: 5.6.1
@@ -164,6 +167,9 @@ importers:
       p-limit:
         specifier: ^3.1.0
         version: 3.1.0
+      picomatch:
+        specifier: ^4.0.2
+        version: 4.0.3
       pino:
         specifier: ^10.1.0
         version: 10.1.0

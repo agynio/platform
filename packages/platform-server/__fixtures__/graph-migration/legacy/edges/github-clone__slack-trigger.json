@@ -1,0 +1,7 @@
+{
+  "id": "github-clone-output__slack-trigger-input",
+  "source": "github-clone",
+  "sourceHandle": "output",
+  "target": "slack-trigger",
+  "targetHandle": "input"
+}

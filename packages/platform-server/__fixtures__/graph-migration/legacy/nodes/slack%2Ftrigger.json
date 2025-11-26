@@ -1,0 +1,32 @@
+{
+  "id": "slack-trigger",
+  "template": "slack.trigger",
+  "config": {
+    "auth": {
+      "bot": {
+        "source": "vault",
+        "value": "workspace/app-token"
+      },
+      "app": {
+        "source": "vault",
+        "value": "secret/api-key"
+      }
+    },
+    "channel": {
+      "source": "static",
+      "value": "#deployments"
+    }
+  },
+  "state": {
+    "appToken": {
+      "source": "env",
+      "envVar": "SLACK_APP_TOKEN",
+      "default": "fallback-token"
+    },
+    "lastCursor": null
+  },
+  "position": {
+    "x": 320,
+    "y": 180
+  }
+}

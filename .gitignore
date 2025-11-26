@@ -17,3 +17,4 @@ test.log
 packages/.DS_Store
 
 packages/platform-ui/storybook-static/
+packages/platform-server/data/graph/**

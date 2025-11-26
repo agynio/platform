@@ -1,0 +1,22 @@
+{
+  "id": "github-clone",
+  "template": "github.clone_repo",
+  "config": {
+    "token": {
+      "source": "vault",
+      "value": "workflows/github/token"
+    },
+    "organization": "HautechAI",
+    "repository": "agents",
+    "branch": {
+      "source": "static",
+      "value": "main"
+    }
+  },
+  "state": {
+    "auth": {
+      "source": "env",
+      "envVar": "GH_TOKEN"
+    }
+  }
+}
