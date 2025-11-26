@@ -1,8 +1,8 @@
 import React, { type ReactNode } from 'react';
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, beforeAll, vi } from 'vitest';
+import type { useNodeStatus as UseNodeStatusFn } from '../useNodeStatus';
 import { act, renderHook } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { useNodeStatus } from '../useNodeStatus';
 
 const apiMocks = vi.hoisted(() => ({
   fetchNodeStatus: vi.fn(),
@@ -26,13 +26,7 @@ const handlerStore = vi.hoisted(() => ({
   status: { current: undefined as ((event: any) => void) | undefined },
 }));
 
-vi.mock('../../services/api', () => ({
-  graphApiService: {
-    fetchNodeStatus: apiMocks.fetchNodeStatus,
-  },
-}));
-
-vi.mock('../../services/socket', () => {
+const applySocketHandlers = () => {
   socketMocks.onNodeStatus.mockImplementation((nodeId: string, handler: (event: any) => void) => {
     handlerStore.status.current = handler;
     return () => {
@@ -63,6 +57,16 @@ vi.mock('../../services/socket', () => {
       if (idx >= 0) handlerStore.disconnected.splice(idx, 1);
     };
   });
+};
+
+vi.mock('../../services/api', () => ({
+  graphApiService: {
+    fetchNodeStatus: apiMocks.fetchNodeStatus,
+  },
+}));
+
+vi.mock('../../services/socket', () => {
+  applySocketHandlers();
 
   return {
     graphSocketService: {
@@ -76,6 +80,12 @@ vi.mock('../../services/socket', () => {
       isConnected: socketMocks.isConnected,
     },
   };
+});
+
+let useNodeStatus: UseNodeStatusFn;
+
+beforeAll(async () => {
+  ({ useNodeStatus } = await import('../useNodeStatus'));
 });
 
 function createClientWrapper() {
@@ -98,6 +108,7 @@ describe('useNodeStatus', () => {
     socketMocks.onConnected.mockClear();
     socketMocks.onReconnected.mockClear();
     socketMocks.onDisconnected.mockClear();
+    applySocketHandlers();
     handlerStore.connected.length = 0;
     handlerStore.reconnected.length = 0;
     handlerStore.disconnected.length = 0;
@@ -158,11 +169,19 @@ describe('useNodeStatus', () => {
       handlerStore.connected.forEach((handler) => handler());
     });
 
-    await vi.advanceTimersByTimeAsync(15000);
     await act(async () => {
       await Promise.resolve();
     });
     expect(apiMocks.fetchNodeStatus).toHaveBeenCalledTimes(3);
+
+    act(() => {
+      handlerStore.reconnected.forEach((handler) => handler());
+    });
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(apiMocks.fetchNodeStatus).toHaveBeenCalledTimes(4);
 
     unmount();
   });

@@ -1,6 +1,6 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, beforeAll, vi } from 'vitest';
+import type { useGraphSocket as UseGraphSocketFn } from '../useGraphSocket';
 import { act, renderHook } from '@testing-library/react';
-import { useGraphSocket } from '../useGraphSocket';
 
 const socketMocks = vi.hoisted(() => ({
   connect: vi.fn(),
@@ -21,7 +21,7 @@ const handlerStore = vi.hoisted(() => ({
   state: new Map<string, (event: any) => void>(),
 }));
 
-vi.mock('../../services/socket', () => {
+const applySocketHandlers = () => {
   socketMocks.onNodeStatus.mockImplementation((nodeId: string, handler: (event: any) => void) => {
     handlerStore.status.set(nodeId, handler);
     return () => {
@@ -55,6 +55,10 @@ vi.mock('../../services/socket', () => {
       if (idx >= 0) handlerStore.disconnected.splice(idx, 1);
     };
   });
+};
+
+vi.mock('../../services/socket', () => {
+  applySocketHandlers();
 
   return {
     graphSocketService: {
@@ -70,6 +74,13 @@ vi.mock('../../services/socket', () => {
     __mockHandlers: handlerStore,
   };
 });
+let useGraphSocket: UseGraphSocketFn;
+let graphServiceModule: { graphSocketService: { connect: typeof socketMocks.connect } };
+
+beforeAll(async () => {
+  graphServiceModule = await import('../../services/socket');
+  ({ useGraphSocket } = await import('../useGraphSocket'));
+});
 
 describe('useGraphSocket', () => {
   beforeEach(() => {
@@ -80,6 +91,7 @@ describe('useGraphSocket', () => {
     socketMocks.onConnected.mockClear();
     socketMocks.onReconnected.mockClear();
     socketMocks.onDisconnected.mockClear();
+    applySocketHandlers();
     socketMocks.isConnected.mockReturnValue(false);
     handlerStore.connected.length = 0;
     handlerStore.reconnected.length = 0;
@@ -89,7 +101,7 @@ describe('useGraphSocket', () => {
     socketMocks.subscribeToNodes.mockReturnValue(() => {});
   });
 
-  it('subscribes to nodes and resubscribes on reconnect', () => {
+  it('subscribes to nodes and resubscribes on reconnect', async () => {
     const statusSpy = vi.fn();
     const stateSpy = vi.fn();
     const subscribeCleanup = vi.fn();
@@ -103,6 +115,11 @@ describe('useGraphSocket', () => {
       }),
     );
 
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(graphServiceModule.graphSocketService.connect).toBe(socketMocks.connect);
     expect(socketMocks.connect).toHaveBeenCalled();
     expect(socketMocks.subscribeToNodes).toHaveBeenCalledWith(['alpha', 'beta']);
     expect(socketMocks.onNodeStatus).toHaveBeenCalledTimes(2);
