@@ -95,6 +95,7 @@ YAML_EMITTER = YAML()
 YAML_EMITTER.indent(mapping=2, sequence=2, offset=0)
 YAML_EMITTER.default_flow_style = False
 YAML_EMITTER.representer.sort_base_mapping_type_on_output = False
+YAML_EMITTER.width = 10**6
 
 
 @dataclasses.dataclass
