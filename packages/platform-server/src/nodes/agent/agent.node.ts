@@ -138,6 +138,11 @@ type RegisteredTool = {
   source: ToolSource;
 };
 
+type ToolRegistryEntry = {
+  active: RegisteredTool;
+  queue: RegisteredTool[];
+};
+
 // Consolidated Agent class (merges previous BaseAgent + Agent into single AgentNode)
 import { Inject, Injectable, Optional, Scope } from '@nestjs/common';
 import { ModuleRef } from '@nestjs/core';
@@ -150,8 +155,8 @@ import { MemoryConnectorNode } from '../memoryConnector/memoryConnector.node';
 export class AgentNode extends Node<AgentStaticConfig> {
   protected buffer = new MessagesBuffer({ debounceMs: 0 });
 
-  private mcpServerTools: Map<LocalMCPServerNode, Map<string, FunctionTool>> = new Map();
-  private toolsByName: Map<string, RegisteredTool> = new Map();
+  private mcpServerTools: Map<LocalMCPServerNode, Map<string, FunctionTool[]>> = new Map();
+  private toolsByName: Map<string, ToolRegistryEntry> = new Map();
   private runningThreads: Set<string> = new Set();
 
   constructor(
@@ -235,33 +240,130 @@ export class AgentNode extends Node<AgentStaticConfig> {
     };
   }
 
-  private registerTool(tool: FunctionTool, source: ToolSource): boolean {
-    const existing = this.toolsByName.get(tool.name);
-    if (existing) {
-      if (existing.tool === tool) return false;
-      const agentNodeId = this.getAgentNodeId();
-      const agentTitle = this.config?.title;
-      this.logger.error(
-        `[Agent:${this.getAgentLabel()}] Duplicate tool name detected: ${tool.name}. Skipping registration.`,
-        {
-          agentNodeId,
-          agentTitle,
-          toolName: tool.name,
-          skipped: this.formatToolSource(source),
-          kept: this.formatToolSource(existing.source),
-        },
-      );
-      return false;
+  private groupToolsByName(tools: FunctionTool[]): Map<string, FunctionTool[]> {
+    const byName = new Map<string, FunctionTool[]>();
+    for (const tool of tools) {
+      const list = byName.get(tool.name);
+      if (list) {
+        list.push(tool);
+      } else {
+        byName.set(tool.name, [tool]);
+      }
     }
-    this.toolsByName.set(tool.name, { tool, source });
-    return true;
+    return byName;
   }
 
-  private unregisterTool(name: string, tool: FunctionTool): boolean {
-    const existing = this.toolsByName.get(name);
-    if (!existing || existing.tool !== tool) return false;
-    this.toolsByName.delete(name);
-    return true;
+  private removeStaleMcpTools(
+    namespace: string,
+    prev: Map<string, FunctionTool[]>,
+    latestByName: Map<string, FunctionTool[]>,
+  ): void {
+    for (const [name, prevTools] of prev) {
+      const latestList = latestByName.get(name) ?? [];
+      const latestSet = new Set(latestList);
+      for (const prevTool of prevTools) {
+        if (latestSet.has(prevTool)) continue;
+        const result = this.unregisterTool(name, prevTool);
+        if (result.removed) {
+          this.logger.debug?.(`[Agent:${this.getAgentLabel()}] MCP tool removed (${namespace}/${name})`);
+        }
+      }
+    }
+  }
+
+  private reconcileLatestMcpTools(
+    source: ToolSource,
+    latestByName: Map<string, FunctionTool[]>,
+  ): Map<string, FunctionTool[]> {
+    const next = new Map<string, FunctionTool[]>();
+
+    for (const [name, tools] of latestByName) {
+      const registeredForServer: FunctionTool[] = [];
+
+      for (const tool of tools) {
+        const result = this.registerTool(tool, source);
+        if (result === 'active') {
+          this.logger.debug(`[Agent:${this.getAgentLabel()}] MCP tool added ${tool.name}`);
+        }
+
+        const entry = this.toolsByName.get(name);
+        if (!entry) continue;
+        const isActive = entry.active.tool === tool;
+        const isQueued = entry.queue.some((queued) => queued.tool === tool);
+        if (!isActive && !isQueued) continue;
+
+        registeredForServer.push(tool);
+      }
+
+      if (registeredForServer.length > 0) {
+        next.set(name, registeredForServer);
+      }
+    }
+
+    return next;
+  }
+
+  private registerTool(tool: FunctionTool, source: ToolSource): 'active' | 'queued' | 'noop' {
+    const candidate: RegisteredTool = { tool, source };
+    const entry = this.toolsByName.get(tool.name);
+    if (!entry) {
+      this.toolsByName.set(tool.name, { active: candidate, queue: [] });
+      return 'active';
+    }
+
+    if (entry.active.tool === tool) return 'noop';
+    if (entry.queue.some((queued) => queued.tool === tool)) return 'noop';
+
+    entry.queue.push(candidate);
+
+    const agentNodeId = this.getAgentNodeId();
+    const agentTitle = this.config?.title;
+    this.logger.error(
+      `[Agent:${this.getAgentLabel()}] Duplicate tool name detected: ${tool.name}. Skipping registration.`,
+      {
+        agentNodeId,
+        agentTitle,
+        toolName: tool.name,
+        skipped: this.formatToolSource(source),
+        kept: this.formatToolSource(entry.active.source),
+      },
+    );
+
+    return 'queued';
+  }
+
+  private unregisterTool(name: string, tool: FunctionTool): { removed: boolean; promoted?: RegisteredTool } {
+    const entry = this.toolsByName.get(name);
+    if (!entry) return { removed: false };
+
+    if (entry.active.tool === tool) {
+      if (entry.queue.length > 0) {
+        const promoted = entry.queue.shift();
+        if (!promoted) {
+          throw new Error('Expected queued tool for promotion.');
+        }
+        entry.active = promoted;
+        this.logger.debug(
+          `[Agent:${this.getAgentLabel()}] Promoted queued tool ${name} after removal.`,
+          {
+            agentNodeId: this.getAgentNodeId(),
+            agentTitle: this.config?.title,
+            toolName: name,
+            promoted: this.formatToolSource(promoted.source),
+          },
+        );
+        return { removed: true, promoted };
+      }
+
+      this.toolsByName.delete(name);
+      return { removed: true };
+    }
+
+    const index = entry.queue.findIndex((queued) => queued.tool === tool);
+    if (index === -1) return { removed: false };
+
+    entry.queue.splice(index, 1);
+    return { removed: true };
   }
 
   public get tools(): FunctionTool[] {
@@ -269,7 +371,7 @@ export class AgentNode extends Node<AgentStaticConfig> {
   }
 
   private getActiveTools(): FunctionTool[] {
-    return Array.from(this.toolsByName.values()).map((entry) => entry.tool);
+    return Array.from(this.toolsByName.values()).map((entry) => entry.active.tool);
   }
 
   private async injectBufferedMessages(
@@ -540,8 +642,8 @@ export class AgentNode extends Node<AgentStaticConfig> {
 
   addTool(toolNode: BaseToolNode<unknown>): void {
     const tool: FunctionTool = toolNode.getTool();
-    const added = this.registerTool(tool, this.buildNodeToolSource(toolNode));
-    if (added) {
+    const result = this.registerTool(tool, this.buildNodeToolSource(toolNode));
+    if (result === 'active') {
       this.logger.debug(
         `[Agent:${this.getAgentLabel()}] Tool added: ${tool.name} (${toolNode.constructor.name})`,
       );
@@ -549,7 +651,8 @@ export class AgentNode extends Node<AgentStaticConfig> {
   }
   removeTool(toolNode: BaseToolNode<unknown>): void {
     const tool: FunctionTool = toolNode.getTool();
-    if (this.unregisterTool(tool.name, tool)) {
+    const result = this.unregisterTool(tool.name, tool);
+    if (result.removed) {
       this.logger.debug(
         `[Agent:${this.getAgentLabel()}] Tool removed: ${tool.name} (${toolNode.constructor.name})`,
       );
@@ -580,7 +683,10 @@ export class AgentNode extends Node<AgentStaticConfig> {
 
   async removeMcpServer(server: LocalMCPServerNode): Promise<void> {
     const tools = this.mcpServerTools.get(server);
-    if (tools) for (const [name, tool] of tools) this.unregisterTool(name, tool);
+    if (tools)
+      for (const [name, toolList] of tools) {
+        for (const tool of toolList) this.unregisterTool(name, tool);
+      }
     this.mcpServerTools.delete(server);
   }
 
@@ -589,43 +695,12 @@ export class AgentNode extends Node<AgentStaticConfig> {
     try {
       const namespace = server.namespace;
       const latestTools: FunctionTool[] = server.listTools();
-      const prev = this.mcpServerTools.get(server) ?? new Map<string, FunctionTool>();
-
-      const uniqueLatest = new Map<string, FunctionTool>();
-      const duplicates: FunctionTool[] = [];
-      for (const tool of latestTools) {
-        if (!uniqueLatest.has(tool.name)) {
-          uniqueLatest.set(tool.name, tool);
-        } else {
-          duplicates.push(tool);
-        }
-      }
-
-      for (const [name, prevTool] of prev) {
-        const latestTool = uniqueLatest.get(name);
-        if (latestTool && latestTool === prevTool) continue;
-        if (this.unregisterTool(name, prevTool)) {
-          this.logger.debug?.(`[Agent:${this.getAgentLabel()}] MCP tool removed (${namespace}/${name})`);
-        }
-      }
-
-      const next = new Map<string, FunctionTool>();
+      const prev = this.mcpServerTools.get(server) ?? new Map<string, FunctionTool[]>();
+      const latestByName = this.groupToolsByName(latestTools);
       const source = this.buildMcpToolSource(server);
 
-      for (const [name, tool] of uniqueLatest) {
-        const added = this.registerTool(tool, source);
-        const isRegistered = this.toolsByName.get(name)?.tool === tool;
-        if (!isRegistered) continue;
-
-        next.set(name, tool);
-        if (added) {
-          this.logger.debug(`[Agent:${this.getAgentLabel()}] MCP tool added ${tool.name}`);
-        }
-      }
-
-      for (const duplicate of duplicates) {
-        this.registerTool(duplicate, source);
-      }
+      this.removeStaleMcpTools(namespace, prev, latestByName);
+      const next = this.reconcileLatestMcpTools(source, latestByName);
 
       this.mcpServerTools.set(server, next);
     } catch (e: unknown) {
