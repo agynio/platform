@@ -159,6 +159,14 @@ async function listVaultKeys(
   return assertStringArray(items);
 }
 
+async function provisionNode(nodeId: string): Promise<void> {
+  await graphApi.postNodeAction(nodeId, 'provision');
+}
+
+async function deprovisionNode(nodeId: string): Promise<void> {
+  await graphApi.postNodeAction(nodeId, 'deprovision');
+}
+
 export const graphApiService = {
   fetchGraph,
   saveGraph,
@@ -172,6 +180,8 @@ export const graphApiService = {
   listVaultMounts,
   listVaultPaths,
   listVaultKeys,
+  provisionNode,
+  deprovisionNode,
 };
 
 export type GraphApiService = typeof graphApiService;

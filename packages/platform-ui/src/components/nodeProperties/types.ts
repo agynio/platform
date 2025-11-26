@@ -1,0 +1,78 @@
+export type NodeStatus =
+  | 'not_ready'
+  | 'provisioning'
+  | 'ready'
+  | 'deprovisioning'
+  | 'provisioning_error'
+  | 'deprovisioning_error';
+
+export type NodeKind = 'Agent' | 'Tool' | 'MCP' | 'Trigger' | 'Workspace';
+
+export interface NodeConfig extends Record<string, unknown> {
+  kind: NodeKind;
+  title: string;
+}
+
+export interface NodeState extends Record<string, unknown> {
+  status: NodeStatus;
+}
+
+export type ReferenceConfigValue = string | Record<string, unknown>;
+
+export type EnvVar = {
+  key: string;
+  value: string;
+  source: 'static' | 'vault' | 'variable';
+};
+
+export type WorkspaceNixPackage = {
+  name: string;
+  version: string;
+  commitHash: string;
+  attributePath: string;
+};
+
+export type AgentQueueConfig = {
+  debounceMs?: number;
+  whenBusy?: 'wait' | 'injectAfterTools';
+  processBuffer?: 'allTogether' | 'oneByOne';
+};
+
+export type AgentSummarizationConfig = {
+  keepTokens?: number;
+  maxTokens?: number;
+  prompt?: string;
+};
+
+export interface McpToolDescriptor {
+  name: string;
+  title?: string | null;
+  description?: string | null;
+}
+
+export type SimpleOption = { value: string; label: string };
+
+export interface NodePropertiesSidebarProps {
+  config: NodeConfig;
+  state: NodeState;
+  onConfigChange?: (updates: Partial<NodeConfig>) => void;
+  onProvision?: () => void;
+  onDeprovision?: () => void;
+  canProvision?: boolean;
+  canDeprovision?: boolean;
+  isActionPending?: boolean;
+  tools?: McpToolDescriptor[];
+  enabledTools?: string[] | null;
+  onToggleTool?: (toolName: string, nextEnabled: boolean) => void;
+  toolsLoading?: boolean;
+  nixPackageSearch?: (query: string) => Promise<Array<{ value: string; label: string }>>;
+  fetchNixPackageVersions?: (name: string) => Promise<string[]>;
+  resolveNixPackageSelection?: (name: string, version: string) => Promise<{
+    version: string;
+    commitHash: string;
+    attributePath: string;
+  }>;
+  secretSuggestionProvider?: (query: string) => Promise<string[]>;
+  variableSuggestionProvider?: (query: string) => Promise<string[]>;
+  providerDebounceMs?: number;
+}

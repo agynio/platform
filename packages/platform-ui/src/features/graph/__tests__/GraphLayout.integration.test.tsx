@@ -15,12 +15,14 @@ type GraphLayoutServiceMocks = {
 };
 
 let services: GraphLayoutServiceMocks;
+let nodeActionMutate: vi.Mock;
 
 const hookMocks = vi.hoisted(() => ({
   useGraphData: vi.fn(),
   useGraphSocket: vi.fn(),
   useNodeStatus: vi.fn(),
   useMcpNodeState: vi.fn(),
+  useNodeAction: vi.fn(),
 }));
 
 vi.mock('@/components/GraphCanvas', () => ({
@@ -52,6 +54,10 @@ vi.mock('@/features/graph/hooks/useNodeStatus', () => ({
 
 vi.mock('@/lib/graph/hooks', () => ({
   useMcpNodeState: hookMocks.useMcpNodeState,
+}));
+
+vi.mock('@/features/graph/hooks/useNodeAction', () => ({
+  useNodeAction: hookMocks.useNodeAction,
 }));
 
 const createServiceMocks = vi.hoisted((): (() => GraphLayoutServiceMocks) => () => {
@@ -98,6 +104,8 @@ describe('GraphLayout', () => {
       setEnabledTools: vi.fn(),
       isLoading: false,
     });
+    nodeActionMutate = vi.fn().mockResolvedValue(undefined);
+    hookMocks.useNodeAction.mockReturnValue({ mutateAsync: nodeActionMutate, isPending: false });
     canvasSpy.mockReset();
     services = createServiceMocks();
   });
@@ -142,7 +150,11 @@ describe('GraphLayout', () => {
       onState?.({ nodeId: 'node-1', state: { foo: 'bar' } } as any);
     });
 
-    hookMocks.useNodeStatus.mockReturnValue({ data: { provisionStatus: { state: 'ready' } } });
+    const refetchStatus = vi.fn();
+    hookMocks.useNodeStatus.mockReturnValue({
+      data: { provisionStatus: { state: 'ready' } },
+      refetch: refetchStatus,
+    });
 
     const { unmount } = render(<GraphLayout services={services} />);
 
@@ -174,6 +186,9 @@ describe('GraphLayout', () => {
       expect.objectContaining({ nodeIds: ['node-1'] }),
     );
 
+    expect(hookMocks.useNodeAction).toHaveBeenCalled();
+    expect(hookMocks.useNodeAction.mock.calls.at(-1)?.[0]).toBe('node-1');
+
     const sidebar = sidebarProps.at(-1) as {
       config: Record<string, unknown>;
       state: Record<string, unknown>;
@@ -188,6 +203,11 @@ describe('GraphLayout', () => {
       enabledTools?: unknown[];
       onToggleTool?: (name: string, enabled: boolean) => void;
       toolsLoading?: boolean;
+      onProvision?: () => void;
+      onDeprovision?: () => void;
+      canProvision?: boolean;
+      canDeprovision?: boolean;
+      isActionPending?: boolean;
     };
 
     expect(typeof sidebar.nixPackageSearch).toBe('function');
@@ -201,6 +221,11 @@ describe('GraphLayout', () => {
     expect(typeof sidebar.toolsLoading).toBe('boolean');
     expect(sidebar.providerDebounceMs).toBeGreaterThanOrEqual(200);
     expect(sidebar.providerDebounceMs).toBeLessThanOrEqual(350);
+    expect(typeof sidebar.onProvision).toBe('function');
+    expect(typeof sidebar.onDeprovision).toBe('function');
+    expect(typeof sidebar.canProvision).toBe('boolean');
+    expect(typeof sidebar.canDeprovision).toBe('boolean');
+    expect(typeof sidebar.isActionPending).toBe('boolean');
 
     expect(sidebar.config).toEqual({
       kind: 'Agent',
@@ -209,6 +234,9 @@ describe('GraphLayout', () => {
     });
 
     expect(sidebar.state).toEqual({ status: 'ready' });
+    expect(sidebar.canProvision).toBe(false);
+    expect(sidebar.canDeprovision).toBe(true);
+    expect(sidebar.isActionPending).toBe(false);
 
     sidebar.onConfigChange?.({ title: 'Updated Agent', systemPrompt: 'New prompt' });
 
@@ -225,6 +253,13 @@ describe('GraphLayout', () => {
         }),
       ),
     );
+
+    act(() => {
+      sidebar.onProvision?.();
+    });
+
+    await waitFor(() => expect(nodeActionMutate).toHaveBeenCalledWith('provision'));
+    await waitFor(() => expect(refetchStatus).toHaveBeenCalled());
 
     unmount();
   });
@@ -258,7 +293,7 @@ describe('GraphLayout', () => {
     });
 
     hookMocks.useGraphSocket.mockReturnValue(undefined);
-    hookMocks.useNodeStatus.mockReturnValue({ data: null });
+    hookMocks.useNodeStatus.mockReturnValue({ data: null, refetch: vi.fn() });
 
     render(<GraphLayout services={services} />);
 
@@ -338,7 +373,7 @@ describe('GraphLayout', () => {
     });
 
     hookMocks.useGraphSocket.mockReturnValue(undefined);
-    hookMocks.useNodeStatus.mockReturnValue({ data: null });
+    hookMocks.useNodeStatus.mockReturnValue({ data: null, refetch: vi.fn() });
 
     render(<GraphLayout services={services} />);
 
@@ -411,7 +446,7 @@ describe('GraphLayout', () => {
     });
 
     hookMocks.useGraphSocket.mockReturnValue(undefined);
-    hookMocks.useNodeStatus.mockReturnValue({ data: null });
+    hookMocks.useNodeStatus.mockReturnValue({ data: null, refetch: vi.fn() });
     hookMocks.useMcpNodeState.mockReturnValue({
       tools: [
         { name: 'search', title: 'Search' },
@@ -504,7 +539,7 @@ describe('GraphLayout', () => {
     });
 
     hookMocks.useGraphSocket.mockReturnValue(undefined);
-    hookMocks.useNodeStatus.mockReturnValue({ data: null });
+    hookMocks.useNodeStatus.mockReturnValue({ data: null, refetch: vi.fn() });
 
     render(<GraphLayout services={services} />);
 
@@ -583,7 +618,7 @@ describe('GraphLayout', () => {
     });
 
     hookMocks.useGraphSocket.mockReturnValue(undefined);
-    hookMocks.useNodeStatus.mockReturnValue({ data: null });
+    hookMocks.useNodeStatus.mockReturnValue({ data: null, refetch: vi.fn() });
 
     services.searchNixPackages.mockResolvedValue([{ name: 'nodejs' }]);
     services.listNixPackageVersions.mockResolvedValue([{ version: '18.16.0' }]);
@@ -701,7 +736,7 @@ describe('GraphLayout', () => {
 
     hookMocks.useGraphData.mockImplementation(() => graphState);
     hookMocks.useGraphSocket.mockReturnValue(undefined);
-    hookMocks.useNodeStatus.mockReturnValue({ data: null });
+    hookMocks.useNodeStatus.mockReturnValue({ data: null, refetch: vi.fn() });
 
     const { rerender } = render(<GraphLayout services={services} />);
 
