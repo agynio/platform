@@ -3,7 +3,6 @@
 //   <h1 className="mb-4 text-xl font-semibold tracking-tight">Checkpoint Writes</h1>
 //   <CheckpointStreamPanel />
 
-import { AgentBuilder } from './builder/AgentBuilder';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 // Runtime graph templates provider (distinct from builder TemplatesProvider)
 import { TemplatesProvider as RuntimeTemplatesProvider } from './lib/graph/templates.provider';
@@ -22,6 +21,7 @@ import { SettingsSecrets } from './pages/SettingsSecrets';
 import { SettingsVariables } from './pages/SettingsVariables';
 import { MemoryNodesListPage } from './pages/MemoryNodesListPage';
 import { MemoryNodeDetailPage } from './pages/MemoryNodeDetailPage';
+import { AgentsGraphContainer } from './features/graph/containers/AgentsGraphContainer';
 
 const queryClient = new QueryClient();
 
@@ -37,7 +37,7 @@ function App() {
           {/* Root layout wraps all primary routes */}
           <Route element={<RootLayout />}>
             {/* Agents */}
-            <Route path="/agents/graph" element={<AgentBuilder />} />
+            <Route path="/agents/graph" element={<AgentsGraphContainer />} />
             <Route path="/agents/chat" element={<AgentsChat />} />
             <Route path="/agents/threads" element={<AgentsThreads />} />
             <Route path="/agents/threads/:threadId" element={<AgentsThreads />} />

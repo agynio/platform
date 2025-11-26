@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { graph as api } from '@/api/modules/graph';
 import type { PersistedGraphUpsertRequestUI } from '@/api/modules/graph';
@@ -211,63 +211,84 @@ const McpStateSchema = z.object({
 
 type McpTool = z.infer<typeof McpToolSchema>;
 
-export function useMcpNodeState(nodeId: string) {
+export function useMcpNodeState(nodeId: string | null | undefined) {
   const qc = useQueryClient();
+  const resolvedId = typeof nodeId === 'string' && nodeId.length > 0 ? nodeId : null;
+  const queryKey = useMemo(
+    () => (resolvedId ? (['graph', 'node', resolvedId, 'state', 'mcp'] as const) : null),
+    [resolvedId],
+  );
+  const safeQueryKey = useMemo(
+    () => queryKey ?? (['graph', 'node', '__none__', 'state', 'mcp'] as const),
+    [queryKey],
+  );
+
   const q = useQuery<{ tools: McpTool[]; enabledTools?: string[] }>({
-    queryKey: ['graph', 'node', nodeId, 'state', 'mcp'],
+    queryKey: safeQueryKey,
     queryFn: async () => {
-      const res = await api.getNodeState(nodeId);
+      if (!resolvedId) return { tools: [], enabledTools: undefined };
+      const res = await api.getNodeState(resolvedId);
       const state = (res?.state ?? {}) as Record<string, unknown>;
       const parsed = McpStateSchema.safeParse(state);
       if (!parsed.success) return { tools: [], enabledTools: undefined };
       return { tools: parsed.data.mcp?.tools ?? [], enabledTools: parsed.data.mcp?.enabledTools };
     },
+    enabled: resolvedId !== null,
     staleTime: 2000,
   });
 
   useEffect(() => {
-    if (!nodeId) return;
+    if (!resolvedId || !queryKey) return;
     graphSocket.connect();
-    const room = `node:${nodeId}`;
+    const room = `node:${resolvedId}`;
     graphSocket.subscribe([room]);
-    const off = graphSocket.onNodeState(nodeId, (ev) => {
+    const off = graphSocket.onNodeState(resolvedId, (ev) => {
       const s = (ev?.state ?? {}) as Record<string, unknown>;
       const parsed = McpStateSchema.safeParse(s);
       if (!parsed.success) return;
-      qc.setQueryData<{ tools: McpTool[]; enabledTools?: string[] }>(
-        ['graph', 'node', nodeId, 'state', 'mcp'],
-        { tools: parsed.data.mcp?.tools ?? [], enabledTools: parsed.data.mcp?.enabledTools },
-      );
+      qc.setQueryData<{ tools: McpTool[]; enabledTools?: string[] }>(queryKey, {
+        tools: parsed.data.mcp?.tools ?? [],
+        enabledTools: parsed.data.mcp?.enabledTools,
+      });
     });
     return () => {
       off();
       graphSocket.unsubscribe([room]);
     };
-  }, [nodeId, qc]);
+  }, [qc, queryKey, resolvedId]);
 
   const m = useMutation({
     mutationFn: async (enabledTools: string[]) => {
-      await api.putNodeState(nodeId, { mcp: { enabledTools } });
+      if (!resolvedId) return enabledTools;
+      await api.putNodeState(resolvedId, { mcp: { enabledTools } });
       return enabledTools;
     },
     onMutate: async (enabledTools) => {
-      await qc.cancelQueries({ queryKey: ['graph', 'node', nodeId, 'state', 'mcp'] });
-      const key = ['graph', 'node', nodeId, 'state', 'mcp'] as const;
-      const prev = qc.getQueryData<{ tools: McpTool[]; enabledTools?: string[] }>(key);
-      qc.setQueryData(key, { tools: prev?.tools ?? [], enabledTools });
+      if (!resolvedId || !queryKey) return { prev: undefined };
+      await qc.cancelQueries({ queryKey });
+      const prev = qc.getQueryData<{ tools: McpTool[]; enabledTools?: string[] }>(queryKey);
+      qc.setQueryData(queryKey, { tools: prev?.tools ?? [], enabledTools });
       return { prev };
     },
     onError: (err: unknown, _vars, ctx) => {
-      if (ctx?.prev) qc.setQueryData(['graph', 'node', nodeId, 'state', 'mcp'], ctx.prev);
+      if (queryKey && ctx?.prev) qc.setQueryData(queryKey, ctx.prev);
       const message = err instanceof Error ? err.message : String(err);
       notifyError(`Failed to update MCP tools: ${message}`);
     },
   });
 
+  const setEnabledTools = useCallback(
+    (next: string[]) => {
+      if (!resolvedId) return;
+      m.mutate(next);
+    },
+    [m, resolvedId],
+  );
+
   return {
     tools: q.data?.tools ?? [],
     enabledTools: q.data?.enabledTools,
-    setEnabledTools: (next: string[]) => m.mutate(next),
-    isLoading: q.isPending,
+    setEnabledTools,
+    isLoading: resolvedId ? q.isPending : false,
   } as const;
 }
