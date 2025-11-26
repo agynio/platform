@@ -40,6 +40,18 @@ describe('normalizeLegacyRefs', () => {
     expect(valueShape).toEqual({ ref: { kind: 'var', name: 'API_TOKEN' } });
   });
 
+  it('preserves env default fallback fields', () => {
+    const withDefault = normalizeLegacyRefs({ ref: { source: 'env', envVar: 'GITHUB', default: 'fallback' } });
+    const withFallback = normalizeLegacyRefs({ ref: { source: 'env', value: 'SVC_TOKEN', fallback: 'svc-fallback' } });
+    const withDefaultValue = normalizeLegacyRefs({
+      ref: { source: 'env', value: 'API_KEY', defaultValue: 'api-fallback' },
+    });
+
+    expect(withDefault).toEqual({ ref: { kind: 'var', name: 'GITHUB', default: 'fallback' } });
+    expect(withFallback).toEqual({ ref: { kind: 'var', name: 'SVC_TOKEN', default: 'svc-fallback' } });
+    expect(withDefaultValue).toEqual({ ref: { kind: 'var', name: 'API_KEY', default: 'api-fallback' } });
+  });
+
   it('recursively normalizes nested objects and arrays', () => {
     const input = {
       nested: [

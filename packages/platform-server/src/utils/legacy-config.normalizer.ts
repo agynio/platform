@@ -91,10 +91,27 @@ const parseEnvReference = (
     opts.logger?.debug?.('Legacy env ref not normalized (missing name) at %s', pointer);
     return undefined;
   }
-  return {
+  const pickDefault = (value: unknown): string | null | undefined => {
+    if (typeof value === 'string') return value;
+    if (value === null) return null;
+    return undefined;
+  };
+
+  const defaultCandidate =
+    (Object.prototype.hasOwnProperty.call(input, 'default') ? pickDefault(input.default) : undefined) ??
+    (Object.prototype.hasOwnProperty.call(input, 'fallback') ? pickDefault(input.fallback) : undefined) ??
+    (Object.prototype.hasOwnProperty.call(input, 'defaultValue') ? pickDefault(input.defaultValue) : undefined);
+
+  const ref: Reference = {
     kind: 'var',
     name,
-  } satisfies Reference;
+  };
+
+  if (defaultCandidate !== undefined) {
+    (ref as Reference & { default?: string | null }).default = defaultCandidate;
+  }
+
+  return ref satisfies Reference;
 };
 
 const tryNormalizeLegacyRef = (
