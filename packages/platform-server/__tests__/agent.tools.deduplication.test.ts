@@ -90,32 +90,13 @@ const createAgent = async () => {
 
 const makeTool = (name: string, description?: string) => new TestFunctionTool(name, description);
 const asMcp = (server: StubMcpServer): LocalMCPServerNode => server as unknown as LocalMCPServerNode;
-type InternalRegistry = {
-  toolsByName: Map<
-    string,
-    {
-      active: { tool: FunctionTool };
-      queue: { tool: FunctionTool }[];
-    }
-  >;
-};
-
-const getRegistryEntry = (agent: AgentNode, name: string) =>
-  (agent as unknown as InternalRegistry).toolsByName.get(name);
-
 const getRegisteredTool = (agent: AgentNode, name: string): FunctionTool | undefined => {
-  const entry = getRegistryEntry(agent, name);
-  return entry?.active.tool;
-};
-
-const getQueuedToolNames = (agent: AgentNode, name: string): string[] => {
-  const entry = getRegistryEntry(agent, name);
-  if (!entry) return [];
-  return entry.queue.map((queued) => queued.tool.name);
+  const map = (agent as unknown as { toolsByName: Map<string, { tool: FunctionTool }> }).toolsByName;
+  return map.get(name)?.tool;
 };
 
 const getRegisteredNames = (agent: AgentNode): string[] => {
-  const map = (agent as unknown as InternalRegistry).toolsByName;
+  const map = (agent as unknown as { toolsByName: Map<string, unknown> }).toolsByName;
   return Array.from(map.keys());
 };
 
@@ -168,33 +149,9 @@ describe('AgentNode tool deduplication', () => {
     });
   });
 
-  it('promotes queued duplicate node tools when the primary is removed', async () => {
-    const { agent, logger } = await createAgent();
-
-    const debugSpy = vi.spyOn(logger, 'debug');
-    const errorSpy = vi.spyOn(logger, 'error');
-
-    const primary = new TestToolNode(logger, makeTool('finish'), 'tool-primary');
-    const fallback = new TestToolNode(logger, makeTool('finish'), 'tool-fallback');
-
-    agent.addTool(primary);
-    agent.addTool(fallback);
-
-    expect(errorSpy).toHaveBeenCalledTimes(1);
-    expect(getRegisteredTool(agent, 'finish')).toBe(primary.getTool());
-    expect(getQueuedToolNames(agent, 'finish')).toEqual(['finish']);
-
-    agent.removeTool(primary);
-
-    expect(getRegisteredTool(agent, 'finish')).toBe(fallback.getTool());
-    expect(getQueuedToolNames(agent, 'finish')).toEqual([]);
-    expect(debugSpy.mock.calls.some(([message]) => message.includes('Promoted queued tool finish'))).toBe(true);
-  });
-
   it('preserves the first tool across interleaved duplicate sources', async () => {
     const { agent, logger } = await createAgent();
 
-    const debugSpy = vi.spyOn(logger, 'debug');
     const errorSpy = vi.spyOn(logger, 'error');
 
     const primary = new TestToolNode(logger, makeTool('alpha'), 'node-primary');
@@ -206,30 +163,14 @@ describe('AgentNode tool deduplication', () => {
     await agent.addMcpServer(asMcp(mcpServer));
     expect(errorSpy).toHaveBeenCalledTimes(1);
     expect(getRegisteredTool(agent, 'alpha')).toBe(primary.getTool());
-    expect(getQueuedToolNames(agent, 'alpha')).toEqual(['alpha']);
 
     const duplicateNode = new TestToolNode(logger, makeTool('alpha'), 'node-duplicate');
-    const duplicateTool = duplicateNode.getTool();
     agent.addTool(duplicateNode);
     expect(errorSpy).toHaveBeenCalledTimes(2);
     expect(getRegisteredTool(agent, 'alpha')).toBe(primary.getTool());
-    expect(getQueuedToolNames(agent, 'alpha')).toEqual(['alpha', 'alpha']);
 
     agent.removeTool(primary);
-    expect(getRegisteredTool(agent, 'alpha')).toBe(mcpPrimary);
-    expect(getQueuedToolNames(agent, 'alpha')).toEqual(['alpha']);
-
-    mcpServer.setTools([]);
-    expect(getRegisteredTool(agent, 'alpha')).toBe(duplicateTool);
-    expect(getQueuedToolNames(agent, 'alpha')).toEqual([]);
-
-    agent.removeTool(duplicateNode);
     expect(getRegisteredNames(agent)).toEqual([]);
-
-    const promotionLogs = debugSpy.mock.calls.filter(([message]) =>
-      message.includes('Promoted queued tool alpha'),
-    );
-    expect(promotionLogs.length).toBe(2);
   });
 
   it('treats case differences in tool names as distinct', async () => {
