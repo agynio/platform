@@ -10,10 +10,9 @@ Repository layout (root)
 - edges/: one YAML per edge — `edges/<urlencoded edgeId>.yaml`
 - variables.yaml (optional): list of `{ key, value }`
 
-Legacy JSON mirrors
-- A transitional `GRAPH_STORE_WRITE_JSON=true` flag writes JSON alongside YAML.
-- `GRAPH_AUTO_CONVERT_JSON=true` converts existing JSON files to YAML on read.
-- JSON files remain readable for backward compatibility during the migration window.
+Format expectations
+- The runtime reads and writes YAML exclusively. JSON snapshots are no longer supported at runtime.
+- Convert any legacy JSON repositories offline before pointing the server at them.
 
 Deterministic edge IDs
 - ID = `${source}-${sourceHandle}__${target}-${targetHandle}`
@@ -59,10 +58,9 @@ curl -X POST http://localhost:3010/api/graph \
 Related behavior
 - Server manages persistence, routing, and error handling for the Git-backed store.
 
-Configuration flags
-- `GRAPH_STORE_WRITE_JSON` (default `false`): write JSON mirrors alongside YAML for one release cycle.
-- `GRAPH_AUTO_CONVERT_JSON` (default `false`): auto-create YAML files when only JSON is available in the working tree.
+Configuration notes
+- The former JSON compatibility flags have been removed; YAML is required everywhere the server interacts with the graph store.
 
 Conversion tooling
-- Use `pnpm convert-graphs` (wrapping `packages/tools/graph-converter`) to generate YAML snapshots locally.
+- Use `pnpm convert-graphs` (wrapping `packages/tools/graph-converter`) offline to migrate legacy JSON files into YAML before deploying.
 - Atomic writes are enabled by default; pass `--no-atomic` if the filesystem cannot support the temp-file + rename flow.

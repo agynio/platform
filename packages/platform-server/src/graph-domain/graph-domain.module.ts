@@ -2,7 +2,6 @@ import { Global, Module } from '@nestjs/common';
 import { ModuleRef } from '@nestjs/core';
 import { CoreModule } from '../core/core.module';
 import { ConfigService } from '../core/services/config.service';
-import { LoggerService } from '../core/services/logger.service';
 import { EventsModule } from '../events/events.module';
 import { InfraModule } from '../infra/infra.module';
 import { EnvModule } from '../env/env.module';
@@ -28,13 +27,13 @@ import { TemplateRegistry } from '../graph-core/templateRegistry';
     ThreadCleanupCoordinator,
     {
       provide: GraphRepository,
-      useFactory: async (config: ConfigService, logger: LoggerService, moduleRef: ModuleRef) => {
+      useFactory: async (config: ConfigService, moduleRef: ModuleRef) => {
         const templateRegistry = await moduleRef.resolve(TemplateRegistry, undefined, { strict: false });
-        const repo = new GitGraphRepository(config, logger, templateRegistry);
+        const repo = new GitGraphRepository(config, templateRegistry);
         await repo.initIfNeeded();
         return repo;
       },
-      inject: [ConfigService, LoggerService, ModuleRef],
+      inject: [ConfigService, ModuleRef],
     },
     AgentsPersistenceService,
   ],

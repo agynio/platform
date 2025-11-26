@@ -3,7 +3,6 @@ import { promises as fs } from 'fs';
 import os from 'os';
 import path from 'path';
 import { GitGraphRepository } from '../src/graph/gitGraph.repository';
-import { LoggerService } from '../src/core/services/logger.service';
 import type { TemplateRegistry } from '../src/graph-core/templateRegistry';
 import type { ConfigService } from '../src/core/services/config.service';
 
@@ -12,7 +11,6 @@ const schema = [
   { name: 'agent', title: 'Agent', kind: 'agent', sourcePorts: [], targetPorts: ['in'] },
 ] as const;
 
-const logger = new LoggerService();
 
 const defaultGraph = {
   name: 'main',
@@ -44,7 +42,7 @@ function createTemplateRegistry(): TemplateRegistry {
 
 function createConfig(
   graphRepoPath: string,
-  overrides?: Partial<Pick<ConfigService, 'graphStoreWriteJson' | 'graphAutoConvertJson' | 'graphBranch'>>,
+  overrides?: Partial<Pick<ConfigService, 'graphBranch'>>,
 ): ConfigService {
   const base = {
     graphRepoPath,
@@ -52,8 +50,6 @@ function createConfig(
     graphAuthorName: 'Casey Quinn',
     graphAuthorEmail: 'casey@example.com',
     graphLockTimeoutMs: 1000,
-    graphStoreWriteJson: overrides?.graphStoreWriteJson ?? false,
-    graphAutoConvertJson: overrides?.graphAutoConvertJson ?? false,
   } as const;
   return base as unknown as ConfigService;
 }
@@ -70,7 +66,7 @@ describe('GitGraphRepository YAML storage', () => {
   });
 
   it('writes YAML files by default', async () => {
-    const repo = new GitGraphRepository(createConfig(tempDir), logger, createTemplateRegistry());
+    const repo = new GitGraphRepository(createConfig(tempDir), createTemplateRegistry());
 
     await repo.initIfNeeded();
     await repo.upsert(defaultGraph, undefined);
@@ -99,51 +95,19 @@ describe('GitGraphRepository YAML storage', () => {
     expect(stored?.variables?.[0]).toEqual({ key: 'env', value: 'prod' });
   });
 
-  it('writes JSON alongside YAML when enabled', async () => {
-    const repo = new GitGraphRepository(
-      createConfig(tempDir, { graphStoreWriteJson: true }),
-      logger,
-      createTemplateRegistry(),
-    );
+  it('ignores legacy JSON files in working tree', async () => {
+    const repo = new GitGraphRepository(createConfig(tempDir), createTemplateRegistry());
 
     await repo.initIfNeeded();
     await repo.upsert(defaultGraph, undefined);
 
-    expect(await pathExists(path.join(tempDir, 'graph.meta.yaml'))).toBe(true);
-    expect(await pathExists(path.join(tempDir, 'graph.meta.json'))).toBe(true);
-    expect(await pathExists(path.join(tempDir, 'nodes', 'trigger.yaml'))).toBe(true);
-    expect(await pathExists(path.join(tempDir, 'nodes', 'trigger.json'))).toBe(true);
-    expect(await pathExists(path.join(tempDir, 'variables.yaml'))).toBe(true);
-    expect(await pathExists(path.join(tempDir, 'variables.json'))).toBe(true);
-  });
+    // Drop malformed JSON files; repository should ignore them entirely
+    await fs.writeFile(path.join(tempDir, 'graph.meta.json'), '{ invalid json', 'utf8');
+    await fs.writeFile(path.join(tempDir, 'nodes', 'trigger.json'), '{ invalid json', 'utf8');
 
-  it('falls back to JSON when YAML missing and auto-converts when enabled', async () => {
-    const templateRegistry = createTemplateRegistry();
-    const config = createConfig(tempDir, { graphStoreWriteJson: true });
-    const repo = new GitGraphRepository(config, logger, templateRegistry);
-
-    await repo.initIfNeeded();
-    await repo.upsert(defaultGraph, undefined);
-
-    // Remove YAML files to emulate legacy JSON-only state
-    await fs.unlink(path.join(tempDir, 'graph.meta.yaml'));
-    await fs.unlink(path.join(tempDir, 'nodes', 'trigger.yaml'));
-    await fs.unlink(path.join(tempDir, 'edges', `${encodeURIComponent('trigger-out__agent-in')}.yaml`));
-    await fs.unlink(path.join(tempDir, 'variables.yaml'));
-
-    const autoConfig = createConfig(tempDir, {
-      graphStoreWriteJson: false,
-      graphAutoConvertJson: true,
-    });
-    const repoWithAuto = new GitGraphRepository(autoConfig, logger, createTemplateRegistry());
-    await repoWithAuto.initIfNeeded();
-    const stored = await repoWithAuto.get('main');
+    const stored = await repo.get('main');
+    expect(stored?.version).toBeGreaterThan(0);
     expect(stored?.nodes).toHaveLength(2);
     expect(await pathExists(path.join(tempDir, 'graph.meta.yaml'))).toBe(true);
-    expect(await pathExists(path.join(tempDir, 'nodes', 'trigger.yaml'))).toBe(true);
-    expect(await pathExists(path.join(tempDir, 'edges', `${encodeURIComponent('trigger-out__agent-in')}.yaml`))).toBe(
-      true,
-    );
-    expect(await pathExists(path.join(tempDir, 'variables.yaml'))).toBe(true);
   });
 });

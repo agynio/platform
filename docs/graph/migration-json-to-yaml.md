@@ -3,7 +3,8 @@
 The Node-based `graph-converter` CLI normalizes graph JSON entities and emits
 YAML that matches the runtime store configuration (two-space indent, unlimited
 line width, stable key order). Use the CLI locally when migrating repositories
-or validating committed graph snapshots.
+or validating committed graph snapshots; runtime persistence now expects YAML
+exclusively, so convert any JSON snapshots before starting the server.
 
 ## Installation
 
@@ -17,6 +18,9 @@ pnpm --filter @agyn/graph-converter run build
 ```bash
 pnpm convert-graphs -- --root ./graph --in-place --schema-migrate --strict
 ```
+
+This CLI is intended for offline migrations. The platform server no longer
+reads JSON graph files at runtime.
 
 Flags:
 

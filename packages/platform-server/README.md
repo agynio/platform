@@ -7,7 +7,7 @@ Graph persistence
   - GRAPH_REPO_PATH: path to the local git repo for graph state (default `./data/graph`)
   - GRAPH_BRANCH: branch name to use (default `graph-state`)
   - GRAPH_AUTHOR_NAME / GRAPH_AUTHOR_EMAIL: default git author (can be overridden per request with headers `x-graph-author-name`/`x-graph-author-email`)
-- On startup, the server initializes `GRAPH_REPO_PATH` as a git repo if missing, ensures branch checkout, seeds root-level per-entity layout (format: 2) with empty `nodes/` and `edges/`, writes `graph.meta.json` for the active graph name (default `main`), and commits the initial state.
+- On startup, the server initializes `GRAPH_REPO_PATH` as a git repo if missing, ensures branch checkout, seeds root-level per-entity layout (format: 2) with empty `nodes/` and `edges/`, writes `graph.meta.yaml` for the active graph name (default `main`), and commits the initial state.
  - The existing API `/api/graph` supports GET and POST. POST maintains optimistic locking via the `version` field. Each successful write creates one commit with message `chore(graph): <name> v<version> (+/- nodes, +/- edges)` on the configured branch.
 - Error responses:
    - 409 VERSION_CONFLICT with `{ error, current }` body when version mismatch.
@@ -20,11 +20,12 @@ Graph persistence
 - DinD sidecars keep `networkMode=container:<workspaceId>` so the workspace and sidecar share namespaces regardless of the workspace network.
 - Set `NCPS_URL_SERVER` (host-reachable) and `NCPS_URL_CONTAINER` (in-network, e.g., `http://ncps:8501`) together so Nix substituters resolve correctly inside workspaces.
 - When the server injects `NIX_CONFIG`, workspace startup logs the resolved substituters/trusted keys and runs `getent hosts ncps` plus `curl http://ncps:8501/nix-cache-info`, emitting warnings if connectivity fails.
-
+-
 Storage layout (format: 2)
-- Preferred working tree layout is root-level per-entity: `graph.meta.json`, `nodes/`, `edges/`.
+- Preferred working tree layout is root-level per-entity: `graph.meta.yaml`, `nodes/`, `edges/`.
 - Filenames are `encodeURIComponent(id)`; edge id is deterministic: `<src>-<srcH>__<tgt>-<tgtH>`.
-- The service can read from historical layouts in HEAD for compatibility: per-graph per-entity under `graphs/<name>/` or legacy monolith `graphs/<name>/graph.json`.
+- The service can read from historical layouts in HEAD for compatibility: per-graph per-entity under `graphs/<name>/` or legacy monolith `graphs/<name>/graph.yaml`.
+- JSON graph files are no longer read or written at runtime; convert legacy datasets with the `pnpm convert-graphs` CLI before deploying.
 - Robustness: when reading, if an entity file lacks an explicit `id` field, the service decodes it from the filename (see readEntitiesFromDir/readFromHeadRoot).
 
 Enabling Memory
