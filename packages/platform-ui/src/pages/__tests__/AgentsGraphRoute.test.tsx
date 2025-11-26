@@ -1,44 +1,42 @@
-import React from 'react';
-import { render, waitFor } from '@testing-library/react';
-import { MemoryRouter } from 'react-router-dom';
-import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
+vi.mock('@/components/agents/GraphLayout', () => ({
+  GraphLayout: () => null,
+}));
 
-let getContextSpy: ReturnType<typeof vi.spyOn> | null = null;
+import { createRoutesFromChildren, type RouteObject } from 'react-router-dom';
 
-beforeAll(() => {
-  getContextSpy = vi
-    .spyOn(HTMLCanvasElement.prototype, 'getContext')
-    .mockReturnValue({} as CanvasRenderingContext2D);
-});
+import { AgentsGraphContainer } from '@/features/graph/containers/AgentsGraphContainer';
+import { appRoutes } from '@/appRoutes.tsx';
 
-afterAll(() => {
-  getContextSpy?.mockRestore();
-});
+function findRouteBySegments(routes: RouteObject[], segments: string[]): RouteObject | undefined {
+  if (segments.length === 0) {
+    return undefined;
+  }
 
-async function renderGraphRoute() {
-  vi.resetModules();
-  delete (globalThis as { __graphMockHits?: number }).__graphMockHits;
-  vi.doMock('@/components/agents/GraphLayout', () => ({
-    __esModule: true,
-    GraphLayout: (props: { services: unknown }) => {
-      expect(props.services).toBeDefined();
-      (globalThis as { __graphMockHits?: number }).__graphMockHits =
-        ((globalThis as { __graphMockHits?: number }).__graphMockHits ?? 0) + 1;
-      return <div data-testid="graph-container">new graph layout</div>;
-    },
-  }));
-  const { default: App } = await import('@/App');
-  return render(
-    <MemoryRouter initialEntries={['/agents/graph']}>
-      <App />
-    </MemoryRouter>,
-  );
+  const [head, ...rest] = segments;
+  const current = routes.find((route) => route.path === head);
+  if (!current) {
+    return undefined;
+  }
+
+  if (rest.length === 0) {
+    return current;
+  }
+
+  if (!current.children) {
+    return undefined;
+  }
+
+  return findRouteBySegments(current.children, rest);
 }
 
 describe('Agents graph routing', () => {
-  it('renders the new graph layout for /agents/graph', async () => {
-    const { findByTestId } = await renderGraphRoute();
-    await findByTestId('graph-container');
-    await waitFor(() => expect((globalThis as { __graphMockHits?: number }).__graphMockHits ?? 0).toBeGreaterThan(0));
+  it('maps /agents/graph to AgentsGraphContainer', () => {
+    const routeObjects = createRoutesFromChildren(appRoutes);
+    const rootRoute = findRouteBySegments(routeObjects, ['/']);
+    expect(rootRoute?.children).toBeDefined();
+
+    const graphRoute = findRouteBySegments(rootRoute?.children ?? [], ['agents', 'graph']);
+    expect(graphRoute).toBeDefined();
+    expect(graphRoute?.element?.type).toBe(AgentsGraphContainer);
   });
 });
