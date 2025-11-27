@@ -102,7 +102,7 @@ describe('runtime config unknown keys handling', () => {
     expect(live.config).toEqual({ scope: 'perThread', collectionPrefix: 'pp', extra: 'x' });
   });
 
-  it('normalizes env entries to use name after resolution', async () => {
+  it('preserves resolver output shape for env entries', async () => {
     const resolveSpy = vi.fn(async (input: unknown) => ({ output: input, report: {} as unknown }));
     const runtime = makeRuntime(resolveSpy);
     const g: GraphDefinition = {
@@ -128,7 +128,7 @@ describe('runtime config unknown keys handling', () => {
     const live = runtime.getNodes().find((n) => n.id === 'env-node');
     expect(live?.config).toEqual({
       env: [
-        { name: 'API_TOKEN', value: 'secret-value' },
+        { key: 'API_TOKEN', value: 'secret-value' },
         { name: 'ALREADY', value: 'exists' },
       ],
     });
