@@ -137,7 +137,7 @@ export default function ThreadsScreen({
           <div className="mb-3 flex items-start justify-between">
             <div className="flex-1">
               <div className="mb-1 flex items-center gap-2">
-                <StatusIndicator status={resolvedSelectedThread.status as 'running' | 'finished' | 'pending'} size="sm" />
+                <StatusIndicator status={resolvedSelectedThread.status} size="sm" />
                 <span className="text-xs text-[var(--agyn-gray)]">{resolvedSelectedThread.agentName}</span>
                 <span className="text-xs text-[var(--agyn-gray)]">•</span>
                 <span className="text-xs text-[var(--agyn-gray)]">{resolvedSelectedThread.createdAt}</span>
@@ -213,6 +213,12 @@ export default function ThreadsScreen({
               title={isRunsInfoCollapsed ? 'Show runs info' : 'Hide runs info'}
             />
           </div>
+
+          {resolvedSelectedThread.childrenError ? (
+            <div className="mt-3 rounded-[6px] border border-[var(--agyn-border-strong)] bg-[var(--agyn-bg-light)] px-3 py-2 text-sm text-[var(--agyn-red)]">
+              {resolvedSelectedThread.childrenError}
+            </div>
+          ) : null}
         </div>
 
         <div className="min-h-0 min-w-0 flex-1 overflow-hidden">
