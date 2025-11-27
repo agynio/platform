@@ -60,10 +60,7 @@ export abstract class PersistenceBaseLLMReducer extends Reducer<LLMState, LLMCon
           break;
         case 'system':
           if (this.isDeveloperMessage(val)) return new DeveloperMessage(val);
-          if (this.isSystemMessage(val)) {
-            const transformed = { ...val, role: 'developer' as const };
-            return new DeveloperMessage(transformed);
-          }
+          if (this.isSystemMessage(val)) return new SystemMessage(val);
           break;
         case 'response':
           if (this.isResponseValue(val)) return new ResponseMessage(val);

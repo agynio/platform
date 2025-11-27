@@ -6,6 +6,7 @@ import {
   LLM,
   Reducer,
   ResponseMessage,
+  SystemMessage,
   ToolCallMessage,
 } from '@agyn/llm';
 import { Inject, Injectable, Logger, Scope } from '@nestjs/common';
@@ -21,12 +22,13 @@ import {
   contextItemInputFromMessage,
   contextItemInputFromSummary,
 } from '../services/context-items.utils';
+import { normalizeInstructionMessage } from '../services/messages.normalization';
 import type { ContextItemInput } from '../services/context-items.utils';
 
 type SequenceEntry =
   | { kind: 'system'; message: DeveloperMessage }
   | { kind: 'summary'; message: HumanMessage }
-  | { kind: 'memory'; message: DeveloperMessage; place: 'after_system' | 'last_message' }
+  | { kind: 'memory'; message: DeveloperMessage | SystemMessage; place: 'after_system' | 'last_message' }
   | { kind: 'conversation'; message: LLMMessage; index: number };
 
 @Injectable({ scope: Scope.TRANSIENT })
@@ -62,7 +64,7 @@ export class CallModelLLMReducer extends Reducer<LLMState, LLMContext> {
   private memoryProvider?: (
     ctx: LLMContext,
     state: LLMState,
-  ) => Promise<{ msg: DeveloperMessage | null; place: 'after_system' | 'last_message' } | null>;
+  ) => Promise<{ msg: DeveloperMessage | SystemMessage | null; place: 'after_system' | 'last_message' } | null>;
 
   init(params: {
     llm: LLM;
@@ -72,7 +74,7 @@ export class CallModelLLMReducer extends Reducer<LLMState, LLMContext> {
     memoryProvider?: (
       ctx: LLMContext,
       state: LLMState,
-    ) => Promise<{ msg: DeveloperMessage | null; place: 'after_system' | 'last_message' } | null>;
+    ) => Promise<{ msg: DeveloperMessage | SystemMessage | null; place: 'after_system' | 'last_message' } | null>;
   }) {
     this.llm = params.llm;
     this.model = params.model;
@@ -103,7 +105,7 @@ export class CallModelLLMReducer extends Reducer<LLMState, LLMContext> {
       sequence,
       summaryText,
     );
-    const input = sequence.map((entry) => entry.message);
+    const input = sequence.map((entry) => this.normalizeSequenceEntry(entry));
 
     const nodeId = ctx.callerAgent.getAgentNodeId?.() ?? null;
     const llmEvent = await this.runEvents.startLLMCall({
@@ -232,7 +234,7 @@ export class CallModelLLMReducer extends Reducer<LLMState, LLMContext> {
   private buildSequence(
     system: DeveloperMessage,
     summaryMsg: HumanMessage | null,
-    memoryResult: { msg: DeveloperMessage | null; place: 'after_system' | 'last_message' } | null,
+    memoryResult: { msg: DeveloperMessage | SystemMessage | null; place: 'after_system' | 'last_message' } | null,
     conversation: LLMMessage[],
   ): SequenceEntry[] {
     const sequence: SequenceEntry[] = [{ kind: 'system', message: system }];
@@ -398,6 +400,22 @@ export class CallModelLLMReducer extends Reducer<LLMState, LLMContext> {
       assign,
       isConversation,
     });
+  }
+
+  private normalizeSequenceEntry(entry: SequenceEntry): LLMMessage {
+    if (entry.kind === 'system' || entry.kind === 'summary') {
+      return entry.message;
+    }
+
+    if (entry.kind === 'memory') {
+      return normalizeInstructionMessage(entry.message);
+    }
+
+    const message = entry.message;
+    if (message instanceof DeveloperMessage || message instanceof SystemMessage) {
+      return normalizeInstructionMessage(message);
+    }
+    return message;
   }
 
   private serializeToolCalls(calls: ToolCallMessage[]): ToolCallRecord[] {
