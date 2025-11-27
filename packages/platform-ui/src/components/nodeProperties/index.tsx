@@ -121,7 +121,7 @@ function NodePropertiesSidebar({
   secretSuggestionProvider,
   variableSuggestionProvider,
   providerDebounceMs = 250,
-  template,
+
 }: NodePropertiesSidebarProps) {
   const { kind: nodeKind, title: nodeTitle } = config;
   const { status } = state;
