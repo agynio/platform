@@ -1,185 +1,95 @@
-import React, { useEffect } from 'react';
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
-import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-
-const hoisted = vi.hoisted(() => {
-  const socketMock = {
-    subscribe: vi.fn(),
-    unsubscribe: vi.fn(),
-    onThreadActivityChanged: vi.fn(() => () => {}),
-    onThreadRemindersCount: vi.fn(() => () => {}),
-    onMessageCreated: vi.fn(() => () => {}),
-    onRunStatusChanged: vi.fn(() => () => {}),
-    onReconnected: vi.fn(() => () => {}),
-  };
-  return {
-    threadById: vi.fn(),
-    threadRuns: vi.fn(),
-    httpGet: vi.fn(() => Promise.resolve({ items: [] })),
-    socket: socketMock,
-  };
-});
-
-const threadByIdMock = hoisted.threadById;
-const threadRunsMock = hoisted.threadRuns;
-
-vi.mock('@/api/hooks/threads', () => ({
-  useThreadById: (threadId: string | undefined) => threadByIdMock(threadId),
-}));
-
-vi.mock('@/api/hooks/runs', () => ({
-  useThreadRuns: (threadId: string | undefined) => threadRunsMock(threadId),
-}));
-
-vi.mock('@/api/http', () => ({
-  http: {
-    get: hoisted.httpGet,
-  },
-  asData: <T,>(promise: Promise<T>) => promise,
-}));
-
-vi.mock('@/api/modules/runs', () => ({
-  runs: {
-    messages: vi.fn(() => Promise.resolve({ items: [] })),
-  },
-}));
-
-vi.mock('@/components/agents/ThreadTree', () => ({
-  ThreadTree: () => <div data-testid="thread-tree" />, // simplified stub
-}));
-
-vi.mock('@/components/agents/RunMessageList', () => ({
-  RunMessageList: (props: { items: Array<{ type?: string; reminder?: { id: string } }> }) => (
-    <div data-testid="run-message-list">
-      {props.items.map((item, idx) =>
-        item && item.type === 'reminder' && item.reminder ? (
-          <div key={`reminder-${item.reminder.id}-${idx}`} data-testid="reminder-countdown-row" />
-        ) : null
-      )}
-    </div>
-  ),
-}));
-
-vi.mock('@/components/agents/ThreadHeader', () => ({
-  ThreadHeader: ({ thread }: { thread: { summary?: string | null } | undefined }) => (
-    <div data-testid="thread-header">{thread?.summary ?? 'no-thread'}</div>
-  ),
-}));
-
-vi.mock('@/components/agents/ThreadStatusFilterSwitch', () => ({
-  ThreadStatusFilterSwitch: ({ value }: { value: string }) => (
-    <div data-testid="thread-status-filter">filter:{value}</div>
-  ),
-}));
-
-vi.mock('@/lib/graph/socket', () => ({
-  graphSocket: hoisted.socket,
-}));
-
+import React from 'react';
+import { describe, it, expect, beforeAll, afterEach, afterAll } from 'vitest';
+import { render, screen } from '@testing-library/react';
+import { MemoryRouter, Route, Routes } from 'react-router-dom';
+import { http, HttpResponse } from 'msw';
 import { AgentsThreads } from '../AgentsThreads';
+import { TestProviders, server, abs } from '../../../__tests__/integration/testUtils';
 
-function renderWithProviders(initialEntry: string, element: React.ReactNode) {
-  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  return render(
-    <MemoryRouter initialEntries={[initialEntry]}>
-      <QueryClientProvider client={client}>{element}</QueryClientProvider>
-    </MemoryRouter>,
-  );
+function t(offsetMs: number) {
+  return new Date(1700000000000 + offsetMs).toISOString();
 }
 
-describe('AgentsThreads deep links', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-    const defaultRunsResult = {
-      data: { items: [] },
-      isLoading: false,
-      isError: false,
-      error: null,
-      refetch: vi.fn(),
-      isFetching: false,
-    };
-    threadRunsMock.mockReturnValue(defaultRunsResult);
-  });
+describe('AgentsThreads deep linking', () => {
+  beforeAll(() => server.listen());
+  afterEach(() => server.resetHandlers());
+  afterAll(() => server.close());
 
-  it('renders thread details from route-loaded thread id', async () => {
-    threadByIdMock.mockReturnValue({
-      data: {
-        id: 'thread-1',
-        alias: 'alias-1',
-        summary: 'Thread from API',
-        status: 'open',
-        createdAt: '2024-01-01T00:00:00.000Z',
-        parentId: null,
-      },
-      isError: false,
-      isLoading: false,
-      isPending: false,
-      error: null,
-    });
-
-    renderWithProviders(
-      '/agents/threads/thread-1',
-      <Routes>
-        <Route path="/agents/threads/:threadId" element={<AgentsThreads />} />
-      </Routes>,
+  function renderAt(path: string) {
+    return render(
+      <TestProviders>
+        <MemoryRouter initialEntries={[path]}>
+          <Routes>
+            <Route path="/agents/threads">
+              <Route index element={<AgentsThreads />} />
+              <Route path=":threadId" element={<AgentsThreads />} />
+            </Route>
+          </Routes>
+        </MemoryRouter>
+      </TestProviders>,
     );
+  }
 
-    await waitFor(() => expect(threadByIdMock).toHaveBeenCalledWith('thread-1'));
-    expect(screen.getByTestId('thread-header')).toHaveTextContent('Thread from API');
-    expect(screen.queryByText('Thread not found')).not.toBeInTheDocument();
-  });
-
-  it('shows friendly error and navigates back on invalid id', async () => {
-    const notFoundError = {
-      message: 'thread_not_found',
-      response: { status: 404 },
-    } as const;
-
-    threadByIdMock.mockReturnValue({
-      data: undefined,
-      isError: true,
-      isLoading: false,
-      isPending: false,
-      error: notFoundError,
-    });
-
-    let currentPath = '';
-    const LocationSpy = () => {
-      const location = useLocation();
-      useEffect(() => {
-        currentPath = location.pathname;
-      }, [location.pathname]);
-      return null;
+  it('loads thread details when navigating directly to a thread id', async () => {
+    const thread = {
+      id: 'thread-1',
+      alias: 'alias-1',
+      summary: 'Thread from API',
+      status: 'open',
+      createdAt: t(0),
+      parentId: null,
+      metrics: { remindersCount: 0, containersCount: 0, activity: 'idle', runsCount: 1 },
+      agentTitle: 'Agent Uno',
     };
 
-    const WithSpy = () => (
-      <>
-        <LocationSpy />
-        <AgentsThreads />
-      </>
+    const runMeta = { id: 'run-1', threadId: 'thread-1', status: 'finished', createdAt: t(1), updatedAt: t(2) };
+
+    const threadsHandler = () => HttpResponse.json({ items: [thread] });
+    const threadHandler = () => HttpResponse.json(thread);
+    const runsHandler = () => HttpResponse.json({ items: [runMeta] });
+    const messagesHandler = () => HttpResponse.json({ items: [] });
+
+    server.use(
+      http.get('/api/agents/threads', threadsHandler),
+      http.get(abs('/api/agents/threads'), threadsHandler),
+      http.get('/api/agents/threads/thread-1', threadHandler),
+      http.get(abs('/api/agents/threads/thread-1'), threadHandler),
+      http.get('/api/agents/threads/thread-1/runs', runsHandler),
+      http.get(abs('/api/agents/threads/thread-1/runs'), runsHandler),
+      http.get('/api/agents/threads/thread-1/children', () => HttpResponse.json({ items: [] })),
+      http.get(abs('/api/agents/threads/thread-1/children'), () => HttpResponse.json({ items: [] })),
+      http.get('/api/agents/runs/run-1/messages', messagesHandler),
+      http.get(abs('/api/agents/runs/run-1/messages'), messagesHandler),
+      http.get('/api/agents/reminders', () => HttpResponse.json({ items: [] })),
+      http.get(abs('/api/agents/reminders'), () => HttpResponse.json({ items: [] })),
+      http.get('/api/containers', () => HttpResponse.json({ items: [] })),
+      http.get(abs('/api/containers'), () => HttpResponse.json({ items: [] })),
     );
 
-    renderWithProviders(
-      '/agents/threads/bad-id',
-      <Routes>
-        <Route path="/agents/threads">
-          <Route index element={<WithSpy />} />
-          <Route path=":threadId" element={<WithSpy />} />
-        </Route>
-      </Routes>,
+    renderAt('/agents/threads/thread-1');
+
+    expect(await screen.findByRole('heading', { name: 'Thread from API' })).toBeInTheDocument();
+    expect(screen.getByTestId('threads-list')).toBeInTheDocument();
+  });
+
+  it('shows a friendly error when the thread is missing', async () => {
+    server.use(
+      http.get('/api/agents/threads', () => HttpResponse.json({ items: [] })),
+      http.get(abs('/api/agents/threads'), () => HttpResponse.json({ items: [] })),
+      http.get('/api/agents/threads/thread-missing', () => new HttpResponse(null, { status: 404 })),
+      http.get(abs('/api/agents/threads/thread-missing'), () => new HttpResponse(null, { status: 404 })),
+      http.get('/api/agents/threads/thread-missing/runs', () => HttpResponse.json({ items: [] })),
+      http.get(abs('/api/agents/threads/thread-missing/runs'), () => HttpResponse.json({ items: [] })),
+      http.get('/api/agents/reminders', () => HttpResponse.json({ items: [] })),
+      http.get(abs('/api/agents/reminders'), () => HttpResponse.json({ items: [] })),
+      http.get('/api/containers', () => HttpResponse.json({ items: [] })),
+      http.get(abs('/api/containers'), () => HttpResponse.json({ items: [] })),
     );
 
-    await waitFor(() => expect(threadByIdMock).toHaveBeenCalledWith('bad-id'));
-    expect(screen.getByText('Thread not found')).toBeInTheDocument();
-    expect(currentPath).toBe('/agents/threads/bad-id');
+    renderAt('/agents/threads/thread-missing');
 
-    const backButton = screen.getByRole('button', { name: 'Back to threads' });
-    fireEvent.click(backButton);
-
-    await waitFor(() => {
-      expect(currentPath).toBe('/agents/threads');
-    });
+    expect(
+      await screen.findByText('Thread not found. The link might be invalid or the thread was removed.'),
+    ).toBeInTheDocument();
   });
 });

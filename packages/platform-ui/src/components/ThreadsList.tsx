@@ -11,6 +11,7 @@ interface ThreadsListProps {
   selectedThreadId?: string;
   className?: string;
   emptyState?: ReactNode;
+  onToggleExpand?: (threadId: string, isExpanded: boolean) => void;
 }
 
 export function ThreadsList({
@@ -22,6 +23,7 @@ export function ThreadsList({
   selectedThreadId,
   className = '',
   emptyState,
+  onToggleExpand,
 }: ThreadsListProps) {
   const [expandedThreads, setExpandedThreads] = useState<Set<string>>(new Set());
   const [hasLoadedMore, setHasLoadedMore] = useState(false);
@@ -56,11 +58,13 @@ export function ThreadsList({
   const handleToggleExpand = (threadId: string) => {
     setExpandedThreads((prev) => {
       const newSet = new Set(prev);
-      if (newSet.has(threadId)) {
+      const isExpanded = newSet.has(threadId);
+      if (isExpanded) {
         newSet.delete(threadId);
       } else {
         newSet.add(threadId);
       }
+      onToggleExpand?.(threadId, !isExpanded);
       return newSet;
     });
   };
@@ -83,11 +87,36 @@ export function ThreadsList({
     );
 
     // Render subthreads if expanded
-    if (isExpanded && thread.subthreads && thread.subthreads.length > 0) {
-      const subthreads = thread.subthreads;
-      subthreads.forEach((subthread) => {
-        items.push(...renderThread(subthread, depth + 1));
-      });
+    if (isExpanded) {
+      if (thread.isChildrenLoading) {
+        items.push(
+          <div key={`${thread.id}-loading`} className="flex items-center gap-2 px-12 py-2 text-xs text-[var(--agyn-gray)]">
+            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            Loading subthreads…
+          </div>,
+        );
+      }
+
+      if (thread.childrenError) {
+        items.push(
+          <div key={`${thread.id}-error`} className="px-12 py-2 text-xs text-[var(--agyn-red)]">
+            {thread.childrenError}
+          </div>,
+        );
+      }
+
+      if (thread.subthreads && thread.subthreads.length > 0) {
+        const subthreads = thread.subthreads;
+        subthreads.forEach((subthread) => {
+          items.push(...renderThread(subthread, depth + 1));
+        });
+      } else if (!thread.isChildrenLoading && !thread.childrenError && thread.hasChildren === false) {
+        items.push(
+          <div key={`${thread.id}-empty`} className="px-12 py-2 text-xs text-[var(--agyn-gray)]">
+            No subthreads
+          </div>,
+        );
+      }
     }
 
     return items;
@@ -104,7 +133,10 @@ export function ThreadsList({
   }
 
   return (
-    <div className={`bg-white rounded-[10px] border border-[var(--agyn-border-subtle)] overflow-hidden ${className}`}>
+    <div
+      className={`bg-white rounded-[10px] border border-[var(--agyn-border-subtle)] overflow-hidden ${className}`}
+      data-testid="threads-list"
+    >
       {/* Threads List */}
       <div className="overflow-y-auto">
         {threads.map((thread) => renderThread(thread, 0))}

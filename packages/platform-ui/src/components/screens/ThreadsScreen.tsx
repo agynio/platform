@@ -16,19 +16,22 @@ interface ThreadsScreenProps {
   reminders: { id: string; title: string; time: string }[];
   filterMode: 'all' | 'open' | 'closed';
   selectedThreadId: string | null;
+  selectedThread?: Thread;
   inputValue: string;
   isRunsInfoCollapsed: boolean;
   threadsHasMore?: boolean;
   threadsIsLoading?: boolean;
   isLoading?: boolean;
   isEmpty?: boolean;
-  error?: ReactNode;
+  listError?: ReactNode;
+  detailError?: ReactNode;
   onFilterModeChange?: (mode: 'all' | 'open' | 'closed') => void;
   onSelectThread?: (threadId: string) => void;
   onToggleRunsInfoCollapsed?: (isCollapsed: boolean) => void;
   onInputValueChange?: (value: string) => void;
   onSendMessage?: (value: string, context: { threadId: string | null }) => void;
   onThreadsLoadMore?: () => void;
+  onThreadExpand?: (threadId: string, isExpanded: boolean) => void;
   className?: string;
 }
 
@@ -39,19 +42,22 @@ export default function ThreadsScreen({
   reminders,
   filterMode,
   selectedThreadId,
+  selectedThread,
   inputValue,
   isRunsInfoCollapsed,
   threadsHasMore = false,
   threadsIsLoading = false,
   isLoading = false,
   isEmpty = false,
-  error,
+  listError,
+  detailError,
   onFilterModeChange,
   onSelectThread,
   onToggleRunsInfoCollapsed,
   onInputValueChange,
   onSendMessage,
   onThreadsLoadMore,
+  onThreadExpand,
   className = '',
 }: ThreadsScreenProps) {
   const filteredThreads = threads.filter((thread) => {
@@ -61,13 +67,13 @@ export default function ThreadsScreen({
     return true;
   });
 
-  const selectedThread = threads.find((thread) => thread.id === selectedThreadId);
+  const resolvedSelectedThread = selectedThread ?? threads.find((thread) => thread.id === selectedThreadId);
 
   const renderThreadsList = () => {
-    if (error) {
+    if (listError) {
       return (
         <div className="flex h-full items-center justify-center px-6 text-center text-sm text-[var(--agyn-red)]">
-          {error}
+          {listError}
         </div>
       );
     }
@@ -81,6 +87,7 @@ export default function ThreadsScreen({
         hasMore={threadsHasMore}
         isLoading={threadsIsLoading || isLoading}
         onLoadMore={onThreadsLoadMore}
+        onToggleExpand={onThreadExpand}
         emptyState={
           <span className="text-sm">
             {isEmpty ? 'No threads available yet' : 'No threads match the current filter'}
@@ -91,10 +98,10 @@ export default function ThreadsScreen({
   };
 
   const renderDetailContent = () => {
-    if (error) {
+    if (detailError) {
       return (
         <div className="flex h-full items-center justify-center px-6 text-center text-sm text-[var(--agyn-red)]">
-          {error}
+          {detailError}
         </div>
       );
     }
@@ -116,7 +123,7 @@ export default function ThreadsScreen({
       );
     }
 
-    if (!selectedThread) {
+    if (!resolvedSelectedThread) {
       return (
         <div className="flex h-full items-center justify-center text-[var(--agyn-gray)]">
           Select a thread to view details
@@ -130,12 +137,12 @@ export default function ThreadsScreen({
           <div className="mb-3 flex items-start justify-between">
             <div className="flex-1">
               <div className="mb-1 flex items-center gap-2">
-                <StatusIndicator status={selectedThread.status as 'running' | 'finished' | 'pending'} size="sm" />
-                <span className="text-xs text-[var(--agyn-gray)]">{selectedThread.agentName}</span>
+                <StatusIndicator status={resolvedSelectedThread.status as 'running' | 'finished' | 'pending'} size="sm" />
+                <span className="text-xs text-[var(--agyn-gray)]">{resolvedSelectedThread.agentName}</span>
                 <span className="text-xs text-[var(--agyn-gray)]">•</span>
-                <span className="text-xs text-[var(--agyn-gray)]">{selectedThread.createdAt}</span>
+                <span className="text-xs text-[var(--agyn-gray)]">{resolvedSelectedThread.createdAt}</span>
               </div>
-              <h3 className="text-[var(--agyn-dark)]">{selectedThread.summary}</h3>
+              <h3 className="text-[var(--agyn-dark)]">{resolvedSelectedThread.summary}</h3>
             </div>
           </div>
 

@@ -19,6 +19,8 @@ export interface Run {
   duration?: string;
   tokens?: number;
   cost?: string;
+  timelineHref?: string;
+  onViewRun?: (runId: string) => void;
 }
 
 export interface QueuedMessageData {
@@ -75,7 +77,10 @@ export function Conversation({
   const hasQueueOrReminders = queuedMessages.length > 0 || reminders.length > 0;
 
   return (
-    <div className={`flex flex-col h-full bg-white rounded-[10px] border border-[var(--agyn-border-subtle)] overflow-hidden ${className}`}>
+    <div
+      className={`flex flex-col h-full bg-white rounded-[10px] border border-[var(--agyn-border-subtle)] overflow-hidden ${className}`}
+      data-testid="conversation"
+    >
       {/* Header */}
       {header && (
         <div className="px-6 py-4 border-b border-[var(--agyn-border-subtle)] bg-[var(--agyn-bg-light)]">
@@ -139,6 +144,8 @@ export function Conversation({
                           tokens={run.tokens}
                           cost={run.cost}
                           height={runHeights.get(run.id) || 0}
+                          runLink={run.timelineHref}
+                          onViewRun={run.onViewRun}
                         />
                       )}
                     </div>

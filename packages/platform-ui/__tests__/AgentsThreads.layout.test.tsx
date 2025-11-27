@@ -6,25 +6,20 @@ import { TestProviders } from './integration/testUtils';
 import { MemoryRouter } from 'react-router-dom';
 
 describe('AgentsThreads layout', () => {
-  it('uses non-scrollable outer container with inner scrollable panels', async () => {
+  it('renders header, threads list, and conversation panels', async () => {
     render(
       <TestProviders>
         <MemoryRouter>
           <AgentsThreads />
         </MemoryRouter>
-      </TestProviders>
+      </TestProviders>,
     );
-    // Outer container
-    const outer = screen.getByRole('heading', { name: /Agents \/ Threads/i }).closest('div')?.parentElement;
-    expect(outer).toBeTruthy();
-    const outerClass = outer?.getAttribute('class') || '';
-    expect(outerClass).toContain('absolute');
-    expect(outerClass).toContain('inset-0');
-    expect(outerClass).toContain('overflow-hidden');
 
-    // Panels exist in DOM (responsive layout uses a single instance per panel)
-    expect(screen.getByTestId('mobile-panel')).toBeInTheDocument();
-    expect(screen.getByTestId('threads-panel')).toBeInTheDocument();
-    expect(screen.getByTestId('messages-panel')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: /Agents \/ Threads/i })).toBeInTheDocument();
+    expect(await screen.findByTestId('threads-list')).toBeInTheDocument();
+    expect(screen.getByText('Select a thread to view details')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Open/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Closed/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /All/i })).toBeInTheDocument();
   });
 });

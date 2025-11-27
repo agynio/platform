@@ -12,6 +12,9 @@ export interface Thread {
   status: ThreadStatus;
   isOpen: boolean;
   subthreads?: Thread[];
+  hasChildren?: boolean;
+  isChildrenLoading?: boolean;
+  childrenError?: string | null;
 }
 
 interface ThreadItemProps {
@@ -44,7 +47,8 @@ export function ThreadItem({
   isExpanded = false,
   isSelected = false,
 }: ThreadItemProps) {
-  const hasSubthreads = thread.subthreads && thread.subthreads.length > 0;
+  const expandedChildrenCount = thread.subthreads?.length ?? 0;
+  const hasSubthreads = (thread.subthreads && thread.subthreads.length > 0) || thread.hasChildren;
   const indentWidth = depth * 24; // Reduced from 32px to 24px
   const avatarColor = getAgentAvatarColor(thread.agentName);
 
@@ -126,7 +130,7 @@ export function ThreadItem({
             ) : (
               <>
                 <ChevronRight className="w-3.5 h-3.5" />
-                <span>Show {thread.subthreads?.length} subthread{thread.subthreads?.length !== 1 ? 's' : ''}</span>
+                <span>Show {expandedChildrenCount} subthread{expandedChildrenCount !== 1 ? 's' : ''}</span>
               </>
             )}
           </button>

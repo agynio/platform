@@ -43,7 +43,11 @@ export function Message({ role, content, timestamp, className = '' }: MessagePro
   const Icon = config.icon;
 
   return (
-    <div className={`flex justify-start mb-4 min-w-0 ${className}`}>
+    <div
+      className={`flex justify-start mb-4 min-w-0 ${className}`}
+      data-testid="conversation-message"
+      data-role={role}
+    >
       <div className="flex gap-3 max-w-full min-w-0 flex-1">
         {/* Avatar */}
         <div

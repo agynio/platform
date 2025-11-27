@@ -181,12 +181,14 @@ const relativeHandlers = [
   // Threads endpoints used by AgentsThreads page
   _http.get('/api/agents/threads', () => _HttpResponse.json({ items: [] })),
   _http.get('/api/agents/threads/:threadId/runs', () => _HttpResponse.json({ items: [] })),
+  _http.get('/api/agents/threads/:threadId/children', () => _HttpResponse.json({ items: [] })),
+  _http.get('/api/agents/threads/:threadId', () => new _HttpResponse(null, { status: 404 })),
   _http.get('/api/agents/threads/:threadId/metrics', () =>
     _HttpResponse.json({ remindersCount: 0, containersCount: 0, activity: 'idle', runsCount: 0 }),
   ),
-  _http.get('/api/agents/threads/:threadId/containers', () =>
-    _HttpResponse.json({ items: [] }),
-  ),
+  _http.get('/api/agents/threads/:threadId/containers', () => _HttpResponse.json({ items: [] })),
+  _http.get('/api/agents/reminders', () => _HttpResponse.json({ items: [] })),
+  _http.get('/api/containers', () => _HttpResponse.json({ items: [] })),
   _http.get('/api/agents/runs/:runId/messages', () => _HttpResponse.json({ items: [] })),
   _http.get('/api/agents/runs/:runId/summary', ({ params }) =>
     _HttpResponse.json({

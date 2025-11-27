@@ -1,72 +1,100 @@
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import React from 'react';
-import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
+import { render, screen, fireEvent, within } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
-import { TestProviders, server, abs } from './integration/testUtils';
 import { MemoryRouter } from 'react-router-dom';
-// run selection removed; no extra wrappers needed beyond TestProviders
 import { AgentsThreads } from '../src/pages/AgentsThreads';
+import { TestProviders, server, abs } from './integration/testUtils';
+
+const navigateMock = vi.fn();
+
+vi.mock('react-router-dom', async () => {
+  const actual = await vi.importActual('react-router-dom');
+  return {
+    ...(actual as Record<string, unknown>),
+    useNavigate: () => navigateMock,
+  };
+});
 
 function t(offsetMs: number) {
   return new Date(1700000000000 + offsetMs).toISOString();
 }
 
-describe('AgentsThreads chat-like view', () => {
+describe('AgentsThreads conversation view', () => {
   beforeAll(() => server.listen());
-  afterEach(() => server.resetHandlers());
+  afterEach(() => {
+    server.resetHandlers();
+    navigateMock.mockReset();
+  });
   afterAll(() => server.close());
 
-  function useThreadsMock() {
+  function setupThreadData() {
+    const thread = {
+      id: 'th1',
+      alias: 'th-a',
+      summary: 'Thread A',
+      status: 'open',
+      createdAt: t(0),
+      parentId: null,
+      metrics: { remindersCount: 1, containersCount: 1, activity: 'working', runsCount: 1 },
+    };
+
+    const runMeta = { id: 'run1', threadId: 'th1', status: 'finished', createdAt: t(1), updatedAt: t(2) };
+
+    const reminders = [{ id: 'rem1', threadId: 'th1', note: 'Follow up', at: t(50) }];
+    const containers = [
+      {
+        containerId: 'cont-1',
+        threadId: 'th1',
+        image: 'ai:latest',
+        status: 'running',
+        startedAt: t(0),
+        lastUsedAt: t(1),
+        killAfterAt: null,
+        role: 'workspace',
+      },
+    ];
+
+    const runsHandler = () => HttpResponse.json({ items: [runMeta] });
+    const threadsHandler = () => HttpResponse.json({ items: [thread] });
+    const threadHandler = () => HttpResponse.json(thread);
+
+    const messagesHandler = ({ request }: { request: Request }) => {
+      const url = new URL(request.url);
+      const type = url.searchParams.get('type');
+      if (type === 'input') {
+        return HttpResponse.json({ items: [{ id: 'm1', kind: 'user', text: 'Hi there', createdAt: t(10) }] });
+      }
+      if (type === 'injected') {
+        return HttpResponse.json({ items: [{ id: 'm2', kind: 'system', text: 'Injected context', createdAt: t(15) }] });
+      }
+      if (type === 'output') {
+        return HttpResponse.json({ items: [{ id: 'm3', kind: 'assistant', text: 'Hello from agent', createdAt: t(20) }] });
+      }
+      return HttpResponse.json({ items: [] });
+    };
+
     server.use(
-      http.get('/api/agents/threads', () => HttpResponse.json({ items: [{ id: 'th1', alias: 'th-a', summary: 'Thread A', createdAt: t(0) }] })),
-      http.get(abs('/api/agents/threads'), () => HttpResponse.json({ items: [{ id: 'th1', alias: 'th-a', summary: 'Thread A', createdAt: t(0) }] })),
-      http.get('/api/agents/threads/th1/runs', () =>
-        HttpResponse.json({ items: [{ id: 'run1', status: 'finished', createdAt: t(1), updatedAt: t(2) }] }),
-      ),
-      http.get(abs('/api/agents/threads/th1/runs'), () =>
-        HttpResponse.json({ items: [{ id: 'run1', status: 'finished', createdAt: t(1), updatedAt: t(2) }] }),
-      ),
-      http.get('/api/agents/runs/run1/messages', ({ request }) => {
-        const url = new URL(request.url);
-        const type = url.searchParams.get('type');
-        if (type === 'input') return HttpResponse.json({ items: [{ id: 'm1', kind: 'user', text: 'Hi', source: { a: 1 }, createdAt: t(10) }] });
-        if (type === 'injected') return HttpResponse.json({ items: [{ id: 'm2', kind: 'system', text: 'Injected', source: { b: 2 }, createdAt: t(20) }] });
-        if (type === 'output') return HttpResponse.json({ items: [{ id: 'm3', kind: 'assistant', text: 'Hello!', source: { c: 3 }, createdAt: t(30) }] });
-        return HttpResponse.json({ items: [] });
-      }),
-      http.get(abs('/api/agents/runs/run1/messages'), ({ request }) => {
-        const url = new URL(request.url);
-        const type = url.searchParams.get('type');
-        if (type === 'input') return HttpResponse.json({ items: [{ id: 'm1', kind: 'user', text: 'Hi', source: { a: 1 }, createdAt: t(10) }] });
-        if (type === 'injected') return HttpResponse.json({ items: [{ id: 'm2', kind: 'system', text: 'Injected', source: { b: 2 }, createdAt: t(20) }] });
-        if (type === 'output') return HttpResponse.json({ items: [{ id: 'm3', kind: 'assistant', text: 'Hello!', source: { c: 3 }, createdAt: t(30) }] });
-        return HttpResponse.json({ items: [] });
-      }),
+      http.get('/api/agents/threads', threadsHandler),
+      http.get(abs('/api/agents/threads'), threadsHandler),
+      http.get('/api/agents/threads/th1', threadHandler),
+      http.get(abs('/api/agents/threads/th1'), threadHandler),
+      http.get('/api/agents/threads/th1/children', () => HttpResponse.json({ items: [] })),
+      http.get(abs('/api/agents/threads/th1/children'), () => HttpResponse.json({ items: [] })),
+      http.get('/api/agents/threads/th1/runs', runsHandler),
+      http.get(abs('/api/agents/threads/th1/runs'), runsHandler),
+      http.get('/api/agents/reminders', () => HttpResponse.json({ items: reminders })),
+      http.get(abs('/api/agents/reminders'), () => HttpResponse.json({ items: reminders })),
+      http.get('/api/containers', () => HttpResponse.json({ items: containers })),
+      http.get(abs('/api/containers'), () => HttpResponse.json({ items: containers })),
+      http.get('/api/agents/runs/run1/messages', messagesHandler),
+      http.get(abs('/api/agents/runs/run1/messages'), messagesHandler),
     );
   }
 
-  it('merges messages chronologically and aligns sides', async () => {
-    useThreadsMock();
-    render(
-      <TestProviders>
-        <MemoryRouter>
-          <AgentsThreads />
-        </MemoryRouter>
-      </TestProviders>,
-    );
-    const threadBtn = await screen.findByRole('button', { name: /Thread A/ });
-    fireEvent.click(threadBtn);
-    const list = await screen.findByTestId('message-list');
-    expect(await within(list).findAllByTestId('run-header')).toHaveLength(1);
-    const bubbles = await within(list).findAllByTestId('message-bubble');
-    expect(bubbles).toHaveLength(3);
-    expect(bubbles[0].dataset.side).toBe('left');
-    expect(bubbles[1].dataset.side).toBe('left');
-    expect(bubbles[2].dataset.side).toBe('right');
-  });
+  it('renders conversation messages and run info, and navigates to run timeline', async () => {
+    setupThreadData();
 
-  it('toggles raw JSON per message', async () => {
-    useThreadsMock();
     render(
       <TestProviders>
         <MemoryRouter>
@@ -74,175 +102,22 @@ describe('AgentsThreads chat-like view', () => {
         </MemoryRouter>
       </TestProviders>,
     );
-    fireEvent.click(await screen.findByRole('button', { name: /Thread A/ }));
-    const list = await screen.findByTestId('message-list');
-    const firstBubble = (await within(list).findAllByTestId('message-bubble'))[0];
-    const toggle = within(firstBubble).getByRole('button', { name: /Show raw JSON/i });
-    fireEvent.click(toggle);
-    await waitFor(() => expect(toggle).toHaveAttribute('aria-expanded', 'true'));
-    const pre = await screen.findByTestId('raw-json');
-    expect(pre).toBeInTheDocument();
-    expect(pre.textContent).toContain('"a": 1');
-  });
 
-  it('autoscrolls to bottom and shows jump control when scrolled up', async () => {
-    const outputCount = 1;
-    server.use(
-      http.get('/api/agents/threads', () => HttpResponse.json({ items: [{ id: 'th1', alias: 'th-a', summary: 'Thread A', createdAt: t(0) }] })),
-      http.get(abs('/api/agents/threads'), () => HttpResponse.json({ items: [{ id: 'th1', alias: 'th-a', summary: 'Thread A', createdAt: t(0) }] })),
-      http.get('/api/agents/threads/th1/runs', () =>
-        HttpResponse.json({ items: [{ id: 'run1', status: 'finished', createdAt: t(1), updatedAt: t(2) }] }),
-      ),
-      http.get(abs('/api/agents/threads/th1/runs'), () =>
-        HttpResponse.json({ items: [{ id: 'run1', status: 'finished', createdAt: t(1), updatedAt: t(2) }] }),
-      ),
-      http.get('/api/agents/runs/run1/messages', ({ request }) => {
-        const url = new URL(request.url);
-        const type = url.searchParams.get('type');
-        if (type === 'input') return HttpResponse.json({ items: [{ id: 'm1', kind: 'user', text: 'Hi', source: {}, createdAt: t(10) }] });
-        if (type === 'injected') return HttpResponse.json({ items: [] });
-        if (type === 'output') {
-          const base = [{ id: 'm3', kind: 'assistant', text: 'Hello!', source: {}, createdAt: t(30) }];
-          const extra = outputCount > 1 ? [{ id: 'm4', kind: 'assistant', text: 'More', source: {}, createdAt: t(40) }] : [];
-          return HttpResponse.json({ items: [...base, ...extra] });
-        }
-        return HttpResponse.json({ items: [] });
-      }),
-      http.get(abs('/api/agents/runs/run1/messages'), ({ request }) => {
-        const url = new URL(request.url);
-        const type = url.searchParams.get('type');
-        if (type === 'input') return HttpResponse.json({ items: [{ id: 'm1', kind: 'user', text: 'Hi', source: {}, createdAt: t(10) }] });
-        if (type === 'injected') return HttpResponse.json({ items: [] });
-        if (type === 'output') {
-          const base = [{ id: 'm3', kind: 'assistant', text: 'Hello!', source: {}, createdAt: t(30) }];
-          const extra = outputCount > 1 ? [{ id: 'm4', kind: 'assistant', text: 'More', source: {}, createdAt: t(40) }] : [];
-          return HttpResponse.json({ items: [...base, ...extra] });
-        }
-        return HttpResponse.json({ items: [] });
-      }),
-    );
-    render(
-      <TestProviders>
-        <MemoryRouter>
-          <AgentsThreads />
-        </MemoryRouter>
-      </TestProviders>,
-    );
-    fireEvent.click(await screen.findByRole('button', { name: /Thread A/ }));
-    const list = await screen.findByTestId('message-list');
-    const setScrollTop = vi.fn();
-    // Spy on scrollTop assignment used for autoscroll
-    Object.defineProperty(list, 'scrollTop', { configurable: true, get: () => 0, set: setScrollTop });
-    // initial autoscroll after first load
-    await waitFor(() => expect(setScrollTop).toHaveBeenCalled());
-    Object.defineProperty(list, 'scrollHeight', { value: 1000, configurable: true });
-    Object.defineProperty(list, 'clientHeight', { value: 300, configurable: true });
-    Object.defineProperty(list, 'scrollTop', { value: 100, configurable: true });
-    fireEvent.scroll(list);
-    expect(await screen.findByTestId('jump-to-latest')).toBeInTheDocument();
-  });
+    const threadRow = await screen.findByText('Thread A');
+    fireEvent.click(threadRow);
 
-  it('renders multiple run headers by default (all runs loaded)', async () => {
-    server.use(
-      http.get('/api/agents/threads', () => HttpResponse.json({ items: [{ id: 'th1', alias: 'th-a', summary: 'Thread A', createdAt: t(0) }] })),
-      http.get(abs('/api/agents/threads'), () => HttpResponse.json({ items: [{ id: 'th1', alias: 'th-a', summary: 'Thread A', createdAt: t(0) }] })),
-      http.get('/api/agents/threads/th1/runs', () =>
-        HttpResponse.json({ items: [
-          { id: 'run1', status: 'finished', createdAt: t(1), updatedAt: t(2) },
-          { id: 'run2', status: 'finished', createdAt: t(3), updatedAt: t(4) },
-        ] }),
-      ),
-      http.get(abs('/api/agents/threads/th1/runs'), () =>
-        HttpResponse.json({ items: [
-          { id: 'run1', status: 'finished', createdAt: t(1), updatedAt: t(2) },
-          { id: 'run2', status: 'finished', createdAt: t(3), updatedAt: t(4) },
-        ] }),
-      ),
-      http.get('/api/agents/runs/run2/messages', ({ request }) => {
-        const url = new URL(request.url);
-        const type = url.searchParams.get('type');
-        if (type === 'input') return HttpResponse.json({ items: [{ id: 'r2m1', kind: 'user', text: 'R2 in', source: {}, createdAt: t(10) }] });
-        if (type === 'injected') return HttpResponse.json({ items: [] });
-        if (type === 'output') return HttpResponse.json({ items: [{ id: 'r2m2', kind: 'assistant', text: 'R2 out', source: {}, createdAt: t(20) }] });
-        return HttpResponse.json({ items: [] });
-      }),
-      http.get(abs('/api/agents/runs/run2/messages'), ({ request }) => {
-        const url = new URL(request.url);
-        const type = url.searchParams.get('type');
-        if (type === 'input') return HttpResponse.json({ items: [{ id: 'r2m1', kind: 'user', text: 'R2 in', source: {}, createdAt: t(10) }] });
-        if (type === 'injected') return HttpResponse.json({ items: [] });
-        if (type === 'output') return HttpResponse.json({ items: [{ id: 'r2m2', kind: 'assistant', text: 'R2 out', source: {}, createdAt: t(20) }] });
-        return HttpResponse.json({ items: [] });
-      }),
-      http.get('/api/agents/runs/run1/messages', ({ request }) => {
-        const url = new URL(request.url);
-        const type = url.searchParams.get('type');
-        if (type === 'input') return HttpResponse.json({ items: [{ id: 'r1m1', kind: 'user', text: 'R1 in', source: {}, createdAt: t(1) }] });
-        if (type === 'injected') return HttpResponse.json({ items: [] });
-        if (type === 'output') return HttpResponse.json({ items: [{ id: 'r1m2', kind: 'assistant', text: 'R1 out', source: {}, createdAt: t(2) }] });
-        return HttpResponse.json({ items: [] });
-      }),
-      http.get(abs('/api/agents/runs/run1/messages'), ({ request }) => {
-        const url = new URL(request.url);
-        const type = url.searchParams.get('type');
-        if (type === 'input') return HttpResponse.json({ items: [{ id: 'r1m1', kind: 'user', text: 'R1 in', source: {}, createdAt: t(1) }] });
-        if (type === 'injected') return HttpResponse.json({ items: [] });
-        if (type === 'output') return HttpResponse.json({ items: [{ id: 'r1m2', kind: 'assistant', text: 'R1 out', source: {}, createdAt: t(2) }] });
-        return HttpResponse.json({ items: [] });
-      }),
-    );
-    render(
-      <TestProviders>
-        <MemoryRouter>
-          <AgentsThreads />
-        </MemoryRouter>
-      </TestProviders>,
-    );
-    fireEvent.click(await screen.findByRole('button', { name: /Thread A/ }));
-    const list2 = await screen.findByTestId('message-list');
-    // Both runs should render without scrolling
-    await waitFor(async () => expect((await within(list2).findAllByTestId('run-header')).length).toBe(2));
-  });
+    const conversation = await screen.findByTestId('conversation');
+    const messages = await within(conversation).findAllByTestId('conversation-message');
+    expect(messages).toHaveLength(3);
+    expect(messages[0]).toHaveTextContent('Hi there');
+    expect(messages[0]).toHaveAttribute('data-role', 'user');
+    expect(messages[1]).toHaveAttribute('data-role', 'system');
+    expect(messages[2]).toHaveAttribute('data-role', 'assistant');
 
-  it('shows empty states when no runs or messages', async () => {
-    server.use(
-      http.get('/api/agents/threads', () => HttpResponse.json({ items: [{ id: 'th1', alias: 'th-a', summary: 'Thread A', createdAt: t(0) }] })),
-      http.get(abs('/api/agents/threads'), () => HttpResponse.json({ items: [{ id: 'th1', alias: 'th-a', summary: 'Thread A', createdAt: t(0) }] })),
-      http.get('/api/agents/threads/th1/runs', () => HttpResponse.json({ items: [] })),
-      http.get(abs('/api/agents/threads/th1/runs'), () => HttpResponse.json({ items: [] })),
-    );
-    render(
-      <TestProviders>
-        <MemoryRouter>
-          <AgentsThreads />
-        </MemoryRouter>
-      </TestProviders>,
-    );
-    fireEvent.click(await screen.findByRole('button', { name: /Thread A/ }));
-    expect(await screen.findByText(/No messages/)).toBeInTheDocument();
-  });
-
-  it('shows error state when message fetch fails', async () => {
-    server.use(
-      http.get('/api/agents/threads', () => HttpResponse.json({ items: [{ id: 'th1', alias: 'th-a', summary: 'Thread A', createdAt: t(0) }] })),
-      http.get(abs('/api/agents/threads'), () => HttpResponse.json({ items: [{ id: 'th1', alias: 'th-a', summary: 'Thread A', createdAt: t(0) }] })),
-      http.get('/api/agents/threads/th1/runs', () =>
-        HttpResponse.json({ items: [{ id: 'run1', status: 'finished', createdAt: t(1), updatedAt: t(2) }] }),
-      ),
-      http.get(abs('/api/agents/threads/th1/runs'), () =>
-        HttpResponse.json({ items: [{ id: 'run1', status: 'finished', createdAt: t(1), updatedAt: t(2) }] }),
-      ),
-      http.get('/api/agents/runs/run1/messages', () => new HttpResponse(null, { status: 500 })),
-      http.get(abs('/api/agents/runs/run1/messages'), () => new HttpResponse(null, { status: 500 })),
-    );
-    render(
-      <TestProviders>
-        <MemoryRouter>
-          <AgentsThreads />
-        </MemoryRouter>
-      </TestProviders>,
-    );
-    fireEvent.click(await screen.findByRole('button', { name: /Thread A/ }));
-    expect(await screen.findByRole('alert')).toBeInTheDocument();
+    const runInfo = await within(conversation).findByTestId('run-info');
+    expect(runInfo).toHaveTextContent('Finished');
+    const viewRunButton = within(runInfo).getByRole('button', { name: /View Run/i });
+    fireEvent.click(viewRunButton);
+    expect(navigateMock).toHaveBeenCalledWith('/agents/threads/th1/runs/run1/timeline');
   });
 });

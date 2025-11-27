@@ -1,22 +1,109 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useQuery, useQueryClient, type UseQueryResult } from '@tanstack/react-query';
-import { RunMessageList, type UnifiedRunMessage, type UnifiedListItem, type RunMeta } from '@/components/agents/RunMessageList';
-import { ThreadTree } from '@/components/agents/ThreadTree';
-import { ThreadStatusFilterSwitch, type ThreadStatusFilter } from '@/components/agents/ThreadStatusFilterSwitch';
-import { useThreadRuns } from '@/api/hooks/runs';
-import { useThreadById } from '@/api/hooks/threads';
-import type { ThreadNode } from '@/api/types/agents';
-import { runs as runsApi } from '@/api/modules/runs';
-import { http } from '@/api/http';
-import type { ReminderItem } from '@/api/types/agents';
-import { graphSocket } from '@/lib/graph/socket';
 import { useNavigate, useParams } from 'react-router-dom';
-import { ThreadHeader } from '@/components/agents/ThreadHeader';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import ThreadsScreen from '@/components/screens/ThreadsScreen';
+import type { Thread } from '@/components/ThreadItem';
+import type { ConversationMessage, Run as ConversationRun } from '@/components/Conversation';
+import { formatDuration } from '@/components/agents/runTimelineFormatting';
+import { notifyError } from '@/lib/notify';
+import { graphSocket } from '@/lib/graph/socket';
+import { threads } from '@/api/modules/threads';
+import { runs as runsApi } from '@/api/modules/runs';
+import { useThreadById, useThreadReminders, useThreadContainers } from '@/api/hooks/threads';
+import { useThreadRuns } from '@/api/hooks/runs';
+import type { ThreadNode, ThreadMetrics, ThreadReminder, RunMessageItem, RunMeta } from '@/api/types/agents';
+import type { ContainerItem } from '@/api/modules/containers';
+import type { ApiError } from '@/api/http';
 
-// Thread list rendering moved into ThreadTree component
-type MessageItem = { id: string; kind: 'user' | 'assistant' | 'system' | 'tool'; text?: string | null; source: unknown; createdAt: string };
-type SocketMessage = { id: string; kind: 'user' | 'assistant' | 'system' | 'tool'; text: string | null; source: unknown; createdAt: string; runId?: string };
+const INITIAL_THREAD_LIMIT = 50;
+const THREAD_LIMIT_STEP = 50;
+const MAX_THREAD_LIMIT = 500;
+
+const defaultMetrics: ThreadMetrics = { remindersCount: 0, containersCount: 0, activity: 'idle', runsCount: 0 };
+
+type FilterMode = 'open' | 'closed' | 'all';
+
+type ThreadChildrenEntry = {
+  nodes: ThreadNode[];
+  status: 'idle' | 'loading' | 'success' | 'error';
+  error?: string | null;
+  hasChildren: boolean;
+};
+
+type ThreadChildrenState = Record<string, ThreadChildrenEntry>;
+
+type SocketMessage = {
+  id: string;
+  kind: 'user' | 'assistant' | 'system' | 'tool';
+  text: string | null;
+  source: unknown;
+  createdAt: string;
+  runId?: string;
+};
+
 type SocketRun = { id: string; status: 'running' | 'finished' | 'terminated'; createdAt: string; updatedAt: string };
+
+type ConversationMessageWithMeta = ConversationMessage & { createdAtRaw: string };
+
+function formatDate(value: string | null | undefined): string {
+  if (!value) return '';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toLocaleString();
+}
+
+function sanitizeSummary(summary: string | null | undefined): string {
+  const trimmed = summary?.trim();
+  return trimmed && trimmed.length > 0 ? trimmed : '(no summary yet)';
+}
+
+function sanitizeAgentName(agentName: string | null | undefined): string {
+  const trimmed = agentName?.trim();
+  return trimmed && trimmed.length > 0 ? trimmed : '(unknown agent)';
+}
+
+function mapThreadStatus(node: ThreadNode): Thread['status'] {
+  const activity = node.metrics?.activity;
+  if (activity === 'working') return 'running';
+  if (activity === 'waiting') return 'pending';
+  if (activity === 'idle') return node.status === 'closed' ? 'finished' : 'pending';
+  return node.status === 'closed' ? 'finished' : 'pending';
+}
+
+function matchesFilter(status: 'open' | 'closed', filter: FilterMode): boolean {
+  if (filter === 'all') return true;
+  return filter === status;
+}
+
+function buildThreadTree(node: ThreadNode, children: ThreadChildrenState): Thread {
+  const entry = children[node.id];
+  const childNodes = entry?.nodes ?? [];
+  const mappedChildren = childNodes.map((child) => buildThreadTree(child, children));
+  return {
+    id: node.id,
+    summary: sanitizeSummary(node.summary ?? null),
+    agentName: sanitizeAgentName(node.agentTitle),
+    createdAt: formatDate(node.createdAt),
+    status: mapThreadStatus(node),
+    isOpen: (node.status ?? 'open') === 'open',
+    subthreads: mappedChildren.length > 0 ? mappedChildren : undefined,
+    hasChildren: entry ? entry.hasChildren : undefined,
+    isChildrenLoading: entry?.status === 'loading',
+    childrenError: entry?.status === 'error' ? entry.error ?? 'Unable to load subthreads' : null,
+  };
+}
+
+function findThreadNode(nodes: ThreadNode[], children: ThreadChildrenState, targetId: string): ThreadNode | undefined {
+  for (const node of nodes) {
+    if (node.id === targetId) return node;
+    const entry = children[node.id];
+    if (entry) {
+      const found = findThreadNode(entry.nodes, children, targetId);
+      if (found) return found;
+    }
+  }
+  return undefined;
+}
 
 function compareRunMeta(a: RunMeta, b: RunMeta): number {
   const diff = new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
@@ -24,452 +111,673 @@ function compareRunMeta(a: RunMeta, b: RunMeta): number {
   return a.id.localeCompare(b.id);
 }
 
-function compareUnifiedMessages(a: UnifiedRunMessage, b: UnifiedRunMessage): number {
-  const diff = new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
+function mapRunStatus(status: RunMeta['status']): ConversationRun['status'] {
+  if (status === 'terminated') return 'failed';
+  if (status === 'finished') return 'finished';
+  return 'running';
+}
+
+function computeRunDuration(run: RunMeta): string | undefined {
+  const start = Date.parse(run.createdAt);
+  if (!Number.isFinite(start)) return undefined;
+  const endCandidate = run.status === 'running' ? Date.now() : Date.parse(run.updatedAt);
+  const end = Number.isFinite(endCandidate) ? endCandidate : start;
+  const ms = Math.max(0, end - start);
+  const label = formatDuration(ms);
+  return label === '—' ? undefined : label;
+}
+
+function compareMessages(a: ConversationMessageWithMeta, b: ConversationMessageWithMeta): number {
+  const diff = Date.parse(a.createdAtRaw) - Date.parse(b.createdAtRaw);
   if (diff !== 0) return diff;
   return a.id.localeCompare(b.id);
 }
 
-function mergeMessageLists(base: UnifiedRunMessage[], additions: UnifiedRunMessage[]): UnifiedRunMessage[] {
+function mergeMessages(base: ConversationMessageWithMeta[], additions: ConversationMessageWithMeta[]): ConversationMessageWithMeta[] {
   if (additions.length === 0) return base;
-  if (base.length === 0) return [...additions].sort(compareUnifiedMessages);
-  const byId = new Map<string, UnifiedRunMessage>();
-  for (const msg of base) byId.set(msg.id, msg);
-  for (const msg of additions) byId.set(msg.id, msg);
-  const merged = Array.from(byId.values());
-  merged.sort(compareUnifiedMessages);
+  if (base.length === 0) return [...additions].sort(compareMessages);
+  const map = new Map<string, ConversationMessageWithMeta>();
+  for (const msg of base) map.set(msg.id, msg);
+  for (const msg of additions) map.set(msg.id, msg);
+  const merged = Array.from(map.values());
+  merged.sort(compareMessages);
   return merged;
 }
 
-function areMessageListsEqual(a: UnifiedRunMessage[], b: UnifiedRunMessage[]): boolean {
+function areMessageListsEqual(a: ConversationMessageWithMeta[], b: ConversationMessageWithMeta[]): boolean {
   if (a.length !== b.length) return false;
   for (let i = 0; i < a.length; i += 1) {
     const left = a[i];
     const right = b[i];
-    if (
-      left.id !== right.id ||
-      left.role !== right.role ||
-      left.text !== right.text ||
-      left.createdAt !== right.createdAt ||
-      left.side !== right.side ||
-      left.runId !== right.runId
-    ) {
+    if (left.id !== right.id || left.role !== right.role || left.content !== right.content || left.timestamp !== right.timestamp) {
       return false;
     }
   }
   return true;
 }
 
-function toUnifiedFromSocket(message: SocketMessage, runId: string): UnifiedRunMessage {
-  const side: 'left' | 'right' = message.kind === 'assistant' || message.kind === 'tool' ? 'right' : 'left';
-  return {
-    id: message.id,
-    role: message.kind,
-    text: message.text,
-    source: message.source,
-    createdAt: message.createdAt,
-    side,
-    runId,
-  };
+function mapApiMessages(items: RunMessageItem[]): ConversationMessageWithMeta[] {
+  return items.map((item) => ({
+    id: item.id,
+    role: item.kind,
+    content: item.text ?? '',
+    timestamp: formatDate(item.createdAt),
+    createdAtRaw: item.createdAt,
+  }));
 }
 
-async function fetchRunMessages(runId: string): Promise<UnifiedRunMessage[]> {
+async function fetchRunMessages(runId: string): Promise<ConversationMessageWithMeta[]> {
   const [input, injected, output] = await Promise.all([
     runsApi.messages(runId, 'input'),
     runsApi.messages(runId, 'injected'),
     runsApi.messages(runId, 'output'),
   ]);
-  const mapItems = (items: MessageItem[], side: 'left' | 'right'): UnifiedRunMessage[] =>
-    items.map((m) => ({ id: m.id, role: m.kind, text: m.text, source: m.source, createdAt: m.createdAt, side, runId }));
-  const combined = [...mapItems(input.items, 'left'), ...mapItems(injected.items, 'left'), ...mapItems(output.items, 'right')];
-  combined.sort(compareUnifiedMessages);
+  const combined = [...mapApiMessages(input.items), ...mapApiMessages(injected.items), ...mapApiMessages(output.items)];
+  combined.sort(compareMessages);
   return combined;
+}
+
+function mapSocketMessage(message: SocketMessage): ConversationMessageWithMeta {
+  return {
+    id: message.id,
+    role: message.kind,
+    content: message.text ?? '',
+    timestamp: formatDate(message.createdAt),
+    createdAtRaw: message.createdAt,
+  };
+}
+
+function mapReminders(items: ThreadReminder[]): { id: string; title: string; time: string }[] {
+  return items.map((reminder) => ({
+    id: reminder.id,
+    title: sanitizeSummary(reminder.note ?? null),
+    time: formatDate(reminder.at),
+  }));
+}
+
+function mapContainers(items: ContainerItem[]): { id: string; name: string; status: 'running' | 'finished' }[] {
+  return items.map((container) => ({
+    id: container.containerId,
+    name: container.role ?? container.image,
+    status: container.status === 'running' ? 'running' : 'finished',
+  }));
 }
 
 export function AgentsThreads() {
   const params = useParams<{ threadId?: string }>();
-  const [selectedThreadIdState, setSelectedThreadIdState] = useState<string | undefined>(params.threadId ?? undefined);
-  const selectedThreadId = params.threadId ?? selectedThreadIdState;
-  const hasRouteThread = params.threadId !== undefined;
-  const [selectedThread, setSelectedThread] = useState<ThreadNode | undefined>(undefined);
-  const [statusFilter, setStatusFilter] = useState<ThreadStatusFilter>('open');
-  // No run selection in new UX (removed)
-  const threadByIdQ = useThreadById(hasRouteThread ? params.threadId : undefined);
-  const activeThreadId = hasRouteThread
-    ? !threadByIdQ.isError
-      ? (params.threadId as string)
-      : undefined
-    : selectedThreadIdState;
-  const queryClient = useQueryClient();
   const navigate = useNavigate();
-  const remindersQueryKey = ['agents', 'threads', activeThreadId ?? 'none', 'reminders', 'active'] as const;
-  const remindersQ = useQuery({
-    enabled: !!activeThreadId,
-    queryKey: remindersQueryKey,
-    queryFn: async () => {
-      const id = activeThreadId as string;
-      return http.get<{ items: ReminderItem[] }>(`/api/agents/reminders?filter=active&threadId=${encodeURIComponent(id)}`);
-    },
-    refetchOnWindowFocus: false,
-  });
-  const reminders = useMemo<ReminderItem[]>(() => {
-    const items = remindersQ.data?.items ?? [];
-    if (!activeThreadId) return [];
-    return items.filter((reminder) => reminder.threadId === activeThreadId);
-  }, [remindersQ.data, activeThreadId]);
-  const nearestReminder = useMemo(() => {
-    if (!reminders.length) return null;
-    return reminders.reduce<ReminderItem>((earliest, item) => {
-      return new Date(item.at).getTime() < new Date(earliest.at).getTime() ? item : earliest;
-    }, reminders[0]);
-  }, [reminders]);
-  const invalidateReminders = useCallback(() => {
-    if (!activeThreadId) return;
-    queryClient.invalidateQueries({ queryKey: ['agents', 'threads', activeThreadId, 'reminders', 'active'] });
-  }, [queryClient, activeThreadId]);
+  const queryClient = useQueryClient();
 
-  // Cast through unknown to align differing RunMeta shapes between API and UI list types
-  const runsQ = useThreadRuns(activeThreadId) as unknown as UseQueryResult<{ items: RunMeta[] }, Error>;
+  const [filterMode, setFilterMode] = useState<FilterMode>('open');
+  const [threadLimit, setThreadLimit] = useState<number>(INITIAL_THREAD_LIMIT);
+  const [childrenState, setChildrenState] = useState<ThreadChildrenState>({});
+  const [inputValue, setInputValue] = useState('');
+  const [selectedThreadIdState, setSelectedThreadIdState] = useState<string | null>(params.threadId ?? null);
+  const [runMessages, setRunMessages] = useState<Record<string, ConversationMessageWithMeta[]>>({});
+  const [messagesError, setMessagesError] = useState<string | null>(null);
+  const [isRunsInfoCollapsed, setRunsInfoCollapsed] = useState(false);
 
-  const runs: RunMeta[] = useMemo(() => {
-    if (!activeThreadId) return [];
-    const list = runsQ.data?.items ?? [];
-    return [...list].sort(compareRunMeta);
-  }, [runsQ.data, activeThreadId]);
-  const latestRun = runs.length > 0 ? runs[runs.length - 1] : null;
-  const showCountdown = Boolean(activeThreadId && latestRun?.status === 'finished' && nearestReminder && !remindersQ.isError);
-
-  const [runMessages, setRunMessages] = useState<Record<string, UnifiedRunMessage[]>>({});
-  const [loadError, setLoadError] = useState<Error | null>(null);
-
-  const pendingMessages = useRef<Map<string, UnifiedRunMessage[]>>(new Map());
-  const seenMessageIds = useRef<Map<string, Set<string>>>(new Map());
+  const pendingMessagesRef = useRef<Map<string, ConversationMessageWithMeta[]>>(new Map());
+  const seenMessageIdsRef = useRef<Map<string, Set<string>>>(new Map());
   const runIdsRef = useRef<Set<string>>(new Set());
 
-  // Reset cache on thread change
-  useEffect(() => {
-    setRunMessages({});
-    setLoadError(null);
-    pendingMessages.current.clear();
-    seenMessageIds.current.clear();
-    runIdsRef.current = new Set();
-    setSelectedThread(undefined);
-  }, [selectedThreadId]);
+  const selectedThreadId = params.threadId ?? selectedThreadIdState;
 
   useEffect(() => {
-    if (params.threadId !== undefined) {
+    if (params.threadId) {
       setSelectedThreadIdState(params.threadId);
     }
   }, [params.threadId]);
 
-  useEffect(() => {
-    if (hasRouteThread && threadByIdQ.data) {
-      setSelectedThread(threadByIdQ.data);
-    }
-  }, [hasRouteThread, threadByIdQ.data]);
-
-  useEffect(() => {
-    if (hasRouteThread && threadByIdQ.isError) {
-      setSelectedThread(undefined);
-    }
-  }, [hasRouteThread, threadByIdQ.isError]);
-
-  useEffect(() => {
-    runIdsRef.current = new Set(runs.map((run) => run.id));
-    for (const run of runs) {
-      if (!seenMessageIds.current.has(run.id)) seenMessageIds.current.set(run.id, new Set());
-    }
-    for (const key of Array.from(seenMessageIds.current.keys())) {
-      if (!runIdsRef.current.has(key)) seenMessageIds.current.delete(key);
-    }
-    for (const key of Array.from(pendingMessages.current.keys())) {
-      if (!runIdsRef.current.has(key)) pendingMessages.current.delete(key);
-    }
-  }, [runs]);
-
-  const flushPendingForRun = useCallback(
-    (runId: string) => {
-      const pending = pendingMessages.current.get(runId);
-      if (!pending || pending.length === 0) return;
-      pendingMessages.current.delete(runId);
-      setRunMessages((prev) => {
-        const existing = prev[runId] ?? [];
-        const merged = mergeMessageLists(existing, pending);
-        seenMessageIds.current.set(runId, new Set(merged.map((m) => m.id)));
-        if (areMessageListsEqual(existing, merged)) return prev;
-        return { ...prev, [runId]: merged };
+  const loadThreadChildren = useCallback(
+    async (threadId: string) => {
+      setChildrenState((prev) => {
+        const entry = prev[threadId];
+        if (entry?.status === 'loading') return prev;
+        if (entry?.hasChildren === false && entry.nodes.length === 0) return prev;
+        return {
+          ...prev,
+          [threadId]: {
+            nodes: entry?.nodes ?? [],
+            status: 'loading',
+            error: null,
+            hasChildren: entry?.hasChildren ?? true,
+          },
+        };
       });
+      try {
+        const res = await threads.children(threadId, filterMode);
+        const nodes = res.items ?? [];
+        setChildrenState((prev) => ({
+          ...prev,
+          [threadId]: {
+            nodes,
+            status: 'success',
+            error: null,
+            hasChildren: nodes.length > 0,
+          },
+        }));
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Failed to load subthreads';
+        setChildrenState((prev) => ({
+          ...prev,
+          [threadId]: {
+            nodes: prev[threadId]?.nodes ?? [],
+            status: 'error',
+            error: message,
+            hasChildren: true,
+          },
+        }));
+      }
     },
-    [setRunMessages],
+    [filterMode],
   );
 
-  useEffect(() => {
-    if (runs.length === 0) return;
-    for (const run of runs) flushPendingForRun(run.id);
-  }, [runs, flushPendingForRun]);
+  const limitKey = useMemo(() => ({ limit: threadLimit }), [threadLimit]);
+  const threadsQueryKey = useMemo(() => ['agents', 'threads', 'roots', filterMode, limitKey] as const, [filterMode, limitKey]);
+
+  const threadsQuery = useQuery({
+    queryKey: threadsQueryKey,
+    queryFn: () => threads.roots(filterMode, threadLimit),
+    keepPreviousData: true,
+  });
+
+  const rootNodes = useMemo<ThreadNode[]>(() => {
+    const data = threadsQuery.data?.items ?? [];
+    const dedup = new Map<string, ThreadNode>();
+    for (const item of data) dedup.set(item.id, item);
+    const nodes = Array.from(dedup.values());
+    nodes.sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
+    return nodes;
+  }, [threadsQuery.data]);
+
+  const threadsForList = useMemo<Thread[]>(() => rootNodes.map((node) => buildThreadTree(node, childrenState)), [rootNodes, childrenState]);
+
+  const threadDetailQuery = useThreadById(selectedThreadId ?? undefined);
+  const runsQuery = useThreadRuns(selectedThreadId ?? undefined);
+
+  const runList = useMemo<RunMeta[]>(() => {
+    const items = runsQuery.data?.items ?? [];
+    const sorted = [...items];
+    sorted.sort(compareRunMeta);
+    return sorted;
+  }, [runsQuery.data]);
 
   useEffect(() => {
-    if (!activeThreadId || runs.length === 0) return;
+    setRunMessages({});
+    setMessagesError(null);
+    pendingMessagesRef.current.clear();
+    seenMessageIdsRef.current.clear();
+    runIdsRef.current = new Set();
+  }, [selectedThreadId]);
+
+  useEffect(() => {
+    const currentIds = new Set(runList.map((run) => run.id));
+    runIdsRef.current = currentIds;
+    setRunMessages((prev) => {
+      const next: Record<string, ConversationMessageWithMeta[]> = {};
+      for (const id of currentIds) {
+        if (prev[id]) next[id] = prev[id];
+      }
+      return next;
+    });
+    for (const id of currentIds) {
+      if (!seenMessageIdsRef.current.has(id)) seenMessageIdsRef.current.set(id, new Set());
+    }
+    for (const id of Array.from(seenMessageIdsRef.current.keys())) {
+      if (!currentIds.has(id)) seenMessageIdsRef.current.delete(id);
+    }
+    for (const id of Array.from(pendingMessagesRef.current.keys())) {
+      if (!currentIds.has(id)) pendingMessagesRef.current.delete(id);
+    }
+  }, [runList]);
+
+  const flushPendingForRun = useCallback((runId: string) => {
+    const pending = pendingMessagesRef.current.get(runId);
+    if (!pending || pending.length === 0) return;
+    pendingMessagesRef.current.delete(runId);
+    setRunMessages((prev) => {
+      const existing = prev[runId] ?? [];
+      const merged = mergeMessages(existing, pending);
+      seenMessageIdsRef.current.set(runId, new Set(merged.map((m) => m.id)));
+      if (areMessageListsEqual(existing, merged)) return prev;
+      return { ...prev, [runId]: merged };
+    });
+  }, []);
+
+  useEffect(() => {
+    if (!selectedThreadId || runList.length === 0) return;
     let cancelled = false;
     const concurrency = 3;
-    let idx = 0;
-    let active = 0;
+    let index = 0;
+    let inflight = 0;
 
-    const queue = runs.map((run) => async () => {
+    const queue = runList.map((run) => async () => {
       try {
         const msgs = await fetchRunMessages(run.id);
         if (!cancelled) {
           setRunMessages((prev) => {
             const existing = prev[run.id] ?? [];
-            const merged = mergeMessageLists(existing, msgs);
-            seenMessageIds.current.set(run.id, new Set(merged.map((m) => m.id)));
+            const merged = mergeMessages(existing, msgs);
+            seenMessageIdsRef.current.set(run.id, new Set(merged.map((m) => m.id)));
             if (areMessageListsEqual(existing, merged)) return prev;
             return { ...prev, [run.id]: merged };
           });
         }
-      } catch (e) {
-        if (!cancelled) setLoadError(e as Error);
+      } catch (error) {
+        if (!cancelled) {
+          setMessagesError(error instanceof Error ? error.message : 'Failed to load messages.');
+        }
       }
     });
 
-    const kick = () => {
-      while (active < concurrency && idx < queue.length) {
-        const fn = queue[idx++];
-        active++;
+    const pump = () => {
+      while (inflight < concurrency && index < queue.length) {
+        const fn = queue[index++];
+        inflight += 1;
         fn().finally(() => {
-          active--;
-          if (!cancelled) kick();
+          inflight -= 1;
+          if (!cancelled) pump();
         });
       }
     };
 
-    kick();
+    pump();
     return () => {
       cancelled = true;
     };
-  }, [activeThreadId, runs]);
-
-  // Subscribe to selected thread room for live updates
-  useEffect(() => {
-    if (!activeThreadId) return;
-    const room = `thread:${activeThreadId}`;
-    graphSocket.subscribe([room]);
-    return () => {
-      graphSocket.unsubscribe([room]);
-    };
-  }, [activeThreadId]);
+  }, [selectedThreadId, runList]);
 
   useEffect(() => {
-    if (!activeThreadId) return;
-    const offMsg = graphSocket.onMessageCreated(({ message }) => {
-      if (!message.runId) return;
+    for (const run of runList) {
+      flushPendingForRun(run.id);
+    }
+  }, [runList, flushPendingForRun]);
+
+  useEffect(() => {
+    if (!selectedThreadId) return;
+    const offMsg = graphSocket.onMessageCreated(({ threadId, message }) => {
+      if (threadId !== selectedThreadId || !message.runId) return;
       const runId = message.runId;
-      const unified = toUnifiedFromSocket(message as SocketMessage, runId);
-      const seen = seenMessageIds.current.get(runId) ?? new Set<string>();
-      if (seen.has(unified.id)) return;
-      seen.add(unified.id);
-      seenMessageIds.current.set(runId, seen);
+      const mapped = mapSocketMessage(message as SocketMessage);
+      const seen = seenMessageIdsRef.current.get(runId) ?? new Set<string>();
+      if (seen.has(mapped.id)) return;
+      seen.add(mapped.id);
+      seenMessageIdsRef.current.set(runId, seen);
 
       if (!runIdsRef.current.has(runId)) {
-        const buffered = pendingMessages.current.get(runId) ?? [];
-        const merged = mergeMessageLists(buffered, [unified]);
-        pendingMessages.current.set(runId, merged);
+        const buffered = pendingMessagesRef.current.get(runId) ?? [];
+        const merged = mergeMessages(buffered, [mapped]);
+        pendingMessagesRef.current.set(runId, merged);
         return;
       }
 
       setRunMessages((prev) => {
         const existing = prev[runId] ?? [];
-        const merged = mergeMessageLists(existing, [unified]);
-        seenMessageIds.current.set(runId, new Set(merged.map((m) => m.id)));
+        const merged = mergeMessages(existing, [mapped]);
+        seenMessageIdsRef.current.set(runId, new Set(merged.map((m) => m.id)));
         if (areMessageListsEqual(existing, merged)) return prev;
         return { ...prev, [runId]: merged };
       });
     });
     return () => offMsg();
-  }, [activeThreadId]);
+  }, [selectedThreadId]);
 
   useEffect(() => {
-    if (!activeThreadId) return;
-    const key = ['agents', 'threads', activeThreadId, 'reminders', 'active'] as const;
-    const offReminders = graphSocket.onThreadRemindersCount(({ threadId, remindersCount }) => {
-      if (threadId !== activeThreadId) return;
-      if (remindersCount === 0) {
-        queryClient.setQueryData<{ items: ReminderItem[] }>(key, { items: [] });
-      } else {
-        invalidateReminders();
-      }
-    });
-    return () => offReminders();
-  }, [activeThreadId, queryClient, invalidateReminders]);
-
-  useEffect(() => {
-    if (!activeThreadId) return;
-    const queryKey = ['agents', 'threads', activeThreadId, 'runs'];
-    const offRun = graphSocket.onRunStatusChanged(({ run }) => {
+    if (!selectedThreadId) return;
+    const queryKey = ['agents', 'threads', selectedThreadId, 'runs'] as const;
+    const offRun = graphSocket.onRunStatusChanged(({ threadId, run }) => {
+      if (threadId !== selectedThreadId) return;
       const next = run as SocketRun;
       queryClient.setQueryData(queryKey, (prev: { items: RunMeta[] } | undefined) => {
         const items = prev?.items ?? [];
-        const idx = items.findIndex((r) => r.id === next.id);
-        let updated: RunMeta[];
+        const idx = items.findIndex((item) => item.id === next.id);
+        const updated = [...items];
         if (idx >= 0) {
-          const existing = items[idx];
+          const existing = updated[idx];
           if (existing.status === next.status && existing.updatedAt === next.updatedAt && existing.createdAt === next.createdAt) {
             return prev;
           }
-          updated = [...items];
           updated[idx] = { ...existing, status: next.status, createdAt: next.createdAt, updatedAt: next.updatedAt };
         } else {
-          updated = [...items, { ...next }];
+          updated.push({ ...next, threadId: threadId ?? selectedThreadId } as RunMeta);
         }
         updated.sort(compareRunMeta);
         return { items: updated };
       });
       runIdsRef.current.add(next.id);
-      if (!seenMessageIds.current.has(next.id)) seenMessageIds.current.set(next.id, new Set());
+      if (!seenMessageIdsRef.current.has(next.id)) seenMessageIdsRef.current.set(next.id, new Set());
       flushPendingForRun(next.id);
-      if (next.status === 'finished') invalidateReminders();
     });
-    return () => offRun();
-  }, [activeThreadId, queryClient, flushPendingForRun, invalidateReminders]);
+    const offReconnect = graphSocket.onReconnected(() => {
+      queryClient.invalidateQueries({ queryKey });
+    });
+    return () => {
+      offRun();
+      offReconnect();
+    };
+  }, [selectedThreadId, queryClient, flushPendingForRun]);
 
   useEffect(() => {
-    if (!activeThreadId) return;
-    const invalidate = () => {
-      queryClient.invalidateQueries({ queryKey: ['agents', 'threads', activeThreadId, 'runs'] });
-      invalidateReminders();
+    if (!selectedThreadId) return;
+    const room = `thread:${selectedThreadId}`;
+    graphSocket.subscribe([room]);
+    return () => {
+      graphSocket.unsubscribe([room]);
     };
-    const offReconnect = graphSocket.onReconnected(invalidate);
-    return () => offReconnect();
-  }, [activeThreadId, queryClient, invalidateReminders]);
+  }, [selectedThreadId]);
 
-  const unifiedItems: UnifiedListItem[] = useMemo(() => {
-    if (!runs.length) return showCountdown && nearestReminder
-      ? [
-          {
-            type: 'reminder',
-            reminder: {
-              id: nearestReminder.id,
-              threadId: nearestReminder.threadId,
-              note: nearestReminder.note,
-              at: nearestReminder.at,
-            },
-            onExpire: invalidateReminders,
-          },
-        ]
-      : [];
-    const items: UnifiedListItem[] = [];
-    for (const run of runs) {
-      const msgs = runMessages[run.id] || [];
-      const start = msgs[0]?.createdAt ?? run.createdAt;
-      const end = msgs[msgs.length - 1]?.createdAt ?? run.updatedAt;
-      items.push({ type: 'run_header', run, start, end, durationMs: new Date(end).getTime() - new Date(start).getTime() });
-      for (const m of msgs) items.push({ type: 'message', message: m });
-    }
-    if (showCountdown && nearestReminder) {
-      items.push({
-        type: 'reminder',
-        reminder: {
-          id: nearestReminder.id,
-          threadId: nearestReminder.threadId,
-          note: nearestReminder.note,
-          at: nearestReminder.at,
-        },
-        onExpire: invalidateReminders,
+  const updateThreadSummaryFromEvent = useCallback(
+    ({ thread }: { thread: { id: string; alias: string; summary: string | null; status: 'open' | 'closed'; createdAt: string; parentId?: string | null } }) => {
+      const node: ThreadNode = {
+        id: thread.id,
+        alias: thread.alias,
+        summary: thread.summary,
+        status: thread.status,
+        parentId: thread.parentId ?? null,
+        createdAt: thread.createdAt,
+        metrics: defaultMetrics,
+        agentTitle: undefined,
+      };
+
+      if (node.parentId) {
+        setChildrenState((prev) => {
+          const entry = prev[node.parentId!];
+          if (!entry) {
+            return {
+              ...prev,
+              [node.parentId!]: { nodes: [node], status: 'idle', error: null, hasChildren: true },
+            };
+          }
+          const idx = entry.nodes.findIndex((existing) => existing.id === node.id);
+          const nodes = [...entry.nodes];
+          if (idx >= 0) nodes[idx] = { ...nodes[idx], summary: node.summary, status: node.status, createdAt: node.createdAt };
+          else nodes.unshift(node);
+          return {
+            ...prev,
+            [node.parentId!]: { ...entry, nodes, hasChildren: true },
+          };
+        });
+      } else {
+        queryClient.setQueryData(['agents', 'threads', 'roots', filterMode, { limit: threadLimit }] as const, (prev: { items: ThreadNode[] } | undefined) => {
+          if (!prev) return prev;
+          const items = prev.items ?? [];
+          const idx = items.findIndex((existing) => existing.id === node.id);
+          if (idx >= 0) {
+            if (!matchesFilter(node.status ?? 'open', filterMode)) {
+              const nextItems = items.filter((existing) => existing.id !== node.id);
+              return { items: nextItems };
+            }
+            const nextItems = [...items];
+            nextItems[idx] = { ...nextItems[idx], summary: node.summary, status: node.status, createdAt: node.createdAt };
+            return { items: nextItems };
+          }
+          if (!matchesFilter(node.status ?? 'open', filterMode)) return prev;
+          const nextItems = [node, ...items];
+          nextItems.sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
+          return { items: nextItems.slice(0, threadLimit) };
+        });
+      }
+
+      queryClient.setQueryData(['agents', 'threads', 'by-id', node.id] as const, (prev: ThreadNode | undefined) => {
+        if (!prev) return prev;
+        return { ...prev, summary: node.summary, status: node.status, createdAt: node.createdAt };
       });
-    }
-    return items;
-  }, [runs, runMessages, showCountdown, nearestReminder, invalidateReminders]);
+    },
+    [filterMode, threadLimit, queryClient],
+  );
 
-  // Per-message JSON toggle state
-  const [showJson, setShowJson] = useState<Record<string, boolean>>({});
-  const toggleJson = (id: string) => setShowJson((prev) => ({ ...prev, [id]: !prev[id] }));
-  const apiThread = hasRouteThread ? threadByIdQ.data : undefined;
-  const currentThread = apiThread ?? selectedThread;
-  const threadLoadError = hasRouteThread ? threadByIdQ.error : null;
-  const threadNotFound = Boolean(hasRouteThread && threadLoadError?.response?.status === 404);
-  const threadLoadFailed = Boolean(hasRouteThread && threadByIdQ.isError);
-  const threadErrorTitle = threadNotFound ? 'Thread not found' : 'Unable to load thread';
-  const threadErrorMessage = threadNotFound
-    ? 'The thread may have been removed or the link is invalid.'
-    : threadLoadError?.message ?? 'Please try again later.';
+  const updateThreadActivity = useCallback(
+    (threadId: string, activity: 'working' | 'waiting' | 'idle') => {
+      const applyActivity = (node: ThreadNode): ThreadNode => ({
+        ...node,
+        metrics: { ...(node.metrics ?? defaultMetrics), activity },
+      });
+
+      queryClient.setQueryData(['agents', 'threads', 'roots', filterMode, { limit: threadLimit }] as const, (prev: { items: ThreadNode[] } | undefined) => {
+        if (!prev) return prev;
+        const items = prev.items ?? [];
+        const idx = items.findIndex((existing) => existing.id === threadId);
+        if (idx === -1) return prev;
+        const nextItems = [...items];
+        nextItems[idx] = applyActivity(nextItems[idx]);
+        return { items: nextItems };
+      });
+
+      setChildrenState((prev) => {
+        let mutated = false;
+        const next: ThreadChildrenState = {};
+        for (const [parentId, entry] of Object.entries(prev)) {
+          const idx = entry.nodes.findIndex((node) => node.id === threadId);
+          if (idx === -1) {
+            next[parentId] = entry;
+            continue;
+          }
+          const nodes = [...entry.nodes];
+          nodes[idx] = applyActivity(nodes[idx]);
+          next[parentId] = { ...entry, nodes };
+          mutated = true;
+        }
+        return mutated ? next : prev;
+      });
+
+      queryClient.setQueryData(['agents', 'threads', 'by-id', threadId] as const, (prev: ThreadNode | undefined) => {
+        if (!prev) return prev;
+        return applyActivity(prev);
+      });
+    },
+    [filterMode, threadLimit, queryClient],
+  );
+
+  const updateThreadRemindersCount = useCallback(
+    (threadId: string, remindersCount: number) => {
+      const applyCount = (node: ThreadNode): ThreadNode => ({
+        ...node,
+        metrics: { ...(node.metrics ?? defaultMetrics), remindersCount },
+      });
+
+      queryClient.setQueryData(['agents', 'threads', 'roots', filterMode, { limit: threadLimit }] as const, (prev: { items: ThreadNode[] } | undefined) => {
+        if (!prev) return prev;
+        const items = prev.items ?? [];
+        const idx = items.findIndex((existing) => existing.id === threadId);
+        if (idx === -1) return prev;
+        const nextItems = [...items];
+        nextItems[idx] = applyCount(nextItems[idx]);
+        return { items: nextItems };
+      });
+
+      setChildrenState((prev) => {
+        let mutated = false;
+        const next: ThreadChildrenState = {};
+        for (const [parentId, entry] of Object.entries(prev)) {
+          const idx = entry.nodes.findIndex((node) => node.id === threadId);
+          if (idx === -1) {
+            next[parentId] = entry;
+            continue;
+          }
+          const nodes = [...entry.nodes];
+          nodes[idx] = applyCount(nodes[idx]);
+          next[parentId] = { ...entry, nodes };
+          mutated = true;
+        }
+        return mutated ? next : prev;
+      });
+
+      queryClient.setQueryData(['agents', 'threads', 'by-id', threadId] as const, (prev: ThreadNode | undefined) => {
+        if (!prev) return prev;
+        return applyCount(prev);
+      });
+    },
+    [filterMode, threadLimit, queryClient],
+  );
+
+  useEffect(() => {
+    graphSocket.subscribe(['threads']);
+    const offCreated = graphSocket.onThreadCreated(updateThreadSummaryFromEvent);
+    const offUpdated = graphSocket.onThreadUpdated(updateThreadSummaryFromEvent);
+    const offActivity = graphSocket.onThreadActivityChanged(({ threadId, activity }) => updateThreadActivity(threadId, activity));
+    const offReminders = graphSocket.onThreadRemindersCount(({ threadId, remindersCount }) => updateThreadRemindersCount(threadId, remindersCount));
+    const offReconnect = graphSocket.onReconnected(() => {
+      queryClient.invalidateQueries({ queryKey: ['agents', 'threads'] });
+    });
+    return () => {
+      offCreated();
+      offUpdated();
+      offActivity();
+      offReminders();
+      offReconnect();
+    };
+  }, [updateThreadSummaryFromEvent, updateThreadActivity, updateThreadRemindersCount, queryClient]);
+
+  useEffect(() => {
+    if (!messagesError) return;
+    notifyError(messagesError);
+  }, [messagesError]);
+
+  const remindersQuery = useThreadReminders(selectedThreadId ?? undefined, Boolean(selectedThreadId));
+  const containersQuery = useThreadContainers(selectedThreadId ?? undefined, Boolean(selectedThreadId));
+
+  const remindersForScreen = useMemo(() => mapReminders(remindersQuery.data?.items ?? []), [remindersQuery.data]);
+  const containersForScreen = useMemo(() => mapContainers(containersQuery.data?.items ?? []), [containersQuery.data]);
+
+  const handleViewRun = useCallback(
+    (runId: string) => {
+      if (!selectedThreadId) return;
+      navigate(
+        `/agents/threads/${encodeURIComponent(selectedThreadId)}/runs/${encodeURIComponent(runId)}/timeline`,
+      );
+    },
+    [navigate, selectedThreadId],
+  );
+
+  const conversationRuns = useMemo<ConversationRun[]>(
+    () =>
+      runList.map((run) => {
+        const timelineHref = selectedThreadId
+          ? `/agents/threads/${encodeURIComponent(selectedThreadId)}/runs/${encodeURIComponent(run.id)}/timeline`
+          : undefined;
+        return {
+          id: run.id,
+          status: mapRunStatus(run.status),
+          duration: computeRunDuration(run),
+          messages: (runMessages[run.id] ?? []) as ConversationMessage[],
+          timelineHref,
+          onViewRun: selectedThreadId ? handleViewRun : undefined,
+        };
+      }),
+    [runList, runMessages, selectedThreadId, handleViewRun],
+  );
+
+  const selectedThreadNode = useMemo(() => {
+    if (!selectedThreadId) return undefined;
+    return findThreadNode(rootNodes, childrenState, selectedThreadId) ?? threadDetailQuery.data;
+  }, [selectedThreadId, rootNodes, childrenState, threadDetailQuery.data]);
+
+  useEffect(() => {
+    const parentId = threadDetailQuery.data?.parentId;
+    if (!parentId) return;
+    const entry = childrenState[parentId];
+    if (entry && entry.status !== 'idle') return;
+    loadThreadChildren(parentId).catch(() => {});
+  }, [threadDetailQuery.data?.parentId, childrenState, loadThreadChildren]);
+
+  const selectedThreadForScreen = useMemo(() => (selectedThreadNode ? buildThreadTree(selectedThreadNode, childrenState) : undefined), [selectedThreadNode, childrenState]);
+
+  const threadsHasMore = (threadsQuery.data?.items?.length ?? 0) >= threadLimit && threadLimit < MAX_THREAD_LIMIT;
+  const threadsIsLoading = threadsQuery.isLoading;
+  const isThreadsEmpty = !threadsQuery.isLoading && threadsForList.length === 0;
+  const detailIsLoading = runsQuery.isLoading || threadDetailQuery.isLoading;
+
+  const handleSelectThread = useCallback(
+    (threadId: string) => {
+      setSelectedThreadIdState(threadId);
+      setInputValue('');
+      navigate(`/agents/threads/${encodeURIComponent(threadId)}`);
+    },
+    [navigate],
+  );
+
+  const handleFilterChange = useCallback(
+    (mode: 'all' | 'open' | 'closed') => {
+      const nextMode = mode as FilterMode;
+      if (nextMode === filterMode) return;
+      setFilterMode(nextMode);
+      setThreadLimit(INITIAL_THREAD_LIMIT);
+      setChildrenState({});
+    },
+    [filterMode],
+  );
+
+  const handleThreadsLoadMore = useCallback(() => {
+    setThreadLimit((prev) => (prev >= MAX_THREAD_LIMIT ? prev : Math.min(MAX_THREAD_LIMIT, prev + THREAD_LIMIT_STEP)));
+  }, []);
+
+  const handleThreadExpand = useCallback(
+    (threadId: string, isExpanded: boolean) => {
+      if (!isExpanded) return;
+      const entry = childrenState[threadId];
+      if (entry?.status === 'loading') return;
+      if (entry?.status === 'success' && entry.nodes.length > 0) return;
+      loadThreadChildren(threadId).catch(() => {});
+    },
+    [childrenState, loadThreadChildren],
+  );
+
+  const handleInputValueChange = useCallback((value: string) => {
+    setInputValue(value);
+  }, []);
+
+  const handleSendMessage = useCallback((value: string, context: { threadId: string | null }) => {
+    if (!context.threadId) return;
+    notifyError('Sending messages is not supported yet.');
+  }, []);
+
+  const handleToggleRunsInfoCollapsed = useCallback((collapsed: boolean) => {
+    setRunsInfoCollapsed(collapsed);
+  }, []);
+
+  const listErrorMessage = threadsQuery.error instanceof Error ? threadsQuery.error.message : threadsQuery.error ? 'Unable to load threads.' : null;
+  const detailError: ApiError | null = threadDetailQuery.isError ? (threadDetailQuery.error as ApiError) : null;
+  const threadNotFound = Boolean(detailError?.response?.status === 404);
+  const detailErrorMessage = detailError
+    ? threadNotFound
+      ? 'Thread not found. The link might be invalid or the thread was removed.'
+      : detailError.message ?? 'Unable to load thread.'
+    : null;
+
+  const listErrorNode = listErrorMessage ? <span>{listErrorMessage}</span> : undefined;
+  const detailErrorNode = detailErrorMessage ? <div className="text-sm text-[var(--agyn-red)]">{detailErrorMessage}</div> : undefined;
 
   return (
     <div className="absolute inset-0 flex min-h-0 min-w-0 flex-col overflow-hidden">
       <div className="shrink-0 border-b px-6 py-3">
         <h1 className="text-xl font-semibold">Agents / Threads</h1>
       </div>
-
-      <div className="flex-1 min-h-0">
-        <div className="h-full min-h-0 overflow-y-auto md:overflow-hidden" data-testid="mobile-panel">
-          <div className="flex h-full min-h-0 flex-col md:flex-row">
-            <section
-              className="flex min-h-0 w-full shrink-0 flex-col border-b md:w-[340px] md:flex-none md:border-b-0 md:border-r"
-              data-testid="threads-panel"
-            >
-              <header className="flex items-center justify-between border-b px-3 py-2 text-sm font-medium">
-                <span>Threads</span>
-                <ThreadStatusFilterSwitch value={statusFilter} onChange={(v) => setStatusFilter(v)} />
-              </header>
-              <div className="flex-1 min-h-0 overflow-y-auto px-3 py-2">
-                <ThreadTree
-                  status={statusFilter}
-                  onSelect={(node) => {
-                    setSelectedThread(node);
-                    setSelectedThreadIdState(node.id);
-                    if (params.threadId !== node.id) {
-                      navigate(`/agents/threads/${encodeURIComponent(node.id)}`);
-                    }
-                  }}
-                  selectedId={selectedThreadId}
-                  onSelectedNodeChange={(node) => setSelectedThread(node)}
-                />
-              </div>
-            </section>
-
-            <section className="flex h-[60vh] min-h-0 min-w-0 flex-col md:h-full md:flex-1" data-testid="messages-panel">
-              <ThreadHeader
-                thread={currentThread}
-                runsCount={runs.length}
-              />
-              <div className="flex-1 min-h-0 overflow-hidden px-3 py-2">
-                {threadLoadFailed ? (
-                  <div className="flex h-full w-full items-center justify-center">
-                    <div className="w-full max-w-sm rounded-md border border-border bg-background px-6 py-5 text-sm shadow-sm">
-                      <div className="text-base font-semibold text-foreground">{threadErrorTitle}</div>
-                      <p className="mt-2 text-muted-foreground">{threadErrorMessage}</p>
-                      <div className="mt-4 flex justify-end">
-                        <button
-                          type="button"
-                          className="rounded border border-input px-3 py-1 text-sm font-medium text-foreground hover:bg-muted"
-                          onClick={() => {
-                            setSelectedThreadIdState(undefined);
-                            setSelectedThread(undefined);
-                            navigate('/agents/threads');
-                          }}
-                        >
-                          Back to threads
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                ) : (
-                  <RunMessageList
-                    items={unifiedItems}
-                    showJson={showJson}
-                    onToggleJson={toggleJson}
-                    isLoading={runsQ.isLoading}
-                    error={loadError}
-                    onViewRunTimeline={(run) => {
-                      if (!activeThreadId) return;
-                      navigate(`/agents/threads/${encodeURIComponent(activeThreadId)}/runs/${encodeURIComponent(run.id)}/timeline`);
-                    }}
-                    activeThreadId={activeThreadId}
-                  />
-                )}
-              </div>
-            </section>
-          </div>
-        </div>
+      <div className="flex min-h-0 flex-1 flex-col">
+        <ThreadsScreen
+          threads={threadsForList}
+          runs={conversationRuns}
+          containers={containersForScreen}
+          reminders={remindersForScreen}
+          filterMode={filterMode}
+          selectedThreadId={selectedThreadId ?? null}
+          inputValue={inputValue}
+          isRunsInfoCollapsed={isRunsInfoCollapsed}
+          threadsHasMore={threadsHasMore}
+          threadsIsLoading={threadsIsLoading}
+          isLoading={detailIsLoading}
+          isEmpty={isThreadsEmpty}
+          listError={listErrorNode}
+          detailError={detailErrorNode}
+          onFilterModeChange={handleFilterChange}
+          onSelectThread={handleSelectThread}
+          onToggleRunsInfoCollapsed={handleToggleRunsInfoCollapsed}
+          onInputValueChange={handleInputValueChange}
+          onSendMessage={handleSendMessage}
+          onThreadsLoadMore={threadsHasMore ? handleThreadsLoadMore : undefined}
+          onThreadExpand={handleThreadExpand}
+          selectedThread={selectedThreadForScreen}
+        />
       </div>
     </div>
   );
