@@ -47,7 +47,7 @@ export function ThreadItem({
   isExpanded = false,
   isSelected = false,
 }: ThreadItemProps) {
-  const expandedChildrenCount = thread.subthreads?.length ?? 0;
+  const knownSubthreadCount = thread.subthreads?.length;
   const hasSubthreads = (thread.subthreads && thread.subthreads.length > 0) || thread.hasChildren;
   const indentWidth = depth * 24; // Reduced from 32px to 24px
   const avatarColor = getAgentAvatarColor(thread.agentName);
@@ -125,12 +125,20 @@ export function ThreadItem({
             {isExpanded ? (
               <>
                 <ChevronDown className="w-3.5 h-3.5" />
-                <span>Hide {thread.subthreads?.length} subthread{thread.subthreads?.length !== 1 ? 's' : ''}</span>
+                <span>
+                  {knownSubthreadCount === undefined
+                    ? 'Hide subthreads'
+                    : `Hide ${knownSubthreadCount} subthread${knownSubthreadCount !== 1 ? 's' : ''}`}
+                </span>
               </>
             ) : (
               <>
                 <ChevronRight className="w-3.5 h-3.5" />
-                <span>Show {expandedChildrenCount} subthread{expandedChildrenCount !== 1 ? 's' : ''}</span>
+                <span>
+                  {knownSubthreadCount === undefined
+                    ? 'Show subthreads'
+                    : `Show ${knownSubthreadCount} subthread${knownSubthreadCount !== 1 ? 's' : ''}`}
+                </span>
               </>
             )}
           </button>

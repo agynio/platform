@@ -28,6 +28,13 @@ export function ThreadsList({
   const [expandedThreads, setExpandedThreads] = useState<Set<string>>(new Set());
   const [hasLoadedMore, setHasLoadedMore] = useState(false);
   const loadMoreRef = useRef<HTMLDivElement>(null);
+  const loadPendingRef = useRef(false);
+
+  useEffect(() => {
+    if (!isLoading) {
+      loadPendingRef.current = false;
+    }
+  }, [isLoading]);
 
   // Infinite scroll observer
   useEffect(() => {
@@ -36,6 +43,8 @@ export function ThreadsList({
     const observer = new IntersectionObserver(
       (entries) => {
         if (entries[0].isIntersecting) {
+          if (loadPendingRef.current) return;
+          loadPendingRef.current = true;
           onLoadMore();
           setHasLoadedMore(true);
         }

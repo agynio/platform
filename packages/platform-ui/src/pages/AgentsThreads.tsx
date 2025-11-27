@@ -87,7 +87,7 @@ function buildThreadTree(node: ThreadNode, children: ThreadChildrenState): Threa
     status: mapThreadStatus(node),
     isOpen: (node.status ?? 'open') === 'open',
     subthreads: mappedChildren.length > 0 ? mappedChildren : undefined,
-    hasChildren: entry ? entry.hasChildren : undefined,
+    hasChildren: entry ? entry.hasChildren : true,
     isChildrenLoading: entry?.status === 'loading',
     childrenError: entry?.status === 'error' ? entry.error ?? 'Unable to load subthreads' : null,
   };
@@ -684,7 +684,7 @@ export function AgentsThreads() {
   const selectedThreadForScreen = useMemo(() => (selectedThreadNode ? buildThreadTree(selectedThreadNode, childrenState) : undefined), [selectedThreadNode, childrenState]);
 
   const threadsHasMore = (threadsQuery.data?.items?.length ?? 0) >= threadLimit && threadLimit < MAX_THREAD_LIMIT;
-  const threadsIsLoading = threadsQuery.isLoading;
+  const threadsIsLoading = threadsQuery.isFetching;
   const isThreadsEmpty = !threadsQuery.isLoading && threadsForList.length === 0;
   const detailIsLoading = runsQuery.isLoading || threadDetailQuery.isLoading;
 

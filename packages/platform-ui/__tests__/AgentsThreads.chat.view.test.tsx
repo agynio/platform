@@ -120,4 +120,43 @@ describe('AgentsThreads conversation view', () => {
     fireEvent.click(viewRunButton);
     expect(navigateMock).toHaveBeenCalledWith('/agents/threads/th1/runs/run1/timeline');
   });
+
+  it('loads subthreads when expanding a thread', async () => {
+    setupThreadData();
+
+    const childThread = {
+      id: 'th-child',
+      alias: 'th-child',
+      summary: 'Child thread',
+      status: 'open',
+      parentId: 'th1',
+      createdAt: t(3),
+      metrics: { remindersCount: 0, containersCount: 0, activity: 'waiting', runsCount: 0 },
+      agentTitle: 'Agent Junior',
+    };
+
+    const childrenHandler = vi.fn(() => HttpResponse.json({ items: [childThread] }));
+
+    server.use(
+      http.get('/api/agents/threads/th1/children', () => childrenHandler()),
+      http.get(abs('/api/agents/threads/th1/children'), () => childrenHandler()),
+    );
+
+    render(
+      <TestProviders>
+        <MemoryRouter>
+          <AgentsThreads />
+        </MemoryRouter>
+      </TestProviders>,
+    );
+
+    const expandButton = await screen.findByRole('button', { name: /Show subthreads/i });
+    expect(expandButton).toBeInTheDocument();
+
+    fireEvent.click(expandButton);
+
+    const childRow = await screen.findByText('Child thread');
+    expect(childRow).toBeInTheDocument();
+    expect(childrenHandler).toHaveBeenCalled();
+  });
 });
