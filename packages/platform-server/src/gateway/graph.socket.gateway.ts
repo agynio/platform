@@ -357,6 +357,12 @@ export class GraphSocketGateway implements OnModuleInit, OnModuleDestroy {
 
   private readonly handleMessageCreated = (payload: { threadId: string; message: MessageBroadcast }): void => {
     try {
+      this.logger.info('new message', {
+        threadId: payload.threadId,
+        messageId: payload.message.id,
+        kind: payload.message.kind,
+        runId: payload.message.runId ?? null,
+      });
       this.emitMessageCreated(payload.threadId, payload.message);
     } catch (err) {
       this.logger.warn('GraphSocketGateway failed to emit message_created', {

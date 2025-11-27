@@ -49,11 +49,15 @@ async function bootstrap() {
   const app = await NestFactory.create(AppModule, adapter, { bufferLogs: true });
   const pinoLogger = app.get(PinoLogger);
   app.useLogger(pinoLogger);
+
+  const logger = app.get(LoggerService);
+  logger.info('Nest application created');
+
   app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
   app.enableCors(corsOptions);
   await app.init();
+  logger.info('Nest application initialized');
 
-  const logger = app.get(LoggerService);
   const fastifyInstance = fastify;
 
   const terminalGateway = app.get(ContainerTerminalGateway);
