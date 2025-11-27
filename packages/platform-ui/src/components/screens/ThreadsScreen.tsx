@@ -1,13 +1,14 @@
-import type { ReactNode } from 'react';
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { formatDistanceToNow } from 'date-fns';
-import { Play, Container, Bell, Send, PanelRightClose, PanelRight, Loader2, Terminal } from 'lucide-react';
+import { Play, Container, Bell, Send, PanelRightClose, PanelRight, Loader2, MessageSquarePlus, Terminal } from 'lucide-react';
+import { AutocompleteInput, type AutocompleteInputHandle, type AutocompleteOption } from '@/components/AutocompleteInput';
+import { Button } from '@/components/Button';
 import { IconButton } from '../IconButton';
 import { ThreadsList } from '../ThreadsList';
 import type { Thread } from '../ThreadItem';
 import { SegmentedControl } from '../SegmentedControl';
 import { Conversation, type Run } from '../Conversation';
 import { Popover, PopoverTrigger, PopoverContent } from '../ui/popover';
-import { Button } from '../Button';
 import { StatusIndicator } from '../StatusIndicator';
 import { AutosizeTextarea } from '../AutosizeTextarea';
 
@@ -27,8 +28,6 @@ interface ThreadsScreenProps {
   isEmpty?: boolean;
   listError?: ReactNode;
   detailError?: ReactNode;
-  isToggleThreadStatusPending?: boolean;
-  isSendMessagePending?: boolean;
   onFilterModeChange?: (mode: 'all' | 'open' | 'closed') => void;
   onSelectThread?: (threadId: string) => void;
   onToggleRunsInfoCollapsed?: (isCollapsed: boolean) => void;
@@ -36,8 +35,17 @@ interface ThreadsScreenProps {
   onSendMessage?: (value: string, context: { threadId: string | null }) => void;
   onThreadsLoadMore?: () => void;
   onThreadExpand?: (threadId: string, isExpanded: boolean) => void;
-  onToggleThreadStatus?: (threadId: string, next: 'open' | 'closed') => void;
+  onCreateDraft?: () => void;
+  onToggleThreadStatus?: (threadId: string, nextStatus: 'open' | 'closed') => void;
+  isToggleThreadStatusPending?: boolean;
+  isSendMessagePending?: boolean;
   onOpenContainerTerminal?: (containerId: string) => void;
+  draftMode?: boolean;
+  draftRecipientId?: string | null;
+  draftRecipientLabel?: string | null;
+  draftFetchOptions?: (query: string) => Promise<AutocompleteOption[]>;
+  onDraftRecipientChange?: (agentId: string | null, agentTitle: string | null) => void;
+  onDraftCancel?: () => void;
   className?: string;
 }
 
@@ -57,8 +65,6 @@ export default function ThreadsScreen({
   isEmpty = false,
   listError,
   detailError,
-  isToggleThreadStatusPending = false,
-  isSendMessagePending = false,
   onFilterModeChange,
   onSelectThread,
   onToggleRunsInfoCollapsed,
@@ -66,8 +72,17 @@ export default function ThreadsScreen({
   onSendMessage,
   onThreadsLoadMore,
   onThreadExpand,
+  onCreateDraft,
   onToggleThreadStatus,
+  isToggleThreadStatusPending = false,
+  isSendMessagePending = false,
   onOpenContainerTerminal,
+  draftMode = false,
+  draftRecipientId = null,
+  draftRecipientLabel = null,
+  draftFetchOptions,
+  onDraftRecipientChange,
+  onDraftCancel,
   className = '',
 }: ThreadsScreenProps) {
   const filteredThreads = threads.filter((thread) => {
@@ -78,6 +93,53 @@ export default function ThreadsScreen({
   });
 
   const resolvedSelectedThread = selectedThread ?? threads.find((thread) => thread.id === selectedThreadId);
+  const [draftRecipientQuery, setDraftRecipientQuery] = useState('');
+  const draftRecipientInputRef = useRef<AutocompleteInputHandle | null>(null);
+
+  const resolvedDraftFetchOptions = useCallback(
+    async (query: string) => {
+      if (!draftFetchOptions) return [];
+      return draftFetchOptions(query);
+    },
+    [draftFetchOptions],
+  );
+
+  useEffect(() => {
+    if (!draftMode) {
+      setDraftRecipientQuery('');
+      return;
+    }
+    if (draftRecipientId && draftRecipientLabel) {
+      setDraftRecipientQuery(draftRecipientLabel);
+    }
+  }, [draftMode, draftRecipientId, draftRecipientLabel]);
+
+  useEffect(() => {
+    if (!draftMode) return;
+    const frame = requestAnimationFrame(() => {
+      draftRecipientInputRef.current?.focus();
+      draftRecipientInputRef.current?.open();
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [draftMode]);
+
+  const handleDraftRecipientInputChange = useCallback(
+    (next: string) => {
+      setDraftRecipientQuery(next);
+      if (draftRecipientId) {
+        onDraftRecipientChange?.(null, null);
+      }
+    },
+    [draftRecipientId, onDraftRecipientChange],
+  );
+
+  const handleDraftRecipientSelect = useCallback(
+    (option: AutocompleteOption) => {
+      setDraftRecipientQuery(option.label);
+      onDraftRecipientChange?.(option.value, option.label);
+    },
+    [onDraftRecipientChange],
+  );
 
   const renderThreadsList = () => {
     if (listError) {
@@ -125,6 +187,38 @@ export default function ThreadsScreen({
       );
     }
 
+    if (draftMode) {
+      return (
+        <>
+          <div className="border-b border-[var(--agyn-border-subtle)] bg-white p-4">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-4">
+              <div className="flex-1">
+                <AutocompleteInput
+                  ref={draftRecipientInputRef}
+                  value={draftRecipientQuery}
+                  onChange={handleDraftRecipientInputChange}
+                  onSelect={handleDraftRecipientSelect}
+                  fetchOptions={resolvedDraftFetchOptions}
+                  placeholder="Search agents..."
+                  clearable
+                  autoOpenOnMount
+                  disabled={!draftFetchOptions}
+                />
+              </div>
+              {onDraftCancel ? (
+                <Button variant="ghost" size="sm" type="button" onClick={onDraftCancel}>
+                  Cancel
+                </Button>
+              ) : null}
+            </div>
+          </div>
+          <div className="flex flex-1 items-center justify-center px-4 text-center text-sm text-[var(--agyn-gray)]">
+            Start your new conversation with the agent
+          </div>
+        </>
+      );
+    }
+
     if (isEmpty) {
       return (
         <div className="flex h-full items-center justify-center text-[var(--agyn-gray)]">
@@ -147,8 +241,8 @@ export default function ThreadsScreen({
       ? formatDistanceToNow(createdAtDate, { addSuffix: true })
       : resolvedSelectedThread.createdAt;
     const createdAtTitle = createdAtValid ? createdAtDate.toLocaleString() : undefined;
-    const nextStatus = resolvedSelectedThread.isOpen ? 'closed' : 'open';
-    const toggleLabel = resolvedSelectedThread.isOpen ? 'Close' : 'Reopen';
+    const nextThreadStatus: 'open' | 'closed' = resolvedSelectedThread.isOpen ? 'closed' : 'open';
+    const toggleLabel = resolvedSelectedThread.isOpen ? 'Close thread' : 'Reopen thread';
     const toggleDisabled = !onToggleThreadStatus || isToggleThreadStatusPending;
     const agentDisplayName = resolvedSelectedThread.agentName?.trim().length
       ? resolvedSelectedThread.agentName.trim()
@@ -180,19 +274,6 @@ export default function ThreadsScreen({
               </div>
               <h3 className="mt-1 text-[var(--agyn-dark)]">{resolvedSelectedThread.summary}</h3>
             </div>
-            <Button
-              variant="ghost"
-              size="sm"
-              type="button"
-              className="ml-4 px-3 py-1 text-xs rounded-[6px]"
-              onClick={() => onToggleThreadStatus?.(resolvedSelectedThread.id, nextStatus)}
-              disabled={toggleDisabled}
-              aria-busy={isToggleThreadStatusPending}
-              aria-label={`${toggleLabel} thread`}
-              title={`${toggleLabel} thread`}
-            >
-              {toggleLabel}
-            </Button>
           </div>
 
           <div className="flex items-center justify-between">
@@ -274,13 +355,30 @@ export default function ThreadsScreen({
               </Popover>
             </div>
 
-            <IconButton
-              icon={isRunsInfoCollapsed ? <PanelRight className="h-4 w-4" /> : <PanelRightClose className="h-4 w-4" />}
-              variant="ghost"
-              size="sm"
-              onClick={() => onToggleRunsInfoCollapsed?.(!isRunsInfoCollapsed)}
-              title={isRunsInfoCollapsed ? 'Show runs info' : 'Hide runs info'}
-            />
+            <div className="flex items-center gap-2">
+              {onToggleThreadStatus ? (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => onToggleThreadStatus(resolvedSelectedThread.id, nextThreadStatus)}
+                  disabled={toggleDisabled}
+                  aria-busy={isToggleThreadStatusPending || undefined}
+                >
+                  {toggleLabel}
+                </Button>
+              ) : null}
+
+              <IconButton
+                icon={
+                  isRunsInfoCollapsed ? <PanelRight className="h-4 w-4" /> : <PanelRightClose className="h-4 w-4" />
+                }
+                variant="ghost"
+                size="sm"
+                onClick={() => onToggleRunsInfoCollapsed?.(!isRunsInfoCollapsed)}
+                title={isRunsInfoCollapsed ? 'Show runs info' : 'Hide runs info'}
+              />
+            </div>
           </div>
 
           {resolvedSelectedThread.childrenError ? (
@@ -311,9 +409,9 @@ export default function ThreadsScreen({
                 variant="primary"
                 size="sm"
                 onClick={() => onSendMessage?.(inputValue, { threadId: selectedThreadId })}
-                aria-label="Send message"
-                title="Send message"
                 disabled={!onSendMessage || !selectedThreadId || isSendMessagePending}
+                title="Send message"
+                aria-label="Send message"
               />
             </div>
           </div>
@@ -325,7 +423,7 @@ export default function ThreadsScreen({
   return (
     <div className={`flex min-h-0 min-w-0 flex-1 overflow-hidden ${className}`}>
       <div className="flex min-h-0 w-[360px] flex-col border-r border-[var(--agyn-border-subtle)] bg-white">
-        <div className="flex h-[66px] items-center border-b border-[var(--agyn-border-subtle)] px-4">
+        <div className="flex h-[66px] items-center justify-between border-b border-[var(--agyn-border-subtle)] px-4">
           <SegmentedControl
             items={[
               { value: 'all', label: 'All' },
@@ -336,12 +434,20 @@ export default function ThreadsScreen({
             onChange={(value) => onFilterModeChange?.(value as 'all' | 'open' | 'closed')}
             size="sm"
           />
+          <IconButton
+            icon={<MessageSquarePlus className="h-4 w-4" />}
+            variant="ghost"
+            size="sm"
+            title="New thread"
+            onClick={onCreateDraft}
+            disabled={!onCreateDraft}
+          />
         </div>
 
         <div className="flex-1 min-h-0 overflow-hidden">{renderThreadsList()}</div>
       </div>
 
-      <div className="flex min-w-0 flex-1 flex-col bg-[var(--agyn-bg-light)]">{renderDetailContent()}</div>
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col bg-[var(--agyn-bg-light)]">{renderDetailContent()}</div>
     </div>
   );
 }
