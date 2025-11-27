@@ -37,6 +37,15 @@ const sampleReminders: Reminder[] = [
 export const Default: Story = {
   args: {
     reminders: sampleReminders,
+    page: 1,
+    perPage: 20,
+    total: sampleReminders.length,
+    totalPages: 1,
+    sortBy: 'createdAt',
+    sortOrder: 'desc',
+    countsByStatus: { scheduled: 1, executed: 1, cancelled: 0 },
+    statusFilter: 'all',
+    perPageOptions: [20, 50, 100],
   },
   parameters: {
     selectedMenuItem: 'reminders',

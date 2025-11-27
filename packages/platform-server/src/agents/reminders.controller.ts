@@ -1,7 +1,13 @@
 import { Controller, Get, Inject, Query } from '@nestjs/common';
 import { Type } from 'class-transformer';
 import { IsIn, IsInt, Min, Max, IsOptional, IsUUID } from 'class-validator';
-import { AgentsPersistenceService } from './agents.persistence.service';
+import {
+  AgentsPersistenceService,
+  type ListRemindersPage,
+  type RemindersListFilter,
+  type RemindersSortField,
+  type RemindersSortOrder,
+} from './agents.persistence.service';
 
 export class ListRemindersQueryDto {
   @IsOptional()
@@ -12,8 +18,22 @@ export class ListRemindersQueryDto {
   @IsInt()
   @Type(() => Number)
   @Min(1)
-  @Max(1000)
-  take?: number;
+  page?: number;
+
+  @IsOptional()
+  @IsInt()
+  @Type(() => Number)
+  @Min(1)
+  @Max(100)
+  perPage?: number;
+
+  @IsOptional()
+  @IsIn(['createdAt', 'at', 'completedAt'])
+  sortBy?: 'createdAt' | 'at' | 'completedAt';
+
+  @IsOptional()
+  @IsIn(['asc', 'desc'])
+  sortOrder?: 'asc' | 'desc';
 
   @IsOptional()
   @IsUUID()
@@ -27,10 +47,13 @@ export class AgentsRemindersController {
   ) {}
 
   @Get('reminders')
-  async listReminders(@Query() query: ListRemindersQueryDto) {
-    const filter = query.filter ?? 'active';
-    const take = query.take ?? 100;
-    const items = await this.persistence.listReminders(filter, take, query.threadId);
-    return { items };
+  async listReminders(@Query() query: ListRemindersQueryDto): Promise<ListRemindersPage> {
+    const filter: RemindersListFilter = query.filter ?? 'active';
+    const page = query.page ?? 1;
+    const perPage = query.perPage ?? 20;
+    const sortBy: RemindersSortField = query.sortBy ?? 'createdAt';
+    const sortOrder: RemindersSortOrder = query.sortOrder ?? 'desc';
+
+    return this.persistence.listRemindersPaged(filter, page, perPage, sortBy, sortOrder, query.threadId);
   }
 }

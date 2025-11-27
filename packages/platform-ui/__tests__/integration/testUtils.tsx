@@ -221,8 +221,30 @@ const relativeHandlers = [
     _HttpResponse.json({ items: [], nextCursor: null }),
   ),
   // Reminders endpoints used by AgentsReminders page (support both forms)
-  _http.get('/api/agents/reminders', () => _HttpResponse.json({ items: [] })),
-  _http.get('/api/agents/:agentId/reminders', () => _HttpResponse.json({ items: [] })),
+  _http.get('/api/agents/reminders', () =>
+    _HttpResponse.json({
+      total: 0,
+      page: 1,
+      perPage: 20,
+      totalPages: 0,
+      sortBy: 'createdAt',
+      sortOrder: 'desc',
+      countsByStatus: { scheduled: 0, executed: 0, cancelled: 0 },
+      items: [],
+    }),
+  ),
+  _http.get('/api/agents/:agentId/reminders', () =>
+    _HttpResponse.json({
+      total: 0,
+      page: 1,
+      perPage: 20,
+      totalPages: 0,
+      sortBy: 'createdAt',
+      sortOrder: 'desc',
+      countsByStatus: { scheduled: 0, executed: 0, cancelled: 0 },
+      items: [],
+    }),
+  ),
 ];
 
 const absoluteHandlers = [
@@ -320,8 +342,30 @@ const absoluteHandlers = [
     _HttpResponse.json({ items: [], nextCursor: null }),
   ),
   // Reminders endpoints (absolute)
-  _http.get(abs('/api/agents/reminders'), () => _HttpResponse.json({ items: [] })),
-  _http.get(abs('/api/agents/:agentId/reminders'), () => _HttpResponse.json({ items: [] })),
+  _http.get(abs('/api/agents/reminders'), () =>
+    _HttpResponse.json({
+      total: 0,
+      page: 1,
+      perPage: 20,
+      totalPages: 0,
+      sortBy: 'createdAt',
+      sortOrder: 'desc',
+      countsByStatus: { scheduled: 0, executed: 0, cancelled: 0 },
+      items: [],
+    }),
+  ),
+  _http.get(abs('/api/agents/:agentId/reminders'), () =>
+    _HttpResponse.json({
+      total: 0,
+      page: 1,
+      perPage: 20,
+      totalPages: 0,
+      sortBy: 'createdAt',
+      sortOrder: 'desc',
+      countsByStatus: { scheduled: 0, executed: 0, cancelled: 0 },
+      items: [],
+    }),
+  ),
 ];
 
 export const handlers = API_BASE ? [...relativeHandlers, ...absoluteHandlers] : relativeHandlers;

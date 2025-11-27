@@ -1,7 +1,12 @@
-import { useState } from 'react';
 import { Trash2, ExternalLink, Check, X } from 'lucide-react';
 import { Badge } from '../Badge';
 import * as Tooltip from '@radix-ui/react-tooltip';
+import type {
+  ListRemindersSortBy,
+  ListRemindersSortOrder,
+  ReminderStatusCounts,
+  ReminderStatusFilter,
+} from '@/features/reminders/types';
 
 export type ReminderStatus = 'scheduled' | 'executed' | 'cancelled';
 
@@ -17,33 +22,49 @@ export interface Reminder {
 
 interface RemindersScreenProps {
   reminders: Reminder[];
+  page: number;
+  perPage: number;
+  total: number;
+  totalPages: number;
+  sortBy: ListRemindersSortBy;
+  sortOrder: ListRemindersSortOrder;
+  countsByStatus: ReminderStatusCounts;
+  statusFilter: ReminderStatusFilter;
+  perPageOptions?: number[];
   onViewThread?: (threadId: string) => void;
   onViewRun?: (runId: string) => void;
   onDeleteReminder?: (reminderId: string) => void;
+  onStatusFilterChange?: (filter: ReminderStatusFilter) => void;
+  onPageChange?: (page: number) => void;
+  onPerPageChange?: (perPage: number) => void;
+  onSortByChange?: (sortBy: ListRemindersSortBy) => void;
+  onSortOrderChange?: (sortOrder: ListRemindersSortOrder) => void;
 }
-
-const ITEMS_PER_PAGE = 20;
 
 export default function RemindersScreen({
   reminders = [],
+  page,
+  perPage,
+  total,
+  totalPages,
+  sortBy,
+  sortOrder,
+  countsByStatus,
+  statusFilter,
+  perPageOptions = [20, 50, 100],
   onViewThread,
   onViewRun,
   onDeleteReminder,
+  onStatusFilterChange,
+  onPageChange,
+  onPerPageChange,
+  onSortByChange,
+  onSortOrderChange,
 }: RemindersScreenProps) {
-  const [statusFilter, setStatusFilter] = useState<ReminderStatus | 'all'>('all');
-  const [currentPage, setCurrentPage] = useState(1);
-
-  // Filter reminders
-  const filteredReminders = (reminders || []).filter(reminder => {
-    if (statusFilter === 'all') return true;
-    return reminder.status === statusFilter;
-  });
-
-  // Pagination
-  const totalPages = Math.ceil(filteredReminders.length / ITEMS_PER_PAGE);
-  const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
-  const endIndex = startIndex + ITEMS_PER_PAGE;
-  const paginatedReminders = filteredReminders.slice(startIndex, endIndex);
+  const safeTotalPages = totalPages > 0 ? totalPages : 0;
+  const safePage = Math.min(Math.max(page, 1), Math.max(safeTotalPages, 1));
+  const startIndex = total === 0 ? 0 : (safePage - 1) * perPage + 1;
+  const endIndex = total === 0 ? 0 : Math.min(safePage * perPage, total);
 
   // Calculate countdown or time since
   const getTimeDisplay = (reminder: Reminder) => {
@@ -115,9 +136,28 @@ export default function RemindersScreen({
     }
   };
 
-  const scheduledCount = reminders.filter(r => r.status === 'scheduled').length;
-  const executedCount = reminders.filter(r => r.status === 'executed').length;
-  const cancelledCount = reminders.filter(r => r.status === 'cancelled').length;
+  const scheduledCount = countsByStatus.scheduled;
+  const executedCount = countsByStatus.executed;
+  const cancelledCount = countsByStatus.cancelled;
+  const allCount = total;
+
+  const handleStatusFilterChange = (next: ReminderStatusFilter) => {
+    onStatusFilterChange?.(next);
+  };
+
+  const handlePageChange = (next: number) => {
+    if (next < 1 || (safeTotalPages > 0 && next > safeTotalPages)) return;
+    onPageChange?.(next);
+  };
+
+  const handlePerPageChange = (next: number) => {
+    if (!Number.isFinite(next) || next <= 0) return;
+    onPerPageChange?.(next);
+  };
+
+  const handleSortOrderToggle = () => {
+    onSortOrderChange?.(sortOrder === 'asc' ? 'desc' : 'asc');
+  };
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden bg-white">
@@ -131,19 +171,20 @@ export default function RemindersScreen({
 
           {/* Filters */}
           <div className="border-b border-[var(--agyn-border-subtle)] px-6 py-3">
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => setStatusFilter('all')}
+            <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+              <div className="flex items-center gap-2">
+                <button
+                onClick={() => handleStatusFilterChange('all')}
                 className={`px-3 py-1.5 text-xs rounded-md transition-all ${
                   statusFilter === 'all'
                     ? 'bg-[var(--agyn-blue)]/10 text-[var(--agyn-blue)]'
                     : 'text-[var(--agyn-text-subtle)] hover:bg-[var(--agyn-bg-light)]'
                 }`}
               >
-                All ({reminders.length})
+                All ({allCount})
               </button>
               <button
-                onClick={() => setStatusFilter('scheduled')}
+                onClick={() => handleStatusFilterChange('scheduled')}
                 className={`px-3 py-1.5 text-xs rounded-md transition-all ${
                   statusFilter === 'scheduled'
                     ? 'bg-[var(--agyn-status-pending)]/10 text-[var(--agyn-status-pending)]'
@@ -153,7 +194,7 @@ export default function RemindersScreen({
                 Scheduled ({scheduledCount})
               </button>
               <button
-                onClick={() => setStatusFilter('executed')}
+                onClick={() => handleStatusFilterChange('executed')}
                 className={`px-3 py-1.5 text-xs rounded-md transition-all ${
                   statusFilter === 'executed'
                     ? 'bg-[var(--agyn-status-finished)]/10 text-[var(--agyn-status-finished)]'
@@ -163,7 +204,7 @@ export default function RemindersScreen({
                 Executed ({executedCount})
               </button>
               <button
-                onClick={() => setStatusFilter('cancelled')}
+                onClick={() => handleStatusFilterChange('cancelled')}
                 className={`px-3 py-1.5 text-xs rounded-md transition-all ${
                   statusFilter === 'cancelled'
                     ? 'bg-[var(--agyn-text-subtle)]/10 text-[var(--agyn-text-subtle)]'
@@ -172,6 +213,44 @@ export default function RemindersScreen({
               >
                 Cancelled ({cancelledCount})
               </button>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-3">
+                <label className="flex items-center gap-2 text-xs text-[var(--agyn-text-subtle)]">
+                  <span>Sort by</span>
+                  <select
+                    value={sortBy}
+                    onChange={(event) => onSortByChange?.(event.target.value as ListRemindersSortBy)}
+                    className="rounded-md border border-[var(--agyn-border-subtle)] bg-white px-2 py-1 text-xs text-[var(--agyn-dark)] focus:border-[var(--agyn-blue)] focus:outline-none"
+                  >
+                    <option value="createdAt">Created</option>
+                    <option value="at">Scheduled</option>
+                    <option value="completedAt">Completed</option>
+                  </select>
+                  <button
+                    type="button"
+                    onClick={handleSortOrderToggle}
+                    className="rounded-md border border-[var(--agyn-border-subtle)] px-2 py-1 text-xs font-medium text-[var(--agyn-text-subtle)] transition-colors hover:border-[var(--agyn-blue)]/40 hover:text-[var(--agyn-blue)]"
+                  >
+                    {sortOrder === 'desc' ? 'Desc' : 'Asc'}
+                  </button>
+                </label>
+
+                <label className="flex items-center gap-2 text-xs text-[var(--agyn-text-subtle)]">
+                  <span>Rows</span>
+                  <select
+                    value={perPage}
+                    onChange={(event) => handlePerPageChange(Number(event.target.value))}
+                    className="rounded-md border border-[var(--agyn-border-subtle)] bg-white px-2 py-1 text-xs text-[var(--agyn-dark)] focus:border-[var(--agyn-blue)] focus:outline-none"
+                  >
+                    {perPageOptions.map((option) => (
+                      <option key={option} value={option}>
+                        {option}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </div>
             </div>
           </div>
 
@@ -198,14 +277,14 @@ export default function RemindersScreen({
                 </tr>
               </thead>
               <tbody>
-                {paginatedReminders.length === 0 ? (
+                {reminders.length === 0 ? (
                   <tr>
                     <td colSpan={5} className="text-center py-12 text-[var(--agyn-text-subtle)]">
                       No reminders found
                     </td>
                   </tr>
                 ) : (
-                  paginatedReminders.map((reminder) => {
+                  reminders.map((reminder) => {
                     const countdown = getTimeDisplay(reminder);
 
                     return (
@@ -315,39 +394,38 @@ export default function RemindersScreen({
           </div>
 
           {/* Pagination */}
-          {totalPages > 1 && (
+          {safeTotalPages > 1 && (
             <div className="border-t border-[var(--agyn-border-subtle)] bg-[var(--agyn-bg-light)] px-6 py-4">
               <div className="flex items-center justify-between">
                 <div className="text-sm text-[var(--agyn-text-subtle)]">
-                  Showing {startIndex + 1} to {Math.min(endIndex, filteredReminders.length)} of{' '}
-                  {filteredReminders.length} reminders
+                  {total === 0 ? 'Showing 0 to 0 of 0 reminders' : `Showing ${startIndex} to ${endIndex} of ${total} reminders`}
                 </div>
                 <div className="flex items-center gap-2">
                   <button
-                    onClick={() => setCurrentPage(currentPage - 1)}
-                    disabled={currentPage === 1}
+                    onClick={() => handlePageChange(safePage - 1)}
+                    disabled={safePage === 1}
                     className="px-3 py-1.5 text-sm text-[var(--agyn-text-subtle)] hover:text-[var(--agyn-dark)] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                   >
                     Previous
                   </button>
                   <div className="flex items-center gap-1">
-                    {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
+                    {Array.from({ length: safeTotalPages }, (_, i) => i + 1).map((pageNumber) => (
                       <button
-                        key={page}
-                        onClick={() => setCurrentPage(page)}
+                        key={pageNumber}
+                        onClick={() => handlePageChange(pageNumber)}
                         className={`w-8 h-8 rounded-md text-sm transition-all ${
-                          currentPage === page
+                          safePage === pageNumber
                             ? 'bg-[var(--agyn-blue)]/10 text-[var(--agyn-blue)] font-medium'
                             : 'text-[var(--agyn-text-subtle)] hover:bg-[var(--agyn-bg-light)]'
                         }`}
                       >
-                        {page}
+                        {pageNumber}
                       </button>
                     ))}
                   </div>
                   <button
-                    onClick={() => setCurrentPage(currentPage + 1)}
-                    disabled={currentPage === totalPages}
+                    onClick={() => handlePageChange(safePage + 1)}
+                    disabled={safePage === safeTotalPages}
                     className="px-3 py-1.5 text-sm text-[var(--agyn-text-subtle)] hover:text-[var(--agyn-dark)] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                   >
                     Next

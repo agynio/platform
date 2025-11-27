@@ -25,6 +25,37 @@ export type RunStartResult = { runId: string };
 
 type RunEventDelegate = Prisma.TransactionClient['runEvent'];
 
+export type RemindersListFilter = 'active' | 'completed' | 'all';
+export type RemindersSortField = 'createdAt' | 'at' | 'completedAt';
+export type RemindersSortOrder = 'asc' | 'desc';
+
+export type ReminderStatusCounts = {
+  scheduled: number;
+  executed: number;
+  cancelled: number;
+};
+
+export type ListRemindersItem = {
+  id: string;
+  threadId: string;
+  note: string;
+  at: Date;
+  createdAt: Date;
+  completedAt: Date | null;
+  cancelledAt: Date | null;
+};
+
+export type ListRemindersPage = {
+  total: number;
+  page: number;
+  perPage: number;
+  totalPages: number;
+  sortBy: RemindersSortField;
+  sortOrder: RemindersSortOrder;
+  countsByStatus: ReminderStatusCounts;
+  items: ListRemindersItem[];
+};
+
 @Injectable()
 export class AgentsPersistenceService {
   private readonly logger = new Logger(AgentsPersistenceService.name);
@@ -537,33 +568,76 @@ export class AgentsPersistenceService {
     return msgs;
   }
 
-  async listReminders(
-    filter: 'active' | 'completed' | 'all' = 'active',
-    take: number = 100,
+  async listRemindersPaged(
+    filter: RemindersListFilter,
+    page: number,
+    perPage: number,
+    sortBy: RemindersSortField,
+    sortOrder: RemindersSortOrder,
     threadId?: string,
-  ): Promise<Array<{ id: string; threadId: string; note: string; at: Date; createdAt: Date; completedAt: Date | null; cancelledAt: Date | null }>> {
-    const limit = Number.isFinite(take) ? Math.min(1000, Math.max(1, Math.trunc(take))) : 100;
-    const where: Prisma.ReminderWhereInput = {};
-    if (filter === 'active') {
-      where.completedAt = null;
-      where.cancelledAt = null;
-    } else if (filter === 'completed') {
-      where.NOT = { completedAt: null };
-    }
-    if (threadId) where.threadId = threadId;
+  ): Promise<ListRemindersPage> {
+    const baseWhere: Prisma.ReminderWhereInput = threadId ? { threadId } : {};
+
+    const filterWhere: Prisma.ReminderWhereInput = (() => {
+      if (filter === 'active') return { ...baseWhere, completedAt: null, cancelledAt: null };
+      if (filter === 'completed') return { ...baseWhere, NOT: { completedAt: null } };
+      return { ...baseWhere };
+    })();
+
+    const scheduledWhere: Prisma.ReminderWhereInput = { ...baseWhere, completedAt: null, cancelledAt: null };
+    const executedWhere: Prisma.ReminderWhereInput = { ...baseWhere, NOT: { completedAt: null } };
+    const cancelledWhere: Prisma.ReminderWhereInput = { ...baseWhere, NOT: { cancelledAt: null } };
+
+    const skip = (page - 1) * perPage;
+    const orderBy: Prisma.ReminderOrderByWithRelationInput = { [sortBy]: sortOrder };
 
     try {
-      return await this.prisma.reminder.findMany({
-        where: Object.keys(where).length === 0 ? undefined : where,
-        orderBy: { at: 'asc' },
-        select: { id: true, threadId: true, note: true, at: true, createdAt: true, completedAt: true, cancelledAt: true },
-        take: limit,
-      });
+      const [items, total, scheduled, executed, cancelled] = await Promise.all([
+        this.prisma.reminder.findMany({
+          where: Object.keys(filterWhere).length === 0 ? undefined : filterWhere,
+          orderBy,
+          select: {
+            id: true,
+            threadId: true,
+            note: true,
+            at: true,
+            createdAt: true,
+            completedAt: true,
+            cancelledAt: true,
+          },
+          take: perPage,
+          skip,
+        }),
+        this.prisma.reminder.count({ where: Object.keys(filterWhere).length === 0 ? undefined : filterWhere }),
+        this.prisma.reminder.count({ where: Object.keys(scheduledWhere).length === 0 ? undefined : scheduledWhere }),
+        this.prisma.reminder.count({ where: Object.keys(executedWhere).length === 0 ? undefined : executedWhere }),
+        this.prisma.reminder.count({ where: Object.keys(cancelledWhere).length === 0 ? undefined : cancelledWhere }),
+      ]);
+
+      const totalPages = total === 0 ? 0 : Math.ceil(total / perPage);
+
+      return {
+        total,
+        page,
+        perPage,
+        totalPages,
+        sortBy,
+        sortOrder,
+        countsByStatus: {
+          scheduled,
+          executed,
+          cancelled,
+        },
+        items,
+      };
     } catch (error) {
       this.logger.error(
-        `Failed to list reminders${this.format({
+        `Failed to list reminders (paged)${this.format({
           filter,
-          take: limit,
+          page,
+          perPage,
+          sortBy,
+          sortOrder,
           threadId,
           error: this.errorInfo(error),
         })}`,

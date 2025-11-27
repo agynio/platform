@@ -1,5 +1,11 @@
 import RemindersScreen from '../screens/RemindersScreen';
-import type { ReminderVm } from '@/features/reminders/types';
+import type {
+  ListRemindersSortBy,
+  ListRemindersSortOrder,
+  ReminderStatusCounts,
+  ReminderStatusFilter,
+  ReminderVm,
+} from '@/features/reminders/types';
 
 interface RemindersLayoutProps {
   reminders?: ReminderVm[];
@@ -8,6 +14,20 @@ interface RemindersLayoutProps {
   onRetry?: () => void;
   onViewThread?: (threadId: string) => void;
   onViewRun?: (runId: string) => void;
+  page: number;
+  perPage: number;
+  total: number;
+  totalPages: number;
+  sortBy: ListRemindersSortBy;
+  sortOrder: ListRemindersSortOrder;
+  countsByStatus: ReminderStatusCounts;
+  statusFilter: ReminderStatusFilter;
+  perPageOptions?: number[];
+  onStatusFilterChange?: (value: ReminderStatusFilter) => void;
+  onPageChange?: (page: number) => void;
+  onPerPageChange?: (perPage: number) => void;
+  onSortByChange?: (sortBy: ListRemindersSortBy) => void;
+  onSortOrderChange?: (sortOrder: ListRemindersSortOrder) => void;
 }
 
 export function RemindersLayout({
@@ -17,6 +37,20 @@ export function RemindersLayout({
   onRetry,
   onViewThread,
   onViewRun,
+  page,
+  perPage,
+  total,
+  totalPages,
+  sortBy,
+  sortOrder,
+  countsByStatus,
+  statusFilter,
+  perPageOptions,
+  onStatusFilterChange,
+  onPageChange,
+  onPerPageChange,
+  onSortByChange,
+  onSortOrderChange,
 }: RemindersLayoutProps) {
   const showLoading = isLoading && !error;
   const errorMessage = error?.message?.trim() || 'Failed to load reminders';
@@ -25,6 +59,20 @@ export function RemindersLayout({
     <div className="relative flex min-h-0 flex-1 overflow-hidden bg-white">
       <RemindersScreen
         reminders={reminders}
+        page={page}
+        perPage={perPage}
+        total={total}
+        totalPages={totalPages}
+        sortBy={sortBy}
+        sortOrder={sortOrder}
+        countsByStatus={countsByStatus}
+        statusFilter={statusFilter}
+        perPageOptions={perPageOptions}
+        onStatusFilterChange={onStatusFilterChange}
+        onPageChange={onPageChange}
+        onPerPageChange={onPerPageChange}
+        onSortByChange={onSortByChange}
+        onSortOrderChange={onSortOrderChange}
         onViewThread={onViewThread}
         onViewRun={onViewRun}
         onDeleteReminder={undefined}
