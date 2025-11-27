@@ -17,8 +17,8 @@ export function FieldLabel({ label, hint, required }: FieldLabelProps) {
       </label>
       {hint && (
         <Tooltip>
-          <TooltipTrigger className="cursor-help">
-            <Info className="w-3.5 h-3.5 text-[var(--agyn-gray)]" />
+          <TooltipTrigger className="cursor-help" aria-label={hint} title={hint}>
+            <Info className="w-3.5 h-3.5 text-[var(--agyn-gray)]" aria-hidden="true" />
           </TooltipTrigger>
           <TooltipContent className="text-xs">{hint}</TooltipContent>
         </Tooltip>

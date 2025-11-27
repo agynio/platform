@@ -29,6 +29,7 @@ import {
   writeReferenceValue,
 } from './utils';
 import { getCanonicalToolName } from './toolCanonicalNames';
+import { TOOL_NAME_HINT } from './toolNameHint';
 import type {
   AgentQueueConfig,
   AgentSummarizationConfig,
@@ -547,7 +548,7 @@ function NodePropertiesSidebar({
 
           {nodeKind === 'Tool' && (
             <section>
-              <FieldLabel label="Name" />
+              <FieldLabel label="Name" hint={TOOL_NAME_HINT} />
               <Input
                 value={toolNameInput}
                 onChange={(event) => handleToolNameChange(event.target.value)}
@@ -555,10 +556,6 @@ function NodePropertiesSidebar({
                 size="sm"
                 aria-invalid={toolNameError ? 'true' : 'false'}
               />
-              <p className="mt-1 text-xs text-[var(--agyn-gray)]">
-                Optional. Unique per agent. Lowercase letters, digits, underscore, max 64 characters.
-                Affects how the LLM addresses this tool.
-              </p>
               {toolNameError && <p className="mt-1 text-xs text-[var(--agyn-status-failed)]">{toolNameError}</p>}
             </section>
           )}

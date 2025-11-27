@@ -3,6 +3,7 @@ import { Input } from '@agyn/ui';
 import { getCanonicalToolName } from '@/components/nodeProperties/toolCanonicalNames';
 import { isValidToolName } from '@/components/nodeProperties/utils';
 import type { StaticConfigViewProps } from './types';
+import { ToolNameLabel } from './shared/ToolNameLabel';
 
 export default function CallAgentToolConfigView({ value, onChange, readOnly, disabled, onValidate }: StaticConfigViewProps) {
   const init = useMemo(() => ({ ...(value || {}) }), [value]);
@@ -57,11 +58,8 @@ export default function CallAgentToolConfigView({ value, onChange, readOnly, dis
         <Input value={description} onChange={(e) => setDescription(e.target.value)} disabled={isDisabled} placeholder="Tool description" />
       </div>
       <div>
-        <label className="block text-xs mb-1">Name (optional)</label>
+        <ToolNameLabel />
         <Input value={name} onChange={(e) => setName(e.target.value)} disabled={isDisabled} placeholder={namePlaceholder} />
-        <div className="text-[10px] text-muted-foreground mt-1">
-          Lowercase letters, digits, underscore. Leave blank to use the canonical name.
-        </div>
         {nameError && <div className="text-[10px] text-red-600 mt-1">{nameError}</div>}
       </div>
       <div>

@@ -5,6 +5,7 @@ import { getCanonicalToolName } from '@/components/nodeProperties/toolCanonicalN
 import { isValidToolName, readEnvList, serializeEnvVars } from '@/components/nodeProperties/utils';
 import type { StaticConfigViewProps } from './types';
 import ReferenceEnvField from './shared/ReferenceEnvField';
+import { ToolNameLabel } from './shared/ToolNameLabel';
 
 export default function ShellToolConfigView({ value, onChange, readOnly, disabled, onValidate }: StaticConfigViewProps) {
   const init = useMemo<Record<string, unknown>>(() => ({ ...(value || {}) }), [value]);
@@ -80,11 +81,8 @@ export default function ShellToolConfigView({ value, onChange, readOnly, disable
   return (
     <div className="space-y-3 text-sm">
       <div>
-        <label className="block text-xs mb-1">Name (optional)</label>
+        <ToolNameLabel />
         <Input value={name} onChange={(e) => setName(e.target.value)} disabled={isDisabled} placeholder={namePlaceholder || 'shell_command'} />
-        <div className="text-[10px] text-muted-foreground mt-1">
-          Lowercase letters, digits, underscore. Leave blank to use the canonical name.
-        </div>
         {nameError && <div className="text-[10px] text-red-600 mt-1">{nameError}</div>}
       </div>
       <div>

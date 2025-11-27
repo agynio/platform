@@ -5,6 +5,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import NodePropertiesSidebar from '../index';
 import type { NodeConfig, NodePropertiesSidebarProps, NodeState } from '../types';
+import { TOOL_NAME_HINT } from '../toolNameHint';
 
 function setup(overrides?: Partial<NodePropertiesSidebarProps>) {
   const { config: configOverride, state: stateOverride, onConfigChange: overrideOnConfigChange, ...rest } = overrides ?? {};
@@ -39,6 +40,18 @@ describe('NodePropertiesSidebar tool name field', () => {
   it('renders canonical placeholder for the tool template', () => {
     const { input } = setup();
     expect(input.placeholder).toBe('shell_command');
+  });
+
+  it('shows the name requirements in a tooltip', async () => {
+    const user = userEvent.setup();
+    setup();
+
+    const tooltipTrigger = screen.getByLabelText(TOOL_NAME_HINT);
+    await user.hover(tooltipTrigger);
+
+    await waitFor(() => {
+      expect(screen.getAllByText(TOOL_NAME_HINT).length).toBeGreaterThan(0);
+    });
   });
 
   it('emits updates for valid tool names', async () => {

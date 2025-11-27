@@ -7,10 +7,35 @@ import ShellToolConfigView from '../ShellToolConfigView';
 import GithubCloneRepoToolConfigView from '../GithubCloneRepoToolConfigView';
 import SendSlackMessageToolConfigView from '../SendSlackMessageToolConfigView';
 import RemindMeToolConfigView from '../RemindMeToolConfigView';
+import { TOOL_NAME_HINT } from '@/components/nodeProperties/toolNameHint';
 
 const canonicalHelp = 'Name must match ^[a-z0-9_]{1,64}$';
 
 describe('ShellToolConfigView name field', () => {
+  it('surfaces tooltip guidance for naming', async () => {
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+    const onValidate = vi.fn();
+
+    render(
+      <ShellToolConfigView
+        templateName="shellTool"
+        value={{}}
+        onChange={onChange}
+        readOnly={false}
+        disabled={false}
+        onValidate={onValidate}
+      />,
+    );
+
+    const trigger = screen.getByLabelText(TOOL_NAME_HINT);
+    await user.hover(trigger);
+
+    await waitFor(() => {
+      expect(screen.getAllByText(TOOL_NAME_HINT).length).toBeGreaterThan(0);
+    });
+  });
+
   it('uses the canonical placeholder and persists valid names', async () => {
     const user = userEvent.setup();
     const onChange = vi.fn();
