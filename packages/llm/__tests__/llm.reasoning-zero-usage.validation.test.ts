@@ -3,6 +3,7 @@ import type { Response } from 'openai/resources/responses/responses.mjs';
 import { LLM, ReasoningOnlyZeroUsageError } from '../src/llm';
 import { HumanMessage } from '../src/messages/humanMessage';
 import { AIMessage } from '../src/messages/aiMessage';
+import { ResponseMessage } from '../src/messages/responseMessage';
 
 function createReasoningOnlyResponse(usage: Response['usage']): Response {
   return {
@@ -132,5 +133,66 @@ describe('LLM reasoning-only zero usage validation', () => {
 
     const result = await llm.call({ model: 'gpt-4o', input: baseInput });
     expect(result.text).toBe('finished');
+  });
+
+  it('does not throw when usage fields are missing', async () => {
+    const partialUsage = {
+      input_tokens_details: {},
+      output_tokens_details: {},
+    } as unknown as Response['usage'];
+
+    const rawResponse = createReasoningOnlyResponse(partialUsage);
+
+    const llm = createLLMFor(rawResponse);
+
+    await expect(llm.call({ model: 'gpt-4o', input: baseInput })).resolves.toBeInstanceOf(ResponseMessage);
+  });
+
+  it('does not treat NaN usage values as zero', async () => {
+    const rawResponse = createReasoningOnlyResponse(
+      buildUsage({ input: Number.NaN, output: 0, total: Number.NaN, cached: 0, reasoning: 0 }),
+    );
+
+    const llm = createLLMFor(rawResponse);
+
+    await expect(llm.call({ model: 'gpt-4o', input: baseInput })).resolves.toBeInstanceOf(ResponseMessage);
+  });
+
+  it('does not treat infinite usage values as zero', async () => {
+    const rawResponse = createReasoningOnlyResponse(
+      buildUsage({ input: Number.POSITIVE_INFINITY, output: 0, total: Number.POSITIVE_INFINITY, cached: 0, reasoning: 0 }),
+    );
+
+    const llm = createLLMFor(rawResponse);
+
+    await expect(llm.call({ model: 'gpt-4o', input: baseInput })).resolves.toBeInstanceOf(ResponseMessage);
+  });
+
+  it('does not treat non-finite detail counters as zero', async () => {
+    const rawResponse = createReasoningOnlyResponse(
+      buildUsage({ input: 0, output: 0, total: 0, cached: Number.POSITIVE_INFINITY, reasoning: Number.NaN }),
+    );
+
+    const llm = createLLMFor(rawResponse);
+
+    await expect(llm.call({ model: 'gpt-4o', input: baseInput })).resolves.toBeInstanceOf(ResponseMessage);
+  });
+
+  it('does not throw when output array is empty', async () => {
+    const rawResponse = createReasoningOnlyResponse(buildUsage({ input: 0, output: 0, total: 0 }));
+    (rawResponse as { output: unknown }).output = [];
+
+    const llm = createLLMFor(rawResponse);
+
+    await expect(llm.call({ model: 'gpt-4o', input: baseInput })).resolves.toBeInstanceOf(ResponseMessage);
+  });
+
+  it('does not throw when output item lacks type discriminator', async () => {
+    const rawResponse = createReasoningOnlyResponse(buildUsage({ input: 0, output: 0, total: 0 }));
+    (rawResponse as { output: unknown }).output = [{}];
+
+    const llm = createLLMFor(rawResponse);
+
+    await expect(llm.call({ model: 'gpt-4o', input: baseInput })).resolves.toBeInstanceOf(ResponseMessage);
   });
 });
