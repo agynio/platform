@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import { formatDistanceToNow } from 'date-fns';
 import { Play, Container, Bell, Send, PanelRightClose, PanelRight, Loader2 } from 'lucide-react';
 import { IconButton } from '../IconButton';
 import { ThreadsList } from '../ThreadsList';
@@ -6,6 +7,7 @@ import type { Thread } from '../ThreadItem';
 import { SegmentedControl } from '../SegmentedControl';
 import { Conversation, type Run } from '../Conversation';
 import { Popover, PopoverTrigger, PopoverContent } from '../ui/popover';
+import { Button } from '../Button';
 import { StatusIndicator } from '../StatusIndicator';
 import { AutosizeTextarea } from '../AutosizeTextarea';
 
@@ -25,6 +27,7 @@ interface ThreadsScreenProps {
   isEmpty?: boolean;
   listError?: ReactNode;
   detailError?: ReactNode;
+  isToggleThreadStatusPending?: boolean;
   onFilterModeChange?: (mode: 'all' | 'open' | 'closed') => void;
   onSelectThread?: (threadId: string) => void;
   onToggleRunsInfoCollapsed?: (isCollapsed: boolean) => void;
@@ -32,6 +35,7 @@ interface ThreadsScreenProps {
   onSendMessage?: (value: string, context: { threadId: string | null }) => void;
   onThreadsLoadMore?: () => void;
   onThreadExpand?: (threadId: string, isExpanded: boolean) => void;
+  onToggleThreadStatus?: (threadId: string, next: 'open' | 'closed') => void;
   className?: string;
 }
 
@@ -51,6 +55,7 @@ export default function ThreadsScreen({
   isEmpty = false,
   listError,
   detailError,
+  isToggleThreadStatusPending = false,
   onFilterModeChange,
   onSelectThread,
   onToggleRunsInfoCollapsed,
@@ -58,6 +63,7 @@ export default function ThreadsScreen({
   onSendMessage,
   onThreadsLoadMore,
   onThreadExpand,
+  onToggleThreadStatus,
   className = '',
 }: ThreadsScreenProps) {
   const filteredThreads = threads.filter((thread) => {
@@ -131,6 +137,16 @@ export default function ThreadsScreen({
       );
     }
 
+    const createdAtDate = new Date(resolvedSelectedThread.createdAt);
+    const createdAtValid = Number.isFinite(createdAtDate.getTime());
+    const createdAtRelative = createdAtValid
+      ? formatDistanceToNow(createdAtDate, { addSuffix: true })
+      : resolvedSelectedThread.createdAt;
+    const createdAtTitle = createdAtValid ? createdAtDate.toLocaleString() : undefined;
+    const nextStatus = resolvedSelectedThread.isOpen ? 'closed' : 'open';
+    const toggleLabel = resolvedSelectedThread.isOpen ? 'Close' : 'Reopen';
+    const toggleDisabled = !onToggleThreadStatus || isToggleThreadStatusPending;
+
     return (
       <>
         <div className="bg-white border-b border-[var(--agyn-border-subtle)] p-4">
@@ -140,10 +156,25 @@ export default function ThreadsScreen({
                 <StatusIndicator status={resolvedSelectedThread.status} size="sm" />
                 <span className="text-xs text-[var(--agyn-gray)]">{resolvedSelectedThread.agentName}</span>
                 <span className="text-xs text-[var(--agyn-gray)]">•</span>
-                <span className="text-xs text-[var(--agyn-gray)]">{resolvedSelectedThread.createdAt}</span>
+                <span className="text-xs text-[var(--agyn-gray)]" title={createdAtTitle}>
+                  {createdAtRelative}
+                </span>
               </div>
               <h3 className="text-[var(--agyn-dark)]">{resolvedSelectedThread.summary}</h3>
             </div>
+            <Button
+              variant="ghost"
+              size="sm"
+              type="button"
+              className="ml-4 px-3 py-1 text-xs rounded-[6px]"
+              onClick={() => onToggleThreadStatus?.(resolvedSelectedThread.id, nextStatus)}
+              disabled={toggleDisabled}
+              aria-busy={isToggleThreadStatusPending}
+              aria-label={`${toggleLabel} thread`}
+              title={`${toggleLabel} thread`}
+            >
+              {toggleLabel}
+            </Button>
           </div>
 
           <div className="flex items-center justify-between">
@@ -252,8 +283,8 @@ export default function ThreadsScreen({
   };
 
   return (
-    <div className={`flex min-w-0 flex-1 overflow-hidden ${className}`}>
-      <div className="flex w-[360px] flex-col border-r border-[var(--agyn-border-subtle)] bg-white">
+    <div className={`flex min-h-0 min-w-0 flex-1 overflow-hidden ${className}`}>
+      <div className="flex min-h-0 w-[360px] flex-col border-r border-[var(--agyn-border-subtle)] bg-white">
         <div className="flex h-[66px] items-center border-b border-[var(--agyn-border-subtle)] px-4">
           <SegmentedControl
             items={[
@@ -267,7 +298,7 @@ export default function ThreadsScreen({
           />
         </div>
 
-        <div className="flex-1 overflow-hidden">{renderThreadsList()}</div>
+        <div className="flex-1 min-h-0 overflow-hidden">{renderThreadsList()}</div>
       </div>
 
       <div className="flex min-w-0 flex-1 flex-col bg-[var(--agyn-bg-light)]">{renderDetailContent()}</div>

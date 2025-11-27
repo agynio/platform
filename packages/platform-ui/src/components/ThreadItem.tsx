@@ -1,3 +1,4 @@
+import { formatDistanceToNow } from 'date-fns';
 import { ChevronRight, ChevronDown } from 'lucide-react';
 import { StatusIndicator, type Status } from './StatusIndicator';
 
@@ -52,6 +53,13 @@ export function ThreadItem({
   const indentWidth = depth * 24; // Reduced from 32px to 24px
   const avatarColor = getAgentAvatarColor(thread.agentName);
 
+  const createdAtDate = new Date(thread.createdAt);
+  const createdAtValid = Number.isFinite(createdAtDate.getTime());
+  const createdAtRelative = createdAtValid
+    ? formatDistanceToNow(createdAtDate, { addSuffix: true })
+    : thread.createdAt;
+  const createdAtTitle = createdAtValid ? createdAtDate.toLocaleString() : undefined;
+
   const handleToggleExpand = () => {
     if (hasSubthreads && onToggleExpand) {
       onToggleExpand(thread.id);
@@ -95,7 +103,9 @@ export function ThreadItem({
             <div className="flex items-center gap-2 mb-1">
               <span className="text-sm text-[var(--agyn-dark)]">{thread.agentName}</span>
               <span className="text-xs text-[var(--agyn-gray)]">•</span>
-              <span className="text-xs text-[var(--agyn-gray)]">{thread.createdAt}</span>
+              <span className="text-xs text-[var(--agyn-gray)]" title={createdAtTitle}>
+                {createdAtRelative}
+              </span>
             </div>
             <p className="text-sm text-[var(--agyn-dark)] overflow-hidden" style={{ 
               display: '-webkit-box',

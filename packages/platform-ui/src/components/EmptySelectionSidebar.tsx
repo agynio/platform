@@ -1,11 +1,11 @@
-import { AlertCircle, Loader2, Plus } from 'lucide-react';
+import { Plus } from 'lucide-react';
 import Badge from './Badge';
 
 export interface DraggableNodeItem {
   id: string;
   kind: 'Trigger' | 'Agent' | 'Tool' | 'MCP' | 'Workspace';
   title: string;
-  description?: string;
+  description: string;
 }
 
 const nodeKindConfig = {
@@ -16,32 +16,73 @@ const nodeKindConfig = {
   Workspace: { color: 'var(--agyn-purple)', bgColor: 'var(--agyn-bg-purple)' },
 };
 
+const defaultNodeItems: DraggableNodeItem[] = [
+  {
+    id: 'trigger-http',
+    kind: 'Trigger',
+    title: 'HTTP Trigger',
+    description: 'Start a workflow with an HTTP request',
+  },
+  {
+    id: 'trigger-schedule',
+    kind: 'Trigger',
+    title: 'Schedule Trigger',
+    description: 'Run workflows on a schedule',
+  },
+  {
+    id: 'agent-gpt4',
+    kind: 'Agent',
+    title: 'GPT-4 Agent',
+    description: 'AI agent powered by GPT-4',
+  },
+  {
+    id: 'agent-claude',
+    kind: 'Agent',
+    title: 'Claude Agent',
+    description: 'AI agent powered by Claude',
+  },
+  {
+    id: 'tool-search',
+    kind: 'Tool',
+    title: 'Web Search',
+    description: 'Search the web for information',
+  },
+  {
+    id: 'tool-calculator',
+    kind: 'Tool',
+    title: 'Calculator',
+    description: 'Perform mathematical calculations',
+  },
+  {
+    id: 'mcp-database',
+    kind: 'MCP',
+    title: 'Database MCP',
+    description: 'Connect to databases via MCP',
+  },
+  {
+    id: 'mcp-files',
+    kind: 'MCP',
+    title: 'File System MCP',
+    description: 'Access file system operations',
+  },
+  {
+    id: 'workspace-dev',
+    kind: 'Workspace',
+    title: 'Development Workspace',
+    description: 'Isolated environment for development',
+  },
+];
+
 interface EmptySelectionSidebarProps {
   nodeItems?: DraggableNodeItem[];
   onNodeDragStart?: (nodeType: string) => void;
-  isLoading?: boolean;
-  errorMessage?: string | null;
 }
 
 export default function EmptySelectionSidebar({
-  nodeItems,
+  nodeItems = defaultNodeItems,
   onNodeDragStart,
-  isLoading = false,
-  errorMessage = null,
 }: EmptySelectionSidebarProps) {
-  const items = Array.isArray(nodeItems)
-    ? nodeItems.filter((item): item is DraggableNodeItem =>
-        !!item && typeof item.id === 'string' && item.id.length > 0 && typeof item.kind === 'string' && typeof item.title === 'string',
-      )
-    : [];
-  const hasItems = items.length > 0;
-  const dragDisabled = !!errorMessage;
-
   const handleDragStart = (event: React.DragEvent, item: DraggableNodeItem) => {
-    if (dragDisabled) {
-      event.preventDefault();
-      return;
-    }
     event.dataTransfer.setData('application/reactflow', JSON.stringify(item));
     event.dataTransfer.effectAllowed = 'move';
     if (onNodeDragStart) {
@@ -68,72 +109,43 @@ export default function EmptySelectionSidebar({
 
       {/* Scrollable Content */}
       <div className="flex-1 overflow-y-auto">
-        <div className="px-6 py-6 space-y-4">
-          {errorMessage ? (
-            <div className="flex items-start gap-2 rounded-[10px] border border-[var(--agyn-status-failed)] bg-[var(--agyn-status-failed-bg)] px-3 py-2">
-              <AlertCircle className="h-4 w-4 text-[var(--agyn-status-failed)] mt-0.5" />
-              <p className="text-sm text-[var(--agyn-status-failed)]">
-                {errorMessage}
-              </p>
-            </div>
-          ) : null}
-
-          {isLoading && !hasItems ? (
-            <div className="flex items-center gap-2 text-sm text-[var(--agyn-gray)]">
-              <Loader2 className="h-4 w-4 animate-spin" />
-              <span>Loading templates…</span>
-            </div>
-          ) : null}
-
-          {!isLoading && !hasItems && !errorMessage ? (
-            <div className="text-sm text-[var(--agyn-gray)]">
-              No templates available
-            </div>
-          ) : null}
-
-          {hasItems ? (
-            <>
-              <div className="text-xs uppercase tracking-wide text-[var(--agyn-gray)]">
-                Drag to Canvas
-              </div>
-              <div className="space-y-2">
-                {items.map((item) => {
-                  const config = nodeKindConfig[item.kind];
-                  return (
-                    <div
-                      key={item.id}
-                      draggable={!dragDisabled}
-                      aria-disabled={dragDisabled || undefined}
-                      onDragStart={(e) => handleDragStart(e, item)}
-                      className={`p-3 rounded-[8px] border border-[var(--agyn-border-subtle)] bg-white transition-all ${
-                        dragDisabled
-                          ? 'cursor-not-allowed opacity-70'
-                          : 'hover:border-[var(--agyn-border-medium)] hover:shadow-sm cursor-grab active:cursor-grabbing'
-                      }`}
-                    >
-                      <div className="flex items-start gap-3">
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2 mb-1.5">
-                            <Badge size="sm" color={config.color} bgColor={config.bgColor}>
-                              {item.kind}
-                            </Badge>
-                            <span className="text-sm text-[var(--agyn-dark)]">
-                              {item.title}
-                            </span>
-                          </div>
-                          {item.description ? (
-                            <p className="text-xs text-[var(--agyn-gray)] leading-relaxed">
-                              {item.description}
-                            </p>
-                          ) : null}
-                        </div>
+        <div className="px-6 py-6">
+          <div className="text-xs uppercase tracking-wide text-[var(--agyn-gray)] mb-3">
+            Drag to Canvas
+          </div>
+          <div className="space-y-2">
+            {nodeItems.map((item) => {
+              const config = nodeKindConfig[item.kind];
+              return (
+                <div
+                  key={item.id}
+                  draggable
+                  onDragStart={(e) => handleDragStart(e, item)}
+                  className="p-3 rounded-[8px] border border-[var(--agyn-border-subtle)] bg-white hover:border-[var(--agyn-border-medium)] hover:shadow-sm transition-all cursor-grab active:cursor-grabbing"
+                >
+                  <div className="flex items-start gap-3">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 mb-1.5">
+                        <Badge
+                          size="sm"
+                          color={config.color}
+                          bgColor={config.bgColor}
+                        >
+                          {item.kind}
+                        </Badge>
+                        <span className="text-sm text-[var(--agyn-dark)]">
+                          {item.title}
+                        </span>
                       </div>
+                      <p className="text-xs text-[var(--agyn-gray)] leading-relaxed">
+                        {item.description}
+                      </p>
                     </div>
-                  );
-                })}
-              </div>
-            </>
-          ) : null}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
         </div>
       </div>
     </div>

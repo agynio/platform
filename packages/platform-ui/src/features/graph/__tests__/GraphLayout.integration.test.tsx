@@ -25,8 +25,6 @@ const hookMocks = vi.hoisted(() => ({
   useNodeAction: vi.fn(),
 }));
 
-const templatesCacheMock = vi.hoisted(() => vi.fn());
-
 vi.mock('@/components/GraphCanvas', () => ({
   GraphCanvas: (props: unknown) => {
     canvasSpy(props);
@@ -56,10 +54,6 @@ vi.mock('@/features/graph/hooks/useNodeStatus', () => ({
 
 vi.mock('@/lib/graph/hooks', () => ({
   useMcpNodeState: hookMocks.useMcpNodeState,
-}));
-
-vi.mock('@/lib/graph/templates.provider', () => ({
-  useTemplatesCache: templatesCacheMock,
 }));
 
 vi.mock('@/features/graph/hooks/useNodeAction', () => ({
@@ -109,13 +103,6 @@ describe('GraphLayout', () => {
       enabledTools: [],
       setEnabledTools: vi.fn(),
       isLoading: false,
-    });
-    templatesCacheMock.mockReturnValue({
-      templates: [],
-      getTemplate: () => undefined,
-      loading: false,
-      ready: true,
-      error: null,
     });
     nodeActionMutate = vi.fn().mockResolvedValue(undefined);
     hookMocks.useNodeAction.mockReturnValue({ mutateAsync: nodeActionMutate, isPending: false });
@@ -243,7 +230,6 @@ describe('GraphLayout', () => {
     expect(sidebar.config).toEqual({
       kind: 'Agent',
       title: 'Agent Node',
-      template: 'agent-template',
       systemPrompt: 'You are helpful.',
     });
 

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient, type QueryKey } from '@tanstack/react-query';
 import ThreadsScreen from '@/components/screens/ThreadsScreen';
 import type { Thread } from '@/components/ThreadItem';
 import type { ConversationMessage, Run as ConversationRun } from '@/components/Conversation';
@@ -32,6 +32,13 @@ type ThreadChildrenEntry = {
 };
 
 type ThreadChildrenState = Record<string, ThreadChildrenEntry>;
+
+type ToggleThreadStatusContext = {
+  previousDetail: ThreadNode | undefined;
+  previousRoots: Array<[QueryKey, { items: ThreadNode[] } | undefined]>;
+  previousChildrenState: ThreadChildrenState;
+  previousOptimisticStatus?: 'open' | 'closed';
+};
 
 type SocketMessage = {
   id: string;
@@ -66,6 +73,7 @@ function sanitizeAgentName(agentName: string | null | undefined): string {
 type StatusOverride = {
   hasRunningRun?: boolean;
   hasPendingReminder?: boolean;
+  status?: 'open' | 'closed';
 };
 
 type StatusOverrides = Record<string, StatusOverride>;
@@ -102,13 +110,15 @@ function buildThreadTree(node: ThreadNode, children: ThreadChildrenState, overri
   const entry = children[node.id];
   const childNodes = entry?.nodes ?? [];
   const mappedChildren = childNodes.map((child) => buildThreadTree(child, children, overrides));
+  const override = overrides[node.id];
+  const status = override?.status ?? node.status ?? 'open';
   return {
     id: node.id,
     summary: sanitizeSummary(node.summary ?? null),
     agentName: sanitizeAgentName(node.agentTitle),
-    createdAt: formatDate(node.createdAt),
+    createdAt: node.createdAt,
     status: computeThreadStatus(node, mappedChildren, overrides),
-    isOpen: (node.status ?? 'open') === 'open',
+    isOpen: status === 'open',
     subthreads: mappedChildren.length > 0 ? mappedChildren : undefined,
     hasChildren: entry ? entry.hasChildren : true,
     isChildrenLoading: entry?.status === 'loading',
@@ -126,6 +136,22 @@ function findThreadNode(nodes: ThreadNode[], children: ThreadChildrenState, targ
     }
   }
   return undefined;
+}
+
+function updateThreadChildrenStatus(state: ThreadChildrenState, threadId: string, next: 'open' | 'closed'): ThreadChildrenState {
+  let mutated = false;
+  const nextState: ThreadChildrenState = {};
+  for (const [parentId, entry] of Object.entries(state)) {
+    let entryMutated = false;
+    const nodes = entry.nodes.map((child) => {
+      if (child.id !== threadId) return child;
+      entryMutated = true;
+      return { ...child, status: next };
+    });
+    if (entryMutated) mutated = true;
+    nextState[parentId] = entryMutated ? { ...entry, nodes } : entry;
+  }
+  return mutated ? nextState : state;
 }
 
 function compareRunMeta(a: RunMeta, b: RunMeta): number {
@@ -234,6 +260,7 @@ export function AgentsThreads() {
   const [filterMode, setFilterMode] = useState<FilterMode>('open');
   const [threadLimit, setThreadLimit] = useState<number>(INITIAL_THREAD_LIMIT);
   const [childrenState, setChildrenState] = useState<ThreadChildrenState>({});
+  const [optimisticStatus, setOptimisticStatus] = useState<Record<string, 'open' | 'closed'>>({});
   const [inputValue, setInputValue] = useState('');
   const [selectedThreadIdState, setSelectedThreadIdState] = useState<string | null>(params.threadId ?? null);
   const [runMessages, setRunMessages] = useState<Record<string, ConversationMessageWithMeta[]>>({});
@@ -698,15 +725,113 @@ export function AgentsThreads() {
   const selectedThreadRemindersCount = remindersQuery.data?.items?.length ?? 0;
   const selectedThreadHasPendingReminder = selectedThreadRemindersCount > 0;
 
+  const toggleThreadStatusMutation = useMutation({
+    mutationFn: async ({ id, next }: { id: string; next: 'open' | 'closed' }) => {
+      await threads.patchStatus(id, next);
+      return { id, next };
+    },
+    onMutate: async ({ id, next }): Promise<ToggleThreadStatusContext> => {
+      await queryClient.cancelQueries({ queryKey: ['agents', 'threads'] });
+
+      const detailKey = ['agents', 'threads', 'by-id', id] as const;
+      const previousDetail = queryClient.getQueryData<ThreadNode>(detailKey);
+      const previousRoots = queryClient.getQueriesData<{ items: ThreadNode[] }>({ queryKey: ['agents', 'threads', 'roots'] });
+
+      let fallbackDetail = previousDetail;
+      if (!fallbackDetail) {
+        for (const [, data] of previousRoots) {
+          const match = data?.items.find((node) => node.id === id);
+          if (match) {
+            fallbackDetail = match;
+            break;
+          }
+        }
+      }
+
+      const previousChildrenState = childrenState;
+      const previousOptimisticStatus = optimisticStatus[id];
+
+      setOptimisticStatus((prev) => {
+        if (prev[id] === next) return prev;
+        return { ...prev, [id]: next };
+      });
+
+      queryClient.setQueryData(detailKey, (prev: ThreadNode | undefined) => {
+        if (prev) return { ...prev, status: next };
+        return fallbackDetail ? { ...fallbackDetail, status: next } : prev;
+      });
+
+      queryClient.setQueriesData<{ items: ThreadNode[] }>({ queryKey: ['agents', 'threads', 'roots'] }, (prev) => {
+        if (!prev) return prev;
+        let changed = false;
+        const items = prev.items.map((node) => {
+          if (node.id !== id) return node;
+          changed = true;
+          return { ...node, status: next };
+        });
+        return changed ? { ...prev, items } : prev;
+      });
+
+      setChildrenState((prev) => updateThreadChildrenStatus(prev, id, next));
+
+      return { previousDetail, previousRoots, previousChildrenState, previousOptimisticStatus };
+    },
+    onSuccess: async (_data, variables) => {
+      const { id, next } = variables;
+      setOptimisticStatus((prev) => {
+        if (!(id in prev)) return prev;
+        const { [id]: _removed, ...rest } = prev;
+        return rest;
+      });
+      setChildrenState((prev) => updateThreadChildrenStatus(prev, id, next));
+      queryClient.setQueryData(['agents', 'threads', 'by-id', id] as const, (prev: ThreadNode | undefined) =>
+        prev ? { ...prev, status: next } : prev,
+      );
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['agents', 'threads'] }),
+        queryClient.invalidateQueries({ queryKey: ['agents', 'threads', 'by-id', id] }),
+      ]);
+    },
+    onError: (error: unknown, variables, ctx?: ToggleThreadStatusContext) => {
+      if (ctx?.previousChildrenState) {
+        setChildrenState(ctx.previousChildrenState);
+      }
+      if (ctx?.previousDetail !== undefined) {
+        queryClient.setQueryData(['agents', 'threads', 'by-id', variables.id] as const, ctx.previousDetail);
+      }
+      if (ctx?.previousRoots) {
+        for (const [key, data] of ctx.previousRoots) {
+          queryClient.setQueryData(key, data);
+        }
+      }
+      setOptimisticStatus((prev) => {
+        if (ctx?.previousOptimisticStatus !== undefined) {
+          if (prev[variables.id] === ctx.previousOptimisticStatus) return prev;
+          return { ...prev, [variables.id]: ctx.previousOptimisticStatus };
+        }
+        if (!(variables.id in prev)) return prev;
+        const { [variables.id]: _removed, ...rest } = prev;
+        return rest;
+      });
+      const message = error instanceof Error ? error.message : 'Failed to update thread status.';
+      notifyError(message);
+    },
+  });
+
   const statusOverrides = useMemo<StatusOverrides>(() => {
-    if (!selectedThreadId) return {};
-    return {
-      [selectedThreadId]: {
+    const overrides: StatusOverrides = {};
+    for (const [id, status] of Object.entries(optimisticStatus)) {
+      overrides[id] = { ...(overrides[id] ?? {}), status };
+    }
+    if (selectedThreadId) {
+      overrides[selectedThreadId] = {
+        ...(overrides[selectedThreadId] ?? {}),
         hasRunningRun: selectedThreadHasRunningRun,
         hasPendingReminder: selectedThreadHasPendingReminder,
-      },
-    };
-  }, [selectedThreadId, selectedThreadHasRunningRun, selectedThreadHasPendingReminder]);
+      };
+    }
+    return overrides;
+  }, [optimisticStatus, selectedThreadId, selectedThreadHasRunningRun, selectedThreadHasPendingReminder]);
 
   const threadsForList = useMemo<Thread[]>(() => rootNodes.map((node) => buildThreadTree(node, childrenState, statusOverrides)), [rootNodes, childrenState, statusOverrides]);
 
@@ -816,6 +941,14 @@ export function AgentsThreads() {
     setRunsInfoCollapsed(collapsed);
   }, []);
 
+  const handleToggleThreadStatus = useCallback(
+    (threadId: string, next: 'open' | 'closed') => {
+      if (toggleThreadStatusMutation.isPending) return;
+      toggleThreadStatusMutation.mutate({ id: threadId, next });
+    },
+    [toggleThreadStatusMutation],
+  );
+
   const listErrorMessage = threadsQuery.error instanceof Error ? threadsQuery.error.message : threadsQuery.error ? 'Unable to load threads.' : null;
   const detailError: ApiError | null = threadDetailQuery.isError ? (threadDetailQuery.error as ApiError) : null;
   const threadNotFound = Boolean(detailError?.response?.status === 404);
@@ -830,30 +963,37 @@ export function AgentsThreads() {
 
   return (
     <div className="absolute inset-0 flex min-h-0 min-w-0 flex-col overflow-hidden">
-      <ThreadsScreen
-        threads={threadsForList}
-        runs={conversationRuns}
-        containers={containersForScreen}
-        reminders={remindersForScreen}
-        filterMode={filterMode}
-        selectedThreadId={selectedThreadId ?? null}
-        inputValue={inputValue}
-        isRunsInfoCollapsed={isRunsInfoCollapsed}
-        threadsHasMore={threadsHasMore}
-        threadsIsLoading={threadsIsLoading}
-        isLoading={detailIsLoading}
-        isEmpty={isThreadsEmpty}
-        listError={listErrorNode}
-        detailError={detailErrorNode}
-        onFilterModeChange={handleFilterChange}
-        onSelectThread={handleSelectThread}
-        onToggleRunsInfoCollapsed={handleToggleRunsInfoCollapsed}
-        onInputValueChange={handleInputValueChange}
-        onSendMessage={handleSendMessage}
-        onThreadsLoadMore={threadsHasMore ? handleThreadsLoadMore : undefined}
-        onThreadExpand={handleThreadExpand}
-        selectedThread={selectedThreadForScreen}
-      />
+      <div className="shrink-0 border-b px-6 py-3">
+        <h1 className="text-xl font-semibold">Agents / Threads</h1>
+      </div>
+      <div className="flex min-h-0 flex-1 flex-col">
+        <ThreadsScreen
+          threads={threadsForList}
+          runs={conversationRuns}
+          containers={containersForScreen}
+          reminders={remindersForScreen}
+          filterMode={filterMode}
+          selectedThreadId={selectedThreadId ?? null}
+          inputValue={inputValue}
+          isRunsInfoCollapsed={isRunsInfoCollapsed}
+          threadsHasMore={threadsHasMore}
+          threadsIsLoading={threadsIsLoading}
+          isLoading={detailIsLoading}
+          isEmpty={isThreadsEmpty}
+          listError={listErrorNode}
+          detailError={detailErrorNode}
+          onFilterModeChange={handleFilterChange}
+          onSelectThread={handleSelectThread}
+          onToggleRunsInfoCollapsed={handleToggleRunsInfoCollapsed}
+          onInputValueChange={handleInputValueChange}
+          onSendMessage={handleSendMessage}
+          onThreadsLoadMore={threadsHasMore ? handleThreadsLoadMore : undefined}
+          onThreadExpand={handleThreadExpand}
+          onToggleThreadStatus={handleToggleThreadStatus}
+          isToggleThreadStatusPending={toggleThreadStatusMutation.isPending}
+          selectedThread={selectedThreadForScreen}
+        />
+      </div>
     </div>
   );
 }

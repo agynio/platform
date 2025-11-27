@@ -12,11 +12,36 @@ describe('mapTemplatesToSidebarItems', () => {
     ]);
 
     expect(items).toEqual([
-      { id: 'trigger-http', kind: 'Trigger', title: 'HTTP Trigger' },
-      { id: 'agent-basic', kind: 'Agent', title: 'agent-basic' },
-      { id: 'tool-search', kind: 'Tool', title: 'Search Tool' },
-      { id: 'workspace-dev', kind: 'Workspace', title: 'Dev Workspace' },
-      { id: 'mcp-db', kind: 'MCP', title: 'Database MCP' },
+      {
+        id: 'trigger-http',
+        kind: 'Trigger',
+        title: 'HTTP Trigger',
+        description: 'Add HTTP Trigger to your graph',
+      },
+      {
+        id: 'agent-basic',
+        kind: 'Agent',
+        title: 'agent-basic',
+        description: 'Add agent-basic to your graph',
+      },
+      {
+        id: 'tool-search',
+        kind: 'Tool',
+        title: 'Search Tool',
+        description: 'Add Search Tool to your graph',
+      },
+      {
+        id: 'workspace-dev',
+        kind: 'Workspace',
+        title: 'Dev Workspace',
+        description: 'Add Dev Workspace to your graph',
+      },
+      {
+        id: 'mcp-db',
+        kind: 'MCP',
+        title: 'Database MCP',
+        description: 'Add Database MCP to your graph',
+      },
     ]);
   });
 
@@ -31,7 +56,12 @@ describe('mapTemplatesToSidebarItems', () => {
     ] as any);
 
     expect(items).toEqual([
-      { id: 'tool-valid', kind: 'Tool', title: 'Valid Tool' },
+      {
+        id: 'tool-valid',
+        kind: 'Tool',
+        title: 'Valid Tool',
+        description: 'Add Valid Tool to your graph',
+      },
     ]);
   });
 });

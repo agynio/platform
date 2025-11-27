@@ -124,7 +124,7 @@ export function Conversation({
 
                   {/* Run Info Column */}
                   <div className={`flex-shrink-0 border-l border-[var(--agyn-border-subtle)] bg-[var(--agyn-bg-light)]/50 relative transition-all ${isCollapsed ? 'w-8' : 'w-[150px]'}`}>
-                    <div className={isCollapsed ? 'pt-6 pb-6 flex items-center justify-center' : 'pt-6 px-6 pb-6'}>
+                    <div className={isCollapsed ? 'pt-6 pb-6 flex items-center justify-center' : 'pt-6 px-3 pb-6'}>
                       {isCollapsed ? (
                         // Collapsed View - Just StatusIndicator
                         <div

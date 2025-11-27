@@ -2,6 +2,7 @@
 import '@testing-library/jest-dom/vitest';
 import { afterEach, vi } from 'vitest';
 import { cleanup } from '@testing-library/react';
+import axios from 'axios';
 import {
   fetch as undiciFetch,
   Headers as UndiciHeaders,
@@ -11,6 +12,18 @@ import {
 
 const rafTimers = new Map<number, ReturnType<typeof setTimeout>>();
 let rafHandleSeed = 1;
+
+const forceAxiosFetchAdapter = () => {
+  if (typeof globalThis.fetch !== 'function') return;
+  try {
+    const fetchAdapter = axios.getAdapter('fetch', axios.defaults);
+    if (typeof fetchAdapter === 'function') {
+      axios.defaults.adapter = fetchAdapter;
+    }
+  } catch (_err) {
+    // ignore: fetch adapter unavailable in this build
+  }
+};
 
 const applyBrowserMocks = () => {
   const g = globalThis as typeof globalThis & Partial<Window> & { document?: Document };
@@ -137,6 +150,8 @@ const applyBrowserMocks = () => {
       value: () => true,
     });
   }
+
+  forceAxiosFetchAdapter();
 };
 
 applyBrowserMocks();

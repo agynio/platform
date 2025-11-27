@@ -1,27 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react';
 import EmptySelectionSidebar from '../src/components/EmptySelectionSidebar';
 
-const sampleItems = [
-  {
-    id: 'trigger-http',
-    kind: 'Trigger',
-    title: 'HTTP Trigger',
-    description: 'Start a workflow with an HTTP request',
-  },
-  {
-    id: 'agent-gpt4',
-    kind: 'Agent',
-    title: 'GPT-4 Agent',
-    description: 'AI agent powered by GPT-4',
-  },
-  {
-    id: 'tool-search',
-    kind: 'Tool',
-    title: 'Web Search',
-    description: 'Search the web for information',
-  },
-];
-
 const meta: Meta<typeof EmptySelectionSidebar> = {
   title: 'Screens/Graph/EmptySelectionSidebar',
   component: EmptySelectionSidebar,
@@ -42,9 +21,7 @@ export const Default: Story = {
       <EmptySelectionSidebar {...args} />
     </div>
   ),
-  args: {
-    nodeItems: sampleItems,
-  },
+  args: {},
 };
 
 export const CustomNodeItems: Story = {
@@ -75,43 +52,5 @@ export const CustomNodeItems: Story = {
         description: 'Trigger workflow via webhook',
       },
     ],
-  },
-};
-
-export const LoadingState: Story = {
-  render: (args) => (
-    <div className="h-screen flex">
-      <div className="flex-1 bg-[var(--agyn-bg-light)]" />
-      <EmptySelectionSidebar {...args} />
-    </div>
-  ),
-  args: {
-    nodeItems: [],
-    isLoading: true,
-  },
-};
-
-export const ErrorState: Story = {
-  render: (args) => (
-    <div className="h-screen flex">
-      <div className="flex-1 bg-[var(--agyn-bg-light)]" />
-      <EmptySelectionSidebar {...args} />
-    </div>
-  ),
-  args: {
-    nodeItems: sampleItems,
-    errorMessage: 'Failed to load templates',
-  },
-};
-
-export const EmptyState: Story = {
-  render: (args) => (
-    <div className="h-screen flex">
-      <div className="flex-1 bg-[var(--agyn-bg-light)]" />
-      <EmptySelectionSidebar {...args} />
-    </div>
-  ),
-  args: {
-    nodeItems: [],
   },
 };

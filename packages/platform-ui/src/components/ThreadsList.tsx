@@ -133,7 +133,7 @@ export function ThreadsList({
 
   if (threads.length === 0 && !isLoading) {
     return (
-      <div className={`bg-white rounded-[10px] border border-[var(--agyn-border-subtle)] overflow-hidden ${className}`}>
+      <div className={`flex min-h-0 flex-col bg-white rounded-[10px] border border-[var(--agyn-border-subtle)] overflow-hidden ${className}`}>
         <div className="flex items-center justify-center py-12 text-[var(--agyn-gray)]">
           {emptyState || <p>No threads found</p>}
         </div>
@@ -143,11 +143,11 @@ export function ThreadsList({
 
   return (
     <div
-      className={`bg-white rounded-[10px] border border-[var(--agyn-border-subtle)] overflow-hidden ${className}`}
+      className={`flex min-h-0 flex-col bg-white rounded-[10px] border border-[var(--agyn-border-subtle)] overflow-hidden ${className}`}
       data-testid="threads-list"
     >
       {/* Threads List */}
-      <div className="overflow-y-auto">
+      <div className="flex-1 overflow-y-auto">
         {threads.map((thread) => renderThread(thread, 0))}
       </div>
 

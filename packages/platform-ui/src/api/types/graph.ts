@@ -12,6 +12,7 @@ export interface TemplateSchema {
   name: string;
   title: string;
   kind: string;
+  description?: string;
   sourcePorts: Record<string, unknown> | string[] | undefined;
   targetPorts: Record<string, unknown> | string[] | undefined;
   capabilities?: {
@@ -34,4 +35,3 @@ export interface PersistedGraphUpsertRequestUI {
   nodes: Array<{ id: string; position?: { x: number; y: number }; template: string; config?: Record<string, unknown> }>;
   edges: Array<{ source: string; sourceHandle?: string; target: string; targetHandle?: string }>;
 }
-

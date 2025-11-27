@@ -27,6 +27,14 @@ function normalizeTitle(title: unknown, fallback: string): string {
   return trimmed.length > 0 ? trimmed : fallback;
 }
 
+function normalizeDescription(description: unknown, title: string): string {
+  if (typeof description === 'string') {
+    const trimmed = description.trim();
+    if (trimmed.length > 0) return trimmed;
+  }
+  return `Add ${title} to your graph`;
+}
+
 export function mapTemplatesToSidebarItems(templates: TemplateSchema[] | undefined): DraggableNodeItem[] {
   if (!Array.isArray(templates) || templates.length === 0) {
     return [];
@@ -41,10 +49,12 @@ export function mapTemplatesToSidebarItems(templates: TemplateSchema[] | undefin
     if (!kind) continue;
     seen.add(name);
     const title = normalizeTitle((tpl as TemplateSchema).title, name);
+    const description = normalizeDescription((tpl as TemplateSchema).description, title);
     items.push({
       id: name,
       kind,
       title,
+      description,
     });
   }
   return items;
