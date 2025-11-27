@@ -36,7 +36,11 @@ export class EnvError extends Error {
 }
 
 export type EnvValue = string | Reference;
-export type EnvItem = { name: string; value: EnvValue };
+export type EnvItem = {
+  key?: string;
+  name?: string;
+  value: EnvValue;
+};
 
 @Injectable()
 export class EnvService {
@@ -52,13 +56,19 @@ export class EnvService {
   ): Promise<Record<string, string>> {
     if (!Array.isArray(items)) throw new EnvError('env items must be an array', 'env_items_invalid');
     const seen = new Set<string>();
-    const normalized: EnvItem[] = [];
+    const normalized: Array<{ name: string; key: string; value: EnvValue }> = [];
     for (const it of items) {
-      const name = typeof it?.name === 'string' ? it.name.trim() : '';
-      if (!name) throw new EnvError('env name must be non-empty', 'env_name_invalid', { item: it });
-      if (seen.has(name)) throw new EnvError(`duplicate env name: ${name}`, 'env_name_duplicate', { name });
+      const rawName =
+        typeof it?.name === 'string' && it.name.trim().length
+          ? it.name
+          : typeof it?.key === 'string'
+            ? it.key
+            : '';
+      const name = typeof rawName === 'string' ? rawName.trim() : '';
+      if (!name) throw new EnvError('env name must be non-empty', 'env_key_invalid', { item: it });
+      if (seen.has(name)) throw new EnvError(`duplicate env name: ${name}`, 'env_key_duplicate', { name });
       seen.add(name);
-      normalized.push({ name, value: it?.value ?? '' });
+      normalized.push({ name, key: name, value: it?.value ?? '' });
     }
 
     if (!this.referenceResolver) {

@@ -392,7 +392,7 @@ export class LocalMCPServerNode extends Node<z.infer<typeof LocalMcpServerStatic
       return allTools.filter((t) => wantedRuntimeNames.has(t.name));
     }
 
-    return allTools;
+    return [];
   }
 
   async callTool(

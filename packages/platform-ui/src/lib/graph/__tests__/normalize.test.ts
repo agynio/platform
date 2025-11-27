@@ -77,6 +77,29 @@ describe('normalizeConfigByTemplate idempotence and behavior', () => {
     expect(cfg8.maxActive).toBeUndefined();
   });
 
+  it('preserves workspace env reference objects without coercion', () => {
+    const initial: TestNode = {
+      id: 'workspace-1',
+      template: 'workspace',
+      config: {
+        env: [
+          { key: 'STATIC', value: 'plain' },
+          { key: 'SECRET', value: { kind: 'vault', path: 'secret/app', key: 'TOKEN' } },
+          { key: 'VAR', value: { kind: 'var', name: 'MY_VAR' } },
+        ],
+      },
+    };
+
+    const normalize = getNormalize(api);
+    const normalized = normalize(initial.template, initial.config);
+
+    expect(normalized.env).toEqual([
+      { key: 'STATIC', value: 'plain' },
+      { key: 'SECRET', value: { kind: 'vault', path: 'secret/app', key: 'TOKEN' } },
+      { key: 'VAR', value: { kind: 'var', name: 'MY_VAR' } },
+    ]);
+  });
+
   it('is idempotent across multiple runs', () => {
     const initialConfig: Record<string, unknown> = { workdir: '/w', env: [{ key: 'A', value: '1', source: 'static' }] };
     const initial = { template: 'shellTool' as const, config: initialConfig };
