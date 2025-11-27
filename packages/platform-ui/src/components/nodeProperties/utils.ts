@@ -29,26 +29,33 @@ function formatVaultSegments(value: Record<string, unknown>): string {
   return segments.join('/');
 }
 
-function parseVaultString(input: string): { kind: 'vault'; path: string; key: string; mount?: string } {
+function parseVaultString(
+  input: string,
+  preferredMount?: string | null,
+): { kind: 'vault'; path: string; key: string; mount?: string } {
   const trimmed = input.trim();
-  const segments = trimmed.split('/').map((segment) => segment.trim()).filter((segment) => segment.length > 0);
-  if (segments.length >= 3) {
-    const mount = segments[0];
-    const key = segments[segments.length - 1];
-    const path = segments.slice(1, -1).join('/');
-    return path.length
-      ? { kind: 'vault', mount, path, key }
-      : { kind: 'vault', mount, path: '', key };
+  if (!trimmed.length) return { kind: 'vault', path: '', key: '' };
+
+  const segments = trimmed
+    .split('/')
+    .map((segment) => segment.trim())
+    .filter((segment) => segment.length > 0);
+
+  if (!segments.length) return { kind: 'vault', path: '', key: '' };
+
+  const key = segments[segments.length - 1];
+  let pathSegments = segments.slice(0, -1);
+  let mount: string | undefined;
+
+  if (preferredMount && pathSegments[0] === preferredMount) {
+    mount = preferredMount;
+    pathSegments = pathSegments.slice(1);
   }
-  if (segments.length === 2) {
-    const [first, second] = segments;
-    return { kind: 'vault', path: first, key: second };
-  }
-  if (segments.length === 1) {
-    const [only] = segments;
-    return { kind: 'vault', path: '', key: only };
-  }
-  return { kind: 'vault', path: '', key: '' };
+
+  const path = pathSegments.join('/');
+  const ref = { kind: 'vault', path, key } as { kind: 'vault'; path: string; key: string; mount?: string };
+  if (mount) ref.mount = mount;
+  return ref;
 }
 
 function parseVariable(input: string): { kind: 'var'; name: string } {
@@ -106,18 +113,24 @@ export function readEnvList(raw: unknown): EnvVar[] {
         item.source === 'vault' ? 'vault' : item.source === 'variable' ? 'variable' : 'static';
       const source = toEnvSource(rawValue, defaultSource);
       let value = '';
+      let mount: string | null | undefined;
       if (typeof rawValue === 'string') {
         value = rawValue;
       } else if (rawValue && typeof rawValue === 'object') {
         if (source === 'vault') {
           value = formatVaultSegments(rawValue);
+          mount = typeof rawValue.mount === 'string' ? rawValue.mount : null;
         } else if (source === 'variable') {
           value = typeof rawValue.name === 'string' ? rawValue.name : '';
         } else if (typeof rawValue.value === 'string') {
           value = rawValue.value;
         }
       }
-      return { key, value, source } satisfies EnvVar;
+      const result: EnvVar = { key, value, source };
+      if (source === 'vault' && mount) {
+        result.meta = { mount };
+      }
+      return result satisfies EnvVar;
     });
   }
   if (isRecord(raw)) {
@@ -133,7 +146,8 @@ export function readEnvList(raw: unknown): EnvVar[] {
 export function serializeEnvVars(list: EnvVar[]): Array<{ key: string; value: RawEnvValue }> {
   return list.map((item) => {
     if (item.source === 'vault') {
-      const ref = parseVaultString(item.value);
+      const preferredMount = item.meta?.mount ?? undefined;
+      const ref = parseVaultString(item.value, preferredMount);
       if (!ref.mount) delete (ref as { mount?: string }).mount;
       return { key: item.key, value: ref };
     }

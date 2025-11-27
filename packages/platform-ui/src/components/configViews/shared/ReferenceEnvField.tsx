@@ -14,7 +14,12 @@ import {
 } from '@agyn/ui';
 import { Brackets, Lock, X } from 'lucide-react';
 
-export type EnvItem = { key: string; value: string; source?: 'static' | 'vault' };
+export type EnvItem = {
+  key: string;
+  value: string;
+  source?: 'static' | 'vault' | 'variable';
+  meta?: { mount?: string | null };
+};
 
 export interface ReferenceEnvFieldProps {
   label?: string;
@@ -28,7 +33,13 @@ export interface ReferenceEnvFieldProps {
 
 function toArray(v?: EnvItem[] | Record<string, string>): EnvItem[] {
   if (!v) return [];
-  if (Array.isArray(v)) return v.map((it) => ({ key: it.key, value: it.value, source: it.source || 'static' }));
+  if (Array.isArray(v))
+    return v.map((it) => ({
+      key: it.key,
+      value: it.value,
+      source: it.source || 'static',
+      ...(it.meta ? { meta: { ...it.meta } } : {}),
+    }));
   // v is Record<string, string> here, so val is already string
   return Object.entries(v).map(([k, val]) => ({ key: k, value: val, source: 'static' }));
 }

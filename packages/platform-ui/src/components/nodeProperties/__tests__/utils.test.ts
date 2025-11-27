@@ -22,7 +22,7 @@ describe('nodeProperties utils', () => {
 
       expect(result).toEqual([
         { key: 'STATIC', value: 'plain', source: 'static' },
-        { key: 'SECRET', value: 'secret/app/db/PASSWORD', source: 'vault' },
+        { key: 'SECRET', value: 'secret/app/db/PASSWORD', source: 'vault', meta: { mount: 'secret' } },
         { key: 'VAR', value: 'FOO', source: 'variable' },
       ]);
     });
@@ -40,7 +40,7 @@ describe('nodeProperties utils', () => {
     it('converts UI env vars back to reference-aware payloads', () => {
       const payload = serializeEnvVars([
         { key: 'STATIC', value: 'plain', source: 'static' },
-        { key: 'SECRET', value: 'secret/app/db/PASSWORD', source: 'vault' },
+        { key: 'SECRET', value: 'secret/app/db/PASSWORD', source: 'vault', meta: { mount: 'secret' } },
         { key: 'VAR', value: 'FOO', source: 'variable' },
       ]);
 
@@ -74,6 +74,23 @@ describe('nodeProperties utils', () => {
             kind: 'vault',
             path: 'path',
             key: 'KEY',
+          },
+        },
+      ]);
+    });
+
+    it('round-trips mountless vault paths containing slashes without assigning a mount', () => {
+      const payload = serializeEnvVars([
+        { key: 'SECRET', value: 'long/nested/path/API_KEY', source: 'vault' },
+      ]);
+
+      expect(payload).toEqual([
+        {
+          key: 'SECRET',
+          value: {
+            kind: 'vault',
+            path: 'long/nested/path',
+            key: 'API_KEY',
           },
         },
       ]);

@@ -23,6 +23,9 @@ export type EnvVar = {
   key: string;
   value: string;
   source: 'static' | 'vault' | 'variable';
+  meta?: {
+    mount?: string | null;
+  };
 };
 
 export type WorkspaceNixPackage = {
