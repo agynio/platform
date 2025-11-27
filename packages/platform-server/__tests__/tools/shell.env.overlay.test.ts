@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import { ShellCommandNode } from '../../src/nodes/tools/shell_command/shell_command.node';
 import { EnvService } from '../../src/env/env.service';
 import { RunEventsService } from '../../src/events/run-events.service';
@@ -31,19 +31,7 @@ class FakeProvider {
 describe('ShellTool env/workdir isolation with vault-backed overlay', () => {
   it('applies per-node overlay and sets workdir without leaking; supports vault refs', async () => {
     const provider: any = new FakeProvider();
-
-    const emptyReport = { events: [], counts: { total: 0, resolved: 0, unresolved: 0, cacheHits: 0, errors: 0 } };
-    const resolverA = {
-      resolve: vi.fn(async (input: unknown) => {
-        if (!Array.isArray(input)) return { output: input, report: emptyReport };
-        const list = input as Array<{ key: string; value: unknown }>;
-        const output = list.map((item) =>
-          item.key === 'BAR' ? { ...item, value: 'VAULTED' } : { ...item },
-        );
-        return { output, report: emptyReport };
-      }),
-    };
-    const envSvc = new EnvService(resolverA as any);
+    const envSvc = new EnvService();
 
     const archiveStub = { createSingleFileTar: async () => Buffer.from('tar') } as const;
     const moduleRefStub = {};
@@ -78,16 +66,13 @@ describe('ShellTool env/workdir isolation with vault-backed overlay', () => {
     const a = createNode(envSvc);
     await a.setConfig({
       env: [
-        { key: 'FOO', value: 'A' },
-        { key: 'BAR', value: { kind: 'vault', path: 'secret/path', key: 'KEY' } },
+        { name: 'FOO', value: 'A' },
+        { name: 'BAR', value: 'VAULTED' },
       ],
       workdir: '/w/a',
     });
-    const resolverB = {
-      resolve: vi.fn(async (input: unknown) => ({ output: input, report: emptyReport })),
-    };
-    const b = createNode(new EnvService(resolverB as any) as any);
-    await b.setConfig({ env: [ { key: 'FOO', value: 'B' } ], workdir: '/w/b' });
+    const b = createNode(new EnvService());
+    await b.setConfig({ env: [ { name: 'FOO', value: 'B' } ], workdir: '/w/b' });
 
     const at = a.getTool();
     const bt = b.getTool();

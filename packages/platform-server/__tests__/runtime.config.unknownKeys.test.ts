@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { LoggerService } from '../src/core/services/logger.service.js';
 import { GraphRepository } from '../src/graph/graph.repository.js';
@@ -9,7 +9,9 @@ import { GraphError } from '../src/graph/types';
 import { ModuleRef } from '@nestjs/core';
 import { MemoryNode, MemoryNodeStaticConfigSchema } from '../src/nodes/memory/memory.node';
 
-const makeRuntime = () => {
+const makeRuntime = (
+  resolveImpl?: (input: unknown) => Promise<{ output: unknown; report: unknown }>,
+) => {
   const logger = new LoggerService();
   const moduleRef: ModuleRef = {
     // Provide DI-aware create for MemoryNode
@@ -31,7 +33,8 @@ const makeRuntime = () => {
     async upsertNodeState(): Promise<void> {}
   }
   const resolver = {
-    resolve: async (input: unknown) => ({ output: input, report: {} as unknown }),
+    resolve: async (input: unknown) =>
+      (resolveImpl ? resolveImpl(input) : ({ output: input, report: {} as unknown })),
   };
   const runtime = new LiveGraphRuntime(logger, templates, new StubRepo(), moduleRef as any, resolver as any);
   return runtime;
@@ -97,6 +100,38 @@ describe('runtime config unknown keys handling', () => {
     expect(res.updatedConfigNodes).toContain('n3');
     const live = runtime.getNodes().find((n) => n.id === 'n3')!;
     expect(live.config).toEqual({ scope: 'perThread', collectionPrefix: 'pp', extra: 'x' });
+  });
+
+  it('normalizes env entries to use name after resolution', async () => {
+    const resolveSpy = vi.fn(async (input: unknown) => ({ output: input, report: {} as unknown }));
+    const runtime = makeRuntime(resolveSpy);
+    const g: GraphDefinition = {
+      nodes: [
+        {
+          id: 'env-node',
+          data: {
+            template: 'Memory',
+            config: {
+              env: [
+                { key: 'API_TOKEN', value: 'secret-value' },
+                { name: 'ALREADY', value: 'exists' },
+              ],
+            },
+          },
+        },
+      ],
+      edges: [],
+    };
+    const res = await runtime.apply(g);
+    expect(res.errors).toHaveLength(0);
+    expect(resolveSpy).toHaveBeenCalled();
+    const live = runtime.getNodes().find((n) => n.id === 'env-node');
+    expect(live?.config).toEqual({
+      env: [
+        { name: 'API_TOKEN', value: 'secret-value' },
+        { name: 'ALREADY', value: 'exists' },
+      ],
+    });
   });
 
   // dynamicConfig removed; skip invalid dynamicConfig test

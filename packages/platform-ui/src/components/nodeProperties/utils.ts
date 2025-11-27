@@ -106,8 +106,8 @@ export function writeReferenceValue(prev: ReferenceConfigValue, nextValue: strin
 export function readEnvList(raw: unknown): EnvVar[] {
   if (Array.isArray(raw)) {
     return raw.map((item) => {
-      if (!isRecord(item)) return { key: '', value: '', source: 'static' } satisfies EnvVar;
-      const key = typeof item.key === 'string' ? item.key : typeof item.name === 'string' ? item.name : '';
+      if (!isRecord(item)) return { name: '', value: '', source: 'static' } satisfies EnvVar;
+      const name = typeof item.name === 'string' ? item.name : typeof item.key === 'string' ? item.key : '';
       const rawValue: RawEnvValue = item.value as RawEnvValue;
       const defaultSource: EnvVar['source'] =
         item.source === 'vault' ? 'vault' : item.source === 'variable' ? 'variable' : 'static';
@@ -126,7 +126,7 @@ export function readEnvList(raw: unknown): EnvVar[] {
           value = rawValue.value;
         }
       }
-      const result: EnvVar = { key, value, source };
+      const result: EnvVar = { name, value, source };
       if (source === 'vault' && mount) {
         result.meta = { mount };
       }
@@ -135,7 +135,7 @@ export function readEnvList(raw: unknown): EnvVar[] {
   }
   if (isRecord(raw)) {
     return Object.entries(raw).map(([key, value]) => ({
-      key,
+      name: key,
       value: typeof value === 'string' ? value : '',
       source: 'static' as const,
     }));
@@ -143,19 +143,19 @@ export function readEnvList(raw: unknown): EnvVar[] {
   return [];
 }
 
-export function serializeEnvVars(list: EnvVar[]): Array<{ key: string; value: RawEnvValue }> {
+export function serializeEnvVars(list: EnvVar[]): Array<{ name: string; value: RawEnvValue }> {
   return list.map((item) => {
     if (item.source === 'vault') {
       const preferredMount = item.meta?.mount ?? undefined;
       const ref = parseVaultString(item.value, preferredMount);
       if (!ref.mount) delete (ref as { mount?: string }).mount;
-      return { key: item.key, value: ref };
+      return { name: item.name, value: ref };
     }
     if (item.source === 'variable') {
       const ref = parseVariable(item.value);
-      return { key: item.key, value: ref };
+      return { name: item.name, value: ref };
     }
-    return { key: item.key, value: item.value };
+    return { name: item.name, value: item.value };
   });
 }
 

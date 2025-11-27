@@ -21,17 +21,17 @@ describe('nodeProperties utils', () => {
       ]);
 
       expect(result).toEqual([
-        { key: 'STATIC', value: 'plain', source: 'static' },
-        { key: 'SECRET', value: 'secret/app/db/PASSWORD', source: 'vault', meta: { mount: 'secret' } },
-        { key: 'VAR', value: 'FOO', source: 'variable' },
+        { name: 'STATIC', value: 'plain', source: 'static' },
+        { name: 'SECRET', value: 'secret/app/db/PASSWORD', source: 'vault', meta: { mount: 'secret' } },
+        { name: 'VAR', value: 'FOO', source: 'variable' },
       ]);
     });
 
     it('handles legacy env map input', () => {
       const result = readEnvList({ FOO: 'bar', BAZ: 'qux' });
       expect(result).toEqual([
-        { key: 'FOO', value: 'bar', source: 'static' },
-        { key: 'BAZ', value: 'qux', source: 'static' },
+        { name: 'FOO', value: 'bar', source: 'static' },
+        { name: 'BAZ', value: 'qux', source: 'static' },
       ]);
     });
   });
@@ -39,15 +39,15 @@ describe('nodeProperties utils', () => {
   describe('serializeEnvVars', () => {
     it('converts UI env vars back to reference-aware payloads', () => {
       const payload = serializeEnvVars([
-        { key: 'STATIC', value: 'plain', source: 'static' },
-        { key: 'SECRET', value: 'secret/app/db/PASSWORD', source: 'vault', meta: { mount: 'secret' } },
-        { key: 'VAR', value: 'FOO', source: 'variable' },
+        { name: 'STATIC', value: 'plain', source: 'static' },
+        { name: 'SECRET', value: 'secret/app/db/PASSWORD', source: 'vault', meta: { mount: 'secret' } },
+        { name: 'VAR', value: 'FOO', source: 'variable' },
       ]);
 
       expect(payload).toEqual([
-        { key: 'STATIC', value: 'plain' },
+        { name: 'STATIC', value: 'plain' },
         {
-          key: 'SECRET',
+          name: 'SECRET',
           value: {
             kind: 'vault',
             mount: 'secret',
@@ -56,7 +56,7 @@ describe('nodeProperties utils', () => {
           },
         },
         {
-          key: 'VAR',
+          name: 'VAR',
           value: {
             kind: 'var',
             name: 'FOO',
@@ -66,10 +66,10 @@ describe('nodeProperties utils', () => {
     });
 
     it('preserves partial vault references', () => {
-      const payload = serializeEnvVars([{ key: 'SECRET', value: 'path/KEY', source: 'vault' }]);
+      const payload = serializeEnvVars([{ name: 'SECRET', value: 'path/KEY', source: 'vault' }]);
       expect(payload).toEqual([
         {
-          key: 'SECRET',
+          name: 'SECRET',
           value: {
             kind: 'vault',
             path: 'path',
@@ -81,12 +81,12 @@ describe('nodeProperties utils', () => {
 
     it('round-trips mountless vault paths containing slashes without assigning a mount', () => {
       const payload = serializeEnvVars([
-        { key: 'SECRET', value: 'long/nested/path/API_KEY', source: 'vault' },
+        { name: 'SECRET', value: 'long/nested/path/API_KEY', source: 'vault' },
       ]);
 
       expect(payload).toEqual([
         {
-          key: 'SECRET',
+          name: 'SECRET',
           value: {
             kind: 'vault',
             path: 'long/nested/path',

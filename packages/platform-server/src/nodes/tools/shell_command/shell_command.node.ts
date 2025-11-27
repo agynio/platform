@@ -9,24 +9,23 @@ import { ArchiveService } from '../../../infra/archive/archive.service';
 import { RunEventsService } from '../../../events/run-events.service';
 import { EventsBusService } from '../../../events/events-bus.service';
 import { PrismaService } from '../../../core/services/prisma.service';
-import { SecretReferenceSchema, VariableReferenceSchema } from '../../../utils/reference-schemas';
 
 // NOTE: ANSI stripping now handled in ShellCommandTool; keep schema exports here only.
 
 // Static config schema for ShellTool: per-node env overlay (supports Vault refs) and optional workdir
 const EnvItemSchema = z
   .object({
-    key: z.string().min(1),
-    value: z.union([z.string(), SecretReferenceSchema, VariableReferenceSchema]),
+    name: z.string().min(1),
+    value: z.string(),
   })
   .strict()
-  .describe('Environment variable entry supporting plain values, vault references, or variables.');
+  .describe('Environment variable entry with resolved string value.');
 export const ShellToolStaticConfigSchema = z
   .object({
     env: z
       .array(EnvItemSchema)
       .optional()
-      .describe('Environment variables (plain, vault, or variable references).')
+      .describe('Environment variables as resolved {name, value} pairs.')
       .meta({ 'ui:field': 'ReferenceEnvField' }),
     workdir: z.string().optional().describe('Working directory to use for each exec.'),
     executionTimeoutMs: z

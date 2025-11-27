@@ -17,7 +17,7 @@ export interface EnvEditorProps {
   envVars: EnvVar[];
   onAdd: () => void;
   onRemove: (index: number) => void;
-  onKeyChange: (index: number, value: string) => void;
+  onNameChange: (index: number, value: string) => void;
   onValueChange: (index: number, value: string) => void;
   onValueFocus?: (index: number) => void;
   onSourceTypeChange: (index: number, type: 'text' | 'secret' | 'variable') => void;
@@ -32,7 +32,7 @@ export function EnvEditor({
   envVars,
   onAdd,
   onRemove,
-  onKeyChange,
+  onNameChange,
   onValueChange,
   onValueFocus,
   onSourceTypeChange,
@@ -51,14 +51,14 @@ export function EnvEditor({
         <CollapsibleContent>
           <div className="space-y-3">
             {envVars.map((envVar, index) => (
-              <div key={`${envVar.key}-${index}`} className="space-y-3">
+              <div key={`${envVar.name}-${index}`} className="space-y-3">
                 <div className="flex-1">
                   <FieldLabel label="Name" />
                   <div className="flex items-center gap-2">
                     <Input
                       placeholder="VARIABLE_NAME"
-                      value={envVar.key}
-                      onChange={(event) => onKeyChange(index, event.target.value)}
+                      value={envVar.name}
+                      onChange={(event) => onNameChange(index, event.target.value)}
                       size="sm"
                       className="flex-1"
                     />

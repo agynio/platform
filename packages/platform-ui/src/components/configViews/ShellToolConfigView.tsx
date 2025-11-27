@@ -1,12 +1,14 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Input } from '@agyn/ui';
 import type { StaticConfigViewProps } from './types';
-import ReferenceEnvField, { type EnvItem } from './shared/ReferenceEnvField';
+import ReferenceEnvField from './shared/ReferenceEnvField';
+import type { EnvItem } from './shared/referenceEnv.helpers';
+import { normalizeEnvItems } from './shared/referenceEnv.helpers';
 
 export default function ShellToolConfigView({ value, onChange, readOnly, disabled, onValidate }: StaticConfigViewProps) {
   const init = useMemo<Record<string, unknown>>(() => ({ ...(value || {}) }), [value]);
   const [workdir, setWorkdir] = useState<string>((init.workdir as string) || (init.workingDir as string) || '/workspace');
-  const [env, setEnv] = useState<EnvItem[]>((init.env as EnvItem[]) || []);
+  const [env, setEnv] = useState<EnvItem[]>(() => normalizeEnvItems(init.env));
   const [executionTimeoutMs, setExecutionTimeoutMs] = useState<number>(
     typeof init.executionTimeoutMs === 'number' ? (init.executionTimeoutMs as number) : 60 * 60 * 1000,
   );

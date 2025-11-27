@@ -12,24 +12,24 @@ describe('ReferenceEnvField', () => {
       </TooltipProvider>,
     );
     fireEvent.click(screen.getByTestId('env-add'));
-    fireEvent.change(screen.getByTestId('env-key-1'), { target: { value: 'BAR' } });
+    fireEvent.change(screen.getByTestId('env-name-1'), { target: { value: 'BAR' } });
     fireEvent.change(screen.getByTestId('env-value-1'), { target: { value: '2' } });
     expect(Array.isArray(last)).toBe(true);
-    expect(last[1]).toEqual({ key: 'BAR', value: '2', source: 'static' });
+    expect(last[1]).toEqual({ name: 'BAR', value: '2', source: 'static' });
   });
 
   it('renders controls in order and uses icon-only remove', () => {
     render(
       <TooltipProvider delayDuration={0}>
-        <ReferenceEnvField value={[{ key: 'FOO', value: '1', source: 'static' }]} onChange={() => {}} />
+        <ReferenceEnvField value={[{ name: 'FOO', value: '1', source: 'static' }]} onChange={() => {}} />
       </TooltipProvider>,
     );
-    const row = screen.getByTestId('env-key-0').closest('div');
+    const row = screen.getByTestId('env-name-0').closest('div');
     expect(row).toBeTruthy();
     // The order should be: Key input, Value input, Source trigger button, Remove button
     const inputsAndButtons = row!.querySelectorAll('input, button');
     expect(inputsAndButtons.length).toBeGreaterThanOrEqual(3);
-    expect(inputsAndButtons[0]).toBe(screen.getByTestId('env-key-0'));
+    expect(inputsAndButtons[0]).toBe(screen.getByTestId('env-name-0'));
     expect(inputsAndButtons[1]).toBe(screen.getByTestId('env-value-0'));
     expect(screen.getByTestId('env-source-trigger-0')).toBeTruthy();
     const removeBtn = screen.getByLabelText('Remove variable');
@@ -40,7 +40,7 @@ describe('ReferenceEnvField', () => {
   it('keyboard a11y: Enter opens menu and Enter selects option', async () => {
     render(
       <TooltipProvider delayDuration={0}>
-        <ReferenceEnvField value={[{ key: 'FOO', value: '', source: 'static' }]} onChange={() => {}} />
+        <ReferenceEnvField value={[{ name: 'FOO', value: '', source: 'static' }]} onChange={() => {}} />
       </TooltipProvider>,
     );
     const trigger = screen.getByTestId('env-source-trigger-0');

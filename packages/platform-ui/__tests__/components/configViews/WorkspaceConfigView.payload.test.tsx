@@ -21,7 +21,7 @@ describe('WorkspaceConfigView payload', () => {
     const img = screen.getByLabelText('Image') as HTMLInputElement;
     fireEvent.change(img, { target: { value: 'node:20' } });
     fireEvent.click(screen.getByText('Add env'));
-    fireEvent.change(screen.getByTestId('env-key-0'), { target: { value: 'A' } });
+    fireEvent.change(screen.getByTestId('env-name-0'), { target: { value: 'A' } });
     fireEvent.change(screen.getByTestId('env-value-0'), { target: { value: '1' } });
     const cpuLimit = screen.getByLabelText('CPU limit') as HTMLInputElement;
     fireEvent.change(cpuLimit, { target: { value: '750m' } });
@@ -36,7 +36,7 @@ describe('WorkspaceConfigView payload', () => {
 
     expect(cfg.image).toBe('node:20');
     expect(Array.isArray(cfg.env)).toBe(true);
-    expect(cfg.env[0]).toEqual({ key: 'A', value: '1', source: 'static' });
+    expect(cfg.env[0]).toEqual({ name: 'A', value: '1', source: 'static' });
     expect(cfg.cpu_limit).toBe('750m');
     expect(cfg.memory_limit).toBe('512Mi');
     expect(cfg.enableDinD).toBe(true);

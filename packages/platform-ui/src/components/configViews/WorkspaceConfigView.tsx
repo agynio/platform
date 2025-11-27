@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Input } from '@agyn/ui';
 import type { StaticConfigViewProps } from './types';
-import ReferenceEnvField, { type EnvItem } from './shared/ReferenceEnvField';
+import ReferenceEnvField from './shared/ReferenceEnvField';
+import type { EnvItem } from './shared/referenceEnv.helpers';
+import { normalizeEnvItems } from './shared/referenceEnv.helpers';
 
 type VolumesFormState = {
   enabled: boolean;
@@ -24,7 +26,7 @@ const parseVolumesConfig = (raw: unknown): VolumesFormState => {
 export default function WorkspaceConfigView({ value, onChange, readOnly, disabled, onValidate }: StaticConfigViewProps) {
   const init = useMemo<Record<string, unknown>>(() => ({ ...(value || {}) }), [value]);
   const [image, setImage] = useState<string>((init.image as string) || '');
-  const [env, setEnv] = useState<EnvItem[]>((init.env as EnvItem[]) || []);
+  const [env, setEnv] = useState<EnvItem[]>(() => normalizeEnvItems(init.env));
   const [initialScript, setInitialScript] = useState<string>((init.initialScript as string) || '');
   const [cpuLimit, setCpuLimit] = useState<string>(() => {
     const raw = init.cpu_limit as unknown;

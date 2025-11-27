@@ -262,7 +262,7 @@ function NodePropertiesSidebar({
   const toolList = useMemo(() => (Array.isArray(tools) ? tools : []), [tools]);
 
   const handleEnvAdd = useCallback(() => {
-    const next = [...envVars, { key: '', value: '', source: 'static' } satisfies EnvVar];
+    const next = [...envVars, { name: '', value: '', source: 'static' } satisfies EnvVar];
     onConfigChange?.({ env: serializeEnvVars(next) });
   }, [envVars, onConfigChange]);
 
@@ -274,9 +274,9 @@ function NodePropertiesSidebar({
     [envVars, onConfigChange],
   );
 
-  const handleEnvKeyChange = useCallback(
+  const handleEnvNameChange = useCallback(
     (index: number, value: string) => {
-      const next = envVars.map((item, idx) => (idx === index ? { ...item, key: value } : item));
+      const next = envVars.map((item, idx) => (idx === index ? { ...item, name: value } : item));
       onConfigChange?.({ env: serializeEnvVars(next) });
     },
     [envVars, onConfigChange],
@@ -441,7 +441,7 @@ function NodePropertiesSidebar({
       envVars,
       onAdd: handleEnvAdd,
       onRemove: handleEnvRemove,
-      onKeyChange: handleEnvKeyChange,
+      onNameChange: handleEnvNameChange,
       onValueChange: handleEnvValueChange,
       onValueFocus: handleEnvValueFocus,
       onSourceTypeChange: handleEnvSourceChange,
@@ -452,7 +452,7 @@ function NodePropertiesSidebar({
       envVars,
       handleEnvAdd,
       handleEnvRemove,
-      handleEnvKeyChange,
+      handleEnvNameChange,
       handleEnvValueChange,
       handleEnvValueFocus,
       handleEnvSourceChange,
@@ -470,7 +470,7 @@ function NodePropertiesSidebar({
       envVars,
       onAdd: handleEnvAdd,
       onRemove: handleEnvRemove,
-      onKeyChange: handleEnvKeyChange,
+      onNameChange: handleEnvNameChange,
       onValueChange: handleEnvValueChange,
       onValueFocus: handleEnvValueFocus,
       onSourceTypeChange: handleEnvSourceChange,
@@ -481,7 +481,7 @@ function NodePropertiesSidebar({
       envVars,
       handleEnvAdd,
       handleEnvRemove,
-      handleEnvKeyChange,
+      handleEnvNameChange,
       handleEnvValueChange,
       handleEnvValueFocus,
       handleEnvSourceChange,

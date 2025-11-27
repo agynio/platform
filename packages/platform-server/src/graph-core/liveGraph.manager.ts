@@ -435,7 +435,7 @@ export class LiveGraphRuntime {
         graphName: this.graphName,
         basePath: `/nodes/${encodeURIComponent(nodeId)}/config`,
       });
-      return output;
+      return this.normalizeResolvedConfig(output as Record<string, unknown>);
     } catch (err) {
       if (err instanceof ResolveError) {
         const path = err.path ?? '<unknown>';
@@ -447,6 +447,106 @@ export class LiveGraphRuntime {
         });
       }
       throw err;
+    }
+  }
+
+  private normalizeResolvedConfig(config: Record<string, unknown>): Record<string, unknown> {
+    const normalized = transform(config) as Record<string, unknown>;
+    return normalized || {};
+
+    function transform(value: unknown): unknown {
+      if (Array.isArray(value)) {
+        let mutated = false;
+        const next = value.map((item) => {
+          const transformed = transform(item);
+          if (transformed !== item) mutated = true;
+          return transformed;
+        });
+        return mutated ? next : value;
+      }
+      if (!value || typeof value !== 'object') {
+        return value;
+      }
+      const obj = value as Record<string, unknown>;
+      let mutated = false;
+      const result: Record<string, unknown> = {};
+      for (const [key, val] of Object.entries(obj)) {
+        if (key === 'env') {
+          const { normalized: normalizedEnv, changed } = normalizeEnv(val);
+          result[key] = normalizedEnv;
+          if (changed) {
+            mutated = true;
+          } else if (normalizedEnv !== val) {
+            mutated = true;
+          }
+          continue;
+        }
+        const transformed = transform(val);
+        result[key] = transformed;
+        if (transformed !== val) mutated = true;
+      }
+      return mutated ? result : value;
+    }
+
+    function normalizeEnv(value: unknown): { normalized: unknown; changed: boolean } {
+      if (Array.isArray(value)) {
+        let changed = false;
+        const next = value.map((entry) => {
+          const { normalized, changed: entryChanged } = normalizeEnvEntry(entry);
+          if (entryChanged) changed = true;
+          return normalized;
+        });
+        return changed ? { normalized: next, changed: true } : { normalized: value, changed: false };
+      }
+      if (value && typeof value === 'object') {
+        const entries = Object.entries(value as Record<string, unknown>);
+        const normalized = entries.map(([envKey, envValue]) => ({ name: envKey, value: envValue }));
+        return { normalized, changed: true };
+      }
+      return { normalized: value, changed: false };
+    }
+
+    function normalizeEnvEntry(entry: unknown): { normalized: unknown; changed: boolean } {
+      if (!entry || typeof entry !== 'object') {
+        return { normalized: entry, changed: false };
+      }
+      const envObj = entry as Record<string, unknown>;
+      const nextEnv: Record<string, unknown> = {};
+      let changed = false;
+      const nameFromName = typeof envObj.name === 'string' ? envObj.name.trim() : '';
+      const nameFromKey = typeof envObj.key === 'string' ? envObj.key.trim() : '';
+      const resolvedName = nameFromName || nameFromKey;
+      if (resolvedName) {
+        nextEnv.name = resolvedName;
+        if (resolvedName !== envObj.name) changed = true;
+      } else if (typeof envObj.name === 'string') {
+        nextEnv.name = envObj.name;
+      }
+      if ('value' in envObj) {
+        nextEnv.value = envObj.value;
+      }
+      if ('key' in envObj) {
+        changed = true;
+      }
+      for (const [envKey, envVal] of Object.entries(envObj)) {
+        if (envKey === 'key' || envKey === 'name' || envKey === 'value') continue;
+        const transformed = transform(envVal);
+        nextEnv[envKey] = transformed;
+        if (transformed !== envVal) changed = true;
+      }
+      const comparableKeys = Object.keys(envObj).filter((envKey) => envKey !== 'key');
+      const sameShape =
+        !changed &&
+        comparableKeys.length === Object.keys(nextEnv).length &&
+        comparableKeys.every((envKey) => {
+          if (envKey === 'name') return envObj.name === nextEnv.name;
+          if (envKey === 'value') return envObj.value === nextEnv.value;
+          return (envObj as Record<string, unknown>)[envKey] === nextEnv[envKey];
+        });
+      if (sameShape) {
+        return { normalized: entry, changed: false };
+      }
+      return { normalized: nextEnv, changed: true };
     }
   }
 

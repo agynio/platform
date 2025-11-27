@@ -20,7 +20,7 @@ describe('ShellToolConfigView payload', () => {
     const wd = screen.getByDisplayValue('/workspace') as HTMLInputElement;
     fireEvent.change(wd, { target: { value: '/work' } });
     fireEvent.click(screen.getByText('Add env'));
-    fireEvent.change(screen.getByTestId('env-key-0'), { target: { value: 'FOO' } });
+    fireEvent.change(screen.getByTestId('env-name-0'), { target: { value: 'FOO' } });
     fireEvent.change(screen.getByTestId('env-value-0'), { target: { value: 'bar' } });
     const exec = screen.getByLabelText('Execution timeout (ms)') as HTMLInputElement;
     fireEvent.change(exec, { target: { value: '0' } });
@@ -31,7 +31,7 @@ describe('ShellToolConfigView payload', () => {
 
     expect(cfg.workdir).toBe('/work');
     expect(Array.isArray(cfg.env)).toBe(true);
-    expect(cfg.env[0]).toEqual({ key: 'FOO', value: 'bar', source: 'static' });
+    expect(cfg.env[0]).toEqual({ name: 'FOO', value: 'bar', source: 'static' });
     expect(cfg.executionTimeoutMs).toBe(0);
     expect(cfg.idleTimeoutMs).toBe(2000);
     expect(cfg.outputLimitChars).toBe(12345);
