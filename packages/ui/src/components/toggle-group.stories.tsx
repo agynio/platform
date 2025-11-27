@@ -6,11 +6,14 @@ export default meta;
 export type Story = StoryObj<typeof meta>;
 
 export const Basic: Story = {
-  render: () => (
-    <ToggleGroup type="single" defaultValue="center">
-      <ToggleGroupItem value="left">Left</ToggleGroupItem>
-      <ToggleGroupItem value="center">Center</ToggleGroupItem>
-      <ToggleGroupItem value="right">Right</ToggleGroupItem>
-    </ToggleGroup>
-  )
+  args: {
+    type: 'single',
+    defaultValue: 'center',
+    children: [
+      <ToggleGroupItem key="left" value="left">Left</ToggleGroupItem>,
+      <ToggleGroupItem key="center" value="center">Center</ToggleGroupItem>,
+      <ToggleGroupItem key="right" value="right">Right</ToggleGroupItem>,
+    ],
+  },
+  render: (args) => <ToggleGroup {...args} />,
 };

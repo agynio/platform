@@ -6,16 +6,16 @@ export default meta;
 export type Story = StoryObj<typeof meta>;
 
 export const Basic: Story = {
-  render: () => (
+  args: {
+    children: [1, 2, 3].map((n) => (
+      <CarouselItem key={n}>
+        <div className="h-40 flex items-center justify-center bg-muted border">Slide {n}</div>
+      </CarouselItem>
+    )),
+  },
+  render: (args) => (
     <div className="w-[360px]">
-      <Carousel>
-        {[1, 2, 3].map((n) => (
-          <CarouselItem key={n}>
-            <div className="h-40 flex items-center justify-center bg-muted border">Slide {n}</div>
-          </CarouselItem>
-        ))}
-      </Carousel>
+      <Carousel {...args} />
     </div>
-  )
+  ),
 };
-

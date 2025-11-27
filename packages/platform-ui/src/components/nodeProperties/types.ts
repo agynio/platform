@@ -20,7 +20,7 @@ export interface NodeState extends Record<string, unknown> {
 export type ReferenceConfigValue = string | Record<string, unknown>;
 
 export type EnvVar = {
-  key: string;
+  name: string;
   value: string;
   source: 'static' | 'vault' | 'variable';
 };

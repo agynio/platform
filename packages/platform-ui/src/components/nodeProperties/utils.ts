@@ -51,17 +51,17 @@ export function writeReferenceValue(prev: ReferenceConfigValue, nextValue: strin
 export function readEnvList(raw: unknown): EnvVar[] {
   if (Array.isArray(raw)) {
     return raw.map((item) => {
-      if (!isRecord(item)) return { key: '', value: '', source: 'static' } satisfies EnvVar;
-      const key = typeof item.key === 'string' ? item.key : typeof item.name === 'string' ? item.name : '';
+      if (!isRecord(item)) return { name: '', value: '', source: 'static' } satisfies EnvVar;
+      const name = typeof item.name === 'string' ? item.name : '';
       const value = typeof item.value === 'string' ? item.value : '';
       const source: EnvVar['source'] =
         item.source === 'vault' ? 'vault' : item.source === 'variable' ? 'variable' : 'static';
-      return { key, value, source } satisfies EnvVar;
+      return { name, value, source } satisfies EnvVar;
     });
   }
   if (isRecord(raw)) {
     return Object.entries(raw).map(([key, value]) => ({
-      key,
+      name: key,
       value: typeof value === 'string' ? value : '',
       source: 'static' as const,
     }));
@@ -71,7 +71,7 @@ export function readEnvList(raw: unknown): EnvVar[] {
 
 export function serializeEnvVars(list: EnvVar[]): EnvVar[] {
   return list.map((item) => ({
-    key: item.key,
+    name: item.name,
     value: item.value,
     source: item.source,
   }));

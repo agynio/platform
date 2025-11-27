@@ -19,6 +19,7 @@ import { GraphRepository } from '../src/graph/graph.repository';
 import type { GraphDefinition } from '../src/shared/types/graph.types';
 import { AgentsPersistenceService } from '../src/agents/agents.persistence.service';
 import { RunSignalsRegistry } from '../src/agents/run-signals.service';
+import { ReferenceResolverService } from '../src/utils/reference-resolver.service';
 
 class StubContainerService extends ContainerService {
   constructor(registry: ContainerRegistry, logger: LoggerService) {
@@ -138,6 +139,10 @@ describe('Graph MCP integration', () => {
         },
         { provide: VaultService, useClass: StubVaultService },
         { provide: LLMProvisioner, useClass: StubLLMProvisioner },
+        {
+          provide: ReferenceResolverService,
+          useValue: { resolve: async <T>(input: T) => ({ output: input, report: {} as Record<string, never> }) },
+        },
         { provide: NcpsKeyService, useValue: { getKeysForInjection: () => [] } },
         { provide: ContainerRegistry, useValue: { updateLastUsed: async () => {}, registerStart: async () => {}, markStopped: async () => {} } },
         { provide: NodeStateService, useValue: { upsertNodeState: async () => {}, getSnapshot: () => undefined } },

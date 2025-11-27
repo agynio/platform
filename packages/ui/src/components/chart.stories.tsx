@@ -13,8 +13,9 @@ const data = [
 ];
 
 export const Basic: Story = {
-  render: () => (
-    <ChartContainer height={200}>
+  args: {
+    height: 200,
+    children: (
       <LineChart data={data}>
         <CartesianGrid strokeDasharray="3 3" />
         <XAxis dataKey="name" />
@@ -22,7 +23,7 @@ export const Basic: Story = {
         <Tooltip />
         <Line type="monotone" dataKey="uv" stroke="#3B82F6" strokeWidth={2} dot={false} />
       </LineChart>
-    </ChartContainer>
-  )
+    ),
+  },
+  render: (args) => <ChartContainer {...args} />,
 };
-

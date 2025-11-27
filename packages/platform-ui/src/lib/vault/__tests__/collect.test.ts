@@ -11,8 +11,8 @@ describe('collectVaultRefs', () => {
   it('collects from nested objects and arrays', () => {
     const input = {
       env: [
-        { key: 'A', value: '1', source: 'static' },
-        { key: 'B', value: 'secret/path/B', source: 'vault' },
+        { name: 'A', value: '1', source: 'static' },
+        { name: 'B', value: 'secret/path/B', source: 'vault' },
       ],
       nested: {
         token: { value: 'x/y/z', source: 'vault' },
@@ -31,4 +31,3 @@ describe('collectVaultRefs', () => {
     expect(collectVaultRefs(input)).toEqual([]);
   });
 });
-

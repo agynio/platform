@@ -6,14 +6,17 @@ export default meta;
 export type Story = StoryObj<typeof meta>;
 
 export const TwoPanels: Story = {
-  render: () => (
+  args: {
+    direction: 'horizontal' as const,
+    children: [
+      <ResizablePanel key="left" defaultSize={50} className="p-2">Left</ResizablePanel>,
+      <ResizableHandle key="handle" />,
+      <ResizablePanel key="right" defaultSize={50} className="p-2">Right</ResizablePanel>,
+    ],
+  },
+  render: (args) => (
     <div className="h-[240px] border">
-      <ResizablePanelGroup direction="horizontal">
-        <ResizablePanel defaultSize={50} className="p-2">Left</ResizablePanel>
-        <ResizableHandle />
-        <ResizablePanel defaultSize={50} className="p-2">Right</ResizablePanel>
-      </ResizablePanelGroup>
+      <ResizablePanelGroup {...args} />
     </div>
-  )
+  ),
 };
-
