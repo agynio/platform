@@ -16,6 +16,12 @@ describe('Slack static config schemas', () => {
     expect(() => SendSlackMessageToolStaticConfigSchema.parse({ bot_token: { kind: 'var', name: 'SLACK_BOT_TOKEN' } })).not.toThrow();
   }, 15000);
 
+  it('SendSlackMessageToolStaticConfigSchema: validates optional name override', async () => {
+    const { SendSlackMessageToolStaticConfigSchema } = await import('../src/nodes/tools/send_slack_message/send_slack_message.tool');
+    expect(SendSlackMessageToolStaticConfigSchema.safeParse({ bot_token: 'xoxb-abc', name: 'slack_message_1' }).success).toBe(true);
+    expect(SendSlackMessageToolStaticConfigSchema.safeParse({ bot_token: 'xoxb-abc', name: 'Slack-Message' }).success).toBe(false);
+  }, 15000);
+
   it('SlackTriggerStaticConfigSchema: requires app_token and bot_token reference fields', async () => {
     const { SlackTriggerStaticConfigSchema } = await import('../src/nodes/slackTrigger/slackTrigger.node');
     expect(() => SlackTriggerStaticConfigSchema.parse({ app_token: 'xapp-abc', bot_token: 'xoxb-abc' })).not.toThrow();

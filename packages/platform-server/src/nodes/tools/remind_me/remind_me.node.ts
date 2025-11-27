@@ -20,7 +20,7 @@ export class RemindMeNode extends BaseToolNode<z.infer<typeof RemindMeToolStatic
 
   getTool(): RemindMeFunctionTool {
     if (!this.toolInstance) {
-      this.toolInstance = new RemindMeFunctionTool(this.prismaService);
+      this.toolInstance = new RemindMeFunctionTool(this, this.prismaService);
       // Wire registry change callback to socket gateway emission
       this.toolInstance.setOnRegistryChanged((count: number, atMs?: number, threadId?: string) => {
         const id = this._nodeId; // emit only when initialized

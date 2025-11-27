@@ -5,6 +5,7 @@ import { Logger } from '@nestjs/common';
 import { PrismaService } from '../../../core/services/prisma.service';
 import type { Reminder } from '@prisma/client';
 import { LLMContext } from '../../../llm/types';
+import type { RemindMeNode } from './remind_me.node';
 
 export const remindMeInvocationSchema = z
   .object({
@@ -17,7 +18,17 @@ export const remindMeInvocationSchema = z
   })
   .strict();
 
-export const RemindMeToolStaticConfigSchema = z.object({}).strict();
+const TOOL_INSTANCE_NAME_REGEX = /^[a-z0-9_]{1,64}$/;
+
+export const RemindMeToolStaticConfigSchema = z
+  .object({
+    name: z
+      .string()
+      .regex(TOOL_INSTANCE_NAME_REGEX, { message: 'Tool name must match ^[a-z0-9_]{1,64}$' })
+      .optional()
+      .describe('Optional override for the tool name (lowercase letters, digits, underscore).'),
+  })
+  .strict();
 
 export class RemindMeFunctionTool extends FunctionTool<typeof remindMeInvocationSchema> {
   // Track DB reminder id -> timer + entity
@@ -27,11 +38,11 @@ export class RemindMeFunctionTool extends FunctionTool<typeof remindMeInvocation
   private onRegistryChanged?: (count: number, updatedAtMs?: number, threadId?: string) => void;
   private readonly logger = new Logger(RemindMeFunctionTool.name);
 
-  constructor(private prismaService: PrismaService) {
+  constructor(private readonly node: RemindMeNode, private prismaService: PrismaService) {
     super();
   }
   get name() {
-    return 'remind_me';
+    return this.node.config?.name ?? 'remind_me';
   }
   get description() {
     return 'Schedule a reminder message after a delay (async fire-and-forget).';

@@ -1,12 +1,13 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { RemindMeFunctionTool } from '../src/nodes/tools/remind_me/remind_me.tool';
+import { RemindMeNode } from '../src/nodes/tools/remind_me/remind_me.node';
+import { RemindMeToolStaticConfigSchema } from '../src/nodes/tools/remind_me/remind_me.tool';
 import { HumanMessage } from '@agyn/llm';
 
 // Minimal typed stub for the caller agent used by the tool
 interface CallerAgentStub { invoke(thread: string, messages: HumanMessage[]): Promise<unknown>; }
 
 // Helper to extract callable tool
-function getToolInstance() {
+async function getToolInstance() {
   const prismaStub = {
     getClient() {
       return {
@@ -17,8 +18,13 @@ function getToolInstance() {
       } as any;
     },
   };
-  const tool = new RemindMeFunctionTool(prismaStub as any);
-  return tool;
+  const eventsBusStub = {
+    emitReminderCount: vi.fn(),
+  } as unknown as import('../src/events/events-bus.service').EventsBusService;
+  const node = new RemindMeNode(eventsBusStub, prismaStub as any);
+  node.init({ nodeId: 'remind-me-node' });
+  await node.setConfig({});
+  return node.getTool();
 }
 
 describe('RemindMeTool', () => {
@@ -32,7 +38,7 @@ describe('RemindMeTool', () => {
   });
 
   it('schedules reminder and invokes caller_agent after delay', async () => {
-    const tool = getToolInstance();
+    const tool = await getToolInstance();
 
     const invokeSpy = vi.fn(async (_t: string, _m: HumanMessage[]) => undefined);
     const caller_agent: CallerAgentStub = { invoke: invokeSpy };
@@ -62,7 +68,7 @@ describe('RemindMeTool', () => {
   });
 
   it('registry tracks active reminders until fired', async () => {
-    const tool = getToolInstance() as any;
+    const tool = (await getToolInstance()) as any;
     const invokeSpy = vi.fn(async (_t: string, _m: HumanMessage[]) => undefined);
     const caller_agent: CallerAgentStub = { invoke: invokeSpy };
     const cfg = { threadId: 't-reg', callerAgent: caller_agent } as any;
@@ -86,7 +92,7 @@ describe('RemindMeTool', () => {
   });
 
   it('destroy cancels timers and clears registry', async () => {
-    const tool = getToolInstance() as any;
+    const tool = (await getToolInstance()) as any;
     const caller_agent: CallerAgentStub = { invoke: vi.fn(async (_t: string, _m: HumanMessage[]) => undefined) };
     await tool.execute({ delayMs: 10_000, note: 'X' } as any, { threadId: 't', callerAgent: caller_agent as any, finishSignal: { activate() {}, deactivate() {}, isActive: false } });
     expect((tool as any).getActiveReminders().length).toBe(1);
@@ -97,7 +103,7 @@ describe('RemindMeTool', () => {
   });
 
   it('enforces cap on active reminders', async () => {
-    const tool = getToolInstance() as any;
+    const tool = (await getToolInstance()) as any;
     const caller_agent: CallerAgentStub = { invoke: vi.fn(async (_t: string, _m: HumanMessage[]) => undefined) };
     (tool as any).maxActive = 1;
     await tool.execute({ delayMs: 10_000, note: 'ok' } as any, { threadId: 't', callerAgent: caller_agent as any, finishSignal: { activate() {}, deactivate() {}, isActive: false } });
@@ -107,7 +113,7 @@ describe('RemindMeTool', () => {
   });
 
   it('schedules immediate reminder when delayMs=0', async () => {
-    const tool = getToolInstance();
+    const tool = await getToolInstance();
     const invokeSpy = vi.fn(async (_t: string, _m: HumanMessage[]) => undefined);
     const caller_agent: CallerAgentStub = { invoke: invokeSpy };
     const config = { threadId: 't-0', callerAgent: caller_agent as any, finishSignal: { activate() {}, deactivate() {}, isActive: false } } as any;
@@ -128,7 +134,7 @@ describe('RemindMeTool', () => {
   });
 
   it('supports multiple concurrent reminders for the same thread (delayMs=0)', async () => {
-    const tool = getToolInstance();
+    const tool = await getToolInstance();
     const invokeSpy = vi.fn(async (_t: string, _m: HumanMessage[]) => undefined);
     const caller_agent: CallerAgentStub = { invoke: invokeSpy };
     const cfg = { threadId: 't-x', callerAgent: caller_agent as any, finishSignal: { activate() {}, deactivate() {}, isActive: false } } as any;
@@ -148,7 +154,7 @@ describe('RemindMeTool', () => {
   });
 
   it('handles overlapping delays for the same thread', async () => {
-    const tool = getToolInstance();
+    const tool = await getToolInstance();
     const invokeSpy = vi.fn(async (_t: string, _m: HumanMessage[]) => undefined);
     const caller_agent: CallerAgentStub = { invoke: invokeSpy };
     const cfg = { threadId: 't-ovl', callerAgent: caller_agent as any, finishSignal: { activate() {}, deactivate() {}, isActive: false } } as any;
@@ -172,7 +178,7 @@ describe('RemindMeTool', () => {
   });
 
   it('routes reminders to mixed threads correctly', async () => {
-    const tool = getToolInstance();
+    const tool = await getToolInstance();
     const invokeSpy = vi.fn(async (_t: string, _m: HumanMessage[]) => undefined);
     const caller_agent: CallerAgentStub = { invoke: invokeSpy };
 
@@ -197,7 +203,7 @@ describe('RemindMeTool', () => {
   });
 
   it('returns scheduled ack even when thread_id missing (no invoke)', async () => {
-    const tool = getToolInstance();
+    const tool = await getToolInstance();
     const caller_agent: CallerAgentStub = { invoke: vi.fn(async (_t: string, _m: HumanMessage[]) => undefined) };
     const res = await tool.execute({ delayMs: 1, note: 'x' } as any, { callerAgent: caller_agent as any, finishSignal: { activate() {}, deactivate() {}, isActive: false } } as any);
     const parsed = typeof res === 'string' ? JSON.parse(res) : res;
@@ -205,7 +211,7 @@ describe('RemindMeTool', () => {
   });
 
   it('returns scheduled ack even when caller_agent missing', async () => {
-    const tool = getToolInstance();
+    const tool = await getToolInstance();
     const res = await tool.execute({ delayMs: 1, note: 'x' } as any, { threadId: 't', finishSignal: { activate() {}, deactivate() {}, isActive: false } } as any);
     const parsed = typeof res === 'string' ? JSON.parse(res) : res;
     expect(parsed.status).toBe('scheduled');
@@ -237,5 +243,15 @@ describe('RemindMeTool', () => {
     await vi.advanceTimersByTimeAsync(10);
     const completionCall = emitted.find((p) => p.count === 0);
     expect(completionCall?.threadId).toBe(threadId);
+  });
+});
+
+describe('RemindMeToolStaticConfigSchema', () => {
+  it('accepts valid name override', () => {
+    expect(RemindMeToolStaticConfigSchema.safeParse({ name: 'reminder_tool' }).success).toBe(true);
+  });
+
+  it('rejects invalid name override', () => {
+    expect(RemindMeToolStaticConfigSchema.safeParse({ name: 'Reminder-Tool' }).success).toBe(false);
   });
 });

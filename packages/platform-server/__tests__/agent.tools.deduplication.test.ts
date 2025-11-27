@@ -9,6 +9,7 @@ import type { ModuleRef } from '@nestjs/core';
 import { FunctionTool } from '@agyn/llm';
 import { BaseToolNode } from '../src/nodes/tools/baseToolNode';
 import type { LocalMCPServerNode } from '../src/nodes/mcp';
+import { FinishNode } from '../src/nodes/tools/finish/finish.node';
 
 class StubProvisioner extends LLMProvisioner {
   async getLLM(): Promise<unknown> {
@@ -181,6 +182,57 @@ describe('AgentNode tool deduplication', () => {
 
     agent.removeTool(primary);
     expect(getRegisteredNames(agent)).toEqual([]);
+  });
+
+  it('registers overridden tool names and exposes them in definitions', async () => {
+    const { agent } = await createAgent();
+
+    const first = new FinishNode();
+    first.init({ nodeId: 'finish-1' });
+    await first.setConfig({ name: 'finish_alpha' } as Record<string, unknown>);
+    agent.addTool(first);
+
+    const second = new FinishNode();
+    second.init({ nodeId: 'finish-2' });
+    await second.setConfig({ name: 'finish_beta' } as Record<string, unknown>);
+    agent.addTool(second);
+
+    const names = agent.tools.map((tool) => tool.name).sort();
+    expect(names).toEqual(['finish_alpha', 'finish_beta']);
+
+    const definitionNames = agent.tools.map((tool) => tool.definition().name).sort();
+    expect(definitionNames).toEqual(['finish_alpha', 'finish_beta']);
+  });
+
+  it('deduplicates overridden tool names and logs errors with context', async () => {
+    const { agent, logger } = await createAgent();
+
+    const primary = new FinishNode();
+    primary.init({ nodeId: 'finish-primary' });
+    await primary.setConfig({ name: 'finish_custom' } as Record<string, unknown>);
+    agent.addTool(primary);
+
+    const errorSpy = vi.spyOn(logger, 'error');
+
+    const duplicate = new FinishNode();
+    duplicate.init({ nodeId: 'finish-duplicate' });
+    await duplicate.setConfig({ name: 'finish_custom' } as Record<string, unknown>);
+    agent.addTool(duplicate);
+
+    expect(agent.tools.map((tool) => tool.name)).toEqual(['finish_custom']);
+    expect(errorSpy).toHaveBeenCalledTimes(1);
+    const [message, context] = errorSpy.mock.calls[0] as [string, Record<string, unknown>];
+    expect(message).toBe('[Agent:Test Agent] Duplicate tool name detected: finish_custom. Skipping registration.');
+    expect(context).toMatchObject({
+      skipped: {
+        sourceType: 'node',
+        nodeId: 'finish-duplicate',
+      },
+      kept: {
+        sourceType: 'node',
+        nodeId: 'finish-primary',
+      },
+    });
   });
 
   it('treats case differences in tool names as distinct', async () => {

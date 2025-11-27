@@ -11,6 +11,8 @@ import { EventsBusService } from '../../../events/events-bus.service';
 import { PrismaService } from '../../../core/services/prisma.service';
 import { SecretReferenceSchema, VariableReferenceSchema } from '../../../utils/reference-schemas';
 
+const TOOL_INSTANCE_NAME_REGEX = /^[a-z0-9_]{1,64}$/;
+
 // NOTE: ANSI stripping now handled in ShellCommandTool; keep schema exports here only.
 
 // Static config schema for ShellTool: per-node env overlay (supports Vault refs) and optional workdir
@@ -23,6 +25,11 @@ const EnvItemSchema = z
   .describe('Environment variable entry supporting plain values, vault references, or variables.');
 export const ShellToolStaticConfigSchema = z
   .object({
+    name: z
+      .string()
+      .regex(TOOL_INSTANCE_NAME_REGEX, { message: 'Tool name must match ^[a-z0-9_]{1,64}$' })
+      .optional()
+      .describe('Optional override for the tool name (lowercase letters, digits, underscore).'),
     env: z
       .array(EnvItemSchema)
       .optional()

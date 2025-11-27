@@ -156,7 +156,7 @@ export class ShellCommandTool extends FunctionTool<typeof bashCommandSchema> {
   }
 
   get name() {
-    return 'shell_command';
+    return this.node.config?.name ?? 'shell_command';
   }
   get schema() {
     return bashCommandSchema;

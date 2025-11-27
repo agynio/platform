@@ -23,4 +23,15 @@ describe('ShellToolStaticConfigSchema validation', () => {
     expect(bashCommandSchema.safeParse({ command: 'pwd', cwd: '/workspace/app' }).success).toBe(true);
     expect(bashCommandSchema.safeParse({ command: 'pwd', cwd: 42 as unknown as string }).success).toBe(false);
   });
+
+  it('accepts valid name override', () => {
+    const res = ShellToolStaticConfigSchema.safeParse({ name: 'shell_override' });
+    expect(res.success).toBe(true);
+    if (res.success) expect(res.data.name).toBe('shell_override');
+  });
+
+  it('rejects invalid name override', () => {
+    const res = ShellToolStaticConfigSchema.safeParse({ name: 'Shell-Override' });
+    expect(res.success).toBe(false);
+  });
 });

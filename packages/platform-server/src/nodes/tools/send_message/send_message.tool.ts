@@ -6,6 +6,7 @@ import type { LLMContext } from '../../../llm/types';
 import { PrismaService } from '../../../core/services/prisma.service';
 import { LiveGraphRuntime } from '../../../graph-core/liveGraph.manager';
 import { SlackTrigger } from '../../slackTrigger/slackTrigger.node';
+import type { SendMessageNode } from './send_message.node';
 
 export const sendMessageInvocationSchema = z.object({ message: z.string().min(1).describe('Message text.') }).strict();
 
@@ -14,12 +15,13 @@ export class SendMessageFunctionTool extends FunctionTool<typeof sendMessageInvo
     private logger: LoggerService,
     private prisma: PrismaService,
     private runtime: LiveGraphRuntime,
+    private readonly node: SendMessageNode,
   ) {
     super();
   }
 
   get name() {
-    return 'send_message';
+    return this.node.config?.name ?? 'send_message';
   }
   get description() {
     return "Send a message to the thread's origin channel.";

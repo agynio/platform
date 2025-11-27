@@ -7,6 +7,8 @@ import { SecretReferenceSchema, VariableReferenceSchema } from '../../../utils/r
 import { ReferenceResolverService } from '../../../utils/reference-resolver.service';
 import { ResolveError } from '../../../utils/references';
 
+const TOOL_INSTANCE_NAME_REGEX = /^[a-z0-9_]{1,64}$/;
+
 const TokenRefSchema = z
   .union([
     z.string().min(1),
@@ -17,6 +19,11 @@ const TokenRefSchema = z
 
 export const GithubCloneRepoToolStaticConfigSchema = z
   .object({
+    name: z
+      .string()
+      .regex(TOOL_INSTANCE_NAME_REGEX, { message: 'Tool name must match ^[a-z0-9_]{1,64}$' })
+      .optional()
+      .describe('Optional override for the tool name (lowercase letters, digits, underscore).'),
     token: TokenRefSchema.optional(),
     authRef: z
       .object({

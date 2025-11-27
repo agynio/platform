@@ -216,4 +216,42 @@ describe('CallToolsLLMReducer context items', () => {
     expect(secondAssistantItem.contentText).toBe('done');
     expect(Array.isArray(secondAssistantItem.contentJson?.output)).toBe(true);
   });
+
+  it('invokes tools using overridden instance names', async () => {
+    const runEvents = createRunEventsStub();
+    const eventsBus = createEventsBusStub();
+    const execute = vi.fn(async () => 'ok');
+    const tool = {
+      name: 'custom_override',
+      description: 'tool with override',
+      schema: { safeParse: (value: unknown) => ({ success: true, data: value }) },
+      execute,
+    };
+
+    const reducer = new CallToolsLLMReducer(new LoggerService(), runEvents as any, eventsBus as any).init({ tools: [tool] });
+    const call = new ToolCallMessage({
+      type: 'function_call',
+      call_id: 'call-custom',
+      name: 'custom_override',
+      arguments: JSON.stringify({ ok: true }),
+    } as any);
+    const response = new ResponseMessage({ output: [call.toPlain() as any] as any });
+    const state = {
+      messages: [HumanMessage.fromText('hi'), response],
+      meta: {},
+      context: { messageIds: [], memory: [] },
+    } as any;
+    const ctx = {
+      threadId: 'thread',
+      runId: 'run',
+      finishSignal: new Signal(),
+      terminateSignal: new Signal(),
+      callerAgent: { getAgentNodeId: () => 'node' },
+    } as any;
+
+    await reducer.invoke(state, ctx);
+
+    expect(execute).toHaveBeenCalledTimes(1);
+    expect(execute).toHaveBeenCalledWith({ ok: true }, expect.objectContaining({ threadId: 'thread' }));
+  });
 });

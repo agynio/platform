@@ -24,7 +24,7 @@ export class GithubCloneRepoFunctionTool extends FunctionTool<typeof githubClone
     super();
   }
   get name() {
-    return 'github_clone_repo';
+    return this.node.config?.name ?? 'github_clone_repo';
   }
   get schema() {
     return githubCloneSchema;

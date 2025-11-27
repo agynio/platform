@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import Fastify from 'fastify';
-import { RemindMeFunctionTool } from '../src/nodes/tools/remind_me/remind_me.tool';
+import { RemindMeNode } from '../src/nodes/tools/remind_me/remind_me.node';
 import { RemindersController } from '../src/graph/controllers/reminders.controller';
 import type { LiveGraphRuntime } from '../src/graph-core/liveGraph.manager';
 import { Signal } from '../src/signal';
@@ -23,7 +23,13 @@ describe('GET /graph/nodes/:nodeId/reminders', () => {
         } as any;
       },
     };
-    const tool = new RemindMeFunctionTool(prismaStub as any);
+    const eventsBusStub = {
+      emitReminderCount: vi.fn(),
+    } as unknown as import('../src/events/events-bus.service').EventsBusService;
+    const node = new RemindMeNode(eventsBusStub, prismaStub as any);
+    node.init({ nodeId: 'node-rem' });
+    await node.setConfig({});
+    const tool = node.getTool();
     const logger = new LoggerService();
     const caller_agent = { invoke: vi.fn(async () => undefined), getAgentNodeId: () => 'agent' };
     await tool.execute({ delayMs: 10_000, note: 'Soon' }, { threadId: 't-1', callerAgent: caller_agent, finishSignal: new Signal(), terminateSignal: new Signal() });

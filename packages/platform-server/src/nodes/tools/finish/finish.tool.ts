@@ -3,17 +3,18 @@ import z from 'zod';
 import { FunctionTool } from '@agyn/llm';
 import { LLMContext } from '../../../llm/types';
 import { Logger } from '@nestjs/common';
+import type { FinishNode } from './finish.node';
 
 export const finishSchema = z.object({ note: z.string() }).strict();
 
 export class FinishFunctionTool extends FunctionTool<typeof finishSchema> {
   private readonly logger = new Logger(FinishFunctionTool.name);
-
-  constructor() {
+  constructor(private readonly node: FinishNode) {
     super();
   }
+
   get name() {
-    return 'finish';
+    return this.node.config?.name ?? 'finish';
   }
   get schema() {
     return finishSchema;

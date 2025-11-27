@@ -6,8 +6,15 @@ import { Logger } from '@nestjs/common';
 import { SecretReferenceSchema, VariableReferenceSchema } from '../../../utils/reference-schemas';
 import { SendSlackMessageNode } from './send_slack_message.node';
 
+const TOOL_INSTANCE_NAME_REGEX = /^[a-z0-9_]{1,64}$/;
+
 export const SendSlackMessageToolStaticConfigSchema = z
   .object({
+    name: z
+      .string()
+      .regex(TOOL_INSTANCE_NAME_REGEX, { message: 'Tool name must match ^[a-z0-9_]{1,64}$' })
+      .optional()
+      .describe('Optional override for the tool name (lowercase letters, digits, underscore).'),
     bot_token: z.union([
       z.string().min(1).startsWith('xoxb-', { message: 'Slack bot token must start with xoxb-' }),
       SecretReferenceSchema,
@@ -35,7 +42,7 @@ export class SendSlackMessageFunctionTool extends FunctionTool<typeof sendSlackI
     super();
   }
   get name() {
-    return 'send_slack_message';
+    return this.node.config?.name ?? 'send_slack_message';
   }
   get description() {
     return 'Send a Slack message (channel or DM). Supports thread replies, broadcast, ephemeral messages.';

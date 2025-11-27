@@ -6,12 +6,20 @@ import { PrismaService } from '../../../core/services/prisma.service';
 import { LiveGraphRuntime } from '../../../graph-core/liveGraph.manager';
 import { LoggerService } from '../../../core/services/logger.service';
 
-export const SendMessageToolStaticConfigSchema = z.object({}).strict();
+const TOOL_INSTANCE_NAME_REGEX = /^[a-z0-9_]{1,64}$/;
 
-type SendMessageConfig = Record<string, never>;
+export const SendMessageToolStaticConfigSchema = z
+  .object({
+    name: z
+      .string()
+      .regex(TOOL_INSTANCE_NAME_REGEX, { message: 'Tool name must match ^[a-z0-9_]{1,64}$' })
+      .optional()
+      .describe('Optional override for the tool name (lowercase letters, digits, underscore).'),
+  })
+  .strict();
 
 @Injectable({ scope: Scope.TRANSIENT })
-export class SendMessageNode extends BaseToolNode<SendMessageConfig> {
+export class SendMessageNode extends BaseToolNode<z.infer<typeof SendMessageToolStaticConfigSchema>> {
   private toolInstance?: SendMessageFunctionTool;
   constructor(
     @Inject(LoggerService) private loggerService: LoggerService,
@@ -22,7 +30,8 @@ export class SendMessageNode extends BaseToolNode<SendMessageConfig> {
   }
 
   getTool(): SendMessageFunctionTool {
-    if (!this.toolInstance) this.toolInstance = new SendMessageFunctionTool(this.loggerService, this.prisma, this.runtime);
+    if (!this.toolInstance)
+      this.toolInstance = new SendMessageFunctionTool(this.loggerService, this.prisma, this.runtime, this);
     return this.toolInstance;
   }
 
