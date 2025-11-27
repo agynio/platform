@@ -33,7 +33,8 @@ async function bootstrap() {
   // NestJS HTTP bootstrap using FastifyAdapter and resolve services via DI
   const adapter = new FastifyAdapter();
   const fastifyAdapterInstance = adapter.getInstance() as unknown as FastifyInstance;
-  const fastifyInstance: FastifyInstance = fastifyAdapterInstance.withTypeProvider<FastifyTypeProviderDefault>() as FastifyInstance;
+  const fastifyInstance: FastifyInstance =
+    fastifyAdapterInstance.withTypeProvider<FastifyTypeProviderDefault>() as FastifyInstance;
 
   // CORS: allow dev UI preflight incl. PUT on /api/graph/nodes/:id/state
   // origins: source via ConfigService.fromEnv(); if unset, keep permissive true
@@ -48,7 +49,7 @@ async function bootstrap() {
   };
   // Enable CORS via Nest to avoid Fastify type-provider generic mismatches
 
-  const app = await NestFactory.create(AppModule, adapter, { bufferLogs: true });
+  const app = await NestFactory.create(AppModule, adapter);
   const pinoLoggerResolved = app.get(PinoLogger) as unknown;
   if (!(pinoLoggerResolved instanceof PinoLogger)) {
     throw new Error('Failed to resolve PinoLogger from application context');
