@@ -1,14 +1,14 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Input } from '@agyn/ui';
+import type { EnvVar } from '@/components/nodeProperties/types';
+import { readEnvList, serializeEnvVars } from '@/components/nodeProperties/utils';
 import type { StaticConfigViewProps } from './types';
 import ReferenceEnvField from './shared/ReferenceEnvField';
-import type { EnvItem } from './shared/referenceEnv.helpers';
-import { normalizeEnvItems } from './shared/referenceEnv.helpers';
 
 export default function ShellToolConfigView({ value, onChange, readOnly, disabled, onValidate }: StaticConfigViewProps) {
   const init = useMemo<Record<string, unknown>>(() => ({ ...(value || {}) }), [value]);
   const [workdir, setWorkdir] = useState<string>((init.workdir as string) || (init.workingDir as string) || '/workspace');
-  const [env, setEnv] = useState<EnvItem[]>(() => normalizeEnvItems(init.env));
+  const [env, setEnv] = useState<EnvVar[]>(() => readEnvList(init.env));
   const [executionTimeoutMs, setExecutionTimeoutMs] = useState<number>(
     typeof init.executionTimeoutMs === 'number' ? (init.executionTimeoutMs as number) : 60 * 60 * 1000,
   );
@@ -33,7 +33,11 @@ export default function ShellToolConfigView({ value, onChange, readOnly, disable
   }, [workdir, executionTimeoutMs, idleTimeoutMs, outputLimitChars, onValidate]);
 
   useEffect(() => {
-    const next = { ...value, workdir, env, executionTimeoutMs, idleTimeoutMs, outputLimitChars };
+    setEnv(readEnvList(init.env));
+  }, [init]);
+
+  useEffect(() => {
+    const next = { ...value, workdir, env: serializeEnvVars(env), executionTimeoutMs, idleTimeoutMs, outputLimitChars };
     if (JSON.stringify(value || {}) !== JSON.stringify(next)) onChange(next);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [workdir, JSON.stringify(env), executionTimeoutMs, idleTimeoutMs, outputLimitChars]);

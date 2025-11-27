@@ -19,13 +19,19 @@ export interface NodeState extends Record<string, unknown> {
 
 export type ReferenceConfigValue = string | Record<string, unknown>;
 
+export interface EnvVarMeta {
+  keyField: 'name' | 'key';
+  original?: Record<string, unknown>;
+  originalSource?: 'static' | 'vault' | 'variable';
+  valueShape?: ReferenceConfigValue;
+}
+
 export type EnvVar = {
+  id: string;
   name: string;
   value: string;
   source: 'static' | 'vault' | 'variable';
-  meta?: {
-    mount?: string | null;
-  };
+  meta: EnvVarMeta;
 };
 
 export type WorkspaceNixPackage = {

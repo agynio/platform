@@ -2,20 +2,11 @@ import type {
   AgentQueueConfig,
   AgentSummarizationConfig,
   EnvVar,
+  EnvVarMeta,
   NodeConfig,
   ReferenceConfigValue,
   WorkspaceNixPackage,
 } from './types';
-
-type RawEnvValue = string | Record<string, unknown> | null | undefined;
-
-function toEnvSource(value: RawEnvValue, fallback: EnvVar['source']): EnvVar['source'] {
-  if (!value || typeof value !== 'object') return fallback;
-  const kind = typeof value.kind === 'string' ? value.kind : undefined;
-  if (kind === 'vault') return 'vault';
-  if (kind === 'var') return 'variable';
-  return fallback;
-}
 
 function formatVaultSegments(value: Record<string, unknown>): string {
   const segments: string[] = [];
@@ -62,6 +53,118 @@ function parseVariable(input: string): { kind: 'var'; name: string } {
   return { kind: 'var', name: input.trim() };
 }
 
+const hasStructuredClone = typeof structuredClone === 'function';
+
+function deepClone<T>(value: T): T {
+  if (!isRecord(value) && typeof value !== 'string') {
+    return value;
+  }
+  if (hasStructuredClone) {
+    return structuredClone(value);
+  }
+  return JSON.parse(JSON.stringify(value)) as T;
+}
+
+function generateEnvId(): string {
+  try {
+    if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+      return crypto.randomUUID();
+    }
+  } catch {
+    // ignore and fall back to Math.random
+  }
+  return `env-${Math.random().toString(36).slice(2, 10)}`;
+}
+
+function extractDisplayValue(source: EnvVar['source'], raw: unknown): string {
+  if (typeof raw === 'string') return raw;
+  if (!isRecord(raw)) return '';
+  if (source === 'vault') return formatVaultSegments(raw);
+  if (source === 'variable') return typeof raw.name === 'string' ? raw.name : '';
+  return typeof raw.value === 'string' ? raw.value : '';
+}
+
+function cloneValueShape(value: unknown): ReferenceConfigValue | undefined {
+  if (typeof value === 'string') return value;
+  if (isRecord(value)) return deepClone(value);
+  return undefined;
+}
+
+function buildVaultValue(input: string, previous?: ReferenceConfigValue): Record<string, unknown> {
+  const prevMount = isRecord(previous) && typeof previous.mount === 'string' ? previous.mount : undefined;
+  const parsed = parseVaultString(input, prevMount);
+  const next = isRecord(previous) ? deepClone(previous) : {};
+  const record = next as Record<string, unknown>;
+  record.kind = 'vault';
+  record.path = parsed.path;
+  record.key = parsed.key;
+  if (parsed.mount) {
+    record.mount = parsed.mount;
+  } else {
+    delete record.mount;
+  }
+  delete record.value;
+  return record;
+}
+
+function buildVariableValue(input: string, previous?: ReferenceConfigValue): Record<string, unknown> {
+  const next = isRecord(previous) ? deepClone(previous) : {};
+  const record = next as Record<string, unknown>;
+  const parsed = parseVariable(input);
+  record.kind = 'var';
+  record.name = parsed.name;
+  delete record.value;
+  delete record.path;
+  delete record.key;
+  delete record.mount;
+  return record;
+}
+
+function buildEnvValue(item: EnvVar): ReferenceConfigValue {
+  const previous = item.meta.valueShape;
+  if (item.source === 'vault') {
+    return buildVaultValue(item.value, previous);
+  }
+  if (item.source === 'variable') {
+    return buildVariableValue(item.value, previous);
+  }
+  if (isRecord(previous)) {
+    const next = deepClone(previous);
+    (next as Record<string, unknown>).value = item.value;
+    return next as ReferenceConfigValue;
+  }
+  return item.value;
+}
+
+function originalSource(meta: EnvVarMeta): 'static' | 'vault' | 'variable' | undefined {
+  if (meta.originalSource === 'static' || meta.originalSource === 'vault' || meta.originalSource === 'variable') {
+    return meta.originalSource;
+  }
+  return undefined;
+}
+
+function resolveKeyField(raw: Record<string, unknown>): 'name' | 'key' {
+  if (typeof raw.name === 'string') return 'name';
+  if (typeof raw.key === 'string') return 'key';
+  return 'name';
+}
+
+export function createEnvVar(overrides?: Partial<Omit<EnvVar, 'meta'>> & { meta?: Partial<EnvVarMeta> }): EnvVar {
+  const base: EnvVar = {
+    id: generateEnvId(),
+    name: '',
+    value: '',
+    source: 'static',
+    meta: { keyField: 'name' },
+  };
+  const mergedMeta = { ...base.meta, ...(overrides?.meta ?? {}) } satisfies EnvVarMeta;
+  return {
+    ...base,
+    ...overrides,
+    meta: mergedMeta,
+  } satisfies EnvVar;
+}
+
 export function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
 }
@@ -104,58 +207,63 @@ export function writeReferenceValue(prev: ReferenceConfigValue, nextValue: strin
 }
 
 export function readEnvList(raw: unknown): EnvVar[] {
-  if (Array.isArray(raw)) {
-    return raw.map((item) => {
-      if (!isRecord(item)) return { name: '', value: '', source: 'static' } satisfies EnvVar;
-      const name = typeof item.name === 'string' ? item.name : typeof item.key === 'string' ? item.key : '';
-      const rawValue: RawEnvValue = item.value as RawEnvValue;
-      const defaultSource: EnvVar['source'] =
-        item.source === 'vault' ? 'vault' : item.source === 'variable' ? 'variable' : 'static';
-      const source = toEnvSource(rawValue, defaultSource);
-      let value = '';
-      let mount: string | null | undefined;
-      if (typeof rawValue === 'string') {
-        value = rawValue;
-      } else if (rawValue && typeof rawValue === 'object') {
-        if (source === 'vault') {
-          value = formatVaultSegments(rawValue);
-          mount = typeof rawValue.mount === 'string' ? rawValue.mount : null;
-        } else if (source === 'variable') {
-          value = typeof rawValue.name === 'string' ? rawValue.name : '';
-        } else if (typeof rawValue.value === 'string') {
-          value = rawValue.value;
-        }
-      }
-      const result: EnvVar = { name, value, source };
-      if (source === 'vault' && mount) {
-        result.meta = { mount };
-      }
-      return result satisfies EnvVar;
-    });
-  }
-  if (isRecord(raw)) {
-    return Object.entries(raw).map(([key, value]) => ({
-      name: key,
-      value: typeof value === 'string' ? value : '',
-      source: 'static' as const,
-    }));
-  }
-  return [];
+  if (!Array.isArray(raw)) return [];
+
+  return raw.map((item) => {
+    if (!isRecord(item)) {
+      return createEnvVar();
+    }
+
+    const rawSource = typeof item.source === 'string' ? item.source : undefined;
+    const source: EnvVar['source'] = rawSource === 'vault' || rawSource === 'variable' ? rawSource : 'static';
+    const rawValue = item.value as unknown;
+    const keyField = resolveKeyField(item);
+    const nameValue = keyField === 'name' ? item.name : item.key;
+    const meta: EnvVarMeta = {
+      keyField,
+      original: deepClone(item),
+      originalSource: rawSource === 'vault' || rawSource === 'variable' || rawSource === 'static' ? rawSource : undefined,
+      valueShape: cloneValueShape(rawValue),
+    } satisfies EnvVarMeta;
+
+    return {
+      id: typeof item.id === 'string' ? item.id : generateEnvId(),
+      name: typeof nameValue === 'string' ? nameValue : '',
+      value: extractDisplayValue(source, rawValue),
+      source,
+      meta,
+    } satisfies EnvVar;
+  });
 }
 
-export function serializeEnvVars(list: EnvVar[]): Array<{ name: string; value: RawEnvValue }> {
+export function serializeEnvVars(list: EnvVar[]): Array<Record<string, unknown>> {
   return list.map((item) => {
-    if (item.source === 'vault') {
-      const preferredMount = item.meta?.mount ?? undefined;
-      const ref = parseVaultString(item.value, preferredMount);
-      if (!ref.mount) delete (ref as { mount?: string }).mount;
-      return { name: item.name, value: ref };
+    const base = item.meta.original ? deepClone(item.meta.original) : {};
+    const record = base as Record<string, unknown>;
+
+    if (item.meta.keyField === 'key') {
+      record.key = item.name;
+      if (!item.meta.original) delete record.name;
+    } else {
+      record.name = item.name;
+      if (!item.meta.original) delete record.key;
     }
-    if (item.source === 'variable') {
-      const ref = parseVariable(item.value);
-      return { name: item.name, value: ref };
+
+    const origHasSource = item.meta.original ? Object.prototype.hasOwnProperty.call(item.meta.original, 'source') : false;
+    const origSource = originalSource(item.meta);
+    if (item.source === 'static') {
+      if (origSource === 'static' || (origSource === undefined && origHasSource)) {
+        record.source = 'static';
+      } else {
+        delete record.source;
+      }
+    } else {
+      record.source = item.source;
     }
-    return { name: item.name, value: item.value };
+
+    record.value = buildEnvValue(item);
+
+    return record;
   });
 }
 
@@ -225,9 +333,8 @@ function mapNixArray(entries: unknown): WorkspaceNixPackage[] {
 }
 
 export function readNixPackages(nixConfig: unknown): WorkspaceNixPackage[] {
-  if (Array.isArray(nixConfig)) return mapNixArray(nixConfig);
-  if (isRecord(nixConfig)) return mapNixArray(nixConfig.packages);
-  return [];
+  if (!isRecord(nixConfig)) return [];
+  return mapNixArray((nixConfig as Record<string, unknown>).packages);
 }
 
 export function applyVolumesUpdate(
@@ -239,8 +346,15 @@ export function applyVolumesUpdate(
   return { volumes: next } satisfies Partial<NodeConfig>;
 }
 
-export function applyNixUpdate(_config: NodeConfig, packages: WorkspaceNixPackage[]): Partial<NodeConfig> {
-  return { nix: { packages: packages.map((pkg) => ({ ...pkg })) } } satisfies Partial<NodeConfig>;
+export function applyNixUpdate(config: NodeConfig, packages: WorkspaceNixPackage[]): Partial<NodeConfig> {
+  const rawNix = (config as Record<string, unknown>).nix;
+  const current = isRecord(rawNix) ? (rawNix as Record<string, unknown>) : {};
+  return {
+    nix: {
+      ...current,
+      packages: packages.map((pkg) => ({ ...pkg })),
+    },
+  } satisfies Partial<NodeConfig>;
 }
 
 export function toNumberOrUndefined(value: string): number | undefined {

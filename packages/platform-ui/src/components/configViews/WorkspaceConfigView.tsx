@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Input } from '@agyn/ui';
+import type { EnvVar } from '@/components/nodeProperties/types';
+import { readEnvList, serializeEnvVars } from '@/components/nodeProperties/utils';
 import type { StaticConfigViewProps } from './types';
 import ReferenceEnvField from './shared/ReferenceEnvField';
-import type { EnvItem } from './shared/referenceEnv.helpers';
-import { normalizeEnvItems } from './shared/referenceEnv.helpers';
 
 type VolumesFormState = {
   enabled: boolean;
@@ -26,7 +26,7 @@ const parseVolumesConfig = (raw: unknown): VolumesFormState => {
 export default function WorkspaceConfigView({ value, onChange, readOnly, disabled, onValidate }: StaticConfigViewProps) {
   const init = useMemo<Record<string, unknown>>(() => ({ ...(value || {}) }), [value]);
   const [image, setImage] = useState<string>((init.image as string) || '');
-  const [env, setEnv] = useState<EnvItem[]>(() => normalizeEnvItems(init.env));
+  const [env, setEnv] = useState<EnvVar[]>(() => readEnvList(init.env));
   const [initialScript, setInitialScript] = useState<string>((init.initialScript as string) || '');
   const [cpuLimit, setCpuLimit] = useState<string>(() => {
     const raw = init.cpu_limit as unknown;
@@ -60,6 +60,10 @@ export default function WorkspaceConfigView({ value, onChange, readOnly, disable
   }, [image, mountPathError, onValidate]);
 
   useEffect(() => {
+    setEnv(readEnvList(init.env));
+  }, [init]);
+
+  useEffect(() => {
     const normalizedMountPath = mountPath.trim() || '/workspace';
     const nextVolumes = { enabled: volumesEnabled, mountPath: normalizedMountPath };
     const parseLimitValue = (raw: string): number | string | undefined => {
@@ -72,7 +76,7 @@ export default function WorkspaceConfigView({ value, onChange, readOnly, disable
     const next = {
       ...value,
       image: image || undefined,
-      env,
+      env: serializeEnvVars(env),
       initialScript: initialScript || undefined,
       cpu_limit: cpuParsed ?? undefined,
       memory_limit: memoryParsed ?? undefined,

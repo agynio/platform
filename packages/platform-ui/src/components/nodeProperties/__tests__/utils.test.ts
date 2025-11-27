@@ -6,93 +6,93 @@ import {
   readNixPackages,
   serializeEnvVars,
 } from '../utils';
-import type { WorkspaceNixPackage } from '../types';
+import type { EnvVar, WorkspaceNixPackage } from '../types';
 
 describe('nodeProperties utils', () => {
   describe('readEnvList', () => {
-    it('parses static, vault, and variable values', () => {
+    it('returns env vars with metadata and display values', () => {
       const result = readEnvList([
-        { key: 'STATIC', value: 'plain' },
         {
           key: 'SECRET',
           value: { kind: 'vault', mount: 'secret', path: 'app/db', key: 'PASSWORD' },
+          source: 'vault',
         },
-        { key: 'VAR', value: { kind: 'var', name: 'FOO' } },
+        { name: 'PLAIN', value: 'text' },
       ]);
 
-      expect(result).toEqual([
-        { name: 'STATIC', value: 'plain', source: 'static' },
-        { name: 'SECRET', value: 'secret/app/db/PASSWORD', source: 'vault', meta: { mount: 'secret' } },
-        { name: 'VAR', value: 'FOO', source: 'variable' },
-      ]);
+      expect(result).toHaveLength(2);
+      const vaultVar = result[0]!;
+      expect(vaultVar).toMatchObject({
+        name: 'SECRET',
+        value: 'secret/app/db/PASSWORD',
+        source: 'vault',
+        meta: { keyField: 'key', originalSource: 'vault' },
+      });
+      expect(vaultVar.meta.original).toEqual({
+        key: 'SECRET',
+        value: { kind: 'vault', mount: 'secret', path: 'app/db', key: 'PASSWORD' },
+        source: 'vault',
+      });
+
+      const staticVar = result[1]!;
+      expect(staticVar).toMatchObject({
+        name: 'PLAIN',
+        value: 'text',
+        source: 'static',
+        meta: { keyField: 'name', originalSource: undefined },
+      });
     });
 
-    it('handles legacy env map input', () => {
-      const result = readEnvList({ FOO: 'bar', BAZ: 'qux' });
-      expect(result).toEqual([
-        { name: 'FOO', value: 'bar', source: 'static' },
-        { name: 'BAZ', value: 'qux', source: 'static' },
-      ]);
+    it('ignores non-array input without converting maps to arrays', () => {
+      expect(readEnvList({ FOO: 'bar' })).toEqual([]);
     });
   });
 
   describe('serializeEnvVars', () => {
-    it('converts UI env vars back to reference-aware payloads', () => {
-      const payload = serializeEnvVars([
-        { name: 'STATIC', value: 'plain', source: 'static' },
-        { name: 'SECRET', value: 'secret/app/db/PASSWORD', source: 'vault', meta: { mount: 'secret' } },
-        { name: 'VAR', value: 'FOO', source: 'variable' },
+    it('preserves key field and updates vault value in place', () => {
+      const initial = readEnvList([
+        {
+          key: 'SECRET',
+          value: { kind: 'vault', mount: 'secret', path: 'app/db', key: 'PASSWORD', extra: 'keep' },
+          source: 'vault',
+        },
       ]);
 
+      const updated: EnvVar[] = initial.map((item) =>
+        item.name === 'SECRET'
+          ? { ...item, value: 'secret/app/db/NEW' }
+          : item,
+      );
+
+      const payload = serializeEnvVars(updated);
       expect(payload).toEqual([
-        { name: 'STATIC', value: 'plain' },
         {
-          name: 'SECRET',
+          key: 'SECRET',
+          source: 'vault',
           value: {
             kind: 'vault',
             mount: 'secret',
             path: 'app/db',
-            key: 'PASSWORD',
-          },
-        },
-        {
-          name: 'VAR',
-          value: {
-            kind: 'var',
-            name: 'FOO',
+            key: 'NEW',
+            extra: 'keep',
           },
         },
       ]);
     });
 
-    it('preserves partial vault references', () => {
-      const payload = serializeEnvVars([{ name: 'SECRET', value: 'path/KEY', source: 'vault' }]);
+    it('omits source for static entries when none was provided originally', () => {
+      const initial = readEnvList([{ name: 'PLAIN', value: 'x' }]);
+      const payload = serializeEnvVars(initial.map((item) => ({ ...item, value: 'updated' })));
       expect(payload).toEqual([
-        {
-          name: 'SECRET',
-          value: {
-            kind: 'vault',
-            path: 'path',
-            key: 'KEY',
-          },
-        },
+        { name: 'PLAIN', value: 'updated' },
       ]);
     });
 
-    it('round-trips mountless vault paths containing slashes without assigning a mount', () => {
-      const payload = serializeEnvVars([
-        { name: 'SECRET', value: 'long/nested/path/API_KEY', source: 'vault' },
-      ]);
-
+    it('retains additional fields on static object values', () => {
+      const initial = readEnvList([{ name: 'CONFIG', value: { value: 'v1', extra: true } }]);
+      const payload = serializeEnvVars(initial.map((item) => ({ ...item, value: 'v2' })));
       expect(payload).toEqual([
-        {
-          name: 'SECRET',
-          value: {
-            kind: 'vault',
-            path: 'long/nested/path',
-            key: 'API_KEY',
-          },
-        },
+        { name: 'CONFIG', value: { value: 'v2', extra: true } },
       ]);
     });
   });
@@ -105,15 +105,15 @@ describe('nodeProperties utils', () => {
       attributePath: 'pkgs.ripgrep',
     }];
 
-    it('reads array and object nix shapes', () => {
-      expect(readNixPackages(sample)).toEqual(sample);
+    it('reads only config.nix.packages arrays', () => {
+      expect(readNixPackages(sample)).toEqual([]);
       expect(readNixPackages({ packages: sample })).toEqual(sample);
-      expect(readNixPackages(undefined)).toEqual([]);
+      expect(readNixPackages({ packages: { not: 'array' } })).toEqual([]);
     });
 
-    it('writes nix packages under config.nix.packages', () => {
-      const update = applyNixUpdate({} as any, sample);
-      expect(update).toEqual({ nix: { packages: sample } });
+    it('writes nix packages while preserving existing nix config', () => {
+      const update = applyNixUpdate({ nix: { pinned: true } } as any, sample);
+      expect(update).toEqual({ nix: { pinned: true, packages: sample } });
     });
   });
 });

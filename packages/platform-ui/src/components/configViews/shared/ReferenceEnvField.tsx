@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback } from 'react';
 import {
   Button,
   Input,
@@ -14,13 +14,13 @@ import {
 } from '@agyn/ui';
 import { Brackets, Lock, X } from 'lucide-react';
 
-import type { EnvItem } from './referenceEnv.helpers';
-import { normalizeEnvItems } from './referenceEnv.helpers';
+import type { EnvVar } from '@/components/nodeProperties/types';
+import { createEnvVar } from '@/components/nodeProperties/utils';
 
 export interface ReferenceEnvFieldProps {
   label?: string;
-  value?: unknown;
-  onChange: (next: EnvItem[]) => void;
+  value: EnvVar[];
+  onChange: (next: EnvVar[]) => void;
   readOnly?: boolean;
   disabled?: boolean;
   addLabel?: string;
@@ -34,11 +34,9 @@ function isVaultRef(v: string) {
 }
 
 export default function ReferenceEnvField({ label, value, onChange, readOnly, disabled, addLabel = 'Add env', onValidate }: ReferenceEnvFieldProps) {
-  const [items, setItems] = useState<EnvItem[]>(normalizeEnvItems(value));
-
   const isDisabled = !!readOnly || !!disabled;
 
-  const validate = useCallback((list: EnvItem[]) => {
+  const validate = useCallback((list: EnvVar[]) => {
     const errors: string[] = [];
     const seen = new Set<string>();
     for (const it of list) {
@@ -53,17 +51,9 @@ export default function ReferenceEnvField({ label, value, onChange, readOnly, di
   }, [onValidate]);
 
   const commit = useCallback(
-    (list: EnvItem[]) => {
-      setItems(list);
+    (list: EnvVar[]) => {
       validate(list);
-      onChange(
-        list.map((i) => ({
-          name: i.name,
-          value: i.value,
-          source: i.source || 'static',
-          ...(i.meta ? { meta: { ...i.meta } } : {}),
-        })),
-      );
+      onChange(list);
     },
     [onChange, validate],
   );
@@ -71,34 +61,32 @@ export default function ReferenceEnvField({ label, value, onChange, readOnly, di
   const addRow = useCallback(() => {
     const base = 'NAME';
     let i = 1;
-    const existing = new Set(items.map((x) => x.name));
+    const existing = new Set(value.map((x) => x.name));
     while (existing.has(`${base}_${i}`)) i++;
-    commit([...items, { name: `${base}_${i}`, value: '', source: 'static' }]);
-  }, [items, commit]);
+    commit([...value, createEnvVar({ name: `${base}_${i}` })]);
+  }, [value, commit]);
 
   const removeAt = useCallback(
     (idx: number) => {
-      commit(items.filter((_, i) => i !== idx));
+      commit(value.filter((_, i) => i !== idx));
     },
-    [items, commit],
+    [value, commit],
   );
 
   const updateAt = useCallback(
-    (idx: number, next: Partial<EnvItem>) => {
-      const list = items.slice();
-      list[idx] = { ...list[idx], ...next } as EnvItem;
-      commit(list);
+    (idx: number, next: Partial<EnvVar>) => {
+      commit(value.map((item, i) => (i === idx ? { ...item, ...next } : item)));
     },
-    [items, commit],
+    [value, commit],
   );
 
   return (
     <div className="space-y-2">
       {label ? <Label className="text-xs">{label}</Label> : null}
-      {items.length === 0 && <div className="text-xs text-muted-foreground">No env set</div>}
+      {value.length === 0 && <div className="text-xs text-muted-foreground">No env set</div>}
       <div className="space-y-2">
-        {items.map((it, idx) => (
-          <div key={`${it.name}-${idx}`} className="flex items-center gap-2">
+        {value.map((it, idx) => (
+          <div key={it.id} className="flex items-center gap-2">
             <Input
               className="text-xs w-1/3"
               value={it.name}
@@ -177,5 +165,3 @@ export default function ReferenceEnvField({ label, value, onChange, readOnly, di
     </div>
   );
 }
-
-export type { EnvItem } from './referenceEnv.helpers';
