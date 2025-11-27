@@ -2,7 +2,6 @@ import { describe, it, expect } from 'vitest';
 import { HumanMessage } from '@agyn/llm';
 import { SummarizationLLMReducer } from '../src/llm/reducers/summarization.llm.reducer';
 import type { LLMProvisioner } from '../src/llm/provisioners/llm.provisioner';
-import { LoggerService } from '../src/core/services/logger.service';
 import { createRunEventsStub, createEventsBusStub } from './helpers/runEvents.stub';
 
 describe('Agent summarization uses overridden model', () => {
@@ -15,8 +14,7 @@ describe('Agent summarization uses overridden model', () => {
       }
     }
     const reducer = await new SummarizationLLMReducer(
-      new ProvisionerStub(),
-      new LoggerService(),
+      new ProvisionerStub() as any,
       createRunEventsStub() as any,
       createEventsBusStub() as any,
     ).init({

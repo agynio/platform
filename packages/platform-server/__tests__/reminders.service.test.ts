@@ -2,12 +2,6 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { RemindersService } from '../src/agents/reminders.service';
 import { RemindMeNode } from '../src/nodes/tools/remind_me/remind_me.node';
 
-const loggerStub = {
-  warn: vi.fn(),
-  info: vi.fn(),
-  error: vi.fn(),
-};
-
 type RuntimeNode = { id: string; template?: string; instance: unknown };
 
 const createRuntimeFixture = (...nodes: RuntimeNode[]) => ({
@@ -46,7 +40,9 @@ describe('RemindersService.cancelThreadReminders', () => {
       });
 
     const runtime = createRuntimeFixture({ id: 'node-a', instance: node }, { id: 'node-other', template: 'skip', instance: {} });
-    const service = new RemindersService(prismaService as any, loggerStub as any, runtime as any);
+    const service = new RemindersService(prismaService as any, runtime as any);
+    const logger = (service as unknown as { logger: { warn: (...args: unknown[]) => void } }).logger;
+    vi.spyOn(logger, 'warn').mockImplementation(() => undefined);
 
     const result = await service.cancelThreadReminders({ threadId: 'thread-123' });
 
@@ -87,13 +83,14 @@ describe('RemindersService.cancelThreadReminders', () => {
       { id: 'node-fail', instance: failingNode },
       { id: 'node-ok', instance: succeedingNode },
     );
-    const service = new RemindersService(prismaService as any, loggerStub as any, runtime as any);
+    const service = new RemindersService(prismaService as any, runtime as any);
+    const logger = (service as unknown as { logger: { warn: (...args: unknown[]) => void } }).logger;
+    const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => undefined);
 
     const result = await service.cancelThreadReminders({ threadId: 'thread-err' });
 
-    expect(loggerStub.warn).toHaveBeenCalledWith(
-      'RemindersService runtime cancellation error',
-      expect.objectContaining({ threadId: 'thread-err', nodeId: 'node-fail' }),
+    expect(warnSpy).toHaveBeenCalledWith(
+      expect.stringContaining('RemindersService runtime cancellation error'),
     );
     expect(succeedingTool.clearTimersByThread).toHaveBeenCalledWith('thread-err');
     expect(result).toEqual({ cancelledDb: 4, clearedRuntime: 2 });

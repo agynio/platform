@@ -1,6 +1,6 @@
 import z from 'zod';
 import { FunctionTool } from '@agyn/llm';
-import { LoggerService } from '../../../core/services/logger.service';
+import { Logger } from '@nestjs/common';
 import type { SendResult } from '../../../messaging/types';
 import type { LLMContext } from '../../../llm/types';
 import { PrismaService } from '../../../core/services/prisma.service';
@@ -10,12 +10,16 @@ import { SlackTrigger } from '../../slackTrigger/slackTrigger.node';
 export const sendMessageInvocationSchema = z.object({ message: z.string().min(1).describe('Message text.') }).strict();
 
 export class SendMessageFunctionTool extends FunctionTool<typeof sendMessageInvocationSchema> {
+  private readonly logger = new Logger(SendMessageFunctionTool.name);
   constructor(
-    private logger: LoggerService,
     private prisma: PrismaService,
     private runtime: LiveGraphRuntime,
   ) {
     super();
+  }
+
+  private format(context?: Record<string, unknown>): string {
+    return context ? ` ${JSON.stringify(context)}` : '';
   }
 
   get name() {
@@ -46,7 +50,9 @@ export class SendMessageFunctionTool extends FunctionTool<typeof sendMessageInvo
         return JSON.stringify({ ok: false, error: 'channel_node_unavailable' });
       }
       if (!(node instanceof SlackTrigger)) {
-        this.logger.error('SendMessageFunctionTool: channel node is not SlackTrigger', { threadId, channelNodeId });
+        this.logger.error(
+          `SendMessageFunctionTool: channel node is not SlackTrigger${this.format({ threadId, channelNodeId })}`,
+        );
         return JSON.stringify({ ok: false, error: 'invalid_channel_type' });
       }
       if (node.status !== 'ready') {

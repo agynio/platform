@@ -56,7 +56,6 @@ vi.mock('@prisma/client', () => {
   };
 });
 const { AgentsPersistenceService } = await import('../src/agents/agents.persistence.service');
-const { LoggerService } = await import('../src/core/services/logger.service');
 import { AIMessage, HumanMessage, SystemMessage, ToolCallMessage, ToolCallOutputMessage } from '@agyn/llm';
 import type { ResponseFunctionToolCall } from 'openai/resources/responses/responses.mjs';
 import { createRunEventsStub } from './helpers/runEvents.stub';
@@ -87,12 +86,10 @@ const createLinkingStub = () =>
 
 function makeService(): InstanceType<typeof AgentsPersistenceService> {
   // Minimal stub; extractKindText does not use prisma
-  const logger = new LoggerService();
   const metrics = { getThreadsMetrics: async () => ({}) } as any;
   const eventsBusStub = createEventsBusStub();
   const svc = new AgentsPersistenceService(
     { getClient: () => ({}) } as any,
-    logger,
     metrics,
     templateRegistryStub,
     graphRepoStub,
@@ -146,13 +143,11 @@ describe('AgentsPersistenceService beginRun/completeRun populates Message.text',
       $transaction: async (cb: any) => cb(prismaMock),
     } as any;
 
-    const logger = new LoggerService();
     const metrics = { getThreadsMetrics: async () => ({}) } as any;
     const linking = createLinkingStub();
     const eventsBusStub = createEventsBusStub();
     const svc = new AgentsPersistenceService(
       { getClient: () => prismaMock } as any,
-      logger,
       metrics,
       templateRegistryStub,
       graphRepoStub,

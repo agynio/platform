@@ -1,7 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { SystemMessage, HumanMessage } from '@agyn/llm';
 import { CallModelLLMReducer } from '../src/llm/reducers/callModel.llm.reducer';
-import { LoggerService } from '../src/core/services/logger.service';
 import { createRunEventsStub, createEventsBusStub } from './helpers/runEvents.stub';
 
 class FakeLLM {
@@ -15,7 +14,7 @@ class FakeLLM {
 describe('CallModelLLMReducer: summary injection', () => {
   it('inserts summary after system when present (unconditional)', async () => {
     const llm = new FakeLLM();
-    const reducer = new CallModelLLMReducer(new LoggerService(), createRunEventsStub() as any, createEventsBusStub() as any);
+    const reducer = new CallModelLLMReducer(createRunEventsStub() as any, createEventsBusStub() as any);
     reducer.init({ llm: llm as any, model: 'x', systemPrompt: 'SYS', tools: [] });
     await reducer.invoke(
       { messages: [HumanMessage.fromText('H1')], summary: 'SUM', context: { messageIds: [], memory: [] } } as any,
@@ -27,7 +26,7 @@ describe('CallModelLLMReducer: summary injection', () => {
 
   it('respects memory placement with after_system (System, Human(sum), System(mem), ...)', async () => {
     const llm = new FakeLLM();
-    const reducer = new CallModelLLMReducer(new LoggerService(), createRunEventsStub() as any, createEventsBusStub() as any);
+    const reducer = new CallModelLLMReducer(createRunEventsStub() as any, createEventsBusStub() as any);
     reducer.init({
       llm: llm as any,
       model: 'x',
@@ -47,7 +46,7 @@ describe('CallModelLLMReducer: summary injection', () => {
 
   it('respects memory placement with last_message (System, Human(sum), ..., System(mem))', async () => {
     const llm = new FakeLLM();
-    const reducer = new CallModelLLMReducer(new LoggerService(), createRunEventsStub() as any, createEventsBusStub() as any);
+    const reducer = new CallModelLLMReducer(createRunEventsStub() as any, createEventsBusStub() as any);
     reducer.init({
       llm: llm as any,
       model: 'x',
@@ -67,7 +66,7 @@ describe('CallModelLLMReducer: summary injection', () => {
 
   it('does not inject when summary is empty/undefined', async () => {
     const llm = new FakeLLM();
-    const reducer = new CallModelLLMReducer(new LoggerService(), createRunEventsStub() as any, createEventsBusStub() as any);
+    const reducer = new CallModelLLMReducer(createRunEventsStub() as any, createEventsBusStub() as any);
     reducer.init({ llm: llm as any, model: 'x', systemPrompt: 'SYS', tools: [] });
     await reducer.invoke(
       { messages: [HumanMessage.fromText('H1')], summary: '', context: { messageIds: [], memory: [] } } as any,
@@ -79,7 +78,7 @@ describe('CallModelLLMReducer: summary injection', () => {
 
   it('still injects summary even if identical text exists in messages', async () => {
     const llm = new FakeLLM();
-    const reducer = new CallModelLLMReducer(new LoggerService(), createRunEventsStub() as any, createEventsBusStub() as any);
+    const reducer = new CallModelLLMReducer(createRunEventsStub() as any, createEventsBusStub() as any);
     reducer.init({ llm: llm as any, model: 'x', systemPrompt: 'SYS', tools: [] });
     const summary = 'SUM';
     await reducer.invoke(

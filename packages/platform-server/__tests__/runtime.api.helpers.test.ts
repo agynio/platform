@@ -1,17 +1,9 @@
 import { describe, it, expect, vi } from 'vitest';
 import { LiveGraphRuntime } from '../src/graph-core/liveGraph.manager';
 import { TemplateRegistry } from '../src/graph-core/templateRegistry';
-import type { FactoryFn } from '../src/shared/types/graph.types';
 import Node from '../src/nodes/base/Node';
 // Capabilities removed; test updated to use Node lifecycle
-import { LoggerService } from '../src/core/services/logger.service.js';
 import { ModuleRef } from '@nestjs/core';
-
-class MockLogger extends LoggerService {
-  info = vi.fn();
-  debug = vi.fn();
-  error = vi.fn();
-}
 
 class ModuleRefStub {
   create<T>(Cls: new (...args: any[]) => T): T {
@@ -28,15 +20,13 @@ class StubRepo extends GraphRepository {
 function makeRuntimeAndRegistry() {
   const moduleRef = new ModuleRefStub() as ModuleRef;
   const registry = new TemplateRegistry(moduleRef);
-  const logger = new MockLogger();
   const runtime = new LiveGraphRuntime(
-    logger,
     registry,
     new StubRepo(),
     moduleRef,
     { resolve: async (input: unknown) => ({ output: input, report: {} as unknown }) } as any,
   );
-  return { registry, runtime, logger };
+  return { registry, runtime };
 }
 
 describe('Runtime helpers and GraphRepository API surfaces', () => {
@@ -50,7 +40,6 @@ describe('Runtime helpers and GraphRepository API surfaces', () => {
       }
     }
 
-    const factory: FactoryFn = async () => new MockNode();
     class MockNodeClass extends MockNode {}
     registry.register('mock', { title: 'Mock', kind: 'tool' }, MockNodeClass);
 

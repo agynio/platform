@@ -1,6 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
 import { ContainerService } from '../src/infra/container/container.service';
-import { LoggerService } from '../src/core/services/logger.service';
 import type { ContainerRegistry } from '../src/infra/container/container.registry';
 
 const makeRegistry = () => ({
@@ -15,7 +14,7 @@ const makeRegistry = () => ({
   ensureIndexes: vi.fn(async () => undefined),
 } satisfies Partial<ContainerRegistry>) as ContainerRegistry;
 
-const createService = (): ContainerService => new ContainerService(makeRegistry(), new LoggerService());
+const createService = (): ContainerService => new ContainerService(makeRegistry());
 import { PassThrough } from 'node:stream';
 
 function makeFrame(type: number, payload: Buffer) {
@@ -143,8 +142,7 @@ describe('ContainerService.startAndCollectExec stream handling', () => {
   });
 
   it('invokes onOutput when combined fallback stream is used', async () => {
-    const logger = new LoggerService();
-    const svc = new ContainerService(makeRegistry(), logger);
+    const svc = createService();
     const hijacked = new PassThrough();
 
     const execInspect = vi

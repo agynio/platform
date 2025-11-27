@@ -2,7 +2,6 @@ import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
 import { PrismaClient, Prisma } from '@prisma/client';
 import { PostgresMemoryEntitiesRepository } from '../../src/nodes/memory/memory.repository';
 import { MemoryService } from '../../src/nodes/memory/memory.service';
-import { LoggerService } from '../../src/core/services/logger.service';
 import { MemoryToolNode } from '../../src/nodes/tools/memory/memory.node';
 
 const URL = process.env.AGENTS_DATABASE_URL;
@@ -12,7 +11,6 @@ const maybeDescribe = shouldRunDbTests ? describe : describe.skip;
 maybeDescribe('E2E: memory tools with Postgres backend', () => {
   if (!shouldRunDbTests) return;
   const prisma = new PrismaClient({ datasources: { db: { url: URL! } } });
-  const logger = new LoggerService();
   let svc: MemoryService;
 
   beforeAll(async () => {
@@ -34,7 +32,7 @@ maybeDescribe('E2E: memory tools with Postgres backend', () => {
   });
 
   function makeTool(nodeId: string) {
-    const node = new MemoryToolNode(logger);
+    const node = new MemoryToolNode();
     node.setMemorySource((opts: { threadId?: string }) => svc.forMemory(nodeId, opts.threadId ? 'perThread' : 'global', opts.threadId) as any);
     return node.getTool();
   }

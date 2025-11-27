@@ -2,7 +2,6 @@ import { describe, it, expect } from 'vitest';
 import { LocalMCPServerNode } from '../src/nodes/mcp/localMcpServer.node';
 import { McpServerConfig } from '../src/mcp/types.js';
 import { ContainerService } from '../src/infra/container/container.service';
-import { LoggerService } from '../src/core/services/logger.service';
 import type { ContainerRegistry } from '../src/infra/container/container.registry';
 
 describe('MCP Lifecycle Changes', () => {
@@ -18,7 +17,7 @@ describe('MCP Lifecycle Changes', () => {
       listByThread: async () => [],
       ensureIndexes: async () => {},
     } as unknown as ContainerRegistry;
-    return new ContainerService(registryStub, new LoggerService());
+    return new ContainerService(registryStub);
   };
   const envStub = { resolveEnvItems: async () => ({}), resolveProviderEnv: async () => ({}) } as any;
 

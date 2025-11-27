@@ -5,7 +5,6 @@ import { LiveGraphRuntime } from '../src/graph-core/liveGraph.manager';
 import { GraphRepository } from '../src/graph/graph.repository';
 import type { GraphDefinition } from '../src/shared/types/graph.types';
 import { buildTemplateRegistry } from '../src/templates';
-import { LoggerService } from '../src/core/services/logger.service.js';
 import { ContainerService } from '../src/infra/container/container.service';
 import { ContainerRegistry } from '../src/infra/container/container.registry';
 import { ConfigService } from '../src/core/services/config.service.js';
@@ -22,8 +21,8 @@ import { RunSignalsRegistry } from '../src/agents/run-signals.service';
 describe('LiveGraphRuntime -> Agent config propagation', () => {
   function makeRuntime() {
     class StubContainerService extends ContainerService {
-      constructor(registry: any, logger: LoggerService) {
-        super(registry as any, logger);
+      constructor(registry: any) {
+        super(registry as any);
       }
     }
     class StubLLMProvisioner extends LLMProvisioner {
@@ -75,7 +74,6 @@ describe('LiveGraphRuntime -> Agent config propagation', () => {
 
     return Test.createTestingModule({
       providers: [
-        LoggerService,
         { provide: ContainerService, useClass: StubContainerService },
         { provide: ConfigService, useValue: new ConfigService().init(cfg) },
         { provide: LLMProvisioner, useClass: StubLLMProvisioner },
@@ -94,12 +92,8 @@ describe('LiveGraphRuntime -> Agent config propagation', () => {
     })
       .compile()
       .then((module) => {
-        const logger = module.get(LoggerService);
-        const containerService = module.get(ContainerService);
-        const configService = module.get(ConfigService);
-        const provisioner = module.get(LLMProvisioner);
         const moduleRef = module.get(ModuleRef);
-        const registry = buildTemplateRegistry({ logger, containerService, configService, provisioner, moduleRef });
+        const registry = buildTemplateRegistry({ moduleRef });
         class StubRepo extends GraphRepository {
           async initIfNeeded(): Promise<void> {}
           async get(): Promise<null> { return null; }
@@ -107,7 +101,7 @@ describe('LiveGraphRuntime -> Agent config propagation', () => {
           async upsertNodeState(): Promise<void> {}
         }
         const resolver = { resolve: async (input: unknown) => ({ output: input, report: {} as unknown }) };
-        const runtime = new LiveGraphRuntime(logger, registry, new StubRepo(), moduleRef, resolver as any);
+        const runtime = new LiveGraphRuntime(registry, new StubRepo(), moduleRef, resolver as any);
         return { runtime };
       });
   }

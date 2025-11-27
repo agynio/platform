@@ -1,7 +1,6 @@
 import { LLMContext, LLMContextState, LLMMessage, LLMState } from '../types';
 import { FunctionTool, Reducer, ResponseMessage, ToolCallMessage, ToolCallOutputMessage } from '@agyn/llm';
-import { LoggerService } from '../../core/services/logger.service';
-import { Inject, Injectable, Scope } from '@nestjs/common';
+import { Inject, Injectable, Logger, Scope } from '@nestjs/common';
 import { McpError } from '../../nodes/mcp/types';
 import { RunEventsService } from '../../events/run-events.service';
 import { EventsBusService } from '../../events/events-bus.service';
@@ -43,12 +42,23 @@ const isToolCallRaw = (value: unknown): value is ToolCallRaw =>
 
 @Injectable({ scope: Scope.TRANSIENT })
 export class CallToolsLLMReducer extends Reducer<LLMState, LLMContext> {
+  private readonly logger = new Logger(CallToolsLLMReducer.name);
   constructor(
-    @Inject(LoggerService) private logger: LoggerService,
     @Inject(RunEventsService) private readonly runEvents: RunEventsService,
     @Inject(EventsBusService) private readonly eventsBus: EventsBusService,
   ) {
     super();
+  }
+
+  private format(context?: Record<string, unknown>): string {
+    return context ? ` ${JSON.stringify(context)}` : '';
+  }
+
+  private errorInfo(error: unknown): Record<string, unknown> {
+    if (error instanceof Error) {
+      return { name: error.name, message: error.message, stack: error.stack };
+    }
+    return { message: String(error) };
   }
 
   private tools?: FunctionTool[];
@@ -164,7 +174,9 @@ export class CallToolsLLMReducer extends Reducer<LLMState, LLMContext> {
 
     try {
       if (!tool) {
-        this.logger.warn(`Unknown tool called: ${toolCall.name}`);
+        this.logger.warn(
+          `Unknown tool called${this.format({ tool: toolCall.name, callId: toolCall.callId, threadId: ctx.threadId })}`,
+        );
         response = createErrorResponse({
           code: 'TOOL_NOT_FOUND',
           message: `Tool ${toolCall.name} is not registered.`,
@@ -177,7 +189,13 @@ export class CallToolsLLMReducer extends Reducer<LLMState, LLMContext> {
       try {
         parsedArgs = JSON.parse(toolCall.args);
       } catch (err) {
-        this.logger.error('Failed to parse tool arguments', err);
+        this.logger.error(
+          `Failed to parse tool arguments${this.format({
+            tool: toolCall.name,
+            callId: toolCall.callId,
+            error: this.errorInfo(err),
+          })}`,
+        );
         const details = err instanceof Error ? { message: err.message, name: err.name } : { error: err };
         response = createErrorResponse({
           code: 'BAD_JSON_ARGS',
@@ -206,7 +224,13 @@ export class CallToolsLLMReducer extends Reducer<LLMState, LLMContext> {
         try {
           serializedInput = toPrismaJsonValue(input);
         } catch (err) {
-          this.logger.warn('Failed to serialize tool input for run event', err);
+          this.logger.warn(
+            `Failed to serialize tool input for run event${this.format({
+              tool: tool.name,
+              callId: toolCall.callId,
+              error: this.errorInfo(err),
+            })}`,
+          );
           serializedInput = toPrismaJsonValue(null);
         }
 
@@ -222,7 +246,13 @@ export class CallToolsLLMReducer extends Reducer<LLMState, LLMContext> {
         startedEventId = started.id;
         await this.eventsBus.publishEvent(started.id, 'append');
       } catch (err) {
-        this.logger.warn('Failed to record tool execution start', err);
+        this.logger.warn(
+          `Failed to record tool execution start${this.format({
+            tool: tool?.name,
+            callId: toolCall.callId,
+            error: this.errorInfo(err),
+          })}`,
+        );
       }
 
       try {
@@ -263,7 +293,13 @@ export class CallToolsLLMReducer extends Reducer<LLMState, LLMContext> {
           };
         }
       } catch (err) {
-        this.logger.error('Error occurred while executing tool', err);
+        this.logger.error(
+          `Error occurred while executing tool${this.format({
+            tool: tool?.name ?? toolCall.name,
+            callId: toolCall.callId,
+            error: this.errorInfo(err),
+          })}`,
+        );
         const message = err instanceof Error && err.message ? err.message : 'Unknown error';
         const details =
           err instanceof Error ? { message: err.message, name: err.name, stack: err.stack } : { error: err };
@@ -289,7 +325,12 @@ export class CallToolsLLMReducer extends Reducer<LLMState, LLMContext> {
         try {
           await this.finalizeToolExecutionEvent(startedEventId, response, caughtError);
         } catch (finalizeErr: unknown) {
-          this.logger.warn('Failed to finalize tool execution event', finalizeErr);
+          this.logger.warn(
+            `Failed to finalize tool execution event${this.format({
+              eventId: startedEventId,
+              error: this.errorInfo(finalizeErr),
+            })}`,
+          );
         }
       }
     }
@@ -319,7 +360,12 @@ export class CallToolsLLMReducer extends Reducer<LLMState, LLMContext> {
       try {
         return toPrismaJsonValue(JSON.parse(JSON.stringify(value)));
       } catch (nested) {
-        this.logger.warn('Failed to serialize tool payload for run event', err, nested);
+        this.logger.warn(
+          `Failed to serialize tool payload for run event${this.format({
+            error: this.errorInfo(err),
+            nested: this.errorInfo(nested),
+          })}`,
+        );
         return null;
       }
     }

@@ -1,15 +1,14 @@
-import { Inject, Injectable } from '@nestjs/common';
+import { Inject, Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../../core/services/prisma.service';
 import { ConversationStateRepository } from '../repositories/conversationState.repository';
 import type { LLMContext, LLMContextState, LLMState } from '../types';
 
-import { LoggerService } from '../../core/services/logger.service';
 import { PersistenceBaseLLMReducer } from './persistenceBase.llm.reducer';
 
 @Injectable()
 export class LoadLLMReducer extends PersistenceBaseLLMReducer {
+  private readonly logger = new Logger(LoadLLMReducer.name);
   constructor(
-    @Inject(LoggerService) private logger: LoggerService,
     @Inject(PrismaService) private prismaService: PrismaService,
   ) {
     super();
@@ -48,7 +47,11 @@ export class LoadLLMReducer extends PersistenceBaseLLMReducer {
       };
       return merged;
     } catch (e) {
-      this.logger.error('LoadLLMReducer error: %s', (e as Error)?.message || String(e));
+      const errorInfo =
+        e instanceof Error
+          ? { name: e.name, message: e.message, stack: e.stack }
+          : { message: String(e) };
+      this.logger.error(`LoadLLMReducer failed ${JSON.stringify({ threadId: ctx.threadId, error: errorInfo })}`);
       return { ...state, context: this.ensureContext(state.context) };
     }
   }

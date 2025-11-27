@@ -1,6 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
 import { SummarizationLLMReducer } from '../src/llm/reducers/summarization.llm.reducer';
-import { LoggerService } from '../src/core/services/logger.service.js';
 import { Signal } from '../src/signal';
 import { HumanMessage, SystemMessage } from '@agyn/llm';
 
@@ -18,7 +17,7 @@ describe('SummarizationLLMReducer termination handling', () => {
     };
     const eventsBus = { publishEvent: vi.fn(), subscribeToRunEvents: vi.fn(() => vi.fn()) };
 
-    const reducer = new SummarizationLLMReducer(provisioner as any, new LoggerService(), runEvents as any, eventsBus as any);
+    const reducer = new SummarizationLLMReducer(provisioner as any, runEvents as any, eventsBus as any);
     await reducer.init({ model: 'summary-test', keepTokens: 100, maxTokens: 200, systemPrompt: 'Summarize' });
 
     const state = {

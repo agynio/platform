@@ -7,7 +7,6 @@ import { GraphSocketGateway } from '../src/gateway/graph.socket.gateway';
 import type { LiveGraphRuntime } from '../src/graph-core/liveGraph.manager';
 import type { ThreadsMetricsService } from '../src/agents/threads.metrics.service';
 import type { PrismaService } from '../src/core/services/prisma.service';
-import type { LoggerService } from '../src/core/services/logger.service';
 import { PrismaClient, ToolExecStatus } from '@prisma/client';
 import { RunEventsService } from '../src/events/run-events.service';
 import { EventsBusService } from '../src/events/events-bus.service';
@@ -18,15 +17,6 @@ import { HumanMessage, AIMessage } from '@agyn/llm';
 import { CallAgentLinkingService } from '../src/agents/call-agent-linking.service';
 
 type MetricsPayload = { activity: 'working' | 'waiting' | 'idle'; remindersCount: number };
-
-const createLoggerStub = (): LoggerService =>
-  ({
-    info: () => undefined,
-    debug: () => undefined,
-    warn: () => undefined,
-    error: () => undefined,
-  }) as LoggerService;
-
 
 const createRuntimeStub = (): LiveGraphRuntime =>
   ({
@@ -145,7 +135,6 @@ if (!shouldRunRealtimeTests) {
     });
 
   it('broadcasts thread lifecycle and metrics events to subscribers', async () => {
-    const logger = createLoggerStub();
     const runtime = createRuntimeStub();
     const metricsDouble = createMetricsDouble();
     const prismaStub = createPrismaStub();
@@ -153,7 +142,7 @@ if (!shouldRunRealtimeTests) {
     await new Promise((resolve) => server.listen(0, resolve));
     const { port } = server.address() as AddressInfo;
     const eventsBus = createEventsBusNoop();
-    const gateway = new GraphSocketGateway(logger, runtime, metricsDouble.service, prismaStub, eventsBus);
+    const gateway = new GraphSocketGateway(runtime, metricsDouble.service, prismaStub, eventsBus);
     gateway.onModuleInit();
     gateway.init({ server });
 
@@ -207,13 +196,12 @@ if (!shouldRunRealtimeTests) {
   });
 
   it('publishes run status changes to thread and run subscribers', async () => {
-    const logger = createLoggerStub();
     const runtime = createRuntimeStub();
     const metricsDouble = createMetricsDouble();
     const prismaService = ({ getClient: () => prisma }) as PrismaService;
     const runEvents = new RunEventsService(prismaService);
     const eventsBus = new EventsBusService(runEvents);
-    const gateway = new GraphSocketGateway(logger, runtime, metricsDouble.service, prismaService, eventsBus);
+    const gateway = new GraphSocketGateway(runtime, metricsDouble.service, prismaService, eventsBus);
     gateway.onModuleInit();
 
     const server = createServer();
@@ -234,7 +222,6 @@ if (!shouldRunRealtimeTests) {
     const graphRepositoryStub = ({ get: async () => ({ nodes: [] }) }) as unknown as GraphRepository;
     const agents = new AgentsPersistenceService(
       prismaService,
-      logger,
       metricsDouble.service,
       templateRegistryStub,
       graphRepositoryStub,
@@ -273,13 +260,12 @@ if (!shouldRunRealtimeTests) {
   });
 
   it('publishes run timeline append and update events with reconciled payloads', async () => {
-    const logger = createLoggerStub();
     const runtime = createRuntimeStub();
     const metricsDouble = createMetricsDouble();
     const prismaService = ({ getClient: () => prisma }) as PrismaService;
     const runEvents = new RunEventsService(prismaService);
     const eventsBus = new EventsBusService(runEvents);
-    const gateway = new GraphSocketGateway(logger, runtime, metricsDouble.service, prismaService, eventsBus);
+    const gateway = new GraphSocketGateway(runtime, metricsDouble.service, prismaService, eventsBus);
     gateway.onModuleInit();
 
     const server = createServer();
@@ -291,7 +277,6 @@ if (!shouldRunRealtimeTests) {
     const graphRepositoryStub = ({ get: async () => ({ nodes: [] }) }) as unknown as GraphRepository;
     const agents = new AgentsPersistenceService(
       prismaService,
-      logger,
       metricsDouble.service,
       templateRegistryStub,
       graphRepositoryStub,

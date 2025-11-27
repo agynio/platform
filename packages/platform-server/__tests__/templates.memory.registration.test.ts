@@ -2,7 +2,6 @@ import { describe, it, expect } from 'vitest';
 import { buildTemplateRegistry } from '../src/templates';
 import { ModuleRef } from '@nestjs/core';
 import { ContainerService } from '../src/infra/container/container.service';
-import { LoggerService } from '../src/core/services/logger.service';
 import type { ContainerRegistry } from '../src/infra/container/container.registry';
 import { ConfigService, configSchema } from '../src/core/services/config.service';
 import { WorkspaceNode } from '../src/nodes/workspace/workspace.node';
@@ -28,7 +27,7 @@ describe('templates: memory registration and agent memory port', () => {
         agentsDatabaseUrl: process.env.AGENTS_DATABASE_URL || 'postgres://localhost/skip',
       }),
     );
-    const containerService = new ContainerService(undefined as unknown as ContainerRegistry, new LoggerService());
+    const containerService = new ContainerService(undefined as unknown as ContainerRegistry);
     const resolver = {
       resolve: async (input: unknown) => ({
         output: input,

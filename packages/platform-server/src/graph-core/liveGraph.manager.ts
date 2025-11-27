@@ -8,11 +8,10 @@ import {
 } from '../graph/liveGraph.types';
 import type { EdgeDef, GraphDefinition, NodeDef } from '../shared/types/graph.types';
 import { GraphError } from '../graph/types';
-import { Inject, Injectable, Optional } from '@nestjs/common';
+import { Inject, Injectable, Logger, Optional } from '@nestjs/common';
 import { ModuleRef } from '@nestjs/core';
 import { ZodError, type ZodIssue } from 'zod';
 
-import { LoggerService } from '../core/services/logger.service';
 import type { NodeStatusState, StatusChangedEvent } from '../nodes/base/Node';
 import type Node from '../nodes/base/Node';
 import { Errors } from '../graph/errors';
@@ -27,6 +26,7 @@ const configsEqual = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stri
 
 @Injectable()
 export class LiveGraphRuntime {
+  private readonly logger = new Logger(LiveGraphRuntime.name);
   private state: GraphRuntimeState = {
     nodes: new Map<string, LiveNode>(),
     executedEdges: new Map(),
@@ -45,9 +45,7 @@ export class LiveGraphRuntime {
   >();
   private nodeStatusHandlers = new Map<string, (ev: StatusChangedEvent) => void>();
   private graphName = 'main';
-
   constructor(
-    @Inject(LoggerService) private readonly logger: LoggerService,
     @Inject(TemplateRegistry) private readonly templateRegistry: TemplateRegistry,
     @Inject(GraphRepository) private readonly graphs: GraphRepository,
     @Inject(ModuleRef) private readonly moduleRef: ModuleRef,
@@ -108,25 +106,36 @@ export class LiveGraphRuntime {
     try {
       const existing = await this.graphs.get(name);
       if (existing) {
-        this.logger.info(
-          'Applying persisted graph to live runtime (version=%s, nodes=%d, edges=%d)',
-          existing.version,
-          existing.nodes.length,
-          existing.edges.length,
+        this.logger.log(
+          `Applying persisted graph to live runtime ${JSON.stringify({
+            version: existing.version,
+            nodes: existing.nodes.length,
+            edges: existing.edges.length,
+          })}`,
         );
         await this.apply(toRuntimeGraph(existing));
-        this.logger.info('Initial persisted graph applied successfully');
+        this.logger.log('Initial persisted graph applied successfully');
         return { applied: true, version: existing.version };
       } else {
-        this.logger.info('No persisted graph found; starting with empty runtime graph.');
+        this.logger.log('No persisted graph found; starting with empty runtime graph.');
         return { applied: false };
       }
     } catch (e) {
       if (e instanceof GraphError) {
         const cause = e && typeof e === 'object' && 'cause' in e ? (e as { cause?: unknown }).cause : undefined;
-        this.logger.error('Failed to apply initial persisted graph: %s. Cause: %s', e.message, String(cause));
+        this.logger.error(
+          `Failed to apply initial persisted graph ${JSON.stringify({ message: e.message, cause: String(cause) })}`,
+        );
       }
-      this.logger.error('Failed to apply initial persisted graph: %s', String(e));
+      this.logger.error(
+        `Failed to apply initial persisted graph ${JSON.stringify(
+          e instanceof Error
+            ? { name: e.name, message: e.message, stack: e.stack }
+            : {
+                error: e,
+              },
+        )}`,
+      );
       return { applied: false };
     }
   }
@@ -182,16 +191,16 @@ export class LiveGraphRuntime {
   private async _applyGraphInternal(next: GraphDefinition): Promise<GraphDiffResult> {
     const prev = this.state.lastGraph ?? ({ nodes: [], edges: [] } as GraphDefinition);
     const diff = this.computeDiff(prev, next);
-    this.logger.info(
-      'Applying graph diff: +%d nodes, -%d nodes, ~%d config updates, +%d edges, -%d edges',
-      diff.addedNodes.length,
-      diff.removedNodeIds.length,
-      diff.configUpdateNodeIds.length,
-      diff.addedEdges.length,
-      diff.removedEdges.length,
+    this.logger.log(
+      `Applying graph diff ${JSON.stringify({
+        addedNodes: diff.addedNodes.length,
+        removedNodes: diff.removedNodeIds.length,
+        configUpdates: diff.configUpdateNodeIds.length,
+        addedEdges: diff.addedEdges.length,
+        removedEdges: diff.removedEdges.length,
+      })}`,
     );
     const errors: GraphError[] = [];
-    const logger = this.logger;
     const pushError = (err: GraphError) => {
       errors.push(err);
       throw err;
@@ -231,7 +240,10 @@ export class LiveGraphRuntime {
         // set live.config to cleaned object only on success
         live.config = cleaned;
       } catch (e) {
-        logger?.error?.('Config update failed (setConfig)', nodeId, e);
+        const errorContext = this.formatError(e);
+        this.logger.error(
+          `Config update failed (setConfig) ${JSON.stringify({ nodeId, error: errorContext })}`,
+        );
         // non-fatal
       }
     }
@@ -244,7 +256,7 @@ export class LiveGraphRuntime {
       const rec = this.state.executedEdges.get(key);
       if (rec) {
         await this.tryReverseAndUnregister(rec).catch((e) => {
-          logger.error('Edge reversal failed', key, e);
+          this.logger.error(`Edge reversal failed ${JSON.stringify({ key, error: this.formatError(e) })}`);
         });
       }
     }
@@ -362,7 +374,9 @@ export class LiveGraphRuntime {
       try {
         created.init({ nodeId: node.id });
       } catch (e) {
-        this.logger.error('Failed to init node instance with nodeId=%s', node.id, e);
+        this.logger.error(
+          `Failed to init node instance ${JSON.stringify({ nodeId: node.id, error: this.formatError(e) })}`,
+        );
       }
       // Attach status_changed forwarder
       this.attachNodeStatusForwarder(node.id, created);
@@ -494,7 +508,9 @@ export class LiveGraphRuntime {
       const rec = this.state.executedEdges.get(k);
       if (rec) {
         await this.tryReverseAndUnregister(rec).catch((e) => {
-          this.logger.error('Edge reversal during node disposal failed', k, e);
+          this.logger.error(
+            `Edge reversal during node disposal failed ${JSON.stringify({ key: k, error: this.formatError(e) })}`,
+          );
         });
       }
     }
@@ -516,6 +532,17 @@ export class LiveGraphRuntime {
   private async tryReverseAndUnregister(rec: ExecutedEdgeRecord): Promise<void> {
     if (rec.reversible && rec.reversal) await rec.reversal();
     this.unregisterEdgeRecord(rec);
+  }
+
+  private formatError(error: unknown): Record<string, unknown> {
+    if (error instanceof Error) {
+      return {
+        name: error.name,
+        message: error.message,
+        stack: error.stack,
+      };
+    }
+    return { error };
   }
 
   private registerEdgeRecord(rec: ExecutedEdgeRecord) {

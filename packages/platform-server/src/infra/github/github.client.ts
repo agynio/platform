@@ -1,23 +1,22 @@
-import { Inject, Injectable } from "@nestjs/common";
+import { Inject, Injectable, Logger } from "@nestjs/common";
 import { Octokit } from "@octokit/rest";
 import { createAppAuth } from "@octokit/auth-app";
 import { spawn } from "child_process";
 import { promises as fs } from "fs";
 import * as path from "path";
-import { LoggerService } from "../../core/services/logger.service";
 import { ConfigService } from "../../core/services/config.service";
 
 @Injectable()
 export class GithubService {
+  private readonly logger = new Logger(GithubService.name);
   private octokit?: Octokit;
   private personalOctokit?: Octokit;
 
   constructor(
     @Inject(ConfigService) private config: ConfigService,
-    @Inject(LoggerService) private logger: LoggerService,
   ) {
     if (!this.isEnabled()) {
-      this.logger.info('GithubService: integration disabled (no credentials)');
+      this.logger.log("GithubService: integration disabled (no credentials)");
     }
   }
 
@@ -47,14 +46,14 @@ export class GithubService {
             installationId,
           },
         });
-        this.logger.info('GithubService: initialized App Octokit');
+        this.logger.log("GithubService: initialized App Octokit");
       }
     } else {
       if (!this.personalOctokit) {
         const token = this.config.githubToken;
         if (!token) throw new Error('GitHub integration is disabled: missing personal access token');
         this.personalOctokit = new Octokit({ auth: token });
-        this.logger.info('GithubService: initialized PAT Octokit');
+        this.logger.log("GithubService: initialized PAT Octokit");
       }
     }
   }

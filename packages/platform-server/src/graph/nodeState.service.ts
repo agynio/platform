@@ -1,5 +1,4 @@
-import { Inject, Injectable, Scope } from '@nestjs/common';
-import { LoggerService } from '../core/services/logger.service';
+import { Inject, Injectable, Logger, Scope } from '@nestjs/common';
 import { LiveGraphRuntime } from '../graph-core/liveGraph.manager';
 import { GraphRepository } from './graph.repository';
 import { mergeWith, isArray } from 'lodash-es';
@@ -33,10 +32,11 @@ export function deepMergeNodeState(
  */
 @Injectable({ scope: Scope.DEFAULT })
 export class NodeStateService {
+  private readonly logger = new Logger(NodeStateService.name);
+
   constructor(
     @Inject(GraphRepository) private readonly graphRepository: GraphRepository,
     @Inject(LiveGraphRuntime) private readonly runtime: LiveGraphRuntime,
-    @Inject(LoggerService) private readonly logger: LoggerService,
     @Inject(EventsBusService) private readonly eventsBus: EventsBusService,
   ) {}
 
@@ -50,9 +50,9 @@ export class NodeStateService {
       // Deep-merge previous snapshot with incoming patch (arrays replace)
       const prev = this.runtime.getNodeStateSnapshot(nodeId) || {};
       const merged = mergeWith({}, prev, patch, (objValue, srcValue) => {
-      if (isArray(objValue) && isArray(srcValue)) return srcValue;
-      return undefined;
-    });
+        if (isArray(objValue) && isArray(srcValue)) return srcValue;
+        return undefined;
+      });
       // Persist merged via repository, update runtime with merged
       await this.graphRepository.upsertNodeState(name, nodeId, merged);
       this.runtime.updateNodeState(nodeId, merged);
@@ -61,11 +61,15 @@ export class NodeStateService {
       try {
         await inst?.setState?.(merged as Record<string, unknown>);
       } catch (e) {
-        this.logger.error('NodeStateService: instance.setState failed for %s: %s', nodeId, String(e));
+        this.logger.error(
+          `NodeStateService: instance.setState failed ${JSON.stringify({ nodeId, error: String(e) })}`,
+        );
       }
       this.eventsBus.emitNodeState({ nodeId, state: merged, updatedAtMs: Date.now() });
     } catch (e) {
-      this.logger.error('NodeStateService: upsertNodeState failed for %s: %s', nodeId, String(e));
+      this.logger.error(
+        `NodeStateService: upsertNodeState failed ${JSON.stringify({ nodeId, error: String(e) })}`,
+      );
     }
   }
 }

@@ -48,7 +48,7 @@ Our repo currently uses:
 ### Node.js server
 - Keep services injectable and stateless. IO is abstracted behind services (e.g., PrismaService). Note: Slack no longer uses a global service; Slack integration is configured per node (see SlackTrigger and SendSlackMessageTool static configs).
 - Configuration comes from `ConfigService` reading env. No direct `process.env` reads inside business logic.
-- Log with structured messages. Avoid console.log in code; use LoggerService.
+- Log with structured messages. Avoid console.log in code; use Nest's `Logger` (per-class instance).
 - Graceful shutdown handlers must close external connections.
 
 ### React UI

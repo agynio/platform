@@ -21,7 +21,7 @@ type GatewayTestContext = {
     threadMetricsAncestors: Handler<{ threadId: string }>;
   };
   disposers: Record<string, ReturnType<typeof vi.fn>>;
-  logger: { warn: ReturnType<typeof vi.fn>; error: ReturnType<typeof vi.fn>; info: ReturnType<typeof vi.fn>; debug: ReturnType<typeof vi.fn> };
+  logger: { warn: ReturnType<typeof vi.fn>; error: ReturnType<typeof vi.fn>; log: ReturnType<typeof vi.fn>; debug: ReturnType<typeof vi.fn> };
 };
 
 function createGatewayTestContext(): GatewayTestContext {
@@ -112,18 +112,18 @@ function createGatewayTestContext(): GatewayTestContext {
     },
   };
 
-  const logger = {
-    warn: vi.fn(),
-    error: vi.fn(),
-    info: vi.fn(),
-    debug: vi.fn(),
-  };
-
   const runtime = { subscribe: vi.fn() } as any;
   const metrics = { getThreadsMetrics: vi.fn().mockResolvedValue({}) } as any;
   const prisma = { getClient: vi.fn().mockReturnValue({ $queryRaw: vi.fn().mockResolvedValue([]) }) } as any;
 
-  const gateway = new GraphSocketGateway(logger as any, runtime, metrics, prisma, eventsBus as EventsBusService);
+  const gateway = new GraphSocketGateway(runtime, metrics, prisma, eventsBus as EventsBusService);
+  const internalLogger = (gateway as unknown as { logger: { warn: (...args: unknown[]) => void; error: (...args: unknown[]) => void; log: (...args: unknown[]) => void; debug: (...args: unknown[]) => void } }).logger;
+  const logger = {
+    warn: vi.spyOn(internalLogger, 'warn').mockImplementation(() => undefined),
+    error: vi.spyOn(internalLogger, 'error').mockImplementation(() => undefined),
+    log: vi.spyOn(internalLogger, 'log').mockImplementation(() => undefined),
+    debug: vi.spyOn(internalLogger, 'debug').mockImplementation(() => undefined),
+  };
   gateway.onModuleInit();
 
   return { gateway, handlers, disposers, logger };
@@ -201,8 +201,7 @@ describe('GraphSocketGateway event bus integration', () => {
     });
     expect(spy).not.toHaveBeenCalled();
     expect(ctx.logger.warn).toHaveBeenCalledWith(
-      'GraphSocketGateway received invalid chunk timestamp',
-      expect.objectContaining({ eventId: 'event-1', ts: 'invalid' }),
+      expect.stringContaining('GraphSocketGateway received invalid chunk timestamp'),
     );
   });
 

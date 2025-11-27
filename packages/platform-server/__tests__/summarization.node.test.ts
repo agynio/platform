@@ -4,7 +4,6 @@ import { SummarizationLLMReducer } from '../src/llm/reducers/summarization.llm.r
 import { LLMProvisioner } from '../src/llm/provisioners/llm.provisioner';
 import type { LLMState } from '../src/llm/types';
 import { createRunEventsStub, createEventsBusStub } from './helpers/runEvents.stub';
-import { LoggerService } from '../src/core/services/logger.service';
 
 let reducer: SummarizationLLMReducer;
 
@@ -14,7 +13,6 @@ beforeEach(async () => {
   };
   reducer = new SummarizationLLMReducer(
     provisioner as LLMProvisioner,
-    new LoggerService(),
     createRunEventsStub() as any,
     createEventsBusStub() as any,
   );
@@ -39,7 +37,6 @@ describe('SummarizationLLMReducer', () => {
     };
     const r = new SummarizationLLMReducer(
       prov as LLMProvisioner,
-      new LoggerService(),
       createRunEventsStub() as any,
       createEventsBusStub() as any,
     );
@@ -66,7 +63,6 @@ describe('SummarizationLLMReducer', () => {
     const provisioner: Pick<LLMProvisioner, 'getLLM'> = { getLLM: async () => ({ call: async () => new ResponseMessage({ output: [] }) } as any) };
     const r = new SummarizationLLMReducer(
       provisioner as LLMProvisioner,
-      new LoggerService(),
       createRunEventsStub() as any,
       createEventsBusStub() as any,
     );
@@ -85,7 +81,6 @@ describe('SummarizationLLMReducer', () => {
     const provisioner: Pick<LLMProvisioner, 'getLLM'> = { getLLM: async () => ({ call: async () => new ResponseMessage({ output: [] }) } as any) };
     const r = new SummarizationLLMReducer(
       provisioner as LLMProvisioner,
-      new LoggerService(),
       createRunEventsStub() as any,
       createEventsBusStub() as any,
     );
@@ -104,7 +99,6 @@ describe('SummarizationLLMReducer', () => {
     const provisioner: Pick<LLMProvisioner, 'getLLM'> = { getLLM: async () => ({ call: async () => new ResponseMessage({ output: [] }) } as any) };
     const r = new SummarizationLLMReducer(
       provisioner as LLMProvisioner,
-      new LoggerService(),
       createRunEventsStub() as any,
       createEventsBusStub() as any,
     );
@@ -119,7 +113,6 @@ describe('SummarizationLLMReducer', () => {
     const provisioner: Pick<LLMProvisioner, 'getLLM'> = { getLLM: async () => ({ call: async () => new ResponseMessage({ output: [] }) } as any) };
     const r = new SummarizationLLMReducer(
       provisioner as LLMProvisioner,
-      new LoggerService(),
       createRunEventsStub() as any,
       createEventsBusStub() as any,
     );

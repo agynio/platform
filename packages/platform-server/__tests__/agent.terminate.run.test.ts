@@ -2,7 +2,6 @@ import { describe, it, expect, vi } from 'vitest';
 import { Test } from '@nestjs/testing';
 import { AgentNode } from '../src/nodes/agent/agent.node';
 import { AgentsPersistenceService } from '../src/agents/agents.persistence.service';
-import { LoggerService } from '../src/core/services/logger.service.js';
 import { ConfigService, configSchema } from '../src/core/services/config.service';
 import { LLMProvisioner } from '../src/llm/provisioners/llm.provisioner';
 import { RunSignalsRegistry } from '../src/agents/run-signals.service';
@@ -32,7 +31,6 @@ describe('AgentNode termination flow', () => {
 
     const module = await Test.createTestingModule({
       providers: [
-        LoggerService,
         {
           provide: ConfigService,
           useValue: new ConfigService().init(

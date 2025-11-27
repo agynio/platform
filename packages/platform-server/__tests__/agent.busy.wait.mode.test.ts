@@ -1,7 +1,6 @@
 
 import { describe, it, expect, vi } from 'vitest';
 import { Test } from '@nestjs/testing';
-import { LoggerService } from '../src/core/services/logger.service';
 import { ConfigService, configSchema } from '../src/core/services/config.service';
 import { AgentNode } from '../src/nodes/agent/agent.node';
 import { AIMessage, HumanMessage, ResponseMessage } from '@agyn/llm';
@@ -37,7 +36,6 @@ describe('Agent busy gating (wait mode)', () => {
 
     const module = await Test.createTestingModule({
       providers: [
-        LoggerService,
         {
           provide: ConfigService,
           useValue: new ConfigService().init(

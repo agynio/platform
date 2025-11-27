@@ -1,13 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { ThreadCleanupCoordinator } from '../src/agents/threadCleanup.coordinator';
 
-const loggerStub = {
-  info: vi.fn(),
-  warn: vi.fn(),
-  error: vi.fn(),
-  debug: vi.fn(),
-};
-
 const prismaStub = {
   thread: {
     findUnique: vi.fn(),
@@ -73,13 +66,25 @@ const makeCoordinator = () => {
     termination as any,
     cleanup as any,
     runSignals as any,
-    loggerStub as any,
     prismaService as any,
     registry as any,
     containerService as any,
     reminders as any,
     eventsBus as any,
   );
+
+  const logger = (coordinator as unknown as {
+    logger: {
+      log: (...args: unknown[]) => void;
+      warn: (...args: unknown[]) => void;
+      error: (...args: unknown[]) => void;
+      debug: (...args: unknown[]) => void;
+    };
+  }).logger;
+  vi.spyOn(logger, 'log').mockImplementation(() => undefined);
+  vi.spyOn(logger, 'warn').mockImplementation(() => undefined);
+  vi.spyOn(logger, 'error').mockImplementation(() => undefined);
+  vi.spyOn(logger, 'debug').mockImplementation(() => undefined);
 
   return {
     coordinator,

@@ -1,12 +1,10 @@
 import { describe, it, expect } from 'vitest';
 import { Test } from '@nestjs/testing';
 import { buildTemplateRegistry } from '../src/templates';
-import { LoggerService } from '../src/core/services/logger.service.js';
 import { ContainerService, type ContainerOpts } from '../src/infra/container/container.service';
 import { ContainerHandle } from '../src/infra/container/container.handle';
 import { ConfigService } from '../src/core/services/config.service.js';
 import { EnvService } from '../src/env/env.service';
-import { ReferenceResolverService } from '../src/utils/reference-resolver.service';
 import { VaultService } from '../src/vault/vault.service';
 import { NodeStateService } from '../src/graph/nodeState.service';
 import { ContainerRegistry } from '../src/infra/container/container.registry';
@@ -25,8 +23,8 @@ import { createEventsBusStub } from './helpers/eventsBus.stub';
 import { ReferenceResolverService } from '../src/utils/reference-resolver.service';
 
 class StubContainerService extends ContainerService {
-  constructor(registry: ContainerRegistry, logger: LoggerService) {
-    super(registry, logger);
+  constructor(registry: ContainerRegistry) {
+    super(registry);
   }
   override async start(_opts?: ContainerOpts): Promise<ContainerHandle> {
     return new ContainerHandle(this, 'cid');
@@ -129,7 +127,6 @@ describe('Boot respects MCP enabledTools from persisted state', () => {
   it('agent registers only enabled MCP tools on load', async () => {
     const module = await Test.createTestingModule({
       providers: [
-        LoggerService,
         { provide: ContainerService, useClass: StubContainerService },
         { provide: ConfigService, useClass: StubConfigService },
         EnvService,
@@ -141,10 +138,6 @@ describe('Boot respects MCP enabledTools from persisted state', () => {
         },
         { provide: VaultService, useClass: StubVaultService },
         { provide: LLMProvisioner, useClass: StubLLMProvisioner },
-        {
-          provide: ReferenceResolverService,
-          useValue: { resolve: async <T>(input: T) => ({ output: input, report: {} as Record<string, never> }) },
-        },
         { provide: NcpsKeyService, useValue: { getKeysForInjection: () => [] } },
         { provide: ContainerRegistry, useValue: { updateLastUsed: async () => {}, registerStart: async () => {}, markStopped: async () => {} } },
         { provide: GraphSocketGateway, useValue: { emitNodeState: (_id: string, _state: Record<string, unknown>) => {} } },
@@ -165,13 +158,9 @@ describe('Boot respects MCP enabledTools from persisted state', () => {
       ],
     }).compile();
 
-    const logger = module.get(LoggerService);
-    const containerService = module.get(ContainerService);
-    const configService = module.get(ConfigService);
-    const provisioner = module.get(LLMProvisioner);
     const moduleRef = module.get(ModuleRef);
 
-    const templateRegistry = buildTemplateRegistry({ logger, containerService, configService, provisioner, moduleRef });
+    const templateRegistry = buildTemplateRegistry({ moduleRef });
 
     const nowIso = new Date().toISOString();
     const persisted: PersistedGraph = {
@@ -211,7 +200,12 @@ describe('Boot respects MCP enabledTools from persisted state', () => {
     }
 
     const resolver = { resolve: async (input: unknown) => ({ output: input, report: {} as unknown }) };
-    const runtime = new LiveGraphRuntime(logger, templateRegistry, new GraphRepoStub() as unknown as GraphRepository, moduleRef, resolver as any);
+    const runtime = new LiveGraphRuntime(
+      templateRegistry,
+      new GraphRepoStub() as unknown as GraphRepository,
+      moduleRef,
+      resolver as any,
+    );
     const loaded = await runtime.load();
     expect(loaded.applied).toBe(true);
 

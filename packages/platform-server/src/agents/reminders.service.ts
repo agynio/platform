@@ -1,7 +1,6 @@
-import { Inject, Injectable } from '@nestjs/common';
+import { Inject, Injectable, Logger } from '@nestjs/common';
 import type { Prisma, PrismaClient } from '@prisma/client';
 import { PrismaService } from '../core/services/prisma.service';
-import { LoggerService } from '../core/services/logger.service';
 import { LiveGraphRuntime } from '../graph-core/liveGraph.manager';
 import { RemindMeNode } from '../nodes/tools/remind_me/remind_me.node';
 import type { RemindMeFunctionTool } from '../nodes/tools/remind_me/remind_me.tool';
@@ -15,11 +14,22 @@ interface CancelThreadRemindersOptions {
 
 @Injectable()
 export class RemindersService {
+  private readonly logger = new Logger(RemindersService.name);
   constructor(
     @Inject(PrismaService) private readonly prismaService: PrismaService,
-    @Inject(LoggerService) private readonly logger: LoggerService,
     @Inject(LiveGraphRuntime) private readonly runtime: LiveGraphRuntime,
   ) {}
+
+  private format(context?: Record<string, unknown>): string {
+    return context ? ` ${JSON.stringify(context)}` : '';
+  }
+
+  private errorInfo(error: unknown): Record<string, unknown> {
+    if (error instanceof Error) {
+      return { name: error.name, message: error.message, stack: error.stack };
+    }
+    return { message: String(error) };
+  }
 
   async cancelThreadReminders({ threadId, prismaOverride }: CancelThreadRemindersOptions): Promise<{
     cancelledDb: number;
@@ -36,8 +46,9 @@ export class RemindersService {
       });
       cancelledDb = result.count ?? 0;
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      this.logger.warn('RemindersService persistence update error', { threadId, error: message });
+      this.logger.warn(
+        `RemindersService persistence update error${this.format({ threadId, error: this.errorInfo(error) })}`,
+      );
     }
 
     let clearedRuntime = 0;
@@ -52,12 +63,13 @@ export class RemindersService {
         const clearedIds = tool.clearTimersByThread(threadId);
         clearedRuntime += clearedIds.length;
       } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
-        this.logger.warn('RemindersService runtime cancellation error', {
-          threadId,
-          nodeId: liveNode.id,
-          error: message,
-        });
+        this.logger.warn(
+          `RemindersService runtime cancellation error${this.format({
+            threadId,
+            nodeId: liveNode.id,
+            error: this.errorInfo(error),
+          })}`,
+        );
       }
     }
 
@@ -68,8 +80,9 @@ export class RemindersService {
     try {
       return this.runtime.getNodes();
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      this.logger.warn('RemindersService runtime traversal failed', { threadId, error: message });
+      this.logger.warn(
+        `RemindersService runtime traversal failed${this.format({ threadId, error: this.errorInfo(error) })}`,
+      );
       return [] as Array<{ id: string; template: string; instance: unknown }>;
     }
   }

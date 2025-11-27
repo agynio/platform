@@ -9,7 +9,6 @@ import { AgentsPersistenceService } from '../../src/agents/agents.persistence.se
 import { CallAgentLinkingService } from '../../src/agents/call-agent-linking.service';
 import { RunSignalsRegistry } from '../../src/agents/run-signals.service';
 import { ConfigService } from '../../src/core/services/config.service';
-import { LoggerService } from '../../src/core/services/logger.service';
 import { PrismaService } from '../../src/core/services/prisma.service';
 import { EventsBusService } from '../../src/events/events-bus.service';
 import { RunEventsService } from '../../src/events/run-events.service';
@@ -26,8 +25,6 @@ import { VaultService } from '../../src/vault/vault.service';
 type InjectionToken = Type<unknown> | string | symbol;
 
 const SKIP_TOKENS = new Set<InjectionToken>([ModuleRef]);
-
-const USE_CLASS_TOKENS = new Set<InjectionToken>([LoggerService]);
 
 const DEFAULT_TOKEN_FACTORIES = new Map<InjectionToken, () => unknown>([
   [
@@ -96,7 +93,6 @@ const DEFAULT_TOKEN_FACTORIES = new Map<InjectionToken, () => unknown>([
     ManageFunctionTool,
     () =>
       new ManageFunctionTool(
-        createDefaultStub('LoggerService') as LoggerService,
         createDefaultStub('AgentsPersistenceService') as AgentsPersistenceService,
       ),
   ],
@@ -136,10 +132,6 @@ export async function createNodeTestingModule<T>(
     }
     const factory = DEFAULT_TOKEN_FACTORIES.get(token as InjectionToken);
     if (factory) return factory();
-    if (USE_CLASS_TOKENS.has(token as InjectionToken)) {
-      const Target = token as Type<unknown>;
-      return new Target();
-    }
     throw new Error(`No mock available for token ${tokenName(token as InjectionToken)}`);
   });
 

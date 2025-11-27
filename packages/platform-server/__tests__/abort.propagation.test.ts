@@ -1,5 +1,4 @@
 import { describe, it, expect } from 'vitest';
-import { LoggerService } from '../src/core/services/logger.service.js';
 import { tool } from '@langchain/core/tools';
 import { ResponseMessage, ToolCallMessage } from '@agyn/llm';
 import { z } from 'zod';
@@ -8,7 +7,6 @@ import { createRunEventsStub, createEventsBusStub } from './helpers/runEvents.st
 
 describe('Abort propagation', () => {
   it('aborts long-running tool with AbortError and surfaces as throw', async () => {
-    const logger = new LoggerService();
     const longTool = tool(async (_input, config) => {
       const sig: AbortSignal | undefined = (config?.configurable as { abort_signal?: AbortSignal })?.abort_signal;
       if (sig?.aborted) {
@@ -23,7 +21,7 @@ describe('Abort propagation', () => {
 
     const runEvents = createRunEventsStub();
     const eventsBus = createEventsBusStub();
-    const reducer = new CallToolsLLMReducer(new LoggerService(), runEvents as any, eventsBus as any).init({
+    const reducer = new CallToolsLLMReducer(runEvents as any, eventsBus as any).init({
       tools: [
         {
           name: 'long',

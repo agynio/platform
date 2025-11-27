@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import { Test } from '@nestjs/testing';
+import { Logger } from '@nestjs/common';
 import { AgentsRemindersController } from '../src/agents/reminders.controller';
 import { AgentsPersistenceService } from '../src/agents/agents.persistence.service';
 import { createRunEventsStub } from './helpers/runEvents.stub';
@@ -73,11 +74,9 @@ describe('AgentsPersistenceService.listReminders', () => {
         } as any;
       },
     };
-    const { LoggerService } = await import('../src/core/services/logger.service');
     const eventsBusStub = createEventsBusStub();
     const svc = new AgentsPersistenceService(
       prismaStub as any,
-      new LoggerService(),
       { getThreadsMetrics: async () => ({}) } as any,
       templateRegistryStub,
       graphRepoStub,
@@ -110,11 +109,9 @@ describe('AgentsPersistenceService.listReminders', () => {
         } as any;
       },
     };
-    const logger = { error: vi.fn(), warn: vi.fn(), info: vi.fn(), debug: vi.fn() } as any;
     const eventsBusStub = createEventsBusStub();
     const svc = new AgentsPersistenceService(
       prismaStub as any,
-      logger,
       { getThreadsMetrics: async () => ({}) } as any,
       templateRegistryStub,
       graphRepoStub,
@@ -123,9 +120,14 @@ describe('AgentsPersistenceService.listReminders', () => {
       eventsBusStub,
     );
 
+    const errorSpy = vi.spyOn(Logger.prototype, 'error').mockImplementation(() => {});
+
     await expect(svc.listReminders('active', 5, 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa')).rejects.toThrow('db down');
-    expect(logger.error).toHaveBeenCalledTimes(1);
-    const payload = logger.error.mock.calls[0][1];
-    expect(payload).toMatchObject({ filter: 'active', take: 5, threadId: 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa' });
+    expect(errorSpy).toHaveBeenCalledTimes(1);
+    const message = errorSpy.mock.calls[0]?.[0] as string;
+    expect(message).toContain('Failed to list reminders');
+    expect(message).toContain('threadId');
+    expect(message).toContain('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa');
+    errorSpy.mockRestore();
   });
 });

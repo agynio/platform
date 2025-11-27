@@ -10,9 +10,8 @@ import {
   ToolCallOutputMessage,
 } from '@agyn/llm';
 import { stringify } from 'yaml';
-import { Inject, Injectable, Scope } from '@nestjs/common';
+import { Inject, Injectable, Logger, Scope } from '@nestjs/common';
 import { LLMProvisioner } from '../provisioners/llm.provisioner';
-import { LoggerService } from '../../core/services/logger.service';
 import { RunEventsService } from '../../events/run-events.service';
 import { EventsBusService } from '../../events/events-bus.service';
 import { toPrismaJsonValue } from '../services/messages.serialization';
@@ -21,13 +20,24 @@ import { contextItemInputFromSummary } from '../services/context-items.utils';
 
 @Injectable({ scope: Scope.TRANSIENT })
 export class SummarizationLLMReducer extends Reducer<LLMState, LLMContext> {
+  private readonly logger = new Logger(SummarizationLLMReducer.name);
   constructor(
     @Inject(LLMProvisioner) private readonly provisioner: LLMProvisioner,
-    @Inject(LoggerService) protected readonly logger: LoggerService,
     @Inject(RunEventsService) private readonly runEvents: RunEventsService,
     @Inject(EventsBusService) private readonly eventsBus: EventsBusService,
   ) {
     super();
+  }
+
+  private format(context?: Record<string, unknown>): string {
+    return context ? ` ${JSON.stringify(context)}` : '';
+  }
+
+  private errorInfo(error: unknown): Record<string, unknown> {
+    if (error instanceof Error) {
+      return { name: error.name, message: error.message, stack: error.stack };
+    }
+    return { message: String(error) };
   }
 
   private params: { model: string; keepTokens: number; maxTokens: number; systemPrompt: string } = {
@@ -122,7 +132,13 @@ export class SummarizationLLMReducer extends Reducer<LLMState, LLMContext> {
         newContext: head.map((m) => this.toPlainMessage(m)),
       };
     } catch (error) {
-      this.logger.error('Error during summarization LLM call', error);
+      this.logger.error(
+        `Error during summarization LLM call${this.format({
+          threadId: ctx.threadId,
+          nodeId: ctx.callerAgent.getAgentNodeId?.() ?? null,
+          error: this.errorInfo(error),
+        })}`,
+      );
       if (error instanceof Error) throw error;
       throw new Error(String(error));
     }
@@ -237,11 +253,16 @@ export class SummarizationLLMReducer extends Reducer<LLMState, LLMContext> {
     if (value === null || value === undefined) return null;
     try {
       return toPrismaJsonValue(value);
-    } catch {
+    } catch (err) {
       try {
         return toPrismaJsonValue(JSON.parse(JSON.stringify(value)));
-      } catch (err) {
-        this.logger.warn('Failed to serialize summarization payload for storage', err);
+      } catch (nested) {
+        this.logger.warn(
+          `Failed to serialize summarization payload for storage${this.format({
+            error: this.errorInfo(err),
+            nested: this.errorInfo(nested),
+          })}`,
+        );
         return null;
       }
     }

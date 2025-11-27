@@ -4,8 +4,9 @@
   "description": "",
   "private": true,
   "scripts": {
-    "build": "pnpm -r --filter ./packages/* run build",
-    "test": "pnpm -r --workspace-concurrency=1 run test",
+    "build": "pnpm -r run --if-present build",
+    "lint": "pnpm -r run --if-present lint",
+    "test": "pnpm -r --workspace-concurrency=1 run --if-present test",
     "convert-graphs": "pnpm --filter @agyn/graph-converter exec graph-converter",
     "postinstall": "pnpm -r --if-present run prepare",
     "deps:up:podman": "podman compose up -d"

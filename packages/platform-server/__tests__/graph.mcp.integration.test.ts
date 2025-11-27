@@ -1,12 +1,10 @@
 import { describe, it, expect } from 'vitest';
 import { Test } from '@nestjs/testing';
 import { buildTemplateRegistry } from '../src/templates';
-import { LoggerService } from '../src/core/services/logger.service.js';
 import { ContainerService, type ContainerOpts } from '../src/infra/container/container.service';
 import { ContainerHandle } from '../src/infra/container/container.handle';
 import { ConfigService } from '../src/core/services/config.service.js';
 import { EnvService } from '../src/env/env.service';
-import { ReferenceResolverService } from '../src/utils/reference-resolver.service';
 import { VaultService } from '../src/vault/vault.service';
 import { NodeStateService } from '../src/graph/nodeState.service';
 import { ContainerRegistry } from '../src/infra/container/container.registry';
@@ -22,8 +20,8 @@ import { RunSignalsRegistry } from '../src/agents/run-signals.service';
 import { ReferenceResolverService } from '../src/utils/reference-resolver.service';
 
 class StubContainerService extends ContainerService {
-  constructor(registry: ContainerRegistry, logger: LoggerService) {
-    super(registry, logger);
+  constructor(registry: ContainerRegistry) {
+    super(registry);
   }
   override async start(_opts?: ContainerOpts): Promise<ContainerHandle> {
     return new ContainerHandle(this, 'cid');
@@ -127,7 +125,6 @@ describe('Graph MCP integration', () => {
   it('constructs graph with mcpServer template without error (deferred start)', async () => {
     const module = await Test.createTestingModule({
       providers: [
-        LoggerService,
         { provide: ContainerService, useClass: StubContainerService },
         { provide: ConfigService, useClass: StubConfigService },
         EnvService,
@@ -139,10 +136,6 @@ describe('Graph MCP integration', () => {
         },
         { provide: VaultService, useClass: StubVaultService },
         { provide: LLMProvisioner, useClass: StubLLMProvisioner },
-        {
-          provide: ReferenceResolverService,
-          useValue: { resolve: async <T>(input: T) => ({ output: input, report: {} as Record<string, never> }) },
-        },
         { provide: NcpsKeyService, useValue: { getKeysForInjection: () => [] } },
         { provide: ContainerRegistry, useValue: { updateLastUsed: async () => {}, registerStart: async () => {}, markStopped: async () => {} } },
         { provide: NodeStateService, useValue: { upsertNodeState: async () => {}, getSnapshot: () => undefined } },
@@ -162,13 +155,9 @@ describe('Graph MCP integration', () => {
       ],
     }).compile();
 
-    const logger = module.get(LoggerService);
-    const containerService = module.get(ContainerService);
-    const configService = module.get(ConfigService);
-    const provisioner = module.get(LLMProvisioner);
     const moduleRef = module.get(ModuleRef);
 
-    const templateRegistry = buildTemplateRegistry({ logger, containerService, configService, provisioner, moduleRef });
+    const templateRegistry = buildTemplateRegistry({ moduleRef });
     class GraphRepoStub implements Pick<GraphRepository, 'initIfNeeded' | 'get' | 'upsert' | 'upsertNodeState'> {
       async initIfNeeded(): Promise<void> {}
       async get(): Promise<null> { return null; }
@@ -177,7 +166,7 @@ describe('Graph MCP integration', () => {
     }
 
     const resolver = { resolve: async (input: unknown) => ({ output: input, report: {} as unknown }) };
-    const runtime = new LiveGraphRuntime(logger, templateRegistry, new GraphRepoStub(), moduleRef, resolver as any);
+    const runtime = new LiveGraphRuntime(templateRegistry, new GraphRepoStub(), moduleRef, resolver as any);
 
     const graph: GraphDefinition = {
       nodes: [

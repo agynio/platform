@@ -1,7 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { LocalMCPServerNode } from '../src/nodes/mcp/localMcpServer.node';
 import { ContainerService } from '../src/infra/container/container.service';
-import { LoggerService } from '../src/core/services/logger.service';
 import type { ContainerRegistry } from '../src/infra/container/container.registry';
 import { PassThrough } from 'node:stream';
 
@@ -81,7 +80,7 @@ describe('LocalMCPServer heartbeat behavior', () => {
       listByThread: async () => [],
       ensureIndexes: async () => {},
     } as unknown as ContainerRegistry;
-    return new ContainerService(registryStub, new LoggerService());
+    return new ContainerService(registryStub);
   };
 
   it('touches last_used during session and stops after completion', async () => {

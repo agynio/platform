@@ -1,8 +1,7 @@
-import { Inject, Injectable, OnModuleDestroy, OnModuleInit, Scope } from '@nestjs/common';
+import { Inject, Injectable, Logger, OnModuleDestroy, OnModuleInit, Scope } from '@nestjs/common';
 import type { IncomingHttpHeaders, Server as HTTPServer } from 'http';
 import { Server as SocketIOServer, type ServerOptions, type Socket } from 'socket.io';
 import { z } from 'zod';
-import { LoggerService } from '../core/services/logger.service';
 import { LiveGraphRuntime } from '../graph-core/liveGraph.manager';
 import type { ThreadStatus, MessageKind, RunStatus } from '@prisma/client';
 import {
@@ -104,6 +103,7 @@ function toDate(value: string): Date | null {
 
 @Injectable({ scope: Scope.DEFAULT })
 export class GraphSocketGateway implements OnModuleInit, OnModuleDestroy {
+  private readonly logger = new Logger(GraphSocketGateway.name);
   private io: SocketIOServer | null = null;
   private initialized = false;
   private pendingThreads = new Set<string>();
@@ -112,7 +112,6 @@ export class GraphSocketGateway implements OnModuleInit, OnModuleDestroy {
   private readonly cleanup: Array<() => void> = [];
 
   constructor(
-    @Inject(LoggerService) private readonly logger: LoggerService,
     @Inject(LiveGraphRuntime) private readonly runtime: LiveGraphRuntime,
     @Inject(ThreadsMetricsService) private readonly metrics: ThreadsMetricsService,
     @Inject(PrismaService) private readonly prismaService: PrismaService,
@@ -138,7 +137,9 @@ export class GraphSocketGateway implements OnModuleInit, OnModuleDestroy {
       try {
         dispose();
       } catch (err) {
-        this.logger.warn('GraphSocketGateway: cleanup failed', this.toSafeError(err));
+        this.logger.warn(
+          `GraphSocketGateway: cleanup failed${this.formatContext({ error: this.toSafeError(err) })}`,
+        );
       }
     }
   }
@@ -176,7 +177,9 @@ export class GraphSocketGateway implements OnModuleInit, OnModuleDestroy {
             message: issue.message,
             code: issue.code,
           }));
-          this.logger.warn('GraphSocketGateway: subscribe invalid', { socketId: socket.id, issues: details });
+          this.logger.warn(
+            `GraphSocketGateway: subscribe invalid${this.formatContext({ socketId: socket.id, issues: details })}`,
+          );
           if (typeof ack === 'function') {
             ack({ ok: false, error: 'invalid_payload', issues: details });
           }
@@ -190,10 +193,12 @@ export class GraphSocketGateway implements OnModuleInit, OnModuleDestroy {
         }
       });
       socket.on('error', (e: unknown) => {
-        this.logger.warn('GraphSocketGateway: socket error', {
-          socketId: socket.id,
-          error: this.toSafeError(e),
-        });
+        this.logger.warn(
+          `GraphSocketGateway: socket error${this.formatContext({
+            socketId: socket.id,
+            error: this.toSafeError(e),
+          })}`,
+        );
       });
     });
     this.initialized = true;
@@ -205,10 +210,12 @@ export class GraphSocketGateway implements OnModuleInit, OnModuleDestroy {
   private readonly handleRunEvent = (payload: RunEventBusPayload): void => {
     const event = payload.event;
     if (!event) {
-      this.logger.warn('GraphSocketGateway received run event payload without snapshot', {
-        eventId: payload.eventId,
-        mutation: payload.mutation,
-      });
+      this.logger.warn(
+        `GraphSocketGateway received run event payload without snapshot${this.formatContext({
+          eventId: payload.eventId,
+          mutation: payload.mutation,
+        })}`,
+      );
       return;
     }
     try {
@@ -219,21 +226,25 @@ export class GraphSocketGateway implements OnModuleInit, OnModuleDestroy {
       };
       this.emitRunEvent(event.runId, event.threadId, broadcast);
     } catch (err) {
-      this.logger.warn('GraphSocketGateway failed to emit run event', {
-        eventId: payload.eventId,
-        mutation: payload.mutation,
-        error: err instanceof Error ? err.message : String(err),
-      });
+      this.logger.warn(
+        `GraphSocketGateway failed to emit run event${this.formatContext({
+          eventId: payload.eventId,
+          mutation: payload.mutation,
+          error: this.toSafeError(err),
+        })}`,
+      );
     }
   };
 
   private readonly handleToolOutputChunk = (payload: ToolOutputChunkPayload): void => {
     const ts = toDate(payload.ts);
     if (!ts) {
-      this.logger.warn('GraphSocketGateway received invalid chunk timestamp', {
-        eventId: payload.eventId,
-        ts: payload.ts,
-      });
+      this.logger.warn(
+        `GraphSocketGateway received invalid chunk timestamp${this.formatContext({
+          eventId: payload.eventId,
+          ts: payload.ts,
+        })}`,
+      );
       return;
     }
     try {
@@ -248,20 +259,24 @@ export class GraphSocketGateway implements OnModuleInit, OnModuleDestroy {
         data: payload.data,
       });
     } catch (err) {
-      this.logger.warn('GraphSocketGateway failed to emit tool_output_chunk', {
-        eventId: payload.eventId,
-        error: err instanceof Error ? err.message : String(err),
-      });
+      this.logger.warn(
+        `GraphSocketGateway failed to emit tool_output_chunk${this.formatContext({
+          eventId: payload.eventId,
+          error: this.toSafeError(err),
+        })}`,
+      );
     }
   };
 
   private readonly handleToolOutputTerminal = (payload: ToolOutputTerminalPayload): void => {
     const ts = toDate(payload.ts);
     if (!ts) {
-      this.logger.warn('GraphSocketGateway received invalid terminal timestamp', {
-        eventId: payload.eventId,
-        ts: payload.ts,
-      });
+      this.logger.warn(
+        `GraphSocketGateway received invalid terminal timestamp${this.formatContext({
+          eventId: payload.eventId,
+          ts: payload.ts,
+        })}`,
+      );
       return;
     }
     try {
@@ -280,10 +295,12 @@ export class GraphSocketGateway implements OnModuleInit, OnModuleDestroy {
         ts,
       });
     } catch (err) {
-      this.logger.warn('GraphSocketGateway failed to emit tool_output_terminal', {
-        eventId: payload.eventId,
-        error: err instanceof Error ? err.message : String(err),
-      });
+      this.logger.warn(
+        `GraphSocketGateway failed to emit tool_output_terminal${this.formatContext({
+          eventId: payload.eventId,
+          error: this.toSafeError(err),
+        })}`,
+      );
     }
   };
 
@@ -291,10 +308,12 @@ export class GraphSocketGateway implements OnModuleInit, OnModuleDestroy {
     try {
       this.emitReminderCount(payload.nodeId, payload.count, payload.updatedAtMs);
     } catch (err) {
-      this.logger.warn('GraphSocketGateway failed to emit reminder_count', {
-        nodeId: payload.nodeId,
-        error: err instanceof Error ? err.message : String(err),
-      });
+      this.logger.warn(
+        `GraphSocketGateway failed to emit reminder_count${this.formatContext({
+          nodeId: payload.nodeId,
+          error: this.toSafeError(err),
+        })}`,
+      );
       return;
     }
 
@@ -305,20 +324,24 @@ export class GraphSocketGateway implements OnModuleInit, OnModuleDestroy {
     try {
       scheduleResult = this.scheduleThreadAndAncestorsMetrics(threadId);
     } catch (err) {
-      this.logger.warn('GraphSocketGateway failed to schedule metrics from reminder count', {
-        nodeId: payload.nodeId,
-        threadId,
-        error: err instanceof Error ? err.message : String(err),
-      });
+      this.logger.warn(
+        `GraphSocketGateway failed to schedule metrics from reminder count${this.formatContext({
+          nodeId: payload.nodeId,
+          threadId,
+          error: this.toSafeError(err),
+        })}`,
+      );
       return;
     }
 
     void Promise.resolve(scheduleResult).catch((err) => {
-      this.logger.warn('GraphSocketGateway failed to schedule metrics from reminder count', {
-        nodeId: payload.nodeId,
-        threadId,
-        error: err instanceof Error ? err.message : String(err),
-      });
+      this.logger.warn(
+        `GraphSocketGateway failed to schedule metrics from reminder count${this.formatContext({
+          nodeId: payload.nodeId,
+          threadId,
+          error: this.toSafeError(err),
+        })}`,
+      );
     });
   };
 
@@ -326,10 +349,12 @@ export class GraphSocketGateway implements OnModuleInit, OnModuleDestroy {
     try {
       this.emitNodeState(payload.nodeId, payload.state, payload.updatedAtMs);
     } catch (err) {
-      this.logger.warn('GraphSocketGateway failed to emit node_state', {
-        nodeId: payload.nodeId,
-        error: err instanceof Error ? err.message : String(err),
-      });
+      this.logger.warn(
+        `GraphSocketGateway failed to emit node_state${this.formatContext({
+          nodeId: payload.nodeId,
+          error: this.toSafeError(err),
+        })}`,
+      );
     }
   };
 
@@ -337,10 +362,12 @@ export class GraphSocketGateway implements OnModuleInit, OnModuleDestroy {
     try {
       this.emitThreadCreated(thread);
     } catch (err) {
-      this.logger.warn('GraphSocketGateway failed to emit thread_created', {
-        threadId: thread.id,
-        error: err instanceof Error ? err.message : String(err),
-      });
+      this.logger.warn(
+        `GraphSocketGateway failed to emit thread_created${this.formatContext({
+          threadId: thread.id,
+          error: this.toSafeError(err),
+        })}`,
+      );
     }
   };
 
@@ -348,28 +375,34 @@ export class GraphSocketGateway implements OnModuleInit, OnModuleDestroy {
     try {
       this.emitThreadUpdated(thread);
     } catch (err) {
-      this.logger.warn('GraphSocketGateway failed to emit thread_updated', {
-        threadId: thread.id,
-        error: err instanceof Error ? err.message : String(err),
-      });
+      this.logger.warn(
+        `GraphSocketGateway failed to emit thread_updated${this.formatContext({
+          threadId: thread.id,
+          error: this.toSafeError(err),
+        })}`,
+      );
     }
   };
 
   private readonly handleMessageCreated = (payload: { threadId: string; message: MessageBroadcast }): void => {
     try {
-      this.logger.info('new message', {
-        threadId: payload.threadId,
-        messageId: payload.message.id,
-        kind: payload.message.kind,
-        runId: payload.message.runId ?? null,
-      });
+      this.logger.log(
+        `new message${this.formatContext({
+          threadId: payload.threadId,
+          messageId: payload.message.id,
+          kind: payload.message.kind,
+          runId: payload.message.runId ?? null,
+        })}`,
+      );
       this.emitMessageCreated(payload.threadId, payload.message);
     } catch (err) {
-      this.logger.warn('GraphSocketGateway failed to emit message_created', {
-        threadId: payload.threadId,
-        messageId: payload.message.id,
-        error: err instanceof Error ? err.message : String(err),
-      });
+      this.logger.warn(
+        `GraphSocketGateway failed to emit message_created${this.formatContext({
+          threadId: payload.threadId,
+          messageId: payload.message.id,
+          error: this.toSafeError(err),
+        })}`,
+      );
     }
   };
 
@@ -377,11 +410,13 @@ export class GraphSocketGateway implements OnModuleInit, OnModuleDestroy {
     try {
       this.emitRunStatusChanged(payload.threadId, payload.run);
     } catch (err) {
-      this.logger.warn('GraphSocketGateway failed to emit run_status_changed', {
-        threadId: payload.threadId,
-        runId: payload.run.id,
-        error: err instanceof Error ? err.message : String(err),
-      });
+      this.logger.warn(
+        `GraphSocketGateway failed to emit run_status_changed${this.formatContext({
+          threadId: payload.threadId,
+          runId: payload.run.id,
+          error: this.toSafeError(err),
+        })}`,
+      );
     }
   };
 
@@ -389,10 +424,12 @@ export class GraphSocketGateway implements OnModuleInit, OnModuleDestroy {
     try {
       this.scheduleThreadMetrics(payload.threadId);
     } catch (err) {
-      this.logger.warn('GraphSocketGateway failed to schedule thread metrics', {
-        threadId: payload.threadId,
-        error: err instanceof Error ? err.message : String(err),
-      });
+      this.logger.warn(
+        `GraphSocketGateway failed to schedule thread metrics${this.formatContext({
+          threadId: payload.threadId,
+          error: this.toSafeError(err),
+        })}`,
+      );
     }
   };
 
@@ -401,18 +438,22 @@ export class GraphSocketGateway implements OnModuleInit, OnModuleDestroy {
     try {
       scheduleResult = this.scheduleThreadAndAncestorsMetrics(payload.threadId);
     } catch (err) {
-      this.logger.warn('GraphSocketGateway failed to schedule ancestor thread metrics', {
-        threadId: payload.threadId,
-        error: err instanceof Error ? err.message : String(err),
-      });
+      this.logger.warn(
+        `GraphSocketGateway failed to schedule ancestor thread metrics${this.formatContext({
+          threadId: payload.threadId,
+          error: this.toSafeError(err),
+        })}`,
+      );
       return;
     }
 
     void Promise.resolve(scheduleResult).catch((err) => {
-      this.logger.warn('GraphSocketGateway failed to schedule ancestor thread metrics', {
-        threadId: payload.threadId,
-        error: err instanceof Error ? err.message : String(err),
-      });
+      this.logger.warn(
+        `GraphSocketGateway failed to schedule ancestor thread metrics${this.formatContext({
+          threadId: payload.threadId,
+          error: this.toSafeError(err),
+        })}`,
+      );
     });
   };
 
@@ -424,7 +465,9 @@ export class GraphSocketGateway implements OnModuleInit, OnModuleDestroy {
     if (!this.io) return;
     const parsed = schema.safeParse(payload);
     if (!parsed.success) {
-      this.logger.error('Gateway payload validation failed', parsed.error.issues);
+      this.logger.error(
+        `Gateway payload validation failed${this.formatContext({ issues: parsed.error.issues })}`,
+      );
       return;
     }
     const data = parsed.data;
@@ -531,7 +574,9 @@ export class GraphSocketGateway implements OnModuleInit, OnModuleDestroy {
     };
     const parsed = ToolOutputChunkEventSchema.safeParse(eventPayload);
     if (!parsed.success) {
-      this.logger.error('Gateway payload validation failed for tool_output_chunk', parsed.error.issues);
+      this.logger.error(
+        `Gateway payload validation failed for tool_output_chunk${this.formatContext({ issues: parsed.error.issues })}`,
+      );
       return;
     }
     this.emitToRooms([`run:${eventPayload.runId}`, `thread:${eventPayload.threadId}`], 'tool_output_chunk', eventPayload);
@@ -566,7 +611,9 @@ export class GraphSocketGateway implements OnModuleInit, OnModuleDestroy {
     };
     const parsed = ToolOutputTerminalEventSchema.safeParse(eventPayload);
     if (!parsed.success) {
-      this.logger.error('Gateway payload validation failed for tool_output_terminal', parsed.error.issues);
+      this.logger.error(
+        `Gateway payload validation failed for tool_output_terminal${this.formatContext({ issues: parsed.error.issues })}`,
+      );
       return;
     }
     this.emitToRooms([`run:${eventPayload.runId}`, `thread:${eventPayload.threadId}`], 'tool_output_terminal', eventPayload);
@@ -588,7 +635,7 @@ export class GraphSocketGateway implements OnModuleInit, OnModuleDestroy {
         this.emitToRooms(['threads', `thread:${id}`], 'thread_reminders_count', remindersPayload);
       }
     } catch (e) {
-      this.logger.error('flushMetricsQueue error', e);
+      this.logger.error(`flushMetricsQueue error${this.formatContext({ error: this.toSafeError(e) })}`);
     }
   };
   scheduleThreadMetrics(threadId: string) {
@@ -608,7 +655,9 @@ export class GraphSocketGateway implements OnModuleInit, OnModuleDestroy {
       `;
       for (const r of rows) this.scheduleThreadMetrics(r.id);
     } catch (e) {
-      this.logger.error('scheduleThreadAndAncestorsMetrics error', e);
+      this.logger.error(
+        `scheduleThreadAndAncestorsMetrics error${this.formatContext({ error: this.toSafeError(e) })}`,
+      );
       this.scheduleThreadMetrics(threadId);
     }
   }
@@ -646,9 +695,15 @@ export class GraphSocketGateway implements OnModuleInit, OnModuleDestroy {
       } catch (error) {
         const errPayload =
           error instanceof Error ? { name: error.name, message: error.message } : { message: String(error) };
-        this.logger.warn('GraphSocketGateway: emit error', { event, room, error: errPayload });
+        this.logger.warn(
+          `GraphSocketGateway: emit error ${this.formatContext({ event, room, error: errPayload })}`,
+        );
       }
     }
+  }
+
+  private formatContext(context: Record<string, unknown>): string {
+    return ` ${JSON.stringify(context)}`;
   }
 
   private toSafeError(error: unknown): { name?: string; message: string } {

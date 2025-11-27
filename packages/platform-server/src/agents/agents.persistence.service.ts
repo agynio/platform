@@ -1,7 +1,6 @@
 import { AIMessage, HumanMessage, SystemMessage, ToolCallMessage, ToolCallOutputMessage } from '@agyn/llm';
-import { Inject, Injectable } from '@nestjs/common';
+import { Inject, Injectable, Logger } from '@nestjs/common';
 import type { MessageKind, Prisma, PrismaClient, RunMessageType, RunStatus, ThreadStatus } from '@prisma/client';
-import { LoggerService } from '../core/services/logger.service';
 import { PrismaService } from '../core/services/prisma.service';
 import { TemplateRegistry } from '../graph-core/templateRegistry';
 import { GraphRepository } from '../graph/graph.repository';
@@ -19,10 +18,10 @@ type RunEventDelegate = Prisma.TransactionClient['runEvent'];
 
 @Injectable()
 export class AgentsPersistenceService {
+  private readonly logger = new Logger(AgentsPersistenceService.name);
 
   constructor(
     @Inject(PrismaService) private prismaService: PrismaService,
-    @Inject(LoggerService) private readonly logger: LoggerService,
     @Inject(ThreadsMetricsService) private readonly metrics: ThreadsMetricsService,
     @Inject(TemplateRegistry) private readonly templateRegistry: TemplateRegistry,
     @Inject(GraphRepository) private readonly graphs: GraphRepository,
@@ -30,6 +29,17 @@ export class AgentsPersistenceService {
     @Inject(CallAgentLinkingService) private readonly callAgentLinking: CallAgentLinkingService,
     @Inject(EventsBusService) private readonly eventsBus: EventsBusService,
   ) {}
+
+  private format(context?: Record<string, unknown>): string {
+    return context ? ` ${JSON.stringify(context)}` : '';
+  }
+
+  private errorInfo(error: unknown): Record<string, unknown> {
+    if (error instanceof Error) {
+      return { name: error.name, message: error.message, stack: error.stack };
+    }
+    return { message: String(error) };
+  }
 
   private get prisma(): PrismaClient {
     return this.prismaService.getClient();
@@ -100,7 +110,9 @@ export class AgentsPersistenceService {
     if (existing?.channel) return; // do not overwrite
     const parsed = ChannelDescriptorSchema.safeParse(descriptor);
     if (!parsed.success) {
-      this.logger.error('Invalid channel descriptor; skipping persistence', { threadId });
+      this.logger.error(
+        `Invalid channel descriptor; skipping persistence${this.format({ threadId, issues: parsed.error.issues })}`,
+      );
       return;
     }
     const channelJson = toPrismaJsonValue(parsed.data);
@@ -454,8 +466,9 @@ export class AgentsPersistenceService {
     try {
       return await this.resolveAgentTitles(ids);
     } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      this.logger.error('AgentsPersistenceService failed to resolve agent titles: %s', message);
+      this.logger.error(
+        `AgentsPersistenceService failed to resolve agent titles ${this.format({ error: this.errorInfo(err) })}`,
+      );
       const fallback = '(unknown agent)';
       return Object.fromEntries(ids.map((id) => [id, fallback]));
     }
@@ -511,12 +524,14 @@ export class AgentsPersistenceService {
         take: limit,
       });
     } catch (error) {
-      this.logger.error('Failed to list reminders', {
-        filter,
-        take: limit,
-        threadId,
-        error: error instanceof Error ? { name: error.name, message: error.message } : error,
-      });
+      this.logger.error(
+        `Failed to list reminders${this.format({
+          filter,
+          take: limit,
+          threadId,
+          error: this.errorInfo(error),
+        })}`,
+      );
       throw error;
     }
   }

@@ -1,6 +1,6 @@
 import 'reflect-metadata';
 
-import { ValidationPipe } from '@nestjs/common';
+import { Logger, ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { FastifyAdapter } from '@nestjs/platform-fastify';
 import type { FastifyInstance, FastifyTypeProviderDefault } from 'fastify';
@@ -8,13 +8,14 @@ import type { IncomingHttpHeaders } from 'http';
 // CORS is enabled via Nest's app.enableCors to avoid type-provider mismatches
 
 import { Logger as PinoLogger } from 'nestjs-pino';
-import { LoggerService } from './core/services/logger.service';
 
 import { AppModule } from './bootstrap/app.module';
 import { ConfigService } from './core/services/config.service';
 import { GraphSocketGateway } from './gateway/graph.socket.gateway';
 import { LiveGraphRuntime } from './graph';
 import { ContainerTerminalGateway } from './infra/container/terminal.gateway';
+
+const bootstrapLogger = new Logger('Bootstrap');
 
 const sanitizeHeaders = (headers: IncomingHttpHeaders | undefined): Record<string, unknown> => {
   if (!headers) return {};
@@ -55,17 +56,12 @@ async function bootstrap() {
   const pinoLogger = pinoLoggerResolved;
   app.useLogger(pinoLogger);
 
-  const loggerResolved = app.get(LoggerService) as unknown;
-  if (!(loggerResolved instanceof LoggerService)) {
-    throw new Error('Failed to resolve LoggerService from application context');
-  }
-  const logger = loggerResolved;
-  logger.info('Nest application created');
+  bootstrapLogger.log('Nest application created');
 
   app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
   app.enableCors(corsOptions);
   await app.init();
-  logger.info('Nest application initialized');
+  bootstrapLogger.log('Nest application initialized');
 
   const terminalGateway = app.get(ContainerTerminalGateway);
   terminalGateway.registerRoutes(fastifyInstance);
@@ -77,23 +73,25 @@ async function bootstrap() {
   // Start Fastify HTTP server
   const PORT = Number(process.env.PORT) || 3010;
   await fastifyInstance.listen({ port: PORT, host: '0.0.0.0' });
-  logger.info(`HTTP server listening on :${PORT}`);
+  bootstrapLogger.log(`HTTP server listening on :${PORT}`);
 
   fastifyInstance.server.on('upgrade', (req, _socket, _head) => {
-    logger.info('HTTP upgrade received', {
-      url: req.url,
-      headers: sanitizeHeaders(req.headers),
-    });
+    bootstrapLogger.log(
+      `HTTP upgrade received ${JSON.stringify({
+        url: req.url,
+        headers: sanitizeHeaders(req.headers),
+      })}`,
+    );
   });
 
   // Load graph
   const liveGraphRuntime = app.get(LiveGraphRuntime);
-  logger.info('Loading live graph runtime...');
+  bootstrapLogger.log('Loading live graph runtime...');
   await liveGraphRuntime.load();
 
   // Tmp disable graceful shutdown because shutdown signal needs to be passed to all async jobs
   //   const shutdown = async () => {
-  //     logger.info('Shutting down...');
+  //     bootstrapLogger.log('Shutting down...');
 
   //     const cleanup = app.get(ContainerCleanupService);
   //     cleanup?.stop();
@@ -107,21 +105,15 @@ async function bootstrap() {
 }
 
 bootstrap().catch((error: unknown) => {
-  const payload: Record<string, unknown> =
+  const context =
     error instanceof Error
       ? {
-          level: 'error',
-          msg: 'Bootstrap failure',
           name: error.name,
           message: error.message,
           stack: error.stack,
         }
-      : {
-          level: 'error',
-          msg: 'Bootstrap failure',
-          error,
-        };
-  console.error(JSON.stringify(payload));
+      : { error };
+  bootstrapLogger.error(`Bootstrap failure ${JSON.stringify(context)}`);
   process.exit(1);
 });
 

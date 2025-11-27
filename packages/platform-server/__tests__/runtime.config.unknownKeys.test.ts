@@ -1,6 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
-import { LoggerService } from '../src/core/services/logger.service.js';
 import { GraphRepository } from '../src/graph/graph.repository.js';
 import { LiveGraphRuntime } from '../src/graph-core/liveGraph.manager';
 import { TemplateRegistry } from '../src/graph-core/templateRegistry';
@@ -12,12 +11,11 @@ import { MemoryNode, MemoryNodeStaticConfigSchema } from '../src/nodes/memory/me
 const makeRuntime = (
   resolveImpl?: (input: unknown) => Promise<{ output: unknown; report: unknown }>,
 ) => {
-  const logger = new LoggerService();
   const moduleRef: ModuleRef = {
     // Provide DI-aware create for MemoryNode
     create: (Cls: any) => {
-      if (Cls === MemoryNode) return new MemoryNode({} as any, logger);
-      return new Cls(logger);
+      if (Cls === MemoryNode) return new MemoryNode(moduleRef as any);
+      return new Cls();
     },
   } as any;
   const templates = new TemplateRegistry(moduleRef);
@@ -36,7 +34,7 @@ const makeRuntime = (
     resolve: async (input: unknown) =>
       (resolveImpl ? resolveImpl(input) : ({ output: input, report: {} as unknown })),
   };
-  const runtime = new LiveGraphRuntime(logger, templates, new StubRepo(), moduleRef as any, resolver as any);
+  const runtime = new LiveGraphRuntime(templates, new StubRepo(), moduleRef as any, resolver as any);
   return runtime;
 };
 

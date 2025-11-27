@@ -2,7 +2,6 @@ import { Test } from '@nestjs/testing';
 import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
 
 import { AgentNode } from '../src/nodes/agent/agent.node';
-import { LoggerService } from '../src/core/services/logger.service';
 import { ConfigService } from '../src/core/services/config.service';
 import { AgentsPersistenceService } from '../src/agents/agents.persistence.service';
 import { LLMProvisioner } from '../src/llm/provisioners/llm.provisioner';
@@ -55,7 +54,6 @@ describe('Agent thread model binding', () => {
 
     moduleRef = await Test.createTestingModule({
       providers: [
-        LoggerService,
         { provide: ConfigService, useValue: baseConfig },
         { provide: LLMProvisioner, useClass: StubProvisioner },
         AgentNode,

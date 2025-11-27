@@ -1,15 +1,14 @@
 import type { LLMContext, LLMState } from '../types';
-import { Inject, Injectable } from '@nestjs/common';
+import { Inject, Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../../core/services/prisma.service';
 import { ConversationStateRepository } from '../repositories/conversationState.repository';
 import { PersistenceBaseLLMReducer } from './persistenceBase.llm.reducer';
 import { toPrismaJsonValue } from '../services/messages.serialization';
-import { LoggerService } from '../../core/services/logger.service';
 
 @Injectable()
 export class SaveLLMReducer extends PersistenceBaseLLMReducer {
+  private readonly logger = new Logger(SaveLLMReducer.name);
   constructor(
-    @Inject(LoggerService) private logger: LoggerService,
     @Inject(PrismaService) private prismaService: PrismaService,
   ) {
     super();
@@ -24,7 +23,11 @@ export class SaveLLMReducer extends PersistenceBaseLLMReducer {
     try {
       await repo.upsert({ threadId: ctx.threadId, nodeId, state: serialized == null ? {} : serialized });
     } catch (e) {
-      this.logger.error('SaveLLMReducer: conversation state persist failed: %s', (e as Error)?.message || String(e));
+      const errorInfo =
+        e instanceof Error ? { name: e.name, message: e.message, stack: e.stack } : { message: String(e) };
+      this.logger.error(
+        `SaveLLMReducer: conversation state persist failed ${JSON.stringify({ threadId: ctx.threadId, nodeId, error: errorInfo })}`,
+      );
       // Propagate error to enforce fail-fast
       throw e;
     }

@@ -1,6 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { SlackAdapter } from '../src/messaging/slack/slack.adapter';
-import { LoggerService } from '../src/core/services/logger.service';
 
 vi.mock('@slack/web-api', () => {
   type ChatPostMessageArguments = { channel: string; text: string; thread_ts?: string };
@@ -18,7 +17,7 @@ vi.mock('@slack/web-api', () => {
 });
 
 describe('SlackAdapter', () => {
-  const adapter = new SlackAdapter(new LoggerService());
+  const adapter = new SlackAdapter();
   beforeEach(() => {
     vi.resetAllMocks();
   });

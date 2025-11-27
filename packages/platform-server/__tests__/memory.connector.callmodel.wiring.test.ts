@@ -1,7 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { SystemMessage, ResponseMessage } from '@agyn/llm';
 import { CallModelLLMReducer } from '../src/llm/reducers/callModel.llm.reducer';
-import { LoggerService } from '../src/core/services/logger.service';
 import { createRunEventsStub, createEventsBusStub } from './helpers/runEvents.stub';
 
 class FakeLLM {
@@ -15,7 +14,7 @@ class FakeLLM {
 describe('CallModel memory injection', () => {
   it('inserts memory after system; robust to summary presence', async () => {
     const llm = new FakeLLM();
-    const reducer = new CallModelLLMReducer(new LoggerService(), createRunEventsStub() as any, createEventsBusStub() as any);
+    const reducer = new CallModelLLMReducer(createRunEventsStub() as any, createEventsBusStub() as any);
     reducer.init({ llm: llm as any, model: 'x', systemPrompt: 'SYS', tools: [], memoryProvider: async () => ({ msg: SystemMessage.fromText('MEM'), place: 'after_system' }) });
     // Explicitly avoid setting summary truthy, but assertions should be resilient
     await reducer.invoke(
@@ -32,7 +31,7 @@ describe('CallModel memory injection', () => {
 
   it('appends memory message at end when placement=last_message with no summary', async () => {
     const llm = new FakeLLM();
-    const reducer = new CallModelLLMReducer(new LoggerService(), createRunEventsStub() as any, createEventsBusStub() as any);
+    const reducer = new CallModelLLMReducer(createRunEventsStub() as any, createEventsBusStub() as any);
     reducer.init({ llm: llm as any, model: 'x', systemPrompt: 'SYS', tools: [], memoryProvider: async () => ({ msg: SystemMessage.fromText('MEM'), place: 'last_message' }) });
     await reducer.invoke(
       { messages: [SystemMessage.fromText('S')], context: { messageIds: [], memory: [] } } as any,
@@ -43,7 +42,7 @@ describe('CallModel memory injection', () => {
 
   it('orders with summary present: after_system -> [System, Human(summary), System(memory), ...messages]', async () => {
     const llm = new FakeLLM();
-    const reducer = new CallModelLLMReducer(new LoggerService(), createRunEventsStub() as any, createEventsBusStub() as any);
+    const reducer = new CallModelLLMReducer(createRunEventsStub() as any, createEventsBusStub() as any);
     reducer.init({ llm: llm as any, model: 'x', systemPrompt: 'SYS', tools: [], memoryProvider: async () => ({ msg: SystemMessage.fromText('MEM'), place: 'after_system' }) });
     await reducer.invoke(
       { messages: [SystemMessage.fromText('S1')], summary: 'SUM', context: { messageIds: [], memory: [] } } as any,
@@ -59,7 +58,7 @@ describe('CallModel memory injection', () => {
 
   it('orders with summary present: last_message -> [System, Human(summary), ...messages, System(memory)]', async () => {
     const llm = new FakeLLM();
-    const reducer = new CallModelLLMReducer(new LoggerService(), createRunEventsStub() as any, createEventsBusStub() as any);
+    const reducer = new CallModelLLMReducer(createRunEventsStub() as any, createEventsBusStub() as any);
     reducer.init({ llm: llm as any, model: 'x', systemPrompt: 'SYS', tools: [], memoryProvider: async () => ({ msg: SystemMessage.fromText('MEM'), place: 'last_message' }) });
     await reducer.invoke(
       { messages: [SystemMessage.fromText('S1')], summary: 'SUM', context: { messageIds: [], memory: [] } } as any,

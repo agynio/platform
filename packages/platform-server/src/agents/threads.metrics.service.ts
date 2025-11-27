@@ -1,13 +1,25 @@
-import { Inject, Injectable } from '@nestjs/common';
+import { Inject, Injectable, Logger } from '@nestjs/common';
 import type { PrismaClient } from '@prisma/client';
 import { PrismaService } from '../core/services/prisma.service';
-import { LoggerService } from '../core/services/logger.service';
 
 export type ThreadMetrics = { remindersCount: number; containersCount: number; activity: 'working' | 'waiting' | 'idle'; runsCount?: number };
 
 @Injectable()
 export class ThreadsMetricsService {
-  constructor(@Inject(PrismaService) private readonly prismaService: PrismaService, @Inject(LoggerService) private readonly logger: LoggerService) {}
+  private readonly logger = new Logger(ThreadsMetricsService.name);
+
+  constructor(@Inject(PrismaService) private readonly prismaService: PrismaService) {}
+
+  private format(context?: Record<string, unknown>): string {
+    return context ? ` ${JSON.stringify(context)}` : '';
+  }
+
+  private errorInfo(error: unknown): Record<string, unknown> {
+    if (error instanceof Error) {
+      return { name: error.name, message: error.message, stack: error.stack };
+    }
+    return { message: String(error) };
+  }
 
   private get prisma(): PrismaClient { return this.prismaService.getClient(); }
 
@@ -71,10 +83,11 @@ export class ThreadsMetricsService {
         out[r.root_id] = { remindersCount: r.reminders_count, containersCount: r.containers_count, activity };
       }
       return out;
-    } catch (e) {
+    } catch (error) {
       // Log SQL aggregation errors; do not fall back to alternate logic
-      const err = e as Error;
-      this.logger.error('ThreadsMetricsService SQL aggregation error', { ids, error: err?.message || String(e) });
+      this.logger.error(
+        `ThreadsMetricsService SQL aggregation error${this.format({ ids, error: this.errorInfo(error) })}`,
+      );
       return {};
     }
   }

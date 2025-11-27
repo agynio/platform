@@ -3,7 +3,7 @@ import { PrismaClient, Prisma } from '@prisma/client';
 import { PostgresMemoryEntitiesRepository } from '../src/nodes/memory/memory.repository';
 import { MemoryService } from '../src/nodes/memory/memory.service';
 import { UnifiedMemoryFunctionTool as UnifiedMemoryTool } from '../src/nodes/tools/memory/memory.tool';
-import { LoggerService } from '../src/core/services/logger.service.js';
+import { Logger } from '@nestjs/common';
 
 const URL = process.env.AGENTS_DATABASE_URL;
 const shouldRunDbTests = process.env.RUN_DB_TESTS === 'true' && !!URL;
@@ -32,7 +32,7 @@ maybeDescribe('Memory tool adapters', () => {
       const svc = new MemoryService(new PostgresMemoryEntitiesRepository(db as any), { get: async () => null } as any);
       return svc.forMemory('nodeX', opts.threadId ? 'perThread' : 'global', opts.threadId) as any;
     };
-    const logger = new LoggerService();
+    const logger = new Logger('MemoryToolAdaptersTest');
     const adapter = new UnifiedMemoryTool({ getDescription: () => '', getName: () => 'memory', getMemoryFactory: () => serviceFactory, logger });
     const name = adapter.name;
     expect(name).toBe('memory');
@@ -61,7 +61,7 @@ maybeDescribe('Memory tool adapters', () => {
       const svc = new MemoryService(new PostgresMemoryEntitiesRepository(db as any), { get: async () => null } as any);
       return svc.forMemory('nodeX', opts.threadId ? 'perThread' : 'global', opts.threadId) as any;
     };
-    const logger = new LoggerService();
+    const logger = new Logger('MemoryToolAdaptersTest');
 
     // ENOTMEM: do not wire memory
     const unconnected = new UnifiedMemoryTool({ getDescription: () => '', getName: () => 'memory', getMemoryFactory: () => undefined, logger });

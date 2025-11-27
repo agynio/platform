@@ -1,4 +1,4 @@
-import { Inject, Injectable } from '@nestjs/common';
+import { Inject, Injectable, Logger } from '@nestjs/common';
 import Docker, { ContainerCreateOptions, Exec } from 'dockerode';
 import { PassThrough, Writable } from 'node:stream';
 import { ContainerHandle } from './container.handle';
@@ -12,7 +12,6 @@ import {
 import { ContainerRegistry } from './container.registry';
 import { mapInspectMounts } from './container.mounts';
 import { createUtf8Collector, demuxDockerMultiplex } from './containerStream.util';
-import { LoggerService } from '../../core/services/logger.service';
 
 const DEFAULT_IMAGE = 'mcr.microsoft.com/vscode/devcontainers/base';
 
@@ -57,10 +56,10 @@ export type ContainerOpts = {
  */
 @Injectable()
 export class ContainerService {
+  private readonly logger = new Logger(ContainerService.name);
   private docker: Docker;
   constructor(
     @Inject(ContainerRegistry) private registry: ContainerRegistry,
-    @Inject(LoggerService) private readonly logger: LoggerService,
   ) {
     this.docker = new Docker({
       ...(process.env.DOCKER_SOCKET
@@ -71,27 +70,58 @@ export class ContainerService {
     });
   }
 
+  private format(context?: Record<string, unknown>): string {
+    return context ? ` ${JSON.stringify(context)}` : '';
+  }
+
+  private log(message: string, context?: Record<string, unknown>): void {
+    this.logger.log(`${message}${this.format(context)}`);
+  }
+
+  private debug(message: string, context?: Record<string, unknown>): void {
+    this.logger.debug(`${message}${this.format(context)}`);
+  }
+
+  private warn(message: string, context?: Record<string, unknown>): void {
+    this.logger.warn(`${message}${this.format(context)}`);
+  }
+
+  private error(message: string, context?: Record<string, unknown>): void {
+    this.logger.error(`${message}${this.format(context)}`);
+  }
+
+  private errorContext(error: unknown): Record<string, unknown> {
+    if (error instanceof Error) {
+      return {
+        name: error.name,
+        message: error.message,
+        stack: error.stack,
+      };
+    }
+    return { error };
+  }
+
   /** Public helper to touch last-used timestamp for a container */
   async touchLastUsed(containerId: string): Promise<void> {
     try {
       await this.registry?.updateLastUsed(containerId, new Date());
     } catch (e: unknown) {
       const msg = e && typeof e === 'object' && 'message' in e ? String((e as Error).message) : String(e);
-      this.logger.debug(`touchLastUsed failed for cid=${containerId.substring(0, 12)} ${msg}`);
+      this.debug(`touchLastUsed failed for cid=${containerId.substring(0, 12)} ${msg}`);
     }
   }
 
   /** Pull an image; if platform is specified, pull even when image exists to ensure correct arch. */
   async ensureImage(image: string, platform?: Platform): Promise<void> {
-    this.logger.info(`Ensuring image '${image}' is available locally`);
+    this.log(`Ensuring image '${image}' is available locally`);
     // Check if image exists
     try {
       await this.docker.getImage(image).inspect();
-      this.logger.debug(`Image '${image}' already present`);
+      this.debug(`Image '${image}' already present`);
       // When platform is provided, still pull to ensure the desired arch variant is present.
       if (!platform) return;
     } catch {
-      this.logger.info(`Image '${image}' not found locally. Pulling...`);
+      this.log(`Image '${image}' not found locally. Pulling...`);
     }
 
     await new Promise<void>((resolve, reject) => {
@@ -103,14 +133,14 @@ export class ContainerService {
           stream,
           (doneErr?: unknown) => {
             if (doneErr) return reject(doneErr);
-            this.logger.info(`Finished pulling image '${image}'`);
+            this.log(`Finished pulling image '${image}'`);
             resolve();
           },
           (event: { status?: string; id?: string }) => {
             if (event?.status && event?.id) {
-              this.logger.debug(`${event.id}: ${event.status}`);
+              this.debug(`${event.id}: ${event.status}`);
             } else if (event?.status) {
-              this.logger.debug(event.status);
+              this.debug(event.status);
             }
           },
         );
@@ -174,13 +204,13 @@ export class ContainerService {
       Object.assign(createOptions, rest);
     }
 
-    this.logger.info(
+    this.log(
       `Creating container from '${optsWithDefaults.image}'${optsWithDefaults.name ? ` name=${optsWithDefaults.name}` : ''}`,
     );
     const container = await this.docker.createContainer(createOptions);
     await container.start();
     const inspect = await container.inspect();
-    this.logger.info(`Container started cid=${inspect.Id.substring(0, 12)} status=${inspect.State?.Status}`);
+    this.log(`Container started cid=${inspect.Id.substring(0, 12)} status=${inspect.State?.Status}`);
     // Persist container start in registry (workspace and DinD)
     if (this.registry) {
       try {
@@ -200,7 +230,7 @@ export class ContainerService {
           mounts: mounts.length ? mounts : undefined,
         });
       } catch (e) {
-        this.logger.error('Failed to register container start', e);
+        this.error('Failed to register container start', { error: this.errorContext(e) });
       }
     }
     return new ContainerHandle(this, inspect.Id);
@@ -240,7 +270,7 @@ export class ContainerService {
         ? Object.entries(options.env).map(([k, v]) => `${k}=${v}`)
         : undefined;
 
-    this.logger.debug(
+    this.debug(
       `Exec in container cid=${inspectData.Id.substring(0, 12)} logToPid1=${logToPid1}: ${Cmd.join(' ')}`,
     );
     // Update last-used before starting exec
@@ -263,7 +293,7 @@ export class ContainerService {
         options?.signal,
         options?.onOutput,
       );
-      this.logger.debug(
+      this.debug(
         `Exec finished cid=${inspectData.Id.substring(0, 12)} exitCode=${exitCode} stdoutBytes=${stdout.length} stderrBytes=${stderr.length}`,
       );
       return { stdout, stderr, exitCode };
@@ -272,7 +302,7 @@ export class ContainerService {
       if (isTimeout && options?.killOnTimeout) {
         // Gracefully stop the container to ensure process-tree cleanup.
         try {
-          this.logger.warn('Exec timeout detected; stopping container', {
+          this.warn('Exec timeout detected; stopping container', {
             containerId,
             timeoutMs: options?.timeoutMs,
             idleTimeoutMs: options?.idleTimeoutMs,
@@ -280,7 +310,10 @@ export class ContainerService {
           await this.stopContainer(containerId, 10);
         } catch (stopErr) {
           // Log but do not swallow original timeout error
-          this.logger.error('Failed to stop container after exec timeout', { containerId, error: stopErr });
+          this.error('Failed to stop container after exec timeout', {
+            containerId,
+            error: this.errorContext(stopErr),
+          });
         }
       }
       throw err;
@@ -317,7 +350,7 @@ export class ContainerService {
     const tty = options?.tty ?? false; // Keep false for clean protocol framing
     const demux = options?.demuxStderr ?? true;
 
-    this.logger.debug(
+    this.debug(
       `Interactive exec in container cid=${inspectData.Id.substring(0, 12)} tty=${tty} demux=${demux}: ${Cmd.join(' ')}`,
     );
     // Update last-used before starting interactive exec
@@ -509,7 +542,7 @@ export class ContainerService {
         streamRef = stream;
         if (!exec.inspect) {
           // Very unlikely, but guard.
-          this.logger.error('Exec instance missing inspect method');
+          this.error('Exec instance missing inspect method');
         }
 
         // Try to determine if we should demux. We'll inspect later.
@@ -526,7 +559,10 @@ export class ContainerService {
                   try {
                     onOutput('stdout', buf);
                   } catch (cbErr) {
-                    this.logger.warn('exec onOutput callback failed', { source: 'stdout', error: cbErr });
+                    this.warn('exec onOutput callback failed', {
+                      source: 'stdout',
+                      error: this.errorContext(cbErr),
+                    });
                   }
                 }
                 stdoutCollector.append(buf);
@@ -542,7 +578,10 @@ export class ContainerService {
                       try {
                         onOutput('stdout', buf);
                       } catch (cbErr) {
-                        this.logger.warn('exec onOutput callback failed', { source: 'stdout', error: cbErr });
+                        this.warn('exec onOutput callback failed', {
+                          source: 'stdout',
+                          error: this.errorContext(cbErr),
+                        });
                       }
                     }
                     stdoutCollector.append(buf);
@@ -559,7 +598,10 @@ export class ContainerService {
                       try {
                         onOutput('stderr', buf);
                       } catch (cbErr) {
-                        this.logger.warn('exec onOutput callback failed', { source: 'stderr', error: cbErr });
+                        this.warn('exec onOutput callback failed', {
+                          source: 'stderr',
+                          error: this.errorContext(cbErr),
+                        });
                       }
                     }
                     stderrCollector.append(buf);
@@ -684,17 +726,17 @@ export class ContainerService {
 
   /** Stop a container by docker id (gracefully). */
   async stopContainer(containerId: string, timeoutSec = 10): Promise<void> {
-    this.logger.info(`Stopping container cid=${containerId.substring(0, 12)} (timeout=${timeoutSec}s)`);
+    this.log(`Stopping container cid=${containerId.substring(0, 12)} (timeout=${timeoutSec}s)`);
     const c = this.docker.getContainer(containerId);
     try {
       await c.stop({ t: timeoutSec });
     } catch (e: unknown) {
       const sc = typeof e === 'object' && e && 'statusCode' in e ? (e as { statusCode?: number }).statusCode : undefined;
       if (sc === 304) {
-        this.logger.debug(`Container already stopped cid=${containerId.substring(0, 12)}`);
+        this.debug(`Container already stopped cid=${containerId.substring(0, 12)}`);
       } else if (sc === 409) {
         // Conflict typically indicates removal already in progress; treat as benign
-        this.logger.warn(`Container stop conflict (likely removing) cid=${containerId.substring(0, 12)}`);
+        this.warn(`Container stop conflict (likely removing) cid=${containerId.substring(0, 12)}`);
       } else {
         throw e;
       }
@@ -709,7 +751,7 @@ export class ContainerService {
     const opts = typeof options === 'boolean' ? { force: options } : options;
     const force = opts?.force ?? false;
     const removeVolumes = opts?.removeVolumes ?? false;
-    this.logger.info(
+    this.log(
       `Removing container cid=${containerId.substring(0, 12)} force=${force} removeVolumes=${removeVolumes}`,
     );
     const container = this.docker.getContainer(containerId);
@@ -718,9 +760,9 @@ export class ContainerService {
     } catch (e: unknown) {
       const sc = typeof e === 'object' && e && 'statusCode' in e ? (e as { statusCode?: number }).statusCode : undefined;
       if (sc === 404) {
-        this.logger.debug(`Container already removed cid=${containerId.substring(0, 12)}`);
+        this.debug(`Container already removed cid=${containerId.substring(0, 12)}`);
       } else if (sc === 409) {
-        this.logger.warn(`Container removal conflict cid=${containerId.substring(0, 12)} (likely removing)`);
+        this.warn(`Container removal conflict cid=${containerId.substring(0, 12)} (likely removing)`);
       } else {
         throw e;
       }
@@ -754,7 +796,7 @@ export class ContainerService {
     options?: { all?: boolean },
   ): Promise<ContainerHandle[]> {
     const labelFilters = Object.entries(labels).map(([k, v]) => `${k}=${v}`);
-    this.logger.info(`Listing containers by labels all=${options?.all ?? false} filters=${labelFilters.join(',')}`);
+    this.log(`Listing containers by labels all=${options?.all ?? false} filters=${labelFilters.join(',')}`);
     // dockerode returns Docker.ContainerInfo[]; type explicitly for comparator safety
     const list: Docker.ContainerInfo[] = await this.docker.listContainers({
       all: options?.all ?? false,
@@ -781,14 +823,14 @@ export class ContainerService {
 
   async removeVolume(volumeName: string, options?: { force?: boolean }): Promise<void> {
     const force = options?.force ?? false;
-    this.logger.info(`Removing volume name=${volumeName} force=${force}`);
+    this.log(`Removing volume name=${volumeName} force=${force}`);
     const volume = this.docker.getVolume(volumeName);
     try {
       await volume.remove({ force });
     } catch (e: unknown) {
       const sc = typeof e === 'object' && e && 'statusCode' in e ? (e as { statusCode?: number }).statusCode : undefined;
       if (sc === 404) {
-        this.logger.debug(`Volume already removed name=${volumeName}`);
+        this.debug(`Volume already removed name=${volumeName}`);
       } else {
         throw e;
       }
@@ -824,7 +866,7 @@ export class ContainerService {
     if (inspectData.State?.Running !== true) {
       throw new Error(`Container '${containerId}' is not running`);
     }
-    this.logger.debug(
+    this.debug(
       `putArchive into container cid=${inspectData.Id.substring(0, 12)} path=${options?.path || ''} bytes=${Buffer.isBuffer(data) ? data.length : 'stream'}`,
     );
     if (Buffer.isBuffer(data)) await container.putArchive(data, options);

@@ -3,7 +3,6 @@ import { Test } from '@nestjs/testing';
 import { Injectable } from '@nestjs/common';
 
 import { AgentNode } from '../src/nodes/agent/agent.node';
-import { LoggerService } from '../src/core/services/logger.service';
 import { ConfigService, configSchema } from '../src/core/services/config.service';
 import { LLMProvisioner } from '../src/llm/provisioners/llm.provisioner';
 import { RunSignalsRegistry } from '../src/agents/run-signals.service';
@@ -112,7 +111,6 @@ const createAgentFixture = async () => {
 
   const moduleRef = await Test.createTestingModule({
     providers: [
-      LoggerService,
       {
         provide: ConfigService,
         useValue: new ConfigService().init(

@@ -3,7 +3,6 @@ import { z } from 'zod';
 import { TemplateRegistry } from '../../graph-core/templateRegistry';
 import type { TemplateNodeSchema } from '../../shared/types/graph.types';
 import { LiveGraphRuntime } from '../../graph-core/liveGraph.manager';
-import { LoggerService } from '../../core/services/logger.service';
 import type { NodeStatusState } from '../../nodes/base/Node';
 import { NodeStateService } from '../nodeState.service';
 
@@ -12,7 +11,6 @@ export class GraphController {
   constructor(
     @Inject(TemplateRegistry) private readonly templateRegistry: TemplateRegistry,
     @Inject(LiveGraphRuntime) private readonly runtime: LiveGraphRuntime,
-    @Inject(LoggerService) private readonly logger: LoggerService,
     @Inject(NodeStateService) private readonly nodeState: NodeStateService,
   ) {}
 

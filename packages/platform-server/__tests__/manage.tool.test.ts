@@ -7,7 +7,6 @@ import { ResponseMessage, AIMessage } from '@agyn/llm';
 import { AgentsPersistenceService } from '../src/agents/agents.persistence.service';
 import { RunSignalsRegistry } from '../src/agents/run-signals.service';
 import { ConfigService, configSchema } from '../src/core/services/config.service';
-import { LoggerService } from '../src/core/services/logger.service.js';
 import { Signal } from '../src/signal';
 import { TemplateRegistry } from '../src/graph-core/templateRegistry';
 import { LiveGraphRuntime } from '../src/graph-core/liveGraph.manager';
@@ -57,7 +56,6 @@ async function createHarness(options: { persistence?: AgentsPersistenceService }
 
   const module = await Test.createTestingModule({
     providers: [
-      LoggerService,
       {
         provide: ConfigService,
         useValue: new ConfigService().init(
@@ -221,7 +219,6 @@ describe('ManageTool unit', () => {
   it('send_message: surfaces child agent failure', async () => {
     const module = await Test.createTestingModule({
       providers: [
-        LoggerService,
         {
           provide: ConfigService,
           useValue: new ConfigService().init(
@@ -251,7 +248,6 @@ describe('ManageTool unit', () => {
 
     const failingAgent = new ThrowingAgent(
       module.get(ConfigService),
-      module.get(LoggerService),
       module.get(LLMProvisioner),
       module.get(ModuleRef),
     );
@@ -270,7 +266,6 @@ describe('ManageTool graph wiring', () => {
   it('connect ManageTool to agents via agent port and expose their titles', async () => {
     const module = await Test.createTestingModule({
       providers: [
-        LoggerService,
         {
           provide: ConfigService,
           useValue: new ConfigService().init(
@@ -310,7 +305,6 @@ describe('ManageTool graph wiring', () => {
     const runtimeModule = await Test.createTestingModule({
       providers: [
         LiveGraphRuntime,
-        LoggerService,
         { provide: TemplateRegistry, useValue: registry },
         {
           provide: GraphRepository,

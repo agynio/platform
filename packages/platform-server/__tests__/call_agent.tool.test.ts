@@ -1,6 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
 import { CallAgentTool } from '../src/nodes/tools/call_agent/call_agent.node';
-import { LoggerService } from '../src/core/services/logger.service.js';
 import { ResponseMessage, AIMessage, HumanMessage } from '@agyn/llm';
 import { AgentsPersistenceService } from '../src/agents/agents.persistence.service';
 import { StubPrismaService, createPrismaStub } from './helpers/prisma.stub';
@@ -42,7 +41,6 @@ const createPersistence = (linking?: CallAgentLinkingService) => {
   const eventsBusStub = createEventsBusStub();
   const svc = new AgentsPersistenceService(
     new StubPrismaService(createPrismaStub()) as any,
-    new LoggerService(),
     metricsStub,
     templateRegistryStub,
     graphRepoStub,

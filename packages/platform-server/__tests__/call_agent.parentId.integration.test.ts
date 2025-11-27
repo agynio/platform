@@ -1,5 +1,4 @@
 import { describe, it, expect } from 'vitest';
-import { LoggerService } from '../src/core/services/logger.service';
 import { CallAgentTool } from '../src/nodes/tools/call_agent/call_agent.node';
 import { ResponseMessage, HumanMessage } from '@agyn/llm';
 import { AgentsPersistenceService } from '../src/agents/agents.persistence.service';
@@ -30,7 +29,6 @@ describe('call_agent integration: creates child thread with parentId', () => {
     const eventsBus = createEventsBusStub();
     const persistence = new AgentsPersistenceService(
       new StubPrismaService(stub) as any,
-      new LoggerService(),
       metricsStub,
       templateRegistryStub,
       graphRepoStub,

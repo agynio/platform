@@ -1,6 +1,5 @@
 import { describe, it, expect } from 'vitest';
 import { AgentsPersistenceService } from '../src/agents/agents.persistence.service';
-import { LoggerService } from '../src/core/services/logger.service';
 import { StubPrismaService, createPrismaStub } from './helpers/prisma.stub';
 import { createRunEventsStub } from './helpers/runEvents.stub';
 import { createEventsBusStub } from './helpers/eventsBus.stub';
@@ -36,7 +35,6 @@ describe('AgentsPersistenceService threads filters and updates', () => {
     const eventsBusStub = createEventsBusStub();
     const svc = new AgentsPersistenceService(
       new StubPrismaService(stub) as any,
-      new LoggerService(),
       metricsStub,
       templateRegistryStub,
       graphRepoStub,

@@ -1,20 +1,17 @@
 import { LLM } from '@agyn/llm';
 import OpenAI from 'openai';
 import { ConfigService } from '../../core/services/config.service';
-import { LoggerService } from '../../core/services/logger.service';
 import { LLMProvisioner } from './llm.provisioner';
-import { Inject, Injectable } from '@nestjs/common';
+import { Inject, Injectable, Logger } from '@nestjs/common';
 
 type ProvisionResult = { apiKey?: string; baseUrl?: string };
 
 @Injectable()
 export class LiteLLMProvisioner extends LLMProvisioner {
+  private readonly logger = new Logger(LiteLLMProvisioner.name);
   private llm?: LLM;
 
-  constructor(
-    @Inject(ConfigService) private cfg: ConfigService,
-    @Inject(LoggerService) private logger: LoggerService,
-  ) {
+  constructor(@Inject(ConfigService) private cfg: ConfigService) {
     super();
   }
 
@@ -95,11 +92,15 @@ export class LiteLLMProvisioner extends LLMProvisioner {
       } catch (e: unknown) {
         const msg = e && typeof e === 'object' && 'message' in e ? (e as { message?: string }).message : String(e);
         if (attempt < maxAttempts) {
-          this.logger.debug('LiteLLM provisioning attempt %d failed: %s', attempt, msg || String(e));
+          this.logger.debug(
+            `LiteLLM provisioning attempt failed ${JSON.stringify({ attempt, error: msg || String(e) })}`,
+          );
           await this.delay(baseDelayMs * Math.pow(2, attempt - 1));
           continue;
         }
-        this.logger.error('LiteLLM provisioning failed after %d attempts', maxAttempts);
+        this.logger.error(
+          `LiteLLM provisioning failed after retries ${JSON.stringify({ attempts: maxAttempts })}`,
+        );
         return {};
       }
     }
@@ -113,7 +114,9 @@ export class LiteLLMProvisioner extends LLMProvisioner {
     baseDelayMs: number,
   ): Promise<boolean> {
     const text = await this.safeReadText(resp);
-    this.logger.error('LiteLLM provisioning failed: status=%s, body=%s', String(resp.status), this.redact(text));
+    this.logger.error(
+      `LiteLLM provisioning failed ${JSON.stringify({ status: String(resp.status), body: this.redact(text) })}`,
+    );
     const shouldRetry = resp.status >= 500 && attempt < maxAttempts;
     if (shouldRetry) {
       await this.delay(baseDelayMs * Math.pow(2, attempt - 1));

@@ -1,12 +1,10 @@
 import { describe, it, expect, vi } from 'vitest';
 import { ThreadsMetricsService } from '../src/agents/threads.metrics.service';
 import { GraphSocketGateway } from '../src/gateway/graph.socket.gateway';
-import { LoggerService } from '../src/core/services/logger.service';
 import type { PrismaService } from '../src/core/services/prisma.service';
 
 describe('SQL: WITH RECURSIVE and UUID casts', () => {
   it('getThreadsMetrics uses WITH RECURSIVE and ::uuid[] and returns expected aggregation', async () => {
-    const logger = new LoggerService();
     const captured: Array<{ strings: TemplateStringsArray; values: unknown[] }> = [];
     type FakeClient = { $queryRaw: (strings: TemplateStringsArray, ...values: unknown[]) => Promise<Array<{ root_id: string; reminders_count: number; containers_count: number; desc_working: boolean; self_working: boolean }>> };
     class FakePrismaService implements Pick<PrismaService, 'getClient'> {
@@ -22,7 +20,7 @@ describe('SQL: WITH RECURSIVE and UUID casts', () => {
         };
       }
     }
-    const svc = new ThreadsMetricsService(new FakePrismaService() as unknown as PrismaService, logger);
+    const svc = new ThreadsMetricsService(new FakePrismaService() as unknown as PrismaService);
     const rootId = '11111111-1111-1111-1111-111111111111';
     const res = await svc.getThreadsMetrics([rootId]);
 
@@ -43,7 +41,6 @@ describe('SQL: WITH RECURSIVE and UUID casts', () => {
   });
 
   it('scheduleThreadAndAncestorsMetrics uses WITH RECURSIVE and ::uuid and schedules returned ids', async () => {
-    const logger = new LoggerService();
     const root = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
     const parent = 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb';
     const leaf = 'cccccccc-cccc-cccc-cccc-cccccccccccc';
@@ -66,7 +63,8 @@ describe('SQL: WITH RECURSIVE and UUID casts', () => {
     const prismaStub = new FakePrismaService2() as unknown as PrismaService;
     const metricsStub = { getThreadsMetrics: vi.fn(async () => ({})) };
     const runtimeStub = { subscribe: () => () => {} } as any;
-    const gateway = new GraphSocketGateway(logger, runtimeStub, metricsStub as any, prismaStub);
+    const eventsBusStub = {} as any;
+    const gateway = new GraphSocketGateway(runtimeStub, metricsStub as any, prismaStub, eventsBusStub);
 
     const scheduled: string[] = [];
     // Spy/override scheduleThreadMetrics to capture scheduled ids

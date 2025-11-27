@@ -8,9 +8,8 @@ import {
   SystemMessage,
   ToolCallMessage,
 } from '@agyn/llm';
-import { Inject, Injectable, Scope } from '@nestjs/common';
+import { Inject, Injectable, Logger, Scope } from '@nestjs/common';
 import { LLMContext, LLMContextState, LLMMessage, LLMState } from '../types';
-import { LoggerService } from '../../core/services/logger.service';
 import type { LLMCallUsageMetrics, ToolCallRecord } from '../../events/run-events.service';
 import { RunEventsService } from '../../events/run-events.service';
 import { EventsBusService } from '../../events/events-bus.service';
@@ -32,19 +31,28 @@ type SequenceEntry =
 
 @Injectable({ scope: Scope.TRANSIENT })
 export class CallModelLLMReducer extends Reducer<LLMState, LLMContext> {
-  protected logger: LoggerService;
+  private readonly logger = new Logger(CallModelLLMReducer.name);
   private readonly runEvents: RunEventsService;
   private readonly eventsBus: EventsBusService;
 
   constructor(
-    @Inject(LoggerService) logger: LoggerService,
     @Inject(RunEventsService) runEvents: RunEventsService,
     @Inject(EventsBusService) eventsBus: EventsBusService,
   ) {
     super();
-    this.logger = logger;
     this.runEvents = runEvents;
     this.eventsBus = eventsBus;
+  }
+
+  private format(context?: Record<string, unknown>): string {
+    return context ? ` ${JSON.stringify(context)}` : '';
+  }
+
+  private errorInfo(error: unknown): Record<string, unknown> {
+    if (error instanceof Error) {
+      return { name: error.name, message: error.message, stack: error.stack };
+    }
+    return { message: String(error) };
   }
 
   private tools: FunctionTool[] = [];
@@ -203,7 +211,9 @@ export class CallModelLLMReducer extends Reducer<LLMState, LLMContext> {
         tools: this.tools,
       });
     } catch (error) {
-      this.logger.error('Error occurred while calling LLM', error);
+      this.logger.error(
+        `Error occurred while calling LLM${this.format({ model: this.model, error: this.errorInfo(error) })}`,
+      );
       if (error instanceof Error) throw error;
       throw new Error(String(error));
     }
@@ -414,7 +424,12 @@ export class CallModelLLMReducer extends Reducer<LLMState, LLMContext> {
       try {
         return toPrismaJsonValue(JSON.parse(JSON.stringify(value)));
       } catch (nested) {
-        this.logger.warn('Failed to serialize LLM payload for run event', err, nested);
+        this.logger.warn(
+          `Failed to serialize LLM payload for run event${this.format({
+            error: this.errorInfo(err),
+            nested: this.errorInfo(nested),
+          })}`,
+        );
         return null;
       }
     }

@@ -1,6 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { CallModelLLMReducer } from '../src/llm/reducers/callModel.llm.reducer';
-import { LoggerService } from '../src/core/services/logger.service.js';
 import { Signal } from '../src/signal';
 import { HumanMessage, ResponseMessage, SystemMessage } from '@agyn/llm';
 import { RunEventStatus } from '@prisma/client';
@@ -28,7 +27,7 @@ describe('CallModelLLMReducer termination handling', () => {
     const runEvents = createRunEventsStub();
     const eventsBus = createEventsBusStub();
     const llmCall = vi.fn();
-    const reducer = new CallModelLLMReducer(new LoggerService(), runEvents as any, eventsBus as any).init({ llm: { call: llmCall } as any, model: 'test-model', systemPrompt: 'SYS', tools: [] });
+    const reducer = new CallModelLLMReducer(runEvents as any, eventsBus as any).init({ llm: { call: llmCall } as any, model: 'test-model', systemPrompt: 'SYS', tools: [] });
 
     const state = { messages: [SystemMessage.fromText('SYS'), HumanMessage.fromText('hi')], context: { messageIds: [], memory: [] } } as any;
     const terminateSignal = new Signal();
@@ -58,7 +57,7 @@ describe('CallModelLLMReducer termination handling', () => {
       return response;
     });
 
-    const reducer = new CallModelLLMReducer(new LoggerService(), runEvents as any, eventsBus as any).init({ llm: { call: llmCall } as any, model: 'test-model', systemPrompt: 'SYS', tools: [] });
+    const reducer = new CallModelLLMReducer(runEvents as any, eventsBus as any).init({ llm: { call: llmCall } as any, model: 'test-model', systemPrompt: 'SYS', tools: [] });
 
     const state = { messages: [SystemMessage.fromText('SYS'), HumanMessage.fromText('step')], context: { messageIds: [], memory: [] } } as any;
 

@@ -1,7 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { ShellCommandNode } from '../../src/nodes/tools/shell_command/shell_command.node';
 import { ContainerService } from '../../src/infra/container/container.service';
-import { LoggerService } from '../../src/core/services/logger.service';
 import type { ContainerRegistry } from '../../src/infra/container/container.registry';
 import { isExecTimeoutError, ExecIdleTimeoutError } from '../../src/utils/execTimeout';
 import { ContainerHandle } from '../../src/infra/container/container.handle';
@@ -57,7 +56,7 @@ describe('ShellTool timeout error message', () => {
     class FakeContainer extends ContainerHandle { override async exec(_cmd: string | string[], _opts?: unknown): Promise<never> { throw timeoutErr; } }
     class FakeProvider {
       async provide(_t: string): Promise<ContainerHandle> {
-        return new FakeContainer(new ContainerService(makeRegistry(), new LoggerService()), 'fake');
+        return new FakeContainer(new ContainerService(makeRegistry()), 'fake');
       }
     }
     const provider = new FakeProvider();
@@ -81,7 +80,7 @@ describe('ShellTool timeout error message', () => {
     class FakeContainer extends ContainerHandle { override async exec(): Promise<never> { throw idleErr; } }
     class FakeProvider {
       async provide(): Promise<ContainerHandle> {
-        return new FakeContainer(new ContainerService(makeRegistry(), new LoggerService()), 'fake');
+        return new FakeContainer(new ContainerService(makeRegistry()), 'fake');
       }
     }
     const provider = new FakeProvider();
@@ -100,7 +99,7 @@ describe('ShellTool timeout error message', () => {
     class FakeContainer extends ContainerHandle { override async exec(): Promise<never> { throw idleErr; } }
     class FakeProvider {
       async provide(): Promise<ContainerHandle> {
-        return new FakeContainer(new ContainerService(makeRegistry(), new LoggerService()), 'fake');
+        return new FakeContainer(new ContainerService(makeRegistry()), 'fake');
       }
     }
     const provider = new FakeProvider();
@@ -118,7 +117,7 @@ describe('ShellTool timeout error message', () => {
 describe('ContainerService.execContainer killOnTimeout behavior', () => {
   let svc: ContainerService;
   beforeEach(() => {
-    svc = new ContainerService(makeRegistry(), new LoggerService());
+    svc = new ContainerService(makeRegistry());
   });
 
   it('stops container on timeout when killOnTimeout=true', async () => {
@@ -234,7 +233,7 @@ describe('ShellTool non-timeout error propagation', () => {
     }
     class FakeProvider {
       async provide(): Promise<ContainerHandle> {
-        return new FakeContainer(new ContainerService(makeRegistry(), new LoggerService()), 'fake');
+        return new FakeContainer(new ContainerService(makeRegistry()), 'fake');
       }
     }
     const provider = new FakeProvider();

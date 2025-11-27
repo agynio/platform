@@ -2,7 +2,6 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { PassThrough } from 'node:stream';
 import Docker from 'dockerode';
 import { ContainerService } from '../src/infra/container/container.service';
-import { LoggerService } from '../src/core/services/logger.service';
 import type { ContainerRegistry } from '../src/infra/container/container.registry';
 import { PLATFORM_LABEL } from '../src/core/constants.js';
 
@@ -56,7 +55,7 @@ describe('ContainerService platform support', () => {
   });
 
   it('threads platform to pull and createContainer and labels when set', async () => {
-    const svc = new ContainerService(makeRegistry(), new LoggerService());
+    const svc = new ContainerService(makeRegistry());
     const docker = (svc as any).docker as Docker;
 
     const pullSpy = vi.spyOn(docker, 'pull');
@@ -82,7 +81,7 @@ describe('ContainerService platform support', () => {
   });
 
   it('omits platform from pull and createContainer when undefined', async () => {
-    const svc = new ContainerService(makeRegistry(), new LoggerService());
+    const svc = new ContainerService(makeRegistry());
     const docker = (svc as any).docker as Docker;
 
     const pullSpy = vi.spyOn(docker, 'pull');
@@ -107,7 +106,7 @@ describe('ContainerService platform support', () => {
   });
 
   it('pulls even if image exists when platform is specified', async () => {
-    const svc = new ContainerService(makeRegistry(), new LoggerService());
+    const svc = new ContainerService(makeRegistry());
     const docker = (svc as any).docker as Docker;
     // Simulate image already present
     (docker.getImage as any).mockReturnValue({ inspect: vi.fn(async () => ({ Id: 'img' })) });
@@ -122,7 +121,7 @@ describe('ContainerService platform support', () => {
   });
 
   it('applies networkMode to HostConfig when provided', async () => {
-    const svc = new ContainerService(makeRegistry(), new LoggerService());
+    const svc = new ContainerService(makeRegistry());
     const docker = (svc as any).docker as Docker;
     const createSpy = vi.spyOn(docker, 'createContainer');
 
@@ -134,7 +133,7 @@ describe('ContainerService platform support', () => {
   });
 
   it('merges NetworkingConfig from createExtras', async () => {
-    const svc = new ContainerService(makeRegistry(), new LoggerService());
+    const svc = new ContainerService(makeRegistry());
     const docker = (svc as any).docker as Docker;
     const createSpy = vi.spyOn(docker, 'createContainer');
 

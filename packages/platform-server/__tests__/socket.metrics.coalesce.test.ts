@@ -1,14 +1,12 @@
 import { describe, it, expect, vi } from 'vitest';
 import { FastifyAdapter } from '@nestjs/platform-fastify';
 import { GraphSocketGateway } from '../src/gateway/graph.socket.gateway';
-import { LoggerService } from '../src/core/services/logger.service';
 
 describe('GraphSocketGateway metrics coalescing', () => {
   it('coalesces multiple schedules into single batch computation', async () => {
     vi.useFakeTimers();
     const adapter = new FastifyAdapter();
     const fastify = adapter.getInstance();
-    const logger = new LoggerService();
     const runtimeStub = { subscribe: () => () => {} } as unknown as import('../src/graph-core/liveGraph.manager').LiveGraphRuntime;
     // Stub metrics service to capture calls
     const getThreadsMetrics = vi.fn(async (_ids: string[]) =>
@@ -16,7 +14,20 @@ describe('GraphSocketGateway metrics coalescing', () => {
     );
     const metricsStub = { getThreadsMetrics } as any;
     const prismaStub = { getClient: () => ({ $queryRaw: async () => [] }) } as any;
-    const gateway = new GraphSocketGateway(logger, runtimeStub, metricsStub, prismaStub as any);
+    const eventsBusStub = {
+      subscribeToRunEvents: () => () => {},
+      subscribeToToolOutputChunk: () => () => {},
+      subscribeToToolOutputTerminal: () => () => {},
+      subscribeToReminderCount: () => () => {},
+      subscribeToNodeState: () => () => {},
+      subscribeToThreadCreated: () => () => {},
+      subscribeToThreadUpdated: () => () => {},
+      subscribeToMessageCreated: () => () => {},
+      subscribeToRunStatusChanged: () => () => {},
+      subscribeToThreadMetrics: () => () => {},
+      subscribeToThreadMetricsAncestors: () => () => {},
+    };
+    const gateway = new GraphSocketGateway(runtimeStub, metricsStub, prismaStub, eventsBusStub as any);
     // Attach and stub io emit sink
     gateway.init({ server: fastify.server });
     const captured: Array<{ room: string; event: string; payload: any }> = [];

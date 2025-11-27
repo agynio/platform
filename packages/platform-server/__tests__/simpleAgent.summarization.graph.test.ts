@@ -1,6 +1,5 @@
 import { describe, it, expect } from 'vitest';
 import { ResponseMessage, AIMessage, HumanMessage } from '@agyn/llm';
-import { LoggerService } from '../src/core/services/logger.service';
 import { ConfigService, configSchema } from '../src/core/services/config.service';
 
 import { AgentNode as Agent } from '../src/nodes/agent/agent.node';
@@ -19,7 +18,6 @@ describe('Agent summarization graph', () => {
 
     const module = await Test.createTestingModule({
       providers: [
-        LoggerService,
         {
           provide: ConfigService,
           useValue: new ConfigService().init(

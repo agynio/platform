@@ -15,7 +15,6 @@ import { VaultService } from '../src/vault/vault.service';
 import { SlackAdapter } from '../src/messaging/slack/slack.adapter';
 import { ConfigService, configSchema } from '../src/core/services/config.service';
 import { EnvService } from '../src/env/env.service';
-import { LoggerService } from '../src/core/services/logger.service';
 import { AgentNode } from '../src/nodes/agent/agent.node';
 import { LLMProvisioner } from '../src/llm/provisioners/llm.provisioner';
 import { GithubService } from '../src/infra/github/github.client';
@@ -226,18 +225,7 @@ if (!shouldRunDbTests) {
         scheduleThreadAndAncestorsMetrics: vi.fn(),
       } as unknown as GraphSocketGateway);
 
-      builder.useMocker((token) => {
-        if (token === LoggerService) {
-          return makeStub({
-            info: vi.fn(),
-            warn: vi.fn(),
-            error: vi.fn(),
-            debug: vi.fn(),
-            child: vi.fn(),
-          });
-        }
-        return makeStub({});
-      });
+      builder.useMocker((_token) => makeStub({}));
 
       const testingModule = await builder.compile();
 

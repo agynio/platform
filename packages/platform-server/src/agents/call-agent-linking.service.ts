@@ -1,8 +1,7 @@
-import { Inject, Injectable } from '@nestjs/common';
+import { Inject, Injectable, Logger } from '@nestjs/common';
 import type { Prisma, PrismaClient, RunStatus } from '@prisma/client';
 import { Prisma as PrismaNamespace } from '@prisma/client';
 
-import { LoggerService } from '../core/services/logger.service';
 import { PrismaService } from '../core/services/prisma.service';
 import { RunEventsService } from '../events/run-events.service';
 import { EventsBusService } from '../events/events-bus.service';
@@ -39,12 +38,23 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 @Injectable()
 export class CallAgentLinkingService {
+  private readonly logger = new Logger(CallAgentLinkingService.name);
   constructor(
     @Inject(PrismaService) private readonly prismaService: PrismaService,
     @Inject(RunEventsService) private readonly runEvents: RunEventsService,
-    @Inject(LoggerService) private readonly logger: LoggerService,
     @Inject(EventsBusService) private readonly eventsBus: EventsBusService,
   ) {}
+
+  private format(context?: Record<string, unknown>): string {
+    return context ? ` ${JSON.stringify(context)}` : '';
+  }
+
+  private errorInfo(error: unknown): Record<string, unknown> {
+    if (error instanceof Error) {
+      return { name: error.name, message: error.message, stack: error.stack };
+    }
+    return { message: String(error) };
+  }
 
   private get prisma(): PrismaClient {
     return this.prismaService.getClient();
@@ -94,11 +104,13 @@ export class CallAgentLinkingService {
       if (eventId) await this.eventsBus.publishEvent(eventId, 'update');
       return eventId;
     } catch (err) {
-      this.logger.warn('call_agent_linking: failed to register parent tool execution', {
-        err,
-        runId: params.runId,
-        childThreadId: params.childThreadId,
-      });
+      this.logger.warn(
+        `call_agent_linking: failed to register parent tool execution${this.format({
+          runId: params.runId,
+          childThreadId: params.childThreadId,
+          error: this.errorInfo(err),
+        })}`,
+      );
       return null;
     }
   }
@@ -214,7 +226,9 @@ export class CallAgentLinkingService {
     try {
       await tx.runEvent.update({ where: { id: eventId }, data: { metadata: this.serializeMetadata(metadata) } });
     } catch (err) {
-      this.logger.warn('call_agent_linking: failed to save metadata', { eventId, err });
+      this.logger.warn(
+        `call_agent_linking: failed to save metadata${this.format({ eventId, error: this.errorInfo(err) })}`,
+      );
     }
   }
 

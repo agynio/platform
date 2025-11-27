@@ -1,5 +1,4 @@
-import { Controller, Get, Param, Query, HttpException, HttpStatus, Inject } from '@nestjs/common';
-import { LoggerService } from '../../core/services/logger.service';
+import { Controller, Get, Param, Query, HttpException, HttpStatus, Inject, Logger } from '@nestjs/common';
 import { LiveGraphRuntime as RuntimeService } from '../../graph-core/liveGraph.manager';
 import type { Reminder } from '@prisma/client';
 
@@ -12,8 +11,9 @@ function isRemindMeInspectable(x: unknown): x is RemindMeInspectable {
 
 @Controller('api/graph/nodes')
 export class RemindersController {
+  private readonly logger = new Logger(RemindersController.name);
+
   constructor(
-    @Inject(LoggerService) private readonly logger: LoggerService,
     @Inject(RuntimeService) private readonly runtimeService: RuntimeService,
   ) {}
 
@@ -32,11 +32,15 @@ export class RemindersController {
       return { items: typeof bounded === 'number' ? items.slice(0, bounded) : items };
     } catch (e: unknown) {
       if (e instanceof HttpException) throw e;
-      try {
-        this.logger.error('reminders controller', e as unknown);
-      } catch {
-        // ignore logging failures
-      }
+      const errorInfo =
+        e instanceof Error
+          ? {
+              name: e.name,
+              message: e.message,
+              stack: e.stack,
+            }
+          : { error: e };
+      this.logger.error(`reminders controller error ${JSON.stringify(errorInfo)}`);
       throw new HttpException({ error: 'server_error' }, HttpStatus.INTERNAL_SERVER_ERROR);
     }
   }

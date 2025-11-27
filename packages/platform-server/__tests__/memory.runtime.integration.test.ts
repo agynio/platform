@@ -6,7 +6,6 @@ import type { LLMContext } from '../src/llm/types';
 import { Signal } from '../src/signal';
 import { TemplateRegistry } from '../src/graph-core/templateRegistry';
 import type { GraphDefinition } from '../src/shared/types/graph.types';
-import { LoggerService } from '../src/core/services/logger.service';
 import Node from '../src/nodes/base/Node';
 import { GraphRepository } from '../src/graph/graph.repository';
 import {
@@ -23,7 +22,7 @@ const createMemoryService = (prisma: PrismaClient) =>
 
 // Minimal ModuleRef surface used by TemplateRegistry/LiveGraphRuntime in this test
 interface MinimalModuleRef {
-  create(type: new (logger: LoggerService) => Node): Promise<Node>;
+  create(type: new () => Node): Promise<Node>;
 }
 
 // Test-only CallModel node wrapper that exposes a setMemoryConnector port and injects MemoryConnector message
@@ -34,8 +33,8 @@ class TestCallModelNode extends Node<Record<string, never>> {
   private content: MemoryConnectorStaticConfig['content'] = 'tree';
   private maxChars = 4000;
 
-  constructor(logger: LoggerService) {
-    super(logger);
+  constructor() {
+    super();
   }
 
   getPortConfig(): TemplatePortConfig {
@@ -100,12 +99,11 @@ function makeRuntime(
   _prisma: PrismaClient,
   _placement: 'after_system' | 'last_message',
 ): LiveGraphRuntime {
-  const logger = new LoggerService();
   const moduleRef: MinimalModuleRef = {
     // DI create: inject logger where expected
-    create: async (Cls: new (logger: LoggerService) => Node): Promise<Node> => {
-      if (Cls === TestCallModelNode) return new TestCallModelNode(logger);
-      if (Cls === MemoryConnectorNode) return new MemoryConnectorNode(logger);
+    create: async (Cls: new () => Node): Promise<Node> => {
+      if (Cls === TestCallModelNode) return new TestCallModelNode();
+      if (Cls === MemoryConnectorNode) return new MemoryConnectorNode();
       // Only the above classes are instantiated in this test
       throw new Error('Unexpected class requested by ModuleRef.create');
     },
@@ -126,7 +124,12 @@ function makeRuntime(
   }
   // Cast moduleRef back to real ModuleRef type for LiveGraphRuntime ctor compatibility
   const resolver = { resolve: async (input: unknown) => ({ output: input, report: {} as unknown }) };
-  const runtime = new LiveGraphRuntime(logger, templates, new StubRepo(), moduleRef as import('@nestjs/core').ModuleRef, resolver as any);
+  const runtime = new LiveGraphRuntime(
+    templates,
+    new StubRepo(),
+    moduleRef as import('@nestjs/core').ModuleRef,
+    resolver as any,
+  );
   return runtime;
 }
 

@@ -3,7 +3,6 @@ import { PrismaClient, Prisma } from '@prisma/client';
 import { PostgresMemoryEntitiesRepository } from '../../src/nodes/memory/memory.repository';
 import { MemoryService } from '../../src/nodes/memory/memory.service';
 import { UnifiedMemoryFunctionTool as UnifiedMemoryTool } from '../../src/nodes/tools/memory/memory.tool';
-import { LoggerService } from '../../src/core/services/logger.service';
 import { MemoryToolNode } from '../../src/nodes/tools/memory/memory.node';
 import { randomUUID } from 'node:crypto';
 
@@ -36,8 +35,7 @@ maybeDescribe('memory_append tool: path normalization and validation', () => {
       const svc = new MemoryService(new PostgresMemoryEntitiesRepository(db as any), { get: async () => null } as any);
       return svc.forMemory(NODE_ID, opts.threadId ? 'perThread' : 'global', opts.threadId) as any;
     };
-    const logger = new LoggerService();
-    const node = new MemoryToolNode(logger);
+    const node = new MemoryToolNode();
     node.setMemorySource(factory);
     const tool = node.getTool();
     return { unified: tool };

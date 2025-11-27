@@ -1,6 +1,5 @@
-import { Controller, Get, Post, Headers, Body, HttpCode, HttpException, HttpStatus, Inject } from '@nestjs/common';
+import { Controller, Get, Post, Headers, Body, HttpCode, HttpException, HttpStatus, Inject, Logger } from '@nestjs/common';
 // import type { FastifyReply } from 'fastify';
-import { LoggerService } from '../../core/services/logger.service';
 import { TemplateRegistry } from '../../graph-core/templateRegistry';
 import { LiveGraphRuntime } from '../../graph-core/liveGraph.manager';
 import { GraphRepository, type GraphAuthor } from '../graph.repository';
@@ -32,8 +31,9 @@ const toRuntimeGraph = (saved: { nodes: Array<{ id: string; template: string; co
 
 @Controller('api')
 export class GraphPersistController {
+  private readonly logger = new Logger(GraphPersistController.name);
+
   constructor(
-    @Inject(LoggerService) private readonly logger: LoggerService,
     @Inject(TemplateRegistry) private readonly templates: TemplateRegistry,
     @Inject(LiveGraphRuntime) private readonly runtime: LiveGraphRuntime,
     @Inject(GraphRepository) private readonly graphs: GraphRepository,
@@ -120,7 +120,9 @@ async upsertGraph(
       const currS = JSON.stringify(n.config || {});
       if (prevS !== currS) {
         // Socket.io Gateway not wired in Nest yet; log and TODO
-        this.logger.info('node_config changed for %s (v=%s) [TODO: emit via gateway]', n.id, String(saved.version));
+        this.logger.log(
+          `node_config changed [TODO: emit via gateway] ${JSON.stringify({ nodeId: n.id, version: saved.version })}`,
+        );
       }
     }
   }
