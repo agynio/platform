@@ -65,25 +65,13 @@ export class LLM {
   private static hasZeroUsage(usage: Response['usage'] | null | undefined): boolean {
     if (!usage || typeof usage !== 'object') return false;
 
-    const counts: number[] = [];
-    const record = usage as Record<string, unknown>;
-
-    for (const key of ['total_tokens', 'input_tokens', 'output_tokens']) {
-      const value = record[key];
-      if (typeof value === 'number') counts.push(value);
-    }
-
-    const inputDetails = record.input_tokens_details;
-    if (inputDetails && typeof inputDetails === 'object') {
-      const cached = (inputDetails as Record<string, unknown>).cached_tokens;
-      if (typeof cached === 'number') counts.push(cached);
-    }
-
-    const outputDetails = record.output_tokens_details;
-    if (outputDetails && typeof outputDetails === 'object') {
-      const reasoning = (outputDetails as Record<string, unknown>).reasoning_tokens;
-      if (typeof reasoning === 'number') counts.push(reasoning);
-    }
+    const counts = [
+      usage.total_tokens,
+      usage.input_tokens,
+      usage.output_tokens,
+      usage.input_tokens_details?.cached_tokens,
+      usage.output_tokens_details?.reasoning_tokens,
+    ].filter((value): value is number => typeof value === 'number');
 
     if (!counts.length) return false;
     return counts.every((value) => value === 0);
