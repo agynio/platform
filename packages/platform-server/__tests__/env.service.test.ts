@@ -12,21 +12,21 @@ describe('EnvService', () => {
     const resolver = makeResolver();
     const svc = new EnvService(resolver as any);
     const res = await svc.resolveEnvItems([
-      { key: 'A', value: '1' },
-      { key: 'B', value: '2' },
+      { name: 'A', value: '1' },
+      { name: 'B', value: '2' },
     ] satisfies EnvItem[]);
     expect(res).toEqual({ A: '1', B: '2' });
   });
 
-  it('resolveEnvItems: duplicate key error', async () => {
+  it('resolveEnvItems: duplicate name error', async () => {
     const resolver = makeResolver();
     const svc = new EnvService(resolver as any);
     await expect(
       svc.resolveEnvItems([
-        { key: 'A', value: '1' },
-        { key: 'A', value: '2' },
+        { name: 'A', value: '1' },
+        { name: 'A', value: '2' },
       ] as EnvItem[]),
-    ).rejects.toMatchObject({ code: 'env_key_duplicate' });
+    ).rejects.toMatchObject({ code: 'env_name_duplicate' });
   });
 
   it('resolveEnvItems: maps ResolveError codes to EnvError', async () => {
@@ -39,7 +39,7 @@ describe('EnvService', () => {
     const svc = new EnvService(resolver as any);
     await expect(
       svc.resolveEnvItems([
-        { key: 'A', value: { kind: 'vault', path: 'secret/app/db', key: 'PASSWORD' } },
+        { name: 'A', value: { kind: 'vault', path: 'secret/app/db', key: 'PASSWORD' } },
       ] as EnvItem[]),
     ).rejects.toMatchObject({ code: 'env_reference_unresolved' });
   });
@@ -47,13 +47,13 @@ describe('EnvService', () => {
   it('resolveEnvItems: throws when resolved value remains a reference', async () => {
     const resolver = makeResolver();
     resolver.resolve.mockResolvedValue({
-      output: [{ key: 'A', value: { kind: 'vault', path: 'secret/app/db', key: 'PASSWORD' } }],
+      output: [{ name: 'A', value: { kind: 'vault', path: 'secret/app/db', key: 'PASSWORD' } }],
       report: {} as unknown,
     });
     const svc = new EnvService(resolver as any);
     await expect(
       svc.resolveEnvItems([
-        { key: 'A', value: { kind: 'vault', path: 'secret/app/db', key: 'PASSWORD' } },
+        { name: 'A', value: { kind: 'vault', path: 'secret/app/db', key: 'PASSWORD' } },
       ] as EnvItem[]),
     ).rejects.toMatchObject({ code: 'env_reference_unresolved' });
   });
@@ -76,8 +76,8 @@ describe('EnvService', () => {
     const base = { BASE: 'x' };
     const merged = await svc.resolveProviderEnv(
       [
-        { key: 'A', value: '1' },
-        { key: 'B', value: '2' },
+        { name: 'A', value: '1' },
+        { name: 'B', value: '2' },
       ],
       undefined,
       base,

@@ -36,9 +36,9 @@ describe('ShellTool env/workdir isolation with vault-backed overlay', () => {
     const resolverA = {
       resolve: vi.fn(async (input: unknown) => {
         if (!Array.isArray(input)) return { output: input, report: emptyReport };
-        const list = input as Array<{ key: string; value: unknown }>;
+        const list = input as Array<{ name: string; value: unknown }>;
         const output = list.map((item) =>
-          item.key === 'BAR' ? { ...item, value: 'VAULTED' } : { ...item },
+          item.name === 'BAR' ? { ...item, value: 'VAULTED' } : { ...item },
         );
         return { output, report: emptyReport };
       }),
@@ -78,8 +78,8 @@ describe('ShellTool env/workdir isolation with vault-backed overlay', () => {
     const a = createNode(envSvc);
     await a.setConfig({
       env: [
-        { key: 'FOO', value: 'A' },
-        { key: 'BAR', value: { kind: 'vault', path: 'secret/path', key: 'KEY' } },
+        { name: 'FOO', value: 'A' },
+        { name: 'BAR', value: { kind: 'vault', path: 'secret/path', key: 'KEY' } },
       ],
       workdir: '/w/a',
     });
@@ -87,7 +87,7 @@ describe('ShellTool env/workdir isolation with vault-backed overlay', () => {
       resolve: vi.fn(async (input: unknown) => ({ output: input, report: emptyReport })),
     };
     const b = createNode(new EnvService(resolverB as any) as any);
-    await b.setConfig({ env: [ { key: 'FOO', value: 'B' } ], workdir: '/w/b' });
+    await b.setConfig({ env: [ { name: 'FOO', value: 'B' } ], workdir: '/w/b' });
 
     const at = a.getTool();
     const bt = b.getTool();

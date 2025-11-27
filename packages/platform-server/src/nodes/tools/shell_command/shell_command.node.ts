@@ -16,7 +16,7 @@ import { SecretReferenceSchema, VariableReferenceSchema } from '../../../utils/r
 // Static config schema for ShellTool: per-node env overlay (supports Vault refs) and optional workdir
 const EnvItemSchema = z
   .object({
-    key: z.string().min(1),
+    name: z.string().min(1),
     value: z.union([z.string(), SecretReferenceSchema, VariableReferenceSchema]),
   })
   .strict()
