@@ -244,6 +244,12 @@ export default function ThreadsScreen({
               title={isRunsInfoCollapsed ? 'Show runs info' : 'Hide runs info'}
             />
           </div>
+
+          {resolvedSelectedThread.childrenError ? (
+            <div className="mt-3 rounded-[6px] border border-[var(--agyn-border-strong)] bg-[var(--agyn-bg-light)] px-3 py-2 text-sm text-[var(--agyn-red)]">
+              {resolvedSelectedThread.childrenError}
+            </div>
+          ) : null}
         </div>
 
         <div className="min-h-0 min-w-0 flex-1 overflow-hidden">

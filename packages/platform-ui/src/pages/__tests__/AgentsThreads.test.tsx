@@ -174,7 +174,7 @@ describe('AgentsThreads page', () => {
 
     expect(await screen.findByRole('heading', { name: thread.summary })).toBeInTheDocument();
     expect(screen.getByTestId('threads-list')).toBeInTheDocument();
-    expect(screen.queryByText('Agents / Threads')).not.toBeInTheDocument();
+    expect(screen.getByText('Agents / Threads')).toBeInTheDocument();
   });
 
   it('shows a friendly error when the thread is missing', async () => {
