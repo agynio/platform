@@ -5,6 +5,7 @@ import { SystemMessage } from './systemMessage';
 import { ToolCallMessage } from './toolCallMessage';
 import { ToolCallOutputMessage } from './toolCallOutputMessage';
 import { ReasoningMessage } from './reasoningMessage';
+import { DeveloperMessage } from './developerMessage';
 
 // Exclude EasyInputMessage because it overlaps with ResponseInputItem.Message and ResponseOutputMessage
 // Add ResponseInputItem.Message back because exclusion removes it
@@ -16,8 +17,11 @@ export class Message {
       if (obj.role === 'user') {
         return new HumanMessage(obj as ResponseInputItem.Message & { role: 'user' });
       }
-      if (obj.role === 'system' || obj.role === 'developer') {
-        return new SystemMessage(obj as ResponseInputItem.Message & { role: 'system' | 'developer' });
+      if (obj.role === 'system') {
+        return new SystemMessage(obj as ResponseInputItem.Message & { role: 'system' });
+      }
+      if (obj.role === 'developer') {
+        return new DeveloperMessage(obj as ResponseInputItem.Message & { role: 'developer' });
       }
       if (obj.role === 'assistant') {
         return new AIMessage(obj);

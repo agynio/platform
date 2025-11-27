@@ -12,6 +12,10 @@ export const configSchema = z.object({
   openaiApiKey: z.string().min(1).optional(),
   // LLM provider selection: must be explicit; no default
   llmProvider: z.enum(['openai', 'litellm']),
+  llmUseDeveloperRole: z
+    .union([z.boolean(), z.string()])
+    .default('false')
+    .transform((v) => (typeof v === 'string' ? v.toLowerCase() === 'true' : !!v)),
   // Optional LiteLLM details for auto-provisioning
   litellmBaseUrl: z.string().optional(),
   litellmMasterKey: z.string().optional(),
@@ -188,6 +192,9 @@ export class ConfigService implements Config {
   get llmProvider(): 'openai' | 'litellm' {
     return this.params.llmProvider;
   }
+  get llmUseDeveloperRole(): boolean {
+    return this.params.llmUseDeveloperRole ?? false;
+  }
   get litellmBaseUrl(): string | undefined {
     return this.params.litellmBaseUrl;
   }
@@ -323,6 +330,7 @@ export class ConfigService implements Config {
       githubInstallationId: process.env.GITHUB_INSTALLATION_ID,
       openaiApiKey: process.env.OPENAI_API_KEY,
       llmProvider: process.env.LLM_PROVIDER,
+      llmUseDeveloperRole: process.env.LLM_USE_DEVELOPER_ROLE,
       // Infer LiteLLM base from OPENAI_BASE_URL if it ends with /v1
       litellmBaseUrl:
         process.env.LITELLM_BASE_URL ||

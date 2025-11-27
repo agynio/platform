@@ -5,8 +5,10 @@ import { LLMProvisioner } from '../src/llm/provisioners/llm.provisioner';
 import type { LLMState } from '../src/llm/types';
 import { createRunEventsStub, createEventsBusStub } from './helpers/runEvents.stub';
 import { LoggerService } from '../src/core/services/logger.service';
+import type { ConfigService } from '../src/core/services/config.service';
 
 let reducer: SummarizationLLMReducer;
+const configStub = { llmUseDeveloperRole: false } as unknown as ConfigService;
 
 beforeEach(async () => {
   const provisioner: Pick<LLMProvisioner, 'getLLM'> = {
@@ -17,6 +19,7 @@ beforeEach(async () => {
     new LoggerService(),
     createRunEventsStub() as any,
     createEventsBusStub() as any,
+    configStub,
   );
   await reducer.init({ model: 'gpt-5', keepTokens: 10, maxTokens: 30, systemPrompt: 'summarize' });
 });
@@ -42,6 +45,7 @@ describe('SummarizationLLMReducer', () => {
       new LoggerService(),
       createRunEventsStub() as any,
       createEventsBusStub() as any,
+      configStub,
     );
     await r.init({ model: 'gpt-5', keepTokens: 10, maxTokens: 30, systemPrompt: 'summarize' });
     const msgs = Array.from({ length: 50 }).map((_, i) => HumanMessage.fromText(`m${i}`));
@@ -69,6 +73,7 @@ describe('SummarizationLLMReducer', () => {
       new LoggerService(),
       createRunEventsStub() as any,
       createEventsBusStub() as any,
+      configStub,
     );
     await r.init({ model: 'gpt-5', keepTokens: 10, maxTokens: 0, systemPrompt: 'summarize' });
     const state: LLMState = {
@@ -88,6 +93,7 @@ describe('SummarizationLLMReducer', () => {
       new LoggerService(),
       createRunEventsStub() as any,
       createEventsBusStub() as any,
+      configStub,
     );
     await r.init({ model: 'gpt-5', keepTokens: 1000, maxTokens: 2000, systemPrompt: 'summarize' });
     const state: LLMState = {
@@ -107,6 +113,7 @@ describe('SummarizationLLMReducer', () => {
       new LoggerService(),
       createRunEventsStub() as any,
       createEventsBusStub() as any,
+      configStub,
     );
     await r.init({ model: 'gpt-5', keepTokens: 10, maxTokens: 30, systemPrompt: 'summarize' });
     const state: LLMState = { messages: [], summary: 'S', context: { messageIds: [], memory: [] } };
@@ -122,6 +129,7 @@ describe('SummarizationLLMReducer', () => {
       new LoggerService(),
       createRunEventsStub() as any,
       createEventsBusStub() as any,
+      configStub,
     );
     await r.init({ model: 'gpt-5', keepTokens: 1000, maxTokens: 1000, systemPrompt: 'summarize' });
     const messages = Array.from({ length: 5 }).map((_, i) => HumanMessage.fromText(`m${i}`));

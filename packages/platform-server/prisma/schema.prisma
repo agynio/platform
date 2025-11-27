@@ -37,6 +37,7 @@ enum MemoryScope {
 
 enum ContextItemRole {
   system
+  developer
   user
   assistant
   tool
@@ -130,6 +131,7 @@ enum MessageKind {
   user
   assistant
   system
+  developer
   tool
 }
 

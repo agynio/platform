@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { Message } from '../src/messages/message';
-import { SystemMessage } from '../src/messages/systemMessage';
+import { DeveloperMessage } from '../src/messages/developerMessage';
 import type { ResponseInputItem } from 'openai/resources/responses/responses.mjs';
 
 describe('Message.fromPlain developer role mapping', () => {
@@ -13,7 +13,7 @@ describe('Message.fromPlain developer role mapping', () => {
 
     const message = Message.fromPlain(plain);
 
-    expect(message).toBeInstanceOf(SystemMessage);
-    expect((message as SystemMessage).toPlain().role).toBe('developer');
+    expect(message).toBeInstanceOf(DeveloperMessage);
+    expect((message as DeveloperMessage).toPlain().role).toBe('developer');
   });
 });

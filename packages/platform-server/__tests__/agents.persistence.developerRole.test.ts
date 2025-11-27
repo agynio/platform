@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { SystemMessage } from '@agyn/llm';
+import { DeveloperMessage, SystemMessage } from '@agyn/llm';
 import { PersistenceBaseLLMReducer } from '../src/llm/reducers/persistenceBase.llm.reducer';
 import type { JsonValue } from '../src/llm/services/messages.serialization';
 import type { LLMContext, LLMState } from '../src/llm/types';
@@ -22,20 +22,21 @@ describe('PersistenceBaseLLMReducer developer role handling', () => {
   it('serializes system messages with developer role output', () => {
     const reducer = new TestPersistenceReducer();
     const state: LLMState = {
-      messages: [SystemMessage.fromText('Persist developer role.')],
+      messages: [DeveloperMessage.fromText('Persist developer role.')],
       summary: undefined,
-      context: { messageIds: [], memory: [] },
+      context: { messageIds: [], memory: [], system: { id: null, role: 'developer' } },
     };
 
     const plain = reducer.serializePublic(state);
 
     expect(plain.messages).toHaveLength(1);
     const [message] = plain.messages;
-    expect(message.kind).toBe('system');
+    expect(message.kind).toBe('developer');
     expect(message.value).not.toBeNull();
 
     const stored = message.value as { role: string };
     expect(stored.role).toBe('developer');
+    expect(plain.context.system?.role).toBe('developer');
   });
 
   it('deserializes persisted developer role messages', () => {
@@ -58,7 +59,7 @@ describe('PersistenceBaseLLMReducer developer role handling', () => {
 
     expect(state.messages).toHaveLength(1);
     const [message] = state.messages;
-    expect(message).toBeInstanceOf(SystemMessage);
+    expect(message).toBeInstanceOf(DeveloperMessage);
     expect(message.toPlain().role).toBe('developer');
   });
 
@@ -83,6 +84,6 @@ describe('PersistenceBaseLLMReducer developer role handling', () => {
     expect(state.messages).toHaveLength(1);
     const [message] = state.messages;
     expect(message).toBeInstanceOf(SystemMessage);
-    expect(message.toPlain().role).toBe('developer');
+    expect(message.toPlain().role).toBe('system');
   });
 });

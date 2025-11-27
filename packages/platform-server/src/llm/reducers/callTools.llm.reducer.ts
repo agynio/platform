@@ -338,7 +338,7 @@ export class CallToolsLLMReducer extends Reducer<LLMState, LLMContext> {
       messageIds: [...context.messageIds],
       memory: context.memory.map((entry) => ({ id: entry.id ?? null, place: entry.place })),
       summary: context.summary ? { id: context.summary.id ?? null, text: context.summary.text ?? null } : undefined,
-      system: context.system ? { id: context.system.id ?? null } : undefined,
+      system: context.system ? { id: context.system.id ?? null, role: context.system.role ?? 'system' } : undefined,
     };
   }
 

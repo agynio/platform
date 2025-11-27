@@ -17,6 +17,7 @@ import { PostgresMemoryEntitiesRepository } from '../src/nodes/memory/memory.rep
 import { MemoryService } from '../src/nodes/memory/memory.service';
 import type { MemoryScope } from '../src/nodes/memory/memory.types';
 import type { TemplatePortConfig } from '../src/graph/ports.types';
+import type { ConfigService } from '../src/core/services/config.service';
 
 const createMemoryService = (prisma: PrismaClient) =>
   new MemoryService(new PostgresMemoryEntitiesRepository({ getClient: () => prisma } as any), { get: async () => null } as any);
@@ -101,11 +102,12 @@ function makeRuntime(
   _placement: 'after_system' | 'last_message',
 ): LiveGraphRuntime {
   const logger = new LoggerService();
+  const configStub = { llmUseDeveloperRole: false } as unknown as ConfigService;
   const moduleRef: MinimalModuleRef = {
     // DI create: inject logger where expected
     create: async (Cls: new (logger: LoggerService) => Node): Promise<Node> => {
       if (Cls === TestCallModelNode) return new TestCallModelNode(logger);
-      if (Cls === MemoryConnectorNode) return new MemoryConnectorNode(logger);
+      if (Cls === MemoryConnectorNode) return new MemoryConnectorNode(configStub);
       // Only the above classes are instantiated in this test
       throw new Error('Unexpected class requested by ModuleRef.create');
     },

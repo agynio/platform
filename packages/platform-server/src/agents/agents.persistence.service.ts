@@ -1,4 +1,4 @@
-import { AIMessage, HumanMessage, SystemMessage, ToolCallMessage, ToolCallOutputMessage } from '@agyn/llm';
+import { AIMessage, DeveloperMessage, HumanMessage, SystemMessage, ToolCallMessage, ToolCallOutputMessage } from '@agyn/llm';
 import { Inject, Injectable } from '@nestjs/common';
 import type { MessageKind, Prisma, PrismaClient, RunMessageType, RunStatus, ThreadStatus } from '@prisma/client';
 import { LoggerService } from '../core/services/logger.service';
@@ -152,7 +152,7 @@ export class AgentsPersistenceService {
    */
   async beginRunThread(
     threadId: string,
-    inputMessages: Array<HumanMessage | SystemMessage | AIMessage>,
+    inputMessages: Array<HumanMessage | SystemMessage | DeveloperMessage | AIMessage>,
   ): Promise<RunStartResult> {
     const { runId, createdMessages, eventIds, patchedEventIds } = await this.prisma.$transaction(async (tx: Prisma.TransactionClient) => {
       // Begin run and persist messages
@@ -205,11 +205,11 @@ export class AgentsPersistenceService {
   }
 
   /**
-   * Persist injected messages. Only SystemMessage injections are supported.
+   * Persist injected messages. Supports System and Developer instruction messages.
    */
   async recordInjected(
     runId: string,
-    injectedMessages: Array<HumanMessage | SystemMessage | AIMessage>,
+    injectedMessages: Array<HumanMessage | SystemMessage | DeveloperMessage | AIMessage>,
     options?: { threadId?: string },
   ): Promise<{ messageIds: string[] }> {
     if (!injectedMessages.length) return { messageIds: [] };
@@ -579,10 +579,11 @@ export class AgentsPersistenceService {
    * Strict derivation of kind/text from typed message instances.
    */
   private deriveKindTextTyped(
-    msg: HumanMessage | SystemMessage | AIMessage | ToolCallMessage | ToolCallOutputMessage,
+    msg: HumanMessage | SystemMessage | DeveloperMessage | AIMessage | ToolCallMessage | ToolCallOutputMessage,
   ): { kind: MessageKind; text: string | null } {
     if (msg instanceof HumanMessage) return { kind: 'user' as MessageKind, text: msg.text };
     if (msg instanceof SystemMessage) return { kind: 'system' as MessageKind, text: msg.text };
+    if (msg instanceof DeveloperMessage) return { kind: 'developer' as MessageKind, text: msg.text };
     if (msg instanceof AIMessage) return { kind: 'assistant' as MessageKind, text: msg.text };
     if (msg instanceof ToolCallMessage) return { kind: 'tool' as MessageKind, text: `call ${msg.name}(${msg.args})` };
     if (msg instanceof ToolCallOutputMessage) return { kind: 'tool' as MessageKind, text: msg.text };

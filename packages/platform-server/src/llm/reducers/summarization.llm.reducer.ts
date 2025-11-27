@@ -1,6 +1,7 @@
 import { LLMContext, LLMContextState, LLMMessage, LLMState } from '../types';
 
 import {
+  DeveloperMessage,
   HumanMessage,
   LLM,
   Reducer,
@@ -18,6 +19,7 @@ import { EventsBusService } from '../../events/events-bus.service';
 import { toPrismaJsonValue } from '../services/messages.serialization';
 import { Prisma } from '@prisma/client';
 import { contextItemInputFromSummary } from '../services/context-items.utils';
+import { ConfigService } from '../../core/services/config.service';
 
 @Injectable({ scope: Scope.TRANSIENT })
 export class SummarizationLLMReducer extends Reducer<LLMState, LLMContext> {
@@ -26,8 +28,10 @@ export class SummarizationLLMReducer extends Reducer<LLMState, LLMContext> {
     @Inject(LoggerService) protected readonly logger: LoggerService,
     @Inject(RunEventsService) private readonly runEvents: RunEventsService,
     @Inject(EventsBusService) private readonly eventsBus: EventsBusService,
+    @Inject(ConfigService) config: ConfigService,
   ) {
     super();
+    this.useDeveloperRole = config.llmUseDeveloperRole;
   }
 
   private params: { model: string; keepTokens: number; maxTokens: number; systemPrompt: string } = {
@@ -37,6 +41,11 @@ export class SummarizationLLMReducer extends Reducer<LLMState, LLMContext> {
     systemPrompt: '',
   };
   private _llm?: LLM;
+  private readonly useDeveloperRole: boolean;
+
+  private instructionFromText(text: string): SystemMessage | DeveloperMessage {
+    return this.useDeveloperRole ? DeveloperMessage.fromText(text) : SystemMessage.fromText(text);
+  }
 
   get llm(): LLM {
     if (!this._llm) throw new Error('Reducer not initialized: call init() first');
@@ -112,7 +121,7 @@ export class SummarizationLLMReducer extends Reducer<LLMState, LLMContext> {
       const response = await this.llm.call({
         model,
         input: [
-          SystemMessage.fromText(systemPrompt),
+          this.instructionFromText(systemPrompt),
           HumanMessage.fromText(userPrompt),
         ],
       });
@@ -216,7 +225,7 @@ export class SummarizationLLMReducer extends Reducer<LLMState, LLMContext> {
       messageIds: [...context.messageIds],
       memory: context.memory.map((entry) => ({ id: entry.id ?? null, place: entry.place })),
       summary: context.summary ? { id: context.summary.id ?? null, text: context.summary.text ?? null } : undefined,
-      system: context.system ? { id: context.system.id ?? null } : undefined,
+      system: context.system ? { id: context.system.id ?? null, role: context.system.role ?? 'system' } : undefined,
     };
   }
 

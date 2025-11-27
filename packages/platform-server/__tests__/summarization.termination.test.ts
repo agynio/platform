@@ -3,10 +3,13 @@ import { SummarizationLLMReducer } from '../src/llm/reducers/summarization.llm.r
 import { LoggerService } from '../src/core/services/logger.service.js';
 import { Signal } from '../src/signal';
 import { HumanMessage, SystemMessage } from '@agyn/llm';
+import type { ConfigService } from '../src/core/services/config.service';
 
 class ProvisionerStub {
   getLLM = vi.fn(async () => ({ call: vi.fn(async () => ({ text: 'summary', output: [] })) }));
 }
+
+const configStub = { llmUseDeveloperRole: false } as unknown as ConfigService;
 
 describe('SummarizationLLMReducer termination handling', () => {
   it('skips summarization when terminateSignal is active', async () => {
@@ -18,7 +21,13 @@ describe('SummarizationLLMReducer termination handling', () => {
     };
     const eventsBus = { publishEvent: vi.fn(), subscribeToRunEvents: vi.fn(() => vi.fn()) };
 
-    const reducer = new SummarizationLLMReducer(provisioner as any, new LoggerService(), runEvents as any, eventsBus as any);
+    const reducer = new SummarizationLLMReducer(
+      provisioner as any,
+      new LoggerService(),
+      runEvents as any,
+      eventsBus as any,
+      configStub,
+    );
     await reducer.init({ model: 'summary-test', keepTokens: 100, maxTokens: 200, systemPrompt: 'Summarize' });
 
     const state = {

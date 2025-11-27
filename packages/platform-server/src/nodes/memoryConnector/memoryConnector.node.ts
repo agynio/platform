@@ -1,7 +1,8 @@
 import { z } from 'zod';
 import Node from '../base/Node';
-import { SystemMessage } from '@agyn/llm';
-import { Injectable } from '@nestjs/common';
+import { DeveloperMessage, SystemMessage } from '@agyn/llm';
+import { Inject, Injectable } from '@nestjs/common';
+import { ConfigService } from '../../core/services/config.service';
 
 // Static config exposed to UI for MemoryConnectorNode
 export const MemoryConnectorStaticConfigSchema = z
@@ -20,7 +21,13 @@ type BoundMemoryService = {
 
 @Injectable()
 export class MemoryConnectorNode extends Node<MemoryConnectorStaticConfig> {
+  private readonly useDeveloperRole: boolean;
   private getMemoryServiceFn?: (opts: { threadId?: string }) => BoundMemoryService;
+
+  constructor(@Inject(ConfigService) private readonly configService: ConfigService) {
+    super();
+    this.useDeveloperRole = configService.llmUseDeveloperRole;
+  }
 
   init(params: { nodeId: string }): void {
     super.init(params);
@@ -36,8 +43,9 @@ export class MemoryConnectorNode extends Node<MemoryConnectorStaticConfig> {
     return this._config.placement;
   }
 
-  private toSystemMessage(text: string | null) {
-    return text ? SystemMessage.fromText(text) : null;
+  private toInstructionMessage(text: string | null): SystemMessage | DeveloperMessage | null {
+    if (!text) return null;
+    return this.useDeveloperRole ? DeveloperMessage.fromText(text) : SystemMessage.fromText(text);
   }
 
   private flattenAll(data: Record<string, string>): string {
@@ -66,7 +74,7 @@ export class MemoryConnectorNode extends Node<MemoryConnectorStaticConfig> {
     return `${path}\n${lines.join('\n')}`;
   }
 
-  async renderMessage(opts: { threadId?: string; path?: string }): Promise<SystemMessage | null> {
+  async renderMessage(opts: { threadId?: string; path?: string }): Promise<SystemMessage | DeveloperMessage | null> {
     const path = opts.path || '/';
     const max = this._config.maxChars ?? 4000;
 
@@ -82,7 +90,7 @@ export class MemoryConnectorNode extends Node<MemoryConnectorStaticConfig> {
     }
 
     if (!text || text.trim().length === 0) return null;
-    return this.toSystemMessage(`Memory\n${text}`);
+    return this.toInstructionMessage(`Memory\n${text}`);
   }
 
   getPortConfig() {

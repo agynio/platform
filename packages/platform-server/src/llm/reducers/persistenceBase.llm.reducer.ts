@@ -1,12 +1,12 @@
 import { Reducer } from '@agyn/llm';
 import type { LLMContext, LLMContextState, LLMState } from '../types';
-import { HumanMessage, ResponseMessage, SystemMessage, ToolCallOutputMessage } from '@agyn/llm';
+import { DeveloperMessage, HumanMessage, ResponseMessage, SystemMessage, ToolCallOutputMessage } from '@agyn/llm';
 import type { JsonValue, InputJsonValue } from '../services/messages.serialization';
 import type { ResponseInputItem, Response } from 'openai/resources/responses/responses.mjs';
 import { toPrismaJsonValue } from '../services/messages.serialization';
 
 type PlainMessage = {
-  kind: 'human' | 'system' | 'response' | 'tool_call_output';
+  kind: 'human' | 'system' | 'developer' | 'response' | 'tool_call_output';
   value: InputJsonValue | null;
 };
 
@@ -20,7 +20,7 @@ type PlainContextState = {
   messageIds: string[];
   memory: Array<{ id: string | null; place: 'after_system' | 'last_message' }>;
   summary?: { id: string | null; text: string | null };
-  system?: { id: string | null };
+  system?: { id: string | null; role?: 'system' | 'developer' };
 };
 
 export abstract class PersistenceBaseLLMReducer extends Reducer<LLMState, LLMContext> {
@@ -30,6 +30,7 @@ export abstract class PersistenceBaseLLMReducer extends Reducer<LLMState, LLMCon
     const messages: PlainMessage[] = state.messages.map((m) => {
       if (m instanceof HumanMessage) return { kind: 'human', value: toPrismaJsonValue(m.toPlain()) };
       if (m instanceof SystemMessage) return { kind: 'system', value: toPrismaJsonValue(m.toPlain()) };
+      if (m instanceof DeveloperMessage) return { kind: 'developer', value: toPrismaJsonValue(m.toPlain()) };
       if (m instanceof ResponseMessage) return { kind: 'response', value: toPrismaJsonValue(m.toPlain()) };
       if (m instanceof ToolCallOutputMessage) return { kind: 'tool_call_output', value: toPrismaJsonValue(m.toPlain()) };
       throw new Error('Unsupported message type for serialization');
@@ -56,6 +57,10 @@ export abstract class PersistenceBaseLLMReducer extends Reducer<LLMState, LLMCon
           break;
         case 'system':
           if (this.isSystemMessage(val)) return new SystemMessage(val);
+          if (this.isDeveloperMessage(val)) return new DeveloperMessage(val);
+          break;
+        case 'developer':
+          if (this.isDeveloperMessage(val)) return new DeveloperMessage(val);
           break;
         case 'response':
           if (this.isResponseValue(val)) return new ResponseMessage(val);
@@ -77,7 +82,12 @@ export abstract class PersistenceBaseLLMReducer extends Reducer<LLMState, LLMCon
     const messageIds = context?.messageIds ? [...context.messageIds] : [];
     const memory = context?.memory ? context.memory.map((entry) => ({ id: entry.id ?? null, place: entry.place })) : [];
     const summary = context?.summary ? { id: context.summary.id ?? null, text: context.summary.text ?? null } : undefined;
-    const system = context?.system ? { id: context.system.id ?? null } : undefined;
+    const system = context?.system
+      ? {
+          id: context.system.id ?? null,
+          role: context.system.role === 'developer' ? 'developer' : 'system',
+        }
+      : undefined;
     return { messageIds, memory, summary, system };
   }
 
@@ -123,8 +133,12 @@ export abstract class PersistenceBaseLLMReducer extends Reducer<LLMState, LLMCon
     return this.isMessageLike(v) && v.role === 'user';
   }
 
-  protected isSystemMessage(v: unknown): v is ResponseInputItem.Message & { role: 'system' | 'developer' } {
-    return this.isMessageLike(v) && (v.role === 'system' || v.role === 'developer');
+  protected isSystemMessage(v: unknown): v is ResponseInputItem.Message & { role: 'system' } {
+    return this.isMessageLike(v) && v.role === 'system';
+  }
+
+  protected isDeveloperMessage(v: unknown): v is ResponseInputItem.Message & { role: 'developer' } {
+    return this.isMessageLike(v) && v.role === 'developer';
   }
 
   protected isResponseValue(v: unknown): v is { output: Response['output']; usage?: Response['usage'] | null } {

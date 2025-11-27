@@ -1,5 +1,6 @@
 import {
   AIMessage,
+  DeveloperMessage,
   FunctionTool,
   HumanMessage,
   LLM,
@@ -9,8 +10,10 @@ import {
   ToolCallMessage,
 } from '@agyn/llm';
 import { Inject, Injectable, Scope } from '@nestjs/common';
+import type { ResponseInputItem } from 'openai/resources/responses/responses.mjs';
 import { LLMContext, LLMContextState, LLMMessage, LLMState } from '../types';
 import { LoggerService } from '../../core/services/logger.service';
+import { ConfigService } from '../../core/services/config.service';
 import type { LLMCallUsageMetrics, ToolCallRecord } from '../../events/run-events.service';
 import { RunEventsService } from '../../events/run-events.service';
 import { EventsBusService } from '../../events/events-bus.service';
@@ -20,14 +23,16 @@ import {
   contextItemInputFromMemory,
   contextItemInputFromMessage,
   contextItemInputFromSummary,
-  contextItemInputFromSystem,
+  contextItemInputFromInstruction,
 } from '../services/context-items.utils';
 import type { ContextItemInput } from '../services/context-items.utils';
 
+type InstructionMessage = SystemMessage | DeveloperMessage;
+
 type SequenceEntry =
-  | { kind: 'system'; message: SystemMessage }
+  | { kind: 'system'; message: InstructionMessage }
   | { kind: 'summary'; message: HumanMessage }
-  | { kind: 'memory'; message: SystemMessage; place: 'after_system' | 'last_message' }
+  | { kind: 'memory'; message: InstructionMessage; place: 'after_system' | 'last_message' }
   | { kind: 'conversation'; message: LLMMessage; index: number };
 
 @Injectable({ scope: Scope.TRANSIENT })
@@ -35,16 +40,19 @@ export class CallModelLLMReducer extends Reducer<LLMState, LLMContext> {
   protected logger: LoggerService;
   private readonly runEvents: RunEventsService;
   private readonly eventsBus: EventsBusService;
+  private readonly useDeveloperRole: boolean;
 
   constructor(
     @Inject(LoggerService) logger: LoggerService,
     @Inject(RunEventsService) runEvents: RunEventsService,
     @Inject(EventsBusService) eventsBus: EventsBusService,
+    @Inject(ConfigService) cfg: ConfigService,
   ) {
     super();
     this.logger = logger;
     this.runEvents = runEvents;
     this.eventsBus = eventsBus;
+    this.useDeveloperRole = cfg.llmUseDeveloperRole;
   }
 
   private tools: FunctionTool[] = [];
@@ -54,7 +62,7 @@ export class CallModelLLMReducer extends Reducer<LLMState, LLMContext> {
   private memoryProvider?: (
     ctx: LLMContext,
     state: LLMState,
-  ) => Promise<{ msg: SystemMessage | null; place: 'after_system' | 'last_message' } | null>;
+  ) => Promise<{ msg: InstructionMessage | null; place: 'after_system' | 'last_message' } | null>;
 
   init(params: {
     llm: LLM;
@@ -64,7 +72,7 @@ export class CallModelLLMReducer extends Reducer<LLMState, LLMContext> {
     memoryProvider?: (
       ctx: LLMContext,
       state: LLMState,
-    ) => Promise<{ msg: SystemMessage | null; place: 'after_system' | 'last_message' } | null>;
+    ) => Promise<{ msg: InstructionMessage | null; place: 'after_system' | 'last_message' } | null>;
   }) {
     this.llm = params.llm;
     this.model = params.model;
@@ -79,7 +87,7 @@ export class CallModelLLMReducer extends Reducer<LLMState, LLMContext> {
       throw new Error('CallModelLLMReducer not initialized');
     }
 
-    const system = SystemMessage.fromText(this.systemPrompt);
+    const system = this.instructionFromText(this.systemPrompt);
     const summaryText = state.summary?.trim() ?? null;
     const summaryMsg = summaryText ? HumanMessage.fromText(summaryText) : null;
     const memoryResult = this.memoryProvider ? await this.memoryProvider(ctx, state) : null;
@@ -209,35 +217,56 @@ export class CallModelLLMReducer extends Reducer<LLMState, LLMContext> {
     }
   }
 
+  private instructionFromText(text: string): InstructionMessage {
+    return this.useDeveloperRole ? DeveloperMessage.fromText(text) : SystemMessage.fromText(text);
+  }
+
+  private normalizeInstruction(message: InstructionMessage): InstructionMessage {
+    if (this.useDeveloperRole) {
+      return message instanceof DeveloperMessage ? message : (this.cloneInstruction(message, 'developer') as DeveloperMessage);
+    }
+    return message instanceof SystemMessage ? message : (this.cloneInstruction(message, 'system') as SystemMessage);
+  }
+
+  private cloneInstruction(message: InstructionMessage, role: 'system' | 'developer'): InstructionMessage {
+    const plain = message.toPlain() as ResponseInputItem.Message;
+    const cloned = { ...plain, role } as ResponseInputItem.Message & { role: typeof role };
+    return role === 'developer' ? new DeveloperMessage(cloned) : new SystemMessage(cloned);
+  }
+
   private cloneContext(context?: LLMContextState): LLMContextState {
     if (!context) return { messageIds: [], memory: [] };
     return {
       messageIds: [...context.messageIds],
       memory: context.memory.map((entry) => ({ id: entry.id ?? null, place: entry.place })),
       summary: context.summary ? { id: context.summary.id ?? null, text: context.summary.text ?? null } : undefined,
-      system: context.system ? { id: context.system.id ?? null } : undefined,
+      system: context.system ? { id: context.system.id ?? null, role: context.system.role ?? 'system' } : undefined,
     };
   }
 
   private buildSequence(
-    system: SystemMessage,
+    system: InstructionMessage,
     summaryMsg: HumanMessage | null,
-    memoryResult: { msg: SystemMessage | null; place: 'after_system' | 'last_message' } | null,
+    memoryResult: { msg: InstructionMessage | null; place: 'after_system' | 'last_message' } | null,
     conversation: LLMMessage[],
   ): SequenceEntry[] {
-    const sequence: SequenceEntry[] = [{ kind: 'system', message: system }];
+    const sequence: SequenceEntry[] = [{ kind: 'system', message: this.normalizeInstruction(system) }];
     if (summaryMsg) sequence.push({ kind: 'summary', message: summaryMsg });
 
     if (memoryResult?.msg && memoryResult.place === 'after_system') {
-      sequence.push({ kind: 'memory', message: memoryResult.msg, place: memoryResult.place });
+      sequence.push({ kind: 'memory', message: this.normalizeInstruction(memoryResult.msg), place: memoryResult.place });
     }
 
     conversation.forEach((message, index) => {
-      sequence.push({ kind: 'conversation', message, index });
+      if (message instanceof SystemMessage || message instanceof DeveloperMessage) {
+        sequence.push({ kind: 'conversation', message: this.normalizeInstruction(message), index });
+      } else {
+        sequence.push({ kind: 'conversation', message, index });
+      }
     });
 
     if (memoryResult?.msg && memoryResult.place === 'last_message') {
-      sequence.push({ kind: 'memory', message: memoryResult.msg, place: memoryResult.place });
+      sequence.push({ kind: 'memory', message: this.normalizeInstruction(memoryResult.msg), place: memoryResult.place });
     }
 
     return sequence;
@@ -259,12 +288,13 @@ export class CallModelLLMReducer extends Reducer<LLMState, LLMContext> {
     for (const entry of sequence) {
       switch (entry.kind) {
         case 'system': {
-          const existing = context.system ?? { id: null };
+          const existing = context.system ?? { id: null, role: entry.message.role };
+          existing.role = entry.message.role;
           context.system = existing;
           this.collectContextId({
             existingId: existing.id ?? null,
             pending,
-            input: () => contextItemInputFromSystem(entry.message),
+            input: () => contextItemInputFromInstruction(entry.message),
             assign: (id) => {
               existing.id = id;
             },

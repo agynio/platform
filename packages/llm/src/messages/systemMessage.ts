@@ -1,20 +1,24 @@
 import { ResponseInputItem } from 'openai/resources/responses/responses.mjs';
 
-type SystemLikeMessage = ResponseInputItem.Message & { role: 'system' | 'developer' };
+type SystemMessageSource = ResponseInputItem.Message & { role: 'system' };
 
 export class SystemMessage {
-  private readonly _source: SystemLikeMessage;
+  private readonly _source: SystemMessageSource;
 
-  constructor(source: SystemLikeMessage) {
-    this._source = source;
+  constructor(source: SystemMessageSource) {
+    this._source = {
+      ...source,
+      role: 'system',
+      type: source.type ?? 'message',
+    };
   }
 
   get type(): 'message' {
     return this._source.type ?? 'message';
   }
 
-  get role(): 'developer' {
-    return 'developer';
+  get role(): 'system' {
+    return 'system';
   }
 
   get text(): string {
@@ -23,16 +27,13 @@ export class SystemMessage {
 
   static fromText(text: string): SystemMessage {
     return new SystemMessage({
-      role: 'developer',
+      type: 'message',
+      role: 'system',
       content: [{ type: 'input_text', text }],
     });
   }
 
-  toPlain(): ResponseInputItem.Message {
-    if (this._source.role === 'developer') {
-      return this._source;
-    }
-
-    return { ...this._source, role: 'developer' };
+  toPlain(): SystemMessageSource {
+    return this._source;
   }
 }

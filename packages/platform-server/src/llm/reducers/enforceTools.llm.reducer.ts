@@ -1,7 +1,8 @@
-import { Reducer, ResponseMessage, SystemMessage, ToolCallMessage } from '@agyn/llm';
+import { DeveloperMessage, Reducer, ResponseMessage, SystemMessage, ToolCallMessage } from '@agyn/llm';
 import { LLMContext, LLMState } from '../types';
 import { LoggerService } from '../../core/services/logger.service';
-import { Injectable } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
+import { ConfigService } from '../../core/services/config.service';
 
 /**
  * EnforceToolsLLMReducer injects a restriction message when the model
@@ -10,8 +11,14 @@ import { Injectable } from '@nestjs/common';
  */
 @Injectable()
 export class EnforceToolsLLMReducer extends Reducer<LLMState, LLMContext> {
-  constructor(private logger?: LoggerService) {
+  private readonly useDeveloperRole: boolean;
+
+  constructor(
+    @Inject(LoggerService) private readonly logger?: LoggerService,
+    @Inject(ConfigService) config?: ConfigService,
+  ) {
     super();
+    this.useDeveloperRole = config?.llmUseDeveloperRole ?? false;
   }
 
   async invoke(state: LLMState, ctx: LLMContext): Promise<LLMState> {
@@ -40,7 +47,7 @@ export class EnforceToolsLLMReducer extends Reducer<LLMState, LLMContext> {
       restrictionMessage = 'Please use a tool to proceed before responding.';
     }
     this.logger?.info('Enforcing restrictOutput: injecting restriction message');
-    const msg = SystemMessage.fromText(restrictionMessage);
+    const msg = this.instructionFromText(restrictionMessage);
 
     return {
       ...state,
@@ -51,5 +58,9 @@ export class EnforceToolsLLMReducer extends Reducer<LLMState, LLMContext> {
         restrictionInjected: true,
       },
     };
+  }
+
+  private instructionFromText(text: string): SystemMessage | DeveloperMessage {
+    return this.useDeveloperRole ? DeveloperMessage.fromText(text) : SystemMessage.fromText(text);
   }
 }

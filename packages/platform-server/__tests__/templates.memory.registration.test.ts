@@ -69,7 +69,7 @@ describe('templates: memory registration and agent memory port', () => {
               }),
             } as any,
           ) as unknown as T;
-        if (cls === MemoryConnectorNode) return new MemoryConnectorNode() as unknown as T;
+        if (cls === MemoryConnectorNode) return new MemoryConnectorNode(configService) as unknown as T;
         if (cls === MemoryNode) return new MemoryNode(this as unknown as ModuleRef) as unknown as T;
         // Reducers/routers/tools not needed for schema introspection; construct without args
         return new (cls as any)();

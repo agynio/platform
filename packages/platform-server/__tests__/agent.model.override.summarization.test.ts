@@ -4,6 +4,7 @@ import { SummarizationLLMReducer } from '../src/llm/reducers/summarization.llm.r
 import type { LLMProvisioner } from '../src/llm/provisioners/llm.provisioner';
 import { LoggerService } from '../src/core/services/logger.service';
 import { createRunEventsStub, createEventsBusStub } from './helpers/runEvents.stub';
+import type { ConfigService } from '../src/core/services/config.service';
 
 describe('Agent summarization uses overridden model', () => {
   it('summarization path honors overridden model in reducer', async () => {
@@ -14,11 +15,13 @@ describe('Agent summarization uses overridden model', () => {
         } as any;
       }
     }
+    const configStub = { llmUseDeveloperRole: false } as unknown as ConfigService;
     const reducer = await new SummarizationLLMReducer(
       new ProvisionerStub(),
       new LoggerService(),
       createRunEventsStub() as any,
       createEventsBusStub() as any,
+      configStub,
     ).init({
       model: 'override-model',
       keepTokens: 1,

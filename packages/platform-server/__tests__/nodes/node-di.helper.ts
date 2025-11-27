@@ -75,6 +75,7 @@ const DEFAULT_TOKEN_FACTORIES = new Map<InjectionToken, () => unknown>([
         ncpsUrl: 'http://ncps:8501',
         vaultAddr: undefined,
         vaultToken: undefined,
+        llmUseDeveloperRole: false,
       }),
   ],
   [NcpsKeyService, () => createDefaultStub('NcpsKeyService', { getKeysForInjection: vi.fn(() => []) })],

@@ -5,6 +5,7 @@ import { CallModelLLMReducer } from '../src/llm/reducers/callModel.llm.reducer';
 import { LoggerService } from '../src/core/services/logger.service.js';
 import { createRunEventsStub, createEventsBusStub } from './helpers/runEvents.stub';
 import { Signal } from '../src/signal';
+import type { ConfigService } from '../src/core/services/config.service';
 
 type MockFn = ReturnType<typeof vi.fn>;
 
@@ -144,7 +145,8 @@ describe('CallToolsLLMReducer context items', () => {
       .mockResolvedValueOnce(responseWithTool)
       .mockResolvedValue(ResponseMessage.fromText('done'));
 
-    const callModel = new CallModelLLMReducer(new LoggerService(), runEvents as any, createEventsBusStub() as any).init({
+    const config = { llmUseDeveloperRole: false } as unknown as ConfigService;
+    const callModel = new CallModelLLMReducer(new LoggerService(), runEvents as any, createEventsBusStub() as any, config).init({
       llm: { call: llmCall } as any,
       model: 'gpt-test',
       systemPrompt: 'Stay on task',

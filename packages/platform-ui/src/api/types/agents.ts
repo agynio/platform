@@ -37,9 +37,15 @@ export type RunMeta = {
   updatedAt: string;
 };
 
-export type RunMessageItem = { id: string; kind: 'user' | 'assistant' | 'system' | 'tool'; text?: string | null; source: unknown; createdAt: string };
+export type RunMessageItem = {
+  id: string;
+  kind: 'user' | 'assistant' | 'system' | 'developer' | 'tool';
+  text?: string | null;
+  source: unknown;
+  createdAt: string;
+};
 
-export type ContextItemRole = 'system' | 'user' | 'assistant' | 'tool' | 'memory' | 'summary' | 'other';
+export type ContextItemRole = 'system' | 'developer' | 'user' | 'assistant' | 'tool' | 'memory' | 'summary' | 'other';
 
 export type ContextItem = {
   id: string;

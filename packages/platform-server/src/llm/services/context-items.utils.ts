@@ -1,6 +1,14 @@
 import type { PrismaClient } from '@prisma/client';
 import { ContextItemRole, Prisma } from '@prisma/client';
-import { AIMessage, HumanMessage, ResponseMessage, SystemMessage, ToolCallMessage, ToolCallOutputMessage } from '@agyn/llm';
+import {
+  AIMessage,
+  DeveloperMessage,
+  HumanMessage,
+  ResponseMessage,
+  SystemMessage,
+  ToolCallMessage,
+  ToolCallOutputMessage,
+} from '@agyn/llm';
 import { toPrismaJsonValue } from './messages.serialization';
 
 export type ContextItemInput = {
@@ -26,6 +34,7 @@ export type LoggerLike = {
 
 const ROLE_ALIASES: Record<string, ContextItemRole> = {
   system: ContextItemRole.system,
+  developer: ContextItemRole.developer,
   user: ContextItemRole.user,
   human: ContextItemRole.user,
   assistant: ContextItemRole.assistant,
@@ -124,11 +133,12 @@ export async function upsertNormalizedContextItems(
   return { ids, created };
 }
 
-export function contextItemInputFromSystem(message: SystemMessage): ContextItemInput {
+export function contextItemInputFromInstruction(message: SystemMessage | DeveloperMessage): ContextItemInput {
+  const role = message instanceof DeveloperMessage ? ContextItemRole.developer : ContextItemRole.system;
   return {
-    role: ContextItemRole.system,
+    role,
     contentText: message.text,
-    metadata: { type: message.type },
+    metadata: { type: message.type, role: message.role },
   };
 }
 
@@ -140,18 +150,23 @@ export function contextItemInputFromSummary(text: string): ContextItemInput {
   };
 }
 
-export function contextItemInputFromMemory(message: SystemMessage, place: MemoryPlacement): ContextItemInput {
+export function contextItemInputFromMemory(
+  message: SystemMessage | DeveloperMessage,
+  place: MemoryPlacement,
+): ContextItemInput {
   return {
     role: ContextItemRole.memory,
     contentText: message.text,
-    metadata: { type: message.type, place },
+    metadata: { type: message.type, place, role: message.role },
   };
 }
 
 export function contextItemInputFromMessage(
-  message: SystemMessage | HumanMessage | AIMessage | ResponseMessage | ToolCallMessage | ToolCallOutputMessage,
+  message: SystemMessage | DeveloperMessage | HumanMessage | AIMessage | ResponseMessage | ToolCallMessage | ToolCallOutputMessage,
 ): ContextItemInput {
-  if (message instanceof SystemMessage) return contextItemInputFromSystem(message);
+  if (message instanceof SystemMessage || message instanceof DeveloperMessage) {
+    return contextItemInputFromInstruction(message);
+  }
   if (message instanceof HumanMessage) {
     return {
       role: ContextItemRole.user,

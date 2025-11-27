@@ -4,7 +4,7 @@ vi.mock('@prisma/client', () => {
   const AnyNull = Symbol('AnyNull');
   const DbNull = Symbol('DbNull');
   return {
-    MessageKind: { user: 'user', system: 'system', assistant: 'assistant', tool: 'tool' },
+    MessageKind: { user: 'user', system: 'system', developer: 'developer', assistant: 'assistant', tool: 'tool' },
     RunStatus: { finished: 'finished', running: 'running', terminated: 'terminated' },
     RunMessageType: { input: 'input', output: 'output', injected: 'injected' },
     RunEventType: {
@@ -45,6 +45,7 @@ vi.mock('@prisma/client', () => {
     },
     ContextItemRole: {
       system: 'system',
+      developer: 'developer',
       user: 'user',
       assistant: 'assistant',
       tool: 'tool',
@@ -57,7 +58,7 @@ vi.mock('@prisma/client', () => {
 });
 const { AgentsPersistenceService } = await import('../src/agents/agents.persistence.service');
 const { LoggerService } = await import('../src/core/services/logger.service');
-import { AIMessage, HumanMessage, SystemMessage, ToolCallMessage, ToolCallOutputMessage } from '@agyn/llm';
+import { AIMessage, DeveloperMessage, HumanMessage, SystemMessage, ToolCallMessage, ToolCallOutputMessage } from '@agyn/llm';
 import type { ResponseFunctionToolCall } from 'openai/resources/responses/responses.mjs';
 import { createRunEventsStub } from './helpers/runEvents.stub';
 import { CallAgentLinkingService } from '../src/agents/call-agent-linking.service';
@@ -161,12 +162,14 @@ describe('AgentsPersistenceService beginRun/completeRun populates Message.text',
       eventsBusStub,
     );
 
-    // Begin run with user + system messages
-    const input = [HumanMessage.fromText('hello'), SystemMessage.fromText('sys')];
+    // Begin run with user + developer + system messages
+    const input = [HumanMessage.fromText('hello'), DeveloperMessage.fromText('dev'), SystemMessage.fromText('sys')];
     const started = await svc.beginRunThread('thread-1', input);
     expect(started.runId).toBe('run-1');
     const inputs = createdMessages.filter((m) => createdRunMessages.find((r) => r.messageId === m.id && r.type === 'input'));
-    expect(inputs.map((m) => m.text)).toEqual(['hello', 'sys']);
+    expect(inputs.map((m) => m.text)).toEqual(['hello', 'dev', 'sys']);
+    const developerEntry = inputs.find((m) => m.text === 'dev');
+    expect(developerEntry?.kind).toBe('developer');
 
     // Complete run with assistant output and tool events
     const call = new ToolCallMessage({ type: 'function_call', call_id: 'c1', name: 'echo', arguments: '{"x":1}' } as ResponseFunctionToolCall);
