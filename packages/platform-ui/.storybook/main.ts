@@ -19,13 +19,6 @@ const config: StorybookConfig = {
   async viteFinal(config) {
     return {
       ...config,
-      resolve: {
-        ...(config.resolve ?? {}),
-        alias: {
-          ...(config.resolve?.alias ?? {}),
-          '@storybook/preview-api': 'storybook/preview-api',
-        },
-      },
       plugins: [
         ...(config.plugins ?? []), //
         tailwindcss(),
