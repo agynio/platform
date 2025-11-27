@@ -3,7 +3,7 @@ import 'reflect-metadata';
 import { ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { FastifyAdapter } from '@nestjs/platform-fastify';
-import type { FastifyTypeProviderDefault } from 'fastify';
+import type { FastifyInstance, FastifyTypeProviderDefault } from 'fastify';
 import type { IncomingHttpHeaders } from 'http';
 // CORS is enabled via Nest's app.enableCors to avoid type-provider mismatches
 
@@ -31,7 +31,8 @@ const sanitizeHeaders = (headers: IncomingHttpHeaders | undefined): Record<strin
 async function bootstrap() {
   // NestJS HTTP bootstrap using FastifyAdapter and resolve services via DI
   const adapter = new FastifyAdapter();
-  const fastify = adapter.getInstance().withTypeProvider<FastifyTypeProviderDefault>();
+  const fastifyAdapterInstance = adapter.getInstance() as unknown as FastifyInstance;
+  const fastifyInstance: FastifyInstance = fastifyAdapterInstance.withTypeProvider<FastifyTypeProviderDefault>() as FastifyInstance;
 
   // CORS: allow dev UI preflight incl. PUT on /api/graph/nodes/:id/state
   // origins: source via ConfigService.fromEnv(); if unset, keep permissive true
@@ -47,10 +48,18 @@ async function bootstrap() {
   // Enable CORS via Nest to avoid Fastify type-provider generic mismatches
 
   const app = await NestFactory.create(AppModule, adapter, { bufferLogs: true });
-  const pinoLogger = app.get(PinoLogger);
+  const pinoLoggerResolved = app.get(PinoLogger) as unknown;
+  if (!(pinoLoggerResolved instanceof PinoLogger)) {
+    throw new Error('Failed to resolve PinoLogger from application context');
+  }
+  const pinoLogger = pinoLoggerResolved;
   app.useLogger(pinoLogger);
 
-  const logger = app.get(LoggerService);
+  const loggerResolved = app.get(LoggerService) as unknown;
+  if (!(loggerResolved instanceof LoggerService)) {
+    throw new Error('Failed to resolve LoggerService from application context');
+  }
+  const logger = loggerResolved;
   logger.info('Nest application created');
 
   app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
@@ -58,14 +67,12 @@ async function bootstrap() {
   await app.init();
   logger.info('Nest application initialized');
 
-  const fastifyInstance = fastify;
-
   const terminalGateway = app.get(ContainerTerminalGateway);
   terminalGateway.registerRoutes(fastifyInstance);
 
   // Attach Socket.IO gateway via DI before starting server
   const gateway = app.get(GraphSocketGateway);
-  gateway.init({ server: fastify.server });
+  gateway.init({ server: fastifyInstance.server });
 
   // Start Fastify HTTP server
   const PORT = Number(process.env.PORT) || 3010;

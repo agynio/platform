@@ -144,7 +144,7 @@ describe('ContainerService.startAndCollectExec stream handling', () => {
 
   it('invokes onOutput when combined fallback stream is used', async () => {
     const logger = new LoggerService();
-    const svc = new ContainerService(logger);
+    const svc = new ContainerService(makeRegistry(), logger);
     const hijacked = new PassThrough();
 
     const execInspect = vi

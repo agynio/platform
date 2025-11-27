@@ -107,7 +107,7 @@ export class NixController {
           (e as { name?: string })?.name === 'FetchError' ||
           (e as { code?: string })?.code === 'ECONNRESET';
         if (attempt >= maxAttempts || !retriable) break;
-        await new Promise((r) => setTimeout(r, Math.min(50 * attempt, 200)));
+        await new Promise((r) => setTimeout(r, Math.min(25 * attempt, 100)));
       }
     }
     throw lastErr;

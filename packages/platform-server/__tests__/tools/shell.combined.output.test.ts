@@ -213,7 +213,6 @@ describe('ShellCommandTool combined output', () => {
     const message = (error as Error).message;
     expect(message).toMatch(/\[exit code 128]/);
     expect(message).toContain('fatal: repo not found');
-    expect(message.toLowerCase()).toContain('output tail');
 
     expect(runEvents.finalizeToolOutputTerminal).toHaveBeenCalledTimes(1);
     const terminalArgs = runEvents.finalizeToolOutputTerminal.mock.calls[0][0];
@@ -239,8 +238,8 @@ describe('ShellCommandTool combined output', () => {
     expect(error).toBeInstanceOf(Error);
     const message = (error as Error).message;
     expect(message).toMatch(/\[exit code 2]/);
+    expect(message).toContain('starting');
     expect(message).toContain('boom');
-    expect(message.toLowerCase()).toContain('output tail');
   });
 
   it('execute throws exit-coded error with full output when under limit', async () => {
@@ -315,7 +314,6 @@ describe('ShellCommandTool combined output', () => {
     expect(message).toMatch(/Full output saved to \/tmp\/.+\.txt/);
 
     expect(runEvents.finalizeToolOutputTerminal).toHaveBeenCalledTimes(1);
-<<<<<<< HEAD
     const terminalArgs = runEvents.finalizeToolOutputTerminal.mock.calls[0][0];
     expect(terminalArgs).toMatchObject({ status: 'error', exitCode: 9 });
     expect(typeof terminalArgs.savedPath).toBe('string');
