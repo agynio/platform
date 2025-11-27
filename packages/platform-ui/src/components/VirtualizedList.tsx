@@ -1,5 +1,5 @@
 import { Virtuoso, type VirtuosoHandle } from 'react-virtuoso';
-import { useRef, useEffect, useState, forwardRef, type ReactNode } from 'react';
+import { useRef, useEffect, useState, useCallback, forwardRef, type ReactNode, type MutableRefObject } from 'react';
 
 export interface VirtualizedListProps<T> {
   items: T[];
@@ -14,6 +14,7 @@ export interface VirtualizedListProps<T> {
   className?: string;
   style?: React.CSSProperties;
   scrollerProps?: React.HTMLAttributes<HTMLDivElement>;
+  scrollerRef?: React.Ref<HTMLDivElement>;
 }
 
 export function VirtualizedList<T>({
@@ -29,6 +30,7 @@ export function VirtualizedList<T>({
   className,
   style,
   scrollerProps,
+  scrollerRef,
 }: VirtualizedListProps<T>) {
   const shouldUseFallbackList =
     (typeof process !== 'undefined' && process.env?.VITEST === 'true') ||
@@ -41,14 +43,28 @@ export function VirtualizedList<T>({
   const isInitialMount = useRef(true);
   const [firstItemIndex, setFirstItemIndex] = useState(100000);
 
-  const scrollerRef = useRef<HTMLDivElement | null>(null);
+  const internalScrollerRef = useRef<HTMLDivElement | null>(null);
+
+  const assignScrollerRef = useCallback(
+    (node: HTMLDivElement | null) => {
+      internalScrollerRef.current = node;
+      if (!scrollerRef) return;
+      if (typeof scrollerRef === 'function') {
+        (scrollerRef as (instance: HTMLDivElement | null) => void)(node);
+        return;
+      }
+
+      (scrollerRef as MutableRefObject<HTMLDivElement | null>).current = node;
+    },
+    [scrollerRef],
+  );
 
   useEffect(() => {
     if (!shouldUseFallbackList) {
       return;
     }
 
-    const node = scrollerRef.current;
+    const node = internalScrollerRef.current;
     if (!node) return;
 
     const applyScroll = () => {
@@ -129,7 +145,7 @@ export function VirtualizedList<T>({
     return (
       <div className={className} style={style}>
         {header}
-        <div ref={scrollerRef} {...scrollerProps}>
+        <div ref={assignScrollerRef} {...scrollerProps}>
           {items.length === 0 && emptyPlaceholder}
           {items.map((item, index) => (
             <div key={getItemKey ? getItemKey(item) : index}>{renderItem(index, item)}</div>
@@ -139,6 +155,8 @@ export function VirtualizedList<T>({
       </div>
     );
   }
+
+  const shouldCustomizeScroller = Boolean(scrollerProps || scrollerRef);
 
   return (
     <div className={className} style={style}>
@@ -166,10 +184,28 @@ export function VirtualizedList<T>({
           Header: header ? () => <>{header}</> : undefined,
           Footer: footer ? () => <>{footer}</> : undefined,
           EmptyPlaceholder: emptyPlaceholder ? () => <>{emptyPlaceholder}</> : undefined,
-          Scroller: scrollerProps
-            ? forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDivElement>>((props, ref) => (
-                <div ref={ref} {...props} {...scrollerProps} />
-              ))
+          Scroller: shouldCustomizeScroller
+            ? forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDivElement>>((props, ref) => {
+                const { className: incomingClassName, ...restProps } = props;
+                const { className: providedClassName, ...providedRest } = scrollerProps ?? {};
+                const mergedClassName = [incomingClassName, providedClassName].filter(Boolean).join(' ');
+
+                return (
+                  <div
+                    {...restProps}
+                    {...providedRest}
+                    className={mergedClassName}
+                    ref={(node) => {
+                      if (typeof ref === 'function') {
+                        ref(node);
+                      } else if (ref) {
+                        (ref as MutableRefObject<HTMLDivElement | null>).current = node;
+                      }
+                      assignScrollerRef(node);
+                    }}
+                  />
+                );
+              })
             : undefined,
         }}
       />

@@ -188,6 +188,9 @@ const ControlledRender: Story['render'] = () => {
       onBack={() => {
         logBack();
       }}
+      onClearSelection={() => {
+        updateArgs({ selectedEventId: null });
+      }}
     />
   );
 };

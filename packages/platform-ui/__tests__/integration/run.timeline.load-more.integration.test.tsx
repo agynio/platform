@@ -537,7 +537,6 @@ describe('AgentsRunScreen integration (MSW)', () => {
     const eventsResolver = ({ request }: { request: Request }) => {
       const url = new URL(request.url);
       const bracketedTs = url.searchParams.get('cursor[ts]');
-      const bracketedId = url.searchParams.get('cursor[id]');
       const plainTs = url.searchParams.get('cursorTs');
       const plainId = url.searchParams.get('cursorId');
       requestLog.push({ bracketed: bracketedTs, plain: plainTs });
@@ -558,9 +557,14 @@ describe('AgentsRunScreen integration (MSW)', () => {
         });
       }
 
-      const cursorTs = plainTs ?? bracketedTs;
-      const cursorId = plainId ?? bracketedId;
-      const cursorIndex = events.findIndex((event) => event.ts === cursorTs && event.id === cursorId);
+      if (!plainTs || !plainId) {
+        return _HttpResponse.json({
+          items: firstCursor ? events.filter((event) => event.id === firstCursor.id) : [],
+          nextCursor: firstCursor,
+        });
+      }
+
+      const cursorIndex = events.findIndex((event) => event.ts === plainTs && event.id === plainId);
       const olderItems = cursorIndex >= 0 ? events.slice(cursorIndex + 1) : [];
       const nextCursor = olderItems.length > 0
         ? { ts: olderItems[olderItems.length - 1].ts, id: olderItems[olderItems.length - 1].id }
@@ -594,12 +598,16 @@ describe('AgentsRunScreen integration (MSW)', () => {
 
       await waitFor(() => expect(screen.getAllByRole('option')).toHaveLength(events.length));
 
-      expect(requestLog.length).toBe(3);
+      expect(requestLog.length).toBe(4);
       const firstAttempt = requestLog[1];
       expect(firstAttempt.bracketed).toBe(firstCursor?.ts ?? events[1].ts);
       expect(firstAttempt.plain).toBe(firstCursor?.ts ?? events[1].ts);
 
-      const fallbackAttempt = requestLog[2];
+      const bracketedAttempt = requestLog[2];
+      expect(bracketedAttempt.bracketed).toBe(firstCursor?.ts ?? events[1].ts);
+      expect(bracketedAttempt.plain).toBeNull();
+
+      const fallbackAttempt = requestLog[3];
       expect(fallbackAttempt.bracketed).toBeNull();
       expect(fallbackAttempt.plain).toBe(firstCursor?.ts ?? events[1].ts);
 

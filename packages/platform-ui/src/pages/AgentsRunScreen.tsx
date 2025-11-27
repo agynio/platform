@@ -202,9 +202,9 @@ function toCursor(event: RunTimelineEvent): RunTimelineEventsCursor {
 }
 
 function buildCursorAttemptModes(preferred: CursorParamMode): CursorParamMode[] {
-  if (preferred === 'both') return ['both', 'plain'];
-  const fallback = preferred === 'plain' ? 'bracketed' : 'plain';
-  return [preferred, fallback];
+  if (preferred === 'both') return ['both', 'bracketed', 'plain'];
+  if (preferred === 'bracketed') return ['bracketed', 'plain'];
+  return ['plain', 'bracketed'];
 }
 
 function isNonAdvancingPage(response: RunTimelineEventsResponse, cursor: RunTimelineEventsCursor): boolean {
@@ -343,6 +343,7 @@ export function AgentsRunScreen() {
   const runId = params.runId;
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
+  const [selectedEventId, setSelectedEventId] = useState<string | null>(() => searchParams.get('eventId'));
   const updateSearchParams = useCallback(
     (mutator: (params: URLSearchParams) => void) => {
       setSearchParams((prev) => {
@@ -353,6 +354,11 @@ export function AgentsRunScreen() {
     },
     [setSearchParams],
   );
+
+  useEffect(() => {
+    const paramValue = searchParams.get('eventId');
+    setSelectedEventId((prev) => (prev === paramValue ? prev : paramValue));
+  }, [searchParams]);
 
   const isMdUp = useMediaQuery('(min-width: 768px)');
   const [follow, setFollow] = useState(() => resolveFollowDefault(searchParams, isMdUp));
@@ -736,16 +742,21 @@ export function AgentsRunScreen() {
       if (incomingRunId !== runId) return;
       const latestEventFilters = eventFiltersRef.current;
       const latestStatusFilters = statusFiltersRef.current;
+      const cursor = toCursor(event);
+      const currentCursor = cursorRef.current;
+      if (!currentCursor || compareCursors(cursor, currentCursor) >= 0) {
+        graphSocket.setRunCursor(runId, cursor);
+      }
       updateEventsState((prev) => mergeEvents(prev, [event], latestEventFilters, latestStatusFilters, {
         context: {
           source: 'socket-event',
           runId,
           filters: { eventFilters: latestEventFilters, statusFilters: latestStatusFilters },
-          cursor: cursorRef.current,
+          cursor: cursor,
           mode: 'MERGE',
         },
       }));
-      setCursor(toCursor(event));
+      setCursor(cursor);
       void refetchSummary();
     });
 
@@ -766,18 +777,19 @@ export function AgentsRunScreen() {
     };
   }, [runId, updateEventsState, setCursor, fetchSinceCursor, refetchSummary]);
 
-  const selectedEventId = searchParams.get('eventId');
-
   const selectEvent = useCallback(
     (eventId: string) => {
+      setSelectedEventId(eventId);
       updateSearchParams((params) => {
         params.set('eventId', eventId);
+        params.set('follow', followRef.current ? 'true' : 'false');
       });
     },
     [updateSearchParams],
   );
 
   const clearSelection = useCallback(() => {
+    setSelectedEventId(null);
     updateSearchParams((params) => {
       params.delete('eventId');
     });
@@ -865,9 +877,17 @@ export function AgentsRunScreen() {
     [stats],
   );
 
-  const combinedError = eventsQuery.isError
-    ? (eventsQuery.error instanceof Error ? eventsQuery.error.message : 'Failed to load events')
-    : loadOlderError;
+  const baseErrorMessage = eventsQuery.error instanceof Error ? eventsQuery.error.message : 'Failed to load events';
+  const fatalError = eventsQuery.isError && events.length === 0 ? baseErrorMessage : null;
+
+  const listErrorMessages: string[] = [];
+  if (eventsQuery.isError && events.length > 0) {
+    listErrorMessages.push(baseErrorMessage);
+  }
+  if (loadOlderError) {
+    listErrorMessages.push(loadOlderError);
+  }
+  const listErrorMessage = listErrorMessages.length > 0 ? listErrorMessages.join(' • ') : null;
 
   const isInitialLoading = eventsQuery.isFetching && events.length === 0;
   const isRefreshingEvents = eventsQuery.isFetching && events.length > 0;
@@ -894,7 +914,8 @@ export function AgentsRunScreen() {
       isLoadingMoreEvents={loadingOlder}
       isLoading={isInitialLoading}
       isEmpty={isEmpty}
-      error={combinedError ?? undefined}
+      error={fatalError ?? undefined}
+      listErrorMessage={listErrorMessage ?? undefined}
       onSelectEvent={handleSelectEvent}
       onFollowingChange={handleFollowingChange}
       onEventFiltersChange={handleEventFiltersChange}
@@ -906,6 +927,8 @@ export function AgentsRunScreen() {
       isRefreshingEvents={isRefreshingEvents}
       onTerminate={handleTerminate}
       onBack={threadId ? () => navigate(`/agents/threads/${threadId}`) : undefined}
+      isDesktopLayout={isMdUp}
+      onClearSelection={clearSelection}
     />
   );
 }

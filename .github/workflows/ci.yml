@@ -152,6 +152,8 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Run UI tests (@agyn/platform-ui)
+        env:
+          NODE_OPTIONS: --max-old-space-size=2048
         run: pnpm --filter @agyn/platform-ui test
 
       - name: Run UI socket e2e tests (@agyn/platform-ui)

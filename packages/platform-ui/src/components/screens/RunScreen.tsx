@@ -11,9 +11,10 @@ import {
   ScrollText,
   Settings2,
   Square,
+  X,
   Wrench,
 } from 'lucide-react';
-import type { ReactNode } from 'react';
+import { useEffect, useMemo, useRef, type ReactNode } from 'react';
 import { Button } from '../Button';
 import { IconButton } from '../IconButton';
 import { RunEventDetails } from '../RunEventDetails';
@@ -63,6 +64,7 @@ interface RunScreenProps {
   isLoading?: boolean;
   isEmpty?: boolean;
   error?: ReactNode;
+  listErrorMessage?: string;
   onSelectEvent: (eventId: string) => void;
   onFollowingChange: (isFollowing: boolean) => void;
   onEventFiltersChange: (filters: EventFilter[]) => void;
@@ -74,6 +76,8 @@ interface RunScreenProps {
   isRefreshingEvents?: boolean;
   onTerminate?: () => void;
   onBack?: () => void;
+  isDesktopLayout?: boolean;
+  onClearSelection?: () => void;
   className?: string;
 }
 
@@ -96,6 +100,7 @@ export default function RunScreen({
   isLoading = false,
   isEmpty = false,
   error,
+  listErrorMessage,
   onSelectEvent,
   onFollowingChange,
   onEventFiltersChange,
@@ -107,6 +112,8 @@ export default function RunScreen({
   isRefreshingEvents = false,
   onTerminate,
   onBack,
+  isDesktopLayout = true,
+  onClearSelection,
   className = '',
 }: RunScreenProps) {
   const eventFilterSet = new Set(eventFilters);
@@ -206,6 +213,7 @@ export default function RunScreen({
         hasMore={hasMoreEvents}
         isLoadingMore={isLoadingMoreEvents}
         loadMore={onLoadMoreEvents}
+        errorMessage={listErrorMessage}
       />
     );
   };
@@ -247,6 +255,12 @@ export default function RunScreen({
     return <RunEventDetails event={selectedEvent} />;
   };
 
+  const shouldShowMobileDetails = !isDesktopLayout && !error && Boolean(selectedEvent) && Boolean(onClearSelection);
+  const activeMobileEvent = shouldShowMobileDetails ? selectedEvent : null;
+  const handleDismissMobileDetails = () => {
+    onClearSelection?.();
+  };
+
   return (
     <div className={`flex h-screen flex-col bg-[var(--agyn-bg-light)] ${className}`}>
       {onBack && (
@@ -256,89 +270,88 @@ export default function RunScreen({
         </div>
       )}
 
-      <div className="flex flex-1 overflow-hidden">
-        <div className="flex flex-1 flex-col overflow-hidden">
-          <div className="flex items-center justify-between border-b border-[var(--agyn-border-subtle)] bg-white px-6 py-3">
-            <div className="flex items-center gap-4">
-              <div className="flex items-center gap-3">
-                <StatusIndicator status={status} size="md" showTooltip={false} />
-                <span className="font-medium capitalize">{status}</span>
-              </div>
+      <div className="flex flex-1 flex-col overflow-hidden">
+        <div className="flex flex-col gap-4 border-b border-[var(--agyn-border-subtle)] bg-white px-4 py-3 md:flex-row md:items-center md:justify-between md:gap-6 md:px-6">
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+            <div className="flex items-center gap-3">
+              <StatusIndicator status={status} size="md" showTooltip={false} />
+              <span className="font-medium capitalize">{status}</span>
+            </div>
 
-              <div className="text-[var(--agyn-border-subtle)]">|</div>
+            <div className="text-[var(--agyn-border-subtle)]">|</div>
 
-              <div className="text-sm text-[var(--agyn-dark)]">{duration}</div>
+            <div className="text-sm text-[var(--agyn-dark)]">{duration}</div>
 
-              <div className="text-[var(--agyn-border-subtle)]">|</div>
+            <div className="text-[var(--agyn-border-subtle)]">|</div>
 
-              <div className="text-sm text-[var(--agyn-text-subtle)]">{formatDate(createdAt)}</div>
+            <div className="text-sm text-[var(--agyn-text-subtle)]">{formatDate(createdAt)}</div>
 
-              <div className="text-[var(--agyn-border-subtle)]">|</div>
+            <div className="text-[var(--agyn-border-subtle)]">|</div>
 
-              <Popover.Root open={tokensPopoverOpen} onOpenChange={onTokensPopoverOpenChange}>
-                <Popover.Trigger asChild>
-                  <button
-                    className="text-sm text-[var(--agyn-dark)] transition-colors hover:text-[var(--agyn-blue)]"
-                    onMouseEnter={() => onTokensPopoverOpenChange(true)}
-                    onMouseLeave={() => onTokensPopoverOpenChange(false)}
-                  >
-                    {formatNumber(tokens.total)}{' '}
-                    <span className="text-[var(--agyn-text-subtle)]">tokens</span>
-                  </button>
-                </Popover.Trigger>
-                <Popover.Portal>
-                  <Popover.Content
-                    className="z-50 min-w-[200px] rounded-[10px] border border-[var(--agyn-border-subtle)] bg-white p-3 shadow-lg"
-                    sideOffset={5}
-                    onMouseEnter={() => onTokensPopoverOpenChange(true)}
-                    onMouseLeave={() => onTokensPopoverOpenChange(false)}
-                  >
-                    <div className="space-y-2">
-                      <div className="mb-2 text-xs font-medium text-[var(--agyn-dark)]">Token Usage</div>
+            <Popover.Root open={tokensPopoverOpen} onOpenChange={onTokensPopoverOpenChange}>
+              <Popover.Trigger asChild>
+                <button
+                  className="text-sm text-[var(--agyn-dark)] transition-colors hover:text-[var(--agyn-blue)]"
+                  onMouseEnter={() => onTokensPopoverOpenChange(true)}
+                  onMouseLeave={() => onTokensPopoverOpenChange(false)}
+                >
+                  {formatNumber(tokens.total)}{' '}
+                  <span className="text-[var(--agyn-text-subtle)]">tokens</span>
+                </button>
+              </Popover.Trigger>
+              <Popover.Portal>
+                <Popover.Content
+                  className="z-50 min-w-[200px] rounded-[10px] border border-[var(--agyn-border-subtle)] bg-white p-3 shadow-lg"
+                  sideOffset={5}
+                  onMouseEnter={() => onTokensPopoverOpenChange(true)}
+                  onMouseLeave={() => onTokensPopoverOpenChange(false)}
+                >
+                  <div className="space-y-2">
+                    <div className="mb-2 text-xs font-medium text-[var(--agyn-dark)]">Token Usage</div>
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="text-[var(--agyn-text-subtle)]">Input</span>
+                      <span className="font-medium text-[var(--agyn-dark)]">{formatNumber(tokens.input)}</span>
+                    </div>
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="text-[var(--agyn-text-subtle)]">Cached</span>
+                      <span className="font-medium text-[var(--agyn-dark)]">{formatNumber(tokens.cached)}</span>
+                    </div>
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="text-[var(--agyn-text-subtle)]">Output</span>
+                      <span className="font-medium text-[var(--agyn-dark)]">{formatNumber(tokens.output)}</span>
+                    </div>
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="text-[var(--agyn-text-subtle)]">Reasoning</span>
+                      <span className="font-medium text-[var(--agyn-dark)]">{formatNumber(tokens.reasoning)}</span>
+                    </div>
+                    <div className="mt-2 border-t border-[var(--agyn-border-subtle)] pt-2">
                       <div className="flex items-center justify-between text-xs">
-                        <span className="text-[var(--agyn-text-subtle)]">Input</span>
-                        <span className="font-medium text-[var(--agyn-dark)]">{formatNumber(tokens.input)}</span>
-                      </div>
-                      <div className="flex items-center justify-between text-xs">
-                        <span className="text-[var(--agyn-text-subtle)]">Cached</span>
-                        <span className="font-medium text-[var(--agyn-dark)]">{formatNumber(tokens.cached)}</span>
-                      </div>
-                      <div className="flex items-center justify-between text-xs">
-                        <span className="text-[var(--agyn-text-subtle)]">Output</span>
-                        <span className="font-medium text-[var(--agyn-dark)]">{formatNumber(tokens.output)}</span>
-                      </div>
-                      <div className="flex items-center justify-between text-xs">
-                        <span className="text-[var(--agyn-text-subtle)]">Reasoning</span>
-                        <span className="font-medium text-[var(--agyn-dark)]">{formatNumber(tokens.reasoning)}</span>
-                      </div>
-                      <div className="mt-2 border-t border-[var(--agyn-border-subtle)] pt-2">
-                        <div className="flex items-center justify-between text-xs">
-                          <span className="font-medium text-[var(--agyn-dark)]">Total</span>
-                          <span className="font-medium text-[var(--agyn-dark)]">{formatNumber(tokens.total)}</span>
-                        </div>
+                        <span className="font-medium text-[var(--agyn-dark)]">Total</span>
+                        <span className="font-medium text-[var(--agyn-dark)]">{formatNumber(tokens.total)}</span>
                       </div>
                     </div>
-                    <Popover.Arrow className="fill-white" />
-                  </Popover.Content>
-                </Popover.Portal>
-              </Popover.Root>
-            </div>
-
-            <div className="flex items-center gap-2">
-              {status === 'running' && (
-                <Button onClick={onTerminate} variant="danger" size="sm">
-                  <Square className="mr-1.5 h-4 w-4" />
-                  Terminate
-                </Button>
-              )}
-            </div>
+                  </div>
+                  <Popover.Arrow className="fill-white" />
+                </Popover.Content>
+              </Popover.Portal>
+            </Popover.Root>
           </div>
 
-          <div className="flex flex-1 overflow-hidden">
-            <div className="flex w-80 flex-col border-r border-[var(--agyn-border-subtle)] bg-white">
-              <div className="flex flex-col gap-3 border-b border-[var(--agyn-border-subtle)] px-3 py-3">
-                <div className="flex items-center justify-between gap-2">
-                  <Popover.Root open={runsPopoverOpen} onOpenChange={onRunsPopoverOpenChange}>
+          <div className="flex items-center gap-2">
+            {status === 'running' && (
+              <Button onClick={onTerminate} variant="danger" size="sm">
+                <Square className="mr-1.5 h-4 w-4" />
+                Terminate
+              </Button>
+            )}
+          </div>
+        </div>
+
+        <div className="flex flex-1 flex-col overflow-hidden md:flex-row">
+          <div className="flex w-full min-h-0 flex-col border-b border-[var(--agyn-border-subtle)] bg-white md:w-80 md:border-b-0 md:border-r">
+            <div className="flex flex-col gap-3 border-b border-[var(--agyn-border-subtle)] px-3 py-3">
+              <div className="flex items-center justify-between gap-2">
+                <Popover.Root open={runsPopoverOpen} onOpenChange={onRunsPopoverOpenChange}>
                   <Popover.Trigger asChild>
                     <button
                       className="text-sm text-[var(--agyn-dark)] transition-colors hover:text-[var(--agyn-blue)]"
@@ -696,9 +709,136 @@ export default function RunScreen({
               </div>
             </div>
 
-            <div className="flex flex-1 flex-col overflow-hidden bg-white">
-              {renderEventDetails()}
+          <div className="hidden flex-1 flex-col overflow-hidden bg-white md:flex">
+            {renderEventDetails()}
+          </div>
+        </div>
+      </div>
+
+      {activeMobileEvent ? <MobileEventDialog event={activeMobileEvent} onClose={handleDismissMobileDetails} /> : null}
+    </div>
+  );
+}
+
+function describeMobileEvent(event: RunEvent): string {
+  if (event.type === 'message') {
+    const subtype = event.data.messageSubtype;
+    if (subtype === 'result') return 'Message • Result';
+    if (subtype === 'intermediate') return 'Message • Intermediate';
+    return 'Message';
+  }
+
+  if (event.type === 'llm') {
+    return 'LLM Call';
+  }
+
+  if (event.type === 'tool') {
+    return event.data.toolName ? `Tool • ${event.data.toolName}` : 'Tool Call';
+  }
+
+  if (event.type === 'summarization') {
+    return 'Summarization';
+  }
+
+  return 'Event';
+}
+
+interface MobileEventDialogProps {
+  event: RunEvent;
+  onClose: () => void;
+}
+
+function MobileEventDialog({ event, onClose }: MobileEventDialogProps) {
+  const dialogRef = useRef<HTMLDivElement | null>(null);
+  const closeButtonRef = useRef<HTMLButtonElement | null>(null);
+  const titleId = useMemo(() => `mobile-run-event-${event.id}`, [event.id]);
+  const descriptionId = useMemo(() => `mobile-run-event-description-${event.id}`, [event.id]);
+
+  useEffect(() => {
+    const previouslyFocused = document.activeElement as HTMLElement | null;
+    if (closeButtonRef.current && typeof closeButtonRef.current.focus === 'function') {
+      closeButtonRef.current.focus({ preventScroll: true });
+    }
+
+    const handleKeyDown = (keyboardEvent: KeyboardEvent) => {
+      if (keyboardEvent.key === 'Escape') {
+        keyboardEvent.preventDefault();
+        onClose();
+      }
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown);
+      previouslyFocused?.focus?.({ preventScroll: true });
+    };
+  }, [onClose]);
+
+  useEffect(() => {
+    const node = dialogRef.current;
+    if (!node) return;
+
+    const handleTrap = (event: KeyboardEvent) => {
+      if (event.key !== 'Tab') return;
+      const focusableSelectors = 'a[href], button:not([disabled]), textarea, input, select, [tabindex]:not([tabindex="-1"])';
+      const focusable = Array.from(node.querySelectorAll<HTMLElement>(focusableSelectors)).filter((element) =>
+        element.getAttribute('tabindex') !== '-1' && !element.hasAttribute('data-focus-guard'),
+      );
+      if (focusable.length === 0) return;
+
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      const active = document.activeElement as HTMLElement | null;
+
+      if (event.shiftKey) {
+        if (active === first || !node.contains(active)) {
+          event.preventDefault();
+          last.focus();
+        }
+        return;
+      }
+
+      if (active === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+
+    node.addEventListener('keydown', handleTrap);
+    return () => node.removeEventListener('keydown', handleTrap);
+  }, []);
+
+  return (
+    <div className="fixed inset-0 z-50 flex flex-col bg-[var(--agyn-dark)]/60 md:hidden">
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        aria-describedby={descriptionId}
+        className="mt-auto w-full max-h-[90vh] overflow-hidden rounded-t-[16px] bg-white shadow-xl"
+      >
+        <div ref={dialogRef} className="flex h-full flex-col">
+          <div className="flex items-start justify-between border-b border-[var(--agyn-border-subtle)] px-4 py-3">
+            <div>
+              <p id={titleId} className="text-sm font-medium text-[var(--agyn-dark)]">
+                {describeMobileEvent(event)}
+              </p>
+              <p id={descriptionId} className="text-xs text-[var(--agyn-text-subtle)]">
+                {event.timestamp}
+              </p>
             </div>
+            <button
+              ref={closeButtonRef}
+              type="button"
+              onClick={onClose}
+              className="inline-flex h-8 w-8 items-center justify-center rounded-full text-[var(--agyn-gray)] transition-colors hover:bg-[var(--agyn-bg-light)] hover:text-[var(--agyn-blue)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--agyn-blue)] focus-visible:ring-offset-2 focus-visible:ring-offset-white"
+              aria-label="Close event details"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+          <div className="flex-1 overflow-y-auto px-4 py-3">
+            <RunEventDetails event={event} />
           </div>
         </div>
       </div>

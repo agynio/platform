@@ -8,7 +8,7 @@
     "build": "vite build",
     "lint": "eslint .",
     "preview": "vite preview",
-    "test": "vitest run",
+    "test": "vitest run --pool=forks --maxWorkers=2 --sequence.concurrent=false --reporter=dot",
     "test:e2e": "vitest run e2e/graph-socket.e2e.test.ts",
     "typecheck": "tsc -p tsconfig.app.json --noEmit",
     "test:watch": "vitest",

@@ -3,7 +3,7 @@ import { describe, expect, beforeEach, afterEach, vi, it } from 'vitest';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { render, waitFor } from '@testing-library/react';
 
-import type { RunTimelineEvent, RunTimelineSummary } from '@/api/types/agents';
+import type { RunTimelineEvent, RunTimelineSummary, RunTimelineEventsResponse } from '@/api/types/agents';
 import { AgentsRunScreen } from '../AgentsRunScreen';
 
 vi.mock('@/components/screens/RunScreen', async () => {
@@ -27,6 +27,9 @@ vi.mock('@/components/screens/RunScreen', async () => {
         </button>
         <button type="button" data-testid="load-more" onClick={() => props.onLoadMoreEvents?.()}>
           load-more
+        </button>
+        <button type="button" data-testid="clear-selection" onClick={() => props.onClearSelection?.()}>
+          clear-selection
         </button>
         <button type="button" data-testid="terminate" onClick={() => props.onTerminate?.()}>
           terminate
@@ -104,6 +107,22 @@ function renderScreen(initialPath = '/agents/threads/thread-1/runs/run-1') {
   );
 }
 
+const matchMediaMock = vi.fn().mockImplementation((query: string) => ({
+  matches: true,
+  media: query,
+  onchange: null,
+  addEventListener: vi.fn(),
+  removeEventListener: vi.fn(),
+  addListener: vi.fn(),
+  removeListener: vi.fn(),
+  dispatchEvent: vi.fn(),
+}));
+
+Object.defineProperty(window, 'matchMedia', {
+  writable: true,
+  value: matchMediaMock,
+});
+
 describe('AgentsRunScreen', () => {
   const useRunTimelineEventsMock = vi.mocked(useRunTimelineEvents);
   const useRunTimelineSummaryMock = vi.mocked(useRunTimelineSummary);
@@ -112,9 +131,21 @@ describe('AgentsRunScreen', () => {
   const notifyErrorMock = vi.mocked(notifyError);
   const notifySuccessMock = vi.mocked(notifySuccess);
   let summaryHookValue: { data: RunTimelineSummary; isLoading: boolean; refetch: ReturnType<typeof vi.fn> };
+  let runEventListener: ((payload: { runId: string; event: RunTimelineEvent }) => void) | null;
 
   beforeEach(() => {
     localStorage.clear();
+    matchMediaMock.mockImplementation((query: string) => ({
+      matches: true,
+      media: query,
+      onchange: null,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+      dispatchEvent: vi.fn(),
+    }));
+    matchMediaMock.mockClear();
     runScreenRenderSpy.mockClear();
     runsModuleMock.timelineEvents.mockReset();
     runsModuleMock.terminate.mockReset();
@@ -124,7 +155,11 @@ describe('AgentsRunScreen', () => {
     graphSocketMock.unsubscribe.mockReset();
     graphSocketMock.setRunCursor.mockReset();
     graphSocketMock.getRunCursor.mockReturnValue(null);
-    graphSocketMock.onRunEvent.mockReturnValue(() => {});
+    runEventListener = null;
+    graphSocketMock.onRunEvent.mockImplementation((handler) => {
+      runEventListener = handler;
+      return () => {};
+    });
     graphSocketMock.onRunStatusChanged.mockReturnValue(() => {});
     graphSocketMock.onReconnected.mockReturnValue(() => {});
 
@@ -157,20 +192,22 @@ describe('AgentsRunScreen', () => {
     };
     useRunTimelineSummaryMock.mockReturnValue(summaryHookValue);
 
-    useRunTimelineEventsMock.mockImplementation(() => ({
-      data: {
-        items: [
-          buildEvent({ id: 'event-1', ts: '2024-01-01T00:00:00.000Z' }),
-          buildEvent({ id: 'event-2', ts: '2024-01-01T00:00:01.000Z' }),
-        ],
-        nextCursor: { ts: '2023-12-31T23:59:59.000Z', id: 'cursor-1' },
-      },
+    const eventsResponse = {
+      items: [
+        buildEvent({ id: 'event-1', ts: '2024-01-01T00:00:00.000Z' }),
+        buildEvent({ id: 'event-2', ts: '2024-01-01T00:00:01.000Z' }),
+      ],
+      nextCursor: { ts: '2023-12-31T23:59:59.000Z', id: 'cursor-1' },
+    } satisfies RunTimelineEventsResponse;
+
+    useRunTimelineEventsMock.mockReturnValue({
+      data: eventsResponse,
       isLoading: false,
       isFetching: false,
       isError: false,
       refetch: vi.fn(),
       error: null,
-    }));
+    });
   });
 
   afterEach(() => {
@@ -220,10 +257,59 @@ describe('AgentsRunScreen', () => {
     expect(call?.[1]).toMatchObject({ limit: 100, order: 'desc' });
   });
 
+  it('surfaces load-older errors without clearing the timeline', async () => {
+    const { getByTestId } = renderScreen();
+    await waitFor(() => expect(runScreenRenderSpy).toHaveBeenCalled());
+
+    runsModuleMock.timelineEvents.mockRejectedValueOnce(new Error('load failure'));
+
+    getByTestId('load-more').click();
+
+    await waitFor(() => {
+      const latestProps = runScreenRenderSpy.mock.calls.at(-1)?.[0];
+      expect(latestProps?.error).toBeUndefined();
+      expect(latestProps?.listErrorMessage).toContain('load failure');
+    });
+  });
+
+  it('updates selection state immediately when selecting an event', async () => {
+    renderScreen();
+    await waitFor(() => expect(runScreenRenderSpy).toHaveBeenCalled());
+
+    const initialProps = runScreenRenderSpy.mock.calls.at(-1)?.[0];
+    expect(initialProps?.selectedEventId).toBe('event-2');
+
+    initialProps?.onSelectEvent?.('event-1');
+
+    await waitFor(() => {
+      const latestProps = runScreenRenderSpy.mock.calls.at(-1)?.[0];
+      expect(latestProps?.selectedEventId).toBe('event-1');
+    });
+  });
+
+  it('advances the graph socket cursor when new events arrive', async () => {
+    renderScreen();
+    await waitFor(() => expect(runScreenRenderSpy).toHaveBeenCalled());
+    expect(runEventListener).toBeTruthy();
+
+    const initialCalls = graphSocketMock.setRunCursor.mock.calls.length;
+    const incoming = buildEvent({ id: 'event-3', ts: '2024-01-01T00:00:02.000Z' });
+    runEventListener?.({ runId: 'run-1', event: incoming });
+
+    await waitFor(() => {
+      expect(graphSocketMock.setRunCursor.mock.calls.length).toBeGreaterThan(initialCalls);
+    });
+
+    const newCalls = graphSocketMock.setRunCursor.mock.calls.slice(initialCalls);
+    const firstNewCall = newCalls[0];
+    expect(firstNewCall?.[0]).toBe('run-1');
+    expect(firstNewCall?.[1]).toEqual({ ts: incoming.ts, id: incoming.id });
+  });
+
   it('terminates the run successfully', async () => {
     runsModuleMock.terminate.mockResolvedValue(undefined);
     const summaryRefetch = vi.fn();
-    useRunTimelineSummaryMock.mockReturnValueOnce({ ...summaryHookValue, refetch: summaryRefetch });
+    summaryHookValue.refetch = summaryRefetch;
 
     const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
     const { getByTestId } = renderScreen();
