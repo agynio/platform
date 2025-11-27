@@ -8,11 +8,16 @@ const loggerStub = {
   error: vi.fn(),
 };
 
-const createRuntimeFixture = (toolNode: RemindMeNode) => ({
-  getNodes: vi.fn(() => [
-    { template: 'remindMeTool', instance: toolNode },
-    { template: 'otherTool', instance: {} },
-  ]),
+type RuntimeNode = { id: string; template?: string; instance: unknown };
+
+const createRuntimeFixture = (...nodes: RuntimeNode[]) => ({
+  getNodes: vi.fn(() =>
+    nodes.map((node) => ({
+      id: node.id,
+      template: node.template ?? 'remindMeTool',
+      instance: node.instance,
+    })),
+  ),
 });
 
 describe('RemindersCancellationService', () => {
@@ -46,7 +51,7 @@ describe('RemindersCancellationService', () => {
         return 2;
       });
 
-    const runtime = createRuntimeFixture(node);
+    const runtime = createRuntimeFixture({ id: 'node-a', instance: node }, { id: 'node-other', template: 'otherTool', instance: {} });
 
     const service = new RemindersCancellationService(
       prismaService as any,
@@ -68,10 +73,10 @@ describe('RemindersCancellationService', () => {
     expect(result).toEqual({ cancelledDb: 3, cancelledRuntime: 2 });
   });
 
-  it('handles runtime cancellation errors gracefully', async () => {
+  it('continues cancellation when a node throws', async () => {
     const prismaClient = {
       reminder: {
-        updateMany: vi.fn(async () => ({ count: 1 })),
+        updateMany: vi.fn(async () => ({ count: 4 })),
       },
     };
     const prismaService = { getClient: () => prismaClient };
@@ -80,13 +85,21 @@ describe('RemindersCancellationService', () => {
       emitThreadMetricsAncestors: vi.fn(),
       emitReminderCount: vi.fn(),
     };
+    const failingNode = new RemindMeNode(eventsBus as any, prismaService as any);
+    failingNode.init({ nodeId: 'node-fail' } as any);
+    const failingTool = failingNode.getTool();
+    vi.spyOn(failingTool, 'cancelByThread').mockRejectedValue(new Error('boom'));
 
-    const node = new RemindMeNode(eventsBus as any, prismaService as any);
-    node.init({ nodeId: 'node-b' } as any);
-    const tool = node.getTool();
-    vi.spyOn(tool, 'cancelByThread').mockRejectedValue(new Error('boom'));
+    const succeedingNode = new RemindMeNode(eventsBus as any, prismaService as any);
+    succeedingNode.init({ nodeId: 'node-ok' } as any);
+    const succeedingTool = succeedingNode.getTool();
+    vi.spyOn(succeedingTool, 'cancelByThread').mockResolvedValue(5);
 
-    const runtime = createRuntimeFixture(node);
+    const runtime = createRuntimeFixture(
+      { id: 'node-fail', instance: failingNode },
+      { id: 'node-ok', instance: succeedingNode },
+      { id: 'node-other', template: 'otherTool', instance: {} },
+    );
 
     const service = new RemindersCancellationService(
       prismaService as any,
@@ -98,13 +111,17 @@ describe('RemindersCancellationService', () => {
     const result = await service.cancelThread('thread-err');
 
     expect(loggerStub.warn).toHaveBeenCalledWith(
-      'RemindersCancellationService runtime cancellation error',
-      expect.objectContaining({ threadId: 'thread-err' }),
+      'RemindersCancellationService node cancellation error',
+      expect.objectContaining({ threadId: 'thread-err', nodeId: 'node-fail' }),
     );
-    expect(prismaClient.reminder.updateMany).toHaveBeenCalled();
+    expect(succeedingTool.cancelByThread).toHaveBeenCalledWith(expect.any(String), prismaClient, expect.any(Date));
+    expect(prismaClient.reminder.updateMany).toHaveBeenCalledWith({
+      where: { threadId: 'thread-err', completedAt: null, cancelledAt: null },
+      data: { cancelledAt: expect.any(Date) },
+    });
     expect(eventsBus.emitThreadMetrics).toHaveBeenCalledWith({ threadId: 'thread-err' });
     expect(eventsBus.emitThreadMetricsAncestors).toHaveBeenCalledWith({ threadId: 'thread-err' });
-    expect(result.cancelledRuntime).toBe(0);
-    expect(result.cancelledDb).toBe(1);
+    expect(result.cancelledRuntime).toBe(5);
+    expect(result.cancelledDb).toBe(4);
   });
 });

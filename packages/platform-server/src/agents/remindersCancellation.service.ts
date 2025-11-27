@@ -23,18 +23,31 @@ export class RemindersCancellationService {
     const cancelledAt = new Date();
     let runtimeCancelled = 0;
 
+    let liveNodes: Array<{ id: string; template: string; instance: unknown }> = [];
     try {
-      for (const liveNode of this.runtime.getNodes()) {
-        if (liveNode.template !== 'remindMeTool') continue;
-        const instance = liveNode.instance;
-        if (!(instance instanceof RemindMeNode)) continue;
-        const tool = instance.getTool() as RemindMeFunctionTool;
-        if (typeof tool.cancelByThread !== 'function') continue;
-        runtimeCancelled += await tool.cancelByThread(threadId, prisma, cancelledAt);
-      }
+      liveNodes = this.runtime.getNodes();
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      this.logger.warn('RemindersCancellationService runtime cancellation error', { threadId, error: message });
+      this.logger.warn('RemindersCancellationService nodes traversal failed', { threadId, error: message });
+    }
+
+    for (const liveNode of liveNodes) {
+      if (liveNode.template !== 'remindMeTool') continue;
+      const instance = liveNode.instance;
+      if (!(instance instanceof RemindMeNode)) continue;
+      const tool = instance.getTool() as RemindMeFunctionTool;
+      if (typeof tool.cancelByThread !== 'function') continue;
+
+      try {
+        runtimeCancelled += await tool.cancelByThread(threadId, prisma, cancelledAt);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        this.logger.warn('RemindersCancellationService node cancellation error', {
+          threadId,
+          nodeId: liveNode.id,
+          error: message,
+        });
+      }
     }
 
     let dbCancelled = 0;
