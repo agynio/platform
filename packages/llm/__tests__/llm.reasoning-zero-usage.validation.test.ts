@@ -106,6 +106,22 @@ describe('LLM reasoning-only zero usage validation', () => {
     expect(error.message).toContain('reasoning-only response');
   });
 
+  it('throws when usage details are missing but totals are zero', async () => {
+    const rawResponse = createReasoningOnlyResponse(
+      {
+        total_tokens: 0,
+        input_tokens: 0,
+        output_tokens: 0,
+      } as unknown as Response['usage'],
+    );
+
+    const llm = createLLMFor(rawResponse);
+
+    await expect(llm.call({ model: 'gpt-4o', input: baseInput })).rejects.toBeInstanceOf(
+      ReasoningOnlyZeroUsageError,
+    );
+  });
+
   it('does not throw when assistant message is present even if usage totals zero', async () => {
     const rawResponse = createMessageResponse(buildUsage({ input: 0, output: 0, total: 0 }));
 

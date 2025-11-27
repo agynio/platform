@@ -138,15 +138,19 @@ export class LLM {
     details: unknown,
     key: 'cached_tokens' | 'reasoning_tokens',
   ): details is UsageSnapshot['input_tokens_details'] | UsageSnapshot['output_tokens_details'] {
-    if (details === undefined || details === null || typeof details !== 'object') {
+    if (details === undefined) {
+      return true;
+    }
+
+    if (details === null || typeof details !== 'object') {
       return false;
     }
 
-    if (!(key in details)) {
-      return false;
+    const value = (details as Partial<Record<typeof key, unknown>>)[key];
+    if (value === undefined) {
+      return true;
     }
 
-    const value = (details as Record<typeof key, unknown>)[key];
     return LLM.isFiniteNumber(value);
   }
 
