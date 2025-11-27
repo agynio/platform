@@ -80,11 +80,12 @@ describe('ShellTool timeout tail inclusion and ANSI stripping', () => {
       // No ANSI should remain
       expect(msg).not.toMatch(/\u001b\[/);
       // Tail should contain the last characters of the 12k string + ERR-SECTION
-      expect(msg).toContain('ERR-SECTION');
-      const tailIndex = msg.indexOf('----------');
-      expect(tailIndex).toBeGreaterThan(0);
-      const tail = msg.substring(tailIndex + '----------'.length);
-      expect(tail.length).toBeLessThanOrEqual(10010); // tail plus possible newline
+      const tailMatch = msg.match(/See output tail below\.\n----------\n([\s\S]+)$/);
+      expect(tailMatch).not.toBeNull();
+      const tail = tailMatch?.[1] ?? '';
+      expect(tail.length).toBe(10_000);
+      expect(tail.endsWith('ERR-SECTION')).toBe(true);
+      expect(tail).toMatch(/^x+ERR-SECTION$/);
     }
   });
 });

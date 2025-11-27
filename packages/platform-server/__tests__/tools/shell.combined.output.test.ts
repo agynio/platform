@@ -294,9 +294,11 @@ describe('ShellCommandTool combined output', () => {
     expect(terminalArgs.message).toContain('Full output saved to');
   });
 
-  it('executeStreaming throws and includes saved path when truncated stderr exceeds limit', async () => {
-    const large = 'E'.repeat(2000);
-    const container = new SequenceContainer([{ source: 'stderr', data: large }], 9);
+  it('executeStreaming throws and includes 10k tail when oversized output is truncated', async () => {
+    const prefix = 'H'.repeat(2000);
+    const tailSegment = 'T'.repeat(10_000);
+    const combinedOutput = `${prefix}${tailSegment}`;
+    const container = new SequenceContainer([{ source: 'stderr', data: combinedOutput }], 9);
     const { tool, runEvents, node } = createToolWithContainer(container);
     await node.setConfig({ outputLimitChars: 1000 } as any);
 
@@ -310,8 +312,12 @@ describe('ShellCommandTool combined output', () => {
     expect(error).toBeInstanceOf(Error);
     const message = (error as Error).message;
     expect(message).toMatch(/\[exit code 9]/);
-    expect(message.toLowerCase()).toContain('output tail');
     expect(message).toMatch(/Full output saved to \/tmp\/.+\.txt/);
+    expect(message.toLowerCase()).toContain('output tail');
+    const tailMatch = message.match(/--- output tail ---\n([\s\S]+)$/);
+    expect(tailMatch).not.toBeNull();
+    expect(tailMatch?.[1].length).toBe(10_000);
+    expect(tailMatch?.[1]).toBe(tailSegment);
 
     expect(runEvents.finalizeToolOutputTerminal).toHaveBeenCalledTimes(1);
     const terminalArgs = runEvents.finalizeToolOutputTerminal.mock.calls[0][0];

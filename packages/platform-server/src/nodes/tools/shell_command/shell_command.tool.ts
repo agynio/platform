@@ -34,6 +34,7 @@ export const bashCommandSchema = z.object({
 const ANSI_REGEX = /[\u001B\u009B][[[\]()#;?]*(?:[0-9]{1,4}(?:;[0-9]{0,4})*)?[0-9A-ORZcf-nq-uy=><]/g;
 const ANSI_OSC_REGEX = /\u001b\][^\u001b\u0007]*(?:\u0007|\u001b\\)/g;
 const ANSI_STRING_REGEX = /\u001b[PX^_][^\u001b]*(?:\u001b\\)/g;
+const OUTPUT_TAIL_LIMIT = 10_000;
 
 const ESC = '\u001b';
 const BEL = '\u0007';
@@ -235,7 +236,7 @@ export class ShellCommandTool extends FunctionTool<typeof bashCommandSchema> {
         details.push(`Full output saved to: ${savedPath}`);
       }
 
-      const snippetLength = Math.min(2000, sanitizedOutput.length);
+      const snippetLength = Math.min(OUTPUT_TAIL_LIMIT, sanitizedOutput.length);
       if (snippetLength > 0) {
         const snippet = sanitizedOutput.slice(-snippetLength);
         if (snippet) {
@@ -354,7 +355,7 @@ export class ShellCommandTool extends FunctionTool<typeof bashCommandSchema> {
         flushDecoderRemainder();
         const timeoutErr = err as ExecTimeoutError | ExecIdleTimeoutError;
         const combined = getCombinedOutput({ stdout: timeoutErr.stdout ?? '', stderr: timeoutErr.stderr ?? '' });
-        const tail = combined.length > 10000 ? combined.slice(-10000) : combined;
+        const tail = combined.length > OUTPUT_TAIL_LIMIT ? combined.slice(-OUTPUT_TAIL_LIMIT) : combined;
         if (isExecIdleTimeoutError(err)) {
           const idleMs = timeoutErr.timeoutMs ?? idleTimeoutMs;
           throw new Error(
