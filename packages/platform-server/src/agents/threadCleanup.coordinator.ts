@@ -69,11 +69,11 @@ export class ThreadCleanupCoordinator {
 
     this.logger.info('ThreadCleanup: pipeline start', { threadId });
 
+    const reminderResult = await this.cancelThreadReminders(threadId);
     await this.terminateActiveRuns(threadId);
     await this.terminateThreadContainers(threadId);
     await this.sweepThreadArtifacts(threadId);
 
-    const reminderResult = await this.cancelThreadReminders(threadId);
     await this.emitThreadMetrics(threadId);
 
     this.logger.info('ThreadCleanup: pipeline complete', {
