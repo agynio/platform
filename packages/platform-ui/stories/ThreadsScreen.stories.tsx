@@ -165,6 +165,21 @@ const reminders = [
   { id: 'r-2', title: 'Update documentation', time: 'Friday at 2:00 PM' },
 ];
 
+const baseArgs: ThreadsScreenProps = {
+  threads,
+  runs,
+  containers,
+  reminders,
+  filterMode: 'all',
+  selectedThreadId: threads[0]?.id ?? null,
+  inputValue: '',
+  isRunsInfoCollapsed: false,
+  threadsHasMore: true,
+  threadsIsLoading: false,
+  isLoading: false,
+  isEmpty: false,
+};
+
 const defaultDraftThread: Thread = {
   id: 'draft-demo',
   summary: 'Plan onboarding follow-up with the product team',
@@ -185,21 +200,6 @@ const fetchDraftRecipients = async (query: string): Promise<AutocompleteOption[]
   return defaultDraftRecipients
     .filter((recipient) => recipient.title.toLowerCase().includes(normalized))
     .map((recipient) => ({ value: recipient.id, label: recipient.title }));
-};
-
-const baseArgs: ThreadsScreenProps = {
-  threads,
-  runs,
-  containers,
-  reminders,
-  filterMode: 'all',
-  selectedThreadId: threads[0]?.id ?? null,
-  inputValue: '',
-  isRunsInfoCollapsed: false,
-  threadsHasMore: true,
-  threadsIsLoading: false,
-  isLoading: false,
-  isEmpty: false,
 };
 
 const ControlledRender: Story['render'] = () => {
@@ -281,7 +281,20 @@ const ControlledRender: Story['render'] = () => {
 };
 
 export const Populated: Story = {
-  args: { ...baseArgs },
+  args: {
+    threads,
+    runs,
+    containers,
+    reminders,
+    filterMode: 'all',
+    selectedThreadId: threads[0].id,
+    inputValue: '',
+    isRunsInfoCollapsed: false,
+    threadsHasMore: true,
+    threadsIsLoading: false,
+    isLoading: false,
+    isEmpty: false,
+  },
   render: ControlledRender,
   parameters: {
     selectedMenuItem: 'threads',

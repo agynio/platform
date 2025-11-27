@@ -215,6 +215,7 @@ describe('AgentsThreads page', () => {
 
     expect(await screen.findByRole('heading', { name: thread.summary })).toBeInTheDocument();
     expect(screen.getByTestId('threads-list')).toBeInTheDocument();
+    expect(screen.getByText('Agents / Threads')).toBeInTheDocument();
     const detailHeading = await screen.findByRole('heading', { name: thread.summary });
     const detailContainer = detailHeading.parentElement as HTMLElement;
     expect(within(detailContainer).getByText(thread.agentName ?? '')).toBeInTheDocument();

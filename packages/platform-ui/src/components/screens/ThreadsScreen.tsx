@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import { formatDistanceToNow } from 'date-fns';
 import { Play, Container, Bell, Send, PanelRightClose, PanelRight, Loader2, MessageSquarePlus, Terminal } from 'lucide-react';
 import { AutocompleteInput, type AutocompleteInputHandle, type AutocompleteOption } from '@/components/AutocompleteInput';
-import { Button } from '@/components/Button';
+import { Button } from '../Button';
 import { IconButton } from '../IconButton';
 import { ThreadsList } from '../ThreadsList';
 import type { Thread } from '../ThreadItem';

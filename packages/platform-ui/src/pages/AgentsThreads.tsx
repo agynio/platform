@@ -4,6 +4,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import ThreadsScreen from '@/components/screens/ThreadsScreen';
 import type { Thread } from '@/components/ThreadItem';
 import type { ConversationMessage, Run as ConversationRun } from '@/components/Conversation';
+import type { AutocompleteOption } from '@/components/AutocompleteInput';
 import { formatDuration } from '@/components/agents/runTimelineFormatting';
 import { notifyError } from '@/lib/notify';
 import { graphSocket } from '@/lib/graph/socket';
@@ -427,6 +428,16 @@ export function AgentsThreads() {
     result.sort((a, b) => a.title.localeCompare(b.title));
     return result;
   }, [fullGraphQuery.data, graphTemplatesQuery.data]);
+
+  const draftFetchOptions = useCallback(
+    async (query: string): Promise<AutocompleteOption[]> => {
+      const normalized = query.trim().toLowerCase();
+      return agentOptions
+        .filter((option) => normalized.length === 0 || option.title.toLowerCase().includes(normalized))
+        .map((option) => ({ value: option.id, label: option.title }));
+    },
+    [agentOptions],
+  );
 
   const limitKey = useMemo(() => ({ limit: threadLimit }), [threadLimit]);
   const threadsQueryKey = useMemo(() => ['agents', 'threads', 'roots', filterMode, limitKey] as const, [filterMode, limitKey]);
@@ -1098,38 +1109,43 @@ export function AgentsThreads() {
 
   return (
     <div className="absolute inset-0 flex min-h-0 min-w-0 flex-col overflow-hidden">
-      <ThreadsScreen
-        threads={threadsForList}
-        runs={conversationRuns}
-        containers={containersForScreen}
-        reminders={remindersForScreen}
-        filterMode={filterMode}
-        selectedThreadId={selectedThreadId ?? null}
-        inputValue={inputValue}
-        isRunsInfoCollapsed={isRunsInfoCollapsed}
-        threadsHasMore={threadsHasMore}
-        threadsIsLoading={threadsIsLoading}
-        isLoading={detailIsLoading}
-        isEmpty={isThreadsEmpty}
-        listError={listErrorNode}
-        detailError={detailErrorNode}
-        onFilterModeChange={handleFilterChange}
-        onSelectThread={handleSelectThread}
-        onToggleRunsInfoCollapsed={handleToggleRunsInfoCollapsed}
-        onInputValueChange={handleInputValueChange}
-        onSendMessage={handleSendMessage}
-        onThreadsLoadMore={threadsHasMore ? handleThreadsLoadMore : undefined}
-        onThreadExpand={handleThreadExpand}
-        selectedThread={selectedThreadForScreen}
-        onCreateDraft={handleCreateDraft}
-        onOpenContainerTerminal={handleOpenContainerTerminal}
-        draftMode={isDraftSelected}
-        draftRecipientId={activeDraft?.agentNodeId ?? null}
-        draftRecipientLabel={activeDraft?.agentTitle ?? null}
-        draftRecipients={agentOptions}
-        onDraftRecipientChange={handleDraftRecipientChange}
-        onDraftCancel={handleDraftCancel}
-      />
+      <div className="shrink-0 border-b px-6 py-3">
+        <h1 className="text-xl font-semibold">Agents / Threads</h1>
+      </div>
+      <div className="flex min-h-0 flex-1 flex-col">
+        <ThreadsScreen
+          threads={threadsForList}
+          runs={conversationRuns}
+          containers={containersForScreen}
+          reminders={remindersForScreen}
+          filterMode={filterMode}
+          selectedThreadId={selectedThreadId ?? null}
+          inputValue={inputValue}
+          isRunsInfoCollapsed={isRunsInfoCollapsed}
+          threadsHasMore={threadsHasMore}
+          threadsIsLoading={threadsIsLoading}
+          isLoading={detailIsLoading}
+          isEmpty={isThreadsEmpty}
+          listError={listErrorNode}
+          detailError={detailErrorNode}
+          onFilterModeChange={handleFilterChange}
+          onSelectThread={handleSelectThread}
+          onToggleRunsInfoCollapsed={handleToggleRunsInfoCollapsed}
+          onInputValueChange={handleInputValueChange}
+          onSendMessage={handleSendMessage}
+          onThreadsLoadMore={threadsHasMore ? handleThreadsLoadMore : undefined}
+          onThreadExpand={handleThreadExpand}
+          selectedThread={selectedThreadForScreen}
+          onCreateDraft={handleCreateDraft}
+          onOpenContainerTerminal={handleOpenContainerTerminal}
+          draftMode={isDraftSelected}
+          draftRecipientId={activeDraft?.agentNodeId ?? null}
+          draftRecipientLabel={activeDraft?.agentTitle ?? null}
+          draftFetchOptions={draftFetchOptions}
+          onDraftRecipientChange={handleDraftRecipientChange}
+          onDraftCancel={handleDraftCancel}
+        />
+      </div>
       <ContainerTerminalDialog
         container={selectedContainer}
         open={Boolean(selectedContainer)}
