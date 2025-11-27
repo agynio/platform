@@ -31,7 +31,8 @@ describe('ShellToolConfigView payload', () => {
 
     expect(cfg.workdir).toBe('/work');
     expect(Array.isArray(cfg.env)).toBe(true);
-    expect(cfg.env[0]).toEqual({ name: 'FOO', value: 'bar', source: 'static' });
+    expect(cfg.env[0]).toEqual({ name: 'FOO', value: 'bar' });
+    expect(cfg.env[0]).not.toHaveProperty('source');
     expect(cfg.executionTimeoutMs).toBe(0);
     expect(cfg.idleTimeoutMs).toBe(2000);
     expect(cfg.outputLimitChars).toBe(12345);

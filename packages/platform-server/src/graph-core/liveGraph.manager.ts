@@ -431,7 +431,7 @@ export class LiveGraphRuntime {
   private async resolveNodeConfig(nodeId: string, config: Record<string, unknown>): Promise<Record<string, unknown>> {
     if (!this.referenceResolver) return config;
     try {
-      const { output } = await this.referenceResolver.resolve(config, {
+      const { output } = await this.referenceResolver.resolve<Record<string, unknown>>(config, {
         graphName: this.graphName,
         basePath: `/nodes/${encodeURIComponent(nodeId)}/config`,
       });

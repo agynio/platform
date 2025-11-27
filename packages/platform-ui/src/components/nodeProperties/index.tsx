@@ -14,6 +14,7 @@ import {
   applyQueueUpdate,
   applySummarizationUpdate,
   applyVolumesUpdate,
+  createEnvVar,
   fromReferenceSourceType,
   isRecord,
   mergeWithDefined,
@@ -29,7 +30,6 @@ import {
 import type {
   AgentQueueConfig,
   AgentSummarizationConfig,
-  EnvVar,
   NodeConfig,
   NodePropertiesSidebarProps,
   NodeState,
@@ -175,10 +175,7 @@ function NodePropertiesSidebar({
   const volumesEnabled = volumesConfig.enabled === true;
   const volumesMountPath =
     typeof volumesConfig.mountPath === 'string' ? (volumesConfig.mountPath as string) : '/workspace';
-  const workspaceNixPackages = useMemo(
-    () => readNixPackages(configRecord.nix),
-    [configRecord.nix],
-  );
+  const workspaceNixPackages = useMemo(() => readNixPackages(configRecord.nix), [configRecord.nix]);
 
   const setVersionLoading = useCallback((name: string, loading: boolean) => {
     setNixVersionLoading((prev) => {
@@ -233,7 +230,9 @@ function NodePropertiesSidebar({
 
   const loadPackageVersions = useCallback(
     async (name: string) => {
-      if (!fetchNixPackageVersions) return;
+      if (!fetchNixPackageVersions) {
+        return;
+      }
       if (nixVersionLoading.has(name)) return;
       setVersionLoading(name, true);
       try {
@@ -262,7 +261,7 @@ function NodePropertiesSidebar({
   const toolList = useMemo(() => (Array.isArray(tools) ? tools : []), [tools]);
 
   const handleEnvAdd = useCallback(() => {
-    const next = [...envVars, { name: '', value: '', source: 'static' } satisfies EnvVar];
+    const next = [...envVars, createEnvVar()];
     onConfigChange?.({ env: serializeEnvVars(next) });
   }, [envVars, onConfigChange]);
 

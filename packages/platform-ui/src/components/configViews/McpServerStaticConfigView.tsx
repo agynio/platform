@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Input } from '@agyn/ui';
+import type { EnvVar } from '@/components/nodeProperties/types';
+import { readEnvList, serializeEnvVars } from '@/components/nodeProperties/utils';
 import type { StaticConfigViewProps } from './types';
-import ReferenceEnvField, { type EnvItem } from './shared/ReferenceEnvField';
+import ReferenceEnvField from './shared/ReferenceEnvField';
 
 export default function McpServerStaticConfigView({ value, onChange, readOnly, disabled, onValidate }: StaticConfigViewProps) {
   const init = useMemo(() => ({ ...(value || {}) }), [value]);
@@ -9,7 +11,7 @@ export default function McpServerStaticConfigView({ value, onChange, readOnly, d
   const [namespace, setNamespace] = useState<string>((init.namespace as string) || 'mcp');
   const [command, setCommand] = useState<string>((init.command as string) || '');
   const [workdir, setWorkdir] = useState<string>((init.workdir as string) || '');
-  const [env, setEnv] = useState<EnvItem[]>((init.env as EnvItem[]) || []);
+  const [env, setEnv] = useState<EnvVar[]>(() => readEnvList(init.env));
   const [requestTimeoutMs, setRequestTimeoutMs] = useState<number>(typeof init.requestTimeoutMs === 'number' ? (init.requestTimeoutMs as number) : 15000);
   const [startupTimeoutMs, setStartupTimeoutMs] = useState<number>(typeof init.startupTimeoutMs === 'number' ? (init.startupTimeoutMs as number) : 15000);
   const [heartbeatIntervalMs, setHeartbeatIntervalMs] = useState<number>(typeof init.heartbeatIntervalMs === 'number' ? (init.heartbeatIntervalMs as number) : 300000);
@@ -33,6 +35,10 @@ export default function McpServerStaticConfigView({ value, onChange, readOnly, d
   }, [namespace, onValidate]);
 
   useEffect(() => {
+    setEnv(readEnvList(init.env));
+  }, [init]);
+
+  useEffect(() => {
     const restart = { maxAttempts: restartMaxAttempts, backoffMs: restartBackoffMs };
     onChange({
       ...value,
@@ -40,7 +46,7 @@ export default function McpServerStaticConfigView({ value, onChange, readOnly, d
       namespace,
       command: command || undefined,
       workdir: workdir || undefined,
-      env,
+      env: serializeEnvVars(env),
       requestTimeoutMs,
       startupTimeoutMs,
       heartbeatIntervalMs,

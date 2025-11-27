@@ -1,9 +1,13 @@
+import { action } from 'storybook/actions';
 import type { Meta, StoryObj } from '@storybook/react';
+import { useArgs } from 'storybook/preview-api';
 import RunScreen from '../src/components/screens/RunScreen';
-import { withMainLayout } from './decorators/withMainLayout';
 import type { RunEvent } from '../src/components/RunEventsList';
 import type { EventType } from '../src/components/RunEventDetails';
 import { type Status } from '../src/components/StatusIndicator';
+import { withMainLayout } from './decorators/withMainLayout';
+
+type RunScreenProps = React.ComponentProps<typeof RunScreen>;
 
 const meta: Meta<typeof RunScreen> = {
   title: 'Screens/Run',
@@ -100,7 +104,8 @@ const sampleEvents: RunEvent[] = [
       input: {
         command: 'send_message',
         worker: 'agent-ops',
-        message: 'Deploy the updated authentication service to staging environment and run integration tests.',
+        message:
+          'Deploy the updated authentication service to staging environment and run integration tests.',
         threadAlias: 'deploy-auth-staging',
       },
       output: {
@@ -135,28 +140,180 @@ const sampleEvents: RunEvent[] = [
   },
 ];
 
-export const Default: Story = {
+const ControlledRender: Story['render'] = () => {
+  const [currentArgs, updateArgs] = useArgs<RunScreenProps>();
+  const logSelectEvent = action('onSelectEvent');
+  const logFollowingChange = action('onFollowingChange');
+  const logEventFiltersChange = action('onEventFiltersChange');
+  const logStatusFiltersChange = action('onStatusFiltersChange');
+  const logTokensPopoverOpenChange = action('onTokensPopoverOpenChange');
+  const logRunsPopoverOpenChange = action('onRunsPopoverOpenChange');
+  const logLoadMoreEvents = action('onLoadMoreEvents');
+  const logTerminate = action('onTerminate');
+  const logBack = action('onBack');
+
+  return (
+    <RunScreen
+      {...currentArgs}
+      onSelectEvent={(eventId) => {
+        logSelectEvent(eventId);
+        updateArgs({ selectedEventId: eventId });
+      }}
+      onFollowingChange={(follow) => {
+        logFollowingChange(follow);
+        updateArgs({ isFollowing: follow });
+      }}
+      onEventFiltersChange={(filters) => {
+        logEventFiltersChange(filters);
+        updateArgs({ eventFilters: filters });
+      }}
+      onStatusFiltersChange={(filters) => {
+        logStatusFiltersChange(filters);
+        updateArgs({ statusFilters: filters });
+      }}
+      onTokensPopoverOpenChange={(open) => {
+        logTokensPopoverOpenChange(open);
+        updateArgs({ tokensPopoverOpen: open });
+      }}
+      onRunsPopoverOpenChange={(open) => {
+        logRunsPopoverOpenChange(open);
+        updateArgs({ runsPopoverOpen: open });
+      }}
+      onLoadMoreEvents={() => {
+        logLoadMoreEvents();
+      }}
+      onTerminate={() => {
+        logTerminate();
+      }}
+      onBack={() => {
+        logBack();
+      }}
+    />
+  );
+};
+
+const baseStatistics = {
+  totalEvents: sampleEvents.length,
+  messages: 2,
+  llm: 1,
+  tools: 3,
+  summaries: 1,
+};
+
+const baseTokens = {
+  input: 500,
+  cached: 0,
+  output: 300,
+  reasoning: 0,
+  total: 800,
+};
+
+export const Populated: Story = {
   args: {
     runId: 'run-001',
     status: 'running' as Status,
     createdAt: new Date().toISOString(),
-    duration: '2.3s',
+    duration: '2m 45s',
+    statistics: baseStatistics,
+    tokens: baseTokens,
+    events: sampleEvents,
+    selectedEventId: sampleEvents[0].id,
+    isFollowing: true,
+    eventFilters: [],
+    statusFilters: [],
+    tokensPopoverOpen: false,
+    runsPopoverOpen: false,
+    hasMoreEvents: true,
+    isLoadingMoreEvents: false,
+    isLoading: false,
+    isEmpty: false,
+  },
+  render: ControlledRender,
+  parameters: {
+    selectedMenuItem: 'threads',
+  },
+};
+
+export const Empty: Story = {
+  args: {
+    runId: 'run-002',
+    status: 'finished' as Status,
+    createdAt: new Date().toISOString(),
+    duration: '0s',
     statistics: {
-      totalEvents: 2,
-      messages: 1,
-      llm: 1,
+      totalEvents: 0,
+      messages: 0,
+      llm: 0,
       tools: 0,
       summaries: 0,
     },
-    tokens: {
-      input: 500,
-      cached: 0,
-      output: 300,
-      reasoning: 0,
-      total: 800,
-    },
-    events: sampleEvents,
+    tokens: baseTokens,
+    events: [],
+    selectedEventId: null,
+    isFollowing: false,
+    eventFilters: [],
+    statusFilters: [],
+    tokensPopoverOpen: false,
+    runsPopoverOpen: false,
+    hasMoreEvents: false,
+    isLoadingMoreEvents: false,
+    isLoading: false,
+    isEmpty: true,
   },
+  render: ControlledRender,
+  parameters: {
+    selectedMenuItem: 'threads',
+  },
+};
+
+export const Loading: Story = {
+  args: {
+    runId: 'run-003',
+    status: 'running' as Status,
+    createdAt: new Date().toISOString(),
+    duration: '—',
+    statistics: baseStatistics,
+    tokens: baseTokens,
+    events: sampleEvents,
+    selectedEventId: sampleEvents[0].id,
+    isFollowing: true,
+    eventFilters: [],
+    statusFilters: [],
+    tokensPopoverOpen: false,
+    runsPopoverOpen: false,
+    hasMoreEvents: true,
+    isLoadingMoreEvents: true,
+    isLoading: true,
+    isEmpty: false,
+  },
+  render: ControlledRender,
+  parameters: {
+    selectedMenuItem: 'threads',
+  },
+};
+
+export const Error: Story = {
+  args: {
+    runId: 'run-004',
+    status: 'failed' as Status,
+    createdAt: new Date().toISOString(),
+    duration: '1m 12s',
+    statistics: baseStatistics,
+    tokens: baseTokens,
+    events: sampleEvents,
+    selectedEventId: sampleEvents[0].id,
+    isFollowing: false,
+    eventFilters: [],
+    statusFilters: [],
+    tokensPopoverOpen: false,
+    runsPopoverOpen: false,
+    hasMoreEvents: false,
+    isLoadingMoreEvents: false,
+    isLoading: false,
+    isEmpty: false,
+    error: 'Unable to load this run. Please retry.',
+  },
+  render: ControlledRender,
   parameters: {
     selectedMenuItem: 'threads',
   },

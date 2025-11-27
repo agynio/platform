@@ -38,6 +38,15 @@ describe('LocalMCPServerNode listTools filtering by enabledTools', () => {
     expect(tools.length).toBe(0);
   });
 
+  it('returns [] when enabledTools is undefined', () => {
+    const ns = { getSnapshot: vi.fn(() => ({ mcp: {} })) } as any;
+    (server as any).nodeStateService = ns;
+    // Clear last enabled tools cache as well
+    (server as any)._lastEnabledTools = undefined;
+    const tools = server.listTools();
+    expect(tools).toEqual([]);
+  });
+
   it('returns only enabled tool when enabledTools=["ns_a"]', () => {
     // Update snapshot to include only ns_a
     const ns = { getSnapshot: vi.fn((_id: string) => ({ mcp: { enabledTools: ['ns_a'] } })) } as any;

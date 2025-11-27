@@ -1,7 +1,19 @@
 import * as Popover from '@radix-ui/react-popover';
 import * as Tooltip from '@radix-ui/react-tooltip';
-import { ArrowLeft, Bot, Eye, EyeOff, FileText, MessageSquare, ScrollText, Settings2, Square, Wrench } from 'lucide-react';
-import { useState } from 'react';
+import {
+  ArrowLeft,
+  Bot,
+  Eye,
+  EyeOff,
+  FileText,
+  Loader2,
+  MessageSquare,
+  ScrollText,
+  Settings2,
+  Square,
+  Wrench,
+} from 'lucide-react';
+import type { ReactNode } from 'react';
 import { Button } from '../Button';
 import { IconButton } from '../IconButton';
 import { RunEventDetails } from '../RunEventDetails';
@@ -40,8 +52,27 @@ interface RunScreenProps {
     total: number;
   };
   events: RunEvent[];
+  selectedEventId: string | null;
+  isFollowing: boolean;
+  eventFilters: EventFilter[];
+  statusFilters: StatusFilter[];
+  tokensPopoverOpen: boolean;
+  runsPopoverOpen: boolean;
+  hasMoreEvents?: boolean;
+  isLoadingMoreEvents?: boolean;
+  isLoading?: boolean;
+  isEmpty?: boolean;
+  error?: ReactNode;
+  onSelectEvent: (eventId: string) => void;
+  onFollowingChange: (isFollowing: boolean) => void;
+  onEventFiltersChange: (filters: EventFilter[]) => void;
+  onStatusFiltersChange: (filters: StatusFilter[]) => void;
+  onTokensPopoverOpenChange: (open: boolean) => void;
+  onRunsPopoverOpenChange: (open: boolean) => void;
+  onLoadMoreEvents?: () => void;
   onTerminate?: () => void;
   onBack?: () => void;
+  className?: string;
 }
 
 export default function RunScreen({
@@ -52,48 +83,41 @@ export default function RunScreen({
   statistics,
   tokens,
   events,
+  selectedEventId,
+  isFollowing,
+  eventFilters,
+  statusFilters,
+  tokensPopoverOpen,
+  runsPopoverOpen,
+  hasMoreEvents = false,
+  isLoadingMoreEvents = false,
+  isLoading = false,
+  isEmpty = false,
+  error,
+  onSelectEvent,
+  onFollowingChange,
+  onEventFiltersChange,
+  onStatusFiltersChange,
+  onTokensPopoverOpenChange,
+  onRunsPopoverOpenChange,
+  onLoadMoreEvents,
   onTerminate,
   onBack,
+  className = '',
 }: RunScreenProps) {
-  const [selectedEventId, setSelectedEventId] = useState<string | undefined>(events[0]?.id);
-  const [isFollowing, setIsFollowing] = useState(true);
-  const [eventFilters, setEventFilters] = useState<Set<EventFilter>>(new Set());
-  const [statusFilters, setStatusFilters] = useState<Set<StatusFilter>>(new Set());
-  const [tokensPopoverOpen, setTokensPopoverOpen] = useState(false);
-  const [runsPopoverOpen, setRunsPopoverOpen] = useState(false);
+  const eventFilterSet = new Set(eventFilters);
+  const statusFilterSet = new Set(statusFilters);
 
-  const toggleEventFilter = (filter: EventFilter) => {
-    const newFilters = new Set(eventFilters);
-    if (newFilters.has(filter)) {
-      newFilters.delete(filter);
-    } else {
-      newFilters.add(filter);
-    }
-    setEventFilters(newFilters);
-  };
-
-  const toggleStatusFilter = (filter: StatusFilter) => {
-    const newFilters = new Set(statusFilters);
-    if (newFilters.has(filter)) {
-      newFilters.delete(filter);
-    } else {
-      newFilters.add(filter);
-    }
-    setStatusFilters(newFilters);
-  };
-
-  const filteredEvents = events.filter(event => {
-    // Apply event type filters
-    if (eventFilters.size > 0) {
+  const filteredEvents = events.filter((event) => {
+    if (eventFilterSet.size > 0) {
       const eventType = event.type === 'summarization' ? 'summary' : event.type;
-      if (!eventFilters.has(eventType as EventFilter)) {
+      if (!eventFilterSet.has(eventType as EventFilter)) {
         return false;
       }
     }
 
-    // Apply status filters
-    if (statusFilters.size > 0 && event.status) {
-      if (!statusFilters.has(event.status as StatusFilter)) {
+    if (statusFilterSet.size > 0 && event.status) {
+      if (!statusFilterSet.has(event.status as StatusFilter)) {
         return false;
       }
     }
@@ -101,232 +125,295 @@ export default function RunScreen({
     return true;
   });
 
-  const selectedEvent = filteredEvents.find(e => e.id === selectedEventId);
+  const selectedEvent = filteredEvents.find((event) => event.id === selectedEventId);
 
-  const formatDate = (dateString: string) => {
-    const date = new Date(dateString);
-    return date.toLocaleDateString('en-US', { 
-      month: 'short', 
-      day: 'numeric', 
+  const formatDate = (value: string) => {
+    const date = new Date(value);
+    return date.toLocaleDateString('en-US', {
+      month: 'short',
+      day: 'numeric',
       year: 'numeric',
       hour: '2-digit',
-      minute: '2-digit'
+      minute: '2-digit',
     });
   };
 
-  const formatNumber = (num: number) => {
-    return num.toLocaleString();
+  const formatNumber = (value: number) => value.toLocaleString();
+
+  const totalEvents = events.length;
+  const runsByStatus = {
+    running: events.filter((event) => event.status === 'running').length,
+    finished: events.filter((event) => event.status === 'finished').length,
+    failed: events.filter((event) => event.status === 'failed').length,
+    terminated: events.filter((event) => event.status === 'terminated').length,
+  } satisfies Record<StatusFilter, number>;
+
+  const handleToggleEventFilter = (filter: EventFilter) => {
+    const nextFilters = new Set(eventFilters);
+    if (eventFilterSet.has(filter)) {
+      nextFilters.delete(filter);
+    } else {
+      nextFilters.add(filter);
+    }
+    onEventFiltersChange(Array.from(nextFilters));
   };
 
-  // Calculate totals by status
-  const totalRuns = events.length;
-  const runsByStatus = {
-    running: events.filter(e => e.status === 'running').length,
-    finished: events.filter(e => e.status === 'finished').length,
-    failed: events.filter(e => e.status === 'failed').length,
-    terminated: events.filter(e => e.status === 'terminated').length,
+  const handleToggleStatusFilter = (filter: StatusFilter) => {
+    const nextFilters = new Set(statusFilters);
+    if (statusFilterSet.has(filter)) {
+      nextFilters.delete(filter);
+    } else {
+      nextFilters.add(filter);
+    }
+    onStatusFiltersChange(Array.from(nextFilters));
+  };
+
+  const renderEventsList = () => {
+    if (error) {
+      return (
+        <div className="flex flex-1 items-center justify-center px-4 text-center text-sm text-[var(--agyn-red)]">
+          {error}
+        </div>
+      );
+    }
+
+    if (isLoading) {
+      return (
+        <div className="flex flex-1 items-center justify-center text-[var(--agyn-gray)]">
+          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+          Loading events…
+        </div>
+      );
+    }
+
+    if (filteredEvents.length === 0) {
+      return (
+        <div className="flex flex-1 items-center justify-center px-4 text-center text-[var(--agyn-gray)]">
+          {isEmpty ? 'No events available yet.' : 'No events match the current filters.'}
+        </div>
+      );
+    }
+
+    return (
+      <RunEventsList
+        events={filteredEvents}
+        selectedEventId={selectedEventId ?? undefined}
+        onSelectEvent={onSelectEvent}
+        hasMore={hasMoreEvents}
+        isLoadingMore={isLoadingMoreEvents}
+        loadMore={onLoadMoreEvents}
+      />
+    );
+  };
+
+  const renderEventDetails = () => {
+    if (error) {
+      return (
+        <div className="flex h-full items-center justify-center px-6 text-center text-sm text-[var(--agyn-red)]">
+          {error}
+        </div>
+      );
+    }
+
+    if (isLoading) {
+      return (
+        <div className="flex h-full items-center justify-center text-[var(--agyn-gray)]">
+          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+          Loading event…
+        </div>
+      );
+    }
+
+    if (isEmpty) {
+      return (
+        <div className="flex h-full items-center justify-center text-[var(--agyn-gray)]">
+          No events recorded for this run yet.
+        </div>
+      );
+    }
+
+    if (!selectedEvent) {
+      return (
+        <div className="flex h-full items-center justify-center text-[var(--agyn-text-subtle)]">
+          Select an event to view details
+        </div>
+      );
+    }
+
+    return <RunEventDetails event={selectedEvent} />;
   };
 
   return (
-    <div className="h-screen bg-[var(--agyn-bg-light)] flex flex-col">
-      {/* Showcase Navigation - NOT PART OF FINAL SCREEN */}
+    <div className={`flex h-screen flex-col bg-[var(--agyn-bg-light)] ${className}`}>
       {onBack && (
-        <div className="h-[40px] bg-[var(--agyn-dark)] border-b border-[var(--agyn-border-subtle)] flex items-center px-4 gap-3">
+        <div className="flex h-[40px] items-center gap-3 border-b border-[var(--agyn-border-subtle)] bg-[var(--agyn-dark)] px-4">
           <IconButton icon={<ArrowLeft />} onClick={onBack} variant="ghost" size="sm" />
           <span className="text-sm text-white">Run • {runId}</span>
         </div>
       )}
 
-      {/* Main Screen Content (content only, layout provides sidebar) */}
-      <div className="flex-1 flex overflow-hidden">
-        {/* Main Content */}
-        <div className="flex-1 flex flex-col overflow-hidden">
-          {/* Header */}
-          <div className="bg-white border-b border-[var(--agyn-border-subtle)] px-6 py-3">
-            <div className="flex items-center justify-between">
-              {/* Left: Status & Metadata */}
-              <div className="flex items-center gap-4">
-                {/* Status */}
-                <div className="flex items-center gap-3">
-                  <StatusIndicator status={status} size="md" showTooltip={false} />
-                  <span className="font-medium capitalize">{status}</span>
-                </div>
+      <div className="flex flex-1 overflow-hidden">
+        <div className="flex flex-1 flex-col overflow-hidden">
+          <div className="flex items-center justify-between border-b border-[var(--agyn-border-subtle)] bg-white px-6 py-3">
+            <div className="flex items-center gap-4">
+              <div className="flex items-center gap-3">
+                <StatusIndicator status={status} size="md" showTooltip={false} />
+                <span className="font-medium capitalize">{status}</span>
+              </div>
 
-                {/* Divider */}
-                <div className="text-[var(--agyn-border-subtle)]">|</div>
+              <div className="text-[var(--agyn-border-subtle)]">|</div>
 
-                {/* Duration */}
-                <div className="text-sm text-[var(--agyn-dark)]">
-                  {duration}
-                </div>
+              <div className="text-sm text-[var(--agyn-dark)]">{duration}</div>
 
-                {/* Divider */}
-                <div className="text-[var(--agyn-border-subtle)]">|</div>
+              <div className="text-[var(--agyn-border-subtle)]">|</div>
 
-                {/* Date */}
-                <div className="text-sm text-[var(--agyn-text-subtle)]">
-                  {formatDate(createdAt)}
-                </div>
+              <div className="text-sm text-[var(--agyn-text-subtle)]">{formatDate(createdAt)}</div>
 
-                {/* Divider */}
-                <div className="text-[var(--agyn-border-subtle)]">|</div>
+              <div className="text-[var(--agyn-border-subtle)]">|</div>
 
-                {/* Tokens with Popover */}
-                <Popover.Root open={tokensPopoverOpen} onOpenChange={setTokensPopoverOpen}>
-                  <Popover.Trigger asChild>
-                    <button 
-                      className="text-sm text-[var(--agyn-dark)] hover:text-[var(--agyn-blue)] transition-colors cursor-pointer"
-                      onMouseEnter={() => setTokensPopoverOpen(true)}
-                      onMouseLeave={() => setTokensPopoverOpen(false)}
-                    >
-                      {formatNumber(tokens.total)} <span className="text-[var(--agyn-text-subtle)]">tokens</span>
-                    </button>
-                  </Popover.Trigger>
-                  <Popover.Portal>
-                    <Popover.Content
-                      className="bg-white rounded-[10px] shadow-lg border border-[var(--agyn-border-subtle)] p-3 min-w-[200px] z-50"
-                      sideOffset={5}
-                      onMouseEnter={() => setTokensPopoverOpen(true)}
-                      onMouseLeave={() => setTokensPopoverOpen(false)}
-                    >
-                      <div className="space-y-2">
-                        <div className="text-xs font-medium text-[var(--agyn-dark)] mb-2">Token Usage</div>
+              <Popover.Root open={tokensPopoverOpen} onOpenChange={onTokensPopoverOpenChange}>
+                <Popover.Trigger asChild>
+                  <button
+                    className="text-sm text-[var(--agyn-dark)] transition-colors hover:text-[var(--agyn-blue)]"
+                    onMouseEnter={() => onTokensPopoverOpenChange(true)}
+                    onMouseLeave={() => onTokensPopoverOpenChange(false)}
+                  >
+                    {formatNumber(tokens.total)}{' '}
+                    <span className="text-[var(--agyn-text-subtle)]">tokens</span>
+                  </button>
+                </Popover.Trigger>
+                <Popover.Portal>
+                  <Popover.Content
+                    className="z-50 min-w-[200px] rounded-[10px] border border-[var(--agyn-border-subtle)] bg-white p-3 shadow-lg"
+                    sideOffset={5}
+                    onMouseEnter={() => onTokensPopoverOpenChange(true)}
+                    onMouseLeave={() => onTokensPopoverOpenChange(false)}
+                  >
+                    <div className="space-y-2">
+                      <div className="mb-2 text-xs font-medium text-[var(--agyn-dark)]">Token Usage</div>
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="text-[var(--agyn-text-subtle)]">Input</span>
+                        <span className="font-medium text-[var(--agyn-dark)]">{formatNumber(tokens.input)}</span>
+                      </div>
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="text-[var(--agyn-text-subtle)]">Cached</span>
+                        <span className="font-medium text-[var(--agyn-dark)]">{formatNumber(tokens.cached)}</span>
+                      </div>
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="text-[var(--agyn-text-subtle)]">Output</span>
+                        <span className="font-medium text-[var(--agyn-dark)]">{formatNumber(tokens.output)}</span>
+                      </div>
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="text-[var(--agyn-text-subtle)]">Reasoning</span>
+                        <span className="font-medium text-[var(--agyn-dark)]">{formatNumber(tokens.reasoning)}</span>
+                      </div>
+                      <div className="mt-2 border-t border-[var(--agyn-border-subtle)] pt-2">
                         <div className="flex items-center justify-between text-xs">
-                          <span className="text-[var(--agyn-text-subtle)]">Input</span>
-                          <span className="text-[var(--agyn-dark)] font-medium">{formatNumber(tokens.input)}</span>
-                        </div>
-                        <div className="flex items-center justify-between text-xs">
-                          <span className="text-[var(--agyn-text-subtle)]">Cached</span>
-                          <span className="text-[var(--agyn-dark)] font-medium">{formatNumber(tokens.cached)}</span>
-                        </div>
-                        <div className="flex items-center justify-between text-xs">
-                          <span className="text-[var(--agyn-text-subtle)]">Output</span>
-                          <span className="text-[var(--agyn-dark)] font-medium">{formatNumber(tokens.output)}</span>
-                        </div>
-                        <div className="flex items-center justify-between text-xs">
-                          <span className="text-[var(--agyn-text-subtle)]">Reasoning</span>
-                          <span className="text-[var(--agyn-dark)] font-medium">{formatNumber(tokens.reasoning)}</span>
-                        </div>
-                        <div className="border-t border-[var(--agyn-border-subtle)] pt-2 mt-2">
-                          <div className="flex items-center justify-between text-xs">
-                            <span className="text-[var(--agyn-dark)] font-medium">Total</span>
-                            <span className="text-[var(--agyn-dark)] font-medium">{formatNumber(tokens.total)}</span>
-                          </div>
+                          <span className="font-medium text-[var(--agyn-dark)]">Total</span>
+                          <span className="font-medium text-[var(--agyn-dark)]">{formatNumber(tokens.total)}</span>
                         </div>
                       </div>
-                      <Popover.Arrow className="fill-white" />
-                    </Popover.Content>
-                  </Popover.Portal>
-                </Popover.Root>
-              </div>
+                    </div>
+                    <Popover.Arrow className="fill-white" />
+                  </Popover.Content>
+                </Popover.Portal>
+              </Popover.Root>
+            </div>
 
-              {/* Right: Actions */}
-              <div className="flex items-center gap-2">
-                {status === 'running' && (
-                  <Button
-                    onClick={onTerminate}
-                    variant="danger"
-                    size="sm"
-                  >
-                    <Square className="w-4 h-4 mr-1.5" />
-                    Terminate
-                  </Button>
-                )}
-              </div>
+            <div className="flex items-center gap-2">
+              {status === 'running' && (
+                <Button onClick={onTerminate} variant="danger" size="sm">
+                  <Square className="mr-1.5 h-4 w-4" />
+                  Terminate
+                </Button>
+              )}
             </div>
           </div>
 
-          {/* Content Area */}
-          <div className="flex-1 flex overflow-hidden">
-            {/* Events List */}
-            <div className="w-80 border-r border-[var(--agyn-border-subtle)] bg-white flex flex-col">
-              {/* Events List Header */}
-              <div className="bg-white border-b border-[var(--agyn-border-subtle)] px-3 py-2 flex items-center justify-between">
-                {/* Events Count with Popover */}
-                <Popover.Root open={runsPopoverOpen} onOpenChange={setRunsPopoverOpen}>
+          <div className="flex flex-1 overflow-hidden">
+            <div className="flex w-80 flex-col border-r border-[var(--agyn-border-subtle)] bg-white">
+              <div className="flex items-center justify-between border-b border-[var(--agyn-border-subtle)] px-3 py-2">
+                <Popover.Root open={runsPopoverOpen} onOpenChange={onRunsPopoverOpenChange}>
                   <Popover.Trigger asChild>
-                    <button 
-                      className="text-sm text-[var(--agyn-dark)] hover:text-[var(--agyn-blue)] transition-colors cursor-pointer"
-                      onMouseEnter={() => setRunsPopoverOpen(true)}
-                      onMouseLeave={() => setRunsPopoverOpen(false)}
+                    <button
+                      className="text-sm text-[var(--agyn-dark)] transition-colors hover:text-[var(--agyn-blue)]"
+                      onMouseEnter={() => onRunsPopoverOpenChange(true)}
+                      onMouseLeave={() => onRunsPopoverOpenChange(false)}
                     >
-                      {formatNumber(totalRuns)} <span className="text-[var(--agyn-text-subtle)]">events</span>
+                      {formatNumber(totalEvents)}{' '}
+                      <span className="text-[var(--agyn-text-subtle)]">events</span>
                     </button>
                   </Popover.Trigger>
                   <Popover.Portal>
                     <Popover.Content
-                      className="bg-white rounded-[10px] shadow-lg border border-[var(--agyn-border-subtle)] p-3 min-w-[200px] z-50"
+                      className="z-50 min-w-[200px] rounded-[10px] border border-[var(--agyn-border-subtle)] bg-white p-3 shadow-lg"
                       sideOffset={5}
-                      onMouseEnter={() => setRunsPopoverOpen(true)}
-                      onMouseLeave={() => setRunsPopoverOpen(false)}
+                      onMouseEnter={() => onRunsPopoverOpenChange(true)}
+                      onMouseLeave={() => onRunsPopoverOpenChange(false)}
                     >
                       <div className="space-y-2">
-                        <div className="text-xs font-medium text-[var(--agyn-dark)] mb-3">Event Statistics</div>
-                        
-                        {/* By Kind */}
-                        <div>
-                          <div className="space-y-1.5">
-                            <div className="flex items-center justify-between text-xs">
-                              <div className="flex items-center gap-1.5">
-                                <MessageSquare className="w-3 h-3 text-[var(--agyn-blue)]" />
-                                <span className="text-[var(--agyn-text-subtle)]">Message</span>
-                              </div>
-                              <span className="text-[var(--agyn-dark)] font-medium">{formatNumber(statistics.messages)}</span>
+                        <div className="mb-3 text-xs font-medium text-[var(--agyn-dark)]">Event Statistics</div>
+
+                        <div className="space-y-1.5">
+                          <div className="flex items-center justify-between text-xs">
+                            <div className="flex items-center gap-1.5">
+                              <MessageSquare className="h-3 w-3 text-[var(--agyn-blue)]" />
+                              <span className="text-[var(--agyn-text-subtle)]">Message</span>
                             </div>
-                            <div className="flex items-center justify-between text-xs">
-                              <div className="flex items-center gap-1.5">
-                                <Bot className="w-3 h-3 text-[var(--agyn-purple)]" />
-                                <span className="text-[var(--agyn-text-subtle)]">LLM</span>
-                              </div>
-                              <span className="text-[var(--agyn-dark)] font-medium">{formatNumber(statistics.llm)}</span>
+                            <span className="font-medium text-[var(--agyn-dark)]">{formatNumber(statistics.messages)}</span>
+                          </div>
+                          <div className="flex items-center justify-between text-xs">
+                            <div className="flex items-center gap-1.5">
+                              <Bot className="h-3 w-3 text-[var(--agyn-purple)]" />
+                              <span className="text-[var(--agyn-text-subtle)]">LLM</span>
                             </div>
-                            <div className="flex items-center justify-between text-xs">
-                              <div className="flex items-center gap-1.5">
-                                <Wrench className="w-3 h-3 text-[var(--agyn-cyan)]" />
-                                <span className="text-[var(--agyn-text-subtle)]">Tool</span>
-                              </div>
-                              <span className="text-[var(--agyn-dark)] font-medium">{formatNumber(statistics.tools)}</span>
+                            <span className="font-medium text-[var(--agyn-dark)]">{formatNumber(statistics.llm)}</span>
+                          </div>
+                          <div className="flex items-center justify-between text-xs">
+                            <div className="flex items-center gap-1.5">
+                              <Wrench className="h-3 w-3 text-[var(--agyn-cyan)]" />
+                              <span className="text-[var(--agyn-text-subtle)]">Tool</span>
                             </div>
-                            <div className="flex items-center justify-between text-xs">
-                              <div className="flex items-center gap-1.5">
-                                <FileText className="w-3 h-3 text-[var(--agyn-gray)]" />
-                                <span className="text-[var(--agyn-text-subtle)]">Summary</span>
-                              </div>
-                              <span className="text-[var(--agyn-dark)] font-medium">{formatNumber(statistics.summaries)}</span>
+                            <span className="font-medium text-[var(--agyn-dark)]">{formatNumber(statistics.tools)}</span>
+                          </div>
+                          <div className="flex items-center justify-between text-xs">
+                            <div className="flex items-center gap-1.5">
+                              <FileText className="h-3 w-3 text-[var(--agyn-gray)]" />
+                              <span className="text-[var(--agyn-text-subtle)]">Summary</span>
                             </div>
+                            <span className="font-medium text-[var(--agyn-dark)]">{formatNumber(statistics.summaries)}</span>
                           </div>
                         </div>
-                        
-                        {/* By Status */}
-                        <div className="pt-2 border-t border-[var(--agyn-border-subtle)]">
+
+                        <div className="border-t border-[var(--agyn-border-subtle)] pt-2">
                           <div className="space-y-1.5">
                             <div className="flex items-center justify-between text-xs">
                               <div className="flex items-center gap-1.5">
                                 <StatusIndicator status="running" size="sm" showTooltip={false} />
                                 <span className="text-[var(--agyn-text-subtle)]">Running</span>
                               </div>
-                              <span className="text-[var(--agyn-dark)] font-medium">{formatNumber(runsByStatus.running)}</span>
+                              <span className="font-medium text-[var(--agyn-dark)]">{formatNumber(runsByStatus.running)}</span>
                             </div>
                             <div className="flex items-center justify-between text-xs">
                               <div className="flex items-center gap-1.5">
                                 <StatusIndicator status="finished" size="sm" showTooltip={false} />
                                 <span className="text-[var(--agyn-text-subtle)]">Finished</span>
                               </div>
-                              <span className="text-[var(--agyn-dark)] font-medium">{formatNumber(runsByStatus.finished)}</span>
+                              <span className="font-medium text-[var(--agyn-dark)]">{formatNumber(runsByStatus.finished)}</span>
                             </div>
                             <div className="flex items-center justify-between text-xs">
                               <div className="flex items-center gap-1.5">
                                 <StatusIndicator status="failed" size="sm" showTooltip={false} />
                                 <span className="text-[var(--agyn-text-subtle)]">Failed</span>
                               </div>
-                              <span className="text-[var(--agyn-dark)] font-medium">{formatNumber(runsByStatus.failed)}</span>
+                              <span className="font-medium text-[var(--agyn-dark)]">{formatNumber(runsByStatus.failed)}</span>
                             </div>
                             <div className="flex items-center justify-between text-xs">
                               <div className="flex items-center gap-1.5">
                                 <StatusIndicator status="terminated" size="sm" showTooltip={false} />
                                 <span className="text-[var(--agyn-text-subtle)]">Terminated</span>
                               </div>
-                              <span className="text-[var(--agyn-dark)] font-medium">{formatNumber(runsByStatus.terminated)}</span>
+                              <span className="font-medium text-[var(--agyn-dark)]">{formatNumber(runsByStatus.terminated)}</span>
                             </div>
                           </div>
                         </div>
@@ -336,7 +423,6 @@ export default function RunScreen({
                   </Popover.Portal>
                 </Popover.Root>
 
-                {/* Actions */}
                 <div className="flex items-center gap-1">
                   <Tooltip.Provider>
                     <Tooltip.Root>
@@ -344,7 +430,7 @@ export default function RunScreen({
                         <div>
                           <IconButton
                             icon={<ScrollText className={isFollowing ? 'text-[var(--agyn-blue)]' : ''} />}
-                            onClick={() => setIsFollowing(!isFollowing)}
+                            onClick={() => onFollowingChange(!isFollowing)}
                             variant="ghost"
                             size="sm"
                           />
@@ -352,7 +438,7 @@ export default function RunScreen({
                       </Tooltip.Trigger>
                       <Tooltip.Portal>
                         <Tooltip.Content
-                          className="bg-[var(--agyn-dark)] text-white px-3 py-2 rounded-md text-xs z-50"
+                          className="z-50 rounded-md bg-[var(--agyn-dark)] px-3 py-2 text-xs text-white"
                           sideOffset={5}
                         >
                           Follow new events
@@ -361,196 +447,194 @@ export default function RunScreen({
                       </Tooltip.Portal>
                     </Tooltip.Root>
                   </Tooltip.Provider>
-                  
-                  {/* Filter Configuration Dropdown */}
+
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
                       <div>
                         <IconButton icon={<Settings2 />} variant="ghost" size="sm" />
                       </div>
                     </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end" className="w-56 bg-white rounded-[10px] border border-[var(--agyn-border-subtle)] shadow-lg p-1">
-                    <DropdownMenuGroup>
-                      <DropdownMenuLabel className="px-3 py-2 text-xs font-medium text-[var(--agyn-text-subtle)]">
-                        Event Kinds
-                      </DropdownMenuLabel>
-                      <DropdownMenuItem
-                        className="flex items-center justify-between px-3 py-2 cursor-pointer rounded-md hover:bg-[var(--agyn-bg-light)] focus:bg-[var(--agyn-bg-light)]"
-                        onSelect={(e) => {
-                          e.preventDefault();
-                          toggleEventFilter('message');
-                        }}
-                      >
-                        <div className="flex items-center gap-2">
-                          <MessageSquare className="w-4 h-4 text-[var(--agyn-blue)]" />
-                          <span className="text-sm">Message</span>
-                          <span className="text-xs text-[var(--agyn-text-subtle)]">({formatNumber(statistics.messages)})</span>
-                        </div>
-                        {eventFilters.has('message') ? (
-                          <Eye className="w-4 h-4 text-[var(--agyn-blue)]" />
-                        ) : (
-                          <EyeOff className="w-4 h-4 text-[var(--agyn-text-subtle)]" />
-                        )}
-                      </DropdownMenuItem>
-                      <DropdownMenuItem
-                        className="flex items-center justify-between px-3 py-2 cursor-pointer rounded-md hover:bg-[var(--agyn-bg-light)] focus:bg-[var(--agyn-bg-light)]"
-                        onSelect={(e) => {
-                          e.preventDefault();
-                          toggleEventFilter('llm');
-                        }}
-                      >
-                        <div className="flex items-center gap-2">
-                          <Bot className="w-4 h-4 text-[var(--agyn-purple)]" />
-                          <span className="text-sm">LLM</span>
-                          <span className="text-xs text-[var(--agyn-text-subtle)]">({formatNumber(statistics.llm)})</span>
-                        </div>
-                        {eventFilters.has('llm') ? (
-                          <Eye className="w-4 h-4 text-[var(--agyn-blue)]" />
-                        ) : (
-                          <EyeOff className="w-4 h-4 text-[var(--agyn-text-subtle)]" />
-                        )}
-                      </DropdownMenuItem>
-                      <DropdownMenuItem
-                        className="flex items-center justify-between px-3 py-2 cursor-pointer rounded-md hover:bg-[var(--agyn-bg-light)] focus:bg-[var(--agyn-bg-light)]"
-                        onSelect={(e) => {
-                          e.preventDefault();
-                          toggleEventFilter('tool');
-                        }}
-                      >
-                        <div className="flex items-center gap-2">
-                          <Wrench className="w-4 h-4 text-[var(--agyn-cyan)]" />
-                          <span className="text-sm">Tool</span>
-                          <span className="text-xs text-[var(--agyn-text-subtle)]">({formatNumber(statistics.tools)})</span>
-                        </div>
-                        {eventFilters.has('tool') ? (
-                          <Eye className="w-4 h-4 text-[var(--agyn-blue)]" />
-                        ) : (
-                          <EyeOff className="w-4 h-4 text-[var(--agyn-text-subtle)]" />
-                        )}
-                      </DropdownMenuItem>
-                      <DropdownMenuItem
-                        className="flex items-center justify-between px-3 py-2 cursor-pointer rounded-md hover:bg-[var(--agyn-bg-light)] focus:bg-[var(--agyn-bg-light)]"
-                        onSelect={(e) => {
-                          e.preventDefault();
-                          toggleEventFilter('summary');
-                        }}
-                      >
-                        <div className="flex items-center gap-2">
-                          <FileText className="w-4 h-4 text-[var(--agyn-gray)]" />
-                          <span className="text-sm">Summary</span>
-                          <span className="text-xs text-[var(--agyn-text-subtle)]">({formatNumber(statistics.summaries)})</span>
-                        </div>
-                        {eventFilters.has('summary') ? (
-                          <Eye className="w-4 h-4 text-[var(--agyn-blue)]" />
-                        ) : (
-                          <EyeOff className="w-4 h-4 text-[var(--agyn-text-subtle)]" />
-                        )}
-                      </DropdownMenuItem>
-                    </DropdownMenuGroup>
+                    <DropdownMenuContent
+                      align="end"
+                      className="w-56 rounded-[10px] border border-[var(--agyn-border-subtle)] bg-white p-1 shadow-lg"
+                    >
+                      <DropdownMenuGroup>
+                        <DropdownMenuLabel className="px-3 py-2 text-xs font-medium text-[var(--agyn-text-subtle)]">
+                          Event Kinds
+                        </DropdownMenuLabel>
+                        <DropdownMenuItem
+                          className="flex items-center justify-between rounded-md px-3 py-2 text-sm transition-colors hover:bg-[var(--agyn-bg-light)] focus:bg-[var(--agyn-bg-light)]"
+                          onSelect={(event) => {
+                            event.preventDefault();
+                            handleToggleEventFilter('message');
+                          }}
+                        >
+                          <div className="flex items-center gap-2">
+                            <MessageSquare className="h-4 w-4 text-[var(--agyn-blue)]" />
+                            <span>Message</span>
+                            <span className="text-xs text-[var(--agyn-text-subtle)]">
+                              ({formatNumber(statistics.messages)})
+                            </span>
+                          </div>
+                          {eventFilterSet.has('message') ? (
+                            <Eye className="h-4 w-4 text-[var(--agyn-blue)]" />
+                          ) : (
+                            <EyeOff className="h-4 w-4 text-[var(--agyn-text-subtle)]" />
+                          )}
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          className="flex items-center justify-between rounded-md px-3 py-2 text-sm transition-colors hover:bg-[var(--agyn-bg-light)] focus:bg-[var(--agyn-bg-light)]"
+                          onSelect={(event) => {
+                            event.preventDefault();
+                            handleToggleEventFilter('llm');
+                          }}
+                        >
+                          <div className="flex items-center gap-2">
+                            <Bot className="h-4 w-4 text-[var(--agyn-purple)]" />
+                            <span>LLM</span>
+                            <span className="text-xs text-[var(--agyn-text-subtle)]">
+                              ({formatNumber(statistics.llm)})
+                            </span>
+                          </div>
+                          {eventFilterSet.has('llm') ? (
+                            <Eye className="h-4 w-4 text-[var(--agyn-blue)]" />
+                          ) : (
+                            <EyeOff className="h-4 w-4 text-[var(--agyn-text-subtle)]" />
+                          )}
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          className="flex items-center justify-between rounded-md px-3 py-2 text-sm transition-colors hover:bg-[var(--agyn-bg-light)] focus:bg-[var(--agyn-bg-light)]"
+                          onSelect={(event) => {
+                            event.preventDefault();
+                            handleToggleEventFilter('tool');
+                          }}
+                        >
+                          <div className="flex items-center gap-2">
+                            <Wrench className="h-4 w-4 text-[var(--agyn-cyan)]" />
+                            <span>Tool</span>
+                            <span className="text-xs text-[var(--agyn-text-subtle)]">
+                              ({formatNumber(statistics.tools)})
+                            </span>
+                          </div>
+                          {eventFilterSet.has('tool') ? (
+                            <Eye className="h-4 w-4 text-[var(--agyn-blue)]" />
+                          ) : (
+                            <EyeOff className="h-4 w-4 text-[var(--agyn-text-subtle)]" />
+                          )}
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          className="flex items-center justify-between rounded-md px-3 py-2 text-sm transition-colors hover:bg-[var(--agyn-bg-light)] focus:bg-[var(--agyn-bg-light)]"
+                          onSelect={(event) => {
+                            event.preventDefault();
+                            handleToggleEventFilter('summary');
+                          }}
+                        >
+                          <div className="flex items-center gap-2">
+                            <FileText className="h-4 w-4 text-[var(--agyn-gray)]" />
+                            <span>Summary</span>
+                            <span className="text-xs text-[var(--agyn-text-subtle)]">
+                              ({formatNumber(statistics.summaries)})
+                            </span>
+                          </div>
+                          {eventFilterSet.has('summary') ? (
+                            <Eye className="h-4 w-4 text-[var(--agyn-blue)]" />
+                          ) : (
+                            <EyeOff className="h-4 w-4 text-[var(--agyn-text-subtle)]" />
+                          )}
+                        </DropdownMenuItem>
+                      </DropdownMenuGroup>
 
-                    <DropdownMenuSeparator className="my-1 bg-[var(--agyn-border-subtle)]" />
+                      <DropdownMenuSeparator className="my-1 bg-[var(--agyn-border-subtle)]" />
 
-                    <DropdownMenuGroup>
-                      <DropdownMenuLabel className="px-3 py-2 text-xs font-medium text-[var(--agyn-text-subtle)]">
-                        Event Status
-                      </DropdownMenuLabel>
-                      <DropdownMenuItem
-                        className="flex items-center justify-between px-3 py-2 cursor-pointer rounded-md hover:bg-[var(--agyn-bg-light)] focus:bg-[var(--agyn-bg-light)]"
-                        onSelect={(e) => {
-                          e.preventDefault();
-                          toggleStatusFilter('running');
-                        }}
-                      >
-                        <div className="flex items-center gap-2">
-                          <StatusIndicator status="running" size="sm" showTooltip={false} />
-                          <span className="text-sm">Running</span>
-                          <span className="text-xs text-[var(--agyn-text-subtle)]">({runsByStatus.running})</span>
-                        </div>
-                        {statusFilters.has('running') ? (
-                          <Eye className="w-4 h-4 text-[var(--agyn-blue)]" />
-                        ) : (
-                          <EyeOff className="w-4 h-4 text-[var(--agyn-text-subtle)]" />
-                        )}
-                      </DropdownMenuItem>
-                      <DropdownMenuItem
-                        className="flex items-center justify-between px-3 py-2 cursor-pointer rounded-md hover:bg-[var(--agyn-bg-light)] focus:bg-[var(--agyn-bg-light)]"
-                        onSelect={(e) => {
-                          e.preventDefault();
-                          toggleStatusFilter('finished');
-                        }}
-                      >
-                        <div className="flex items-center gap-2">
-                          <StatusIndicator status="finished" size="sm" showTooltip={false} />
-                          <span className="text-sm">Finished</span>
-                          <span className="text-xs text-[var(--agyn-text-subtle)]">({runsByStatus.finished})</span>
-                        </div>
-                        {statusFilters.has('finished') ? (
-                          <Eye className="w-4 h-4 text-[var(--agyn-blue)]" />
-                        ) : (
-                          <EyeOff className="w-4 h-4 text-[var(--agyn-text-subtle)]" />
-                        )}
-                      </DropdownMenuItem>
-                      <DropdownMenuItem
-                        className="flex items-center justify-between px-3 py-2 cursor-pointer rounded-md hover:bg-[var(--agyn-bg-light)] focus:bg-[var(--agyn-bg-light)]"
-                        onSelect={(e) => {
-                          e.preventDefault();
-                          toggleStatusFilter('failed');
-                        }}
-                      >
-                        <div className="flex items-center gap-2">
-                          <StatusIndicator status="failed" size="sm" showTooltip={false} />
-                          <span className="text-sm">Failed</span>
-                          <span className="text-xs text-[var(--agyn-text-subtle)]">({runsByStatus.failed})</span>
-                        </div>
-                        {statusFilters.has('failed') ? (
-                          <Eye className="w-4 h-4 text-[var(--agyn-blue)]" />
-                        ) : (
-                          <EyeOff className="w-4 h-4 text-[var(--agyn-text-subtle)]" />
-                        )}
-                      </DropdownMenuItem>
-                      <DropdownMenuItem
-                        className="flex items-center justify-between px-3 py-2 cursor-pointer rounded-md hover:bg-[var(--agyn-bg-light)] focus:bg-[var(--agyn-bg-light)]"
-                        onSelect={(e) => {
-                          e.preventDefault();
-                          toggleStatusFilter('terminated');
-                        }}
-                      >
-                        <div className="flex items-center gap-2">
-                          <StatusIndicator status="terminated" size="sm" showTooltip={false} />
-                          <span className="text-sm">Terminated</span>
-                          <span className="text-xs text-[var(--agyn-text-subtle)]">({runsByStatus.terminated})</span>
-                        </div>
-                        {statusFilters.has('terminated') ? (
-                          <Eye className="w-4 h-4 text-[var(--agyn-blue)]" />
-                        ) : (
-                          <EyeOff className="w-4 h-4 text-[var(--agyn-text-subtle)]" />
-                        )}
-                      </DropdownMenuItem>
-                    </DropdownMenuGroup>
-                  </DropdownMenuContent>
-                </DropdownMenu>
+                      <DropdownMenuGroup>
+                        <DropdownMenuLabel className="px-3 py-2 text-xs font-medium text-[var(--agyn-text-subtle)]">
+                          Event Status
+                        </DropdownMenuLabel>
+                        <DropdownMenuItem
+                          className="flex items-center justify-between rounded-md px-3 py-2 text-sm transition-colors hover:bg-[var(--agyn-bg-light)] focus:bg-[var(--agyn-bg-light)]"
+                          onSelect={(event) => {
+                            event.preventDefault();
+                            handleToggleStatusFilter('running');
+                          }}
+                        >
+                          <div className="flex items-center gap-2">
+                            <StatusIndicator status="running" size="sm" showTooltip={false} />
+                            <span>Running</span>
+                            <span className="text-xs text-[var(--agyn-text-subtle)]">({formatNumber(runsByStatus.running)})</span>
+                          </div>
+                          {statusFilterSet.has('running') ? (
+                            <Eye className="h-4 w-4 text-[var(--agyn-blue)]" />
+                          ) : (
+                            <EyeOff className="h-4 w-4 text-[var(--agyn-text-subtle)]" />
+                          )}
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          className="flex items-center justify-between rounded-md px-3 py-2 text-sm transition-colors hover:bg-[var(--agyn-bg-light)] focus:bg-[var(--agyn-bg-light)]"
+                          onSelect={(event) => {
+                            event.preventDefault();
+                            handleToggleStatusFilter('finished');
+                          }}
+                        >
+                          <div className="flex items-center gap-2">
+                            <StatusIndicator status="finished" size="sm" showTooltip={false} />
+                            <span>Finished</span>
+                            <span className="text-xs text-[var(--agyn-text-subtle)]">({formatNumber(runsByStatus.finished)})</span>
+                          </div>
+                          {statusFilterSet.has('finished') ? (
+                            <Eye className="h-4 w-4 text-[var(--agyn-blue)]" />
+                          ) : (
+                            <EyeOff className="h-4 w-4 text-[var(--agyn-text-subtle)]" />
+                          )}
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          className="flex items-center justify-between rounded-md px-3 py-2 text-sm transition-colors hover:bg-[var(--agyn-bg-light)] focus:bg-[var(--agyn-bg-light)]"
+                          onSelect={(event) => {
+                            event.preventDefault();
+                            handleToggleStatusFilter('failed');
+                          }}
+                        >
+                          <div className="flex items-center gap-2">
+                            <StatusIndicator status="failed" size="sm" showTooltip={false} />
+                            <span>Failed</span>
+                            <span className="text-xs text-[var(--agyn-text-subtle)]">({formatNumber(runsByStatus.failed)})</span>
+                          </div>
+                          {statusFilterSet.has('failed') ? (
+                            <Eye className="h-4 w-4 text-[var(--agyn-blue)]" />
+                          ) : (
+                            <EyeOff className="h-4 w-4 text-[var(--agyn-text-subtle)]" />
+                          )}
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          className="flex items-center justify-between rounded-md px-3 py-2 text-sm transition-colors hover:bg-[var(--agyn-bg-light)] focus:bg-[var(--agyn-bg-light)]"
+                          onSelect={(event) => {
+                            event.preventDefault();
+                            handleToggleStatusFilter('terminated');
+                          }}
+                        >
+                          <div className="flex items-center gap-2">
+                            <StatusIndicator status="terminated" size="sm" showTooltip={false} />
+                            <span>Terminated</span>
+                            <span className="text-xs text-[var(--agyn-text-subtle)]">({formatNumber(runsByStatus.terminated)})</span>
+                          </div>
+                          {statusFilterSet.has('terminated') ? (
+                            <Eye className="h-4 w-4 text-[var(--agyn-blue)]" />
+                          ) : (
+                            <EyeOff className="h-4 w-4 text-[var(--agyn-text-subtle)]" />
+                          )}
+                        </DropdownMenuItem>
+                      </DropdownMenuGroup>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
                 </div>
               </div>
 
-              {/* Events List */}
               <div className="flex-1 overflow-hidden">
-                <RunEventsList
-                  events={filteredEvents}
-                  selectedEventId={selectedEventId}
-                  onSelectEvent={setSelectedEventId}
-                />
+                {renderEventsList()}
               </div>
             </div>
 
-            {/* Event Details */}
-            <div className="flex-1 bg-white overflow-hidden">
-              {selectedEvent ? (
-                <RunEventDetails event={selectedEvent} />
-              ) : (
-                <div className="h-full flex items-center justify-center text-[var(--agyn-text-subtle)]">
-                  Select an event to view details
-                </div>
-              )}
+            <div className="flex flex-1 flex-col overflow-hidden bg-white">
+              {renderEventDetails()}
             </div>
           </div>
         </div>

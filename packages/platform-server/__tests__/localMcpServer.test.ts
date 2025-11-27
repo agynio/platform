@@ -159,7 +159,9 @@ describe('LocalMCPServer (mock)', () => {
     await server.deprovision();
   });
 
-  it('lists tools', async () => {
+  it('lists tools when enabledTools are provided', async () => {
+    expect(server.listTools()).toEqual([]);
+    await server.setState({ mcp: { enabledTools: ['echo'] } as any });
     const tools = server.listTools();
     expect(tools.find((t) => String(t.name).endsWith('_echo'))).toBeTruthy();
   });

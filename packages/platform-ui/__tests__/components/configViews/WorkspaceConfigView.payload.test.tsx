@@ -36,7 +36,8 @@ describe('WorkspaceConfigView payload', () => {
 
     expect(cfg.image).toBe('node:20');
     expect(Array.isArray(cfg.env)).toBe(true);
-    expect(cfg.env[0]).toEqual({ name: 'A', value: '1', source: 'static' });
+    expect(cfg.env[0]).toEqual({ name: 'A', value: '1' });
+    expect(cfg.env[0]).not.toHaveProperty('source');
     expect(cfg.cpu_limit).toBe('750m');
     expect(cfg.memory_limit).toBe('512Mi');
     expect(cfg.enableDinD).toBe(true);

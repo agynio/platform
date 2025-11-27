@@ -5,6 +5,7 @@ import { describe, expect, it, vi, beforeEach } from 'vitest';
 
 import type { EnvEditorProps } from '../EnvEditor';
 import { EnvEditor } from '../EnvEditor';
+import { readEnvList } from '../utils';
 
 const latestReferenceProps: { current: any } = { current: null };
 
@@ -12,12 +13,7 @@ vi.mock('../../ReferenceInput', () => ({
   ReferenceInput: (props: any) => {
     latestReferenceProps.current = props;
     return (
-      <input
-        data-testid="reference-input"
-        value={props.value}
-        onChange={props.onChange}
-        onFocus={props.onFocus}
-      />
+      <input data-testid="reference-input" value={props.value} onChange={props.onChange} onFocus={props.onFocus} />
     );
   },
 }));
@@ -27,7 +23,7 @@ describe('nodeProperties/EnvEditor', () => {
     title: 'Environment Variables',
     isOpen: true,
     onOpenChange: vi.fn(),
-    envVars: [{ name: 'API_KEY', value: 'secret/data', source: 'vault' }],
+    envVars: readEnvList([{ name: 'API_KEY', value: 'secret/data', source: 'vault' }]),
     onAdd: vi.fn(),
     onRemove: vi.fn(),
     onNameChange: vi.fn(),

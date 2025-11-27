@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback } from 'react';
 import {
   Button,
   Input,
@@ -14,23 +14,17 @@ import {
 } from '@agyn/ui';
 import { Brackets, Lock, X } from 'lucide-react';
 
-export type EnvItem = { name: string; value: string; source?: 'static' | 'vault' };
+import type { EnvVar } from '@/components/nodeProperties/types';
+import { createEnvVar } from '@/components/nodeProperties/utils';
 
 export interface ReferenceEnvFieldProps {
   label?: string;
-  value?: EnvItem[] | Record<string, string>;
-  onChange: (next: EnvItem[]) => void;
+  value: EnvVar[];
+  onChange: (next: EnvVar[]) => void;
   readOnly?: boolean;
   disabled?: boolean;
   addLabel?: string;
   onValidate?: (errors: string[]) => void;
-}
-
-function toArray(v?: EnvItem[] | Record<string, string>): EnvItem[] {
-  if (!v) return [];
-  if (Array.isArray(v)) return v.map((it) => ({ name: it.name, value: it.value, source: it.source || 'static' }));
-  // v is Record<string, string> here, so val is already string
-  return Object.entries(v).map(([k, val]) => ({ name: k, value: val, source: 'static' }));
 }
 
 function isVaultRef(v: string) {
@@ -39,70 +33,68 @@ function isVaultRef(v: string) {
 }
 
 export default function ReferenceEnvField({ label, value, onChange, readOnly, disabled, addLabel = 'Add env', onValidate }: ReferenceEnvFieldProps) {
-  const [items, setItems] = useState<EnvItem[]>(toArray(value));
-
   const isDisabled = !!readOnly || !!disabled;
 
-  const validate = useCallback((list: EnvItem[]) => {
-    const errors: string[] = [];
-    const seen = new Set<string>();
-    for (const it of list) {
-      const name = (it.name || '').trim();
-      if (!name) errors.push('env name is required');
-      if (seen.has(name)) errors.push(`duplicate env name: ${name}`);
-      if (name) seen.add(name);
-      const src = it.source || 'static';
-      if (src === 'vault' && it.value && !isVaultRef(it.value)) errors.push(`env ${name || '(blank)'} vault ref must be mount/path/key`);
-    }
-    onValidate?.(errors);
-  }, [onValidate]);
+  const validate = useCallback(
+    (list: EnvVar[]) => {
+      const errors: string[] = [];
+      const seen = new Set<string>();
+      for (const it of list) {
+        const name = (it.name || '').trim();
+        if (!name) errors.push('env name is required');
+        if (seen.has(name)) errors.push(`duplicate env name: ${name}`);
+        if (name) seen.add(name);
+        const src = it.source || 'static';
+        if (src === 'vault' && it.value && !isVaultRef(it.value)) errors.push(`env ${name || '(blank)'} vault ref must be mount/path/key`);
+      }
+      onValidate?.(errors);
+    },
+    [onValidate],
+  );
 
   const commit = useCallback(
-    (list: EnvItem[]) => {
-      setItems(list);
+    (list: EnvVar[]) => {
       validate(list);
-      onChange(list.map((i) => ({ name: i.name, value: i.value, source: i.source || 'static' })));
+      onChange(list);
     },
     [onChange, validate],
   );
 
   const addRow = useCallback(() => {
-    const base = 'KEY';
+    const base = 'NAME';
     let i = 1;
-    const existing = new Set(items.map((x) => x.name));
+    const existing = new Set(value.map((x) => x.name));
     while (existing.has(`${base}_${i}`)) i++;
-    commit([...items, { name: `${base}_${i}`, value: '', source: 'static' }]);
-  }, [items, commit]);
+    commit([...value, createEnvVar({ name: `${base}_${i}` })]);
+  }, [value, commit]);
 
   const removeAt = useCallback(
     (idx: number) => {
-      commit(items.filter((_, i) => i !== idx));
+      commit(value.filter((_, i) => i !== idx));
     },
-    [items, commit],
+    [value, commit],
   );
 
   const updateAt = useCallback(
-    (idx: number, next: Partial<EnvItem>) => {
-      const list = items.slice();
-      list[idx] = { ...list[idx], ...next } as EnvItem;
-      commit(list);
+    (idx: number, next: Partial<EnvVar>) => {
+      commit(value.map((item, i) => (i === idx ? { ...item, ...next } : item)));
     },
-    [items, commit],
+    [value, commit],
   );
 
   return (
     <div className="space-y-2">
       {label ? <Label className="text-xs">{label}</Label> : null}
-      {items.length === 0 && <div className="text-xs text-muted-foreground">No env set</div>}
+      {value.length === 0 && <div className="text-xs text-muted-foreground">No env set</div>}
       <div className="space-y-2">
-        {items.map((it, idx) => (
-          <div key={`${it.name}-${idx}`} className="flex items-center gap-2">
+        {value.map((it, idx) => (
+          <div key={it.id} className="flex items-center gap-2">
             <Input
               className="text-xs w-1/3"
               value={it.name}
               onChange={(e) => updateAt(idx, { name: e.target.value })}
               disabled={isDisabled}
-              placeholder="KEY"
+              placeholder="VARIABLE_NAME"
               data-testid={`env-name-${idx}`}
             />
             <Input
@@ -125,17 +117,11 @@ export default function ReferenceEnvField({ label, value, onChange, readOnly, di
                       aria-label={(it.source ?? 'static') === 'vault' ? 'Vault secret' : 'Static value'}
                       data-testid={`env-source-trigger-${idx}`}
                     >
-                      {(!it.source || it.source === 'static') ? (
-                        <Brackets aria-hidden className="size-4" />
-                      ) : (
-                        <Lock aria-hidden className="size-4" />
-                      )}
+                      {!it.source || it.source === 'static' ? <Brackets aria-hidden className="size-4" /> : <Lock aria-hidden className="size-4" />}
                     </Button>
                   </DropdownMenuTrigger>
                 </TooltipTrigger>
-                <TooltipContent>
-                  {(it.source ?? 'static') === 'vault' ? 'Vault secret' : 'Static value'}
-                </TooltipContent>
+                <TooltipContent>{(it.source ?? 'static') === 'vault' ? 'Vault secret' : 'Static value'}</TooltipContent>
               </Tooltip>
               <DropdownMenuContent align="end">
                 <DropdownMenuRadioGroup

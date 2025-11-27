@@ -6,6 +6,7 @@ import { ContainerService, type ContainerOpts } from '../src/infra/container/con
 import { ContainerHandle } from '../src/infra/container/container.handle';
 import { ConfigService } from '../src/core/services/config.service.js';
 import { EnvService } from '../src/env/env.service';
+import { ReferenceResolverService } from '../src/utils/reference-resolver.service';
 import { VaultService } from '../src/vault/vault.service';
 import { NodeStateService } from '../src/graph/nodeState.service';
 import { ContainerRegistry } from '../src/infra/container/container.registry';
@@ -130,6 +131,12 @@ describe('Graph MCP integration', () => {
         { provide: ContainerService, useClass: StubContainerService },
         { provide: ConfigService, useClass: StubConfigService },
         EnvService,
+        {
+          provide: ReferenceResolverService,
+          useValue: {
+            resolve: async (input: unknown) => ({ output: input, report: {} as unknown }),
+          },
+        },
         { provide: VaultService, useClass: StubVaultService },
         { provide: LLMProvisioner, useClass: StubLLMProvisioner },
         {

@@ -51,7 +51,7 @@ export function EnvEditor({
         <CollapsibleContent>
           <div className="space-y-3">
             {envVars.map((envVar, index) => (
-              <div key={`${envVar.name}-${index}`} className="space-y-3">
+              <div key={envVar.id} className="space-y-3">
                 <div className="flex-1">
                   <FieldLabel label="Name" />
                   <div className="flex items-center gap-2">
