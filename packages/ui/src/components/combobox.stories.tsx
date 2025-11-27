@@ -7,18 +7,21 @@ export default meta;
 export type Story = StoryObj<typeof meta>;
 
 export const Controlled: Story = {
-  render: () => {
+  args: {
+    options: [
+      { label: 'Apple', value: 'apple' },
+      { label: 'Banana', value: 'banana' },
+      { label: 'Cherry', value: 'cherry' },
+    ],
+  },
+  render: (args) => {
     const [value, setValue] = React.useState<string | undefined>();
     return (
       <Combobox
-        options={[
-          { label: 'Apple', value: 'apple' },
-          { label: 'Banana', value: 'banana' },
-          { label: 'Cherry', value: 'cherry' }
-        ]}
+        {...args}
         value={value}
         onChange={(v: string | undefined) => setValue(v)}
       />
     );
-  }
+  },
 };

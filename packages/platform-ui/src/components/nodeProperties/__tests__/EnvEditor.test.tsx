@@ -27,10 +27,10 @@ describe('nodeProperties/EnvEditor', () => {
     title: 'Environment Variables',
     isOpen: true,
     onOpenChange: vi.fn(),
-    envVars: [{ key: 'API_KEY', value: 'secret/data', source: 'vault' }],
+    envVars: [{ name: 'API_KEY', value: 'secret/data', source: 'vault' }],
     onAdd: vi.fn(),
     onRemove: vi.fn(),
-    onKeyChange: vi.fn(),
+    onNameChange: vi.fn(),
     onValueChange: vi.fn(),
     onValueFocus: vi.fn(),
     onSourceTypeChange: vi.fn(),
@@ -47,7 +47,7 @@ describe('nodeProperties/EnvEditor', () => {
       ...baseEnv,
       onAdd: vi.fn(),
       onRemove: vi.fn(),
-      onKeyChange: vi.fn(),
+      onNameChange: vi.fn(),
       onValueChange: vi.fn(),
       onValueFocus: vi.fn(),
       onSourceTypeChange: vi.fn(),
@@ -61,7 +61,7 @@ describe('nodeProperties/EnvEditor', () => {
 
     const nameInput = screen.getByPlaceholderText('VARIABLE_NAME');
     fireEvent.change(nameInput, { target: { value: 'NEW_KEY' } });
-    expect(props.onKeyChange).toHaveBeenCalledWith(0, 'NEW_KEY');
+    expect(props.onNameChange).toHaveBeenCalledWith(0, 'NEW_KEY');
 
     const referenceInput = screen.getByTestId('reference-input');
     fireEvent.focus(referenceInput);

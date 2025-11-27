@@ -14,7 +14,7 @@ import { SecretReferenceSchema, VariableReferenceSchema } from '../../utils/refe
 // New env item type with source-aware reference
 const EnvItemSchema = z
   .object({
-    key: z.string().min(1),
+    name: z.string().min(1),
     value: z.union([z.string(), SecretReferenceSchema, VariableReferenceSchema]),
   })
   .strict()

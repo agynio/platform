@@ -6,15 +6,18 @@ export default meta;
 export type Story = StoryObj<typeof meta>;
 
 export const Basic: Story = {
-  render: () => (
-    <InputOTP maxLength={6} containerClassName="">
-      <InputOTPSlot index={0} />
-      <InputOTPSlot index={1} />
-      <InputOTPSlot index={2} />
-      <InputOTPSeparator />
-      <InputOTPSlot index={3} />
-      <InputOTPSlot index={4} />
-      <InputOTPSlot index={5} />
-    </InputOTP>
-  )
+  args: {
+    maxLength: 6,
+    containerClassName: '',
+    children: [
+      <InputOTPSlot key={0} index={0} />,
+      <InputOTPSlot key={1} index={1} />,
+      <InputOTPSlot key={2} index={2} />,
+      <InputOTPSeparator key="sep" />,
+      <InputOTPSlot key={3} index={3} />,
+      <InputOTPSlot key={4} index={4} />,
+      <InputOTPSlot key={5} index={5} />,
+    ],
+  },
+  render: (args) => <InputOTP {...args} />,
 };

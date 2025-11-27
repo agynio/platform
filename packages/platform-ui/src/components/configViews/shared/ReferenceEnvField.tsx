@@ -14,7 +14,7 @@ import {
 } from '@agyn/ui';
 import { Brackets, Lock, X } from 'lucide-react';
 
-export type EnvItem = { key: string; value: string; source?: 'static' | 'vault' };
+export type EnvItem = { name: string; value: string; source?: 'static' | 'vault' };
 
 export interface ReferenceEnvFieldProps {
   label?: string;
@@ -28,9 +28,9 @@ export interface ReferenceEnvFieldProps {
 
 function toArray(v?: EnvItem[] | Record<string, string>): EnvItem[] {
   if (!v) return [];
-  if (Array.isArray(v)) return v.map((it) => ({ key: it.key, value: it.value, source: it.source || 'static' }));
+  if (Array.isArray(v)) return v.map((it) => ({ name: it.name, value: it.value, source: it.source || 'static' }));
   // v is Record<string, string> here, so val is already string
-  return Object.entries(v).map(([k, val]) => ({ key: k, value: val, source: 'static' }));
+  return Object.entries(v).map(([k, val]) => ({ name: k, value: val, source: 'static' }));
 }
 
 function isVaultRef(v: string) {
@@ -47,12 +47,12 @@ export default function ReferenceEnvField({ label, value, onChange, readOnly, di
     const errors: string[] = [];
     const seen = new Set<string>();
     for (const it of list) {
-      const k = (it.key || '').trim();
-      if (!k) errors.push('env key is required');
-      if (seen.has(k)) errors.push(`duplicate env key: ${k}`);
-      if (k) seen.add(k);
-      const src = (it.source || 'static');
-      if (src === 'vault' && it.value && !isVaultRef(it.value)) errors.push(`env ${k || '(blank)'} vault ref must be mount/path/key`);
+      const name = (it.name || '').trim();
+      if (!name) errors.push('env name is required');
+      if (seen.has(name)) errors.push(`duplicate env name: ${name}`);
+      if (name) seen.add(name);
+      const src = it.source || 'static';
+      if (src === 'vault' && it.value && !isVaultRef(it.value)) errors.push(`env ${name || '(blank)'} vault ref must be mount/path/key`);
     }
     onValidate?.(errors);
   }, [onValidate]);
@@ -61,7 +61,7 @@ export default function ReferenceEnvField({ label, value, onChange, readOnly, di
     (list: EnvItem[]) => {
       setItems(list);
       validate(list);
-      onChange(list.map((i) => ({ key: i.key, value: i.value, source: i.source || 'static' })));
+      onChange(list.map((i) => ({ name: i.name, value: i.value, source: i.source || 'static' })));
     },
     [onChange, validate],
   );
@@ -69,9 +69,9 @@ export default function ReferenceEnvField({ label, value, onChange, readOnly, di
   const addRow = useCallback(() => {
     const base = 'KEY';
     let i = 1;
-    const existing = new Set(items.map((x) => x.key));
+    const existing = new Set(items.map((x) => x.name));
     while (existing.has(`${base}_${i}`)) i++;
-    commit([...items, { key: `${base}_${i}`, value: '', source: 'static' }]);
+    commit([...items, { name: `${base}_${i}`, value: '', source: 'static' }]);
   }, [items, commit]);
 
   const removeAt = useCallback(
@@ -96,14 +96,14 @@ export default function ReferenceEnvField({ label, value, onChange, readOnly, di
       {items.length === 0 && <div className="text-xs text-muted-foreground">No env set</div>}
       <div className="space-y-2">
         {items.map((it, idx) => (
-          <div key={`${it.key}-${idx}`} className="flex items-center gap-2">
+          <div key={`${it.name}-${idx}`} className="flex items-center gap-2">
             <Input
               className="text-xs w-1/3"
-              value={it.key}
-              onChange={(e) => updateAt(idx, { key: e.target.value })}
+              value={it.name}
+              onChange={(e) => updateAt(idx, { name: e.target.value })}
               disabled={isDisabled}
               placeholder="KEY"
-              data-testid={`env-key-${idx}`}
+              data-testid={`env-name-${idx}`}
             />
             <Input
               className="text-xs flex-1"

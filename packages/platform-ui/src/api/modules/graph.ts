@@ -31,7 +31,7 @@ function normalizeConfigByTemplate(
   switch (template) {
     case 'workspace': {
       if (c.env && !Array.isArray(c.env) && typeof c.env === 'object') {
-        c.env = Object.entries(c.env as Record<string, string>).map(([k, v]) => ({ key: k, value: v, source: 'static' }));
+        c.env = Object.entries(c.env as Record<string, string>).map(([name, v]) => ({ name, value: v, source: 'static' }));
       }
       if ('workingDir' in c) delete (c as Record<string, unknown>).workingDir;
       delete (c as Record<string, unknown>).note;
@@ -51,7 +51,7 @@ function normalizeConfigByTemplate(
         delete rc.workingDir;
       }
       if (c.env && !Array.isArray(c.env) && typeof c.env === 'object') {
-        c.env = Object.entries(c.env as Record<string, string>).map(([k, v]) => ({ key: k, value: v, source: 'static' }));
+        c.env = Object.entries(c.env as Record<string, string>).map(([name, v]) => ({ name, value: v, source: 'static' }));
       }
       return c;
     }
@@ -85,7 +85,7 @@ function normalizeConfigByTemplate(
     }
     case 'mcpServer': {
       if (c.env && !Array.isArray(c.env) && typeof c.env === 'object') {
-        c.env = Object.entries(c.env as Record<string, string>).map(([k, v]) => ({ key: k, value: v, source: 'static' }));
+        c.env = Object.entries(c.env as Record<string, string>).map(([name, v]) => ({ name, value: v, source: 'static' }));
       }
       delete (c as Record<string, unknown>).image;
       delete (c as Record<string, unknown>).toolDiscoveryTimeoutMs;

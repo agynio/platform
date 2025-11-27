@@ -50,7 +50,7 @@ describe('normalizeConfigByTemplate idempotence and behavior', () => {
     expect(Array.isArray(cfg1.env) && cfg1.env[0].source === 'static').toBe(true);
 
     const cfg2 = body.nodes[1].config;
-    expect(cfg2.env[0]).toEqual({ key: 'B', value: '2', source: 'static' });
+    expect(cfg2.env[0]).toEqual({ name: 'B', value: '2', source: 'static' });
     expect(cfg2.workingDir).toBeUndefined();
     expect(cfg2.note).toBeUndefined();
 
@@ -67,7 +67,7 @@ describe('normalizeConfigByTemplate idempotence and behavior', () => {
     expect(cfg5.repoUrl).toBeUndefined();
 
     const cfg6 = body.nodes[5].config;
-    expect(cfg6.env[0]).toEqual({ key: 'C', value: '3', source: 'static' });
+    expect(cfg6.env[0]).toEqual({ name: 'C', value: '3', source: 'static' });
     expect(cfg6.image).toBeUndefined();
     expect(cfg6.toolDiscoveryTimeoutMs).toBeUndefined();
 
@@ -78,7 +78,7 @@ describe('normalizeConfigByTemplate idempotence and behavior', () => {
   });
 
   it('is idempotent across multiple runs', () => {
-    const initialConfig: Record<string, unknown> = { workdir: '/w', env: [{ key: 'A', value: '1', source: 'static' }] };
+    const initialConfig: Record<string, unknown> = { workdir: '/w', env: [{ name: 'A', value: '1', source: 'static' }] };
     const initial = { template: 'shellTool' as const, config: initialConfig };
     const normalize = getNormalize(api);
     const once = normalize(initial.template, initial.config);

@@ -6,8 +6,9 @@ export default meta;
 export type Story = StoryObj<typeof meta>;
 
 export const Basic: Story = {
-  render: () => (
-    <Accordion type="single" collapsible className="w-full max-w-md">
+  args: { type: 'single', collapsible: true, className: 'w-full max-w-md' },
+  render: (args) => (
+    <Accordion {...args}>
       <AccordionItem value="item-1">
         <AccordionTrigger>Item 1</AccordionTrigger>
         <AccordionContent>Content for item 1</AccordionContent>
@@ -17,6 +18,5 @@ export const Basic: Story = {
         <AccordionContent>Content for item 2</AccordionContent>
       </AccordionItem>
     </Accordion>
-  )
+  ),
 };
-

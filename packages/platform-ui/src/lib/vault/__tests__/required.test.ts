@@ -21,8 +21,8 @@ describe('computeRequiredKeys', () => {
           template: 'workspace',
           config: {
             env: [
-              { key: 'GH_TOKEN', value: 'secret/github/GH_TOKEN', source: 'vault' },
-              { key: 'STATIC_ONLY', value: 'abc', source: 'static' },
+              { name: 'GH_TOKEN', value: 'secret/github/GH_TOKEN', source: 'vault' },
+              { name: 'STATIC_ONLY', value: 'abc', source: 'static' },
             ],
           },
         },
