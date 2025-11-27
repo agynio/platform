@@ -34,7 +34,7 @@ type ThreadChildrenState = Record<string, ThreadChildrenEntry>;
 
 type SocketMessage = {
   id: string;
-  kind: 'user' | 'assistant' | 'system' | 'tool';
+  kind: 'user' | 'assistant' | 'system' | 'developer' | 'tool';
   text: string | null;
   source: unknown;
   createdAt: string;

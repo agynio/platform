@@ -1,8 +1,8 @@
 import { type ReactNode } from 'react';
-import { User, Bot, Terminal, Settings } from 'lucide-react';
+import { User, Bot, Terminal, Settings, Code } from 'lucide-react';
 import { MarkdownContent } from './MarkdownContent';
 
-export type MessageRole = 'system' | 'user' | 'assistant' | 'tool';
+export type MessageRole = 'system' | 'user' | 'assistant' | 'developer' | 'tool';
 
 interface MessageProps {
   role: MessageRole;
@@ -29,6 +29,12 @@ const roleConfig = {
     bg: '#F5F3FF',
     icon: Bot,
     label: 'Assistant',
+  },
+  developer: {
+    color: '#EA580C',
+    bg: '#FFF7ED',
+    icon: Code,
+    label: 'Developer',
   },
   tool: {
     color: 'var(--agyn-cyan)',

@@ -34,6 +34,7 @@ function toPlainText(content: ContextItem['contentText'], fallback: ContextItem[
 
 const ROLE_COLORS: Record<ContextItem['role'], string> = {
   system: 'bg-gray-900 text-white',
+  developer: 'bg-orange-600 text-white',
   user: 'bg-emerald-600 text-white',
   assistant: 'bg-sky-600 text-white',
   tool: 'bg-amber-600 text-white',
