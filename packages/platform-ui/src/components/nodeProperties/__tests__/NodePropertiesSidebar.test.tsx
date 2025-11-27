@@ -54,6 +54,21 @@ describe('NodePropertiesSidebar tool name field', () => {
     expect(screen.queryByText('Name must match ^[a-z0-9_]{1,64}$')).not.toBeInTheDocument();
   });
 
+  it('trims whitespace before validating and persisting', async () => {
+    const user = userEvent.setup();
+    const { input, onConfigChange } = setup();
+
+    await user.clear(input);
+    onConfigChange.mockClear();
+    await user.type(input, '  custom_tool  ');
+
+    await waitFor(() => {
+      expect(onConfigChange).toHaveBeenCalled();
+    });
+    expect(onConfigChange.mock.calls.at(-1)?.[0]).toEqual({ name: 'custom_tool' });
+    expect(screen.queryByText('Name must match ^[a-z0-9_]{1,64}$')).not.toBeInTheDocument();
+  });
+
   it('rejects invalid tool names and shows an error', async () => {
     const user = userEvent.setup();
     const { input, onConfigChange } = setup();
@@ -76,6 +91,22 @@ describe('NodePropertiesSidebar tool name field', () => {
 
     onConfigChange.mockClear();
     await user.clear(input);
+
+    await waitFor(() => {
+      expect(onConfigChange).toHaveBeenCalledWith({ name: undefined });
+    });
+    expect(screen.queryByText('Name must match ^[a-z0-9_]{1,64}$')).not.toBeInTheDocument();
+  });
+
+  it('clears the name when the trimmed input is empty', async () => {
+    const user = userEvent.setup();
+    const { input, onConfigChange } = setup({
+      config: { kind: 'Tool', title: 'Shell tool', name: 'custom_tool' } as NodeConfig,
+    });
+
+    onConfigChange.mockClear();
+    await user.clear(input);
+    await user.type(input, '   ');
 
     await waitFor(() => {
       expect(onConfigChange).toHaveBeenCalledWith({ name: undefined });

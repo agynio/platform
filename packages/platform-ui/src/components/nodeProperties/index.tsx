@@ -457,13 +457,13 @@ function NodePropertiesSidebar({
         }
         return;
       }
-      if (!isValidToolName(value)) {
+      if (!isValidToolName(normalized)) {
         setToolNameError('Name must match ^[a-z0-9_]{1,64}$');
         return;
       }
       setToolNameError(null);
-      if (value !== toolName) {
-        onConfigChange?.({ name: value });
+      if (normalized !== toolName) {
+        onConfigChange?.({ name: normalized });
       }
     },
     [onConfigChange, toolName],
