@@ -658,7 +658,6 @@ describe('AgentsThreads page', () => {
 
       expect(await screen.findByRole('button', { name: 'Agent Cirrus' })).toBeInTheDocument();
     });
-
     it('disables Send until a recipient is chosen and message entered', async () => {
       const user = userEvent.setup();
       const thread = makeThread();
