@@ -70,6 +70,20 @@ function mapThreadStatus(node: ThreadNode): Thread['status'] {
   return node.status === 'closed' ? 'finished' : 'pending';
 }
 
+function deriveSelectedThreadStatus(thread: ThreadNode | undefined, runs: RunMeta[]): Thread['status'] {
+  if (runs.some((run) => run.status === 'running')) {
+    return 'running';
+  }
+  const latestRun = runs.length > 0 ? runs[runs.length - 1] : undefined;
+  if (latestRun?.status === 'terminated') {
+    return 'failed';
+  }
+  if (thread?.status === 'closed') {
+    return 'finished';
+  }
+  return 'pending';
+}
+
 function matchesFilter(status: 'open' | 'closed', filter: FilterMode): boolean {
   if (filter === 'all') return true;
   return filter === status;
@@ -674,6 +688,13 @@ export function AgentsThreads() {
   }, [selectedThreadId, rootNodes, childrenState, threadDetailQuery.data]);
 
   useEffect(() => {
+    if (!selectedThreadId) return;
+    const entry = childrenState[selectedThreadId];
+    if (entry?.status === 'loading' || entry?.status === 'success') return;
+    loadThreadChildren(selectedThreadId).catch(() => {});
+  }, [selectedThreadId, childrenState, loadThreadChildren]);
+
+  useEffect(() => {
     const parentId = threadDetailQuery.data?.parentId;
     if (!parentId) return;
     const entry = childrenState[parentId];
@@ -681,7 +702,12 @@ export function AgentsThreads() {
     loadThreadChildren(parentId).catch(() => {});
   }, [threadDetailQuery.data?.parentId, childrenState, loadThreadChildren]);
 
-  const selectedThreadForScreen = useMemo(() => (selectedThreadNode ? buildThreadTree(selectedThreadNode, childrenState) : undefined), [selectedThreadNode, childrenState]);
+  const selectedThreadForScreen = useMemo(() => {
+    if (!selectedThreadNode) return undefined;
+    const base = buildThreadTree(selectedThreadNode, childrenState);
+    const status = deriveSelectedThreadStatus(selectedThreadNode, runList);
+    return { ...base, status };
+  }, [selectedThreadNode, childrenState, runList]);
 
   const threadsHasMore = (threadsQuery.data?.items?.length ?? 0) >= threadLimit && threadLimit < MAX_THREAD_LIMIT;
   const threadsIsLoading = threadsQuery.isFetching;
@@ -750,35 +776,30 @@ export function AgentsThreads() {
 
   return (
     <div className="absolute inset-0 flex min-h-0 min-w-0 flex-col overflow-hidden">
-      <div className="shrink-0 border-b px-6 py-3">
-        <h1 className="text-xl font-semibold">Agents / Threads</h1>
-      </div>
-      <div className="flex min-h-0 flex-1 flex-col">
-        <ThreadsScreen
-          threads={threadsForList}
-          runs={conversationRuns}
-          containers={containersForScreen}
-          reminders={remindersForScreen}
-          filterMode={filterMode}
-          selectedThreadId={selectedThreadId ?? null}
-          inputValue={inputValue}
-          isRunsInfoCollapsed={isRunsInfoCollapsed}
-          threadsHasMore={threadsHasMore}
-          threadsIsLoading={threadsIsLoading}
-          isLoading={detailIsLoading}
-          isEmpty={isThreadsEmpty}
-          listError={listErrorNode}
-          detailError={detailErrorNode}
-          onFilterModeChange={handleFilterChange}
-          onSelectThread={handleSelectThread}
-          onToggleRunsInfoCollapsed={handleToggleRunsInfoCollapsed}
-          onInputValueChange={handleInputValueChange}
-          onSendMessage={handleSendMessage}
-          onThreadsLoadMore={threadsHasMore ? handleThreadsLoadMore : undefined}
-          onThreadExpand={handleThreadExpand}
-          selectedThread={selectedThreadForScreen}
-        />
-      </div>
+      <ThreadsScreen
+        threads={threadsForList}
+        runs={conversationRuns}
+        containers={containersForScreen}
+        reminders={remindersForScreen}
+        filterMode={filterMode}
+        selectedThreadId={selectedThreadId ?? null}
+        inputValue={inputValue}
+        isRunsInfoCollapsed={isRunsInfoCollapsed}
+        threadsHasMore={threadsHasMore}
+        threadsIsLoading={threadsIsLoading}
+        isLoading={detailIsLoading}
+        isEmpty={isThreadsEmpty}
+        listError={listErrorNode}
+        detailError={detailErrorNode}
+        onFilterModeChange={handleFilterChange}
+        onSelectThread={handleSelectThread}
+        onToggleRunsInfoCollapsed={handleToggleRunsInfoCollapsed}
+        onInputValueChange={handleInputValueChange}
+        onSendMessage={handleSendMessage}
+        onThreadsLoadMore={threadsHasMore ? handleThreadsLoadMore : undefined}
+        onThreadExpand={handleThreadExpand}
+        selectedThread={selectedThreadForScreen}
+      />
     </div>
   );
 }
