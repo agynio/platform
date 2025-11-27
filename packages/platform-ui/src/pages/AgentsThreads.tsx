@@ -272,7 +272,8 @@ export function AgentsThreads() {
           },
         }));
       } catch (error) {
-        const message = error instanceof Error ? error.message : 'Failed to load subthreads';
+        const details = error instanceof Error && error.message ? error.message : null;
+        const message = details ? `Failed to load subthreads (${details})` : 'Failed to load subthreads';
         setChildrenState((prev) => ({
           ...prev,
           [threadId]: {
@@ -690,7 +691,7 @@ export function AgentsThreads() {
   useEffect(() => {
     if (!selectedThreadId) return;
     const entry = childrenState[selectedThreadId];
-    if (entry?.status === 'loading' || entry?.status === 'success') return;
+    if (entry?.status === 'loading' || entry?.status === 'success' || entry?.status === 'error') return;
     loadThreadChildren(selectedThreadId).catch(() => {});
   }, [selectedThreadId, childrenState, loadThreadChildren]);
 

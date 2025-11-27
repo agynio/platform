@@ -227,4 +227,32 @@ describe('AgentsThreads page', () => {
     expect(await screen.findByText('First subthread')).toBeInTheDocument();
     expect(screen.getByText('Second subthread')).toBeInTheDocument();
   });
+
+  it('surfaces subthread preload failures without retrying endlessly', async () => {
+    const thread = makeThread({ summary: 'Thread with failing children' });
+    const runs = [makeRun({ id: 'run-with-failure' })];
+    let callCount = 0;
+
+    registerThreadScenario({ thread, runs, children: [] });
+
+    server.use(
+      http.get('*/api/agents/threads/:threadId/children', ({ params }) => {
+        if (params.threadId === thread.id) {
+          callCount += 1;
+          return new HttpResponse(null, { status: 500 });
+        }
+        return HttpResponse.json({ items: [] });
+      }),
+      http.options('*/api/agents/threads/:threadId/children', () => new HttpResponse(null, { status: 200 })),
+    );
+
+    renderAt(`/agents/threads/${thread.id}`);
+
+    expect(await screen.findByRole('heading', { name: thread.summary })).toBeInTheDocument();
+
+    await new Promise((resolve) => setTimeout(resolve, 150));
+    expect(callCount).toBe(1);
+
+    expect(await screen.findByText(/Failed to load subthreads/i)).toBeInTheDocument();
+  });
 });
