@@ -20,6 +20,7 @@ const THREAD_LIMIT_STEP = 50;
 const MAX_THREAD_LIMIT = 500;
 
 const defaultMetrics: ThreadMetrics = { remindersCount: 0, containersCount: 0, activity: 'idle', runsCount: 0 };
+const THREAD_PRELOAD_CONCURRENCY = 4;
 
 type FilterMode = 'open' | 'closed' | 'all';
 
@@ -316,6 +317,13 @@ export function AgentsThreads() {
 
   useEffect(() => {
     if (rootNodes.length === 0) return;
+
+    const inFlight = rootNodes.reduce((count, node) => {
+      return childrenState[node.id]?.status === 'loading' ? count + 1 : count;
+    }, 0);
+
+    if (inFlight >= THREAD_PRELOAD_CONCURRENCY) return;
+
     const queue = rootNodes
       .map((node) => node.id)
       .filter((threadId) => {
@@ -327,32 +335,16 @@ export function AgentsThreads() {
         }
         return false;
       });
+
     if (queue.length === 0) return;
 
-    const concurrency = 4;
-    let index = 0;
-    let active = 0;
-    let cancelled = false;
+    const availableSlots = Math.max(THREAD_PRELOAD_CONCURRENCY - inFlight, 0);
+    if (availableSlots === 0) return;
 
-    const pump = () => {
-      if (cancelled) return;
-      while (active < concurrency && index < queue.length) {
-        const threadId = queue[index++];
-        active += 1;
-        loadThreadChildren(threadId)
-          .catch(() => {})
-          .finally(() => {
-            active -= 1;
-            if (!cancelled) pump();
-          });
-      }
-    };
-
-    pump();
-
-    return () => {
-      cancelled = true;
-    };
+    const toLoad = queue.slice(0, availableSlots);
+    toLoad.forEach((threadId) => {
+      loadThreadChildren(threadId).catch(() => {});
+    });
   }, [rootNodes, childrenState, loadThreadChildren]);
 
   const threadDetailQuery = useThreadById(selectedThreadId ?? undefined);

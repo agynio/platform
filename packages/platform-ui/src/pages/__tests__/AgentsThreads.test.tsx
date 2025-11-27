@@ -1,6 +1,6 @@
 import React from 'react';
 import { describe, it, expect, beforeAll, afterEach, afterAll } from 'vitest';
-import { render, screen, within } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { http, HttpResponse } from 'msw';
@@ -38,6 +38,8 @@ type ReminderMock = {
   createdAt: string;
   completedAt: string | null;
 };
+
+const PRELOAD_CONCURRENCY = 4;
 
 function makeThread(overrides: Partial<ThreadMock> = {}): ThreadMock {
   return {
@@ -324,6 +326,99 @@ describe('AgentsThreads page', () => {
     expect(screen.queryByText('Loading subthreads…')).not.toBeInTheDocument();
     expect(await screen.findByText('First subthread')).toBeInTheDocument();
     expect(screen.getByText('Second subthread')).toBeInTheDocument();
+  });
+
+  it('respects preload concurrency across rerenders', async () => {
+    const threads = Array.from({ length: 6 }).map((_, index) =>
+      makeThread({
+        id: `root-${index}`,
+        alias: `alias-${index}`,
+        summary: `Root thread ${index}`,
+        createdAt: t(index * 10),
+      }),
+    );
+
+    let pendingCount = 0;
+    let maxPending = 0;
+    const pendingResolvers: (() => void)[] = [];
+    const started: string[] = [];
+
+    server.use(
+      http.get('*/api/agents/threads', () => HttpResponse.json({ items: threads })),
+      http.get(abs('/api/agents/threads'), () => HttpResponse.json({ items: threads })),
+      http.get('*/api/agents/threads/:threadId', ({ params }) => {
+        const thread = threads.find((item) => item.id === params.threadId);
+        if (!thread) {
+          return new HttpResponse(null, { status: 404 });
+        }
+        return HttpResponse.json(thread);
+      }),
+      http.get(abs('/api/agents/threads/:threadId'), ({ params }) => {
+        const thread = threads.find((item) => item.id === params.threadId);
+        if (!thread) {
+          return new HttpResponse(null, { status: 404 });
+        }
+        return HttpResponse.json(thread);
+      }),
+      http.get('*/api/agents/threads/:threadId/children', ({ params }) => {
+        const threadId = params.threadId as string;
+        started.push(threadId);
+        pendingCount += 1;
+        maxPending = Math.max(maxPending, pendingCount);
+        return new Promise<HttpResponse>((resolve) => {
+          pendingResolvers.push(() => {
+            pendingCount -= 1;
+            resolve(HttpResponse.json({ items: [] }));
+          });
+        });
+      }),
+      http.get(abs('/api/agents/threads/:threadId/children'), ({ params }) => {
+        const threadId = params.threadId as string;
+        started.push(threadId);
+        pendingCount += 1;
+        maxPending = Math.max(maxPending, pendingCount);
+        return new Promise<HttpResponse>((resolve) => {
+          pendingResolvers.push(() => {
+            pendingCount -= 1;
+            resolve(HttpResponse.json({ items: [] }));
+          });
+        });
+      }),
+      http.options('*/api/agents/threads/:threadId/children', () => new HttpResponse(null, { status: 200 })),
+      http.options(abs('/api/agents/threads/:threadId/children'), () => new HttpResponse(null, { status: 200 })),
+      http.get('*/api/agents/reminders', () => HttpResponse.json({ items: [] })),
+      http.get(abs('/api/agents/reminders'), () => HttpResponse.json({ items: [] })),
+      http.options('*/api/agents/reminders', () => new HttpResponse(null, { status: 200 })),
+      http.options(abs('/api/agents/reminders'), () => new HttpResponse(null, { status: 200 })),
+      http.get('*/api/containers', () => HttpResponse.json({ items: [] })),
+      http.get(abs('/api/containers'), () => HttpResponse.json({ items: [] })),
+    );
+
+    renderAt('/agents/threads');
+
+    await screen.findByTestId('threads-list');
+
+    await waitFor(() => {
+      expect(started.length).toBeGreaterThanOrEqual(PRELOAD_CONCURRENCY);
+    });
+
+    expect(maxPending).toBeLessThanOrEqual(PRELOAD_CONCURRENCY);
+
+    while (pendingResolvers.length > 0) {
+      const resolveNext = pendingResolvers.shift();
+      if (resolveNext) {
+        resolveNext();
+        // Allow new preload requests to register for the next iteration.
+        await new Promise((resolve) => setTimeout(resolve, 0));
+      }
+    }
+
+    await waitFor(() => {
+      expect(pendingCount).toBe(0);
+    });
+
+    expect(started).toHaveLength(threads.length);
+    expect(maxPending).toBeLessThanOrEqual(PRELOAD_CONCURRENCY);
   });
 
   it('surfaces subthread preload failures without retrying endlessly', async () => {
