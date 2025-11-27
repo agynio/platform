@@ -78,7 +78,7 @@ describe('LocalMCPServer provision/deprovision + enabledTools filtering', () => 
     // Preload cache with discovered tools (creates LocalMCPServerTool instances)
     server.preloadCachedTools([ { name: 'toolA' } as any, { name: 'toolB' } as any ]);
     let tools = server.listTools();
-    expect(tools.map(t => t.name).sort()).toEqual(['ns_toolA', 'ns_toolB']);
+    expect(tools).toEqual([]);
 
     // Enable only toolA using raw name
     await server.setState({ mcp: { enabledTools: ['toolA'] } });

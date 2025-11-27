@@ -32,8 +32,7 @@ describe('Mixed Shell + MCP overlay isolation', () => {
         agentsDatabaseUrl: 'postgres://localhost/agents',
       }),
     );
-    const resolver = { resolve: async (input: unknown) => ({ output: input, report: {} as unknown }) };
-    const envService = new EnvService(resolver as any);
+    const envService = new EnvService();
 
     const moduleRefStub = {};
     const archiveStub = { createSingleFileTar: vi.fn(async () => Buffer.from('tar')) } as const;

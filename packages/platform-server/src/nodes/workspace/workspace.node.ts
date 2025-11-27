@@ -7,7 +7,6 @@ import { ConfigService } from '../../core/services/config.service';
 import { NcpsKeyService } from '../../infra/ncps/ncpsKey.service';
 import { EnvService, type EnvItem } from '../../env/env.service';
 import { Inject, Injectable, Scope } from '@nestjs/common';
-import { SecretReferenceSchema, VariableReferenceSchema } from '../../utils/reference-schemas';
 
 // Static configuration schema for ContainerProviderEntity
 // Allows overriding the base image and supplying environment variables.
@@ -15,10 +14,10 @@ import { SecretReferenceSchema, VariableReferenceSchema } from '../../utils/refe
 const EnvItemSchema = z
   .object({
     name: z.string().min(1),
-    value: z.union([z.string(), SecretReferenceSchema, VariableReferenceSchema]),
+    value: z.string(),
   })
   .strict()
-  .describe('Environment variable entry supporting plain values, vault references, or variables.');
+  .describe('Environment variable entry with resolved string value.');
 
 const VolumeConfigSchema = z
   .object({
@@ -35,7 +34,7 @@ const VolumeConfigSchema = z
 export const ContainerProviderStaticConfigSchema = z
   .object({
     image: z.string().min(1).optional().describe('Optional container image override.'),
-    env: z.array(EnvItemSchema).optional().describe('Environment variables (plain, vault, or variable references).'),
+    env: z.array(EnvItemSchema).optional().describe('Environment variables as resolved {name, value} pairs.'),
     initialScript: z
       .string()
       .optional()

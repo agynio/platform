@@ -16,15 +16,14 @@ import { Inject, Injectable, Scope, Optional } from '@nestjs/common';
 import { jsonSchemaToZod } from '@agyn/json-schema-to-zod';
 import { isEqual } from 'lodash-es';
 import { ModuleRef } from '@nestjs/core';
-import { SecretReferenceSchema, VariableReferenceSchema } from '../../utils/reference-schemas';
 
 const EnvItemSchema = z
   .object({
     name: z.string().min(1),
-    value: z.union([z.string(), SecretReferenceSchema, VariableReferenceSchema]),
+    value: z.string(),
   })
   .strict()
-  .describe('Environment variable entry supporting plain values, vault references, or variables.');
+  .describe('Environment variable entry with resolved string value.');
 
 export const LocalMcpServerStaticConfigSchema = z.object({
   title: z.string().optional(),
@@ -37,7 +36,7 @@ export const LocalMcpServerStaticConfigSchema = z.object({
   env: z
     .array(EnvItemSchema)
     .optional()
-    .describe('Environment variables (plain, vault, or variable references).')
+    .describe('Environment variables as resolved {name, value} pairs.')
     .meta({ 'ui:field': 'ReferenceEnvField' }),
   requestTimeoutMs: z.number().int().positive().optional().describe('Per-request timeout in ms.'),
   startupTimeoutMs: z.number().int().positive().optional().describe('Startup handshake timeout in ms.'),
@@ -98,8 +97,8 @@ export class LocalMCPServerNode extends Node<z.infer<typeof LocalMcpServerStatic
   // Node lifecycle state driven by base Node
   private _provInFlight: Promise<void> | null = null;
 
-  // Dynamic config: enabled tools (if undefined => all enabled by default)
-  // Dynamic tool filtering removed per strictness spec; always expose all cached tools
+  // Dynamic config: enabled tools (undefined => disabled by default)
+  // Tools are exposed only after enabledTools explicitly enumerates them.
   private _globalStaleTimeoutMs = 0;
   // Last seen enabled tools from state for change detection
   private _lastEnabledTools?: string[];
@@ -377,22 +376,21 @@ export class LocalMCPServerNode extends Node<z.infer<typeof LocalMcpServerStatic
       enabledList = [...this._lastEnabledTools];
     }
 
-    // If enabledTools present (including empty array), filter accordingly
-    if (enabledList) {
-      const wantedRuntimeNames = new Set<string>(enabledList.map((n) => toRuntimeName(String(n))));
-      const availableNames = new Set(allTools.map((t) => t.name));
-      // Log and ignore unknown names
-      const unknown: string[] = Array.from(wantedRuntimeNames).filter((n) => !availableNames.has(n));
-      if (unknown.length) {
-        const availableList = Array.from(availableNames).join(',');
-        this.logger.log(
-          `[MCP:${ns}] enabledTools contains unknown tool(s); ignoring unknown=${unknown.join(',')} available=${availableList}`,
-        );
-      }
-      return allTools.filter((t) => wantedRuntimeNames.has(t.name));
+    if (enabledList === undefined) {
+      return [];
     }
 
-    return allTools;
+    const wantedRuntimeNames = new Set<string>(enabledList.map((n) => toRuntimeName(String(n))));
+    const availableNames = new Set(allTools.map((t) => t.name));
+    // Log and ignore unknown names
+    const unknown: string[] = Array.from(wantedRuntimeNames).filter((n) => !availableNames.has(n));
+    if (unknown.length) {
+      const availableList = Array.from(availableNames).join(',');
+      this.logger.log(
+        `[MCP:${ns}] enabledTools contains unknown tool(s); ignoring unknown=${unknown.join(',')} available=${availableList}`,
+      );
+    }
+    return allTools.filter((t) => wantedRuntimeNames.has(t.name));
   }
 
   async callTool(

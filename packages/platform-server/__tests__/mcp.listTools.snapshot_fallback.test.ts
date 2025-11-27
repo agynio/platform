@@ -30,6 +30,11 @@ describe('LocalMCPServerNode listTools: snapshot-first, fallback-to-setState, na
     (server as any).nodeStateService = nodeStateService;
   });
 
+  it('returns [] when enabledTools is not provided', () => {
+    const tools = server.listTools();
+    expect(tools).toEqual([]);
+  });
+
   it('falls back to setState enabledTools when snapshot is undefined', async () => {
     await server.setState({ mcp: { enabledTools: ['a', 'c'] } as any });
     const tools = server.listTools();
