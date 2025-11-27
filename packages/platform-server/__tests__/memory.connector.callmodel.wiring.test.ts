@@ -12,11 +12,28 @@ class FakeLLM {
   }
 }
 
+const createStructuredMemory = (text: string) =>
+  new DeveloperMessage({
+    type: 'message',
+    role: 'developer',
+    content: [
+      { type: 'input_text', text },
+      { type: 'input_text', text: text + ' context' },
+    ],
+  });
+
 describe('CallModel memory injection', () => {
   it('inserts memory after system; robust to summary presence', async () => {
     const llm = new FakeLLM();
     const reducer = new CallModelLLMReducer(new LoggerService(), createRunEventsStub() as any, createEventsBusStub() as any);
-    reducer.init({ llm: llm as any, model: 'x', systemPrompt: 'SYS', tools: [], memoryProvider: async () => ({ msg: DeveloperMessage.fromText('MEM'), place: 'after_system' }) });
+    const expectedMemoryPlain = createStructuredMemory('MEM').toPlain();
+    reducer.init({
+      llm: llm as any,
+      model: 'x',
+      systemPrompt: 'SYS',
+      tools: [],
+      memoryProvider: async () => ({ msg: createStructuredMemory('MEM'), place: 'after_system' }),
+    });
     // Explicitly avoid setting summary truthy, but assertions should be resilient
     await reducer.invoke(
       { messages: [], summary: undefined, context: { messageIds: [], memory: [] } } as any,
@@ -27,24 +44,40 @@ describe('CallModel memory injection', () => {
     const second = llm.lastInput[1] as any;
     const isSecondHuman = !!second && typeof second?.toJSON === 'function' && second.toJSON().role === 'human';
     const memIndex = isSecondHuman ? 2 : 1;
-    expect((llm.lastInput[memIndex] as DeveloperMessage).text).toBe('MEM');
+    const memoryMessage = llm.lastInput[memIndex] as DeveloperMessage;
+    expect(memoryMessage.toPlain().content).toEqual(expectedMemoryPlain.content);
   });
 
   it('appends memory message at end when placement=last_message with no summary', async () => {
     const llm = new FakeLLM();
     const reducer = new CallModelLLMReducer(new LoggerService(), createRunEventsStub() as any, createEventsBusStub() as any);
-    reducer.init({ llm: llm as any, model: 'x', systemPrompt: 'SYS', tools: [], memoryProvider: async () => ({ msg: DeveloperMessage.fromText('MEM'), place: 'last_message' }) });
+    const expectedMemoryPlain = createStructuredMemory('MEM').toPlain();
+    reducer.init({
+      llm: llm as any,
+      model: 'x',
+      systemPrompt: 'SYS',
+      tools: [],
+      memoryProvider: async () => ({ msg: createStructuredMemory('MEM'), place: 'last_message' }),
+    });
     await reducer.invoke(
       { messages: [DeveloperMessage.fromText('S')], context: { messageIds: [], memory: [] } } as any,
       { threadId: 't', runId: 'r', finishSignal: { isActive: false } as any, terminateSignal: { isActive: false } as any, callerAgent: {} as any },
     );
-    expect((llm.lastInput[llm.lastInput.length - 1] as DeveloperMessage).text).toBe('MEM');
+    const memoryMessage = llm.lastInput[llm.lastInput.length - 1] as DeveloperMessage;
+    expect(memoryMessage.toPlain().content).toEqual(expectedMemoryPlain.content);
   });
 
   it('orders with summary present: after_system -> [System, Human(summary), System(memory), ...messages]', async () => {
     const llm = new FakeLLM();
     const reducer = new CallModelLLMReducer(new LoggerService(), createRunEventsStub() as any, createEventsBusStub() as any);
-    reducer.init({ llm: llm as any, model: 'x', systemPrompt: 'SYS', tools: [], memoryProvider: async () => ({ msg: DeveloperMessage.fromText('MEM'), place: 'after_system' }) });
+    const expectedMemoryPlain = createStructuredMemory('MEM').toPlain();
+    reducer.init({
+      llm: llm as any,
+      model: 'x',
+      systemPrompt: 'SYS',
+      tools: [],
+      memoryProvider: async () => ({ msg: createStructuredMemory('MEM'), place: 'after_system' }),
+    });
     await reducer.invoke(
       { messages: [DeveloperMessage.fromText('S1')], summary: 'SUM', context: { messageIds: [], memory: [] } } as any,
       { threadId: 't', runId: 'r', finishSignal: { isActive: false } as any, terminateSignal: { isActive: false } as any, callerAgent: {} as any },
@@ -54,18 +87,25 @@ describe('CallModel memory injection', () => {
     const second = llm.lastInput[1] as any;
     const role = second?.toJSON ? second.toJSON().role : 'human';
     expect(role).toBe('human');
-    expect((llm.lastInput[2] as DeveloperMessage).text).toBe('MEM');
+    expect((llm.lastInput[2] as DeveloperMessage).toPlain().content).toEqual(expectedMemoryPlain.content);
   });
 
   it('orders with summary present: last_message -> [System, Human(summary), ...messages, System(memory)]', async () => {
     const llm = new FakeLLM();
     const reducer = new CallModelLLMReducer(new LoggerService(), createRunEventsStub() as any, createEventsBusStub() as any);
-    reducer.init({ llm: llm as any, model: 'x', systemPrompt: 'SYS', tools: [], memoryProvider: async () => ({ msg: DeveloperMessage.fromText('MEM'), place: 'last_message' }) });
+    const expectedMemoryPlain = createStructuredMemory('MEM').toPlain();
+    reducer.init({
+      llm: llm as any,
+      model: 'x',
+      systemPrompt: 'SYS',
+      tools: [],
+      memoryProvider: async () => ({ msg: createStructuredMemory('MEM'), place: 'last_message' }),
+    });
     await reducer.invoke(
       { messages: [DeveloperMessage.fromText('S1')], summary: 'SUM', context: { messageIds: [], memory: [] } } as any,
       { threadId: 't', runId: 'r', finishSignal: { isActive: false } as any, terminateSignal: { isActive: false } as any, callerAgent: {} as any },
     );
     const last = llm.lastInput[llm.lastInput.length - 1] as DeveloperMessage;
-    expect(last.text).toBe('MEM');
+    expect(last.toPlain().content).toEqual(expectedMemoryPlain.content);
   });
 });

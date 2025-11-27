@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { CallModelLLMReducer } from '../src/llm/reducers/callModel.llm.reducer';
 import { LoggerService } from '../src/core/services/logger.service.js';
 import { AIMessage, DeveloperMessage, HumanMessage, ResponseMessage, SystemMessage } from '@agyn/llm';
+import type { ResponseInputItem } from 'openai/resources/responses/responses.mjs';
 import { Signal } from '../src/signal';
 
 describe('CallModelLLMReducer usage metrics', () => {
@@ -190,8 +191,17 @@ describe('CallModelLLMReducer usage metrics', () => {
       tools: [],
     });
 
+    const structuredPlain: ResponseInputItem.Message & { role: 'system' } = {
+      type: 'message',
+      role: 'system',
+      content: [
+        { type: 'input_text', text: 'legacy instructions' },
+        { type: 'input_text', text: 'Mask secrets in logs.' },
+      ],
+    };
+
     const initialState = {
-      messages: [SystemMessage.fromText('legacy instructions'), HumanMessage.fromText('Hi there')],
+      messages: [new SystemMessage(structuredPlain), HumanMessage.fromText('Hi there')],
       context: { messageIds: [], memory: [] },
     } as any;
 
@@ -213,6 +223,7 @@ describe('CallModelLLMReducer usage metrics', () => {
     );
     expect(normalizedInstruction).toBeDefined();
     expect(normalizedInstruction?.role).toBe('developer');
+    expect(normalizedInstruction?.toPlain().content).toEqual(structuredPlain.content);
     expect(result.messages[0]).toBeInstanceOf(SystemMessage);
   });
 });

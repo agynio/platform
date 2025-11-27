@@ -2,6 +2,7 @@ import { Reducer } from '@agyn/llm';
 import type { LLMContext, LLMContextState, LLMState } from '../types';
 import { DeveloperMessage, HumanMessage, ResponseMessage, SystemMessage, ToolCallOutputMessage } from '@agyn/llm';
 import type { JsonValue, InputJsonValue } from '../services/messages.serialization';
+import { coerceRole } from '../services/messages.normalization';
 import type { ResponseInputItem, Response } from 'openai/resources/responses/responses.mjs';
 import { toPrismaJsonValue } from '../services/messages.serialization';
 
@@ -30,8 +31,8 @@ export abstract class PersistenceBaseLLMReducer extends Reducer<LLMState, LLMCon
     const messages: PlainMessage[] = state.messages.map((m) => {
       if (m instanceof HumanMessage) return { kind: 'human', value: toPrismaJsonValue(m.toPlain()) };
       if (m instanceof DeveloperMessage) {
-        const system = SystemMessage.fromText(m.text);
-        return { kind: 'system', value: toPrismaJsonValue(system.toPlain()) };
+        const coerced = coerceRole(m.toPlain(), 'system');
+        return { kind: 'system', value: toPrismaJsonValue(coerced) };
       }
       if (m instanceof SystemMessage) return { kind: 'system', value: toPrismaJsonValue(m.toPlain()) };
       if (m instanceof ResponseMessage) return { kind: 'response', value: toPrismaJsonValue(m.toPlain()) };
