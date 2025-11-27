@@ -22,10 +22,8 @@ interface RemindersLayoutProps {
   sortOrder: ListRemindersSortOrder;
   countsByStatus: ReminderStatusCounts;
   statusFilter: ReminderStatusFilter;
-  perPageOptions?: number[];
   onStatusFilterChange?: (value: ReminderStatusFilter) => void;
   onPageChange?: (page: number) => void;
-  onPerPageChange?: (perPage: number) => void;
   onSortByChange?: (sortBy: ListRemindersSortBy) => void;
   onSortOrderChange?: (sortOrder: ListRemindersSortOrder) => void;
 }
@@ -45,10 +43,8 @@ export function RemindersLayout({
   sortOrder,
   countsByStatus,
   statusFilter,
-  perPageOptions,
   onStatusFilterChange,
   onPageChange,
-  onPerPageChange,
   onSortByChange,
   onSortOrderChange,
 }: RemindersLayoutProps) {
@@ -67,10 +63,8 @@ export function RemindersLayout({
         sortOrder={sortOrder}
         countsByStatus={countsByStatus}
         statusFilter={statusFilter}
-        perPageOptions={perPageOptions}
         onStatusFilterChange={onStatusFilterChange}
         onPageChange={onPageChange}
-        onPerPageChange={onPerPageChange}
         onSortByChange={onSortByChange}
         onSortOrderChange={onSortOrderChange}
         onViewThread={onViewThread}

@@ -18,13 +18,13 @@ const STATUS_TO_API_FILTER: Record<ReminderStatusFilter, ListRemindersFilter> = 
 };
 
 const DEFAULT_COUNTS: ReminderStatusCounts = { scheduled: 0, executed: 0, cancelled: 0 };
-const PER_PAGE_OPTIONS = [20, 50, 100];
+const DEFAULT_PER_PAGE = 20;
 
 export function AgentsReminders() {
   const navigate = useNavigate();
   const [statusFilter, setStatusFilter] = useState<ReminderStatusFilter>('all');
   const [page, setPage] = useState(1);
-  const [perPage, setPerPage] = useState(PER_PAGE_OPTIONS[0]);
+  const perPage = DEFAULT_PER_PAGE;
   const [sortBy, setSortBy] = useState<ListRemindersSortBy>('createdAt');
   const [sortOrder, setSortOrder] = useState<ListRemindersSortOrder>('desc');
 
@@ -33,7 +33,7 @@ export function AgentsReminders() {
 
   useEffect(() => {
     setPage(1);
-  }, [statusFilter, perPage, sortBy, sortOrder, apiFilter]);
+  }, [statusFilter, sortBy, sortOrder, apiFilter]);
 
   const handleViewThread = useCallback(
     (threadId: string) => {
@@ -76,11 +76,6 @@ export function AgentsReminders() {
     setPage(nextPage);
   }, []);
 
-  const handlePerPageChange = useCallback((nextPerPage: number) => {
-    if (perPage === nextPerPage) return;
-    setPerPage(nextPerPage);
-  }, [perPage]);
-
   const handleSortByChange = useCallback((nextSortBy: ListRemindersSortBy) => {
     if (sortBy === nextSortBy) return;
     setSortBy(nextSortBy);
@@ -109,10 +104,8 @@ export function AgentsReminders() {
       sortOrder={effectiveSortOrder}
       countsByStatus={countsByStatus}
       statusFilter={statusFilter}
-      perPageOptions={PER_PAGE_OPTIONS}
       onStatusFilterChange={handleStatusFilterChange}
       onPageChange={handlePageChange}
-      onPerPageChange={handlePerPageChange}
       onSortByChange={handleSortByChange}
       onSortOrderChange={handleSortOrderChange}
     />

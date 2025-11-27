@@ -45,7 +45,6 @@ export const Default: Story = {
     sortOrder: 'desc',
     countsByStatus: { scheduled: 1, executed: 1, cancelled: 0 },
     statusFilter: 'all',
-    perPageOptions: [20, 50, 100],
   },
   parameters: {
     selectedMenuItem: 'reminders',

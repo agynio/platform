@@ -79,7 +79,12 @@ describe('AgentsReminders page', () => {
     expect(within(rows[1]).getByText('Soon')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /All \(1\)/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Scheduled \(1\)/i })).toBeInTheDocument();
-    expect(screen.getByLabelText('Rows')).toHaveValue('20');
+    const statusButtons = screen
+      .getAllByRole('button')
+      .filter((button) => /\(\d+\)/.test(button.textContent ?? ''))
+      .map((button) => button.textContent?.replace(/\s+/g, ' ').trim());
+
+    expect(statusButtons).toEqual(['Scheduled (1)', 'Executed (0)', 'Cancelled (0)', 'All (1)']);
   });
 
   it('filters reminders client-side by status', async () => {
