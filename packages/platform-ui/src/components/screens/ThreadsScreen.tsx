@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from 'react';
-import { Play, Container, Bell, Send, PanelRightClose, PanelRight, Loader2, Plus } from 'lucide-react';
+import { Play, Container, Bell, Send, PanelRightClose, PanelRight, Loader2, MessageSquarePlus } from 'lucide-react';
 import { IconButton } from '../IconButton';
 import { ThreadsList } from '../ThreadsList';
 import type { Thread } from '../ThreadItem';
@@ -396,15 +396,14 @@ export default function ThreadsScreen({
             onChange={(value) => onFilterModeChange?.(value as 'all' | 'open' | 'closed')}
             size="sm"
           />
-          {onCreateDraft ? (
-            <IconButton
-              icon={<Plus className="h-4 w-4" />}
-              variant="ghost"
-              size="sm"
-              title="New thread"
-              onClick={onCreateDraft}
-            />
-          ) : null}
+          <IconButton
+            icon={<MessageSquarePlus className="h-4 w-4" />}
+            variant="ghost"
+            size="sm"
+            title="New thread"
+            onClick={onCreateDraft}
+            disabled={!onCreateDraft}
+          />
         </div>
 
         <div className="flex-1 overflow-hidden">{renderThreadsList()}</div>

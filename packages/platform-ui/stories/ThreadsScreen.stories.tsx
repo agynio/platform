@@ -22,16 +22,12 @@ export default meta;
 
 type Story = StoryObj<typeof ThreadsScreen>;
 
-const storyNow = new Date('2024-06-01T12:00:00Z');
-const isoHoursAgo = (hours: number) => new Date(storyNow.getTime() - hours * 60 * 60 * 1000).toISOString();
-const isoDaysAgo = (days: number) => new Date(storyNow.getTime() - days * 24 * 60 * 60 * 1000).toISOString();
-
 const threads: Thread[] = [
   {
     id: '1',
     summary: 'Implement user authentication flow with OAuth 2.0',
     agentName: 'Auth Agent',
-    createdAt: isoHoursAgo(2),
+    createdAt: '2 hours ago',
     status: 'running',
     isOpen: true,
   },
@@ -39,7 +35,7 @@ const threads: Thread[] = [
     id: '2',
     summary: 'Refactor database queries for better performance',
     agentName: 'DB Agent',
-    createdAt: isoHoursAgo(5),
+    createdAt: '5 hours ago',
     status: 'finished',
     isOpen: true,
     subthreads: [
@@ -47,7 +43,7 @@ const threads: Thread[] = [
         id: '2-1',
         summary: 'Optimize index usage in user queries',
         agentName: 'Optimizer',
-        createdAt: isoHoursAgo(4),
+        createdAt: '4 hours ago',
         status: 'finished',
         isOpen: true,
       },
@@ -57,47 +53,11 @@ const threads: Thread[] = [
     id: '3',
     summary: 'Design new landing page components',
     agentName: 'Design Agent',
-    createdAt: isoDaysAgo(1),
+    createdAt: '1 day ago',
     status: 'pending',
     isOpen: false,
   },
 ];
-
-const manyThreads: Thread[] = Array.from({ length: 24 }, (_, index) => {
-  const idx = index + 1;
-  const hoursAgo = idx * 3;
-  const statusCycle = idx % 4;
-  const status: Thread['status'] = statusCycle === 0 ? 'running' : statusCycle === 1 ? 'pending' : statusCycle === 2 ? 'finished' : 'failed';
-  return {
-    id: `thread-${idx}`,
-    summary: `Deep dive analysis task ${idx}`,
-    agentName: `Agent ${String.fromCharCode(65 + (idx % 26))}`,
-    createdAt: isoHoursAgo(hoursAgo),
-    status,
-    isOpen: status !== 'finished' && status !== 'failed',
-  };
-});
-
-const updateThreadOpenState = (nodes: Thread[], targetId: string, isOpen: boolean): Thread[] => {
-  let mutated = false;
-  const next = nodes.map((thread) => {
-    let updated = thread;
-    if (thread.id === targetId && thread.isOpen !== isOpen) {
-      updated = { ...thread, isOpen };
-      mutated = true;
-    }
-    if (thread.subthreads) {
-      const updatedChildren = updateThreadOpenState(thread.subthreads, targetId, isOpen);
-      if (updatedChildren !== thread.subthreads) {
-        updated = updated === thread ? { ...thread } : updated;
-        updated.subthreads = updatedChildren;
-        mutated = true;
-      }
-    }
-    return updated;
-  });
-  return mutated ? next : nodes;
-};
 
 const runs: Run[] = [
   {
@@ -164,6 +124,36 @@ const reminders = [
   { id: 'r-2', title: 'Update documentation', time: 'Friday at 2:00 PM' },
 ];
 
+const defaultDraftThread: Thread = {
+  id: 'draft-demo',
+  summary: 'Plan onboarding follow-up with the product team',
+  agentName: 'Draft conversation',
+  createdAt: 'Just now',
+  status: 'pending',
+  isOpen: true,
+};
+
+const defaultDraftRecipients = [
+  { id: 'agent-1', title: 'Agent Nimbus' },
+  { id: 'agent-2', title: 'Agent Cirrus' },
+  { id: 'agent-3', title: 'Agent Stratus' },
+];
+
+const baseArgs: ThreadsScreenProps = {
+  threads,
+  runs,
+  containers,
+  reminders,
+  filterMode: 'all',
+  selectedThreadId: threads[0]?.id ?? null,
+  inputValue: '',
+  isRunsInfoCollapsed: false,
+  threadsHasMore: true,
+  threadsIsLoading: false,
+  isLoading: false,
+  isEmpty: false,
+};
+
 const ControlledRender: Story['render'] = () => {
   const [currentArgs, updateArgs] = useArgs<ThreadsScreenProps>();
   const logFilterModeChange = action('onFilterModeChange');
@@ -172,87 +162,81 @@ const ControlledRender: Story['render'] = () => {
   const logInputValueChange = action('onInputValueChange');
   const logSendMessage = action('onSendMessage');
   const logThreadsLoadMore = action('onThreadsLoadMore');
-  const logToggleThreadStatus = action('onToggleThreadStatus');
+  const logCreateDraft = action('onCreateDraft');
 
   return (
-    <div className="absolute inset-0 flex min-h-0 min-w-0">
-      <ThreadsScreen
-        {...currentArgs}
-        onFilterModeChange={(mode) => {
-          logFilterModeChange(mode);
-          updateArgs({ filterMode: mode });
-        }}
-        onSelectThread={(threadId) => {
-          logSelectThread(threadId);
-          updateArgs({ selectedThreadId: threadId });
-        }}
-        onToggleRunsInfoCollapsed={(collapsed) => {
-          logToggleRunsInfoCollapsed(collapsed);
-          updateArgs({ isRunsInfoCollapsed: collapsed });
-        }}
-        onInputValueChange={(value) => {
-          logInputValueChange(value);
-          updateArgs({ inputValue: value });
-        }}
-        onSendMessage={(value, context) => {
-          logSendMessage(value, context);
-          updateArgs({ inputValue: '' });
-        }}
-        onThreadsLoadMore={() => {
-          logThreadsLoadMore();
-        }}
-        onToggleThreadStatus={(threadId, next) => {
-          logToggleThreadStatus(threadId, next);
-          const isOpen = next === 'open';
-          const updatedThreads = updateThreadOpenState(currentArgs.threads, threadId, isOpen);
-          const nextSelectedThread = currentArgs.selectedThread && currentArgs.selectedThread.id === threadId
-            ? { ...currentArgs.selectedThread, isOpen }
-            : currentArgs.selectedThread;
-          updateArgs({
-            threads: updatedThreads,
-            selectedThread: nextSelectedThread,
-          });
-        }}
-      />
-    </div>
+    <ThreadsScreen
+      {...currentArgs}
+      onCreateDraft={() => {
+        logCreateDraft();
+        currentArgs.onCreateDraft?.();
+        const draftThread = { ...defaultDraftThread };
+        const existingThreads = currentArgs.threads ?? [];
+        const nextThreads = [
+          draftThread,
+          ...existingThreads.filter((thread) => thread.id !== draftThread.id),
+        ];
+
+        updateArgs({
+          threads: nextThreads,
+          selectedThreadId: draftThread.id,
+          selectedThread: draftThread,
+          draftMode: true,
+          draftRecipients: currentArgs.draftRecipients?.length
+            ? currentArgs.draftRecipients
+            : defaultDraftRecipients,
+          draftRecipientId: null,
+          draftRecipientLabel: null,
+          runs: [],
+          inputValue: currentArgs.draftMode ? currentArgs.inputValue : '',
+        });
+      }}
+      onFilterModeChange={(mode) => {
+        logFilterModeChange(mode);
+        updateArgs({ filterMode: mode });
+      }}
+      onSelectThread={(threadId) => {
+        logSelectThread(threadId);
+        updateArgs({ selectedThreadId: threadId });
+      }}
+      onToggleRunsInfoCollapsed={(collapsed) => {
+        logToggleRunsInfoCollapsed(collapsed);
+        updateArgs({ isRunsInfoCollapsed: collapsed });
+      }}
+      onInputValueChange={(value) => {
+        logInputValueChange(value);
+        updateArgs({ inputValue: value });
+      }}
+      onSendMessage={(value, context) => {
+        logSendMessage(value, context);
+        updateArgs({ inputValue: '' });
+      }}
+      onThreadsLoadMore={() => {
+        logThreadsLoadMore();
+      }}
+    />
   );
 };
 
 export const Populated: Story = {
-  args: {
-    threads,
-    runs,
-    containers,
-    reminders,
-    filterMode: 'all',
-    selectedThreadId: threads[0].id,
-    inputValue: '',
-    isRunsInfoCollapsed: false,
-    threadsHasMore: true,
-    threadsIsLoading: false,
-    isLoading: false,
-    isEmpty: false,
-  },
+  args: { ...baseArgs },
   render: ControlledRender,
   parameters: {
     selectedMenuItem: 'threads',
   },
 };
 
-export const ManyThreads: Story = {
+export const DraftModePreview: Story = {
   args: {
-    threads: manyThreads,
-    runs,
-    containers,
-    reminders,
-    filterMode: 'all',
-    selectedThreadId: manyThreads[0].id,
-    inputValue: '',
-    isRunsInfoCollapsed: false,
-    threadsHasMore: false,
-    threadsIsLoading: false,
-    isLoading: false,
-    isEmpty: false,
+    ...baseArgs,
+    threads: [defaultDraftThread, ...threads],
+    runs: [],
+    selectedThreadId: defaultDraftThread.id,
+    selectedThread: defaultDraftThread,
+    draftMode: true,
+    draftRecipients: defaultDraftRecipients,
+    draftRecipientId: null,
+    draftRecipientLabel: null,
   },
   render: ControlledRender,
   parameters: {
