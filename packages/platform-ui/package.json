@@ -91,11 +91,9 @@
   "devDependencies": {
     "@chromatic-com/storybook": "^4.1.3",
     "@eslint/js": "^9.35.0",
-    "@storybook/addon-actions": "workspace:10.0.8",
     "@storybook/addon-a11y": "^10.0.8",
     "@storybook/addon-docs": "^10.0.8",
     "@storybook/addon-vitest": "^10.0.8",
-    "@storybook/preview-api": "workspace:10.0.8",
     "@storybook/react": "^10.0.8",
     "@storybook/react-vite": "^10.0.8",
     "storybook": "^10.0.8",

@@ -1,6 +1,6 @@
-import { action } from '@storybook/addon-actions';
+import { action } from 'storybook/actions';
 import type { Meta, StoryObj } from '@storybook/react';
-import { useArgs } from '@storybook/preview-api';
+import { useArgs } from 'storybook/preview-api';
 import ThreadsScreen from '../src/components/screens/ThreadsScreen';
 import type { Thread } from '../src/components/ThreadItem';
 import type { Run } from '../src/components/Conversation';

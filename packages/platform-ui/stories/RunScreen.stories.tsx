@@ -1,6 +1,6 @@
-import { action } from '@storybook/addon-actions';
+import { action } from 'storybook/actions';
 import type { Meta, StoryObj } from '@storybook/react';
-import { useArgs } from '@storybook/preview-api';
+import { useArgs } from 'storybook/preview-api';
 import RunScreen from '../src/components/screens/RunScreen';
 import type { RunEvent } from '../src/components/RunEventsList';
 import type { EventType } from '../src/components/RunEventDetails';
