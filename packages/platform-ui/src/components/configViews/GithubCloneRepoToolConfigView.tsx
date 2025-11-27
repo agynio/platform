@@ -1,4 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
+import { Input } from '@agyn/ui';
+import { getCanonicalToolName } from '@/components/nodeProperties/toolCanonicalNames';
+import { isValidToolName } from '@/components/nodeProperties/utils';
 import type { StaticConfigViewProps } from './types';
 import ReferenceField, { type ReferenceValue } from './shared/ReferenceField';
 
@@ -18,19 +21,53 @@ export default function GithubCloneRepoToolConfigView({ value, onChange, readOnl
   })();
   const [token, setToken] = useState<ReferenceValue | string>(initialToken);
   const [errors, setErrors] = useState<string[]>([]);
+  const [name, setName] = useState<string>((init.name as string) || '');
+  const [nameError, setNameError] = useState<string | null>(null);
+  const namePlaceholder = getCanonicalToolName('githubCloneRepoTool') || 'github_clone_repo';
 
   useEffect(() => {
     const t = typeof token === 'string' ? { value: token, source: 'static' as const } : (token as ReferenceValue);
     const errs: string[] = [];
     if ((t.source || 'static') === 'vault' && t.value && !isVaultRef(t.value)) errs.push('token vault ref must be mount/path/key');
     setErrors(errs);
-    const next = { ...value, token: t };
+
+    const trimmedName = name.trim();
+    let nextName: string | undefined;
+    if (trimmedName.length === 0) {
+      setNameError(null);
+      nextName = undefined;
+    } else if (isValidToolName(trimmedName)) {
+      setNameError(null);
+      nextName = trimmedName;
+    } else {
+      setNameError('Name must match ^[a-z0-9_]{1,64}$');
+      nextName = typeof init.name === 'string' ? (init.name as string) : undefined;
+    }
+
+    const next = { ...value, token: t, name: nextName };
     if (JSON.stringify(value || {}) !== JSON.stringify(next)) onChange(next);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [token]);
+  }, [token, name]);
+
+  useEffect(() => {
+    setName((init.name as string) || '');
+  }, [init]);
 
   return (
     <div className="space-y-3 text-sm">
+      <div>
+        <label className="block text-xs mb-1">Name (optional)</label>
+        <Input
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          disabled={readOnly || disabled}
+          placeholder={namePlaceholder}
+        />
+        <div className="text-[10px] text-muted-foreground mt-1">
+          Lowercase letters, digits, underscore. Leave blank to use the canonical name.
+        </div>
+        {nameError && <div className="text-[10px] text-red-600 mt-1">{nameError}</div>}
+      </div>
       <ReferenceField
         label="GitHub token (optional)"
         value={token}

@@ -64,6 +64,7 @@ export type SimpleOption = { value: string; label: string };
 export interface NodePropertiesSidebarProps {
   config: NodeConfig;
   state: NodeState;
+  template?: string;
   onConfigChange?: (updates: Partial<NodeConfig>) => void;
   onProvision?: () => void;
   onDeprovision?: () => void;

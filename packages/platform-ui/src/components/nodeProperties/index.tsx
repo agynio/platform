@@ -16,6 +16,7 @@ import {
   applyVolumesUpdate,
   createEnvVar,
   fromReferenceSourceType,
+  isValidToolName,
   isRecord,
   mergeWithDefined,
   readEnvList,
@@ -27,6 +28,7 @@ import {
   serializeEnvVars,
   writeReferenceValue,
 } from './utils';
+import { getCanonicalToolName } from './toolCanonicalNames';
 import type {
   AgentQueueConfig,
   AgentSummarizationConfig,
@@ -117,6 +119,7 @@ function NodePropertiesSidebar({
   secretSuggestionProvider,
   variableSuggestionProvider,
   providerDebounceMs = 250,
+  template,
 }: NodePropertiesSidebarProps) {
   const { kind: nodeKind, title: nodeTitle } = config;
   const { status } = state;
@@ -131,6 +134,9 @@ function NodePropertiesSidebar({
   const [nixVersionLoading, setNixVersionLoading] = useState<Set<string>>(() => new Set());
   const [nixResolutionLoading, setNixResolutionLoading] = useState<Set<string>>(() => new Set());
   const [nixErrors, setNixErrors] = useState<Record<string, string | null>>({});
+  const toolName = typeof configRecord.name === 'string' ? (configRecord.name as string) : '';
+  const [toolNameInput, setToolNameInput] = useState(toolName);
+  const [toolNameError, setToolNameError] = useState<string | null>(null);
 
   const secretFetcher = useSuggestionFetcher(secretSuggestionProvider, providerDebounceMs);
   const variableFetcher = useSuggestionFetcher(variableSuggestionProvider, providerDebounceMs);
@@ -432,6 +438,37 @@ function NodePropertiesSidebar({
     [onToggleTool],
   );
 
+  useEffect(() => {
+    setToolNameInput(toolName);
+    setToolNameError(null);
+  }, [toolName]);
+
+  const canonicalToolName = useMemo(() => getCanonicalToolName(template), [template]);
+  const toolNamePlaceholder = canonicalToolName || 'tool_name';
+
+  const handleToolNameChange = useCallback(
+    (value: string) => {
+      setToolNameInput(value);
+      const normalized = value.trim();
+      if (normalized.length === 0) {
+        setToolNameError(null);
+        if (toolName !== '') {
+          onConfigChange?.({ name: undefined });
+        }
+        return;
+      }
+      if (!isValidToolName(value)) {
+        setToolNameError('Name must match ^[a-z0-9_]{1,64}$');
+        return;
+      }
+      setToolNameError(null);
+      if (value !== toolName) {
+        onConfigChange?.({ name: value });
+      }
+    },
+    [onConfigChange, toolName],
+  );
+
   const mcpEnvEditorProps = useMemo(
     () => ({
       title: 'Environment Variables',
@@ -507,6 +544,24 @@ function NodePropertiesSidebar({
             <FieldLabel label="Title" hint="The display name for this node" />
             <Input value={nodeTitle} onChange={(event) => onConfigChange?.({ title: event.target.value })} size="sm" />
           </section>
+
+          {nodeKind === 'Tool' && (
+            <section>
+              <FieldLabel label="Name" />
+              <Input
+                value={toolNameInput}
+                onChange={(event) => handleToolNameChange(event.target.value)}
+                placeholder={toolNamePlaceholder}
+                size="sm"
+                aria-invalid={toolNameError ? 'true' : 'false'}
+              />
+              <p className="mt-1 text-xs text-[var(--agyn-gray)]">
+                Optional. Unique per agent. Lowercase letters, digits, underscore, max 64 characters.
+                Affects how the LLM addresses this tool.
+              </p>
+              {toolNameError && <p className="mt-1 text-xs text-[var(--agyn-status-failed)]">{toolNameError}</p>}
+            </section>
+          )}
 
           {nodeKind === 'Agent' && (
             <AgentSection

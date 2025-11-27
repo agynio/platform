@@ -743,6 +743,7 @@ export function GraphLayout({ services }: GraphLayoutProps) {
         <NodePropertiesSidebar
           config={sidebarConfig}
           state={sidebarState}
+          template={selectedNode.template}
           onConfigChange={handleConfigChange}
           onProvision={handleProvision}
           onDeprovision={handleDeprovision}

@@ -60,6 +60,7 @@ function GradientEdge(props: EdgeProps<Edge>) {
 
 export interface GraphNodeConfig {
   id: string;
+  template?: string;
   kind: NodeKind;
   title: string;
   x: number;
@@ -298,6 +299,7 @@ export default function GraphScreen({
             state={{
               status: selectedNode.status,
             }}
+            template={selectedNode.template}
             onConfigChange={
               onNodeUpdate
                 ? (updates) => {

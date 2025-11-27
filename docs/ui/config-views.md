@@ -27,3 +27,9 @@ Flags
 
 Fallback behavior
 - If no view is registered for a template/mode, RightPropertiesPanel shows a simple placeholder informing the user no custom view exists.
+
+Tool name handling
+- Static tool config views should surface an optional **Name** field when the tool exposes a canonical name.
+- Use `getCanonicalToolName(templateName)` (defined in `toolCanonicalNames.ts`) to fetch the placeholder and fallback name.
+- Validate names with `isValidToolName` (`^[a-z0-9_]{1,64}$`). Trim whitespace, allow blank values (clears to canonical), and reject invalid entries by keeping the previous valid name.
+- Surface validation errors both locally (inline message) and via `onValidate` so the parent panel can block saves.

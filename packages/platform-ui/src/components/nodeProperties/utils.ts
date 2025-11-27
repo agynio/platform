@@ -363,3 +363,10 @@ export function toNumberOrUndefined(value: string): number | undefined {
   const parsed = Number(trimmed);
   return Number.isFinite(parsed) ? parsed : undefined;
 }
+
+export const TOOL_NAME_PATTERN = /^[a-z0-9_]{1,64}$/;
+
+export function isValidToolName(value: string): boolean {
+  if (typeof value !== 'string') return false;
+  return TOOL_NAME_PATTERN.test(value);
+}

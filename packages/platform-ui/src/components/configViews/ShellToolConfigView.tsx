@@ -1,12 +1,14 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Input } from '@agyn/ui';
 import type { EnvVar } from '@/components/nodeProperties/types';
-import { readEnvList, serializeEnvVars } from '@/components/nodeProperties/utils';
+import { getCanonicalToolName } from '@/components/nodeProperties/toolCanonicalNames';
+import { isValidToolName, readEnvList, serializeEnvVars } from '@/components/nodeProperties/utils';
 import type { StaticConfigViewProps } from './types';
 import ReferenceEnvField from './shared/ReferenceEnvField';
 
 export default function ShellToolConfigView({ value, onChange, readOnly, disabled, onValidate }: StaticConfigViewProps) {
   const init = useMemo<Record<string, unknown>>(() => ({ ...(value || {}) }), [value]);
+  const [name, setName] = useState<string>((init.name as string) || '');
   const [workdir, setWorkdir] = useState<string>((init.workdir as string) || (init.workingDir as string) || '/workspace');
   const [env, setEnv] = useState<EnvVar[]>(() => readEnvList(init.env));
   const [executionTimeoutMs, setExecutionTimeoutMs] = useState<number>(
@@ -19,31 +21,72 @@ export default function ShellToolConfigView({ value, onChange, readOnly, disable
     const v = init['outputLimitChars'];
     return typeof v === 'number' ? v : 50000;
   });
+  const [nameError, setNameError] = useState<string | null>(null);
 
   const isDisabled = !!readOnly || !!disabled;
+  const namePlaceholder = getCanonicalToolName('shellTool');
 
   useEffect(() => {
     const errors: string[] = [];
+    const trimmedName = name.trim();
+    const hasName = trimmedName.length > 0;
+    const nameValid = !hasName || isValidToolName(trimmedName);
     const inRange = (v: number) => v === 0 || (Number.isInteger(v) && v >= 1000 && v <= 86400000);
     if (!inRange(executionTimeoutMs)) errors.push('executionTimeoutMs must be 0 or 1000-86400000');
     if (!inRange(idleTimeoutMs)) errors.push('idleTimeoutMs must be 0 or 1000-86400000');
     const outputLimitInRange = (v: number) => v === 0 || (Number.isInteger(v) && v > 0);
     if (!outputLimitInRange(outputLimitChars)) errors.push('outputLimitChars must be 0 or a positive integer');
+    if (!nameValid) {
+      errors.push('Name must match ^[a-z0-9_]{1,64}$');
+      setNameError('Name must match ^[a-z0-9_]{1,64}$');
+    } else {
+      setNameError(null);
+    }
     onValidate?.(errors);
-  }, [workdir, executionTimeoutMs, idleTimeoutMs, outputLimitChars, onValidate]);
+  }, [workdir, executionTimeoutMs, idleTimeoutMs, outputLimitChars, name, onValidate]);
 
   useEffect(() => {
     setEnv(readEnvList(init.env));
   }, [init]);
 
   useEffect(() => {
-    const next = { ...value, workdir, env: serializeEnvVars(env), executionTimeoutMs, idleTimeoutMs, outputLimitChars };
+    setName((init.name as string) || '');
+  }, [init]);
+
+  useEffect(() => {
+    const trimmedName = name.trim();
+    let nextName: string | undefined;
+    if (trimmedName.length === 0) {
+      nextName = undefined;
+    } else if (isValidToolName(trimmedName)) {
+      nextName = trimmedName;
+    } else {
+      nextName = typeof init.name === 'string' ? (init.name as string) : undefined;
+    }
+
+    const next = {
+      ...value,
+      name: nextName,
+      workdir,
+      env: serializeEnvVars(env),
+      executionTimeoutMs,
+      idleTimeoutMs,
+      outputLimitChars,
+    };
     if (JSON.stringify(value || {}) !== JSON.stringify(next)) onChange(next);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [workdir, JSON.stringify(env), executionTimeoutMs, idleTimeoutMs, outputLimitChars]);
+  }, [name, workdir, JSON.stringify(env), executionTimeoutMs, idleTimeoutMs, outputLimitChars]);
 
   return (
     <div className="space-y-3 text-sm">
+      <div>
+        <label className="block text-xs mb-1">Name (optional)</label>
+        <Input value={name} onChange={(e) => setName(e.target.value)} disabled={isDisabled} placeholder={namePlaceholder || 'shell_command'} />
+        <div className="text-[10px] text-muted-foreground mt-1">
+          Lowercase letters, digits, underscore. Leave blank to use the canonical name.
+        </div>
+        {nameError && <div className="text-[10px] text-red-600 mt-1">{nameError}</div>}
+      </div>
       <div>
         <label htmlFor="workdir" className="block text-xs mb-1">Working directory</label>
         <Input id="workdir" value={workdir} onChange={(e) => setWorkdir(e.target.value)} disabled={isDisabled} />
