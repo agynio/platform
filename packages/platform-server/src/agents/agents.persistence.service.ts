@@ -560,6 +560,41 @@ export class AgentsPersistenceService {
     });
   }
 
+  async listReminders(
+    filter: RemindersListFilter = 'active',
+    take: number = 100,
+    threadId?: string,
+  ): Promise<ListRemindersItem[]> {
+    const limit = Number.isFinite(take) ? Math.min(1000, Math.max(1, Math.trunc(take))) : 100;
+    const where: Prisma.ReminderWhereInput = {};
+
+    if (filter === 'active') {
+      where.completedAt = null;
+      where.cancelledAt = null;
+    } else if (filter === 'completed') {
+      where.NOT = { completedAt: null };
+    }
+
+    if (threadId) where.threadId = threadId;
+
+    try {
+      return await this.prisma.reminder.findMany({
+        where: Object.keys(where).length === 0 ? undefined : where,
+        orderBy: { at: 'asc' },
+        select: { id: true, threadId: true, note: true, at: true, createdAt: true, completedAt: true, cancelledAt: true },
+        take: limit,
+      });
+    } catch (error) {
+      this.logger.error('Failed to list reminders', {
+        filter,
+        take: limit,
+        threadId,
+        error: error instanceof Error ? { name: error.name, message: error.message } : error,
+      });
+      throw error;
+    }
+  }
+
   async listRunMessages(runId: string, type: RunMessageType): Promise<Array<{ id: string; kind: MessageKind; text: string | null; source: Prisma.JsonValue; createdAt: Date }>> {
     const links = await this.prisma.runMessage.findMany({ where: { runId, type }, select: { messageId: true } });
     if (links.length === 0) return [];
@@ -596,15 +631,7 @@ export class AgentsPersistenceService {
         this.prisma.reminder.findMany({
           where: Object.keys(filterWhere).length === 0 ? undefined : filterWhere,
           orderBy,
-          select: {
-            id: true,
-            threadId: true,
-            note: true,
-            at: true,
-            createdAt: true,
-            completedAt: true,
-            cancelledAt: true,
-          },
+          select: { id: true, threadId: true, note: true, at: true, createdAt: true, completedAt: true, cancelledAt: true },
           take: perPage,
           skip,
         }),

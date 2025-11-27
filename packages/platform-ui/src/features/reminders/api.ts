@@ -14,9 +14,14 @@ export interface ListRemindersOptions {
   sortBy?: ListRemindersSortBy;
   sortOrder?: ListRemindersSortOrder;
   threadId?: string;
+  take?: number;
 }
 
-export interface ListRemindersResponse {
+interface ListRemindersBaseResponse {
+  items: ReminderItem[];
+}
+
+export interface ListRemindersPagedResponse extends ListRemindersBaseResponse {
   total: number;
   page: number;
   perPage: number;
@@ -24,8 +29,9 @@ export interface ListRemindersResponse {
   sortBy: ListRemindersSortBy;
   sortOrder: ListRemindersSortOrder;
   countsByStatus: ReminderStatusCounts;
-  items: ReminderItem[];
 }
+
+export type ListRemindersResponse = ListRemindersBaseResponse | ListRemindersPagedResponse;
 
 export async function listReminders(
   filter: ListRemindersFilter = 'active',
@@ -38,6 +44,7 @@ export async function listReminders(
   if (options.sortBy) params.set('sortBy', options.sortBy);
   if (options.sortOrder) params.set('sortOrder', options.sortOrder);
   if (options.threadId) params.set('threadId', options.threadId);
+  if (options.take !== undefined) params.set('take', String(options.take));
 
   const query = params.toString();
   const url = `/api/agents/reminders${query ? `?${query}` : ''}`;

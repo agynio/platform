@@ -31,18 +31,10 @@ const createLinkingStub = () =>
   }) as unknown as CallAgentLinkingService;
 
 describe('AgentsRemindersController', () => {
-  it('applies default filter, paging, and sorting', async () => {
+  it('returns legacy list when no paging params provided', async () => {
     const svc = {
-      listRemindersPaged: vi.fn(async () => ({
-        total: 1,
-        page: 1,
-        perPage: 20,
-        totalPages: 1,
-        sortBy: 'createdAt',
-        sortOrder: 'desc',
-        countsByStatus: { scheduled: 1, executed: 0, cancelled: 0 },
-        items: [{ id: '1' }],
-      } as any)),
+      listReminders: vi.fn(async () => [{ id: '1' }]),
+      listRemindersPaged: vi.fn(),
     } as unknown as AgentsPersistenceService;
     const module = await Test.createTestingModule({
       controllers: [AgentsRemindersController],
@@ -51,13 +43,31 @@ describe('AgentsRemindersController', () => {
 
     const ctrl = await module.resolve(AgentsRemindersController);
     const res = await ctrl.listReminders({});
-    expect(svc.listRemindersPaged).toHaveBeenCalledWith('active', 1, 20, 'createdAt', 'desc', undefined);
-    expect(res.items).toHaveLength(1);
-    expect(res.total).toBe(1);
+    expect(svc.listReminders).toHaveBeenCalledWith('active', 100, undefined);
+    expect(svc.listRemindersPaged).not.toHaveBeenCalled();
+    expect(res).toEqual({ items: [{ id: '1' }] });
   });
 
-  it('passes explicit query params to service', async () => {
+  it('passes filter, take, and threadId to legacy service', async () => {
     const svc = {
+      listReminders: vi.fn(async () => []),
+      listRemindersPaged: vi.fn(),
+    } as unknown as AgentsPersistenceService;
+    const module = await Test.createTestingModule({
+      controllers: [AgentsRemindersController],
+      providers: [{ provide: AgentsPersistenceService, useValue: svc }],
+    }).compile();
+
+    const ctrl = await module.resolve(AgentsRemindersController);
+    const threadId = '11111111-1111-1111-1111-111111111111';
+    await ctrl.listReminders({ filter: 'completed', take: 10, threadId });
+    expect(svc.listReminders).toHaveBeenCalledWith('completed', 10, threadId);
+    expect(svc.listRemindersPaged).not.toHaveBeenCalled();
+  });
+
+  it('delegates to paged service when paging params provided', async () => {
+    const svc = {
+      listReminders: vi.fn(async () => []),
       listRemindersPaged: vi.fn(async () => ({
         total: 0,
         page: 2,
@@ -76,8 +86,82 @@ describe('AgentsRemindersController', () => {
 
     const ctrl = await module.resolve(AgentsRemindersController);
     const threadId = '11111111-1111-1111-1111-111111111111';
-    await ctrl.listReminders({ filter: 'completed', page: 2, perPage: 10, sortBy: 'at', sortOrder: 'asc', threadId });
+    const res = await ctrl.listReminders({ filter: 'completed', page: 2, perPage: 10, sortBy: 'at', sortOrder: 'asc', threadId });
     expect(svc.listRemindersPaged).toHaveBeenCalledWith('completed', 2, 10, 'at', 'asc', threadId);
+    expect(svc.listReminders).not.toHaveBeenCalled();
+    expect(res.total).toBe(0);
+  });
+});
+
+describe('AgentsPersistenceService.listReminders', () => {
+  it('builds correct where/order/take options', async () => {
+    const captured: any[] = [];
+    const prismaStub = {
+      getClient() {
+        return {
+          reminder: {
+            findMany: async (args: any) => {
+              captured.push(args);
+              return [];
+            },
+          },
+        } as any;
+      },
+    };
+    const { LoggerService } = await import('../src/core/services/logger.service');
+    const eventsBusStub = createEventsBusStub();
+    const svc = new AgentsPersistenceService(
+      prismaStub as any,
+      new LoggerService(),
+      { getThreadsMetrics: async () => ({}) } as any,
+      templateRegistryStub,
+      graphRepoStub,
+      createRunEventsStub() as any,
+      createLinkingStub(),
+      eventsBusStub,
+    );
+
+    await svc.listReminders('active', 50);
+    await svc.listReminders('completed', 25);
+    await svc.listReminders('all', 100);
+    await svc.listReminders('active', 20, 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa');
+
+    expect(captured[0]).toMatchObject({ where: { completedAt: null, cancelledAt: null }, orderBy: { at: 'asc' }, take: 50 });
+    expect(captured[1]).toMatchObject({ where: { NOT: { completedAt: null } }, orderBy: { at: 'asc' }, take: 25 });
+    expect(captured[2]).toMatchObject({ orderBy: { at: 'asc' }, take: 100 });
+    expect(captured[2].where).toBeUndefined();
+    expect(captured[3]).toMatchObject({ where: { completedAt: null, cancelledAt: null, threadId: 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa' }, orderBy: { at: 'asc' }, take: 20 });
+  });
+
+  it('logs and rethrows prisma errors', async () => {
+    const prismaStub = {
+      getClient() {
+        return {
+          reminder: {
+            findMany: async () => {
+              throw new Error('db down');
+            },
+          },
+        } as any;
+      },
+    };
+    const logger = { error: vi.fn(), warn: vi.fn(), info: vi.fn(), debug: vi.fn() } as any;
+    const eventsBusStub = createEventsBusStub();
+    const svc = new AgentsPersistenceService(
+      prismaStub as any,
+      logger,
+      { getThreadsMetrics: async () => ({}) } as any,
+      templateRegistryStub,
+      graphRepoStub,
+      createRunEventsStub() as any,
+      createLinkingStub(),
+      eventsBusStub,
+    );
+
+    await expect(svc.listReminders('active', 5, 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa')).rejects.toThrow('db down');
+    expect(logger.error).toHaveBeenCalledTimes(1);
+    const payload = logger.error.mock.calls[0][1];
+    expect(payload).toMatchObject({ filter: 'active', take: 5, threadId: 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa' });
   });
 });
 

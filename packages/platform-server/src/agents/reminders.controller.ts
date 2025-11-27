@@ -3,6 +3,7 @@ import { Type } from 'class-transformer';
 import { IsIn, IsInt, Min, Max, IsOptional, IsUUID } from 'class-validator';
 import {
   AgentsPersistenceService,
+  type ListRemindersItem,
   type ListRemindersPage,
   type RemindersListFilter,
   type RemindersSortField,
@@ -28,6 +29,13 @@ export class ListRemindersQueryDto {
   perPage?: number;
 
   @IsOptional()
+  @IsInt()
+  @Type(() => Number)
+  @Min(1)
+  @Max(1000)
+  take?: number;
+
+  @IsOptional()
   @IsIn(['createdAt', 'at', 'completedAt'])
   sortBy?: 'createdAt' | 'at' | 'completedAt';
 
@@ -47,13 +55,20 @@ export class AgentsRemindersController {
   ) {}
 
   @Get('reminders')
-  async listReminders(@Query() query: ListRemindersQueryDto): Promise<ListRemindersPage> {
+  async listReminders(@Query() query: ListRemindersQueryDto): Promise<{ items: ListRemindersItem[] } | ListRemindersPage> {
     const filter: RemindersListFilter = query.filter ?? 'active';
-    const page = query.page ?? 1;
-    const perPage = query.perPage ?? 20;
-    const sortBy: RemindersSortField = query.sortBy ?? 'createdAt';
-    const sortOrder: RemindersSortOrder = query.sortOrder ?? 'desc';
+    const hasPaging = query.page !== undefined || query.perPage !== undefined;
 
-    return this.persistence.listRemindersPaged(filter, page, perPage, sortBy, sortOrder, query.threadId);
+    if (hasPaging) {
+      const page = query.page ?? 1;
+      const perPage = query.perPage ?? 20;
+      const sortBy: RemindersSortField = query.sortBy ?? 'createdAt';
+      const sortOrder: RemindersSortOrder = query.sortOrder ?? 'desc';
+      return this.persistence.listRemindersPaged(filter, page, perPage, sortBy, sortOrder, query.threadId);
+    }
+
+    const take = query.take ?? 100;
+    const items = await this.persistence.listReminders(filter, take, query.threadId);
+    return { items };
   }
 }
