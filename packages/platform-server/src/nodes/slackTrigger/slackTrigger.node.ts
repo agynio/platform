@@ -273,9 +273,7 @@ export class SlackTrigger extends Node<SlackTriggerConfig> {
       this._listeners.map(async (listener) =>
         listener.invoke(
           thread,
-          messages.map((m) =>
-            HumanMessage.fromText(`${YamlStringify({ from: m.info })}\n---\n${YamlStringify({ content: m.content })}`),
-          ),
+          messages.map((m) => HumanMessage.fromText(`From User:\n${m.content}`)),
         ),
       ),
     );
