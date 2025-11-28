@@ -273,6 +273,8 @@ export default function ThreadsScreen({
                 variant="primary"
                 size="sm"
                 onClick={() => onSendMessage?.(inputValue, { threadId: selectedThreadId })}
+                aria-label="Send message"
+                title="Send message"
                 disabled={!onSendMessage || !selectedThreadId}
               />
             </div>

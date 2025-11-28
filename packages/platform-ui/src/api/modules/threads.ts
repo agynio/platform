@@ -30,6 +30,8 @@ export const threads = {
     ),
   patchStatus: (id: string, status: 'open' | 'closed') =>
     asData<void>(http.patch(`/api/agents/threads/${encodeURIComponent(id)}`, { status })),
+  sendMessage: (id: string, text: string) =>
+    asData<{ ok: true }>(http.post(`/api/agents/threads/${encodeURIComponent(id)}/messages`, { text })),
   metrics: (id: string) =>
     asData<ThreadMetrics>(http.get(`/api/agents/threads/${encodeURIComponent(id)}/metrics`)),
   reminders: async (id: string, take: number = 200) => {

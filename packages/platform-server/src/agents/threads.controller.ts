@@ -1,4 +1,21 @@
-import { Body, Controller, Get, Inject, NotFoundException, NotImplementedException, Param, Patch, Post, Query } from '@nestjs/common';
+import {
+  BadRequestException,
+  Body,
+  ConflictException,
+  Controller,
+  Get,
+  HttpCode,
+  Inject,
+  InternalServerErrorException,
+  Logger,
+  NotFoundException,
+  NotImplementedException,
+  Param,
+  Patch,
+  Post,
+  Query,
+  ServiceUnavailableException,
+} from '@nestjs/common';
 import { IsBooleanString, IsIn, IsInt, IsOptional, IsString, IsISO8601, Max, Min, ValidateIf } from 'class-validator';
 import { AgentsPersistenceService } from './agents.persistence.service';
 import { Transform, Expose } from 'class-transformer';
@@ -7,6 +24,9 @@ import { ThreadCleanupCoordinator } from './threadCleanup.coordinator';
 import type { ThreadMetrics } from './threads.metrics.service';
 import { RunEventsService } from '../events/run-events.service';
 import { RunSignalsRegistry } from './run-signals.service';
+import { LiveGraphRuntime } from '../graph-core/liveGraph.manager';
+import { HumanMessage } from '@agyn/llm';
+import type { AgentNode } from '../nodes/agent/agent.node';
 
 // Avoid runtime import of Prisma in tests; enumerate allowed values
 export const RunMessageTypeValues: ReadonlyArray<RunMessageType> = ['input', 'injected', 'output'];
@@ -142,11 +162,14 @@ export class PatchThreadBodyDto {
 
 @Controller('api/agents')
 export class AgentsThreadsController {
+  private static readonly MAX_MESSAGE_LENGTH = 8000;
+  private readonly logger = new Logger(AgentsThreadsController.name);
   constructor(
     @Inject(AgentsPersistenceService) private readonly persistence: AgentsPersistenceService,
     @Inject(ThreadCleanupCoordinator) private readonly cleanupCoordinator: ThreadCleanupCoordinator,
     @Inject(RunEventsService) private readonly runEvents: RunEventsService,
     @Inject(RunSignalsRegistry) private readonly runSignals: RunSignalsRegistry,
+    @Inject(LiveGraphRuntime) private readonly runtime: LiveGraphRuntime,
   ) {}
 
   @Get('threads')
@@ -327,6 +350,70 @@ export class AgentsThreadsController {
     return { ok: true };
   }
 
+  @Post('threads/:threadId/messages')
+  @HttpCode(202)
+  async sendThreadMessage(@Param('threadId') threadId: string, @Body() body: unknown): Promise<{ ok: true }> {
+    const text = this.extractMessageText(body);
+    if (!text) {
+      throw new BadRequestException({ error: 'bad_message_payload' });
+    }
+
+    const thread = await this.persistence.getThreadById(threadId);
+    if (!thread) {
+      throw new NotFoundException({ error: 'thread_not_found' });
+    }
+    if (thread.status === 'closed') {
+      throw new ConflictException({ error: 'thread_closed' });
+    }
+
+    const liveNodes = this.runtime.getNodes();
+    const agentNodes = liveNodes.filter((node) => node.template === 'agent');
+    if (agentNodes.length === 0) {
+      throw new ServiceUnavailableException({ error: 'agent_unavailable' });
+    }
+
+    const candidateNodeIds = agentNodes.map((node) => node.id);
+    const agentNodeId = await this.persistence.getLatestAgentNodeIdForThread(threadId, { candidateNodeIds });
+    if (!agentNodeId) {
+      throw new ServiceUnavailableException({ error: 'agent_unavailable' });
+    }
+
+    const liveAgentNode = agentNodes.find((node) => node.id === agentNodeId);
+    if (!liveAgentNode) {
+      throw new ServiceUnavailableException({ error: 'agent_unavailable' });
+    }
+
+    const instance = liveAgentNode.instance as Pick<AgentNode, 'invoke' | 'status'>;
+    if (typeof instance?.invoke !== 'function') {
+      throw new ServiceUnavailableException({ error: 'agent_unavailable' });
+    }
+    if (instance.status !== 'ready') {
+      throw new ServiceUnavailableException({ error: 'agent_unready' });
+    }
+
+    try {
+      const invocation = instance.invoke(threadId, [HumanMessage.fromText(text)]);
+      void invocation.catch((error) => {
+        const stack = error instanceof Error ? error.stack : undefined;
+        this.logger.error(
+          `sendThreadMessage invoke failed thread=${threadId} agent=${agentNodeId}`,
+          stack,
+          AgentsThreadsController.name,
+        );
+      });
+    } catch (error) {
+      const stack = error instanceof Error ? error.stack : undefined;
+      this.logger.error(
+        `sendThreadMessage immediate failure thread=${threadId} agent=${agentNodeId}`,
+        stack,
+        AgentsThreadsController.name,
+      );
+      throw new InternalServerErrorException({ error: 'send_failed' });
+    }
+
+    return { ok: true } as const;
+  }
+
   @Get('threads/:threadId/metrics')
   async getThreadMetrics(@Param('threadId') threadId: string) {
     const metrics = await this.persistence.getThreadsMetrics([threadId]);
@@ -342,5 +429,15 @@ export class AgentsThreadsController {
     }
     this.runSignals.activateTerminate(runId);
     return { ok: true };
+  }
+
+  private extractMessageText(body: unknown): string | null {
+    if (!body || typeof body !== 'object') return null;
+    const textValue = (body as Record<string, unknown>).text;
+    if (typeof textValue !== 'string') return null;
+    const trimmed = textValue.trim();
+    if (trimmed.length === 0) return null;
+    if (trimmed.length > AgentsThreadsController.MAX_MESSAGE_LENGTH) return null;
+    return trimmed;
   }
 }

@@ -18,6 +18,7 @@ import type { ApiError } from '@/api/http';
 const INITIAL_THREAD_LIMIT = 50;
 const THREAD_LIMIT_STEP = 50;
 const MAX_THREAD_LIMIT = 500;
+const THREAD_MESSAGE_MAX_LENGTH = 8000;
 
 const defaultMetrics: ThreadMetrics = { remindersCount: 0, containersCount: 0, activity: 'idle', runsCount: 0 };
 const THREAD_PRELOAD_CONCURRENCY = 4;
@@ -68,6 +69,37 @@ function sanitizeSummary(summary: string | null | undefined): string {
 function sanitizeAgentName(agentName: string | null | undefined): string {
   const trimmed = agentName?.trim();
   return trimmed && trimmed.length > 0 ? trimmed : '(unknown agent)';
+}
+
+const sendMessageErrorMap: Record<string, string> = {
+  bad_message_payload: 'Please enter a message up to 8000 characters.',
+  thread_not_found: 'Thread not found. It may have been removed.',
+  thread_closed: 'This thread is closed. Reopen it to send messages.',
+  agent_unavailable: 'Agent is not currently available for this thread.',
+  agent_unready: 'Agent is starting up. Try again shortly.',
+  send_failed: 'Failed to send the message. Please retry.',
+};
+
+function resolveSendMessageError(error: unknown): string {
+  if (error && typeof error === 'object') {
+    const apiError = error as ApiError;
+    const payload = apiError.response?.data as { error?: unknown; message?: unknown } | undefined;
+    if (payload && typeof payload === 'object') {
+      const code = typeof payload.error === 'string' ? payload.error : undefined;
+      if (code && sendMessageErrorMap[code]) {
+        return sendMessageErrorMap[code];
+      }
+      const message = typeof payload.message === 'string' ? payload.message : undefined;
+      if (message) return message;
+    }
+    if (typeof apiError.message === 'string' && apiError.message.trim().length > 0) {
+      return apiError.message;
+    }
+  }
+  if (error instanceof Error && error.message) {
+    return error.message;
+  }
+  return 'Failed to send the message.';
 }
 
 type StatusOverride = {
@@ -725,6 +757,20 @@ export function AgentsThreads() {
   const selectedThreadRemindersCount = remindersQuery.data?.items?.length ?? 0;
   const selectedThreadHasPendingReminder = selectedThreadRemindersCount > 0;
 
+  const sendMessageMutation = useMutation({
+    mutationFn: async ({ threadId, text }: { threadId: string; text: string }) => {
+      await threads.sendMessage(threadId, text);
+      return { threadId };
+    },
+    onSuccess: () => {
+      setInputValue('');
+    },
+    onError: (error: unknown) => {
+      notifyError(resolveSendMessageError(error));
+    },
+  });
+  const { mutate: sendThreadMessage, isPending: isSendMessagePending } = sendMessageMutation;
+
   const toggleThreadStatusMutation = useMutation({
     mutationFn: async ({ id, next }: { id: string; next: 'open' | 'closed' }) => {
       await threads.patchStatus(id, next);
@@ -932,10 +978,23 @@ export function AgentsThreads() {
     setInputValue(value);
   }, []);
 
-  const handleSendMessage = useCallback((_value: string, context: { threadId: string | null }) => {
-    if (!context.threadId) return;
-    notifyError('Sending messages is not supported yet.');
-  }, []);
+  const handleSendMessage = useCallback(
+    (value: string, context: { threadId: string | null }) => {
+      if (!context.threadId) return;
+      if (isSendMessagePending) return;
+      const trimmed = value.trim();
+      if (trimmed.length === 0) {
+        notifyError('Enter a message before sending.');
+        return;
+      }
+      if (trimmed.length > THREAD_MESSAGE_MAX_LENGTH) {
+        notifyError('Messages are limited to 8000 characters.');
+        return;
+      }
+      sendThreadMessage({ threadId: context.threadId, text: trimmed });
+    },
+    [isSendMessagePending, sendThreadMessage],
+  );
 
   const handleToggleRunsInfoCollapsed = useCallback((collapsed: boolean) => {
     setRunsInfoCollapsed(collapsed);

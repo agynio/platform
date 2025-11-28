@@ -6,6 +6,7 @@ import { ThreadCleanupCoordinator } from '../src/agents/threadCleanup.coordinato
 import { RunEventsService } from '../src/events/run-events.service';
 import { RunSignalsRegistry } from '../src/agents/run-signals.service';
 import { NotFoundException } from '@nestjs/common';
+import { LiveGraphRuntime } from '../src/graph-core/liveGraph.manager';
 
 const runEventsStub = {
   getRunSummary: vi.fn(),
@@ -28,6 +29,7 @@ describe('AgentsThreadsController terminate run endpoint', () => {
         { provide: ThreadCleanupCoordinator, useValue: { closeThreadWithCascade: vi.fn() } },
         { provide: RunEventsService, useValue: runEventsStub },
         { provide: RunSignalsRegistry, useValue: { register: vi.fn(), activateTerminate, clear: vi.fn() } },
+        { provide: LiveGraphRuntime, useValue: { getNodes: vi.fn(() => []) } },
       ],
     }).compile();
 
@@ -50,6 +52,7 @@ describe('AgentsThreadsController terminate run endpoint', () => {
         { provide: ThreadCleanupCoordinator, useValue: { closeThreadWithCascade: vi.fn() } },
         { provide: RunEventsService, useValue: runEventsStub },
         { provide: RunSignalsRegistry, useValue: { register: vi.fn(), activateTerminate, clear: vi.fn() } },
+        { provide: LiveGraphRuntime, useValue: { getNodes: vi.fn(() => []) } },
       ],
     }).compile();
 
@@ -71,6 +74,7 @@ describe('AgentsThreadsController terminate run endpoint', () => {
         { provide: ThreadCleanupCoordinator, useValue: { closeThreadWithCascade: vi.fn() } },
         { provide: RunEventsService, useValue: runEventsStub },
         { provide: RunSignalsRegistry, useValue: { register: vi.fn(), activateTerminate: vi.fn(), clear: vi.fn() } },
+        { provide: LiveGraphRuntime, useValue: { getNodes: vi.fn(() => []) } },
       ],
     }).compile();
 

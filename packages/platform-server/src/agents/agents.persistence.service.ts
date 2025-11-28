@@ -417,6 +417,25 @@ export class AgentsPersistenceService {
     return result;
   }
 
+  async getLatestAgentNodeIdForThread(
+    threadId: string,
+    options?: { candidateNodeIds?: string[] },
+  ): Promise<string | null> {
+    const candidateNodeIds = options?.candidateNodeIds;
+    if (candidateNodeIds && candidateNodeIds.length === 0) return null;
+    const prisma = this.prisma;
+    const where: Prisma.ConversationStateWhereInput = { threadId };
+    if (candidateNodeIds && candidateNodeIds.length > 0) {
+      where.nodeId = { in: candidateNodeIds };
+    }
+    const state = await prisma.conversationState.findFirst({
+      where,
+      orderBy: { updatedAt: 'desc' },
+      select: { nodeId: true },
+    });
+    return state?.nodeId ?? null;
+  }
+
   async listChildren(parentId: string, status: 'open' | 'closed' | 'all' = 'all'): Promise<Array<{ id: string; alias: string; summary: string | null; status: ThreadStatus; createdAt: Date; parentId?: string | null }>> {
     const where: Prisma.ThreadWhereInput = { parentId };
     if (status !== 'all') where.status = status as ThreadStatus;
