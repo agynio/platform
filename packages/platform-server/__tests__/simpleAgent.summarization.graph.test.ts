@@ -7,6 +7,7 @@ import { Test } from '@nestjs/testing';
 import { LLMProvisioner } from '../src/llm/provisioners/llm.provisioner';
 import { PrismaService } from '../src/core/services/prisma.service';
 import { AgentsPersistenceService } from '../src/agents/agents.persistence.service';
+import { LoggerService } from '../src/core/services/logger.service.js';
 import { RunEventsService } from '../src/events/run-events.service';
 import { EventsBusService } from '../src/events/events-bus.service';
 import { createRunEventsStub } from './helpers/runEvents.stub';
@@ -28,6 +29,7 @@ describe('Agent summarization graph', () => {
           ),
         },
         { provide: LLMProvisioner, useValue: provisioner },
+        LoggerService,
         Agent,
         { provide: PrismaService, useValue: { getClient: () => ({ conversationState: { upsert: async () => {}, findUnique: async () => null } }) } },
         {

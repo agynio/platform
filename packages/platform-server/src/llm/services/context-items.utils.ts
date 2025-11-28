@@ -1,6 +1,14 @@
 import type { PrismaClient } from '@prisma/client';
 import { ContextItemRole, Prisma } from '@prisma/client';
-import { AIMessage, HumanMessage, ResponseMessage, SystemMessage, ToolCallMessage, ToolCallOutputMessage } from '@agyn/llm';
+import {
+  AIMessage,
+  DeveloperMessage,
+  HumanMessage,
+  ResponseMessage,
+  SystemMessage,
+  ToolCallMessage,
+  ToolCallOutputMessage,
+} from '@agyn/llm';
 import { toPrismaJsonValue } from './messages.serialization';
 
 export type ContextItemInput = {
@@ -26,6 +34,7 @@ export type LoggerLike = {
 
 const ROLE_ALIASES: Record<string, ContextItemRole> = {
   system: ContextItemRole.system,
+  developer: ContextItemRole.system,
   user: ContextItemRole.user,
   human: ContextItemRole.user,
   assistant: ContextItemRole.assistant,
@@ -124,6 +133,14 @@ export async function upsertNormalizedContextItems(
   return { ids, created };
 }
 
+export function contextItemInputFromDeveloper(message: DeveloperMessage): ContextItemInput {
+  return {
+    role: ContextItemRole.system,
+    contentText: message.text,
+    metadata: { type: message.type },
+  };
+}
+
 export function contextItemInputFromSystem(message: SystemMessage): ContextItemInput {
   return {
     role: ContextItemRole.system,
@@ -140,7 +157,10 @@ export function contextItemInputFromSummary(text: string): ContextItemInput {
   };
 }
 
-export function contextItemInputFromMemory(message: SystemMessage, place: MemoryPlacement): ContextItemInput {
+export function contextItemInputFromMemory(
+  message: DeveloperMessage | SystemMessage,
+  place: MemoryPlacement,
+): ContextItemInput {
   return {
     role: ContextItemRole.memory,
     contentText: message.text,
@@ -149,8 +169,16 @@ export function contextItemInputFromMemory(message: SystemMessage, place: Memory
 }
 
 export function contextItemInputFromMessage(
-  message: SystemMessage | HumanMessage | AIMessage | ResponseMessage | ToolCallMessage | ToolCallOutputMessage,
+  message:
+    | DeveloperMessage
+    | SystemMessage
+    | HumanMessage
+    | AIMessage
+    | ResponseMessage
+    | ToolCallMessage
+    | ToolCallOutputMessage,
 ): ContextItemInput {
+  if (message instanceof DeveloperMessage) return contextItemInputFromDeveloper(message);
   if (message instanceof SystemMessage) return contextItemInputFromSystem(message);
   if (message instanceof HumanMessage) {
     return {

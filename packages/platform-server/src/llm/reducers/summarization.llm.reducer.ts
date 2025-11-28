@@ -1,11 +1,11 @@
 import { LLMContext, LLMContextState, LLMMessage, LLMState } from '../types';
 
 import {
+  DeveloperMessage,
   HumanMessage,
   LLM,
   Reducer,
   ResponseMessage,
-  SystemMessage,
   ToolCallMessage,
   ToolCallOutputMessage,
 } from '@agyn/llm';
@@ -122,7 +122,7 @@ export class SummarizationLLMReducer extends Reducer<LLMState, LLMContext> {
       const response = await this.llm.call({
         model,
         input: [
-          SystemMessage.fromText(systemPrompt),
+          DeveloperMessage.fromText(systemPrompt),
           HumanMessage.fromText(userPrompt),
         ],
       });

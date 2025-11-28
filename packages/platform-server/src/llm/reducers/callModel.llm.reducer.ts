@@ -1,5 +1,6 @@
 import {
   AIMessage,
+  DeveloperMessage,
   FunctionTool,
   HumanMessage,
   LLM,
@@ -8,7 +9,7 @@ import {
   SystemMessage,
   ToolCallMessage,
 } from '@agyn/llm';
-import { Inject, Injectable, Logger, Scope } from '@nestjs/common';
+import { Inject, Injectable, Scope } from '@nestjs/common';
 import { LLMContext, LLMContextState, LLMMessage, LLMState } from '../types';
 import type { LLMCallUsageMetrics, ToolCallRecord } from '../../events/run-events.service';
 import { RunEventsService } from '../../events/run-events.service';
@@ -16,30 +17,34 @@ import { EventsBusService } from '../../events/events-bus.service';
 import { RunEventStatus, Prisma } from '@prisma/client';
 import { toPrismaJsonValue } from '../services/messages.serialization';
 import {
+  contextItemInputFromDeveloper,
   contextItemInputFromMemory,
   contextItemInputFromMessage,
   contextItemInputFromSummary,
-  contextItemInputFromSystem,
 } from '../services/context-items.utils';
+import { normalizeInstructionMessage } from '../services/messages.normalization';
 import type { ContextItemInput } from '../services/context-items.utils';
+import { LoggerService } from '../../core/services/logger.service';
 
 type SequenceEntry =
-  | { kind: 'system'; message: SystemMessage }
+  | { kind: 'system'; message: DeveloperMessage }
   | { kind: 'summary'; message: HumanMessage }
-  | { kind: 'memory'; message: SystemMessage; place: 'after_system' | 'last_message' }
+  | { kind: 'memory'; message: DeveloperMessage | SystemMessage; place: 'after_system' | 'last_message' }
   | { kind: 'conversation'; message: LLMMessage; index: number };
 
 @Injectable({ scope: Scope.TRANSIENT })
 export class CallModelLLMReducer extends Reducer<LLMState, LLMContext> {
-  private readonly logger = new Logger(CallModelLLMReducer.name);
+  protected logger: LoggerService;
   private readonly runEvents: RunEventsService;
   private readonly eventsBus: EventsBusService;
 
   constructor(
+    @Inject(LoggerService) logger: LoggerService,
     @Inject(RunEventsService) runEvents: RunEventsService,
     @Inject(EventsBusService) eventsBus: EventsBusService,
   ) {
     super();
+    this.logger = logger;
     this.runEvents = runEvents;
     this.eventsBus = eventsBus;
   }
@@ -62,7 +67,7 @@ export class CallModelLLMReducer extends Reducer<LLMState, LLMContext> {
   private memoryProvider?: (
     ctx: LLMContext,
     state: LLMState,
-  ) => Promise<{ msg: SystemMessage | null; place: 'after_system' | 'last_message' } | null>;
+  ) => Promise<{ msg: DeveloperMessage | SystemMessage | null; place: 'after_system' | 'last_message' } | null>;
 
   init(params: {
     llm: LLM;
@@ -72,7 +77,7 @@ export class CallModelLLMReducer extends Reducer<LLMState, LLMContext> {
     memoryProvider?: (
       ctx: LLMContext,
       state: LLMState,
-    ) => Promise<{ msg: SystemMessage | null; place: 'after_system' | 'last_message' } | null>;
+    ) => Promise<{ msg: DeveloperMessage | SystemMessage | null; place: 'after_system' | 'last_message' } | null>;
   }) {
     this.llm = params.llm;
     this.model = params.model;
@@ -87,7 +92,7 @@ export class CallModelLLMReducer extends Reducer<LLMState, LLMContext> {
       throw new Error('CallModelLLMReducer not initialized');
     }
 
-    const system = SystemMessage.fromText(this.systemPrompt);
+    const system = DeveloperMessage.fromText(this.systemPrompt);
     const summaryText = state.summary?.trim() ?? null;
     const summaryMsg = summaryText ? HumanMessage.fromText(summaryText) : null;
     const memoryResult = this.memoryProvider ? await this.memoryProvider(ctx, state) : null;
@@ -103,7 +108,7 @@ export class CallModelLLMReducer extends Reducer<LLMState, LLMContext> {
       sequence,
       summaryText,
     );
-    const input = sequence.map((entry) => entry.message);
+    const input = sequence.map((entry) => this.normalizeSequenceEntry(entry));
 
     const nodeId = ctx.callerAgent.getAgentNodeId?.() ?? null;
     const llmEvent = await this.runEvents.startLLMCall({
@@ -230,9 +235,9 @@ export class CallModelLLMReducer extends Reducer<LLMState, LLMContext> {
   }
 
   private buildSequence(
-    system: SystemMessage,
+    system: DeveloperMessage,
     summaryMsg: HumanMessage | null,
-    memoryResult: { msg: SystemMessage | null; place: 'after_system' | 'last_message' } | null,
+    memoryResult: { msg: DeveloperMessage | SystemMessage | null; place: 'after_system' | 'last_message' } | null,
     conversation: LLMMessage[],
   ): SequenceEntry[] {
     const sequence: SequenceEntry[] = [{ kind: 'system', message: system }];
@@ -274,7 +279,7 @@ export class CallModelLLMReducer extends Reducer<LLMState, LLMContext> {
           this.collectContextId({
             existingId: existing.id ?? null,
             pending,
-            input: () => contextItemInputFromSystem(entry.message),
+            input: () => contextItemInputFromDeveloper(entry.message),
             assign: (id) => {
               existing.id = id;
             },
@@ -398,6 +403,22 @@ export class CallModelLLMReducer extends Reducer<LLMState, LLMContext> {
       assign,
       isConversation,
     });
+  }
+
+  private normalizeSequenceEntry(entry: SequenceEntry): LLMMessage {
+    if (entry.kind === 'system' || entry.kind === 'summary') {
+      return entry.message;
+    }
+
+    if (entry.kind === 'memory') {
+      return normalizeInstructionMessage(entry.message);
+    }
+
+    const message = entry.message;
+    if (message instanceof DeveloperMessage || message instanceof SystemMessage) {
+      return normalizeInstructionMessage(message);
+    }
+    return message;
   }
 
   private serializeToolCalls(calls: ToolCallMessage[]): ToolCallRecord[] {

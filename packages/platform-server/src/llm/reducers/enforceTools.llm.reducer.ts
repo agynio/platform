@@ -1,4 +1,4 @@
-import { Reducer, ResponseMessage, SystemMessage, ToolCallMessage } from '@agyn/llm';
+import { DeveloperMessage, Reducer, ResponseMessage, ToolCallMessage } from '@agyn/llm';
 import { LLMContext, LLMState } from '../types';
 import { Injectable, Logger } from '@nestjs/common';
 
@@ -43,7 +43,7 @@ export class EnforceToolsLLMReducer extends Reducer<LLMState, LLMContext> {
       restrictionMessage = 'Please use a tool to proceed before responding.';
     }
     this.logger.log('Enforcing restrictOutput: injecting restriction message');
-    const msg = SystemMessage.fromText(restrictionMessage);
+    const msg = DeveloperMessage.fromText(restrictionMessage);
 
     return {
       ...state,

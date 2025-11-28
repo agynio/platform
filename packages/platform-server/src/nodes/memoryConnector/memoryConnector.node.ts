@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import Node from '../base/Node';
-import { SystemMessage } from '@agyn/llm';
+import { DeveloperMessage } from '@agyn/llm';
 import { Injectable } from '@nestjs/common';
 
 // Static config exposed to UI for MemoryConnectorNode
@@ -36,8 +36,8 @@ export class MemoryConnectorNode extends Node<MemoryConnectorStaticConfig> {
     return this._config.placement;
   }
 
-  private toSystemMessage(text: string | null) {
-    return text ? SystemMessage.fromText(text) : null;
+  private toDeveloperMessage(text: string | null) {
+    return text ? DeveloperMessage.fromText(text) : null;
   }
 
   private flattenAll(data: Record<string, string>): string {
@@ -66,7 +66,7 @@ export class MemoryConnectorNode extends Node<MemoryConnectorStaticConfig> {
     return `${path}\n${lines.join('\n')}`;
   }
 
-  async renderMessage(opts: { threadId?: string; path?: string }): Promise<SystemMessage | null> {
+  async renderMessage(opts: { threadId?: string; path?: string }): Promise<DeveloperMessage | null> {
     const path = opts.path || '/';
     const max = this._config.maxChars ?? 4000;
 
@@ -82,7 +82,7 @@ export class MemoryConnectorNode extends Node<MemoryConnectorStaticConfig> {
     }
 
     if (!text || text.trim().length === 0) return null;
-    return this.toSystemMessage(`Memory\n${text}`);
+    return this.toDeveloperMessage(`Memory\n${text}`);
   }
 
   getPortConfig() {

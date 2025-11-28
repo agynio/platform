@@ -2,6 +2,7 @@ import { EasyInputMessage, ResponseInputItem } from 'openai/resources/responses/
 import { AIMessage } from './aiMessage';
 import { HumanMessage } from './humanMessage';
 import { SystemMessage } from './systemMessage';
+import { DeveloperMessage } from './developerMessage';
 import { ToolCallMessage } from './toolCallMessage';
 import { ToolCallOutputMessage } from './toolCallOutputMessage';
 import { ReasoningMessage } from './reasoningMessage';
@@ -15,6 +16,9 @@ export class Message {
     if (obj.type === 'message') {
       if (obj.role === 'user') {
         return new HumanMessage(obj as ResponseInputItem.Message & { role: 'user' });
+      }
+      if (obj.role === 'developer') {
+        return new DeveloperMessage(obj as ResponseInputItem.Message & { role: 'developer' });
       }
       if (obj.role === 'system') {
         return new SystemMessage(obj as ResponseInputItem.Message & { role: 'system' });

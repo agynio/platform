@@ -8,7 +8,7 @@ import { AgentsPersistenceService } from '../src/agents/agents.persistence.servi
 import type { ThreadsMetricsService } from '../src/agents/threads.metrics.service';
 import type { TemplateRegistry } from '../src/graph-core/templateRegistry';
 import type { GraphRepository } from '../src/graph/graph.repository';
-import { HumanMessage, SystemMessage, AIMessage } from '@agyn/llm';
+import { HumanMessage, DeveloperMessage, AIMessage } from '@agyn/llm';
 import { CallAgentLinkingService } from '../src/agents/call-agent-linking.service';
 
 const databaseUrl = process.env.AGENTS_DATABASE_URL;
@@ -129,7 +129,7 @@ if (!shouldRunDbTests) {
         const initialMessageIds = await collectMessageIds(runId);
         expect(initialMessageIds).toContain(firstMetadata?.childMessageId as string);
 
-        await agents.recordInjected(runId, [SystemMessage.fromText('additional context')]);
+        await agents.recordInjected(runId, [DeveloperMessage.fromText('additional context')]);
         const afterInjection = await loadMetadata(toolEventId);
         expect(afterInjection?.childRunId).toBe(runId);
         expect(afterInjection?.childRunStatus).toBe('running');

@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { SummarizationLLMReducer } from '../src/llm/reducers/summarization.llm.reducer';
 import { Signal } from '../src/signal';
-import { HumanMessage, SystemMessage } from '@agyn/llm';
+import { DeveloperMessage, HumanMessage } from '@agyn/llm';
 
 class ProvisionerStub {
   getLLM = vi.fn(async () => ({ call: vi.fn(async () => ({ text: 'summary', output: [] })) }));
@@ -21,7 +21,7 @@ describe('SummarizationLLMReducer termination handling', () => {
     await reducer.init({ model: 'summary-test', keepTokens: 100, maxTokens: 200, systemPrompt: 'Summarize' });
 
     const state = {
-      messages: [SystemMessage.fromText('S'), HumanMessage.fromText('H')],
+      messages: [DeveloperMessage.fromText('S'), HumanMessage.fromText('H')],
       summary: 'Old summary',
       context: { messageIds: [], memory: [] },
     } as any;

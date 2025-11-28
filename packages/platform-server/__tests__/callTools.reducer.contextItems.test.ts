@@ -2,6 +2,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { HumanMessage, ResponseMessage, ToolCallMessage } from '@agyn/llm';
 import { CallToolsLLMReducer } from '../src/llm/reducers/callTools.llm.reducer';
 import { CallModelLLMReducer } from '../src/llm/reducers/callModel.llm.reducer';
+import { LoggerService } from '../src/core/services/logger.service.js';
 import { createRunEventsStub, createEventsBusStub } from './helpers/runEvents.stub';
 import { Signal } from '../src/signal';
 
@@ -143,7 +144,7 @@ describe('CallToolsLLMReducer context items', () => {
       .mockResolvedValueOnce(responseWithTool)
       .mockResolvedValue(ResponseMessage.fromText('done'));
 
-    const callModel = new CallModelLLMReducer(runEvents as any, createEventsBusStub() as any).init({
+    const callModel = new CallModelLLMReducer(new LoggerService(), runEvents as any, createEventsBusStub() as any).init({
       llm: { call: llmCall } as any,
       model: 'gpt-test',
       systemPrompt: 'Stay on task',

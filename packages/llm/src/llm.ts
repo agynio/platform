@@ -4,6 +4,7 @@ import {
   AIMessage,
   HumanMessage,
   SystemMessage,
+  DeveloperMessage,
   ToolCallMessage,
   ToolCallOutputMessage,
   ResponseMessage,
@@ -16,6 +17,7 @@ export type LLMInput =
   | AIMessage
   | ToolCallMessage
   | ToolCallOutputMessage
+  | DeveloperMessage
   | SystemMessage
   | ResponseMessage;
 

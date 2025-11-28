@@ -1,11 +1,12 @@
 import { describe, it, expect } from 'vitest';
-import { SystemMessage, HumanMessage } from '@agyn/llm';
+import { DeveloperMessage, HumanMessage } from '@agyn/llm';
 import { CallModelLLMReducer } from '../src/llm/reducers/callModel.llm.reducer';
+import { LoggerService } from '../src/core/services/logger.service.js';
 import { createRunEventsStub, createEventsBusStub } from './helpers/runEvents.stub';
 
 class FakeLLM {
-  lastInput: Array<SystemMessage | HumanMessage | { toJSON?: () => unknown; toPlain?: () => unknown }> = [];
-  async call(opts: { model: string; input: Array<SystemMessage | HumanMessage | { toJSON?: () => unknown }> }) {
+  lastInput: Array<DeveloperMessage | HumanMessage | { toJSON?: () => unknown; toPlain?: () => unknown }> = [];
+  async call(opts: { model: string; input: Array<DeveloperMessage | HumanMessage | { toJSON?: () => unknown }> }) {
     this.lastInput = opts.input as any[];
     return { text: 'ok', output: [] } as any;
   }
@@ -14,59 +15,59 @@ class FakeLLM {
 describe('CallModelLLMReducer: summary injection', () => {
   it('inserts summary after system when present (unconditional)', async () => {
     const llm = new FakeLLM();
-    const reducer = new CallModelLLMReducer(createRunEventsStub() as any, createEventsBusStub() as any);
+    const reducer = new CallModelLLMReducer(new LoggerService(), createRunEventsStub() as any, createEventsBusStub() as any);
     reducer.init({ llm: llm as any, model: 'x', systemPrompt: 'SYS', tools: [] });
     await reducer.invoke(
       { messages: [HumanMessage.fromText('H1')], summary: 'SUM', context: { messageIds: [], memory: [] } } as any,
       { threadId: 't', runId: 'r', finishSignal: { isActive: false } as any, terminateSignal: { isActive: false } as any, callerAgent: {} as any },
     );
-    expect(llm.lastInput[0] instanceof SystemMessage).toBe(true);
+    expect(llm.lastInput[0] instanceof DeveloperMessage).toBe(true);
     expect((llm.lastInput[1] as HumanMessage).text).toBe('SUM');
   });
 
   it('respects memory placement with after_system (System, Human(sum), System(mem), ...)', async () => {
     const llm = new FakeLLM();
-    const reducer = new CallModelLLMReducer(createRunEventsStub() as any, createEventsBusStub() as any);
+    const reducer = new CallModelLLMReducer(new LoggerService(), createRunEventsStub() as any, createEventsBusStub() as any);
     reducer.init({
       llm: llm as any,
       model: 'x',
       systemPrompt: 'SYS',
       tools: [],
-      memoryProvider: async () => ({ msg: SystemMessage.fromText('MEM'), place: 'after_system' }),
+      memoryProvider: async () => ({ msg: DeveloperMessage.fromText('MEM'), place: 'after_system' }),
     });
     await reducer.invoke(
       { messages: [HumanMessage.fromText('H1')], summary: 'SUM', context: { messageIds: [], memory: [] } } as any,
       { threadId: 't', runId: 'r', finishSignal: { isActive: false } as any, terminateSignal: { isActive: false } as any, callerAgent: {} as any },
     );
-    expect(llm.lastInput[0] instanceof SystemMessage).toBe(true);
+    expect(llm.lastInput[0] instanceof DeveloperMessage).toBe(true);
     expect((llm.lastInput[1] as HumanMessage).text).toBe('SUM');
-    expect((llm.lastInput[2] as SystemMessage).text).toBe('MEM');
+    expect((llm.lastInput[2] as DeveloperMessage).text).toBe('MEM');
     expect((llm.lastInput[3] as HumanMessage).text).toBe('H1');
   });
 
   it('respects memory placement with last_message (System, Human(sum), ..., System(mem))', async () => {
     const llm = new FakeLLM();
-    const reducer = new CallModelLLMReducer(createRunEventsStub() as any, createEventsBusStub() as any);
+    const reducer = new CallModelLLMReducer(new LoggerService(), createRunEventsStub() as any, createEventsBusStub() as any);
     reducer.init({
       llm: llm as any,
       model: 'x',
       systemPrompt: 'SYS',
       tools: [],
-      memoryProvider: async () => ({ msg: SystemMessage.fromText('MEM'), place: 'last_message' }),
+      memoryProvider: async () => ({ msg: DeveloperMessage.fromText('MEM'), place: 'last_message' }),
     });
     await reducer.invoke(
       { messages: [HumanMessage.fromText('H1')], summary: 'SUM', context: { messageIds: [], memory: [] } } as any,
       { threadId: 't', runId: 'r', finishSignal: { isActive: false } as any, terminateSignal: { isActive: false } as any, callerAgent: {} as any },
     );
-    expect(llm.lastInput[0] instanceof SystemMessage).toBe(true);
+    expect(llm.lastInput[0] instanceof DeveloperMessage).toBe(true);
     expect((llm.lastInput[1] as HumanMessage).text).toBe('SUM');
     expect((llm.lastInput[2] as HumanMessage).text).toBe('H1');
-    expect((llm.lastInput[3] as SystemMessage).text).toBe('MEM');
+    expect((llm.lastInput[3] as DeveloperMessage).text).toBe('MEM');
   });
 
   it('does not inject when summary is empty/undefined', async () => {
     const llm = new FakeLLM();
-    const reducer = new CallModelLLMReducer(createRunEventsStub() as any, createEventsBusStub() as any);
+    const reducer = new CallModelLLMReducer(new LoggerService(), createRunEventsStub() as any, createEventsBusStub() as any);
     reducer.init({ llm: llm as any, model: 'x', systemPrompt: 'SYS', tools: [] });
     await reducer.invoke(
       { messages: [HumanMessage.fromText('H1')], summary: '', context: { messageIds: [], memory: [] } } as any,
@@ -78,7 +79,7 @@ describe('CallModelLLMReducer: summary injection', () => {
 
   it('still injects summary even if identical text exists in messages', async () => {
     const llm = new FakeLLM();
-    const reducer = new CallModelLLMReducer(createRunEventsStub() as any, createEventsBusStub() as any);
+    const reducer = new CallModelLLMReducer(new LoggerService(), createRunEventsStub() as any, createEventsBusStub() as any);
     reducer.init({ llm: llm as any, model: 'x', systemPrompt: 'SYS', tools: [] });
     const summary = 'SUM';
     await reducer.invoke(
@@ -86,7 +87,7 @@ describe('CallModelLLMReducer: summary injection', () => {
       { threadId: 't', runId: 'r', finishSignal: { isActive: false } as any, terminateSignal: { isActive: false } as any, callerAgent: {} as any },
     );
     // Summary should be injected after system, even if an identical HumanMessage exists later
-    expect(llm.lastInput[0] instanceof SystemMessage).toBe(true);
+    expect(llm.lastInput[0] instanceof DeveloperMessage).toBe(true);
     expect((llm.lastInput[1] as HumanMessage).text).toBe('SUM');
     // There will be two HumanMessages with the same text: injected summary and existing message
     expect(llm.lastInput.filter((m) => m instanceof HumanMessage).length).toBe(2);

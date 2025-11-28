@@ -1,6 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
 import { CallModelLLMReducer } from '../src/llm/reducers/callModel.llm.reducer';
-import { AIMessage, HumanMessage, ResponseMessage, SystemMessage } from '@agyn/llm';
+import { LoggerService } from '../src/core/services/logger.service.js';
+import { AIMessage, DeveloperMessage, HumanMessage, ResponseMessage, SystemMessage } from '@agyn/llm';
+import type { ResponseInputItem } from 'openai/resources/responses/responses.mjs';
 import { Signal } from '../src/signal';
 
 describe('CallModelLLMReducer usage metrics', () => {
@@ -30,7 +32,7 @@ describe('CallModelLLMReducer usage metrics', () => {
     const llm = { call: vi.fn(async () => response) };
 
     const eventsBus = { publishEvent: vi.fn(async () => {}), subscribeToRunEvents: vi.fn(() => vi.fn()) };
-    const reducer = new CallModelLLMReducer(runEvents as any, eventsBus as any).init({
+    const reducer = new CallModelLLMReducer(new LoggerService(), runEvents as any, eventsBus as any).init({
       llm: llm as any,
       model: 'gpt-usage',
       systemPrompt: 'SYS',
@@ -38,7 +40,7 @@ describe('CallModelLLMReducer usage metrics', () => {
     });
 
     const initialState = {
-      messages: [SystemMessage.fromText('SYS'), HumanMessage.fromText('Hello')],
+      messages: [DeveloperMessage.fromText('SYS'), HumanMessage.fromText('Hello')],
       context: { messageIds: ['ctx-1'], memory: [] },
     } as any;
 
@@ -77,7 +79,7 @@ describe('CallModelLLMReducer usage metrics', () => {
     const llm = { call: vi.fn(async () => response) };
 
     const eventsBus = { publishEvent: vi.fn(async () => {}), subscribeToRunEvents: vi.fn(() => vi.fn()) };
-    const reducer = new CallModelLLMReducer(runEvents as any, eventsBus as any).init({
+    const reducer = new CallModelLLMReducer(new LoggerService(), runEvents as any, eventsBus as any).init({
       llm: llm as any,
       model: 'gpt-context',
       systemPrompt: 'SYS',
@@ -122,12 +124,12 @@ describe('CallModelLLMReducer usage metrics', () => {
     const llm = { call: vi.fn(async () => response) };
 
     const memoryProvider = vi.fn(async () => ({
-      msg: SystemMessage.fromText('Memory injection'),
+      msg: DeveloperMessage.fromText('Memory injection'),
       place: 'after_system' as const,
     }));
 
     const eventsBus = { publishEvent: vi.fn(async () => {}), subscribeToRunEvents: vi.fn(() => vi.fn()) };
-    const reducer = new CallModelLLMReducer(runEvents as any, eventsBus as any).init({
+    const reducer = new CallModelLLMReducer(new LoggerService(), runEvents as any, eventsBus as any).init({
       llm: llm as any,
       model: 'gpt-context-tail',
       systemPrompt: 'SYS',
@@ -160,5 +162,68 @@ describe('CallModelLLMReducer usage metrics', () => {
         contextItemIds: expect.arrayContaining(['ctx-summary-new', 'ctx-memory-new', 'ctx-user-tail']),
       }),
     );
+  });
+
+  it('normalizes system messages to developer role when calling LLM', async () => {
+    const runEvents = {
+      startLLMCall: vi.fn(async () => ({ id: 'evt-normalize' })),
+      publishEvent: vi.fn(async () => {}),
+      completeLLMCall: vi.fn(async () => {}),
+      createContextItems: vi.fn(async () => ['ctx-assistant']),
+      connectContextItemsToRun: vi.fn(async () => {}),
+      createContextItemsAndConnect: vi.fn(async () => ({ messageIds: [] })),
+    };
+
+    const response = new ResponseMessage({ output: [] as any, text: 'ok' } as any);
+    let lastCallArgs: any;
+    const llm = {
+      call: vi.fn(async (args) => {
+        lastCallArgs = args;
+        return response;
+      }),
+    };
+
+    const eventsBus = { publishEvent: vi.fn(async () => {}), subscribeToRunEvents: vi.fn(() => vi.fn()) };
+    const reducer = new CallModelLLMReducer(new LoggerService(), runEvents as any, eventsBus as any).init({
+      llm: llm as any,
+      model: 'gpt-normalize',
+      systemPrompt: 'SYS',
+      tools: [],
+    });
+
+    const structuredPlain: ResponseInputItem.Message & { role: 'system' } = {
+      type: 'message',
+      role: 'system',
+      content: [
+        { type: 'input_text', text: 'legacy instructions' },
+        { type: 'input_text', text: 'Mask secrets in logs.' },
+      ],
+    };
+
+    const initialState = {
+      messages: [new SystemMessage(structuredPlain), HumanMessage.fromText('Hi there')],
+      context: { messageIds: [], memory: [] },
+    } as any;
+
+    const result = await reducer.invoke(initialState, {
+      threadId: 'thread-normalize',
+      runId: 'run-normalize',
+      finishSignal: new Signal(),
+      terminateSignal: new Signal(),
+      callerAgent: { getAgentNodeId: () => 'agent-normalize' } as any,
+    });
+
+    expect(llm.call).toHaveBeenCalledTimes(1);
+    expect(lastCallArgs).toBeDefined();
+    const { input } = lastCallArgs;
+    expect(Array.isArray(input)).toBe(true);
+    expect(input.some((msg: unknown) => msg instanceof SystemMessage)).toBe(false);
+    const normalizedInstruction = input.find(
+      (msg: unknown): msg is DeveloperMessage => msg instanceof DeveloperMessage && msg.text === 'legacy instructions',
+    );
+    expect(normalizedInstruction).toBeDefined();
+    expect(normalizedInstruction?.role).toBe('developer');
+    expect(normalizedInstruction?.toPlain().content).toEqual(structuredPlain.content);
+    expect(result.messages[0]).toBeInstanceOf(SystemMessage);
   });
 });

@@ -1,11 +1,20 @@
-import { AIMessage, HumanMessage, SystemMessage, ToolCallMessage, ToolCallOutputMessage } from '@agyn/llm';
+import {
+  AIMessage,
+  DeveloperMessage,
+  HumanMessage,
+  SystemMessage,
+  ToolCallMessage,
+  ToolCallOutputMessage,
+} from '@agyn/llm';
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import type { MessageKind, Prisma, PrismaClient, RunMessageType, RunStatus, ThreadStatus } from '@prisma/client';
+import type { ResponseInputItem } from 'openai/resources/responses/responses.mjs';
 import { PrismaService } from '../core/services/prisma.service';
 import { TemplateRegistry } from '../graph-core/templateRegistry';
 import { GraphRepository } from '../graph/graph.repository';
 import type { PersistedGraphNode } from '../shared/types/graph.types';
 import { toPrismaJsonValue } from '../llm/services/messages.serialization';
+import { coerceRole } from '../llm/services/messages.normalization';
 import { ChannelDescriptorSchema, type ChannelDescriptor } from '../messaging/types';
 import { RunEventsService } from '../events/run-events.service';
 import { EventsBusService } from '../events/events-bus.service';
@@ -164,7 +173,7 @@ export class AgentsPersistenceService {
    */
   async beginRunThread(
     threadId: string,
-    inputMessages: Array<HumanMessage | SystemMessage | AIMessage>,
+    inputMessages: Array<HumanMessage | DeveloperMessage | SystemMessage | AIMessage>,
   ): Promise<RunStartResult> {
     const { runId, createdMessages, eventIds, patchedEventIds } = await this.prisma.$transaction(async (tx: Prisma.TransactionClient) => {
       // Begin run and persist messages
@@ -174,9 +183,22 @@ export class AgentsPersistenceService {
       const patchedEventIds: string[] = [];
       await Promise.all(
         inputMessages.map(async (msg) => {
-          const { kind, text } = this.deriveKindTextTyped(msg);
-          const source = toPrismaJsonValue(msg.toPlain());
-          const created = await tx.message.create({ data: { kind, text, source } });
+          let kind: MessageKind;
+          let textValue: string | null;
+          let source: Prisma.InputJsonValue;
+          if (msg instanceof DeveloperMessage) {
+            kind = 'system' as MessageKind;
+            textValue = msg.text;
+            const coerced = coerceRole(msg.toPlain(), 'system');
+            source = toPrismaJsonValue(coerced);
+          } else {
+            const normalized = this.normalizeForPersistence(msg);
+            const { kind: derivedKind, text } = this.deriveKindTextTyped(normalized);
+            kind = derivedKind;
+            textValue = text;
+            source = toPrismaJsonValue(normalized.toPlain());
+          }
+          const created = await tx.message.create({ data: { kind, text: textValue, source } });
           await tx.runMessage.create({ data: { runId: run.id, messageId: created.id, type: 'input' as RunMessageType } });
           const event = await this.runEvents.recordInvocationMessage({
             tx,
@@ -188,7 +210,7 @@ export class AgentsPersistenceService {
             metadata: { messageType: 'input' },
           });
           eventIds.push(event.id);
-          createdMessages.push({ id: created.id, kind, text, source: created.source as Prisma.JsonValue, createdAt: created.createdAt });
+          createdMessages.push({ id: created.id, kind, text: textValue, source: created.source as Prisma.JsonValue, createdAt: created.createdAt });
         }),
       );
       const linkedEventId = await this.callAgentLinking.onChildRunStarted({
@@ -217,11 +239,11 @@ export class AgentsPersistenceService {
   }
 
   /**
-   * Persist injected messages. Only SystemMessage injections are supported.
+   * Persist injected messages. Only DeveloperMessage injections are supported (SystemMessage retained for legacy callers).
    */
   async recordInjected(
     runId: string,
-    injectedMessages: Array<HumanMessage | SystemMessage | AIMessage>,
+    injectedMessages: Array<HumanMessage | DeveloperMessage | SystemMessage | AIMessage>,
     options?: { threadId?: string },
   ): Promise<{ messageIds: string[] }> {
     if (!injectedMessages.length) return { messageIds: [] };
@@ -238,9 +260,22 @@ export class AgentsPersistenceService {
       threadId = resolvedThreadId;
 
       for (const msg of injectedMessages) {
-        const { kind, text } = this.deriveKindTextTyped(msg);
-        const source = toPrismaJsonValue(msg.toPlain());
-        const created = await tx.message.create({ data: { kind, text, source } });
+        let kind: MessageKind;
+        let textValue: string | null;
+        let source: Prisma.InputJsonValue;
+        if (msg instanceof DeveloperMessage) {
+          kind = 'system' as MessageKind;
+          textValue = msg.text;
+          const coerced = coerceRole(msg.toPlain(), 'system');
+          source = toPrismaJsonValue(coerced);
+        } else {
+          const normalized = this.normalizeForPersistence(msg);
+          const { kind: derivedKind, text } = this.deriveKindTextTyped(normalized);
+          kind = derivedKind;
+          textValue = text;
+          source = toPrismaJsonValue(normalized.toPlain());
+        }
+        const created = await tx.message.create({ data: { kind, text: textValue, source } });
         await tx.runMessage.create({ data: { runId, messageId: created.id, type: 'injected' as RunMessageType } });
         const event = await this.runEvents.recordInvocationMessage({
           tx,
@@ -252,7 +287,7 @@ export class AgentsPersistenceService {
           metadata: { messageType: 'injected' },
         });
         eventIds.push(event.id);
-        createdMessages.push({ id: created.id, kind, text, source: created.source as Prisma.JsonValue, createdAt: created.createdAt });
+        createdMessages.push({ id: created.id, kind, text: textValue, source: created.source as Prisma.JsonValue, createdAt: created.createdAt });
       }
 
       if (createdMessages.length > 0) {
@@ -312,8 +347,9 @@ export class AgentsPersistenceService {
       const threadId = current.threadId;
       await Promise.all(
         outputMessages.map(async (msg) => {
-          const { kind, text } = this.deriveKindTextTyped(msg);
-          const source = toPrismaJsonValue(msg.toPlain());
+          const normalized = this.normalizeForPersistence(msg);
+          const { kind, text } = this.deriveKindTextTyped(normalized);
+          const source = toPrismaJsonValue(normalized.toPlain());
           const created = await tx.message.create({ data: { kind, text, source } });
           await tx.runMessage.create({ data: { runId, messageId: created.id, type: 'output' as RunMessageType } });
           const event = await this.runEvents.recordInvocationMessage({
@@ -592,6 +628,16 @@ export class AgentsPersistenceService {
     const candidate = (tx as { runEvent?: RunEventDelegate }).runEvent;
     if (!candidate || typeof candidate.findFirst !== 'function') return undefined;
     return candidate;
+  }
+
+  private normalizeForPersistence(
+    msg: HumanMessage | DeveloperMessage | SystemMessage | AIMessage | ToolCallMessage | ToolCallOutputMessage,
+  ): HumanMessage | SystemMessage | AIMessage | ToolCallMessage | ToolCallOutputMessage {
+    if (msg instanceof DeveloperMessage) {
+      const coerced = coerceRole(msg.toPlain(), 'system') as ResponseInputItem.Message & { role: 'system' };
+      return new SystemMessage(coerced);
+    }
+    return msg;
   }
 
   /**

@@ -3,6 +3,7 @@ import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
 
 import { AgentNode } from '../src/nodes/agent/agent.node';
 import { ConfigService } from '../src/core/services/config.service';
+import { LoggerService } from '../src/core/services/logger.service.js';
 import { AgentsPersistenceService } from '../src/agents/agents.persistence.service';
 import { LLMProvisioner } from '../src/llm/provisioners/llm.provisioner';
 import { RunEventsService } from '../src/events/run-events.service';
@@ -56,6 +57,7 @@ describe('Agent thread model binding', () => {
       providers: [
         { provide: ConfigService, useValue: baseConfig },
         { provide: LLMProvisioner, useClass: StubProvisioner },
+        LoggerService,
         AgentNode,
         {
           provide: PrismaService,

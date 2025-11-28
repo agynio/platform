@@ -21,12 +21,12 @@
 //   | ResponseCustomToolCall
 //   | ResponseInputItem.ItemReference;
 
-import { AIMessage, HumanMessage, ResponseMessage, SystemMessage, ToolCallOutputMessage } from '@agyn/llm';
+import { AIMessage, DeveloperMessage, HumanMessage, ResponseMessage, SystemMessage, ToolCallOutputMessage } from '@agyn/llm';
 import { Signal } from '../signal';
 // Minimal interface required from a caller agent within LLM execution context.
 // AgentNode implements this shape; tests can provide light stubs without heavy DI.
 // Narrow buffer message shape used by AgentNode message queue
-export type BufferLLMMessage = HumanMessage | AIMessage | SystemMessage;
+export type BufferLLMMessage = HumanMessage | AIMessage | DeveloperMessage;
 
 // Minimal interface required from a caller agent within LLM execution context.
 export interface CallerAgent {
@@ -58,7 +58,13 @@ export interface CallerAgent {
 
 ///////////
 
-export type LLMMessage = HumanMessage | SystemMessage | AIMessage | ResponseMessage | ToolCallOutputMessage;
+export type LLMMessage =
+  | HumanMessage
+  | DeveloperMessage
+  | SystemMessage
+  | AIMessage
+  | ResponseMessage
+  | ToolCallOutputMessage;
 
 export type LLMContextMemoryEntry = {
   id: string | null;

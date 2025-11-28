@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
 import { PrismaClient, Prisma } from '@prisma/client';
-import { SystemMessage } from '@agyn/llm';
+import { DeveloperMessage } from '@agyn/llm';
 import { LiveGraphRuntime } from '../src/graph-core/liveGraph.manager';
 import type { LLMContext } from '../src/llm/types';
 import { Signal } from '../src/signal';
@@ -80,11 +80,11 @@ class TestCallModelNode extends Node<Record<string, never>> {
   }
 
   async invoke(
-    input: { messages: SystemMessage[] },
+    input: { messages: DeveloperMessage[] },
     ctx: LLMContext,
-  ): Promise<{ messages: SystemMessage[] }> {
-    const system = SystemMessage.fromText('SYS');
-    const messages: SystemMessage[] = [system, ...input.messages];
+  ): Promise<{ messages: DeveloperMessage[] }> {
+    const system = DeveloperMessage.fromText('SYS');
+    const messages: DeveloperMessage[] = [system, ...input.messages];
     const mem = this.conn ? await this.conn.renderMessage({ threadId: ctx.threadId }) : null;
     if (mem) {
       if (this.placement === 'after_system') messages.splice(1, 0, mem);
@@ -133,7 +133,7 @@ function makeRuntime(
   return runtime;
 }
 
-async function getLastMessages(runtime: LiveGraphRuntime, nodeId: string): Promise<SystemMessage[]> {
+async function getLastMessages(runtime: LiveGraphRuntime, nodeId: string): Promise<DeveloperMessage[]> {
   const cm = runtime.getNodeInstance(nodeId) as TestCallModelNode;
   const out = await cm.invoke(
     { messages: [], context: { messageIds: [], memory: [] } },
@@ -219,7 +219,7 @@ maybeDescribe('Runtime integration: memory injection via LiveGraphRuntime', () =
 
     const msgs = await getLastMessages(runtime, 'cm');
     const last = msgs[msgs.length - 1];
-    expect(last).toBeInstanceOf(SystemMessage);
+    expect(last).toBeInstanceOf(DeveloperMessage);
     expect(last.text).toMatch(/Memory/);
     expect(last.text).toMatch(/\[\+\] alpha|\[ \] alpha/);
   });
