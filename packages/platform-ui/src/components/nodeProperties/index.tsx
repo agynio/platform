@@ -105,6 +105,7 @@ function useSuggestionFetcher(
 function NodePropertiesSidebar({
   config,
   state,
+  template,
   onConfigChange,
   onProvision,
   onDeprovision,
@@ -126,7 +127,9 @@ function NodePropertiesSidebar({
   const { kind: nodeKind, title: nodeTitle } = config;
   const { status } = state;
   const configRecord = config as Record<string, unknown>;
-  const template = typeof config.template === 'string' ? config.template : undefined;
+  const templateName =
+    (typeof template === 'string' ? template : undefined) ??
+    (typeof config.template === 'string' ? (config.template as string) : undefined);
 
   const [workspaceEnvOpen, setWorkspaceEnvOpen] = useState(true);
   const [mcpEnvOpen, setMcpEnvOpen] = useState(true);
@@ -491,7 +494,7 @@ function NodePropertiesSidebar({
     setToolNameError(null);
   }, [toolName]);
 
-  const canonicalToolName = useMemo(() => getCanonicalToolName(template), [template]);
+  const canonicalToolName = useMemo(() => getCanonicalToolName(templateName), [templateName]);
   const toolNamePlaceholder = canonicalToolName || 'tool_name';
 
   const handleToolNameChange = useCallback(
@@ -714,7 +717,7 @@ function NodePropertiesSidebar({
             />
           )}
 
-          {nodeKind === 'Tool' && template === 'shellTool' && (
+          {nodeKind === 'Tool' && templateName === 'shellTool' && (
             <ToolSection
               workdir={toolWorkdir}
               onWorkdirChange={handleToolWorkdirChange}
