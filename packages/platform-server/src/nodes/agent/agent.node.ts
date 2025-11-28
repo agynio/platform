@@ -462,13 +462,12 @@ export class AgentNode extends Node<AgentStaticConfig> {
     let effectiveBehavior: EffectiveAgentConfig['behavior'] | undefined;
     try {
       const persistence = this.getPersistence();
-      const started = await persistence.beginRunThread(thread, messages);
+      const agentNodeId = this.getAgentNodeId();
+      if (!agentNodeId) throw new Error('agent_node_id_missing');
+      const started = await persistence.beginRunThread(thread, messages, agentNodeId);
       runId = started.runId;
       if (!runId) throw new Error('run_start_failed');
       const ensuredRunId = runId;
-
-      const agentNodeId = this.getAgentNodeId();
-      if (!agentNodeId) throw new Error('agent_node_id_missing');
 
       const configModel = this.config.model ?? 'gpt-5';
       const persistedModel = await persistence.ensureThreadModel(thread, configModel);

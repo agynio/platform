@@ -16,14 +16,17 @@ const runEventsStub = {
 };
 
 type SetupOptions = {
-  thread?: { id: string; status: ThreadStatus } | null;
+  thread?: { id: string; status: ThreadStatus; assignedAgentNodeId?: string | null } | null;
   latestAgentNodeId?: string | null;
   nodes?: Array<{ id: string; template: string; instance: { status: string; invoke: ReturnType<typeof vi.fn> } }>;
 };
 
 async function setup(options: SetupOptions = {}) {
   const invoke = vi.fn(async () => 'queued');
-  const thread = options.thread === undefined ? { id: 'thread-1', status: 'open' as ThreadStatus } : options.thread;
+  const thread =
+    options.thread === undefined
+      ? { id: 'thread-1', status: 'open' as ThreadStatus, assignedAgentNodeId: null }
+      : options.thread;
   const latestAgentNodeId =
     options.latestAgentNodeId === undefined ? (thread ? 'agent-1' : null) : options.latestAgentNodeId;
   const nodes =
@@ -35,6 +38,7 @@ async function setup(options: SetupOptions = {}) {
 
   const getThreadById = vi.fn(async () => thread);
   const getLatestAgentNodeIdForThread = vi.fn(async () => latestAgentNodeId);
+  const ensureAssignedAgent = vi.fn(async () => {});
   const module = await Test.createTestingModule({
     controllers: [AgentsThreadsController],
     providers: [
@@ -51,6 +55,7 @@ async function setup(options: SetupOptions = {}) {
           getThreadById,
           getLatestAgentNodeIdForThread,
           getRunById: async () => null,
+          ensureAssignedAgent,
         },
       },
       { provide: ThreadCleanupCoordinator, useValue: { closeThreadWithCascade: vi.fn() } },
@@ -66,22 +71,37 @@ async function setup(options: SetupOptions = {}) {
     invoke,
     getThreadById,
     getLatestAgentNodeIdForThread,
+    ensureAssignedAgent,
   };
 }
 
 describe('AgentsThreadsController POST /api/agents/threads/:threadId/messages', () => {
   it('dispatches message to agent runtime when thread is open', async () => {
-    const { controller, invoke, getLatestAgentNodeIdForThread } = await setup();
+    const { controller, invoke, getLatestAgentNodeIdForThread, ensureAssignedAgent } = await setup();
 
     const result = await controller.sendThreadMessage('thread-1', { text: '  hello world  ' });
 
     expect(result).toEqual({ ok: true });
     expect(getLatestAgentNodeIdForThread).toHaveBeenCalledWith('thread-1', { candidateNodeIds: ['agent-1'] });
+    expect(ensureAssignedAgent).toHaveBeenCalledWith('thread-1', 'agent-1');
     expect(invoke).toHaveBeenCalledTimes(1);
     const args = invoke.mock.calls[0];
     expect(args[0]).toBe('thread-1');
     expect(Array.isArray(args[1])).toBe(true);
     expect(args[1][0]).toMatchObject({ text: 'hello world' });
+  });
+
+  it('uses assigned agent without falling back when available', async () => {
+    const { controller, invoke, getLatestAgentNodeIdForThread, ensureAssignedAgent } = await setup({
+      thread: { id: 'thread-1', status: 'open' as ThreadStatus, assignedAgentNodeId: 'agent-1' },
+      latestAgentNodeId: 'agent-1',
+    });
+
+    await controller.sendThreadMessage('thread-1', { text: 'hello' });
+
+    expect(getLatestAgentNodeIdForThread).not.toHaveBeenCalled();
+    expect(ensureAssignedAgent).not.toHaveBeenCalled();
+    expect(invoke).toHaveBeenCalledTimes(1);
   });
 
   it('rejects when message body is invalid', async () => {

@@ -30,7 +30,12 @@ function createService(stub: any, overrides?: { metrics?: any; templateRegistry?
       getThreadsMetrics: async (ids: string[]) =>
         Object.fromEntries(ids.map((id) => [id, { remindersCount: 0, containersCount: 0, activity: 'idle' as const }])),
     } as any);
-  const templateRegistry = overrides?.templateRegistry ?? ({ toSchema: async () => [] } as any);
+  const templateRegistry =
+    overrides?.templateRegistry ??
+    ({
+      toSchema: async () => [],
+      getMeta: () => undefined,
+    } as any);
   const graphRepo =
     overrides?.graphRepo ??
     ({ get: async () => ({ name: 'main', version: 1, updatedAt: new Date().toISOString(), nodes: [], edges: [] }) } as any);
@@ -88,6 +93,7 @@ describe('AgentsPersistenceService metrics and agent titles', () => {
         nodes: [
           { id: 'agent-configured', template: 'templateA', config: { title: '  Configured Agent  ' } },
           { id: 'agent-template', template: 'templateB' },
+          { id: 'agent-assigned', template: 'templateA', config: { title: 'Assigned Only' } },
         ],
         edges: [],
       }),
@@ -97,15 +103,20 @@ describe('AgentsPersistenceService metrics and agent titles', () => {
     const threadConfigured = (await stub.thread.create({ data: { alias: 'config' } })).id;
     const threadTemplate = (await stub.thread.create({ data: { alias: 'tmpl' } })).id;
     const threadFallback = (await stub.thread.create({ data: { alias: 'miss' } })).id;
+    const threadAssignedOnly = (await stub.thread.create({ data: { alias: 'assigned' } })).id;
+
+    await stub.thread.update({ where: { id: threadConfigured }, data: { assignedAgentNodeId: 'agent-configured' } });
+    await stub.thread.update({ where: { id: threadAssignedOnly }, data: { assignedAgentNodeId: 'agent-assigned' } });
 
     stub.conversationState._push({ threadId: threadConfigured, nodeId: 'agent-configured', state: {}, updatedAt: new Date('2024-04-02T00:00:00Z') });
     // Older state should be ignored in favour of more recent entry
     stub.conversationState._push({ threadId: threadConfigured, nodeId: 'agent-template', state: {}, updatedAt: new Date('2023-01-01T00:00:00Z') });
     stub.conversationState._push({ threadId: threadTemplate, nodeId: 'agent-template', state: {}, updatedAt: new Date('2024-03-01T00:00:00Z') });
 
-    const titles = await svc.getThreadsAgentTitles([threadConfigured, threadTemplate, threadFallback]);
+    const titles = await svc.getThreadsAgentTitles([threadConfigured, threadTemplate, threadFallback, threadAssignedOnly]);
     expect(titles[threadConfigured]).toBe('Configured Agent');
     expect(titles[threadTemplate]).toBe('Template B');
     expect(titles[threadFallback]).toBe('(unknown agent)');
+    expect(titles[threadAssignedOnly]).toBe('Assigned Only');
   });
 });

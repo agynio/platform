@@ -72,10 +72,15 @@ describe('send_message tool', () => {
     const persistence = ({
       getOrCreateThreadByAlias: async () => 't1',
       updateThreadChannelDescriptor: async () => undefined,
-    } satisfies Pick<import('../src/agents/agents.persistence.service').AgentsPersistenceService, 'getOrCreateThreadByAlias' | 'updateThreadChannelDescriptor'>) as import('../src/agents/agents.persistence.service').AgentsPersistenceService;
+      ensureAssignedAgent: async () => undefined,
+    } satisfies Pick<import('../src/agents/agents.persistence.service').AgentsPersistenceService, 'getOrCreateThreadByAlias' | 'updateThreadChannelDescriptor' | 'ensureAssignedAgent'>) as import('../src/agents/agents.persistence.service').AgentsPersistenceService;
     const slackSend = vi.fn(async () => sendResult);
     const slackAdapter = ({ sendText: slackSend } satisfies Pick<SlackAdapter, 'sendText'>) as SlackAdapter;
-    const trigger = new SlackTrigger(undefined as any, persistence, prismaService, slackAdapter);
+    const runtimeStub = ({
+      getOutboundNodeIds: () => [],
+      getNodes: () => [],
+    } satisfies Pick<import('../src/graph-core/liveGraph.manager').LiveGraphRuntime, 'getOutboundNodeIds' | 'getNodes'>) as import('../src/graph-core/liveGraph.manager').LiveGraphRuntime;
+    const trigger = new SlackTrigger(undefined as any, persistence, prismaService, slackAdapter, runtimeStub);
     trigger.init({ nodeId: 'channel-node' });
 
     // Override prisma behavior for descriptor lookup inside sendToChannel
@@ -120,9 +125,14 @@ describe('send_message tool', () => {
     const persistence = ({
       getOrCreateThreadByAlias: async () => 't1',
       updateThreadChannelDescriptor: async () => undefined,
-    } satisfies Pick<import('../src/agents/agents.persistence.service').AgentsPersistenceService, 'getOrCreateThreadByAlias' | 'updateThreadChannelDescriptor'>) as import('../src/agents/agents.persistence.service').AgentsPersistenceService;
+      ensureAssignedAgent: async () => undefined,
+    } satisfies Pick<import('../src/agents/agents.persistence.service').AgentsPersistenceService, 'getOrCreateThreadByAlias' | 'updateThreadChannelDescriptor' | 'ensureAssignedAgent'>) as import('../src/agents/agents.persistence.service').AgentsPersistenceService;
     const slackAdapter = ({ sendText: vi.fn() } satisfies Pick<SlackAdapter, 'sendText'>) as SlackAdapter;
-    const trigger = new SlackTrigger(undefined as any, persistence, prismaService, slackAdapter);
+    const runtimeStub = ({
+      getOutboundNodeIds: () => [],
+      getNodes: () => [],
+    } satisfies Pick<import('../src/graph-core/liveGraph.manager').LiveGraphRuntime, 'getOutboundNodeIds' | 'getNodes'>) as import('../src/graph-core/liveGraph.manager').LiveGraphRuntime;
+    const trigger = new SlackTrigger(undefined as any, persistence, prismaService, slackAdapter, runtimeStub);
     trigger.init({ nodeId: 'channel-node' });
     const runtime = makeRuntimeStub(trigger);
     const tool = new SendMessageFunctionTool(prismaService, runtime);

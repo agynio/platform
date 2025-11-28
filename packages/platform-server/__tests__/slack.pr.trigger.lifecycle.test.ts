@@ -31,6 +31,7 @@ describe('SlackTrigger and PRTrigger lifecycle', () => {
     const persistence = {
       getOrCreateThreadByAlias: async (_src: string, _alias: string, _summary: string) => 't-slack',
       updateThreadChannelDescriptor: async () => undefined,
+      ensureAssignedAgent: async () => undefined,
     } as unknown as AgentsPersistenceService;
     const prisma = {
       getClient: () => ({
@@ -40,7 +41,11 @@ describe('SlackTrigger and PRTrigger lifecycle', () => {
     const slackAdapter = {
       sendText: vi.fn(async () => ({ ok: true, channelMessageId: '1', threadId: '1' })),
     } as SlackAdapter;
-    const trigger = new SlackTrigger(undefined as any, persistence, prisma as PrismaService, slackAdapter);
+    const runtimeStub = ({
+      getOutboundNodeIds: () => [],
+      getNodes: () => [],
+    } satisfies Pick<import('../src/graph-core/liveGraph.manager').LiveGraphRuntime, 'getOutboundNodeIds' | 'getNodes'>) as import('../src/graph-core/liveGraph.manager').LiveGraphRuntime;
+    const trigger = new SlackTrigger(undefined as any, persistence, prisma as PrismaService, slackAdapter, runtimeStub);
     await trigger.setConfig({ app_token: 'xapp-test', bot_token: 'xoxb-test' });
     await trigger.provision();
     await trigger.deprovision();

@@ -11,6 +11,8 @@ import { AgentsPersistenceService } from '../../agents/agents.persistence.servic
 import { PrismaService } from '../../core/services/prisma.service';
 import { SlackAdapter } from '../../messaging/slack/slack.adapter';
 import { ChannelDescriptorSchema, type SendResult, type ChannelDescriptor } from '../../messaging/types';
+import { LiveGraphRuntime } from '../../graph-core/liveGraph.manager';
+import type { LiveNode } from '../../graph/liveGraph.types';
 import { SecretReferenceSchema, VariableReferenceSchema } from '../../utils/reference-schemas';
 
 type TriggerHumanMessage = {
@@ -62,8 +64,28 @@ export class SlackTrigger extends Node<SlackTriggerConfig> {
     @Inject(AgentsPersistenceService) private readonly persistence: AgentsPersistenceService,
     @Inject(PrismaService) private readonly prismaService: PrismaService,
     @Inject(SlackAdapter) private readonly slackAdapter: SlackAdapter,
+    @Inject(LiveGraphRuntime) private readonly runtime: LiveGraphRuntime,
   ) {
     super();
+  }
+
+  private resolveAssignedAgentNodeId(): string | null {
+    try {
+      const nodeId = this.nodeId;
+      const outbound = this.runtime.getOutboundNodeIds(nodeId);
+      if (outbound.length === 0) return null;
+      const liveNodes = new Map(this.runtime.getNodes().map((node) => [node.id, node]));
+      const agentCandidates = outbound
+        .map((id) => liveNodes.get(id))
+        .filter((node): node is LiveNode => !!node && node.template === 'agent');
+      if (agentCandidates.length === 0) return null;
+      agentCandidates.sort((a, b) => a.id.localeCompare(b.id));
+      return agentCandidates[0]?.id ?? null;
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      this.logger.error(`SlackTrigger.resolveAssignedAgentNodeId failed: ${msg}`);
+      return null;
+    }
   }
 
   private ensureToken(value: unknown, expectedPrefix: string, fieldName: 'app_token' | 'bot_token'): string {
@@ -187,6 +209,10 @@ export class SlackTrigger extends Node<SlackTriggerConfig> {
         const threadId = await this.persistence.getOrCreateThreadByAlias('slack', alias, text, {
           channelNodeId: this.nodeId,
         });
+        const assignedAgentNodeId = this.resolveAssignedAgentNodeId();
+        if (assignedAgentNodeId) {
+          await this.persistence.ensureAssignedAgent(threadId, assignedAgentNodeId);
+        }
         // Persist descriptor only when channel present and event is top-level (no thread_ts)
         if (typeof event.channel === 'string' && event.channel) {
           if (!event.thread_ts && rootTs) {

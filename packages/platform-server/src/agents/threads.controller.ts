@@ -372,10 +372,15 @@ export class AgentsThreadsController {
       throw new ServiceUnavailableException({ error: 'agent_unavailable' });
     }
 
-    const candidateNodeIds = agentNodes.map((node) => node.id);
-    const agentNodeId = await this.persistence.getLatestAgentNodeIdForThread(threadId, { candidateNodeIds });
+    let agentNodeId = thread.assignedAgentNodeId ?? null;
     if (!agentNodeId) {
-      throw new ServiceUnavailableException({ error: 'agent_unavailable' });
+      const candidateNodeIds = agentNodes.map((node) => node.id);
+      const fallbackAgentNodeId = await this.persistence.getLatestAgentNodeIdForThread(threadId, { candidateNodeIds });
+      if (!fallbackAgentNodeId) {
+        throw new ServiceUnavailableException({ error: 'agent_unavailable' });
+      }
+      agentNodeId = fallbackAgentNodeId;
+      await this.persistence.ensureAssignedAgent(threadId, agentNodeId);
     }
 
     const liveAgentNode = agentNodes.find((node) => node.id === agentNodeId);

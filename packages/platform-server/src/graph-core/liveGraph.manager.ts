@@ -62,6 +62,19 @@ export class LiveGraphRuntime {
   getNodes() {
     return Array.from(this.state.nodes.values());
   }
+  getNode(id: string): LiveNode | undefined {
+    return this.state.nodes.get(id);
+  }
+  getOutboundNodeIds(nodeId: string): string[] {
+    const keys = this.state.outboundEdges.get(nodeId);
+    if (!keys) return [];
+    const targets = new Set<string>();
+    for (const key of keys) {
+      const rec = this.state.executedEdges.get(key);
+      if (rec) targets.add(rec.target);
+    }
+    return Array.from(targets).sort();
+  }
   getExecutedEdges() {
     return Array.from(this.state.executedEdges.values());
   }

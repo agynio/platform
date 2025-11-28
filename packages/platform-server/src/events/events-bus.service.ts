@@ -39,6 +39,7 @@ export type ThreadBroadcast = {
   createdAt: Date;
   parentId?: string | null;
   channelNodeId?: string | null;
+  assignedAgentNodeId?: string | null;
 };
 
 export type MessageBroadcast = {

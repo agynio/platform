@@ -153,4 +153,24 @@ describe('AgentsPersistenceService: alias resolution helpers', () => {
     const t = stub._store.threads.find((tt: any) => tt.id === id);
     expect(t.summary).toBe('Initial summary');
   });
+
+  it('beginRunThread assigns agent node once when provided', async () => {
+    const stub = createPrismaStub();
+    const svc = createService(stub);
+    const eventsBus = (svc as any).__eventsBusStub;
+    const id = await svc.getOrCreateThreadByAlias('test', 'root-assign-agent', 'Summary');
+
+    const beforeUpdateCalls = eventsBus.emitThreadUpdated.mock.calls.length;
+    await svc.beginRunThread(id, [], 'agent-run');
+    const thread = stub._store.threads.find((tt: any) => tt.id === id);
+    expect(thread.assignedAgentNodeId).toBe('agent-run');
+    expect(eventsBus.emitThreadUpdated).toHaveBeenCalledWith(
+      expect.objectContaining({ id, assignedAgentNodeId: 'agent-run' }),
+    );
+
+    const afterFirstAssignmentCalls = eventsBus.emitThreadUpdated.mock.calls.length;
+    await svc.beginRunThread(id, [], 'agent-run');
+    expect(eventsBus.emitThreadUpdated.mock.calls.length).toBe(afterFirstAssignmentCalls);
+    expect(eventsBus.emitThreadUpdated.mock.calls.length).toBeGreaterThan(beforeUpdateCalls);
+  });
 });

@@ -10,6 +10,7 @@ export function createPrismaStub() {
     createdAt: Date;
     channel: any;
     channelNodeId: string | null;
+    assignedAgentNodeId: string | null;
   }> = [];
   const runs: Array<{ id: string; threadId: string; status: string; createdAt: Date; updatedAt: Date }> = [];
   const messages: Array<{ id: string; kind: string; text: string | null; source: any; createdAt: Date }> = [];
@@ -46,6 +47,7 @@ export function createPrismaStub() {
           createdAt: new Date(timeSeed + idSeq),
           channel: data.channel ?? null,
           channelNodeId: data.channelNodeId ?? null,
+          assignedAgentNodeId: data.assignedAgentNodeId ?? null,
         };
         threads.push(row);
         return row;
@@ -58,13 +60,25 @@ export function createPrismaStub() {
         if (Object.prototype.hasOwnProperty.call(data, 'status')) next.status = data.status;
         if (Object.prototype.hasOwnProperty.call(data, 'channel')) next.channel = data.channel ?? null;
         if (Object.prototype.hasOwnProperty.call(data, 'channelNodeId')) next.channelNodeId = data.channelNodeId ?? null;
+        if (Object.prototype.hasOwnProperty.call(data, 'assignedAgentNodeId')) next.assignedAgentNodeId = data.assignedAgentNodeId ?? null;
         threads[idx] = next as any;
         return threads[idx];
       },
       updateMany: async ({ where, data }: any) => {
-        const target = threads.find((t) => t.id === where.id && t.summary === null);
-        if (target && Object.prototype.hasOwnProperty.call(data, 'summary')) target.summary = data.summary ?? null;
-        return { count: target ? 1 : 0 };
+        let count = 0;
+        for (const t of threads) {
+          if (where?.id && t.id !== where.id) continue;
+          if (Object.prototype.hasOwnProperty.call(where, 'summary') && where.summary !== t.summary) continue;
+          if (
+            Object.prototype.hasOwnProperty.call(where, 'assignedAgentNodeId') &&
+            (where.assignedAgentNodeId === null ? t.assignedAgentNodeId !== null : t.assignedAgentNodeId !== where.assignedAgentNodeId)
+          )
+            continue;
+          if (Object.prototype.hasOwnProperty.call(data, 'summary')) t.summary = data.summary ?? null;
+          if (Object.prototype.hasOwnProperty.call(data, 'assignedAgentNodeId')) t.assignedAgentNodeId = data.assignedAgentNodeId ?? null;
+          count += 1;
+        }
+        return { count };
       },
       findMany: async (args: any) => {
         let rows = [...threads];

@@ -1,11 +1,20 @@
-import { AIMessage, HumanMessage, SystemMessage, ToolCallMessage, ToolCallOutputMessage } from '@agyn/llm';
+import {
+  AIMessage,
+  DeveloperMessage,
+  HumanMessage,
+  SystemMessage,
+  ToolCallMessage,
+  ToolCallOutputMessage,
+} from '@agyn/llm';
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import type { MessageKind, Prisma, PrismaClient, RunMessageType, RunStatus, ThreadStatus } from '@prisma/client';
+import type { ResponseInputItem } from 'openai/resources/responses/responses.mjs';
 import { PrismaService } from '../core/services/prisma.service';
 import { TemplateRegistry } from '../graph-core/templateRegistry';
 import { GraphRepository } from '../graph/graph.repository';
 import type { PersistedGraphNode } from '../shared/types/graph.types';
 import { toPrismaJsonValue } from '../llm/services/messages.serialization';
+import { coerceRole } from '../llm/services/messages.normalization';
 import { ChannelDescriptorSchema, type ChannelDescriptor } from '../messaging/types';
 import { RunEventsService } from '../events/run-events.service';
 import { EventsBusService } from '../events/events-bus.service';
@@ -98,6 +107,7 @@ export class AgentsPersistenceService {
       createdAt: created.createdAt,
       parentId: created.parentId ?? null,
       channelNodeId: created.channelNodeId ?? null,
+      assignedAgentNodeId: created.assignedAgentNodeId ?? null,
     });
     return created.id;
   }
@@ -125,6 +135,7 @@ export class AgentsPersistenceService {
       createdAt: updated.createdAt,
       parentId: updated.parentId ?? null,
       channelNodeId: updated.channelNodeId ?? null,
+      assignedAgentNodeId: updated.assignedAgentNodeId ?? null,
     });
   }
 
@@ -146,9 +157,44 @@ export class AgentsPersistenceService {
       createdAt: created.createdAt,
       parentId: created.parentId ?? null,
       channelNodeId: created.channelNodeId ?? null,
+      assignedAgentNodeId: created.assignedAgentNodeId ?? null,
     });
     this.eventsBus.emitThreadMetricsAncestors({ threadId: created.id });
     return created.id;
+  }
+
+  async ensureAssignedAgent(threadId: string, agentNodeId: string): Promise<void> {
+    const normalized = typeof agentNodeId === 'string' ? agentNodeId.trim() : '';
+    if (!normalized) return;
+    const result = await this.prisma.thread.updateMany({
+      where: { id: threadId, assignedAgentNodeId: null },
+      data: { assignedAgentNodeId: normalized },
+    });
+    if (result.count === 0) return;
+    const updated = await this.prisma.thread.findUnique({
+      where: { id: threadId },
+      select: {
+        id: true,
+        alias: true,
+        summary: true,
+        status: true,
+        createdAt: true,
+        parentId: true,
+        channelNodeId: true,
+        assignedAgentNodeId: true,
+      },
+    });
+    if (!updated) return;
+    this.eventsBus.emitThreadUpdated({
+      id: updated.id,
+      alias: updated.alias,
+      summary: updated.summary ?? null,
+      status: updated.status,
+      createdAt: updated.createdAt,
+      parentId: updated.parentId ?? null,
+      channelNodeId: updated.channelNodeId ?? null,
+      assignedAgentNodeId: updated.assignedAgentNodeId ?? null,
+    });
   }
 
   /**
@@ -164,7 +210,8 @@ export class AgentsPersistenceService {
    */
   async beginRunThread(
     threadId: string,
-    inputMessages: Array<HumanMessage | SystemMessage | AIMessage>,
+    inputMessages: Array<HumanMessage | DeveloperMessage | SystemMessage | AIMessage>,
+    agentNodeId?: string,
   ): Promise<RunStartResult> {
     const { runId, createdMessages, eventIds, patchedEventIds } = await this.prisma.$transaction(async (tx: Prisma.TransactionClient) => {
       // Begin run and persist messages
@@ -174,9 +221,22 @@ export class AgentsPersistenceService {
       const patchedEventIds: string[] = [];
       await Promise.all(
         inputMessages.map(async (msg) => {
-          const { kind, text } = this.deriveKindTextTyped(msg);
-          const source = toPrismaJsonValue(msg.toPlain());
-          const created = await tx.message.create({ data: { kind, text, source } });
+          let kind: MessageKind;
+          let textValue: string | null;
+          let source: Prisma.InputJsonValue;
+          if (msg instanceof DeveloperMessage) {
+            kind = 'system' as MessageKind;
+            textValue = msg.text;
+            const coerced = coerceRole(msg.toPlain(), 'system');
+            source = toPrismaJsonValue(coerced);
+          } else {
+            const normalized = this.normalizeForPersistence(msg);
+            const { kind: derivedKind, text } = this.deriveKindTextTyped(normalized);
+            kind = derivedKind;
+            textValue = text;
+            source = toPrismaJsonValue(normalized.toPlain());
+          }
+          const created = await tx.message.create({ data: { kind, text: textValue, source } });
           await tx.runMessage.create({ data: { runId: run.id, messageId: created.id, type: 'input' as RunMessageType } });
           const event = await this.runEvents.recordInvocationMessage({
             tx,
@@ -188,7 +248,7 @@ export class AgentsPersistenceService {
             metadata: { messageType: 'input' },
           });
           eventIds.push(event.id);
-          createdMessages.push({ id: created.id, kind, text, source: created.source as Prisma.JsonValue, createdAt: created.createdAt });
+          createdMessages.push({ id: created.id, kind, text: textValue, source: created.source as Prisma.JsonValue, createdAt: created.createdAt });
         }),
       );
       const linkedEventId = await this.callAgentLinking.onChildRunStarted({
@@ -213,15 +273,16 @@ export class AgentsPersistenceService {
     this.eventsBus.emitThreadMetrics({ threadId });
     await Promise.all(eventIds.map((id) => this.eventsBus.publishEvent(id, 'append')));
     await Promise.all(patchedEventIds.map((id) => this.eventsBus.publishEvent(id, 'update')));
+    if (agentNodeId) await this.ensureAssignedAgent(threadId, agentNodeId);
     return { runId };
   }
 
   /**
-   * Persist injected messages. Only SystemMessage injections are supported.
+   * Persist injected messages. Only DeveloperMessage injections are supported (SystemMessage retained for legacy callers).
    */
   async recordInjected(
     runId: string,
-    injectedMessages: Array<HumanMessage | SystemMessage | AIMessage>,
+    injectedMessages: Array<HumanMessage | DeveloperMessage | SystemMessage | AIMessage>,
     options?: { threadId?: string },
   ): Promise<{ messageIds: string[] }> {
     if (!injectedMessages.length) return { messageIds: [] };
@@ -238,9 +299,22 @@ export class AgentsPersistenceService {
       threadId = resolvedThreadId;
 
       for (const msg of injectedMessages) {
-        const { kind, text } = this.deriveKindTextTyped(msg);
-        const source = toPrismaJsonValue(msg.toPlain());
-        const created = await tx.message.create({ data: { kind, text, source } });
+        let kind: MessageKind;
+        let textValue: string | null;
+        let source: Prisma.InputJsonValue;
+        if (msg instanceof DeveloperMessage) {
+          kind = 'system' as MessageKind;
+          textValue = msg.text;
+          const coerced = coerceRole(msg.toPlain(), 'system');
+          source = toPrismaJsonValue(coerced);
+        } else {
+          const normalized = this.normalizeForPersistence(msg);
+          const { kind: derivedKind, text } = this.deriveKindTextTyped(normalized);
+          kind = derivedKind;
+          textValue = text;
+          source = toPrismaJsonValue(normalized.toPlain());
+        }
+        const created = await tx.message.create({ data: { kind, text: textValue, source } });
         await tx.runMessage.create({ data: { runId, messageId: created.id, type: 'injected' as RunMessageType } });
         const event = await this.runEvents.recordInvocationMessage({
           tx,
@@ -252,7 +326,7 @@ export class AgentsPersistenceService {
           metadata: { messageType: 'injected' },
         });
         eventIds.push(event.id);
-        createdMessages.push({ id: created.id, kind, text, source: created.source as Prisma.JsonValue, createdAt: created.createdAt });
+        createdMessages.push({ id: created.id, kind, text: textValue, source: created.source as Prisma.JsonValue, createdAt: created.createdAt });
       }
 
       if (createdMessages.length > 0) {
@@ -312,8 +386,9 @@ export class AgentsPersistenceService {
       const threadId = current.threadId;
       await Promise.all(
         outputMessages.map(async (msg) => {
-          const { kind, text } = this.deriveKindTextTyped(msg);
-          const source = toPrismaJsonValue(msg.toPlain());
+          const normalized = this.normalizeForPersistence(msg);
+          const { kind, text } = this.deriveKindTextTyped(normalized);
+          const source = toPrismaJsonValue(normalized.toPlain());
           const created = await tx.message.create({ data: { kind, text, source } });
           await tx.runMessage.create({ data: { runId, messageId: created.id, type: 'output' as RunMessageType } });
           const event = await this.runEvents.recordInvocationMessage({
@@ -373,6 +448,7 @@ export class AgentsPersistenceService {
         status: ThreadStatus;
         createdAt: Date;
         parentId: string | null;
+        assignedAgentNodeId: string | null;
         metrics?: ThreadMetrics;
         agentTitle?: string;
       })
@@ -380,7 +456,15 @@ export class AgentsPersistenceService {
   > {
     const thread = await this.prisma.thread.findUnique({
       where: { id: threadId },
-      select: { id: true, alias: true, summary: true, status: true, createdAt: true, parentId: true },
+      select: {
+        id: true,
+        alias: true,
+        summary: true,
+        status: true,
+        createdAt: true,
+        parentId: true,
+        assignedAgentNodeId: true,
+      },
     });
     if (!thread) return null;
 
@@ -394,11 +478,13 @@ export class AgentsPersistenceService {
       status: ThreadStatus;
       createdAt: Date;
       parentId: string | null;
+      assignedAgentNodeId: string | null;
       metrics?: ThreadMetrics;
       agentTitle?: string;
     } = {
       ...thread,
       parentId: thread.parentId ?? null,
+      assignedAgentNodeId: thread.assignedAgentNodeId ?? null,
     };
 
     const defaultMetrics: ThreadMetrics = { remindersCount: 0, containersCount: 0, activity: 'idle', runsCount: 0 };
@@ -464,6 +550,8 @@ export class AgentsPersistenceService {
       status: updated.status,
       createdAt: updated.createdAt,
       parentId: updated.parentId ?? null,
+      channelNodeId: updated.channelNodeId ?? null,
+      assignedAgentNodeId: updated.assignedAgentNodeId ?? null,
     });
     return { previousStatus: result.previousStatus, status: updated.status };
   }
@@ -483,7 +571,31 @@ export class AgentsPersistenceService {
   async getThreadsAgentTitles(ids: string[]): Promise<Record<string, string>> {
     if (!ids || ids.length === 0) return {};
     try {
-      return await this.resolveAgentTitles(ids);
+      const threads = await this.prisma.thread.findMany({
+        where: { id: { in: ids } },
+        select: { id: true, assignedAgentNodeId: true },
+      });
+      const assignedNodeIds = Array.from(
+        new Set(
+          threads
+            .map((thread) => thread.assignedAgentNodeId)
+            .filter((value): value is string => typeof value === 'string' && value.length > 0),
+        ),
+      );
+      const assignedTitles = await this.resolveAgentNodeTitles(assignedNodeIds);
+      const titles: Record<string, string> = {};
+      for (const thread of threads) {
+        const assignedId = thread.assignedAgentNodeId;
+        if (!assignedId) continue;
+        const title = assignedTitles[assignedId];
+        if (title) titles[thread.id] = title;
+      }
+
+      const unresolvedIds = ids.filter((id) => !titles[id]);
+      if (unresolvedIds.length === 0) return titles;
+
+      const fallbackTitles = await this.resolveAgentTitles(unresolvedIds);
+      return { ...titles, ...fallbackTitles };
     } catch (err) {
       this.logger.error(
         `AgentsPersistenceService failed to resolve agent titles ${this.format({ error: this.errorInfo(err) })}`,
@@ -567,6 +679,41 @@ export class AgentsPersistenceService {
     return out;
   }
 
+  private async resolveAgentNodeTitles(nodeIds: string[]): Promise<Record<string, string>> {
+    if (!nodeIds || nodeIds.length === 0) return {};
+    const graph = await this.graphs.get('main');
+    if (!graph || !Array.isArray(graph.nodes) || graph.nodes.length === 0) return {};
+
+    const agentNodes = graph.nodes.filter((node) => {
+      const meta = this.templateRegistry.getMeta(node.template);
+      if (meta) return meta.kind === 'agent';
+      return node.template === 'agent';
+    });
+    if (agentNodes.length === 0) return {};
+
+    const nodeById = new Map<string, PersistedGraphNode>(agentNodes.map((node) => [node.id, node]));
+    const fallback = '(unknown agent)';
+    const titles: Record<string, string> = {};
+
+    for (const nodeId of new Set(nodeIds)) {
+      const node = nodeById.get(nodeId);
+      if (!node) continue;
+      const config = (node.config as Record<string, unknown> | undefined) ?? undefined;
+      const rawTitle = typeof config?.['title'] === 'string' ? (config['title'] as string) : undefined;
+      const configTitle = rawTitle?.trim();
+      const templateMeta = this.templateRegistry.getMeta(node.template);
+      const templateTitle = templateMeta?.title ?? node.template;
+      const resolved = configTitle && configTitle.length > 0
+        ? configTitle
+        : templateTitle && templateTitle.trim().length > 0
+          ? templateTitle
+          : fallback;
+      titles[nodeId] = resolved;
+    }
+
+    return titles;
+  }
+
   private async resolveAgentTitles(threadIds: string[]): Promise<Record<string, string>> {
     const fallback = '(unknown agent)';
     const empty = Object.fromEntries(threadIds.map((id) => [id, fallback]));
@@ -611,6 +758,16 @@ export class AgentsPersistenceService {
     const candidate = (tx as { runEvent?: RunEventDelegate }).runEvent;
     if (!candidate || typeof candidate.findFirst !== 'function') return undefined;
     return candidate;
+  }
+
+  private normalizeForPersistence(
+    msg: HumanMessage | DeveloperMessage | SystemMessage | AIMessage | ToolCallMessage | ToolCallOutputMessage,
+  ): HumanMessage | SystemMessage | AIMessage | ToolCallMessage | ToolCallOutputMessage {
+    if (msg instanceof DeveloperMessage) {
+      const coerced = coerceRole(msg.toPlain(), 'system') as ResponseInputItem.Message & { role: 'system' };
+      return new SystemMessage(coerced);
+    }
+    return msg;
   }
 
   /**

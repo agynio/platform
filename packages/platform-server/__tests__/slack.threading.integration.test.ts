@@ -78,10 +78,12 @@ describe('SlackTrigger threading integration', () => {
     const updateThreadChannelDescriptor = vi.fn(async (threadId: string, descriptor: ChannelDescriptor) => {
       store.setDescriptor(threadId, descriptor);
     });
+    const ensureAssignedAgent = vi.fn(async () => {});
     const persistence = ({
       getOrCreateThreadByAlias,
       updateThreadChannelDescriptor,
-    } satisfies Pick<import('../src/agents/agents.persistence.service').AgentsPersistenceService, 'getOrCreateThreadByAlias' | 'updateThreadChannelDescriptor'>) as import('../src/agents/agents.persistence.service').AgentsPersistenceService;
+      ensureAssignedAgent,
+    } satisfies Pick<import('../src/agents/agents.persistence.service').AgentsPersistenceService, 'getOrCreateThreadByAlias' | 'updateThreadChannelDescriptor' | 'ensureAssignedAgent'>) as import('../src/agents/agents.persistence.service').AgentsPersistenceService;
     const prismaStub = ({
       getClient: () => ({
         thread: {
@@ -91,7 +93,11 @@ describe('SlackTrigger threading integration', () => {
     } satisfies Pick<import('../src/core/services/prisma.service').PrismaService, 'getClient'>) as import('../src/core/services/prisma.service').PrismaService;
     const slackSend = vi.fn(async (opts: { token: string; channel: string; text: string; thread_ts?: string }) => ({ ok: true, channelMessageId: '200', threadId: opts.thread_ts ?? 'generated-thread' }));
     const slackAdapter = ({ sendText: slackSend } satisfies Pick<SlackAdapter, 'sendText'>) as SlackAdapter;
-    const trigger = new SlackTrigger(undefined as any, persistence, prismaStub, slackAdapter);
+    const runtimeStub = ({
+      getOutboundNodeIds: () => ['agent-slack'],
+      getNodes: () => [{ id: 'agent-slack', template: 'agent' }],
+    } satisfies Pick<import('../src/graph-core/liveGraph.manager').LiveGraphRuntime, 'getOutboundNodeIds' | 'getNodes'>) as import('../src/graph-core/liveGraph.manager').LiveGraphRuntime;
+    const trigger = new SlackTrigger(undefined as any, persistence, prismaStub, slackAdapter, runtimeStub);
     trigger.init({ nodeId: 'slack-node' });
     await trigger.setConfig({ app_token: 'xapp-abc', bot_token: 'xoxb-bot' });
     await trigger.provision();
@@ -104,12 +110,13 @@ describe('SlackTrigger threading integration', () => {
       slackSend,
       getOrCreateThreadByAlias,
       updateThreadChannelDescriptor,
+      ensureAssignedAgent,
     };
   };
 
   it('replies to top-level channel messages within the same thread', async () => {
     const store = new DescriptorStore();
-    const { handler, trigger, slackSend, updateThreadChannelDescriptor } = await setup(store);
+    const { handler, trigger, slackSend, updateThreadChannelDescriptor, ensureAssignedAgent } = await setup(store);
     const ack = vi.fn(async () => {});
     const env: SlackEnvelope = {
       envelope_id: 'env1',
@@ -133,6 +140,7 @@ describe('SlackTrigger threading integration', () => {
     const descriptor = store.getDescriptor(threadId);
     expect(descriptor?.identifiers.thread_ts).toBe('1000.1');
     expect(updateThreadChannelDescriptor).toHaveBeenCalledTimes(1);
+    expect(ensureAssignedAgent).toHaveBeenCalledWith(threadId, 'agent-slack');
   });
 
   it('keeps reply events in their originating Slack thread', async () => {
