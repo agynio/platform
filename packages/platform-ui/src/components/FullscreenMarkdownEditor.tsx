@@ -255,6 +255,12 @@ const useScrollSync = ({
       window.cancelAnimationFrame(frame);
     };
   }, [content, isEnabled, reapplyAlignment]);
+
+  const markEditorAsSource = useCallback(() => {
+    lastSourceRef.current = 'editor';
+  }, []);
+
+  return { markEditorAsSource };
 };
 
 export function FullscreenMarkdownEditor({ 
@@ -281,7 +287,7 @@ export function FullscreenMarkdownEditor({
     };
   }, []);
 
-  useScrollSync({
+  const { markEditorAsSource } = useScrollSync({
     editorRef,
     previewScrollRef,
     previewContentRef,
@@ -379,7 +385,10 @@ export function FullscreenMarkdownEditor({
               <textarea
                 ref={editorRef}
                 value={localValue}
-                onChange={(e) => setLocalValue(e.target.value)}
+                onChange={(e) => {
+                  setLocalValue(e.target.value);
+                  markEditorAsSource();
+                }}
                 className="flex-1 p-6 resize-none focus:outline-none font-mono text-sm text-[var(--agyn-dark)] bg-white"
                 placeholder="Start typing your markdown here..."
                 spellCheck={false}

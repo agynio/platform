@@ -275,4 +275,42 @@ describe('FullscreenMarkdownEditor scroll sync', () => {
 
     expect(previewControl.scrollTop).toBeCloseTo(expectedRatio * previewMaxScroll);
   });
+
+  it('keeps editor position when typing after preview was last scrolled', async () => {
+    render(<FullscreenMarkdownEditor value={initialMarkdown} onChange={vi.fn()} onClose={vi.fn()} />);
+
+    const editor = getEditor();
+    const previewScroll = getPreviewScrollContainer();
+    const editorControl = setupScrollController(editor, { scrollHeight: 400, clientHeight: 200, scrollTop: 80 });
+    const previewControl = setupScrollController(previewScroll, {
+      scrollHeight: 800,
+      clientHeight: 200,
+    });
+
+    await flushAnimationFrames();
+
+    fireEvent.scroll(editor);
+    await flushAnimationFrames();
+
+    previewControl.resetSetCalls();
+    editorControl.resetSetCalls();
+
+    previewControl.setScrollTop(360);
+    fireEvent.scroll(previewScroll);
+    await flushAnimationFrames();
+
+    previewControl.resetSetCalls();
+    editorControl.resetSetCalls();
+
+    const initialEditorScroll = editorControl.scrollTop;
+
+    fireEvent.change(editor, {
+      target: { value: `${initialMarkdown}\nupdate` },
+    });
+    await flushAnimationFrames();
+
+    expect(editorControl.scrollTop).toBe(initialEditorScroll);
+    expect(editorControl.setCalls).toBe(0);
+    expect(previewControl.setCalls).toBe(1);
+  });
 });
