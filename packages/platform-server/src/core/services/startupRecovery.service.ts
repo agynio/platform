@@ -1,6 +1,6 @@
 import { Inject, Injectable, Logger, OnApplicationBootstrap } from '@nestjs/common';
-import type { Prisma, PrismaClient, RunStatus } from '@prisma/client';
-import { RunStatus as RunStatusEnum } from '@prisma/client';
+import type { Prisma, PrismaClient, RunEventStatus, RunStatus } from '@prisma/client';
+import { RunEventStatus as RunEventStatusEnum, RunStatus as RunStatusEnum } from '@prisma/client';
 import { PrismaService } from './prisma.service';
 import { EventsBusService } from '../../events/events-bus.service';
 
@@ -21,6 +21,16 @@ type RecoveredReminder = {
   cancelledAt: Date | null;
 };
 
+type RecoveredRunEvent = {
+  id: string;
+  runId: string;
+  threadId: string;
+  status: RunEventStatus;
+  startedAt: Date | null;
+  endedAt: Date | null;
+  durationMs: number | null;
+};
+
 const RECOVERY_REASON = 'server_restart_recovery';
 const LOCK_KEY_NAMESPACE = 0x53545254; // 'STRT'
 const LOCK_KEY_ID = 0x0000_0001;
@@ -37,7 +47,12 @@ export class StartupRecoveryService implements OnApplicationBootstrap {
   async onApplicationBootstrap(): Promise<void> {
     const prisma = this.prismaService.getClient() as PrismaClient;
     const startedAt = Date.now();
-    const recovery = { runs: [] as RecoveredRun[], reminders: [] as RecoveredReminder[], skipped: false };
+    const recovery = {
+      runs: [] as RecoveredRun[],
+      runEvents: [] as RecoveredRunEvent[],
+      reminders: [] as RecoveredReminder[],
+      skipped: false,
+    };
 
     try {
       await prisma.$transaction(async (tx: TransactionClient) => {
@@ -48,6 +63,7 @@ export class StartupRecoveryService implements OnApplicationBootstrap {
         }
 
         recovery.runs = await this.terminateRunningRuns(tx);
+        recovery.runEvents = await this.cancelRunningRunEvents(tx);
         recovery.reminders = await this.completePendingReminders(tx);
       });
     } catch (err) {
@@ -62,16 +78,18 @@ export class StartupRecoveryService implements OnApplicationBootstrap {
 
     const durationMs = Date.now() - startedAt;
     const terminatedRuns = recovery.runs.length;
+    const cancelledRunEvents = recovery.runEvents.length;
     const completedReminders = recovery.reminders.length;
 
     this.logger.log('Startup recovery completed', {
       reason: RECOVERY_REASON,
       terminatedRuns,
+      cancelledRunEvents,
       completedReminders,
       durationMs,
     });
 
-    this.emitEvents(recovery.runs, recovery.reminders);
+    this.emitEvents(recovery.runs, recovery.reminders, recovery.runEvents);
   }
 
   private async tryAcquireLock(tx: TransactionClient): Promise<boolean> {
@@ -144,7 +162,50 @@ export class StartupRecoveryService implements OnApplicationBootstrap {
     return completed.map((rem) => ({ ...rem }));
   }
 
-  private emitEvents(runs: RecoveredRun[], reminders: RecoveredReminder[]): void {
+  private async cancelRunningRunEvents(tx: TransactionClient): Promise<RecoveredRunEvent[]> {
+    type RunEventDelegate = Pick<NonNullable<TransactionClient['runEvent']>, 'findMany' | 'updateMany'>;
+    const runEventDelegate = (tx as unknown as { runEvent?: RunEventDelegate }).runEvent;
+    if (!runEventDelegate || typeof runEventDelegate.findMany !== 'function' || typeof runEventDelegate.updateMany !== 'function') {
+      this.logger.debug('Startup recovery skipping run event updates (delegate unavailable)', { reason: RECOVERY_REASON });
+      return [];
+    }
+
+    const running = await runEventDelegate.findMany({
+      where: { status: RunEventStatusEnum.running },
+      select: { id: true, runId: true, threadId: true, startedAt: true },
+    });
+    if (running.length === 0) return [];
+
+    const endedAt = new Date();
+    const updatedIds: string[] = [];
+    for (const event of running) {
+      const durationMs = event.startedAt ? Math.max(0, endedAt.getTime() - event.startedAt.getTime()) : null;
+      const result = await runEventDelegate.updateMany({
+        where: { id: event.id, status: RunEventStatusEnum.running },
+        data: {
+          status: RunEventStatusEnum.cancelled,
+          endedAt,
+          durationMs,
+          errorCode: 'app_restart',
+          errorMessage: 'terminated during startup reconciliation',
+        },
+      });
+      if (result.count > 0) {
+        updatedIds.push(event.id);
+      }
+    }
+
+    if (updatedIds.length === 0) return [];
+
+    const updated = await runEventDelegate.findMany({
+      where: { id: { in: updatedIds } },
+      select: { id: true, runId: true, threadId: true, status: true, startedAt: true, endedAt: true, durationMs: true },
+    });
+
+    return updated.map((event) => ({ ...event }));
+  }
+
+  private emitEvents(runs: RecoveredRun[], reminders: RecoveredReminder[], runEvents: RecoveredRunEvent[]): void {
     const runStatus = RunStatusEnum.terminated;
     const metricThreads = new Set<string>();
 
@@ -167,6 +228,10 @@ export class StartupRecoveryService implements OnApplicationBootstrap {
 
     for (const reminder of reminders) {
       metricThreads.add(reminder.threadId);
+    }
+
+    for (const event of runEvents) {
+      metricThreads.add(event.threadId);
     }
 
     for (const threadId of metricThreads) {

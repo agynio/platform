@@ -1,5 +1,5 @@
 import { afterAll, describe, expect, it, vi, type SpyInstance } from 'vitest';
-import { PrismaClient, RunStatus } from '@prisma/client';
+import { PrismaClient, RunEventStatus, RunEventType, RunStatus } from '@prisma/client';
 import { randomUUID } from 'node:crypto';
 import { StartupRecoveryService } from '../src/core/services/startupRecovery.service';
 import type { EventsBusService } from '../src/events/events-bus.service';
@@ -64,19 +64,59 @@ if (!shouldRunDbTests) {
       await prisma.$disconnect();
     });
 
-    it('terminates running runs, completes reminders, and is idempotent', async () => {
+    it('terminates running runs, cancels run events, completes reminders, and is idempotent', async () => {
       const thread = await prisma.thread.create({ data: { alias: `startup-recovery-${randomUUID()}` } });
       const secondThread = await prisma.thread.create({ data: { alias: `startup-recovery-${randomUUID()}` } });
+      const eventOnlyThread = await prisma.thread.create({ data: { alias: `startup-recovery-${randomUUID()}` } });
 
       const runningRun = await prisma.run.create({ data: { threadId: thread.id, status: RunStatus.running } });
       const finishedRun = await prisma.run.create({ data: { threadId: thread.id, status: RunStatus.finished } });
       const additionalRunning = await prisma.run.create({ data: { threadId: secondThread.id, status: RunStatus.running } });
+      const eventOnlyRun = await prisma.run.create({ data: { threadId: eventOnlyThread.id, status: RunStatus.finished } });
 
       const pendingReminder = await prisma.reminder.create({
         data: { threadId: thread.id, note: 'pending', at: new Date(Date.now() + 60_000), completedAt: null },
       });
       const completedReminder = await prisma.reminder.create({
         data: { threadId: thread.id, note: 'done', at: new Date(Date.now() + 120_000), completedAt: new Date() },
+      });
+
+      const runningEvent = await prisma.runEvent.create({
+        data: {
+          runId: runningRun.id,
+          threadId: thread.id,
+          type: RunEventType.tool_execution,
+          status: RunEventStatus.running,
+          startedAt: new Date(Date.now() - 5_000),
+        },
+      });
+      const secondRunningEvent = await prisma.runEvent.create({
+        data: {
+          runId: additionalRunning.id,
+          threadId: secondThread.id,
+          type: RunEventType.llm_call,
+          status: RunEventStatus.running,
+          startedAt: new Date(Date.now() - 10_000),
+        },
+      });
+      const finishedEvent = await prisma.runEvent.create({
+        data: {
+          runId: finishedRun.id,
+          threadId: thread.id,
+          type: RunEventType.llm_call,
+          status: RunEventStatus.success,
+          startedAt: new Date(Date.now() - 20_000),
+          endedAt: new Date(Date.now() - 10_000),
+          durationMs: 10_000,
+        },
+      });
+      const eventOnlyRunningEvent = await prisma.runEvent.create({
+        data: {
+          runId: eventOnlyRun.id,
+          threadId: eventOnlyThread.id,
+          type: RunEventType.invocation_message,
+          status: RunEventStatus.running,
+        },
       });
 
       const spies = initLoggerSpies();
@@ -95,6 +135,35 @@ if (!shouldRunDbTests) {
         const additionalRecovered = await prisma.run.findUniqueOrThrow({ where: { id: additionalRunning.id } });
         expect(additionalRecovered.status).toBe(RunStatus.terminated);
 
+        const recoveredEvent = await prisma.runEvent.findUniqueOrThrow({ where: { id: runningEvent.id } });
+        expect(recoveredEvent.status).toBe(RunEventStatus.cancelled);
+        expect(recoveredEvent.endedAt).toBeInstanceOf(Date);
+        expect(recoveredEvent.durationMs).toBeGreaterThanOrEqual(0);
+        if (recoveredEvent.startedAt) {
+          expect(recoveredEvent.durationMs).toBe(recoveredEvent.endedAt!.getTime() - recoveredEvent.startedAt.getTime());
+        }
+        expect(recoveredEvent.errorCode).toBe('app_restart');
+        expect(recoveredEvent.errorMessage).toBe('terminated during startup reconciliation');
+
+        const recoveredSecondEvent = await prisma.runEvent.findUniqueOrThrow({ where: { id: secondRunningEvent.id } });
+        expect(recoveredSecondEvent.status).toBe(RunEventStatus.cancelled);
+        expect(recoveredSecondEvent.endedAt).toBeInstanceOf(Date);
+        expect(recoveredSecondEvent.durationMs).toBeGreaterThanOrEqual(0);
+        const recoveredEventOnly = await prisma.runEvent.findUniqueOrThrow({ where: { id: eventOnlyRunningEvent.id } });
+        expect(recoveredEventOnly.status).toBe(RunEventStatus.cancelled);
+        expect(recoveredEventOnly.endedAt).toBeInstanceOf(Date);
+        expect(recoveredEventOnly.durationMs).toBeNull();
+
+        const finishedEventUnchanged = await prisma.runEvent.findUniqueOrThrow({ where: { id: finishedEvent.id } });
+        expect(finishedEventUnchanged.status).toBe(RunEventStatus.success);
+        expect(finishedEventUnchanged.endedAt).not.toBeNull();
+        const firstEndedAt = recoveredEvent.endedAt;
+        const firstDuration = recoveredEvent.durationMs;
+
+        const secondEndedAt = recoveredSecondEvent.endedAt;
+        const secondDuration = recoveredSecondEvent.durationMs;
+        const eventOnlyEndedAt = recoveredEventOnly.endedAt;
+
         const pendingReminderUpdated = await prisma.reminder.findUniqueOrThrow({ where: { id: pendingReminder.id } });
         expect(pendingReminderUpdated.completedAt).toBeInstanceOf(Date);
 
@@ -105,6 +174,7 @@ if (!shouldRunDbTests) {
         expect(summaryCall).toBeDefined();
         const summaryPayload = (summaryCall?.[1] ?? {}) as Record<string, unknown>;
         expect(summaryPayload?.terminatedRuns).toBe(2);
+        expect(summaryPayload?.cancelledRunEvents).toBe(3);
         expect(summaryPayload?.completedReminders).toBe(1);
 
         expect(events.runStatusChanges).toEqual(
@@ -113,7 +183,7 @@ if (!shouldRunDbTests) {
             { threadId: secondThread.id, runId: additionalRunning.id, status: RunStatus.terminated },
           ]),
         );
-        expect(new Set(events.metricsScheduled)).toEqual(new Set([thread.id, secondThread.id]));
+        expect(new Set(events.metricsScheduled)).toEqual(new Set([thread.id, secondThread.id, eventOnlyThread.id]));
 
         const secondSpies = initLoggerSpies();
         const eventsSecond = new CaptureEventsBus();
@@ -125,17 +195,30 @@ if (!shouldRunDbTests) {
           const secondSummary = secondSpies.logSpy.mock.calls.find(([message]) => message === 'Startup recovery completed');
           const secondPayload = (secondSummary?.[1] ?? {}) as Record<string, unknown>;
           expect(secondPayload?.terminatedRuns).toBe(0);
+          expect(secondPayload?.cancelledRunEvents).toBe(0);
           expect(secondPayload?.completedReminders).toBe(0);
           expect(eventsSecond.runStatusChanges).toHaveLength(0);
           expect(eventsSecond.metricsScheduled).toHaveLength(0);
+
+          const recoveredEventAfterSecond = await prisma.runEvent.findUniqueOrThrow({ where: { id: runningEvent.id } });
+          expect(recoveredEventAfterSecond.endedAt?.getTime()).toBe(firstEndedAt?.getTime());
+          expect(recoveredEventAfterSecond.durationMs).toBe(firstDuration);
+
+          const recoveredSecondEventAfterSecond = await prisma.runEvent.findUniqueOrThrow({ where: { id: secondRunningEvent.id } });
+          expect(recoveredSecondEventAfterSecond.endedAt?.getTime()).toBe(secondEndedAt?.getTime());
+          expect(recoveredSecondEventAfterSecond.durationMs).toBe(secondDuration);
+
+          const recoveredEventOnlyAfterSecond = await prisma.runEvent.findUniqueOrThrow({ where: { id: eventOnlyRunningEvent.id } });
+          expect(recoveredEventOnlyAfterSecond.endedAt?.getTime()).toBe(eventOnlyEndedAt?.getTime());
+          expect(recoveredEventOnlyAfterSecond.durationMs).toBeNull();
         } finally {
           secondSpies.restore();
         }
       } finally {
         spies.restore();
         await prisma.reminder.deleteMany({ where: { id: { in: [pendingReminder.id, completedReminder.id] } } });
-        await prisma.run.deleteMany({ where: { threadId: { in: [thread.id, secondThread.id] } } });
-        await prisma.thread.deleteMany({ where: { id: { in: [thread.id, secondThread.id] } } });
+        await prisma.run.deleteMany({ where: { threadId: { in: [thread.id, secondThread.id, eventOnlyThread.id] } } });
+        await prisma.thread.deleteMany({ where: { id: { in: [thread.id, secondThread.id, eventOnlyThread.id] } } });
       }
     });
 
@@ -172,21 +255,29 @@ if (!shouldRunDbTests) {
       }
     });
 
-    it('logs errors encountered during recovery without throwing', async () => {
+    it('logs errors encountered during recovery and propagates failure', async () => {
       class ThrowingTx {
+        readonly run = {
+          findMany: vi.fn(async () => [{ id: 'run-id', threadId: 'thread-id', createdAt: new Date(), status: RunStatus.running }]),
+          updateMany: vi.fn(async () => {
+            throw new Error('simulated failure');
+          }),
+        };
+
+        readonly reminder = {
+          findMany: vi.fn(async () => []),
+          updateMany: vi.fn(async () => ({ count: 0 })),
+        };
+
+        readonly runEvent = {
+          findMany: vi.fn(async () => []),
+          updateMany: vi.fn(async () => ({ count: 0 })),
+        };
+
         async $queryRaw(strings: TemplateStringsArray, ...values: unknown[]): Promise<Array<{ acquired: boolean }>> {
           expect(strings[0]).toContain('pg_try_advisory_xact_lock');
           expect(values).toHaveLength(2);
           return [{ acquired: true }];
-        }
-
-        async run(updateFn: unknown): Promise<never> {
-          expect(typeof updateFn).toBe('function');
-          throw new Error('simulated failure');
-        }
-
-        async reminder(): Promise<never> {
-          throw new Error('should not be called');
         }
       }
 
@@ -199,7 +290,7 @@ if (!shouldRunDbTests) {
       const service = new StartupRecoveryService(prismaService as any, events as unknown as EventsBusService);
 
       try {
-        await service.onApplicationBootstrap();
+        await expect(service.onApplicationBootstrap()).rejects.toThrow('simulated failure');
 
         expect(prismaSpy).toHaveBeenCalledTimes(1);
         const errorLogged = spies.errorSpy.mock.calls.some(([message, payload]) => {
