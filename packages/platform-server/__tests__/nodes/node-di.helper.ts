@@ -20,6 +20,7 @@ import { ContainerService } from '../../src/infra/container/container.service';
 import { NcpsKeyService } from '../../src/infra/ncps/ncpsKey.service';
 import { LLMProvisioner } from '../../src/llm/provisioners/llm.provisioner';
 import { SlackAdapter } from '../../src/messaging/slack/slack.adapter';
+import { ThreadOutboxService } from '../../src/messaging/threadOutbox.service';
 import { ManageFunctionTool } from '../../src/nodes/tools/manage/manage.tool';
 import { VaultService } from '../../src/vault/vault.service';
 
@@ -88,6 +89,7 @@ const DEFAULT_TOKEN_FACTORIES = new Map<InjectionToken, () => unknown>([
   ],
   [RunSignalsRegistry, () => createDefaultStub('RunSignalsRegistry')],
   [SlackAdapter, () => createDefaultStub('SlackAdapter')],
+  [ThreadOutboxService, () => createDefaultStub('ThreadOutboxService', { send: vi.fn(async () => ({ ok: true })) })],
   [CallAgentLinkingService, () => createDefaultStub('CallAgentLinkingService')],
   [LiveGraphRuntime, () => createDefaultStub('LiveGraphRuntime')],
   [TemplateRegistry, () => createDefaultStub('TemplateRegistry', { getMeta: vi.fn(() => undefined) })],

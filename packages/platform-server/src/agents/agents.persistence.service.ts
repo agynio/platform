@@ -228,9 +228,11 @@ export class AgentsPersistenceService {
       await Promise.all(
         inputMessages.map(async (msg) => {
           const normalized = this.normalizeForPersistence(msg);
+          if (!this.isInputMessage(normalized)) {
+            throw new Error('unsupported_input_message_type');
+          }
           const { text } = this.deriveKindTextTyped(normalized);
-          const coerced = coerceRole(normalized.toPlain(), 'user');
-          const source = toPrismaJsonValue(coerced);
+          const source = this.toUserMessageSource(normalized);
           const created = await tx.message.create({ data: { kind: 'user' as MessageKind, text, source } });
           await tx.runMessage.create({ data: { runId: run.id, messageId: created.id, type: 'input' as RunMessageType } });
           const event = await this.runEvents.recordInvocationMessage({
@@ -295,9 +297,11 @@ export class AgentsPersistenceService {
 
       for (const msg of injectedMessages) {
         const normalized = this.normalizeForPersistence(msg);
+        if (!this.isInputMessage(normalized)) {
+          throw new Error('unsupported_injected_message_type');
+        }
         const { text } = this.deriveKindTextTyped(normalized);
-        const coerced = coerceRole(normalized.toPlain(), 'user');
-        const source = toPrismaJsonValue(coerced);
+        const source = this.toUserMessageSource(normalized);
         const created = await tx.message.create({ data: { kind: 'user' as MessageKind, text, source } });
         await tx.runMessage.create({ data: { runId, messageId: created.id, type: 'injected' as RunMessageType } });
         const event = await this.runEvents.recordInvocationMessage({
@@ -785,6 +789,24 @@ export class AgentsPersistenceService {
     const candidate = (tx as { runEvent?: RunEventDelegate }).runEvent;
     if (!candidate || typeof candidate.findFirst !== 'function') return undefined;
     return candidate;
+  }
+
+  private isInputMessage(
+    msg: HumanMessage | SystemMessage | AIMessage | ToolCallMessage | ToolCallOutputMessage,
+  ): msg is HumanMessage | SystemMessage | AIMessage {
+    return msg instanceof HumanMessage || msg instanceof SystemMessage || msg instanceof AIMessage;
+  }
+
+  private toUserMessageSource(msg: HumanMessage | SystemMessage | AIMessage): Prisma.InputJsonValue {
+    if (msg instanceof HumanMessage) {
+      return toPrismaJsonValue(msg.toPlain());
+    }
+    if (msg instanceof SystemMessage) {
+      const plain = msg.toPlain();
+      return toPrismaJsonValue({ ...plain, role: 'user' as const });
+    }
+    const userPlain = HumanMessage.fromText(msg.text).toPlain();
+    return toPrismaJsonValue(userPlain);
   }
 
   private normalizeForPersistence(
