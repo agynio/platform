@@ -657,9 +657,10 @@ export function GraphLayout({ services }: GraphLayoutProps) {
     }
     const baseConfig = selectedNode.config ?? {};
     return {
+      ...baseConfig,
       kind: selectedNode.kind,
       title: selectedNode.title,
-      ...baseConfig,
+      template: selectedNode.template,
     } satisfies SidebarNodeConfig;
   }, [selectedNode]);
 

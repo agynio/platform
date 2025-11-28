@@ -9,6 +9,7 @@ import { AgentSection } from './AgentSection';
 import { TriggerSection } from './TriggerSection';
 import { McpSection } from './McpSection';
 import { WorkspaceSection } from './WorkspaceSection';
+import { ToolSection } from './ToolSection';
 import {
   applyNixUpdate,
   applyQueueUpdate,
@@ -41,6 +42,14 @@ type SuggestionFetcher = {
   fetchNow: (query: string) => void;
   scheduleFetch: (query: string) => void;
 };
+
+type ToolLimitKey =
+  | 'executionTimeoutMs'
+  | 'idleTimeoutMs'
+  | 'outputLimitChars'
+  | 'chunkCoalesceMs'
+  | 'chunkSizeBytes'
+  | 'clientBufferLimitBytes';
 
 function useSuggestionFetcher(
   provider?: (query: string) => Promise<string[]>,
@@ -118,13 +127,17 @@ function NodePropertiesSidebar({
   variableSuggestionProvider,
   providerDebounceMs = 250,
 }: NodePropertiesSidebarProps) {
-  const { kind: nodeKind, title: nodeTitle } = config;
+  const { kind: nodeKind, title: nodeTitle, template } = config;
   const { status } = state;
   const configRecord = config as Record<string, unknown>;
+  const nodeTemplate = typeof template === 'string' ? template : undefined;
+  const isShellTool = nodeKind === 'Tool' && nodeTemplate === 'shellTool';
 
+  const [toolEnvOpen, setToolEnvOpen] = useState(true);
   const [workspaceEnvOpen, setWorkspaceEnvOpen] = useState(true);
   const [mcpEnvOpen, setMcpEnvOpen] = useState(true);
   const [nixPackagesOpen, setNixPackagesOpen] = useState(true);
+  const [toolLimitsOpen, setToolLimitsOpen] = useState(false);
   const [mcpLimitsOpen, setMcpLimitsOpen] = useState(false);
   const [nixPackageQuery, setNixPackageQuery] = useState('');
   const [nixVersionOptions, setNixVersionOptions] = useState<Record<string, string[]>>({});
@@ -143,6 +156,26 @@ function NodePropertiesSidebar({
   } = variableFetcher;
 
   const envVars = useMemo(() => readEnvList(configRecord.env), [configRecord.env]);
+  const toolWorkdir = typeof configRecord.workdir === 'string' ? (configRecord.workdir as string) : '';
+  const toolLogToPid1 = configRecord.logToPid1 === true;
+  const toolLimits = useMemo(
+    () => ({
+      executionTimeoutMs: readNumber(configRecord.executionTimeoutMs),
+      idleTimeoutMs: readNumber(configRecord.idleTimeoutMs),
+      outputLimitChars: readNumber(configRecord.outputLimitChars),
+      chunkCoalesceMs: readNumber(configRecord.chunkCoalesceMs),
+      chunkSizeBytes: readNumber(configRecord.chunkSizeBytes),
+      clientBufferLimitBytes: readNumber(configRecord.clientBufferLimitBytes),
+    }),
+    [
+      configRecord.executionTimeoutMs,
+      configRecord.idleTimeoutMs,
+      configRecord.outputLimitChars,
+      configRecord.chunkCoalesceMs,
+      configRecord.chunkSizeBytes,
+      configRecord.clientBufferLimitBytes,
+    ],
+  );
   const agentModel = typeof configRecord.model === 'string' ? (configRecord.model as string) : '';
   const agentSystemPrompt = typeof configRecord.systemPrompt === 'string' ? (configRecord.systemPrompt as string) : '';
   const restrictOutput = configRecord.restrictOutput === true;
@@ -425,11 +458,47 @@ function NodePropertiesSidebar({
     [config, onConfigChange],
   );
 
+  const handleToolLimitChange = useCallback(
+    (key: ToolLimitKey, value: number | undefined) => {
+      onConfigChange?.({ [key]: value });
+    },
+    [onConfigChange],
+  );
+
   const handleToggleToolInternal = useCallback(
     (toolName: string, enabled: boolean) => {
       onToggleTool?.(toolName, enabled);
     },
     [onToggleTool],
+  );
+
+  const toolEnvEditorProps = useMemo(
+    () => ({
+      title: 'Environment Variables',
+      isOpen: toolEnvOpen,
+      onOpenChange: setToolEnvOpen,
+      envVars,
+      onAdd: handleEnvAdd,
+      onRemove: handleEnvRemove,
+      onNameChange: handleEnvNameChange,
+      onValueChange: handleEnvValueChange,
+      onValueFocus: handleEnvValueFocus,
+      onSourceTypeChange: handleEnvSourceChange,
+      secretSuggestions,
+      variableSuggestions,
+    }),
+    [
+      envVars,
+      handleEnvAdd,
+      handleEnvRemove,
+      handleEnvNameChange,
+      handleEnvValueChange,
+      handleEnvValueFocus,
+      handleEnvSourceChange,
+      secretSuggestions,
+      toolEnvOpen,
+      variableSuggestions,
+    ],
   );
 
   const mcpEnvEditorProps = useMemo(
@@ -507,6 +576,20 @@ function NodePropertiesSidebar({
             <FieldLabel label="Title" hint="The display name for this node" />
             <Input value={nodeTitle} onChange={(event) => onConfigChange?.({ title: event.target.value })} size="sm" />
           </section>
+
+          {isShellTool && (
+            <ToolSection
+              workdir={toolWorkdir}
+              onWorkdirChange={(value) => onConfigChange?.({ workdir: value })}
+              envEditorProps={toolEnvEditorProps}
+              limits={toolLimits}
+              onLimitChange={handleToolLimitChange}
+              limitsOpen={toolLimitsOpen}
+              onLimitsOpenChange={setToolLimitsOpen}
+              logToPid1={toolLogToPid1}
+              onLogToPid1Change={(checked) => onConfigChange?.({ logToPid1: checked })}
+            />
+          )}
 
           {nodeKind === 'Agent' && (
             <AgentSection
