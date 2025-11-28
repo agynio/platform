@@ -9,6 +9,7 @@ import { AgentSection } from './AgentSection';
 import { TriggerSection } from './TriggerSection';
 import { McpSection } from './McpSection';
 import { WorkspaceSection } from './WorkspaceSection';
+import { ToolSection } from './ToolSection';
 import {
   applyNixUpdate,
   applyQueueUpdate,
@@ -16,6 +17,7 @@ import {
   applyVolumesUpdate,
   createEnvVar,
   fromReferenceSourceType,
+  isValidToolName,
   isRecord,
   mergeWithDefined,
   readEnvList,
@@ -27,6 +29,8 @@ import {
   serializeEnvVars,
   writeReferenceValue,
 } from './utils';
+import { getCanonicalToolName } from './toolCanonicalNames';
+import { TOOL_NAME_HINT } from './toolNameHint';
 import type {
   AgentQueueConfig,
   AgentSummarizationConfig,
@@ -101,6 +105,7 @@ function useSuggestionFetcher(
 function NodePropertiesSidebar({
   config,
   state,
+  template,
   onConfigChange,
   onProvision,
   onDeprovision,
@@ -117,20 +122,29 @@ function NodePropertiesSidebar({
   secretSuggestionProvider,
   variableSuggestionProvider,
   providerDebounceMs = 250,
+
 }: NodePropertiesSidebarProps) {
   const { kind: nodeKind, title: nodeTitle } = config;
   const { status } = state;
   const configRecord = config as Record<string, unknown>;
+  const templateName =
+    (typeof template === 'string' ? template : undefined) ??
+    (typeof config.template === 'string' ? (config.template as string) : undefined);
 
   const [workspaceEnvOpen, setWorkspaceEnvOpen] = useState(true);
   const [mcpEnvOpen, setMcpEnvOpen] = useState(true);
+  const [toolEnvOpen, setToolEnvOpen] = useState(true);
   const [nixPackagesOpen, setNixPackagesOpen] = useState(true);
   const [mcpLimitsOpen, setMcpLimitsOpen] = useState(false);
+  const [toolLimitsOpen, setToolLimitsOpen] = useState(false);
   const [nixPackageQuery, setNixPackageQuery] = useState('');
   const [nixVersionOptions, setNixVersionOptions] = useState<Record<string, string[]>>({});
   const [nixVersionLoading, setNixVersionLoading] = useState<Set<string>>(() => new Set());
   const [nixResolutionLoading, setNixResolutionLoading] = useState<Set<string>>(() => new Set());
   const [nixErrors, setNixErrors] = useState<Record<string, string | null>>({});
+  const toolName = typeof configRecord.name === 'string' ? (configRecord.name as string) : '';
+  const [toolNameInput, setToolNameInput] = useState(toolName);
+  const [toolNameError, setToolNameError] = useState<string | null>(null);
 
   const secretFetcher = useSuggestionFetcher(secretSuggestionProvider, providerDebounceMs);
   const variableFetcher = useSuggestionFetcher(variableSuggestionProvider, providerDebounceMs);
@@ -176,6 +190,20 @@ function NodePropertiesSidebar({
   const volumesMountPath =
     typeof volumesConfig.mountPath === 'string' ? (volumesConfig.mountPath as string) : '/workspace';
   const workspaceNixPackages = useMemo(() => readNixPackages(configRecord.nix), [configRecord.nix]);
+  const toolWorkdir =
+    typeof configRecord.workdir === 'string'
+      ? (configRecord.workdir as string)
+      : typeof configRecord.workingDir === 'string'
+      ? (configRecord.workingDir as string)
+      : '';
+  const toolExecutionTimeout = readNumber(configRecord.executionTimeoutMs);
+  const toolIdleTimeout = readNumber(configRecord.idleTimeoutMs);
+  const toolOutputLimit = readNumber(configRecord.outputLimitChars);
+  const toolChunkCoalesce = readNumber(configRecord.chunkCoalesceMs);
+  const toolChunkSize = readNumber(configRecord.chunkSizeBytes);
+  const toolClientBufferLimit = readNumber(configRecord.clientBufferLimitBytes);
+  const logToPid1Enabled =
+    typeof configRecord.logToPid1 === 'boolean' ? (configRecord.logToPid1 as boolean) : true;
 
   const setVersionLoading = useCallback((name: string, loading: boolean) => {
     setNixVersionLoading((prev) => {
@@ -323,6 +351,35 @@ function NodePropertiesSidebar({
     [envVars, onConfigChange, fetchSecretNow, fetchVariableNow],
   );
 
+  type ToolLimitKey =
+    | 'executionTimeoutMs'
+    | 'idleTimeoutMs'
+    | 'outputLimitChars'
+    | 'chunkCoalesceMs'
+    | 'chunkSizeBytes'
+    | 'clientBufferLimitBytes';
+
+  const handleToolWorkdirChange = useCallback(
+    (value: string) => {
+      onConfigChange?.({ workdir: value });
+    },
+    [onConfigChange],
+  );
+
+  const handleToolLimitChange = useCallback(
+    (key: ToolLimitKey, value: number | undefined) => {
+      onConfigChange?.({ [key]: value } as Partial<NodeConfig>);
+    },
+    [onConfigChange],
+  );
+
+  const handleLogToPid1Change = useCallback(
+    (checked: boolean) => {
+      onConfigChange?.({ logToPid1: checked });
+    },
+    [onConfigChange],
+  );
+
   const handleQueueUpdate = useCallback(
     (partial: Partial<AgentQueueConfig>) => {
       onConfigChange?.(applyQueueUpdate(config, partial));
@@ -432,6 +489,37 @@ function NodePropertiesSidebar({
     [onToggleTool],
   );
 
+  useEffect(() => {
+    setToolNameInput(toolName);
+    setToolNameError(null);
+  }, [toolName]);
+
+  const canonicalToolName = useMemo(() => getCanonicalToolName(templateName), [templateName]);
+  const toolNamePlaceholder = canonicalToolName || 'tool_name';
+
+  const handleToolNameChange = useCallback(
+    (value: string) => {
+      setToolNameInput(value);
+      const normalized = value.trim();
+      if (normalized.length === 0) {
+        setToolNameError(null);
+        if (toolName !== '') {
+          onConfigChange?.({ name: undefined });
+        }
+        return;
+      }
+      if (!isValidToolName(normalized)) {
+        setToolNameError('Name must match ^[a-z0-9_]{1,64}$');
+        return;
+      }
+      setToolNameError(null);
+      if (normalized !== toolName) {
+        onConfigChange?.({ name: normalized });
+      }
+    },
+    [onConfigChange, toolName],
+  );
+
   const mcpEnvEditorProps = useMemo(
     () => ({
       title: 'Environment Variables',
@@ -456,6 +544,35 @@ function NodePropertiesSidebar({
       handleEnvValueFocus,
       handleEnvSourceChange,
       mcpEnvOpen,
+      secretSuggestions,
+      variableSuggestions,
+    ],
+  );
+
+  const toolEnvEditorProps = useMemo(
+    () => ({
+      title: 'Environment Variables',
+      isOpen: toolEnvOpen,
+      onOpenChange: setToolEnvOpen,
+      envVars,
+      onAdd: handleEnvAdd,
+      onRemove: handleEnvRemove,
+      onNameChange: handleEnvNameChange,
+      onValueChange: handleEnvValueChange,
+      onValueFocus: handleEnvValueFocus,
+      onSourceTypeChange: handleEnvSourceChange,
+      secretSuggestions,
+      variableSuggestions,
+    }),
+    [
+      envVars,
+      handleEnvAdd,
+      handleEnvRemove,
+      handleEnvNameChange,
+      handleEnvValueChange,
+      handleEnvValueFocus,
+      handleEnvSourceChange,
+      toolEnvOpen,
       secretSuggestions,
       variableSuggestions,
     ],
@@ -507,6 +624,20 @@ function NodePropertiesSidebar({
             <FieldLabel label="Title" hint="The display name for this node" />
             <Input value={nodeTitle} onChange={(event) => onConfigChange?.({ title: event.target.value })} size="sm" />
           </section>
+
+          {nodeKind === 'Tool' && (
+            <section>
+              <FieldLabel label="Name" hint={TOOL_NAME_HINT} />
+              <Input
+                value={toolNameInput}
+                onChange={(event) => handleToolNameChange(event.target.value)}
+                placeholder={toolNamePlaceholder}
+                size="sm"
+                aria-invalid={toolNameError ? 'true' : 'false'}
+              />
+              {toolNameError && <p className="mt-1 text-xs text-[var(--agyn-status-failed)]">{toolNameError}</p>}
+            </section>
+          )}
 
           {nodeKind === 'Agent' && (
             <AgentSection
@@ -583,6 +714,27 @@ function NodePropertiesSidebar({
                 loading: toolsLoading,
                 onToggle: handleToggleToolInternal,
               }}
+            />
+          )}
+
+          {nodeKind === 'Tool' && templateName === 'shellTool' && (
+            <ToolSection
+              workdir={toolWorkdir}
+              onWorkdirChange={handleToolWorkdirChange}
+              envEditorProps={toolEnvEditorProps}
+              limits={{
+                executionTimeoutMs: toolExecutionTimeout,
+                idleTimeoutMs: toolIdleTimeout,
+                outputLimitChars: toolOutputLimit,
+                chunkCoalesceMs: toolChunkCoalesce,
+                chunkSizeBytes: toolChunkSize,
+                clientBufferLimitBytes: toolClientBufferLimit,
+              }}
+              onLimitChange={handleToolLimitChange}
+              limitsOpen={toolLimitsOpen}
+              onLimitsOpenChange={setToolLimitsOpen}
+              logToPid1={logToPid1Enabled}
+              onLogToPid1Change={handleLogToPid1Change}
             />
           )}
 
