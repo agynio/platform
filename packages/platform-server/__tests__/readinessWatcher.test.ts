@@ -33,6 +33,7 @@ describe('ReadinessWatcher', () => {
   let emit: any;
 
   beforeEach(() => {
+    vi.useRealTimers();
     runtime = new RuntimeStub();
     emit = vi.fn();
   });
