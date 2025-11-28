@@ -34,7 +34,7 @@ export class SendMessageFunctionTool extends FunctionTool<typeof sendMessageInvo
 
   async execute(args: z.infer<typeof sendMessageInvocationSchema>, ctx: LLMContext): Promise<string> {
     const threadId = ctx?.threadId;
-    if (!threadId) return JSON.stringify({ ok: false, error: 'missing_thread_context' });
+    if (!threadId) return 'missing_thread_context';
     try {
       const prisma = this.prisma.getClient();
       const thread = await prisma.thread.findUnique({
@@ -43,26 +43,29 @@ export class SendMessageFunctionTool extends FunctionTool<typeof sendMessageInvo
       });
       const channelNodeId = thread?.channelNodeId ?? null;
       if (!channelNodeId) {
-        return JSON.stringify({ ok: false, error: 'missing_channel_node' });
+        return 'missing_channel_node';
       }
       const node = this.runtime.getNodeInstance(channelNodeId);
       if (!node) {
-        return JSON.stringify({ ok: false, error: 'channel_node_unavailable' });
+        return 'channel_node_unavailable';
       }
       if (!(node instanceof SlackTrigger)) {
         this.logger.error(
           `SendMessageFunctionTool: channel node is not SlackTrigger${this.format({ threadId, channelNodeId })}`,
         );
-        return JSON.stringify({ ok: false, error: 'invalid_channel_type' });
+        return 'invalid_channel_type';
       }
       if (node.status !== 'ready') {
-        return JSON.stringify({ ok: false, error: 'slacktrigger_unprovisioned' });
+        return 'slacktrigger_unprovisioned';
       }
       const res: SendResult = await node.sendToChannel(threadId, args.message);
-      return JSON.stringify(res);
+      if (res.ok) {
+        return 'message sent successfully';
+      }
+      return res.error ?? 'unknown_error';
     } catch (e) {
       const msg = e instanceof Error && e.message ? e.message : 'unknown_error';
-      return JSON.stringify({ ok: false, error: msg });
+      return msg;
     }
   }
 }
