@@ -7,6 +7,7 @@ import { CallAgentTool } from '../src/nodes/tools/call_agent/call_agent.node';
 import type { AgentsPersistenceService } from '../src/agents/agents.persistence.service';
 import { Signal } from '../src/signal';
 import { CallAgentLinkingService } from '../src/agents/call-agent-linking.service';
+import { ShellCommandTool } from '../src/nodes/tools/shell_command/shell_command.tool';
 
 const buildState = (name: string, callId: string, args: string) => {
   const response = new ResponseMessage({
@@ -123,6 +124,47 @@ describe('CallToolsLLMReducer error isolation', () => {
     const payload = parseErrorPayload(result);
     expect(payload.message).toContain('produced output longer');
     expect(payload.error_code).toBe('TOOL_OUTPUT_TOO_LARGE');
+  });
+
+  it('marks non-zero shell_command responses as errors while returning message', async () => {
+    const runEvents = createRunEventsStub();
+    const eventsBus = createEventsBusStub();
+    const archiveStub = { createSingleFileTar: vi.fn(async () => Buffer.from('')) };
+    const prismaStub = {
+      getClient: vi.fn(() => ({
+        container: { findUnique: vi.fn(async () => null) },
+        containerEvent: { findFirst: vi.fn(async () => null) },
+      })),
+    };
+
+    class StubShellCommandTool extends ShellCommandTool {
+      constructor() {
+        super(archiveStub as any, runEvents as any, eventsBus as any, prismaStub as any);
+      }
+
+      override async executeStreaming(
+        _args: Parameters<ShellCommandTool['executeStreaming']>[0],
+        _context: Parameters<ShellCommandTool['executeStreaming']>[1],
+        _options: Parameters<ShellCommandTool['executeStreaming']>[2],
+      ): Promise<string> {
+        return '[exit code 42] compiler error: missing semicolon';
+      }
+    }
+
+    const shellTool = new StubShellCommandTool();
+    const reducer = new CallToolsLLMReducer(runEvents as any, eventsBus as any).init({ tools: [shellTool] });
+    const state = buildState(shellTool.name, 'call-shell', JSON.stringify({ command: 'fail' }));
+
+    const result = await reducer.invoke(state, ctx);
+
+    const message = result.messages.at(-1) as ToolCallOutputMessage;
+    expect(message).toBeInstanceOf(ToolCallOutputMessage);
+    expect(message.text).toBe('[exit code 42] compiler error: missing semicolon');
+
+    expect(runEvents.completeToolExecution).toHaveBeenCalledTimes(1);
+    const [payload] = runEvents.completeToolExecution.mock.calls[0];
+    expect(payload.status).toBe('error');
+    expect(payload.errorMessage).toBe('[exit code 42] compiler error: missing semicolon');
   });
 });
 

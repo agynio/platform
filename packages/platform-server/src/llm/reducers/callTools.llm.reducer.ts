@@ -40,6 +40,17 @@ type ToolCallResult = {
 const isToolCallRaw = (value: unknown): value is ToolCallRaw =>
   typeof value === 'string' || Array.isArray(value);
 
+const SHELL_EXIT_CODE_REGEX = /^\[exit code (-?\d+)]/;
+
+const isNonZeroShellExitMessage = (value: unknown): boolean => {
+  if (typeof value !== 'string') return false;
+  const match = SHELL_EXIT_CODE_REGEX.exec(value);
+  if (!match) return false;
+  const parsed = Number.parseInt(match[1], 10);
+  if (Number.isNaN(parsed)) return false;
+  return parsed !== 0;
+};
+
 @Injectable({ scope: Scope.TRANSIENT })
 export class CallToolsLLMReducer extends Reducer<LLMState, LLMContext> {
   private readonly logger = new Logger(CallToolsLLMReducer.name);
@@ -286,8 +297,11 @@ export class CallToolsLLMReducer extends Reducer<LLMState, LLMContext> {
             details: { receivedType: typeof raw },
           });
         } else {
+          const shouldFlagNonZeroShellExit =
+            tool instanceof ShellCommandTool && isNonZeroShellExitMessage(raw);
+
           response = {
-            status: 'success',
+            status: shouldFlagNonZeroShellExit ? 'error' : 'success',
             raw,
             output: raw,
           };
