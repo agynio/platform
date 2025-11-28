@@ -15,7 +15,7 @@ Behavior
 
 - Requires ctx.threadId; loads `Thread.channel` and validates the Slack-only descriptor.
 - Uses SlackAdapter directly; no registry or multi-channel support in v1.
-- Returns a JSON envelope: `{ ok, channelMessageId?, threadId?, error? }`.
+- Returns plain text responses: `message sent successfully` on success, otherwise an error code/message string.
 - Logs adapter type and identifiers; does not log full text.
 
 Slack-only descriptor and token resolution
