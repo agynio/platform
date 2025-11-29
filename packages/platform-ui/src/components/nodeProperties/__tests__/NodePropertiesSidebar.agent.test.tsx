@@ -46,14 +46,16 @@ describe('NodePropertiesSidebar - agent', () => {
     const nameInput = screen.getByPlaceholderText('e.g., Casey Quinn') as HTMLInputElement;
     expect(nameInput.value).toBe('Casey Quinn');
     fireEvent.change(nameInput, { target: { value: '  Delta  ' } });
-    expect(onConfigChange).toHaveBeenCalledWith(expect.objectContaining({ name: '  Delta  ' }));
+    expect(onConfigChange).toHaveBeenCalledWith(expect.objectContaining({ name: 'Delta' }));
 
     const roleInput = screen.getByPlaceholderText('e.g., Incident Commander') as HTMLInputElement;
     expect(roleInput.value).toBe('Lead Planner');
     fireEvent.change(roleInput, { target: { value: '  Support  ' } });
-    expect(onConfigChange).toHaveBeenCalledWith(expect.objectContaining({ role: '  Support  ' }));
+    expect(onConfigChange).toHaveBeenCalledWith(expect.objectContaining({ role: 'Support' }));
 
     fireEvent.change(titleInput, { target: { value: '   ' } });
-    expect(onConfigChange).toHaveBeenCalledWith(expect.objectContaining({ title: '   ' }));
+    expect(onConfigChange).toHaveBeenCalledWith(
+      expect.objectContaining({ title: 'Casey Quinn (Lead Planner)' }),
+    );
   });
 });

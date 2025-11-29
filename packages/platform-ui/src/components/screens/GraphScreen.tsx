@@ -3,7 +3,7 @@ import { ArrowLeft } from 'lucide-react';
 import { addEdge, applyEdgeChanges, applyNodeChanges, BaseEdge, getBezierPath } from '@xyflow/react';
 import type { Edge, EdgeProps, EdgeTypes, Node } from '@xyflow/react';
 
-import NodePropertiesSidebar from '../NodePropertiesSidebar';
+import NodePropertiesSidebar, { type NodeConfig as SidebarNodeConfig } from '../NodePropertiesSidebar';
 import EmptySelectionSidebar from '../EmptySelectionSidebar';
 import { IconButton } from '../IconButton';
 import { GraphCanvas, type GraphCanvasDropContext, type GraphNodeData } from '../GraphCanvas';
@@ -195,6 +195,25 @@ export default function GraphScreen({
 
   const selectedNode = nodeConfigs.find((node) => node.id === selectedNodeId);
 
+  const sidebarEntry = useMemo(() => {
+    if (!selectedNode) {
+      return null;
+    }
+    const baseConfig = (selectedNode.data ?? {}) as Record<string, unknown>;
+    const rawTitle = typeof baseConfig.title === 'string' ? (baseConfig.title as string) : selectedNode.title;
+    const config: SidebarNodeConfig = {
+      ...baseConfig,
+      kind: selectedNode.kind,
+      title: rawTitle,
+      template: selectedNode.template,
+    };
+
+    return {
+      config,
+      displayTitle: selectedNode.title,
+    };
+  }, [selectedNode]);
+
   const onNodesChange = useCallback(
     (changes: Parameters<typeof applyNodeChanges>[0]) => {
       setNodes((nds) => applyNodeChanges(changes, nds) as Node<GraphNodeData>[]);
@@ -289,17 +308,13 @@ export default function GraphScreen({
         </div>
 
         {/* Right Sidebar - Node Properties or Empty State */}
-        {selectedNode ? (
+        {selectedNode && sidebarEntry ? (
           <NodePropertiesSidebar
-            config={{
-              kind: selectedNode.kind,
-              title: selectedNode.title,
-              ...selectedNode.data,
-            }}
+            config={sidebarEntry.config}
             state={{
               status: selectedNode.status,
             }}
-            template={selectedNode.template}
+            displayTitle={sidebarEntry.displayTitle}
             onConfigChange={
               onNodeUpdate
                 ? (updates) => {

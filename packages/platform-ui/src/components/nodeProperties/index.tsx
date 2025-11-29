@@ -215,6 +215,36 @@ function NodePropertiesSidebar({
     [config, nodeKind],
   );
 
+  const handleConfigChange = useCallback(
+    (partial: Partial<NodeConfig>) => {
+      if (!onConfigChange) return;
+      if (nodeKind !== 'Agent') {
+        onConfigChange(partial);
+        return;
+      }
+
+      if (!Object.prototype.hasOwnProperty.call(partial, 'title')) {
+        onConfigChange(partial);
+        return;
+      }
+
+      const record = partial as Record<string, unknown>;
+      const rawTitle = record.title;
+      const stringTitle = typeof rawTitle === 'string' ? rawTitle : '';
+      const trimmedTitle = stringTitle.trim();
+      if (trimmedTitle.length > 0) {
+        onConfigChange(partial);
+        return;
+      }
+
+      const nextName = typeof record.name === 'string' ? (record.name as string) : agentNameValue;
+      const nextRole = typeof record.role === 'string' ? (record.role as string) : agentRoleValue;
+      const resolvedTitle = computeAgentDefaultTitle(nextName, nextRole, 'Agent');
+      onConfigChange({ ...partial, title: resolvedTitle });
+    },
+    [onConfigChange, nodeKind, agentNameValue, agentRoleValue],
+  );
+
   const slackAppReference = useMemo(() => readReferenceValue(configRecord.app_token), [configRecord.app_token]);
   const slackBotReference = useMemo(() => readReferenceValue(configRecord.bot_token), [configRecord.bot_token]);
 
@@ -389,26 +419,18 @@ function NodePropertiesSidebar({
 
   const handleAgentNameChange = useCallback(
     (value: string) => {
-<<<<<<< HEAD
       const trimmed = value.trim();
       handleConfigChange({ name: trimmed.length > 0 ? trimmed : undefined });
-=======
-      onConfigChange?.({ name: value });
->>>>>>> 65a7371 (fix(agent): keep placeholder titles)
     },
-    [onConfigChange],
+    [handleConfigChange],
   );
 
   const handleAgentRoleChange = useCallback(
     (value: string) => {
-<<<<<<< HEAD
       const trimmed = value.trim();
       handleConfigChange({ role: trimmed.length > 0 ? trimmed : undefined });
-=======
-      onConfigChange?.({ role: value });
->>>>>>> 65a7371 (fix(agent): keep placeholder titles)
     },
-    [onConfigChange],
+    [handleConfigChange],
   );
 
   const handleAgentModelChange = useCallback(

@@ -13,6 +13,7 @@ function setup(overrides?: Partial<NodePropertiesSidebarProps>) {
   const config: NodeConfig = {
     kind: 'Tool',
     title: 'Shell tool',
+    template: 'shellTool',
     ...(configOverride as Record<string, unknown> | undefined),
   } as NodeConfig;
   const state: NodeState = {
@@ -24,7 +25,7 @@ function setup(overrides?: Partial<NodePropertiesSidebarProps>) {
     <NodePropertiesSidebar
       config={config}
       state={state}
-      template="shellTool"
+      displayTitle={config.title}
       onConfigChange={onConfigChange}
       tools={[]}
       enabledTools={[]}

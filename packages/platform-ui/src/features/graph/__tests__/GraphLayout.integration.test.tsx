@@ -269,11 +269,15 @@ describe('GraphLayout', () => {
     expect(typeof sidebar.canDeprovision).toBe('boolean');
     expect(typeof sidebar.isActionPending).toBe('boolean');
 
-    expect(sidebar.config).toEqual({
-      kind: 'Agent',
-      title: 'Agent Node',
-      systemPrompt: 'You are helpful.',
-    });
+    expect(sidebar.config).toEqual(
+      expect.objectContaining({
+        kind: 'Agent',
+        title: 'Agent Node',
+        systemPrompt: 'You are helpful.',
+        template: 'agent-template',
+      }),
+    );
+    expect(sidebar).toHaveProperty('displayTitle', 'Agent Node');
 
     expect(sidebar.state).toEqual({ status: 'ready' });
     expect(sidebar.canProvision).toBe(false);
