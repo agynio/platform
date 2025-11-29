@@ -138,7 +138,7 @@ type RegisteredTool = {
 };
 
 // Consolidated Agent class (merges previous BaseAgent + Agent into single AgentNode)
-import { Inject, Injectable, Optional, Scope } from '@nestjs/common';
+import { Inject, Injectable, OnModuleInit, Scope } from '@nestjs/common';
 import { ModuleRef } from '@nestjs/core';
 import type { TemplatePortConfig } from '../../graph/ports.types';
 import type { RuntimeContext } from '../../graph/runtimeContext';
@@ -146,44 +146,57 @@ import Node from '../base/Node';
 import { MemoryConnectorNode } from '../memoryConnector/memoryConnector.node';
 
 @Injectable({ scope: Scope.TRANSIENT })
-export class AgentNode extends Node<AgentStaticConfig> {
+export class AgentNode extends Node<AgentStaticConfig> implements OnModuleInit {
   protected buffer = new MessagesBuffer({ debounceMs: 0 });
 
   private mcpServerTools: Map<LocalMCPServerNode, Map<string, FunctionTool>> = new Map();
   private toolsByName: Map<string, RegisteredTool> = new Map();
   private toolNames: Set<string> = new Set();
   private runningThreads: Set<string> = new Set();
+  private persistenceRef: AgentsPersistenceService | null | undefined;
+  private runSignalsRef: RunSignalsRegistry | null | undefined;
+  private moduleInitialized = false;
 
   constructor(
     @Inject(ConfigService) protected configService: ConfigService,
     @Inject(LLMProvisioner) protected llmProvisioner: LLMProvisioner,
     @Inject(ModuleRef) protected readonly moduleRef: ModuleRef,
-    @Optional() @Inject(AgentsPersistenceService) private persistence?: AgentsPersistenceService,
-    @Optional() @Inject(RunSignalsRegistry) private runSignals?: RunSignalsRegistry,
   ) {
     super();
   }
 
-  private getPersistence(): AgentsPersistenceService {
-    if (!this.persistence) {
-      const resolved = this.moduleRef.get(AgentsPersistenceService, { strict: false });
-      if (!resolved) {
-        throw new Error('AgentsPersistenceService unavailable');
+  onModuleInit(): void {
+    this.moduleInitialized = true;
+  }
+
+  private getPersistenceOrThrow(): AgentsPersistenceService {
+    if (this.persistenceRef === undefined) {
+      try {
+        this.persistenceRef = this.moduleRef.get(AgentsPersistenceService, { strict: false }) ?? null;
+      } catch {
+        this.persistenceRef = null;
       }
-      this.persistence = resolved;
     }
-    return this.persistence;
+    if (!this.persistenceRef) {
+      const initializedState = this.moduleInitialized ? 'initialized' : 'uninitialized';
+      throw new Error(`AgentsPersistenceService unavailable (${initializedState})`);
+    }
+    return this.persistenceRef;
   }
 
   private getRunSignals(): RunSignalsRegistry {
-    if (!this.runSignals) {
-      const resolved = this.moduleRef.get(RunSignalsRegistry, { strict: false });
-      if (!resolved) {
-        throw new Error('RunSignalsRegistry unavailable');
+    if (this.runSignalsRef === undefined) {
+      try {
+        this.runSignalsRef = this.moduleRef.get(RunSignalsRegistry, { strict: false }) ?? null;
+      } catch {
+        this.runSignalsRef = null;
       }
-      this.runSignals = resolved;
     }
-    return this.runSignals;
+    if (!this.runSignalsRef) {
+      const initializedState = this.moduleInitialized ? 'initialized' : 'uninitialized';
+      throw new Error(`RunSignalsRegistry unavailable (${initializedState})`);
+    }
+    return this.runSignalsRef;
   }
 
   get config() {
@@ -286,7 +299,7 @@ export class AgentNode extends Node<AgentStaticConfig> {
       `[Agent: ${this.config.title ?? this.nodeId}] Injecting ${drained.length} buffered message(s) into active run for thread ${ctx.threadId}`,
     );
 
-    await this.getPersistence().recordInjected(ctx.runId, drained, { threadId: ctx.threadId });
+    await this.getPersistenceOrThrow().recordInjected(ctx.runId, drained, { threadId: ctx.threadId });
     state.messages.push(...drained);
   }
 
@@ -461,7 +474,7 @@ export class AgentNode extends Node<AgentStaticConfig> {
     let terminateSignal: Signal | undefined;
     let effectiveBehavior: EffectiveAgentConfig['behavior'] | undefined;
     try {
-      const persistence = this.getPersistence();
+      const persistence = this.getPersistenceOrThrow();
       const agentNodeId = this.getAgentNodeId();
       if (!agentNodeId) throw new Error('agent_node_id_missing');
       const started = await persistence.beginRunThread(thread, messages, agentNodeId);
