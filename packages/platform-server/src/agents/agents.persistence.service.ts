@@ -836,18 +836,16 @@ export class AgentsPersistenceService {
     order: 'asc' | 'desc',
   ): Promise<Array<{ id: string; threadId: string; note: string; at: Date; createdAt: Date; completedAt: Date | null; cancelledAt: Date | null }>> {
     const direction = order === 'asc' ? Prisma.sql`ASC` : Prisma.sql`DESC`;
-    const whereSql = clauses.length > 0 ? Prisma.sql`WHERE ${Prisma.join(clauses, Prisma.sql` AND `)}` : Prisma.empty;
+    const whereSql = clauses.length > 0 ? Prisma.sql`WHERE ${Prisma.join(clauses, ' AND ')}` : Prisma.empty;
 
-    return tx.$queryRaw<Array<{ id: string; threadId: string; note: string; at: Date; createdAt: Date; completedAt: Date | null; cancelledAt: Date | null }>>(
-      Prisma.sql`
-        SELECT "id", "threadId", "note", "at", "createdAt", "completedAt", "cancelledAt"
-        FROM "Reminder"
-        ${whereSql}
-        ORDER BY COALESCE("completedAt", "cancelledAt", "createdAt") ${direction}, "createdAt" ${direction}
-        OFFSET ${skip}
-        LIMIT ${take}
-      `,
-    );
+    return tx.$queryRaw<Array<{ id: string; threadId: string; note: string; at: Date; createdAt: Date; completedAt: Date | null; cancelledAt: Date | null }>>`
+      SELECT "id", "threadId", "note", "at", "createdAt", "completedAt", "cancelledAt"
+      FROM "Reminder"
+      ${whereSql}
+      ORDER BY COALESCE("completedAt", "cancelledAt", "createdAt") ${direction}, "createdAt" ${direction}
+      OFFSET ${skip}
+      LIMIT ${take}
+    `;
   }
 
   private async getRunsCount(ids: string[]): Promise<Record<string, number>> {
