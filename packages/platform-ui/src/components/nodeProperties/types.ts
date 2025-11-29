@@ -11,6 +11,7 @@ export type NodeKind = 'Agent' | 'Tool' | 'MCP' | 'Trigger' | 'Workspace';
 export interface NodeConfig extends Record<string, unknown> {
   kind: NodeKind;
   title: string;
+  template?: string;
 }
 
 export interface NodeState extends Record<string, unknown> {
@@ -64,7 +65,7 @@ export type SimpleOption = { value: string; label: string };
 export interface NodePropertiesSidebarProps {
   config: NodeConfig;
   state: NodeState;
-  template?: string;
+  displayTitle?: string;
   onConfigChange?: (updates: Partial<NodeConfig>) => void;
   onProvision?: () => void;
   onDeprovision?: () => void;

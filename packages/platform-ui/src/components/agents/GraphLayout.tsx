@@ -5,6 +5,7 @@ import { GraphCanvas, type GraphNodeData } from '../GraphCanvas';
 import { GradientEdge } from './edges/GradientEdge';
 import EmptySelectionSidebar from '../EmptySelectionSidebar';
 import NodePropertiesSidebar, { type NodeConfig as SidebarNodeConfig } from '../NodePropertiesSidebar';
+import { computeAgentDefaultTitle } from '../../utils/agentDisplay';
 
 import { useGraphData } from '@/features/graph/hooks/useGraphData';
 import { useGraphSocket } from '@/features/graph/hooks/useGraphSocket';
@@ -651,17 +652,28 @@ export function GraphLayout({ services }: GraphLayoutProps) {
 
   const canDeprovision = sidebarStatus === 'ready' || sidebarStatus === 'provisioning';
 
-  const sidebarConfig = useMemo(() => {
+  const sidebarEntry = useMemo(() => {
     if (!selectedNode) {
       return null;
     }
-    const baseConfig = selectedNode.config ?? {};
-    return {
-      kind: selectedNode.kind,
-      title: selectedNode.title,
+    const baseConfig = (selectedNode.config ?? {}) as Record<string, unknown>;
+    const rawTitle = typeof baseConfig.title === 'string' ? (baseConfig.title as string) : '';
+
+    const config: SidebarNodeConfig = {
       ...baseConfig,
-    } satisfies SidebarNodeConfig;
+      kind: selectedNode.kind,
+      title: rawTitle,
+      template: selectedNode.template,
+    };
+
+    return {
+      config,
+      displayTitle: selectedNode.title,
+    };
   }, [selectedNode]);
+
+  const sidebarConfig = sidebarEntry?.config ?? null;
+  const sidebarDisplayTitle = sidebarEntry?.displayTitle ?? '';
 
   const sidebarState = useMemo(() => ({ status: sidebarStatus }), [sidebarStatus]);
 
@@ -672,20 +684,30 @@ export function GraphLayout({ services }: GraphLayoutProps) {
       const node = nodesRef.current.find((item) => item.id === nodeId);
       if (!node) return;
 
-      const updatedConfig: Record<string, unknown> = {
-        kind: node.kind,
-        title: node.title,
-        ...(node.config ?? {}),
+      const baseConfig = (node.config ?? {}) as Record<string, unknown>;
+      const mergedConfig: Record<string, unknown> = {
+        ...baseConfig,
         ...nextConfig,
       };
+      mergedConfig.kind = node.kind;
+      mergedConfig.template = node.template;
 
-      const nextTitle = typeof updatedConfig.title === 'string' ? updatedConfig.title : node.title;
-      updatedConfig.kind = node.kind;
-      updatedConfig.title = nextTitle;
+      const rawTitle = typeof mergedConfig.title === 'string' ? (mergedConfig.title as string) : '';
+      mergedConfig.title = rawTitle;
+
+      let displayTitle = rawTitle;
+      if (node.kind === 'Agent') {
+        const nextName = typeof mergedConfig.name === 'string' ? (mergedConfig.name as string) : '';
+        const nextRole = typeof mergedConfig.role === 'string' ? (mergedConfig.role as string) : '';
+        const trimmed = rawTitle.trim();
+        displayTitle = trimmed.length > 0 ? trimmed : computeAgentDefaultTitle(nextName, nextRole, 'Agent');
+      } else {
+        displayTitle = rawTitle.trim();
+      }
 
       updateNodeRef.current(nodeId, {
-        config: updatedConfig,
-        ...(nextTitle !== node.title ? { title: nextTitle } : {}),
+        config: mergedConfig,
+        ...(displayTitle !== node.title ? { title: displayTitle } : {}),
       });
     },
     [],
@@ -743,7 +765,7 @@ export function GraphLayout({ services }: GraphLayoutProps) {
         <NodePropertiesSidebar
           config={sidebarConfig}
           state={sidebarState}
-          template={selectedNode.template}
+          displayTitle={sidebarDisplayTitle}
           onConfigChange={handleConfigChange}
           onProvision={handleProvision}
           onDeprovision={handleDeprovision}

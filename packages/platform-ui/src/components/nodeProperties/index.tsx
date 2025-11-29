@@ -114,6 +114,7 @@ function useSuggestionFetcher(
 function NodePropertiesSidebar({
   config,
   state,
+  displayTitle,
   onConfigChange,
   onProvision,
   onDeprovision,
@@ -130,15 +131,16 @@ function NodePropertiesSidebar({
   secretSuggestionProvider,
   variableSuggestionProvider,
   providerDebounceMs = 250,
-  template,
 }: NodePropertiesSidebarProps) {
-  const { kind: nodeKind, title: nodeTitle } = config;
+  const { kind: nodeKind, title: nodeTitle, template } = config;
+  const nodeTitleValue = typeof nodeTitle === 'string' ? nodeTitle : '';
   const { status } = state;
   const configRecord = config as Record<string, unknown>;
-  const templateName =
-    (typeof template === 'string' ? template : undefined) ??
-    (typeof config.template === 'string' ? (config.template as string) : undefined);
-  const isShellTool = nodeKind === 'Tool' && templateName === 'shellTool';
+  const configTemplate = typeof template === 'string' ? template : undefined;
+  const recordTemplate =
+    typeof configRecord.template === 'string' ? (configRecord.template as string) : undefined;
+  const nodeTemplate = configTemplate ?? recordTemplate;
+  const isShellTool = nodeKind === 'Tool' && nodeTemplate === 'shellTool';
 
   const [toolEnvOpen, setToolEnvOpen] = useState(true);
   const [workspaceEnvOpen, setWorkspaceEnvOpen] = useState(true);
@@ -186,12 +188,17 @@ function NodePropertiesSidebar({
     () => computeAgentDefaultTitle(agentNameValue, agentRoleValue, 'Agent'),
     [agentNameValue, agentRoleValue],
   );
-  const sidebarTitle = useMemo(() => {
-    if (nodeKind !== 'Agent') return nodeTitle;
-    const trimmed = typeof nodeTitle === 'string' ? nodeTitle.trim() : '';
-    if (trimmed.length > 0) return trimmed;
-    return agentDefaultTitle;
-  }, [nodeKind, nodeTitle, agentDefaultTitle]);
+  const headerTitle = useMemo(() => {
+    const providedDisplay = typeof displayTitle === 'string' ? displayTitle.trim() : '';
+    if (providedDisplay.length > 0) return providedDisplay;
+
+    if (nodeKind === 'Agent') {
+      const trimmedConfigTitle = nodeTitleValue.trim();
+      return trimmedConfigTitle.length > 0 ? trimmedConfigTitle : agentDefaultTitle;
+    }
+
+    return nodeTitleValue.trim();
+  }, [displayTitle, nodeKind, nodeTitleValue, agentDefaultTitle]);
   const agentModelValue = typeof configRecord.model === 'string' ? (configRecord.model as string) : '';
   const agentSystemPromptValue =
     typeof configRecord.systemPrompt === 'string' ? (configRecord.systemPrompt as string) : '';
@@ -208,35 +215,6 @@ function NodePropertiesSidebar({
     [config, nodeKind],
   );
 
-  const handleConfigChange = useCallback(
-    (partial: Partial<NodeConfig>) => {
-      if (!onConfigChange) return;
-      if (nodeKind !== 'Agent') {
-        onConfigChange(partial);
-        return;
-      }
-
-      if (!Object.prototype.hasOwnProperty.call(partial, 'title')) {
-        onConfigChange(partial);
-        return;
-      }
-
-      const record = partial as Record<string, unknown>;
-      const rawTitle = record.title;
-      const stringTitle = typeof rawTitle === 'string' ? rawTitle : '';
-      const trimmedTitle = stringTitle.trim();
-      if (trimmedTitle.length > 0) {
-        onConfigChange(partial);
-        return;
-      }
-
-      const nextName = typeof record.name === 'string' ? (record.name as string) : agentNameValue;
-      const nextRole = typeof record.role === 'string' ? (record.role as string) : agentRoleValue;
-      const resolvedTitle = computeAgentDefaultTitle(nextName, nextRole, 'Agent');
-      onConfigChange({ ...partial, title: resolvedTitle });
-    },
-    [onConfigChange, nodeKind, agentNameValue, agentRoleValue],
-  );
   const slackAppReference = useMemo(() => readReferenceValue(configRecord.app_token), [configRecord.app_token]);
   const slackBotReference = useMemo(() => readReferenceValue(configRecord.bot_token), [configRecord.bot_token]);
 
@@ -411,18 +389,26 @@ function NodePropertiesSidebar({
 
   const handleAgentNameChange = useCallback(
     (value: string) => {
+<<<<<<< HEAD
       const trimmed = value.trim();
       handleConfigChange({ name: trimmed.length > 0 ? trimmed : undefined });
+=======
+      onConfigChange?.({ name: value });
+>>>>>>> 65a7371 (fix(agent): keep placeholder titles)
     },
-    [handleConfigChange],
+    [onConfigChange],
   );
 
   const handleAgentRoleChange = useCallback(
     (value: string) => {
+<<<<<<< HEAD
       const trimmed = value.trim();
       handleConfigChange({ role: trimmed.length > 0 ? trimmed : undefined });
+=======
+      onConfigChange?.({ role: value });
+>>>>>>> 65a7371 (fix(agent): keep placeholder titles)
     },
-    [handleConfigChange],
+    [onConfigChange],
   );
 
   const handleAgentModelChange = useCallback(
@@ -626,7 +612,7 @@ function NodePropertiesSidebar({
     setToolNameError(null);
   }, [toolName]);
 
-  const canonicalToolName = useMemo(() => getCanonicalToolName(templateName), [templateName]);
+  const canonicalToolName = useMemo(() => getCanonicalToolName(nodeTemplate), [nodeTemplate]);
   const toolNamePlaceholder = canonicalToolName || 'tool_name';
 
   const handleToolNameChange = useCallback(
@@ -713,7 +699,7 @@ function NodePropertiesSidebar({
   return (
     <div className="w-[420px] bg-white border-l border-[var(--agyn-border-default)] flex flex-col">
       <Header
-        title={sidebarTitle}
+        title={headerTitle}
         status={status}
         canProvision={canProvision}
         canDeprovision={canDeprovision}
@@ -726,7 +712,7 @@ function NodePropertiesSidebar({
           <section>
             <FieldLabel label="Title" hint="The display name for this node" />
             <Input
-              value={nodeTitle}
+              value={nodeTitleValue}
               onChange={(event) => handleConfigChange({ title: event.target.value })}
               size="sm"
               placeholder={nodeKind === 'Agent' ? agentDefaultTitle : undefined}

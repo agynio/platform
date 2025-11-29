@@ -81,10 +81,7 @@ export class ManageToolNode extends BaseToolNode<z.infer<typeof ManageToolStatic
     if (name) return name;
     if (role) return role;
 
-    const fallbackId = agent.getAgentNodeId()?.trim();
-    if (fallbackId) return fallbackId;
-
-    return 'unknown agent';
+    throw new Error('ManageToolNode: worker agent requires non-empty title');
   }
 
   protected createTool() {

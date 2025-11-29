@@ -237,6 +237,12 @@ describe('ManageTool unit', () => {
     harness.node.addWorker(profile);
     expect(harness.node.listWorkers()).toEqual(['Alpha', 'Bravo (Strategist)']);
 
+    const noProfile = await harness.module.resolve(FakeAgent);
+    await noProfile.setConfig({});
+    expect(() => harness.node.addWorker(noProfile)).toThrow(
+      'ManageToolNode: worker agent requires non-empty title',
+    );
+
     const nameOnly = await harness.module.resolve(FakeAgent);
     await nameOnly.setConfig({ name: 'Gamma' });
     harness.node.addWorker(nameOnly);
