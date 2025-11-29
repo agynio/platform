@@ -1,6 +1,5 @@
 import type { ConfigViewRegistration } from './types';
 // registerConfigView is not used directly here; exports installer below
-import SimpleAgentConfigView from './SimpleAgentConfigView';
 import McpServerDynamicConfigView from './McpServerDynamicConfigView';
 import McpServerStaticConfigView from './McpServerStaticConfigView';
 import WorkspaceConfigView from './WorkspaceConfigView';
@@ -15,7 +14,6 @@ import MemoryConnectorConfigView from './MemoryConnectorConfigView';
 
 // Export an installer to avoid side-effect registration at import time
 export function installDefaultConfigViews(register: (entry: ConfigViewRegistration) => void) {
-  register({ template: 'agent', mode: 'static', component: SimpleAgentConfigView });
   register({ template: 'mcpServer', mode: 'dynamic', component: McpServerDynamicConfigView });
   register({ template: 'mcpServer', mode: 'static', component: McpServerStaticConfigView });
   // Register Workspace config view under template name 'workspace'

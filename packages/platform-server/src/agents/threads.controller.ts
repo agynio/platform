@@ -189,13 +189,14 @@ export class AgentsThreadsController {
         : Promise.resolve<Record<string, ThreadMetrics>>({}),
       ids.length > 0
         ? this.persistence.getThreadsAgentDescriptors(ids)
-        : Promise.resolve<Record<string, { title: string; role?: string }>>({}),
+        : Promise.resolve<Record<string, { title: string; role?: string; name?: string }>>({}),
     ]);
     const defaultMetrics: ThreadMetrics = { remindersCount: 0, containersCount: 0, activity: 'idle', runsCount: 0 };
     const fallbackTitle = '(unknown agent)';
     const items = threads.map((t) => ({
       ...t,
       ...(descriptors[t.id]?.role ? { agentRole: descriptors[t.id].role } : {}),
+      ...(descriptors[t.id]?.name ? { agentName: descriptors[t.id].name } : {}),
       ...(includeMetrics ? { metrics: { ...defaultMetrics, ...(metrics[t.id] ?? {}) } } : {}),
       ...(includeAgentTitles ? { agentTitle: descriptors[t.id]?.title ?? fallbackTitle } : {}),
     }));
@@ -214,7 +215,7 @@ export class AgentsThreadsController {
         : Promise.resolve<Record<string, ThreadMetrics>>({}),
       ids.length > 0
         ? this.persistence.getThreadsAgentDescriptors(ids)
-        : Promise.resolve<Record<string, { title: string; role?: string }>>({}),
+        : Promise.resolve<Record<string, { title: string; role?: string; name?: string }>>({}),
     ]);
     const defaultMetrics: ThreadMetrics = { remindersCount: 0, containersCount: 0, activity: 'idle', runsCount: 0 };
     const fallbackTitle = '(unknown agent)';
@@ -222,6 +223,7 @@ export class AgentsThreadsController {
       items: items.map((t) => ({
         ...t,
         ...(descriptors[t.id]?.role ? { agentRole: descriptors[t.id].role } : {}),
+        ...(descriptors[t.id]?.name ? { agentName: descriptors[t.id].name } : {}),
         ...(includeMetrics ? { metrics: { ...defaultMetrics, ...(metrics[t.id] ?? {}) } } : {}),
         ...(includeAgentTitles ? { agentTitle: descriptors[t.id]?.title ?? fallbackTitle } : {}),
       })),

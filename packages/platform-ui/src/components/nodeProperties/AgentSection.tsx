@@ -10,6 +10,8 @@ import type { AgentQueueConfig, AgentSummarizationConfig } from './types';
 import { toNumberOrUndefined } from './utils';
 
 interface AgentSectionProps {
+  name: string;
+  role: string;
   model: string;
   systemPrompt: string;
   restrictOutput: boolean;
@@ -17,6 +19,8 @@ interface AgentSectionProps {
   restrictionMaxInjections?: number;
   queueConfig: AgentQueueConfig;
   summarization: AgentSummarizationConfig;
+  onNameChange: (value: string) => void;
+  onRoleChange: (value: string) => void;
   onModelChange: (value: string) => void;
   onSystemPromptChange: (value: string) => void;
   onRestrictOutputChange: (checked: boolean) => void;
@@ -34,6 +38,10 @@ export function AgentSection({
   restrictionMaxInjections,
   queueConfig,
   summarization,
+  name,
+  role,
+  onNameChange,
+  onRoleChange,
   onModelChange,
   onSystemPromptChange,
   onRestrictOutputChange,
@@ -51,6 +59,32 @@ export function AgentSection({
 
   return (
     <>
+      <section>
+        <h3 className="text-[var(--agyn-dark)] mb-4 font-semibold">Profile</h3>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div>
+            <FieldLabel label="Name" hint="Optional display name" />
+            <Input
+              placeholder="e.g., Casey Quinn"
+              value={name}
+              onChange={(event) => onNameChange(event.target.value)}
+              size="sm"
+              maxLength={64}
+            />
+          </div>
+          <div>
+            <FieldLabel label="Role" hint="Optional role or specialty" />
+            <Input
+              placeholder="e.g., Incident Commander"
+              value={role}
+              onChange={(event) => onRoleChange(event.target.value)}
+              size="sm"
+              maxLength={64}
+            />
+          </div>
+        </div>
+      </section>
+
       <section>
         <h3 className="text-[var(--agyn-dark)] mb-4 font-semibold">LLM</h3>
         <div className="space-y-4">

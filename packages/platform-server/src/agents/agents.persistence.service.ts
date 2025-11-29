@@ -434,6 +434,7 @@ export class AgentsPersistenceService {
         metrics?: ThreadMetrics;
         agentTitle?: string;
         agentRole?: string;
+        agentName?: string;
       })
     | null
   > {
@@ -465,6 +466,7 @@ export class AgentsPersistenceService {
       metrics?: ThreadMetrics;
       agentTitle?: string;
       agentRole?: string;
+      agentName?: string;
     } = {
       ...thread,
       parentId: thread.parentId ?? null,
@@ -487,6 +489,10 @@ export class AgentsPersistenceService {
 
     if (descriptor?.role) {
       result.agentRole = descriptor.role;
+    }
+
+    if (descriptor?.name) {
+      result.agentName = descriptor.name;
     }
 
     if (includeAgentTitles) {

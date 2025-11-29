@@ -94,7 +94,12 @@ describe('AgentsPersistenceService metrics and agent titles', () => {
           {
             id: 'agent-configured',
             template: 'templateA',
-            config: { title: '  Configured Agent  ', role: '  Lead Engineer  ' },
+            config: { title: '  Configured Agent  ', name: '  Casey  ', role: '  Lead Engineer  ' },
+          },
+          {
+            id: 'agent-profile',
+            template: 'templateA',
+            config: { name: '  Delta  ', role: '  Support  ' },
           },
           { id: 'agent-template', template: 'templateB' },
           { id: 'agent-assigned', template: 'templateA', config: { title: 'Assigned Only' } },
@@ -105,6 +110,7 @@ describe('AgentsPersistenceService metrics and agent titles', () => {
     const svc = createService(stub, { templateRegistry, graphRepo });
 
     const threadConfigured = (await stub.thread.create({ data: { alias: 'config' } })).id;
+    const threadProfile = (await stub.thread.create({ data: { alias: 'profile' } })).id;
     const threadTemplate = (await stub.thread.create({ data: { alias: 'tmpl' } })).id;
     const threadFallback = (await stub.thread.create({ data: { alias: 'miss' } })).id;
     const threadAssignedOnly = (await stub.thread.create({ data: { alias: 'assigned' } })).id;
@@ -115,28 +121,44 @@ describe('AgentsPersistenceService metrics and agent titles', () => {
     stub.conversationState._push({ threadId: threadConfigured, nodeId: 'agent-configured', state: {}, updatedAt: new Date('2024-04-02T00:00:00Z') });
     // Older state should be ignored in favour of more recent entry
     stub.conversationState._push({ threadId: threadConfigured, nodeId: 'agent-template', state: {}, updatedAt: new Date('2023-01-01T00:00:00Z') });
+    stub.conversationState._push({ threadId: threadProfile, nodeId: 'agent-profile', state: {}, updatedAt: new Date('2024-03-10T00:00:00Z') });
     stub.conversationState._push({ threadId: threadTemplate, nodeId: 'agent-template', state: {}, updatedAt: new Date('2024-03-01T00:00:00Z') });
 
     const titles = await svc.getThreadsAgentTitles([
       threadConfigured,
+      threadProfile,
       threadTemplate,
       threadFallback,
       threadAssignedOnly,
     ]);
     expect(titles[threadConfigured]).toBe('Configured Agent');
+    expect(titles[threadProfile]).toBe('Delta (Support)');
     expect(titles[threadTemplate]).toBe('Template B');
     expect(titles[threadFallback]).toBe('(unknown agent)');
     expect(titles[threadAssignedOnly]).toBe('Assigned Only');
 
     const roles = await svc.getThreadsAgentRoles([
       threadConfigured,
+      threadProfile,
       threadTemplate,
       threadFallback,
       threadAssignedOnly,
     ]);
     expect(roles[threadConfigured]).toBe('Lead Engineer');
+    expect(roles[threadProfile]).toBe('Support');
     expect(roles[threadTemplate]).toBeUndefined();
     expect(roles[threadFallback]).toBeUndefined();
     expect(roles[threadAssignedOnly]).toBeUndefined();
+
+    const descriptors = await svc.getThreadsAgentDescriptors([
+      threadConfigured,
+      threadProfile,
+      threadTemplate,
+      threadFallback,
+    ]);
+    expect(descriptors[threadConfigured]).toEqual({ title: 'Configured Agent', role: 'Lead Engineer', name: 'Casey' });
+    expect(descriptors[threadProfile]).toEqual({ title: 'Delta (Support)', role: 'Support', name: 'Delta' });
+    expect(descriptors[threadTemplate]).toEqual({ title: 'Template B' });
+    expect(descriptors[threadFallback]).toEqual({ title: '(unknown agent)' });
   });
 });

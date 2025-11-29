@@ -150,6 +150,9 @@ export default function ThreadsScreen({
     const nextStatus = resolvedSelectedThread.isOpen ? 'closed' : 'open';
     const toggleLabel = resolvedSelectedThread.isOpen ? 'Close' : 'Reopen';
     const toggleDisabled = !onToggleThreadStatus || isToggleThreadStatusPending;
+    const agentTitle = resolvedSelectedThread.agentTitle?.trim().length
+      ? resolvedSelectedThread.agentTitle.trim()
+      : resolvedSelectedThread.agentName;
     const agentRole = resolvedSelectedThread.agentRole?.trim();
 
     return (
@@ -159,7 +162,7 @@ export default function ThreadsScreen({
             <div className="flex-1">
               <div className="mb-1 flex items-center gap-2">
                 <StatusIndicator status={resolvedSelectedThread.status} size="sm" showTooltip={false} />
-                <span className="text-xs text-[var(--agyn-gray)]">{resolvedSelectedThread.agentName}</span>
+                <span className="text-xs text-[var(--agyn-gray)]">{agentTitle}</span>
                 <span className="text-xs text-[var(--agyn-gray)]">•</span>
                 <span className="text-xs text-[var(--agyn-gray)]" title={createdAtTitle}>
                   {createdAtRelative}

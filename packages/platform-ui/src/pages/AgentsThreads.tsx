@@ -15,6 +15,7 @@ import type { ThreadNode, ThreadMetrics, ThreadReminder, RunMessageItem, RunMeta
 import type { ContainerItem } from '@/api/modules/containers';
 import type { ApiError } from '@/api/http';
 import { ContainerTerminalDialog } from '@/components/monitoring/ContainerTerminalDialog';
+import { AGENT_TITLE_FALLBACK, computeAgentDefaultTitle, normalizeAgentName, normalizeAgentRole } from '@/utils/agentDisplay';
 
 const INITIAL_THREAD_LIMIT = 50;
 const THREAD_LIMIT_STEP = 50;
@@ -67,14 +68,20 @@ function sanitizeSummary(summary: string | null | undefined): string {
   return trimmed && trimmed.length > 0 ? trimmed : '(no summary yet)';
 }
 
-function sanitizeAgentName(agentName: string | null | undefined): string {
-  const trimmed = agentName?.trim();
-  return trimmed && trimmed.length > 0 ? trimmed : '(unknown agent)';
+function resolveThreadAgentTitle(node: ThreadNode): string {
+  const explicit = normalizeAgentName(node.agentTitle);
+  if (explicit) return explicit;
+  return computeAgentDefaultTitle(node.agentName, node.agentRole, AGENT_TITLE_FALLBACK);
 }
 
-function sanitizeAgentRole(agentRole: string | null | undefined): string | undefined {
-  const trimmed = agentRole?.trim();
-  return trimmed && trimmed.length > 0 ? trimmed : undefined;
+function resolveThreadAgentName(node: ThreadNode): string {
+  const explicit = normalizeAgentName(node.agentName);
+  if (explicit) return explicit;
+  return resolveThreadAgentTitle(node);
+}
+
+function resolveThreadAgentRole(node: ThreadNode): string | undefined {
+  return normalizeAgentRole(node.agentRole);
 }
 
 function containerDisplayName(container: ContainerItem): string {
@@ -157,8 +164,9 @@ function buildThreadTree(node: ThreadNode, children: ThreadChildrenState, overri
   return {
     id: node.id,
     summary: sanitizeSummary(node.summary ?? null),
-    agentName: sanitizeAgentName(node.agentTitle),
-    agentRole: sanitizeAgentRole(node.agentRole),
+    agentName: resolveThreadAgentName(node),
+    agentTitle: resolveThreadAgentTitle(node),
+    agentRole: resolveThreadAgentRole(node),
     createdAt: node.createdAt,
     status: computeThreadStatus(node, mappedChildren, overrides),
     isOpen: status === 'open',

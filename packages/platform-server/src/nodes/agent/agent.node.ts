@@ -46,6 +46,12 @@ const DEFAULT_RESTRICTION_MESSAGE =
 export const AgentStaticConfigSchema = z
   .object({
     title: z.string().optional().describe('Display name for this agent (UI only).'),
+    name: z
+      .string()
+      .trim()
+      .max(64)
+      .describe('Friendly name for this agent (UI only).')
+      .optional(),
     role: z
       .string()
       .trim()
@@ -213,6 +219,9 @@ export class AgentNode extends Node<AgentStaticConfig> implements OnModuleInit {
   override async setConfig(cfg: AgentStaticConfig): Promise<void> {
     const parsed = AgentStaticConfigSchema.parse(cfg ?? {});
     const sanitized: AgentStaticConfig = { ...parsed };
+    if (typeof sanitized.name === 'string' && sanitized.name.length === 0) {
+      delete sanitized.name;
+    }
     if (typeof sanitized.role === 'string' && sanitized.role.length === 0) {
       delete sanitized.role;
     }
@@ -221,7 +230,14 @@ export class AgentNode extends Node<AgentStaticConfig> implements OnModuleInit {
 
   private getAgentLabel(): string {
     const title = this.config?.title;
-    if (typeof title === 'string' && title.trim().length > 0) return title;
+    if (typeof title === 'string' && title.trim().length > 0) return title.trim();
+    const name = this.config?.name;
+    const role = this.config?.role;
+    const trimmedName = typeof name === 'string' ? name.trim() : '';
+    const trimmedRole = typeof role === 'string' ? role.trim() : '';
+    if (trimmedName && trimmedRole) return `${trimmedName} (${trimmedRole})`;
+    if (trimmedName) return trimmedName;
+    if (trimmedRole) return trimmedRole;
     const nodeId = this.getAgentNodeId();
     return nodeId ?? 'unknown';
   }

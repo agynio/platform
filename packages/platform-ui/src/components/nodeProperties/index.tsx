@@ -10,6 +10,7 @@ import { TriggerSection } from './TriggerSection';
 import { McpSection } from './McpSection';
 import { WorkspaceSection } from './WorkspaceSection';
 import { ToolSection } from './ToolSection';
+import { computeAgentDefaultTitle } from '../../utils/agentDisplay';
 import {
   applyNixUpdate,
   applyQueueUpdate,
@@ -179,13 +180,33 @@ function NodePropertiesSidebar({
   const toolClientBufferLimit = readNumber(configRecord.clientBufferLimitBytes);
   const logToPid1Enabled =
     typeof configRecord.logToPid1 === 'boolean' ? (configRecord.logToPid1 as boolean) : true;
-  const agentModel = typeof configRecord.model === 'string' ? (configRecord.model as string) : '';
-  const agentSystemPrompt = typeof configRecord.systemPrompt === 'string' ? (configRecord.systemPrompt as string) : '';
-  const restrictOutput = configRecord.restrictOutput === true;
-  const restrictionMessage = typeof configRecord.restrictionMessage === 'string' ? (configRecord.restrictionMessage as string) : '';
-  const restrictionMaxInjections = readNumber(configRecord.restrictionMaxInjections);
-  const queueConfig = useMemo(() => readQueueConfig(config), [config]);
-  const summarizationConfig = useMemo(() => readSummarizationConfig(config), [config]);
+  const agentNameValue = typeof configRecord.name === 'string' ? (configRecord.name as string) : '';
+  const agentRoleValue = typeof configRecord.role === 'string' ? (configRecord.role as string) : '';
+  const agentDefaultTitle = useMemo(
+    () => computeAgentDefaultTitle(agentNameValue, agentRoleValue, 'Agent'),
+    [agentNameValue, agentRoleValue],
+  );
+  const sidebarTitle = useMemo(() => {
+    if (nodeKind !== 'Agent') return nodeTitle;
+    const trimmed = typeof nodeTitle === 'string' ? nodeTitle.trim() : '';
+    if (trimmed.length > 0) return trimmed;
+    return agentDefaultTitle;
+  }, [nodeKind, nodeTitle, agentDefaultTitle]);
+  const agentModelValue = typeof configRecord.model === 'string' ? (configRecord.model as string) : '';
+  const agentSystemPromptValue =
+    typeof configRecord.systemPrompt === 'string' ? (configRecord.systemPrompt as string) : '';
+  const agentRestrictOutput = configRecord.restrictOutput === true;
+  const agentRestrictionMessageValue =
+    typeof configRecord.restrictionMessage === 'string' ? (configRecord.restrictionMessage as string) : '';
+  const agentRestrictionMaxInjectionsValue = readNumber(configRecord.restrictionMaxInjections);
+  const agentQueueConfig = useMemo<AgentQueueConfig>(
+    () => (nodeKind === 'Agent' ? readQueueConfig(config) : {}),
+    [config, nodeKind],
+  );
+  const agentSummarizationConfig = useMemo<AgentSummarizationConfig>(
+    () => (nodeKind === 'Agent' ? readSummarizationConfig(config) : {}),
+    [config, nodeKind],
+  );
 
   const slackAppReference = useMemo(() => readReferenceValue(configRecord.app_token), [configRecord.app_token]);
   const slackBotReference = useMemo(() => readReferenceValue(configRecord.bot_token), [configRecord.bot_token]);
@@ -359,14 +380,69 @@ function NodePropertiesSidebar({
     [envVars, onConfigChange, fetchSecretNow, fetchVariableNow],
   );
 
-  const handleQueueUpdate = useCallback(
+  const handleAgentNameChange = useCallback(
+    (value: string) => {
+      if (!onConfigChange) return;
+      const trimmed = value.trim();
+      onConfigChange({ name: trimmed.length > 0 ? trimmed : undefined });
+    },
+    [onConfigChange],
+  );
+
+  const handleAgentRoleChange = useCallback(
+    (value: string) => {
+      if (!onConfigChange) return;
+      const trimmed = value.trim();
+      onConfigChange({ role: trimmed.length > 0 ? trimmed : undefined });
+    },
+    [onConfigChange],
+  );
+
+  const handleAgentModelChange = useCallback(
+    (value: string) => {
+      const trimmed = value.trim();
+      onConfigChange?.({ model: trimmed });
+    },
+    [onConfigChange],
+  );
+
+  const handleAgentSystemPromptChange = useCallback(
+    (value: string) => {
+      onConfigChange?.({ systemPrompt: value });
+    },
+    [onConfigChange],
+  );
+
+  const handleAgentRestrictOutputChange = useCallback(
+    (checked: boolean) => {
+      onConfigChange?.({ restrictOutput: checked });
+    },
+    [onConfigChange],
+  );
+
+  const handleAgentRestrictionMessageChange = useCallback(
+    (value: string) => {
+      const trimmed = value.trim();
+      onConfigChange?.({ restrictionMessage: trimmed.length > 0 ? trimmed : undefined });
+    },
+    [onConfigChange],
+  );
+
+  const handleAgentRestrictionMaxInjectionsChange = useCallback(
+    (value: number | undefined) => {
+      onConfigChange?.({ restrictionMaxInjections: value ?? undefined });
+    },
+    [onConfigChange],
+  );
+
+  const handleAgentQueueConfigChange = useCallback(
     (partial: Partial<AgentQueueConfig>) => {
       onConfigChange?.(applyQueueUpdate(config, partial));
     },
     [config, onConfigChange],
   );
 
-  const handleSummarizationUpdate = useCallback(
+  const handleAgentSummarizationChange = useCallback(
     (partial: Partial<AgentSummarizationConfig>) => {
       onConfigChange?.(applySummarizationUpdate(config, partial));
     },
@@ -610,7 +686,7 @@ function NodePropertiesSidebar({
   return (
     <div className="w-[420px] bg-white border-l border-[var(--agyn-border-default)] flex flex-col">
       <Header
-        title={nodeTitle}
+        title={sidebarTitle}
         status={status}
         canProvision={canProvision}
         canDeprovision={canDeprovision}
@@ -622,7 +698,12 @@ function NodePropertiesSidebar({
         <div className="space-y-8">
           <section>
             <FieldLabel label="Title" hint="The display name for this node" />
-            <Input value={nodeTitle} onChange={(event) => onConfigChange?.({ title: event.target.value })} size="sm" />
+            <Input
+              value={nodeTitle}
+              onChange={(event) => onConfigChange?.({ title: event.target.value })}
+              size="sm"
+              placeholder={nodeKind === 'Agent' ? agentDefaultTitle : undefined}
+            />
           </section>
 
           {nodeKind === 'Tool' && (
@@ -641,22 +722,24 @@ function NodePropertiesSidebar({
 
           {nodeKind === 'Agent' && (
             <AgentSection
-              model={agentModel}
-              systemPrompt={agentSystemPrompt}
-              restrictOutput={restrictOutput}
-              restrictionMessage={restrictionMessage}
-              restrictionMaxInjections={restrictionMaxInjections}
-              queueConfig={queueConfig}
-              summarization={summarizationConfig}
-              onModelChange={(value) => onConfigChange?.({ model: value })}
-              onSystemPromptChange={(value) => onConfigChange?.({ systemPrompt: value })}
-              onRestrictOutputChange={(checked) => onConfigChange?.({ restrictOutput: checked })}
-              onRestrictionMessageChange={(value) => onConfigChange?.({ restrictionMessage: value })}
-              onRestrictionMaxInjectionsChange={(value) =>
-                onConfigChange?.({ restrictionMaxInjections: value })
-              }
-              onQueueConfigChange={handleQueueUpdate}
-              onSummarizationChange={handleSummarizationUpdate}
+              name={agentNameValue}
+              role={agentRoleValue}
+              model={agentModelValue}
+              systemPrompt={agentSystemPromptValue}
+              restrictOutput={agentRestrictOutput}
+              restrictionMessage={agentRestrictionMessageValue}
+              restrictionMaxInjections={agentRestrictionMaxInjectionsValue}
+              queueConfig={agentQueueConfig}
+              summarization={agentSummarizationConfig}
+              onNameChange={handleAgentNameChange}
+              onRoleChange={handleAgentRoleChange}
+              onModelChange={handleAgentModelChange}
+              onSystemPromptChange={handleAgentSystemPromptChange}
+              onRestrictOutputChange={handleAgentRestrictOutputChange}
+              onRestrictionMessageChange={handleAgentRestrictionMessageChange}
+              onRestrictionMaxInjectionsChange={handleAgentRestrictionMaxInjectionsChange}
+              onQueueConfigChange={handleAgentQueueConfigChange}
+              onSummarizationChange={handleAgentSummarizationChange}
             />
           )}
 

@@ -21,7 +21,7 @@ describe('AgentsThreadsController list endpoints', () => {
         { id: 't1', alias: 'a1', summary: 'Summary', status: 'open', createdAt: now, parentId: null },
       ]),
       getThreadsMetrics: vi.fn(async () => ({ t1: { remindersCount: 5, containersCount: 1, activity: 'working', runsCount: 2 } })),
-      getThreadsAgentDescriptors: vi.fn(async () => ({ t1: { title: 'Agent One', role: 'Planner' } })),
+      getThreadsAgentDescriptors: vi.fn(async () => ({ t1: { title: 'Agent One', role: 'Planner', name: 'Alpha' } })),
       listChildren: vi.fn(),
       listRuns: vi.fn(),
       listRunMessages: vi.fn(),
@@ -57,6 +57,7 @@ describe('AgentsThreadsController list endpoints', () => {
           metrics: { remindersCount: 5, containersCount: 1, activity: 'working', runsCount: 2 },
           agentTitle: 'Agent One',
           agentRole: 'Planner',
+          agentName: 'Alpha',
         },
       ],
     });
@@ -69,7 +70,7 @@ describe('AgentsThreadsController list endpoints', () => {
       listThreads: vi.fn(async () => [
         { id: 't1', alias: 'a1', summary: 'Summary', status: 'open', createdAt: now, parentId: null },
       ]),
-      getThreadsAgentDescriptors: vi.fn(async () => ({ t1: { title: 'Agent One', role: 'Support' } })),
+      getThreadsAgentDescriptors: vi.fn(async () => ({ t1: { title: 'Agent One', role: 'Support', name: 'Beta' } })),
       getThreadsMetrics: vi.fn(),
       listChildren: vi.fn(),
       listRuns: vi.fn(),
@@ -91,7 +92,7 @@ describe('AgentsThreadsController list endpoints', () => {
     const res = await ctrl.listThreads({} as any);
 
     expect((persistence.getThreadsMetrics as any).mock?.calls?.length ?? 0).toBe(0);
-    expect(res.items[0]).toMatchObject({ agentRole: 'Support' });
+    expect(res.items[0]).toMatchObject({ agentRole: 'Support', agentName: 'Beta' });
     expect(res.items[0]).not.toHaveProperty('agentTitle');
     expect(res.items[0]).not.toHaveProperty('metrics');
   });
