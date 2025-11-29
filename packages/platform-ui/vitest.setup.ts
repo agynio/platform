@@ -174,6 +174,7 @@ vi.mock('react-virtuoso', () => {
     const atBottomStateChangeRef = useRef<MockVirtuosoProps['atBottomStateChange']>(atBottomStateChange);
     const startReachedRef = useRef<MockVirtuosoProps['startReached']>(startReached);
     const endReachedRef = useRef<MockVirtuosoProps['endReached']>(endReached);
+    const initialBottomSyncRef = useRef(false);
     const isAtBottomRef = useRef(false);
 
     useEffect(() => {
@@ -273,9 +274,18 @@ vi.mock('react-virtuoso', () => {
         previousNodeRef.current = node;
         isAtBottomRef.current = true;
 
+        const shouldSyncInitialBottom = notify && itemCount > 0 && !initialBottomSyncRef.current;
+
+        if (shouldSyncInitialBottom) {
+          initialBottomSyncRef.current = true;
+          atBottomStateChangeRef.current?.(true);
+        }
+
         if (notify) {
           queueMicrotask(() => {
-            atBottomStateChangeRef.current?.(true);
+            if (!shouldSyncInitialBottom) {
+              atBottomStateChangeRef.current?.(true);
+            }
 
             if (itemCount > 0) {
               const lastIndex = firstItemIndex + itemCount - 1;
@@ -426,6 +436,8 @@ vi.mock('react-virtuoso', () => {
       ...providedScrollerProps,
       ...(scrollerProps ?? {}),
     };
+
+    mergedScrollerProps.role = 'listbox';
 
     const scrollerElement = React.createElement(
       'div',

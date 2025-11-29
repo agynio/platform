@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import RunScreen, { type EventFilter, type StatusFilter } from '@/components/screens/RunScreen';
 import { useRunTimelineEvents, useRunTimelineSummary } from '@/api/hooks/runs';
-import { runs } from '@/api/modules/runs';
+import { buildTimelineQueryParams, runs } from '@/api/modules/runs';
 import type {
   RunEventStatus,
   RunEventType,
@@ -595,13 +595,15 @@ export function AgentsRunScreen() {
 
         for (let i = 0; i < attemptModes.length; i += 1) {
           const mode = attemptModes[i];
-          const candidate = await runs.timelineEvents(runId, {
-            types: currentApiTypes.length > 0 ? currentApiTypes.join(',') : undefined,
-            statuses: currentApiStatuses.length > 0 ? currentApiStatuses.join(',') : undefined,
-            cursorTs: cursor.ts,
-            cursorId: cursor.id,
-            cursorParamMode: mode,
-          });
+          const candidate = await runs.timelineEvents(
+            runId,
+            buildTimelineQueryParams({
+              types: currentApiTypes,
+              statuses: currentApiStatuses,
+              cursor,
+              cursorParamMode: mode,
+            }),
+          );
           if (!isNonAdvancingPage(candidate, cursor)) {
             response = candidate;
             successfulMode = mode;
@@ -684,15 +686,17 @@ export function AgentsRunScreen() {
 
       for (let i = 0; i < attemptModes.length; i += 1) {
         const mode = attemptModes[i];
-        const candidate = await runs.timelineEvents(runId, {
-          types: currentApiTypes.length > 0 ? currentApiTypes.join(',') : undefined,
-          statuses: currentApiStatuses.length > 0 ? currentApiStatuses.join(',') : undefined,
-          limit: 100,
-          order: 'desc',
-          cursorTs: cursor.ts,
-          cursorId: cursor.id,
-          cursorParamMode: mode,
-        });
+        const candidate = await runs.timelineEvents(
+          runId,
+          buildTimelineQueryParams({
+            types: currentApiTypes,
+            statuses: currentApiStatuses,
+            limit: 100,
+            order: 'desc',
+            cursor,
+            cursorParamMode: mode,
+          }),
+        );
         if (!isNonAdvancingPage(candidate, cursor)) {
           response = candidate;
           successfulMode = mode;

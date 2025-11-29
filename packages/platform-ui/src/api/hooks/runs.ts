@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { runs } from '@/api/modules/runs';
+import { buildTimelineQueryParams, runs } from '@/api/modules/runs';
 import type { RunTimelineEventsCursor } from '@/api/types/agents';
 
 export function useThreadRuns(threadId: string | undefined) {
@@ -31,18 +31,28 @@ export function useRunTimelineEvents(
   runId: string | undefined,
   filters: { types: string[]; statuses: string[]; limit?: number; order?: 'asc' | 'desc'; cursor?: RunTimelineEventsCursor | null },
 ) {
+  const typesKey = filters.types.join('|');
+  const statusesKey = filters.statuses.join('|');
+  const limitKey = typeof filters.limit === 'number' ? filters.limit : null;
+  const orderKey = filters.order ?? null;
+  const cursorTsKey = filters.cursor?.ts ?? null;
+  const cursorIdKey = filters.cursor?.id ?? null;
+
   return useQuery({
     enabled: !!runId,
-    queryKey: ['agents', 'runs', runId, 'timeline', 'events', filters],
+    queryKey: ['agents', 'runs', runId, 'timeline', 'events', typesKey, statusesKey, limitKey, orderKey, cursorTsKey, cursorIdKey],
     queryFn: () =>
-      runs.timelineEvents(runId as string, {
-        types: filters.types.length > 0 ? filters.types.join(',') : undefined,
-        statuses: filters.statuses.length > 0 ? filters.statuses.join(',') : undefined,
-        limit: filters.limit,
-        order: filters.order,
-        cursorTs: filters.cursor?.ts,
-        cursorId: filters.cursor?.id,
-      }),
+      runs.timelineEvents(
+        runId as string,
+        buildTimelineQueryParams({
+          types: filters.types,
+          statuses: filters.statuses,
+          limit: filters.limit,
+          order: filters.order,
+          cursor: filters.cursor ?? null,
+          cursorParamMode: 'both',
+        }),
+      ),
     refetchOnWindowFocus: false,
   });
 }

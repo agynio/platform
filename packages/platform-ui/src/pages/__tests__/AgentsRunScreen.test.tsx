@@ -4,6 +4,7 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { render, waitFor } from '@testing-library/react';
 
 import type { RunTimelineEvent, RunTimelineSummary, RunTimelineEventsResponse } from '@/api/types/agents';
+import type * as RunsModule from '@/api/modules/runs';
 import { AgentsRunScreen } from '../AgentsRunScreen';
 
 vi.mock('@/components/screens/RunScreen', async () => {
@@ -50,12 +51,17 @@ vi.mock('@/api/hooks/runs', () => ({
   useRunTimelineSummary: vi.fn(),
 }));
 
-vi.mock('@/api/modules/runs', () => ({
-  runs: {
-    timelineEvents: vi.fn(),
-    terminate: vi.fn(),
-  },
-}));
+vi.mock('@/api/modules/runs', async () => {
+  const actual = await vi.importActual<typeof RunsModule>('@/api/modules/runs');
+  return {
+    ...actual,
+    runs: {
+      ...actual.runs,
+      timelineEvents: vi.fn(),
+      terminate: vi.fn(),
+    },
+  };
+});
 
 vi.mock('@/lib/graph/socket', () => ({
   graphSocket: {

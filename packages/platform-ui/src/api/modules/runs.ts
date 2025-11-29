@@ -2,10 +2,64 @@ import { http, asData } from '@/api/http';
 import type {
   RunMessageItem,
   RunMeta,
+  RunTimelineEventsCursor,
   RunTimelineEventsResponse,
   RunTimelineSummary,
   ToolOutputSnapshot,
 } from '@/api/types/agents';
+
+export type TimelineQueryParamsInput = {
+  types?: string[];
+  statuses?: string[];
+  limit?: number;
+  order?: 'asc' | 'desc';
+  cursor?: RunTimelineEventsCursor | null;
+  cursorParamMode?: 'both' | 'bracketed' | 'plain';
+};
+
+export function buildTimelineQueryParams(input: TimelineQueryParamsInput): Record<string, string | number> {
+  const {
+    types,
+    statuses,
+    limit,
+    order,
+    cursor,
+    cursorParamMode,
+  } = input;
+
+  const params: Record<string, string | number> = {};
+
+  if (Array.isArray(types) && types.length > 0) {
+    params.types = types.join(',');
+  }
+
+  if (Array.isArray(statuses) && statuses.length > 0) {
+    params.statuses = statuses.join(',');
+  }
+
+  if (typeof limit === 'number') {
+    params.limit = limit;
+  }
+
+  if (order === 'asc' || order === 'desc') {
+    params.order = order;
+  }
+
+  if (cursor && (cursor.ts || cursor.id)) {
+    Object.assign(
+      params,
+      buildCursorParams({
+        cursorTs: cursor.ts,
+        cursorId: cursor.id,
+        cursorParamMode,
+      }),
+    );
+  }
+
+  return params;
+}
+
+export type TimelineQueryParams = ReturnType<typeof buildTimelineQueryParams>;
 
 export const runs = {
   listByThread: (threadId: string) => asData<{ items: RunMeta[] }>(
@@ -17,27 +71,10 @@ export const runs = {
     ),
   timelineSummary: (runId: string) =>
     asData<RunTimelineSummary>(http.get<RunTimelineSummary>(`/api/agents/runs/${encodeURIComponent(runId)}/summary`)),
-  timelineEvents: (
-    runId: string,
-    params: {
-      types?: string;
-      statuses?: string;
-      limit?: number;
-      order?: 'asc' | 'desc';
-      cursorTs?: string;
-      cursorId?: string;
-      cursorParamMode?: 'both' | 'bracketed' | 'plain';
-    },
-  ) =>
+  timelineEvents: (runId: string, params: TimelineQueryParams) =>
     asData<RunTimelineEventsResponse>(
       http.get<RunTimelineEventsResponse>(`/api/agents/runs/${encodeURIComponent(runId)}/events`, {
-        params: {
-          types: params.types,
-          statuses: params.statuses,
-          limit: params.limit,
-          order: params.order,
-          ...buildCursorParams(params),
-        },
+        params,
       }),
     ),
   toolOutputSnapshot: (
