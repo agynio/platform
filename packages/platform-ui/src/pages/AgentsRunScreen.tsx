@@ -448,8 +448,6 @@ export function AgentsRunScreen() {
 
   const eventFiltersRef = useRef(eventFilters);
   const statusFiltersRef = useRef(statusFilters);
-  const apiTypesRef = useRef(apiTypes);
-  const apiStatusesRef = useRef(apiStatuses);
 
   useEffect(() => {
     eventFiltersRef.current = eventFilters;
@@ -458,14 +456,6 @@ export function AgentsRunScreen() {
   useEffect(() => {
     statusFiltersRef.current = statusFilters;
   }, [statusFilters]);
-
-  useEffect(() => {
-    apiTypesRef.current = apiTypes;
-  }, [apiTypes]);
-
-  useEffect(() => {
-    apiStatusesRef.current = apiStatuses;
-  }, [apiStatuses]);
 
   useEffect(() => {
     const currentFilterKey = JSON.stringify([eventFilters, statusFilters]);
@@ -586,8 +576,8 @@ export function AgentsRunScreen() {
 
     const promise = (async () => {
       try {
-        const currentApiTypes = apiTypesRef.current;
-        const currentApiStatuses = apiStatusesRef.current;
+        const currentApiTypes = apiTypes;
+        const currentApiStatuses = apiStatuses;
         const attemptModes = buildCursorAttemptModes(catchUpCursorParamModeRef.current);
 
         let response: RunTimelineEventsResponse | null = null;
@@ -642,7 +632,7 @@ export function AgentsRunScreen() {
       catchUpRef.current = null;
     });
     return catchUpRef.current;
-  }, [runId, eventsQuery, updateEventsState, setCursor]);
+  }, [runId, apiTypes, apiStatuses, eventsQuery, updateEventsState, setCursor]);
 
   const { refetch: refetchSummary } = summaryQuery;
 
@@ -674,8 +664,8 @@ export function AgentsRunScreen() {
     setLoadingOlder(true);
     setLoadOlderError(null);
 
-    const currentApiTypes = apiTypesRef.current;
-    const currentApiStatuses = apiStatusesRef.current;
+    const currentApiTypes = apiTypes;
+    const currentApiStatuses = apiStatuses;
     const latestEventFilters = eventFiltersRef.current;
     const latestStatusFilters = statusFiltersRef.current;
     const attemptModes = buildCursorAttemptModes(loadOlderCursorParamModeRef.current);
@@ -735,7 +725,7 @@ export function AgentsRunScreen() {
       loadingOlderRef.current = false;
       setLoadingOlder(false);
     }
-  }, [olderCursor, runId, updateEventsState]);
+  }, [olderCursor, runId, apiTypes, apiStatuses, updateEventsState]);
 
   useEffect(() => {
     if (!runId) return;

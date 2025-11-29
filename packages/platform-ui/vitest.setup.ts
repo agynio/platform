@@ -231,10 +231,13 @@ vi.mock('react-virtuoso', () => {
           knownNode.scrollTop = fallbackHeight;
         }
 
-        if (typeof document !== 'undefined') {
+        if (typeof document !== 'undefined' && itemCount > 0) {
           const listboxes = document.querySelectorAll<HTMLElement>('[role="listbox"]');
           listboxes.forEach((element) => {
-            element.scrollTop = fallbackHeight;
+            const targetHeight = typeof element.scrollHeight === 'number' && element.scrollHeight > 0
+              ? element.scrollHeight
+              : fallbackHeight;
+            element.scrollTop = targetHeight;
           });
         }
 
