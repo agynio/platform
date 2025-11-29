@@ -278,7 +278,6 @@ export default function ThreadsScreen({
 
         <div className="min-h-0 min-w-0 flex-1 overflow-hidden">
           <Conversation
-            key={resolvedSelectedThread.id}
             runs={runs}
             className="h-full rounded-none border-none"
             collapsed={isRunsInfoCollapsed}

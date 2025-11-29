@@ -1,5 +1,5 @@
 import React from 'react';
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { render, screen, act } from '@testing-library/react';
 import { Conversation, type Run } from '../Conversation';
 import { waitForStableScrollHeight } from '../agents/waitForStableScrollHeight';
@@ -23,10 +23,56 @@ function createRuns(): Run[] {
   ];
 }
 
+function setupScrollAreaMock(scrollArea: HTMLDivElement) {
+  let scrollHeightValue = 0;
+  let lastScrollOptions: ScrollToOptions | number | undefined;
+
+  Object.defineProperty(scrollArea, 'scrollHeight', {
+    configurable: true,
+    get: () => scrollHeightValue,
+  });
+
+  const scrollToMock = vi.fn((options: ScrollToOptions | number) => {
+    lastScrollOptions = options;
+  });
+
+  Object.defineProperty(scrollArea, 'scrollTo', {
+    configurable: true,
+    writable: true,
+    value: scrollToMock,
+  });
+
+  return {
+    setScrollHeight(value: number) {
+      scrollHeightValue = value;
+    },
+    getLastScrollTop(): number {
+      if (typeof lastScrollOptions === 'number') {
+        return lastScrollOptions;
+      }
+      return lastScrollOptions?.top ?? 0;
+    },
+    getLastScrollOptions() {
+      return lastScrollOptions;
+    },
+    scrollToMock,
+  };
+}
+
 describe('Conversation auto-scroll behavior', () => {
   beforeEach(() => {
     waitForStableScrollHeightMock.mockReset();
     waitForStableScrollHeightMock.mockImplementation(() => Promise.resolve());
+
+    vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
+      callback(0);
+      return 1;
+    });
+    vi.stubGlobal('cancelAnimationFrame', vi.fn());
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
   });
 
   it('scrolls to the bottom after the scroll height stabilizes', async () => {
@@ -49,22 +95,9 @@ describe('Conversation auto-scroll behavior', () => {
     );
 
     const scrollArea = screen.getByTestId('conversation-scroll-area') as HTMLDivElement;
-    let scrollHeightValue = 0;
-    let scrollTopValue = 0;
+    const { setScrollHeight, scrollToMock, getLastScrollOptions, getLastScrollTop } = setupScrollAreaMock(scrollArea);
 
-    Object.defineProperty(scrollArea, 'scrollHeight', {
-      configurable: true,
-      get: () => scrollHeightValue,
-    });
-    Object.defineProperty(scrollArea, 'scrollTop', {
-      configurable: true,
-      get: () => scrollTopValue,
-      set: (value: number) => {
-        scrollTopValue = value;
-      },
-    });
-
-    scrollHeightValue = 960;
+    setScrollHeight(960);
 
     await act(async () => {
       resolveWait();
@@ -72,12 +105,13 @@ describe('Conversation auto-scroll behavior', () => {
     });
 
     expect(waitForStableScrollHeightMock).toHaveBeenCalledWith(scrollArea);
-    expect(scrollTopValue).toBe(960);
+    expect(scrollToMock).toHaveBeenCalledTimes(1);
+    expect(scrollToMock).toHaveBeenCalledWith(expect.objectContaining({ top: 960, behavior: 'auto' }));
+    expect(getLastScrollTop()).toBe(960);
+    expect(getLastScrollOptions()).toEqual(expect.objectContaining({ top: 960, behavior: 'auto' }));
   });
 
   it('scrolls only after transcript hydration when runs start empty', async () => {
-    waitForStableScrollHeightMock.mockImplementation(() => Promise.resolve());
-
     const { rerender } = render(
       <Conversation
         runs={[]}
@@ -87,22 +121,10 @@ describe('Conversation auto-scroll behavior', () => {
     );
 
     const scrollArea = screen.getByTestId('conversation-scroll-area') as HTMLDivElement;
-    let scrollHeightValue = 0;
-    let scrollTopValue = 0;
-
-    Object.defineProperty(scrollArea, 'scrollHeight', {
-      configurable: true,
-      get: () => scrollHeightValue,
-    });
-    Object.defineProperty(scrollArea, 'scrollTop', {
-      configurable: true,
-      get: () => scrollTopValue,
-      set: (value: number) => {
-        scrollTopValue = value;
-      },
-    });
+    const { setScrollHeight, scrollToMock, getLastScrollTop } = setupScrollAreaMock(scrollArea);
 
     expect(waitForStableScrollHeightMock).not.toHaveBeenCalled();
+    expect(scrollToMock).not.toHaveBeenCalled();
 
     rerender(
       <Conversation
@@ -119,7 +141,8 @@ describe('Conversation auto-scroll behavior', () => {
     );
 
     expect(waitForStableScrollHeightMock).not.toHaveBeenCalled();
-    expect(scrollTopValue).toBe(0);
+    expect(scrollToMock).not.toHaveBeenCalled();
+    expect(getLastScrollTop()).toBe(0);
 
     let resolveWait: (() => void) = () => {
       throw new Error('resolve not set');
@@ -131,7 +154,7 @@ describe('Conversation auto-scroll behavior', () => {
         }),
     );
 
-    scrollHeightValue = 720;
+    setScrollHeight(720);
 
     rerender(
       <Conversation
@@ -147,7 +170,9 @@ describe('Conversation auto-scroll behavior', () => {
     });
 
     expect(waitForStableScrollHeightMock).toHaveBeenCalledTimes(1);
-    expect(scrollTopValue).toBe(720);
+    expect(scrollToMock).toHaveBeenCalledTimes(1);
+    expect(scrollToMock).toHaveBeenCalledWith(expect.objectContaining({ top: 720, behavior: 'auto' }));
+    expect(getLastScrollTop()).toBe(720);
   });
 
   it('uses the latest scroll height after dynamic content growth', async () => {
@@ -170,31 +195,21 @@ describe('Conversation auto-scroll behavior', () => {
     );
 
     const scrollArea = screen.getByTestId('conversation-scroll-area') as HTMLDivElement;
-    let scrollHeightValue = 200;
-    let scrollTopValue = 0;
+    const { setScrollHeight, scrollToMock, getLastScrollTop } = setupScrollAreaMock(scrollArea);
 
-    Object.defineProperty(scrollArea, 'scrollHeight', {
-      configurable: true,
-      get: () => scrollHeightValue,
-    });
-    Object.defineProperty(scrollArea, 'scrollTop', {
-      configurable: true,
-      get: () => scrollTopValue,
-      set: (value: number) => {
-        scrollTopValue = value;
-      },
-    });
-
-    scrollHeightValue = 200;
+    setScrollHeight(200);
     await Promise.resolve();
-    scrollHeightValue = 640;
+    setScrollHeight(640);
 
     await act(async () => {
       resolveWait();
       await Promise.resolve();
     });
 
-    expect(scrollTopValue).toBe(640);
+    expect(waitForStableScrollHeightMock).toHaveBeenCalledTimes(1);
+    expect(scrollToMock).toHaveBeenCalledTimes(1);
+    expect(scrollToMock).toHaveBeenCalledWith(expect.objectContaining({ top: 640 }));
+    expect(getLastScrollTop()).toBe(640);
   });
 
   it('does not auto-follow updates for the same active thread after the initial scroll', async () => {
@@ -209,40 +224,25 @@ describe('Conversation auto-scroll behavior', () => {
     );
 
     const scrollArea = screen.getByTestId('conversation-scroll-area') as HTMLDivElement;
-    let scrollTopValue = 0;
+    const { setScrollHeight, scrollToMock } = setupScrollAreaMock(scrollArea);
 
-    Object.defineProperty(scrollArea, 'scrollHeight', {
-      configurable: true,
-      get: () => 500,
-    });
-    Object.defineProperty(scrollArea, 'scrollTop', {
-      configurable: true,
-      get: () => scrollTopValue,
-      set: (value: number) => {
-        scrollTopValue = value;
-      },
-    });
+    setScrollHeight(500);
 
-    await act(async () => {
-      await Promise.resolve();
-    });
+    await Promise.resolve();
 
     expect(waitForStableScrollHeightMock).toHaveBeenCalledTimes(1);
-    expect(scrollTopValue).toBe(500);
+    expect(scrollToMock).toHaveBeenCalledTimes(1);
+    expect(scrollToMock).toHaveBeenCalledWith(expect.objectContaining({ top: 500 }));
 
     waitForStableScrollHeightMock.mockClear();
-
-    scrollTopValue = 120;
 
     rerender(
       <Conversation
         runs={[
           {
-            id: 'run-1',
-            status: 'finished',
+            ...runs[0],
             messages: [
-              { id: 'm1', role: 'user', content: 'Hello' },
-              { id: 'm2', role: 'assistant', content: 'Hi there' },
+              ...runs[0].messages,
               { id: 'm3', role: 'assistant', content: 'Extra' },
             ],
           },
@@ -252,11 +252,11 @@ describe('Conversation auto-scroll behavior', () => {
       />,
     );
 
-    await act(async () => {
-      await Promise.resolve();
-    });
+    setScrollHeight(700);
+
+    await Promise.resolve();
 
     expect(waitForStableScrollHeightMock).not.toHaveBeenCalled();
-    expect(scrollTopValue).toBe(120);
+    expect(scrollToMock).toHaveBeenCalledTimes(1);
   });
 });

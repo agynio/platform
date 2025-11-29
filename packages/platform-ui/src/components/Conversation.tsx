@@ -1,4 +1,4 @@
-import { type ReactNode, useRef, useEffect, useState } from 'react';
+import { type ReactNode, useRef, useEffect, useState, type CSSProperties } from 'react';
 import { waitForStableScrollHeight } from './agents/waitForStableScrollHeight';
 import { Message, type MessageRole } from './Message';
 import { RunInfo } from './RunInfo';
@@ -103,6 +103,7 @@ export function Conversation({
     }
 
     let cancelled = false;
+    let rafId: number | null = null;
     const requestId = scrollRequestIdRef.current + 1;
     scrollRequestIdRef.current = requestId;
 
@@ -111,16 +112,32 @@ export function Conversation({
       if (cancelled || scrollRequestIdRef.current !== requestId) {
         return;
       }
-      container.scrollTop = container.scrollHeight;
-      lastAutoScrolledThreadIdRef.current = threadId;
+
+      const targetTop = container.scrollHeight;
+
+      rafId = requestAnimationFrame(() => {
+        if (cancelled || scrollRequestIdRef.current !== requestId) {
+          return;
+        }
+
+        container.scrollTo({ top: targetTop, behavior: 'auto' });
+        lastAutoScrolledThreadIdRef.current = threadId;
+      });
     })();
 
     return () => {
       cancelled = true;
+      if (rafId !== null) {
+        cancelAnimationFrame(rafId);
+      }
     };
   }, [totalMessageCount, activeThreadId]);
 
   const hasQueueOrReminders = queuedMessages.length > 0 || reminders.length > 0;
+  const scrollContainerStyle: CSSProperties & { overflowAnchor?: string } = {
+    overflowAnchor: 'none',
+    scrollBehavior: 'auto',
+  };
 
   return (
     <div
@@ -139,6 +156,7 @@ export function Conversation({
         ref={scrollContainerRef}
         data-testid="conversation-scroll-area"
         className="flex-1 min-w-0 overflow-y-auto flex flex-col"
+        style={scrollContainerStyle}
       >
         {/* Runs Container */}
         <div className="flex flex-col flex-1 min-w-0">
@@ -173,7 +191,7 @@ export function Conversation({
                   </div>
 
                   {/* Run Info Column */}
-                  <div className={`flex-shrink-0 border-l border-[var(--agyn-border-subtle)] bg-[var(--agyn-bg-light)]/50 relative transition-all ${isCollapsed ? 'w-8' : 'w-[150px]'}`}>
+                  <div className={`flex-shrink-0 border-l border-[var(--agyn-border-subtle)] bg-[var(--agyn-bg-light)]/50 relative transition-[width] ${isCollapsed ? 'w-8' : 'w-[150px]'}`}>
                     <div className={isCollapsed ? 'pt-6 pb-6 flex items-center justify-center' : 'pt-6 px-3 pb-6'}>
                       {isCollapsed ? (
                         // Collapsed View - Just StatusIndicator
@@ -241,14 +259,14 @@ export function Conversation({
               </div>
 
               {/* Empty space for run info column */}
-              <div className={`flex-shrink-0 border-l border-[var(--agyn-border-subtle)] bg-[var(--agyn-bg-light)]/50 transition-all ${isCollapsed ? 'w-8' : 'w-[150px]'}`} />
+              <div className={`flex-shrink-0 border-l border-[var(--agyn-border-subtle)] bg-[var(--agyn-bg-light)]/50 transition-[width] ${isCollapsed ? 'w-8' : 'w-[150px]'}`} />
             </div>
           )}
 
           {/* Spacer to fill remaining space */}
           <div className="flex-1 flex">
             <div className="flex-1" />
-            <div className={`flex-shrink-0 border-l border-[var(--agyn-border-subtle)] bg-[var(--agyn-bg-light)]/50 transition-all ${isCollapsed ? 'w-8' : 'w-[150px]'}`} />
+            <div className={`flex-shrink-0 border-l border-[var(--agyn-border-subtle)] bg-[var(--agyn-bg-light)]/50 transition-[width] ${isCollapsed ? 'w-8' : 'w-[150px]'}`} />
           </div>
         </div>
       </div>
