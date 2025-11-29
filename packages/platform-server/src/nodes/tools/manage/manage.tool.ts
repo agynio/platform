@@ -94,7 +94,8 @@ export class ManageFunctionTool extends FunctionTool<typeof ManageInvocationSche
       const childThreadId = await persistence.getOrCreateSubthreadByAlias('manage', alias, parentThreadId, '');
       try {
         const res = await targetAgent.invoke(childThreadId, [HumanMessage.fromText(messageText)]);
-        return res?.text;
+        const responseText = res?.text ?? '';
+        return responseText ? `Response from: ${targetTitle}\n${responseText}` : `Response from: ${targetTitle}`;
       } catch (err: unknown) {
         this.logger.error('Manage: send_message failed', {
           worker: targetTitle,

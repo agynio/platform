@@ -53,6 +53,7 @@ interface UseGraphDataResult {
   applyNodeStatus: (nodeId: string, status: NodeStatus) => void;
   applyNodeState: (nodeId: string, state: Record<string, unknown>) => void;
   setEdges: (next: GraphPersistedEdge[]) => void;
+  removeNodes: (ids: string[]) => void;
   refresh: () => Promise<void>;
 }
 
@@ -263,6 +264,50 @@ export function useGraphData(): UseGraphDataResult {
     [scheduleSave],
   );
 
+  const removeNodes = useCallback(
+    (ids: string[]) => {
+      if (!Array.isArray(ids) || ids.length === 0) {
+        return;
+      }
+      const idSet = new Set(ids.filter((id): id is string => typeof id === 'string' && id.length > 0));
+      if (idSet.size === 0) {
+        return;
+      }
+
+      let nodesRemoved = false;
+      setNodes((prev) => {
+        if (prev.length === 0) {
+          return prev;
+        }
+        const next = prev.filter((node) => !idSet.has(node.id));
+        if (next.length === prev.length) {
+          return prev;
+        }
+        nodesRemoved = true;
+        return next;
+      });
+
+      for (const id of idSet) {
+        metadataRef.current.delete(id);
+      }
+
+      const prevEdges = baseRef.current.edges;
+      const filteredEdges = prevEdges.filter((edge) => !idSet.has(edge.source) && !idSet.has(edge.target));
+      const edgesRemoved = filteredEdges.length !== prevEdges.length;
+      if (edgesRemoved) {
+        const cloned = filteredEdges.map(cloneEdge);
+        baseRef.current.edges = cloned;
+        setEdgeState(cloned);
+      }
+
+      if (!nodesRemoved && !edgesRemoved) {
+        return;
+      }
+      scheduleSave();
+    },
+    [scheduleSave],
+  );
+
   const refresh = useCallback(async () => {
     abortRef.current = false;
     setLoading(true);
@@ -342,6 +387,7 @@ export function useGraphData(): UseGraphDataResult {
     applyNodeStatus,
     applyNodeState,
     setEdges,
+    removeNodes,
     refresh,
   };
 }

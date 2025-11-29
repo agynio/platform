@@ -46,6 +46,14 @@ type SuggestionFetcher = {
   scheduleFetch: (query: string) => void;
 };
 
+type ToolLimitKey =
+  | 'executionTimeoutMs'
+  | 'idleTimeoutMs'
+  | 'outputLimitChars'
+  | 'chunkCoalesceMs'
+  | 'chunkSizeBytes'
+  | 'clientBufferLimitBytes';
+
 function useSuggestionFetcher(
   provider?: (query: string) => Promise<string[]>,
   debounceMs = 250,
@@ -105,7 +113,6 @@ function useSuggestionFetcher(
 function NodePropertiesSidebar({
   config,
   state,
-  template,
   onConfigChange,
   onProvision,
   onDeprovision,
@@ -122,7 +129,7 @@ function NodePropertiesSidebar({
   secretSuggestionProvider,
   variableSuggestionProvider,
   providerDebounceMs = 250,
-
+  template,
 }: NodePropertiesSidebarProps) {
   const { kind: nodeKind, title: nodeTitle } = config;
   const { status } = state;
@@ -130,13 +137,14 @@ function NodePropertiesSidebar({
   const templateName =
     (typeof template === 'string' ? template : undefined) ??
     (typeof config.template === 'string' ? (config.template as string) : undefined);
+  const isShellTool = nodeKind === 'Tool' && templateName === 'shellTool';
 
+  const [toolEnvOpen, setToolEnvOpen] = useState(true);
   const [workspaceEnvOpen, setWorkspaceEnvOpen] = useState(true);
   const [mcpEnvOpen, setMcpEnvOpen] = useState(true);
-  const [toolEnvOpen, setToolEnvOpen] = useState(true);
   const [nixPackagesOpen, setNixPackagesOpen] = useState(true);
-  const [mcpLimitsOpen, setMcpLimitsOpen] = useState(false);
   const [toolLimitsOpen, setToolLimitsOpen] = useState(false);
+  const [mcpLimitsOpen, setMcpLimitsOpen] = useState(false);
   const [nixPackageQuery, setNixPackageQuery] = useState('');
   const [nixVersionOptions, setNixVersionOptions] = useState<Record<string, string[]>>({});
   const [nixVersionLoading, setNixVersionLoading] = useState<Set<string>>(() => new Set());
@@ -157,6 +165,20 @@ function NodePropertiesSidebar({
   } = variableFetcher;
 
   const envVars = useMemo(() => readEnvList(configRecord.env), [configRecord.env]);
+  const toolWorkdir =
+    typeof configRecord.workdir === 'string'
+      ? (configRecord.workdir as string)
+      : typeof configRecord.workingDir === 'string'
+      ? (configRecord.workingDir as string)
+      : '';
+  const toolExecutionTimeout = readNumber(configRecord.executionTimeoutMs);
+  const toolIdleTimeout = readNumber(configRecord.idleTimeoutMs);
+  const toolOutputLimit = readNumber(configRecord.outputLimitChars);
+  const toolChunkCoalesce = readNumber(configRecord.chunkCoalesceMs);
+  const toolChunkSize = readNumber(configRecord.chunkSizeBytes);
+  const toolClientBufferLimit = readNumber(configRecord.clientBufferLimitBytes);
+  const logToPid1Enabled =
+    typeof configRecord.logToPid1 === 'boolean' ? (configRecord.logToPid1 as boolean) : true;
   const agentModel = typeof configRecord.model === 'string' ? (configRecord.model as string) : '';
   const agentSystemPrompt = typeof configRecord.systemPrompt === 'string' ? (configRecord.systemPrompt as string) : '';
   const restrictOutput = configRecord.restrictOutput === true;
@@ -190,20 +212,6 @@ function NodePropertiesSidebar({
   const volumesMountPath =
     typeof volumesConfig.mountPath === 'string' ? (volumesConfig.mountPath as string) : '/workspace';
   const workspaceNixPackages = useMemo(() => readNixPackages(configRecord.nix), [configRecord.nix]);
-  const toolWorkdir =
-    typeof configRecord.workdir === 'string'
-      ? (configRecord.workdir as string)
-      : typeof configRecord.workingDir === 'string'
-      ? (configRecord.workingDir as string)
-      : '';
-  const toolExecutionTimeout = readNumber(configRecord.executionTimeoutMs);
-  const toolIdleTimeout = readNumber(configRecord.idleTimeoutMs);
-  const toolOutputLimit = readNumber(configRecord.outputLimitChars);
-  const toolChunkCoalesce = readNumber(configRecord.chunkCoalesceMs);
-  const toolChunkSize = readNumber(configRecord.chunkSizeBytes);
-  const toolClientBufferLimit = readNumber(configRecord.clientBufferLimitBytes);
-  const logToPid1Enabled =
-    typeof configRecord.logToPid1 === 'boolean' ? (configRecord.logToPid1 as boolean) : true;
 
   const setVersionLoading = useCallback((name: string, loading: boolean) => {
     setNixVersionLoading((prev) => {
@@ -351,35 +359,6 @@ function NodePropertiesSidebar({
     [envVars, onConfigChange, fetchSecretNow, fetchVariableNow],
   );
 
-  type ToolLimitKey =
-    | 'executionTimeoutMs'
-    | 'idleTimeoutMs'
-    | 'outputLimitChars'
-    | 'chunkCoalesceMs'
-    | 'chunkSizeBytes'
-    | 'clientBufferLimitBytes';
-
-  const handleToolWorkdirChange = useCallback(
-    (value: string) => {
-      onConfigChange?.({ workdir: value });
-    },
-    [onConfigChange],
-  );
-
-  const handleToolLimitChange = useCallback(
-    (key: ToolLimitKey, value: number | undefined) => {
-      onConfigChange?.({ [key]: value } as Partial<NodeConfig>);
-    },
-    [onConfigChange],
-  );
-
-  const handleLogToPid1Change = useCallback(
-    (checked: boolean) => {
-      onConfigChange?.({ logToPid1: checked });
-    },
-    [onConfigChange],
-  );
-
   const handleQueueUpdate = useCallback(
     (partial: Partial<AgentQueueConfig>) => {
       onConfigChange?.(applyQueueUpdate(config, partial));
@@ -482,11 +461,61 @@ function NodePropertiesSidebar({
     [config, onConfigChange],
   );
 
+  const handleToolLimitChange = useCallback(
+    (key: ToolLimitKey, value: number | undefined) => {
+      onConfigChange?.({ [key]: value } as Partial<NodeConfig>);
+    },
+    [onConfigChange],
+  );
+
+  const handleToolWorkdirChange = useCallback(
+    (value: string) => {
+      onConfigChange?.({ workdir: value });
+    },
+    [onConfigChange],
+  );
+
+  const handleLogToPid1Change = useCallback(
+    (checked: boolean) => {
+      onConfigChange?.({ logToPid1: checked });
+    },
+    [onConfigChange],
+  );
+
   const handleToggleToolInternal = useCallback(
     (toolName: string, enabled: boolean) => {
       onToggleTool?.(toolName, enabled);
     },
     [onToggleTool],
+  );
+
+  const toolEnvEditorProps = useMemo(
+    () => ({
+      title: 'Environment Variables',
+      isOpen: toolEnvOpen,
+      onOpenChange: setToolEnvOpen,
+      envVars,
+      onAdd: handleEnvAdd,
+      onRemove: handleEnvRemove,
+      onNameChange: handleEnvNameChange,
+      onValueChange: handleEnvValueChange,
+      onValueFocus: handleEnvValueFocus,
+      onSourceTypeChange: handleEnvSourceChange,
+      secretSuggestions,
+      variableSuggestions,
+    }),
+    [
+      envVars,
+      handleEnvAdd,
+      handleEnvRemove,
+      handleEnvNameChange,
+      handleEnvValueChange,
+      handleEnvValueFocus,
+      handleEnvSourceChange,
+      secretSuggestions,
+      toolEnvOpen,
+      variableSuggestions,
+    ],
   );
 
   useEffect(() => {
@@ -544,35 +573,6 @@ function NodePropertiesSidebar({
       handleEnvValueFocus,
       handleEnvSourceChange,
       mcpEnvOpen,
-      secretSuggestions,
-      variableSuggestions,
-    ],
-  );
-
-  const toolEnvEditorProps = useMemo(
-    () => ({
-      title: 'Environment Variables',
-      isOpen: toolEnvOpen,
-      onOpenChange: setToolEnvOpen,
-      envVars,
-      onAdd: handleEnvAdd,
-      onRemove: handleEnvRemove,
-      onNameChange: handleEnvNameChange,
-      onValueChange: handleEnvValueChange,
-      onValueFocus: handleEnvValueFocus,
-      onSourceTypeChange: handleEnvSourceChange,
-      secretSuggestions,
-      variableSuggestions,
-    }),
-    [
-      envVars,
-      handleEnvAdd,
-      handleEnvRemove,
-      handleEnvNameChange,
-      handleEnvValueChange,
-      handleEnvValueFocus,
-      handleEnvSourceChange,
-      toolEnvOpen,
       secretSuggestions,
       variableSuggestions,
     ],
@@ -717,7 +717,7 @@ function NodePropertiesSidebar({
             />
           )}
 
-          {nodeKind === 'Tool' && templateName === 'shellTool' && (
+          {isShellTool && (
             <ToolSection
               workdir={toolWorkdir}
               onWorkdirChange={handleToolWorkdirChange}
@@ -737,7 +737,6 @@ function NodePropertiesSidebar({
               onLogToPid1Change={handleLogToPid1Change}
             />
           )}
-
           {nodeKind === 'Workspace' && (
             <WorkspaceSection
               image={workspaceImage}

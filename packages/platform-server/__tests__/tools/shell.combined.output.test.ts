@@ -191,26 +191,18 @@ describe('ShellCommandTool combined output', () => {
     const container = new SequenceContainer(chunks);
     const { tool } = createToolWithContainer(container);
 
-  const result = await tool.executeStreaming({ command: 'partial' }, ctx as any, streamingOptions);
+    const result = await tool.executeStreaming({ command: 'partial' }, ctx as any, streamingOptions);
 
-  expect(result).toBe('output line\n');
-  expect(result).not.toContain('\x1b');
+    expect(result).toBe('output line\n');
+    expect(result).not.toContain('\x1b');
   });
 
-  it('executeStreaming throws with exit code and tail for stderr-only failure', async () => {
+  it('executeStreaming returns exit-coded message for stderr-only failure', async () => {
     const chunks: OutputChunk[] = [{ source: 'stderr', data: 'fatal: repo not found\n' }];
     const container = new SequenceContainer(chunks, 128);
     const { tool, runEvents } = createToolWithContainer(container);
 
-    let error: Error | null = null;
-    try {
-      await tool.executeStreaming({ command: 'failing' }, ctx as any, streamingOptions);
-    } catch (err) {
-      error = err as Error;
-    }
-
-    expect(error).toBeInstanceOf(Error);
-    const message = (error as Error).message;
+    const message = await tool.executeStreaming({ command: 'failing' }, ctx as any, streamingOptions);
     expect(message).toMatch(/\[exit code 128]/);
     expect(message).toContain('fatal: repo not found');
 
@@ -220,65 +212,38 @@ describe('ShellCommandTool combined output', () => {
     expect(terminalArgs.bytesStderr).toBe(Buffer.byteLength('fatal: repo not found\n', 'utf8'));
   });
 
-  it('execute throws with exit code and tail when command fails', async () => {
+  it('execute returns exit-coded message with combined output when command fails', async () => {
     const chunks: OutputChunk[] = [
       { source: 'stdout', data: 'starting\n' },
       { source: 'stderr', data: 'boom\n' },
     ];
     const container = new SequenceContainer(chunks, 2);
     const { tool } = createToolWithContainer(container);
-
-    let error: Error | null = null;
-    try {
-      await tool.execute({ command: 'fail' }, ctx as any);
-    } catch (err) {
-      error = err as Error;
-    }
-
-    expect(error).toBeInstanceOf(Error);
-    const message = (error as Error).message;
+    const message = await tool.execute({ command: 'fail' }, ctx as any);
     expect(message).toMatch(/\[exit code 2]/);
     expect(message).toContain('starting');
     expect(message).toContain('boom');
   });
 
-  it('execute throws exit-coded error with full output when under limit', async () => {
+  it('execute returns exit-coded message with full output when under limit', async () => {
     const chunks: OutputChunk[] = [
       { source: 'stdout', data: 'alpha\n' },
       { source: 'stderr', data: 'omega\n' },
     ];
     const container = new SequenceContainer(chunks, 7);
     const { tool } = createToolWithContainer(container);
-
-    let error: Error | null = null;
-    try {
-      await tool.execute({ command: 'fails' }, ctx as any);
-    } catch (err) {
-      error = err as Error;
-    }
-
-    expect(error).toBeInstanceOf(Error);
-    const message = (error as Error).message;
+    const message = await tool.execute({ command: 'fails' }, ctx as any);
     expect(message.split('\n')[0]).toBe('[exit code 7]');
     expect(message).toContain('alpha');
     expect(message).toContain('omega');
   });
 
-  it('executeStreaming throws and references saved output when failure exceeds limit', async () => {
+  it('executeStreaming returns exit-coded message and saved output when failure exceeds limit', async () => {
     const largeOutput = Array.from({ length: 30 }, (_, idx) => `line-${idx}`).join('\n');
     const container = new SequenceContainer([{ source: 'stdout', data: largeOutput }], 3);
     const { tool, runEvents, node } = createToolWithContainer(container);
     await node.setConfig({ outputLimitChars: 20 } as any);
-
-    let error: Error | null = null;
-    try {
-      await tool.executeStreaming({ command: 'huge' }, ctx as any, streamingOptions);
-    } catch (err) {
-      error = err as Error;
-    }
-
-    expect(error).toBeInstanceOf(Error);
-    const message = (error as Error).message;
+    const message = await tool.executeStreaming({ command: 'huge' }, ctx as any, streamingOptions);
     expect(message.split('\n')[0]).toBe('[exit code 3]');
     expect(message).toContain('Full output saved to:');
 
@@ -294,23 +259,14 @@ describe('ShellCommandTool combined output', () => {
     expect(terminalArgs.message).toContain('Full output saved to');
   });
 
-  it('executeStreaming throws and includes 10k tail when oversized output is truncated', async () => {
+  it('executeStreaming returns exit-coded message with 10k tail when oversized output is truncated', async () => {
     const prefix = 'H'.repeat(2000);
     const tailSegment = 'T'.repeat(10_000);
     const combinedOutput = `${prefix}${tailSegment}`;
     const container = new SequenceContainer([{ source: 'stderr', data: combinedOutput }], 9);
     const { tool, runEvents, node } = createToolWithContainer(container);
     await node.setConfig({ outputLimitChars: 1000 } as any);
-
-    let error: Error | null = null;
-    try {
-      await tool.executeStreaming({ command: 'fail-large' }, ctx as any, streamingOptions);
-    } catch (err) {
-      error = err as Error;
-    }
-
-    expect(error).toBeInstanceOf(Error);
-    const message = (error as Error).message;
+    const message = await tool.executeStreaming({ command: 'fail-large' }, ctx as any, streamingOptions);
     expect(message).toMatch(/\[exit code 9]/);
     expect(message).toMatch(/Full output saved to \/tmp\/.+\.txt/);
     expect(message.toLowerCase()).toContain('output tail');

@@ -1,4 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
+import { HumanMessage } from '@agyn/llm';
 // BaseTrigger legacy removed in Issue #451; use SlackTrigger semantics only
 // Typed helper for Slack socket-mode envelope used by our handler
 type SlackMessageEvent = {
@@ -178,6 +179,8 @@ describe('SlackTrigger events', () => {
     };
     await handler(env);
     expect(received.length).toBe(1);
+    expect(received[0]).toBeInstanceOf(HumanMessage);
+    expect((received[0] as HumanMessage).text).toBe('From User:\nhello');
     expect(ack).toHaveBeenCalledTimes(1);
     expect(getOrCreateThreadByAlias).toHaveBeenCalledWith('slack', 'U_1.0', 'hello', {
       channelNodeId: nodeId,
@@ -239,6 +242,8 @@ describe('SlackTrigger events', () => {
     };
     await handler(env);
     expect(received.length).toBe(1);
+    expect(received[0]).toBeInstanceOf(HumanMessage);
+    expect((received[0] as HumanMessage).text).toBe('From User:\nhello socket');
     expect(ack).toHaveBeenCalledTimes(1);
     expect(getOrCreateThreadByAlias).toHaveBeenCalledWith('slack', 'U2_2.0', 'hello socket', {
       channelNodeId: nodeId,
@@ -265,6 +270,8 @@ describe('SlackTrigger events', () => {
     };
     await handler(env);
     expect(received.length).toBe(1);
+    expect(received[0]).toBeInstanceOf(HumanMessage);
+    expect((received[0] as HumanMessage).text).toBe('From User:\nfallback');
     expect(ack).toHaveBeenCalledTimes(1);
     expect(getOrCreateThreadByAlias).toHaveBeenCalledWith('slack', 'UF_3.0', 'fallback', {
       channelNodeId: nodeId,
@@ -273,6 +280,29 @@ describe('SlackTrigger events', () => {
       't-slack',
       expect.objectContaining({ identifiers: { channel: 'CF', thread_ts: '3.0' } }),
     );
+  });
+
+  it('preserves multiline slack content in human message text', async () => {
+    const { handler, received } = await setupTrigger();
+    const ack = vi.fn<[], Promise<void>>(async () => {});
+    const text = 'first line\nsecond line';
+    const env: SlackEnvelope = {
+      envelope_id: 'multiline',
+      ack,
+      body: {
+        type: 'event_callback',
+        event: {
+          type: 'message',
+          user: 'UM',
+          channel: 'CM',
+          text,
+          ts: '9.0',
+        },
+      },
+    };
+    await handler(env);
+    expect(received.length).toBe(1);
+    expect((received[0] as HumanMessage).text).toBe(`From User:\n${text}`);
   });
 
   it('acks and filters out non-message or subtype events without notifying listeners', async () => {

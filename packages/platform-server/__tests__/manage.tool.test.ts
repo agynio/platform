@@ -103,7 +103,7 @@ describe('ManageTool unit', () => {
       ctx,
     );
 
-    expect(res?.startsWith('ok-')).toBe(true);
+    expect(res).toBe('Response from: child-1\nok-child-explicit');
     expect(getOrCreateSubthreadByAlias).toHaveBeenCalledWith('manage', 'Mixed.Alias-Case_123', 'parent', '');
   });
 
@@ -119,8 +119,40 @@ describe('ManageTool unit', () => {
       ctx,
     );
 
-    expect(res?.startsWith('ok-')).toBe(true);
+    expect(res).toBe('Response from: Alpha Worker\nok-child-derived');
     expect(getOrCreateSubthreadByAlias).toHaveBeenCalledWith('manage', 'alpha-worker', 'parent', '');
+  });
+
+  it('send_message: prefixes multi-line worker response preserving content', async () => {
+    const harness = await createHarness();
+    const worker = await addWorker(harness.module, harness.node, 'Multi Worker');
+    vi.spyOn(worker, 'invoke').mockResolvedValue(
+      new ResponseMessage({ output: [AIMessage.fromText('line 1\nline 2').toPlain()] }),
+    );
+
+    const ctx = buildCtx();
+    const res = await harness.tool.execute(
+      { command: 'send_message', worker: 'Multi Worker', message: 'compose' },
+      ctx,
+    );
+
+    expect(res).toBe('Response from: Multi Worker\nline 1\nline 2');
+  });
+
+  it('send_message: omits newline when worker response text is empty', async () => {
+    const harness = await createHarness();
+    const worker = await addWorker(harness.module, harness.node, 'Empty Worker');
+    vi.spyOn(worker, 'invoke').mockResolvedValue(
+      new ResponseMessage({ output: [AIMessage.fromText('').toPlain()] }),
+    );
+
+    const ctx = buildCtx();
+    const res = await harness.tool.execute(
+      { command: 'send_message', worker: 'Empty Worker', message: 'noop' },
+      ctx,
+    );
+
+    expect(res).toBe('Response from: Empty Worker');
   });
 
   it('send_message: rejects empty alias after trim', async () => {
