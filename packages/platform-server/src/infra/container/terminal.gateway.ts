@@ -815,7 +815,7 @@ export class ContainerTerminalGateway {
             return;
           }
           try {
-            const normalized = message.data.replace(/\r\n/g, '\n').replace(/\n/g, '\r');
+            const normalized = message.data.replace(/\r\n/g, '\r');
             const buffer = Buffer.from(normalized, 'utf8');
             const writeOk = stdin.write(buffer, (error) => {
               if (error) {

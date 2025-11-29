@@ -199,6 +199,142 @@ describe('ContainerTerminalGateway (custom websocket server)', () => {
     await app.close();
   });
 
+  it('replays history for arrow-up input without leaking escape text', async () => {
+    const harness = createSessionServiceHarness({
+      shell: '/bin/bash',
+      containerId: 'c'.repeat(64),
+      cols: 120,
+      rows: 32,
+      maxDurationMs: 300_000,
+    });
+
+    const sessionMocks = harness.service as unknown as TerminalSessionsService;
+    const record = harness.getRecord();
+    if (!record) {
+      throw new Error('expected active terminal session');
+    }
+
+    const stdin = new PassThrough();
+    const stdout = new PassThrough();
+    const closeExec = vi.fn().mockResolvedValue({ exitCode: 0 });
+
+    const containerMocks = {
+      execContainer: vi.fn().mockResolvedValue({ stdout: 'C.UTF-8\n', stderr: '', exitCode: 0 }),
+      openInteractiveExec: vi.fn().mockResolvedValue({
+        stdin,
+        stdout,
+        stderr: undefined,
+        close: closeExec,
+        execId: 'exec-history',
+      }),
+      resizeExec: vi.fn().mockResolvedValue(undefined),
+    } as unknown as ContainerService;
+
+    const gateway = new ContainerTerminalGateway(sessionMocks, containerMocks);
+
+    let stdinBuffer = '';
+    let pending = '';
+    const history: string[] = [];
+
+    stdin.on('data', (chunk) => {
+      const text = chunk.toString('utf8');
+      stdinBuffer += text;
+      pending += text;
+
+      const processArrows = () => {
+        const escIndex = pending.indexOf('\u001b');
+        if (escIndex === -1) {
+          return false;
+        }
+        if (pending.length < escIndex + 3) {
+          return false; // wait for full sequence
+        }
+        const sequence = pending.slice(escIndex, escIndex + 3);
+        if (sequence === '\u001b[A') {
+          pending = pending.slice(0, escIndex) + pending.slice(escIndex + 3);
+          const last = history[history.length - 1];
+          if (last) {
+            setImmediate(() => {
+              stdout.write(last);
+            });
+          }
+          return true;
+        }
+        return false;
+      };
+
+      while (processArrows()) {
+        // keep processing until no additional arrow sequences remain
+      }
+
+      while (pending.includes('\r')) {
+        const idx = pending.indexOf('\r');
+        const raw = pending.slice(0, idx);
+        pending = pending.slice(idx + 1);
+        const command = raw.trim();
+        if (!command) {
+          continue;
+        }
+        if (command.startsWith('stty') || command.startsWith('export')) {
+          continue;
+        }
+        history.push(command);
+        setImmediate(() => {
+          stdout.write(`${command}\r\n`);
+        });
+      }
+    });
+
+    const app = Fastify();
+    gateway.registerRoutes(app);
+    const port = await listenFastify(app);
+
+    const messages: { type?: string; data?: unknown; phase?: string }[] = [];
+    const ws = new WebSocket(
+      `ws://127.0.0.1:${port}/api/containers/${record.containerId}/terminal/ws?sessionId=${record.sessionId}&token=${record.token}`,
+    );
+    ws.on('message', (payload) => {
+      const text = typeof payload === 'string' ? payload : payload.toString('utf8');
+      try {
+        messages.push(JSON.parse(text) as { type?: string; data?: unknown });
+      } catch {
+        messages.push({ data: text });
+      }
+    });
+
+    await waitFor(() => messages.some((msg) => msg.type === 'status' && msg.phase === 'running'), 3000);
+
+    ws.send(JSON.stringify({ type: 'input', data: 'echo first\r\n' }));
+    await waitFor(
+      () => messages.some((msg) => msg.type === 'output' && typeof msg.data === 'string' && msg.data.includes('echo first')),
+      3000,
+    );
+    messages.length = 0;
+
+    ws.send(JSON.stringify({ type: 'input', data: 'echo second\r\n' }));
+    await waitFor(
+      () => messages.some((msg) => msg.type === 'output' && typeof msg.data === 'string' && msg.data.includes('echo second')),
+      3000,
+    );
+    messages.length = 0;
+
+    ws.send(JSON.stringify({ type: 'input', data: '\u001b[A' }));
+    await waitFor(
+      () => messages.some((msg) => msg.type === 'output' && typeof msg.data === 'string' && msg.data.includes('echo second')),
+      3000,
+    );
+
+    expect(
+      messages.some((msg) => msg.type === 'output' && typeof msg.data === 'string' && msg.data.includes('[A')),
+    ).toBe(false);
+    expect(stdinBuffer).toContain('\u001b[A');
+
+    ws.send(JSON.stringify({ type: 'close' }));
+    await waitForWsClose(ws, 3000);
+
+    await app.close();
+  });
+
   it('aborts exec when socket closes before start', async () => {
     const record = createSessionRecord({
       containerId: 'c'.repeat(64),

@@ -151,13 +151,13 @@ describe('ContainerTerminalGateway E2E', () => {
 
     await waitFor(() => messages.some((msg) => msg.type === 'status' && msg.phase === 'running'), 2000);
 
-    ws.send(JSON.stringify({ type: 'input', data: 'echo hi\n' }));
+    ws.send(JSON.stringify({ type: 'input', data: 'echo hi\r' }));
     await waitFor(
       () => messages.some((msg) => msg.type === 'output' && typeof msg.data === 'string' && msg.data.includes('hi')),
       2000,
     );
 
-    ws.send(JSON.stringify({ type: 'input', data: 'whoami\n' }));
+    ws.send(JSON.stringify({ type: 'input', data: 'whoami\r' }));
     await waitFor(
       () => messages.some((msg) => msg.type === 'output' && typeof msg.data === 'string' && msg.data.includes('test-user')),
       2000,
