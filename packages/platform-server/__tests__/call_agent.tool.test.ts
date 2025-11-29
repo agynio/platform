@@ -32,6 +32,7 @@ const createLinkingStub = () => {
     onChildRunStarted: vi.fn().mockResolvedValue(null),
     onChildRunMessage: vi.fn().mockResolvedValue(null),
     onChildRunCompleted: vi.fn().mockResolvedValue(null),
+    resolveLinkedAgentNodes: vi.fn().mockResolvedValue({}),
   } satisfies Record<string, unknown>;
 
   return { instance: spies as unknown as CallAgentLinkingService, spies };

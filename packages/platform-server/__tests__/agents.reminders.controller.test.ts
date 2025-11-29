@@ -28,6 +28,7 @@ const createLinkingStub = () =>
     onChildRunStarted: async () => null,
     onChildRunMessage: async () => null,
     onChildRunCompleted: async () => null,
+    resolveLinkedAgentNodes: async () => ({}),
   }) as unknown as CallAgentLinkingService;
 
 describe('AgentsRemindersController', () => {

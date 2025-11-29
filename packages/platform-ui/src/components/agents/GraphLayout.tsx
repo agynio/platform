@@ -52,32 +52,60 @@ export interface GraphLayoutProps {
   services: GraphLayoutServices;
 }
 
-function toFlowNode(node: GraphNodeConfig): FlowNode {
-  const rawTitle = typeof node.title === 'string' ? node.title : '';
-  let displayTitle = rawTitle;
-
-  if (node.kind === 'Agent') {
-    const config = (node.config ?? {}) as Record<string, unknown>;
-    const trimmed = rawTitle.trim();
-    if (trimmed.length > 0) {
-      displayTitle = trimmed;
-    } else {
-      const name = typeof config['name'] === 'string' ? (config['name'] as string) : undefined;
-      const role = typeof config['role'] === 'string' ? (config['role'] as string) : undefined;
-      displayTitle = computeAgentDefaultTitle(name, role, 'Agent');
-    }
-  } else {
-    const trimmed = rawTitle.trim();
-    displayTitle = trimmed.length > 0 ? trimmed : rawTitle;
+function resolveAgentDisplayTitle(node: GraphNodeConfig): string {
+  const config = (node.config ?? {}) as Record<string, unknown>;
+  const rawConfigTitle = typeof config.title === 'string' ? config.title : '';
+  const trimmedConfigTitle = rawConfigTitle.trim();
+  if (trimmedConfigTitle.length > 0) {
+    return trimmedConfigTitle;
   }
 
+  const fallbackTemplate =
+    typeof node.template === 'string' && node.template.trim().length > 0 ? node.template.trim() : 'Agent';
+  const basePlaceholder = computeAgentDefaultTitle(undefined, undefined, 'Agent');
+  const storedTitleRaw = typeof node.title === 'string' ? node.title : '';
+  const storedTitle = storedTitleRaw.trim();
+  const profileFallback = computeAgentDefaultTitle(
+    typeof config.name === 'string' ? (config.name as string) : undefined,
+    typeof config.role === 'string' ? (config.role as string) : undefined,
+    fallbackTemplate,
+  );
+  const isPlaceholderTitle =
+    storedTitle.length > 0 &&
+    (storedTitle === basePlaceholder || storedTitle === fallbackTemplate || storedTitle === node.template);
+
+  if (storedTitle.length > 0 && !isPlaceholderTitle) {
+    return storedTitle;
+  }
+
+  if (profileFallback.length > 0) {
+    return profileFallback;
+  }
+
+  if (storedTitle.length > 0) {
+    return storedTitle;
+  }
+
+  return basePlaceholder;
+}
+
+function resolveDisplayTitle(node: GraphNodeConfig): string {
+  if (node.kind === 'Agent') {
+    return resolveAgentDisplayTitle(node);
+  }
+  const rawTitle = typeof node.title === 'string' ? node.title : '';
+  const trimmed = rawTitle.trim();
+  return trimmed.length > 0 ? trimmed : rawTitle;
+}
+
+function toFlowNode(node: GraphNodeConfig): FlowNode {
   return {
     id: node.id,
     type: 'graphNode',
     position: { x: node.x, y: node.y },
     data: {
       kind: node.kind,
-      title: displayTitle,
+      title: resolveDisplayTitle(node),
       inputs: node.ports.inputs,
       outputs: node.ports.outputs,
       avatarSeed: node.avatarSeed,
@@ -427,30 +455,31 @@ export function GraphLayout({ services }: GraphLayoutProps) {
       let changed = prev.length !== nodes.length;
       const next: FlowNode[] = nodes.map((node, index) => {
         const existing = prevById.get(node.id);
+        const nextData = {
+          kind: node.kind,
+          title: resolveDisplayTitle(node),
+          inputs: node.ports.inputs,
+          outputs: node.ports.outputs,
+          avatarSeed: node.avatarSeed,
+        } satisfies FlowNode['data'];
         if (!existing) {
           changed = true;
           return toFlowNode(node);
         }
         const basePosition = existing.position ?? { x: node.x, y: node.y };
         const dataMatches =
-          existing.data.kind === node.kind &&
-          existing.data.title === node.title &&
-          existing.data.avatarSeed === node.avatarSeed &&
-          existing.data.inputs === node.ports.inputs &&
-          existing.data.outputs === node.ports.outputs;
+          existing.data.kind === nextData.kind &&
+          existing.data.title === nextData.title &&
+          existing.data.avatarSeed === nextData.avatarSeed &&
+          existing.data.inputs === nextData.inputs &&
+          existing.data.outputs === nextData.outputs;
         const positionMatches =
           existing.position?.x === basePosition.x && existing.position?.y === basePosition.y;
         let nextNode = existing;
         if (!dataMatches) {
           nextNode = {
             ...existing,
-            data: {
-              kind: node.kind,
-              title: node.title,
-              inputs: node.ports.inputs,
-              outputs: node.ports.outputs,
-              avatarSeed: node.avatarSeed,
-            },
+            data: nextData,
           } satisfies FlowNode;
         }
         if (!positionMatches) {
@@ -686,7 +715,7 @@ export function GraphLayout({ services }: GraphLayoutProps) {
 
     return {
       config,
-      displayTitle: selectedNode.title,
+      displayTitle: resolveDisplayTitle(selectedNode),
     };
   }, [selectedNode]);
 
@@ -711,21 +740,14 @@ export function GraphLayout({ services }: GraphLayoutProps) {
       mergedConfig.template = node.template;
 
       const rawTitle = typeof mergedConfig.title === 'string' ? (mergedConfig.title as string) : '';
-      mergedConfig.title = rawTitle;
+      const trimmedTitle = rawTitle.trim();
+      mergedConfig.title = trimmedTitle;
 
-      let displayTitle = rawTitle;
-      if (node.kind === 'Agent') {
-        const nextName = typeof mergedConfig.name === 'string' ? (mergedConfig.name as string) : '';
-        const nextRole = typeof mergedConfig.role === 'string' ? (mergedConfig.role as string) : '';
-        const trimmed = rawTitle.trim();
-        displayTitle = trimmed.length > 0 ? trimmed : computeAgentDefaultTitle(nextName, nextRole, 'Agent');
-      } else {
-        displayTitle = rawTitle.trim();
-      }
+      const nextTitle = trimmedTitle;
 
       updateNodeRef.current(nodeId, {
         config: mergedConfig,
-        ...(displayTitle !== node.title ? { title: displayTitle } : {}),
+        ...(nextTitle !== node.title ? { title: nextTitle } : {}),
       });
     },
     [],

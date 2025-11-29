@@ -310,6 +310,85 @@ describe('GraphLayout', () => {
     unmount();
   });
 
+  it('keeps agent title placeholder when cleared in sidebar', async () => {
+    const updateNode = vi.fn();
+    const applyNodeStatus = vi.fn();
+    const applyNodeState = vi.fn();
+    const setEdges = vi.fn();
+
+    hookMocks.useGraphData.mockReturnValue({
+      nodes: [
+        {
+          id: 'node-1',
+          template: 'agent-template',
+          kind: 'Agent',
+          title: 'Agent',
+          x: 0,
+          y: 0,
+          status: 'not_ready',
+          config: { title: '', name: 'Atlas', role: 'Navigator' },
+          ports: { inputs: [], outputs: [] },
+        },
+      ],
+      edges: [],
+      loading: false,
+      savingState: { status: 'saved', error: null },
+      savingErrorMessage: null,
+      updateNode,
+      applyNodeStatus,
+      applyNodeState,
+      setEdges,
+    });
+
+    hookMocks.useGraphSocket.mockReturnValue(undefined);
+    hookMocks.useNodeStatus.mockReturnValue({ data: null, refetch: vi.fn() });
+
+    render(<GraphLayout services={services} />);
+
+    await waitFor(() => expect(canvasSpy).toHaveBeenCalled());
+
+    const canvasProps = canvasSpy.mock.calls.at(-1)?.[0] as {
+      onNodesChange?: (changes: any[]) => void;
+    };
+
+    act(() => {
+      canvasProps.onNodesChange?.([
+        {
+          id: 'node-1',
+          type: 'select',
+          selected: true,
+        },
+      ]);
+    });
+
+    await waitFor(() => expect(sidebarProps.length).toBeGreaterThan(0));
+
+    const sidebar = sidebarProps.at(-1) as {
+      onConfigChange?: (next: Record<string, unknown>) => void;
+    };
+
+    act(() => {
+      sidebar.onConfigChange?.({ title: '   ' });
+    });
+
+    await waitFor(() =>
+      expect(updateNode).toHaveBeenCalledWith(
+        'node-1',
+        expect.objectContaining({
+          config: expect.objectContaining({ title: '' }),
+          title: '',
+        }),
+      ),
+    );
+
+    await waitFor(() => {
+      const latest = canvasSpy.mock.calls.at(-1)?.[0] as {
+        nodes?: Array<{ data?: { title?: string } }>;
+      };
+      expect(latest?.nodes?.[0]?.data?.title).toBe('Atlas (Navigator)');
+    });
+  });
+
   it('persists node position updates when drag ends', async () => {
     const updateNode = vi.fn();
     const setEdges = vi.fn();

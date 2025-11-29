@@ -204,6 +204,48 @@ export class CallAgentLinkingService {
     return event.id;
   }
 
+  async resolveLinkedAgentNodes(threadIds: string[]): Promise<Record<string, string>> {
+    if (!Array.isArray(threadIds) || threadIds.length === 0) {
+      return {};
+    }
+    const clauses = threadIds
+      .filter((id): id is string => typeof id === 'string' && id.length > 0)
+      .map((id) => ({ metadata: { path: ['childThreadId'], equals: id } }));
+    if (clauses.length === 0) {
+      return {};
+    }
+    try {
+      const events = await this.prisma.runEvent.findMany({
+        where: {
+          type: 'tool_execution',
+          toolExecution: { toolName: { in: CALL_AGENT_TOOL_NAMES } },
+          OR: clauses,
+        },
+        orderBy: { ts: 'desc' },
+        select: { metadata: true, nodeId: true },
+      });
+      const resolved: Record<string, string> = {};
+      for (const event of events) {
+        const parsed = this.parseMetadata(event.metadata);
+        if (!parsed?.childThreadId) continue;
+        if (resolved[parsed.childThreadId]) continue;
+        const nodeId = typeof event.nodeId === 'string' ? event.nodeId : null;
+        if (nodeId && nodeId.length > 0) {
+          resolved[parsed.childThreadId] = nodeId;
+        }
+      }
+      return resolved;
+    } catch (err) {
+      this.logger.warn(
+        `call_agent_linking: failed to resolve linked agents${this.format({
+          threadIds,
+          error: this.errorInfo(err),
+        })}`,
+      );
+      return {};
+    }
+  }
+
   private serializeMetadata(metadata: CallAgentLinkMetadata): PrismaNamespace.JsonObject {
     return {
       tool: metadata.tool,

@@ -5,7 +5,7 @@ import { createRunEventsStub } from './helpers/runEvents.stub';
 import { createEventsBusStub } from './helpers/eventsBus.stub';
 import { CallAgentLinkingService } from '../src/agents/call-agent-linking.service';
 
-const createLinkingStub = () =>
+const createLinkingStub = (overrides?: Partial<CallAgentLinkingService>) =>
   ({
     buildInitialMetadata: (params: { toolName: string; parentThreadId: string; childThreadId: string }) => ({
       tool: params.toolName === 'call_engineer' ? 'call_engineer' : 'call_agent',
@@ -21,9 +21,14 @@ const createLinkingStub = () =>
     onChildRunStarted: async () => null,
     onChildRunMessage: async () => null,
     onChildRunCompleted: async () => null,
+    resolveLinkedAgentNodes: async () => ({}),
+    ...overrides,
   }) as unknown as CallAgentLinkingService;
 
-function createService(stub: any, overrides?: { metrics?: any; templateRegistry?: any; graphRepo?: any }) {
+function createService(
+  stub: any,
+  overrides?: { metrics?: any; templateRegistry?: any; graphRepo?: any; linking?: CallAgentLinkingService },
+) {
   const metrics =
     overrides?.metrics ??
     ({
@@ -46,7 +51,7 @@ function createService(stub: any, overrides?: { metrics?: any; templateRegistry?
     templateRegistry,
     graphRepo,
     createRunEventsStub() as any,
-    createLinkingStub(),
+    overrides?.linking ?? createLinkingStub(),
     eventsBusStub,
   );
   return svc;
@@ -160,5 +165,45 @@ describe('AgentsPersistenceService metrics and agent titles', () => {
     expect(descriptors[threadProfile]).toEqual({ title: 'Delta (Support)', role: 'Support', name: 'Delta' });
     expect(descriptors[threadTemplate]).toEqual({ title: 'Template B' });
     expect(descriptors[threadFallback]).toEqual({ title: '(unknown agent)' });
+  });
+
+  it('resolves agent descriptors using call-agent linkage when state missing', async () => {
+    const stub = createPrismaStub();
+    const templateRegistry = {
+      toSchema: async () => [
+        { name: 'templateA', title: 'Template A', kind: 'agent', sourcePorts: [], targetPorts: [] },
+      ],
+      getMeta: (template: string) => {
+        if (template === 'templateA') return { title: 'Template A', kind: 'agent' };
+        return undefined;
+      },
+    };
+    const graphRepo = {
+      get: async () => ({
+        name: 'main',
+        version: 1,
+        updatedAt: new Date().toISOString(),
+        nodes: [
+          {
+            id: 'agent-linked',
+            template: 'templateA',
+            config: { title: '', name: '  Orion  ', role: '  Strategist  ' },
+          },
+        ],
+        edges: [],
+      }),
+    };
+
+    const threadLinked = (await stub.thread.create({ data: { alias: 'linked' } })).id;
+
+    const linking = createLinkingStub({
+      resolveLinkedAgentNodes: async (ids: string[]) =>
+        ids.includes(threadLinked) ? { [threadLinked]: 'agent-linked' } : {},
+    });
+
+    const svc = createService(stub, { templateRegistry, graphRepo, linking });
+
+    const descriptors = await svc.getThreadsAgentDescriptors([threadLinked]);
+    expect(descriptors[threadLinked]).toEqual({ title: 'Orion (Strategist)', role: 'Strategist', name: 'Orion' });
   });
 });

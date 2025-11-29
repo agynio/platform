@@ -74,9 +74,11 @@ const createLinkingStub = () =>
       childRunLinkEnabled: false,
       childMessageId: null,
     }),
+    registerParentToolExecution: async () => null,
     onChildRunStarted: async () => null,
     onChildRunMessage: async () => null,
     onChildRunCompleted: async () => null,
+    resolveLinkedAgentNodes: async () => ({}),
   }) as unknown as CallAgentLinkingService;
 
 const waitForEvent = <T>(socket: Socket, event: string, timeoutMs = 5000): Promise<T> =>

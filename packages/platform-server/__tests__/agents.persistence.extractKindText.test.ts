@@ -82,6 +82,7 @@ const createLinkingStub = () =>
     onChildRunStarted: async () => null,
     onChildRunMessage: async () => null,
     onChildRunCompleted: async () => null,
+    resolveLinkedAgentNodes: async () => ({}),
   }) as unknown as CallAgentLinkingService;
 
 function makeService(): InstanceType<typeof AgentsPersistenceService> {
