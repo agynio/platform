@@ -8,6 +8,7 @@ type Row = {
   containerId: string;
   threadId: string | null;
   image: string;
+  name: string;
   status: 'running' | 'stopped' | 'terminating' | 'failed';
   createdAt: Date;
   lastUsedAt: Date;
@@ -28,6 +29,7 @@ type ContainerSelect = {
   containerId?: boolean;
   threadId?: boolean;
   image?: boolean;
+  name?: boolean;
   status?: boolean;
   createdAt?: boolean;
   lastUsedAt?: boolean;
@@ -35,7 +37,7 @@ type ContainerSelect = {
   metadata?: boolean;
 };
 type FindManyArgs = { where?: ContainerWhereInput; orderBy?: ContainerOrderByInput; select?: ContainerSelect; take?: number };
-type SelectedRow = { containerId: string; threadId: string | null; image: string; status: Row['status']; createdAt: Date; lastUsedAt: Date; killAfterAt: Date | null };
+type SelectedRow = { containerId: string; threadId: string | null; image: string; name: string; status: Row['status']; createdAt: Date; lastUsedAt: Date; killAfterAt: Date | null };
 type SelectedRowWithMeta = SelectedRow & { metadata?: Row['metadata'] };
 
 class InMemoryPrismaClient {
@@ -60,6 +62,7 @@ class InMemoryPrismaClient {
         containerId: r.containerId,
         threadId: r.threadId,
         image: r.image,
+        name: r.name,
         status: r.status,
         createdAt: r.createdAt,
         lastUsedAt: r.lastUsedAt,
@@ -129,6 +132,7 @@ describe('ContainersController routes', () => {
       containerId: `cid-${i}`,
       threadId,
       image: `img:${i}`,
+      name: i === 1 ? 'workspace_main' : `workspace_${i}`,
       status,
       createdAt: new Date(now - i * 1000),
       lastUsedAt: new Date(now - i * 500),
@@ -148,6 +152,7 @@ describe('ContainersController routes', () => {
         createdAt: new Date(now - 4000),
         lastUsedAt: new Date(now - 2000),
         killAfterAt: null,
+        name: 'dind_helper',
         metadata: { labels: { 'hautech.ai/role': 'dind', 'hautech.ai/parent_cid': 'cid-1' } },
       },
     ];
@@ -156,7 +161,7 @@ describe('ContainersController routes', () => {
 
   it('lists running containers by default and maps startedAt', async () => {
     const res = await fastify.inject({ method: 'GET', url: '/api/containers' }); expect(res.statusCode).toBe(200);
-    type ContainerTestItem = { containerId: string; threadId: string | null; image: string; status: string; startedAt: string; lastUsedAt: string; killAfterAt: string | null; role: string; sidecars?: Array<{ containerId: string; role: string; image: string; status: string }> };
+    type ContainerTestItem = { containerId: string; threadId: string | null; image: string; name: string; status: string; startedAt: string; lastUsedAt: string; killAfterAt: string | null; role: string; sidecars?: Array<{ containerId: string; role: string; image: string; status: string; name: string }> };
     type ListResponse = { items: ContainerTestItem[] };
     const body = res.json() as ListResponse;
     const items = body.items;
@@ -169,6 +174,8 @@ describe('ContainersController routes', () => {
     expect(first.startedAt).toBe(src.createdAt.toISOString());
     // role should default/workspace
     expect(first.role).toBe('workspace');
+    expect(first.name).toBe('workspace_main');
+    expect(first.sidecars?.[0]?.name).toBe('dind_helper');
     // sidecars for cid-1 include a dind
     expect(first.sidecars && first.sidecars.length).toBeGreaterThan(0);
     expect(first.sidecars![0]).toMatchObject({ containerId: 'sidecar-1', role: 'dind', image: 'dind:latest', status: 'running' });
@@ -195,6 +202,7 @@ describe('ContainersController routes', () => {
       containerId: `cid-x-${i}`,
       threadId: null,
       image: `imgx:${i}`,
+      name: `workspace_x_${i}`,
       status: 'running',
       createdAt: new Date(now - i * 2000),
       lastUsedAt: new Date(now - i * 1000),
@@ -214,6 +222,7 @@ describe('ContainersController routes', () => {
         containerId: 'sidecar-only',
         threadId: 'parentless-thread',
         image: 'dind:latest',
+        name: 'orphan_dind',
         status: 'running',
         createdAt: now,
         lastUsedAt: now,

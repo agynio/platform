@@ -129,13 +129,14 @@ describe('MonitoringContainers page', () => {
           containerId: 'abcdef1234567890',
           threadId: '11111111-1111-1111-1111-111111111111',
           image: 'workspace:latest',
+          name: 'workspace-main',
           status: 'running',
           startedAt: timestamp,
           lastUsedAt: timestamp,
           killAfterAt: null,
           role: 'workspace',
           sidecars: [
-            { containerId: 'dind1234567890', role: 'dind', image: 'dind:latest', status: 'terminating' },
+            { containerId: 'dind1234567890', role: 'dind', image: 'dind:latest', status: 'terminating', name: 'dind-helper' },
           ],
           mounts: [
             { source: 'ha_ws_thread', destination: '/workspace' },
@@ -202,7 +203,7 @@ describe('MonitoringContainers page', () => {
       containerId: 'abcdef1234567890',
       role: 'workspace',
       status: 'running',
-      name: 'workspace:latest',
+      name: 'workspace-main',
       volumes: ['ha_ws_thread → /workspace'],
     });
     expect(workspace.parentId).toBeUndefined();
@@ -212,6 +213,7 @@ describe('MonitoringContainers page', () => {
       role: 'dind',
       status: 'stopping',
       parentId: 'abcdef1234567890',
+      name: 'dind-helper',
       volumes: [],
     });
   });
@@ -249,7 +251,7 @@ describe('MonitoringContainers page', () => {
     });
 
     expect(mutateSessionMock).toHaveBeenCalledWith({ containerId: 'abcdef1234567890' });
-    expect(screen.getByText(/Terminal for abcdef123456/)).toBeTruthy();
+    expect(screen.getByText('workspace-main')).toBeTruthy();
     expect(screen.getByTestId('terminal-view')).toBeTruthy();
     expect(terminalOpenMock).toHaveBeenCalled();
   });

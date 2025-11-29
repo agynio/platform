@@ -5,9 +5,13 @@ import {
   useRef,
   useState,
 } from 'react';
-import { Badge, Button, Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@agyn/ui';
+import { X } from 'lucide-react';
 import type { ContainerItem, ContainerTerminalSessionResponse } from '@/api/modules/containers';
 import { useCreateContainerTerminalSession } from '@/api/hooks/containers';
+import { Dialog, DialogClose, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Button } from '@/components/Button';
+import { IconButton } from '@/components/IconButton';
 import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import { WebglAddon } from '@xterm/addon-webgl';
@@ -19,6 +23,11 @@ type Props = {
   open: boolean;
   onClose: () => void;
 };
+
+function resolveDisplayName(container: ContainerItem | null): string {
+  if (!container) return 'Terminal';
+  return container.name;
+}
 
 export function ContainerTerminalDialog({ container, open, onClose }: Props) {
   const mutation = useCreateContainerTerminalSession();
@@ -97,47 +106,72 @@ export function ContainerTerminalDialog({ container, open, onClose }: Props) {
       });
   };
 
-  const title = container ? `Terminal for ${container.containerId.substring(0, 12)}` : 'Terminal';
+
+  const displayName = resolveDisplayName(container);
+
+  const placeholderMessage = error
+    ? 'Unable to start terminal'
+    : loading
+      ? 'Starting terminal session…'
+      : 'Terminal session inactive';
 
   return (
     <Dialog open={open} onOpenChange={(value) => { if (!value) onClose(); }}>
       <DialogContent
-        className="max-w-3xl"
+        className="w-full md:w-[50vw] md:max-w-[960px] p-0"
+        hideCloseButton
         onOpenAutoFocus={(event) => {
           event.preventDefault();
         }}
       >
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-3">
-            <span>{title}</span>
-            {container?.role && <Badge variant="outline">{container.role}</Badge>}
-          </DialogTitle>
-          <DialogDescription>
-            {container?.threadId ? (
-              <span className="font-mono text-xs">Thread {container.threadId}</span>
-            ) : (
-              <span className="text-xs text-muted-foreground">Detached container</span>
-            )}
-          </DialogDescription>
-        </DialogHeader>
-        <div className="flex flex-col gap-3">
-          {loading && <div className="text-sm text-muted-foreground">Starting terminal session…</div>}
-          {error && (
-            <div className="flex items-center justify-between rounded border border-red-500/50 bg-red-500/10 px-3 py-2 text-sm text-red-600">
-              <span>{error}</span>
-              <Button size="sm" variant="ghost" onClick={handleRetry}>Retry</Button>
+        <Tabs defaultValue="terminal" key={container?.containerId ?? 'default'} className="flex min-h-[520px] flex-col gap-0">
+          <DialogHeader className="gap-4 border-b border-[var(--agyn-border-subtle)] px-6 py-4">
+            <div className="flex items-center justify-between gap-4">
+              <DialogTitle className="text-lg font-semibold text-[var(--agyn-dark)]">
+                {displayName}
+              </DialogTitle>
+              <DialogClose asChild>
+                <IconButton
+                  icon={<X className="h-4 w-4" />}
+                  variant="ghost"
+                  size="sm"
+                  aria-label="Close terminal"
+                  data-slot="dialog-close"
+                />
+              </DialogClose>
             </div>
-          )}
-          {session && container && (
-            <TerminalConsole session={session} container={container} onClose={onClose} />
-          )}
-        </div>
-        <DialogFooter className="flex items-center justify-between">
-          <div className="text-xs text-muted-foreground">
-            Session expires at {session ? new Date(session.expiresAt).toLocaleString() : 'pending…'}
-          </div>
-          <Button variant="outline" onClick={onClose}>Close</Button>
-        </DialogFooter>
+            <TabsList className="mt-2">
+              <TabsTrigger value="terminal">Terminal</TabsTrigger>
+              <TabsTrigger value="logs">Logs</TabsTrigger>
+            </TabsList>
+          </DialogHeader>
+
+          <TabsContent value="terminal" className="flex flex-1 flex-col" forceMount>
+            <div className="flex flex-1 flex-col gap-4 px-6 py-4">
+              {error && (
+                <div className="flex items-center justify-between rounded-md border border-[var(--agyn-status-failed)]/40 bg-[var(--agyn-status-failed)]/10 px-3 py-2 text-sm text-[var(--agyn-status-failed)]">
+                  <span>{error}</span>
+                  <Button variant="ghost" size="sm" onClick={handleRetry}>Retry</Button>
+                </div>
+              )}
+              <div className="flex-1">
+                {session && container ? (
+                  <TerminalConsole session={session} container={container} />
+                ) : (
+                  <div className="flex min-h-[360px] items-center justify-center rounded-md border border-[var(--agyn-border-subtle)] bg-[var(--agyn-bg-light)] text-sm text-[var(--agyn-text-subtle)]">
+                    {placeholderMessage}
+                  </div>
+                )}
+              </div>
+            </div>
+          </TabsContent>
+
+          <TabsContent value="logs" className="flex flex-1" forceMount>
+            <div className="flex flex-1 items-center justify-center px-6 py-4 text-sm text-[var(--agyn-text-subtle)]">
+              Logs view coming soon.
+            </div>
+          </TabsContent>
+        </Tabs>
       </DialogContent>
     </Dialog>
   );
@@ -146,13 +180,12 @@ export function ContainerTerminalDialog({ container, open, onClose }: Props) {
 type TerminalConsoleProps = {
   session: ContainerTerminalSessionResponse;
   container: ContainerItem;
-  onClose: () => void;
 };
 
 type TerminalStatus = 'connecting' | 'running' | 'closed' | 'error';
 
-function TerminalConsole({ session, container, onClose }: TerminalConsoleProps) {
-  const { cols: negotiatedCols, rows: negotiatedRows, shell } = session.negotiated;
+function TerminalConsole({ session, container }: TerminalConsoleProps) {
+  const { cols: negotiatedCols, rows: negotiatedRows } = session.negotiated;
   const terminalContainerRef = useRef<HTMLDivElement | null>(null);
   const termRef = useRef<Terminal | null>(null);
   const fitAddonRef = useRef<FitAddon | null>(null);
@@ -165,9 +198,7 @@ function TerminalConsole({ session, container, onClose }: TerminalConsoleProps) 
   const pendingResizeRef = useRef<{ cols: number; rows: number } | null>({ cols: negotiatedCols, rows: negotiatedRows });
   const dimsRef = useRef<{ cols: number; rows: number }>({ cols: negotiatedCols, rows: negotiatedRows });
 
-  const [status, setStatus] = useState<TerminalStatus>('connecting');
-  const [statusDetail, setStatusDetail] = useState<string | null>(null);
-  const [exitCode, setExitCode] = useState<number | null>(null);
+  const [, setStatus] = useState<TerminalStatus>('connecting');
 
   const resolvedUrl = useMemo(() => toWsUrl(session.wsUrl), [session.wsUrl]);
 
@@ -198,10 +229,6 @@ function TerminalConsole({ session, container, onClose }: TerminalConsoleProps) 
 
   const setStatusIfChanged = useCallback((next: TerminalStatus) => {
     setStatus((prev) => (prev === next ? prev : next));
-  }, []);
-
-  const setStatusDetailIfChanged = useCallback((next: string | null) => {
-    setStatusDetail((prev) => (prev === next ? prev : next));
   }, []);
 
   const disposeTerminal = useCallback(() => {
@@ -409,8 +436,6 @@ function TerminalConsole({ session, container, onClose }: TerminalConsoleProps) 
     const ws = new WebSocket(resolvedUrl);
     wsRef.current = ws;
     setStatusIfChanged('connecting');
-    setStatusDetailIfChanged(null);
-    setExitCode((prev) => (prev === null ? prev : null));
 
     const onOpen = () => {
       if (!isMounted.current) return;
@@ -449,16 +474,13 @@ function TerminalConsole({ session, container, onClose }: TerminalConsoleProps) 
             if (phase === 'error') {
               const reason = typeof data.reason === 'string' ? data.reason : 'Terminal error';
               setStatusIfChanged('error');
-              setStatusDetailIfChanged(reason);
               termRef.current?.writeln(`\r\n\x1b[31m${reason}\x1b[0m`);
             } else if (phase === 'exited') {
               const exit = typeof data.exitCode === 'number' ? data.exitCode : null;
               setStatusIfChanged('closed');
-              setExitCode((prev) => (prev === exit ? prev : exit));
               termRef.current?.writeln(`\r\n\x1b[33mProcess exited${exit !== null ? ` (code ${exit})` : ''}\x1b[0m`);
             } else if (phase === 'running') {
               setStatusIfChanged('running');
-              setStatusDetailIfChanged(null);
             }
             break;
           }
@@ -467,7 +489,6 @@ function TerminalConsole({ session, container, onClose }: TerminalConsoleProps) 
             const text = typeof reason === 'string' ? reason : 'Terminal error';
             debugLog('ws error payload', { message: text, code: data.code });
             setStatusIfChanged('error');
-            setStatusDetailIfChanged(text);
             termRef.current?.writeln(`\r\n\x1b[31m${text}\x1b[0m`);
             break;
           }
@@ -486,7 +507,6 @@ function TerminalConsole({ session, container, onClose }: TerminalConsoleProps) 
       const message = 'Terminal connection error';
       debugLog('ws error event', { type: event.type });
       setStatusIfChanged('error');
-      setStatusDetailIfChanged(message);
       termRef.current?.writeln(`\r\n\x1b[31m${message}\x1b[0m`);
     };
 
@@ -526,37 +546,19 @@ function TerminalConsole({ session, container, onClose }: TerminalConsoleProps) 
       wsRef.current = null;
       debugLog('ws cleanup complete');
     };
-  }, [debugLog, flushPendingInput, focusTerminal, resolvedUrl, sendMessage, setStatusDetailIfChanged, setStatusIfChanged]);
-
-  const statusLabel = status === 'running' ? 'Running' : status === 'connecting' ? 'Connecting' : 'Closed';
+  }, [debugLog, flushPendingInput, focusTerminal, resolvedUrl, sendMessage, setStatusIfChanged]);
 
   return (
-    <div className="flex flex-col gap-2">
-      <div className="flex items-center justify-between text-xs text-muted-foreground">
-        <div className="flex items-center gap-2">
-          <Badge variant={status === 'running' ? 'outline' : 'secondary'}>{statusLabel}</Badge>
-          <span>Shell: {shell}</span>
-          {exitCode !== null && <span>Exit code: {exitCode}</span>}
-          {statusDetail && <span className="text-red-500">{statusDetail}</span>}
-        </div>
-        <div>
-          <Button size="sm" variant="ghost" onClick={() => onClose()}>End session</Button>
-        </div>
-      </div>
-      <div className="h-[320px] w-full rounded border bg-black">
-        <div
-          ref={terminalContainerRef}
-          className="h-full w-full"
-          data-testid="terminal-view"
-          aria-label={`Terminal for container ${container.containerId}`}
-          tabIndex={0}
-          onClick={handleHostClick}
-          onFocus={handleHostFocus}
-        />
-      </div>
-      <p className="text-xs text-muted-foreground">
-        Tip: click inside the terminal to focus, use your keyboard for input, and scroll to review history.
-      </p>
+    <div className="flex h-full min-h-[360px] w-full overflow-hidden rounded-md border border-[var(--agyn-border-subtle)] bg-black">
+      <div
+        ref={terminalContainerRef}
+        className="h-full w-full focus:outline-hidden"
+        data-testid="terminal-view"
+        aria-label={`Terminal for container ${container.containerId}`}
+        tabIndex={0}
+        onClick={handleHostClick}
+        onFocus={handleHostFocus}
+      />
     </div>
   );
 }

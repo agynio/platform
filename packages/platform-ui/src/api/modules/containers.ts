@@ -4,6 +4,7 @@ export type ContainerItem = {
   containerId: string;
   threadId: string | null;
   image: string;
+  name: string;
   status: 'running' | 'stopped' | 'terminating' | 'failed';
   startedAt: string;
   lastUsedAt: string;
@@ -11,7 +12,7 @@ export type ContainerItem = {
   // Derived from metadata.labels['hautech.ai/role']
   role: 'workspace' | 'dind' | string;
   // Optional sidecars attached to this container (e.g., DinD)
-  sidecars?: Array<{ containerId: string; role: 'dind'; image: string; status: 'running'|'stopped'|'terminating'|'failed' }>;
+  sidecars?: Array<{ containerId: string; role: 'dind'; image: string; status: 'running'|'stopped'|'terminating'|'failed'; name: string }>;
   mounts?: Array<{ source: string; destination: string }>;
 };
 

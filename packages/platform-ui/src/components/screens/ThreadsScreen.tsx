@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 import { formatDistanceToNow } from 'date-fns';
-import { Play, Container, Bell, Send, PanelRightClose, PanelRight, Loader2 } from 'lucide-react';
+import { Play, Container, Bell, Send, PanelRightClose, PanelRight, Loader2, Terminal } from 'lucide-react';
 import { IconButton } from '../IconButton';
 import { ThreadsList } from '../ThreadsList';
 import type { Thread } from '../ThreadItem';
@@ -36,6 +36,7 @@ interface ThreadsScreenProps {
   onThreadsLoadMore?: () => void;
   onThreadExpand?: (threadId: string, isExpanded: boolean) => void;
   onToggleThreadStatus?: (threadId: string, next: 'open' | 'closed') => void;
+  onOpenContainerTerminal?: (containerId: string) => void;
   className?: string;
 }
 
@@ -64,6 +65,7 @@ export default function ThreadsScreen({
   onThreadsLoadMore,
   onThreadExpand,
   onToggleThreadStatus,
+  onOpenContainerTerminal,
   className = '',
 }: ThreadsScreenProps) {
   const filteredThreads = threads.filter((thread) => {
@@ -153,7 +155,7 @@ export default function ThreadsScreen({
           <div className="mb-3 flex items-start justify-between">
             <div className="flex-1">
               <div className="mb-1 flex items-center gap-2">
-                <StatusIndicator status={resolvedSelectedThread.status} size="sm" />
+                <StatusIndicator status={resolvedSelectedThread.status} size="sm" showTooltip={false} />
                 <span className="text-xs text-[var(--agyn-gray)]">{resolvedSelectedThread.agentName}</span>
                 <span className="text-xs text-[var(--agyn-gray)]">•</span>
                 <span className="text-xs text-[var(--agyn-gray)]" title={createdAtTitle}>
@@ -198,15 +200,35 @@ export default function ThreadsScreen({
                 <PopoverContent className="w-[280px]">
                   <div className="space-y-2">
                     <h4 className="mb-3 text-sm text-[var(--agyn-dark)]">Containers</h4>
-                    {containers.map((container) => (
-                      <div
-                        key={container.id}
-                        className="flex items-center justify-between rounded-[6px] bg-[var(--agyn-bg-light)] px-3 py-2"
-                      >
-                        <span className="text-sm text-[var(--agyn-dark)]">{container.name}</span>
-                        <StatusIndicator status={container.status} size="sm" />
+                    {containers.length === 0 ? (
+                      <div className="rounded-[10px] border border-[var(--agyn-border-subtle)] bg-white px-3 py-2 text-sm text-[var(--agyn-text-subtle)]">
+                        No containers available.
                       </div>
-                    ))}
+                    ) : (
+                      containers.map((container) => {
+                        const isRunning = container.status === 'running';
+                        return (
+                          <div
+                            key={container.id}
+                            className="rounded-[10px] border border-[var(--agyn-border-subtle)] bg-[var(--agyn-bg-light)] px-3 py-2"
+                          >
+                            <div className="flex items-center gap-2">
+                              <span className="truncate text-sm text-[var(--agyn-dark)]">{container.name}</span>
+                              <IconButton
+                                variant="ghost"
+                                size="sm"
+                                icon={<Terminal className="h-4 w-4" />}
+                                aria-label="Open terminal"
+                                title="Open terminal"
+                                onClick={() => onOpenContainerTerminal?.(container.id)}
+                                disabled={!isRunning || !onOpenContainerTerminal}
+                              />
+                              <StatusIndicator status={container.status} size="sm" showTooltip={false} />
+                            </div>
+                          </div>
+                        );
+                      })
+                    )}
                   </div>
                 </PopoverContent>
               </Popover>

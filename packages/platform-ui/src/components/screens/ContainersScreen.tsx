@@ -241,6 +241,7 @@ export default function ContainersScreen({
                   const dinds = isGroup ? item.slice(1) : [];
                   const isExpanded = expandedContainers.has(mainContainer.id);
                   const hasDinds = dinds.length > 0;
+                  const threadLabel = mainContainer.threadId ? mainContainer.threadId.slice(0, 6) : null;
 
                   const toggleExpanded = () => {
                     const newExpanded = new Set(expandedContainers);
@@ -280,6 +281,32 @@ export default function ContainersScreen({
                                       </Tooltip.Portal>
                                     </Tooltip.Root>
                                   </Tooltip.Provider>
+                                  {threadLabel ? (
+                                    <Tooltip.Provider delayDuration={300}>
+                                      <Tooltip.Root>
+                                        <Tooltip.Trigger asChild>
+                                          <Badge
+                                            variant="neutral"
+                                            size="sm"
+                                            color="var(--agyn-dark)"
+                                            bgColor="transparent"
+                                            className="font-mono tracking-tight border border-[var(--agyn-border-subtle)]"
+                                          >
+                                            {threadLabel}
+                                          </Badge>
+                                        </Tooltip.Trigger>
+                                        <Tooltip.Portal>
+                                          <Tooltip.Content
+                                            className="bg-[var(--agyn-dark)] text-white text-xs px-3 py-2 rounded-md font-mono"
+                                            sideOffset={5}
+                                          >
+                                            {mainContainer.threadId}
+                                            <Tooltip.Arrow className="fill-[var(--agyn-dark)]" />
+                                          </Tooltip.Content>
+                                        </Tooltip.Portal>
+                                      </Tooltip.Root>
+                                    </Tooltip.Provider>
+                                  ) : null}
                                   <Badge variant="primary" size="sm">Workspace</Badge>
                                   {getStatusBadge(mainContainer.status)}
                                 </div>

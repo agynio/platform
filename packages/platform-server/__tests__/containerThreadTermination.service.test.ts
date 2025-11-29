@@ -11,6 +11,7 @@ type Row = {
   status: ContainerStatus;
   metadata: ContainerMetadata;
   terminationReason?: string | null;
+  name?: string;
 };
 
 const ISO_NOW = '2024-01-02T03:04:05.000Z';
@@ -53,17 +54,19 @@ const createHarness = () => {
       row.metadata.claimId = claimId;
       return true;
     }),
-    registerStart: vi.fn(async (args: { containerId: string; threadId: string; labels?: Record<string, string>; platform?: string; ttlSeconds?: number; nodeId: string; image: string }) => {
+    registerStart: vi.fn(async (args: { containerId: string; threadId: string; labels?: Record<string, string>; platform?: string; ttlSeconds?: number; nodeId: string; image: string; name: string }) => {
       const meta: ContainerMetadata = {
         labels: args.labels ?? {},
         platform: args.platform,
         ttlSeconds: args.ttlSeconds ?? 86400,
       };
+      if (typeof args.name !== 'string' || !args.name.trim()) throw new Error('name required');
       rows.set(args.containerId, {
         containerId: args.containerId,
         threadId: args.threadId || null,
         status: 'running',
         metadata: meta,
+        name: args.name,
       });
       if (args.labels) labels.set(args.containerId, args.labels);
     }),
@@ -118,6 +121,7 @@ describe('ContainerThreadTerminationService', () => {
       threadId: 'thread-1',
       status: 'running',
       metadata: { labels: { 'hautech.ai/role': 'workspace' }, ttlSeconds: 86400 },
+      name: 'cid1-name',
     });
     labels.set('cid1', { 'hautech.ai/thread_id': 'thread-1', 'hautech.ai/role': 'workspace' });
 
