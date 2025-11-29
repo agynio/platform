@@ -97,6 +97,10 @@ export function Conversation({
       return undefined;
     }
 
+    if (runs.length === 0) {
+      return undefined;
+    }
+
     let cancelled = false;
     const requestId = scrollRequestIdRef.current + 1;
     scrollRequestIdRef.current = requestId;

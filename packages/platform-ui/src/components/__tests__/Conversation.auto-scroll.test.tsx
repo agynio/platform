@@ -75,6 +75,62 @@ describe('Conversation auto-scroll behavior', () => {
     expect(scrollTopValue).toBe(960);
   });
 
+  it('scrolls after runs load asynchronously for the selected thread', async () => {
+    let resolveWait: (() => void) = () => {
+      throw new Error('resolve not set');
+    };
+    waitForStableScrollHeightMock.mockImplementationOnce(
+      () =>
+        new Promise<void>((resolve) => {
+          resolveWait = resolve;
+        }),
+    );
+
+    const { rerender } = render(
+      <Conversation
+        runs={[]}
+        activeThreadId="thread-1"
+        className="h-full"
+      />,
+    );
+
+    const scrollArea = screen.getByTestId('conversation-scroll-area') as HTMLDivElement;
+    let scrollHeightValue = 0;
+    let scrollTopValue = 0;
+
+    Object.defineProperty(scrollArea, 'scrollHeight', {
+      configurable: true,
+      get: () => scrollHeightValue,
+    });
+    Object.defineProperty(scrollArea, 'scrollTop', {
+      configurable: true,
+      get: () => scrollTopValue,
+      set: (value: number) => {
+        scrollTopValue = value;
+      },
+    });
+
+    expect(waitForStableScrollHeightMock).not.toHaveBeenCalled();
+
+    rerender(
+      <Conversation
+        runs={createRuns()}
+        activeThreadId="thread-1"
+        className="h-full"
+      />,
+    );
+
+    scrollHeightValue = 720;
+
+    await act(async () => {
+      resolveWait();
+      await Promise.resolve();
+    });
+
+    expect(waitForStableScrollHeightMock).toHaveBeenCalledTimes(1);
+    expect(scrollTopValue).toBe(720);
+  });
+
   it('uses the latest scroll height after dynamic content growth', async () => {
     let resolveWait: (() => void) = () => {
       throw new Error('resolve not set');
