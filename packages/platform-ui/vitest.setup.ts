@@ -92,7 +92,7 @@ vi.mock('react-virtuoso', () => {
     scrollBy(options: ScrollToOptions): void;
     scrollIntoView(location: unknown): void;
     scrollTo(options: ScrollToOptions): void;
-    scrollToIndex(location: number): void;
+    scrollToIndex(location: number | { index: number }): void;
   }
 
   type HeaderFooterProps = { context?: unknown };
@@ -115,6 +115,14 @@ vi.mock('react-virtuoso', () => {
     itemContent?: (index: number, item: unknown) => React.ReactNode;
     components?: MaybeComponents;
     firstItemIndex?: number;
+    initialTopMostItemIndex?: number;
+    followOutput?:
+      | boolean
+      | 'smooth'
+      | ((isAtBottom: boolean) => boolean | 'smooth' | undefined | null);
+    atBottomStateChange?: (isAtBottom: boolean) => void;
+    startReached?: (index: number) => void;
+    endReached?: (index: number) => void;
     className?: string;
     style?: React.CSSProperties;
     context?: unknown;
@@ -130,6 +138,11 @@ vi.mock('react-virtuoso', () => {
       itemContent = fallbackItemContent,
       components: incomingComponents,
       firstItemIndex = 0,
+      initialTopMostItemIndex,
+      followOutput,
+      atBottomStateChange,
+      startReached,
+      endReached,
       className,
       style,
       context,
@@ -139,86 +152,213 @@ vi.mock('react-virtuoso', () => {
 
     const items = Array.isArray(data) ? data : [];
     const itemCount = items.length;
+    useEffect(() => {
+      if (itemCount === 0) {
+        isAtBottomRef.current = true;
+        return;
+      }
+
+      const lastIndex = firstItemIndex + itemCount - 1;
+      if (typeof initialTopMostItemIndex === 'number') {
+        isAtBottomRef.current = initialTopMostItemIndex >= lastIndex;
+      } else {
+        isAtBottomRef.current = true;
+      }
+    }, [firstItemIndex, initialTopMostItemIndex, itemCount]);
     const components: MaybeComponents = incomingComponents ?? {};
     const scrollerNodeRef = useRef<HTMLDivElement | null>(null);
     const previousNodeRef = useRef<HTMLDivElement | null>(null);
     const lastScrollHeightRef = useRef(0);
     const knownNodesRef = useRef(new Set<HTMLDivElement>());
+    const followOutputRef = useRef<MockVirtuosoProps['followOutput']>(followOutput);
+    const atBottomStateChangeRef = useRef<MockVirtuosoProps['atBottomStateChange']>(atBottomStateChange);
+    const startReachedRef = useRef<MockVirtuosoProps['startReached']>(startReached);
+    const endReachedRef = useRef<MockVirtuosoProps['endReached']>(endReached);
+    const isAtBottomRef = useRef(false);
 
-    const applyAutoScroll = useCallback((node: HTMLDivElement | null) => {
-      if (!node) {
-        return;
+    useEffect(() => {
+      followOutputRef.current = followOutput;
+    }, [followOutput]);
+
+    useEffect(() => {
+      atBottomStateChangeRef.current = atBottomStateChange;
+    }, [atBottomStateChange]);
+
+    useEffect(() => {
+      startReachedRef.current = startReached;
+    }, [startReached]);
+
+    useEffect(() => {
+      endReachedRef.current = endReached;
+    }, [endReached]);
+
+    const evaluateFollowOutput = (isAtBottom: boolean) => {
+      const followValue = followOutputRef.current;
+      if (typeof followValue === 'function') {
+        try {
+          const result = followValue(isAtBottom);
+          return result === true || result === 'smooth';
+        } catch (_err) {
+          return false;
+        }
       }
 
-      knownNodesRef.current.add(node);
+      return followValue === true || followValue === 'smooth';
+    };
 
-      const measuredHeight = node.scrollHeight;
-      const fallbackHeight = measuredHeight || lastScrollHeightRef.current || itemCount * 32;
+    const applyAutoScroll = useCallback(
+      (node: HTMLDivElement | null, options?: { notify?: boolean }) => {
+        if (!node) {
+          return;
+        }
 
-      if (fallbackHeight > 0) {
-        lastScrollHeightRef.current = fallbackHeight;
-        globalLastScrollHeight = fallbackHeight;
-      }
+        const notify = options?.notify ?? true;
 
-      for (const knownNode of knownNodesRef.current) {
-        knownNode.scrollTop = fallbackHeight;
-      }
+        knownNodesRef.current.add(node);
 
-      if (typeof document !== 'undefined') {
-        const listboxes = document.querySelectorAll<HTMLElement>('[role="listbox"]');
-        listboxes.forEach((element) => {
-          element.scrollTop = fallbackHeight;
-        });
-      }
+        const measuredHeight = node.scrollHeight;
+        const fallbackHeight = measuredHeight || lastScrollHeightRef.current || itemCount * 32;
 
-      for (const target of definedScrollTargets) {
-        target.scrollTop = fallbackHeight;
-      }
+        if (fallbackHeight > 0) {
+          lastScrollHeightRef.current = fallbackHeight;
+          globalLastScrollHeight = fallbackHeight;
+        }
 
-      const activeDescendant = node.getAttribute('aria-activedescendant');
-      if (activeDescendant !== null) {
+        node.scrollTop = fallbackHeight;
+
         for (const knownNode of knownNodesRef.current) {
-          if (knownNode.getAttribute('aria-activedescendant') !== activeDescendant) {
-            knownNode.setAttribute('aria-activedescendant', activeDescendant);
+          knownNode.scrollTop = fallbackHeight;
+        }
+
+        if (typeof document !== 'undefined') {
+          const listboxes = document.querySelectorAll<HTMLElement>('[role="listbox"]');
+          listboxes.forEach((element) => {
+            element.scrollTop = fallbackHeight;
+          });
+        }
+
+        for (const target of definedScrollTargets) {
+          target.scrollTop = fallbackHeight;
+        }
+
+        const activeDescendant = node.getAttribute('aria-activedescendant');
+        if (activeDescendant !== null) {
+          for (const knownNode of knownNodesRef.current) {
+            if (knownNode.getAttribute('aria-activedescendant') !== activeDescendant) {
+              knownNode.setAttribute('aria-activedescendant', activeDescendant);
+            }
+          }
+
+          if (typeof document !== 'undefined') {
+            const listboxes = document.querySelectorAll<HTMLElement>('[role="listbox"]');
+            listboxes.forEach((element) => {
+              if (element.getAttribute('aria-activedescendant') !== activeDescendant) {
+                element.setAttribute('aria-activedescendant', activeDescendant);
+              }
+            });
+          }
+        } else {
+          for (const knownNode of knownNodesRef.current) {
+            knownNode.removeAttribute('aria-activedescendant');
+          }
+
+          if (typeof document !== 'undefined') {
+            const listboxes = document.querySelectorAll<HTMLElement>('[role="listbox"]');
+            listboxes.forEach((element) => {
+              element.removeAttribute('aria-activedescendant');
+            });
           }
         }
 
-        if (typeof document !== 'undefined') {
-          const listboxes = document.querySelectorAll<HTMLElement>('[role="listbox"]');
-          listboxes.forEach((element) => {
-            if (element.getAttribute('aria-activedescendant') !== activeDescendant) {
-              element.setAttribute('aria-activedescendant', activeDescendant);
+        previousNodeRef.current = node;
+        isAtBottomRef.current = true;
+
+        if (notify) {
+          queueMicrotask(() => {
+            atBottomStateChangeRef.current?.(true);
+
+            if (itemCount > 0) {
+              const lastIndex = firstItemIndex + itemCount - 1;
+              endReachedRef.current?.(lastIndex);
+            }
+
+            if (evaluateFollowOutput(true)) {
+              queueMicrotask(() => {
+                applyAutoScroll(node, { notify: false });
+              });
             }
           });
         }
-      } else {
-        for (const knownNode of knownNodesRef.current) {
-          knownNode.removeAttribute('aria-activedescendant');
+      },
+      [firstItemIndex, itemCount],
+    );
+
+    const scrollToIndexImpl = useCallback(
+      (location: number | { index: number }) => {
+        const resolvedIndex =
+          typeof location === 'number'
+            ? location
+            : location && typeof location === 'object' && typeof (location as { index?: unknown }).index === 'number'
+              ? (location as { index: number }).index
+              : null;
+
+        if (resolvedIndex === null) {
+          return;
         }
 
-        if (typeof document !== 'undefined') {
-          const listboxes = document.querySelectorAll<HTMLElement>('[role="listbox"]');
-          listboxes.forEach((element) => {
-            element.removeAttribute('aria-activedescendant');
+        if (resolvedIndex <= firstItemIndex) {
+          for (const knownNode of knownNodesRef.current) {
+            knownNode.scrollTop = 0;
+          }
+
+          const currentNode = scrollerNodeRef.current;
+          if (currentNode && !knownNodesRef.current.has(currentNode)) {
+            currentNode.scrollTop = 0;
+          }
+
+          if (typeof document !== 'undefined') {
+            const listboxes = document.querySelectorAll<HTMLElement>('[role="listbox"]');
+            listboxes.forEach((element) => {
+              element.scrollTop = 0;
+            });
+          }
+
+          for (const target of definedScrollTargets) {
+            target.scrollTop = 0;
+          }
+
+          isAtBottomRef.current = false;
+
+          queueMicrotask(() => {
+            atBottomStateChangeRef.current?.(false);
           });
-        }
-      }
 
-      previousNodeRef.current = node;
-    }, [itemCount]);
-
-    useImperativeHandle(ref, (): MockVirtuosoHandle => ({
-      autoscrollToBottom: () => {},
-      getState: (callback) => {
-        if (typeof callback === 'function') {
-          callback({});
+          startReachedRef.current?.(firstItemIndex);
         }
       },
-      scrollBy: () => {},
-      scrollIntoView: () => {},
-      scrollTo: () => {},
-      scrollToIndex: () => {},
-    }), []);
+      [firstItemIndex],
+    );
+
+    useImperativeHandle(
+      ref,
+      (): MockVirtuosoHandle => ({
+        autoscrollToBottom: () => {
+          applyAutoScroll(scrollerNodeRef.current ?? null);
+        },
+        getState: (callback) => {
+          if (typeof callback === 'function') {
+            callback({});
+          }
+        },
+        scrollBy: () => {},
+        scrollIntoView: () => {},
+        scrollTo: () => {},
+        scrollToIndex: (location) => {
+          scrollToIndexImpl(location);
+        },
+      }),
+      [applyAutoScroll, scrollToIndexImpl],
+    );
 
     useEffect(() => {
       applyAutoScroll(scrollerNodeRef.current);
@@ -281,11 +421,16 @@ vi.mock('react-virtuoso', () => {
       applyAutoScroll(node);
     };
 
+    const mergedScrollerProps: React.HTMLAttributes<HTMLDivElement> = {
+      role: 'listbox',
+      ...providedScrollerProps,
+      ...(scrollerProps ?? {}),
+    };
+
     const scrollerElement = React.createElement(
       'div',
       {
-        ...providedScrollerProps,
-        ...(scrollerProps ?? {}),
+        ...mergedScrollerProps,
         ref: setScrollerNode,
       },
       listChildren,
