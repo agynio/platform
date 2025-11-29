@@ -674,7 +674,15 @@ export class ContainerTerminalGateway {
       let bootstrapMarkerBuffer = '';
       let stdoutMuxRemainder: Buffer | null = null;
       let stdoutMuxStrippedLogged = false;
-      const decodeDockerMultiplex = (buffer: Buffer): { payload: Buffer; remainder: Buffer | null; stripped: boolean } => {
+      const decodeDockerMultiplex = (
+        buffer: Buffer,
+        hadPending: boolean,
+      ): {
+        payloads: Buffer[];
+        remainder: Buffer | null;
+        stripped: boolean;
+        treatAsPlain: boolean;
+      } => {
         let offset = 0;
         const frames: Buffer[] = [];
         let stripped = false;
@@ -686,43 +694,54 @@ export class ContainerTerminalGateway {
             buffer[offset + 1] === 0 &&
             buffer[offset + 2] === 0 &&
             buffer[offset + 3] === 0;
+
           if (!headerLooksValid) {
-            if (offset === 0) {
-              return { payload: buffer, remainder: null, stripped: false };
+            if (frames.length === 0) {
+              return { payloads: [buffer], remainder: null, stripped: false, treatAsPlain: true };
             }
             frames.push(buffer.subarray(offset));
-            return { payload: Buffer.concat(frames), remainder: null, stripped };
+            return { payloads: frames, remainder: null, stripped: true, treatAsPlain: false };
           }
 
           const frameLength = buffer.readUInt32BE(offset + 4);
           const frameEnd = offset + 8 + frameLength;
           if (frameEnd > buffer.length) {
-            return {
-              payload: frames.length ? Buffer.concat(frames) : Buffer.alloc(0),
-              remainder: buffer.subarray(offset),
-              stripped,
-            };
+            return { payloads: frames, remainder: buffer.subarray(offset), stripped, treatAsPlain: false };
           }
+
           frames.push(buffer.subarray(offset + 8, frameEnd));
           stripped = true;
           offset = frameEnd;
         }
 
-        const remainder = buffer.length - offset > 0 ? buffer.subarray(offset) : null;
-        if (!stripped) {
-          return { payload: buffer, remainder: null, stripped: false };
+        if (frames.length === 0 && !stripped) {
+          if (hadPending) {
+            return { payloads: [], remainder: buffer, stripped: false, treatAsPlain: false };
+          }
+          return { payloads: [buffer], remainder: null, stripped: false, treatAsPlain: true };
         }
-        return {
-          payload: Buffer.concat(frames),
-          remainder,
-          stripped,
-        };
+
+        if (offset < buffer.length) {
+          return { payloads: frames, remainder: buffer.subarray(offset), stripped, treatAsPlain: false };
+        }
+
+        return { payloads: frames, remainder: null, stripped, treatAsPlain: false };
       };
 
       stdout?.on('data', (chunk: Buffer | string) => {
+        if (!chunk) return;
         const incoming = typeof chunk === 'string' ? Buffer.from(chunk, 'utf8') : chunk;
-        const buffered = stdoutMuxRemainder ? Buffer.concat([stdoutMuxRemainder, incoming]) : incoming;
-        const { payload, remainder, stripped } = decodeDockerMultiplex(buffered);
+        const combined = stdoutMuxRemainder ? Buffer.concat([stdoutMuxRemainder, incoming]) : incoming;
+        const potentialHeaderByte = combined.length > 0 ? combined[0] : undefined;
+        if (!stdoutMuxRemainder && combined.length > 0 && combined.length < 8) {
+          if (potentialHeaderByte === 0 || potentialHeaderByte === 1 || potentialHeaderByte === 2) {
+            stdoutMuxRemainder = combined;
+            refreshActivity();
+            return;
+          }
+        }
+        const hadPending = stdoutMuxRemainder !== null;
+        const { payloads, remainder, stripped, treatAsPlain } = decodeDockerMultiplex(combined, hadPending);
         stdoutMuxRemainder = remainder;
         if (stripped && !stdoutMuxStrippedLogged) {
           stdoutMuxStrippedLogged = true;
@@ -733,7 +752,13 @@ export class ContainerTerminalGateway {
           });
         }
 
-        const data = payload.toString('utf8');
+        if (!payloads.length) {
+          refreshActivity();
+          return;
+        }
+
+        const payloadBuffer = treatAsPlain ? payloads[0] : Buffer.concat(payloads);
+        const data = payloadBuffer.toString('utf8');
         if (data.length) {
           bootstrapMarkerBuffer = (bootstrapMarkerBuffer + data).slice(-512);
           if (!bootstrapMarkerLogged && bootstrapMarkerBuffer.includes('BOOTSTRAP_OK')) {
