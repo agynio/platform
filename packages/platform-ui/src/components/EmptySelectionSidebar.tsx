@@ -16,71 +16,16 @@ const nodeKindConfig = {
   Workspace: { color: 'var(--agyn-purple)', bgColor: 'var(--agyn-bg-purple)' },
 };
 
-const defaultNodeItems: DraggableNodeItem[] = [
-  {
-    id: 'trigger-http',
-    kind: 'Trigger',
-    title: 'HTTP Trigger',
-    description: 'Start a workflow with an HTTP request',
-  },
-  {
-    id: 'trigger-schedule',
-    kind: 'Trigger',
-    title: 'Schedule Trigger',
-    description: 'Run workflows on a schedule',
-  },
-  {
-    id: 'agent-gpt4',
-    kind: 'Agent',
-    title: 'GPT-4 Agent',
-    description: 'AI agent powered by GPT-4',
-  },
-  {
-    id: 'agent-claude',
-    kind: 'Agent',
-    title: 'Claude Agent',
-    description: 'AI agent powered by Claude',
-  },
-  {
-    id: 'tool-search',
-    kind: 'Tool',
-    title: 'Web Search',
-    description: 'Search the web for information',
-  },
-  {
-    id: 'tool-calculator',
-    kind: 'Tool',
-    title: 'Calculator',
-    description: 'Perform mathematical calculations',
-  },
-  {
-    id: 'mcp-database',
-    kind: 'MCP',
-    title: 'Database MCP',
-    description: 'Connect to databases via MCP',
-  },
-  {
-    id: 'mcp-files',
-    kind: 'MCP',
-    title: 'File System MCP',
-    description: 'Access file system operations',
-  },
-  {
-    id: 'workspace-dev',
-    kind: 'Workspace',
-    title: 'Development Workspace',
-    description: 'Isolated environment for development',
-  },
-];
-
 interface EmptySelectionSidebarProps {
   nodeItems?: DraggableNodeItem[];
   onNodeDragStart?: (nodeType: string) => void;
+  statusMessage?: string;
 }
 
 export default function EmptySelectionSidebar({
-  nodeItems = defaultNodeItems,
+  nodeItems = [],
   onNodeDragStart,
+  statusMessage,
 }: EmptySelectionSidebarProps) {
   const handleDragStart = (event: React.DragEvent, item: DraggableNodeItem) => {
     event.dataTransfer.setData('application/reactflow', JSON.stringify(item));
@@ -89,6 +34,9 @@ export default function EmptySelectionSidebar({
       onNodeDragStart(item.kind);
     }
   };
+
+  const hasItems = nodeItems.length > 0;
+  const emptyMessage = statusMessage && statusMessage.length > 0 ? statusMessage : 'No templates available.';
 
   return (
     <div className="w-[420px] bg-white border-l border-[var(--agyn-border-default)] flex flex-col h-full">
@@ -114,37 +62,43 @@ export default function EmptySelectionSidebar({
             Drag to Canvas
           </div>
           <div className="space-y-2">
-            {nodeItems.map((item) => {
-              const config = nodeKindConfig[item.kind];
-              return (
-                <div
-                  key={item.id}
-                  draggable
-                  onDragStart={(e) => handleDragStart(e, item)}
-                  className="p-3 rounded-[8px] border border-[var(--agyn-border-subtle)] bg-white hover:border-[var(--agyn-border-medium)] hover:shadow-sm transition-all cursor-grab active:cursor-grabbing"
-                >
-                  <div className="flex items-start gap-3">
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 mb-1.5">
-                        <Badge
-                          size="sm"
-                          color={config.color}
-                          bgColor={config.bgColor}
-                        >
-                          {item.kind}
-                        </Badge>
-                        <span className="text-sm text-[var(--agyn-dark)]">
-                          {item.title}
-                        </span>
+            {hasItems ? (
+              nodeItems.map((item) => {
+                const config = nodeKindConfig[item.kind];
+                return (
+                  <div
+                    key={item.id}
+                    draggable
+                    onDragStart={(e) => handleDragStart(e, item)}
+                    className="p-3 rounded-[8px] border border-[var(--agyn-border-subtle)] bg-white hover:border-[var(--agyn-border-medium)] hover:shadow-sm transition-all cursor-grab active:cursor-grabbing"
+                  >
+                    <div className="flex items-start gap-3">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 mb-1.5">
+                          <Badge
+                            size="sm"
+                            color={config.color}
+                            bgColor={config.bgColor}
+                          >
+                            {item.kind}
+                          </Badge>
+                          <span className="text-sm text-[var(--agyn-dark)]">
+                            {item.title}
+                          </span>
+                        </div>
+                        <p className="text-xs text-[var(--agyn-gray)] leading-relaxed">
+                          {item.description}
+                        </p>
                       </div>
-                      <p className="text-xs text-[var(--agyn-gray)] leading-relaxed">
-                        {item.description}
-                      </p>
                     </div>
                   </div>
-                </div>
-              );
-            })}
+                );
+              })
+            ) : (
+              <div className="rounded-[8px] border border-[var(--agyn-border-subtle)] bg-[var(--agyn-bg-light)] px-3 py-6 text-sm text-[var(--agyn-gray)]">
+                {emptyMessage}
+              </div>
+            )}
           </div>
         </div>
       </div>
