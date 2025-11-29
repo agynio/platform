@@ -413,4 +413,160 @@ describe('ContainerTerminalGateway (custom websocket server)', () => {
 
     await app.close();
   });
+
+  describe('docker multiplex decoding', () => {
+    const createFrame = (data: string): Buffer => {
+      const payload = Buffer.from(data, 'utf8');
+      const frame = Buffer.alloc(8 + payload.length);
+      frame.writeUInt8(1, 0);
+      frame.writeUInt8(0, 1);
+      frame.writeUInt8(0, 2);
+      frame.writeUInt8(0, 3);
+      frame.writeUInt32BE(payload.length, 4);
+      payload.copy(frame, 8);
+      return frame;
+    };
+
+    const setupMuxHarness = async () => {
+      const harness = createSessionServiceHarness({
+        shell: '/bin/bash',
+        containerId: 'd'.repeat(64),
+      });
+      const sessionMocks = harness.service as unknown as TerminalSessionsService;
+      const record = harness.getRecord();
+      if (!record) {
+        throw new Error('expected active terminal session');
+      }
+
+      const stdin = new PassThrough();
+      const stdout = new PassThrough();
+      const closeExec = vi.fn().mockResolvedValue({ exitCode: 0 });
+
+      const containerMocks = {
+        openInteractiveExec: vi.fn().mockResolvedValue({
+          stdin,
+          stdout,
+          stderr: undefined,
+          close: closeExec,
+          execId: 'exec-mux',
+        }),
+        resizeExec: vi.fn().mockResolvedValue(undefined),
+      } as unknown as ContainerService;
+
+      const gateway = new ContainerTerminalGateway(sessionMocks, containerMocks);
+
+      const app = Fastify();
+      gateway.registerRoutes(app);
+      const port = await listenFastify(app);
+
+      const messages: { type?: string; data?: unknown; phase?: string }[] = [];
+      const ws = new WebSocket(
+        `ws://127.0.0.1:${port}/api/containers/${record.containerId}/terminal/ws?sessionId=${record.sessionId}&token=${record.token}`,
+      );
+      ws.on('message', (payload) => {
+        const text = typeof payload === 'string' ? payload : payload.toString('utf8');
+        try {
+          messages.push(JSON.parse(text) as { type?: string; data?: unknown; phase?: string });
+        } catch {
+          messages.push({ data: text });
+        }
+      });
+
+      await waitFor(() => messages.some((msg) => msg.type === 'status' && msg.phase === 'running'), 3000);
+      messages.length = 0;
+
+      return {
+        stdout,
+        messages,
+        ws,
+        async cleanup() {
+          if (ws.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify({ type: 'close' }));
+            await waitForWsClose(ws, 3000);
+          } else if (ws.readyState === WebSocket.CONNECTING) {
+            await new Promise((resolve) => ws.once('open', resolve));
+            ws.send(JSON.stringify({ type: 'close' }));
+            await waitForWsClose(ws, 3000);
+          } else if (ws.readyState === WebSocket.CLOSING) {
+            await waitForWsClose(ws, 3000);
+          }
+          await app.close();
+        },
+      };
+    };
+
+    const expectForwarded = async (chunks: Buffer[]) => {
+      const harness = await setupMuxHarness();
+      try {
+        for (const chunk of chunks) {
+          harness.stdout.write(chunk);
+        }
+
+        await waitFor(
+          () =>
+            harness.messages.some(
+              (msg) => msg.type === 'output' && typeof msg.data === 'string' && msg.data.includes('hello'),
+            ),
+          3000,
+        );
+        const forwarded = harness.messages.find((msg) => msg.type === 'output')?.data;
+        expect(forwarded).toBe('hello\n');
+        expect(typeof forwarded === 'string' && forwarded.includes('\u0001')).toBe(false);
+      } finally {
+        await harness.cleanup();
+      }
+    };
+
+    it('strips multiplex headers delivered in a single chunk', async () => {
+      const frame = createFrame('hello\n');
+      await expectForwarded([frame]);
+    });
+
+    it.each([
+      ['split header 1/7', [1]],
+      ['split header 4/4', [4]],
+      ['split header 7/1', [7]],
+      ['split header 2/3/3', [2, 5]],
+    ])('strips multiplex headers with %s', async (_label, splitSizes) => {
+      const frame = createFrame('hello\n');
+      const header = frame.subarray(0, 8);
+      const payload = frame.subarray(8);
+      const chunks: Buffer[] = [];
+      let offset = 0;
+      for (const size of splitSizes) {
+        const end = Math.min(offset + size, 8);
+        if (end > offset) {
+          chunks.push(header.subarray(offset, end));
+        }
+        offset = end;
+      }
+      if (offset < 8) {
+        chunks.push(header.subarray(offset, 8));
+      }
+      chunks.push(payload);
+      await expectForwarded(chunks);
+    });
+
+    it.each([
+      ['payload split 2+rest', [2]],
+      ['payload split 1+2+rest', [1, 3]],
+    ])('strips multiplex headers when %s', async (_label, splitPoints) => {
+      const frame = createFrame('hello\n');
+      const header = frame.subarray(0, 8);
+      const payload = frame.subarray(8);
+      const chunks: Buffer[] = [header];
+      let offset = 0;
+      for (const size of splitPoints) {
+        const end = Math.min(offset + size, payload.length);
+        if (end > offset) {
+          chunks.push(payload.subarray(offset, end));
+        }
+        offset = end;
+      }
+      if (offset < payload.length) {
+        chunks.push(payload.subarray(offset));
+      }
+      await expectForwarded(chunks);
+    });
+  });
 });
