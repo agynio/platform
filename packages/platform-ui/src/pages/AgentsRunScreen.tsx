@@ -254,6 +254,8 @@ type ToolLinkData = {
   runId?: string;
 };
 
+type LlmToolCall = NonNullable<RunTimelineEvent['llmCall']>['toolCalls'][number];
+
 function readStringPath(record: Record<string, unknown>, path: readonly string[]): string | undefined {
   let current: unknown = record;
   for (const segment of path) {
@@ -304,27 +306,168 @@ function normalizeRecordWithTargets(record: Record<string, unknown> | null, targ
   return changed ? next : record;
 }
 
-function toPlainTextContent(item: ContextItem): string {
-  if (isNonEmptyString(item.contentText)) return item.contentText;
-  if (item.contentJson === null || item.contentJson === undefined) return '';
-  try {
-    return JSON.stringify(item.contentJson, null, 2);
-  } catch (_error) {
-    return String(item.contentJson);
+function parseContextItemContent(item: ContextItem): {
+  parsed: unknown;
+  record: Record<string, unknown> | null;
+  text: string | null;
+} {
+  const parsedContent = item.contentJson ?? (isNonEmptyString(item.contentText) ? parseMaybeJson(item.contentText) : undefined);
+  const record = coerceRecord(parsedContent);
+
+  const stringCandidates: Array<string | null> = [];
+  if (record && typeof record.content === 'string' && record.content.length > 0) stringCandidates.push(record.content);
+  if (record && typeof record.response === 'string' && record.response.length > 0) stringCandidates.push(record.response);
+  if (typeof parsedContent === 'string' && parsedContent.length > 0) stringCandidates.push(parsedContent);
+  if (isNonEmptyString(item.contentText)) stringCandidates.push(item.contentText);
+
+  let text: string | null = null;
+  for (const candidate of stringCandidates) {
+    if (typeof candidate === 'string' && candidate.length > 0) {
+      text = candidate;
+      break;
+    }
   }
+
+  if (text === null && parsedContent !== undefined) {
+    if (typeof parsedContent === 'string') {
+      text = parsedContent;
+    } else {
+      try {
+        text = JSON.stringify(parsedContent, null, 2);
+      } catch (_error) {
+        text = String(parsedContent);
+      }
+    }
+  }
+
+  return { parsed: parsedContent, record, text };
 }
 
-function toContextRecord(item: ContextItem): Record<string, unknown> {
-  return {
-    id: item.id,
-    role: item.role,
-    timestamp: item.createdAt,
-    sizeBytes: item.sizeBytes,
-    content: toPlainTextContent(item),
-    contentText: item.contentText,
-    contentJson: item.contentJson,
-    metadata: item.metadata,
+function normalizeMetadata(value: unknown): Record<string, unknown> | null {
+  const parsed = parseMaybeJson(value);
+  return coerceRecord(parsed);
+}
+
+function collectToolCalls(
+  primary: Record<string, unknown> | null,
+  primaryAdditionalKwargs: Record<string, unknown> | null,
+  metadata: Record<string, unknown> | null,
+  metadataAdditionalKwargs: Record<string, unknown> | null,
+): Record<string, unknown>[] {
+  const seen = new Set<string>();
+  const result: Record<string, unknown>[] = [];
+
+  const addRecords = (value: unknown) => {
+    if (value === undefined || value === null) return;
+    const normalized = typeof value === 'string' ? parseMaybeJson(value) : value;
+    for (const record of toRecordArray(normalized)) {
+      const key = (() => {
+        try {
+          return JSON.stringify(record);
+        } catch (_err) {
+          return undefined;
+        }
+      })();
+      if (key && seen.has(key)) continue;
+      if (key) seen.add(key);
+      result.push(record);
+    }
   };
+
+  if (primary) {
+    addRecords(primary.tool_calls);
+    addRecords(primary.toolCalls);
+  }
+  if (primaryAdditionalKwargs) {
+    addRecords(primaryAdditionalKwargs.tool_calls);
+    addRecords(primaryAdditionalKwargs.toolCalls);
+  }
+  if (metadata) {
+    addRecords(metadata.tool_calls);
+    addRecords(metadata.toolCalls);
+  }
+  if (metadataAdditionalKwargs) {
+    addRecords(metadataAdditionalKwargs.tool_calls);
+    addRecords(metadataAdditionalKwargs.toolCalls);
+  }
+
+  return result;
+}
+
+function extractReasoning(
+  primary: Record<string, unknown> | null,
+  primaryAdditionalKwargs: Record<string, unknown> | null,
+  metadata: Record<string, unknown> | null,
+  metadataAdditionalKwargs: Record<string, unknown> | null,
+): unknown {
+  const candidates: unknown[] = [];
+  if (primary) candidates.push(primary.reasoning);
+  if (primaryAdditionalKwargs) candidates.push(primaryAdditionalKwargs.reasoning);
+  if (metadata) candidates.push(metadata.reasoning);
+  if (metadataAdditionalKwargs) candidates.push(metadataAdditionalKwargs.reasoning);
+
+  for (const candidate of candidates) {
+    if (candidate === undefined) continue;
+    if (candidate === null) return null;
+    if (typeof candidate === 'string') {
+      const parsed = parseMaybeJson(candidate);
+      return parsed;
+    }
+    return candidate;
+  }
+  return undefined;
+}
+
+function toContextRecord(item: ContextItem, fallbackToolCalls?: readonly LlmToolCall[]): Record<string, unknown> {
+  const metadataRecord = normalizeMetadata(item.metadata);
+  const metadataAdditionalKwargs = metadataRecord ? coerceRecord(metadataRecord.additional_kwargs) : null;
+  const { parsed: parsedContent, record: parsedRecord, text: textContent } = parseContextItemContent(item);
+  const contentAdditionalKwargs = parsedRecord ? coerceRecord(parsedRecord.additional_kwargs) : null;
+
+  const result: Record<string, unknown> = parsedRecord ? { ...parsedRecord } : {};
+
+  if (!isNonEmptyString(result.id)) {
+    result.id = item.id;
+  }
+  result.role = typeof result.role === 'string' && result.role.length > 0 ? result.role : item.role;
+  result.timestamp = result.timestamp ?? item.createdAt;
+  result.sizeBytes = item.sizeBytes;
+  result.contentJson = parsedContent;
+  result.contentText = isNonEmptyString(item.contentText) ? item.contentText : textContent;
+  result.metadata = metadataRecord ?? item.metadata;
+
+  if (textContent !== null && textContent !== undefined) {
+    if (result.content === undefined) {
+      result.content = textContent;
+    }
+    if (result.response === undefined && result.role === 'assistant') {
+      result.response = textContent;
+    }
+  }
+
+  const mergedAdditionalKwargs = contentAdditionalKwargs ?? metadataAdditionalKwargs;
+  if (mergedAdditionalKwargs) {
+    result.additional_kwargs = mergedAdditionalKwargs;
+  }
+
+  const collectedToolCalls = collectToolCalls(parsedRecord, contentAdditionalKwargs, metadataRecord, metadataAdditionalKwargs);
+  let toolCalls: Record<string, unknown>[] = collectedToolCalls;
+
+  if (toolCalls.length === 0 && result.role === 'assistant' && Array.isArray(fallbackToolCalls) && fallbackToolCalls.length > 0) {
+    toolCalls = toRecordArray(fallbackToolCalls as unknown);
+  }
+
+  if (toolCalls.length > 0) {
+    result.tool_calls = toolCalls;
+    result.toolCalls = toolCalls;
+  }
+
+  const reasoning = extractReasoning(parsedRecord, contentAdditionalKwargs, metadataRecord, metadataAdditionalKwargs);
+  if (reasoning !== undefined) {
+    result.reasoning = reasoning;
+  }
+
+  return result;
 }
 
 function toRecordArray(value: unknown): Record<string, unknown>[] {
@@ -372,13 +515,17 @@ function buildToolLinkData(event: RunTimelineEvent): ToolLinkData | undefined {
   };
 }
 
-function resolveContextRecords(ids: readonly string[], lookup: Map<string, ContextItem>): Record<string, unknown>[] {
+function resolveContextRecords(
+  ids: readonly string[],
+  lookup: Map<string, ContextItem>,
+  fallbackToolCalls?: readonly LlmToolCall[],
+): Record<string, unknown>[] {
   if (!Array.isArray(ids) || ids.length === 0) return [];
   const records: Record<string, unknown>[] = [];
   for (const id of ids) {
     if (!isNonEmptyString(id)) continue;
     const item = lookup.get(id);
-    if (item) records.push(toContextRecord(item));
+    if (item) records.push(toContextRecord(item, fallbackToolCalls));
   }
   return records;
 }
@@ -1220,7 +1367,10 @@ export function AgentsRunScreen() {
     const lookup = contextItemsRef.current;
     void contextItemsVersion;
     return events.map((event) => {
-      const contextRecords = event.type === 'llm_call' ? resolveContextRecords(event.llmCall?.contextItemIds ?? [], lookup) : [];
+      const contextRecords =
+        event.type === 'llm_call'
+          ? resolveContextRecords(event.llmCall?.contextItemIds ?? [], lookup, event.llmCall?.toolCalls ?? [])
+          : [];
       const toolLinks = event.type === 'tool_execution' ? buildToolLinkData(event) : undefined;
       return createUiEvent(event, { context: contextRecords, tool: toolLinks });
     });
