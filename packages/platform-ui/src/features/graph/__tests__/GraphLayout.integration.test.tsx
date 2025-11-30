@@ -3,6 +3,7 @@ import { act, render, screen, waitFor } from '@testing-library/react';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 
 import { GraphLayout, type GraphLayoutServices } from '@/components/agents/GraphLayout';
+import type { GraphNodeConfig, GraphPersistedEdge, GraphSaveState } from '@/features/graph/types';
 
 const sidebarProps: any[] = [];
 const emptySidebarProps: any[] = [];
@@ -105,6 +106,43 @@ const createServiceMocks = vi.hoisted((): (() => GraphLayoutServiceMocks) => () 
   } satisfies GraphLayoutServiceMocks;
 });
 
+type GraphDataMock = {
+  nodes: GraphNodeConfig[];
+  edges: GraphPersistedEdge[];
+  loading: boolean;
+  savingState: GraphSaveState;
+  savingErrorMessage: string | null;
+  updateNode: vi.Mock;
+  applyNodeStatus: vi.Mock;
+  applyNodeState: vi.Mock;
+  setEdges: vi.Mock;
+  removeNodes: vi.Mock;
+  addNode: vi.Mock;
+  scheduleSave: vi.Mock;
+  refresh: vi.Mock;
+};
+
+function mockGraphData(overrides: Partial<GraphDataMock> = {}): GraphDataMock {
+  const base: GraphDataMock = {
+    nodes: [],
+    edges: [],
+    loading: false,
+    savingState: { status: 'saved', error: null },
+    savingErrorMessage: null,
+    updateNode: vi.fn(),
+    applyNodeStatus: vi.fn(),
+    applyNodeState: vi.fn(),
+    setEdges: vi.fn(),
+    removeNodes: vi.fn(),
+    addNode: vi.fn(),
+    scheduleSave: vi.fn(),
+    refresh: vi.fn(),
+  } satisfies GraphDataMock;
+  const value: GraphDataMock = { ...base, ...overrides };
+  hookMocks.useGraphData.mockReturnValue(value);
+  return value;
+}
+
 describe('GraphLayout', () => {
   beforeEach(() => {
     sidebarProps.length = 0;
@@ -129,7 +167,7 @@ describe('GraphLayout', () => {
     const applyNodeState = vi.fn();
     const setEdges = vi.fn();
 
-    hookMocks.useGraphData.mockReturnValue({
+    mockGraphData({
       nodes: [
         {
           id: 'agent-1',
@@ -143,10 +181,6 @@ describe('GraphLayout', () => {
           ports: { inputs: [], outputs: [] },
         },
       ],
-      edges: [],
-      loading: false,
-      savingState: { status: 'saved', error: null },
-      savingErrorMessage: null,
       updateNode,
       applyNodeStatus,
       applyNodeState,
@@ -172,7 +206,7 @@ describe('GraphLayout', () => {
     const setEdges = vi.fn();
     const removeNodes = vi.fn();
 
-    hookMocks.useGraphData.mockReturnValue({
+    mockGraphData({
       nodes: [
         {
           id: 'node-1',
@@ -186,10 +220,6 @@ describe('GraphLayout', () => {
           ports: { inputs: [], outputs: [] },
         },
       ],
-      edges: [],
-      loading: false,
-      savingState: { status: 'saved', error: null },
-      savingErrorMessage: null,
       updateNode,
       applyNodeStatus,
       applyNodeState,
@@ -325,7 +355,7 @@ describe('GraphLayout', () => {
     const applyNodeState = vi.fn();
     const setEdges = vi.fn();
 
-    hookMocks.useGraphData.mockReturnValue({
+    mockGraphData({
       nodes: [
         {
           id: 'node-1',
@@ -339,10 +369,6 @@ describe('GraphLayout', () => {
           ports: { inputs: [], outputs: [] },
         },
       ],
-      edges: [],
-      loading: false,
-      savingState: { status: 'saved', error: null },
-      savingErrorMessage: null,
       updateNode,
       applyNodeStatus,
       applyNodeState,
@@ -401,12 +427,9 @@ describe('GraphLayout', () => {
     const setEdges = vi.fn();
     const removeNodes = vi.fn();
 
-    hookMocks.useGraphData.mockReturnValue({
+    mockGraphData({
       nodes: [],
       edges: [],
-      loading: false,
-      savingState: { status: 'saved', error: null },
-      savingErrorMessage: null,
       updateNode,
       applyNodeStatus,
       applyNodeState,
@@ -447,12 +470,9 @@ describe('GraphLayout', () => {
     const setEdges = vi.fn();
     const removeNodes = vi.fn();
 
-    hookMocks.useGraphData.mockReturnValue({
+    mockGraphData({
       nodes: [],
       edges: [],
-      loading: false,
-      savingState: { status: 'saved', error: null },
-      savingErrorMessage: null,
       updateNode,
       applyNodeStatus,
       applyNodeState,
@@ -479,12 +499,9 @@ describe('GraphLayout', () => {
     const setEdges = vi.fn();
     const removeNodes = vi.fn();
 
-    hookMocks.useGraphData.mockReturnValue({
+    mockGraphData({
       nodes: [],
       edges: [],
-      loading: false,
-      savingState: { status: 'saved', error: null },
-      savingErrorMessage: null,
       updateNode,
       applyNodeStatus,
       applyNodeState,
@@ -504,12 +521,84 @@ describe('GraphLayout', () => {
     expect(emptySidebar.statusMessage).toBe('Loading templates...');
   });
 
+  it('adds a graph node when dropping a template onto the canvas', async () => {
+    const addNode = vi.fn();
+    const scheduleSave = vi.fn();
+
+    mockGraphData({
+      nodes: [],
+      edges: [],
+      addNode,
+      scheduleSave,
+    });
+
+    hookMocks.useGraphSocket.mockReturnValue(undefined);
+    hookMocks.useNodeStatus.mockReturnValue({ data: null, refetch: vi.fn() });
+    hookMocks.useTemplates.mockReturnValue({
+      data: [
+        {
+          name: 'agent-template',
+          title: 'Agent Template',
+          kind: 'agent',
+          sourcePorts: { out: { title: 'Main Out' } },
+          targetPorts: { in: { title: 'Main In' } },
+        },
+      ],
+      isLoading: false,
+      isError: false,
+    });
+
+    render(<GraphLayout services={services} />);
+
+    await waitFor(() => expect(canvasSpy).toHaveBeenCalled());
+    const canvasProps = canvasSpy.mock.calls.at(-1)?.[0] as {
+      onDrop?: (
+        event: React.DragEvent<HTMLDivElement>,
+        context: { data: Record<string, string>; position: { x: number; y: number } },
+      ) => void;
+    };
+
+    expect(typeof canvasProps.onDrop).toBe('function');
+
+    act(() => {
+      canvasProps.onDrop?.(
+        { preventDefault() {} } as React.DragEvent<HTMLDivElement>,
+        {
+          data: { id: 'agent-template', kind: 'Agent', title: '  New Agent  ' },
+          position: { x: 300, y: 420 },
+        },
+      );
+    });
+
+    expect(addNode).toHaveBeenCalledTimes(1);
+    const [node, metadata] = addNode.mock.calls[0] as [
+      GraphNodeConfig,
+      { template: string; config?: Record<string, unknown>; position?: { x: number; y: number } },
+    ];
+
+    expect(typeof node.id).toBe('string');
+    expect(node.id.length).toBeGreaterThan(0);
+    expect(node.template).toBe('agent-template');
+    expect(node.kind).toBe('Agent');
+    expect(node.title).toBe('New Agent');
+    expect(node.x).toBe(300);
+    expect(node.y).toBe(420);
+    expect(node.config).toEqual({ title: 'New Agent' });
+    expect(node.ports.inputs).toEqual([{ id: 'in', title: 'Main In' }]);
+    expect(node.ports.outputs).toEqual([{ id: 'out', title: 'Main Out' }]);
+    expect(metadata.template).toBe('agent-template');
+    expect(metadata.config).toEqual({ title: 'New Agent' });
+    expect(metadata.position).toEqual({ x: 300, y: 420 });
+
+    expect(scheduleSave).toHaveBeenCalledTimes(1);
+  });
+
   it('persists node position updates when drag ends', async () => {
     const updateNode = vi.fn();
     const setEdges = vi.fn();
     const removeNodes = vi.fn();
 
-    hookMocks.useGraphData.mockReturnValue({
+    mockGraphData({
       nodes: [
         {
           id: 'node-1',
@@ -523,10 +612,6 @@ describe('GraphLayout', () => {
           ports: { inputs: [], outputs: [] },
         },
       ],
-      edges: [],
-      loading: false,
-      savingState: { status: 'saved', error: null },
-      savingErrorMessage: null,
       updateNode,
       applyNodeStatus: vi.fn(),
       applyNodeState: vi.fn(),
@@ -580,7 +665,7 @@ describe('GraphLayout', () => {
     const setEdges = vi.fn();
     const removeNodes = vi.fn();
 
-    hookMocks.useGraphData.mockReturnValue({
+    mockGraphData({
       nodes: [
         {
           id: 'node-1',
@@ -594,10 +679,6 @@ describe('GraphLayout', () => {
           ports: { inputs: [], outputs: [] },
         },
       ],
-      edges: [],
-      loading: false,
-      savingState: { status: 'saved', error: null },
-      savingErrorMessage: null,
       updateNode,
       applyNodeStatus: vi.fn(),
       applyNodeState: vi.fn(),
@@ -632,7 +713,7 @@ describe('GraphLayout', () => {
     const setEdges = vi.fn();
     const removeNodes = vi.fn();
 
-    hookMocks.useGraphData.mockReturnValue({
+    mockGraphData({
       nodes: [
         {
           id: 'node-1',
@@ -657,10 +738,6 @@ describe('GraphLayout', () => {
           ports: { inputs: [], outputs: [] },
         },
       ],
-      edges: [],
-      loading: false,
-      savingState: { status: 'saved', error: null },
-      savingErrorMessage: null,
       updateNode,
       applyNodeStatus: vi.fn(),
       applyNodeState: vi.fn(),
@@ -718,7 +795,7 @@ describe('GraphLayout', () => {
     const removeNodes = vi.fn();
     const setEnabledTools = vi.fn();
 
-    hookMocks.useGraphData.mockReturnValue({
+    mockGraphData({
       nodes: [
         {
           id: 'mcp-1',
@@ -732,10 +809,6 @@ describe('GraphLayout', () => {
           ports: { inputs: [], outputs: [] },
         },
       ],
-      edges: [],
-      loading: false,
-      savingState: { status: 'saved', error: null },
-      savingErrorMessage: null,
       updateNode,
       applyNodeStatus: vi.fn(),
       applyNodeState: vi.fn(),
@@ -802,7 +875,7 @@ describe('GraphLayout', () => {
     const setEdges = vi.fn();
     const removeNodes = vi.fn();
 
-    hookMocks.useGraphData.mockReturnValue({
+    mockGraphData({
       nodes: [
         {
           id: 'agent-1',
@@ -827,10 +900,6 @@ describe('GraphLayout', () => {
           ports: { inputs: [], outputs: [] },
         },
       ],
-      edges: [],
-      loading: false,
-      savingState: { status: 'saved', error: null },
-      savingErrorMessage: null,
       updateNode,
       applyNodeStatus,
       applyNodeState,
@@ -894,7 +963,7 @@ describe('GraphLayout', () => {
     const setEdges = vi.fn();
     const removeNodes = vi.fn();
 
-    hookMocks.useGraphData.mockReturnValue({
+    mockGraphData({
       nodes: [
         {
           id: 'node-1',
@@ -908,10 +977,6 @@ describe('GraphLayout', () => {
           ports: { inputs: [], outputs: [] },
         },
       ],
-      edges: [],
-      loading: false,
-      savingState: { status: 'saved', error: null },
-      savingErrorMessage: null,
       updateNode,
       applyNodeStatus,
       applyNodeState,
@@ -1074,7 +1139,7 @@ describe('GraphLayout', () => {
     const applyNodeState = vi.fn();
     const setEdges = vi.fn();
 
-    hookMocks.useGraphData.mockReturnValue({
+    mockGraphData({
       nodes: [
         {
           id: 'agent-2',
@@ -1093,10 +1158,6 @@ describe('GraphLayout', () => {
           ports: { inputs: [], outputs: [] },
         },
       ],
-      edges: [],
-      loading: false,
-      savingState: { status: 'saved', error: null },
-      savingErrorMessage: null,
       updateNode,
       applyNodeStatus,
       applyNodeState,

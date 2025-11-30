@@ -54,6 +54,8 @@ interface UseGraphDataResult {
   applyNodeState: (nodeId: string, state: Record<string, unknown>) => void;
   setEdges: (next: GraphPersistedEdge[]) => void;
   removeNodes: (ids: string[]) => void;
+  addNode: (node: GraphNodeConfig, metadata: GraphNodeMetadata) => void;
+  scheduleSave: () => void;
   refresh: () => Promise<void>;
 }
 
@@ -308,6 +310,48 @@ export function useGraphData(): UseGraphDataResult {
     [scheduleSave],
   );
 
+  const addNode = useCallback((node: GraphNodeConfig, metadata: GraphNodeMetadata) => {
+    if (!node || typeof node.id !== 'string' || node.id.length === 0) {
+      throw new Error('Graph node id is required');
+    }
+    const nodeId = node.id;
+    const clonedMetadata: GraphNodeMetadata = {
+      template: metadata?.template ?? node.template,
+      config: metadata?.config ? { ...metadata.config } : node.config ? { ...(node.config as Record<string, unknown>) } : undefined,
+      state: metadata?.state ? { ...metadata.state } : node.state ? { ...(node.state as Record<string, unknown>) } : undefined,
+      position: metadata?.position
+        ? { x: metadata.position.x, y: metadata.position.y }
+        : { x: node.x, y: node.y },
+    } satisfies GraphNodeMetadata;
+
+    metadataRef.current.set(nodeId, clonedMetadata);
+
+    setNodes((prev) => {
+      const clonedNode: GraphNodeConfig = {
+        ...node,
+        config: node.config ? { ...(node.config as Record<string, unknown>) } : undefined,
+        state: node.state ? { ...(node.state as Record<string, unknown>) } : undefined,
+        runtime: node.runtime ? { ...(node.runtime ?? {}) } : undefined,
+        capabilities: node.capabilities ? { ...(node.capabilities ?? {}) } : undefined,
+        ports: {
+          inputs: Array.isArray(node.ports?.inputs) ? node.ports.inputs.map((port) => ({ ...port })) : [],
+          outputs: Array.isArray(node.ports?.outputs) ? node.ports.outputs.map((port) => ({ ...port })) : [],
+        },
+      } satisfies GraphNodeConfig;
+
+      const existingIndex = prev.findIndex((existing) => existing.id === nodeId);
+      if (existingIndex >= 0) {
+        const next = [...prev];
+        next[existingIndex] = clonedNode;
+        nodesRef.current = next;
+        return next;
+      }
+      const next = [...prev, clonedNode];
+      nodesRef.current = next;
+      return next;
+    });
+  }, []);
+
   const refresh = useCallback(async () => {
     abortRef.current = false;
     setLoading(true);
@@ -388,6 +432,8 @@ export function useGraphData(): UseGraphDataResult {
     applyNodeState,
     setEdges,
     removeNodes,
+    addNode,
+    scheduleSave,
     refresh,
   };
 }

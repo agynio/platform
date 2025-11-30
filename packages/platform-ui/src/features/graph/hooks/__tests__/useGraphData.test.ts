@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { act, renderHook, waitFor } from '@testing-library/react';
+import type { GraphNodeConfig, GraphNodeMetadata } from '@/features/graph/types';
 import { useGraphData } from '../useGraphData';
 
 const apiMocks = vi.hoisted(() => ({
@@ -141,5 +142,63 @@ describe('useGraphData', () => {
     expect(result.current.savingState.status).toBe('saving');
 
     vi.useRealTimers();
+  });
+
+  it('adds nodes via addNode and schedules saves when requested', async () => {
+    const { result } = renderHook(() => useGraphData());
+
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    vi.useFakeTimers();
+
+    const newNode: GraphNodeConfig = {
+      id: 'node-2',
+      template: 'agent',
+      kind: 'Agent',
+      title: 'Agent Two',
+      x: 50,
+      y: 60,
+      status: 'not_ready',
+      config: { title: 'Agent Two' },
+      ports: { inputs: [{ id: 'in', title: 'IN' }], outputs: [{ id: 'out', title: 'OUT' }] },
+    };
+
+    act(() => {
+      result.current.addNode(newNode, {
+        template: 'agent',
+        config: { title: 'Agent Two' },
+        position: { x: 50, y: 60 },
+      });
+      result.current.scheduleSave();
+    });
+
+    expect(result.current.nodes.some((node) => node.id === 'node-2')).toBe(true);
+    expect(result.current.savingState.status).toBe('saving');
+
+    await vi.advanceTimersByTimeAsync(800);
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(apiMocks.saveGraph).toHaveBeenCalledTimes(1);
+    const payload = apiMocks.saveGraph.mock.calls[0]?.[0] as {
+      nodes?: Array<{ id: string; config?: Record<string, unknown> }>;
+    } | undefined;
+    const persisted = payload?.nodes?.find((node) => node.id === 'node-2');
+    expect(persisted?.config).toEqual({ title: 'Agent Two' });
+
+    vi.useRealTimers();
+  });
+
+  it('throws when addNode receives an invalid id', async () => {
+    const { result } = renderHook(() => useGraphData());
+
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    expect(() => {
+      act(() => {
+        result.current.addNode({} as GraphNodeConfig, {} as GraphNodeMetadata);
+      });
+    }).toThrow('Graph node id is required');
   });
 });

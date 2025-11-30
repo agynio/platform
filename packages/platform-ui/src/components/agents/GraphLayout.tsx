@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { addEdge, applyEdgeChanges, applyNodeChanges, type Edge, type EdgeTypes, type Node } from '@xyflow/react';
 
-import { GraphCanvas, type GraphNodeData } from '../GraphCanvas';
+import { GraphCanvas, type GraphCanvasDropHandler, type GraphNodeData } from '../GraphCanvas';
 import { GradientEdge } from './edges/GradientEdge';
 import EmptySelectionSidebar from '../EmptySelectionSidebar';
 import NodePropertiesSidebar, { type NodeConfig as SidebarNodeConfig } from '../NodePropertiesSidebar';
@@ -13,8 +13,9 @@ import { useNodeStatus } from '@/features/graph/hooks/useNodeStatus';
 import { useNodeAction } from '@/features/graph/hooks/useNodeAction';
 import { useMcpNodeState, useTemplates } from '@/lib/graph/hooks';
 import { mapTemplatesToSidebarItems } from '@/lib/graph/sidebarNodeItems';
+import { buildGraphNodeFromTemplate } from '@/features/graph/mappers';
 import type { GraphNodeConfig, GraphNodeStatus, GraphPersistedEdge } from '@/features/graph/types';
-import type { NodeStatus as ApiNodeStatus } from '@/api/types/graph';
+import type { TemplateSchema, NodeStatus as ApiNodeStatus } from '@/api/types/graph';
 
 type FlowNode = Node<GraphNodeData>;
 
@@ -138,6 +139,19 @@ function buildEdgeId(
   return `${source}-${encodeHandle(sourceHandle)}__${target}-${encodeHandle(targetHandle)}`;
 }
 
+function generateGraphNodeId(): string {
+  try {
+    if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+      return crypto.randomUUID();
+    }
+  } catch {
+    // fall through to fallback
+  }
+  const timestamp = Date.now().toString(36);
+  const random = Math.random().toString(36).slice(2, 10);
+  return `node-${timestamp}-${random}`;
+}
+
 function makeEdgeData(
   sourceNode?: GraphNodeConfig,
   targetNode?: GraphNodeConfig,
@@ -209,6 +223,8 @@ export function GraphLayout({ services }: GraphLayoutProps) {
     applyNodeState,
     setEdges,
     removeNodes,
+    addNode,
+    scheduleSave,
   } = useGraphData();
 
   const providerDebounceMs = 275;
@@ -437,6 +453,24 @@ export function GraphLayout({ services }: GraphLayoutProps) {
   const fallbackEnabledTools = useMemo<string[]>(() => [], []);
   const templatesQuery = useTemplates();
   const sidebarNodeItems = useMemo(() => mapTemplatesToSidebarItems(templatesQuery.data), [templatesQuery.data]);
+  const templatesByName = useMemo(() => {
+    if (!Array.isArray(templatesQuery.data) || templatesQuery.data.length === 0) {
+      return null;
+    }
+    const map = new Map<string, TemplateSchema>();
+    for (const tpl of templatesQuery.data) {
+      if (!tpl || typeof tpl !== 'object') {
+        continue;
+      }
+      const name = typeof tpl.name === 'string' ? tpl.name.trim() : '';
+      if (!name) {
+        continue;
+      }
+      map.set(name, tpl);
+    }
+    return map.size > 0 ? map : null;
+  }, [templatesQuery.data]);
+  const canAcceptDrop = !templatesQuery.isLoading && !!templatesByName && templatesByName.size > 0;
   const sidebarStatusMessage = useMemo(() => {
     if (templatesQuery.isLoading) {
       return 'Loading templates...';
@@ -820,6 +854,30 @@ export function GraphLayout({ services }: GraphLayoutProps) {
     handleNodeAction('deprovision');
   }, [handleNodeAction]);
 
+  const handleDrop = useCallback<GraphCanvasDropHandler>((_event, { data, position }) => {
+    if (!templatesByName) {
+      return;
+    }
+    const template = templatesByName.get(data.id);
+    if (!template) {
+      return;
+    }
+    const x = Number.isFinite(position?.x) ? position.x : 0;
+    const y = Number.isFinite(position?.y) ? position.y : 0;
+    const nodeId = generateGraphNodeId();
+    const rawTitle = typeof data.title === 'string' ? data.title.trim() : '';
+    const config = rawTitle.length > 0 ? { title: rawTitle } : undefined;
+    const { node, metadata } = buildGraphNodeFromTemplate(template, {
+      id: nodeId,
+      position: { x, y },
+      title: rawTitle || undefined,
+      config,
+    });
+
+    addNode(node, metadata);
+    scheduleSave();
+  }, [addNode, scheduleSave, templatesByName]);
+
   if (loading && nodes.length === 0) {
     return (
       <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
@@ -838,6 +896,7 @@ export function GraphLayout({ services }: GraphLayoutProps) {
           onEdgesChange={handleEdgesChange}
           onConnect={handleConnect}
           edgeTypes={edgeTypes}
+          onDrop={canAcceptDrop ? handleDrop : undefined}
           savingStatus={savingState.status}
           savingErrorMessage={savingErrorMessage ?? undefined}
         />
