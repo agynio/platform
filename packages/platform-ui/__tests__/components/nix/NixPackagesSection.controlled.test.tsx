@@ -59,6 +59,7 @@ describe('NixPackagesSection (controlled)', () => {
     const dialog = await screen.findByRole('dialog', { name: 'Add custom Nix package' });
     const closeButton = within(dialog).getByRole('button', { name: 'Close' });
     expect(closeButton.className).toContain('w-8 h-8');
+    expect(closeButton.className).toContain('rounded-[10px]');
     const form = (within(dialog).getByLabelText('GitHub repository') as HTMLInputElement).closest('form');
     if (!form) {
       throw new Error('Modal form not found');
@@ -76,12 +77,15 @@ describe('NixPackagesSection (controlled)', () => {
     const attributeInput = within(dialog).getByLabelText('Flake attribute');
     expect(attributeInput).not.toHaveAttribute('aria-required');
     expect(attributeInput).toHaveAttribute('placeholder', 'default');
+    expect(attributeInput).toHaveValue('');
 
-    fireEvent.change(within(dialog).getByLabelText('GitHub repository'), { target: { value: 'agyn/example' } });
+    fireEvent.change(repositoryInput, { target: { value: 'agyn/example' } });
     const cancelButton = within(dialog).getByRole('button', { name: 'Cancel' });
     const addButton = within(dialog).getByRole('button', { name: 'Add' });
     expect(cancelButton.className).toContain('px-4 py-2');
+    expect(cancelButton.className).toContain('text-sm');
     expect(addButton.className).toContain('px-4 py-2');
+    expect(addButton.className).toContain('text-sm');
     fireEvent.click(addButton);
 
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
@@ -129,8 +133,10 @@ describe('NixPackagesSection (controlled)', () => {
     const addCustomRepo = async () => {
       fireEvent.click(screen.getByRole('button', { name: 'or add custom' }));
       const dialog = await screen.findByRole('dialog', { name: 'Add custom Nix package' });
-      fireEvent.change(within(dialog).getByLabelText('GitHub repository'), { target: { value: 'agyn/example' } });
-      fireEvent.change(within(dialog).getByLabelText('Flake attribute'), { target: { value: 'packages.default' } });
+      const repoInput = within(dialog).getByLabelText('GitHub repository');
+      const attributeInput = within(dialog).getByLabelText('Flake attribute');
+      expect(attributeInput).toHaveValue('');
+      fireEvent.change(repoInput, { target: { value: 'agyn/example' } });
       fireEvent.click(within(dialog).getByRole('button', { name: 'Add' }));
       await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
     };
@@ -142,12 +148,14 @@ describe('NixPackagesSection (controlled)', () => {
       await waitFor(() => {
         const text = screen.getByTestId('nix-value').textContent ?? '';
         expect(text).toContain('1234567890abcdef1234567890abcdef12345678');
+        expect(text).toContain('"attributePath":"default"');
       });
 
       await addCustomRepo();
       await waitFor(() => {
         const text = screen.getByTestId('nix-value').textContent ?? '';
         expect(text).toContain('9999999999999999999999999999999999999999');
+        expect(text).toContain('"attributePath":"default"');
         expect(text).not.toContain('1234567890abcdef1234567890abcdef12345678');
       });
 

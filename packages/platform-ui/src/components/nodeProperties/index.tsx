@@ -487,7 +487,13 @@ function NodePropertiesSidebar({
       }
       const nextPackages: WorkspaceNixPackage[] = [
         ...workspaceNixPackages,
-        { name: option.value, version: '', commitHash: '', attributePath: '' },
+        {
+          kind: 'nixpkgs',
+          name: option.value,
+          version: '',
+          commitHash: '',
+          attributePath: '',
+        },
       ];
       onConfigChange?.(applyNixUpdate(config, nextPackages, workspaceFlakeRepos));
       setNixErrors((prev) => ({ ...prev, [option.value]: null }));
@@ -528,7 +534,7 @@ function NodePropertiesSidebar({
         const nextResolved = staged.map((entry, idx) =>
           idx === index
             ? {
-                name: entry.name,
+                ...entry,
                 version: resolved.version,
                 commitHash: resolved.commitHash,
                 attributePath: resolved.attributePath,
