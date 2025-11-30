@@ -99,6 +99,7 @@ describe('nodeProperties utils', () => {
 
   describe('Nix helpers', () => {
     const sample: WorkspaceNixPackage[] = [{
+      kind: 'nixpkgs',
       name: 'ripgrep',
       version: '13.0',
       commitHash: 'abc123',
@@ -113,7 +114,12 @@ describe('nodeProperties utils', () => {
 
     it('writes nix packages while preserving existing nix config', () => {
       const update = applyNixUpdate({ nix: { pinned: true } } as any, sample);
-      expect(update).toEqual({ nix: { pinned: true, packages: sample } });
+      expect(update).toEqual({
+        nix: {
+          pinned: true,
+          packages: sample,
+        },
+      });
     });
   });
 });
