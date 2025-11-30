@@ -715,21 +715,27 @@ export class WorkspaceNode extends Node<ContainerProviderStaticConfig> {
     pathPrefix: string,
     baseInstall: string,
     refs: string[],
-  ): Promise<void> {
-    if (refs.length === 0) return;
+  ): Promise<boolean> {
+    if (refs.length === 0) return true;
     const combined = `${pathPrefix} && ${baseInstall} ${refs.join(' ')}`;
     this.logger.log(`Nix install: ${refs.length} package(s) (combined)`);
     const combinedRes = await container.exec(combined, { timeoutMs: 10 * 60_000, idleTimeoutMs: 60_000 });
-    if (combinedRes.exitCode === 0) return;
+    if (combinedRes.exitCode === 0) return true;
 
     this.logger.error(`Nix install (combined) failed exitCode=${combinedRes.exitCode}`);
     const timeoutOpts = { timeoutMs: 3 * 60_000, idleTimeoutMs: 60_000 } as const;
+    let allSucceeded = true;
     for (const ref of refs) {
       const cmd = `${pathPrefix} && ${baseInstall} ${ref}`;
       const res = await container.exec(cmd, timeoutOpts);
-      if (res.exitCode === 0) this.logger.log(`Nix install succeeded for ${ref}`);
-      else this.logger.error(`Nix install failed for ${ref} exitCode=${res.exitCode}`);
+      if (res.exitCode === 0) {
+        this.logger.log(`Nix install succeeded for ${ref}`);
+      } else {
+        this.logger.error(`Nix install failed for ${ref} exitCode=${res.exitCode}`);
+        allSucceeded = false;
+      }
     }
+    return allSucceeded;
   }
 
   private async ensureNixPackages(
@@ -782,7 +788,19 @@ export class WorkspaceNode extends Node<ContainerProviderStaticConfig> {
         return;
       }
 
-      await this.installFlakeRefs(container, PATH_PREFIX, BASE_INSTALL, installs.map((entry) => entry.flakeUri));
+      const installSucceeded = await this.installFlakeRefs(
+        container,
+        PATH_PREFIX,
+        BASE_INSTALL,
+        installs.map((entry) => entry.flakeUri),
+      );
+
+      if (!installSucceeded) {
+        if (installs.length > 0) {
+          this.logger.warn('Nix install failed; skipping profile removals to preserve existing entries');
+        }
+        return;
+      }
 
       if (removals.length > 0) {
         await this.removeProfileEntries(

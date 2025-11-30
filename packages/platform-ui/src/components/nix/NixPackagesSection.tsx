@@ -3,7 +3,7 @@ import { Button, Input } from '@agyn/ui';
 import type { ContainerNixConfig, FlakeRepoSelection, NixPackageSelection } from './types';
 import { useQuery } from '@tanstack/react-query';
 import { fetchPackages, fetchVersions, resolvePackage, resolveRepo } from '@/api/modules/nix';
-import { isAxiosError } from 'axios';
+import { AxiosError, isAxiosError } from 'axios';
 
 // Debounce helper
 function useDebounced<T>(value: T, delay = 300) {
@@ -38,6 +38,14 @@ function describeRepoError(err: unknown): string {
   }
   if (err instanceof Error) return err.message || 'Failed to resolve repository.';
   return 'Failed to resolve repository.';
+}
+
+function isCancellationError(err: unknown): boolean {
+  if (isAxiosError(err)) {
+    if (err.code === AxiosError.ERR_CANCELED || err.code === 'ERR_CANCELED') return true;
+    if (err.name === 'CanceledError') return true;
+  }
+  return err instanceof DOMException && err.name === 'AbortError';
 }
 
 function displayRepository(repository: string): string {
@@ -367,7 +375,9 @@ export function NixPackagesSection(props: ControlledProps | UncontrolledProps) {
         });
         setRepoForm({ repository: '', ref: '', attr: '' });
       } catch (err) {
-        setRepoError(describeRepoError(err));
+        if (!isCancellationError(err)) {
+          setRepoError(describeRepoError(err));
+        }
       } finally {
         setRepoSubmitting(false);
         if (repoResolveRef.current === ac) repoResolveRef.current = null;
@@ -401,7 +411,9 @@ export function NixPackagesSection(props: ControlledProps | UncontrolledProps) {
           return next;
         });
       } catch (err) {
-        setRepoError(describeRepoError(err));
+        if (!isCancellationError(err)) {
+          setRepoError(describeRepoError(err));
+        }
       } finally {
         if (repoResolveRef.current === ac) repoResolveRef.current = null;
         setRepoUpdatingIndex((curr) => (curr === index ? null : curr));
