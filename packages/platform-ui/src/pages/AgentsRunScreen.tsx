@@ -227,6 +227,15 @@ function coerceRecord(value: unknown): Record<string, unknown> | null {
   return null;
 }
 
+function parseMaybeJson(value: unknown): unknown {
+  if (typeof value !== 'string') return value;
+  try {
+    return JSON.parse(value);
+  } catch (_error) {
+    return value;
+  }
+}
+
 function isNonEmptyString(value: unknown): value is string {
   return typeof value === 'string' && value.length > 0;
 }
@@ -334,8 +343,10 @@ function buildToolLinkData(event: RunTimelineEvent): ToolLinkData | undefined {
 
   const rawInput = execution.input;
   const rawOutput = execution.output ?? execution.raw;
-  const inputRecord = coerceRecord(rawInput);
-  const outputRecord = coerceRecord(rawOutput);
+  const parsedInput = parseMaybeJson(rawInput);
+  const parsedOutput = parseMaybeJson(rawOutput);
+  const inputRecord = coerceRecord(parsedInput);
+  const outputRecord = coerceRecord(parsedOutput);
 
   const inputTargets = extractLinkTargets(inputRecord);
   const outputTargets = extractLinkTargets(outputRecord);
@@ -346,8 +357,11 @@ function buildToolLinkData(event: RunTimelineEvent): ToolLinkData | undefined {
     runId: outputTargets.runId ?? inputTargets.runId,
   };
 
-  const normalizedInput = normalizeRecordWithTargets(inputRecord, targets) ?? rawInput;
-  const normalizedOutput = normalizeRecordWithTargets(outputRecord, targets) ?? rawOutput;
+  const normalizedInputRecord = normalizeRecordWithTargets(inputRecord, targets);
+  const normalizedOutputRecord = normalizeRecordWithTargets(outputRecord, targets);
+
+  const normalizedInput = normalizedInputRecord ?? inputRecord ?? parsedInput;
+  const normalizedOutput = normalizedOutputRecord ?? outputRecord ?? parsedOutput;
 
   return {
     input: normalizedInput,
