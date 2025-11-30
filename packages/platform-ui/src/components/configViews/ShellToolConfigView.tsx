@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, type ChangeEvent } from 'react';
 import { Input } from '@agyn/ui';
 import type { EnvVar } from '@/components/nodeProperties/types';
 import { getCanonicalToolName } from '@/components/nodeProperties/toolCanonicalNames';
@@ -82,25 +82,25 @@ export default function ShellToolConfigView({ value, onChange, readOnly, disable
     <div className="space-y-3 text-sm">
       <div>
         <ToolNameLabel />
-        <Input value={name} onChange={(e) => setName(e.target.value)} disabled={isDisabled} placeholder={namePlaceholder || 'shell_command'} />
+        <Input value={name} onChange={(e: ChangeEvent<HTMLInputElement>) => setName(e.target.value)} disabled={isDisabled} placeholder={namePlaceholder || 'shell_command'} />
         {nameError && <div className="text-[10px] text-red-600 mt-1">{nameError}</div>}
       </div>
       <div>
         <label htmlFor="workdir" className="block text-xs mb-1">Working directory</label>
-        <Input id="workdir" value={workdir} onChange={(e) => setWorkdir(e.target.value)} disabled={isDisabled} />
+        <Input id="workdir" value={workdir} onChange={(e: ChangeEvent<HTMLInputElement>) => setWorkdir(e.target.value)} disabled={isDisabled} />
       </div>
       <div>
         <div className="text-xs mb-1">Environment</div>
-        <ReferenceEnvField value={env} onChange={setEnv} readOnly={readOnly} disabled={disabled} addLabel="Add env" onValidate={onValidate} />
+        <ReferenceEnvField value={env} onChange={(next) => setEnv(next)} readOnly={readOnly} disabled={disabled} addLabel="Add env" onValidate={onValidate} />
       </div>
       <div className="grid grid-cols-2 gap-2">
         <div>
           <label htmlFor="executionTimeoutMs" className="block text-xs mb-1">Execution timeout (ms)</label>
-          <Input id="executionTimeoutMs" type="number" min={0} value={executionTimeoutMs} onChange={(e) => setExecutionTimeoutMs(parseInt(e.target.value || '0', 10))} disabled={isDisabled} />
+          <Input id="executionTimeoutMs" type="number" min={0} value={executionTimeoutMs} onChange={(e: ChangeEvent<HTMLInputElement>) => setExecutionTimeoutMs(parseInt(e.target.value || '0', 10))} disabled={isDisabled} />
         </div>
         <div>
           <label htmlFor="idleTimeoutMs" className="block text-xs mb-1">Idle timeout (ms)</label>
-          <Input id="idleTimeoutMs" type="number" min={0} value={idleTimeoutMs} onChange={(e) => setIdleTimeoutMs(parseInt(e.target.value || '0', 10))} disabled={isDisabled} />
+          <Input id="idleTimeoutMs" type="number" min={0} value={idleTimeoutMs} onChange={(e: ChangeEvent<HTMLInputElement>) => setIdleTimeoutMs(parseInt(e.target.value || '0', 10))} disabled={isDisabled} />
         </div>
       </div>
       <div>
@@ -110,7 +110,7 @@ export default function ShellToolConfigView({ value, onChange, readOnly, disable
           type="number"
           min={0}
           value={outputLimitChars}
-          onChange={(e) => setOutputLimitChars(parseInt(e.target.value || '0', 10))}
+          onChange={(e: ChangeEvent<HTMLInputElement>) => setOutputLimitChars(parseInt(e.target.value || '0', 10))}
           disabled={isDisabled}
         />
         <div className="text-[10px] text-muted-foreground mt-1">

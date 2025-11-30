@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, type ChangeEvent } from 'react';
 import { Input } from '@agyn/ui';
 import type { StaticConfigViewProps } from './types';
 
@@ -19,7 +19,7 @@ export default function MemoryConnectorConfigView({ value, onChange, readOnly, d
     <div className="space-y-3 text-sm">
       <div>
         <label className="block text-xs mb-1">Placement</label>
-        <select className="w-full border rounded px-2 py-1" value={placement} onChange={(e) => setPlacement(e.target.value)} disabled={isDisabled}>
+        <select className="w-full border rounded px-2 py-1" value={placement} onChange={(e: ChangeEvent<HTMLSelectElement>) => setPlacement(e.target.value)} disabled={isDisabled}>
           {['after_system', 'last_message'].map((m) => (
             <option key={m} value={m}>
               {m}
@@ -29,7 +29,7 @@ export default function MemoryConnectorConfigView({ value, onChange, readOnly, d
       </div>
       <div>
         <label className="block text-xs mb-1">Content</label>
-        <select className="w-full border rounded px-2 py-1" value={content} onChange={(e) => setContent(e.target.value)} disabled={isDisabled}>
+        <select className="w-full border rounded px-2 py-1" value={content} onChange={(e: ChangeEvent<HTMLSelectElement>) => setContent(e.target.value)} disabled={isDisabled}>
           {['full', 'tree'].map((m) => (
             <option key={m} value={m}>
               {m}
@@ -39,7 +39,7 @@ export default function MemoryConnectorConfigView({ value, onChange, readOnly, d
       </div>
       <div>
         <label className="block text-xs mb-1">Max chars</label>
-        <Input type="number" min={1} max={20000} value={maxChars} onChange={(e) => setMaxChars(parseInt(e.target.value || '1', 10))} disabled={isDisabled} />
+        <Input type="number" min={1} max={20000} value={maxChars} onChange={(e: ChangeEvent<HTMLInputElement>) => setMaxChars(parseInt(e.target.value || '1', 10))} disabled={isDisabled} />
       </div>
     </div>
   );

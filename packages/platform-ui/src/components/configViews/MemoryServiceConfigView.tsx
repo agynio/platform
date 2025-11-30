@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, type ChangeEvent } from 'react';
 import { Input } from '@agyn/ui';
 import type { StaticConfigViewProps } from './types';
 
@@ -19,18 +19,18 @@ export default function MemoryServiceConfigView({ value, onChange, readOnly, dis
     <div className="space-y-3 text-sm">
       <div>
         <label className="block text-xs mb-1">Scope</label>
-        <select className="w-full border rounded px-2 py-1" value={scope} onChange={(e) => setScope(e.target.value)} disabled={isDisabled}>
+        <select className="w-full border rounded px-2 py-1" value={scope} onChange={(e: ChangeEvent<HTMLSelectElement>) => setScope(e.target.value)} disabled={isDisabled}>
           <option value="global">global</option>
           <option value="thread">thread</option>
         </select>
       </div>
       <div>
         <label className="block text-xs mb-1">Collection prefix (optional)</label>
-        <Input value={collectionPrefix} onChange={(e) => setCollectionPrefix(e.target.value)} disabled={isDisabled} />
+        <Input value={collectionPrefix} onChange={(e: ChangeEvent<HTMLInputElement>) => setCollectionPrefix(e.target.value)} disabled={isDisabled} />
       </div>
       <div>
         <label className="block text-xs mb-1">Title (optional)</label>
-        <Input value={title} onChange={(e) => setTitle(e.target.value)} disabled={isDisabled} />
+        <Input value={title} onChange={(e: ChangeEvent<HTMLInputElement>) => setTitle(e.target.value)} disabled={isDisabled} />
       </div>
     </div>
   );

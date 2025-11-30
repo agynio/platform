@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, type ChangeEvent } from 'react';
 import { Input } from '@agyn/ui';
 import { getCanonicalToolName } from '@/components/nodeProperties/toolCanonicalNames';
 import { isValidToolName } from '@/components/nodeProperties/utils';
@@ -71,7 +71,7 @@ export default function SendSlackMessageToolConfigView({ value, onChange, readOn
         <ToolNameLabel />
         <Input
           value={name}
-          onChange={(e) => setName(e.target.value)}
+          onChange={(e: ChangeEvent<HTMLInputElement>) => setName(e.target.value)}
           disabled={isDisabled}
           placeholder={namePlaceholder}
         />
@@ -80,7 +80,7 @@ export default function SendSlackMessageToolConfigView({ value, onChange, readOn
       <ReferenceField
         label="Bot token"
         value={bot_token}
-        onChange={(v) => setBotToken(v)}
+        onChange={(v: ReferenceValue | string) => setBotToken(v)}
         readOnly={readOnly}
         disabled={disabled}
         placeholder="xoxb-... or mount/path/key"
@@ -89,7 +89,7 @@ export default function SendSlackMessageToolConfigView({ value, onChange, readOn
       {errors.length > 0 && <div className="text-[10px] text-red-600">{errors.join(', ')}</div>}
       <div>
         <label className="block text-xs mb-1">Default channel</label>
-        <Input value={default_channel} onChange={(e) => setDefaultChannel(e.target.value)} disabled={isDisabled} placeholder="C123 or #general" />
+        <Input value={default_channel} onChange={(e: ChangeEvent<HTMLInputElement>) => setDefaultChannel(e.target.value)} disabled={isDisabled} placeholder="C123 or #general" />
       </div>
     </div>
   );

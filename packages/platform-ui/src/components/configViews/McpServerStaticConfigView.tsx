@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, type ChangeEvent } from 'react';
 import { Input } from '@agyn/ui';
 import type { EnvVar } from '@/components/nodeProperties/types';
 import { readEnvList, serializeEnvVars } from '@/components/nodeProperties/utils';
@@ -60,52 +60,52 @@ export default function McpServerStaticConfigView({ value, onChange, readOnly, d
     <div className="space-y-3 text-sm">
       <div>
         <label className="block text-xs mb-1">Title (optional)</label>
-        <Input value={title} onChange={(e) => setTitle(e.target.value)} disabled={isDisabled} />
+        <Input value={title} onChange={(e: ChangeEvent<HTMLInputElement>) => setTitle(e.target.value)} disabled={isDisabled} />
       </div>
       <div>
         <label className="block text-xs mb-1">Namespace</label>
-        <Input value={namespace} onChange={(e) => setNamespace(e.target.value)} disabled={isDisabled} />
+        <Input value={namespace} onChange={(e: ChangeEvent<HTMLInputElement>) => setNamespace(e.target.value)} disabled={isDisabled} />
       </div>
       <div>
         <label className="block text-xs mb-1">Command (optional)</label>
-        <Input value={command} onChange={(e) => setCommand(e.target.value)} disabled={isDisabled} placeholder="mcp start --stdio" />
+        <Input value={command} onChange={(e: ChangeEvent<HTMLInputElement>) => setCommand(e.target.value)} disabled={isDisabled} placeholder="mcp start --stdio" />
       </div>
       <div>
         <label className="block text-xs mb-1">Workdir (optional)</label>
-        <Input value={workdir} onChange={(e) => setWorkdir(e.target.value)} disabled={isDisabled} />
+        <Input value={workdir} onChange={(e: ChangeEvent<HTMLInputElement>) => setWorkdir(e.target.value)} disabled={isDisabled} />
       </div>
       <div>
         <div className="text-xs mb-1">Environment</div>
-        <ReferenceEnvField value={env} onChange={setEnv} readOnly={readOnly} disabled={disabled} addLabel="Add env" onValidate={onValidate} />
+        <ReferenceEnvField value={env} onChange={(next) => setEnv(next)} readOnly={readOnly} disabled={disabled} addLabel="Add env" onValidate={onValidate} />
       </div>
       <div className="grid grid-cols-2 gap-2">
         <div>
           <label className="block text-xs mb-1">Request timeout (ms)</label>
-          <Input type="number" min={1} value={requestTimeoutMs} onChange={(e) => setRequestTimeoutMs(parseInt(e.target.value || '1', 10))} disabled={isDisabled} />
+          <Input type="number" min={1} value={requestTimeoutMs} onChange={(e: ChangeEvent<HTMLInputElement>) => setRequestTimeoutMs(parseInt(e.target.value || '1', 10))} disabled={isDisabled} />
         </div>
         <div>
           <label className="block text-xs mb-1">Startup timeout (ms)</label>
-          <Input type="number" min={1} value={startupTimeoutMs} onChange={(e) => setStartupTimeoutMs(parseInt(e.target.value || '1', 10))} disabled={isDisabled} />
+          <Input type="number" min={1} value={startupTimeoutMs} onChange={(e: ChangeEvent<HTMLInputElement>) => setStartupTimeoutMs(parseInt(e.target.value || '1', 10))} disabled={isDisabled} />
         </div>
       </div>
       <div className="grid grid-cols-2 gap-2">
         <div>
           <label className="block text-xs mb-1">Heartbeat interval (ms)</label>
-          <Input type="number" min={1} value={heartbeatIntervalMs} onChange={(e) => setHeartbeatIntervalMs(parseInt(e.target.value || '1', 10))} disabled={isDisabled} />
+          <Input type="number" min={1} value={heartbeatIntervalMs} onChange={(e: ChangeEvent<HTMLInputElement>) => setHeartbeatIntervalMs(parseInt(e.target.value || '1', 10))} disabled={isDisabled} />
         </div>
         <div>
           <label className="block text-xs mb-1">Stale timeout (ms)</label>
-          <Input type="number" min={0} value={staleTimeoutMs} onChange={(e) => setStaleTimeoutMs(parseInt(e.target.value || '0', 10))} disabled={isDisabled} />
+          <Input type="number" min={0} value={staleTimeoutMs} onChange={(e: ChangeEvent<HTMLInputElement>) => setStaleTimeoutMs(parseInt(e.target.value || '0', 10))} disabled={isDisabled} />
         </div>
       </div>
       <div className="grid grid-cols-2 gap-2">
         <div>
           <label className="block text-xs mb-1">Restart max attempts</label>
-          <Input type="number" min={1} value={restartMaxAttempts} onChange={(e) => setRestartMaxAttempts(parseInt(e.target.value || '1', 10))} disabled={isDisabled} />
+          <Input type="number" min={1} value={restartMaxAttempts} onChange={(e: ChangeEvent<HTMLInputElement>) => setRestartMaxAttempts(parseInt(e.target.value || '1', 10))} disabled={isDisabled} />
         </div>
         <div>
           <label className="block text-xs mb-1">Restart backoff (ms)</label>
-          <Input type="number" min={1} value={restartBackoffMs} onChange={(e) => setRestartBackoffMs(parseInt(e.target.value || '1', 10))} disabled={isDisabled} />
+          <Input type="number" min={1} value={restartBackoffMs} onChange={(e: ChangeEvent<HTMLInputElement>) => setRestartBackoffMs(parseInt(e.target.value || '1', 10))} disabled={isDisabled} />
         </div>
       </div>
     </div>
