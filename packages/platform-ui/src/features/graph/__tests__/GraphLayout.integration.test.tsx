@@ -708,6 +708,67 @@ describe('GraphLayout', () => {
     await waitFor(() => expect(removeNodes).toHaveBeenCalledWith(['node-1']));
   });
 
+  it('uses onNodesDelete to persist removals once when both callbacks fire', async () => {
+    const updateNode = vi.fn();
+    const setEdges = vi.fn();
+    const removeNodes = vi.fn();
+
+    hookMocks.useGraphData.mockReturnValue({
+      nodes: [
+        {
+          id: 'node-1',
+          template: 'agent-template',
+          kind: 'Agent',
+          title: 'Agent Node',
+          x: 0,
+          y: 0,
+          status: 'not_ready',
+          config: { title: 'Agent Node' },
+          ports: { inputs: [], outputs: [] },
+        },
+      ],
+      edges: [],
+      loading: false,
+      savingState: { status: 'saved', error: null },
+      savingErrorMessage: null,
+      updateNode,
+      applyNodeStatus: vi.fn(),
+      applyNodeState: vi.fn(),
+      setEdges,
+      removeNodes,
+    });
+
+    hookMocks.useGraphSocket.mockReturnValue(undefined);
+    hookMocks.useNodeStatus.mockReturnValue({ data: null, refetch: vi.fn() });
+
+    render(<GraphLayout services={services} />);
+
+    await waitFor(() => expect(canvasSpy).toHaveBeenCalled());
+    const props = canvasSpy.mock.calls.at(-1)?.[0] as {
+      onNodesChange?: (changes: Array<{ id: string; type: string }>) => void;
+      onNodesDelete?: (nodes: Array<{ id: string }>) => void;
+    };
+
+    expect(typeof props.onNodesDelete).toBe('function');
+
+    act(() => {
+      props.onNodesChange?.([
+        {
+          id: 'node-1',
+          type: 'remove',
+        },
+      ]);
+      props.onNodesDelete?.([
+        {
+          id: 'node-1',
+        },
+      ]);
+    });
+
+    await waitFor(() => expect(removeNodes).toHaveBeenCalledWith(['node-1']));
+    expect(removeNodes).toHaveBeenCalledTimes(1);
+  });
+
   it('persists edges when connecting and removing', async () => {
     const updateNode = vi.fn();
     const setEdges = vi.fn();

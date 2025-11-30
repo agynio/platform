@@ -14,6 +14,7 @@ import {
 	type OnConnect,
 	type OnEdgesChange,
 	type OnNodesChange,
+	type OnNodesDelete,
 	type XYPosition,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
@@ -75,6 +76,7 @@ interface GraphCanvasProps {
 	onDragOver?: (event: React.DragEvent<HTMLDivElement>) => void;
 	savingStatus?: SavingStatus;
 	savingErrorMessage?: string;
+	onNodesDelete?: OnNodesDelete<Node<GraphNodeData>>;
 }
 
 export function GraphCanvas({
@@ -89,6 +91,7 @@ export function GraphCanvas({
 	onDragOver,
 	savingStatus,
 	savingErrorMessage,
+	onNodesDelete,
 }: GraphCanvasProps) {
 	const defaultNodeTypes = React.useMemo(
 		() => ({
@@ -123,6 +126,7 @@ export function GraphCanvas({
 				onDragOver={onDragOver}
 				savingStatus={savingStatus}
 				savingErrorMessage={savingErrorMessage}
+				onNodesDelete={onNodesDelete}
 			/>
 		</ReactFlowProvider>
 	);
@@ -140,6 +144,7 @@ function ReactFlowInner({
 	onDragOver,
 	savingStatus,
 	savingErrorMessage,
+	onNodesDelete,
 }: Omit<GraphCanvasProps, 'nodeTypes'> & { nodeTypes: NodeTypes }) {
 	const reactFlowInstance = useReactFlow();
 
@@ -189,6 +194,8 @@ function ReactFlowInner({
 				edgeTypes={edgeTypes}
 				onDrop={handleDrop}
 				onDragOver={handleDragOver}
+				onNodesDelete={onNodesDelete}
+				tabIndex={0}
 				panOnScroll
 				panOnScrollSpeed={2}
 				selectionOnDrag
