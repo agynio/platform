@@ -116,7 +116,7 @@ export function NixPackagesSection(props: ControlledProps | UncontrolledProps) {
 
     for (const entry of incoming) {
       if (!entry || typeof entry !== 'object') continue;
-      const candidate = entry as Record<string, unknown>;
+      const candidate = entry as Partial<FlakeRepoSelection & NixpkgsSelection>;
       const kind = typeof candidate.kind === 'string' ? candidate.kind : undefined;
       if (kind === 'flakeRepo' || (typeof candidate.repository === 'string' && kind !== 'nixpkgs')) {
         const repository = typeof candidate.repository === 'string' ? candidate.repository : '';

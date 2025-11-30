@@ -320,18 +320,18 @@ export function applySummarizationUpdate(
 
 function mapNixArray(entries: unknown): WorkspaceNixPackage[] {
   if (!Array.isArray(entries)) return [];
-  return entries
-    .map((entry) => {
-      if (!isRecord(entry)) return null;
-      if (entry.kind === 'flakeRepo') return null;
-      const name = typeof entry.name === 'string' ? entry.name : '';
-      if (!name) return null;
-      const version = typeof entry.version === 'string' ? entry.version : '';
-      const commitHash = typeof entry.commitHash === 'string' ? entry.commitHash : '';
-      const attributePath = typeof entry.attributePath === 'string' ? entry.attributePath : '';
-      return { kind: 'nixpkgs', name, version, commitHash, attributePath } satisfies WorkspaceNixPackage;
-    })
-    .filter((item): item is WorkspaceNixPackage => item !== null);
+  const mapped: WorkspaceNixPackage[] = [];
+  for (const entry of entries) {
+    if (!isRecord(entry)) continue;
+    if (entry.kind === 'flakeRepo') continue;
+    const name = typeof entry.name === 'string' ? entry.name : '';
+    if (!name) continue;
+    const version = typeof entry.version === 'string' ? entry.version : '';
+    const commitHash = typeof entry.commitHash === 'string' ? entry.commitHash : '';
+    const attributePath = typeof entry.attributePath === 'string' ? entry.attributePath : '';
+    mapped.push({ kind: 'nixpkgs', name, version, commitHash, attributePath });
+  }
+  return mapped;
 }
 
 export function readNixPackages(nixConfig: unknown): WorkspaceNixPackage[] {
