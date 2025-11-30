@@ -503,7 +503,6 @@ describe('GraphLayout', () => {
 
     expect(emptySidebar.statusMessage).toBe('Loading templates...');
   });
-  });
 
   it('persists node position updates when drag ends', async () => {
     const updateNode = vi.fn();
