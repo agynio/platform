@@ -2,7 +2,10 @@ import { Inject, Injectable, Logger } from '@nestjs/common';
 import type { AgentsPersistenceService } from '../agents/agents.persistence.service';
 import { AGENTS_PERSISTENCE_WRITER } from '../agents/tokens';
 import { ChannelRouter } from './channelRouter.service';
-import type { SendResult, ThreadOutboxSendRequest } from './types';
+import type { SendResult, ThreadOutboxSendRequest, ThreadOutboxSource } from './types';
+
+const isThreadOutboxSource = (value: unknown): value is ThreadOutboxSource =>
+  value === 'send_message' || value === 'auto_response' || value === 'manage_forward';
 
 @Injectable()
 export class ThreadOutboxService {
@@ -18,8 +21,22 @@ export class ThreadOutboxService {
     return context ? ` ${JSON.stringify(context)}` : '';
   }
 
+  private ensureOutboxSource(value: unknown, context: Record<string, unknown>): ThreadOutboxSource | null {
+    if (!isThreadOutboxSource(value)) {
+      this.logger.warn(
+        `ThreadOutboxService: invalid outbox source${this.format({ ...context, source: value })}`,
+      );
+      return null;
+    }
+    return value;
+  }
+
   async send(request: ThreadOutboxSendRequest & { role?: 'assistant' | 'user' }): Promise<SendResult> {
-    const { threadId, source } = request;
+    const threadId = request.threadId;
+    const source = this.ensureOutboxSource(request.source, { threadId });
+    if (!source) {
+      return { ok: false, error: 'invalid_outbox_source' } satisfies SendResult;
+    }
     const text = request.text?.trim() ?? '';
     if (!text) {
       return { ok: false, error: 'empty_message' } satisfies SendResult;

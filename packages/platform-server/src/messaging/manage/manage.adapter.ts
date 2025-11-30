@@ -1,11 +1,7 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
-import type { AgentsPersistenceService } from '../../agents/agents.persistence.service';
-import { AGENTS_PERSISTENCE_READER } from '../../agents/tokens';
 import { PrismaService } from '../../core/services/prisma.service';
-import {
-  ManageChannelDescriptorSchema,
-  type ThreadOutboxSource,
-} from '../types';
+import { ThreadsQueryService } from '../../threads/threads.query.service';
+import { ManageChannelDescriptorSchema, type ThreadOutboxSource } from '../types';
 
 interface ComputeForwardingInfoParams {
   childThreadId: string;
@@ -37,8 +33,7 @@ export class ManageAdapter {
 
   constructor(
     @Inject(PrismaService) private readonly prisma: PrismaService,
-    @Inject(AGENTS_PERSISTENCE_READER)
-    private readonly persistence: Pick<AgentsPersistenceService, 'getThreadAgentTitle' | 'getThreadAgentNodeId'>,
+    @Inject(ThreadsQueryService) private readonly threadsQuery: ThreadsQueryService,
   ) {}
 
   private format(context?: Record<string, unknown>): string {
@@ -56,38 +51,49 @@ export class ManageAdapter {
     const { childThreadId, source, runId = null } = params;
     const text = params.text?.trim() ?? '';
     if (!text) {
-      return { ok: false, error: 'empty_message' };
+      return { ok: false, error: 'empty_message' } satisfies ComputeForwardingInfoFailure;
     }
 
     try {
-      const prisma = this.prisma.getClient();
-      const thread = await prisma.thread.findUnique({
+      let parentThreadId: string | null = this.asStringOrNull(params.parentThreadId);
+      let childThreadAlias: string | null =
+        params.childThreadAlias === undefined ? null : this.asStringOrNull(params.childThreadAlias);
+      if (!parentThreadId || childThreadAlias === null) {
+        const link = await this.threadsQuery.getParentThreadIdAndAlias(childThreadId);
+        if (!parentThreadId) parentThreadId = this.asStringOrNull(link.parentThreadId);
+        if (childThreadAlias === null) childThreadAlias = this.asStringOrNull(link.alias);
+      }
+
+      const thread = await this.prisma.getClient().thread.findUnique({
         where: { id: childThreadId },
-        select: { parentId: true, alias: true, channel: true },
+        select: { channel: true },
       });
-      const parentThreadId = thread?.parentId ?? null;
+
       if (!parentThreadId) {
         this.logger.warn(
           `ManageAdapter: missing parent thread${this.format({ childThreadId })}`,
         );
-        return { ok: false, error: 'manage_missing_parent' };
+        return { ok: false, error: 'manage_missing_parent' } satisfies ComputeForwardingInfoFailure;
       }
 
-      const agentTitleCandidate = await this.persistence.getThreadAgentTitle(childThreadId);
+      const ensuredParentThreadId: string = parentThreadId;
+
+      const descriptorInfo = this.parseDescriptor(thread?.channel);
+      const agentTitleCandidate =
+        descriptorInfo?.agentTitle ?? (await this.threadsQuery.getThreadAgentTitle(childThreadId));
       const trimmedAgentTitle = typeof agentTitleCandidate === 'string' ? agentTitleCandidate.trim() : '';
       const agentTitle = trimmedAgentTitle.length > 0 ? trimmedAgentTitle : 'Subagent';
-      const descriptorInfo = this.parseDescriptor(thread?.channel);
       const resolvedPrefix = this.resolvePrefix(
         typeof params.prefix === 'string' && params.prefix.length > 0 ? params.prefix : descriptorInfo?.asyncPrefix,
         agentTitle,
       );
-      const alias = this.extractAlias(thread?.alias);
+      const alias = this.extractAlias(childThreadAlias);
       const correlationLabel = descriptorInfo?.showCorrelationInOutput ? this.buildCorrelationLabel({ alias, childThreadId }) : null;
       const forwardedText = this.composeForwardedText(resolvedPrefix, correlationLabel, text);
 
       return {
         ok: true,
-        parentThreadId,
+        parentThreadId: ensuredParentThreadId,
         forwardedText,
         agentTitle,
         childThreadId,
@@ -105,11 +111,13 @@ export class ManageAdapter {
         })}`,
       );
       const message = error instanceof Error && error.message ? error.message : 'manage_forward_failed';
-      return { ok: false, error: message };
+      return { ok: false, error: message } satisfies ComputeForwardingInfoFailure;
     }
   }
 
-  private parseDescriptor(raw: unknown): { asyncPrefix?: string; showCorrelationInOutput?: boolean } | null {
+  private parseDescriptor(
+    raw: unknown,
+  ): { asyncPrefix?: string; showCorrelationInOutput?: boolean; agentTitle?: string } | null {
     if (!raw) return null;
     const parsed = ManageChannelDescriptorSchema.safeParse(raw);
     if (!parsed.success) return null;
@@ -117,6 +125,7 @@ export class ManageAdapter {
     return {
       asyncPrefix: typeof meta.asyncPrefix === 'string' ? meta.asyncPrefix : undefined,
       showCorrelationInOutput: meta.showCorrelationInOutput === true,
+      agentTitle: typeof meta.agentTitle === 'string' ? meta.agentTitle : undefined,
     };
   }
 
@@ -129,6 +138,12 @@ export class ManageAdapter {
     if (typeof alias !== 'string' || alias.length === 0) return null;
     const lastSegment = alias.split(':').pop();
     return (lastSegment ?? alias) || null;
+  }
+
+  private asStringOrNull(value: unknown): string | null {
+    if (typeof value !== 'string') return null;
+    const trimmed = value.trim();
+    return trimmed.length > 0 ? trimmed : null;
   }
 
   private buildCorrelationLabel(context: { alias: string | null; childThreadId: string }): string {

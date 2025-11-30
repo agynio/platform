@@ -4,14 +4,19 @@ import { ManageAdapter } from './manage/manage.adapter';
 import { AgentIngressService } from './manage/agentIngress.service';
 import { LiveGraphRuntime } from '../graph-core/liveGraph.manager';
 import { SlackTrigger } from '../nodes/slackTrigger/slackTrigger.node';
+import { ThreadsQueryService } from '../threads/threads.query.service';
 import {
   ChannelDescriptorSchema,
   type IChannelAdapter,
   type ManageChannelDescriptor,
   type SendResult,
   type SlackChannelDescriptor,
+  type ThreadOutboxSource,
   type ThreadOutboxSendRequest,
 } from './types';
+
+const isThreadOutboxSource = (value: unknown): value is ThreadOutboxSource =>
+  value === 'send_message' || value === 'auto_response' || value === 'manage_forward';
 
 interface SlackRoute {
   type: 'slack';
@@ -39,6 +44,7 @@ export class ChannelRouter {
     @Inject(LiveGraphRuntime) private readonly runtime: LiveGraphRuntime,
     @Inject(ManageAdapter) private readonly manageAdapter: ManageAdapter,
     @Inject(AgentIngressService) private readonly agentIngress: AgentIngressService,
+    @Inject(ThreadsQueryService) private readonly threadsQuery: ThreadsQueryService,
   ) {}
 
   private format(context?: Record<string, unknown>): string {
@@ -97,7 +103,11 @@ export class ChannelRouter {
       const adapter: AdapterWithRoute = {
         route,
         sendText: async (payload: ThreadOutboxSendRequest): Promise<SendResult> => {
-          const { threadId, source } = payload;
+          const threadId = payload.threadId;
+          const source = this.ensureOutboxSource(payload.source, { threadId });
+          if (!source) {
+            return { ok: false, error: 'invalid_outbox_source' } satisfies SendResult;
+          }
           const channelNodeId = route.channelNodeId;
           const node = this.runtime.getNodeInstance(channelNodeId);
           if (!node) {
@@ -142,12 +152,24 @@ export class ChannelRouter {
             return { ok: true } satisfies SendResult;
           }
 
+          const childThreadId = payload.threadId;
+          const text = payload.text;
+          const source = this.ensureOutboxSource(payload.source, { threadId: childThreadId });
+          if (!source) {
+            return { ok: false, error: 'invalid_outbox_source' } satisfies SendResult;
+          }
+          const runId = payload.runId ?? null;
+          const prefix = payload.prefix;
+
+          const link = await this.threadsQuery.getParentThreadIdAndAlias(childThreadId);
           const info = await this.manageAdapter.computeForwardingInfo({
-            childThreadId: payload.threadId,
-            text: payload.text,
-            source: payload.source,
-            runId: payload.runId ?? null,
-            prefix: payload.prefix,
+            childThreadId,
+            text,
+            source,
+            runId,
+            prefix,
+            parentThreadId: link.parentThreadId,
+            childThreadAlias: link.alias,
           });
 
           if (!info.ok) {
@@ -169,5 +191,15 @@ export class ChannelRouter {
     }
 
     return null;
+  }
+
+  private ensureOutboxSource(value: unknown, context: Record<string, unknown>): ThreadOutboxSource | null {
+    if (!isThreadOutboxSource(value)) {
+      this.logger.warn(
+        `ChannelRouter: invalid outbox source${this.format({ ...context, source: value })}`,
+      );
+      return null;
+    }
+    return value;
   }
 }

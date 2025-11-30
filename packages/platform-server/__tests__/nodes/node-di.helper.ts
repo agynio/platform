@@ -24,6 +24,7 @@ import { ThreadOutboxService } from '../../src/messaging/threadOutbox.service';
 import { ManageFunctionTool } from '../../src/nodes/tools/manage/manage.tool';
 import { VaultService } from '../../src/vault/vault.service';
 import { ReferenceResolverService } from '../../src/utils/reference-resolver.service';
+import { ThreadsQueryService } from '../../src/threads/threads.query.service';
 
 type InjectionToken = Type<unknown> | string | symbol;
 
@@ -90,6 +91,15 @@ const DEFAULT_TOKEN_FACTORIES = new Map<InjectionToken, () => unknown>([
         getThreadAgentNodeId: vi.fn(async () => 'agent-node-1'),
         recordOutboxMessage: vi.fn(async () => undefined),
         ensureThreadModel: vi.fn(async (_threadId: string, model: string) => model),
+      }),
+  ],
+  [
+    ThreadsQueryService,
+    () =>
+      createDefaultStub('ThreadsQueryService', {
+        getParentThreadIdAndAlias: vi.fn(async () => ({ parentThreadId: 'thread-1', alias: null })),
+        getThreadAgentTitle: vi.fn(async () => 'Worker Alpha'),
+        getThreadAgentNodeId: vi.fn(async () => 'agent-node-1'),
       }),
   ],
   [RunSignalsRegistry, () => createDefaultStub('RunSignalsRegistry')],

@@ -5,6 +5,7 @@ import type { SlackAdapter } from '../src/messaging/slack/slack.adapter';
 import type { ManageAdapter } from '../src/messaging/manage/manage.adapter';
 import type { AgentIngressService } from '../src/messaging/manage/agentIngress.service';
 import type { LiveGraphRuntime } from '../src/graph-core/liveGraph.manager';
+import type { ThreadsQueryService } from '../src/threads/threads.query.service';
 
 describe('ChannelRouter manage routes', () => {
   const PARENT_THREAD_ID = '11111111-1111-1111-8111-111111111111';
@@ -29,6 +30,12 @@ describe('ChannelRouter manage routes', () => {
     ({
       getNodeInstance: vi.fn(() => instance),
     }) as unknown as LiveGraphRuntime & { getNodeInstance: ReturnType<typeof vi.fn> };
+  const makeThreadsQuery = () =>
+    ({
+      getParentThreadIdAndAlias: vi.fn(async () => ({ parentThreadId: PARENT_THREAD_ID, alias: 'alias-1' })),
+    }) as unknown as ThreadsQueryService & {
+      getParentThreadIdAndAlias: ReturnType<typeof vi.fn>;
+    };
 
   it('returns ok without forwarding for sync mode', async () => {
     const descriptor = {
@@ -43,8 +50,9 @@ describe('ChannelRouter manage routes', () => {
     const runtime = makeRuntime(slack);
     const manage = makeManage();
     const ingress = makeIngress();
+    const threadsQuery = makeThreadsQuery();
 
-    const router = new ChannelRouter(prisma, runtime, manage, ingress);
+    const router = new ChannelRouter(prisma, runtime, manage, ingress, threadsQuery);
     const adapter = await router.getAdapter(CHILD_THREAD_ID);
     expect(adapter).not.toBeNull();
     const res = await adapter!.sendText({
@@ -85,8 +93,9 @@ describe('ChannelRouter manage routes', () => {
     });
     const ingress = makeIngress();
     ingress.enqueueToAgent.mockResolvedValue({ ok: true });
+    const threadsQuery = makeThreadsQuery();
 
-    const router = new ChannelRouter(prisma, runtime, manage, ingress);
+    const router = new ChannelRouter(prisma, runtime, manage, ingress, threadsQuery);
     const adapter = await router.getAdapter(CHILD_THREAD_ID);
     expect(adapter).not.toBeNull();
 
@@ -104,6 +113,8 @@ describe('ChannelRouter manage routes', () => {
       source: 'auto_response',
       runId: 'child-run',
       prefix: undefined,
+      parentThreadId: PARENT_THREAD_ID,
+      childThreadAlias: 'alias-1',
     });
     expect(ingress.enqueueToAgent).toHaveBeenCalledWith({
       parentThreadId: PARENT_THREAD_ID,

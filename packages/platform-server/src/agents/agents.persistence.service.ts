@@ -16,7 +16,7 @@ import { GraphRepository } from '../graph/graph.repository';
 import type { PersistedGraphNode } from '../shared/types/graph.types';
 import { toPrismaJsonValue } from '../llm/services/messages.serialization';
 import { coerceRole } from '../llm/services/messages.normalization';
-import { ChannelDescriptorSchema, type ChannelDescriptor, type ThreadOutboxSource } from '../messaging/types';
+import { ChannelDescriptorSchema, type ChannelDescriptor, type ThreadOutboxSource } from '../threads/thread-channel.schema';
 import { RunEventsService } from '../events/run-events.service';
 import { EventsBusService } from '../events/events-bus.service';
 import { CallAgentLinkingService } from './call-agent-linking.service';

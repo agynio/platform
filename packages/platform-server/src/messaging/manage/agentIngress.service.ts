@@ -1,10 +1,9 @@
 import { HumanMessage } from '@agyn/llm';
 import { Inject, Injectable, Logger } from '@nestjs/common';
-import type { AgentsPersistenceService } from '../../agents/agents.persistence.service';
-import { AGENTS_PERSISTENCE_READER } from '../../agents/tokens';
 import { LiveGraphRuntime } from '../../graph-core/liveGraph.manager';
 import { AgentNode } from '../../nodes/agent/agent.node';
 import type { SendResult } from '../types';
+import { ThreadsQueryService } from '../../threads/threads.query.service';
 
 interface AgentIngressPayload {
   parentThreadId: string;
@@ -21,8 +20,8 @@ export class AgentIngressService {
   private readonly logger = new Logger(AgentIngressService.name);
 
   constructor(
-    @Inject(AGENTS_PERSISTENCE_READER)
-    private readonly persistence: Pick<AgentsPersistenceService, 'getThreadAgentNodeId'>,
+    @Inject(ThreadsQueryService)
+    private readonly threadsQuery: ThreadsQueryService,
     @Inject(LiveGraphRuntime) private readonly runtime: LiveGraphRuntime,
   ) {}
 
@@ -44,7 +43,7 @@ export class AgentIngressService {
     }
 
     try {
-      const agentNodeId = await this.persistence.getThreadAgentNodeId(payload.parentThreadId);
+      const agentNodeId = await this.threadsQuery.getThreadAgentNodeId(payload.parentThreadId);
       if (!agentNodeId) {
         this.logger.warn(
           `AgentIngressService: missing agent node${this.format({

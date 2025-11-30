@@ -36,7 +36,8 @@ import { EnvService } from '../env/env.service';
 import { GraphCoreModule } from '../graph-core/graph-core.module';
 import { TemplateRegistry } from '../graph-core/templateRegistry';
 import { registerDefaultTemplates } from '../templates';
-import { AGENTS_PERSISTENCE_READER, AGENTS_PERSISTENCE_WRITER } from '../agents/tokens';
+import { AGENTS_PERSISTENCE_WRITER } from '../agents/tokens';
+import { ThreadsQueryService } from '../threads/threads.query.service';
 
 @Injectable()
 class NodesTemplateRegistrar implements OnModuleInit {
@@ -56,6 +57,7 @@ class NodesTemplateRegistrar implements OnModuleInit {
     ManageAdapter,
     AgentIngressService,
     ChannelRouter,
+    ThreadsQueryService,
     ThreadOutboxService,
     PostgresMemoryEntitiesRepository,
     MemoryService,
@@ -75,11 +77,6 @@ class NodesTemplateRegistrar implements OnModuleInit {
     GithubCloneRepoNode,
     RemindMeNode,
     NodesTemplateRegistrar,
-    {
-      provide: AGENTS_PERSISTENCE_READER,
-      useFactory: (persistence: AgentsPersistenceService) => persistence,
-      inject: [AgentsPersistenceService],
-    },
     {
       provide: AGENTS_PERSISTENCE_WRITER,
       useFactory: (persistence: AgentsPersistenceService) => persistence,
@@ -101,6 +98,7 @@ class NodesTemplateRegistrar implements OnModuleInit {
     ManageAdapter,
     AgentIngressService,
     ChannelRouter,
+    ThreadsQueryService,
     ThreadOutboxService,
     PostgresMemoryEntitiesRepository,
     MemoryService,

@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { HumanMessage } from '@agyn/llm';
 import { AgentIngressService } from '../src/messaging/manage/agentIngress.service';
-import type { AgentsPersistenceService } from '../src/agents/agents.persistence.service';
+import type { ThreadsQueryService } from '../src/threads/threads.query.service';
 import type { LiveGraphRuntime } from '../src/graph-core/liveGraph.manager';
 import { AgentNode } from '../src/nodes/agent/agent.node';
 
@@ -16,9 +16,9 @@ const makeProxyAgent = () => {
 
 describe('AgentIngressService', () => {
   it('invokes agent node when ready', async () => {
-    const persistence = {
+    const threadsQuery = {
       getThreadAgentNodeId: vi.fn(async () => 'agent-1'),
-    } as unknown as AgentsPersistenceService & {
+    } as unknown as ThreadsQueryService & {
       getThreadAgentNodeId: ReturnType<typeof vi.fn>;
     };
     const agent = makeProxyAgent();
@@ -26,7 +26,7 @@ describe('AgentIngressService', () => {
       getNodeInstance: vi.fn(() => agent),
     } as unknown as LiveGraphRuntime & { getNodeInstance: ReturnType<typeof vi.fn> };
 
-    const service = new AgentIngressService(persistence, runtime);
+    const service = new AgentIngressService(threadsQuery, runtime);
     const res = await service.enqueueToAgent({
       parentThreadId: 'parent-thread',
       text: 'From Worker Alpha: hello',
@@ -46,9 +46,9 @@ describe('AgentIngressService', () => {
   });
 
   it('returns error when agent is not ready', async () => {
-    const persistence = {
+    const threadsQuery = {
       getThreadAgentNodeId: vi.fn(async () => 'agent-1'),
-    } as unknown as AgentsPersistenceService & {
+    } as unknown as ThreadsQueryService & {
       getThreadAgentNodeId: ReturnType<typeof vi.fn>;
     };
     const agent = makeProxyAgent();
@@ -57,7 +57,7 @@ describe('AgentIngressService', () => {
       getNodeInstance: vi.fn(() => agent),
     } as unknown as LiveGraphRuntime & { getNodeInstance: ReturnType<typeof vi.fn> };
 
-    const service = new AgentIngressService(persistence, runtime);
+    const service = new AgentIngressService(threadsQuery, runtime);
     const res = await service.enqueueToAgent({
       parentThreadId: 'parent-thread',
       text: 'child message',
@@ -71,16 +71,16 @@ describe('AgentIngressService', () => {
   });
 
   it('returns error when agent node missing', async () => {
-    const persistence = {
+    const threadsQuery = {
       getThreadAgentNodeId: vi.fn(async () => null),
-    } as unknown as AgentsPersistenceService & {
+    } as unknown as ThreadsQueryService & {
       getThreadAgentNodeId: ReturnType<typeof vi.fn>;
     };
     const runtime = {
       getNodeInstance: vi.fn(() => null),
     } as unknown as LiveGraphRuntime & { getNodeInstance: ReturnType<typeof vi.fn> };
 
-    const service = new AgentIngressService(persistence, runtime);
+    const service = new AgentIngressService(threadsQuery, runtime);
     const res = await service.enqueueToAgent({
       parentThreadId: 'parent-thread',
       text: 'child message',
@@ -94,16 +94,16 @@ describe('AgentIngressService', () => {
   });
 
   it('returns error when runtime node is not an agent', async () => {
-    const persistence = {
+    const threadsQuery = {
       getThreadAgentNodeId: vi.fn(async () => 'agent-1'),
-    } as unknown as AgentsPersistenceService & {
+    } as unknown as ThreadsQueryService & {
       getThreadAgentNodeId: ReturnType<typeof vi.fn>;
     };
     const runtime = {
       getNodeInstance: vi.fn(() => ({ status: 'ready' })),
     } as unknown as LiveGraphRuntime & { getNodeInstance: ReturnType<typeof vi.fn> };
 
-    const service = new AgentIngressService(persistence, runtime);
+    const service = new AgentIngressService(threadsQuery, runtime);
     const res = await service.enqueueToAgent({
       parentThreadId: 'parent-thread',
       text: 'child message',
