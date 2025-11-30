@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Button, Input } from '@agyn/ui';
-import type { ContainerNixConfig, FlakeRepoSelection, NixPackageSelection } from './types';
+import type { ContainerNixConfig, FlakeRepoSelection, NixPackageSelection, NixpkgsSelection } from './types';
 import { useQuery } from '@tanstack/react-query';
 import { fetchPackages, fetchVersions, resolvePackage, resolveRepo } from '@/api/modules/nix';
 import { AxiosError, isAxiosError } from 'axios';
