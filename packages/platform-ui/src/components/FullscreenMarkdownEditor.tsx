@@ -83,12 +83,6 @@ const scheduleScrollUpdate = (
   });
 
   rafRef.current = firstFrame;
-
-  window.requestAnimationFrame(() => {
-    if (suppressRef.current > 0) {
-      suppressRef.current -= 1;
-    }
-  });
 };
 
 interface ScrollSyncOptions {
@@ -160,7 +154,6 @@ const useScrollSync = ({
     }
 
     if (editorSuppressRef.current > 0) {
-      editorSuppressRef.current -= 1;
       return;
     }
 
@@ -185,7 +178,6 @@ const useScrollSync = ({
     }
 
     if (previewSuppressRef.current > 0) {
-      previewSuppressRef.current -= 1;
       return;
     }
 
