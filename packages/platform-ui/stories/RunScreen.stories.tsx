@@ -2,7 +2,7 @@ import type { ComponentProps } from 'react';
 import { useArgs } from 'storybook/preview-api';
 import { action } from 'storybook/actions';
 import type { Meta, StoryObj } from '@storybook/react';
-import { rest } from 'msw';
+import { http, HttpResponse } from 'msw';
 import RunScreen from '../src/components/screens/RunScreen';
 import type { RunEvent } from '../src/components/RunEventsList';
 import type { ContextItem, RunTimelineEvent, RunTimelineEventsResponse, RunTimelineSummary, RunEventType, RunEventStatus } from '../src/api/types/agents';
@@ -375,21 +375,22 @@ const baseStatistics = {
 
 const defaultSelectedEventId = sampleEvents.find((event) => event.type === 'llm')?.id ?? sampleEvents[0]?.id ?? null;
 
-const contextItemsHandler = rest.get('/api/agents/context-items', (req, res, ctx) => {
-  const ids = req.url.searchParams.getAll('ids');
+const contextItemsHandler = http.get('/api/agents/context-items', ({ request }) => {
+  const url = new URL(request.url);
+  const ids = url.searchParams.getAll('ids');
   const source = ids.length > 0 ? ids : Array.from(sampleContextItemMap.keys());
   const items = source
     .map((id) => sampleContextItemMap.get(id))
     .filter((item): item is ContextItem => Boolean(item));
-  return res(ctx.json({ items }));
+  return HttpResponse.json({ items });
 });
 
-const runSummaryHandler = rest.get('/api/agents/runs/:runId/summary', (_req, res, ctx) => {
-  return res(ctx.json(sampleRunSummary));
+const runSummaryHandler = http.get('/api/agents/runs/:runId/summary', () => {
+  return HttpResponse.json(sampleRunSummary);
 });
 
-const runEventsHandler = rest.get('/api/agents/runs/:runId/events', (_req, res, ctx) => {
-  return res(ctx.json(sampleRunEventsResponse));
+const runEventsHandler = http.get('/api/agents/runs/:runId/events', () => {
+  return HttpResponse.json(sampleRunEventsResponse);
 });
 
 const ControlledRender: Story['render'] = () => {

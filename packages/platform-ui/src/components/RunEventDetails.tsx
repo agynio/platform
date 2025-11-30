@@ -1,4 +1,4 @@
-import { Clock, MessageSquare, Bot, Wrench, FileText, Terminal, Users, ChevronDown, ChevronRight, Copy, User, Settings, ExternalLink } from 'lucide-react';
+import { Clock, MessageSquare, Bot, Wrench, FileText, Terminal, Users, ChevronDown, ChevronRight, Copy, ExternalLink, User, Settings } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { Badge } from './Badge';
 import { IconButton } from './IconButton';
@@ -6,9 +6,9 @@ import { JsonViewer } from './JsonViewer';
 import { MarkdownContent } from './MarkdownContent';
 import { Dropdown } from './Dropdown';
 import { StatusIndicator, type Status } from './StatusIndicator';
-import { useContextItems } from '@/api/hooks/contextItems';
 import { useNow } from '@/hooks/useNow';
 import { computeDurationMs, formatAbsoluteTimestamp, formatDurationShort, formatRelativeTimeShort } from '@/utils/time';
+import { LLMContextViewer } from '@/components/agents/LLMContextViewer';
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -25,25 +25,6 @@ const safeJsonParse = (value: string): unknown => {
   } catch {
     return value;
   }
-};
-
-const safeStringify = (value: unknown): string => {
-  if (value === null || value === undefined) {
-    return '';
-  }
-  if (typeof value === 'string') {
-    return value;
-  }
-  try {
-    return JSON.stringify(value, null, 2);
-  } catch {
-    return String(value);
-  }
-};
-
-const formatToolCallArguments = (value: unknown): string => {
-  const serialized = safeStringify(value ?? {});
-  return serialized.length > 0 ? serialized : '{}';
 };
 
 const extractToolCallArguments = (call: Record<string, unknown>): unknown => {
@@ -85,25 +66,6 @@ const toContextIds = (value: unknown): string[] => {
   return single ? [single] : [];
 };
 
-const getHighlightCount = (value: unknown): number | undefined => {
-  if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0) {
-    return undefined;
-  }
-  return Math.floor(value);
-};
-
-const CONTEXT_HIGHLIGHT_ROLES: ReadonlySet<ContextMessageRole> = new Set<ContextMessageRole>(['user', 'assistant', 'tool']);
-type ContextMessageRole = 'system' | 'user' | 'assistant' | 'tool' | 'other';
-
-const normalizeContextMessageRole = (value: unknown): ContextMessageRole => {
-  if (typeof value !== 'string') return 'other';
-  const normalized = value.trim().toLowerCase();
-  if (normalized === 'system' || normalized === 'user' || normalized === 'assistant' || normalized === 'tool') {
-    return normalized;
-  }
-  return 'other';
-};
-
 export interface RunEventData extends Record<string, unknown> {
   messageSubtype?: MessageSubtype;
   content?: unknown;
@@ -142,6 +104,24 @@ export type EventType = 'message' | 'llm' | 'tool' | 'summarization';
 export type ToolSubtype = 'generic' | 'shell' | 'manage' | string;
 export type MessageSubtype = 'source' | 'intermediate' | 'result';
 export type OutputViewMode = 'text' | 'terminal' | 'markdown' | 'json' | 'yaml';
+
+type ContextMessageRole = 'system' | 'user' | 'assistant' | 'tool' | 'other';
+
+const normalizeContextMessageRole = (value: unknown): ContextMessageRole => {
+  if (typeof value !== 'string') return 'other';
+  const normalized = value.trim().toLowerCase();
+  if (normalized === 'system' || normalized === 'user' || normalized === 'assistant' || normalized === 'tool') {
+    return normalized;
+  }
+  return 'other';
+};
+
+type ToolCallDisplay = {
+  key: string;
+  name: string;
+  callId?: string;
+  payload: unknown;
+};
 
 const EVENTS_WITHOUT_DURATION: ReadonlySet<EventType> = new Set<EventType>(['message']);
 
@@ -199,78 +179,35 @@ export function RunEventDetails({ event }: RunEventDetailsProps) {
     });
   };
 
-  const llmContextIds = useMemo<readonly string[] | undefined>(() => {
-    if (event.type !== 'llm') return undefined;
-    const ids = toContextIds(event.data.context);
-    return ids.length > 0 ? ids : [];
+  const llmContextIds = useMemo<string[]>(() => {
+    if (event.type !== 'llm') return [];
+    return toContextIds(event.data.context);
   }, [event.data, event.type]);
-  const {
-    items: llmContextItems,
-    total: totalContextItems,
-    targetCount: targetContextItems,
-    hasMore: hasMoreContextItems,
-    isInitialLoading: isContextInitialLoading,
-    isFetching: isContextFetching,
-    error: contextErrorRaw,
-    loadMore: loadMoreContext,
-  } = useContextItems(llmContextIds, { initialCount: 10 });
 
-  const hasContextError = Boolean(contextErrorRaw);
+  const highlightContextCount = event.type === 'llm' ? asNumber(event.data.newContextCount) : undefined;
 
-  const highlightContextCount = event.type === 'llm' ? getHighlightCount(event.data.newContextCount) : undefined;
-
-  const highlightedContextIds = useMemo(() => {
-    if (!highlightContextCount || highlightContextCount <= 0 || llmContextItems.length === 0) {
-      return new Set<string>();
-    }
-    const ids = new Set<string>();
-    let remaining = highlightContextCount;
-    for (let index = llmContextItems.length - 1; index >= 0 && remaining > 0; index -= 1) {
-      const item = llmContextItems[index];
-      if (!item) continue;
-      const role = normalizeContextMessageRole(item.role);
-      if (!CONTEXT_HIGHLIGHT_ROLES.has(role)) continue;
-      ids.add(item.id);
-      remaining -= 1;
-    }
-    return ids;
-  }, [highlightContextCount, llmContextItems]);
-
-  const llmContextMessages = useMemo(() => {
-    if (llmContextItems.length === 0) return [] as Record<string, unknown>[];
-    return llmContextItems.map((item) => {
-      const normalizedRole = normalizeContextMessageRole(item.role);
-      const hasText = typeof item.contentText === 'string' && item.contentText.trim().length > 0;
-      let contentValue: unknown = '';
-      if (hasText) {
-        contentValue = item.contentText ?? '';
-      } else if (item.contentJson !== null && item.contentJson !== undefined) {
-        contentValue = normalizedRole === 'assistant' || normalizedRole === 'tool' ? item.contentJson : safeStringify(item.contentJson);
-      }
-
-      const message: Record<string, unknown> = {
-        id: item.id,
-        role: normalizedRole,
-        timestamp: item.createdAt,
-        content: contentValue,
-        contextItemId: item.id,
-      };
-
-      if (normalizedRole === 'assistant') {
-        message.response = hasText && item.contentText ? item.contentText : item.contentJson ?? '';
-      }
-
-      if (normalizedRole === 'tool') {
-        message.tool_result = item.contentJson ?? item.contentText ?? '';
-      }
-
-      if (highlightedContextIds.has(item.id)) {
-        message.__highlight = true;
-      }
-
-      return message;
+  const llmToolCalls = useMemo<ToolCallDisplay[]>(() => {
+    if (event.type !== 'llm') return [];
+    const toolCallGroups = [event.data.toolCalls, event.data.tool_calls, event.data.additional_kwargs?.tool_calls];
+    const calls: ToolCallDisplay[] = [];
+    toolCallGroups.forEach((group) => {
+      if (!Array.isArray(group)) return;
+      group.forEach((call) => {
+        if (!isRecord(call)) return;
+        const name = asString(call.name, 'Tool Call');
+        const callIdCandidate = asString((call as { callId?: unknown; id?: unknown }).callId ?? (call as { id?: unknown }).id);
+        const payload = extractToolCallArguments(call) ?? call;
+        const key = callIdCandidate.length > 0 ? callIdCandidate : `tool-call-${calls.length}`;
+        calls.push({
+          key,
+          name,
+          callId: callIdCandidate.length > 0 ? callIdCandidate : undefined,
+          payload,
+        });
+      });
     });
-  }, [llmContextItems, highlightedContextIds]);
+    return calls;
+  }, [event.data.additional_kwargs?.tool_calls, event.data.toolCalls, event.data.tool_calls, event.type]);
 
   const renderOutputContent = (output: unknown) => {
     const outputString = typeof output === 'string'
@@ -386,31 +323,10 @@ export function RunEventDetails({ event }: RunEventDetailsProps) {
     const totalTokens = asNumber(event.data.tokens?.total);
     const cost = typeof event.data.cost === 'string' ? event.data.cost : '';
     const model = asString(event.data.model);
-    const hasContextSource = Array.isArray(llmContextIds) ? llmContextIds.length > 0 : false;
-    const hasContextMessages = llmContextMessages.length > 0;
-    const displayedContextCount = Math.min(targetContextItems, totalContextItems);
-    type ToolCallDisplay = { key: string; name: string; callId?: string; arguments: string };
-    const toolCallGroups = [event.data.toolCalls, event.data.tool_calls, event.data.additional_kwargs?.tool_calls];
-    const toolCalls: ToolCallDisplay[] = [];
-
-    toolCallGroups.forEach((group) => {
-      if (!Array.isArray(group)) return;
-      group.forEach((call) => {
-        if (!isRecord(call)) return;
-        const name = asString(call.name, 'Tool Call');
-        const callIdCandidate = asString((call as { callId?: unknown; id?: unknown }).callId ?? (call as { id?: unknown }).id);
-        const argumentsValue = extractToolCallArguments(call);
-        const formattedArguments = formatToolCallArguments(argumentsValue);
-        const key = callIdCandidate.length > 0 ? callIdCandidate : `tool-call-${toolCalls.length}`;
-        toolCalls.push({
-          key,
-          name,
-          callId: callIdCandidate.length > 0 ? callIdCandidate : undefined,
-          arguments: formattedArguments,
-        });
-      });
-    });
-
+    const highlightCount = typeof highlightContextCount === 'number' && highlightContextCount > 0
+      ? Math.floor(highlightContextCount)
+      : undefined;
+    const toolCalls = llmToolCalls;
     const hasToolCalls = toolCalls.length > 0;
 
     const tokens = event.data.tokens;
@@ -463,143 +379,100 @@ export function RunEventDetails({ event }: RunEventDetailsProps) {
         </div>
 
         {/* Input & Output Side by Side */}
-        <div className="grid grid-cols-2 gap-4 flex-1 min-h-0">
+        <div className="grid grid-cols-1 gap-4 flex-1 min-h-0 md:grid-cols-2">
           {/* Input */}
-          <div className="flex flex-col min-h-0 min-w-0">
+          <div className="flex flex-col min-h-0 min-w-0 gap-4">
             {/* Model */}
             {model && (
-              <div className="flex-shrink-0 mb-4">
-                <div className="flex items-center gap-2 mb-3 h-8">
+              <div className="flex flex-col rounded-[10px] border border-[var(--agyn-border-subtle)] bg-white p-4">
+                <div className="mb-2 flex items-center justify-between">
                   <span className="text-sm text-[var(--agyn-gray)]">Model</span>
                   <IconButton icon={<Copy className="w-3 h-3" />} size="sm" variant="ghost" />
                 </div>
-                <div className="text-[var(--agyn-dark)] text-sm font-mono">
-                  {model}
-                </div>
+                <div className="text-sm font-mono text-[var(--agyn-dark)] break-all">{model}</div>
               </div>
             )}
-            
-            {/* Context */}
-            <div className="flex-1 flex flex-col min-h-0">
-              <div className="flex items-center gap-2 mb-3 h-8 flex-shrink-0">
-                <span className="text-sm text-[var(--agyn-gray)]">Context</span>
+            <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-[10px] border border-[var(--agyn-border-subtle)]">
+              <div className="border-b border-[var(--agyn-border-subtle)] px-4 py-2 text-sm font-medium text-[var(--agyn-gray)]">
+                Context
               </div>
-              <div className="flex-1 overflow-y-auto min-h-0 border border-[var(--agyn-border-subtle)] rounded-[10px] p-4">
-                {!hasContextSource ? (
+              <div className="flex-1 min-h-0 overflow-y-auto px-4 py-3">
+                {llmContextIds.length === 0 ? (
                   <div className="text-sm text-[var(--agyn-gray)]">No context messages</div>
                 ) : (
-                  <div className="space-y-4">
-                    {hasMoreContextItems && (
-                      <button
-                        type="button"
-                        className="w-full text-sm text-[var(--agyn-blue)] hover:text-[var(--agyn-blue)]/80 py-2 border border-[var(--agyn-border-subtle)] rounded-[6px] transition-colors disabled:cursor-not-allowed disabled:opacity-70"
-                        onClick={loadMoreContext}
-                        disabled={isContextFetching}
-                      >
-                        Load older context
-                        {totalContextItems > 0 && (
-                          <span className="ml-1 text-xs text-[var(--agyn-gray)]">
-                            ({displayedContextCount} of {totalContextItems})
-                          </span>
-                        )}
-                      </button>
-                    )}
-
-                    {isContextInitialLoading && (
-                      <div className="text-sm text-[var(--agyn-gray)]">Loading context…</div>
-                    )}
-
-                    {hasContextMessages && renderContextMessages(llmContextMessages)}
-
-                    {!isContextInitialLoading && !isContextFetching && !hasContextMessages && (
-                      <div className="text-sm text-[var(--agyn-gray)]">No context messages</div>
-                    )}
-
-                    {isContextFetching && !isContextInitialLoading && (
-                      <div className="text-sm text-[var(--agyn-gray)]">Loading…</div>
-                    )}
-
-                    {hasContextError && !isContextInitialLoading && (
-                      <div className="text-sm text-[var(--agyn-red)]">Failed to load context items</div>
-                    )}
-                  </div>
+                  <LLMContextViewer ids={llmContextIds} highlightLastCount={highlightCount} />
                 )}
               </div>
             </div>
           </div>
 
           {/* Output */}
-          <div className="flex flex-col min-h-0 min-w-0">
-            <div className="flex items-center gap-2 mb-3 h-8 flex-shrink-0">
-              <span className="text-sm text-[var(--agyn-gray)]">Output</span>
-              <IconButton icon={<Copy className="w-3 h-3" />} size="sm" variant="ghost" />
-            </div>
-            <div className="flex-1 overflow-y-auto min-h-0 border border-[var(--agyn-border-subtle)] rounded-[10px] p-4">
-              <div className="flex flex-col gap-4">
-                <section>
-                  <div className="mb-2 flex items-center justify-between">
-                    <span className="text-sm text-[var(--agyn-gray)]">Response</span>
+          <div className="flex flex-col min-h-0 min-w-0 gap-4">
+            <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-[10px] border border-[var(--agyn-border-subtle)] bg-white">
+              <div className="flex items-center justify-between border-b border-[var(--agyn-border-subtle)] px-4 py-2">
+                <span className="text-sm text-[var(--agyn-gray)]">Output</span>
+                <IconButton icon={<Copy className="w-3 h-3" />} size="sm" variant="ghost" />
+              </div>
+              <div className="flex-1 min-h-0 overflow-y-auto px-4 py-3">
+                {response ? (
+                  <div className="prose prose-sm max-w-none">
+                    <MarkdownContent content={response} />
                   </div>
-                  {response ? (
-                    <div className="prose prose-sm max-w-none">
-                      <MarkdownContent content={response} />
-                    </div>
-                  ) : (
-                    <div className="text-sm text-[var(--agyn-gray)]">No response available</div>
-                  )}
-                </section>
-
-                {hasToolCalls && (
-                  <section>
-                    <div className="mb-2 flex items-center justify-between">
-                      <span className="text-sm text-[var(--agyn-gray)]">Tool Calls</span>
-                    </div>
-                    <div className="space-y-3">
-                      {toolCalls.map((call) => (
-                        <div
-                          key={call.key}
-                          className="rounded-[8px] border border-[var(--agyn-border-subtle)] bg-[var(--agyn-bg-light)]/40 p-3"
-                        >
-                          <div className="flex items-start justify-between gap-3">
-                            <div>
-                              <p className="text-sm font-medium text-[var(--agyn-dark)]">{call.name}</p>
-                              {call.callId && (
-                                <p className="text-xs text-[var(--agyn-gray)] mt-0.5">Call ID: {call.callId}</p>
-                              )}
-                            </div>
-                          </div>
-                          <pre
-                            className="mt-2 max-h-48 overflow-auto rounded-[6px] bg-[var(--agyn-dark)]/5 p-2 text-xs text-[var(--agyn-dark)] whitespace-pre-wrap"
-                            style={{ wordBreak: 'break-word' }}
-                          >
-                            {call.arguments}
-                          </pre>
-                        </div>
-                      ))}
-                    </div>
-                  </section>
-                )}
-
-                {hasTokenMetrics && (
-                  <section>
-                    <div className="mb-2 flex items-center justify-between">
-                      <span className="text-sm text-[var(--agyn-gray)]">Token Usage</span>
-                    </div>
-                    <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
-                      {tokenEntries.map(({ key, label, value }) => (
-                        <div
-                          key={key}
-                          className="rounded-[8px] border border-[var(--agyn-border-subtle)] bg-white p-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.6)]"
-                        >
-                          <div className="text-xs text-[var(--agyn-gray)]">{label}</div>
-                          <div className="text-sm font-semibold text-[var(--agyn-dark)]">{formatTokenValue(value)}</div>
-                        </div>
-                      ))}
-                    </div>
-                  </section>
+                ) : (
+                  <div className="text-sm text-[var(--agyn-gray)]">No response available</div>
                 )}
               </div>
             </div>
+
+            {hasToolCalls && (
+              <div className="space-y-3 rounded-[10px] border border-[var(--agyn-border-subtle)] bg-white p-4">
+                <div className="text-sm font-medium text-[var(--agyn-dark)]">Tool Calls</div>
+                <div className="space-y-2">
+                  {toolCalls.map((call, index) => {
+                    const toggleKey = call.key ?? `tool-call-${index}`;
+                    const isExpanded = expandedToolCalls.has(toggleKey);
+                    return (
+                      <div key={toggleKey} className="rounded-[8px] border border-[var(--agyn-border-subtle)] bg-[var(--agyn-bg-light)]/60">
+                        <button
+                          type="button"
+                          onClick={() => toggleToolCall(toggleKey)}
+                          className="flex w-full items-center justify-between gap-3 px-3 py-2 text-left"
+                        >
+                          <span className="flex items-center gap-2 text-sm font-medium text-[var(--agyn-dark)]">
+                            {isExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+                            <Wrench className="h-4 w-4 text-[var(--agyn-blue)]" />
+                            <span>{call.name}</span>
+                            {call.callId && <span className="text-xs text-[var(--agyn-gray)]">({call.callId})</span>}
+                          </span>
+                        </button>
+                        {isExpanded && (
+                          <div className="border-t border-[var(--agyn-border-subtle)] px-3 py-3 text-xs text-[var(--agyn-dark)]">
+                            <JsonViewer data={call.payload} />
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {hasTokenMetrics && (
+              <div className="space-y-3 rounded-[10px] border border-[var(--agyn-border-subtle)] bg-white p-4">
+                <div className="text-sm font-medium text-[var(--agyn-dark)]">Token Usage</div>
+                <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
+                  {tokenEntries.map(({ key, label, value }) => (
+                    <div
+                      key={key}
+                      className="rounded-[8px] border border-[var(--agyn-border-subtle)] bg-[var(--agyn-bg-light)]/40 p-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.6)]"
+                    >
+                      <div className="text-xs text-[var(--agyn-gray)]">{label}</div>
+                      <div className="text-sm font-semibold text-[var(--agyn-dark)]">{formatTokenValue(value)}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -674,10 +547,10 @@ export function RunEventDetails({ event }: RunEventDetailsProps) {
         });
       };
 
-      const timestamp = formatTimestamp(message.timestamp);
-      const reasoning = isRecord(message.reasoning) ? message.reasoning : undefined;
-      const reasoningTokens = asNumber(reasoning?.tokens);
-      const reasoningScore = asNumber(reasoning?.score);
+      const timestamp = formatTimestamp((message as { timestamp?: unknown }).timestamp);
+      const reasoning = isRecord((message as { reasoning?: unknown }).reasoning) ? (message as { reasoning?: unknown }).reasoning : undefined;
+      const reasoningTokens = asNumber((reasoning as { tokens?: unknown })?.tokens);
+      const reasoningScore = asNumber((reasoning as { score?: unknown })?.score);
 
       const getReasoningVariant = () => {
         if (reasoningTokens !== undefined) {
@@ -688,16 +561,23 @@ export function RunEventDetails({ event }: RunEventDetailsProps) {
         return 'neutral';
       };
 
-      const additionalKwargs = isRecord(message.additional_kwargs) ? message.additional_kwargs : undefined;
-      const toolCallsRaw = message.tool_calls || message.toolCalls || additionalKwargs?.tool_calls;
+      const additionalKwargs = isRecord((message as { additional_kwargs?: unknown }).additional_kwargs)
+        ? (message as { additional_kwargs?: unknown }).additional_kwargs
+        : undefined;
+      const toolCallsRaw =
+        (message as { tool_calls?: unknown }).tool_calls ||
+        (message as { toolCalls?: unknown }).toolCalls ||
+        (additionalKwargs as { tool_calls?: unknown } | undefined)?.tool_calls;
       const toolCalls = Array.isArray(toolCallsRaw) ? toolCallsRaw.filter(isRecord) : [];
       const hasToolCalls = toolCalls.length > 0;
 
-      const toolResultValue = message.tool_result ?? message.tool_result_if_exists;
+      const toolResultValue = (message as { tool_result?: unknown; tool_result_if_exists?: unknown }).tool_result
+        ?? (message as { tool_result_if_exists?: unknown }).tool_result_if_exists;
       const hasToolResult = toolResultValue !== undefined;
 
       const renderAssistantContent = () => {
-        const content = message.content ?? message.response;
+        const content = (message as { content?: unknown; response?: unknown }).content
+          ?? (message as { response?: unknown }).response;
         if (typeof content === 'string') {
           return <MarkdownContent content={content} />;
         }
@@ -713,14 +593,12 @@ export function RunEventDetails({ event }: RunEventDetailsProps) {
             {roleConfig.icon}
             <span className={`text-xs font-medium ${role === 'tool' ? '' : 'capitalize'}`}>
               {role === 'tool'
-                ? asString(message.name, 'Tool')
+                ? asString((message as { name?: unknown }).name, 'Tool')
                 : role === 'other'
-                  ? asString(message.role, 'Other')
+                  ? asString((message as { role?: unknown }).role, 'Other')
                   : role}
             </span>
-            {timestamp && (
-              <span className="text-xs text-[var(--agyn-gray)] ml-1">{timestamp}</span>
-            )}
+            {timestamp && <span className="ml-1 text-xs text-[var(--agyn-gray)]">{timestamp}</span>}
             {isHighlighted && (
               <Badge
                 variant="info"
@@ -760,13 +638,13 @@ export function RunEventDetails({ event }: RunEventDetailsProps) {
           >
             {(role === 'system' || role === 'user') && (
               <div className="prose prose-sm max-w-none">
-                <MarkdownContent content={asString(message.content)} />
+                <MarkdownContent content={asString((message as { content?: unknown }).content)} />
               </div>
             )}
 
             {role === 'tool' && (
               <div className="text-sm">
-                {renderOutputContent(message.content || toolResultValue || '')}
+                {renderOutputContent((message as { content?: unknown }).content || toolResultValue || '')}
               </div>
             )}
 
@@ -776,37 +654,37 @@ export function RunEventDetails({ event }: RunEventDetailsProps) {
                 {hasToolCalls && (
                   <div className="space-y-1">
                     {toolCalls.map((toolCall, tcIndex) => {
-                      const toolCallRecord = toolCall;
+                      const toolCallRecord = toolCall as Record<string, unknown>;
                       const toolFunction = isRecord(toolCallRecord.function) ? toolCallRecord.function : undefined;
                       const toggleKey = `${index}-${tcIndex}`;
                       const isExpanded = expandedToolCalls.has(toggleKey);
                       const toolLabel =
                         asString(toolCallRecord.name) ||
-                        asString(toolFunction?.name) ||
+                        asString((toolFunction as { name?: unknown } | undefined)?.name) ||
                         'Tool Call';
 
                       return (
                         <div key={toggleKey} className="space-y-1">
                           <button
                             onClick={() => toggleToolCall(toggleKey)}
-                            className="flex items-center gap-1.5 text-sm text-[var(--agyn-dark)] hover:text-[var(--agyn-blue)] transition-colors"
+                            className="flex items-center gap-1.5 text-sm text-[var(--agyn-dark)] transition-colors hover:text-[var(--agyn-blue)]"
                             type="button"
                           >
                             {isExpanded ? (
-                              <ChevronDown className="w-3.5 h-3.5" />
+                              <ChevronDown className="h-3.5 w-3.5" />
                             ) : (
-                              <ChevronRight className="w-3.5 h-3.5" />
+                              <ChevronRight className="h-3.5 w-3.5" />
                             )}
-                            <Wrench className="w-3.5 h-3.5" />
+                            <Wrench className="h-3.5 w-3.5" />
                             <span className="font-medium">{toolLabel}</span>
                           </button>
                           {isExpanded && (
                             <div className="ml-5 mt-2">
                               <JsonViewer
                                 data={
-                                  toolCallRecord.arguments ??
-                                  toolFunction?.arguments ??
-                                  toolCallRecord
+                                  (toolCallRecord as { arguments?: unknown }).arguments
+                                    ?? (toolFunction as { arguments?: unknown } | undefined)?.arguments
+                                    ?? toolCallRecord
                                 }
                               />
                             </div>
@@ -820,9 +698,9 @@ export function RunEventDetails({ event }: RunEventDetailsProps) {
             )}
 
             {hasToolResult && role !== 'tool' && (
-              <div className="bg-[var(--agyn-bg-light)] border border-[var(--agyn-border-subtle)] rounded-[6px] p-3">
-                <div className="text-xs text-[var(--agyn-gray)] mb-1">Tool Result</div>
-                <pre className="text-xs whitespace-pre-wrap overflow-auto">
+              <div className="rounded-[6px] border border-[var(--agyn-border-subtle)] bg-[var(--agyn-bg-light)] p-3">
+                <div className="mb-1 text-xs text-[var(--agyn-gray)]">Tool Result</div>
+                <pre className="whitespace-pre-wrap text-xs">
                   {typeof toolResultValue === 'string'
                     ? toolResultValue
                     : JSON.stringify(toolResultValue, null, 2)}
