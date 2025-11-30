@@ -22,9 +22,12 @@ function t(offsetMs: number) {
 }
 
 describe('AgentsThreads conversation view', () => {
+  let user: ReturnType<typeof userEvent.setup>;
+
   beforeAll(() => server.listen());
   beforeEach(() => {
     (globalThis as { __AGYN_DISABLE_VIRTUALIZATION__?: boolean }).__AGYN_DISABLE_VIRTUALIZATION__ = true;
+    user = userEvent.setup();
   });
   afterEach(() => {
     (globalThis as { __AGYN_DISABLE_VIRTUALIZATION__?: boolean }).__AGYN_DISABLE_VIRTUALIZATION__ = false;
@@ -101,8 +104,6 @@ describe('AgentsThreads conversation view', () => {
   it('renders conversation messages and run info, and navigates to run timeline', async () => {
     setupThreadData();
 
-    const user = userEvent.setup();
-
     render(
       <TestProviders>
         <MemoryRouter>
@@ -131,8 +132,6 @@ describe('AgentsThreads conversation view', () => {
 
   it('loads subthreads when expanding a thread', async () => {
     setupThreadData();
-
-    const user = userEvent.setup();
 
     const childThread = {
       id: 'th-child',
@@ -232,8 +231,6 @@ describe('AgentsThreads conversation view', () => {
 
   it('reuses cached conversation content when returning to a thread', async () => {
     setupTwoThreadData();
-
-    const user = userEvent.setup();
 
     render(
       <TestProviders>
