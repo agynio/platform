@@ -163,7 +163,7 @@ export function NixRepoInstallSection({ onAdd }: NixRepoInstallSectionProps) {
               variant="ghost"
               size="sm"
               aria-label="Close"
-              rounded
+              rounded={false}
               icon={<X className="h-4 w-4" />}
             />
           </DialogClose>
@@ -171,12 +171,13 @@ export function NixRepoInstallSection({ onAdd }: NixRepoInstallSectionProps) {
         <form className="space-y-4" onSubmit={handleSubmit}>
           <Input
             id="nix-repo-repository"
-            label="Repository *"
+            label={<span>Repository <span className="text-[var(--agyn-status-failed)]">*</span></span>}
             value={form.repository}
             onChange={(event) => updateField('repository', event.target.value)}
             placeholder="owner/repo or github:owner/repo"
             aria-label="GitHub repository"
             aria-invalid={isRequiredError && !form.repository.trim() ? true : undefined}
+            aria-required="true"
             autoComplete="off"
             error={repositoryError}
           />
@@ -191,12 +192,13 @@ export function NixRepoInstallSection({ onAdd }: NixRepoInstallSectionProps) {
           />
           <Input
             id="nix-repo-attr"
-            label="Package Attribute *"
+            label={<span>Package Attribute <span className="text-[var(--agyn-status-failed)]">*</span></span>}
             value={form.attr}
             onChange={(event) => updateField('attr', event.target.value)}
             placeholder="packages.x86_64-linux.default"
             aria-label="Flake attribute"
             aria-invalid={isRequiredError && !form.attr.trim() ? true : undefined}
+            aria-required="true"
             autoComplete="off"
             error={attributeError}
           />
@@ -206,10 +208,10 @@ export function NixRepoInstallSection({ onAdd }: NixRepoInstallSectionProps) {
             </p>
           )}
           <DialogFooter>
-            <Button type="button" variant="ghost" onClick={() => handleDialogOpenChange(false)} disabled={submitting}>
+            <Button type="button" variant="ghost" size="sm" onClick={() => handleDialogOpenChange(false)} disabled={submitting}>
               Cancel
             </Button>
-            <Button type="submit" variant="primary" disabled={submitting}>
+            <Button type="submit" variant="primary" size="sm" disabled={submitting}>
               {submitting ? 'Adding…' : 'Add'}
             </Button>
           </DialogFooter>

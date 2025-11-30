@@ -52,20 +52,38 @@ describe('NixPackagesSection (controlled)', () => {
   it('opens the add custom modal and lists the resolved package alongside nixpkgs selections', async () => {
     render(<Harness />);
 
-    fireEvent.click(screen.getByRole('button', { name: 'or add custom' }));
+    const trigger = screen.getByRole('button', { name: 'or add custom' });
+    expect(trigger).toBeInTheDocument();
+    fireEvent.click(trigger);
 
     const dialog = await screen.findByRole('dialog', { name: 'Add custom Nix package' });
     const closeButton = within(dialog).getByRole('button', { name: 'Close' });
-    expect(closeButton).toHaveClass('rounded-full');
+    expect(closeButton.className).toContain('w-8 h-8');
     const form = (within(dialog).getByLabelText('GitHub repository') as HTMLInputElement).closest('form');
     if (!form) {
       throw new Error('Modal form not found');
     }
     expect(form).toHaveClass('space-y-4');
 
+    const repositoryLabel = within(dialog).getByText(/Repository/, { selector: 'span' });
+    const repositoryStar = within(repositoryLabel).getByText('*');
+    expect(repositoryStar).toHaveClass('text-[var(--agyn-status-failed)]');
+    const attributeLabel = within(dialog).getByText(/Package Attribute/, { selector: 'span' });
+    const attributeStar = within(attributeLabel).getByText('*');
+    expect(attributeStar).toHaveClass('text-[var(--agyn-status-failed)]');
+
+    const repositoryInput = within(dialog).getByLabelText('GitHub repository');
+    expect(repositoryInput).toHaveAttribute('aria-required', 'true');
+    const attributeInput = within(dialog).getByLabelText('Flake attribute');
+    expect(attributeInput).toHaveAttribute('aria-required', 'true');
+
     fireEvent.change(within(dialog).getByLabelText('GitHub repository'), { target: { value: 'agyn/example' } });
     fireEvent.change(within(dialog).getByLabelText('Flake attribute'), { target: { value: 'packages.default' } });
-    fireEvent.click(within(dialog).getByRole('button', { name: 'Add' }));
+    const cancelButton = within(dialog).getByRole('button', { name: 'Cancel' });
+    const addButton = within(dialog).getByRole('button', { name: 'Add' });
+    expect(cancelButton.className).toContain('px-4 py-2');
+    expect(addButton.className).toContain('px-4 py-2');
+    fireEvent.click(addButton);
 
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
 
