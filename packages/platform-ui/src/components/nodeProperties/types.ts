@@ -36,6 +36,7 @@ export type EnvVar = {
 };
 
 export type WorkspaceNixPackage = {
+  kind?: 'nixpkgs';
   name: string;
   version: string;
   commitHash: string;

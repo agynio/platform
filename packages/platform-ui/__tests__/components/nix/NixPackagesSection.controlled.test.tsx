@@ -10,6 +10,7 @@ function Harness() {
   return (
     <TestProviders>
       <NixPackagesSection value={value} onChange={setValue} />
+      <pre data-testid="nix-value">{JSON.stringify(value)}</pre>
     </TestProviders>
   );
 }
@@ -45,5 +46,35 @@ describe('NixPackagesSection (controlled)', () => {
     // Remove the package
     fireEvent.click(screen.getByLabelText('Remove gi'));
     await waitFor(() => expect(screen.queryByRole('list', { name: 'Selected Nix packages' })).not.toBeInTheDocument());
+  });
+
+  it('resolves and manages custom flake repositories', async () => {
+    render(<Harness />);
+
+    fireEvent.change(screen.getByLabelText('GitHub repository'), { target: { value: 'agyn/example' } });
+    fireEvent.change(screen.getByLabelText('Flake attribute'), {
+      target: { value: 'packages.default' },
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Install' }));
+
+    const repoList = await screen.findByRole('list', { name: 'Custom flake repositories' });
+    expect(repoList).toBeInTheDocument();
+    expect(screen.getByText(/agyn\/example#packages\.default/i)).toBeInTheDocument();
+
+    await waitFor(() => {
+      const text = screen.getByTestId('nix-value').textContent ?? '';
+      expect(text).toContain('"kind":"flakeRepo"');
+      expect(text).toContain('"repository":"github:agyn/example"');
+      expect(text).toContain('"attributePath":"packages.default"');
+    });
+
+    const refreshButton = screen.getByRole('button', { name: 'Refresh' }) as HTMLButtonElement;
+    fireEvent.click(refreshButton);
+    await waitFor(() => expect(refreshButton.disabled).toBeFalsy());
+
+    const removeButton = screen.getByRole('button', { name: 'Remove' });
+    fireEvent.click(removeButton);
+    await waitFor(() => expect(screen.queryByRole('list', { name: 'Custom flake repositories' })).not.toBeInTheDocument());
   });
 });

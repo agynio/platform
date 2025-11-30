@@ -323,11 +323,13 @@ function mapNixArray(entries: unknown): WorkspaceNixPackage[] {
   return entries
     .map((entry) => {
       if (!isRecord(entry)) return null;
+      if (entry.kind === 'flakeRepo') return null;
       const name = typeof entry.name === 'string' ? entry.name : '';
+      if (!name) return null;
       const version = typeof entry.version === 'string' ? entry.version : '';
       const commitHash = typeof entry.commitHash === 'string' ? entry.commitHash : '';
       const attributePath = typeof entry.attributePath === 'string' ? entry.attributePath : '';
-      return { name, version, commitHash, attributePath } satisfies WorkspaceNixPackage;
+      return { kind: 'nixpkgs', name, version, commitHash, attributePath } satisfies WorkspaceNixPackage;
     })
     .filter((item): item is WorkspaceNixPackage => item !== null);
 }
@@ -349,10 +351,23 @@ export function applyVolumesUpdate(
 export function applyNixUpdate(config: NodeConfig, packages: WorkspaceNixPackage[]): Partial<NodeConfig> {
   const rawNix = (config as Record<string, unknown>).nix;
   const current = isRecord(rawNix) ? (rawNix as Record<string, unknown>) : {};
+  const existing = Array.isArray(current.packages) ? current.packages : [];
+  const preservedFlakes = existing.filter(
+    (entry): entry is Record<string, unknown> => isRecord(entry) && entry.kind === 'flakeRepo',
+  );
   return {
     nix: {
       ...current,
-      packages: packages.map((pkg) => ({ ...pkg })),
+      packages: [
+        ...preservedFlakes.map((entry) => ({ ...entry })),
+        ...packages.map((pkg) => ({
+          kind: 'nixpkgs',
+          name: pkg.name,
+          version: pkg.version,
+          commitHash: pkg.commitHash,
+          attributePath: pkg.attributePath,
+        })),
+      ],
     },
   } satisfies Partial<NodeConfig>;
 }
