@@ -1,6 +1,6 @@
 import React from 'react';
 import { describe, it, expect, beforeAll, beforeEach, afterEach, afterAll, vi } from 'vitest';
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { http, HttpResponse } from 'msw';
@@ -529,18 +529,24 @@ describe('AgentsThreads page', () => {
 
     expect(maxPending).toBeLessThanOrEqual(PRELOAD_CONCURRENCY);
 
-    while (pendingResolvers.length > 0) {
-      const resolveNext = pendingResolvers.shift();
-      if (resolveNext) {
-        resolveNext();
-        // Allow new preload requests to register for the next iteration.
-        await new Promise((resolve) => setTimeout(resolve, 0));
+    while (true) {
+      if (pendingCount === 0 && pendingResolvers.length === 0) {
+        break;
       }
+      if (pendingResolvers.length === 0) {
+        await waitFor(() => expect(pendingResolvers.length).toBeGreaterThan(0));
+        continue;
+      }
+
+      const batch = pendingResolvers.splice(0);
+      await act(async () => {
+        for (const resolveNext of batch) {
+          resolveNext();
+        }
+      });
     }
 
-    await waitFor(() => {
-      expect(pendingCount).toBe(0);
-    });
+    expect(pendingCount).toBe(0);
 
     expect(started).toHaveLength(threads.length);
     expect(maxPending).toBeLessThanOrEqual(PRELOAD_CONCURRENCY);
