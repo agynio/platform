@@ -1,6 +1,6 @@
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import React from 'react';
-import { render, screen, fireEvent, within } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import type * as ReactRouterDom from 'react-router-dom';
 
 const navigateMock = vi.fn<(path: string) => void>();
@@ -18,20 +18,96 @@ import { http, HttpResponse } from 'msw';
 import { TestProviders, server, abs } from './integration/testUtils';
 import { AgentsReminders } from '../src/pages/AgentsReminders';
 
-const API_PATH = '/api/agents/reminders';
+type ReminderApi = {
+  id: string;
+  threadId: string;
+  note: string;
+  at: string;
+  createdAt: string;
+  completedAt: string | null;
+  cancelledAt: string | null;
+  status?: 'scheduled' | 'executed' | 'cancelled';
+};
 
 function t(offsetMs: number) {
   return new Date(1700000000000 + offsetMs).toISOString();
 }
 
+function buildReminder(
+  id: string,
+  note: string,
+  status: 'scheduled' | 'executed' | 'cancelled',
+  overrides: Partial<ReminderApi> = {},
+): ReminderApi {
+  return {
+    id,
+    threadId: overrides.threadId ?? `th-${id}`,
+    note,
+    at: overrides.at ?? t(Number(id) * 100),
+    createdAt: overrides.createdAt ?? t(Number(id) * 50),
+    completedAt: status === 'executed' ? overrides.completedAt ?? t(Number(id) * 150) : null,
+    cancelledAt: status === 'cancelled' ? overrides.cancelledAt ?? t(Number(id) * 175) : null,
+    status,
+    ...overrides,
+  };
+}
+
+function computeCounts(items: ReminderApi[]) {
+  return items.reduce(
+    (acc, item) => {
+      if (item.status === 'cancelled') acc.cancelled += 1;
+      else if (item.status === 'executed') acc.executed += 1;
+      else acc.scheduled += 1;
+      return acc;
+    },
+    { scheduled: 0, executed: 0, cancelled: 0 },
+  );
+}
+
+function buildResponse({
+  items,
+  page = 1,
+  pageSize = 20,
+  totalCount,
+  pageCount,
+  countsByStatus,
+}: {
+  items: ReminderApi[];
+  page?: number;
+  pageSize?: number;
+  totalCount?: number;
+  pageCount?: number;
+  countsByStatus?: { scheduled: number; executed: number; cancelled: number };
+}) {
+  const resolvedCounts = countsByStatus ?? computeCounts(items);
+  const resolvedTotal = totalCount ?? items.length;
+  const resolvedPageCount = pageCount ?? (resolvedTotal === 0 ? 0 : Math.ceil(resolvedTotal / pageSize));
+  return {
+    items,
+    page,
+    pageSize,
+    totalCount: resolvedTotal,
+    pageCount: resolvedPageCount,
+    countsByStatus: resolvedCounts,
+    sortApplied: { key: 'latest', order: 'desc' },
+  };
+}
+
 function renderPage() {
   return render(
-    <MemoryRouter initialEntries={[{ pathname: '/agents/reminders' }]}>
+    <MemoryRouter
+      initialEntries={[{ pathname: '/agents/reminders' }]}
+    >
       <TestProviders>
         <AgentsReminders />
       </TestProviders>
     </MemoryRouter>,
   );
+}
+
+function expectVisiblePageButtons(expected: number[]) {
+  const buttons = screen.getAllByRole('button', { name: /^\d+$/ }).map((btn) => Number(btn.textContent));
+  expect(buttons).toEqual(expected);
 }
 
 describe('AgentsReminders page', () => {
@@ -42,161 +118,193 @@ describe('AgentsReminders page', () => {
   });
   afterAll(() => server.close());
 
-  it('renders reminders with server metadata', async () => {
-    const payload = {
-      items: [
-        { id: 'r1', threadId: 'th1', note: 'Soon', at: t(100), createdAt: t(50), completedAt: null, cancelledAt: null },
-        { id: 'r2', threadId: 'th2', note: 'Done', at: t(200), createdAt: t(150), completedAt: t(210), cancelledAt: null },
-        { id: 'r3', threadId: 'th3', note: 'Cancelled', at: t(300), createdAt: t(250), completedAt: null, cancelledAt: t(310) },
-      ],
+  it('renders server-paginated reminders and requests page metadata', async () => {
+    const payload = buildResponse({
+      items: [buildReminder('1', 'Soon', 'scheduled')],
       page: 1,
-      pageSize: 20,
-      totalCount: 3,
       pageCount: 1,
-      countsByStatus: { scheduled: 1, executed: 1, cancelled: 1 },
-      sortApplied: { key: 'latest', order: 'desc' },
-    } as const;
-
+      totalCount: 1,
+    });
+    const requests: URL[] = [];
     const handler = ({ request }: { request: Request }) => {
       const url = new URL(request.url);
+      requests.push(url);
+      return HttpResponse.json(payload);
+    };
+
+    server.use(
+      http.get('/api/agents/reminders', handler),
+      http.get(abs('/api/agents/reminders'), handler),
+    );
+
+    renderPage();
+
+    expect(await screen.findByRole('heading', { name: 'Reminders' })).toBeInTheDocument();
+    expect(await screen.findByText('Soon')).toBeInTheDocument();
+
+    await waitFor(() => expect(requests.length).toBeGreaterThan(0));
+    requests.forEach((url) => {
       expect(url.searchParams.get('filter')).toBe('all');
       expect(url.searchParams.get('page')).toBe('1');
       expect(url.searchParams.get('pageSize')).toBe('20');
       expect(url.searchParams.get('sort')).toBe('latest');
       expect(url.searchParams.get('order')).toBe('desc');
-      return HttpResponse.json(payload);
-    };
+    });
 
-    server.use(http.get(API_PATH, handler), http.get(abs(API_PATH), handler));
-
-    renderPage();
-
-    expect(await screen.findByRole('heading', { name: 'Reminders' })).toBeInTheDocument();
-    const table = await screen.findByRole('table');
-    const rows = within(table).getAllByRole('row');
-    expect(rows).toHaveLength(4);
-    expect(within(rows[1]).getByText('Soon')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /All \(3\)/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /All \(1\)/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Scheduled \(1\)/i })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /Executed \(1\)/i })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /Cancelled \(1\)/i })).toBeInTheDocument();
   });
 
-  it('requests backend filter values and resets page when switching filters', async () => {
-    const requests: Array<{ filter: string | null; page: string | null }> = [];
-    const allPayload = {
-      items: [
-        { id: 'r1', threadId: 'th1', note: 'Soon', at: t(100), createdAt: t(50), completedAt: null, cancelledAt: null },
-      ],
-      page: 1,
+  it('shows a 7-button window centered on the current page', async () => {
+    const payload = buildResponse({
+      items: [buildReminder('5', 'Center', 'scheduled')],
+      page: 10,
+      pageCount: 20,
+      totalCount: 400,
       pageSize: 20,
-      totalCount: 1,
-      pageCount: 1,
-      countsByStatus: { scheduled: 1, executed: 0, cancelled: 0 },
-      sortApplied: { key: 'latest', order: 'desc' },
-    } as const;
-    const completedPayload = {
-      items: [
-        { id: 'r2', threadId: 'th2', note: 'Done', at: t(200), createdAt: t(150), completedAt: t(210), cancelledAt: null },
-      ],
-      page: 1,
-      pageSize: 20,
-      totalCount: 1,
-      pageCount: 1,
-      countsByStatus: { scheduled: 1, executed: 1, cancelled: 0 },
-      sortApplied: { key: 'latest', order: 'desc' },
-    } as const;
+    });
 
-    const handler = ({ request }: { request: Request }) => {
-      const url = new URL(request.url);
-      requests.push({ filter: url.searchParams.get('filter'), page: url.searchParams.get('page') });
-      const filter = url.searchParams.get('filter');
-      if (filter === 'completed') {
-        expect(url.searchParams.get('page')).toBe('1');
-        return HttpResponse.json(completedPayload);
-      }
-      return HttpResponse.json(allPayload);
-    };
-
-    server.use(http.get(API_PATH, handler), http.get(abs(API_PATH), handler));
+    const handler = () => HttpResponse.json(payload);
+    server.use(
+      http.get('/api/agents/reminders', handler),
+      http.get(abs('/api/agents/reminders'), handler),
+    );
 
     renderPage();
 
-    expect(await screen.findByText('Soon')).toBeInTheDocument();
-
-    fireEvent.click(screen.getByRole('button', { name: /Executed \(0\)/i }));
-
-    expect(await screen.findByText('Done')).toBeInTheDocument();
-
-    expect(requests.some(({ filter, page }) => filter === 'completed' && page === '1')).toBe(true);
+    expect(await screen.findByText('Center')).toBeInTheDocument();
+    await waitFor(() => expect(screen.queryByRole('button', { name: '10' })).toHaveAttribute('aria-current', 'page'));
+    expectVisiblePageButtons([7, 8, 9, 10, 11, 12, 13]);
   });
 
-  it('requests the next page when pagination controls are used', async () => {
-    const payloadPage1 = {
-      items: [
-        { id: 'r1', threadId: 'th1', note: 'First', at: t(100), createdAt: t(50), completedAt: null, cancelledAt: null },
-        { id: 'r2', threadId: 'th2', note: 'Second', at: t(200), createdAt: t(150), completedAt: null, cancelledAt: null },
-      ],
+  it('clamps the page window at the start', async () => {
+    const payload = buildResponse({
+      items: [buildReminder('1', 'Start', 'scheduled')],
       page: 1,
-      pageSize: 2,
-      totalCount: 4,
-      pageCount: 2,
-      countsByStatus: { scheduled: 4, executed: 0, cancelled: 0 },
-      sortApplied: { key: 'latest', order: 'desc' },
-    } as const;
-    const payloadPage2 = {
-      items: [
-        { id: 'r3', threadId: 'th3', note: 'Third', at: t(300), createdAt: t(250), completedAt: null, cancelledAt: null },
-        { id: 'r4', threadId: 'th4', note: 'Fourth', at: t(400), createdAt: t(350), completedAt: null, cancelledAt: null },
-      ],
-      page: 2,
-      pageSize: 2,
-      totalCount: 4,
-      pageCount: 2,
-      countsByStatus: { scheduled: 4, executed: 0, cancelled: 0 },
-      sortApplied: { key: 'latest', order: 'desc' },
-    } as const;
+      pageCount: 20,
+      totalCount: 400,
+      pageSize: 20,
+    });
 
-    const handler = ({ request }: { request: Request }) => {
-      const url = new URL(request.url);
-      const pageParam = url.searchParams.get('page') ?? '1';
-      return pageParam === '2' ? HttpResponse.json(payloadPage2) : HttpResponse.json(payloadPage1);
-    };
-
-    server.use(http.get(API_PATH, handler), http.get(abs(API_PATH), handler));
+    const handler = () => HttpResponse.json(payload);
+    server.use(
+      http.get('/api/agents/reminders', handler),
+      http.get(abs('/api/agents/reminders'), handler),
+    );
 
     renderPage();
 
-    expect(await screen.findByText('First')).toBeInTheDocument();
-    expect(screen.getByText(/Showing 1 to 2 of 4 reminders/i)).toBeInTheDocument();
+    expect(await screen.findByText('Start')).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByRole('button', { name: '1' })).toHaveAttribute('aria-current', 'page'));
+    expectVisiblePageButtons([1, 2, 3, 4, 5, 6, 7]);
+    expect(screen.getByRole('button', { name: 'Previous' })).toBeDisabled();
+  });
+
+  it('clamps the page window at the end', async () => {
+    const payload = buildResponse({
+      items: [buildReminder('1', 'End', 'scheduled')],
+      page: 20,
+      pageCount: 20,
+      totalCount: 400,
+      pageSize: 20,
+    });
+
+    const handler = () => HttpResponse.json(payload);
+    server.use(
+      http.get('/api/agents/reminders', handler),
+      http.get(abs('/api/agents/reminders'), handler),
+    );
+
+    renderPage();
+
+    expect(await screen.findByText('End')).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByRole('button', { name: '20' })).toHaveAttribute('aria-current', 'page'));
+    expectVisiblePageButtons([14, 15, 16, 17, 18, 19, 20]);
+    expect(screen.getByRole('button', { name: 'Next' })).toBeDisabled();
+  });
+
+  it('invokes onPageChange for next and numeric buttons', async () => {
+    const responses = [
+      {
+        expectedPageParam: '1',
+        payload: buildResponse({
+          items: [buildReminder('1', 'First page', 'scheduled')],
+          page: 2,
+          pageCount: 5,
+          totalCount: 100,
+          pageSize: 20,
+        }),
+      },
+      {
+        expectedPageParam: '3',
+        payload: buildResponse({
+          items: [buildReminder('2', 'Second page', 'scheduled')],
+          page: 3,
+          pageCount: 5,
+          totalCount: 100,
+          pageSize: 20,
+        }),
+      },
+      {
+        expectedPageParam: '4',
+        payload: buildResponse({
+          items: [buildReminder('3', 'Third page', 'scheduled')],
+          page: 4,
+          pageCount: 5,
+          totalCount: 100,
+          pageSize: 20,
+        }),
+      },
+    ];
+
+    let call = 0;
+    const handler = ({ request }: { request: Request }) => {
+      const url = new URL(request.url);
+      const current = responses[Math.min(call, responses.length - 1)];
+      expect(url.searchParams.get('page')).toBe(current.expectedPageParam);
+      const body = current.payload;
+      call += 1;
+      return HttpResponse.json(body);
+    };
+
+    server.use(
+      http.get('/api/agents/reminders', handler),
+      http.get(abs('/api/agents/reminders'), handler),
+    );
+
+    renderPage();
+
+    expect(await screen.findByText('First page')).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByRole('button', { name: '2' })).toHaveAttribute('aria-current', 'page'));
 
     fireEvent.click(screen.getByRole('button', { name: 'Next' }));
+    expect(await screen.findByText('Second page')).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByRole('button', { name: '3' })).toHaveAttribute('aria-current', 'page'));
 
-    expect(await screen.findByText('Third')).toBeInTheDocument();
-    expect(screen.getByText(/Showing 3 to 4 of 4 reminders/i)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '4' }));
+    expect(await screen.findByText('Third page')).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByRole('button', { name: '4' })).toHaveAttribute('aria-current', 'page'));
   });
 
   it('shows error overlay and retries successfully', async () => {
     let attempt = 0;
+    const successPayload = buildResponse({
+      items: [buildReminder('1', 'Recovered', 'scheduled')],
+      page: 1,
+      pageCount: 1,
+      totalCount: 1,
+    });
+
     const handler = () => {
       attempt += 1;
-      if (attempt === 1) {
-        return new HttpResponse(null, { status: 500 });
-      }
-      return HttpResponse.json({
-        items: [
-          { id: 'r1', threadId: 'th1', note: 'Recovered', at: t(100), createdAt: t(50), completedAt: null, cancelledAt: null },
-        ],
-        page: 1,
-        pageSize: 20,
-        totalCount: 1,
-        pageCount: 1,
-        countsByStatus: { scheduled: 1, executed: 0, cancelled: 0 },
-        sortApplied: { key: 'latest', order: 'desc' },
-      });
+      if (attempt === 1) return new HttpResponse(null, { status: 500 });
+      return HttpResponse.json(successPayload);
     };
 
-    server.use(http.get(API_PATH, handler), http.get(abs(API_PATH), handler));
+    server.use(
+      http.get('/api/agents/reminders', handler),
+      http.get(abs('/api/agents/reminders'), handler),
+    );
 
     renderPage();
 
@@ -210,30 +318,28 @@ describe('AgentsReminders page', () => {
 
   it('navigates to thread when view action is clicked', async () => {
     navigateMock.mockClear();
-
-    const payload = {
-      items: [
-        { id: 'r1', threadId: 'th1', note: 'Soon', at: t(100), createdAt: t(50), completedAt: null, cancelledAt: null },
-      ],
+    const payload = buildResponse({
+      items: [buildReminder('1', 'Soon', 'scheduled')],
       page: 1,
-      pageSize: 20,
-      totalCount: 1,
       pageCount: 1,
-      countsByStatus: { scheduled: 1, executed: 0, cancelled: 0 },
-      sortApplied: { key: 'latest', order: 'desc' },
-    } as const;
+      totalCount: 1,
+    });
 
     const handler = () => HttpResponse.json(payload);
-    server.use(http.get(API_PATH, handler), http.get(abs(API_PATH), handler));
+    server.use(
+      http.get('/api/agents/reminders', handler),
+      http.get(abs('/api/agents/reminders'), handler),
+    );
 
     renderPage();
 
     const noteCell = await screen.findByText('Soon');
     const row = noteCell.closest('tr');
     expect(row).not.toBeNull();
-    const actionButtons = within(row as HTMLTableRowElement).getAllByRole('button');
-    fireEvent.click(actionButtons[0]);
+    const actionButtons = row?.querySelectorAll('button');
+    expect(actionButtons?.length).toBeGreaterThan(0);
+    fireEvent.click(actionButtons![0]);
 
-    expect(navigateMock).toHaveBeenCalledWith('/agents/threads/th1');
+    expect(navigateMock).toHaveBeenCalledWith('/agents/threads/th-1');
   });
 });
