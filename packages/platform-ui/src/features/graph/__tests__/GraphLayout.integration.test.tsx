@@ -286,19 +286,13 @@ describe('GraphLayout', () => {
 
     sidebar.onConfigChange?.({ title: 'Updated Agent', systemPrompt: 'New prompt' });
 
-    await waitFor(() =>
-      expect(updateNode).toHaveBeenCalledWith(
-        'node-1',
-        expect.objectContaining({
-          config: expect.objectContaining({
-            kind: 'Agent',
-            title: 'Updated Agent',
-            systemPrompt: 'New prompt',
-          }),
-          title: 'Updated Agent',
-        }),
-      ),
-    );
+    await waitFor(() => expect(updateNode).toHaveBeenCalled());
+    const lastCall = updateNode.mock.calls.at(-1);
+    expect(lastCall?.[0]).toBe('node-1');
+    expect(lastCall?.[1]).toEqual({
+      config: { systemPrompt: 'New prompt' },
+      title: 'Updated Agent',
+    });
 
     act(() => {
       sidebar.onProvision?.();
@@ -371,15 +365,11 @@ describe('GraphLayout', () => {
       sidebar.onConfigChange?.({ title: '   ' });
     });
 
-    await waitFor(() =>
-      expect(updateNode).toHaveBeenCalledWith(
-        'node-1',
-        expect.objectContaining({
-          config: expect.objectContaining({ title: '' }),
-          title: '',
-        }),
-      ),
-    );
+    await waitFor(() => expect(updateNode).toHaveBeenCalled());
+    const payload = updateNode.mock.calls.at(-1)?.[1] as { config: Record<string, unknown>; title?: string };
+    expect(payload).toBeDefined();
+    expect(payload?.config).toEqual({ name: 'Atlas', role: 'Navigator' });
+    expect(payload?.title).toBe('');
 
     await waitFor(() => {
       const latest = canvasSpy.mock.calls.at(-1)?.[0] as {
@@ -889,5 +879,92 @@ describe('GraphLayout', () => {
 
     await waitFor(() => expect(screen.getByText('Build Your AI Team')).toBeInTheDocument());
     expect(screen.queryByTestId('node-sidebar-mock')).not.toBeInTheDocument();
+  });
+
+  it('omits UI-only keys when persisting agent config updates', async () => {
+    const updateNode = vi.fn();
+    const applyNodeStatus = vi.fn();
+    const applyNodeState = vi.fn();
+    const setEdges = vi.fn();
+
+    hookMocks.useGraphData.mockReturnValue({
+      nodes: [
+        {
+          id: 'agent-2',
+          template: 'agent-template',
+          kind: 'Agent',
+          title: 'Agent Node',
+          x: 0,
+          y: 0,
+          status: 'not_ready',
+          config: {
+            systemPrompt: 'Original prompt',
+            role: 'Navigator',
+            kind: 'Agent',
+            template: 'agent-template',
+          },
+          ports: { inputs: [], outputs: [] },
+        },
+      ],
+      edges: [],
+      loading: false,
+      savingState: { status: 'saved', error: null },
+      savingErrorMessage: null,
+      updateNode,
+      applyNodeStatus,
+      applyNodeState,
+      setEdges,
+    });
+
+    hookMocks.useGraphSocket.mockReturnValue(undefined);
+    hookMocks.useNodeStatus.mockReturnValue({ data: null, refetch: vi.fn() });
+
+    render(<GraphLayout services={services} />);
+
+    await waitFor(() => expect(canvasSpy).toHaveBeenCalled());
+    const canvasProps = canvasSpy.mock.calls.at(-1)?.[0] as {
+      onNodesChange?: (changes: Array<{ id: string; type: string; selected: boolean }>) => void;
+    };
+
+    act(() => {
+      canvasProps.onNodesChange?.([
+        {
+          id: 'agent-2',
+          type: 'select',
+          selected: true,
+        },
+      ]);
+    });
+
+    await waitFor(() => expect(screen.getByTestId('node-sidebar-mock')).toBeInTheDocument());
+
+    const sidebar = sidebarProps.at(-1) as {
+      onConfigChange?: (cfg: Partial<Record<string, unknown>>) => void;
+    };
+
+    act(() => {
+      sidebar.onConfigChange?.({
+        kind: 'Agent',
+        template: 'agent-template',
+        title: '  Updated Agent  ',
+        systemPrompt: 'Updated prompt',
+        debounceMs: 325,
+      });
+    });
+
+    await waitFor(() => expect(updateNode).toHaveBeenCalled());
+
+    const lastCall = updateNode.mock.calls.at(-1);
+    expect(lastCall?.[0]).toBe('agent-2');
+    const payload = lastCall?.[1] as { config: Record<string, unknown>; title?: string };
+    expect(payload.title).toBe('Updated Agent');
+    expect(payload.config).toMatchObject({
+      systemPrompt: 'Updated prompt',
+      debounceMs: 325,
+      role: 'Navigator',
+    });
+    expect(payload.config).not.toHaveProperty('kind');
+    expect(payload.config).not.toHaveProperty('title');
+    expect(payload.config).not.toHaveProperty('template');
   });
 });

@@ -704,12 +704,14 @@ export function GraphLayout({ services }: GraphLayoutProps) {
       return null;
     }
     const baseConfig = (selectedNode.config ?? {}) as Record<string, unknown>;
-    const rawTitle = typeof baseConfig.title === 'string' ? (baseConfig.title as string) : '';
+    const rawTitleFromConfig = typeof baseConfig.title === 'string' ? (baseConfig.title as string) : null;
+    const resolvedTitle =
+      rawTitleFromConfig ?? (typeof selectedNode.title === 'string' ? selectedNode.title : '');
 
     const config: SidebarNodeConfig = {
       ...baseConfig,
       kind: selectedNode.kind,
-      title: rawTitle,
+      title: resolvedTitle,
       template: selectedNode.template,
     };
 
@@ -731,24 +733,35 @@ export function GraphLayout({ services }: GraphLayoutProps) {
       const node = nodesRef.current.find((item) => item.id === nodeId);
       if (!node) return;
 
-      const baseConfig = (node.config ?? {}) as Record<string, unknown>;
-      const mergedConfig: Record<string, unknown> = {
+      const baseConfig = { ...(node.config ?? {}) } as Record<string, unknown>;
+      delete baseConfig.kind;
+      delete baseConfig.title;
+      delete baseConfig.template;
+
+      const patch = { ...(nextConfig ?? {}) } as Record<string, unknown>;
+      const rawTitleUpdate = typeof patch.title === 'string' ? (patch.title as string) : undefined;
+      delete patch.kind;
+      delete patch.title;
+      delete patch.template;
+
+      const updatedConfig: Record<string, unknown> = {
         ...baseConfig,
-        ...nextConfig,
+        ...patch,
       };
-      mergedConfig.kind = node.kind;
-      mergedConfig.template = node.template;
 
-      const rawTitle = typeof mergedConfig.title === 'string' ? (mergedConfig.title as string) : '';
-      const trimmedTitle = rawTitle.trim();
-      mergedConfig.title = trimmedTitle;
+      const updates: { config: Record<string, unknown>; title?: string } = {
+        config: updatedConfig,
+      };
 
-      const nextTitle = trimmedTitle;
+      if (rawTitleUpdate !== undefined) {
+        const trimmedTitle = rawTitleUpdate.trim();
+        const currentTitle = typeof node.title === 'string' ? node.title : '';
+        if (trimmedTitle !== currentTitle) {
+          updates.title = trimmedTitle;
+        }
+      }
 
-      updateNodeRef.current(nodeId, {
-        config: mergedConfig,
-        ...(nextTitle !== node.title ? { title: nextTitle } : {}),
-      });
+      updateNodeRef.current(nodeId, updates);
     },
     [],
   );

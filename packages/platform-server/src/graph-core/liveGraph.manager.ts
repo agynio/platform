@@ -396,8 +396,13 @@ export class LiveGraphRuntime {
 
       if (node.data.config) {
         const resolvedConfig = await this.resolveNodeConfig(node.id, node.data.config);
-        await created.setConfig(resolvedConfig);
-        live.config = resolvedConfig;
+        const cleanedConfig = await this.applyConfigWithUnknownKeyStripping(
+          created,
+          'setConfig',
+          resolvedConfig,
+          node.id,
+        );
+        live.config = cleanedConfig;
       }
       await created.setState(node.data.state ?? {});
     } catch (e) {

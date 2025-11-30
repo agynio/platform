@@ -3,10 +3,29 @@ import { z } from 'zod';
 import { GraphRepository } from '../src/graph/graph.repository.js';
 import { LiveGraphRuntime } from '../src/graph-core/liveGraph.manager';
 import { TemplateRegistry } from '../src/graph-core/templateRegistry';
+import type { TemplatePortConfig } from '../src/graph/ports.types';
 import type { GraphDefinition } from '../src/shared/types/graph.types';
 import { GraphError } from '../src/graph/types';
 import { ModuleRef } from '@nestjs/core';
+import Node from '../src/nodes/base/Node';
 import { MemoryNode, MemoryNodeStaticConfigSchema } from '../src/nodes/memory/memory.node';
+import { AgentStaticConfigSchema } from '../src/nodes/agent/agent.node';
+
+type StrictAgentConfig = z.infer<typeof AgentStaticConfigSchema>;
+
+class StrictAgentNode extends Node<StrictAgentConfig> {
+  appliedConfigs: StrictAgentConfig[] = [];
+
+  getPortConfig(): TemplatePortConfig {
+    return { sourcePorts: {}, targetPorts: {} };
+  }
+
+  override async setConfig(cfg: StrictAgentConfig): Promise<void> {
+    const parsed = AgentStaticConfigSchema.parse(cfg);
+    this.appliedConfigs.push(parsed);
+    await super.setConfig(parsed);
+  }
+}
 
 const makeRuntime = (
   resolveImpl?: (input: unknown) => Promise<{ output: unknown; report: unknown }>,
@@ -20,6 +39,7 @@ const makeRuntime = (
   } as any;
   const templates = new TemplateRegistry(moduleRef);
   templates.register('Memory', { title: 'Memory', kind: 'tool' }, MemoryNode as any);
+  templates.register('StrictAgent', { title: 'Strict Agent', kind: 'agent' }, StrictAgentNode as any);
   class StubRepo extends GraphRepository {
     async initIfNeeded(): Promise<void> {}
     async get(): Promise<any> {
@@ -130,6 +150,34 @@ describe('runtime config unknown keys handling', () => {
         { name: 'ALREADY', value: 'exists' },
       ],
     });
+  });
+
+  it('strips unknown root keys when instantiating strict agent config', async () => {
+    const runtime = makeRuntime();
+    const g: GraphDefinition = {
+      nodes: [
+        {
+          id: 'agent-1',
+          data: {
+            template: 'StrictAgent',
+            config: {
+              model: 'gpt-4o',
+              kind: 'legacy-agent',
+            },
+          },
+        },
+      ],
+      edges: [],
+    };
+    const res = await runtime.apply(g);
+    expect(res.errors).toHaveLength(0);
+    const live = runtime.getNodes().find((n) => n.id === 'agent-1');
+    expect(live?.config).toEqual({ model: 'gpt-4o' });
+    const inst = runtime.getNodeInstance('agent-1') as StrictAgentNode;
+    expect(inst.appliedConfigs).toHaveLength(1);
+    const applied = inst.appliedConfigs[0];
+    expect(applied).not.toHaveProperty('kind');
+    expect(applied).toMatchObject({ model: 'gpt-4o' });
   });
 
   // dynamicConfig removed; skip invalid dynamicConfig test
