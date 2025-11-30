@@ -1,6 +1,18 @@
+import React from 'react';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import ManageToolConfigView from '../ManageToolConfigView';
+
+if (!Element.prototype.hasPointerCapture) {
+  Element.prototype.hasPointerCapture = () => false;
+}
+if (!Element.prototype.setPointerCapture) {
+  Element.prototype.setPointerCapture = () => {};
+}
+if (!Element.prototype.scrollIntoView) {
+  Element.prototype.scrollIntoView = () => {};
+}
 
 describe('ManageToolConfigView', () => {
   it('emits default configuration on mount', async () => {
@@ -58,10 +70,10 @@ describe('ManageToolConfigView', () => {
       expect(last?.showCorrelationInOutput).toBe(true);
     });
 
-    const modeTrigger = await screen.findByLabelText(/Forwarding mode/i);
-    fireEvent.mouseDown(modeTrigger);
-    const asyncOption = await screen.findByText(/Async/i);
-    fireEvent.click(asyncOption);
+    const user = userEvent.setup();
+    const modeTrigger = await screen.findByRole('combobox', { name: /Forwarding mode/i });
+    await user.click(modeTrigger);
+    await user.keyboard('{ArrowDown}{Enter}');
     await waitFor(() => {
       const last = handleChange.mock.calls.at(-1)?.[0] as Record<string, unknown> | undefined;
       expect(last?.mode).toBe('async');

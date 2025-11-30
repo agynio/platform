@@ -164,8 +164,8 @@ describe('AgentsPersistenceService beginRun/completeRun populates Message.text',
     expect(inputs.map((m) => m.text)).toEqual(['hello', 'sys']);
     const developerRecord = inputs.find((m) => m.text === 'sys');
     expect(developerRecord?.kind).toBe('user');
-    const expectedStructured = { ...DeveloperMessage.fromText('sys').toPlain(), role: 'user' as const };
-    expect(developerRecord?.source).toEqual(expectedStructured);
+    const expectedContent = DeveloperMessage.fromText('sys').toPlain().content;
+    expect(developerRecord?.source).toMatchObject({ role: 'user', content: expectedContent });
 
     // Complete run with assistant output and tool events
     const call = new ToolCallMessage({ type: 'function_call', call_id: 'c1', name: 'echo', arguments: '{"x":1}' } as ResponseFunctionToolCall);

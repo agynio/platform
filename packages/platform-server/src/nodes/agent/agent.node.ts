@@ -30,6 +30,7 @@ import { Signal } from '../../signal';
 import { AgentsPersistenceService } from '../../agents/agents.persistence.service';
 import { RunSignalsRegistry } from '../../agents/run-signals.service';
 import { ThreadOutboxService } from '../../messaging/threadOutbox.service';
+import { ThreadOutboxService } from '../../messaging/threadOutbox.service';
 
 import { BaseToolNode } from '../tools/baseToolNode';
 import { BufferMessage, MessagesBuffer, ProcessBuffer } from './messagesBuffer';
@@ -144,7 +145,7 @@ type RegisteredTool = {
 };
 
 // Consolidated Agent class (merges previous BaseAgent + Agent into single AgentNode)
-import { Inject, Injectable, Optional, Scope } from '@nestjs/common';
+import { Inject, Injectable, OnModuleInit, Scope } from '@nestjs/common';
 import { ModuleRef } from '@nestjs/core';
 import type { TemplatePortConfig } from '../../graph/ports.types';
 import type { RuntimeContext } from '../../graph/runtimeContext';
@@ -152,57 +153,73 @@ import Node from '../base/Node';
 import { MemoryConnectorNode } from '../memoryConnector/memoryConnector.node';
 
 @Injectable({ scope: Scope.TRANSIENT })
-export class AgentNode extends Node<AgentStaticConfig> {
+export class AgentNode extends Node<AgentStaticConfig> implements OnModuleInit {
   protected buffer = new MessagesBuffer({ debounceMs: 0 });
 
   private mcpServerTools: Map<LocalMCPServerNode, Map<string, FunctionTool>> = new Map();
   private toolsByName: Map<string, RegisteredTool> = new Map();
   private toolNames: Set<string> = new Set();
   private runningThreads: Set<string> = new Set();
+  private persistenceRef: AgentsPersistenceService | null | undefined;
+  private runSignalsRef: RunSignalsRegistry | null | undefined;
+  private outboxRef: ThreadOutboxService | null | undefined;
+  private moduleInitialized = false;
 
   constructor(
     @Inject(ConfigService) protected configService: ConfigService,
     @Inject(LLMProvisioner) protected llmProvisioner: LLMProvisioner,
     @Inject(ModuleRef) protected readonly moduleRef: ModuleRef,
-    @Optional() @Inject(AgentsPersistenceService) private persistence?: AgentsPersistenceService,
-    @Optional() @Inject(RunSignalsRegistry) private runSignals?: RunSignalsRegistry,
-    @Optional() @Inject(ThreadOutboxService) private outbox?: ThreadOutboxService,
   ) {
     super();
   }
 
-  private getPersistence(): AgentsPersistenceService {
-    if (!this.persistence) {
-      const resolved = this.moduleRef.get(AgentsPersistenceService, { strict: false });
-      if (!resolved) {
-        throw new Error('AgentsPersistenceService unavailable');
+  onModuleInit(): void {
+    this.moduleInitialized = true;
+  }
+
+  private getPersistenceOrThrow(): AgentsPersistenceService {
+    if (this.persistenceRef === undefined) {
+      try {
+        this.persistenceRef = this.moduleRef.get(AgentsPersistenceService, { strict: false }) ?? null;
+      } catch {
+        this.persistenceRef = null;
       }
-      this.persistence = resolved;
     }
-    return this.persistence;
+    if (!this.persistenceRef) {
+      const initializedState = this.moduleInitialized ? 'initialized' : 'uninitialized';
+      throw new Error(`AgentsPersistenceService unavailable (${initializedState})`);
+    }
+    return this.persistenceRef;
   }
 
   private getRunSignals(): RunSignalsRegistry {
-    if (!this.runSignals) {
-      const resolved = this.moduleRef.get(RunSignalsRegistry, { strict: false });
-      if (!resolved) {
-        throw new Error('RunSignalsRegistry unavailable');
+    if (this.runSignalsRef === undefined) {
+      try {
+        this.runSignalsRef = this.moduleRef.get(RunSignalsRegistry, { strict: false }) ?? null;
+      } catch {
+        this.runSignalsRef = null;
       }
-      this.runSignals = resolved;
     }
-    return this.runSignals;
+    if (!this.runSignalsRef) {
+      const initializedState = this.moduleInitialized ? 'initialized' : 'uninitialized';
+      throw new Error(`RunSignalsRegistry unavailable (${initializedState})`);
+    }
+    return this.runSignalsRef;
   }
 
-
-  private getOutbox(): ThreadOutboxService {
-    if (!this.outbox) {
-      const resolved = this.moduleRef.get(ThreadOutboxService, { strict: false });
-      if (!resolved) {
-        throw new Error('ThreadOutboxService unavailable');
+  private getOutboxOrThrow(): ThreadOutboxService {
+    if (this.outboxRef === undefined) {
+      try {
+        this.outboxRef = this.moduleRef.get(ThreadOutboxService, { strict: false }) ?? null;
+      } catch {
+        this.outboxRef = null;
       }
-      this.outbox = resolved;
     }
-    return this.outbox;
+    if (!this.outboxRef) {
+      const initializedState = this.moduleInitialized ? 'initialized' : 'uninitialized';
+      throw new Error(`ThreadOutboxService unavailable (${initializedState})`);
+    }
+    return this.outboxRef;
   }
 
   get config() {
@@ -305,7 +322,7 @@ export class AgentNode extends Node<AgentStaticConfig> {
       `[Agent: ${this.config.title ?? this.nodeId}] Injecting ${drained.length} buffered message(s) into active run for thread ${ctx.threadId}`,
     );
 
-    await this.getPersistence().recordInjected(ctx.runId, drained, { threadId: ctx.threadId });
+    await this.getPersistenceOrThrow().recordInjected(ctx.runId, drained, { threadId: ctx.threadId });
     state.messages.push(...drained);
   }
 
@@ -331,18 +348,27 @@ export class AgentNode extends Node<AgentStaticConfig> {
     if (!autoSendEnabled || finalText.length === 0) return outputs;
 
     try {
-      await this.getOutbox().send({ threadId, text: finalText, source: 'auto_response', runId });
-      return outputs.filter((item) => !(item instanceof AIMessage));
-    } catch (error) {
-      this.logger.error(
-        `Agent auto-response delivery failed ${JSON.stringify({
+      const outbox = this.getOutboxOrThrow();
+      const result = await outbox.send({ threadId, text: finalText, source: 'auto_response', runId });
+      if (!result.ok) {
+        this.logger.error('Agent auto-response delivery failed', {
           threadId,
           runId,
-          error: error instanceof Error
-            ? { name: error.name, message: error.message, stack: error.stack }
-            : { error },
-        })}`,
-      );
+          error: result.error,
+        });
+        return outputs;
+      }
+      return outputs.filter((item) => !(item instanceof AIMessage));
+    } catch (error) {
+      const errorInfo =
+        error instanceof Error
+          ? { name: error.name, message: error.message, stack: error.stack }
+          : { error: String(error) };
+      this.logger.error('Agent auto-response delivery encountered error', {
+        threadId,
+        runId,
+        error: errorInfo,
+      });
       return outputs;
     }
   }
@@ -510,14 +536,13 @@ export class AgentNode extends Node<AgentStaticConfig> {
     let terminateSignal: Signal | undefined;
     let effectiveBehavior: EffectiveAgentConfig['behavior'] | undefined;
     try {
-      const persistence = this.getPersistence();
-      const started = await persistence.beginRunThread(thread, messages);
+      const persistence = this.getPersistenceOrThrow();
+      const agentNodeId = this.getAgentNodeId();
+      if (!agentNodeId) throw new Error('agent_node_id_missing');
+      const started = await persistence.beginRunThread(thread, messages, agentNodeId);
       runId = started.runId;
       if (!runId) throw new Error('run_start_failed');
       const ensuredRunId = runId;
-
-      const agentNodeId = this.getAgentNodeId();
-      if (!agentNodeId) throw new Error('agent_node_id_missing');
 
       const configModel = this.config.model ?? 'gpt-5';
       const persistedModel = await persistence.ensureThreadModel(thread, configModel);

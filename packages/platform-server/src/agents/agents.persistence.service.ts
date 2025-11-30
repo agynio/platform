@@ -650,11 +650,7 @@ export class AgentsPersistenceService {
       if (!graph || !Array.isArray(graph.nodes) || graph.nodes.length === 0) return null;
 
       const agentNodeIds = graph.nodes
-        .filter((node) => {
-          const meta = this.templateRegistry.getMeta(node.template);
-          if (meta) return meta.kind === 'agent';
-          return node.template === 'agent';
-        })
+        .filter((node) => isAgentTemplate(node.template, this.templateRegistry))
         .map((node) => node.id);
 
       if (agentNodeIds.length === 0) return null;
@@ -817,12 +813,6 @@ export class AgentsPersistenceService {
     for (const id of threadIds) if (!titles[id]) titles[id] = fallback;
     return titles;
   }
-
-  async getThreadAgentTitle(threadId: string): Promise<string | null> {
-    const titles = await this.resolveAgentTitles([threadId]);
-    return titles[threadId] ?? null;
-  }
-
   private getRunEventDelegate(tx: Prisma.TransactionClient): RunEventDelegate | undefined {
     const candidate = (tx as { runEvent?: RunEventDelegate }).runEvent;
     if (!candidate || typeof candidate.findFirst !== 'function') return undefined;
@@ -846,7 +836,6 @@ export class AgentsPersistenceService {
     const userPlain = HumanMessage.fromText(msg.text).toPlain();
     return toPrismaJsonValue(userPlain);
   }
-
   private normalizeForPersistence(
     msg: HumanMessage | DeveloperMessage | SystemMessage | AIMessage | ToolCallMessage | ToolCallOutputMessage,
   ): HumanMessage | SystemMessage | AIMessage | ToolCallMessage | ToolCallOutputMessage {

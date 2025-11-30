@@ -2,7 +2,8 @@ import { Inject, Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../core/services/prisma.service';
 import { ManageAdapter } from './manage/manage.adapter';
 import { AgentIngressService } from './manage/agentIngress.service';
-import { SlackAdapter } from './slack/slack.adapter';
+import { LiveGraphRuntime } from '../graph-core/liveGraph.manager';
+import { SlackTrigger } from '../nodes/slackTrigger/slackTrigger.node';
 import {
   ChannelDescriptorSchema,
   type IChannelAdapter,
@@ -35,7 +36,7 @@ export class ChannelRouter {
 
   constructor(
     @Inject(PrismaService) private readonly prismaService: PrismaService,
-    @Inject(SlackAdapter) private readonly slackAdapter: SlackAdapter,
+    @Inject(LiveGraphRuntime) private readonly runtime: LiveGraphRuntime,
     @Inject(ManageAdapter) private readonly manageAdapter: ManageAdapter,
     @Inject(AgentIngressService) private readonly agentIngress: AgentIngressService,
   ) {}
@@ -96,7 +97,37 @@ export class ChannelRouter {
       const adapter: AdapterWithRoute = {
         route,
         sendText: async (payload: ThreadOutboxSendRequest): Promise<SendResult> => {
-          return this.slackAdapter.sendText({ ...payload, channelNodeId: route.channelNodeId });
+          const { threadId, source } = payload;
+          const channelNodeId = route.channelNodeId;
+          const node = this.runtime.getNodeInstance(channelNodeId);
+          if (!node) {
+            this.logger.warn(
+              `ChannelRouter: missing SlackTrigger node${this.format({ threadId, source, channelNodeId })}`,
+            );
+            return { ok: false, error: 'channel_node_unavailable' } satisfies SendResult;
+          }
+
+          if (!(node instanceof SlackTrigger)) {
+            this.logger.warn(
+              `ChannelRouter: node is not SlackTrigger${this.format({ threadId, source, channelNodeId })}`,
+            );
+            return { ok: false, error: 'invalid_channel_node' } satisfies SendResult;
+          }
+
+          if (node.status !== 'ready') {
+            this.logger.warn(
+              `ChannelRouter: trigger not ready${this.format({
+                threadId,
+                source,
+                channelNodeId,
+                status: node.status,
+              })}`,
+            );
+            return { ok: false, error: 'slacktrigger_not_ready' } satisfies SendResult;
+          }
+
+          const text = payload.prefix ? `${payload.prefix}${payload.text}` : payload.text;
+          return node.sendToChannel(threadId, text);
         },
       };
       return adapter;

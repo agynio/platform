@@ -1,4 +1,4 @@
-import { Inject, Injectable, Scope } from '@nestjs/common';
+import { Inject, Injectable, Scope, forwardRef } from '@nestjs/common';
 import z from 'zod';
 import { BaseToolNode } from '../baseToolNode';
 import { ManageFunctionTool } from './manage.tool';
@@ -46,7 +46,7 @@ export class ManageToolNode extends BaseToolNode<z.infer<typeof ManageToolStatic
   private readonly workers: Set<AgentNode> = new Set();
 
   constructor(
-    @Inject(ManageFunctionTool) private readonly manageTool: ManageFunctionTool,
+    @Inject(forwardRef(() => ManageFunctionTool)) private readonly manageTool: ManageFunctionTool,
     @Inject(AgentsPersistenceService) private readonly persistence: AgentsPersistenceService,
   ) {
     super();

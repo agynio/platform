@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import { HumanMessage } from '@agyn/llm';
+import { parse as parseYaml } from 'yaml';
 // BaseTrigger legacy removed in Issue #451; use SlackTrigger semantics only
 // Typed helper for Slack socket-mode envelope used by our handler
 type SlackMessageEvent = {
@@ -126,6 +127,13 @@ import { ResolveError } from '../src/utils/references';
 import type { BufferMessage } from '../src/nodes/agent/messagesBuffer';
 
 describe('SlackTrigger events', () => {
+  const decodeMessage = (msg: HumanMessage) => {
+    const [fromSection, contentSection] = msg.text.split('\n---\n');
+    const fromParsed = parseYaml(fromSection) as { from?: Record<string, unknown> };
+    const contentParsed = parseYaml(contentSection) as { content?: unknown };
+    return { info: fromParsed?.from ?? {}, content: contentParsed?.content };
+  };
+
   const setupTrigger = async (options: { nodeTemplate?: string; templateMeta?: { kind: 'agent' | 'tool'; title: string } } = {}) => {
     const getOrCreateThreadByAlias = vi.fn(async () => 't-slack');
     const updateThreadChannelDescriptor = vi.fn(async () => undefined);
@@ -194,7 +202,12 @@ describe('SlackTrigger events', () => {
     await handler(env);
     expect(received.length).toBe(1);
     expect(received[0]).toBeInstanceOf(HumanMessage);
-    expect((received[0] as HumanMessage).text).toBe('From User:\nhello');
+    const decoded = decodeMessage(received[0] as HumanMessage);
+    expect(decoded.content).toBe('hello');
+    expect(decoded.info).toMatchObject({ user: 'U', channel: 'C', channel_type: 'channel' });
+    expect(String(decoded.info.thread_ts)).toBe('1.0');
+    expect(decoded.info.client_msg_id).toBe('client-1');
+    expect(decoded.info.event_ts).toBe('evt-1');
     expect(ack).toHaveBeenCalledTimes(1);
     expect(getOrCreateThreadByAlias).toHaveBeenCalledWith('slack', 'U_1.0', 'hello', {
       channelNodeId: nodeId,
@@ -280,7 +293,9 @@ describe('SlackTrigger events', () => {
     await handler(env);
     expect(received.length).toBe(1);
     expect(received[0]).toBeInstanceOf(HumanMessage);
-    expect((received[0] as HumanMessage).text).toBe('From User:\nhello socket');
+    const decoded = decodeMessage(received[0] as HumanMessage);
+    expect(decoded.content).toBe('hello socket');
+    expect(decoded.info).toMatchObject({ user: 'U2', channel: 'C2' });
     expect(ack).toHaveBeenCalledTimes(1);
     expect(getOrCreateThreadByAlias).toHaveBeenCalledWith('slack', 'U2_2.0', 'hello socket', {
       channelNodeId: nodeId,
@@ -308,7 +323,9 @@ describe('SlackTrigger events', () => {
     await handler(env);
     expect(received.length).toBe(1);
     expect(received[0]).toBeInstanceOf(HumanMessage);
-    expect((received[0] as HumanMessage).text).toBe('From User:\nfallback');
+    const decoded = decodeMessage(received[0] as HumanMessage);
+    expect(decoded.content).toBe('fallback');
+    expect(decoded.info).toMatchObject({ user: 'UF', channel: 'CF' });
     expect(ack).toHaveBeenCalledTimes(1);
     expect(getOrCreateThreadByAlias).toHaveBeenCalledWith('slack', 'UF_3.0', 'fallback', {
       channelNodeId: nodeId,
@@ -339,7 +356,9 @@ describe('SlackTrigger events', () => {
     };
     await handler(env);
     expect(received.length).toBe(1);
-    expect((received[0] as HumanMessage).text).toBe(`From User:\n${text}`);
+    const decoded = decodeMessage(received[0] as HumanMessage);
+    expect(decoded.content).toBe(text);
+    expect(decoded.info).toMatchObject({ user: 'UM', channel: 'CM' });
   });
 
   it('acks and filters out non-message or subtype events without notifying listeners', async () => {
