@@ -349,7 +349,7 @@ describe('GraphLayout', () => {
     unmount();
   });
 
-  it('keeps agent title placeholder when cleared in sidebar', async () => {
+  it('keeps agent title literal when cleared in sidebar', async () => {
     const updateNode = vi.fn();
     const applyNodeStatus = vi.fn();
     const applyNodeState = vi.fn();
@@ -416,7 +416,7 @@ describe('GraphLayout', () => {
       const latest = canvasSpy.mock.calls.at(-1)?.[0] as {
         nodes?: Array<{ data?: { title?: string } }>;
       };
-      expect(latest?.nodes?.[0]?.data?.title).toBe('Atlas (Navigator)');
+      expect(latest?.nodes?.[0]?.data?.title).toBe('Agent');
     });
   });
 

@@ -70,28 +70,20 @@ function resolveAgentDisplayTitle(node: GraphNodeConfig): string {
     return configTitle;
   }
 
+  const storedTitleRaw = typeof node.title === 'string' ? node.title : '';
+  const storedTitle = storedTitleRaw.trim();
+  if (storedTitle.length > 0) {
+    return storedTitle;
+  }
+
   const rawTemplate = typeof node.template === 'string' ? node.template : '';
   const fallbackTemplate = rawTemplate.trim().length > 0 ? rawTemplate.trim() : 'Agent';
-  const basePlaceholder = computeAgentDefaultTitle(undefined, undefined, 'Agent');
   const profileFallback = computeAgentDefaultTitle(
     typeof config.name === 'string' ? (config.name as string) : undefined,
     typeof config.role === 'string' ? (config.role as string) : undefined,
     fallbackTemplate,
   );
   const trimmedProfileFallback = profileFallback.trim();
-
-  const storedTitleRaw = typeof node.title === 'string' ? node.title : '';
-  const storedTitle = storedTitleRaw.trim();
-  if (storedTitle.length > 0) {
-    if (
-      trimmedProfileFallback.length > 0 &&
-      (storedTitle === fallbackTemplate || storedTitle === basePlaceholder) &&
-      trimmedProfileFallback !== fallbackTemplate
-    ) {
-      return trimmedProfileFallback;
-    }
-    return storedTitle;
-  }
 
   if (trimmedProfileFallback.length > 0) {
     return trimmedProfileFallback;
