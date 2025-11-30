@@ -7,12 +7,13 @@ import { Toggle } from '../Toggle';
 import { AutocompleteInput, type AutocompleteOption } from '../AutocompleteInput';
 import { IconButton } from '../IconButton';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '../ui/collapsible';
+import { NixRepoInstallSection } from '../nix/NixRepoInstallSection';
 
 import type { EnvEditorProps } from './EnvEditor';
 import { EnvEditor } from './EnvEditor';
 import { FieldLabel } from './FieldLabel';
 import { WORKSPACE_PLATFORM_OPTIONS } from './constants';
-import type { WorkspaceNixPackage } from './types';
+import type { WorkspaceFlakeRepo, WorkspaceNixPackage } from './types';
 import { toNumberOrUndefined } from './utils';
 
 interface WorkspaceNixProps {
@@ -20,6 +21,7 @@ interface WorkspaceNixProps {
   onQueryChange: (value: string) => void;
   fetchOptions: (query: string) => Promise<AutocompleteOption[]>;
   packages: WorkspaceNixPackage[];
+  repoEntries: WorkspaceFlakeRepo[];
   versionOptions: Record<string, string[]>;
   versionLoading: Set<string>;
   resolutionLoading: Set<string>;
@@ -27,6 +29,7 @@ interface WorkspaceNixProps {
   onSelectOption: (option: AutocompleteOption) => Promise<void> | void;
   onRemove: (index: number) => void;
   onVersionChange: (index: number, value: string) => Promise<void> | void;
+  onRepoEntriesChange: (entries: WorkspaceFlakeRepo[]) => void;
 }
 
 interface WorkspaceSectionProps {
@@ -230,6 +233,7 @@ export function WorkspaceSection({
                   );
                 })}
               </div>
+              <NixRepoInstallSection entries={nixProps.repoEntries} onChange={nixProps.onRepoEntriesChange} />
             </div>
           </CollapsibleContent>
         </Collapsible>

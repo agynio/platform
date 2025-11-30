@@ -5,6 +5,7 @@ import type {
   EnvVarMeta,
   NodeConfig,
   ReferenceConfigValue,
+  WorkspaceFlakeRepo,
   WorkspaceNixPackage,
 } from './types';
 
@@ -339,6 +340,27 @@ export function readNixPackages(nixConfig: unknown): WorkspaceNixPackage[] {
   return mapNixArray((nixConfig as Record<string, unknown>).packages);
 }
 
+function mapFlakeRepos(entries: unknown): WorkspaceFlakeRepo[] {
+  if (!Array.isArray(entries)) return [];
+  const mapped: WorkspaceFlakeRepo[] = [];
+  for (const entry of entries) {
+    if (!isRecord(entry)) continue;
+    if (entry.kind !== 'flakeRepo') continue;
+    const repository = typeof entry.repository === 'string' ? entry.repository : '';
+    const commitHash = typeof entry.commitHash === 'string' ? entry.commitHash : '';
+    const attributePath = typeof entry.attributePath === 'string' ? entry.attributePath : '';
+    if (!repository || !commitHash || !attributePath) continue;
+    const ref = typeof entry.ref === 'string' ? entry.ref : undefined;
+    mapped.push({ kind: 'flakeRepo', repository, commitHash, attributePath, ...(ref ? { ref } : {}) });
+  }
+  return mapped;
+}
+
+export function readNixFlakeRepos(nixConfig: unknown): WorkspaceFlakeRepo[] {
+  if (!isRecord(nixConfig)) return [];
+  return mapFlakeRepos((nixConfig as Record<string, unknown>).packages);
+}
+
 export function applyVolumesUpdate(
   config: NodeConfig,
   partial: Partial<{ enabled: boolean; mountPath: string }>,
@@ -348,18 +370,46 @@ export function applyVolumesUpdate(
   return { volumes: next } satisfies Partial<NodeConfig>;
 }
 
-export function applyNixUpdate(config: NodeConfig, packages: WorkspaceNixPackage[]): Partial<NodeConfig> {
+export function applyNixUpdate(
+  config: NodeConfig,
+  packages: WorkspaceNixPackage[],
+  flakeRepos?: WorkspaceFlakeRepo[],
+): Partial<NodeConfig> {
   const rawNix = (config as Record<string, unknown>).nix;
   const current = isRecord(rawNix) ? (rawNix as Record<string, unknown>) : {};
   const existing = Array.isArray(current.packages) ? current.packages : [];
-  const preservedFlakes = existing.filter(
-    (entry): entry is Record<string, unknown> => isRecord(entry) && entry.kind === 'flakeRepo',
-  );
+  const normalizedFlakes: WorkspaceFlakeRepo[] = Array.isArray(flakeRepos)
+    ? flakeRepos.map((entry) => ({ ...entry }))
+    : existing
+        .filter((entry): entry is Record<string, unknown> => isRecord(entry) && entry.kind === 'flakeRepo')
+        .map((entry) => {
+          const repository = typeof entry.repository === 'string' ? entry.repository : '';
+          const commitHash = typeof entry.commitHash === 'string' ? entry.commitHash : '';
+          const attributePath = typeof entry.attributePath === 'string' ? entry.attributePath : '';
+          const ref = typeof entry.ref === 'string' ? entry.ref : undefined;
+          if (!repository || !commitHash || !attributePath) {
+            return null;
+          }
+          return {
+            kind: 'flakeRepo' as const,
+            repository,
+            commitHash,
+            attributePath,
+            ...(ref ? { ref } : {}),
+          } satisfies WorkspaceFlakeRepo;
+        })
+        .filter((entry): entry is WorkspaceFlakeRepo => entry !== null);
   return {
     nix: {
       ...current,
       packages: [
-        ...preservedFlakes.map((entry) => ({ ...entry })),
+        ...normalizedFlakes.map((entry) => ({
+          kind: 'flakeRepo',
+          repository: entry.repository,
+          commitHash: entry.commitHash,
+          attributePath: entry.attributePath,
+          ...(entry.ref ? { ref: entry.ref } : {}),
+        })),
         ...packages.map((pkg) => ({
           kind: 'nixpkgs',
           name: pkg.name,
