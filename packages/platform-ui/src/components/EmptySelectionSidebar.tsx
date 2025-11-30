@@ -87,7 +87,10 @@ export default function EmptySelectionSidebar({
   onNodeDragStart,
   statusMessage,
 }: EmptySelectionSidebarProps) {
-  const shouldShowMocks = import.meta.env.DEV && import.meta.env.VITE_UI_MOCK_SIDEBAR === 'true';
+  const runtimeNodeEnv = typeof process !== 'undefined' ? process.env?.NODE_ENV : undefined;
+  const isProductionRuntime = runtimeNodeEnv === 'production';
+  const isDevEnvironment = !isProductionRuntime && (import.meta.env.DEV === true || import.meta.env.DEV === 'true');
+  const shouldShowMocks = isDevEnvironment && import.meta.env.VITE_UI_MOCK_SIDEBAR === 'true';
   const effectiveNodeItems = nodeItems.length > 0 ? nodeItems : shouldShowMocks ? defaultNodeItems : [];
   const handleDragStart = (event: DragEvent<HTMLDivElement>, item: DraggableNodeItem) => {
     event.dataTransfer.setData('application/reactflow', JSON.stringify(item));
