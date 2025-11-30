@@ -1,11 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import { useParams, useSearchParams } from 'react-router-dom';
 import RunScreen, { type EventFilter, type StatusFilter } from '@/components/screens/RunScreen';
 import type { RunEvent as UiRunEvent } from '@/components/RunEventsList';
 import type { Status } from '@/components/StatusIndicator';
 import { useRunTimelineEvents, useRunTimelineSummary } from '@/api/hooks/runs';
+import { contextItems } from '@/api/modules/contextItems';
 import { runs } from '@/api/modules/runs';
 import type {
+  ContextItem,
   RunEventStatus,
   RunEventType,
   RunTimelineEvent,
@@ -225,7 +227,168 @@ function coerceRecord(value: unknown): Record<string, unknown> | null {
   return null;
 }
 
-function createUiEvent(event: RunTimelineEvent): UiRunEvent {
+function parseMaybeJson(value: unknown): unknown {
+  if (typeof value !== 'string') return value;
+  try {
+    return JSON.parse(value);
+  } catch (_error) {
+    return value;
+  }
+}
+
+function isNonEmptyString(value: unknown): value is string {
+  return typeof value === 'string' && value.length > 0;
+}
+
+type LinkTargets = {
+  threadId?: string;
+  subthreadId?: string;
+  runId?: string;
+};
+
+type ToolLinkData = {
+  input: unknown;
+  output: unknown;
+  threadId?: string;
+  subthreadId?: string;
+  runId?: string;
+};
+
+function readStringPath(record: Record<string, unknown>, path: readonly string[]): string | undefined {
+  let current: unknown = record;
+  for (const segment of path) {
+    if (!current || typeof current !== 'object') return undefined;
+    current = (current as Record<string, unknown>)[segment];
+  }
+  return isNonEmptyString(current) ? current : undefined;
+}
+
+function extractLinkTargets(record: Record<string, unknown> | null): LinkTargets {
+  if (!record) return {};
+  const directThreadId = readStringPath(record, ['threadId']) ?? readStringPath(record, ['thread_id']);
+  const nestedThreadId = readStringPath(record, ['thread', 'id']) ?? readStringPath(record, ['thread', 'threadId']) ?? readStringPath(record, ['thread', 'thread_id']);
+  const directSubthreadId = readStringPath(record, ['subthreadId']) ?? readStringPath(record, ['subthread_id']);
+  const nestedSubthreadId = readStringPath(record, ['subthread', 'id']) ?? readStringPath(record, ['subthread', 'subthreadId']) ?? readStringPath(record, ['subthread', 'subthread_id']);
+  const directRunId = readStringPath(record, ['runId']) ?? readStringPath(record, ['run_id']);
+  const nestedRunId = readStringPath(record, ['run', 'id']) ?? readStringPath(record, ['run', 'runId']) ?? readStringPath(record, ['run', 'run_id']);
+
+  const threadId = directThreadId ?? nestedThreadId;
+  const subthreadId = directSubthreadId ?? nestedSubthreadId;
+  const runId = directRunId ?? nestedRunId;
+
+  return {
+    threadId: threadId ?? undefined,
+    subthreadId: subthreadId ?? undefined,
+    runId: runId ?? undefined,
+  };
+}
+
+function normalizeRecordWithTargets(record: Record<string, unknown> | null, targets: LinkTargets): Record<string, unknown> | null {
+  if (!record) return null;
+  let changed = false;
+  const next: Record<string, unknown> = { ...record };
+
+  if (targets.threadId && !isNonEmptyString(next.threadId)) {
+    next.threadId = targets.threadId;
+    changed = true;
+  }
+  if (targets.subthreadId && !isNonEmptyString(next.subthreadId)) {
+    next.subthreadId = targets.subthreadId;
+    changed = true;
+  }
+  if (targets.runId && !isNonEmptyString(next.runId)) {
+    next.runId = targets.runId;
+    changed = true;
+  }
+
+  return changed ? next : record;
+}
+
+function toPlainTextContent(item: ContextItem): string {
+  if (isNonEmptyString(item.contentText)) return item.contentText;
+  if (item.contentJson === null || item.contentJson === undefined) return '';
+  try {
+    return JSON.stringify(item.contentJson, null, 2);
+  } catch (_error) {
+    return String(item.contentJson);
+  }
+}
+
+function toContextRecord(item: ContextItem): Record<string, unknown> {
+  return {
+    id: item.id,
+    role: item.role,
+    timestamp: item.createdAt,
+    sizeBytes: item.sizeBytes,
+    content: toPlainTextContent(item),
+    contentText: item.contentText,
+    contentJson: item.contentJson,
+    metadata: item.metadata,
+  };
+}
+
+function toRecordArray(value: unknown): Record<string, unknown>[] {
+  if (!Array.isArray(value)) return [];
+  const result: Record<string, unknown>[] = [];
+  for (const item of value) {
+    const record = coerceRecord(item);
+    if (record) result.push(record);
+  }
+  return result;
+}
+
+function buildToolLinkData(event: RunTimelineEvent): ToolLinkData | undefined {
+  const execution = event.toolExecution;
+  if (!execution) return undefined;
+
+  const rawInput = execution.input;
+  const rawOutput = execution.output ?? execution.raw;
+  const parsedInput = parseMaybeJson(rawInput);
+  const parsedOutput = parseMaybeJson(rawOutput);
+  const inputRecord = coerceRecord(parsedInput);
+  const outputRecord = coerceRecord(parsedOutput);
+
+  const inputTargets = extractLinkTargets(inputRecord);
+  const outputTargets = extractLinkTargets(outputRecord);
+
+  const targets: LinkTargets = {
+    threadId: outputTargets.threadId ?? inputTargets.threadId,
+    subthreadId: outputTargets.subthreadId ?? inputTargets.subthreadId,
+    runId: outputTargets.runId ?? inputTargets.runId,
+  };
+
+  const normalizedInputRecord = normalizeRecordWithTargets(inputRecord, targets);
+  const normalizedOutputRecord = normalizeRecordWithTargets(outputRecord, targets);
+
+  const normalizedInput = normalizedInputRecord ?? inputRecord ?? parsedInput;
+  const normalizedOutput = normalizedOutputRecord ?? outputRecord ?? parsedOutput;
+
+  return {
+    input: normalizedInput,
+    output: normalizedOutput,
+    threadId: targets.threadId,
+    subthreadId: targets.subthreadId,
+    runId: targets.runId,
+  };
+}
+
+function resolveContextRecords(ids: readonly string[], lookup: Map<string, ContextItem>): Record<string, unknown>[] {
+  if (!Array.isArray(ids) || ids.length === 0) return [];
+  const records: Record<string, unknown>[] = [];
+  for (const id of ids) {
+    if (!isNonEmptyString(id)) continue;
+    const item = lookup.get(id);
+    if (item) records.push(toContextRecord(item));
+  }
+  return records;
+}
+
+type CreateUiEventOptions = {
+  context?: Record<string, unknown>[];
+  tool?: ToolLinkData;
+};
+
+function createUiEvent(event: RunTimelineEvent, options?: CreateUiEventOptions): UiRunEvent {
   const timestamp = formatTimestamp(event.ts);
   const duration = formatDurationLabel(event.durationMs);
   const status = mapEventStatus(event.status);
@@ -265,6 +428,8 @@ function createUiEvent(event: RunTimelineEvent): UiRunEvent {
 
   if (event.type === 'llm_call') {
     const usage = event.llmCall?.usage;
+    const fallbackContext = toRecordArray(event.metadata);
+    const context = options?.context && options.context.length > 0 ? options.context : fallbackContext;
     return {
       id: event.id,
       type: 'llm',
@@ -272,7 +437,7 @@ function createUiEvent(event: RunTimelineEvent): UiRunEvent {
       duration,
       status,
       data: {
-        context: Array.isArray(event.metadata) ? event.metadata : [],
+        context,
         response: event.llmCall?.responseText ?? '',
         model: event.llmCall?.model ?? undefined,
         tokens: usage
@@ -291,10 +456,14 @@ function createUiEvent(event: RunTimelineEvent): UiRunEvent {
   }
 
   if (event.type === 'tool_execution') {
-    const input = event.toolExecution?.input;
-    const output = event.toolExecution?.output ?? event.toolExecution?.raw;
-    const inputRecord = coerceRecord(input);
-    const outputRecord = coerceRecord(output);
+    const rawInput = event.toolExecution?.input;
+    const rawOutput = event.toolExecution?.output ?? event.toolExecution?.raw;
+    const normalizedInput = options?.tool?.input ?? rawInput;
+    const normalizedOutput = options?.tool?.output ?? rawOutput;
+    const inputRecord = coerceRecord(normalizedInput);
+    const runId = options?.tool?.runId;
+    const subthreadId = options?.tool?.subthreadId;
+    const threadId = options?.tool?.threadId;
 
     return {
       id: event.id,
@@ -304,17 +473,18 @@ function createUiEvent(event: RunTimelineEvent): UiRunEvent {
       status,
       data: {
         toolName: event.toolExecution?.toolName,
-        toolSubtype: inferToolSubtype(event.toolExecution?.toolName, input),
-        input,
-        output,
+        toolSubtype: inferToolSubtype(event.toolExecution?.toolName, normalizedInput),
+        input: normalizedInput,
+        output: normalizedOutput,
         command: (inputRecord?.command as string | undefined) ?? undefined,
         workingDir: (inputRecord?.cwd as string | undefined) ?? undefined,
         message: (inputRecord?.message as string | undefined) ?? undefined,
         worker: (inputRecord?.worker as string | undefined) ?? undefined,
         threadAlias: (inputRecord?.threadAlias as string | undefined) ?? undefined,
-        runId: (outputRecord?.runId as string | undefined) ?? undefined,
-        subthreadId: (outputRecord?.subthreadId as string | undefined) ?? undefined,
-        tool_result: output,
+        threadId,
+        runId,
+        subthreadId,
+        tool_result: normalizedOutput,
         errorMessage: event.toolExecution?.errorMessage ?? undefined,
       },
     };
@@ -392,7 +562,6 @@ function sanitizeStatusFilters(filters: StatusFilter[]): StatusFilter[] {
 export function AgentsRunScreen() {
   const params = useParams<{ threadId: string; runId: string }>();
   const runId = params.runId;
-  const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const updateSearchParams = useCallback(
     (mutator: (params: URLSearchParams) => void) => {
@@ -417,6 +586,9 @@ export function AgentsRunScreen() {
   const [nextCursor, setNextCursor] = useState<RunTimelineEventsCursor | null>(null);
   const [loadingOlder, setLoadingOlder] = useState(false);
   const [loadOlderError, setLoadOlderError] = useState<string | null>(null);
+  const contextItemsRef = useRef<Map<string, ContextItem>>(new Map());
+  const pendingContextIdsRef = useRef<Set<string>>(new Set());
+  const [contextItemsVersion, setContextItemsVersion] = useState(0);
 
   const followDefault = useMemo(() => {
     const paramValue = parseFollowValue(searchParams.get('follow'));
@@ -584,6 +756,64 @@ export function AgentsRunScreen() {
     },
     [],
   );
+
+  const fetchContextItems = useCallback(async (ids: readonly string[]) => {
+    if (!Array.isArray(ids) || ids.length === 0) return;
+    const lookup = contextItemsRef.current;
+    const pending = pendingContextIdsRef.current;
+    const candidates: string[] = [];
+
+    for (const id of ids) {
+      if (!isNonEmptyString(id)) continue;
+      if (lookup.has(id) || pending.has(id)) continue;
+      pending.add(id);
+      candidates.push(id);
+    }
+
+    if (candidates.length === 0) return;
+
+    let fetched: ContextItem[] | null = null;
+    try {
+      fetched = await contextItems.getMany(candidates);
+    } catch (error) {
+      console.error('Failed to load context items', error);
+    } finally {
+      for (const id of candidates) {
+        pending.delete(id);
+      }
+    }
+
+    if (!fetched || fetched.length === 0) return;
+
+    let updated = false;
+    for (const item of fetched) {
+      if (isNonEmptyString(item.id) && !lookup.has(item.id)) {
+        lookup.set(item.id, item);
+        updated = true;
+      }
+    }
+
+    if (updated) {
+      setContextItemsVersion((version) => version + 1);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (allEvents.length === 0) return;
+    const lookup = contextItemsRef.current;
+    const ids = new Set<string>();
+    for (const event of allEvents) {
+      if (event.type !== 'llm_call') continue;
+      const contextIds = event.llmCall?.contextItemIds ?? [];
+      for (const id of contextIds) {
+        if (!isNonEmptyString(id)) continue;
+        if (lookup.has(id)) continue;
+        ids.add(id);
+      }
+    }
+    if (ids.size === 0) return;
+    void fetchContextItems(Array.from(ids));
+  }, [allEvents, fetchContextItems]);
 
   useEffect(() => {
     setEvents((prev) => {
@@ -986,7 +1216,15 @@ export function AgentsRunScreen() {
 
   const tokenTotals = useMemo(() => aggregateTokens(allEvents), [allEvents]);
 
-  const uiEvents = useMemo<UiRunEvent[]>(() => events.map((event) => createUiEvent(event)), [events]);
+  const uiEvents = useMemo<UiRunEvent[]>(() => {
+    const lookup = contextItemsRef.current;
+    void contextItemsVersion;
+    return events.map((event) => {
+      const contextRecords = event.type === 'llm_call' ? resolveContextRecords(event.llmCall?.contextItemIds ?? [], lookup) : [];
+      const toolLinks = event.type === 'tool_execution' ? buildToolLinkData(event) : undefined;
+      return createUiEvent(event, { context: contextRecords, tool: toolLinks });
+    });
+  }, [events, contextItemsVersion]);
 
   const isLoading = eventsQuery.isLoading || summaryQuery.isLoading;
   const hasMoreEvents = Boolean(nextCursor);
@@ -1035,7 +1273,6 @@ export function AgentsRunScreen() {
         onRunsPopoverOpenChange={setRunsPopoverOpen}
         onLoadMoreEvents={hasMoreEvents ? loadOlderEvents : undefined}
         onTerminate={runStatus === 'running' && !isTerminating ? handleTerminate : undefined}
-        onBack={() => navigate(-1)}
       />
     </>
   );
