@@ -424,6 +424,7 @@ model Container {
   thread            Thread?         @relation(fields: [threadId], references: [id], onDelete: SetNull)
   providerType      ProviderType    @default(docker)
   image             String
+  name              String
   status            ContainerStatus @default(running)
   createdAt         DateTime        @default(now())
   updatedAt         DateTime        @updatedAt

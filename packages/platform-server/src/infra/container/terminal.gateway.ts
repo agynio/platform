@@ -531,6 +531,7 @@ export class ContainerTerminalGateway {
     }
 
     containerId = session.containerId;
+    const containerShortId = containerId.substring(0, 12);
 
     if (containerIdParam && containerIdParam !== containerId) {
       send({ type: 'error', code: 'container_mismatch', message: 'Terminal session belongs to different container' });
@@ -630,8 +631,93 @@ export class ContainerTerminalGateway {
           });
         });
       }
+      let stdoutMuxRemainder: Buffer | null = null;
+      let stdoutMuxStrippedLogged = false;
+      const decodeDockerMultiplex = (
+        buffer: Buffer,
+        hadPending: boolean,
+      ): {
+        payloads: Buffer[];
+        remainder: Buffer | null;
+        stripped: boolean;
+        treatAsPlain: boolean;
+      } => {
+        let offset = 0;
+        const frames: Buffer[] = [];
+        let stripped = false;
+
+        while (buffer.length - offset >= 8) {
+          const streamId = buffer[offset];
+          const headerLooksValid =
+            (streamId === 0 || streamId === 1 || streamId === 2) &&
+            buffer[offset + 1] === 0 &&
+            buffer[offset + 2] === 0 &&
+            buffer[offset + 3] === 0;
+
+          if (!headerLooksValid) {
+            if (frames.length === 0) {
+              return { payloads: [buffer], remainder: null, stripped: false, treatAsPlain: true };
+            }
+            frames.push(buffer.subarray(offset));
+            return { payloads: frames, remainder: null, stripped: true, treatAsPlain: false };
+          }
+
+          const frameLength = buffer.readUInt32BE(offset + 4);
+          const frameEnd = offset + 8 + frameLength;
+          if (frameEnd > buffer.length) {
+            return { payloads: frames, remainder: buffer.subarray(offset), stripped, treatAsPlain: false };
+          }
+
+          frames.push(buffer.subarray(offset + 8, frameEnd));
+          stripped = true;
+          offset = frameEnd;
+        }
+
+        if (frames.length === 0 && !stripped) {
+          if (hadPending) {
+            return { payloads: [], remainder: buffer, stripped: false, treatAsPlain: false };
+          }
+          return { payloads: [buffer], remainder: null, stripped: false, treatAsPlain: true };
+        }
+
+        if (offset < buffer.length) {
+          return { payloads: frames, remainder: buffer.subarray(offset), stripped, treatAsPlain: false };
+        }
+
+        return { payloads: frames, remainder: null, stripped, treatAsPlain: false };
+      };
+
       stdout?.on('data', (chunk: Buffer | string) => {
-        const data = typeof chunk === 'string' ? chunk : chunk.toString('utf8');
+        if (!chunk) return;
+        const incoming = typeof chunk === 'string' ? Buffer.from(chunk, 'utf8') : chunk;
+        const combined = stdoutMuxRemainder ? Buffer.concat([stdoutMuxRemainder, incoming]) : incoming;
+        const potentialHeaderByte = combined.length > 0 ? combined[0] : undefined;
+        if (!stdoutMuxRemainder && combined.length > 0 && combined.length < 8) {
+          if (potentialHeaderByte === 0 || potentialHeaderByte === 1 || potentialHeaderByte === 2) {
+            stdoutMuxRemainder = combined;
+            refreshActivity();
+            return;
+          }
+        }
+        const hadPending = stdoutMuxRemainder !== null;
+        const { payloads, remainder, stripped, treatAsPlain } = decodeDockerMultiplex(combined, hadPending);
+        stdoutMuxRemainder = remainder;
+        if (stripped && !stdoutMuxStrippedLogged) {
+          stdoutMuxStrippedLogged = true;
+          this.logger.warn('docker multiplex headers stripped from stdout', {
+            execId,
+            sessionId,
+            containerId: containerShortId,
+          });
+        }
+
+        if (!payloads.length) {
+          refreshActivity();
+          return;
+        }
+
+        const payloadBuffer = treatAsPlain ? payloads[0] : Buffer.concat(payloads);
+        const data = payloadBuffer.toString('utf8');
         if (data.length) send({ type: 'output', data });
         refreshActivity();
       });

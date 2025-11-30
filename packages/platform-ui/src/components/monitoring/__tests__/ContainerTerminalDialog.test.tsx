@@ -101,6 +101,7 @@ const container: ContainerItem = {
   containerId: 'container-123456',
   threadId: '11111111-1111-1111-1111-111111111111',
   image: 'workspace:latest',
+  name: 'Workspace container',
   status: 'running',
   startedAt: new Date().toISOString(),
   lastUsedAt: new Date().toISOString(),
@@ -222,6 +223,33 @@ describe('ContainerTerminalDialog stability', () => {
     await waitFor(() => {
       expect(getSentInputs()).toContain('live command');
     });
+  });
+
+  it('renders only the header close control', () => {
+    render(<ContainerTerminalDialog container={container} open onClose={() => {}} />);
+
+    const closeButtons = document.querySelectorAll('[data-slot="dialog-close"]');
+    expect(closeButtons).toHaveLength(1);
+  });
+
+  it('keeps the terminal session active when switching tabs', async () => {
+    render(<ContainerTerminalDialog container={container} open onClose={() => {}} />);
+
+    const logsTab = await screen.findByRole('tab', { name: 'Logs' });
+    const terminalTab = await screen.findByRole('tab', { name: 'Terminal' });
+
+    await waitFor(() => expect(mutateAsyncMock).toHaveBeenCalledTimes(1));
+    expect(terminalDisposeMock).not.toHaveBeenCalled();
+
+    fireEvent.click(logsTab);
+    await waitFor(() => expect(screen.getByText('Logs view coming soon.')).toBeInTheDocument());
+
+    expect(mutateAsyncMock).toHaveBeenCalledTimes(1);
+    expect(terminalDisposeMock).not.toHaveBeenCalled();
+
+    fireEvent.click(terminalTab);
+    expect(terminalDisposeMock).not.toHaveBeenCalled();
+    expect(mutateAsyncMock).toHaveBeenCalledTimes(1);
   });
 });
 

@@ -14,6 +14,7 @@ import { useThreadRuns } from '@/api/hooks/runs';
 import type { ThreadNode, ThreadMetrics, ThreadReminder, RunMessageItem, RunMeta } from '@/api/types/agents';
 import type { ContainerItem } from '@/api/modules/containers';
 import type { ApiError } from '@/api/http';
+import { ContainerTerminalDialog } from '@/components/monitoring/ContainerTerminalDialog';
 
 const INITIAL_THREAD_LIMIT = 50;
 const THREAD_LIMIT_STEP = 50;
@@ -69,6 +70,10 @@ function sanitizeSummary(summary: string | null | undefined): string {
 function sanitizeAgentName(agentName: string | null | undefined): string {
   const trimmed = agentName?.trim();
   return trimmed && trimmed.length > 0 ? trimmed : '(unknown agent)';
+}
+
+function containerDisplayName(container: ContainerItem): string {
+  return container.name;
 }
 
 const sendMessageErrorMap: Record<string, string> = {
@@ -279,7 +284,7 @@ function mapReminders(items: ThreadReminder[]): { id: string; title: string; tim
 function mapContainers(items: ContainerItem[]): { id: string; name: string; status: 'running' | 'finished' }[] {
   return items.map((container) => ({
     id: container.containerId,
-    name: container.role ?? container.image,
+    name: containerDisplayName(container),
     status: container.status === 'running' ? 'running' : 'finished',
   }));
 }
@@ -298,6 +303,7 @@ export function AgentsThreads() {
   const [runMessages, setRunMessages] = useState<Record<string, ConversationMessageWithMeta[]>>({});
   const [messagesError, setMessagesError] = useState<string | null>(null);
   const [isRunsInfoCollapsed, setRunsInfoCollapsed] = useState(false);
+  const [selectedContainerId, setSelectedContainerId] = useState<string | null>(null);
 
   const pendingMessagesRef = useRef<Map<string, ConversationMessageWithMeta[]>>(new Map());
   const seenMessageIdsRef = useRef<Map<string, Set<string>>>(new Map());
@@ -751,7 +757,17 @@ export function AgentsThreads() {
   const containersQuery = useThreadContainers(selectedThreadId ?? undefined, Boolean(selectedThreadId));
 
   const remindersForScreen = useMemo(() => mapReminders(remindersQuery.data?.items ?? []), [remindersQuery.data]);
-  const containersForScreen = useMemo(() => mapContainers(containersQuery.data?.items ?? []), [containersQuery.data]);
+  const containerItems = useMemo(() => containersQuery.data?.items ?? [], [containersQuery.data]);
+  const containersForScreen = useMemo(() => mapContainers(containerItems), [containerItems]);
+  const selectedContainer = useMemo(() => {
+    if (!selectedContainerId) return null;
+    return containerItems.find((item) => item.containerId === selectedContainerId) ?? null;
+  }, [containerItems, selectedContainerId]);
+
+  useEffect(() => {
+    if (!selectedContainerId) return;
+    if (!selectedContainer) setSelectedContainerId(null);
+  }, [selectedContainerId, selectedContainer]);
 
   const selectedThreadHasRunningRun = runList.some((run) => run.status === 'running');
   const selectedThreadRemindersCount = remindersQuery.data?.items?.length ?? 0;
@@ -939,6 +955,15 @@ export function AgentsThreads() {
   const isThreadsEmpty = !threadsQuery.isLoading && threadsForList.length === 0;
   const detailIsLoading = runsQuery.isLoading || threadDetailQuery.isLoading;
 
+  const handleOpenContainerTerminal = (containerId: string) => {
+    if (!containerItems.some((item) => item.containerId === containerId)) return;
+    setSelectedContainerId(containerId);
+  };
+
+  const handleCloseContainerTerminal = () => {
+    setSelectedContainerId(null);
+  };
+
   const handleSelectThread = useCallback(
     (threadId: string) => {
       setSelectedThreadIdState(threadId);
@@ -1049,8 +1074,14 @@ export function AgentsThreads() {
           isToggleThreadStatusPending={toggleThreadStatusMutation.isPending}
           isSendMessagePending={isSendMessagePending}
           selectedThread={selectedThreadForScreen}
+          onOpenContainerTerminal={handleOpenContainerTerminal}
         />
       </div>
+      <ContainerTerminalDialog
+        container={selectedContainer}
+        open={Boolean(selectedContainer)}
+        onClose={handleCloseContainerTerminal}
+      />
     </div>
   );
 }

@@ -8,6 +8,7 @@ type ContainerRow = {
   threadId: string | null;
   providerType: 'docker';
   image: string;
+  name: string;
   status: ContainerStatus;
   createdAt: Date;
   updatedAt: Date;
@@ -27,6 +28,10 @@ class FakePrismaClient {
       if (!existing) {
         const create = args.create;
         const now = new Date();
+        if (typeof create.name !== 'string' || !create.name.trim()) {
+          throw new Error('name required');
+        }
+        const name = create.name as string;
         const row: ContainerRow = {
           containerId: create.containerId,
           dockerContainerId: (create.dockerContainerId as string | null) ?? null,
@@ -34,6 +39,7 @@ class FakePrismaClient {
           threadId: (create.threadId as string | null) ?? null,
           providerType: 'docker',
           image: create.image as string,
+          name,
           status: (create.status as ContainerStatus) ?? 'running',
           createdAt: now,
           updatedAt: now,
@@ -51,6 +57,11 @@ class FakePrismaClient {
         existing.dockerContainerId = (update.dockerContainerId as string | null) ?? existing.dockerContainerId;
         existing.threadId = (update.threadId as string | null) ?? existing.threadId;
         existing.image = (update.image as string) ?? existing.image;
+        if ('name' in update) {
+          const nextName = update.name as string;
+          if (typeof nextName !== 'string' || !nextName.trim()) throw new Error('name required');
+          existing.name = nextName;
+        }
         existing.status = (update.status as ContainerStatus) ?? existing.status;
         existing.updatedAt = new Date();
         existing.lastUsedAt = (update.lastUsedAt as Date) ?? existing.lastUsedAt;
@@ -79,6 +90,11 @@ class FakePrismaClient {
       if ('metadata' in data) existing.metadata = (data.metadata as ContainerMetadata | null) ?? existing.metadata;
       if ('dockerContainerId' in data) existing.dockerContainerId = (data.dockerContainerId as string | null) ?? existing.dockerContainerId;
       if ('threadId' in data) existing.threadId = (data.threadId as string | null) ?? existing.threadId;
+      if ('name' in data) {
+        const nextName = data.name as string;
+        if (typeof nextName !== 'string' || !nextName.trim()) throw new Error('name required');
+        existing.name = nextName;
+      }
       return existing;
     },
     updateMany: async (args: { where: { containerId: string; status: ContainerStatus }; data: { status: ContainerStatus; metadata?: ContainerMetadata | null } }) => {
@@ -144,6 +160,7 @@ describe('ContainerRegistry (Prisma-backed)', () => {
       image: 'node:20',
       labels: { 'hautech.ai/role': 'workspace' },
       ttlSeconds: 10,
+      name: '/workspace-main',
     });
     const row = await prisma.container.findUnique({ where: { containerId: 'abc' } });
     expect(row).toBeTruthy();
@@ -151,6 +168,7 @@ describe('ContainerRegistry (Prisma-backed)', () => {
     expect(row!.killAfterAt).not.toBeNull();
     expect(row!.metadata!.ttlSeconds).toBe(10);
     expect(row!.dockerContainerId).toBe('abc');
+    expect(row!.name).toBe('workspace-main');
   });
 
   it('updateLastUsed does not create when missing', async () => {
@@ -162,7 +180,7 @@ describe('ContainerRegistry (Prisma-backed)', () => {
   });
 
   it('claimForTermination performs CAS update', async () => {
-    await registry.registerStart({ containerId: 'cid1', nodeId: 'n', threadId: '', image: 'img' });
+    await registry.registerStart({ containerId: 'cid1', nodeId: 'n', threadId: '', image: 'img', name: '/cid1' });
     const ok1 = await registry.claimForTermination('cid1', 'claim');
     expect(ok1).toBe(true);
     const ok2 = await registry.claimForTermination('cid1', 'claim2');
@@ -173,11 +191,11 @@ describe('ContainerRegistry (Prisma-backed)', () => {
     const now = new Date();
     const past = new Date(now.getTime() - 1000);
     const future = new Date(now.getTime() + 60_000);
-    await registry.registerStart({ containerId: 'r1', nodeId: 'n', threadId: '', image: 'img', ttlSeconds: 0 });
+    await registry.registerStart({ containerId: 'r1', nodeId: 'n', threadId: '', image: 'img', ttlSeconds: 0, name: '/r1' });
     await prisma.container.update({ where: { containerId: 'r1' }, data: { killAfterAt: past } });
-    await registry.registerStart({ containerId: 't1', nodeId: 'n', threadId: '', image: 'img' });
+    await registry.registerStart({ containerId: 't1', nodeId: 'n', threadId: '', image: 'img', name: '/t1' });
     await prisma.container.update({ where: { containerId: 't1' }, data: { status: 'terminating', metadata: {} as ContainerMetadata } });
-    await registry.registerStart({ containerId: 't2', nodeId: 'n', threadId: '', image: 'img' });
+    await registry.registerStart({ containerId: 't2', nodeId: 'n', threadId: '', image: 'img', name: '/t2' });
     await prisma.container.update({
       where: { containerId: 't2' },
       data: { status: 'terminating', metadata: { labels: {}, ttlSeconds: 86400, retryAfter: future.toISOString() } as ContainerMetadata },
@@ -190,7 +208,7 @@ describe('ContainerRegistry (Prisma-backed)', () => {
   });
 
   it('recordTerminationFailure sets backoff metadata', async () => {
-    await registry.registerStart({ containerId: 'x', nodeId: 'n', threadId: '', image: 'img' });
+    await registry.registerStart({ containerId: 'x', nodeId: 'n', threadId: '', image: 'img', name: '/x' });
     await registry.markTerminating('x', 'cleanup');
     await registry.recordTerminationFailure('x', 'oops');
     const row = await prisma.container.findUnique({ where: { containerId: 'x' } });
@@ -200,7 +218,7 @@ describe('ContainerRegistry (Prisma-backed)', () => {
   });
 
   it('markStopped sets status and deletedAt', async () => {
-    await registry.registerStart({ containerId: 'y', nodeId: 'n', threadId: '', image: 'img' });
+    await registry.registerStart({ containerId: 'y', nodeId: 'n', threadId: '', image: 'img', name: '/y' });
     await registry.markStopped('y', 'ttl_expired');
     const row = await prisma.container.findUnique({ where: { containerId: 'y' } });
     expect(row!.status).toBe('stopped');

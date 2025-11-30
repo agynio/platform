@@ -15,6 +15,7 @@ const mockContainers: ContainerItem[] = [
     containerId: 'abc1234567890',
     threadId: 't1',
     image: 'hautech/thread:latest',
+    name: 'hautech-thread',
     status: 'running',
     startedAt: '2025-11-14T09:00:00.000Z',
     lastUsedAt: '2025-11-14T10:00:00.000Z',

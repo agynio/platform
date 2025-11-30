@@ -31,9 +31,7 @@ function toVolumes(mounts: ContainerItem['mounts']): string[] {
 }
 
 function toName(container: ContainerItem): string {
-  const image = container.image?.trim();
-  if (image) return image;
-  return container.containerId;
+  return container.name;
 }
 
 function createSidecarSource(parent: ContainerItem, sidecar: NonNullable<ContainerItem['sidecars']>[number]): ContainerItem {
@@ -41,6 +39,7 @@ function createSidecarSource(parent: ContainerItem, sidecar: NonNullable<Contain
     containerId: sidecar.containerId,
     threadId: parent.threadId,
     image: sidecar.image,
+    name: sidecar.name,
     status: sidecar.status,
     startedAt: parent.startedAt,
     lastUsedAt: parent.lastUsedAt,

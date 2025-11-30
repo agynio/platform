@@ -47,6 +47,7 @@ describe('AgentsThreads conversation view', () => {
         containerId: 'cont-1',
         threadId: 'th1',
         image: 'ai:latest',
+        name: 'cont-1-name',
         status: 'running',
         startedAt: t(0),
         lastUsedAt: t(1),
