@@ -64,39 +64,40 @@ export interface GraphLayoutProps {
 
 function resolveAgentDisplayTitle(node: GraphNodeConfig): string {
   const config = (node.config ?? {}) as Record<string, unknown>;
-  const rawConfigTitle = typeof config.title === 'string' ? config.title : '';
-  const trimmedConfigTitle = rawConfigTitle.trim();
-  if (trimmedConfigTitle.length > 0) {
-    return trimmedConfigTitle;
+  const configTitleRaw = typeof config.title === 'string' ? config.title : '';
+  const configTitle = configTitleRaw.trim();
+  if (configTitle.length > 0) {
+    return configTitle;
   }
 
-  const fallbackTemplate =
-    typeof node.template === 'string' && node.template.trim().length > 0 ? node.template.trim() : 'Agent';
+  const rawTemplate = typeof node.template === 'string' ? node.template : '';
+  const fallbackTemplate = rawTemplate.trim().length > 0 ? rawTemplate.trim() : 'Agent';
   const basePlaceholder = computeAgentDefaultTitle(undefined, undefined, 'Agent');
-  const storedTitleRaw = typeof node.title === 'string' ? node.title : '';
-  const storedTitle = storedTitleRaw.trim();
   const profileFallback = computeAgentDefaultTitle(
     typeof config.name === 'string' ? (config.name as string) : undefined,
     typeof config.role === 'string' ? (config.role as string) : undefined,
     fallbackTemplate,
   );
-  const isPlaceholderTitle =
-    storedTitle.length > 0 &&
-    (storedTitle === basePlaceholder || storedTitle === fallbackTemplate || storedTitle === node.template);
+  const trimmedProfileFallback = profileFallback.trim();
 
-  if (storedTitle.length > 0 && !isPlaceholderTitle) {
-    return storedTitle;
-  }
-
-  if (profileFallback.length > 0) {
-    return profileFallback;
-  }
-
+  const storedTitleRaw = typeof node.title === 'string' ? node.title : '';
+  const storedTitle = storedTitleRaw.trim();
   if (storedTitle.length > 0) {
+    if (
+      trimmedProfileFallback.length > 0 &&
+      (storedTitle === fallbackTemplate || storedTitle === basePlaceholder) &&
+      trimmedProfileFallback !== fallbackTemplate
+    ) {
+      return trimmedProfileFallback;
+    }
     return storedTitle;
   }
 
-  return basePlaceholder;
+  if (trimmedProfileFallback.length > 0) {
+    return trimmedProfileFallback;
+  }
+
+  return fallbackTemplate;
 }
 
 function resolveDisplayTitle(node: GraphNodeConfig): string {
@@ -815,14 +816,13 @@ export function GraphLayout({ services }: GraphLayoutProps) {
       return null;
     }
     const baseConfig = (selectedNode.config ?? {}) as Record<string, unknown>;
-    const rawTitleFromConfig = typeof baseConfig.title === 'string' ? (baseConfig.title as string) : null;
-    const resolvedTitle =
-      rawTitleFromConfig ?? (typeof selectedNode.title === 'string' ? selectedNode.title : '');
+    const { title: _ignoredTitle, ...rest } = baseConfig;
+    const configTitle = typeof baseConfig.title === 'string' ? (baseConfig.title as string) : '';
 
     const config: SidebarNodeConfig = {
-      ...baseConfig,
+      ...rest,
       kind: selectedNode.kind,
-      title: resolvedTitle,
+      title: configTitle,
       template: selectedNode.template,
     };
 

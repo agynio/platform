@@ -184,9 +184,28 @@ function NodePropertiesSidebar({
     typeof configRecord.logToPid1 === 'boolean' ? (configRecord.logToPid1 as boolean) : true;
   const agentNameValue = typeof configRecord.name === 'string' ? (configRecord.name as string) : '';
   const agentRoleValue = typeof configRecord.role === 'string' ? (configRecord.role as string) : '';
+  const [agentNameInput, setAgentNameInput] = useState(agentNameValue);
+  const [agentRoleInput, setAgentRoleInput] = useState(agentRoleValue);
+  const [agentNameDirty, setAgentNameDirty] = useState(false);
+  const [agentRoleDirty, setAgentRoleDirty] = useState(false);
+
+  useEffect(() => {
+    if (agentNameDirty) {
+      return;
+    }
+    setAgentNameInput(agentNameValue);
+  }, [agentNameValue, agentNameDirty]);
+
+  useEffect(() => {
+    if (agentRoleDirty) {
+      return;
+    }
+    setAgentRoleInput(agentRoleValue);
+  }, [agentRoleValue, agentRoleDirty]);
+
   const agentDefaultTitle = useMemo(
-    () => computeAgentDefaultTitle(agentNameValue, agentRoleValue, 'Agent'),
-    [agentNameValue, agentRoleValue],
+    () => computeAgentDefaultTitle(agentNameInput.trim(), agentRoleInput.trim(), 'Agent'),
+    [agentNameInput, agentRoleInput],
   );
   const headerTitle = useMemo(() => {
     const providedDisplay = typeof displayTitle === 'string' ? displayTitle.trim() : '';
@@ -409,21 +428,59 @@ function NodePropertiesSidebar({
     [envVars, onConfigChange, fetchSecretNow, fetchVariableNow],
   );
 
-  const handleAgentNameChange = useCallback(
-    (value: string) => {
-      const trimmed = value.trim();
-      handleConfigChange({ name: trimmed.length > 0 ? trimmed : undefined });
-    },
-    [handleConfigChange],
-  );
+  const handleAgentNameChange = useCallback((value: string) => {
+    setAgentNameDirty(true);
+    setAgentNameInput(value);
+    const trimmed = value.trim();
+    const normalizedNext = trimmed.length > 0 ? trimmed : undefined;
+    const normalizedCurrent = agentNameValue.length > 0 ? agentNameValue : undefined;
+    if (normalizedNext === normalizedCurrent) {
+      return;
+    }
+    handleConfigChange({ name: normalizedNext });
+  }, [agentNameValue, handleConfigChange]);
 
-  const handleAgentRoleChange = useCallback(
-    (value: string) => {
-      const trimmed = value.trim();
-      handleConfigChange({ role: trimmed.length > 0 ? trimmed : undefined });
-    },
-    [handleConfigChange],
-  );
+  const handleAgentNameBlur = useCallback(() => {
+    const trimmed = agentNameInput.trim();
+    const nextInputValue = trimmed.length > 0 ? trimmed : '';
+    setAgentNameInput(nextInputValue);
+    setAgentNameDirty(false);
+
+    const normalizedNext = trimmed.length > 0 ? trimmed : undefined;
+    const normalizedCurrent = agentNameValue.length > 0 ? agentNameValue : undefined;
+    if (normalizedNext === normalizedCurrent) {
+      return;
+    }
+
+    handleConfigChange({ name: normalizedNext });
+  }, [agentNameInput, agentNameValue, handleConfigChange]);
+
+  const handleAgentRoleChange = useCallback((value: string) => {
+    setAgentRoleDirty(true);
+    setAgentRoleInput(value);
+    const trimmed = value.trim();
+    const normalizedNext = trimmed.length > 0 ? trimmed : undefined;
+    const normalizedCurrent = agentRoleValue.length > 0 ? agentRoleValue : undefined;
+    if (normalizedNext === normalizedCurrent) {
+      return;
+    }
+    handleConfigChange({ role: normalizedNext });
+  }, [agentRoleValue, handleConfigChange]);
+
+  const handleAgentRoleBlur = useCallback(() => {
+    const trimmed = agentRoleInput.trim();
+    const nextInputValue = trimmed.length > 0 ? trimmed : '';
+    setAgentRoleInput(nextInputValue);
+    setAgentRoleDirty(false);
+
+    const normalizedNext = trimmed.length > 0 ? trimmed : undefined;
+    const normalizedCurrent = agentRoleValue.length > 0 ? agentRoleValue : undefined;
+    if (normalizedNext === normalizedCurrent) {
+      return;
+    }
+
+    handleConfigChange({ role: normalizedNext });
+  }, [agentRoleInput, agentRoleValue, handleConfigChange]);
 
   const handleAgentModelChange = useCallback(
     (value: string) => {
@@ -749,8 +806,8 @@ function NodePropertiesSidebar({
 
           {nodeKind === 'Agent' && (
             <AgentSection
-              name={agentNameValue}
-              role={agentRoleValue}
+              name={agentNameInput}
+              role={agentRoleInput}
               model={agentModelValue}
               systemPrompt={agentSystemPromptValue}
               restrictOutput={agentRestrictOutput}
@@ -759,7 +816,9 @@ function NodePropertiesSidebar({
               queueConfig={agentQueueConfig}
               summarization={agentSummarizationConfig}
               onNameChange={handleAgentNameChange}
+              onNameBlur={handleAgentNameBlur}
               onRoleChange={handleAgentRoleChange}
+              onRoleBlur={handleAgentRoleBlur}
               onModelChange={handleAgentModelChange}
               onSystemPromptChange={handleAgentSystemPromptChange}
               onRestrictOutputChange={handleAgentRestrictOutputChange}
