@@ -7,6 +7,15 @@ export type ThreadMetrics = {
   runsCount: number;
 };
 
+export type AgentQueueItem = {
+  id: string;
+  kind: 'assistant' | 'user' | 'system';
+  text: string;
+  enqueuedAt: string;
+  tokenId?: string;
+  priority?: number | null;
+};
+
 export type ThreadReminder = {
   id: string;
   threadId: string;

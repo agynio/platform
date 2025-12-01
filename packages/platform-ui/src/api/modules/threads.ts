@@ -1,5 +1,5 @@
 import { http, asData } from '@/api/http';
-import type { ThreadMetrics, ThreadNode, ThreadReminder } from '@/api/types/agents';
+import type { ThreadMetrics, ThreadNode, ThreadReminder, AgentQueueItem } from '@/api/types/agents';
 
 const UUID_REGEX = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
 
@@ -34,6 +34,18 @@ export const threads = {
     asData<{ ok: true }>(http.post(`/api/agents/threads/${encodeURIComponent(id)}/messages`, { text })),
   metrics: (id: string) =>
     asData<ThreadMetrics>(http.get(`/api/agents/threads/${encodeURIComponent(id)}/metrics`)),
+  queue: async (id: string) => {
+    const res = await asData<{ items: AgentQueueItem[] }>(
+      http.get(`/api/agents/threads/${encodeURIComponent(id)}/queue`),
+    );
+    const items = [...(res.items ?? [])];
+    items.sort((a, b) => {
+      const diff = new Date(a.enqueuedAt).getTime() - new Date(b.enqueuedAt).getTime();
+      if (diff !== 0) return diff;
+      return a.id.localeCompare(b.id);
+    });
+    return { items };
+  },
   reminders: async (id: string, take: number = 200) => {
     if (!UUID_REGEX.test(id)) {
       throw new Error('Invalid thread identifier');

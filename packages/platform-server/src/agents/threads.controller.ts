@@ -27,7 +27,7 @@ import { RunSignalsRegistry } from './run-signals.service';
 import { LiveGraphRuntime } from '../graph-core/liveGraph.manager';
 import { HumanMessage } from '@agyn/llm';
 import { TemplateRegistry } from '../graph-core/templateRegistry';
-import { isAgentLiveNode, isAgentRuntimeInstance } from './agent-node.utils';
+import { AgentRuntimeInstance, isAgentLiveNode, isAgentRuntimeInstance } from './agent-node.utils';
 
 // Avoid runtime import of Prisma in tests; enumerate allowed values
 export const RunMessageTypeValues: ReadonlyArray<RunMessageType> = ['input', 'injected', 'output'];
@@ -44,6 +44,15 @@ export const RunEventStatusValues: ReadonlyArray<RunEventStatus> = ['pending', '
 
 const isRunEventType = (value: string): value is RunEventType => (RunEventTypeValues as ReadonlyArray<string>).includes(value);
 const isRunEventStatus = (value: string): value is RunEventStatus => (RunEventStatusValues as ReadonlyArray<string>).includes(value);
+
+type AgentQueueItemResponse = {
+  id: string;
+  kind: 'assistant' | 'user' | 'system';
+  text: string;
+  enqueuedAt: string;
+  tokenId?: string;
+  priority?: number | null;
+};
 
 export class ListRunMessagesQueryDto {
   @IsIn(RunMessageTypeValues)
@@ -258,6 +267,72 @@ export class AgentsThreadsController {
   async listRuns(@Param('threadId') threadId: string) {
     const runs = await this.persistence.listRuns(threadId);
     return { items: runs };
+  }
+
+  @Get('threads/:threadId/queue')
+  async getThreadQueue(@Param('threadId') threadId: string) {
+    const thread = await this.persistence.getThreadById(threadId);
+    if (!thread) throw new NotFoundException({ error: 'thread_not_found' });
+
+    const liveNodes = this.runtime.getNodes();
+    const agentNodes = liveNodes.filter((node) => isAgentLiveNode(node, this.templateRegistry));
+    if (agentNodes.length === 0) return { items: [] as AgentQueueItemResponse[] };
+
+    const runtimeAgents = agentNodes.flatMap((node) => {
+      const instance = node.instance;
+      if (!isAgentRuntimeInstance(instance)) return [];
+      return [{ id: node.id, instance }];
+    });
+    if (runtimeAgents.length === 0) return { items: [] as AgentQueueItemResponse[] };
+
+    const candidateNodeIds = runtimeAgents.map((entry) => entry.id);
+
+    const orderedIds: string[] = [];
+    if (thread.assignedAgentNodeId && candidateNodeIds.includes(thread.assignedAgentNodeId)) {
+      orderedIds.push(thread.assignedAgentNodeId);
+    }
+    if (orderedIds.length === 0) {
+      const fallbackAgentNodeId = await this.persistence.getLatestAgentNodeIdForThread(threadId, { candidateNodeIds });
+      if (fallbackAgentNodeId && candidateNodeIds.includes(fallbackAgentNodeId)) {
+        orderedIds.push(fallbackAgentNodeId);
+      }
+    }
+    for (const id of candidateNodeIds) {
+      if (!orderedIds.includes(id)) orderedIds.push(id);
+    }
+
+    let snapshot: ReturnType<AgentRuntimeInstance['getQueueSnapshot']> | null = null;
+
+    for (const id of orderedIds) {
+      const agent = runtimeAgents.find((entry) => entry.id === id);
+      if (!agent) continue;
+      const queue = agent.instance.getQueueSnapshot(threadId);
+      if (queue.length === 0) continue;
+      snapshot = queue;
+      break;
+    }
+
+    if (!snapshot || snapshot.length === 0) {
+      return { items: [] as AgentQueueItemResponse[] };
+    }
+
+    const items: AgentQueueItemResponse[] = snapshot
+      .map(({ id, msg, tokenId, enqueuedAt }) => {
+        const role = msg.role;
+        const kind: AgentQueueItemResponse['kind'] = role === 'assistant' || role === 'user' ? role : 'system';
+        const text = typeof msg.text === 'string' ? msg.text : '';
+        const at = Number.isFinite(enqueuedAt) ? new Date(enqueuedAt).toISOString() : new Date().toISOString();
+        return {
+          id,
+          kind,
+          text,
+          enqueuedAt: at,
+          tokenId: tokenId ?? undefined,
+        } satisfies AgentQueueItemResponse;
+      })
+      .sort((a, b) => new Date(a.enqueuedAt).getTime() - new Date(b.enqueuedAt).getTime());
+
+    return { items };
   }
 
   @Get('runs/:runId/messages')

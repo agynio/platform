@@ -26,6 +26,8 @@ export interface Run {
 export interface QueuedMessageData {
   id: string;
   content: ReactNode;
+  kind?: 'user' | 'assistant' | 'system';
+  enqueuedAt?: string;
 }
 
 export interface ReminderData {
@@ -175,6 +177,8 @@ export function Conversation({
                       <QueuedMessage
                         key={msg.id}
                         content={msg.content}
+                        kind={msg.kind}
+                        enqueuedAt={msg.enqueuedAt}
                       />
                     ))}
 

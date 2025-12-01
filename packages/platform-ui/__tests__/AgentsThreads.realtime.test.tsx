@@ -17,32 +17,39 @@ describe('AgentsThreads realtime updates', () => {
   afterEach(() => server.resetHandlers());
   afterAll(() => server.close());
 
+  const THREAD_ID = '00000000-0000-0000-0000-000000000001';
+
   function setupBaseMocks(withRuns: boolean) {
-    const thread = { id: 'th1', alias: 'th-a', summary: 'Thread A', status: 'open', createdAt: t(0) };
+    const thread = { id: THREAD_ID, alias: 'th-a', summary: 'Thread A', status: 'open', createdAt: t(0) };
     const runs = withRuns
-      ? [{ id: 'run-1', threadId: 'th1', status: 'running', createdAt: t(1), updatedAt: t(1) }]
+      ? [{ id: 'run-1', threadId: THREAD_ID, status: 'running', createdAt: t(1), updatedAt: t(1) }]
       : [];
 
     const threadsHandler = () => HttpResponse.json({ items: [thread] });
     const runsHandler = () => HttpResponse.json({ items: runs });
     const messagesHandler = () => HttpResponse.json({ items: [] });
+    const queueItems: Array<{ id: string; kind: 'user' | 'assistant' | 'system'; text: string; enqueuedAt: string }> = [];
 
     server.use(
       http.get('/api/agents/threads', threadsHandler),
       http.get(abs('/api/agents/threads'), threadsHandler),
-      http.get('/api/agents/threads/th1', () => HttpResponse.json({ ...thread, parentId: null, metrics: { remindersCount: 0, containersCount: 0, activity: 'idle', runsCount: runs.length } })),
-      http.get(abs('/api/agents/threads/th1'), () => HttpResponse.json({ ...thread, parentId: null, metrics: { remindersCount: 0, containersCount: 0, activity: 'idle', runsCount: runs.length } })),
-      http.get('/api/agents/threads/th1/runs', runsHandler),
-      http.get(abs('/api/agents/threads/th1/runs'), runsHandler),
-      http.get('/api/agents/threads/th1/children', () => HttpResponse.json({ items: [] })),
-      http.get(abs('/api/agents/threads/th1/children'), () => HttpResponse.json({ items: [] })),
+      http.get(`/api/agents/threads/${THREAD_ID}`, () => HttpResponse.json({ ...thread, parentId: null, metrics: { remindersCount: 0, containersCount: 0, activity: 'idle', runsCount: runs.length } })),
+      http.get(abs(`/api/agents/threads/${THREAD_ID}`), () => HttpResponse.json({ ...thread, parentId: null, metrics: { remindersCount: 0, containersCount: 0, activity: 'idle', runsCount: runs.length } })),
+      http.get(`/api/agents/threads/${THREAD_ID}/runs`, runsHandler),
+      http.get(abs(`/api/agents/threads/${THREAD_ID}/runs`), runsHandler),
+      http.get(`/api/agents/threads/${THREAD_ID}/children`, () => HttpResponse.json({ items: [] })),
+      http.get(abs(`/api/agents/threads/${THREAD_ID}/children`), () => HttpResponse.json({ items: [] })),
       http.get('/api/agents/runs/run-1/messages', messagesHandler),
       http.get(abs('/api/agents/runs/run-1/messages'), messagesHandler),
       http.get('/api/agents/reminders', () => HttpResponse.json({ items: [] })),
       http.get(abs('/api/agents/reminders'), () => HttpResponse.json({ items: [] })),
       http.get('/api/containers', () => HttpResponse.json({ items: [] })),
       http.get(abs('/api/containers'), () => HttpResponse.json({ items: [] })),
+      http.get(`/api/agents/threads/${THREAD_ID}/queue`, () => HttpResponse.json({ items: queueItems })),
+      http.get(abs(`/api/agents/threads/${THREAD_ID}/queue`), () => HttpResponse.json({ items: queueItems })),
     );
+
+    return { queueItems };
   }
 
   it('appends streamed messages for known runs and deduplicates duplicates', async () => {
@@ -63,7 +70,7 @@ describe('AgentsThreads realtime updates', () => {
     await waitFor(() => expect(within(conversation).queryAllByTestId('conversation-message')).toHaveLength(0));
 
     const payload = {
-      threadId: 'th1',
+      threadId: THREAD_ID,
       message: { id: 'msg-1', kind: 'assistant', text: 'Streamed', source: {}, createdAt: t(5), runId: 'run-1' },
     } as const;
 
@@ -86,7 +93,7 @@ describe('AgentsThreads realtime updates', () => {
   });
 
   it('buffers streamed messages until the corresponding run appears', async () => {
-    setupBaseMocks(false);
+    const { queueItems } = setupBaseMocks(false);
 
     const user = userEvent.setup();
 
@@ -102,9 +109,11 @@ describe('AgentsThreads realtime updates', () => {
     const conversation = await screen.findByTestId('conversation');
 
     const bufferedPayload = {
-      threadId: 'th1',
+      threadId: THREAD_ID,
       message: { id: 'msg-buffer', kind: 'assistant', text: 'Buffered message', source: {}, createdAt: t(5), runId: 'run-late' },
     } as const;
+
+    queueItems.push({ id: 'queued-buffer', kind: 'assistant', text: 'Buffered message', enqueuedAt: t(5) });
 
     const messageListeners = (graphSocket as any).messageCreatedListeners as Set<(p: typeof bufferedPayload) => void>;
     await act(async () => {
@@ -117,13 +126,16 @@ describe('AgentsThreads realtime updates', () => {
     const pendingRoot = pendingLabel.parentElement?.parentElement as HTMLElement | null;
     expect(pendingRoot).not.toBeNull();
     if (!pendingRoot) throw new Error('Missing pending section');
-    expect(within(pendingRoot).getByText('Buffered message')).toBeInTheDocument();
+    await waitFor(() => expect(within(pendingRoot).getByText('Buffered message')).toBeInTheDocument());
 
     const runPayload = {
-      threadId: 'th1',
+      threadId: THREAD_ID,
       run: { id: 'run-late', status: 'running', createdAt: t(1), updatedAt: t(1) },
     } as const;
     const runListeners = (graphSocket as any).runStatusListeners as Set<(p: typeof runPayload) => void>;
+
+    queueItems.splice(0);
+
     await act(async () => {
       for (const listener of runListeners) {
         listener(runPayload);

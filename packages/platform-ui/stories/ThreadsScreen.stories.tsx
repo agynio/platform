@@ -171,8 +171,18 @@ const pendingConversationReminders: ReminderData[] = [
 ];
 
 const pendingQueuedMessages: QueuedMessageData[] = [
-  { id: 'queue-1', content: 'Queued message awaiting agent availability.' },
-  { id: 'queue-2', content: 'Queued message with additional context.' },
+  {
+    id: 'queue-1',
+    content: 'Queued message awaiting agent availability.',
+    kind: 'user',
+    enqueuedAt: new Date(Date.now() - 7 * 60 * 1000).toISOString(),
+  },
+  {
+    id: 'queue-2',
+    content: 'Queued message with additional context.',
+    kind: 'assistant',
+    enqueuedAt: new Date(Date.now() - 3 * 60 * 1000).toISOString(),
+  },
 ];
 
 const baseArgs: ThreadsScreenProps = {
@@ -315,6 +325,19 @@ export const RunsOnlyPending: Story = {
   args: {
     ...baseArgs,
     queuedMessages: [],
+    conversationReminders: [],
+  },
+  render: ControlledRender,
+  parameters: {
+    selectedMenuItem: 'threads',
+  },
+};
+
+export const QueueOnly: Story = {
+  args: {
+    ...baseArgs,
+    runs: [],
+    queuedMessages: pendingQueuedMessages,
     conversationReminders: [],
   },
   render: ControlledRender,

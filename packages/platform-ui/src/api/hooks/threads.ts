@@ -4,7 +4,7 @@ import { threads } from '@/api/modules/threads';
 import type { ApiError } from '@/api/http';
 import { listContainers } from '@/api/modules/containers';
 import { graphSocket } from '@/lib/graph/socket';
-import type { ThreadMetrics, ThreadNode, ThreadReminder } from '@/api/types/agents';
+import type { ThreadMetrics, ThreadNode, ThreadReminder, AgentQueueItem } from '@/api/types/agents';
 import type { ContainerItem } from '@/api/modules/containers';
 
 const UUID_REGEX = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
@@ -156,6 +156,42 @@ export function useThreadContainers(threadId: string | undefined, enabled: boole
       offReconnect();
     };
   }, [threadId, enabled, isValidThread, qc, queryKey]);
+
+  return q;
+}
+
+export function useThreadQueue(threadId: string | undefined, enabled: boolean = true) {
+  const qc = useQueryClient();
+  const queryKey = useMemo(() => ['agents', 'threads', threadId, 'queue'] as const, [threadId]);
+  const isValidThread = !!threadId && UUID_REGEX.test(threadId);
+  const allow = enabled && isValidThread;
+  const q = useQuery<{ items: AgentQueueItem[] }>({
+    enabled: allow,
+    queryKey,
+    queryFn: () => threads.queue(threadId as string),
+    staleTime: 1500,
+  });
+
+  useEffect(() => {
+    if (!allow || !threadId) return;
+    const invalidate = () => {
+      qc.invalidateQueries({ queryKey }).catch(() => {});
+    };
+    const offMessage = graphSocket.onMessageCreated((payload) => {
+      if (payload.threadId !== threadId) return;
+      invalidate();
+    });
+    const offRun = graphSocket.onRunStatusChanged((payload) => {
+      if (payload.threadId !== threadId) return;
+      invalidate();
+    });
+    const offReconnect = graphSocket.onReconnected(invalidate);
+    return () => {
+      offMessage();
+      offRun();
+      offReconnect();
+    };
+  }, [allow, threadId, qc, queryKey]);
 
   return q;
 }

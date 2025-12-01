@@ -11,7 +11,7 @@ import { notifyError } from '@/lib/notify';
 import { graphSocket } from '@/lib/graph/socket';
 import { threads } from '@/api/modules/threads';
 import { runs as runsApi } from '@/api/modules/runs';
-import { useThreadById, useThreadReminders, useThreadContainers } from '@/api/hooks/threads';
+import { useThreadById, useThreadReminders, useThreadContainers, useThreadQueue } from '@/api/hooks/threads';
 import { useThreadRuns } from '@/api/hooks/runs';
 import type { ThreadNode, ThreadMetrics, ThreadReminder, RunMessageItem, RunMeta } from '@/api/types/agents';
 import type { ContainerItem } from '@/api/modules/containers';
@@ -59,13 +59,6 @@ type SocketMessage = {
 type SocketRun = { id: string; status: 'running' | 'finished' | 'terminated'; createdAt: string; updatedAt: string };
 
 type ConversationMessageWithMeta = ConversationMessage & { createdAtRaw: string };
-
-type PendingQueuedMessage = {
-  id: string;
-  runId: string;
-  createdAt: string;
-  text: string;
-};
 
 type ThreadDraft = {
   id: string;
@@ -289,20 +282,6 @@ function compareMessages(a: ConversationMessageWithMeta, b: ConversationMessageW
   return a.id.localeCompare(b.id);
 }
 
-function compareQueuedMessages(a: PendingQueuedMessage, b: PendingQueuedMessage): number {
-  const aTime = Date.parse(a.createdAt);
-  const bTime = Date.parse(b.createdAt);
-  if (Number.isFinite(aTime) && Number.isFinite(bTime)) {
-    const diff = aTime - bTime;
-    if (diff !== 0) return diff;
-  } else if (Number.isFinite(aTime)) {
-    return -1;
-  } else if (Number.isFinite(bTime)) {
-    return 1;
-  }
-  return a.id.localeCompare(b.id);
-}
-
 function mergeMessages(base: ConversationMessageWithMeta[], additions: ConversationMessageWithMeta[]): ConversationMessageWithMeta[] {
   if (additions.length === 0) return base;
   if (base.length === 0) return [...additions].sort(compareMessages);
@@ -424,7 +403,6 @@ export function AgentsThreads() {
   const [drafts, setDrafts] = useState<ThreadDraft[]>([]);
   const [selectedThreadIdState, setSelectedThreadIdState] = useState<string | null>(params.threadId ?? null);
   const [runMessages, setRunMessages] = useState<Record<string, ConversationMessageWithMeta[]>>({});
-  const [queuedMessages, setQueuedMessages] = useState<PendingQueuedMessage[]>([]);
   const [messagesError, setMessagesError] = useState<string | null>(null);
   const [isRunsInfoCollapsed, setRunsInfoCollapsed] = useState(false);
   const [selectedContainerId, setSelectedContainerId] = useState<string | null>(null);
@@ -617,6 +595,7 @@ export function AgentsThreads() {
 
   const threadDetailQuery = useThreadById(effectiveSelectedThreadId);
   const runsQuery = useThreadRuns(effectiveSelectedThreadId);
+  const queueQuery = useThreadQueue(effectiveSelectedThreadId, Boolean(effectiveSelectedThreadId) && !isDraftSelected);
 
   const runList = useMemo<RunMeta[]>(() => {
     const items = runsQuery.data?.items ?? [];
@@ -627,7 +606,6 @@ export function AgentsThreads() {
 
   useEffect(() => {
     setRunMessages({});
-    setQueuedMessages([]);
     setMessagesError(null);
     pendingMessagesRef.current.clear();
     seenMessageIdsRef.current.clear();
@@ -665,10 +643,6 @@ export function AgentsThreads() {
       seenMessageIdsRef.current.set(runId, new Set(merged.map((m) => m.id)));
       if (areMessageListsEqual(existing, merged)) return prev;
       return { ...prev, [runId]: merged };
-    });
-    setQueuedMessages((prev) => {
-      if (!prev.some((item) => item.runId === runId)) return prev;
-      return prev.filter((item) => item.runId !== runId);
     });
   }, []);
 
@@ -736,33 +710,6 @@ export function AgentsThreads() {
         const buffered = pendingMessagesRef.current.get(runId) ?? [];
         const merged = mergeMessages(buffered, [mapped]);
         pendingMessagesRef.current.set(runId, merged);
-        const text = typeof mapped.content === 'string' ? mapped.content : String(mapped.content ?? '');
-        setQueuedMessages((prev) => {
-          const existingIndex = prev.findIndex((item) => item.id === mapped.id);
-          const nextEntry: PendingQueuedMessage = {
-            id: mapped.id,
-            runId,
-            createdAt: mapped.createdAtRaw,
-            text,
-          };
-          if (existingIndex === -1) {
-            const next = [...prev, nextEntry];
-            next.sort(compareQueuedMessages);
-            return next;
-          }
-          const existing = prev[existingIndex];
-          if (
-            existing.createdAt === nextEntry.createdAt &&
-            existing.text === nextEntry.text &&
-            existing.runId === nextEntry.runId
-          ) {
-            return prev;
-          }
-          const next = [...prev];
-          next[existingIndex] = nextEntry;
-          next.sort(compareQueuedMessages);
-          return next;
-        });
         return;
       }
 
@@ -1007,10 +954,11 @@ export function AgentsThreads() {
   const queuedMessagesForScreen = useMemo<QueuedMessageData[]>(
     () => {
       if (isDraftSelected) return [];
-      if (queuedMessages.length === 0) return [];
-      return queuedMessages.map((item) => ({ id: item.id, content: item.text }));
+      const items = queueQuery.data?.items ?? [];
+      if (items.length === 0) return [];
+      return items.map((item) => ({ id: item.id, content: item.text, kind: item.kind, enqueuedAt: item.enqueuedAt }));
     },
-    [isDraftSelected, queuedMessages],
+    [isDraftSelected, queueQuery.data],
   );
   const selectedContainer = useMemo(() => {
     if (!selectedContainerId || isDraftSelected) return null;
@@ -1031,8 +979,11 @@ export function AgentsThreads() {
       await threads.sendMessage(threadId, text);
       return { threadId };
     },
-    onSuccess: () => {
+    onSuccess: (_data, variables) => {
       setInputValue('');
+      if (variables?.threadId) {
+        queryClient.invalidateQueries({ queryKey: ['agents', 'threads', variables.threadId, 'queue'] }).catch(() => {});
+      }
     },
     onError: (error: unknown) => {
       notifyError(resolveSendMessageError(error));

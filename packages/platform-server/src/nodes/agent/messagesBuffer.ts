@@ -1,4 +1,5 @@
 import { AIMessage, HumanMessage, SystemMessage } from '@agyn/llm';
+import { randomUUID } from 'crypto';
 
 export type BufferMessage = AIMessage | HumanMessage | SystemMessage;
 
@@ -11,7 +12,7 @@ export interface MessagesBufferOptions {
   debounceMs?: number;
 }
 
-type QueuedItem = { msg: BufferMessage; tokenId?: string };
+type QueuedItem = { id: string; msg: BufferMessage; tokenId?: string; enqueuedAt: number };
 
 type ThreadState = {
   queue: QueuedItem[];
@@ -39,7 +40,7 @@ export class MessagesBuffer {
     const batch = Array.isArray(msgs) ? msgs : [msgs];
     if (!batch.length) return;
     const s = this.ensure(thread);
-    s.queue.push(...batch.map((m) => ({ msg: m })));
+    s.queue.push(...batch.map((m) => ({ id: randomUUID(), msg: m, enqueuedAt: now })));
     s.lastEnqueueAt = now;
   }
 
@@ -47,7 +48,7 @@ export class MessagesBuffer {
     const batch = Array.isArray(msgs) ? msgs : [msgs];
     if (!batch.length) return;
     const s = this.ensure(thread);
-    s.queue.push(...batch.map((m) => ({ msg: m, tokenId })));
+    s.queue.push(...batch.map((m) => ({ id: randomUUID(), msg: m, tokenId, enqueuedAt: now })));
     s.lastEnqueueAt = now;
   }
 
@@ -114,6 +115,12 @@ export class MessagesBuffer {
     if (!s || s.queue.length === 0) return;
     const drop = new Set(tokenIds);
     s.queue = s.queue.filter((q) => !q.tokenId || !drop.has(q.tokenId));
+  }
+
+  snapshot(thread: string): QueuedItem[] {
+    const state = this.threads.get(thread);
+    if (!state || state.queue.length === 0) return [];
+    return state.queue.map((item) => ({ ...item }));
   }
 
   private ensure(thread: string): ThreadState {

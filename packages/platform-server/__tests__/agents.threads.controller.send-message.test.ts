@@ -9,6 +9,7 @@ import { LiveGraphRuntime } from '../src/graph-core/liveGraph.manager';
 import { TemplateRegistry } from '../src/graph-core/templateRegistry';
 import type { ThreadStatus } from '@prisma/client';
 import { NotFoundException, ServiceUnavailableException } from '@nestjs/common';
+import { AIMessage, HumanMessage } from '@agyn/llm';
 
 const runEventsStub = {
   getRunSummary: async () => null,
@@ -19,7 +20,7 @@ const runEventsStub = {
 type SetupOptions = {
   thread?: { id: string; status: ThreadStatus; assignedAgentNodeId?: string | null } | null;
   latestAgentNodeId?: string | null;
-  nodes?: Array<{ id: string; template: string; instance: { status: string; invoke: ReturnType<typeof vi.fn> } }>;
+  nodes?: Array<{ id: string; template: string; instance: { status: string; invoke: ReturnType<typeof vi.fn>; getQueueSnapshot: ReturnType<typeof vi.fn> } }>;
   templateMeta?: Record<string, { kind: 'agent' | 'tool'; title: string }>;
 };
 
@@ -34,7 +35,7 @@ async function setup(options: SetupOptions = {}) {
   const nodes =
     options.nodes === undefined
       ? latestAgentNodeId
-        ? [{ id: latestAgentNodeId, template: 'agent', instance: { status: 'ready', invoke } }]
+        ? [{ id: latestAgentNodeId, template: 'agent', instance: { status: 'ready', invoke, getQueueSnapshot: vi.fn(() => []) } }]
         : []
       : options.nodes;
 
@@ -153,7 +154,13 @@ describe('AgentsThreadsController POST /api/agents/threads/:threadId/messages', 
   it('rejects when agent is not ready', async () => {
     const invoke = vi.fn(async () => 'queued');
     const { controller } = await setup({
-      nodes: [{ id: 'agent-1', template: 'agent', instance: { status: 'not_ready', invoke } }],
+      nodes: [
+        {
+          id: 'agent-1',
+          template: 'agent',
+          instance: { status: 'not_ready', invoke, getQueueSnapshot: vi.fn(() => []) },
+        },
+      ],
     });
     await expect(controller.sendThreadMessage('thread-1', { text: 'hello' })).rejects.toMatchObject({
       status: 503,
@@ -165,7 +172,13 @@ describe('AgentsThreadsController POST /api/agents/threads/:threadId/messages', 
     const invoke = vi.fn(async () => 'queued');
     const { controller, getLatestAgentNodeIdForThread, ensureAssignedAgent } = await setup({
       latestAgentNodeId: 'custom-agent-node',
-      nodes: [{ id: 'custom-agent-node', template: 'custom.agent', instance: { status: 'ready', invoke } }],
+      nodes: [
+        {
+          id: 'custom-agent-node',
+          template: 'custom.agent',
+          instance: { status: 'ready', invoke, getQueueSnapshot: vi.fn(() => []) },
+        },
+      ],
       templateMeta: { 'custom.agent': { kind: 'agent', title: 'Custom Agent' } },
     });
 
@@ -174,5 +187,100 @@ describe('AgentsThreadsController POST /api/agents/threads/:threadId/messages', 
     expect(getLatestAgentNodeIdForThread).toHaveBeenCalledWith('thread-1', { candidateNodeIds: ['custom-agent-node'] });
     expect(ensureAssignedAgent).toHaveBeenCalledWith('thread-1', 'custom-agent-node');
     expect(invoke).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('AgentsThreadsController GET /api/agents/threads/:threadId/queue', () => {
+  it('returns 404 when thread is missing', async () => {
+    const { controller } = await setup({ thread: null, latestAgentNodeId: null });
+    expect.assertions(2);
+    try {
+      await controller.getThreadQueue('missing-thread');
+      throw new Error('expected NotFoundException');
+    } catch (error) {
+      expect(error).toBeInstanceOf(NotFoundException);
+      expect((error as NotFoundException).getResponse()).toEqual({ error: 'thread_not_found' });
+    }
+  });
+
+  it('returns queue items in chronological order for the assigned agent', async () => {
+    const getQueueSnapshot = vi.fn(() => [
+      { id: 'q2', msg: AIMessage.fromText('latest'), enqueuedAt: 2000 },
+      { id: 'q1', msg: HumanMessage.fromText('first'), tokenId: 'token-1', enqueuedAt: 1000 },
+    ]);
+
+    const { controller, getLatestAgentNodeIdForThread } = await setup({
+      thread: { id: 'thread-1', status: 'open' as ThreadStatus, assignedAgentNodeId: 'agent-1' },
+      nodes: [
+        {
+          id: 'agent-1',
+          template: 'agent',
+          instance: { status: 'ready', invoke: vi.fn(), getQueueSnapshot },
+        },
+      ],
+    });
+
+    const result = await controller.getThreadQueue('thread-1');
+
+    expect(getLatestAgentNodeIdForThread).not.toHaveBeenCalled();
+    expect(result.items).toEqual([
+      {
+        id: 'q1',
+        kind: 'user',
+        text: 'first',
+        enqueuedAt: new Date(1000).toISOString(),
+        tokenId: 'token-1',
+      },
+      {
+        id: 'q2',
+        kind: 'assistant',
+        text: 'latest',
+        enqueuedAt: new Date(2000).toISOString(),
+      },
+    ]);
+  });
+
+  it('falls back to the latest agent when the assigned agent is unavailable', async () => {
+    const getQueueSnapshot = vi.fn(() => [{ id: 'q1', msg: HumanMessage.fromText('queued'), enqueuedAt: 500 }]);
+
+    const { controller, getLatestAgentNodeIdForThread } = await setup({
+      thread: { id: 'thread-1', status: 'open' as ThreadStatus, assignedAgentNodeId: 'agent-1' },
+      latestAgentNodeId: 'agent-2',
+      nodes: [
+        {
+          id: 'agent-2',
+          template: 'agent',
+          instance: { status: 'ready', invoke: vi.fn(), getQueueSnapshot },
+        },
+      ],
+    });
+
+    const result = await controller.getThreadQueue('thread-1');
+
+    expect(getLatestAgentNodeIdForThread).toHaveBeenCalledWith('thread-1', { candidateNodeIds: ['agent-2'] });
+    expect(result.items).toEqual([
+      {
+        id: 'q1',
+        kind: 'user',
+        text: 'queued',
+        enqueuedAt: new Date(500).toISOString(),
+      },
+    ]);
+  });
+
+  it('returns an empty list when no messages are queued', async () => {
+    const { controller } = await setup({
+      nodes: [
+        {
+          id: 'agent-1',
+          template: 'agent',
+          instance: { status: 'ready', invoke: vi.fn(), getQueueSnapshot: vi.fn(() => []) },
+        },
+      ],
+    });
+
+    const result = await controller.getThreadQueue('thread-1');
+
+    expect(result).toEqual({ items: [] });
   });
 });
