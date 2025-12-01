@@ -9,6 +9,11 @@ import { LiveGraphRuntime } from '../src/graph-core/liveGraph.manager';
 import { TemplateRegistry } from '../src/graph-core/templateRegistry';
 import type { ThreadStatus } from '@prisma/client';
 import { NotFoundException, ServiceUnavailableException } from '@nestjs/common';
+import { createPrismaStub, StubPrismaService } from './helpers/prisma.stub';
+import { ThreadsMetricsService } from '../src/agents/threads.metrics.service';
+import { SendMessageFunctionTool } from '../src/nodes/tools/send_message/send_message.tool';
+import { CallAgentLinkingService } from '../src/agents/call-agent-linking.service';
+import { EventsBusService } from '../src/events/events-bus.service';
 
 const runEventsStub = {
   getRunSummary: async () => null,
@@ -174,5 +179,103 @@ describe('AgentsThreadsController POST /api/agents/threads/:threadId/messages', 
     expect(getLatestAgentNodeIdForThread).toHaveBeenCalledWith('thread-1', { candidateNodeIds: ['custom-agent-node'] });
     expect(ensureAssignedAgent).toHaveBeenCalledWith('thread-1', 'custom-agent-node');
     expect(invoke).toHaveBeenCalledTimes(1);
+  });
+
+  it('persists run and message without forwarding for internal threads', async () => {
+    const prismaStub = createPrismaStub();
+    const prismaService = new StubPrismaService(prismaStub) as any;
+    const metricsService = new ThreadsMetricsService(prismaService as any);
+    const templateRegistryStub: Partial<TemplateRegistry> = {
+      getMeta: (template: string) => (template === 'agent.template' ? { kind: 'agent', title: 'Agent' } : undefined),
+    };
+    const graphRepoStub = {
+      initIfNeeded: async () => undefined,
+      get: async () => ({ name: 'main', version: 1, updatedAt: new Date().toISOString(), nodes: [], edges: [] }),
+      upsert: async () => ({ name: 'main', version: 1, updatedAt: new Date().toISOString(), nodes: [], edges: [] }),
+      upsertNodeState: async () => undefined,
+    };
+    let eventCounter = 0;
+    const runEventsStub: Partial<RunEventsService> = {
+      recordInvocationMessage: vi.fn(async () => ({ id: `event-${++eventCounter}` } as any)),
+    };
+    const callAgentLinkingImpl: Partial<CallAgentLinkingService> = {
+      buildInitialMetadata: vi.fn(() => ({
+        tool: 'call_agent',
+        parentThreadId: '',
+        childThreadId: '',
+        childRun: { id: null, status: 'queued', linkEnabled: false, latestMessageId: null },
+        childRunId: null,
+        childRunStatus: 'queued',
+        childRunLinkEnabled: false,
+        childMessageId: null,
+      })),
+      registerParentToolExecution: vi.fn(async () => null),
+      onChildRunStarted: vi.fn(async () => null),
+      onChildRunMessage: vi.fn(async () => null),
+      onChildRunCompleted: vi.fn(async () => null),
+      resolveLinkedAgentNodes: vi.fn(async () => ({})),
+    };
+    const eventsBusStub: Partial<EventsBusService> = {
+      emitThreadCreated: vi.fn(),
+      emitThreadUpdated: vi.fn(),
+      emitRunStatusChanged: vi.fn(),
+      emitMessageCreated: vi.fn(),
+      emitThreadMetrics: vi.fn(),
+      publishEvent: vi.fn(async () => undefined),
+    };
+    const persistence = new AgentsPersistenceService(
+      prismaService as any,
+      metricsService as any,
+      templateRegistryStub as TemplateRegistry,
+      graphRepoStub as any,
+      runEventsStub as RunEventsService,
+      callAgentLinkingImpl as CallAgentLinkingService,
+      eventsBusStub as EventsBusService,
+    );
+    const cleanupStub = { closeThreadWithCascade: vi.fn() } as unknown as ThreadCleanupCoordinator;
+    const runSignalsStub = { register: vi.fn(), activateTerminate: vi.fn(), clear: vi.fn() } as unknown as RunSignalsRegistry;
+
+    const sendToolRuntime = { getNodeInstance: vi.fn(() => undefined) } as Partial<LiveGraphRuntime>;
+    const sendTool = new SendMessageFunctionTool(prismaService as any, sendToolRuntime as unknown as LiveGraphRuntime);
+    let toolResult: string | undefined;
+    let resolveInvoke!: () => void;
+    const invokeCompleted = new Promise<void>((resolve) => {
+      resolveInvoke = resolve;
+    });
+    const agentInvoke = vi.fn(async (threadId: string, messages: unknown[]) => {
+      await persistence.beginRunThread(threadId, messages as any, 'agent-1');
+      toolResult = await sendTool.execute({ message: 'agent response' }, { threadId });
+      resolveInvoke();
+      return 'queued';
+    });
+
+    const agentNode = { id: 'agent-1', template: 'agent.template', instance: { status: 'ready', invoke: agentInvoke } };
+    const runtimeStub = {
+      getNodes: () => [agentNode],
+    } as unknown as LiveGraphRuntime;
+
+    const controller = new AgentsThreadsController(
+      persistence,
+      cleanupStub,
+      runEventsStub as RunEventsService,
+      runSignalsStub,
+      runtimeStub,
+      templateRegistryStub as TemplateRegistry,
+    );
+
+    const thread = await prismaStub.thread.create({
+      data: { alias: 'internal:thread', summary: 'Internal', assignedAgentNodeId: 'agent-1', channel: null, channelNodeId: null },
+    });
+
+    const response = await controller.sendThreadMessage(thread.id, { text: 'Hello internal' });
+    expect(response).toEqual({ ok: true });
+    await invokeCompleted;
+
+    expect(prismaStub._store.runs).toHaveLength(1);
+    expect(prismaStub._store.messages).toHaveLength(1);
+    expect(runEventsStub.recordInvocationMessage).toHaveBeenCalled();
+    expect(eventsBusStub.emitMessageCreated).toHaveBeenCalled();
+    expect(toolResult).toBe('message sent successfully');
+    expect(sendToolRuntime.getNodeInstance).not.toHaveBeenCalled();
   });
 });
