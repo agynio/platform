@@ -40,6 +40,7 @@ export function createRunEventsStub() {
     recordInjection: vi.fn(async () => makeEvent()),
     startLLMCall,
     completeLLMCall: vi.fn(async () => {}),
+    updateLLMCallContextCount: vi.fn(async () => {}),
     startToolExecution: vi.fn(async () => makeEvent()),
     completeToolExecution: vi.fn(async () => {}),
     recordSummarization: vi.fn(async () => makeEvent()),

@@ -1115,6 +1115,13 @@ export class RunEventsService {
     return event;
   }
 
+  async updateLLMCallContextCount(eventId: string, newContextItemCount: number): Promise<void> {
+    await this.prisma.lLMCall.update({
+      where: { eventId },
+      data: { newContextItemCount },
+    });
+  }
+
   async completeLLMCall(args: LLMCallCompleteArgs): Promise<void> {
     const tx = args.tx ?? this.prisma;
     const endedAt = args.endedAt ?? new Date();

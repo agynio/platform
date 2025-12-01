@@ -90,6 +90,8 @@ export type LLMState = {
     restrictionInjectionCount?: number;
     restrictionInjected?: boolean;
     lastLLMEventId?: string | null;
+    turnNewContextCountSoFar?: number;
+    toolRequestMessageIds?: string[];
   };
 };
 

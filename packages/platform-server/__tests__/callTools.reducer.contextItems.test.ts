@@ -174,11 +174,13 @@ describe('CallToolsLLMReducer context items', () => {
     expect(lastMessage).toBeInstanceOf(ResponseMessage);
     const responseMessage = lastMessage as ResponseMessage;
     expect(responseMessage.output.some((entry) => entry instanceof ToolCallMessage)).toBe(true);
-    expect(createContextItemsMock).toHaveBeenCalledTimes(1);
+    expect(createContextItemsMock).toHaveBeenCalledTimes(2);
     const firstAssistantIds = await (createContextItemsMock.mock.results[0]?.value as Promise<string[]>);
     expect(firstAssistantIds).toHaveLength(1);
     const firstAssistantId = firstAssistantIds[0];
-    expect(afterFirstModel.context.messageIds).toEqual(['ctx-user-1', firstAssistantId]);
+    const toolRequestIds = await (createContextItemsMock.mock.results[1]?.value as Promise<string[]>);
+    expect(toolRequestIds).toHaveLength(1);
+    expect(afterFirstModel.context.messageIds).toEqual(['ctx-user-1', firstAssistantId, toolRequestIds[0]]);
     const firstAssistantItem = createContextItemsMock.mock.calls[0][0][0] as any;
     expect(firstAssistantItem.role).toBe('assistant');
     expect(firstAssistantItem.contentText).toBeNull();
@@ -188,13 +190,16 @@ describe('CallToolsLLMReducer context items', () => {
     expect(reasoning.type).toBe('reasoning');
     expect(toolEntry.type).toBe('function_call');
     expect(toolEntry.name).toBe('alpha');
+    const toolRequestItem = createContextItemsMock.mock.calls[1][0][0] as any;
+    expect(toolRequestItem.role).toBe('tool');
+    expect(toolRequestItem.metadata?.phase).toBe('request');
 
     const afterTools = await callTools.invoke(afterFirstModel, ctx);
     expect(tool.execute).toHaveBeenCalledTimes(1);
-    expect(createContextItemsMock).toHaveBeenCalledTimes(2);
-    const toolContextIds = await (createContextItemsMock.mock.results[1]?.value as Promise<string[]>);
+    expect(createContextItemsMock).toHaveBeenCalledTimes(3);
+    const toolContextIds = await (createContextItemsMock.mock.results[2]?.value as Promise<string[]>);
     expect(toolContextIds).toHaveLength(1);
-    expect(afterTools.context.messageIds).toEqual(['ctx-user-1', firstAssistantId, toolContextIds[0]]);
+    expect(afterTools.context.messageIds).toEqual(['ctx-user-1', firstAssistantId, toolRequestIds[0], toolContextIds[0]]);
 
     const afterSecondModel = await callModel.invoke(afterTools, ctx);
 
@@ -202,15 +207,27 @@ describe('CallToolsLLMReducer context items', () => {
     const secondCallArgs = startLLMCallMock.mock.calls[1][0];
     expect(Array.isArray(secondCallArgs?.contextItemIds)).toBe(true);
 
-    expect(createContextItemsMock).toHaveBeenCalledTimes(3);
-    const secondAssistantIds = await (createContextItemsMock.mock.results[2]?.value as Promise<string[]>);
+    expect(createContextItemsMock).toHaveBeenCalledTimes(4);
+    const secondAssistantIds = await (createContextItemsMock.mock.results[3]?.value as Promise<string[]>);
     expect(secondAssistantIds).toHaveLength(1);
     const secondAssistantId = secondAssistantIds[0];
 
-    expect(secondCallArgs.contextItemIds).toEqual(['ctx-system-1', 'ctx-user-1', firstAssistantId, toolContextIds[0]]);
-    expect(afterSecondModel.context.messageIds).toEqual(['ctx-user-1', firstAssistantId, toolContextIds[0], secondAssistantId]);
+    expect(secondCallArgs.contextItemIds).toEqual([
+      'ctx-system-1',
+      'ctx-user-1',
+      firstAssistantId,
+      toolRequestIds[0],
+      toolContextIds[0],
+    ]);
+    expect(afterSecondModel.context.messageIds).toEqual([
+      'ctx-user-1',
+      firstAssistantId,
+      toolRequestIds[0],
+      toolContextIds[0],
+      secondAssistantId,
+    ]);
 
-    const secondAssistantItem = createContextItemsMock.mock.calls[2][0][0] as any;
+    const secondAssistantItem = createContextItemsMock.mock.calls[3][0][0] as any;
     expect(secondAssistantItem.role).toBe('assistant');
     expect(secondAssistantItem.contentText).toBe('done');
     expect(Array.isArray(secondAssistantItem.contentJson?.output)).toBe(true);

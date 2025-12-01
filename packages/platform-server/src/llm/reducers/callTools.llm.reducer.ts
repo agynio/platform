@@ -129,19 +129,39 @@ export class CallToolsLLMReducer extends Reducer<LLMState, LLMContext> {
       return state;
     }
 
+    const context = this.cloneContext(state.context);
+    let toolResultIds: string[] = [];
+    if (results.length > 0) {
+      const inputs = results.map((msg) => contextItemInputFromMessage(msg));
+      const created = await this.runEvents.createContextItems(inputs);
+      toolResultIds = created.filter((id): id is string => typeof id === 'string' && id.length > 0);
+      if (toolResultIds.length > 0) {
+        context.messageIds = [...context.messageIds, ...toolResultIds];
+      }
+    }
+
+    let turnNewContextCount = state.meta?.turnNewContextCountSoFar ?? 0;
+    if (toolResultIds.length > 0) {
+      turnNewContextCount += toolResultIds.length;
+      if (llmEventId) {
+        try {
+          await this.runEvents.updateLLMCallContextCount(llmEventId, turnNewContextCount);
+          await this.eventsBus.publishEvent(llmEventId, 'update');
+        } catch (err) {
+          this.logger.warn(
+            `Failed to update LLM call context count after tool results${this.format({ eventId: llmEventId, error: this.errorInfo(err) })}`,
+          );
+        }
+      }
+    }
+
     // Reset enforcement counters after successful tool execution
     const meta = {
       ...state.meta,
       restrictionInjectionCount: 0,
       restrictionInjected: false,
+      turnNewContextCountSoFar: turnNewContextCount,
     };
-
-    const context = this.cloneContext(state.context);
-    if (results.length > 0) {
-      const inputs = results.map((msg) => contextItemInputFromMessage(msg));
-      const created = await this.runEvents.createContextItems(inputs);
-      context.messageIds = [...context.messageIds, ...created];
-    }
 
     return { ...state, messages: [...state.messages, ...results], meta, context };
   }
