@@ -28,17 +28,25 @@ export class ManageFunctionTool extends FunctionTool<typeof ManageInvocationSche
   private _node?: ManageToolNode;
   private persistence?: AgentsPersistenceService;
   private readonly logger = new Logger(ManageFunctionTool.name);
-  private readonly eventsBus: EventsBusService;
 
   constructor(
     @Inject(AgentsPersistenceService) private readonly injectedPersistence: AgentsPersistenceService,
-    @Inject(EventsBusService) eventsBus: EventsBusService,
+    @Inject(EventsBusService) private readonly eventsBus: EventsBusService,
   ) {
     super();
-    this.eventsBus = eventsBus;
+    if (!eventsBus) {
+      throw new Error(
+        'Manage: EventsBusService not available; ensure EventsModule is imported and service exported',
+      );
+    }
   }
 
   init(node: ManageToolNode, options?: { persistence?: AgentsPersistenceService }) {
+    if (!this.eventsBus) {
+      throw new Error(
+        'Manage: EventsBusService not available; ensure EventsModule is imported and service exported',
+      );
+    }
     this._node = node;
     this.persistence = options?.persistence ?? this.injectedPersistence;
     return this;

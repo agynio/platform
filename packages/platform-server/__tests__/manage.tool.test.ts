@@ -40,6 +40,8 @@ class FakeAgent extends AgentNode {
 }
 
 const PARENT_THREAD_ID = '11111111-1111-1111-8111-111111111111';
+const EVENTS_BUS_MISSING_ERROR =
+  'Manage: EventsBusService not available; ensure EventsModule is imported and service exported';
 
 function buildCtx(overrides: Partial<LLMContext> = {}): LLMContext {
   return {
@@ -70,18 +72,8 @@ async function createHarness(options: { persistence?: AgentsPersistenceService; 
         ),
       },
       { provide: LLMProvisioner, useClass: StubLLMProvisioner },
-      {
-        provide: ManageFunctionTool,
-        useFactory: (agentsPersistence: AgentsPersistenceService, eventsBus: EventsBusService) =>
-          new ManageFunctionTool(agentsPersistence, eventsBus),
-        inject: [AgentsPersistenceService, EventsBusService],
-      },
-      {
-        provide: ManageToolNode,
-        useFactory: (tool: ManageFunctionTool, agentsPersistence: AgentsPersistenceService) =>
-          new ManageToolNode(tool, agentsPersistence),
-        inject: [ManageFunctionTool, AgentsPersistenceService],
-      },
+      ManageFunctionTool,
+      ManageToolNode,
       FakeAgent,
       { provide: AgentsPersistenceService, useValue: persistence },
       { provide: RunEventsService, useValue: { publishEvent: vi.fn() } as unknown as RunEventsService },
@@ -106,6 +98,56 @@ async function addWorker(module: Awaited<ReturnType<typeof createHarness>>['modu
 }
 
 describe('ManageTool unit', () => {
+  it('fails fast when EventsBusService is missing', async () => {
+    const module = await Test.createTestingModule({
+      providers: [
+        ManageFunctionTool,
+        {
+          provide: AgentsPersistenceService,
+          useValue: {
+            getOrCreateSubthreadByAlias: vi.fn(),
+            updateThreadChannelDescriptor: vi.fn(),
+          } as unknown as AgentsPersistenceService,
+        },
+        { provide: EventsBusService, useValue: undefined },
+      ],
+    }).compile();
+
+    try {
+      await expect(module.resolve(ManageFunctionTool)).rejects.toThrow(EVENTS_BUS_MISSING_ERROR);
+    } finally {
+      await module.close();
+    }
+  });
+
+  it('initializes when EventsBusService is provided', async () => {
+    const module = await Test.createTestingModule({
+      providers: [
+        ManageFunctionTool,
+        {
+          provide: AgentsPersistenceService,
+          useValue: {
+            getOrCreateSubthreadByAlias: vi.fn(),
+            updateThreadChannelDescriptor: vi.fn(),
+          } as unknown as AgentsPersistenceService,
+        },
+        {
+          provide: EventsBusService,
+          useValue: {
+            subscribeToMessageCreated: vi.fn(() => () => undefined),
+          } as unknown as EventsBusService,
+        },
+      ],
+    }).compile();
+
+    try {
+      const tool = await module.resolve(ManageFunctionTool);
+      expect(() => tool.init({} as ManageToolNode)).not.toThrow();
+    } finally {
+      await module.close();
+    }
+  });
+
   it('send_message: uses explicit threadAlias verbatim after trim', async () => {
     const getOrCreateSubthreadByAlias = vi.fn().mockResolvedValue('child-explicit');
     const updateThreadChannelDescriptor = vi.fn().mockResolvedValue(undefined);

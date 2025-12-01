@@ -111,11 +111,15 @@ const DEFAULT_TOKEN_FACTORIES = new Map<InjectionToken, () => unknown>([
   [ReferenceResolverService, () => createDefaultStub('ReferenceResolverService', { resolve: vi.fn(async () => ({ output: {} })) })],
   [
     ManageFunctionTool,
-    () =>
-      new ManageFunctionTool(
-        createDefaultStub('AgentsPersistenceService') as AgentsPersistenceService,
-        createDefaultStub('EventsBusService') as EventsBusService,
-      ),
+    () => {
+      const toolStub = createDefaultStub('ManageFunctionTool', {
+        execute: vi.fn(),
+      }) as Record<string, unknown>;
+      const initMock = vi.fn(() => toolStub);
+      Reflect.set(toolStub, 'init', initMock);
+      Reflect.set(toolStub, 'name', 'manage');
+      return toolStub;
+    },
   ],
 ]);
 
