@@ -4,7 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { QueryKey } from '@tanstack/react-query';
 import ThreadsScreen from '@/components/screens/ThreadsScreen';
 import type { Thread } from '@/components/ThreadItem';
-import type { ConversationMessage, Run as ConversationRun } from '@/components/Conversation';
+import type { ConversationMessage, Run as ConversationRun, QueuedMessageData, ReminderData } from '@/components/Conversation';
 import type { AutocompleteOption } from '@/components/AutocompleteInput';
 import { formatDuration } from '@/components/agents/runTimelineFormatting';
 import { notifyError } from '@/lib/notify';
@@ -59,6 +59,13 @@ type SocketMessage = {
 type SocketRun = { id: string; status: 'running' | 'finished' | 'terminated'; createdAt: string; updatedAt: string };
 
 type ConversationMessageWithMeta = ConversationMessage & { createdAtRaw: string };
+
+type PendingQueuedMessage = {
+  id: string;
+  runId: string;
+  createdAt: string;
+  text: string;
+};
 
 type ThreadDraft = {
   id: string;
@@ -282,6 +289,20 @@ function compareMessages(a: ConversationMessageWithMeta, b: ConversationMessageW
   return a.id.localeCompare(b.id);
 }
 
+function compareQueuedMessages(a: PendingQueuedMessage, b: PendingQueuedMessage): number {
+  const aTime = Date.parse(a.createdAt);
+  const bTime = Date.parse(b.createdAt);
+  if (Number.isFinite(aTime) && Number.isFinite(bTime)) {
+    const diff = aTime - bTime;
+    if (diff !== 0) return diff;
+  } else if (Number.isFinite(aTime)) {
+    return -1;
+  } else if (Number.isFinite(bTime)) {
+    return 1;
+  }
+  return a.id.localeCompare(b.id);
+}
+
 function mergeMessages(base: ConversationMessageWithMeta[], additions: ConversationMessageWithMeta[]): ConversationMessageWithMeta[] {
   if (additions.length === 0) return base;
   if (base.length === 0) return [...additions].sort(compareMessages);
@@ -344,6 +365,42 @@ function mapReminders(items: ThreadReminder[]): { id: string; title: string; tim
   }));
 }
 
+type ConversationReminderWithSort = ReminderData & { sortValue: number };
+
+function mapRemindersForConversation(items: ThreadReminder[]): ReminderData[] {
+  const mapped: ConversationReminderWithSort[] = items.map((reminder) => {
+    const sanitizedContent = sanitizeSummary(reminder.note ?? null);
+    const timestamp = Date.parse(reminder.at);
+    if (!Number.isFinite(timestamp)) {
+      return {
+        id: reminder.id,
+        content: sanitizedContent,
+        scheduledTime: '--:--',
+        sortValue: Number.POSITIVE_INFINITY,
+      } satisfies ConversationReminderWithSort;
+    }
+
+    const target = new Date(timestamp);
+    const scheduledTime = target.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
+    const date = `${target.getFullYear()}-${String(target.getMonth() + 1).padStart(2, '0')}-${String(target.getDate()).padStart(2, '0')}`;
+
+    return {
+      id: reminder.id,
+      content: sanitizedContent,
+      scheduledTime,
+      date,
+      sortValue: timestamp,
+    } satisfies ConversationReminderWithSort;
+  });
+
+  mapped.sort((a, b) => {
+    if (a.sortValue !== b.sortValue) return a.sortValue - b.sortValue;
+    return a.id.localeCompare(b.id);
+  });
+
+  return mapped.map(({ sortValue: _sort, ...rest }) => rest);
+}
+
 function mapContainers(items: ContainerItem[]): { id: string; name: string; status: 'running' | 'finished' }[] {
   return items.map((container) => ({
     id: container.containerId,
@@ -365,6 +422,7 @@ export function AgentsThreads() {
   const [drafts, setDrafts] = useState<ThreadDraft[]>([]);
   const [selectedThreadIdState, setSelectedThreadIdState] = useState<string | null>(params.threadId ?? null);
   const [runMessages, setRunMessages] = useState<Record<string, ConversationMessageWithMeta[]>>({});
+  const [queuedMessages, setQueuedMessages] = useState<PendingQueuedMessage[]>([]);
   const [messagesError, setMessagesError] = useState<string | null>(null);
   const [isRunsInfoCollapsed, setRunsInfoCollapsed] = useState(false);
   const [selectedContainerId, setSelectedContainerId] = useState<string | null>(null);
@@ -567,6 +625,7 @@ export function AgentsThreads() {
 
   useEffect(() => {
     setRunMessages({});
+    setQueuedMessages([]);
     setMessagesError(null);
     pendingMessagesRef.current.clear();
     seenMessageIdsRef.current.clear();
@@ -604,6 +663,10 @@ export function AgentsThreads() {
       seenMessageIdsRef.current.set(runId, new Set(merged.map((m) => m.id)));
       if (areMessageListsEqual(existing, merged)) return prev;
       return { ...prev, [runId]: merged };
+    });
+    setQueuedMessages((prev) => {
+      if (!prev.some((item) => item.runId === runId)) return prev;
+      return prev.filter((item) => item.runId !== runId);
     });
   }, []);
 
@@ -671,6 +734,33 @@ export function AgentsThreads() {
         const buffered = pendingMessagesRef.current.get(runId) ?? [];
         const merged = mergeMessages(buffered, [mapped]);
         pendingMessagesRef.current.set(runId, merged);
+        const text = typeof mapped.content === 'string' ? mapped.content : String(mapped.content ?? '');
+        setQueuedMessages((prev) => {
+          const existingIndex = prev.findIndex((item) => item.id === mapped.id);
+          const nextEntry: PendingQueuedMessage = {
+            id: mapped.id,
+            runId,
+            createdAt: mapped.createdAtRaw,
+            text,
+          };
+          if (existingIndex === -1) {
+            const next = [...prev, nextEntry];
+            next.sort(compareQueuedMessages);
+            return next;
+          }
+          const existing = prev[existingIndex];
+          if (
+            existing.createdAt === nextEntry.createdAt &&
+            existing.text === nextEntry.text &&
+            existing.runId === nextEntry.runId
+          ) {
+            return prev;
+          }
+          const next = [...prev];
+          next[existingIndex] = nextEntry;
+          next.sort(compareQueuedMessages);
+          return next;
+        });
         return;
       }
 
@@ -904,9 +994,21 @@ export function AgentsThreads() {
     () => (isDraftSelected ? [] : mapReminders(remindersQuery.data?.items ?? [])),
     [isDraftSelected, remindersQuery.data],
   );
+  const conversationRemindersForScreen = useMemo<ReminderData[]>(
+    () => (isDraftSelected ? [] : mapRemindersForConversation(remindersQuery.data?.items ?? [])),
+    [isDraftSelected, remindersQuery.data],
+  );
   const containersForScreen = useMemo(
     () => (isDraftSelected ? [] : mapContainers(containerItems)),
     [isDraftSelected, containerItems],
+  );
+  const queuedMessagesForScreen = useMemo<QueuedMessageData[]>(
+    () => {
+      if (isDraftSelected) return [];
+      if (queuedMessages.length === 0) return [];
+      return queuedMessages.map((item) => ({ id: item.id, content: item.text }));
+    },
+    [isDraftSelected, queuedMessages],
   );
   const selectedContainer = useMemo(() => {
     if (!selectedContainerId || isDraftSelected) return null;
@@ -1312,8 +1414,10 @@ export function AgentsThreads() {
         <ThreadsScreen
           threads={threadsForList}
           runs={conversationRuns}
+          queuedMessages={queuedMessagesForScreen}
           containers={containersForScreen}
           reminders={remindersForScreen}
+          conversationReminders={conversationRemindersForScreen}
           filterMode={filterMode}
           selectedThreadId={selectedThreadId ?? null}
           inputValue={inputValue}

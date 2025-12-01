@@ -1,11 +1,12 @@
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import React from 'react';
-import { render, screen, within } from '@testing-library/react';
+import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { MemoryRouter } from 'react-router-dom';
 import { AgentsThreads } from '../src/pages/AgentsThreads';
 import { TestProviders, server, abs } from './integration/testUtils';
+import { graphSocket } from '../src/lib/graph/socket';
 
 const navigateMock = vi.fn();
 
@@ -29,9 +30,11 @@ describe('AgentsThreads conversation view', () => {
   });
   afterAll(() => server.close());
 
+  const THREAD_ID = '00000000-0000-0000-0000-000000000001';
+
   function setupThreadData() {
     const thread = {
-      id: 'th1',
+      id: THREAD_ID,
       alias: 'th-a',
       summary: 'Thread A',
       status: 'open',
@@ -40,13 +43,13 @@ describe('AgentsThreads conversation view', () => {
       metrics: { remindersCount: 1, containersCount: 1, activity: 'working', runsCount: 1 },
     };
 
-    const runMeta = { id: 'run1', threadId: 'th1', status: 'finished', createdAt: t(1), updatedAt: t(2) };
+    const runMeta = { id: 'run1', threadId: THREAD_ID, status: 'finished', createdAt: t(1), updatedAt: t(2) };
 
-    const reminders = [{ id: 'rem1', threadId: 'th1', note: 'Follow up', at: t(50) }];
+    const reminders = [{ id: 'rem1', threadId: THREAD_ID, note: 'Follow up', at: t(50) }];
     const containers = [
       {
         containerId: 'cont-1',
-        threadId: 'th1',
+        threadId: THREAD_ID,
         image: 'ai:latest',
         name: 'cont-1-name',
         status: 'running',
@@ -79,12 +82,12 @@ describe('AgentsThreads conversation view', () => {
     server.use(
       http.get('/api/agents/threads', threadsHandler),
       http.get(abs('/api/agents/threads'), threadsHandler),
-      http.get('/api/agents/threads/th1', threadHandler),
-      http.get(abs('/api/agents/threads/th1'), threadHandler),
-      http.get('/api/agents/threads/th1/children', () => HttpResponse.json({ items: [] })),
-      http.get(abs('/api/agents/threads/th1/children'), () => HttpResponse.json({ items: [] })),
-      http.get('/api/agents/threads/th1/runs', runsHandler),
-      http.get(abs('/api/agents/threads/th1/runs'), runsHandler),
+      http.get(`/api/agents/threads/${THREAD_ID}`, threadHandler),
+      http.get(abs(`/api/agents/threads/${THREAD_ID}`), threadHandler),
+      http.get(`/api/agents/threads/${THREAD_ID}/children`, () => HttpResponse.json({ items: [] })),
+      http.get(abs(`/api/agents/threads/${THREAD_ID}/children`), () => HttpResponse.json({ items: [] })),
+      http.get(`/api/agents/threads/${THREAD_ID}/runs`, runsHandler),
+      http.get(abs(`/api/agents/threads/${THREAD_ID}/runs`), runsHandler),
       http.get('/api/agents/reminders', () => HttpResponse.json({ items: reminders })),
       http.get(abs('/api/agents/reminders'), () => HttpResponse.json({ items: reminders })),
       http.get('/api/containers', () => HttpResponse.json({ items: containers })),
@@ -122,18 +125,92 @@ describe('AgentsThreads conversation view', () => {
     expect(runInfo).toHaveTextContent('Finished');
     const viewRunButton = within(runInfo).getByRole('button', { name: /View Run/i });
     await user.click(viewRunButton);
-    expect(navigateMock).toHaveBeenCalledWith('/agents/threads/th1/runs/run1/timeline');
+    expect(navigateMock).toHaveBeenCalledWith(`/agents/threads/${THREAD_ID}/runs/run1/timeline`);
+  });
+
+  it('shows reminders and queued messages under pending, then moves queued items into runs when the run starts', async () => {
+    setupThreadData();
+
+    const user = userEvent.setup();
+
+    render(
+      <TestProviders>
+        <MemoryRouter>
+          <AgentsThreads />
+        </MemoryRouter>
+      </TestProviders>,
+    );
+
+    const threadRow = await screen.findByText('Thread A');
+    await user.click(threadRow);
+
+    const conversation = await screen.findByTestId('conversation');
+    await within(conversation).findByText('Follow up');
+    const pendingLabel = within(conversation).getByText('PENDING');
+    const pendingRoot = pendingLabel.parentElement?.parentElement as HTMLElement | null;
+    expect(pendingRoot).not.toBeNull();
+    if (!pendingRoot) throw new Error('Pending section not rendered');
+
+    expect(within(pendingRoot).getByText('Follow up')).toBeInTheDocument();
+    expect(within(pendingRoot).queryByText('Pending reply')).toBeNull();
+
+    const bufferedPayload = {
+      threadId: THREAD_ID,
+      message: {
+        id: 'msg-buffer',
+        kind: 'assistant' as const,
+        text: 'Pending reply',
+        source: {},
+        createdAt: t(55),
+        runId: 'run-late',
+      },
+    };
+
+    const messageListeners = (graphSocket as any).messageCreatedListeners as Set<(payload: typeof bufferedPayload) => void>;
+    await act(async () => {
+      for (const listener of messageListeners) {
+        listener(bufferedPayload);
+      }
+    });
+
+    expect(within(pendingRoot).getByText('Pending reply')).toBeInTheDocument();
+    expect(
+      within(conversation)
+        .queryAllByTestId('conversation-message')
+        .some((node) => within(node).queryByText('Pending reply')),
+    ).toBe(false);
+
+    const runPayload = {
+      threadId: THREAD_ID,
+      run: { id: 'run-late', status: 'running' as const, createdAt: t(56), updatedAt: t(57) },
+    };
+    const runListeners = (graphSocket as any).runStatusListeners as Set<(payload: typeof runPayload) => void>;
+    await act(async () => {
+      for (const listener of runListeners) {
+        listener(runPayload);
+      }
+    });
+
+    await waitFor(() => {
+      expect(within(pendingRoot).queryByText('Pending reply')).toBeNull();
+    });
+
+    await waitFor(() => {
+      const nodes = within(conversation).queryAllByTestId('conversation-message');
+      const found = nodes.some((node) => within(node).queryByText('Pending reply'));
+      expect(found).toBe(true);
+    });
   });
 
   it('loads subthreads when expanding a thread', async () => {
     setupThreadData();
 
     const childThread = {
-      id: 'th-child',
+      id: '00000000-0000-0000-0000-000000000002',
       alias: 'th-child',
       summary: 'Child thread',
       status: 'open',
-      parentId: 'th1',
+      parentId: THREAD_ID,
       createdAt: t(3),
       metrics: { remindersCount: 0, containersCount: 0, activity: 'waiting', runsCount: 0 },
       agentTitle: 'Agent Junior',
@@ -142,8 +219,8 @@ describe('AgentsThreads conversation view', () => {
     const childrenHandler = vi.fn(() => HttpResponse.json({ items: [childThread] }));
 
     server.use(
-      http.get('/api/agents/threads/th1/children', () => childrenHandler()),
-      http.get(abs('/api/agents/threads/th1/children'), () => childrenHandler()),
+      http.get(`/api/agents/threads/${THREAD_ID}/children`, () => childrenHandler()),
+      http.get(abs(`/api/agents/threads/${THREAD_ID}/children`), () => childrenHandler()),
     );
 
     const user = userEvent.setup();

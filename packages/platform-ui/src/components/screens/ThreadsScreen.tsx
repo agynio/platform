@@ -7,7 +7,7 @@ import { IconButton } from '../IconButton';
 import { ThreadsList } from '../ThreadsList';
 import type { Thread } from '../ThreadItem';
 import { SegmentedControl } from '../SegmentedControl';
-import { Conversation, type Run } from '../Conversation';
+import { Conversation, type Run, type QueuedMessageData, type ReminderData } from '../Conversation';
 import { Popover, PopoverTrigger, PopoverContent } from '../ui/popover';
 import { StatusIndicator } from '../StatusIndicator';
 import { AutosizeTextarea } from '../AutosizeTextarea';
@@ -19,6 +19,8 @@ interface ThreadsScreenProps {
   runs: Run[];
   containers: { id: string; name: string; status: 'running' | 'finished' }[];
   reminders: { id: string; title: string; time: string }[];
+  queuedMessages?: QueuedMessageData[];
+  conversationReminders?: ReminderData[];
   filterMode: 'all' | 'open' | 'closed';
   selectedThreadId: string | null;
   selectedThread?: Thread;
@@ -56,6 +58,8 @@ export default function ThreadsScreen({
   runs,
   containers,
   reminders,
+  queuedMessages = [],
+  conversationReminders = [],
   filterMode,
   selectedThreadId,
   selectedThread,
@@ -428,7 +432,13 @@ export default function ThreadsScreen({
         </div>
 
         <div className="min-h-0 min-w-0 flex-1 overflow-hidden">
-          <Conversation runs={runs} className="h-full rounded-none border-none" collapsed={isRunsInfoCollapsed} />
+          <Conversation
+            runs={runs}
+            queuedMessages={queuedMessages}
+            reminders={conversationReminders}
+            className="h-full rounded-none border-none"
+            collapsed={isRunsInfoCollapsed}
+          />
         </div>
 
         {renderComposer(!onSendMessage || !selectedThreadId || isSendMessagePending)}

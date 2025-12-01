@@ -113,7 +113,11 @@ describe('AgentsThreads realtime updates', () => {
       }
     });
 
-    expect(within(conversation).queryByText('Buffered message')).toBeNull();
+    const pendingLabel = await within(conversation).findByText('PENDING');
+    const pendingRoot = pendingLabel.parentElement?.parentElement as HTMLElement | null;
+    expect(pendingRoot).not.toBeNull();
+    if (!pendingRoot) throw new Error('Missing pending section');
+    expect(within(pendingRoot).getByText('Buffered message')).toBeInTheDocument();
 
     const runPayload = {
       threadId: 'th1',
@@ -126,6 +130,7 @@ describe('AgentsThreads realtime updates', () => {
       }
     });
 
+    await waitFor(() => expect(within(conversation).queryByText('PENDING')).toBeNull());
     await waitFor(() => expect(within(conversation).getByText('Buffered message')).toBeInTheDocument());
   });
 });
