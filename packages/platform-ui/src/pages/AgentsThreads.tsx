@@ -376,6 +376,7 @@ function mapRemindersForConversation(items: ThreadReminder[]): ReminderData[] {
         id: reminder.id,
         content: sanitizedContent,
         scheduledTime: '--:--',
+        utcTs: reminder.at,
         sortValue: Number.POSITIVE_INFINITY,
       } satisfies ConversationReminderWithSort;
     }
@@ -389,6 +390,7 @@ function mapRemindersForConversation(items: ThreadReminder[]): ReminderData[] {
       content: sanitizedContent,
       scheduledTime,
       date,
+      utcTs: reminder.at,
       sortValue: timestamp,
     } satisfies ConversationReminderWithSort;
   });

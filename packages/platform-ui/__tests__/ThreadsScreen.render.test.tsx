@@ -21,7 +21,13 @@ const queuedMessages = [
 ];
 
 const conversationReminders = [
-  { id: 'rem-1', content: 'Reminder gamma', scheduledTime: '09:00', date: '2024-06-02' },
+  {
+    id: 'rem-1',
+    content: 'Reminder gamma',
+    scheduledTime: '09:00',
+    date: '2024-06-02',
+    utcTs: '2024-06-02T09:00:00Z',
+  },
 ];
 
 function renderScreen(overrides: Partial<ThreadsScreenProps> = {}) {
