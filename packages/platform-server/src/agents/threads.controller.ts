@@ -41,7 +41,6 @@ import { HumanMessage } from '@agyn/llm';
 import { TemplateRegistry } from '../graph-core/templateRegistry';
 import { isAgentLiveNode, isAgentRuntimeInstance } from './agent-node.utils';
 import { randomUUID } from 'node:crypto';
-import type { Response } from 'express';
 
 // Avoid runtime import of Prisma in tests; enumerate allowed values
 export const RunMessageTypeValues: ReadonlyArray<RunMessageType> = ['input', 'injected', 'output'];
@@ -456,7 +455,7 @@ export class AgentsThreadsController {
   }
 
   @Post('threads')
-  async createThread(@Body() body: CreateThreadBodyDto, @Res({ passthrough: true }) res: Response) {
+  async createThread(@Body() body: CreateThreadBodyDto, @Res({ passthrough: true }) res: unknown) {
     const agentNodeId = body.agentNodeId.trim();
     const summary = body.summary?.trim() ?? '';
 
@@ -483,9 +482,11 @@ export class AgentsThreadsController {
     try {
       const threadId = await this.persistence.getOrCreateThreadByAlias('manual', alias, summary);
       await this.persistence.ensureAssignedAgent(threadId, agentNodeId);
-      const responseCandidate = res as { setHeader?: (name: string, value: string) => void };
-      if (typeof responseCandidate.setHeader === 'function') {
-        responseCandidate.setHeader('Location', `/api/agents/threads/${threadId}`);
+      if (res && typeof res === 'object') {
+        const candidate = res as { setHeader?: (name: string, value: string) => void };
+        if (typeof candidate.setHeader === 'function') {
+          candidate.setHeader('Location', `/api/agents/threads/${threadId}`);
+        }
       }
       return { id: threadId } as const;
     } catch (error) {

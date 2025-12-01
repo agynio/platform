@@ -193,12 +193,17 @@ function resolveCreateThreadError(error: unknown): string {
 }
 
 class DraftSendError extends Error {
-  constructor(
-    public readonly stage: 'create' | 'send',
-    public readonly originalError: unknown,
-    public readonly threadId?: string,
-  ) {
+  public readonly stage: 'create' | 'send';
+  public readonly originalError: unknown;
+  public readonly threadId?: string;
+
+  constructor(stage: 'create' | 'send', originalError: unknown, threadId?: string) {
     super(stage === 'create' ? 'draft_create_failed' : 'draft_send_failed');
+    this.stage = stage;
+    this.originalError = originalError;
+    this.threadId = threadId;
+    this.name = 'DraftSendError';
+    Object.setPrototypeOf(this, DraftSendError.prototype);
   }
 }
 
