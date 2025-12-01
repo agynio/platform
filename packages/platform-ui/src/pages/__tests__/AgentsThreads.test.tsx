@@ -767,5 +767,171 @@ describe('AgentsThreads page', () => {
       expect(draftThreadRequests).toHaveLength(0);
       expect(draftRunsRequests).toHaveLength(0);
     });
+
+    it('creates a thread and sends the initial message for a draft conversation', async () => {
+      const user = userEvent.setup();
+      const alertMock = vi.spyOn(window, 'alert').mockImplementation(() => {});
+
+      const existingThread = makeThread();
+      const newThreadId = 'thread-new-1';
+      const newThread = makeThread({
+        id: newThreadId,
+        alias: 'alias-new-1',
+        summary: 'New conversation with Agent Nimbus',
+        createdAt: t(100),
+      });
+
+      const threadsList: ThreadMock[] = [existingThread];
+
+      server.use(
+        http.get('*/api/agents/threads', () => HttpResponse.json({ items: threadsList })),
+        http.get(abs('/api/agents/threads'), () => HttpResponse.json({ items: threadsList })),
+        http.get('*/api/agents/threads/:threadId', ({ params }) => {
+          if (params.threadId === existingThread.id) {
+            return HttpResponse.json(existingThread);
+          }
+          if (params.threadId === newThreadId) {
+            return HttpResponse.json(newThread);
+          }
+          return new HttpResponse(null, { status: 404 });
+        }),
+        http.get(abs('/api/agents/threads/:threadId'), ({ params }) => {
+          if (params.threadId === existingThread.id) {
+            return HttpResponse.json(existingThread);
+          }
+          if (params.threadId === newThreadId) {
+            return HttpResponse.json(newThread);
+          }
+          return new HttpResponse(null, { status: 404 });
+        }),
+        http.get('*/api/agents/threads/:threadId/runs', () => HttpResponse.json({ items: [] })),
+        http.get(abs('/api/agents/threads/:threadId/runs'), () => HttpResponse.json({ items: [] })),
+        http.get('*/api/agents/threads/:threadId/children', () => HttpResponse.json({ items: [] })),
+        http.get(abs('/api/agents/threads/:threadId/children'), () => HttpResponse.json({ items: [] })),
+        http.options('*/api/agents/threads/:threadId/children', () => new HttpResponse(null, { status: 200 })),
+        http.options(abs('/api/agents/threads/:threadId/children'), () => new HttpResponse(null, { status: 200 })),
+        http.get('*/api/agents/reminders', () => HttpResponse.json({ items: [] })),
+        http.get(abs('/api/agents/reminders'), () => HttpResponse.json({ items: [] })),
+        http.options('*/api/agents/reminders', () => new HttpResponse(null, { status: 200 })),
+        http.options(abs('/api/agents/reminders'), () => new HttpResponse(null, { status: 200 })),
+        http.get('*/api/containers', () => HttpResponse.json({ items: [] })),
+        http.get(abs('/api/containers'), () => HttpResponse.json({ items: [] })),
+      );
+
+      registerGraphAgents([{ id: 'agent-1', template: 'agent.template.one', title: 'Agent Nimbus' }]);
+
+      const createRequests: Array<{ agentNodeId: string; summary?: string }> = [];
+      const sendRequests: Array<{ threadId: string; body: unknown }> = [];
+
+      const handleCreate = async ({ request }: { request: Request }) => {
+        const payload = (await request.json()) as { agentNodeId: string; summary?: string };
+        createRequests.push(payload);
+        if (!threadsList.some((item) => item.id === newThread.id)) {
+          threadsList.push(newThread);
+        }
+        return HttpResponse.json({ id: newThreadId });
+      };
+
+      const handleSend = async ({ params, request }: { params: Record<string, string | undefined>; request: Request }) => {
+        const body = await request.json();
+        sendRequests.push({ threadId: params.threadId as string, body });
+        return HttpResponse.json({ ok: true });
+      };
+
+      server.use(
+        http.post('*/api/agents/threads', handleCreate),
+        http.post(abs('/api/agents/threads'), handleCreate),
+        http.post('*/api/agents/threads/:threadId/messages', handleSend),
+        http.post(abs('/api/agents/threads/:threadId/messages'), handleSend),
+      );
+
+      renderAt('/agents/threads');
+
+      await user.click(await screen.findByRole('button', { name: 'New thread' }));
+
+      const searchInput = await screen.findByPlaceholderText('Search agents...');
+      const option = await screen.findByRole('button', { name: 'Agent Nimbus' });
+      await user.click(option);
+
+      await waitFor(() => {
+        expect(searchInput).toHaveValue('Agent Nimbus');
+      });
+
+      const textarea = await screen.findByPlaceholderText('Type a message...');
+      await user.type(textarea, 'Hello draft message');
+
+      const sendButton = screen.getByTitle('Send message');
+      act(() => {
+        fireEvent.click(sendButton);
+      });
+
+      await waitFor(() => {
+        expect(createRequests).toHaveLength(1);
+      });
+      expect(createRequests[0]).toMatchObject({ agentNodeId: 'agent-1' });
+
+      await waitFor(() => {
+        expect(sendRequests).toHaveLength(1);
+      });
+      expect(sendRequests[0]).toMatchObject({ threadId: newThreadId, body: { text: 'Hello draft message' } });
+
+      expect(await screen.findByRole('heading', { name: newThread.summary })).toBeInTheDocument();
+
+      const updatedTextarea = await screen.findByPlaceholderText('Type a message...');
+      const updatedSendButton = screen.getByTitle('Send message');
+
+      await waitFor(() => {
+        expect(updatedTextarea).toHaveValue('');
+        expect(updatedSendButton).not.toBeDisabled();
+      });
+      expect(alertMock).not.toHaveBeenCalled();
+    });
+
+    it('guards draft send attempts without a recipient', async () => {
+      const user = userEvent.setup();
+      vi.spyOn(window, 'alert').mockImplementation(() => {});
+      const thread = makeThread();
+      registerThreadScenario({ thread, runs: [] });
+      registerGraphAgents([]);
+
+      const createRequests: Array<Record<string, unknown>> = [];
+      const messageRequests: Array<Record<string, unknown>> = [];
+
+      const handleCreate = async ({ request }: { request: Request }) => {
+        createRequests.push(await request.json());
+        return HttpResponse.json({ id: 'thread-unexpected' });
+      };
+
+      const handleSend = async ({ request }: { request: Request }) => {
+        messageRequests.push(await request.json());
+        return HttpResponse.json({ ok: true });
+      };
+
+      server.use(
+        http.post('*/api/agents/threads', handleCreate),
+        http.post(abs('/api/agents/threads'), handleCreate),
+        http.post('*/api/agents/threads/:threadId/messages', handleSend),
+        http.post(abs('/api/agents/threads/:threadId/messages'), handleSend),
+      );
+
+      renderAt('/agents/threads');
+
+      await user.click(await screen.findByRole('button', { name: 'New thread' }));
+
+      const textarea = await screen.findByPlaceholderText('Type a message...');
+      await user.type(textarea, 'Message without recipient');
+
+      const sendButton = screen.getByTitle('Send message');
+      sendButton.disabled = false;
+      sendButton.removeAttribute('disabled');
+
+      fireEvent.click(sendButton);
+
+      await new Promise((resolve) => setTimeout(resolve, 5));
+
+      expect(createRequests).toHaveLength(0);
+      expect(messageRequests).toHaveLength(0);
+      expect(textarea).toHaveValue('Message without recipient');
+    });
   });
 });
