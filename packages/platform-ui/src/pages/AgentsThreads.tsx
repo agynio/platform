@@ -140,6 +140,9 @@ const sendMessageErrorMap: Record<string, string> = {
   send_failed: 'Failed to send the message. Please retry.',
 };
 
+const DRAFT_RECIPIENT_REQUIRED_ERROR = 'Select an agent before sending.';
+const DRAFT_CREATION_FAILED_ERROR = 'Failed to create the thread. Please try again.';
+
 function resolveSendMessageError(error: unknown): string {
   if (error && typeof error === 'object') {
     const apiError = error as ApiError;
@@ -934,7 +937,21 @@ export function AgentsThreads() {
       notifyError(resolveSendMessageError(error));
     },
   });
-  const { mutate: sendThreadMessage, isPending: isSendMessagePending } = sendMessageMutation;
+  const { mutate: sendThreadMessage, mutateAsync: sendThreadMessageAsync, isPending: isSendMessagePending } = sendMessageMutation;
+
+  const createThreadMutation = useMutation({
+    mutationFn: async ({ agentNodeId, summary }: { agentNodeId: string; summary?: string }) => {
+      return threads.create({ agentNodeId, summary });
+    },
+    onError: (error: unknown) => {
+      const message =
+        error instanceof Error && error.message && error.message.trim().length > 0
+          ? error.message
+          : DRAFT_CREATION_FAILED_ERROR;
+      notifyError(message);
+    },
+  });
+  const { mutateAsync: createThread, isPending: isCreateThreadPending } = createThreadMutation;
 
   const toggleThreadStatusMutation = useMutation({
     mutationFn: async ({ id, next }: { id: string; next: 'open' | 'closed' }) => {
@@ -1116,6 +1133,7 @@ export function AgentsThreads() {
   const threadsIsLoading = threadsQuery.isFetching;
   const isThreadsEmpty = !threadsQuery.isLoading && threadsForList.length === 0;
   const detailIsLoading = runsQuery.isLoading || threadDetailQuery.isLoading;
+  const isSendActionPending = isSendMessagePending || isCreateThreadPending;
 
   const handleOpenContainerTerminal = useCallback(
     (containerId: string) => {
@@ -1272,10 +1290,10 @@ export function AgentsThreads() {
   }, [selectedThreadId, rootNodes, childrenState, navigate]);
 
   const handleSendMessage = useCallback(
-    (value: string, context: { threadId: string | null }) => {
+    async (value: string, context: { threadId: string | null }) => {
       if (!context.threadId) return;
-      if (isDraftThreadId(context.threadId)) return;
-      if (isSendMessagePending) return;
+      if (isSendMessagePending || isCreateThreadPending) return;
+
       const trimmed = value.trim();
       if (trimmed.length === 0) {
         notifyError('Enter a message before sending.');
@@ -1285,9 +1303,53 @@ export function AgentsThreads() {
         notifyError('Messages are limited to 8000 characters.');
         return;
       }
+
+      if (isDraftThreadId(context.threadId)) {
+        const draft = draftsRef.current.find((item) => item.id === context.threadId);
+        if (!draft) {
+          notifyError(DRAFT_CREATION_FAILED_ERROR);
+          return;
+        }
+        if (!draft.agentNodeId) {
+          notifyError(DRAFT_RECIPIENT_REQUIRED_ERROR);
+          return;
+        }
+        try {
+          const created = await createThread({
+            agentNodeId: draft.agentNodeId,
+            summary: draft.agentTitle ?? undefined,
+          });
+          const newThreadId = created?.id;
+          if (!newThreadId) {
+            notifyError(DRAFT_CREATION_FAILED_ERROR);
+            return;
+          }
+
+          setDrafts((prev) => prev.filter((item) => item.id !== draft.id));
+          setSelectedThreadIdState(newThreadId);
+          lastNonDraftIdRef.current = newThreadId;
+          navigate(`/agents/threads/${encodeURIComponent(newThreadId)}`);
+
+          await queryClient.invalidateQueries({ queryKey: ['agents', 'threads'] });
+          await sendThreadMessageAsync({ threadId: newThreadId, text: trimmed });
+          await queryClient.invalidateQueries({ queryKey: ['agents', 'threads', 'by-id', newThreadId] });
+        } catch {
+          // Errors are surfaced via mutation onError handlers.
+        }
+        return;
+      }
+
       sendThreadMessage({ threadId: context.threadId, text: trimmed });
     },
-    [isSendMessagePending, sendThreadMessage],
+    [
+      createThread,
+      isCreateThreadPending,
+      isSendMessagePending,
+      navigate,
+      queryClient,
+      sendThreadMessage,
+      sendThreadMessageAsync,
+    ],
   );
 
   const handleToggleRunsInfoCollapsed = useCallback((collapsed: boolean) => {
@@ -1329,7 +1391,7 @@ export function AgentsThreads() {
           onToggleRunsInfoCollapsed={handleToggleRunsInfoCollapsed}
           onInputValueChange={handleInputValueChange}
           onSendMessage={handleSendMessage}
-          isSendMessagePending={isSendMessagePending}
+          isSendMessagePending={isSendActionPending}
           onThreadsLoadMore={threadsHasMore ? handleThreadsLoadMore : undefined}
           onThreadExpand={handleThreadExpand}
           onToggleThreadStatus={handleToggleThreadStatus}

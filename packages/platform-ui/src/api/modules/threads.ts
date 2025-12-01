@@ -32,6 +32,8 @@ export const threads = {
     asData<void>(http.patch(`/api/agents/threads/${encodeURIComponent(id)}`, { status })),
   sendMessage: (id: string, text: string) =>
     asData<{ ok: true }>(http.post(`/api/agents/threads/${encodeURIComponent(id)}/messages`, { text })),
+  create: (params: { agentNodeId: string; summary?: string }) =>
+    asData<{ id: string }>(http.post(`/api/agents/threads`, params)),
   metrics: (id: string) =>
     asData<ThreadMetrics>(http.get(`/api/agents/threads/${encodeURIComponent(id)}/metrics`)),
   reminders: async (id: string, take: number = 200) => {
