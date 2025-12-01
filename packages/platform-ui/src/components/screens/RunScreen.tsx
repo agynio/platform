@@ -240,7 +240,7 @@ export default function RunScreen({
       );
     }
 
-    return <RunEventDetails event={selectedEvent} />;
+    return <RunEventDetails event={selectedEvent} runId={runId} />;
   };
 
   return (
