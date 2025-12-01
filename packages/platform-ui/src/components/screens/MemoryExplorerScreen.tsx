@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, type KeyboardEvent } from 'react';
-import { Save, Plus, FilePlus2, FolderPlus, Trash2, RefreshCw } from 'lucide-react';
+import { Plus, RefreshCw, Save, Trash2 } from 'lucide-react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { MemoryTree } from '@/components/memory/MemoryTree';
@@ -7,7 +7,6 @@ import { MarkdownInput } from '@/components/MarkdownInput';
 import { Button } from '@/components/Button';
 import { IconButton } from '@/components/IconButton';
 import { Input } from '@/components/Input';
-import { Textarea } from '@/components/Textarea';
 import { Badge } from '@/components/Badge';
 import {
   AlertDialog,
@@ -35,23 +34,6 @@ interface MemoryExplorerScreenProps {
   onThreadChange?: (threadId: string) => void;
 }
 
-type AppendIntent = 'append' | 'create';
-
-interface AppendPayload {
-  path: string;
-  content: string;
-  intent: AppendIntent;
-}
-
-interface EnsureLocationPayload {
-  path: string;
-  focusAfter?: boolean;
-}
-
-interface DeletePayload {
-  path: string;
-}
-
 export default function MemoryExplorerScreen({
   nodeId,
   scope,
@@ -76,6 +58,8 @@ export default function MemoryExplorerScreen({
 
   const lastSyncedRef = useRef<{ path: string; content: string } | null>(null);
 
+  const documentStateRef = useRef<{ exists: boolean }>({ exists: false });
+
   const [editorValue, setEditorValue] = useState('');
   const [editorDirty, setEditorDirty] = useState(false);
   const resetEditor = useCallback(() => {
@@ -83,17 +67,22 @@ export default function MemoryExplorerScreen({
     setEditorDirty(false);
   }, []);
 
-  const [appendValue, setAppendValue] = useState('');
-  const [newLocationName, setNewLocationName] = useState('');
-  const [newDocumentName, setNewDocumentName] = useState('');
-  const [newDocumentContent, setNewDocumentContent] = useState('');
+  const editorValueRef = useRef('');
+  useEffect(() => {
+    editorValueRef.current = editorValue;
+  }, [editorValue]);
 
-  const resetFormState = useCallback(() => {
-    setAppendValue('');
-    setNewLocationName('');
-    setNewDocumentName('');
-    setNewDocumentContent('');
-  }, []);
+  const [isAddingChild, setIsAddingChild] = useState(false);
+  const [newChildName, setNewChildName] = useState('');
+  const childInputRef = useRef<HTMLInputElement | null>(null);
+  useEffect(() => {
+    if (!isAddingChild) return;
+    setNewChildName('');
+    const timer = setTimeout(() => {
+      childInputRef.current?.focus();
+    }, 10);
+    return () => clearTimeout(timer);
+  }, [isAddingChild]);
 
   const focusPath = useCallback(
     (path: string, options: { notify?: boolean } = {}) => {
@@ -109,13 +98,15 @@ export default function MemoryExplorerScreen({
       selectedPathRef.current = normalized;
       setSelectedPath(normalized);
       lastSyncedRef.current = null;
+      documentStateRef.current.exists = false;
       resetEditor();
-      resetFormState();
+      setIsAddingChild(false);
+      setNewChildName('');
       if (shouldNotify) {
         onPathChange?.(normalized);
       }
     },
-    [onPathChange, resetEditor, resetFormState],
+    [onPathChange, resetEditor],
   );
 
   useEffect(() => {
@@ -165,12 +156,14 @@ export default function MemoryExplorerScreen({
         setEditorDirty(false);
       }
       lastSyncedRef.current = { path, content: incoming };
+      documentStateRef.current.exists = true;
     } else if (readQuery.isError) {
       const path = selectedPathRef.current;
       lastSyncedRef.current = { path, content: '' };
       if (!editorDirty) {
         resetEditor();
       }
+      documentStateRef.current.exists = false;
     }
   }, [editorDirty, readQuery.data, readQuery.isError, threadMissing, resetEditor]);
 
@@ -207,78 +200,106 @@ export default function MemoryExplorerScreen({
     },
     [effectiveThreadId, nodeId, queryClient, scope],
   );
+  const documentExists = statQuery.data?.exists ?? false;
+  const documentHasSubdocs = statQuery.data?.hasSubdocs ?? false;
+  const documentLength = statQuery.data?.contentLength ?? 0;
 
-  const appendMutation = useMutation({
-    mutationFn: async ({ path, content }: AppendPayload) => {
-      const normalized = normalizeMemoryPath(path);
-      return memoryApi.append(nodeId, scope, effectiveThreadId, normalized, content);
-    },
-    onSuccess: (_data, { path, content, intent }) => {
-      const normalized = normalizeMemoryPath(path);
-      invalidateTree();
-      invalidatePathQueries(normalized);
-      invalidateParentQueries(normalized);
+  useEffect(() => {
+    documentStateRef.current.exists = documentExists;
+  }, [documentExists]);
 
-      if (intent === 'append') {
-        notifySuccess('Content appended');
-        setAppendValue('');
-      } else {
-        notifySuccess('Document created');
-        focusPath(normalized, { notify: true });
-        setEditorValue(content);
-        setEditorDirty(false);
-        lastSyncedRef.current = { path: normalized, content };
-        setNewDocumentName('');
-        setNewDocumentContent('');
+  const documentStatus = useMemo(() => {
+    if (threadMissing) return 'Thread required';
+    if (statQuery.isLoading) return 'Loading path…';
+    if (statQuery.error) return 'Failed to load path info';
+    if (!documentExists) return 'Document missing';
+    if (documentHasSubdocs && documentLength > 0) return 'Document with subdocuments';
+    if (documentHasSubdocs) return 'Has subdocuments';
+    return 'Document';
+  }, [documentExists, documentHasSubdocs, documentLength, statQuery.error, statQuery.isLoading, threadMissing]);
+
+  const readBusy = readQuery.isLoading || readQuery.isFetching;
+  const isRootPath = selectedPathRef.current === '/';
+
+  const saveMutation = useMutation({
+    mutationFn: async () => {
+      const path = normalizeMemoryPath(selectedPathRef.current);
+      if (path === '/') {
+        throw new Error('Root document cannot be edited');
       }
-    },
-    onError: (error: unknown, { intent }) => {
-      notifyError((error as Error)?.message || (intent === 'append' ? 'Failed to append content' : 'Failed to create document'));
-    },
-  });
+      const nextContent = editorValueRef.current;
+      const lastSynced = lastSyncedRef.current?.content ?? '';
+      const exists = documentStateRef.current.exists;
 
-  const updateMutation = useMutation({
-    mutationFn: async ({ oldContent, newContent }: { oldContent: string; newContent: string }) =>
-      memoryApi.update(nodeId, scope, effectiveThreadId, selectedPathRef.current, oldContent, newContent),
-    onSuccess: () => {
-      notifySuccess('Document saved');
-      setEditorDirty(false);
+      if (!exists) {
+        await memoryApi.ensureDir(nodeId, scope, effectiveThreadId, path);
+        if (nextContent.length > 0) {
+          await memoryApi.append(nodeId, scope, effectiveThreadId, path, nextContent);
+        }
+        return { status: 'created' as const };
+      }
+
+      if (nextContent === lastSynced) {
+        return { status: 'unchanged' as const };
+      }
+
+      if (lastSynced.length === 0) {
+        await memoryApi.ensureDir(nodeId, scope, effectiveThreadId, path);
+        await memoryApi.append(nodeId, scope, effectiveThreadId, path, nextContent);
+        return { status: 'saved' as const };
+      }
+
+      const result = await memoryApi.update(nodeId, scope, effectiveThreadId, path, lastSynced, nextContent);
+      if (result.replaced === 0 && nextContent !== lastSynced) {
+        throw new Error('Document changed remotely. Refresh and try again.');
+      }
+      return { status: 'saved' as const };
+    },
+    onSuccess: (outcome) => {
+      if (outcome.status === 'created') {
+        notifySuccess('Document created');
+      } else if (outcome.status === 'saved') {
+        notifySuccess('Document saved');
+      }
       const currentPath = selectedPathRef.current;
+      documentStateRef.current.exists = true;
+      lastSyncedRef.current = { path: currentPath, content: editorValueRef.current };
+      setEditorDirty(false);
+      invalidateTree();
       invalidatePathQueries(currentPath);
       invalidateParentQueries(currentPath);
-      lastSyncedRef.current = { path: currentPath, content: editorValue };
     },
     onError: (error: unknown) => {
       notifyError((error as Error)?.message || 'Failed to save document');
     },
   });
 
-  const ensureDirMutation = useMutation({
-    mutationFn: async ({ path }: EnsureLocationPayload) => {
-      const normalized = normalizeMemoryPath(path);
-      return memoryApi.ensureDir(nodeId, scope, effectiveThreadId, normalized);
+  const createChildMutation = useMutation({
+    mutationFn: async (targetPath: string) => {
+      const normalized = normalizeMemoryPath(targetPath);
+      await memoryApi.ensureDir(nodeId, scope, effectiveThreadId, normalized);
+      return normalized;
     },
-    onSuccess: (_data, { path, focusAfter }) => {
-      const normalized = normalizeMemoryPath(path);
-      notifySuccess('Location ensured');
+    onSuccess: (normalized) => {
+      notifySuccess('Subdocument added');
       invalidateTree();
-      invalidatePathQueries(normalized);
       invalidateParentQueries(normalized);
-      setNewLocationName('');
-      if (focusAfter) {
-        focusPath(normalized, { notify: true });
-      }
+      invalidatePathQueries(normalized, { includeRead: false });
+      focusPath(normalized, { notify: true });
     },
     onError: (error: unknown) => {
-      notifyError((error as Error)?.message || 'Failed to ensure location');
+      notifyError((error as Error)?.message || 'Failed to add subdocument');
     },
   });
 
   const deleteMutation = useMutation({
-    mutationFn: async ({ path }: DeletePayload) => memoryApi.delete(nodeId, scope, effectiveThreadId, normalizeMemoryPath(path)),
-    onSuccess: (_data, { path }) => {
-      const normalized = normalizeMemoryPath(path);
-      notifySuccess('Location deleted');
+    mutationFn: async (targetPath: string) => {
+      const normalized = normalizeMemoryPath(targetPath);
+      return memoryApi.delete(nodeId, scope, effectiveThreadId, normalized);
+    },
+    onSuccess: (_result, removedPath) => {
+      const normalized = normalizeMemoryPath(removedPath);
+      notifySuccess('Document removed');
       invalidateTree();
       invalidatePathQueries(normalized);
       invalidateParentQueries(normalized);
@@ -286,57 +307,51 @@ export default function MemoryExplorerScreen({
       focusPath(parent, { notify: true });
     },
     onError: (error: unknown) => {
-      notifyError((error as Error)?.message || 'Failed to delete path');
+      notifyError((error as Error)?.message || 'Failed to delete document');
     },
   });
 
-  const documentExists = statQuery.data?.exists ?? false;
-  const documentHasSubdocs = statQuery.data?.hasSubdocs ?? false;
-  const documentLength = statQuery.data?.contentLength ?? 0;
-
-  const documentStatus = useMemo(() => {
-    if (statQuery.isLoading) return 'Loading path…';
-    if (statQuery.error) return 'Failed to load path info';
-    if (!documentExists) return 'Missing document';
-    if (documentHasSubdocs && documentLength > 0) return 'Document with subdocuments';
-    if (documentHasSubdocs) return 'Location with subdocuments';
-    return 'Document';
-  }, [documentExists, documentHasSubdocs, documentLength, statQuery.error, statQuery.isLoading]);
-
-  const readBusy = readQuery.isLoading || readQuery.isFetching;
-  const saveDisabled = threadMissing || !documentExists || updateMutation.isPending || readBusy || readQuery.isError || !editorDirty;
-  const appendDisabled = threadMissing || appendMutation.isPending || appendValue.trim().length === 0;
-  const createLocationDisabled = threadMissing || ensureDirMutation.isPending || newLocationName.trim().length === 0;
-  const createDocumentDisabled = threadMissing || appendMutation.isPending || newDocumentName.trim().length === 0 || newDocumentContent.trim().length === 0;
-  const deleteDisabled = threadMissing || deleteMutation.isPending || selectedPathRef.current === '/';
+  const saveDisabled = threadMissing || isRootPath || saveMutation.isPending || readBusy || !editorDirty;
+  const addDisabled = threadMissing || createChildMutation.isPending;
+  const addConfirmDisabled = threadMissing || createChildMutation.isPending || newChildName.trim().length === 0;
+  const deleteDisabled = threadMissing || isRootPath || deleteMutation.isPending || !documentExists;
 
   const handleEditorChange = (event: ChangeEvent<HTMLTextAreaElement>) => {
-    setEditorValue(event.target.value);
+    const nextValue = event.target.value;
+    editorValueRef.current = nextValue;
+    setEditorValue(nextValue);
     setEditorDirty(true);
   };
 
-  const handleAppend = () => {
-    if (appendDisabled) return;
-    appendMutation.mutate({ path: selectedPathRef.current, content: appendValue, intent: 'append' });
+  const handleSave = () => {
+    if (saveDisabled) return;
+    saveMutation.mutate();
   };
 
-  const handleCreateDocument = () => {
-    if (createDocumentDisabled) return;
-    const trimmedName = newDocumentName.trim();
+  const handleAddChildSubmit = () => {
+    if (addConfirmDisabled) return;
+    const trimmedName = newChildName.trim();
+    if (!trimmedName) return;
     const targetPath = joinMemoryPath(selectedPathRef.current, trimmedName);
-    appendMutation.mutate({ path: targetPath, content: newDocumentContent, intent: 'create' });
+    createChildMutation.mutate(targetPath);
   };
 
-  const handleCreateLocation = (focusAfter: boolean) => {
-    if (createLocationDisabled) return;
-    const trimmedName = newLocationName.trim();
-    const targetPath = joinMemoryPath(selectedPathRef.current, trimmedName);
-    ensureDirMutation.mutate({ path: targetPath, focusAfter });
+  const handleAddChildKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      handleAddChildSubmit();
+    } else if (event.key === 'Escape') {
+      event.preventDefault();
+      if (!createChildMutation.isPending) {
+        setIsAddingChild(false);
+        setNewChildName('');
+      }
+    }
   };
 
   const handleDelete = () => {
     if (deleteDisabled) return;
-    deleteMutation.mutate({ path: selectedPathRef.current });
+    deleteMutation.mutate(selectedPathRef.current);
   };
 
   const handleThreadSubmit = useCallback(() => {
@@ -421,14 +436,12 @@ export default function MemoryExplorerScreen({
               variant="primary"
               size="sm"
               onClick={() => {
-                if (readQuery.data) {
-                  updateMutation.mutate({ oldContent: readQuery.data.content, newContent: editorValue });
-                }
+                handleSave();
               }}
               disabled={saveDisabled}
             >
               <Save className="mr-2 h-4 w-4" />
-              Save changes
+              Save
             </Button>
           </div>
         </div>
@@ -468,152 +481,100 @@ export default function MemoryExplorerScreen({
                 <div className="flex h-full items-center justify-center text-center text-sm text-[var(--agyn-text-subtle)]">
                   Choose a thread to edit per-thread memory content.
                 </div>
-              ) : (
+            ) : (
                 <div className="flex h-full flex-col gap-6">
                   <section className="space-y-3">
-                    <div className="flex items-center justify-between gap-4">
+                    <div className="flex flex-wrap items-center justify-between gap-4">
                       <h2 className="text-lg font-semibold text-[var(--agyn-dark)]">Document</h2>
-                      <div className="flex items-center gap-2">
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          onClick={() => {
-                            if (readQuery.data) {
-                              setEditorValue(readQuery.data.content);
-                              setEditorDirty(false);
-                            }
-                          }}
-                          disabled={threadMissing || readBusy || readQuery.isError}
-                        >
-                          Reset
+                      <div className="flex flex-wrap items-center gap-3">
+                        <Button type="button" variant="primary" size="sm" onClick={handleSave} disabled={saveDisabled}>
+                          <Save className="mr-2 h-4 w-4" />
+                          Save
                         </Button>
+                        {isAddingChild ? (
+                          <div className="flex flex-wrap items-center gap-2">
+                            <Input
+                              ref={childInputRef}
+                              value={newChildName}
+                              onChange={(event) => setNewChildName(event.target.value)}
+                              onKeyDown={handleAddChildKeyDown}
+                              placeholder="Child name"
+                              className="h-8 w-44"
+                              disabled={createChildMutation.isPending}
+                            />
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="secondary"
+                              onClick={handleAddChildSubmit}
+                              disabled={addConfirmDisabled}
+                            >
+                              <Plus className="mr-2 h-4 w-4" />
+                              Add
+                            </Button>
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => {
+                                if (createChildMutation.isPending) return;
+                                setIsAddingChild(false);
+                                setNewChildName('');
+                              }}
+                              disabled={createChildMutation.isPending}
+                            >
+                              Cancel
+                            </Button>
+                          </div>
+                        ) : (
+                          <Button
+                            type="button"
+                            variant="secondary"
+                            size="sm"
+                            onClick={() => setIsAddingChild(true)}
+                            disabled={addDisabled}
+                          >
+                            <Plus className="mr-2 h-4 w-4" />
+                            Add subdocument
+                          </Button>
+                        )}
+                        <AlertDialog>
+                          <AlertDialogTrigger asChild>
+                            <Button type="button" variant="danger" size="sm" disabled={deleteDisabled}>
+                              <Trash2 className="mr-2 h-4 w-4" />
+                              Delete
+                            </Button>
+                          </AlertDialogTrigger>
+                          <AlertDialogContent>
+                            <AlertDialogHeader>
+                              <AlertDialogTitle>Delete “{selectedPathRef.current}”?</AlertDialogTitle>
+                              <AlertDialogDescription>
+                                This removes the document and all nested entries. This action cannot be undone.
+                              </AlertDialogDescription>
+                            </AlertDialogHeader>
+                            <AlertDialogFooter>
+                              <AlertDialogCancel disabled={deleteMutation.isPending}>Cancel</AlertDialogCancel>
+                              <AlertDialogAction
+                                className="bg-[var(--agyn-status-failed)] text-white hover:bg-[var(--agyn-status-failed)]/90"
+                                onClick={handleDelete}
+                                disabled={deleteMutation.isPending}
+                              >
+                                Delete
+                              </AlertDialogAction>
+                            </AlertDialogFooter>
+                          </AlertDialogContent>
+                        </AlertDialog>
                       </div>
                     </div>
                     <MarkdownInput
                       value={editorValue}
                       onChange={handleEditorChange}
-                      disabled={threadMissing || readBusy || readQuery.isError}
+                      disabled={threadMissing || readBusy}
                       className="min-h-[360px]"
                       helperText={readQuery.error ? (readQuery.error as Error).message : undefined}
                     />
-                  </section>
-
-                  <section className="space-y-2 rounded-xl border border-[var(--agyn-border-subtle)] bg-[var(--agyn-bg-light)] p-4">
-                    <div className="flex items-center justify-between">
-                      <h3 className="text-sm font-semibold text-[var(--agyn-dark)]">Append content</h3>
-                      <Button type="button" size="sm" variant="secondary" onClick={handleAppend} disabled={appendDisabled}>
-                        <Plus className="mr-2 h-4 w-4" />
-                        Append
-                      </Button>
-                    </div>
-                    <Textarea
-                      value={appendValue}
-                      onChange={(event) => setAppendValue(event.target.value)}
-                      placeholder="Content to append to the current document"
-                      disabled={threadMissing || appendMutation.isPending}
-                      className="min-h-[140px]"
-                    />
-                  </section>
-
-                  <section className="grid gap-6 rounded-xl border border-[var(--agyn-border-subtle)] bg-[var(--agyn-bg-light)] p-4 md:grid-cols-2">
-                    <div className="space-y-3">
-                      <h3 className="text-sm font-semibold text-[var(--agyn-dark)]">Create child location</h3>
-                      <Input
-                        value={newLocationName}
-                        onChange={(event) => setNewLocationName(event.target.value)}
-                        placeholder="Location name"
-                        disabled={ensureDirMutation.isPending || threadMissing}
-                      />
-                      <div className="flex flex-wrap gap-2">
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="secondary"
-                          onClick={() => handleCreateLocation(false)}
-                          disabled={createLocationDisabled}
-                        >
-                          <FolderPlus className="mr-2 h-4 w-4" />
-                          Create location
-                        </Button>
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="outline"
-                          onClick={() => handleCreateLocation(true)}
-                          disabled={createLocationDisabled}
-                        >
-                          <FolderPlus className="mr-2 h-4 w-4" />
-                          Create & open
-                        </Button>
-                      </div>
-                    </div>
-                    <div className="space-y-3">
-                      <h3 className="text-sm font-semibold text-[var(--agyn-dark)]">Create child document</h3>
-                      <Input
-                        value={newDocumentName}
-                        onChange={(event) => setNewDocumentName(event.target.value)}
-                        placeholder="Document name"
-                        disabled={appendMutation.isPending || threadMissing}
-                      />
-                      <Textarea
-                        value={newDocumentContent}
-                        onChange={(event) => setNewDocumentContent(event.target.value)}
-                        placeholder="Initial content"
-                        disabled={appendMutation.isPending || threadMissing}
-                        className="min-h-[160px]"
-                      />
-                      <Button type="button" size="sm" variant="secondary" onClick={handleCreateDocument} disabled={createDocumentDisabled}>
-                        <FilePlus2 className="mr-2 h-4 w-4" />
-                        Create document
-                      </Button>
-                    </div>
-                  </section>
-
-                  <section className="rounded-xl border border-[var(--agyn-border-subtle)] bg-[var(--agyn-bg-light)] p-4">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <h3 className="text-sm font-semibold text-[var(--agyn-dark)]">Delete subtree</h3>
-                        <p className="text-xs text-[var(--agyn-text-subtle)]">
-                          Remove the selected document and all nested entries. This action cannot be undone.
-                        </p>
-                      </div>
-                      <AlertDialog>
-                        <AlertDialogTrigger asChild>
-                          <Button
-                            type="button"
-                            variant="danger"
-                            size="sm"
-                            disabled={deleteDisabled}
-                          >
-                            <Trash2 className="mr-2 h-4 w-4" />
-                            Delete
-                          </Button>
-                        </AlertDialogTrigger>
-                        <AlertDialogContent>
-                          <AlertDialogHeader>
-                            <AlertDialogTitle>Delete “{selectedPathRef.current}”?</AlertDialogTitle>
-                            <AlertDialogDescription>
-                              This will permanently remove the document and its subdocuments. This action cannot be undone.
-                            </AlertDialogDescription>
-                          </AlertDialogHeader>
-                          <AlertDialogFooter>
-                            <AlertDialogCancel disabled={deleteMutation.isPending}>Cancel</AlertDialogCancel>
-                            <AlertDialogAction
-                              className="bg-[var(--agyn-status-failed)] text-white hover:bg-[var(--agyn-status-failed)]/90"
-                              onClick={handleDelete}
-                              disabled={deleteMutation.isPending}
-                            >
-                              Delete
-                            </AlertDialogAction>
-                          </AlertDialogFooter>
-                        </AlertDialogContent>
-                      </AlertDialog>
-                    </div>
-                    {selectedPathRef.current === '/' ? (
-                      <div className="mt-2 text-xs text-[var(--agyn-text-subtle)]">
-                        The root path cannot be deleted.
-                      </div>
+                    {isRootPath ? (
+                      <div className="text-xs text-[var(--agyn-text-subtle)]">The root document cannot be edited or removed.</div>
                     ) : null}
                   </section>
                 </div>

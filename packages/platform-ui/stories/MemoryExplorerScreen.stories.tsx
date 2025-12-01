@@ -1,24 +1,20 @@
 import { useEffect, useMemo } from 'react';
+import { vi } from 'vitest';
 import type { Meta, StoryObj } from '@storybook/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
 import MemoryExplorerScreen from '../src/components/screens/MemoryExplorerScreen';
 import { withMainLayout } from './decorators/withMainLayout';
-import { memoryApi } from '../src/api/modules/memory';
 import { memoryPathParent, normalizeMemoryPath } from '../src/components/memory/path';
 
 type MemoryExplorerProps = React.ComponentProps<typeof MemoryExplorerScreen>;
 
-type DirectoryNode = { kind: 'dir' };
-type DocumentNode = { kind: 'doc'; content: string };
-type MemoryNode = DirectoryNode | DocumentNode;
-
-type MemoryEntries = Map<string, MemoryNode>;
-type MemoryChildren = Map<string, Set<string>>;
-
-type MemoryApiMock = {
-  install: () => () => void;
+type MemoryNode = {
+  content: string;
+  children: Set<string>;
 };
+
+type MemoryStore = Map<string, MemoryNode>;
 
 const meta: Meta<typeof MemoryExplorerScreen> = {
   title: 'Screens/Memory Explorer',
@@ -33,205 +29,168 @@ const meta: Meta<typeof MemoryExplorerScreen> = {
 export default meta;
 
 type Story = StoryObj<typeof MemoryExplorerScreen>;
+const createNode = (content: string = ''): MemoryNode => ({ content, children: new Set() });
 
-function createMemoryApiMock(): MemoryApiMock {
-  const entries: MemoryEntries = new Map();
-  const children: MemoryChildren = new Map();
+const childName = (path: string): string => {
+  const segments = path.split('/').filter(Boolean);
+  return segments[segments.length - 1] ?? '/';
+};
 
-  const ensureChildrenSet = (path: string) => {
-    if (!children.has(path)) {
-      children.set(path, new Set());
-    }
-    return children.get(path)!;
-  };
+const appendContent = (current: string, addition: string): string => {
+  if (!current) return addition;
+  if (!addition) return current;
+  const needsSeparator = !current.endsWith('\n') && !addition.startsWith('\n');
+  return needsSeparator ? `${current}\n${addition}` : `${current}${addition}`;
+};
 
-  const ensureDir = (inputPath: string): void => {
-    const path = normalizeMemoryPath(inputPath);
-    const existing = entries.get(path);
-    if (existing && existing.kind === 'doc') {
-      throw new Error(`Cannot convert document to directory: ${path}`);
-    }
-    if (!existing) {
-      entries.set(path, { kind: 'dir' });
-    }
-    ensureChildrenSet(path);
+const normalizeForStore = (path: string): string => normalizeMemoryPath(path);
+
+const ensureNode = (store: MemoryStore, rawPath: string): MemoryNode => {
+  const path = normalizeForStore(rawPath);
+  const existing = store.get(path);
+  if (existing) return existing;
+  const node = createNode();
+  store.set(path, node);
+  if (path !== '/') {
     const parent = memoryPathParent(path);
-    if (parent !== path) {
-      ensureDir(parent);
-      ensureChildrenSet(parent).add(path);
-    }
-  };
+    const parentNode = ensureNode(store, parent);
+    parentNode.children.add(path);
+  }
+  return node;
+};
 
-  const setDocument = (inputPath: string, content: string): void => {
-    const path = normalizeMemoryPath(inputPath);
-    const parent = memoryPathParent(path);
-    ensureDir(parent);
-    entries.set(path, { kind: 'doc', content });
-    ensureChildrenSet(parent).add(path);
-  };
+const removeNode = (store: MemoryStore, rawPath: string): number => {
+  const path = normalizeForStore(rawPath);
+  if (path === '/') return 0;
+  const node = store.get(path);
+  if (!node) return 0;
+  let removed = 1;
+  for (const child of Array.from(node.children)) {
+    removed += removeNode(store, child);
+  }
+  store.delete(path);
+  const parent = memoryPathParent(path);
+  if (parent !== path) {
+    const parentNode = store.get(parent);
+    parentNode?.children.delete(path);
+  }
+  return removed;
+};
 
-  const removeNode = (inputPath: string): number => {
-    const path = normalizeMemoryPath(inputPath);
-    if (path === '/') {
-      return 0;
-    }
-    const node = entries.get(path);
-    if (!node) {
-      return 0;
-    }
-    let removed = 1;
-    if (node.kind === 'dir') {
-      const childPaths = Array.from(ensureChildrenSet(path));
-      for (const child of childPaths) {
-        removed += removeNode(child);
-      }
-      children.delete(path);
-    }
-    entries.delete(path);
-    const parent = memoryPathParent(path);
-    if (parent !== path) {
-      ensureChildrenSet(parent).delete(path);
-    }
-    return removed;
-  };
+const sortChildren = (paths: string[]): string[] =>
+  [...paths].sort((a, b) => childName(a).localeCompare(childName(b), undefined, { sensitivity: 'base' }));
 
-  const listEntries: typeof memoryApi.list = async (_nodeId, _scope, _threadId, inputPath) => {
-    const path = normalizeMemoryPath(inputPath);
-    const childPaths = Array.from(children.get(path) ?? []);
-    const items = childPaths.map((childPath) => {
-      const node = entries.get(childPath);
-      const name = childPath === '/' ? '/' : childPath.split('/').filter(Boolean).pop() ?? '/';
-      const hasSubdocs = node?.kind === 'dir' ? (children.get(childPath)?.size ?? 0) > 0 : false;
-      return { name, hasSubdocs };
-    });
-    return { items };
-  };
+const seedStore = (): MemoryStore => {
+  const store: MemoryStore = new Map();
+  ensureNode(store, '/').content = '# Memory Explorer\n\nSelect any entry to edit its markdown.';
 
-  const statPath: typeof memoryApi.stat = async (_nodeId, _scope, _threadId, inputPath) => {
-    const path = normalizeMemoryPath(inputPath);
-    const node = entries.get(path);
-    if (!node) {
-      return { exists: false, hasSubdocs: false, contentLength: 0 };
-    }
-    if (node.kind === 'dir') {
-      const childCount = children.get(path)?.size ?? 0;
-      return { exists: true, hasSubdocs: childCount > 0, contentLength: 0 };
-    }
-    return { exists: true, hasSubdocs: false, contentLength: node.content.length };
-  };
+  ensureNode(store, '/projects').content = '## Projects overview\n- Alpha initiative\n- Beta expansions';
+  ensureNode(store, '/projects/alpha').content = '### Alpha initiative\nFocus: retrieval quality and summarization fidelity.';
+  ensureNode(store, '/projects/alpha/brief.md').content = '# Alpha brief\n\n- Capture user feedback\n- Draft evaluation rubric';
+  ensureNode(store, '/projects/alpha/journal.md').content = '## Alpha journal\n\nDay 14 – iterated on explorer UI.';
+  ensureNode(store, '/projects/beta').content = '### Beta experiments\nCoordinating integration test rollouts.';
+  ensureNode(store, '/projects/beta/launch.md').content = '# Beta launch checklist\n1. Validate connectors\n2. Publish release notes';
 
-  const readPath: typeof memoryApi.read = async (_nodeId, _scope, _threadId, inputPath) => {
-    const path = normalizeMemoryPath(inputPath);
-    const node = entries.get(path);
-    if (!node) {
-      throw new Error('Document not found');
-    }
-    if (node.kind !== 'doc') {
-      throw new Error('Path is a directory');
-    }
-    return { content: node.content };
-  };
+  ensureNode(store, '/archives');
+  ensureNode(store, '/archives/2023').content = 'Highlights from 2023 stored here.';
+  ensureNode(store, '/archives/2023/summary.md').content = '# 2023 Summary\n- Memory explorer prototype shipped\n- Captured stakeholder feedback';
 
-  const appendToPath: typeof memoryApi.append = async (_nodeId, _scope, _threadId, inputPath, data) => {
-    const path = normalizeMemoryPath(inputPath);
-    const parent = memoryPathParent(path);
-    ensureDir(parent);
-    const existing = entries.get(path);
-    if (existing && existing.kind === 'dir') {
-      throw new Error('Cannot append to a directory');
-    }
-    if (existing && existing.kind === 'doc') {
-      existing.content = existing.content ? `${existing.content}\n${data}` : data;
-    } else {
-      entries.set(path, { kind: 'doc', content: data });
-      ensureChildrenSet(parent).add(path);
-    }
-  };
+  ensureNode(store, '/notes.md').content = '# General notes\n- Align explorer UI with latest spec\n- Record learnings in markdown';
 
-  const updatePath: typeof memoryApi.update = async (_nodeId, _scope, _threadId, inputPath, _oldStr, newStr) => {
-    const path = normalizeMemoryPath(inputPath);
-    const parent = memoryPathParent(path);
-    ensureDir(parent);
-    const node = entries.get(path);
-    if (node && node.kind === 'dir') {
-      throw new Error('Cannot update a directory');
-    }
-    entries.set(path, { kind: 'doc', content: newStr });
-    ensureChildrenSet(parent).add(path);
-    return { replaced: 1 };
-  };
+  return store;
+};
 
-  const ensureDirPath: typeof memoryApi.ensureDir = async (_nodeId, _scope, _threadId, inputPath) => {
-    ensureDir(inputPath);
-  };
+let memoryStore: MemoryStore = seedStore();
 
-  const deletePath: typeof memoryApi.delete = async (_nodeId, _scope, _threadId, inputPath) => {
-    const path = normalizeMemoryPath(inputPath);
-    if (path === '/') {
-      throw new Error('Cannot delete root');
-    }
-    const removed = removeNode(path);
-    return { removed };
-  };
+const listEntries = async (_nodeId: string, _scope: string, _threadId: string | undefined, rawPath: string) => {
+  const path = normalizeForStore(rawPath);
+  const node = memoryStore.get(path);
+  if (!node) return { items: [] };
+  const items = sortChildren(Array.from(node.children)).map((childPath) => {
+    const child = memoryStore.get(childPath);
+    return {
+      name: childName(childPath),
+      hasSubdocs: Boolean(child && child.children.size > 0),
+    };
+  });
+  return { items };
+};
 
-  // seed initial tree content
-  ensureDir('/');
-  ensureDir('/projects');
-  ensureDir('/projects/alpha');
-  ensureDir('/projects/beta');
-  ensureDir('/archives');
-  ensureDir('/archives/2023');
-  ensureDir('/resources');
-
-  setDocument('/projects/alpha/notes.md', '# Alpha project notes\n\n- Investigate retrieval enhancements\n- Prepare sprint demo outline');
-  setDocument('/projects/alpha/ideas.md', '## Idea log\n1. Incorporate RAG for summaries\n2. Capture evaluation metrics inline');
-  setDocument('/projects/beta/todo.md', '* Stabilize beta agent pipeline\n* Add integration tests for connectors');
-  setDocument('/journal.md', '## Daily journal\n- Captured learning outcomes\n- Planned next exploration session');
-  setDocument('/archives/2023/highlights.md', '### 2023 Highlights\n- Completed initial memory explorer prototype\n- Documented API contract revisions');
-  setDocument('/resources/checklist.md', '- Sync with evaluation squad\n- Refresh docs for new onboarding');
-
-  const overrides = {
-    list: listEntries,
-    stat: statPath,
-    read: readPath,
-    append: appendToPath,
-    update: updatePath,
-    ensureDir: ensureDirPath,
-    delete: deletePath,
-  } satisfies Partial<typeof memoryApi>;
-
+const statPath = async (_nodeId: string, _scope: string, _threadId: string | undefined, rawPath: string) => {
+  const path = normalizeForStore(rawPath);
+  const node = memoryStore.get(path);
+  if (!node) {
+    return { exists: false, hasSubdocs: false, contentLength: 0 };
+  }
   return {
-    install: () => {
-      const originals = {
-        list: memoryApi.list,
-        stat: memoryApi.stat,
-        read: memoryApi.read,
-        append: memoryApi.append,
-        update: memoryApi.update,
-        ensureDir: memoryApi.ensureDir,
-        delete: memoryApi.delete,
-      };
+    exists: true,
+    hasSubdocs: node.children.size > 0,
+    contentLength: node.content.length,
+  };
+};
 
-      memoryApi.list = overrides.list!;
-      memoryApi.stat = overrides.stat!;
-      memoryApi.read = overrides.read!;
-      memoryApi.append = overrides.append!;
-      memoryApi.update = overrides.update!;
-      memoryApi.ensureDir = overrides.ensureDir!;
-      memoryApi.delete = overrides.delete!;
+const readPath = async (_nodeId: string, _scope: string, _threadId: string | undefined, rawPath: string) => {
+  const path = normalizeForStore(rawPath);
+  const node = memoryStore.get(path);
+  if (!node) {
+    throw new Error('Document not found');
+  }
+  return { content: node.content };
+};
 
-      return () => {
-        memoryApi.list = originals.list;
-        memoryApi.stat = originals.stat;
-        memoryApi.read = originals.read;
-        memoryApi.append = originals.append;
-        memoryApi.update = originals.update;
-        memoryApi.ensureDir = originals.ensureDir;
-        memoryApi.delete = originals.delete;
-      };
+const appendPath = async (_nodeId: string, _scope: string, _threadId: string | undefined, rawPath: string, data: string) => {
+  const path = normalizeForStore(rawPath);
+  const node = ensureNode(memoryStore, path);
+  node.content = appendContent(node.content, data);
+};
+
+const updatePath = async (_nodeId: string, _scope: string, _threadId: string | undefined, rawPath: string, oldStr: string, newStr: string) => {
+  const path = normalizeForStore(rawPath);
+  const node = memoryStore.get(path);
+  if (!node) {
+    throw new Error('ENOENT');
+  }
+  if (oldStr.length === 0) {
+    return { replaced: 0 };
+  }
+  const segments = node.content.split(oldStr);
+  const count = segments.length - 1;
+  if (count === 0) {
+    return { replaced: 0 };
+  }
+  node.content = segments.join(newStr);
+  return { replaced: count };
+};
+
+const ensureDirPath = async (_nodeId: string, _scope: string, _threadId: string | undefined, rawPath: string) => {
+  ensureNode(memoryStore, rawPath);
+};
+
+const deletePath = async (_nodeId: string, _scope: string, _threadId: string | undefined, rawPath: string) => {
+  const removed = removeNode(memoryStore, rawPath);
+  return { removed };
+};
+
+const resetMemoryMock = () => {
+  memoryStore = seedStore();
+};
+
+vi.mock('../src/api/modules/memory', async () => {
+  const actual = await vi.importActual<typeof import('../src/api/modules/memory')>('../src/api/modules/memory');
+  return {
+    ...actual,
+    memoryApi: {
+      ...actual.memoryApi,
+      list: listEntries,
+      stat: statPath,
+      read: readPath,
+      append: appendPath,
+      update: updatePath,
+      ensureDir: ensureDirPath,
+      delete: deletePath,
     },
   };
-}
+});
 
 function MemoryExplorerStoryWrapper(props: MemoryExplorerProps) {
   const queryClient = useMemo(
@@ -246,15 +205,12 @@ function MemoryExplorerStoryWrapper(props: MemoryExplorerProps) {
     [],
   );
 
-  const mock = useMemo(() => createMemoryApiMock(), []);
-
   useEffect(() => {
-    const restore = mock.install();
+    resetMemoryMock();
     return () => {
-      restore();
       queryClient.clear();
     };
-  }, [mock, queryClient]);
+  }, [queryClient]);
 
   return (
     <QueryClientProvider client={queryClient}>
