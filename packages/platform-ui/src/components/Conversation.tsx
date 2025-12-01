@@ -10,6 +10,7 @@ import {
   useImperativeHandle,
 } from 'react';
 import { Loader2 } from 'lucide-react';
+import { debugConversation } from '@/lib/debug';
 import { waitForStableScrollHeight } from './agents/waitForStableScrollHeight';
 import {
   VirtualizedList,
@@ -237,34 +238,49 @@ export const Conversation = forwardRef<ConversationHandle, ConversationProps>(fu
 
   const scrollToBottom = useCallback(async () => {
     const handle = listHandleRef.current;
-    if (!handle) return;
+    if (!handle) {
+      debugConversation('conversation.scroll.skip-no-handle', () => ({ threadId }));
+      return;
+    }
     if (conversationItems.length === 0) {
+      debugConversation('conversation.scroll.skip-empty', () => ({ threadId }));
       return;
     }
 
     const scroller = handle.getScrollerElement();
+    if (!scroller) {
+      debugConversation('conversation.scroll.missing-scroller', () => ({ threadId, requestId }));
+    }
     const requestId = scrollRequestIdRef.current + 1;
     scrollRequestIdRef.current = requestId;
 
     if (scroller) {
+      debugConversation('conversation.scroll.wait-for-stable', () => ({ threadId, requestId }));
       await waitForStableScrollHeight(scroller);
       if (scrollRequestIdRef.current !== requestId) {
+        debugConversation('conversation.scroll.abort.wait-mismatch', () => ({ threadId, requestId, latest: scrollRequestIdRef.current }));
         return;
       }
     }
 
     await new Promise<void>((resolve) => {
+      if (rafIdRef.current !== null) {
+        cancelAnimationFrame(rafIdRef.current);
+        rafIdRef.current = null;
+      }
       rafIdRef.current = requestAnimationFrame(() => {
         if (scrollRequestIdRef.current !== requestId) {
+          debugConversation('conversation.scroll.abort.frame-mismatch', () => ({ threadId, requestId, latest: scrollRequestIdRef.current }));
           resolve();
           return;
         }
+        debugConversation('conversation.scroll.apply-bottom', () => ({ threadId, requestId, itemCount: conversationItems.length }));
         handle.scrollToIndex({ index: conversationItems.length - 1, align: 'end', behavior: 'auto' });
         rafIdRef.current = null;
         resolve();
       });
     });
-  }, [conversationItems.length]);
+  }, [conversationItems.length, threadId]);
 
   useEffect(() => {
     if (!isActive) {
@@ -339,15 +355,20 @@ export const Conversation = forwardRef<ConversationHandle, ConversationProps>(fu
 
   const tryApplyPendingRestore = useCallback((): boolean => {
     const state = pendingRestoreRef.current;
-    if (!state) return true;
+    if (!state) {
+      debugConversation('conversation.restore.no-pending', () => ({ threadId }));
+      return true;
+    }
 
     const handle = listHandleRef.current;
     if (!handle) {
+      debugConversation('conversation.restore.wait-handle', () => ({ threadId }));
       return false;
     }
 
     const itemsLength = conversationItems.length;
     if (itemsLength === 0) {
+      debugConversation('conversation.restore.wait-items', () => ({ threadId }));
       return false;
     }
 
@@ -367,13 +388,17 @@ export const Conversation = forwardRef<ConversationHandle, ConversationProps>(fu
       if (Number.isFinite(offset)) {
         location.offset = offset as number;
       }
+      debugConversation('conversation.restore.apply-index', () => ({ threadId, location }));
       handle.scrollToIndex(location);
       if (Number.isFinite(top)) {
+        debugConversation('conversation.restore.apply-scrolltop', () => ({ threadId, top }));
         handle.scrollTo({ top: top as number, behavior: 'auto' });
       }
     } else if (Number.isFinite(top)) {
+      debugConversation('conversation.restore.apply-scrolltop', () => ({ threadId, top }));
       handle.scrollTo({ top: top as number, behavior: 'auto' });
     } else if (wasAtBottom && itemsLength > 0) {
+      debugConversation('conversation.restore.apply-bottom', () => ({ threadId }));
       handle.scrollToIndex({ index: itemsLength - 1, align: 'end', behavior: 'auto' });
     }
 
@@ -381,19 +406,24 @@ export const Conversation = forwardRef<ConversationHandle, ConversationProps>(fu
     initialScrollRequestedRef.current = true;
     initialScrollCompletedRef.current = true;
     setIsLoaderVisible(false);
+    debugConversation('conversation.restore.complete', () => ({ threadId }));
     return true;
-  }, [conversationItems.length]);
+  }, [conversationItems.length, threadId]);
 
   const schedulePendingRestore = useCallback(() => {
-    if (!pendingRestoreRef.current) return;
+    if (!pendingRestoreRef.current) {
+      return;
+    }
     if (restoreFrameRef.current !== null) {
       cancelAnimationFrame(restoreFrameRef.current);
     }
+    debugConversation('conversation.restore.schedule', () => ({ threadId }));
     restoreFrameRef.current = requestAnimationFrame(() => {
       restoreFrameRef.current = null;
+      debugConversation('conversation.restore.frame', () => ({ threadId }));
       tryApplyPendingRestore();
     });
-  }, [tryApplyPendingRestore]);
+  }, [threadId, tryApplyPendingRestore]);
 
   useEffect(() => {
     if (pendingRestoreRef.current && conversationItems.length > 0) {
@@ -526,17 +556,24 @@ export const Conversation = forwardRef<ConversationHandle, ConversationProps>(fu
     () => ({
       captureScrollState: async () => {
         const handle = listHandleRef.current;
-        if (!handle) return null;
+        if (!handle) {
+          debugConversation('conversation.capture.skip', () => ({ threadId, reason: 'no-handle' }));
+          return null;
+        }
         const position = await handle.captureScrollPosition();
-        return normalizeCapturedState(position, handle.isAtBottom());
+        const normalized = normalizeCapturedState(position, handle.isAtBottom());
+        debugConversation('conversation.capture.result', () => ({ threadId, normalized }));
+        return normalized;
       },
       restoreScrollState: (state) => {
         const normalized = sanitizeRestoreState(state);
         if (!normalized) {
+          debugConversation('conversation.restore.skip', () => ({ threadId, provided: state }));
           pendingRestoreRef.current = null;
           return;
         }
 
+        debugConversation('conversation.restore.enqueue', () => ({ threadId, normalized }));
         pendingRestoreRef.current = normalized;
         initialScrollRequestedRef.current = true;
         initialScrollCompletedRef.current = false;
@@ -547,7 +584,7 @@ export const Conversation = forwardRef<ConversationHandle, ConversationProps>(fu
       },
       isAtBottom: () => isAtBottomRef.current,
     }),
-    [isActive, schedulePendingRestore],
+    [isActive, schedulePendingRestore, threadId],
   );
 
   return (

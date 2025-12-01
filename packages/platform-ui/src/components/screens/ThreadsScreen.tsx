@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
+import { debugConversation } from '@/lib/debug';
 import { formatDistanceToNow } from 'date-fns';
 import { Play, Container, Bell, Send, PanelRightClose, PanelRight, Loader2, MessageSquarePlus, Terminal } from 'lucide-react';
 import { AutocompleteInput, type AutocompleteInputHandle, type AutocompleteOption } from '@/components/AutocompleteInput';
@@ -88,6 +89,36 @@ interface ConversationsHostProps {
 
 const MAX_CONVERSATION_CACHE = 10;
 
+const isFiniteNumber = (value: unknown): value is number => typeof value === 'number' && Number.isFinite(value);
+
+const sanitizeScrollState = (state: ConversationScrollState | null | undefined): ConversationScrollState | null => {
+  if (!state) return null;
+
+  const next: ConversationScrollState = {};
+
+  if (isFiniteNumber(state.index)) {
+    next.index = Math.max(0, Math.floor(state.index));
+  }
+
+  if (isFiniteNumber(state.offset) && next.index !== undefined) {
+    next.offset = Math.max(0, state.offset);
+  }
+
+  if (isFiniteNumber(state.scrollTop)) {
+    next.scrollTop = Math.max(0, state.scrollTop);
+  }
+
+  if (state.atBottom) {
+    next.atBottom = true;
+  }
+
+  if (next.index === undefined && next.scrollTop === undefined && !next.atBottom) {
+    return null;
+  }
+
+  return next;
+};
+
 export function ConversationsHost({
   activeThreadId,
   runs,
@@ -141,13 +172,20 @@ export function ConversationsHost({
     setCache((prev) => {
       const entries: Record<string, ConversationCacheEntry> = { ...prev.entries };
       const previousEntry = entries[activeThreadId];
+      const preservedState = sanitizeScrollState(previousEntry?.scrollState);
+
       entries[activeThreadId] = {
         runs,
         queuedMessages,
         reminders,
         hydrationComplete,
-        scrollState: previousEntry?.scrollState ?? null,
+        scrollState: preservedState,
       };
+
+      debugConversation('conversations-host.cache.refresh', () => ({
+        threadId: activeThreadId,
+        hadEntry: Boolean(previousEntry),
+      }));
 
       const filtered = prev.order.filter((id) => id !== activeThreadId);
       const nextOrder = [activeThreadId, ...filtered];
@@ -168,6 +206,7 @@ export function ConversationsHost({
             cancelAnimationFrame(frameId);
             restoreFrameRefs.current.delete(id);
           }
+          debugConversation('conversations-host.cache.evict', () => ({ threadId: id }));
         }
         return { order: trimmed, entries: trimmedEntries };
       }
@@ -176,7 +215,8 @@ export function ConversationsHost({
   }, [activeThreadId, hydrationComplete, queuedMessages, reminders, runs]);
 
   const storeScrollState = useCallback((threadId: string, scrollState: ConversationScrollState | null) => {
-    if (!scrollState) return;
+    const sanitized = sanitizeScrollState(scrollState);
+    debugConversation('conversations-host.cache.store', () => ({ threadId, hasState: Boolean(sanitized) }));
     setCache((prev) => {
       const entry = prev.entries[threadId];
       if (!entry) return prev;
@@ -184,7 +224,7 @@ export function ConversationsHost({
         ...prev.entries,
         [threadId]: {
           ...entry,
-          scrollState,
+          scrollState: sanitized,
         },
       };
       return { order: prev.order, entries };
@@ -194,17 +234,29 @@ export function ConversationsHost({
   const captureScrollState = useCallback(
     async (threadId: string) => {
       const handle = conversationRefs.current.get(threadId);
-      if (!handle) return;
+      if (!handle) {
+        debugConversation('conversations-host.capture.skip', () => ({ threadId }));
+        return;
+      }
       const snapshot = await handle.captureScrollState();
+      debugConversation('conversations-host.capture.success', () => ({ threadId, hasState: Boolean(snapshot) }));
       storeScrollState(threadId, snapshot);
     },
     [storeScrollState],
   );
 
-  const scheduleRestoreFrame = useCallback((threadId: string, state: ConversationScrollState) => {
+  const scheduleRestoreFrame = useCallback((threadId: string, state: ConversationScrollState | null | undefined) => {
+    const sanitized = sanitizeScrollState(state);
+    if (!sanitized) {
+      pendingRestoresRef.current.delete(threadId);
+      debugConversation('conversations-host.restore.drop', () => ({ threadId }));
+      return;
+    }
+
     const frames = restoreFrameRefs.current;
     const pending = pendingRestoresRef.current;
-    pending.set(threadId, state);
+    pending.set(threadId, sanitized);
+
     const previousFrame = frames.get(threadId);
     if (typeof previousFrame === 'number') {
       cancelAnimationFrame(previousFrame);
@@ -214,28 +266,39 @@ export function ConversationsHost({
       frames.delete(threadId);
       const pendingState = pending.get(threadId);
       if (!pendingState) {
+        debugConversation('conversations-host.restore.frame-missing', () => ({ threadId }));
         return;
       }
       const handle = conversationRefs.current.get(threadId);
       if (!handle) {
+        debugConversation('conversations-host.restore.defer', () => ({ threadId }));
         return;
       }
       pending.delete(threadId);
+      debugConversation('conversations-host.restore.apply', () => ({ threadId }));
       handle.restoreScrollState(pendingState);
     });
 
     frames.set(threadId, frameId);
+    debugConversation('conversations-host.restore.schedule', () => ({ threadId, frameId }));
   }, []);
 
   const requestRestore = useCallback(
     (threadId: string, state: ConversationScrollState | null | undefined) => {
-      if (!state) return;
-      const handle = conversationRefs.current.get(threadId);
-      if (handle) {
-        scheduleRestoreFrame(threadId, state);
+      const sanitized = sanitizeScrollState(state);
+      if (!sanitized) {
+        pendingRestoresRef.current.delete(threadId);
+        debugConversation('conversations-host.restore.skip', () => ({ threadId }));
         return;
       }
-      pendingRestoresRef.current.set(threadId, state);
+      const handle = conversationRefs.current.get(threadId);
+      if (handle) {
+        debugConversation('conversations-host.restore.immediate', () => ({ threadId }));
+        scheduleRestoreFrame(threadId, sanitized);
+        return;
+      }
+      debugConversation('conversations-host.restore.queue', () => ({ threadId }));
+      pendingRestoresRef.current.set(threadId, sanitized);
     },
     [scheduleRestoreFrame],
   );
@@ -243,12 +306,17 @@ export function ConversationsHost({
   useEffect(() => {
     const previousId = previousActiveRef.current;
     if (previousId && previousId !== activeThreadId) {
+      debugConversation('conversations-host.switch.capture', () => ({ from: previousId }));
       void captureScrollState(previousId);
     }
 
     const entry = cacheRef.current.entries[activeThreadId];
-    if (entry?.scrollState) {
-      requestRestore(activeThreadId, entry.scrollState);
+    const cachedState = sanitizeScrollState(entry?.scrollState);
+    if (cachedState) {
+      debugConversation('conversations-host.switch.restore', () => ({ threadId: activeThreadId }));
+      requestRestore(activeThreadId, cachedState);
+    } else {
+      debugConversation('conversations-host.switch.no-state', () => ({ threadId: activeThreadId }));
     }
 
     previousActiveRef.current = activeThreadId;
@@ -273,12 +341,14 @@ export function ConversationsHost({
 
         const handleRef = (handle: ConversationHandle | null) => {
           if (handle) {
+            debugConversation('conversations-host.handle.attach', () => ({ threadId }));
             conversationRefs.current.set(threadId, handle);
             const pending = pendingRestoresRef.current.get(threadId);
             if (pending) {
               scheduleRestoreFrame(threadId, pending);
             }
           } else {
+            debugConversation('conversations-host.handle.detach', () => ({ threadId }));
             conversationRefs.current.delete(threadId);
             const frameId = restoreFrameRefs.current.get(threadId);
             if (typeof frameId === 'number') {

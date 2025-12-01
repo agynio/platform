@@ -188,6 +188,104 @@ describe('ConversationsHost', () => {
       .getAttribute('data-instance-id');
 
     expect(revivedInstanceId).toBe(preservedInstanceId);
+
+    const spiesForFive = conversationMockModule.__conversationHandleSpies.get('thread-5');
+    expect(spiesForFive?.restore).toHaveBeenCalledTimes(1);
+  });
+
+  it('clears pending restore frames on cache eviction', async () => {
+    vi.unstubAllGlobals();
+    let rafId = 0;
+    const callbacks = new Map<number, FrameRequestCallback>();
+    vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
+      const id = ++rafId;
+      callbacks.set(id, callback);
+      return id;
+    });
+    const cancelSpy = vi.fn((id: number) => {
+      callbacks.delete(id);
+    });
+    vi.stubGlobal('cancelAnimationFrame', cancelSpy);
+
+    const { rerender } = render(
+      <ConversationsHost
+        activeThreadId="thread-1"
+        runs={[createRun('1')]}
+        queuedMessages={EMPTY_QUEUE}
+        reminders={EMPTY_REMINDERS}
+        hydrationComplete
+        isRunsInfoCollapsed={false}
+      />,
+    );
+
+    await act(async () => {
+      rerender(
+        <ConversationsHost
+          activeThreadId="thread-2"
+          runs={[createRun('2')]}
+          queuedMessages={EMPTY_QUEUE}
+          reminders={EMPTY_REMINDERS}
+          hydrationComplete
+          isRunsInfoCollapsed={false}
+        />,
+      );
+      await Promise.resolve();
+    });
+
+    await act(async () => {
+      rerender(
+        <ConversationsHost
+          activeThreadId="thread-1"
+          runs={[createRun('1')]}
+          queuedMessages={EMPTY_QUEUE}
+          reminders={EMPTY_REMINDERS}
+          hydrationComplete
+          isRunsInfoCollapsed={false}
+        />,
+      );
+      await Promise.resolve();
+    });
+
+    const pendingIds = Array.from(callbacks.keys());
+    expect(pendingIds.length).toBeGreaterThan(0);
+    const frameIdForThread1 = pendingIds[0];
+
+    for (let index = 3; index <= 12; index += 1) {
+      const threadId = `thread-${index}`;
+      await act(async () => {
+        rerender(
+          <ConversationsHost
+            activeThreadId={threadId}
+            runs={[createRun(String(index))]}
+            queuedMessages={EMPTY_QUEUE}
+            reminders={EMPTY_REMINDERS}
+            hydrationComplete
+            isRunsInfoCollapsed={false}
+          />,
+        );
+        await Promise.resolve();
+      });
+    }
+
+    expect(cancelSpy.mock.calls.flat()).toContain(frameIdForThread1);
+    expect(callbacks.has(frameIdForThread1)).toBe(false);
+
+    await act(async () => {
+      rerender(
+        <ConversationsHost
+          activeThreadId="thread-1"
+          runs={[createRun('1')]}
+          queuedMessages={EMPTY_QUEUE}
+          reminders={EMPTY_REMINDERS}
+          hydrationComplete
+          isRunsInfoCollapsed={false}
+        />,
+      );
+      await Promise.resolve();
+    });
+
+    const refreshedSpies = conversationMockModule.__conversationHandleSpies.get('thread-1');
+    expect(refreshedSpies?.restore).not.toHaveBeenCalled();
   });
 
   it('marks only the active conversation as visible', async () => {
@@ -272,12 +370,14 @@ describe('ConversationsHost', () => {
           isRunsInfoCollapsed={false}
         />,
       );
-      await Promise.resolve();
-    });
+    await Promise.resolve();
+  });
 
-    const refreshedSpiesForA = conversationMockModule.__conversationHandleSpies.get('thread-a');
-    expect(refreshedSpiesForA?.restore).toHaveBeenCalledTimes(1);
-    expect(refreshedSpiesForA?.restore).toHaveBeenCalledWith(capturedState);
+  const refreshedSpiesForA = conversationMockModule.__conversationHandleSpies.get('thread-a');
+  expect(refreshedSpiesForA?.restore).toHaveBeenCalledTimes(1);
+  expect(refreshedSpiesForA?.restore).toHaveBeenCalledWith(
+    expect.objectContaining({ index: expect.any(Number), offset: 4, scrollTop: 42 }),
+  );
   });
 
   it('skips restore when no cached scroll state is available', async () => {
@@ -375,7 +475,7 @@ describe('ConversationsHost', () => {
 
     const spiesForThread1 = conversationMockModule.__conversationHandleSpies.get('thread-1');
     expect(spiesForThread1).toBeDefined();
-    const capturedState = await spiesForThread1!.capture.mock.results[0].value;
+    await spiesForThread1!.capture.mock.results[0].value;
 
     await act(async () => {
       await Promise.resolve();
@@ -436,6 +536,8 @@ describe('ConversationsHost', () => {
 
     const restoredHandle = conversationMockModule.__conversationHandleSpies.get('thread-1');
     expect(restoredHandle?.restore).toHaveBeenCalledTimes(1);
-    expect(restoredHandle?.restore).toHaveBeenCalledWith(capturedState);
+    expect(restoredHandle?.restore).toHaveBeenCalledWith(
+      expect.objectContaining({ index: expect.any(Number), offset: 4, scrollTop: 42 }),
+    );
   });
 });

@@ -13,8 +13,43 @@ import {
   type MutableRefObject,
   type Key,
 } from 'react';
+import { debugConversation } from '@/lib/debug';
 
 const isFiniteNumber = (value: unknown): value is number => typeof value === 'number' && Number.isFinite(value);
+
+const sanitizeScrollPosition = (
+  position: VirtualizedListScrollPosition | null | undefined,
+  itemsLength: number,
+): VirtualizedListScrollPosition | null => {
+  if (!position) return null;
+
+  const next: VirtualizedListScrollPosition = {};
+
+  if (isFiniteNumber(position.index) && itemsLength > 0) {
+    const raw = Math.floor(position.index as number);
+    next.index = Math.max(0, Math.min(itemsLength - 1, raw));
+  }
+
+  if (isFiniteNumber(position.offset) && next.index !== undefined) {
+    const offset = Math.max(0, position.offset as number);
+    next.offset = offset;
+  }
+
+  if (isFiniteNumber(position.scrollTop)) {
+    const scrollTop = Math.max(0, position.scrollTop as number);
+    next.scrollTop = scrollTop;
+  }
+
+  if (position.atBottom === true) {
+    next.atBottom = true;
+  }
+
+  if (next.index === undefined && next.scrollTop === undefined && !next.atBottom) {
+    return null;
+  }
+
+  return next;
+};
 
 export interface VirtualizedListScrollPosition {
   index?: number;
@@ -255,7 +290,9 @@ function VirtualizedListInner<T>(
       return null;
     }
 
-    return result;
+    const sanitized = sanitizeScrollPosition(result, items.length);
+    debugConversation('virtualized-list.capture.static', () => ({ items: items.length, sanitized }));
+    return sanitized;
   }, [items.length]);
 
   const restoreStaticPosition = useCallback(
@@ -263,30 +300,41 @@ function VirtualizedListInner<T>(
       const scroller = scrollerRef.current;
       if (!scroller || !position) return;
 
-      if (isFiniteNumber(position.index) && items.length > 0) {
-        const raw = Math.floor(position.index as number);
+      const sanitized = sanitizeScrollPosition(position, items.length);
+      if (!sanitized) {
+        debugConversation('virtualized-list.restore.static.skip', () => ({ items: items.length }));
+        return;
+      }
+
+      if (isFiniteNumber(sanitized.index) && items.length > 0) {
+        const raw = Math.floor(sanitized.index as number);
         const clampedIndex = Math.max(0, Math.min(items.length - 1, raw));
         const node = itemRefs.current[clampedIndex] ?? null;
         if (node) {
-          const offsetValue = isFiniteNumber(position.offset) ? (position.offset as number) : 0;
+          const offsetValue = isFiniteNumber(sanitized.offset) ? (sanitized.offset as number) : 0;
           const top = node.offsetTop + offsetValue;
+          debugConversation('virtualized-list.restore.static.index', () => ({ items: items.length, clampedIndex, offset: offsetValue }));
           scrollElement(scroller, { top, behavior: 'auto' });
           return;
         }
       }
 
-      if (isFiniteNumber(position.scrollTop)) {
-        scrollElement(scroller, { top: position.scrollTop as number, behavior: 'auto' });
+      if (isFiniteNumber(sanitized.scrollTop)) {
+        const top = sanitized.scrollTop as number;
+        debugConversation('virtualized-list.restore.static.scrollTop', () => ({ items: items.length, top }));
+        scrollElement(scroller, { top, behavior: 'auto' });
         return;
       }
 
-      if (position.atBottom && items.length > 0) {
+      if (sanitized.atBottom && items.length > 0) {
         const lastNode = itemRefs.current[Math.max(0, items.length - 1)] ?? null;
         if (lastNode) {
           const target = lastNode.offsetTop - (scroller.clientHeight - lastNode.offsetHeight);
+          debugConversation('virtualized-list.restore.static.bottom', () => ({ items: items.length, target }));
           scrollElement(scroller, { top: target, behavior: 'auto' });
           return;
         }
+        debugConversation('virtualized-list.restore.static.bottom-fallback', () => ({ items: items.length }));
         scrollElement(scroller, { top: scroller.scrollHeight, behavior: 'auto' });
       }
     },
@@ -322,7 +370,9 @@ function VirtualizedListInner<T>(
           return;
         }
 
-        resolve(result);
+        const sanitized = sanitizeScrollPosition(result, items.length);
+        debugConversation('virtualized-list.capture.virtuoso', () => ({ items: items.length, sanitized }));
+        resolve(sanitized);
       });
     });
   }, [captureStaticPosition, firstItemIndex, forceStatic, items.length]);
@@ -330,17 +380,28 @@ function VirtualizedListInner<T>(
   const restoreScrollPosition = useCallback(
     (position: VirtualizedListScrollPosition) => {
       if (!position) return;
-      if (forceStatic) {
-        restoreStaticPosition(position);
+      const sanitized = sanitizeScrollPosition(position, items.length);
+      if (!sanitized) {
+        debugConversation('virtualized-list.restore.skip', () => ({ items: items.length }));
         return;
       }
-      const instance = virtuosoRef.current;
-      if (!instance) return;
 
-      const idx = position?.index;
-      const top = position?.scrollTop;
-      const offset = position?.offset;
-      const wasAtBottom = position?.atBottom === true;
+      if (forceStatic) {
+        debugConversation('virtualized-list.restore.static', () => ({ items: items.length, sanitized }));
+        restoreStaticPosition(sanitized);
+        return;
+      }
+
+      const instance = virtuosoRef.current;
+      if (!instance) {
+        debugConversation('virtualized-list.restore.pending-instance', () => ({ items: items.length }));
+        return;
+      }
+
+      const idx = sanitized.index;
+      const top = sanitized.scrollTop;
+      const offset = sanitized.offset;
+      const wasAtBottom = sanitized.atBottom === true;
       const itemsLength = items.length;
 
       if (Number.isFinite(idx) && itemsLength > 0) {
@@ -355,19 +416,23 @@ function VirtualizedListInner<T>(
         if (Number.isFinite(offset)) {
           location.offset = offset as number;
         }
+        debugConversation('virtualized-list.restore.index', () => ({ items: items.length, location }));
         instance.scrollToIndex(location);
         if (Number.isFinite(top)) {
+          debugConversation('virtualized-list.restore.scrollTop', () => ({ items: items.length, top }));
           instance.scrollTo({ top: top as number, behavior: 'auto' });
         }
         return;
       }
 
       if (Number.isFinite(top)) {
+        debugConversation('virtualized-list.restore.scrollTop', () => ({ items: items.length, top }));
         instance.scrollTo({ top: top as number, behavior: 'auto' });
         return;
       }
 
       if (wasAtBottom && itemsLength > 0) {
+        debugConversation('virtualized-list.restore.bottom', () => ({ items: items.length, firstItemIndex }));
         instance.scrollToIndex({ index: firstItemIndex + itemsLength - 1, align: 'end', behavior: 'auto' });
       }
     },
