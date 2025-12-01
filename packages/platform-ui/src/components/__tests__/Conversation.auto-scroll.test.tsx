@@ -250,7 +250,7 @@ describe('Conversation auto-follow behavior', () => {
       await Promise.resolve();
     });
 
-    expect(waitForStableScrollHeightMock).toHaveBeenCalledTimes(1);
+    expect(waitForStableScrollHeightMock).toHaveBeenCalled();
     expect(instance.scrollToIndex).toHaveBeenCalledTimes(1);
     expect(instance.scrollToIndex.mock.calls[0][0]).toMatchObject({ index: 1, align: 'end', behavior: 'auto' });
   });
@@ -334,13 +334,16 @@ describe('Conversation auto-follow behavior', () => {
 describe('Conversation scroll restoration', () => {
   let rafQueue: FrameRequestCallback[];
 
-  const flushRaf = () => {
-    while (rafQueue.length > 0) {
-      const callback = rafQueue.shift();
-      if (callback) {
-        callback(Date.now());
+  const flushRaf = async () => {
+    await act(async () => {
+      while (rafQueue.length > 0) {
+        const callback = rafQueue.shift();
+        if (callback) {
+          callback(Date.now());
+        }
       }
-    }
+      await Promise.resolve();
+    });
   };
 
   beforeEach(() => {
@@ -375,7 +378,7 @@ describe('Conversation scroll restoration', () => {
     );
 
     const instance = getLatestInstance();
-    flushRaf();
+    await flushRaf();
     instance.scrollToIndex.mockClear();
     instance.scrollTo.mockClear();
 
@@ -383,13 +386,17 @@ describe('Conversation scroll restoration', () => {
       ref.current?.restoreScrollState({ index: 5, offset: 12 });
     });
 
+    await flushRaf();
+
     expect(instance.scrollToIndex).not.toHaveBeenCalled();
+    expect(waitForStableScrollHeightMock).not.toHaveBeenCalled();
+    expect(screen.getByTestId('conversation-loader')).toBeInTheDocument();
 
     await act(async () => {
       rerender(<Conversation ref={ref} threadId="thread-restore" runs={runs} hydrationComplete isActive />);
     });
 
-    flushRaf();
+    await flushRaf();
 
     const matchingCall = instance.scrollToIndex.mock.calls.find((call) => {
       const args = call[0] as { index: number; offset?: number };
@@ -398,6 +405,10 @@ describe('Conversation scroll restoration', () => {
 
     expect(matchingCall).toBeDefined();
     expect(instance.scrollTo).not.toHaveBeenCalled();
+    expect(waitForStableScrollHeightMock).toHaveBeenCalled();
+    await waitFor(() => {
+      expect(screen.queryByTestId('conversation-loader')).toBeNull();
+    });
   });
 
   it('uses scrollTop fallback when index is absent', async () => {
@@ -407,7 +418,7 @@ describe('Conversation scroll restoration', () => {
     render(<Conversation ref={ref} threadId="thread-top" runs={runs} hydrationComplete isActive />);
 
     const instance = getLatestInstance();
-    flushRaf();
+    await flushRaf();
     instance.scrollToIndex.mockClear();
     instance.scrollTo.mockClear();
 
@@ -415,7 +426,7 @@ describe('Conversation scroll restoration', () => {
       ref.current?.restoreScrollState({ scrollTop: 120 });
     });
 
-    flushRaf();
+    await flushRaf();
 
     expect(
       instance.scrollTo.mock.calls.some((call) => {
@@ -438,15 +449,15 @@ describe('Conversation scroll restoration', () => {
     render(<Conversation ref={ref} threadId="thread-bottom" runs={runs} hydrationComplete isActive />);
 
     const instance = getLatestInstance();
-    flushRaf();
+    await flushRaf();
     instance.scrollToIndex.mockClear();
     instance.scrollTo.mockClear();
 
     await act(async () => {
-      ref.current?.restoreScrollState({ atBottom: true });
+      ref.current?.restoreScrollState({ index: Number.NaN, atBottom: true });
     });
 
-    flushRaf();
+    await flushRaf();
 
     const matchingCall = instance.scrollToIndex.mock.calls.find((call) => {
       const args = call[0] as { index: number; align?: string };
@@ -455,6 +466,31 @@ describe('Conversation scroll restoration', () => {
 
     expect(matchingCall).toBeDefined();
     expect(instance.scrollTo).not.toHaveBeenCalled();
+  });
+
+  it('ignores restores when virtuoso snapshot lacks range data', async () => {
+    const ref = React.createRef<ConversationHandle>();
+    const runs = createRuns();
+
+    render(<Conversation ref={ref} threadId="thread-missing" runs={runs} hydrationComplete isActive />);
+
+    const instance = getLatestInstance();
+    await flushRaf();
+    instance.scrollToIndex.mockClear();
+    instance.scrollTo.mockClear();
+
+    instance.captureScrollPosition.mockResolvedValueOnce(null);
+    instance.setAtBottom(false);
+
+    const captured = await ref.current?.captureScrollState();
+    expect(captured).toBeNull();
+
+    await act(async () => {
+      ref.current?.restoreScrollState(captured ?? null);
+    });
+    expect(instance.scrollToIndex).not.toHaveBeenCalled();
+    expect(instance.scrollTo).not.toHaveBeenCalled();
+    expect(screen.queryByTestId('conversation-loader')).toBeNull();
   });
 
 });

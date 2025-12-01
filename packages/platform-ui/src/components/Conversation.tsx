@@ -188,6 +188,16 @@ export const Conversation = forwardRef<ConversationHandle, ConversationProps>(fu
     return items;
   }, [runs, hasQueueOrReminders]);
 
+  const restorableItemCount = useMemo(() => {
+    let count = 0;
+    for (const item of conversationItems) {
+      if (item.type !== 'spacer') {
+        count += 1;
+      }
+    }
+    return count;
+  }, [conversationItems]);
+
   useEffect(() => {
     const next = new Map<string, number>();
     const runIdSet = new Set(runs.map((run) => run.id));
@@ -353,7 +363,7 @@ export const Conversation = forwardRef<ConversationHandle, ConversationProps>(fu
     [hydrationComplete, isActive],
   );
 
-  const tryApplyPendingRestore = useCallback((): boolean => {
+  const tryApplyPendingRestore = useCallback(async (): Promise<boolean> => {
     const state = pendingRestoreRef.current;
     if (!state) {
       debugConversation('conversation.restore.no-pending', () => ({ threadId }));
@@ -367,39 +377,64 @@ export const Conversation = forwardRef<ConversationHandle, ConversationProps>(fu
     }
 
     const itemsLength = conversationItems.length;
-    if (itemsLength === 0) {
-      debugConversation('conversation.restore.wait-items', () => ({ threadId }));
+    if (restorableItemCount === 0) {
+      debugConversation('conversation.restore.wait-items', () => ({ threadId, itemsLength }));
       return false;
     }
 
-    const idx = state?.index;
-    const top = state?.scrollTop;
-    const offset = state?.offset;
-    const wasAtBottom = state?.atBottom === true;
+    const scroller = handle.getScrollerElement();
+    if (!scroller) {
+      debugConversation('conversation.restore.wait-scroller', () => ({ threadId }));
+      return false;
+    }
 
-    if (Number.isFinite(idx) && itemsLength > 0) {
-      const rawIndex = Math.floor(idx as number);
-      const clampedIndex = Math.max(0, Math.min(itemsLength - 1, rawIndex));
+    debugConversation('conversation.restore.await-height', () => ({ threadId }));
+    await waitForStableScrollHeight(scroller);
+
+    if (pendingRestoreRef.current !== state) {
+      debugConversation('conversation.restore.changed', () => ({ threadId }));
+      return true;
+    }
+
+    const idx = Number.isFinite(state.index) ? Math.floor(state.index as number) : undefined;
+    const clampedIndex = typeof idx === 'number' ? Math.max(0, Math.min(itemsLength - 1, idx)) : undefined;
+    const top = Number.isFinite(state.scrollTop) ? (state.scrollTop as number) : undefined;
+    const offset = Number.isFinite(state.offset) ? Math.max(0, state.offset as number) : undefined;
+    const wasAtBottom = state.atBottom === true;
+
+    let applied = false;
+
+    if (typeof clampedIndex === 'number') {
       const location: { index: number; align: 'start'; behavior: 'auto'; offset?: number } = {
         index: clampedIndex,
         align: 'start',
         behavior: 'auto',
       };
-      if (Number.isFinite(offset)) {
-        location.offset = offset as number;
+      if (typeof offset === 'number') {
+        location.offset = offset;
       }
       debugConversation('conversation.restore.apply-index', () => ({ threadId, location }));
       handle.scrollToIndex(location);
-      if (Number.isFinite(top)) {
-        debugConversation('conversation.restore.apply-scrolltop', () => ({ threadId, top }));
-        handle.scrollTo({ top: top as number, behavior: 'auto' });
-      }
-    } else if (Number.isFinite(top)) {
+      applied = true;
+    } else if (typeof top === 'number') {
       debugConversation('conversation.restore.apply-scrolltop', () => ({ threadId, top }));
-      handle.scrollTo({ top: top as number, behavior: 'auto' });
-    } else if (wasAtBottom && itemsLength > 0) {
+      handle.scrollTo({ top, behavior: 'auto' });
+      applied = true;
+    } else if (wasAtBottom) {
       debugConversation('conversation.restore.apply-bottom', () => ({ threadId }));
       handle.scrollToIndex({ index: itemsLength - 1, align: 'end', behavior: 'auto' });
+      applied = true;
+    } else {
+      debugConversation('conversation.restore.no-op', () => ({ threadId }));
+    }
+
+    if (!applied) {
+      pendingRestoreRef.current = null;
+      initialScrollRequestedRef.current = true;
+      initialScrollCompletedRef.current = true;
+      setIsLoaderVisible(false);
+      debugConversation('conversation.restore.complete', () => ({ threadId, skipped: true }));
+      return true;
     }
 
     pendingRestoreRef.current = null;
@@ -408,7 +443,7 @@ export const Conversation = forwardRef<ConversationHandle, ConversationProps>(fu
     setIsLoaderVisible(false);
     debugConversation('conversation.restore.complete', () => ({ threadId }));
     return true;
-  }, [conversationItems.length, threadId]);
+  }, [conversationItems, conversationItems.length, restorableItemCount, threadId]);
 
   const schedulePendingRestore = useCallback(() => {
     if (!pendingRestoreRef.current) {
@@ -421,7 +456,9 @@ export const Conversation = forwardRef<ConversationHandle, ConversationProps>(fu
     restoreFrameRef.current = requestAnimationFrame(() => {
       restoreFrameRef.current = null;
       debugConversation('conversation.restore.frame', () => ({ threadId }));
-      tryApplyPendingRestore();
+      void tryApplyPendingRestore().catch((error) => {
+        debugConversation('conversation.restore.error', () => ({ threadId, error }));
+      });
     });
   }, [threadId, tryApplyPendingRestore]);
 

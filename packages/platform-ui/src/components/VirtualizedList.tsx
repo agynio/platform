@@ -351,26 +351,37 @@ function VirtualizedListInner<T>(
       instance.getState((snapshot: StateSnapshot) => {
         const range = snapshot.ranges[0];
         const absoluteIndex = range ? range.startIndex : undefined;
-        const relative = isFiniteNumber(absoluteIndex) ? absoluteIndex - firstItemIndex : undefined;
+        const scrollTop = snapshot.scrollTop;
+        const hasRange = Number.isFinite(absoluteIndex);
+        const hasScrollTop = Number.isFinite(scrollTop);
 
-        const result: VirtualizedListScrollPosition = {};
-        if (isFiniteNumber(relative) && items.length > 0) {
-          const clamped = Math.max(0, Math.min(items.length - 1, Math.floor(relative as number)));
-          result.index = clamped;
-        }
-        if (isFiniteNumber(snapshot.scrollTop)) {
-          result.scrollTop = snapshot.scrollTop;
-        }
-        if (atBottomRef.current) {
-          result.atBottom = true;
-        }
-
-        if (result.index === undefined && result.scrollTop === undefined && !result.atBottom) {
+        if (!hasRange || !hasScrollTop) {
+          debugConversation('virtualized-list.capture.virtuoso.unusable', () => ({ items: items.length, hasRange, hasScrollTop }));
           resolve(null);
           return;
         }
 
+        const relative = (absoluteIndex as number) - firstItemIndex;
+        const result: VirtualizedListScrollPosition = {};
+
+        if (items.length > 0) {
+          const clamped = Math.max(0, Math.min(items.length - 1, Math.floor(relative)));
+          result.index = clamped;
+        }
+
+        result.scrollTop = scrollTop as number;
+
+        if (atBottomRef.current) {
+          result.atBottom = true;
+        }
+
         const sanitized = sanitizeScrollPosition(result, items.length);
+        if (!sanitized) {
+          debugConversation('virtualized-list.capture.virtuoso.sanitized-null', () => ({ items: items.length }));
+          resolve(null);
+          return;
+        }
+
         debugConversation('virtualized-list.capture.virtuoso', () => ({ items: items.length, sanitized }));
         resolve(sanitized);
       });
@@ -404,6 +415,11 @@ function VirtualizedListInner<T>(
       const wasAtBottom = sanitized.atBottom === true;
       const itemsLength = items.length;
 
+      if (itemsLength === 0 && !Number.isFinite(top) && !wasAtBottom) {
+        debugConversation('virtualized-list.restore.skip-empty', () => ({ items: items.length }));
+        return;
+      }
+
       if (Number.isFinite(idx) && itemsLength > 0) {
         const raw = Math.floor(idx as number);
         const clampedIndex = Math.max(0, Math.min(itemsLength - 1, raw));
@@ -418,23 +434,23 @@ function VirtualizedListInner<T>(
         }
         debugConversation('virtualized-list.restore.index', () => ({ items: items.length, location }));
         instance.scrollToIndex(location);
-        if (Number.isFinite(top)) {
-          debugConversation('virtualized-list.restore.scrollTop', () => ({ items: items.length, top }));
-          instance.scrollTo({ top: top as number, behavior: 'auto' });
-        }
         return;
       }
 
       if (Number.isFinite(top)) {
-        debugConversation('virtualized-list.restore.scrollTop', () => ({ items: items.length, top }));
-        instance.scrollTo({ top: top as number, behavior: 'auto' });
+        const topValue = top as number;
+        debugConversation('virtualized-list.restore.scrollTop', () => ({ items: items.length, top: topValue }));
+        instance.scrollTo({ top: topValue, behavior: 'auto' });
         return;
       }
 
       if (wasAtBottom && itemsLength > 0) {
         debugConversation('virtualized-list.restore.bottom', () => ({ items: items.length, firstItemIndex }));
         instance.scrollToIndex({ index: firstItemIndex + itemsLength - 1, align: 'end', behavior: 'auto' });
+        return;
       }
+
+      debugConversation('virtualized-list.restore.unhandled', () => ({ items: items.length }));
     },
     [firstItemIndex, forceStatic, items.length, restoreStaticPosition],
   );
