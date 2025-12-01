@@ -68,23 +68,22 @@ describe('ShellTool timeout tail inclusion and ANSI stripping', () => {
     const t = node.getTool();
 
     const payload = { command: 'sleep 1h' } as any;
-    await expect(
-      t.execute(payload as any, { threadId: 't', finishSignal: { activate() {}, deactivate() {}, isActive: false } as any, callerAgent: {} as any } as any),
-    ).rejects.toThrowError(/Error \(timeout after 3600000ms\): command exceeded 3600000ms and was terminated\. See output tail below\./);
+    const message = await t.execute(payload as any, {
+      threadId: 't',
+      finishSignal: { activate() {}, deactivate() {}, isActive: false } as any,
+      callerAgent: {} as any,
+    } as any);
 
-    try {
-      await t.execute(payload as any, { threadId: 't', finishSignal: { activate() {}, deactivate() {}, isActive: false } as any, callerAgent: {} as any } as any);
-    } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : String(e);
-      // No ANSI should remain
-      expect(msg).not.toMatch(/\u001b\[/);
-      // Tail should contain the last characters of the 12k string + ERR-SECTION
-      const tailMatch = msg.match(/See output tail below\.\n----------\n([\s\S]+)$/);
-      expect(tailMatch).not.toBeNull();
-      const tail = tailMatch?.[1] ?? '';
-      expect(tail.length).toBe(10_000);
-      expect(tail.endsWith('ERR-SECTION')).toBe(true);
-      expect(tail).toMatch(/^x+ERR-SECTION$/);
-    }
+    expect(message.startsWith('[exit code 408] Exec timed out after 3600000ms'))
+      .toBe(true);
+    // No ANSI should remain
+    expect(message).not.toMatch(/\u001b\[/);
+
+    const lines = message.split('\n');
+    expect(lines[1]).toBe('---');
+    const tail = lines[2] ?? '';
+    expect(tail.length).toBe(10_000);
+    expect(tail.endsWith('ERR-SECTION')).toBe(true);
+    expect(tail).toMatch(/^x+ERR-SECTION$/);
   });
 });
