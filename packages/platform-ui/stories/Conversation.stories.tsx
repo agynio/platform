@@ -147,6 +147,15 @@ const sampleReminders: ReminderData[] = [
   },
 ];
 
+const localizedUtcReminders: ReminderData[] = [
+  {
+    id: 'reminder-locale-1',
+    content: '현지화 상태 점검',
+    scheduledTime: '오후 6시 30분',
+    utcTs: new Date(Date.now() + 45 * 60 * 1000).toISOString(),
+  },
+];
+
 export const FullExample: Story = {
   render: (args) => {
     const [inputValue, setInputValue] = useState('');
@@ -484,6 +493,16 @@ export const WordWrapTest: Story = {
             },
           ]}
         />
+      </div>
+    </div>
+  ),
+};
+
+export const LocalizedUtcReminderCountdown: Story = {
+  render: () => (
+    <div className="p-6 bg-[var(--agyn-bg-light)] min-h-screen flex items-center justify-center">
+      <div className="w-full max-w-3xl h-[320px]">
+        <Conversation runs={minimalRuns} reminders={localizedUtcReminders} queuedMessages={[]} />
       </div>
     </div>
   ),

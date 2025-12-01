@@ -33,6 +33,7 @@ export interface ReminderData {
   content: ReactNode;
   scheduledTime: string;
   date?: string;
+  utcTs?: string;
 }
 
 interface ConversationProps {
@@ -184,6 +185,7 @@ export function Conversation({
                         content={reminder.content}
                         scheduledTime={reminder.scheduledTime}
                         date={reminder.date}
+                        utcTs={reminder.utcTs}
                       />
                     ))}
                   </div>
