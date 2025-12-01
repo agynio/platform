@@ -16,8 +16,8 @@ const baseThread: Thread = {
 };
 
 const queuedMessages = [
-  { id: 'qm-1', content: 'Queued alpha' },
-  { id: 'qm-2', content: 'Queued beta' },
+  { id: 'qm-1', content: 'Queued alpha', kind: 'user' as const, enqueuedAt: '2024-06-01T12:05:00Z' },
+  { id: 'qm-2', content: 'Queued beta', kind: 'assistant' as const, enqueuedAt: '2024-06-01T12:07:00Z' },
 ];
 
 const conversationReminders = [

@@ -131,10 +131,14 @@ const sampleQueued: QueuedMessageData[] = [
   {
     id: 'queued-1',
     content: 'Generate unit tests for the authentication endpoint',
+    kind: 'user',
+    enqueuedAt: new Date(Date.now() - 5 * 60 * 1000).toISOString(),
   },
   {
     id: 'queued-2',
     content: 'Add rate limiting to prevent brute force attacks',
+    kind: 'assistant',
+    enqueuedAt: new Date(Date.now() - 2 * 60 * 1000).toISOString(),
   },
 ];
 

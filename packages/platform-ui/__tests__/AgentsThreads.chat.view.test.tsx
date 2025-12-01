@@ -63,6 +63,7 @@ describe('AgentsThreads conversation view', () => {
     const runsHandler = () => HttpResponse.json({ items: [runMeta] });
     const threadsHandler = () => HttpResponse.json({ items: [thread] });
     const threadHandler = () => HttpResponse.json(thread);
+    const queueItems: Array<{ id: string; kind: 'user' | 'assistant' | 'system'; text: string; enqueuedAt: string }> = [];
 
     const messagesHandler = ({ request }: { request: Request }) => {
       const url = new URL(request.url);
@@ -94,7 +95,11 @@ describe('AgentsThreads conversation view', () => {
       http.get(abs('/api/containers'), () => HttpResponse.json({ items: containers })),
       http.get('/api/agents/runs/run1/messages', messagesHandler),
       http.get(abs('/api/agents/runs/run1/messages'), messagesHandler),
+      http.get(`/api/agents/threads/${THREAD_ID}/queue`, () => HttpResponse.json({ items: queueItems })),
+      http.get(abs(`/api/agents/threads/${THREAD_ID}/queue`), () => HttpResponse.json({ items: queueItems })),
     );
+
+    return { queueItems };
   }
 
   it('renders conversation messages and run info, and navigates to run timeline', async () => {
@@ -129,7 +134,7 @@ describe('AgentsThreads conversation view', () => {
   });
 
   it('shows reminders and queued messages under pending, then moves queued items into runs when the run starts', async () => {
-    setupThreadData();
+    const { queueItems } = setupThreadData();
 
     const user = userEvent.setup();
 
@@ -167,18 +172,24 @@ describe('AgentsThreads conversation view', () => {
     };
 
     const messageListeners = (graphSocket as any).messageCreatedListeners as Set<(payload: typeof bufferedPayload) => void>;
+    queueItems.push({ id: 'queued-run-late', kind: 'assistant', text: 'Pending reply', enqueuedAt: t(55) });
+
     await act(async () => {
       for (const listener of messageListeners) {
         listener(bufferedPayload);
       }
     });
 
-    expect(within(pendingRoot).getByText('Pending reply')).toBeInTheDocument();
+    await waitFor(() => {
+      expect(within(pendingRoot).getByText('Pending reply')).toBeInTheDocument();
+    });
     expect(
       within(conversation)
         .queryAllByTestId('conversation-message')
         .some((node) => within(node).queryByText('Pending reply')),
     ).toBe(false);
+
+    queueItems.splice(0);
 
     const runPayload = {
       threadId: THREAD_ID,
@@ -191,9 +202,7 @@ describe('AgentsThreads conversation view', () => {
       }
     });
 
-    await waitFor(() => {
-      expect(within(pendingRoot).queryByText('Pending reply')).toBeNull();
-    });
+    await waitFor(() => expect(within(pendingRoot).queryByText('Pending reply')).toBeNull());
 
     await waitFor(() => {
       const nodes = within(conversation).queryAllByTestId('conversation-message');

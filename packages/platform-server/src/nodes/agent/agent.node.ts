@@ -181,6 +181,10 @@ export class AgentNode extends Node<AgentStaticConfig> implements OnModuleInit {
     this.moduleInitialized = true;
   }
 
+  getQueueSnapshot(threadId: string): ReturnType<MessagesBuffer['snapshot']> {
+    return this.buffer.snapshot(threadId);
+  }
+
   private getPersistenceOrThrow(): AgentsPersistenceService {
     if (this.persistenceRef === undefined) {
       try {

@@ -89,11 +89,13 @@ function registerThreadScenario({
   runs,
   children = [],
   reminders = [],
+  queue = [],
 }: {
   thread: ThreadMock;
   runs: RunMock[];
   children?: ThreadMock[];
   reminders?: ReminderMock[];
+  queue?: Array<{ id: string; kind: 'user' | 'assistant' | 'system'; text: string; enqueuedAt: string; tokenId?: string }>;
 }) {
   const threadPayload: ThreadMock = {
     ...thread,
@@ -133,6 +135,18 @@ function registerThreadScenario({
     http.options('*/api/agents/reminders', () => new HttpResponse(null, { status: 200 })),
     http.options(abs('/api/agents/reminders'), () => new HttpResponse(null, { status: 200 })),
     http.get('*/api/containers', () => HttpResponse.json({ items: [] })),
+    http.get('*/api/agents/threads/:threadId/queue', ({ params }) => {
+      if (params.threadId === threadPayload.id) {
+        return HttpResponse.json({ items: queue });
+      }
+      return HttpResponse.json({ items: [] });
+    }),
+    http.get(abs('/api/agents/threads/:threadId/queue'), ({ params }) => {
+      if (params.threadId === threadPayload.id) {
+        return HttpResponse.json({ items: queue });
+      }
+      return HttpResponse.json({ items: [] });
+    }),
   );
 }
 
@@ -323,6 +337,28 @@ describe('AgentsThreads page', () => {
       expect(input).toHaveValue('');
       expect(sendButton).not.toBeDisabled();
     });
+  });
+
+  it('renders queued messages from the queue endpoint', async () => {
+    const thread = makeThread({ id: '11111111-1111-1111-1111-111111111120' });
+    registerThreadScenario({
+      thread,
+      runs: [],
+      children: [],
+      queue: [
+        { id: 'queued-assistant', kind: 'assistant', text: 'Assistant queued second', enqueuedAt: t(500) },
+        { id: 'queued-user', kind: 'user', text: 'User queued first', enqueuedAt: t(100) },
+      ],
+    });
+
+    renderAt(`/agents/threads/${thread.id}`);
+
+    const queueItems = await screen.findAllByTestId('queued-message');
+    expect(queueItems).toHaveLength(2);
+    expect(queueItems[0]).toHaveTextContent('User queued first');
+    expect(queueItems[0]).toHaveTextContent('User');
+    expect(queueItems[1]).toHaveTextContent('Assistant queued second');
+    expect(queueItems[1]).toHaveTextContent('Assistant');
   });
 
   it('shows Running when any run is active', async () => {
