@@ -1,10 +1,10 @@
 import { useEffect, useMemo } from 'react';
-import { vi } from 'vitest';
 import type { Meta, StoryObj } from '@storybook/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
 import MemoryExplorerScreen from '../src/components/screens/MemoryExplorerScreen';
 import { withMainLayout } from './decorators/withMainLayout';
+import { memoryApi } from '../src/api/modules/memory';
 import { memoryPathParent, normalizeMemoryPath } from '../src/components/memory/path';
 
 type MemoryExplorerProps = React.ComponentProps<typeof MemoryExplorerScreen>;
@@ -102,7 +102,7 @@ const seedStore = (): MemoryStore => {
 
 let memoryStore: MemoryStore = seedStore();
 
-const listEntries = async (_nodeId: string, _scope: string, _threadId: string | undefined, rawPath: string) => {
+const listEntries: typeof memoryApi.list = async (_nodeId, _scope, _threadId, rawPath) => {
   const path = normalizeForStore(rawPath);
   const node = memoryStore.get(path);
   if (!node) return { items: [] };
@@ -116,7 +116,7 @@ const listEntries = async (_nodeId: string, _scope: string, _threadId: string | 
   return { items };
 };
 
-const statPath = async (_nodeId: string, _scope: string, _threadId: string | undefined, rawPath: string) => {
+const statPath: typeof memoryApi.stat = async (_nodeId, _scope, _threadId, rawPath) => {
   const path = normalizeForStore(rawPath);
   const node = memoryStore.get(path);
   if (!node) {
@@ -129,7 +129,7 @@ const statPath = async (_nodeId: string, _scope: string, _threadId: string | und
   };
 };
 
-const readPath = async (_nodeId: string, _scope: string, _threadId: string | undefined, rawPath: string) => {
+const readPath: typeof memoryApi.read = async (_nodeId, _scope, _threadId, rawPath) => {
   const path = normalizeForStore(rawPath);
   const node = memoryStore.get(path);
   if (!node) {
@@ -138,13 +138,13 @@ const readPath = async (_nodeId: string, _scope: string, _threadId: string | und
   return { content: node.content };
 };
 
-const appendPath = async (_nodeId: string, _scope: string, _threadId: string | undefined, rawPath: string, data: string) => {
+const appendPath: typeof memoryApi.append = async (_nodeId, _scope, _threadId, rawPath, data) => {
   const path = normalizeForStore(rawPath);
   const node = ensureNode(memoryStore, path);
   node.content = appendContent(node.content, data);
 };
 
-const updatePath = async (_nodeId: string, _scope: string, _threadId: string | undefined, rawPath: string, oldStr: string, newStr: string) => {
+const updatePath: typeof memoryApi.update = async (_nodeId, _scope, _threadId, rawPath, oldStr, newStr) => {
   const path = normalizeForStore(rawPath);
   const node = memoryStore.get(path);
   if (!node) {
@@ -162,11 +162,11 @@ const updatePath = async (_nodeId: string, _scope: string, _threadId: string | u
   return { replaced: count };
 };
 
-const ensureDirPath = async (_nodeId: string, _scope: string, _threadId: string | undefined, rawPath: string) => {
+const ensureDirPath: typeof memoryApi.ensureDir = async (_nodeId, _scope, _threadId, rawPath) => {
   ensureNode(memoryStore, rawPath);
 };
 
-const deletePath = async (_nodeId: string, _scope: string, _threadId: string | undefined, rawPath: string) => {
+const deletePath: typeof memoryApi.delete = async (_nodeId, _scope, _threadId, rawPath) => {
   const removed = removeNode(memoryStore, rawPath);
   return { removed };
 };
@@ -175,22 +175,37 @@ const resetMemoryMock = () => {
   memoryStore = seedStore();
 };
 
-vi.mock('../src/api/modules/memory', async () => {
-  const actual = await vi.importActual<typeof import('../src/api/modules/memory')>('../src/api/modules/memory');
-  return {
-    ...actual,
-    memoryApi: {
-      ...actual.memoryApi,
-      list: listEntries,
-      stat: statPath,
-      read: readPath,
-      append: appendPath,
-      update: updatePath,
-      ensureDir: ensureDirPath,
-      delete: deletePath,
-    },
+const installMemoryApiMock = () => {
+  const originals = {
+    list: memoryApi.list,
+    stat: memoryApi.stat,
+    read: memoryApi.read,
+    append: memoryApi.append,
+    update: memoryApi.update,
+    ensureDir: memoryApi.ensureDir,
+    delete: memoryApi.delete,
   };
-});
+
+  memoryApi.list = listEntries;
+  memoryApi.stat = statPath;
+  memoryApi.read = readPath;
+  memoryApi.append = appendPath;
+  memoryApi.update = updatePath;
+  memoryApi.ensureDir = ensureDirPath;
+  memoryApi.delete = deletePath;
+
+  resetMemoryMock();
+
+  return () => {
+    memoryApi.list = originals.list;
+    memoryApi.stat = originals.stat;
+    memoryApi.read = originals.read;
+    memoryApi.append = originals.append;
+    memoryApi.update = originals.update;
+    memoryApi.ensureDir = originals.ensureDir;
+    memoryApi.delete = originals.delete;
+  };
+};
 
 function MemoryExplorerStoryWrapper(props: MemoryExplorerProps) {
   const queryClient = useMemo(
@@ -206,8 +221,9 @@ function MemoryExplorerStoryWrapper(props: MemoryExplorerProps) {
   );
 
   useEffect(() => {
-    resetMemoryMock();
+    const restore = installMemoryApiMock();
     return () => {
+      restore();
       queryClient.clear();
     };
   }, [queryClient]);
