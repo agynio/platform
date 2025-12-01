@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { EnvService } from '../../src/env/env.service';
 import { ShellCommandNode } from '../../src/nodes/tools/shell_command/shell_command.node';
 import type { ContainerHandle } from '../../src/infra/container/container.handle';
-import { ExecTimeoutError } from '../../src/utils/execTimeout';
+import { ExecIdleTimeoutError, ExecTimeoutError } from '../../src/utils/execTimeout';
 
 type OutputChunk = { source: 'stdout' | 'stderr'; data: string };
 
@@ -303,6 +303,52 @@ describe('ShellCommandTool combined output', () => {
     expect(payload.status).toBe('timeout');
     expect(payload.exitCode).toBeNull();
     expect(payload.message).toContain('Command timed out');
+  });
+
+  it('executeStreaming returns idle-timeout payload and idle status', async () => {
+    class IdleTimeoutContainer implements ContainerHandle {
+      async exec(): Promise<never> {
+        throw new ExecIdleTimeoutError(4000, 'idle stdout\n', 'idle stderr\n');
+      }
+      async putArchive(): Promise<void> {}
+      async stop(): Promise<void> {}
+      async remove(): Promise<void> {}
+    }
+
+    const { tool, runEvents } = createToolWithContainer(new IdleTimeoutContainer());
+    const message = await tool.executeStreaming({ command: 'idle' }, ctx as any, streamingOptions);
+
+    expect(message).toBe('[exit code 408] Exec idle timed out after 4000ms\n---\nidle stdout\nidle stderr\n');
+    expect(runEvents.finalizeToolOutputTerminal).toHaveBeenCalledTimes(1);
+    const payload = runEvents.finalizeToolOutputTerminal.mock.calls[0][0];
+    expect(payload.status).toBe('idle_timeout');
+    expect(payload.exitCode).toBeNull();
+    expect(payload.message).toContain('Command produced no output');
+  });
+
+  it('executeStreaming returns generic failure payload and error status', async () => {
+    class GenericFailureContainer implements ContainerHandle {
+      async exec(
+        _command: string,
+        options?: { onOutput?: (source: 'stdout' | 'stderr', chunk: Buffer) => void },
+      ): Promise<never> {
+        options?.onOutput?.('stdout', Buffer.from('log chunk\n'));
+        throw new Error('fatal: permission denied');
+      }
+      async putArchive(): Promise<void> {}
+      async stop(): Promise<void> {}
+      async remove(): Promise<void> {}
+    }
+
+    const { tool, runEvents } = createToolWithContainer(new GenericFailureContainer());
+    const message = await tool.executeStreaming({ command: 'fail-gen' }, ctx as any, streamingOptions);
+
+    expect(message).toBe('[exit code 500] fatal: permission denied\n---\nlog chunk\n');
+    expect(runEvents.finalizeToolOutputTerminal).toHaveBeenCalledTimes(1);
+    const payload = runEvents.finalizeToolOutputTerminal.mock.calls[0][0];
+    expect(payload.status).toBe('error');
+    expect(payload.exitCode).toBeNull();
+    expect(payload.message ?? null).toBeNull();
   });
 
   it('removes CSI sequences split across chunks in non-streaming execute', async () => {
