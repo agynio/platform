@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { EnvService } from '../../src/env/env.service';
 import { ShellCommandNode } from '../../src/nodes/tools/shell_command/shell_command.node';
 import type { ContainerHandle } from '../../src/infra/container/container.handle';
+import { ExecTimeoutError } from '../../src/utils/execTimeout';
 
 type OutputChunk = { source: 'stdout' | 'stderr'; data: string };
 
@@ -220,7 +221,7 @@ describe('ShellCommandTool combined output', () => {
     const container = new SequenceContainer(chunks, 2);
     const { tool } = createToolWithContainer(container);
     const message = await tool.execute({ command: 'fail' }, ctx as any);
-    expect(message).toMatch(/\[exit code 2]/);
+    expect(message.startsWith('[exit code 2] Process exited with code 2')).toBe(true);
     expect(message).toContain('starting');
     expect(message).toContain('boom');
   });
@@ -233,7 +234,7 @@ describe('ShellCommandTool combined output', () => {
     const container = new SequenceContainer(chunks, 7);
     const { tool } = createToolWithContainer(container);
     const message = await tool.execute({ command: 'fails' }, ctx as any);
-    expect(message.split('\n')[0]).toBe('[exit code 7]');
+    expect(message.split('\n')[0]).toBe('[exit code 7] Process exited with code 7');
     expect(message).toContain('alpha');
     expect(message).toContain('omega');
   });
@@ -244,8 +245,9 @@ describe('ShellCommandTool combined output', () => {
     const { tool, runEvents, node } = createToolWithContainer(container);
     await node.setConfig({ outputLimitChars: 20 } as any);
     const message = await tool.executeStreaming({ command: 'huge' }, ctx as any, streamingOptions);
-    expect(message.split('\n')[0]).toBe('[exit code 3]');
-    expect(message).toContain('Full output saved to:');
+    expect(message.split('\n')[0]).toBe('[exit code 3] Process exited with code 3');
+    expect(message).toContain('\n---\n');
+    expect(message).not.toContain('Full output saved to');
 
     expect(runEvents.finalizeToolOutputTerminal).toHaveBeenCalledTimes(1);
     const terminalArgs = runEvents.finalizeToolOutputTerminal.mock.calls[0][0];
@@ -253,9 +255,6 @@ describe('ShellCommandTool combined output', () => {
     expect(typeof terminalArgs.savedPath).toBe('string');
     const savedPath = terminalArgs.savedPath as string | null;
     expect(savedPath).not.toBeNull();
-    if (savedPath) {
-      expect(message).toContain(savedPath);
-    }
     expect(terminalArgs.message).toContain('Full output saved to');
   });
 
@@ -268,12 +267,13 @@ describe('ShellCommandTool combined output', () => {
     await node.setConfig({ outputLimitChars: 1000 } as any);
     const message = await tool.executeStreaming({ command: 'fail-large' }, ctx as any, streamingOptions);
     expect(message).toMatch(/\[exit code 9]/);
-    expect(message).toMatch(/Full output saved to \/tmp\/.+\.txt/);
-    expect(message.toLowerCase()).toContain('output tail');
-    const tailMatch = message.match(/--- output tail ---\n([\s\S]+)$/);
-    expect(tailMatch).not.toBeNull();
-    expect(tailMatch?.[1].length).toBe(10_000);
-    expect(tailMatch?.[1]).toBe(tailSegment);
+    expect(message).not.toContain('Full output saved to');
+    const parts = message.split('\n');
+    expect(parts[0]).toBe('[exit code 9] Process exited with code 9');
+    expect(parts[1]).toBe('---');
+    const tail = parts[2] ?? '';
+    expect(tail.length).toBe(1000);
+    expect(tail).toBe(tailSegment.slice(-1000));
 
     expect(runEvents.finalizeToolOutputTerminal).toHaveBeenCalledTimes(1);
     const terminalArgs = runEvents.finalizeToolOutputTerminal.mock.calls[0][0];
@@ -282,6 +282,27 @@ describe('ShellCommandTool combined output', () => {
     expect(terminalArgs.savedPath).toMatch(/^\/tmp\/.+\.txt$/);
     expect(typeof terminalArgs.message).toBe('string');
     expect(terminalArgs.message).toContain('Output truncated');
+  });
+
+  it('executeStreaming returns plain-text timeout payload without throwing', async () => {
+    class TimeoutContainer implements ContainerHandle {
+      async exec(): Promise<never> {
+        throw new ExecTimeoutError(3000, 'partial stdout\n', 'partial stderr\n');
+      }
+      async putArchive(): Promise<void> {}
+      async stop(): Promise<void> {}
+      async remove(): Promise<void> {}
+    }
+
+    const { tool, runEvents } = createToolWithContainer(new TimeoutContainer());
+    const message = await tool.executeStreaming({ command: 'slow' }, ctx as any, streamingOptions);
+
+    expect(message).toBe('[exit code 408] Exec timed out after 3000ms\n---\npartial stdout\npartial stderr\n');
+    expect(runEvents.finalizeToolOutputTerminal).toHaveBeenCalledTimes(1);
+    const payload = runEvents.finalizeToolOutputTerminal.mock.calls[0][0];
+    expect(payload.status).toBe('timeout');
+    expect(payload.exitCode).toBeNull();
+    expect(payload.message).toContain('Command timed out');
   });
 
   it('removes CSI sequences split across chunks in non-streaming execute', async () => {

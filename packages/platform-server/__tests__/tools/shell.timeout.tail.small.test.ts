@@ -68,18 +68,17 @@ describe('ShellTool timeout full inclusion when <=10k', () => {
     const t = node.getTool();
 
     const payload = { command: 'sleep 1h' } as any;
-    try {
-      await t.execute(payload as any, { threadId: 't', finishSignal: { activate() {}, deactivate() {}, isActive: false } as any, callerAgent: {} as any } as any);
-      throw new Error('expected to throw');
-    } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : String(e);
-      const sepIndex = msg.indexOf('----------');
-      expect(sepIndex).toBeGreaterThan(0);
-      const tail = msg.slice(sepIndex + '----------'.length + 1); // skip separator and newline
-      // no ansi
-      expect(tail).not.toMatch(/\u001b\[/);
-      // full plain text content should be present (not truncated)
-      expect(tail).toContain(combinedPlain);
-    }
+    const message = await t.execute(payload as any, {
+      threadId: 't',
+      finishSignal: { activate() {}, deactivate() {}, isActive: false } as any,
+      callerAgent: {} as any,
+    } as any);
+
+    expect(message.startsWith('[exit code 408] Exec timed out after 3600000ms')).toBe(true);
+    const lines = message.split('\n');
+    expect(lines[1]).toBe('---');
+    const tail = lines.slice(2).join('\n');
+    expect(tail).not.toMatch(/\u001b\[/);
+    expect(tail).toContain(combinedPlain);
   });
 });
