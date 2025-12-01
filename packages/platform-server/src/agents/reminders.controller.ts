@@ -5,8 +5,8 @@ import { AgentsPersistenceService } from './agents.persistence.service';
 
 export class ListRemindersQueryDto {
   @IsOptional()
-  @IsIn(['active', 'completed', 'all'])
-  filter?: 'active' | 'completed' | 'all';
+  @IsIn(['active', 'completed', 'cancelled', 'all'])
+  filter?: 'active' | 'completed' | 'cancelled' | 'all';
 
   @IsOptional()
   @IsInt()
@@ -14,6 +14,27 @@ export class ListRemindersQueryDto {
   @Min(1)
   @Max(1000)
   take?: number;
+
+  @IsOptional()
+  @IsInt()
+  @Type(() => Number)
+  @Min(1)
+  page?: number;
+
+  @IsOptional()
+  @IsInt()
+  @Type(() => Number)
+  @Min(1)
+  @Max(200)
+  pageSize?: number;
+
+  @IsOptional()
+  @IsIn(['latest', 'createdAt', 'at'])
+  sort?: 'latest' | 'createdAt' | 'at';
+
+  @IsOptional()
+  @IsIn(['asc', 'desc'])
+  order?: 'asc' | 'desc';
 
   @IsOptional()
   @IsUUID()
@@ -28,6 +49,24 @@ export class AgentsRemindersController {
 
   @Get('reminders')
   async listReminders(@Query() query: ListRemindersQueryDto) {
+    const wantsPagination =
+      query.page !== undefined ||
+      query.pageSize !== undefined ||
+      query.sort !== undefined ||
+      query.order !== undefined;
+
+    if (wantsPagination) {
+      const result = await this.persistence.listRemindersPaginated({
+        filter: query.filter ?? 'all',
+        page: query.page ?? 1,
+        pageSize: query.pageSize ?? 20,
+        sort: query.sort ?? 'latest',
+        order: query.order ?? 'desc',
+        threadId: query.threadId,
+      });
+      return result;
+    }
+
     const filter = query.filter ?? 'active';
     const take = query.take ?? 100;
     const items = await this.persistence.listReminders(filter, take, query.threadId);

@@ -1,8 +1,18 @@
 import RemindersScreen from '../screens/RemindersScreen';
 import type { ReminderVm } from '@/features/reminders/types';
+import type { CountsByStatus, ListRemindersOrder, ListRemindersSort } from '@/features/reminders/api';
 
 interface RemindersLayoutProps {
   reminders?: ReminderVm[];
+  countsByStatus?: CountsByStatus;
+  totalCount?: number;
+  page?: number;
+  pageSize?: number;
+  pageCount?: number;
+  filter?: 'all' | 'scheduled' | 'executed' | 'cancelled';
+  sortApplied?: { key: ListRemindersSort; order: ListRemindersOrder };
+  onFilterChange?: (filter: 'all' | 'scheduled' | 'executed' | 'cancelled') => void;
+  onPageChange?: (page: number) => void;
   isLoading?: boolean;
   error?: Error | null;
   onRetry?: () => void;
@@ -12,12 +22,26 @@ interface RemindersLayoutProps {
 
 export function RemindersLayout({
   reminders = [],
+  countsByStatus,
+  totalCount,
+  page,
+  pageSize,
+  pageCount,
+  filter = 'all',
+  sortApplied,
+  onFilterChange,
+  onPageChange,
   isLoading = false,
   error = null,
   onRetry,
   onViewThread,
   onViewRun,
 }: RemindersLayoutProps) {
+  const resolvedCounts = countsByStatus ?? { scheduled: 0, executed: 0, cancelled: 0 };
+  const resolvedTotal = totalCount ?? reminders.length;
+  const resolvedPageSize = pageSize ?? (reminders.length > 0 ? reminders.length : 20);
+  const resolvedPage = page ?? 1;
+  const resolvedPageCount = pageCount ?? (resolvedTotal === 0 ? 0 : Math.ceil(resolvedTotal / resolvedPageSize));
   const showLoading = isLoading && !error;
   const errorMessage = error?.message?.trim() || 'Failed to load reminders';
 
@@ -25,6 +49,15 @@ export function RemindersLayout({
     <div className="relative flex min-h-0 flex-1 overflow-hidden bg-white">
       <RemindersScreen
         reminders={reminders}
+        countsByStatus={resolvedCounts}
+        totalCount={resolvedTotal}
+        page={resolvedPage}
+        pageSize={resolvedPageSize}
+        pageCount={resolvedPageCount}
+        filter={filter}
+        sortApplied={sortApplied}
+        onFilterChange={onFilterChange}
+        onPageChange={onPageChange}
         onViewThread={onViewThread}
         onViewRun={onViewRun}
         onDeleteReminder={undefined}
