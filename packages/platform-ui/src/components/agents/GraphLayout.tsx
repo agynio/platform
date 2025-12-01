@@ -70,12 +70,6 @@ function resolveAgentDisplayTitle(node: GraphNodeConfig): string {
     return configTitle;
   }
 
-  const storedTitleRaw = typeof node.title === 'string' ? node.title : '';
-  const storedTitle = storedTitleRaw.trim();
-  if (storedTitle.length > 0) {
-    return storedTitle;
-  }
-
   const rawTemplate = typeof node.template === 'string' ? node.template : '';
   const templateTitle = rawTemplate.trim().length > 0 ? rawTemplate.trim() : 'Agent';
   const rawName = typeof config.name === 'string' ? (config.name as string) : '';
@@ -88,6 +82,12 @@ function resolveAgentDisplayTitle(node: GraphNodeConfig): string {
       normalizedRole.length > 0 ? normalizedRole : undefined,
       templateTitle,
     );
+  }
+
+  const storedTitleRaw = typeof node.title === 'string' ? node.title : '';
+  const storedTitle = storedTitleRaw.trim();
+  if (storedTitle.length > 0 && storedTitle !== templateTitle) {
+    return storedTitle;
   }
 
   return templateTitle;
