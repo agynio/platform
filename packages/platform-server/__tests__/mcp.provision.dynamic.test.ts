@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { LocalMCPServerNode } from '../src/nodes/mcp/localMcpServer.node';
 import type { McpServerConfig, McpTool } from '../src/mcp/types';
+import { createModuleRefStub } from './helpers/module-ref.stub';
 
 class MockLogger {
   info = vi.fn();
@@ -28,7 +29,7 @@ describe('LocalMCPServer provision/deprovision + enabledTools filtering', () => 
       resolveEnvItems: vi.fn(async () => ({})),
       resolveProviderEnv: vi.fn(async () => ({})),
     } as any;
-    server = new LocalMCPServerNode(new MockContainerService() as any, envStub, {} as any, undefined as any);
+    server = new LocalMCPServerNode(new MockContainerService() as any, envStub, {} as any, createModuleRefStub());
     (server as any).logger = logger;
     (server as any).setContainerProvider(mockProvider as any);
   });

@@ -8,7 +8,7 @@ import {
 } from '../graph/liveGraph.types';
 import type { EdgeDef, GraphDefinition, NodeDef } from '../shared/types/graph.types';
 import { GraphError } from '../graph/types';
-import { Inject, Injectable, Logger, Optional } from '@nestjs/common';
+import { Inject, Injectable, Logger } from '@nestjs/common';
 import { ModuleRef } from '@nestjs/core';
 import { ZodError, type ZodIssue } from 'zod';
 
@@ -49,7 +49,7 @@ export class LiveGraphRuntime {
     @Inject(TemplateRegistry) private readonly templateRegistry: TemplateRegistry,
     @Inject(GraphRepository) private readonly graphs: GraphRepository,
     @Inject(ModuleRef) private readonly moduleRef: ModuleRef,
-    @Optional() @Inject(ReferenceResolverService) private readonly referenceResolver?: ReferenceResolverService,
+    @Inject(ReferenceResolverService) private readonly referenceResolver: ReferenceResolverService,
   ) {
     this.portsRegistry = new PortsRegistry();
   }
@@ -461,7 +461,6 @@ export class LiveGraphRuntime {
   }
 
   private async resolveNodeConfig(nodeId: string, config: Record<string, unknown>): Promise<Record<string, unknown>> {
-    if (!this.referenceResolver) return config;
     try {
       const { output } = await this.referenceResolver.resolve<Record<string, unknown>>(config, {
         graphName: this.graphName,

@@ -3,6 +3,7 @@ import { SlackTrigger } from '../src/nodes/slackTrigger/slackTrigger.node';
 import type { AgentsPersistenceService } from '../src/agents/agents.persistence.service';
 import type { PrismaService } from '../src/core/services/prisma.service';
 import type { SlackAdapter } from '../src/messaging/slack/slack.adapter';
+import { createReferenceResolverStub } from './helpers/reference-resolver.stub';
 
 // Mock @slack/socket-mode to avoid network/real client
 const socketClients: Array<{ start: ReturnType<typeof vi.fn>; disconnect: ReturnType<typeof vi.fn> }> = [];
@@ -46,7 +47,8 @@ describe('SlackTrigger and PRTrigger lifecycle', () => {
       getNodes: () => [],
     } satisfies Pick<import('../src/graph-core/liveGraph.manager').LiveGraphRuntime, 'getOutboundNodeIds' | 'getNodes'>) as import('../src/graph-core/liveGraph.manager').LiveGraphRuntime;
     const templateRegistryStub = ({ getMeta: () => undefined } satisfies Pick<import('../src/graph-core/templateRegistry').TemplateRegistry, 'getMeta'>) as import('../src/graph-core/templateRegistry').TemplateRegistry;
-    const trigger = new SlackTrigger(undefined as any, persistence, prisma as PrismaService, slackAdapter, runtimeStub, templateRegistryStub);
+    const { stub: referenceResolver } = createReferenceResolverStub();
+    const trigger = new SlackTrigger(referenceResolver, persistence, prisma as PrismaService, slackAdapter, runtimeStub, templateRegistryStub);
     await trigger.setConfig({ app_token: 'xapp-test', bot_token: 'xoxb-test' });
     await trigger.provision();
     await trigger.deprovision();

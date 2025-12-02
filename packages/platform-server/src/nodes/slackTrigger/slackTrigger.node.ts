@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { ReferenceResolverService } from '../../utils/reference-resolver.service';
 import { ResolveError } from '../../utils/references';
 import Node from '../base/Node';
-import { Inject, Injectable, Scope, Optional } from '@nestjs/common';
+import { Inject, Injectable, Scope } from '@nestjs/common';
 import { BufferMessage } from '../agent/messagesBuffer';
 import { HumanMessage } from '@agyn/llm';
 import { stringify as YamlStringify } from 'yaml';
@@ -61,8 +61,7 @@ export class SlackTrigger extends Node<SlackTriggerConfig> {
 
   constructor(
     @Inject(ReferenceResolverService)
-    @Optional()
-    private readonly referenceResolver: ReferenceResolverService | null = null,
+    private readonly referenceResolver: ReferenceResolverService,
     @Inject(AgentsPersistenceService) private readonly persistence: AgentsPersistenceService,
     @Inject(PrismaService) private readonly prismaService: PrismaService,
     @Inject(SlackAdapter) private readonly slackAdapter: SlackAdapter,
@@ -101,16 +100,6 @@ export class SlackTrigger extends Node<SlackTriggerConfig> {
   }
 
   private async resolveTokens(cfg: SlackTriggerConfig): Promise<{ app: string; bot: string }> {
-    if (!this.referenceResolver) {
-      if (typeof cfg?.app_token !== 'string' || typeof cfg?.bot_token !== 'string') {
-        throw new Error('SlackTrigger config requires resolved tokens');
-      }
-      return {
-        app: this.ensureToken(cfg.app_token, 'xapp-', 'app_token'),
-        bot: this.ensureToken(cfg.bot_token, 'xoxb-', 'bot_token'),
-      };
-    }
-
     try {
       const { output } = await this.referenceResolver.resolve(cfg, {
         basePath: '/slack',

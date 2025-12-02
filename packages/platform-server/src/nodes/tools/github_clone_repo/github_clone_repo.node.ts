@@ -2,7 +2,7 @@ import z from 'zod';
 import { BaseToolNode } from '../baseToolNode';
 import { WorkspaceNode } from '../../workspace/workspace.node';
 import { GithubCloneRepoFunctionTool } from './github_clone_repo.tool';
-import { Inject, Injectable, Optional, Scope } from '@nestjs/common';
+import { Inject, Injectable, Scope } from '@nestjs/common';
 import { SecretReferenceSchema, VariableReferenceSchema } from '../../../utils/reference-schemas';
 import { ReferenceResolverService } from '../../../utils/reference-resolver.service';
 import { ResolveError } from '../../../utils/references';
@@ -38,18 +38,12 @@ export class GithubCloneRepoNode extends BaseToolNode<StaticConfigType> {
 
   private toolInstance?: GithubCloneRepoFunctionTool;
   private resolvedToken: string = '';
-  constructor(
-    @Inject(ReferenceResolverService) @Optional() private readonly referenceResolver?: ReferenceResolverService,
-  ) {
+  constructor(@Inject(ReferenceResolverService) private readonly referenceResolver: ReferenceResolverService) {
     super();
   }
 
   private async resolveTokenValue(token: StaticConfigType['token']): Promise<string> {
     if (token === undefined) return '';
-    if (!this.referenceResolver) {
-      if (typeof token !== 'string') throw new Error('GithubCloneRepoNode config requires resolved token');
-      return token;
-    }
     try {
       const { output } = await this.referenceResolver.resolve({ token }, { basePath: '/github_clone_repo/token' });
       const resolved = output.token;

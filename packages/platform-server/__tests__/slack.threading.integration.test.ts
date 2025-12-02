@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { SlackTrigger } from '../src/nodes/slackTrigger/slackTrigger.node';
 import type { SlackAdapter } from '../src/messaging/slack/slack.adapter';
+import { createReferenceResolverStub } from './helpers/reference-resolver.stub';
 
 type ChannelDescriptor = import('../src/messaging/types').ChannelDescriptor;
 
@@ -98,7 +99,8 @@ describe('SlackTrigger threading integration', () => {
       getNodes: () => [{ id: 'agent-slack', template: 'agent' }],
     } satisfies Pick<import('../src/graph-core/liveGraph.manager').LiveGraphRuntime, 'getOutboundNodeIds' | 'getNodes'>) as import('../src/graph-core/liveGraph.manager').LiveGraphRuntime;
     const templateRegistryStub = ({ getMeta: (template: string) => (template === 'agent' ? { kind: 'agent', title: 'Agent' } : undefined) } satisfies Pick<import('../src/graph-core/templateRegistry').TemplateRegistry, 'getMeta'>) as import('../src/graph-core/templateRegistry').TemplateRegistry;
-    const trigger = new SlackTrigger(undefined as any, persistence, prismaStub, slackAdapter, runtimeStub, templateRegistryStub);
+    const { stub: referenceResolver } = createReferenceResolverStub();
+    const trigger = new SlackTrigger(referenceResolver, persistence, prismaStub, slackAdapter, runtimeStub, templateRegistryStub);
     trigger.init({ nodeId: 'slack-node' });
     await trigger.setConfig({ app_token: 'xapp-abc', bot_token: 'xoxb-bot' });
     await trigger.provision();

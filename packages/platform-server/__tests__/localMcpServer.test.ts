@@ -4,6 +4,7 @@ import { McpServerConfig } from '../src/mcp/types.js';
 import { PassThrough } from 'node:stream';
 import { ContainerService } from '../src/infra/container/container.service';
 import type { ContainerRegistry } from '../src/infra/container/container.registry';
+import { createModuleRefStub } from './helpers/module-ref.stub';
 // no extra imports
 
 /**
@@ -139,7 +140,7 @@ describe('LocalMCPServer (mock)', () => {
       }),
     });
     const envStub = { resolveEnvItems: async () => ({}), resolveProviderEnv: async () => ({}) } as any;
-    server = new LocalMCPServerNode(containerService as any, envStub, {} as any, undefined as any);
+    server = new LocalMCPServerNode(containerService as any, envStub, {} as any, createModuleRefStub());
     // Provide a dummy container provider to satisfy start precondition (reuse mocked docker above)
     const mockProvider = {
       provide: async (threadId: string) => ({ 
