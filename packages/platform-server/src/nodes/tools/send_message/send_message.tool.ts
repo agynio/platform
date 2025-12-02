@@ -39,10 +39,18 @@ export class SendMessageFunctionTool extends FunctionTool<typeof sendMessageInvo
       const prisma = this.prisma.getClient();
       const thread = await prisma.thread.findUnique({
         where: { id: threadId },
-        select: { channelNodeId: true },
+        select: { channelNodeId: true, channel: true },
       });
-      const channelNodeId = thread?.channelNodeId ?? null;
-      if (!channelNodeId) {
+      if (!thread) {
+        return 'missing_channel_node';
+      }
+      const channelNodeId = thread.channelNodeId ?? null;
+      const channelDescriptor = thread.channel ?? null;
+      const hasChannelDescriptor = channelDescriptor !== null && channelDescriptor !== undefined;
+      if (channelNodeId == null) {
+        if (!hasChannelDescriptor) {
+          return 'message sent successfully';
+        }
         return 'missing_channel_node';
       }
       const node = this.runtime.getNodeInstance(channelNodeId);

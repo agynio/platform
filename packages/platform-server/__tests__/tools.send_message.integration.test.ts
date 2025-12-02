@@ -32,20 +32,24 @@ vi.mock('@slack/web-api', () => {
 });
 
 describe('send_message tool', () => {
-  const makePrismaStub = (options: { channelNodeId?: string | null; channel?: unknown | null }) => {
+  const makePrismaStub = (options: { channelNodeId?: string | null; channel?: unknown | null; exists?: boolean }) => {
     const state = {
       channelNodeId: options.channelNodeId === undefined ? 'channel-node' : options.channelNodeId,
       channel: options.channel === undefined ? null : options.channel,
+      exists: options.exists !== undefined ? options.exists : true,
     };
-    const threadFindUnique = vi.fn(async ({ select }: { select: Record<string, boolean> }) => {
-      if (select.channelNodeId) {
-        if (!state.channelNodeId) return null;
-        return { channelNodeId: state.channelNodeId };
+    const threadFindUnique = vi.fn(async ({ select }: { select?: Record<string, boolean> }) => {
+      if (!state.exists) return null;
+      if (!select || Object.keys(select).length === 0) {
+        return { channelNodeId: state.channelNodeId ?? null, channel: state.channel ?? null };
       }
-      if (select.channel) {
-        return { channel: state.channel };
+      const result: Record<string, unknown> = {};
+      if (select.channelNodeId) result.channelNodeId = state.channelNodeId ?? null;
+      if (select.channel) result.channel = state.channel ?? null;
+      if (Object.keys(result).length === 0) {
+        return null;
       }
-      return null;
+      return result;
     });
     const client = { thread: { findUnique: threadFindUnique } };
     const prismaService = ({ getClient: () => client } satisfies Pick<import('../src/core/services/prisma.service').PrismaService, 'getClient'>) as import('../src/core/services/prisma.service').PrismaService;
@@ -55,7 +59,7 @@ describe('send_message tool', () => {
   const makeRuntimeStub = (instance: unknown) =>
     ({
       getNodeInstance: vi.fn(() => instance),
-    } satisfies Partial<LiveGraphRuntime>) as LiveGraphRuntime;
+    } satisfies Partial<LiveGraphRuntime>) as unknown as LiveGraphRuntime;
 
   const makeTrigger = async (
     prismaService: import('../src/core/services/prisma.service').PrismaService,
@@ -88,8 +92,11 @@ describe('send_message tool', () => {
     const client = prismaService.getClient();
     const originalFindUnique = client.thread.findUnique;
     client.thread.findUnique = vi.fn(async (args: { select: Record<string, boolean> }) => {
-      if (args.select?.channel) return { channel: descriptor };
-      return originalFindUnique(args);
+      const base = await originalFindUnique(args);
+      if (!args.select?.channel) {
+        return base;
+      }
+      return { ...(base ?? {}), channel: descriptor };
     });
 
     await trigger.setConfig({ app_token: 'xapp-abc', bot_token: 'xoxb-abc' });
@@ -97,8 +104,17 @@ describe('send_message tool', () => {
     return { trigger, slackSend };
   };
 
-  it('returns error when thread channel mapping missing', async () => {
-    const { prismaService } = makePrismaStub({ channelNodeId: null });
+  it('returns success when thread has no channel mapping (internal thread)', async () => {
+    const { prismaService } = makePrismaStub({ channelNodeId: null, channel: null });
+    const runtime = makeRuntimeStub(undefined);
+    const tool = new SendMessageFunctionTool(prismaService, runtime);
+    const res = await tool.execute({ message: 'hello' }, { threadId: 't1' });
+    expect(res).toBe('message sent successfully');
+    expect(runtime.getNodeInstance).not.toHaveBeenCalled();
+  });
+
+  it('returns error when channel descriptor exists but channel node mapping missing', async () => {
+    const { prismaService } = makePrismaStub({ channelNodeId: null, channel: { type: 'slack' } });
     const runtime = makeRuntimeStub(undefined);
     const tool = new SendMessageFunctionTool(prismaService, runtime);
     const res = await tool.execute({ message: 'hello' }, { threadId: 't1' });
