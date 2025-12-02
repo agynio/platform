@@ -65,25 +65,6 @@ const defaultSeedDocuments: MemorySeedDocument[] = [
   },
 ];
 
-const defaultSeeds: MemorySeedConfig[] = [
-  {
-    nodeId: 'demo-node',
-    scope: 'global',
-    documents: defaultSeedDocuments,
-  },
-];
-
-const defaultSeedMap = new Map(
-  defaultSeeds.map((seed) => [createStoreKey(seed.nodeId, seed.scope, seed.threadId), seed.documents ?? []]),
-);
-
-const appendContent = (current: string, addition: string): string => {
-  if (!current) return addition;
-  if (!addition) return current;
-  const needsSeparator = !current.endsWith('\n') && !addition.startsWith('\n');
-  return needsSeparator ? `${current}\n${addition}` : `${current}${addition}`;
-};
-
 const createStoreKey = (nodeId: string, scope: 'global' | 'perThread', threadId: string | undefined) =>
   `${nodeId}::${scope}::${threadId ?? ''}`;
 
@@ -95,6 +76,25 @@ const parseStoreKey = (key: string): { nodeId: string; scope: 'global' | 'perThr
     threadId: threadRaw ? threadRaw : undefined,
   };
 };
+
+const appendContent = (current: string, addition: string): string => {
+  if (!current) return addition;
+  if (!addition) return current;
+  const needsSeparator = !current.endsWith('\n') && !addition.startsWith('\n');
+  return needsSeparator ? `${current}\n${addition}` : `${current}${addition}`;
+};
+
+const defaultSeeds: MemorySeedConfig[] = [
+  {
+    nodeId: 'demo-node',
+    scope: 'global',
+    documents: defaultSeedDocuments,
+  },
+];
+
+const defaultSeedMap = new Map(
+  defaultSeeds.map((seed) => [createStoreKey(seed.nodeId, seed.scope, seed.threadId), seed.documents ?? []]),
+);
 
 const ensureNode = (store: MemoryStore, rawPath: string): MemoryNode => {
   const path = normalizeMemoryPath(rawPath);
