@@ -1,13 +1,21 @@
 import { useEffect, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import type { QueryClient } from '@tanstack/react-query';
 import { threads } from '@/api/modules/threads';
 import type { ApiError } from '@/api/http';
 import { listContainers } from '@/api/modules/containers';
 import { graphSocket } from '@/lib/graph/socket';
-import type { ThreadMetrics, ThreadNode, ThreadReminder } from '@/api/types/agents';
+import type { ThreadMetrics, ThreadNode, ThreadReminder, AgentQueueItem } from '@/api/types/agents';
 import type { ContainerItem } from '@/api/modules/containers';
 
 const UUID_REGEX = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
+
+export const threadQueueQueryKey = (threadId: string | undefined) => ['agents', 'threads', threadId, 'queue'] as const;
+
+export function invalidateThreadQueue(queryClient: QueryClient, threadId: string | undefined): Promise<void> {
+  if (!threadId) return Promise.resolve();
+  return queryClient.invalidateQueries({ queryKey: threadQueueQueryKey(threadId) });
+}
 
 export function useThreadRoots(status: 'open' | 'closed' | 'all') {
   return useQuery({
@@ -156,6 +164,31 @@ export function useThreadContainers(threadId: string | undefined, enabled: boole
       offReconnect();
     };
   }, [threadId, enabled, isValidThread, qc, queryKey]);
+
+  return q;
+}
+
+export function useThreadQueue(threadId: string | undefined, enabled: boolean = true) {
+  const qc = useQueryClient();
+  const queryKey = useMemo(() => threadQueueQueryKey(threadId), [threadId]);
+  const isValidThread = !!threadId && UUID_REGEX.test(threadId);
+  const allow = enabled && isValidThread;
+  const q = useQuery<{ items: AgentQueueItem[] }>({
+    enabled: allow,
+    queryKey,
+    queryFn: () => threads.queue(threadId as string),
+    staleTime: 1500,
+  });
+
+  useEffect(() => {
+    if (!allow || !threadId) return;
+    const offReconnect = graphSocket.onReconnected(() => {
+      invalidateThreadQueue(qc, threadId).catch(() => {});
+    });
+    return () => {
+      offReconnect();
+    };
+  }, [allow, threadId, qc]);
 
   return q;
 }

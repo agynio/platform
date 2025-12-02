@@ -26,6 +26,8 @@ export interface Run {
 export interface QueuedMessageData {
   id: string;
   content: ReactNode;
+  kind?: 'user' | 'assistant' | 'system';
+  enqueuedAt?: string;
 }
 
 export interface ReminderData {
@@ -33,6 +35,7 @@ export interface ReminderData {
   content: ReactNode;
   scheduledTime: string;
   date?: string;
+  utcTs?: string;
 }
 
 interface ConversationProps {
@@ -174,6 +177,8 @@ export function Conversation({
                       <QueuedMessage
                         key={msg.id}
                         content={msg.content}
+                        kind={msg.kind}
+                        enqueuedAt={msg.enqueuedAt}
                       />
                     ))}
 
@@ -184,6 +189,7 @@ export function Conversation({
                         content={reminder.content}
                         scheduledTime={reminder.scheduledTime}
                         date={reminder.date}
+                        utcTs={reminder.utcTs}
                       />
                     ))}
                   </div>

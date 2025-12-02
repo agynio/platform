@@ -6,6 +6,7 @@ import { LiveGraphRuntime } from '../graph-core/liveGraph.manager';
 import type { ThreadStatus, MessageKind, RunStatus } from '@prisma/client';
 import {
   EventsBusService,
+  type AgentQueueEvent,
   type MessageBroadcast,
   type NodeStateBusEvent,
   type ReminderCountEvent as ReminderCountBusEvent,
@@ -130,6 +131,8 @@ export class GraphSocketGateway implements OnModuleInit, OnModuleDestroy {
     this.cleanup.push(this.eventsBus.subscribeToRunStatusChanged(this.handleRunStatusChanged));
     this.cleanup.push(this.eventsBus.subscribeToThreadMetrics(this.handleThreadMetrics));
     this.cleanup.push(this.eventsBus.subscribeToThreadMetricsAncestors(this.handleThreadMetricsAncestors));
+    this.cleanup.push(this.eventsBus.subscribeToAgentQueueEnqueued(this.handleAgentQueueEnqueued));
+    this.cleanup.push(this.eventsBus.subscribeToAgentQueueDrained(this.handleAgentQueueDrained));
   }
 
   onModuleDestroy(): void {
@@ -420,6 +423,62 @@ export class GraphSocketGateway implements OnModuleInit, OnModuleDestroy {
     }
   };
 
+  private readonly handleAgentQueueEnqueued = (payload: AgentQueueEvent): void => {
+    const ts =
+      payload.at instanceof Date
+        ? payload.at
+        : typeof payload.at === 'string'
+          ? toDate(payload.at)
+          : null;
+    if (!ts || Number.isNaN(ts.getTime())) {
+      this.logger.warn(
+        `GraphSocketGateway received invalid agent_queue_enqueued timestamp${this.formatContext({
+          threadId: payload.threadId,
+          at: payload.at,
+        })}`,
+      );
+      return;
+    }
+    try {
+      this.emitAgentQueueEnqueued(payload.threadId, ts);
+    } catch (err) {
+      this.logger.warn(
+        `GraphSocketGateway failed to emit agent_queue_enqueued${this.formatContext({
+          threadId: payload.threadId,
+          error: this.toSafeError(err),
+        })}`,
+      );
+    }
+  };
+
+  private readonly handleAgentQueueDrained = (payload: AgentQueueEvent): void => {
+    const ts =
+      payload.at instanceof Date
+        ? payload.at
+        : typeof payload.at === 'string'
+          ? toDate(payload.at)
+          : null;
+    if (!ts || Number.isNaN(ts.getTime())) {
+      this.logger.warn(
+        `GraphSocketGateway received invalid agent_queue_drained timestamp${this.formatContext({
+          threadId: payload.threadId,
+          at: payload.at,
+        })}`,
+      );
+      return;
+    }
+    try {
+      this.emitAgentQueueDrained(payload.threadId, ts);
+    } catch (err) {
+      this.logger.warn(
+        `GraphSocketGateway failed to emit agent_queue_drained${this.formatContext({
+          threadId: payload.threadId,
+          error: this.toSafeError(err),
+        })}`,
+      );
+    }
+  };
+
   private readonly handleThreadMetrics = (payload: ThreadMetricsEvent): void => {
     try {
       this.scheduleThreadMetrics(payload.threadId);
@@ -547,6 +606,18 @@ export class GraphSocketGateway implements OnModuleInit, OnModuleDestroy {
       },
     };
     this.emitToRooms([`thread:${threadId}`, `run:${run.id}`], 'run_status_changed', payload);
+  }
+  emitAgentQueueEnqueued(threadId: string, at: Date) {
+    this.emitToRooms([`thread:${threadId}`], 'agent_queue_enqueued', {
+      threadId,
+      at: at.toISOString(),
+    });
+  }
+  emitAgentQueueDrained(threadId: string, at: Date) {
+    this.emitToRooms([`thread:${threadId}`], 'agent_queue_drained', {
+      threadId,
+      at: at.toISOString(),
+    });
   }
   emitRunEvent(runId: string, threadId: string, payload: RunEventBroadcast) {
     const eventName = payload.mutation === 'update' ? 'run_event_updated' : 'run_event_appended';

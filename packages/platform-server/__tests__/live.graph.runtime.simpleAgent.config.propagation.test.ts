@@ -14,6 +14,8 @@ import { LLMProvisioner } from '../src/llm/provisioners/llm.provisioner';
 import { AgentNode } from '../src/nodes/agent/agent.node';
 import { AgentsPersistenceService } from '../src/agents/agents.persistence.service';
 import { RunSignalsRegistry } from '../src/agents/run-signals.service';
+import { EventsBusService } from '../src/events/events-bus.service';
+import { createEventsBusStub } from './helpers/eventsBus.stub';
 
 // Avoid any real network calls by ensuring ChatOpenAI token counting/invoke are not used in this test.
 // We don't invoke the graph; we only verify propagation of config to internal nodes/fields.
@@ -88,6 +90,7 @@ describe('LiveGraphRuntime -> Agent config propagation', () => {
           },
         },
         RunSignalsRegistry,
+        { provide: EventsBusService, useValue: createEventsBusStub() },
       ],
     })
       .compile()

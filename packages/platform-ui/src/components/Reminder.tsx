@@ -6,6 +6,7 @@ interface ReminderProps {
   scheduledTime: string;
   date?: string;
   className?: string;
+  utcTs?: string;
 }
 
 function getCountdown(targetDate: Date): string {
@@ -23,30 +24,56 @@ function getCountdown(targetDate: Date): string {
   return `in ${minutes}m`;
 }
 
+function resolveTargetDate(utcTs: string | undefined, date: string | undefined, scheduledTime: string): Date | null {
+  if (utcTs) {
+    const parsedUtc = new Date(utcTs);
+    if (!Number.isNaN(parsedUtc.getTime())) {
+      return parsedUtc;
+    }
+  }
+
+  const [hours, minutes] = scheduledTime.split(':');
+  const hourValue = Number.parseInt(hours, 10);
+  const minuteValue = Number.parseInt(minutes, 10);
+  if (!Number.isFinite(hourValue) || !Number.isFinite(minuteValue)) {
+    return null;
+  }
+
+  const base = date ? new Date(date) : new Date();
+  if (Number.isNaN(base.getTime())) {
+    return null;
+  }
+  base.setHours(hourValue, minuteValue, 0, 0);
+  return base;
+}
+
 export function Reminder({
   content,
   scheduledTime,
   date,
   className = '',
+  utcTs,
 }: ReminderProps) {
   const [countdown, setCountdown] = useState<string>('');
-  
+
   useEffect(() => {
-    // Parse the date and time to create a target date
-    const targetDate = date ? new Date(date) : new Date();
-    const [hours, minutes] = scheduledTime.split(':');
-    targetDate.setHours(parseInt(hours), parseInt(minutes), 0, 0);
-    
-    // Initial countdown
-    setCountdown(getCountdown(targetDate));
-    
-    // Update countdown every minute
-    const interval = setInterval(() => {
+    const targetDate = resolveTargetDate(utcTs, date, scheduledTime);
+    if (!targetDate) {
+      setCountdown('');
+      return undefined;
+    }
+
+    const updateCountdown = () => {
       setCountdown(getCountdown(targetDate));
-    }, 60000);
-    
-    return () => clearInterval(interval);
-  }, [scheduledTime, date]);
+    };
+
+    updateCountdown();
+    const interval = setInterval(updateCountdown, 60000);
+
+    return () => {
+      clearInterval(interval);
+    };
+  }, [utcTs, scheduledTime, date]);
   
   return (
     <div className={`flex justify-start mb-4 ${className}`}>

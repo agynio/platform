@@ -9,6 +9,7 @@ import type { ModuleRef } from '@nestjs/core';
 import { FunctionTool } from '@agyn/llm';
 import { BaseToolNode } from '../src/nodes/tools/baseToolNode';
 import type { LocalMCPServerNode } from '../src/nodes/mcp';
+import type { EventsBusService } from '../src/events/events-bus.service';
 
 class StubProvisioner extends LLMProvisioner {
   async getLLM(): Promise<unknown> {
@@ -89,8 +90,12 @@ const createAgent = async () => {
     get: vi.fn(),
     create: vi.fn(async () => undefined),
   } as unknown as ModuleRef;
+  const eventsBus = {
+    emitAgentQueueEnqueued: vi.fn(),
+    emitAgentQueueDrained: vi.fn(),
+  } as unknown as EventsBusService;
 
-  const agent = new AgentNode(configService, provisioner, moduleRef);
+  const agent = new AgentNode(configService, provisioner, moduleRef, eventsBus);
   (agent as unknown as { logger: LoggerStub }).logger = logger;
   agent.init({ nodeId: 'agent-node' });
   await agent.setConfig({ title: 'Test Agent' } as AgentStaticConfig);

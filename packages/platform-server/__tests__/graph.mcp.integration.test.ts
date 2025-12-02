@@ -18,6 +18,8 @@ import type { GraphDefinition } from '../src/shared/types/graph.types';
 import { AgentsPersistenceService } from '../src/agents/agents.persistence.service';
 import { RunSignalsRegistry } from '../src/agents/run-signals.service';
 import { ReferenceResolverService } from '../src/utils/reference-resolver.service';
+import { EventsBusService } from '../src/events/events-bus.service';
+import { createEventsBusStub } from './helpers/eventsBus.stub';
 
 class StubContainerService extends ContainerService {
   constructor(registry: ContainerRegistry) {
@@ -152,6 +154,7 @@ describe('Graph MCP integration', () => {
           },
         },
         RunSignalsRegistry,
+        { provide: EventsBusService, useValue: createEventsBusStub() },
       ],
     }).compile();
 

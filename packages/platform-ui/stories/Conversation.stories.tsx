@@ -131,10 +131,14 @@ const sampleQueued: QueuedMessageData[] = [
   {
     id: 'queued-1',
     content: 'Generate unit tests for the authentication endpoint',
+    kind: 'user',
+    enqueuedAt: new Date(Date.now() - 5 * 60 * 1000).toISOString(),
   },
   {
     id: 'queued-2',
     content: 'Add rate limiting to prevent brute force attacks',
+    kind: 'assistant',
+    enqueuedAt: new Date(Date.now() - 2 * 60 * 1000).toISOString(),
   },
 ];
 
@@ -144,6 +148,15 @@ const sampleReminders: ReminderData[] = [
     content: 'Review and deploy authentication changes to staging',
     scheduledTime: '15:00',
     date: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+  },
+];
+
+const localizedUtcReminders: ReminderData[] = [
+  {
+    id: 'reminder-locale-1',
+    content: '현지화 상태 점검',
+    scheduledTime: '오후 6시 30분',
+    utcTs: new Date(Date.now() + 45 * 60 * 1000).toISOString(),
   },
 ];
 
@@ -484,6 +497,16 @@ export const WordWrapTest: Story = {
             },
           ]}
         />
+      </div>
+    </div>
+  ),
+};
+
+export const LocalizedUtcReminderCountdown: Story = {
+  render: () => (
+    <div className="p-6 bg-[var(--agyn-bg-light)] min-h-screen flex items-center justify-center">
+      <div className="w-full max-w-3xl h-[320px]">
+        <Conversation runs={minimalRuns} reminders={localizedUtcReminders} queuedMessages={[]} />
       </div>
     </div>
   ),

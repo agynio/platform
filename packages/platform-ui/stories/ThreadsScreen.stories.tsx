@@ -3,7 +3,7 @@ import type { Meta, StoryObj } from '@storybook/react';
 import { useArgs } from 'storybook/preview-api';
 import ThreadsScreen from '../src/components/screens/ThreadsScreen';
 import type { Thread } from '../src/components/ThreadItem';
-import type { Run } from '../src/components/Conversation';
+import type { Run, QueuedMessageData, ReminderData } from '../src/components/Conversation';
 import type { AutocompleteOption } from '../src/components/AutocompleteInput';
 import { withMainLayout } from './decorators/withMainLayout';
 
@@ -165,6 +165,26 @@ const reminders = [
   { id: 'r-2', title: 'Update documentation', time: 'Friday at 2:00 PM' },
 ];
 
+const pendingConversationReminders: ReminderData[] = [
+  { id: 'rem-1', content: 'Review agent summary draft', scheduledTime: '09:30', date: '2024-06-02' },
+  { id: 'rem-2', content: 'Check deployment status', scheduledTime: '14:15', date: '2024-06-02' },
+];
+
+const pendingQueuedMessages: QueuedMessageData[] = [
+  {
+    id: 'queue-1',
+    content: 'Queued message awaiting agent availability.',
+    kind: 'user',
+    enqueuedAt: new Date(Date.now() - 7 * 60 * 1000).toISOString(),
+  },
+  {
+    id: 'queue-2',
+    content: 'Queued message with additional context.',
+    kind: 'assistant',
+    enqueuedAt: new Date(Date.now() - 3 * 60 * 1000).toISOString(),
+  },
+];
+
 const baseArgs: ThreadsScreenProps = {
   threads,
   runs,
@@ -294,6 +314,55 @@ export const Populated: Story = {
     threadsIsLoading: false,
     isLoading: false,
     isEmpty: false,
+  },
+  render: ControlledRender,
+  parameters: {
+    selectedMenuItem: 'threads',
+  },
+};
+
+export const RunsOnlyPending: Story = {
+  args: {
+    ...baseArgs,
+    queuedMessages: [],
+    conversationReminders: [],
+  },
+  render: ControlledRender,
+  parameters: {
+    selectedMenuItem: 'threads',
+  },
+};
+
+export const QueueOnly: Story = {
+  args: {
+    ...baseArgs,
+    runs: [],
+    queuedMessages: pendingQueuedMessages,
+    conversationReminders: [],
+  },
+  render: ControlledRender,
+  parameters: {
+    selectedMenuItem: 'threads',
+  },
+};
+
+export const RunsWithPendingReminders: Story = {
+  args: {
+    ...baseArgs,
+    queuedMessages: [],
+    conversationReminders: pendingConversationReminders,
+  },
+  render: ControlledRender,
+  parameters: {
+    selectedMenuItem: 'threads',
+  },
+};
+
+export const RunsQueuedAndReminders: Story = {
+  args: {
+    ...baseArgs,
+    queuedMessages: pendingQueuedMessages,
+    conversationReminders: pendingConversationReminders,
   },
   render: ControlledRender,
   parameters: {

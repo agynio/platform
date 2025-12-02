@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { Test } from '@nestjs/testing';
 import { ModuleRef } from '@nestjs/core';
+import { Injectable, Scope } from '@nestjs/common';
 
 import { ResponseMessage, AIMessage } from '@agyn/llm';
 
@@ -17,6 +18,8 @@ import type { LLMContext } from '../src/llm/types';
 import { AgentNode } from '../src/nodes/agent/agent.node';
 import { ManageFunctionTool } from '../src/nodes/tools/manage/manage.tool';
 import { ManageToolNode } from '../src/nodes/tools/manage/manage.node';
+import { EventsBusService } from '../src/events/events-bus.service';
+import { createEventsBusStub } from './helpers/eventsBus.stub';
 
 class StubLLMProvisioner extends LLMProvisioner {
   async getLLM(): Promise<{ call: (messages: unknown) => Promise<{ text: string; output: unknown[] }> }> {
@@ -24,6 +27,7 @@ class StubLLMProvisioner extends LLMProvisioner {
   }
 }
 
+@Injectable({ scope: Scope.TRANSIENT })
 class FakeAgent extends AgentNode {
   override getPortConfig() {
     return { sourcePorts: {}, targetPorts: { $self: { kind: 'instance' } } } as const;
@@ -68,6 +72,7 @@ async function createHarness(options: { persistence?: AgentsPersistenceService }
       FakeAgent,
       { provide: AgentsPersistenceService, useValue: persistence },
       RunSignalsRegistry,
+      { provide: EventsBusService, useValue: createEventsBusStub() },
     ],
   }).compile();
 
@@ -283,6 +288,7 @@ describe('ManageTool unit', () => {
           useValue: { getOrCreateSubthreadByAlias: async () => 'child-t' } as unknown as AgentsPersistenceService,
         },
         RunSignalsRegistry,
+        { provide: EventsBusService, useValue: createEventsBusStub() },
       ],
     }).compile();
 
@@ -330,6 +336,7 @@ describe('ManageTool graph wiring', () => {
           useValue: { getOrCreateSubthreadByAlias: async () => 'child-t' } as unknown as AgentsPersistenceService,
         },
         RunSignalsRegistry,
+        { provide: EventsBusService, useValue: createEventsBusStub() },
       ],
     }).compile();
 
@@ -372,6 +379,7 @@ describe('ManageTool graph wiring', () => {
           useValue: { getOrCreateSubthreadByAlias: async () => 'child-t' } as unknown as AgentsPersistenceService,
         },
         RunSignalsRegistry,
+        { provide: EventsBusService, useValue: createEventsBusStub() },
       ],
     }).compile();
     const runtime = await runtimeModule.resolve(LiveGraphRuntime);

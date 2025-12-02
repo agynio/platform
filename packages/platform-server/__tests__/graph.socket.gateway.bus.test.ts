@@ -1,5 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type { EventsBusService, ReminderCountEvent, RunEventBusPayload } from '../src/events/events-bus.service';
+import type {
+  AgentQueueEvent,
+  EventsBusService,
+  ReminderCountEvent,
+  RunEventBusPayload,
+} from '../src/events/events-bus.service';
 import type { ToolOutputChunkPayload, ToolOutputTerminalPayload } from '../src/events/run-events.service';
 import { GraphSocketGateway } from '../src/gateway/graph.socket.gateway';
 
@@ -19,6 +24,8 @@ type GatewayTestContext = {
     runStatus: Handler<{ threadId: string; run: { id: string; status: string; createdAt: Date; updatedAt: Date } }>;
     threadMetrics: Handler<{ threadId: string }>;
     threadMetricsAncestors: Handler<{ threadId: string }>;
+    agentQueueEnqueued: Handler<AgentQueueEvent>;
+    agentQueueDrained: Handler<AgentQueueEvent>;
   };
   disposers: Record<string, ReturnType<typeof vi.fn>>;
   logger: { warn: ReturnType<typeof vi.fn>; error: ReturnType<typeof vi.fn>; log: ReturnType<typeof vi.fn>; debug: ReturnType<typeof vi.fn> };
@@ -50,6 +57,8 @@ function createGatewayTestContext(): GatewayTestContext {
     runStatus: vi.fn(),
     threadMetrics: vi.fn(),
     threadMetricsAncestors: vi.fn(),
+    agentQueueEnqueued: vi.fn(),
+    agentQueueDrained: vi.fn(),
   };
 
   const eventsBus: Pick<
@@ -65,6 +74,8 @@ function createGatewayTestContext(): GatewayTestContext {
     | 'subscribeToRunStatusChanged'
     | 'subscribeToThreadMetrics'
     | 'subscribeToThreadMetricsAncestors'
+    | 'subscribeToAgentQueueEnqueued'
+    | 'subscribeToAgentQueueDrained'
   > = {
     subscribeToRunEvents: (listener) => {
       handlers.run = listener;
@@ -109,6 +120,14 @@ function createGatewayTestContext(): GatewayTestContext {
     subscribeToThreadMetricsAncestors: (listener) => {
       handlers.threadMetricsAncestors = listener;
       return disposers.threadMetricsAncestors;
+    },
+    subscribeToAgentQueueEnqueued: (listener) => {
+      handlers.agentQueueEnqueued = listener;
+      return disposers.agentQueueEnqueued;
+    },
+    subscribeToAgentQueueDrained: (listener) => {
+      handlers.agentQueueDrained = listener;
+      return disposers.agentQueueDrained;
     },
   };
 
@@ -161,6 +180,20 @@ describe('GraphSocketGateway event bus integration', () => {
       } as any,
     });
     expect(spy).toHaveBeenCalledWith('run-1', 'thread-1', expect.objectContaining({ mutation: 'append' }));
+  });
+
+  it('forwards agent queue enqueued events to thread room', () => {
+    const spy = vi.spyOn(ctx.gateway, 'emitAgentQueueEnqueued');
+    const at = new Date('2025-01-01T00:00:00.000Z');
+    ctx.handlers.agentQueueEnqueued?.({ threadId: 'thread-1', at });
+    expect(spy).toHaveBeenCalledWith('thread-1', at);
+  });
+
+  it('forwards agent queue drained events to thread room', () => {
+    const spy = vi.spyOn(ctx.gateway, 'emitAgentQueueDrained');
+    const at = new Date('2025-02-01T12:00:00.000Z');
+    ctx.handlers.agentQueueDrained?.({ threadId: 'thread-2', at });
+    expect(spy).toHaveBeenCalledWith('thread-2', at);
   });
 
   it('converts tool output chunk timestamps to Date objects', () => {

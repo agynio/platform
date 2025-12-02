@@ -16,6 +16,7 @@ type RunSummary = {
   updatedAt: string;
 };
 type RunEventSocketPayload = { runId: string; mutation: 'append' | 'update'; event: RunTimelineEvent };
+type AgentQueueEventPayload = { threadId: string; at: string };
 interface ServerToClientEvents {
   node_status: (payload: NodeStatusEvent) => void;
   node_state: (payload: NodeStateEvent) => void;
@@ -30,6 +31,8 @@ interface ServerToClientEvents {
   run_event_updated: (payload: RunEventSocketPayload) => void;
   tool_output_chunk: (payload: ToolOutputChunk) => void;
   tool_output_terminal: (payload: ToolOutputTerminal) => void;
+  agent_queue_enqueued: (payload: AgentQueueEventPayload) => void;
+  agent_queue_drained: (payload: AgentQueueEventPayload) => void;
 }
 // Client-to-server emits: subscribe to rooms
 type SubscribePayload = { room?: string; rooms?: string[] };
@@ -47,6 +50,7 @@ type RunStatusChangedPayload = { threadId: string; run: RunSummary };
 type RunEventListenerPayload = RunEventSocketPayload;
 type ToolChunkListener = (payload: ToolOutputChunk) => void;
 type ToolTerminalListener = (payload: ToolOutputTerminal) => void;
+type AgentQueueListener = (payload: AgentQueueEventPayload) => void;
 
 class GraphSocket {
   // Typed socket instance; null until connected
@@ -61,6 +65,8 @@ class GraphSocket {
   private messageCreatedListeners = new Set<(payload: MessageCreatedPayload) => void>();
   private runStatusListeners = new Set<(payload: RunStatusChangedPayload) => void>();
   private runEventListeners = new Set<(payload: RunEventListenerPayload) => void>();
+  private agentQueueEnqueuedListeners = new Set<AgentQueueListener>();
+  private agentQueueDrainedListeners = new Set<AgentQueueListener>();
   private toolChunkListeners = new Set<ToolChunkListener>();
   private toolTerminalListeners = new Set<ToolTerminalListener>();
   private subscribedRooms = new Set<string>();
@@ -208,6 +214,16 @@ class GraphSocket {
     };
     socket.on('run_status_changed', handleRunStatusChanged);
     this.socketCleanup.push(() => socket.off('run_status_changed', handleRunStatusChanged));
+    const handleAgentQueueEnqueued: ServerToClientEvents['agent_queue_enqueued'] = (payload) => {
+      for (const fn of this.agentQueueEnqueuedListeners) fn(payload);
+    };
+    socket.on('agent_queue_enqueued', handleAgentQueueEnqueued);
+    this.socketCleanup.push(() => socket.off('agent_queue_enqueued', handleAgentQueueEnqueued));
+    const handleAgentQueueDrained: ServerToClientEvents['agent_queue_drained'] = (payload) => {
+      for (const fn of this.agentQueueDrainedListeners) fn(payload);
+    };
+    socket.on('agent_queue_drained', handleAgentQueueDrained);
+    this.socketCleanup.push(() => socket.off('agent_queue_drained', handleAgentQueueDrained));
     const handleRunEvent = (eventName: 'run_event_appended' | 'run_event_updated', payload: RunEventSocketPayload) => {
       const cursor = { ts: payload.event.ts, id: payload.event.id } as RunTimelineEventsCursor;
       const force = eventName === 'run_event_updated';
@@ -327,6 +343,8 @@ class GraphSocket {
     this.messageCreatedListeners.clear();
     this.runStatusListeners.clear();
     this.runEventListeners.clear();
+    this.agentQueueEnqueuedListeners.clear();
+    this.agentQueueDrainedListeners.clear();
     this.connectCallbacks.clear();
     this.reconnectCallbacks.clear();
     this.disconnectCallbacks.clear();
@@ -373,6 +391,20 @@ class GraphSocket {
     this.runStatusListeners.add(cb);
     return () => {
       this.runStatusListeners.delete(cb);
+    };
+  }
+
+  onAgentQueueEnqueued(cb: AgentQueueListener) {
+    this.agentQueueEnqueuedListeners.add(cb);
+    return () => {
+      this.agentQueueEnqueuedListeners.delete(cb);
+    };
+  }
+
+  onAgentQueueDrained(cb: AgentQueueListener) {
+    this.agentQueueDrainedListeners.add(cb);
+    return () => {
+      this.agentQueueDrainedListeners.delete(cb);
     };
   }
 

@@ -29,6 +29,7 @@ import { SummarizationLLMReducer } from '../../llm/reducers/summarization.llm.re
 import { Signal } from '../../signal';
 import { AgentsPersistenceService } from '../../agents/agents.persistence.service';
 import { RunSignalsRegistry } from '../../agents/run-signals.service';
+import { EventsBusService } from '../../events/events-bus.service';
 
 import { BaseToolNode } from '../tools/baseToolNode';
 import { BufferMessage, MessagesBuffer, ProcessBuffer } from './messagesBuffer';
@@ -173,12 +174,17 @@ export class AgentNode extends Node<AgentStaticConfig> implements OnModuleInit {
     @Inject(ConfigService) protected configService: ConfigService,
     @Inject(LLMProvisioner) protected llmProvisioner: LLMProvisioner,
     @Inject(ModuleRef) protected readonly moduleRef: ModuleRef,
+    @Inject(EventsBusService) private readonly eventsBus: EventsBusService,
   ) {
     super();
   }
 
   onModuleInit(): void {
     this.moduleInitialized = true;
+  }
+
+  getQueueSnapshot(threadId: string): ReturnType<MessagesBuffer['snapshot']> {
+    return this.buffer.snapshot(threadId);
   }
 
   private getPersistenceOrThrow(): AgentsPersistenceService {
@@ -323,7 +329,8 @@ export class AgentNode extends Node<AgentStaticConfig> implements OnModuleInit {
     ctx: LLMContext,
   ): Promise<void> {
     const mode = behavior.processBuffer === 'oneByOne' ? ProcessBuffer.OneByOne : ProcessBuffer.AllTogether;
-    const drained = this.buffer.tryDrain(ctx.threadId, mode);
+    const drainedAt = Date.now();
+    const drained = this.buffer.tryDrain(ctx.threadId, mode, drainedAt);
     if (drained.length === 0) return;
 
     this.logger.debug?.(
@@ -332,6 +339,7 @@ export class AgentNode extends Node<AgentStaticConfig> implements OnModuleInit {
 
     await this.getPersistenceOrThrow().recordInjected(ctx.runId, drained, { threadId: ctx.threadId });
     state.messages.push(...drained);
+    this.eventsBus.emitAgentQueueDrained({ threadId: ctx.threadId, at: new Date(drainedAt) });
   }
 
   private resolveBufferModeFromBehavior(behavior?: EffectiveAgentConfig['behavior']): ProcessBuffer {
@@ -495,7 +503,9 @@ export class AgentNode extends Node<AgentStaticConfig> implements OnModuleInit {
   async invoke(thread: string, messages: BufferMessage[]): Promise<ResponseMessage | ToolCallOutputMessage> {
     const busy = this.runningThreads.has(thread);
     if (busy) {
-      this.buffer.enqueue(thread, messages);
+      const now = Date.now();
+      this.buffer.enqueue(thread, messages, now);
+      this.eventsBus.emitAgentQueueEnqueued({ threadId: thread, at: new Date(now) });
       return ResponseMessage.fromText('queued');
     }
 
@@ -574,8 +584,10 @@ export class AgentNode extends Node<AgentStaticConfig> implements OnModuleInit {
       if (runId) this.getRunSignals().clear(runId);
     }
 
-    const nextMessages = this.buffer.tryDrain(thread, this.resolveBufferModeFromBehavior(effectiveBehavior));
+    const drainedAt = Date.now();
+    const nextMessages = this.buffer.tryDrain(thread, this.resolveBufferModeFromBehavior(effectiveBehavior), drainedAt);
     if (nextMessages.length > 0) {
+      this.eventsBus.emitAgentQueueDrained({ threadId: thread, at: new Date(drainedAt) });
       void this.invoke(thread, nextMessages);
     }
 

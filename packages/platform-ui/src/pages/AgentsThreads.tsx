@@ -4,14 +4,14 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { QueryKey } from '@tanstack/react-query';
 import ThreadsScreen from '@/components/screens/ThreadsScreen';
 import type { Thread } from '@/components/ThreadItem';
-import type { ConversationMessage, Run as ConversationRun } from '@/components/Conversation';
+import type { ConversationMessage, Run as ConversationRun, QueuedMessageData, ReminderData } from '@/components/Conversation';
 import type { AutocompleteOption } from '@/components/AutocompleteInput';
 import { formatDuration } from '@/components/agents/runTimelineFormatting';
 import { notifyError } from '@/lib/notify';
 import { graphSocket } from '@/lib/graph/socket';
 import { threads } from '@/api/modules/threads';
 import { runs as runsApi } from '@/api/modules/runs';
-import { useThreadById, useThreadReminders, useThreadContainers } from '@/api/hooks/threads';
+import { useThreadById, useThreadReminders, useThreadContainers, useThreadQueue, invalidateThreadQueue } from '@/api/hooks/threads';
 import { useThreadRuns } from '@/api/hooks/runs';
 import type { ThreadNode, ThreadMetrics, ThreadReminder, RunMessageItem, RunMeta } from '@/api/types/agents';
 import type { ContainerItem } from '@/api/modules/containers';
@@ -344,6 +344,44 @@ function mapReminders(items: ThreadReminder[]): { id: string; title: string; tim
   }));
 }
 
+type ConversationReminderWithSort = ReminderData & { sortValue: number };
+
+function mapRemindersForConversation(items: ThreadReminder[]): ReminderData[] {
+  const mapped: ConversationReminderWithSort[] = items.map((reminder) => {
+    const sanitizedContent = sanitizeSummary(reminder.note ?? null);
+    const timestamp = Date.parse(reminder.at);
+    if (!Number.isFinite(timestamp)) {
+      return {
+        id: reminder.id,
+        content: sanitizedContent,
+        scheduledTime: '--:--',
+        utcTs: reminder.at,
+        sortValue: Number.POSITIVE_INFINITY,
+      } satisfies ConversationReminderWithSort;
+    }
+
+    const target = new Date(timestamp);
+    const scheduledTime = target.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
+    const date = `${target.getFullYear()}-${String(target.getMonth() + 1).padStart(2, '0')}-${String(target.getDate()).padStart(2, '0')}`;
+
+    return {
+      id: reminder.id,
+      content: sanitizedContent,
+      scheduledTime,
+      date,
+      utcTs: reminder.at,
+      sortValue: timestamp,
+    } satisfies ConversationReminderWithSort;
+  });
+
+  mapped.sort((a, b) => {
+    if (a.sortValue !== b.sortValue) return a.sortValue - b.sortValue;
+    return a.id.localeCompare(b.id);
+  });
+
+  return mapped.map(({ sortValue: _sort, ...rest }) => rest);
+}
+
 function mapContainers(items: ContainerItem[]): { id: string; name: string; status: 'running' | 'finished' }[] {
   return items.map((container) => ({
     id: container.containerId,
@@ -557,6 +595,7 @@ export function AgentsThreads() {
 
   const threadDetailQuery = useThreadById(effectiveSelectedThreadId);
   const runsQuery = useThreadRuns(effectiveSelectedThreadId);
+  const queueQuery = useThreadQueue(effectiveSelectedThreadId, Boolean(effectiveSelectedThreadId) && !isDraftSelected);
 
   const runList = useMemo<RunMeta[]>(() => {
     const items = runsQuery.data?.items ?? [];
@@ -904,10 +943,50 @@ export function AgentsThreads() {
     () => (isDraftSelected ? [] : mapReminders(remindersQuery.data?.items ?? [])),
     [isDraftSelected, remindersQuery.data],
   );
+  const conversationRemindersForScreen = useMemo<ReminderData[]>(
+    () => (isDraftSelected ? [] : mapRemindersForConversation(remindersQuery.data?.items ?? [])),
+    [isDraftSelected, remindersQuery.data],
+  );
   const containersForScreen = useMemo(
     () => (isDraftSelected ? [] : mapContainers(containerItems)),
     [isDraftSelected, containerItems],
   );
+  const queuedMessagesForScreen = useMemo<QueuedMessageData[]>(
+    () => {
+      if (isDraftSelected) return [];
+      const items = queueQuery.data?.items ?? [];
+      if (items.length === 0) return [];
+      return items.map((item) => ({ id: item.id, content: item.text, kind: item.kind, enqueuedAt: item.enqueuedAt }));
+    },
+    [isDraftSelected, queueQuery.data],
+  );
+
+  useEffect(() => {
+    const threadId = effectiveSelectedThreadId;
+    if (!threadId) return;
+    let timeout: ReturnType<typeof setTimeout> | null = null;
+    const scheduleInvalidate = () => {
+      if (timeout) clearTimeout(timeout);
+      timeout = setTimeout(() => {
+        invalidateThreadQueue(queryClient, threadId).catch(() => {});
+      }, 300);
+    };
+    const offEnqueued = graphSocket.onAgentQueueEnqueued((payload) => {
+      if (payload.threadId !== threadId) return;
+      scheduleInvalidate();
+    });
+    const offDrained = graphSocket.onAgentQueueDrained((payload) => {
+      if (payload.threadId !== threadId) return;
+      scheduleInvalidate();
+    });
+    const offReconnect = graphSocket.onReconnected(scheduleInvalidate);
+    return () => {
+      if (timeout) clearTimeout(timeout);
+      offEnqueued();
+      offDrained();
+      offReconnect();
+    };
+  }, [effectiveSelectedThreadId, queryClient]);
   const selectedContainer = useMemo(() => {
     if (!selectedContainerId || isDraftSelected) return null;
     return containerItems.find((item) => item.containerId === selectedContainerId) ?? null;
@@ -927,8 +1006,11 @@ export function AgentsThreads() {
       await threads.sendMessage(threadId, text);
       return { threadId };
     },
-    onSuccess: () => {
+    onSuccess: (_data, variables) => {
       setInputValue('');
+      if (variables?.threadId) {
+        invalidateThreadQueue(queryClient, variables.threadId).catch(() => {});
+      }
     },
     onError: (error: unknown) => {
       notifyError(resolveSendMessageError(error));
@@ -1312,8 +1394,10 @@ export function AgentsThreads() {
         <ThreadsScreen
           threads={threadsForList}
           runs={conversationRuns}
+          queuedMessages={queuedMessagesForScreen}
           containers={containersForScreen}
           reminders={remindersForScreen}
+          conversationReminders={conversationRemindersForScreen}
           filterMode={filterMode}
           selectedThreadId={selectedThreadId ?? null}
           inputValue={inputValue}

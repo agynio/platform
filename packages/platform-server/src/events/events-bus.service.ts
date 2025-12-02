@@ -69,6 +69,11 @@ export type RunStatusBroadcast = {
   };
 };
 
+export type AgentQueueEvent = {
+  threadId: string;
+  at: Date;
+};
+
 type EventsBusEvents = {
   run_event: [RunEventBusPayload];
   tool_output_chunk: [ToolOutputChunkPayload];
@@ -81,6 +86,8 @@ type EventsBusEvents = {
   run_status_changed: [RunStatusBroadcast];
   thread_metrics: [ThreadMetricsEvent];
   thread_metrics_ancestors: [ThreadMetricsAncestorsEvent];
+  agent_queue_enqueued: [AgentQueueEvent];
+  agent_queue_drained: [AgentQueueEvent];
 };
 
 @Injectable()
@@ -194,6 +201,28 @@ export class EventsBusService implements OnModuleDestroy {
 
   emitRunStatusChanged(payload: RunStatusBroadcast): void {
     this.emitter.emit('run_status_changed', payload);
+  }
+
+  subscribeToAgentQueueEnqueued(listener: (payload: AgentQueueEvent) => void): () => void {
+    this.emitter.on('agent_queue_enqueued', listener);
+    return () => {
+      this.emitter.off('agent_queue_enqueued', listener);
+    };
+  }
+
+  emitAgentQueueEnqueued(payload: AgentQueueEvent): void {
+    this.emitter.emit('agent_queue_enqueued', payload);
+  }
+
+  subscribeToAgentQueueDrained(listener: (payload: AgentQueueEvent) => void): () => void {
+    this.emitter.on('agent_queue_drained', listener);
+    return () => {
+      this.emitter.off('agent_queue_drained', listener);
+    };
+  }
+
+  emitAgentQueueDrained(payload: AgentQueueEvent): void {
+    this.emitter.emit('agent_queue_drained', payload);
   }
 
   subscribeToThreadMetrics(listener: (payload: ThreadMetricsEvent) => void): () => void {

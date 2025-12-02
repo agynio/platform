@@ -9,6 +9,8 @@ export type EventsBusStub = {
   emitRunStatusChanged: ReturnType<typeof vi.fn>;
   emitThreadMetrics: ReturnType<typeof vi.fn>;
   emitThreadMetricsAncestors: ReturnType<typeof vi.fn>;
+  emitAgentQueueEnqueued: ReturnType<typeof vi.fn>;
+  emitAgentQueueDrained: ReturnType<typeof vi.fn>;
   emitReminderCount: ReturnType<typeof vi.fn>;
   emitToolOutputChunk: ReturnType<typeof vi.fn>;
   emitToolOutputTerminal: ReturnType<typeof vi.fn>;
@@ -23,6 +25,8 @@ export type EventsBusStub = {
   subscribeToRunStatusChanged: ReturnType<typeof vi.fn>;
   subscribeToThreadMetrics: ReturnType<typeof vi.fn>;
   subscribeToThreadMetricsAncestors: ReturnType<typeof vi.fn>;
+  subscribeToAgentQueueEnqueued: ReturnType<typeof vi.fn>;
+  subscribeToAgentQueueDrained: ReturnType<typeof vi.fn>;
 };
 
 export function createEventsBusStub(): EventsBusStub {
@@ -36,6 +40,8 @@ export function createEventsBusStub(): EventsBusStub {
     emitRunStatusChanged: vi.fn(),
     emitThreadMetrics: vi.fn(),
     emitThreadMetricsAncestors: vi.fn(),
+    emitAgentQueueEnqueued: vi.fn(),
+    emitAgentQueueDrained: vi.fn(),
     emitReminderCount: vi.fn(),
     emitToolOutputChunk: vi.fn(),
     emitToolOutputTerminal: vi.fn(),
@@ -50,5 +56,7 @@ export function createEventsBusStub(): EventsBusStub {
     subscribeToRunStatusChanged: vi.fn(() => disposer()),
     subscribeToThreadMetrics: vi.fn(() => disposer()),
     subscribeToThreadMetricsAncestors: vi.fn(() => disposer()),
+    subscribeToAgentQueueEnqueued: vi.fn(() => disposer()),
+    subscribeToAgentQueueDrained: vi.fn(() => disposer()),
   };
 }

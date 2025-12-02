@@ -7,6 +7,7 @@ import { ConfigService, configSchema } from '../src/core/services/config.service
 import { LLMProvisioner } from '../src/llm/provisioners/llm.provisioner';
 import { RunSignalsRegistry } from '../src/agents/run-signals.service';
 import { AgentsPersistenceService } from '../src/agents/agents.persistence.service';
+import { EventsBusService } from '../src/events/events-bus.service';
 
 import { AIMessage, HumanMessage, Loop, Reducer, ResponseMessage, Router } from '@agyn/llm';
 import type { LLMContext, LLMState } from '../src/llm/types';
@@ -119,6 +120,13 @@ const createAgentFixture = async () => {
       },
       TestAgentNode,
       RunSignalsRegistry,
+      {
+        provide: EventsBusService,
+        useValue: {
+          emitAgentQueueEnqueued: vi.fn(),
+          emitAgentQueueDrained: vi.fn(),
+        },
+      },
       { provide: AgentNode, useExisting: TestAgentNode },
       { provide: LLMProvisioner, useValue: { getLLM } },
       {

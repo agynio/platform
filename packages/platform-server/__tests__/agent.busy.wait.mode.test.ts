@@ -9,6 +9,7 @@ import type { LLMContext, LLMState } from '../src/llm/types';
 import { LLMProvisioner } from '../src/llm/provisioners/llm.provisioner';
 import { AgentsPersistenceService } from '../src/agents/agents.persistence.service';
 import { RunSignalsRegistry } from '../src/agents/run-signals.service';
+import { EventsBusService } from '../src/events/events-bus.service';
 
 class PassthroughReducer extends Reducer<LLMState, LLMContext> {
   async invoke(state: LLMState): Promise<LLMState> {
@@ -54,6 +55,13 @@ describe('Agent busy gating (wait mode)', () => {
           },
         },
         RunSignalsRegistry,
+        {
+          provide: EventsBusService,
+          useValue: {
+            emitAgentQueueEnqueued: vi.fn(),
+            emitAgentQueueDrained: vi.fn(),
+          },
+        },
       ],
     }).compile();
     const agent = await module.resolve(NoToolAgent);

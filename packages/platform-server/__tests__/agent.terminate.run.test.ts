@@ -7,6 +7,7 @@ import { LLMProvisioner } from '../src/llm/provisioners/llm.provisioner';
 import { RunSignalsRegistry } from '../src/agents/run-signals.service';
 import { Reducer, Loop, ResponseMessage, HumanMessage } from '@agyn/llm';
 import type { LLMContext, LLMState } from '../src/llm/types';
+import { EventsBusService } from '../src/events/events-bus.service';
 
 class TestReducer extends Reducer<LLMState, LLMContext> {
   override async invoke(state: LLMState): Promise<LLMState> {
@@ -49,6 +50,13 @@ describe('AgentNode termination flow', () => {
         },
         RunSignalsRegistry,
         TerminateAwareAgent,
+        {
+          provide: EventsBusService,
+          useValue: {
+            emitAgentQueueEnqueued: vi.fn(),
+            emitAgentQueueDrained: vi.fn(),
+          },
+        },
       ],
     }).compile();
 
