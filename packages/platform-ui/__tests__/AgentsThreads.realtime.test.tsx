@@ -14,7 +14,13 @@ function t(offsetMs: number) {
 
 describe('AgentsThreads realtime updates', () => {
   beforeAll(() => server.listen());
-  afterEach(() => server.resetHandlers());
+  beforeEach(() => {
+    (globalThis as { __AGYN_DISABLE_VIRTUALIZATION__?: boolean }).__AGYN_DISABLE_VIRTUALIZATION__ = true;
+  });
+  afterEach(() => {
+    (globalThis as { __AGYN_DISABLE_VIRTUALIZATION__?: boolean }).__AGYN_DISABLE_VIRTUALIZATION__ = false;
+    server.resetHandlers();
+  });
   afterAll(() => server.close());
 
   function setupBaseMocks(withRuns: boolean) {

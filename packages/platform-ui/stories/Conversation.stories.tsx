@@ -14,6 +14,11 @@ const meta: Meta<typeof Conversation> = {
     layout: 'fullscreen',
   },
   tags: ['!autodocs'],
+  args: {
+    threadId: 'story-thread',
+    hydrationComplete: true,
+    isActive: true,
+  },
 };
 
 export default meta;
@@ -295,7 +300,7 @@ export const Minimal: Story = {
   render: () => (
     <div className="p-6 bg-[var(--agyn-bg-light)] min-h-screen flex items-center justify-center">
       <div className="w-full max-w-3xl h-[300px]">
-        <Conversation runs={minimalRuns} />
+        <Conversation threadId="story-thread" hydrationComplete isActive runs={minimalRuns} />
       </div>
     </div>
   ),
@@ -305,7 +310,7 @@ export const StatusVariations: Story = {
   render: () => (
     <div className="p-6 bg-[var(--agyn-bg-light)] min-h-screen flex items-center justify-center">
       <div className="w-full max-w-3xl h-[500px]">
-        <Conversation runs={statusRuns} />
+        <Conversation threadId="story-thread" hydrationComplete isActive runs={statusRuns} />
       </div>
     </div>
   ),
@@ -316,6 +321,9 @@ export const MessageRoles: Story = {
     <div className="p-6 bg-[var(--agyn-bg-light)] min-h-screen flex items-center justify-center">
       <div className="w-full max-w-3xl h-[400px]">
         <Conversation
+          threadId="story-thread"
+          hydrationComplete
+          isActive
           runs={[
             {
               id: 'run-roles',
@@ -362,6 +370,9 @@ export const MarkdownExamples: Story = {
     <div className="p-6 bg-[var(--agyn-bg-light)] min-h-screen flex items-center justify-center">
       <div className="w-full max-w-3xl h-[800px]">
         <Conversation
+          threadId="story-thread"
+          hydrationComplete
+          isActive
           runs={[
             {
               id: 'run-markdown',
@@ -421,7 +432,14 @@ export const QueueAndRemindersOnly: Story = {
   render: () => (
     <div className="p-6 bg-[var(--agyn-bg-light)] min-h-screen flex items-center justify-center">
       <div className="w-full max-w-3xl h-[350px]">
-        <Conversation runs={minimalRuns} queuedMessages={sampleQueued} reminders={sampleReminders} />
+        <Conversation
+          threadId="story-thread"
+          hydrationComplete
+          isActive
+          runs={minimalRuns}
+          queuedMessages={sampleQueued}
+          reminders={sampleReminders}
+        />
       </div>
     </div>
   ),
@@ -432,6 +450,9 @@ export const WordWrapTest: Story = {
     <div className="p-6 bg-[var(--agyn-bg-light)] min-h-screen flex items-center justify-center">
       <div className="w-full max-w-3xl h-[500px]">
         <Conversation
+          threadId="story-thread"
+          hydrationComplete
+          isActive
           runs={[
             {
               id: 'run-wordwrap',

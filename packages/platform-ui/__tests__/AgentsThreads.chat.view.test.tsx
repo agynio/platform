@@ -22,8 +22,15 @@ function t(offsetMs: number) {
 }
 
 describe('AgentsThreads conversation view', () => {
+  let user: ReturnType<typeof userEvent.setup>;
+
   beforeAll(() => server.listen());
+  beforeEach(() => {
+    (globalThis as { __AGYN_DISABLE_VIRTUALIZATION__?: boolean }).__AGYN_DISABLE_VIRTUALIZATION__ = true;
+    user = userEvent.setup();
+  });
   afterEach(() => {
+    (globalThis as { __AGYN_DISABLE_VIRTUALIZATION__?: boolean }).__AGYN_DISABLE_VIRTUALIZATION__ = false;
     server.resetHandlers();
     navigateMock.mockReset();
   });
@@ -164,5 +171,94 @@ describe('AgentsThreads conversation view', () => {
     const childRow = await screen.findByText('Child thread');
     expect(childRow).toBeInTheDocument();
     expect(childrenHandler).toHaveBeenCalled();
+  });
+
+  function setupTwoThreadData() {
+    const threadA = {
+      id: 'th1',
+      alias: 'th-a',
+      summary: 'Thread A',
+      status: 'open',
+      createdAt: t(0),
+      parentId: null,
+      metrics: { remindersCount: 0, containersCount: 0, activity: 'working', runsCount: 1 },
+    };
+
+    const threadB = {
+      id: 'th2',
+      alias: 'th-b',
+      summary: 'Thread B',
+      status: 'open',
+      createdAt: t(5),
+      parentId: null,
+      metrics: { remindersCount: 0, containersCount: 0, activity: 'idle', runsCount: 1 },
+    };
+
+    const runA = { id: 'run1', threadId: 'th1', status: 'finished', createdAt: t(1), updatedAt: t(2) };
+    const runB = { id: 'run2', threadId: 'th2', status: 'finished', createdAt: t(6), updatedAt: t(7) };
+
+    const threadsHandler = () => HttpResponse.json({ items: [threadA, threadB] });
+
+    server.use(
+      http.get('/api/agents/threads', threadsHandler),
+      http.get(abs('/api/agents/threads'), threadsHandler),
+      http.get('/api/agents/threads/th1', () => HttpResponse.json(threadA)),
+      http.get(abs('/api/agents/threads/th1'), () => HttpResponse.json(threadA)),
+      http.get('/api/agents/threads/th2', () => HttpResponse.json(threadB)),
+      http.get(abs('/api/agents/threads/th2'), () => HttpResponse.json(threadB)),
+      http.get('/api/agents/threads/th1/children', () => HttpResponse.json({ items: [] })),
+      http.get(abs('/api/agents/threads/th1/children'), () => HttpResponse.json({ items: [] })),
+      http.get('/api/agents/threads/th2/children', () => HttpResponse.json({ items: [] })),
+      http.get(abs('/api/agents/threads/th2/children'), () => HttpResponse.json({ items: [] })),
+      http.get('/api/agents/threads/th1/runs', () => HttpResponse.json({ items: [runA] })),
+      http.get(abs('/api/agents/threads/th1/runs'), () => HttpResponse.json({ items: [runA] })),
+      http.get('/api/agents/threads/th2/runs', () => HttpResponse.json({ items: [runB] })),
+      http.get(abs('/api/agents/threads/th2/runs'), () => HttpResponse.json({ items: [runB] })),
+      http.get('/api/agents/runs/run1/messages', () =>
+        HttpResponse.json({ items: [{ id: 'a-1', kind: 'assistant', text: 'Thread A says hello', createdAt: t(3) }] }),
+      ),
+      http.get(abs('/api/agents/runs/run1/messages'), () =>
+        HttpResponse.json({ items: [{ id: 'a-1', kind: 'assistant', text: 'Thread A says hello', createdAt: t(3) }] }),
+      ),
+      http.get('/api/agents/runs/run2/messages', () =>
+        HttpResponse.json({ items: [{ id: 'b-1', kind: 'assistant', text: 'Thread B checking in', createdAt: t(8) }] }),
+      ),
+      http.get(abs('/api/agents/runs/run2/messages'), () =>
+        HttpResponse.json({ items: [{ id: 'b-1', kind: 'assistant', text: 'Thread B checking in', createdAt: t(8) }] }),
+      ),
+      http.get('/api/agents/reminders', () => HttpResponse.json({ items: [] })),
+      http.get(abs('/api/agents/reminders'), () => HttpResponse.json({ items: [] })),
+      http.get('/api/containers', () => HttpResponse.json({ items: [] })),
+      http.get(abs('/api/containers'), () => HttpResponse.json({ items: [] })),
+    );
+  }
+
+  it('reuses cached conversation content when returning to a thread', async () => {
+    setupTwoThreadData();
+
+    render(
+      <TestProviders>
+        <MemoryRouter>
+          <AgentsThreads />
+        </MemoryRouter>
+      </TestProviders>,
+    );
+
+    const threadARow = await screen.findByText('Thread A');
+    await user.click(threadARow);
+
+    const conversation = await screen.findByTestId('conversation');
+    const threadAInitialMessages = await within(conversation).findAllByText('Thread A says hello');
+    expect(threadAInitialMessages.length).toBeGreaterThan(0);
+
+    const threadBRow = await screen.findByText('Thread B');
+    await user.click(threadBRow);
+    const conversationB = await screen.findByTestId('conversation');
+    const threadBMessages = await within(conversationB).findAllByText('Thread B checking in');
+    expect(threadBMessages.length).toBeGreaterThan(0);
+
+    await user.click(threadARow);
+    const conversationAfterReturn = await screen.findByTestId('conversation');
+    expect(within(conversationAfterReturn).getAllByText('Thread A says hello').length).toBeGreaterThan(0);
   });
 });

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
+import { debugConversation } from '@/lib/debug';
 import { formatDistanceToNow } from 'date-fns';
 import { Play, Container, Bell, Send, PanelRightClose, PanelRight, Loader2, MessageSquarePlus, Terminal } from 'lucide-react';
 import { AutocompleteInput, type AutocompleteInputHandle, type AutocompleteOption } from '@/components/AutocompleteInput';
@@ -7,7 +8,14 @@ import { IconButton } from '../IconButton';
 import { ThreadsList } from '../ThreadsList';
 import type { Thread } from '../ThreadItem';
 import { SegmentedControl } from '../SegmentedControl';
-import { Conversation, type Run } from '../Conversation';
+import {
+  Conversation,
+  type Run,
+  type QueuedMessageData,
+  type ReminderData,
+  type ConversationHandle,
+  type ConversationScrollState,
+} from '../Conversation';
 import { Popover, PopoverTrigger, PopoverContent } from '../ui/popover';
 import { StatusIndicator } from '../StatusIndicator';
 import { AutosizeTextarea } from '../AutosizeTextarea';
@@ -30,6 +38,7 @@ interface ThreadsScreenProps {
   isEmpty?: boolean;
   listError?: ReactNode;
   detailError?: ReactNode;
+  conversationHydrationComplete?: boolean;
   onFilterModeChange?: (mode: 'all' | 'open' | 'closed') => void;
   onSelectThread?: (threadId: string) => void;
   onToggleRunsInfoCollapsed?: (isCollapsed: boolean) => void;
@@ -51,6 +60,361 @@ interface ThreadsScreenProps {
   className?: string;
 }
 
+type ConversationCacheEntry = {
+  runs: Run[];
+  queuedMessages: QueuedMessageData[];
+  reminders: ReminderData[];
+  hydrationComplete: boolean;
+  atBottomAtOpen: boolean;
+  scrollState?: ConversationScrollState | null;
+};
+
+type PendingRestoreEntry = {
+  state: ConversationScrollState;
+  showLoader: boolean;
+};
+
+type ConversationCacheState = {
+  order: string[];
+  entries: Record<string, ConversationCacheEntry>;
+};
+
+interface ConversationsHostProps {
+  activeThreadId: string;
+  runs: Run[];
+  queuedMessages: QueuedMessageData[];
+  reminders: ReminderData[];
+  hydrationComplete: boolean;
+  isRunsInfoCollapsed: boolean;
+  className?: string;
+  header?: ReactNode;
+  footer?: ReactNode;
+  defaultCollapsed?: boolean;
+  collapsed?: boolean;
+}
+
+const MAX_CONVERSATION_CACHE = 10;
+
+const isFiniteNumber = (value: unknown): value is number => typeof value === 'number' && Number.isFinite(value);
+
+const sanitizeScrollState = (state: ConversationScrollState | null | undefined): ConversationScrollState | null => {
+  if (!state) return null;
+
+  const next: ConversationScrollState = {};
+
+  if (isFiniteNumber(state.index)) {
+    next.index = Math.max(0, Math.floor(state.index));
+  }
+
+  if (isFiniteNumber(state.offset) && next.index !== undefined) {
+    next.offset = Math.max(0, state.offset);
+  }
+
+  if (isFiniteNumber(state.scrollTop)) {
+    next.scrollTop = Math.max(0, state.scrollTop);
+  }
+
+  if (state.atBottom) {
+    next.atBottom = true;
+  }
+
+  if (next.index === undefined && next.scrollTop === undefined && !next.atBottom) {
+    return null;
+  }
+
+  return next;
+};
+
+export function ConversationsHost({
+  activeThreadId,
+  runs,
+  queuedMessages,
+  reminders,
+  hydrationComplete,
+  isRunsInfoCollapsed,
+  className,
+  header,
+  footer,
+  defaultCollapsed,
+  collapsed,
+}: ConversationsHostProps) {
+  const [cache, setCache] = useState<ConversationCacheState>(() => ({
+    order: [activeThreadId],
+    entries: {
+      [activeThreadId]: {
+        runs,
+        queuedMessages,
+        reminders,
+        hydrationComplete,
+        atBottomAtOpen: true,
+        scrollState: null,
+      },
+    },
+  }));
+  const cacheRef = useRef(cache);
+  const conversationRefs = useRef<Map<string, ConversationHandle>>(new Map());
+  const pendingRestoresRef = useRef<Map<string, PendingRestoreEntry>>(new Map());
+  const restoreFrameRefs = useRef<Map<string, number>>(new Map());
+  const previousActiveRef = useRef<string>(activeThreadId);
+
+  useEffect(() => {
+    cacheRef.current = cache;
+  }, [cache]);
+
+  useEffect(() => {
+    const frameMap = restoreFrameRefs.current;
+    const pendingMap = pendingRestoresRef.current;
+    const handleMap = conversationRefs.current;
+    return () => {
+      for (const frameId of frameMap.values()) {
+        cancelAnimationFrame(frameId);
+      }
+      frameMap.clear();
+      pendingMap.clear();
+      handleMap.clear();
+    };
+  }, []);
+
+  useEffect(() => {
+    setCache((prev) => {
+      const entries: Record<string, ConversationCacheEntry> = { ...prev.entries };
+      const previousEntry = entries[activeThreadId];
+      const preservedState = sanitizeScrollState(previousEntry?.scrollState);
+      const atBottomAtOpen = previousEntry?.atBottomAtOpen ?? true;
+      const hydrationState = hydrationComplete || Boolean(previousEntry?.hydrationComplete);
+
+      entries[activeThreadId] = {
+        runs,
+        queuedMessages,
+        reminders,
+        hydrationComplete: hydrationState,
+        atBottomAtOpen,
+        scrollState: preservedState,
+      };
+
+      debugConversation('conversations-host.cache.refresh', () => ({
+        threadId: activeThreadId,
+        hadEntry: Boolean(previousEntry),
+      }));
+
+      const filtered = prev.order.filter((id) => id !== activeThreadId);
+      const nextOrder = [activeThreadId, ...filtered];
+      if (nextOrder.length > MAX_CONVERSATION_CACHE) {
+        const trimmed = nextOrder.slice(0, MAX_CONVERSATION_CACHE);
+        const removed = nextOrder.slice(MAX_CONVERSATION_CACHE);
+        const trimmedEntries: Record<string, ConversationCacheEntry> = {};
+        for (const id of trimmed) {
+          if (entries[id]) {
+            trimmedEntries[id] = entries[id];
+          }
+        }
+        for (const id of removed) {
+          pendingRestoresRef.current.delete(id);
+          conversationRefs.current.delete(id);
+          const frameId = restoreFrameRefs.current.get(id);
+          if (typeof frameId === 'number') {
+            cancelAnimationFrame(frameId);
+            restoreFrameRefs.current.delete(id);
+          }
+          debugConversation('conversations-host.cache.evict', () => ({ threadId: id }));
+        }
+        return { order: trimmed, entries: trimmedEntries };
+      }
+      return { order: nextOrder, entries };
+    });
+  }, [activeThreadId, hydrationComplete, queuedMessages, reminders, runs]);
+
+  const storeScrollState = useCallback((threadId: string, scrollState: ConversationScrollState | null) => {
+    const sanitized = sanitizeScrollState(scrollState);
+    debugConversation('conversations-host.cache.store', () => ({ threadId, hasState: Boolean(sanitized) }));
+    setCache((prev) => {
+      const entry = prev.entries[threadId];
+      if (!entry) return prev;
+      if (entry.scrollState === sanitized) return prev;
+      const entries = {
+        ...prev.entries,
+        [threadId]: {
+          ...entry,
+          scrollState: sanitized,
+        },
+      };
+      return { order: prev.order, entries };
+    });
+  }, []);
+
+  const storeAtBottomAtOpen = useCallback((threadId: string, atBottomAtOpen: boolean) => {
+    debugConversation('conversations-host.cache.at-bottom', () => ({ threadId, atBottomAtOpen }));
+    setCache((prev) => {
+      const entry = prev.entries[threadId];
+      if (!entry) return prev;
+      if (entry.atBottomAtOpen === atBottomAtOpen) return prev;
+      const entries = {
+        ...prev.entries,
+        [threadId]: {
+          ...entry,
+          atBottomAtOpen,
+        },
+      };
+      return { order: prev.order, entries };
+    });
+  }, []);
+
+  const captureScrollState = useCallback(
+    async (threadId: string) => {
+      const handle = conversationRefs.current.get(threadId);
+      if (!handle) {
+        debugConversation('conversations-host.capture.skip', () => ({ threadId }));
+        return;
+      }
+      const snapshot = await handle.captureScrollState();
+      debugConversation('conversations-host.capture.success', () => ({ threadId, hasState: Boolean(snapshot) }));
+      storeScrollState(threadId, snapshot);
+      storeAtBottomAtOpen(threadId, handle.isAtBottom());
+    },
+    [storeAtBottomAtOpen, storeScrollState],
+  );
+
+  const scheduleRestoreFrame = useCallback((threadId: string, entry: PendingRestoreEntry) => {
+    const frames = restoreFrameRefs.current;
+    const pending = pendingRestoresRef.current;
+    pending.set(threadId, entry);
+
+    const previousFrame = frames.get(threadId);
+    if (typeof previousFrame === 'number') {
+      cancelAnimationFrame(previousFrame);
+    }
+
+    const frameId = requestAnimationFrame(() => {
+      frames.delete(threadId);
+      const pendingEntry = pending.get(threadId);
+      if (!pendingEntry) {
+        debugConversation('conversations-host.restore.frame-missing', () => ({ threadId }));
+        return;
+      }
+      const handle = conversationRefs.current.get(threadId);
+      if (!handle) {
+        debugConversation('conversations-host.restore.defer', () => ({ threadId }));
+        return;
+      }
+      pending.delete(threadId);
+      debugConversation('conversations-host.restore.apply', () => ({ threadId, showLoader: pendingEntry.showLoader }));
+      handle.restoreScrollState(pendingEntry.state, { showLoader: pendingEntry.showLoader });
+    });
+
+    frames.set(threadId, frameId);
+    debugConversation('conversations-host.restore.schedule', () => ({ threadId, frameId, showLoader: entry.showLoader }));
+  }, []);
+
+  const requestRestore = useCallback(
+    (threadId: string, state: ConversationScrollState | null | undefined, options?: { showLoader?: boolean }) => {
+      const sanitized = sanitizeScrollState(state);
+      if (!sanitized) {
+        pendingRestoresRef.current.delete(threadId);
+        debugConversation('conversations-host.restore.skip', () => ({ threadId }));
+        return;
+      }
+      const showLoader = options?.showLoader ?? true;
+      const handle = conversationRefs.current.get(threadId);
+      const entry: PendingRestoreEntry = { state: sanitized, showLoader };
+      if (handle) {
+        debugConversation('conversations-host.restore.immediate', () => ({ threadId, showLoader }));
+        scheduleRestoreFrame(threadId, entry);
+        return;
+      }
+      debugConversation('conversations-host.restore.queue', () => ({ threadId, showLoader }));
+      pendingRestoresRef.current.set(threadId, entry);
+    },
+    [scheduleRestoreFrame],
+  );
+
+  useEffect(() => {
+    const previousId = previousActiveRef.current;
+    if (previousId && previousId !== activeThreadId) {
+      debugConversation('conversations-host.switch.capture', () => ({ from: previousId }));
+      void captureScrollState(previousId);
+    }
+
+    const entry = cacheRef.current.entries[activeThreadId];
+    const cachedState = sanitizeScrollState(entry?.scrollState);
+    if (cachedState) {
+      debugConversation('conversations-host.switch.restore', () => ({ threadId: activeThreadId }));
+      requestRestore(activeThreadId, cachedState, { showLoader: false });
+    } else {
+      debugConversation('conversations-host.switch.no-state', () => ({ threadId: activeThreadId }));
+    }
+
+    previousActiveRef.current = activeThreadId;
+  }, [activeThreadId, captureScrollState, requestRestore]);
+
+  const normalizedOrder = cache.order.includes(activeThreadId)
+    ? cache.order
+    : [activeThreadId, ...cache.order].slice(0, MAX_CONVERSATION_CACHE);
+
+  return (
+    <div className="relative h-full">
+      {normalizedOrder.map((threadId) => {
+        const isActive = threadId === activeThreadId;
+        const cached = cache.entries[threadId];
+        const runsForThread = isActive ? runs : cached?.runs ?? [];
+        const queuedForThread = isActive ? queuedMessages : cached?.queuedMessages ?? [];
+        const remindersForThread = isActive ? reminders : cached?.reminders ?? [];
+        const hydrationForThread = isActive
+          ? cached?.hydrationComplete ?? hydrationComplete
+          : cached?.hydrationComplete ?? false;
+        const atBottomAtOpen = cached?.atBottomAtOpen ?? true;
+        const visibilityClass = isActive
+          ? 'absolute inset-0 flex flex-col visible opacity-100 pointer-events-auto'
+          : 'absolute inset-0 flex flex-col invisible opacity-0 pointer-events-none';
+
+        const handleRef = (handle: ConversationHandle | null) => {
+          if (handle) {
+            debugConversation('conversations-host.handle.attach', () => ({ threadId }));
+            conversationRefs.current.set(threadId, handle);
+            const pending = pendingRestoresRef.current.get(threadId);
+            if (pending) {
+              scheduleRestoreFrame(threadId, pending);
+            }
+          } else {
+            debugConversation('conversations-host.handle.detach', () => ({ threadId }));
+            conversationRefs.current.delete(threadId);
+            const frameId = restoreFrameRefs.current.get(threadId);
+            if (typeof frameId === 'number') {
+              cancelAnimationFrame(frameId);
+              restoreFrameRefs.current.delete(threadId);
+            }
+          }
+        };
+
+        return (
+          <div
+            key={threadId}
+            className={visibilityClass}
+            aria-hidden={!isActive}
+            data-testid={`conversation-host-item-${threadId}`}
+          >
+            <Conversation
+              ref={handleRef}
+              threadId={threadId}
+              runs={runsForThread}
+              queuedMessages={queuedForThread}
+              reminders={remindersForThread}
+              hydrationComplete={hydrationForThread}
+              isActive={isActive}
+              className={className}
+              header={header}
+              footer={footer}
+              defaultCollapsed={defaultCollapsed ?? isRunsInfoCollapsed}
+              collapsed={collapsed ?? isRunsInfoCollapsed}
+              atBottomAtOpen={atBottomAtOpen}
+              testId={isActive ? undefined : null}
+            />
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 export default function ThreadsScreen({
   threads,
   runs,
@@ -67,6 +431,7 @@ export default function ThreadsScreen({
   isEmpty = false,
   listError,
   detailError,
+  conversationHydrationComplete = true,
   onFilterModeChange,
   onSelectThread,
   onToggleRunsInfoCollapsed,
@@ -428,7 +793,17 @@ export default function ThreadsScreen({
         </div>
 
         <div className="min-h-0 min-w-0 flex-1 overflow-hidden">
-          <Conversation runs={runs} className="h-full rounded-none border-none" collapsed={isRunsInfoCollapsed} />
+          <ConversationsHost
+            activeThreadId={resolvedSelectedThread.id}
+            runs={runs}
+            queuedMessages={[] as QueuedMessageData[]}
+            reminders={[] as ReminderData[]}
+            hydrationComplete={conversationHydrationComplete}
+            isRunsInfoCollapsed={isRunsInfoCollapsed}
+            className="h-full rounded-none border-none"
+            defaultCollapsed={isRunsInfoCollapsed}
+            collapsed={isRunsInfoCollapsed}
+          />
         </div>
 
         {renderComposer(!onSendMessage || !selectedThreadId || isSendMessagePending)}

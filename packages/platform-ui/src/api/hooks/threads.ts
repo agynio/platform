@@ -33,6 +33,9 @@ export function useThreadById(threadId: string | undefined) {
       if (error?.response?.status === 404) return false;
       return failureCount < 2;
     },
+    staleTime: 60000,
+    refetchOnMount: false,
+    refetchOnWindowFocus: false,
   });
 }
 

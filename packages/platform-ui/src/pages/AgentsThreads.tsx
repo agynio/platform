@@ -28,6 +28,7 @@ const MAX_THREAD_LIMIT = 500;
 
 const defaultMetrics: ThreadMetrics = { remindersCount: 0, containersCount: 0, activity: 'idle', runsCount: 0 };
 const THREAD_PRELOAD_CONCURRENCY = 4;
+const CONVERSATION_CACHE_LIMIT = 10;
 
 type FilterMode = 'open' | 'closed' | 'all';
 
@@ -69,6 +70,15 @@ type ThreadDraft = {
 };
 
 type AgentOption = { id: string; title: string };
+
+type ThreadConversationCache = {
+  runMessages: Record<string, ConversationMessageWithMeta[]>;
+  pendingMessages: Map<string, ConversationMessageWithMeta[]>;
+  seenMessageIds: Map<string, Set<string>>;
+  runIds: Set<string>;
+  hydrationComplete: boolean;
+  messagesError: string | null;
+};
 
 const DRAFT_SUMMARY_LABEL = '(new conversation)';
 const DRAFT_RECIPIENT_PLACEHOLDER = '(no recipient)';
@@ -293,6 +303,57 @@ function mergeMessages(base: ConversationMessageWithMeta[], additions: Conversat
   return merged;
 }
 
+function cloneRunMessagesMap(
+  source: Record<string, ConversationMessageWithMeta[]>,
+): Record<string, ConversationMessageWithMeta[]> {
+  const result: Record<string, ConversationMessageWithMeta[]> = {};
+  for (const [runId, messages] of Object.entries(source)) {
+    result[runId] = [...messages];
+  }
+  return result;
+}
+
+function clonePendingMessagesMap(
+  source: Map<string, ConversationMessageWithMeta[]>,
+): Map<string, ConversationMessageWithMeta[]> {
+  const next = new Map<string, ConversationMessageWithMeta[]>();
+  for (const [runId, list] of source.entries()) {
+    next.set(runId, [...list]);
+  }
+  return next;
+}
+
+function cloneSeenMessagesMap(source: Map<string, Set<string>>): Map<string, Set<string>> {
+  const next = new Map<string, Set<string>>();
+  for (const [runId, set] of source.entries()) {
+    next.set(runId, new Set(set));
+  }
+  return next;
+}
+
+function applyMessageToCacheEntry(
+  entry: ThreadConversationCache,
+  runId: string,
+  message: ConversationMessageWithMeta,
+): void {
+  const seen = entry.seenMessageIds.get(runId) ?? new Set<string>();
+  if (seen.has(message.id)) return;
+  seen.add(message.id);
+  entry.seenMessageIds.set(runId, seen);
+
+  if (!entry.runIds.has(runId)) {
+    const pending = entry.pendingMessages.get(runId) ?? [];
+    const merged = mergeMessages(pending, [message]);
+    entry.pendingMessages.set(runId, merged);
+    return;
+  }
+
+  const existing = entry.runMessages[runId] ?? [];
+  const merged = mergeMessages(existing, [message]);
+  entry.runMessages[runId] = merged;
+  entry.seenMessageIds.set(runId, new Set(merged.map((item) => item.id)));
+}
+
 function areMessageListsEqual(a: ConversationMessageWithMeta[], b: ConversationMessageWithMeta[]): boolean {
   if (a.length !== b.length) return false;
   for (let i = 0; i < a.length; i += 1) {
@@ -368,6 +429,7 @@ export function AgentsThreads() {
   const [messagesError, setMessagesError] = useState<string | null>(null);
   const [isRunsInfoCollapsed, setRunsInfoCollapsed] = useState(false);
   const [selectedContainerId, setSelectedContainerId] = useState<string | null>(null);
+  const [conversationHydrationComplete, setConversationHydrationComplete] = useState(false);
 
   const pendingMessagesRef = useRef<Map<string, ConversationMessageWithMeta[]>>(new Map());
   const seenMessageIdsRef = useRef<Map<string, Set<string>>>(new Map());
@@ -375,9 +437,27 @@ export function AgentsThreads() {
   const draftsRef = useRef<ThreadDraft[]>([]);
   const lastSelectedIdRef = useRef<string | null>(null);
   const lastNonDraftIdRef = useRef<string | null>(null);
+  const runMessagesStateRef = useRef(runMessages);
+  const messagesErrorRef = useRef<string | null>(messagesError);
+  const conversationHydrationCompleteRef = useRef(conversationHydrationComplete);
+  const conversationCacheRef = useRef<Map<string, ThreadConversationCache>>(new Map());
+  const conversationCacheOrderRef = useRef<string[]>([]);
+  const previousThreadIdRef = useRef<string | null>(null);
 
   const selectedThreadId = params.threadId ?? selectedThreadIdState;
   const isDraftSelected = isDraftThreadId(selectedThreadId);
+
+  useEffect(() => {
+    runMessagesStateRef.current = runMessages;
+  }, [runMessages]);
+
+  useEffect(() => {
+    messagesErrorRef.current = messagesError;
+  }, [messagesError]);
+
+  useEffect(() => {
+    conversationHydrationCompleteRef.current = conversationHydrationComplete;
+  }, [conversationHydrationComplete]);
 
   useEffect(() => {
     if (params.threadId) {
@@ -510,6 +590,9 @@ export function AgentsThreads() {
     queryKey: threadsQueryKey,
     queryFn: () => threads.roots(filterMode, threadLimit),
     placeholderData: (previousData) => previousData,
+    staleTime: 15000,
+    refetchOnMount: false,
+    refetchOnWindowFocus: false,
   });
 
   const rootNodes = useMemo<ThreadNode[]>(() => {
@@ -566,12 +649,63 @@ export function AgentsThreads() {
   }, [runsQuery.data]);
 
   useEffect(() => {
-    setRunMessages({});
-    setMessagesError(null);
-    pendingMessagesRef.current.clear();
-    seenMessageIdsRef.current.clear();
-    runIdsRef.current = new Set();
-  }, [selectedThreadId]);
+    const currentThreadId = effectiveSelectedThreadId ?? null;
+    const previousThreadId = previousThreadIdRef.current;
+
+    if (previousThreadId && previousThreadId !== currentThreadId) {
+      const cacheEntry: ThreadConversationCache = {
+        runMessages: cloneRunMessagesMap(runMessagesStateRef.current),
+        pendingMessages: clonePendingMessagesMap(pendingMessagesRef.current),
+        seenMessageIds: cloneSeenMessagesMap(seenMessageIdsRef.current),
+        runIds: new Set(runIdsRef.current),
+        hydrationComplete: conversationHydrationCompleteRef.current,
+        messagesError: messagesErrorRef.current,
+      };
+      conversationCacheRef.current.set(previousThreadId, cacheEntry);
+      conversationCacheOrderRef.current = [
+        previousThreadId,
+        ...conversationCacheOrderRef.current.filter((id) => id !== previousThreadId),
+      ];
+      while (conversationCacheOrderRef.current.length > CONVERSATION_CACHE_LIMIT) {
+        const removed = conversationCacheOrderRef.current.pop();
+        if (removed) {
+          conversationCacheRef.current.delete(removed);
+        }
+      }
+    }
+
+    if (!currentThreadId) {
+      setRunMessages({});
+      setMessagesError(null);
+      pendingMessagesRef.current = new Map();
+      seenMessageIdsRef.current = new Map();
+      runIdsRef.current = new Set();
+      setConversationHydrationComplete(false);
+      previousThreadIdRef.current = currentThreadId;
+      return;
+    }
+
+    const cached = conversationCacheRef.current.get(currentThreadId);
+    if (cached) {
+      conversationCacheRef.current.delete(currentThreadId);
+      conversationCacheOrderRef.current = conversationCacheOrderRef.current.filter((id) => id !== currentThreadId);
+      setRunMessages(cloneRunMessagesMap(cached.runMessages));
+      setMessagesError(cached.messagesError ?? null);
+      pendingMessagesRef.current = clonePendingMessagesMap(cached.pendingMessages);
+      seenMessageIdsRef.current = cloneSeenMessagesMap(cached.seenMessageIds);
+      runIdsRef.current = new Set(cached.runIds);
+      setConversationHydrationComplete(cached.hydrationComplete);
+    } else {
+      setRunMessages({});
+      setMessagesError(null);
+      pendingMessagesRef.current = new Map();
+      seenMessageIdsRef.current = new Map();
+      runIdsRef.current = new Set();
+      setConversationHydrationComplete(false);
+    }
+
+    previousThreadIdRef.current = currentThreadId;
+  }, [effectiveSelectedThreadId]);
 
   useEffect(() => {
     const currentIds = new Set(runList.map((run) => run.id));
@@ -594,14 +728,35 @@ export function AgentsThreads() {
     }
   }, [runList]);
 
+  useEffect(() => {
+    if (!effectiveSelectedThreadId) {
+      if (conversationHydrationComplete) {
+        setConversationHydrationComplete(false);
+      }
+      return;
+    }
+    if (conversationHydrationComplete) return;
+    if (runsQuery.isLoading) return;
+    const runIds = runList.map((run) => run.id);
+    const allLoaded = runIds.every((id) => runMessages[id] !== undefined);
+    if (allLoaded) {
+      setConversationHydrationComplete(true);
+    }
+  }, [conversationHydrationComplete, effectiveSelectedThreadId, runList, runMessages, runsQuery.isLoading]);
+
   const flushPendingForRun = useCallback((runId: string) => {
     const pending = pendingMessagesRef.current.get(runId);
     if (!pending || pending.length === 0) return;
     pendingMessagesRef.current.delete(runId);
     setRunMessages((prev) => {
-      const existing = prev[runId] ?? [];
-      const merged = mergeMessages(existing, pending);
+      const existing = prev[runId];
+      const base = existing ?? [];
+      const merged = mergeMessages(base, pending);
       seenMessageIdsRef.current.set(runId, new Set(merged.map((m) => m.id)));
+      if (!existing) {
+        if (merged.length === 0) return prev;
+        return { ...prev, [runId]: merged };
+      }
       if (areMessageListsEqual(existing, merged)) return prev;
       return { ...prev, [runId]: merged };
     });
@@ -619,9 +774,14 @@ export function AgentsThreads() {
         const msgs = await fetchRunMessages(run.id);
         if (!cancelled) {
           setRunMessages((prev) => {
-            const existing = prev[run.id] ?? [];
-            const merged = mergeMessages(existing, msgs);
+            const existing = prev[run.id];
+            const base = existing ?? [];
+            const merged = mergeMessages(base, msgs);
             seenMessageIdsRef.current.set(run.id, new Set(merged.map((m) => m.id)));
+            if (!existing) {
+              if (merged.length === 0) return prev;
+              return { ...prev, [run.id]: merged };
+            }
             if (areMessageListsEqual(existing, merged)) return prev;
             return { ...prev, [run.id]: merged };
           });
@@ -657,11 +817,18 @@ export function AgentsThreads() {
   }, [runList, flushPendingForRun]);
 
   useEffect(() => {
-    if (!selectedThreadId) return;
+    const activeThreadId = effectiveSelectedThreadId ?? null;
     const offMsg = graphSocket.onMessageCreated(({ threadId, message }) => {
-      if (threadId !== selectedThreadId || !message.runId) return;
+      if (!message.runId) return;
       const runId = message.runId;
       const mapped = mapSocketMessage(message as SocketMessage);
+      const cachedEntry = conversationCacheRef.current.get(threadId);
+      if (cachedEntry) {
+        applyMessageToCacheEntry(cachedEntry, runId, mapped);
+      }
+
+      if (!activeThreadId || threadId !== activeThreadId) return;
+
       const seen = seenMessageIdsRef.current.get(runId) ?? new Set<string>();
       if (seen.has(mapped.id)) return;
       seen.add(mapped.id);
@@ -675,59 +842,85 @@ export function AgentsThreads() {
       }
 
       setRunMessages((prev) => {
-        const existing = prev[runId] ?? [];
-        const merged = mergeMessages(existing, [mapped]);
+        const existing = prev[runId];
+        const base = existing ?? [];
+        const merged = mergeMessages(base, [mapped]);
         seenMessageIdsRef.current.set(runId, new Set(merged.map((m) => m.id)));
+        if (!existing) {
+          if (merged.length === 0) return prev;
+          return { ...prev, [runId]: merged };
+        }
         if (areMessageListsEqual(existing, merged)) return prev;
         return { ...prev, [runId]: merged };
       });
     });
     return () => offMsg();
-  }, [selectedThreadId]);
+  }, [effectiveSelectedThreadId]);
 
   useEffect(() => {
-    if (!selectedThreadId) return;
-    const queryKey = ['agents', 'threads', selectedThreadId, 'runs'] as const;
+    const activeThreadId = effectiveSelectedThreadId ?? null;
+    const queryKey = activeThreadId ? (['agents', 'threads', activeThreadId, 'runs'] as const) : null;
+
     const offRun = graphSocket.onRunStatusChanged(({ threadId, run }) => {
-      if (threadId !== selectedThreadId) return;
       const next = run as SocketRun;
+
+      if (threadId) {
+        const cachedEntry = conversationCacheRef.current.get(threadId);
+        if (cachedEntry) {
+          cachedEntry.runIds.add(next.id);
+        }
+      }
+
+      if (!activeThreadId || threadId !== activeThreadId || !queryKey) return;
+
       queryClient.setQueryData(queryKey, (prev: { items: RunMeta[] } | undefined) => {
         const items = prev?.items ?? [];
         const idx = items.findIndex((item) => item.id === next.id);
         const updated = [...items];
         if (idx >= 0) {
           const existing = updated[idx];
-          if (existing.status === next.status && existing.updatedAt === next.updatedAt && existing.createdAt === next.createdAt) {
+          if (
+            existing.status === next.status &&
+            existing.updatedAt === next.updatedAt &&
+            existing.createdAt === next.createdAt
+          ) {
             return prev;
           }
           updated[idx] = { ...existing, status: next.status, createdAt: next.createdAt, updatedAt: next.updatedAt };
         } else {
-          updated.push({ ...next, threadId: threadId ?? selectedThreadId } as RunMeta);
+          updated.push({ ...next, threadId: threadId ?? activeThreadId } as RunMeta);
         }
         updated.sort(compareRunMeta);
         return { items: updated };
       });
+
       runIdsRef.current.add(next.id);
       if (!seenMessageIdsRef.current.has(next.id)) seenMessageIdsRef.current.set(next.id, new Set());
       flushPendingForRun(next.id);
     });
-    const offReconnect = graphSocket.onReconnected(() => {
-      queryClient.invalidateQueries({ queryKey });
-    });
+
+    const offReconnect = activeThreadId
+      ? graphSocket.onReconnected(() => {
+          if (queryKey) {
+            queryClient.invalidateQueries({ queryKey });
+          }
+        })
+      : () => {};
+
     return () => {
       offRun();
       offReconnect();
     };
-  }, [selectedThreadId, queryClient, flushPendingForRun]);
+  }, [effectiveSelectedThreadId, queryClient, flushPendingForRun]);
 
   useEffect(() => {
-    if (!selectedThreadId) return;
-    const room = `thread:${selectedThreadId}`;
+    if (!effectiveSelectedThreadId) return;
+    const room = `thread:${effectiveSelectedThreadId}`;
     graphSocket.subscribe([room]);
     return () => {
       graphSocket.unsubscribe([room]);
     };
-  }, [selectedThreadId]);
+  }, [effectiveSelectedThreadId]);
 
   const updateThreadSummaryFromEvent = useCallback(
     ({ thread }: { thread: { id: string; alias: string; summary: string | null; status: 'open' | 'closed'; createdAt: string; parentId?: string | null } }) => {
@@ -1343,6 +1536,7 @@ export function AgentsThreads() {
           draftFetchOptions={draftFetchOptions}
           onDraftRecipientChange={handleDraftRecipientChange}
           onDraftCancel={handleDraftCancel}
+          conversationHydrationComplete={conversationHydrationComplete}
         />
       </div>
       <ContainerTerminalDialog

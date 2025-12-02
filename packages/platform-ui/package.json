@@ -10,10 +10,15 @@
     "preview": "vite preview",
     "test": "vitest run",
     "test:e2e": "vitest run e2e/graph-socket.e2e.test.ts",
+    "playwright": "playwright test --config=./playwright.config.ts",
     "typecheck": "tsc -p tsconfig.app.json --noEmit",
     "test:watch": "vitest",
     "storybook": "storybook dev -p 6006",
-    "build-storybook": "storybook build"
+    "build-storybook": "storybook build",
+    "storybook:build": "storybook build -o storybook-static",
+    "storybook:preview": "pnpm exec serve storybook-static -l 6006",
+    "storybook:test-e2e": "playwright test storybook-e2e -c ./storybook-e2e/playwright.config.ts",
+    "storybook:test-ci": "start-server-and-test 'pnpm --filter @agyn/platform-ui run storybook:preview' http://localhost:6006 'pnpm --filter @agyn/platform-ui run storybook:test-e2e'"
   },
   "dependencies": {
     "@agyn/shared": "workspace:*",
@@ -96,6 +101,9 @@
     "@storybook/addon-vitest": "^10.0.8",
     "@storybook/react": "^10.0.8",
     "@storybook/react-vite": "^10.0.8",
+    "@playwright/test": "^1.49.0",
+    "serve": "^14.2.3",
+    "start-server-and-test": "^2.0.8",
     "storybook": "^10.0.8",
     "@testing-library/jest-dom": "^6.8.0",
     "@testing-library/react": "^16.3.0",
