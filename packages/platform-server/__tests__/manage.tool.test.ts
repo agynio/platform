@@ -7,7 +7,6 @@ import { AIMessage, ResponseMessage } from '@agyn/llm';
 import { AgentsPersistenceService } from '../src/agents/agents.persistence.service';
 import { RunSignalsRegistry } from '../src/agents/run-signals.service';
 import { ConfigService, configSchema } from '../src/core/services/config.service';
-import { PrismaService } from '../src/core/services/prisma.service';
 import { Signal } from '../src/signal';
 import { TemplateRegistry } from '../src/graph-core/templateRegistry';
 import { LiveGraphRuntime } from '../src/graph-core/liveGraph.manager';
@@ -70,16 +69,6 @@ async function createHarness(options: { persistence?: AgentsPersistenceService; 
         ),
       },
       { provide: LLMProvisioner, useClass: StubLLMProvisioner },
-      {
-        provide: PrismaService,
-        useValue: {
-          getClient: () => ({
-            runEvent: {
-              findMany: vi.fn().mockResolvedValue([]),
-            },
-          }),
-        } as unknown as PrismaService,
-      },
       ManageFunctionTool,
       ManageToolNode,
       FakeAgent,
@@ -106,7 +95,7 @@ async function addWorker(module: Awaited<ReturnType<typeof createHarness>>['modu
 }
 
 describe('ManageTool unit', () => {
-  it('initializes when EventsBusService is missing', async () => {
+  it('initializes with EventsBusService', async () => {
     const module = await Test.createTestingModule({
       providers: [
         ManageFunctionTool,
@@ -116,49 +105,6 @@ describe('ManageTool unit', () => {
             getOrCreateSubthreadByAlias: vi.fn(),
             updateThreadChannelDescriptor: vi.fn(),
           } as unknown as AgentsPersistenceService,
-        },
-        {
-          provide: PrismaService,
-          useValue: {
-            getClient: () => ({
-              runEvent: {
-                findMany: vi.fn().mockResolvedValue([]),
-              },
-            }),
-          } as unknown as PrismaService,
-        },
-        { provide: EventsBusService, useValue: undefined },
-      ],
-    }).compile();
-
-    try {
-      const tool = await module.resolve(ManageFunctionTool);
-      expect(() => tool.init({} as ManageToolNode)).not.toThrow();
-    } finally {
-      await module.close();
-    }
-  });
-
-  it('initializes when EventsBusService is provided', async () => {
-    const module = await Test.createTestingModule({
-      providers: [
-        ManageFunctionTool,
-        {
-          provide: AgentsPersistenceService,
-          useValue: {
-            getOrCreateSubthreadByAlias: vi.fn(),
-            updateThreadChannelDescriptor: vi.fn(),
-          } as unknown as AgentsPersistenceService,
-        },
-        {
-          provide: PrismaService,
-          useValue: {
-            getClient: () => ({
-              runEvent: {
-                findMany: vi.fn().mockResolvedValue([]),
-              },
-            }),
-          } as unknown as PrismaService,
         },
         {
           provide: EventsBusService,

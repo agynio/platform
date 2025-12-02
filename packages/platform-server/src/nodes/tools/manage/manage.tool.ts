@@ -2,11 +2,10 @@ import z from 'zod';
 
 import { FunctionTool, HumanMessage } from '@agyn/llm';
 import { ManageToolNode, ManageToolStaticConfigSchema } from './manage.node';
-import { Inject, Injectable, Logger, Optional, Scope } from '@nestjs/common';
+import { Inject, Injectable, Logger, Scope } from '@nestjs/common';
 import { LLMContext } from '../../../llm/types';
 import { AgentsPersistenceService } from '../../../agents/agents.persistence.service';
 import { EventsBusService, type MessageBroadcast } from '../../../events/events-bus.service';
-import { PrismaService } from '../../../core/services/prisma.service';
 
 export const ManageInvocationSchema = z
   .object({
@@ -29,12 +28,10 @@ export class ManageFunctionTool extends FunctionTool<typeof ManageInvocationSche
   private _node?: ManageToolNode;
   private persistence?: AgentsPersistenceService;
   private readonly logger = new Logger(ManageFunctionTool.name);
-  private fallbackWarned = false;
 
   constructor(
     @Inject(AgentsPersistenceService) private readonly injectedPersistence: AgentsPersistenceService,
-    @Optional() @Inject(EventsBusService) private readonly eventsBus: EventsBusService | undefined,
-    @Inject(PrismaService) private readonly prismaService: PrismaService,
+    @Inject(EventsBusService) private readonly eventsBus: EventsBusService,
   ) {
     super();
   }
@@ -245,15 +242,6 @@ export class ManageFunctionTool extends FunctionTool<typeof ManageInvocationSche
   } {
     const timeoutMs = Number.isFinite(options.timeoutMs) ? Math.max(0, Math.trunc(options.timeoutMs)) : 0;
     const maxMessages = Math.max(1, Math.trunc(options.maxMessages ?? 1));
-    const startedAt = new Date();
-
-    if (!this.eventsBus) {
-      if (!this.fallbackWarned) {
-        this.logger.warn('Manage: EventsBusService missing; using polling fallback');
-        this.fallbackWarned = true;
-      }
-      return this.createPollingCollector(childThreadId, { timeoutMs, maxMessages, startedAt });
-    }
     const collected: Array<{ id: string; text: string; runId?: string; createdAt: Date }> = [];
     const seenIds = new Set<string>();
     let settled = false;
@@ -316,151 +304,5 @@ export class ManageFunctionTool extends FunctionTool<typeof ManageInvocationSche
       wait: () => promise,
       cancel,
     };
-  }
-
-  private createPollingCollector(
-    childThreadId: string,
-    options: { timeoutMs: number; maxMessages: number; startedAt: Date },
-  ): {
-    wait: () => Promise<{ messages: Array<{ id: string; text: string; runId?: string; createdAt: Date }> }>;
-    cancel: (reason: unknown) => void;
-  } {
-    const maxMessages = Math.max(1, Math.trunc(options.maxMessages ?? 1));
-    const collected: Array<{ id: string; text: string; runId?: string; createdAt: Date }> = [];
-    const seenIds = new Set<string>();
-    let settled = false;
-    let timer: NodeJS.Timeout | null = null;
-    let rejectRef: (reason: unknown) => void = () => {};
-    let resolveRef: ((value: { messages: Array<{ id: string; text: string; runId?: string; createdAt: Date }> }) => void) | null = null;
-
-    const computeDeadline = () => {
-      if (options.timeoutMs <= 0) return Date.now();
-      return Date.now() + options.timeoutMs;
-    };
-    const deadline = computeDeadline();
-    const pollInterval = options.timeoutMs > 0 ? Math.min(500, Math.max(50, Math.trunc(options.timeoutMs / 10) || 100)) : 50;
-
-    const cleanup = () => {
-      if (timer) {
-        clearTimeout(timer);
-        timer = null;
-      }
-    };
-
-    const finish = (messages: typeof collected) => {
-      if (settled) return;
-      settled = true;
-      cleanup();
-      resolveRef?.({ messages });
-    };
-
-    const scheduleNext = () => {
-      if (settled) return;
-      timer = setTimeout(() => {
-        void poll();
-      }, pollInterval);
-    };
-
-    const poll = async () => {
-      if (settled) return;
-      try {
-        const remaining = Math.max(1, maxMessages - collected.length);
-        const messages = await this.fetchAssistantMessagesSince(childThreadId, options.startedAt, remaining, seenIds);
-        if (messages.length > 0) {
-          collected.push(...messages);
-        }
-        if (collected.length >= maxMessages) {
-          finish([...collected]);
-          return;
-        }
-      } catch (error) {
-        rejectRef(error);
-        return;
-      }
-
-      const expired = Date.now() >= deadline;
-      if (expired) {
-        if (collected.length > 0) {
-          finish([...collected]);
-        } else {
-          rejectRef(new Error('Manage: timed out waiting for worker response'));
-        }
-        return;
-      }
-
-      scheduleNext();
-    };
-
-    const promise = new Promise<{ messages: Array<{ id: string; text: string; runId?: string; createdAt: Date }> }>((resolve, reject) => {
-      resolveRef = resolve;
-      rejectRef = (reason: unknown) => {
-        if (settled) return;
-        settled = true;
-        cleanup();
-        reject(reason ?? new Error('Manage: cancelled'));
-      };
-
-      void poll();
-    });
-
-    const cancel = (reason: unknown) => {
-      rejectRef(reason ?? new Error('Manage: cancelled'));
-    };
-
-    return {
-      wait: () => promise,
-      cancel,
-    };
-  }
-
-  private async fetchAssistantMessagesSince(
-    childThreadId: string,
-    since: Date,
-    limit: number,
-    seenIds: Set<string>,
-  ): Promise<Array<{ id: string; text: string; runId?: string; createdAt: Date }>> {
-    const prisma = this.prismaService?.getClient?.();
-    if (!prisma || typeof prisma.runEvent?.findMany !== 'function') {
-      throw new Error('Manage: PrismaService unavailable for sync fallback');
-    }
-
-    const take = Math.max(limit, 5);
-    const events = await prisma.runEvent.findMany({
-      where: {
-        threadId: childThreadId,
-        type: 'invocation_message',
-        ts: { gte: since },
-        eventMessage: { is: { role: 'assistant' } },
-      },
-      include: {
-        eventMessage: {
-          include: {
-            message: {
-              select: { id: true, kind: true, text: true, createdAt: true },
-            },
-          },
-        },
-      },
-      orderBy: { ts: 'asc' },
-      take,
-    });
-
-    const messages: Array<{ id: string; text: string; runId?: string; createdAt: Date }> = [];
-    for (const event of events) {
-      const message = event?.eventMessage?.message;
-      if (!message) continue;
-      if (message.kind !== 'assistant') continue;
-      if (!message.id || seenIds.has(message.id)) continue;
-      seenIds.add(message.id);
-      messages.push({
-        id: message.id,
-        text: typeof message.text === 'string' ? message.text : '',
-        runId: typeof event.runId === 'string' ? event.runId : undefined,
-        createdAt: message.createdAt instanceof Date ? message.createdAt : new Date(message.createdAt),
-      });
-      if (messages.length >= limit) break;
-    }
-
-    return messages;
   }
 }
