@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { ChevronDown, ChevronRight, FileText, Folder } from 'lucide-react';
-import { memoryApi, type ListEntry } from '@/api/modules/memory';
+import type { ListEntry } from '@/api/modules/memory';
+
+import { memoryQueryKeys, useMemoryData } from './MemoryDataProvider';
 import { joinMemoryPath, memoryPathSegments, normalizeMemoryPath } from './path';
 
 type MemoryTreeProps = {
@@ -95,11 +97,12 @@ function DirectoryNode({
   selectedPath,
   onSelectPath,
 }: DirectoryNodeProps) {
+  const memoryData = useMemoryData();
   const normalizedPath = normalizeMemoryPath(path);
   const isExpanded = expandedPaths.has(normalizedPath);
   const listQuery = useQuery({
-    queryKey: ['memory/list', nodeId, scope, threadId, normalizedPath],
-    queryFn: () => memoryApi.list(nodeId, scope, threadId, normalizedPath),
+    queryKey: memoryQueryKeys.list(nodeId, scope, threadId, normalizedPath),
+    queryFn: () => memoryData.list(nodeId, scope, threadId, normalizedPath),
     enabled: isExpanded,
     staleTime: 15_000,
   });
