@@ -57,7 +57,7 @@ describe('Agent busy gating (wait mode)', () => {
       ],
     }).compile();
     const agent = await module.resolve(NoToolAgent);
-    await agent.setConfig({ whenBusy: 'wait' });
+    await agent.setConfig({ whenBusy: 'wait', sendLLMResponseToThread: false });
     agent.init({ nodeId: 'A1' });
 
     const p1 = agent.invoke('t', [HumanMessage.fromText('m1')]);

@@ -158,7 +158,7 @@ describe('Agent injectAfterTools buffering', () => {
 
   it('injects buffered messages before the next call_model when configured', async () => {
     const { moduleRef, agent, recordInjected } = await createAgentFixture();
-    await agent.setConfig({ whenBusy: 'injectAfterTools', processBuffer: 'allTogether' });
+    await agent.setConfig({ whenBusy: 'injectAfterTools', processBuffer: 'allTogether', sendLLMResponseToThread: false });
 
     const primary = agent.invoke('thread-1', [HumanMessage.fromText('initial')]);
     const queued = agent.invoke('thread-1', [HumanMessage.fromText('followup-1'), HumanMessage.fromText('followup-2')]);
@@ -182,7 +182,7 @@ describe('Agent injectAfterTools buffering', () => {
 
   it('respects processBuffer oneByOne by deferring remaining messages to the next run', async () => {
     const { moduleRef, agent, recordInjected, completeRun } = await createAgentFixture();
-    await agent.setConfig({ whenBusy: 'injectAfterTools', processBuffer: 'oneByOne' });
+    await agent.setConfig({ whenBusy: 'injectAfterTools', processBuffer: 'oneByOne', sendLLMResponseToThread: false });
 
     const primary = agent.invoke('thread-2', [HumanMessage.fromText('seed')]);
     const queuedFirst = agent.invoke('thread-2', [HumanMessage.fromText('buffer-1')]);
@@ -210,7 +210,7 @@ describe('Agent injectAfterTools buffering', () => {
 
   it('keeps buffered messages for the next run when whenBusy=wait', async () => {
     const { moduleRef, agent, recordInjected, completeRun, beginRunThread } = await createAgentFixture();
-    await agent.setConfig({ whenBusy: 'wait', processBuffer: 'allTogether' });
+    await agent.setConfig({ whenBusy: 'wait', processBuffer: 'allTogether', sendLLMResponseToThread: false });
 
     const primary = agent.invoke('thread-3', [HumanMessage.fromText('start')]);
     const queued = agent.invoke('thread-3', [HumanMessage.fromText('held')]);

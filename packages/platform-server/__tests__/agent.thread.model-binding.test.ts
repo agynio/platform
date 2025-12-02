@@ -93,7 +93,7 @@ describe('Agent thread model binding', () => {
 
     agent = await moduleRef.resolve(AgentNode);
     agent.init({ nodeId: 'agent-node' });
-    await agent.setConfig({ debounceMs: 0 });
+    await agent.setConfig({ debounceMs: 0, sendLLMResponseToThread: false });
   };
 
   afterEach(async () => {
@@ -127,7 +127,7 @@ describe('Agent thread model binding', () => {
 
     callModelInit.mockClear();
 
-    await agent.setConfig({ model: 'gpt-next' });
+    await agent.setConfig({ model: 'gpt-next', sendLLMResponseToThread: false });
     await agent.invoke('thread-1', [HumanMessage.fromText('second')]);
 
     const secondCallArgs = callModelInit.mock.calls.find((call) => typeof call[0]?.model === 'string')?.[0];
@@ -142,7 +142,7 @@ describe('Agent thread model binding', () => {
     await agent.invoke('thread-1', [HumanMessage.fromText('first')]);
     expect(threadModels.get('thread-1')).toBe('gpt-5');
 
-    await agent.setConfig({ model: 'gpt-future' });
+    await agent.setConfig({ model: 'gpt-future', sendLLMResponseToThread: false });
 
     const callModelInit = vi.spyOn(CallModelLLMReducer.prototype, 'init');
     await agent.invoke('thread-2', [HumanMessage.fromText('hello')]);

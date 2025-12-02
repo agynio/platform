@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { ReferenceResolverService } from '../../utils/reference-resolver.service';
 import { ResolveError } from '../../utils/references';
 import Node from '../base/Node';
-import { Inject, Injectable, Scope, Optional } from '@nestjs/common';
+import { Inject, Injectable, Scope, Optional, forwardRef } from '@nestjs/common';
 import { BufferMessage } from '../agent/messagesBuffer';
 import { HumanMessage } from '@agyn/llm';
 import { stringify as YamlStringify } from 'yaml';
@@ -63,7 +63,7 @@ export class SlackTrigger extends Node<SlackTriggerConfig> {
     @Inject(ReferenceResolverService)
     @Optional()
     private readonly referenceResolver: ReferenceResolverService | null = null,
-    @Inject(AgentsPersistenceService) private readonly persistence: AgentsPersistenceService,
+    @Inject(forwardRef(() => AgentsPersistenceService)) private readonly persistence: AgentsPersistenceService,
     @Inject(PrismaService) private readonly prismaService: PrismaService,
     @Inject(SlackAdapter) private readonly slackAdapter: SlackAdapter,
     @Inject(LiveGraphRuntime) private readonly runtime: LiveGraphRuntime,
@@ -302,7 +302,9 @@ export class SlackTrigger extends Node<SlackTriggerConfig> {
       this._listeners.map(async (listener) =>
         listener.invoke(
           thread,
-          messages.map((m) => HumanMessage.fromText(`From User:\n${m.content}`)),
+          messages.map((m) =>
+            HumanMessage.fromText(`${YamlStringify({ from: m.info })}\n---\n${YamlStringify({ content: m.content })}`),
+          ),
         ),
       ),
     );
@@ -345,6 +347,12 @@ export class SlackTrigger extends Node<SlackTriggerConfig> {
         return { ok: false, error: 'invalid_channel_descriptor' };
       }
       const descriptor = parsed.data;
+      if (descriptor.type !== 'slack') {
+        this.logger.error(
+          `SlackTrigger.sendToChannel: unsupported channel type threadId=${threadId} type=${descriptor.type}`,
+        );
+        return { ok: false, error: 'unsupported_channel_type' };
+      }
       const ids = descriptor.identifiers;
       const res = await this.slackAdapter.sendText({
         token: this.botToken!,

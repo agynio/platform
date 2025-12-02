@@ -50,7 +50,7 @@ describe('Agent summarization graph', () => {
 
     const agent = await module.resolve(Agent);
     agent.init({ nodeId: 'agent-1' });
-    await agent.setConfig({ summarizationKeepTokens: 2, summarizationMaxTokens: 200 });
+    await agent.setConfig({ summarizationKeepTokens: 2, summarizationMaxTokens: 200, sendLLMResponseToThread: false });
 
     const msg = (text: string) => HumanMessage.fromText(text);
     const r1 = await agent.invoke('t', [msg('hi')]);

@@ -29,6 +29,7 @@ import { SummarizationLLMReducer } from '../../llm/reducers/summarization.llm.re
 import { Signal } from '../../signal';
 import { AgentsPersistenceService } from '../../agents/agents.persistence.service';
 import { RunSignalsRegistry } from '../../agents/run-signals.service';
+import { ThreadOutboxService } from '../../messaging/threadOutbox.service';
 
 import { BaseToolNode } from '../tools/baseToolNode';
 import { BufferMessage, MessagesBuffer, ProcessBuffer } from './messagesBuffer';
@@ -102,6 +103,10 @@ export const AgentStaticConfigSchema = z
       .min(0)
       .default(0)
       .describe('Max enforcement injections per turn (0 = unlimited).'),
+    sendLLMResponseToThread: z
+      .boolean()
+      .default(true)
+      .describe('Automatically send the final LLM response to the active thread.'),
   })
   .partial()
   .strict();
@@ -127,6 +132,7 @@ type EffectiveAgentConfig = {
     restrictOutput: boolean;
     restrictionMessage: string;
     restrictionMaxInjections: number;
+    autoSendFinalResponse: boolean;
   };
   memoryPlacement: 'after_system' | 'last_message' | 'none';
 };
@@ -167,6 +173,7 @@ export class AgentNode extends Node<AgentStaticConfig> implements OnModuleInit {
   private runningThreads: Set<string> = new Set();
   private persistenceRef: AgentsPersistenceService | null | undefined;
   private runSignalsRef: RunSignalsRegistry | null | undefined;
+  private outboxRef: ThreadOutboxService | null | undefined;
   private moduleInitialized = false;
 
   constructor(
@@ -209,6 +216,21 @@ export class AgentNode extends Node<AgentStaticConfig> implements OnModuleInit {
       throw new Error(`RunSignalsRegistry unavailable (${initializedState})`);
     }
     return this.runSignalsRef;
+  }
+
+  private getOutboxOrThrow(): ThreadOutboxService {
+    if (this.outboxRef === undefined) {
+      try {
+        this.outboxRef = this.moduleRef.get(ThreadOutboxService, { strict: false }) ?? null;
+      } catch {
+        this.outboxRef = null;
+      }
+    }
+    if (!this.outboxRef) {
+      const initializedState = this.moduleInitialized ? 'initialized' : 'uninitialized';
+      throw new Error(`ThreadOutboxService unavailable (${initializedState})`);
+    }
+    return this.outboxRef;
   }
 
   get config() {
@@ -343,6 +365,44 @@ export class AgentNode extends Node<AgentStaticConfig> implements OnModuleInit {
     return this.memoryConnector ? this.memoryConnector.getPlacement() : 'none';
   }
 
+  private async maybeSendFinalResponse(args: {
+    last: ResponseMessage;
+    outputs: Array<AIMessage | ToolCallMessage>;
+    threadId: string;
+    runId: string;
+    behavior?: EffectiveAgentConfig['behavior'];
+  }): Promise<Array<AIMessage | ToolCallMessage>> {
+    const { last, outputs, threadId, runId, behavior } = args;
+    const autoSendEnabled = behavior?.autoSendFinalResponse ?? true;
+    const finalText = last.text?.trim() ?? '';
+    if (!autoSendEnabled || finalText.length === 0) return outputs;
+
+    try {
+      const outbox = this.getOutboxOrThrow();
+      const result = await outbox.send({ threadId, text: finalText, source: 'auto_response', runId });
+      if (!result.ok) {
+        this.logger.error('Agent auto-response delivery failed', {
+          threadId,
+          runId,
+          error: result.error,
+        });
+        return outputs;
+      }
+      return outputs.filter((item) => !(item instanceof AIMessage));
+    } catch (error) {
+      const errorInfo =
+        error instanceof Error
+          ? { name: error.name, message: error.message, stack: error.stack }
+          : { error: String(error) };
+      this.logger.error('Agent auto-response delivery encountered error', {
+        threadId,
+        runId,
+        error: errorInfo,
+      });
+      return outputs;
+    }
+  }
+
   private buildEffectiveConfig(model: string): EffectiveAgentConfig {
     return {
       model,
@@ -361,6 +421,7 @@ export class AgentNode extends Node<AgentStaticConfig> implements OnModuleInit {
         restrictOutput: this.config.restrictOutput ?? false,
         restrictionMessage: this.config.restrictionMessage ?? DEFAULT_RESTRICTION_MESSAGE,
         restrictionMaxInjections: this.config.restrictionMaxInjections ?? 0,
+        autoSendFinalResponse: this.config.sendLLMResponseToThread ?? true,
       },
       memoryPlacement: this.getMemoryPlacement(),
     } satisfies EffectiveAgentConfig;
@@ -559,7 +620,14 @@ export class AgentNode extends Node<AgentStaticConfig> implements OnModuleInit {
           const outputs: Array<AIMessage | ToolCallMessage> = last.output.filter(
             (o) => o instanceof AIMessage || o instanceof ToolCallMessage,
           ) as Array<AIMessage | ToolCallMessage>;
-          await persistence.completeRun(ensuredRunId, 'finished', outputs);
+          const outputsForPersistence = await this.maybeSendFinalResponse({
+            last,
+            outputs,
+            threadId: thread,
+            runId: ensuredRunId,
+            behavior: effectiveBehavior,
+          });
+          await persistence.completeRun(ensuredRunId, 'finished', outputsForPersistence);
         } else {
           await persistence.completeRun(ensuredRunId, 'finished', [last]);
         }

@@ -37,7 +37,7 @@ describe('call_agent sync busy', () => {
       ],
     }).compile();
     const agent = await module.resolve(BusyAgent);
-    await agent.setConfig({});
+    await agent.setConfig({ sendLLMResponseToThread: false });
     agent.init({ nodeId: 'caller' });
     const linkingStub = {
       registerParentToolExecution: async () => undefined,

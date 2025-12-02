@@ -45,6 +45,16 @@ Layers
 - MCP: local server inside a workspace container with transport over docker exec.
 - Services: infra clients and helpers (config, docker container provision, Prisma/Postgres, Slack, GitHub, checkpointer, sockets).
 
+3. Key Flows
+
+Thread messaging pipeline
+- ThreadOutboxService is the single write path for assistant-authored messages. Tools (send_message) and the agent auto-send flag call it with threadId, runId, source metadata, and optional prefix.
+- ChannelRouter validates the persisted Thread.channel descriptor and resolves the concrete adapter. It surfaces failures immediately (no retry or deduplication) and returns errors such as missing adapters.
+- Slack routes call SlackAdapter, which locates the SlackTrigger node recorded as channelNodeId and delegates delivery via SlackTrigger.sendToChannel using the stored descriptor.
+- Manage routes call ManageAdapter.computeForwardingInfo. The adapter builds the forwarded text (including prefixes/correlation metadata) and ChannelRouter hands it to AgentIngressService, which enqueues the message directly to the parent agent—no external adapters (Slack, etc.) are involved.
+- AgentsPersistenceService stamps inbound author roles: injected or ingress messages become `user`, while ThreadOutboxService (including Manage forwards) stores `assistant`.
+- Agents expose a static config toggle **Send LLM response to thread** (default `true`). When enabled the final model reply for a run is persisted through ThreadOutboxService with source `auto_response`.
+
 Workspace container platform
 - containerProvider.staticConfig.platform: Optional; enum of `linux/amd64` or `linux/arm64`.
 - Behavior: When set, `docker pull` includes the platform selector and `docker.createContainer` receives `platform` as a query parameter. New containers are labeled with `hautech.ai/platform`.

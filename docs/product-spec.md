@@ -46,8 +46,8 @@ Architecture and components
   - Run-events persistence logs model/tool executions; console/logger output surfaces server activity. Tracing SDK/server/UI stack was removed in issue #760; remaining references are historical until new observability plan lands.
 
 Features and capabilities
-- Agents: SimpleAgent graph with scheduling and buffer policies; dynamic summarization; restriction enforcement for tool-first flows.
-- Tools: Shell, GitHub clone, Slack, finish, call_agent, manage, remind_me, unified memory tool.
+- Agents: SimpleAgent graph with scheduling and buffer policies; dynamic summarization; restriction enforcement for tool-first flows; optional auto-send toggle (**Send LLM response to thread**, default true) that routes the final model reply through ThreadOutboxService.
+- Tools: Shell, GitHub clone, Slack, finish, call_agent, manage, remind_me, unified memory tool. Manage uses ManageAdapter + ThreadOutboxService to relay worker replies back to the parent thread before channel delivery.
 - Triggers: Slack Socket Mode trigger, debug trigger.
 - Memory: Memory node/connector or unified memory tool; supports connector placement and scopes.
 - MCP: Local server inside workspace container with dynamic tool registration and re-sync; namespace-prefixed tool names; staleness timeout.
@@ -61,6 +61,8 @@ Core data model and state
   - Per-node paused flag; provision status (not_ready, provisioning, ready, deprovisioning, error); per-node dynamic-config readiness.
 - Containers
   - container_id, node_id, thread_id, image, status, last_used_at, kill_after_at, termination_reason, metadata.labels, metadata.platform, metadata.ttlSeconds.
+- Messages
+  - AgentsPersistenceService coerces ingress/injected content to `user` and all ThreadOutboxService writes (send_message, manage forwards, auto responses) to `assistant`, preserving author semantics for downstream consumers.
 - Observability
   - Spans/traces keyed with nodeId/threadId; checkpoint stream events.
 
@@ -75,6 +77,10 @@ Behaviors and failure modes
 - Slack
   - Filters bot/subtype events; acks envelopes; robust error logging.
   - Socket Mode requires enabling Socket Mode plus message.* event subscriptions; provide tokens with prefixes `xapp-` (app) and `xoxb-` (bot) via UI or Vault refs.
+- Thread outbox
+  - ThreadOutboxService persists assistant messages before delivery; ChannelRouter validates descriptors then selects SlackAdapter or ManageAdapter.
+  - ManageAdapter writes prefixed text back on the parent thread (default `From <AgentTitle>:`) and reuses ChannelRouter to reach the external channel.
+  - Outbox operations never retry or deduplicate; adapters return `{ ok: false, error }` when delivery fails (e.g., missing descriptors or channel nodes).
 - Cleanup
   - Exponential backoff on termination failures (max delay 15m).
 - UI caveats

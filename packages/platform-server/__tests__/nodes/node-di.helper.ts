@@ -20,8 +20,11 @@ import { ContainerService } from '../../src/infra/container/container.service';
 import { NcpsKeyService } from '../../src/infra/ncps/ncpsKey.service';
 import { LLMProvisioner } from '../../src/llm/provisioners/llm.provisioner';
 import { SlackAdapter } from '../../src/messaging/slack/slack.adapter';
+import { ThreadOutboxService } from '../../src/messaging/threadOutbox.service';
 import { ManageFunctionTool } from '../../src/nodes/tools/manage/manage.tool';
 import { VaultService } from '../../src/vault/vault.service';
+import { ReferenceResolverService } from '../../src/utils/reference-resolver.service';
+import { ThreadsQueryService } from '../../src/threads/threads.query.service';
 
 type InjectionToken = Type<unknown> | string | symbol;
 
@@ -84,23 +87,57 @@ const DEFAULT_TOKEN_FACTORIES = new Map<InjectionToken, () => unknown>([
         getOrCreateThreadByAlias: vi.fn(async () => 'thread-1'),
         updateThreadChannelDescriptor: vi.fn(async () => undefined),
         getOrCreateSubthreadByAlias: vi.fn(async () => 'child-thread'),
+        getThreadAgentTitle: vi.fn(async () => 'Worker Alpha'),
+        getThreadAgentNodeId: vi.fn(async () => 'agent-node-1'),
+        recordOutboxMessage: vi.fn(async () => undefined),
+        ensureThreadModel: vi.fn(async (_threadId: string, model: string) => model),
+      }),
+  ],
+  [
+    ThreadsQueryService,
+    () =>
+      createDefaultStub('ThreadsQueryService', {
+        getParentThreadIdAndAlias: vi.fn(async () => ({ parentThreadId: 'thread-1', alias: null })),
+        getThreadAgentTitle: vi.fn(async () => 'Worker Alpha'),
+        getThreadAgentNodeId: vi.fn(async () => 'agent-node-1'),
       }),
   ],
   [RunSignalsRegistry, () => createDefaultStub('RunSignalsRegistry')],
   [SlackAdapter, () => createDefaultStub('SlackAdapter')],
+  [ThreadOutboxService, () => createDefaultStub('ThreadOutboxService', { send: vi.fn(async () => ({ ok: true })) })],
   [CallAgentLinkingService, () => createDefaultStub('CallAgentLinkingService')],
   [LiveGraphRuntime, () => createDefaultStub('LiveGraphRuntime')],
   [TemplateRegistry, () => createDefaultStub('TemplateRegistry', { getMeta: vi.fn(() => undefined) })],
+  [ReferenceResolverService, () => createDefaultStub('ReferenceResolverService', { resolve: vi.fn(async () => ({ output: {} })) })],
   [
     ManageFunctionTool,
-    () =>
-      new ManageFunctionTool(
-        createDefaultStub('AgentsPersistenceService') as AgentsPersistenceService,
-      ),
+    () => {
+      const toolStub = createDefaultStub('ManageFunctionTool', {
+        execute: vi.fn(),
+      }) as Record<string, unknown>;
+      const initMock = vi.fn(() => toolStub);
+      Reflect.set(toolStub, 'init', initMock);
+      Reflect.set(toolStub, 'name', 'manage');
+      return toolStub;
+    },
   ],
 ]);
 
+function unwrapToken(token: unknown): InjectionToken {
+  if (
+    token &&
+    typeof token === 'object' &&
+    'forwardRef' in token &&
+    typeof (token as { forwardRef?: () => unknown }).forwardRef === 'function'
+  ) {
+    const resolved = (token as { forwardRef: () => unknown }).forwardRef();
+    return unwrapToken(resolved);
+  }
+  return token as InjectionToken;
+}
+
 function tokenName(token: InjectionToken): string {
+  if (!token) return 'undefined';
   if (typeof token === 'string') return token;
   if (typeof token === 'symbol') return token.description ?? 'Symbol';
   return token?.name ?? 'AnonymousToken';
@@ -128,13 +165,14 @@ export async function createNodeTestingModule<T>(
   });
 
   moduleBuilder.useMocker((token) => {
-    if (SKIP_TOKENS.has(token as InjectionToken)) return undefined;
+    const resolvedToken = unwrapToken(token);
+    if (SKIP_TOKENS.has(resolvedToken)) return undefined;
     if (process.env.VITEST_NODE_DI_DEBUG === 'true') {
-      console.debug(`useMocker -> ${tokenName(token as InjectionToken)}`);
+      console.debug(`useMocker -> ${tokenName(resolvedToken)}`);
     }
-    const factory = DEFAULT_TOKEN_FACTORIES.get(token as InjectionToken);
+    const factory = DEFAULT_TOKEN_FACTORIES.get(resolvedToken);
     if (factory) return factory();
-    throw new Error(`No mock available for token ${tokenName(token as InjectionToken)}`);
+    throw new Error(`No mock available for token ${tokenName(resolvedToken)}`);
   });
 
   const module = await moduleBuilder.compile();

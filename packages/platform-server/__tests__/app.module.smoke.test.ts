@@ -14,10 +14,14 @@ import { AgentsPersistenceService } from '../src/agents/agents.persistence.servi
 import { ThreadsMetricsService } from '../src/agents/threads.metrics.service';
 import { VaultService } from '../src/vault/vault.service';
 import { SlackAdapter } from '../src/messaging/slack/slack.adapter';
+import { ManageAdapter } from '../src/messaging/manage/manage.adapter';
 import { EventsBusService } from '../src/events/events-bus.service';
 import { createEventsBusStub } from './helpers/eventsBus.stub';
 import { StartupRecoveryService } from '../src/core/services/startupRecovery.service';
 import { LiveGraphRuntime } from '../src/graph-core/liveGraph.manager';
+import { AgentIngressService } from '../src/messaging/manage/agentIngress.service';
+import { ThreadOutboxService } from '../src/messaging/threadOutbox.service';
+import { SlackTrigger } from '../src/nodes/slackTrigger/slackTrigger.node';
 
 process.env.LLM_PROVIDER = process.env.LLM_PROVIDER || 'openai';
 process.env.AGENTS_DATABASE_URL = process.env.AGENTS_DATABASE_URL || 'postgres://localhost:5432/test';
@@ -120,6 +124,31 @@ describe('AppModule bootstrap smoke test', () => {
     const slackAdapterStub = {
       sendText: vi.fn().mockResolvedValue({ ok: true, channelMessageId: null, threadId: null }),
     } satisfies Partial<SlackAdapter>;
+    const manageAdapterStub = {
+      computeForwardingInfo: vi.fn().mockResolvedValue({
+        ok: true,
+        parentThreadId: 'parent-thread',
+        forwardedText: 'text',
+        agentTitle: 'Agent',
+        childThreadId: 'child-thread',
+        runId: null,
+        showCorrelationInOutput: false,
+      }),
+    } satisfies Partial<ManageAdapter>;
+    const agentIngressStub = {
+      enqueueToAgent: vi.fn().mockResolvedValue({ ok: true }),
+    } satisfies Partial<AgentIngressService>;
+    class ThreadOutboxServiceStub {
+      send = vi.fn().mockResolvedValue({ ok: true });
+    }
+
+    class SlackTriggerStub {
+      status: 'ready' | 'provisioning' | 'provisioning_error' | 'deprovisioning' | 'deprovisioning_error' = 'ready';
+
+      async sendToChannel(): Promise<{ ok: true }> {
+        return { ok: true };
+      }
+    }
     const eventsBusStub = createEventsBusStub();
     const startupRecoveryStub = { onApplicationBootstrap: vi.fn() } satisfies Partial<StartupRecoveryService>;
     const liveRuntimeStub = ({
@@ -152,6 +181,14 @@ describe('AppModule bootstrap smoke test', () => {
       .useValue(vaultStub)
       .overrideProvider(SlackAdapter)
       .useValue(slackAdapterStub)
+      .overrideProvider(ManageAdapter)
+      .useValue(manageAdapterStub)
+      .overrideProvider(AgentIngressService)
+      .useValue(agentIngressStub)
+      .overrideProvider(ThreadOutboxService)
+      .useClass(ThreadOutboxServiceStub)
+      .overrideProvider(SlackTrigger)
+      .useClass(SlackTriggerStub)
       .overrideProvider(EventsBusService)
       .useValue(eventsBusStub as unknown as EventsBusService)
       .overrideProvider(StartupRecoveryService)

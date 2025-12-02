@@ -53,7 +53,7 @@ describe('AgentNode termination flow', () => {
     }).compile();
 
     const agent = await module.resolve(TerminateAwareAgent);
-    await agent.setConfig({ whenBusy: 'wait' });
+    await agent.setConfig({ whenBusy: 'wait', sendLLMResponseToThread: false });
     agent.setRuntimeContext({ nodeId: 'agent-test', get: () => undefined });
 
     const registry = module.get(RunSignalsRegistry);

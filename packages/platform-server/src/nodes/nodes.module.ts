@@ -1,6 +1,7 @@
 import { forwardRef, Inject, Injectable, Module, OnModuleInit } from '@nestjs/common';
 import { ModuleRef } from '@nestjs/core';
 import { CoreModule } from '../core/core.module';
+import { AgentsPersistenceService } from '../agents/agents.persistence.service';
 import { EnvModule } from '../env/env.module';
 import { EventsModule } from '../events/events.module';
 import { InfraModule } from '../infra/infra.module';
@@ -12,6 +13,10 @@ import { MemoryConnectorNode } from './memoryConnector/memoryConnector.node';
 import { AgentNode } from './agent/agent.node';
 import { SlackTrigger } from './slackTrigger/slackTrigger.node';
 import { SlackAdapter } from '../messaging/slack/slack.adapter';
+import { ThreadOutboxService } from '../messaging/threadOutbox.service';
+import { ChannelRouter } from '../messaging/channelRouter.service';
+import { ManageAdapter } from '../messaging/manage/manage.adapter';
+import { AgentIngressService } from '../messaging/manage/agentIngress.service';
 import { LocalMCPServerNode } from './mcp';
 import { ManageToolNode } from './tools/manage/manage.node';
 import { ManageFunctionTool } from './tools/manage/manage.tool';
@@ -31,6 +36,8 @@ import { EnvService } from '../env/env.service';
 import { GraphCoreModule } from '../graph-core/graph-core.module';
 import { TemplateRegistry } from '../graph-core/templateRegistry';
 import { registerDefaultTemplates } from '../templates';
+import { AGENTS_PERSISTENCE_WRITER } from '../agents/tokens';
+import { ThreadsQueryService } from '../threads/threads.query.service';
 
 @Injectable()
 class NodesTemplateRegistrar implements OnModuleInit {
@@ -47,6 +54,11 @@ class NodesTemplateRegistrar implements OnModuleInit {
   imports: [CoreModule, EnvModule, EventsModule, InfraModule, LLMModule, forwardRef(() => GraphCoreModule)],
   providers: [
     SlackAdapter,
+    ManageAdapter,
+    AgentIngressService,
+    ChannelRouter,
+    ThreadsQueryService,
+    ThreadOutboxService,
     PostgresMemoryEntitiesRepository,
     MemoryService,
     MemoryNode,
@@ -66,6 +78,11 @@ class NodesTemplateRegistrar implements OnModuleInit {
     RemindMeNode,
     NodesTemplateRegistrar,
     {
+      provide: AGENTS_PERSISTENCE_WRITER,
+      useFactory: (persistence: AgentsPersistenceService) => persistence,
+      inject: [AgentsPersistenceService],
+    },
+    {
       provide: WorkspaceNode,
       useFactory: (
         containerService: ContainerService,
@@ -78,6 +95,11 @@ class NodesTemplateRegistrar implements OnModuleInit {
   ],
   exports: [
     SlackAdapter,
+    ManageAdapter,
+    AgentIngressService,
+    ChannelRouter,
+    ThreadsQueryService,
+    ThreadOutboxService,
     PostgresMemoryEntitiesRepository,
     MemoryService,
     MemoryNode,

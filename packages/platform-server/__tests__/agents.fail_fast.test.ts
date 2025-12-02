@@ -41,7 +41,7 @@ describe('Fail-fast behavior', () => {
     }).compile();
 
     const agent = await module.resolve(AgentNode);
-    await agent.setConfig({});
+    await agent.setConfig({ sendLLMResponseToThread: false });
     const loggerStub = { error: vi.fn(), warn: vi.fn(), log: vi.fn(), debug: vi.fn() };
     (agent as any).logger = loggerStub;
     agent.setRuntimeContext({ nodeId: 'A', get: (_id: string) => undefined });

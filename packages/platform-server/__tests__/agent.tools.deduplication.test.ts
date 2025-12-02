@@ -93,7 +93,7 @@ const createAgent = async () => {
   const agent = new AgentNode(configService, provisioner, moduleRef);
   (agent as unknown as { logger: LoggerStub }).logger = logger;
   agent.init({ nodeId: 'agent-node' });
-  await agent.setConfig({ title: 'Test Agent' } as AgentStaticConfig);
+  await agent.setConfig({ title: 'Test Agent', sendLLMResponseToThread: false } as AgentStaticConfig);
 
   return { agent, logger };
 };

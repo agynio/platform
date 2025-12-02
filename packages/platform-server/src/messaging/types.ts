@@ -1,27 +1,26 @@
-import { z } from 'zod';
+export {
+  SlackIdentifiersSchema,
+  SlackChannelDescriptorSchema,
+  ManageIdentifiersSchema,
+  ManageChannelDescriptorSchema,
+  ChannelDescriptorSchema,
+  type ChannelDescriptor,
+  type SlackChannelDescriptor,
+  type ManageChannelDescriptor,
+  type ThreadOutboxSource,
+} from '../threads/thread-channel.schema';
 
-// Slack-only channel descriptor
-// thread_ts is optional (omit if not present)
-export const SlackIdentifiersSchema = z.object({ channel: z.string().min(1), thread_ts: z.string().min(1).optional() }).strict();
+export type ThreadOutboxSendRequest = {
+  threadId: string;
+  text: string;
+  source: ThreadOutboxSource;
+  prefix?: string;
+  runId?: string | null;
+};
 
-export const ChannelDescriptorSchema = z
-  .object({
-    type: z.literal('slack'),
-    version: z.number().int(),
-    identifiers: SlackIdentifiersSchema,
-    meta: z
-      .object({
-        channel_type: z.string().optional(),
-        client_msg_id: z.string().optional(),
-        event_ts: z.string().optional(),
-      })
-      .strict()
-      .optional(),
-    createdBy: z.string().optional(),
-  })
-  .strict();
-
-export type ChannelDescriptor = z.infer<typeof ChannelDescriptorSchema>;
+export interface IChannelAdapter {
+  sendText(payload: ThreadOutboxSendRequest): Promise<SendResult>;
+}
 
 export type SendResult = {
   ok: boolean;
