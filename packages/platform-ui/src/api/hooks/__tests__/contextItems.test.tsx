@@ -77,4 +77,46 @@ describe('useContextItems', () => {
     });
     expect(fetchMock).toHaveBeenCalledTimes(3);
   });
+
+  it('allows configuring a page size independent of the initial count', async () => {
+    const ids = Array.from({ length: 10 }, (_, index) => `ctx-${index + 1}`);
+    const fetchMock = vi
+      .spyOn(contextItems, 'getMany')
+      .mockImplementation(async (requested) => requested.map((id) => createContextItem(id)));
+
+    const { result } = renderHook(() => useContextItems(ids, { initialCount: 6, pageSize: 3 }), {
+      wrapper: createWrapper(),
+    });
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      expect(result.current.loadedCount).toBe(6);
+    });
+    expect(fetchMock).toHaveBeenCalledWith(ids.slice(-6));
+
+    act(() => {
+      result.current.loadMore();
+    });
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+      expect(result.current.loadedCount).toBe(9);
+    });
+    expect(fetchMock).toHaveBeenLastCalledWith(ids.slice(-9, -6));
+    expect(result.current.items.map((item) => item.id)).toEqual(ids.slice(-9));
+
+    act(() => {
+      result.current.loadMore();
+    });
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledTimes(3);
+      expect(result.current.loadedCount).toBe(10);
+      expect(result.current.hasMore).toBe(false);
+    });
+    expect(fetchMock).toHaveBeenLastCalledWith(ids.slice(0, 1));
+
+    act(() => {
+      result.current.loadMore();
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+  });
 });

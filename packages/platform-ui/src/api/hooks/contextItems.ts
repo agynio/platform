@@ -7,6 +7,7 @@ const BASE_KEY = ['agents', 'context-items'] as const;
 
 export type UseContextItemsOptions = {
   initialCount?: number;
+  pageSize?: number;
 };
 
 export type UseContextItemsResult = {
@@ -24,7 +25,10 @@ export type UseContextItemsResult = {
 export function useContextItems(ids: readonly string[] | undefined, options?: UseContextItemsOptions): UseContextItemsResult {
   const queryClient = useQueryClient();
   const allIds = useMemo(() => (Array.isArray(ids) ? ids.filter((id): id is string => typeof id === 'string' && id.length > 0) : []), [ids]);
-  const initialCount = options?.initialCount ?? 10;
+  const initialCountParam = options?.initialCount ?? 10;
+  const pageSize = options?.pageSize ?? initialCountParam;
+  const initialCount = Math.max(1, initialCountParam);
+  const loadMoreStep = Math.max(1, pageSize);
   const [visibleCount, setVisibleCount] = useState(() => Math.min(initialCount, allIds.length));
   const [cacheVersion, setCacheVersion] = useState(0);
 
@@ -91,11 +95,10 @@ export function useContextItems(ids: readonly string[] | undefined, options?: Us
     if (allIds.length === 0) return;
     setVisibleCount((prev) => {
       if (prev >= allIds.length) return prev;
-      const increment = Math.max(1, initialCount);
-      const next = Math.min(allIds.length, prev + increment);
+      const next = Math.min(allIds.length, prev + loadMoreStep);
       return next;
     });
-  }, [allIds.length, initialCount]);
+  }, [allIds.length, loadMoreStep]);
 
   return {
     items,

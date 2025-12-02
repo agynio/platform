@@ -98,10 +98,14 @@ export class CallModelLLMReducer extends Reducer<LLMState, LLMContext> {
     }
 
     const sequence = this.buildSequence(system, summaryMsg, memoryResult, state.messages);
-    const { contextItemIds, context: nextContext, newContextCount } = await this.resolveContextIds(
+    const previousToolRequestIds = Array.isArray(state.meta?.toolRequestMessageIds)
+      ? state.meta!.toolRequestMessageIds.filter((id): id is string => typeof id === 'string' && id.length > 0)
+      : [];
+    const { contextItemIds, context: nextContext, newConversationCount } = await this.resolveContextIds(
       context,
       sequence,
       summaryText,
+      previousToolRequestIds,
     );
     const input = sequence.map((entry) => entry.message);
 
@@ -112,7 +116,7 @@ export class CallModelLLMReducer extends Reducer<LLMState, LLMContext> {
       nodeId,
       model: this.model,
       contextItemIds,
-      newContextItemCount: newContextCount,
+      newContextItemCount: newConversationCount,
       metadata: {
         summaryIncluded: Boolean(summaryMsg),
         memoryPlacement: memoryResult?.msg ? memoryResult.place : null,
@@ -143,14 +147,14 @@ export class CallModelLLMReducer extends Reducer<LLMState, LLMContext> {
     try {
       const rawMessage = await this.callModel(input);
       const usageMetrics = this.extractUsage(rawMessage);
+      let turnNewContextCount = newConversationCount;
 
       if (ctx.terminateSignal?.isActive) {
         return cancelAndReturn({ rawResponse: this.trySerialize(rawMessage), usage: usageMetrics });
       }
 
-      const toolCalls = this.serializeToolCalls(
-        rawMessage.output.filter((m) => m instanceof ToolCallMessage) as ToolCallMessage[],
-      );
+      const toolCallMessages = rawMessage.output.filter((m) => m instanceof ToolCallMessage) as ToolCallMessage[];
+      const toolCalls = this.serializeToolCalls(toolCallMessages);
       const rawResponse = this.trySerialize(rawMessage);
 
       const assistantContextItems = await this.runEvents.createContextItems([
@@ -161,10 +165,37 @@ export class CallModelLLMReducer extends Reducer<LLMState, LLMContext> {
         throw new Error('Failed to persist assistant response context item');
       }
 
+      turnNewContextCount += 1;
+
+      let toolCallRequestIds: string[] = [];
+      if (toolCallMessages.length > 0) {
+        const inputs = toolCallMessages.map((message) => contextItemInputFromMessage(message));
+        const createdToolRequests = await this.runEvents.createContextItems(inputs);
+        toolCallRequestIds = createdToolRequests.filter((id): id is string => typeof id === 'string' && id.length > 0);
+        if (toolCallRequestIds.length > 0) {
+          turnNewContextCount += toolCallRequestIds.length;
+        }
+      }
+
+      if (turnNewContextCount !== newConversationCount) {
+        try {
+          await this.runEvents.updateLLMCallContextCount(llmEvent.id, turnNewContextCount);
+          await this.eventsBus.publishEvent(llmEvent.id, 'update');
+        } catch (err) {
+          this.logger.warn(
+            `Failed to update LLM call context count${this.format({ eventId: llmEvent.id, error: this.errorInfo(err) })}`,
+          );
+        }
+      }
+
       const contextWithAssistant: LLMContextState = {
         ...nextContext,
-        messageIds: [...nextContext.messageIds, assistantContextId],
+        messageIds: [...nextContext.messageIds, assistantContextId, ...toolCallRequestIds],
       };
+
+      const toolRequestMessageIds = Array.from(
+        new Set([...previousToolRequestIds.filter((id) => contextWithAssistant.messageIds.includes(id)), ...toolCallRequestIds]),
+      );
 
       await this.runEvents.completeLLMCall({
         eventId: llmEvent.id,
@@ -181,7 +212,12 @@ export class CallModelLLMReducer extends Reducer<LLMState, LLMContext> {
         ...state,
         messages: [...state.messages, rawMessage],
         context: contextWithAssistant,
-        meta: { ...state.meta, lastLLMEventId: llmEvent.id },
+        meta: {
+          ...state.meta,
+          lastLLMEventId: llmEvent.id,
+          turnNewContextCountSoFar: turnNewContextCount,
+          toolRequestMessageIds,
+        },
       };
       return updated;
     } catch (error) {
@@ -257,10 +293,38 @@ export class CallModelLLMReducer extends Reducer<LLMState, LLMContext> {
     context: LLMContextState,
     sequence: SequenceEntry[],
     summaryText: string | null,
-  ): Promise<{ contextItemIds: string[]; context: LLMContextState; newContextCount: number }> {
+    toolRequestMessageIds: string[],
+  ): Promise<{ contextItemIds: string[]; context: LLMContextState; newConversationCount: number }> {
     const pending: Array<{ input: ContextItemInput; assign: (id: string) => void; isConversation?: boolean }> = [];
+    const conversationCount = sequence.reduce((total, entry) => (entry.kind === 'conversation' ? total + 1 : total), 0);
+    const requestIdSet = new Set(
+      (toolRequestMessageIds ?? []).filter((id): id is string => typeof id === 'string' && id.length > 0),
+    );
+
+    const normalizedMessageIds: string[] = [];
+    let retainedConversation = 0;
+    for (const id of context.messageIds) {
+      if (typeof id !== 'string' || id.length === 0) continue;
+      if (requestIdSet.has(id)) {
+        normalizedMessageIds.push(id);
+        continue;
+      }
+      if (retainedConversation < conversationCount) {
+        normalizedMessageIds.push(id);
+        retainedConversation += 1;
+      }
+    }
+    context.messageIds = normalizedMessageIds;
+
+    const conversationIndices: number[] = [];
+    context.messageIds.forEach((id, idx) => {
+      if (!requestIdSet.has(id)) {
+        conversationIndices.push(idx);
+      }
+    });
+
     let conversationIndex = 0;
-    const initialConversationCount = context.messageIds.length;
+    const initialConversationCount = conversationIndices.length;
 
     if (!summaryText) {
       context.summary = undefined;
@@ -315,19 +379,21 @@ export class CallModelLLMReducer extends Reducer<LLMState, LLMContext> {
         }
         case 'conversation': {
           const idx = conversationIndex;
-          const existingId = context.messageIds[idx] ?? null;
+          const mappedIndex = conversationIndices[idx] ?? null;
+          const existingId = mappedIndex !== null ? context.messageIds[mappedIndex] ?? null : null;
           this.collectContextId({
             existingId,
             pending,
             input: () => contextItemInputFromMessage(entry.message),
             assign: (id) => {
-              if (idx < context.messageIds.length) {
-                context.messageIds[idx] = id;
+              if (mappedIndex !== null) {
+                context.messageIds[mappedIndex] = id;
               } else {
                 context.messageIds.push(id);
+                conversationIndices.push(context.messageIds.length - 1);
               }
             },
-            isConversation: existingId === null || idx >= initialConversationCount,
+            isConversation: existingId === null || mappedIndex === null || idx >= initialConversationCount,
           });
           conversationIndex += 1;
           break;
@@ -335,49 +401,37 @@ export class CallModelLLMReducer extends Reducer<LLMState, LLMContext> {
       }
     }
 
-    if (context.messageIds.length > conversationIndex) {
-      context.messageIds = context.messageIds.slice(0, conversationIndex);
-    }
-
-    let newContextCount = 0;
+    let newConversationCount = 0;
     if (pending.length > 0) {
       const inputs = pending.map((item) => item.input);
       const created = await this.runEvents.createContextItems(inputs);
       created.forEach((id, index) => {
         pending[index].assign(id);
         if (pending[index].isConversation && typeof id === 'string' && id.length > 0) {
-          newContextCount += 1;
+          newConversationCount += 1;
         }
       });
     }
 
     const contextItemIds: string[] = [];
-    for (const entry of sequence) {
-      switch (entry.kind) {
-        case 'system': {
-          const id = context.system?.id ?? null;
-          if (id) contextItemIds.push(id);
-          break;
-        }
-        case 'summary': {
-          const id = context.summary?.id ?? null;
-          if (id) contextItemIds.push(id);
-          break;
-        }
-        case 'memory': {
-          const memoryEntry = context.memory.find((m) => m.place === entry.place);
-          if (memoryEntry?.id) contextItemIds.push(memoryEntry.id);
-          break;
-        }
-        case 'conversation': {
-          const id = context.messageIds[entry.index] ?? null;
-          if (id) contextItemIds.push(id);
-          break;
-        }
+    if (context.system?.id) {
+      contextItemIds.push(context.system.id);
+    }
+    if (context.summary?.id) {
+      contextItemIds.push(context.summary.id);
+    }
+    for (const memoryEntry of context.memory) {
+      if (memoryEntry?.id) {
+        contextItemIds.push(memoryEntry.id);
+      }
+    }
+    for (const id of context.messageIds) {
+      if (typeof id === 'string' && id.length > 0) {
+        contextItemIds.push(id);
       }
     }
 
-    return { contextItemIds, context, newContextCount };
+    return { contextItemIds, context, newConversationCount };
   }
 
   private collectContextId(params: {

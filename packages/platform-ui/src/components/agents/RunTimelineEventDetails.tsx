@@ -3,13 +3,14 @@ import { stringify as stringifyYaml } from 'yaml';
 import { Link } from 'react-router-dom';
 import type {
   ContextItem,
+  ContextItemRole,
   RunTimelineEvent,
   ToolOutputChunk,
   ToolOutputTerminal,
   ToolOutputSource,
 } from '@/api/types/agents';
 import { STATUS_COLORS, formatDuration, getEventTypeLabel } from './runTimelineFormatting';
-import { LLMContextViewer } from './LLMContextViewer';
+import { ContextItemsList } from './ContextItemsList';
 import { waitForStableScrollHeight } from './waitForStableScrollHeight';
 import { useToolOutputStreaming } from '@/hooks/useToolOutputStreaming';
 
@@ -53,6 +54,9 @@ const CALL_AGENT_STATUS_STYLES = {
   finished: { bg: 'bg-emerald-500', text: 'text-white' },
   terminated: { bg: 'bg-gray-500', text: 'text-white' },
 } as const;
+
+const CONVERSATION_ROLES: ContextItemRole[] = ['user', 'assistant', 'tool'];
+const CONVERSATION_PAGE_SIZE = 20;
 
 type CallAgentStatusKey = keyof typeof CALL_AGENT_STATUS_STYLES;
 
@@ -886,9 +890,14 @@ export function RunTimelineEventDetails({ event }: { event: RunTimelineEvent }) 
               <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded border border-gray-200 bg-white">
                 <header className="border-b border-gray-200 px-3 py-2 text-xs font-semibold uppercase tracking-wide text-gray-500">Context</header>
                 <div ref={contextScrollRef} data-testid="llm-context-scroll" className="flex-1 min-h-0 overflow-y-auto px-3 py-2">
-                  <LLMContextViewer
+                  <ContextItemsList
                     ids={llmCall.contextItemIds}
                     highlightLastCount={llmCall.newContextItemCount}
+                    initialVisibleCount={Math.max(0, llmCall.newContextItemCount)}
+                    pageSize={CONVERSATION_PAGE_SIZE}
+                    allowedRoles={CONVERSATION_ROLES}
+                    loadMoreLabel="Load older messages"
+                    emptyLabel="No conversation messages"
                     onItemsRendered={handleContextItemsRendered}
                     onBeforeLoadMore={handleBeforeLoadMore}
                   />

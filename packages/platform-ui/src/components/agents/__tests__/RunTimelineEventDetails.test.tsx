@@ -843,6 +843,7 @@ describe('RunTimelineEventDetails', () => {
           topP: null,
           stopReason: null,
           contextItemIds: contextItems.map((item) => item.id),
+          newContextItemCount: contextItems.length,
           responseText: null,
           rawResponse: null,
           toolCalls: [],
@@ -954,8 +955,10 @@ describe('RunTimelineEventDetails', () => {
 
       const contextRegion = screen.getByTestId('llm-context-scroll');
       const highlightedIds = ['ctx-4', 'ctx-5', 'ctx-6'];
-      const nonHighlightedIds = ['ctx-1', 'ctx-2', 'ctx-3'];
+      const filteredOutIds = ['ctx-1', 'ctx-2', 'ctx-3'];
 
+      const renderedItems = contextRegion.querySelectorAll('[data-context-item-id]');
+      expect(renderedItems.length).toBe(highlightedIds.length);
       const newBadges = within(contextRegion).getAllByText('New');
       expect(newBadges).toHaveLength(highlightedIds.length);
 
@@ -964,12 +967,104 @@ describe('RunTimelineEventDetails', () => {
         expect(wrapper?.className).toContain('border-sky-200');
       });
 
-      nonHighlightedIds.forEach((id) => {
+      filteredOutIds.forEach((id) => {
         const wrapper = contextRegion.querySelector(`[data-context-item-id="${id}"]`);
-        expect(wrapper?.className ?? '').not.toContain('border-sky-200');
-        const headerText = wrapper?.querySelector('header')?.textContent ?? '';
-        expect(headerText).not.toContain('New');
+        expect(wrapper).toBeNull();
       });
+    } finally {
+      useContextItemsSpy.mockRestore();
+    }
+  });
+
+  it('shows only new conversational items by default and reveals older messages on demand', async () => {
+    const user = userEvent.setup();
+    const newest: ContextItem = {
+      id: 'ctx-newest',
+      role: 'assistant',
+      contentText: 'Newest reply',
+      contentJson: null,
+      metadata: null,
+      sizeBytes: 90,
+      createdAt: '2024-01-01T00:05:00.000Z',
+    };
+    const recent: ContextItem = {
+      id: 'ctx-recent',
+      role: 'user',
+      contentText: 'Recent question',
+      contentJson: null,
+      metadata: null,
+      sizeBytes: 70,
+      createdAt: '2024-01-01T00:04:00.000Z',
+    };
+    const oldest: ContextItem = {
+      id: 'ctx-oldest',
+      role: 'assistant',
+      contentText: 'Older assistant reply',
+      contentJson: null,
+      metadata: null,
+      sizeBytes: 80,
+      createdAt: '2024-01-01T00:03:00.000Z',
+    };
+
+    let loadMoreCalls = 0;
+
+    const useContextItemsSpy = vi.spyOn(contextItemsModule, 'useContextItems').mockImplementation(() => {
+      const [stage, setStage] = React.useState<'initial' | 'loaded'>('initial');
+      const items = stage === 'initial' ? [recent, newest] : [oldest, recent, newest];
+      const hasMore = stage === 'initial';
+      const loadMore = () => {
+        loadMoreCalls += 1;
+        setStage('loaded');
+      };
+
+      return {
+        items,
+        total: 3,
+        loadedCount: items.length,
+        targetCount: items.length,
+        hasMore,
+        isInitialLoading: false,
+        isFetching: false,
+        error: null,
+        loadMore,
+      } satisfies UseContextItemsResult;
+    });
+
+    try {
+      const event = buildEvent({
+        type: 'llm_call',
+        toolExecution: undefined,
+        llmCall: {
+          provider: 'openai',
+          model: 'gpt-test',
+          temperature: null,
+          topP: null,
+          stopReason: null,
+          contextItemIds: [oldest.id, recent.id, newest.id],
+          newContextItemCount: 1,
+          responseText: null,
+          rawResponse: null,
+          toolCalls: [],
+        },
+      });
+
+      renderDetails(event);
+
+      const contextRegion = screen.getByTestId('llm-context-scroll');
+      expect(within(contextRegion).getByText('Newest reply')).toBeInTheDocument();
+      expect(within(contextRegion).queryByText('Recent question')).toBeNull();
+      expect(within(contextRegion).queryByText('Older assistant reply')).toBeNull();
+
+      const loadButton = screen.getByRole('button', { name: /Load older messages/i });
+      await act(async () => {
+        await user.click(loadButton);
+      });
+
+      await waitFor(() => {
+        expect(within(contextRegion).getByText('Recent question')).toBeInTheDocument();
+      });
+      expect(within(contextRegion).getByText('Older assistant reply')).toBeInTheDocument();
+      expect(loadMoreCalls).toBeGreaterThan(0);
     } finally {
       useContextItemsSpy.mockRestore();
     }
@@ -1021,6 +1116,7 @@ describe('RunTimelineEventDetails', () => {
           topP: null,
           stopReason: null,
           contextItemIds: contextItems.map((item) => item.id),
+          newContextItemCount: 1,
           responseText: null,
           rawResponse: null,
           toolCalls: [],
@@ -1053,6 +1149,7 @@ describe('RunTimelineEventDetails', () => {
           llmCall: {
             ...event.llmCall!,
             contextItemIds: contextItems.map((item) => item.id),
+            newContextItemCount: 1,
           },
         }));
       });
@@ -1073,7 +1170,7 @@ describe('RunTimelineEventDetails', () => {
     });
     const older: ContextItem = {
       id: 'ctx-older',
-      role: 'system',
+      role: 'user',
       contentText: 'System',
       contentJson: null,
       createdAt: '2024-01-01T00:00:00.000Z',
@@ -1128,6 +1225,7 @@ describe('RunTimelineEventDetails', () => {
         topP: null,
         stopReason: null,
         contextItemIds: [older.id, mid.id, latest.id],
+        newContextItemCount: 1,
         responseText: null,
         rawResponse: null,
         toolCalls: [],
@@ -1184,7 +1282,7 @@ describe('RunTimelineEventDetails', () => {
     scrollToMock.mockClear();
     scrollTopValue = 800;
 
-    const loadButton = screen.getByRole('button', { name: /Load older context/i });
+    const loadButton = screen.getByRole('button', { name: /Load older messages/i });
     await act(async () => {
       await user.click(loadButton);
     });
