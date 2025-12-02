@@ -1,115 +1,17 @@
 import React from 'react';
-import {
-  describe,
-  it,
-  expect,
-  beforeAll,
-  beforeEach,
-  afterEach,
-  vi,
-  type Mock,
-} from 'vitest';
+import { describe, it, expect, beforeAll, beforeEach, afterEach, vi } from 'vitest';
 import { render, screen, act, waitFor } from '@testing-library/react';
 import { Conversation, type Run, type ConversationHandle } from '../Conversation';
 import { waitForStableScrollHeight } from '../agents/waitForStableScrollHeight';
+import type { MockVirtualizedListInstance } from './__mocks__/virtualizedListMock';
 
 vi.mock('../agents/waitForStableScrollHeight', () => ({
   waitForStableScrollHeight: vi.fn(() => Promise.resolve()),
 }));
 
-vi.mock('../VirtualizedList', () => {
-  const { forwardRef, useRef, useImperativeHandle, useMemo, useEffect } = React;
-
-  const instances: any[] = [];
-
-  const VirtualizedList = forwardRef(function MockVirtualizedList(props: any, ref) {
-    const scrollerRef = useRef<HTMLDivElement | null>(null);
-    const atBottomRef = useRef(true);
-    const propsRef = useRef(props);
-    propsRef.current = props;
-
-    const scrollToIndexMock = useMemo(() => vi.fn(), []);
-    const scrollToMock = useMemo(() => vi.fn(), []);
-    const captureScrollPositionMock = useMemo(
-      () => vi.fn(() => Promise.resolve({ index: undefined, scrollTop: 0 })),
-      [],
-    );
-    const restoreScrollPositionMock = useMemo(() => vi.fn(), []);
-
-    const instanceRef = useRef<any | null>(null);
-    if (!instanceRef.current) {
-      instanceRef.current = {
-        scrollToIndex: scrollToIndexMock,
-        scrollTo: scrollToMock,
-        setAtBottom(value: boolean) {
-          atBottomRef.current = value;
-          propsRef.current.onAtBottomChange?.(value);
-        },
-        getScroller: () => scrollerRef.current,
-        captureScrollPosition: captureScrollPositionMock,
-        restoreScrollPosition: restoreScrollPositionMock,
-      };
-      instances.push(instanceRef.current);
-    }
-
-    const { onAtBottomChange } = props;
-
-    useImperativeHandle(ref, () => ({
-      scrollToIndex: (...args: any[]) => {
-        scrollToIndexMock(...args);
-      },
-      scrollTo: (...args: any[]) => {
-        scrollToMock(...args);
-      },
-      getScrollerElement: () => scrollerRef.current,
-      isAtBottom: () => atBottomRef.current,
-      captureScrollPosition: () => captureScrollPositionMock(),
-      restoreScrollPosition: (position: unknown) => {
-        restoreScrollPositionMock(position);
-      },
-    }));
-
-    useEffect(() => {
-      onAtBottomChange?.(atBottomRef.current);
-      return () => {
-        const index = instances.indexOf(instanceRef.current);
-        if (index >= 0) {
-          instances.splice(index, 1);
-        }
-      };
-    }, [onAtBottomChange]);
-
-    return (
-      <div data-testid="mock-virtualized-list" ref={scrollerRef} style={{ overflowY: 'auto', height: '100%' }}>
-        {props.items.map((item: unknown, index: number) => {
-          const key = props.getItemKey ? props.getItemKey(item) : index;
-          return <div key={key}>{props.renderItem(index, item)}</div>;
-        })}
-      </div>
-    );
-  });
-
-  return {
-    VirtualizedList,
-    __virtualizedListMock: {
-      getInstances: () => instances,
-      clear: () => {
-        instances.splice(0, instances.length);
-      },
-    },
-  };
-});
+vi.mock('../VirtualizedList', async () => await import('./__mocks__/virtualizedListMock'));
 
 const waitForStableScrollHeightMock = vi.mocked(waitForStableScrollHeight);
-
-type MockVirtualizedListInstance = {
-  scrollToIndex: Mock;
-  scrollTo: Mock;
-  setAtBottom: (value: boolean) => void;
-  getScroller: () => HTMLDivElement | null;
-  captureScrollPosition: Mock;
-  restoreScrollPosition: Mock;
-};
 
 type VirtualizedListMockModule = {
   __virtualizedListMock: {

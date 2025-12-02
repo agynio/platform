@@ -443,7 +443,7 @@ export const Conversation = forwardRef<ConversationHandle, ConversationProps>(fu
     setIsLoaderVisible(false);
     debugConversation('conversation.restore.complete', () => ({ threadId }));
     return true;
-  }, [conversationItems, conversationItems.length, restorableItemCount, threadId]);
+  }, [conversationItems, restorableItemCount, threadId]);
 
   const schedulePendingRestore = useCallback(() => {
     if (!pendingRestoreRef.current) {

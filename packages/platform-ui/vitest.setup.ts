@@ -145,10 +145,9 @@ const applyBrowserMocks = () => {
       } as ResizeObserverEntry;
     };
 
-    const hasHTMLElement = typeof HTMLElement !== 'undefined';
-
     const measure = (element: Element) => {
-      if (hasHTMLElement && element instanceof HTMLElement) {
+      const HTMLElementCtor = typeof globalThis.HTMLElement === 'function' ? globalThis.HTMLElement : undefined;
+      if (HTMLElementCtor && element instanceof HTMLElementCtor) {
         const width = element.offsetWidth || element.clientWidth;
         const height = element.offsetHeight || element.clientHeight;
         return { width: width || 1, height: height || 1 };

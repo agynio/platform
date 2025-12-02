@@ -31,20 +31,32 @@ const resolveEnvFlag = (): unknown => {
 
 const resolveGlobalFlag = (): unknown => {
   try {
-    return (globalThis as { AGYN_DEBUG_CONVERSATIONS?: unknown }).AGYN_DEBUG_CONVERSATIONS;
+    const global = globalThis as {
+      AGYN_DEBUG_CONVERSATIONS?: unknown;
+      __AGYN_DEBUG_CONVERSATIONS__?: unknown;
+    };
+    if (global.AGYN_DEBUG_CONVERSATIONS !== undefined) return global.AGYN_DEBUG_CONVERSATIONS;
+    if (global.__AGYN_DEBUG_CONVERSATIONS__ !== undefined) return global.__AGYN_DEBUG_CONVERSATIONS__;
   } catch (_error) {
-    return undefined;
+    // ignore lookup failures
   }
+  return undefined;
 };
 
 const rawFlag = resolveGlobalFlag() ?? resolveEnvFlag();
 
 export const AGYN_DEBUG_CONVERSATIONS = coerceBoolean(rawFlag);
 
+const isDebugEnabled = (): boolean => {
+  const globalFlag = resolveGlobalFlag();
+  if (globalFlag !== undefined) return coerceBoolean(globalFlag);
+  return AGYN_DEBUG_CONVERSATIONS;
+};
+
 type DebugPayload = unknown | (() => unknown);
 
 export const debugConversation = (label: string, ...payload: DebugPayload[]): void => {
-  if (!AGYN_DEBUG_CONVERSATIONS) return;
+  if (!isDebugEnabled()) return;
   const rendered: unknown[] = [];
   for (const entry of payload) {
     if (typeof entry === 'function') {
