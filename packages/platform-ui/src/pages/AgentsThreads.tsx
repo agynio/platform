@@ -130,6 +130,7 @@ function containerDisplayName(container: ContainerItem): string {
 }
 
 const THREAD_MESSAGE_MAX_LENGTH = 8000;
+const THREAD_SUMMARY_MAX_LENGTH = 256;
 
 const sendMessageErrorMap: Record<string, string> = {
   bad_message_payload: 'Please enter a message up to 8000 characters.',
@@ -161,6 +162,57 @@ function resolveSendMessageError(error: unknown): string {
   }
   return 'Failed to send the message.';
 }
+
+const createThreadErrorMap: Record<string, string> = {
+  invalid_agent: 'Selected agent is no longer available.',
+  agent_unavailable: 'Agent is not currently available. Please try again later.',
+  agent_unready: 'Agent is starting up. Try again shortly.',
+  create_failed: 'Failed to start the conversation. Please retry.',
+};
+
+function resolveCreateThreadError(error: unknown): string {
+  if (error && typeof error === 'object') {
+    const apiError = error as ApiError;
+    const payload = apiError.response?.data as { error?: unknown; message?: unknown } | undefined;
+    if (payload && typeof payload === 'object') {
+      const code = typeof payload.error === 'string' ? payload.error : undefined;
+      if (code && createThreadErrorMap[code]) {
+        return createThreadErrorMap[code];
+      }
+      const message = typeof payload.message === 'string' ? payload.message : undefined;
+      if (message) return message;
+    }
+    if (typeof apiError.message === 'string' && apiError.message.trim().length > 0) {
+      return apiError.message;
+    }
+  }
+  if (error instanceof Error && error.message) {
+    return error.message;
+  }
+  return 'Failed to create the thread.';
+}
+
+class DraftSendError extends Error {
+  public readonly stage: 'create' | 'send';
+  public readonly originalError: unknown;
+  public readonly threadId?: string;
+
+  constructor(stage: 'create' | 'send', originalError: unknown, threadId?: string) {
+    super(stage === 'create' ? 'draft_create_failed' : 'draft_send_failed');
+    this.stage = stage;
+    this.originalError = originalError;
+    this.threadId = threadId;
+    this.name = 'DraftSendError';
+    Object.setPrototypeOf(this, DraftSendError.prototype);
+  }
+}
+
+type DraftSendVariables = {
+  draftId: string;
+  agentNodeId: string;
+  summary?: string;
+  text: string;
+};
 
 function updateThreadChildrenStatus(state: ThreadChildrenState, threadId: string, next: 'open' | 'closed'): ThreadChildrenState {
   let changed = false;
@@ -936,6 +988,65 @@ export function AgentsThreads() {
   });
   const { mutate: sendThreadMessage, isPending: isSendMessagePending } = sendMessageMutation;
 
+  const draftSendMutation = useMutation<{ threadId: string }, DraftSendError, DraftSendVariables>({
+    mutationFn: async ({ agentNodeId, summary, text }) => {
+      let threadId: string;
+      try {
+        const created = await threads.create({ agentNodeId, summary });
+        threadId = created.id;
+      } catch (error) {
+        throw new DraftSendError('create', error);
+      }
+
+      try {
+        await threads.sendMessage(threadId, text);
+      } catch (error) {
+        throw new DraftSendError('send', error, threadId);
+      }
+
+      return { threadId };
+    },
+    onSuccess: async ({ threadId }, variables) => {
+      setDrafts((prev) => prev.filter((draft) => draft.id !== variables.draftId));
+      setSelectedThreadIdState(threadId);
+      lastNonDraftIdRef.current = threadId;
+      setInputValue('');
+      navigate(`/agents/threads/${encodeURIComponent(threadId)}`);
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['agents', 'threads'] }),
+        queryClient.invalidateQueries({ queryKey: ['agents', 'threads', 'roots'] }),
+        queryClient.invalidateQueries({ queryKey: ['agents', 'threads', 'by-id', threadId] }),
+      ]);
+    },
+    onError: async (error, variables) => {
+      if (error instanceof DraftSendError) {
+        if (error.stage === 'create') {
+          notifyError(resolveCreateThreadError(error.originalError));
+          return;
+        }
+
+        const threadId = error.threadId;
+        if (threadId) {
+          setDrafts((prev) => prev.filter((draft) => draft.id !== variables.draftId));
+          setSelectedThreadIdState(threadId);
+          lastNonDraftIdRef.current = threadId;
+          navigate(`/agents/threads/${encodeURIComponent(threadId)}`);
+          await Promise.all([
+            queryClient.invalidateQueries({ queryKey: ['agents', 'threads'] }),
+            queryClient.invalidateQueries({ queryKey: ['agents', 'threads', 'roots'] }),
+            queryClient.invalidateQueries({ queryKey: ['agents', 'threads', 'by-id', threadId] }),
+          ]);
+        }
+        setInputValue(variables.text);
+        notifyError(resolveSendMessageError(error.originalError));
+        return;
+      }
+
+      notifyError('Failed to send the message.');
+    },
+  });
+  const { mutate: sendDraftMessage, isPending: isDraftSendPending } = draftSendMutation;
+
   const toggleThreadStatusMutation = useMutation({
     mutationFn: async ({ id, next }: { id: string; next: 'open' | 'closed' }) => {
       await threads.patchStatus(id, next);
@@ -1274,8 +1385,6 @@ export function AgentsThreads() {
   const handleSendMessage = useCallback(
     (value: string, context: { threadId: string | null }) => {
       if (!context.threadId) return;
-      if (isDraftThreadId(context.threadId)) return;
-      if (isSendMessagePending) return;
       const trimmed = value.trim();
       if (trimmed.length === 0) {
         notifyError('Enter a message before sending.');
@@ -1285,9 +1394,29 @@ export function AgentsThreads() {
         notifyError('Messages are limited to 8000 characters.');
         return;
       }
+      if (isDraftThreadId(context.threadId)) {
+        if (isDraftSendPending) return;
+        const draft = draftsRef.current.find((item) => item.id === context.threadId);
+        if (!draft) {
+          notifyError('Draft not found. Please try again.');
+          return;
+        }
+        if (!draft.agentNodeId) {
+          notifyError('Select an agent before sending.');
+          return;
+        }
+        sendDraftMessage({
+          draftId: draft.id,
+          agentNodeId: draft.agentNodeId,
+          summary: trimmed.slice(0, THREAD_SUMMARY_MAX_LENGTH),
+          text: trimmed,
+        });
+        return;
+      }
+      if (isSendMessagePending) return;
       sendThreadMessage({ threadId: context.threadId, text: trimmed });
     },
-    [isSendMessagePending, sendThreadMessage],
+    [isDraftSendPending, sendDraftMessage, isSendMessagePending, sendThreadMessage],
   );
 
   const handleToggleRunsInfoCollapsed = useCallback((collapsed: boolean) => {
@@ -1329,7 +1458,7 @@ export function AgentsThreads() {
           onToggleRunsInfoCollapsed={handleToggleRunsInfoCollapsed}
           onInputValueChange={handleInputValueChange}
           onSendMessage={handleSendMessage}
-          isSendMessagePending={isSendMessagePending}
+          isSendMessagePending={isSendMessagePending || isDraftSendPending}
           onThreadsLoadMore={threadsHasMore ? handleThreadsLoadMore : undefined}
           onThreadExpand={handleThreadExpand}
           onToggleThreadStatus={handleToggleThreadStatus}

@@ -168,6 +168,106 @@ function registerGraphAgents(agents: Array<{ id: string; template: string; title
   );
 }
 
+function registerDraftSendHandlers({
+  existingThread,
+  createdThread,
+  createError,
+  sendError,
+}: {
+  existingThread: ThreadMock;
+  createdThread: ThreadMock;
+  createError?: { status: number; body?: unknown };
+  sendError?: { status: number; body?: unknown };
+}) {
+  const createRequests: Array<unknown> = [];
+  const messageRequests: Array<{ params: Record<string, string>; body: unknown }> = [];
+  let created = false;
+
+  const threadsResponse = () => {
+    const items = created ? [createdThread, existingThread] : [existingThread];
+    return HttpResponse.json({ items });
+  };
+
+  server.use(
+    http.get('*/api/agents/threads', threadsResponse),
+    http.get(abs('/api/agents/threads'), threadsResponse),
+    http.get('*/api/agents/threads/:threadId', ({ params }) => {
+      if (created && params.threadId === createdThread.id) {
+        return HttpResponse.json(createdThread);
+      }
+      return undefined;
+    }),
+    http.get(abs('/api/agents/threads/:threadId'), ({ params }) => {
+      if (created && params.threadId === createdThread.id) {
+        return HttpResponse.json(createdThread);
+      }
+      return undefined;
+    }),
+    http.get('*/api/agents/threads/:threadId/runs', ({ params }) => {
+      if (params.threadId === createdThread.id) {
+        return HttpResponse.json({ items: [] });
+      }
+      return undefined;
+    }),
+    http.get(abs('/api/agents/threads/:threadId/runs'), ({ params }) => {
+      if (params.threadId === createdThread.id) {
+        return HttpResponse.json({ items: [] });
+      }
+      return undefined;
+    }),
+    http.post('*/api/agents/threads', async ({ request }) => {
+      const json = await request.json();
+      createRequests.push(json);
+      if (createError) {
+        return new HttpResponse(JSON.stringify(createError.body ?? {}), {
+          status: createError.status,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+      created = true;
+      return HttpResponse.json({ id: createdThread.id }, { headers: { Location: `/api/agents/threads/${createdThread.id}` } });
+    }),
+    http.post(abs('/api/agents/threads'), async ({ request }) => {
+      const json = await request.json();
+      createRequests.push(json);
+      if (createError) {
+        return new HttpResponse(JSON.stringify(createError.body ?? {}), {
+          status: createError.status,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+      created = true;
+      return HttpResponse.json({ id: createdThread.id }, { headers: { Location: `/api/agents/threads/${createdThread.id}` } });
+    }),
+    http.post('*/api/agents/threads/:threadId/messages', async ({ params, request }) => {
+      if (params.threadId !== createdThread.id) return undefined;
+      const json = await request.json();
+      messageRequests.push({ params: params as Record<string, string>, body: json });
+      if (sendError) {
+        return new HttpResponse(JSON.stringify(sendError.body ?? {}), {
+          status: sendError.status,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+      return HttpResponse.json({ ok: true });
+    }),
+    http.post(abs('/api/agents/threads/:threadId/messages'), async ({ params, request }) => {
+      if (params.threadId !== createdThread.id) return undefined;
+      const json = await request.json();
+      messageRequests.push({ params: params as Record<string, string>, body: json });
+      if (sendError) {
+        return new HttpResponse(JSON.stringify(sendError.body ?? {}), {
+          status: sendError.status,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+      return HttpResponse.json({ ok: true });
+    }),
+  );
+
+  return { createRequests, messageRequests };
+}
+
 describe('AgentsThreads page', () => {
   beforeAll(() => server.listen({ onUnhandledRequest: 'error' }));
   afterEach(() => {
@@ -766,6 +866,137 @@ describe('AgentsThreads page', () => {
 
       expect(draftThreadRequests).toHaveLength(0);
       expect(draftRunsRequests).toHaveLength(0);
+    });
+
+    it('creates a thread and enqueues the initial message when sending a draft', async () => {
+      const user = userEvent.setup();
+      const existingThread = makeThread();
+      const createdThread = makeThread({ id: 'thread-created', summary: 'Draft created thread', agentTitle: 'Agent Nimbus' });
+      registerThreadScenario({ thread: existingThread, runs: [] });
+      registerGraphAgents([{ id: 'agent-1', template: 'agent.template.one', title: 'Agent Nimbus' }]);
+
+      const { createRequests, messageRequests } = registerDraftSendHandlers({ existingThread, createdThread });
+
+      renderAt('/agents/threads');
+
+      await user.click(await screen.findByRole('button', { name: 'New thread' }));
+
+      const list = await screen.findByTestId('threads-list');
+      const searchInput = await screen.findByPlaceholderText('Search agents...');
+      await user.click(await screen.findByRole('button', { name: 'Agent Nimbus' }));
+      await waitFor(() => {
+        expect(searchInput).toHaveValue('Agent Nimbus');
+      });
+
+      const textarea = await screen.findByPlaceholderText('Type a message...');
+      await user.clear(textarea);
+      await user.type(textarea, 'Hello agent draft');
+
+      await user.click(screen.getByTitle('Send message'));
+
+      await waitFor(() => {
+        expect(messageRequests.length).toBe(1);
+      });
+
+      expect(createRequests).toHaveLength(1);
+      expect(createRequests[0]).toMatchObject({ agentNodeId: 'agent-1', summary: 'Hello agent draft' });
+      expect(messageRequests[0]?.params.threadId).toBe(createdThread.id);
+      expect(messageRequests[0]?.body).toEqual({ text: 'Hello agent draft' });
+
+      await waitFor(() => {
+        expect(screen.getByPlaceholderText('Type a message...')).toHaveValue('');
+      });
+      await screen.findByRole('heading', { name: createdThread.summary });
+      await waitFor(() => {
+        expect(within(list).queryByText('(new conversation)')).not.toBeInTheDocument();
+      });
+    });
+
+    it('shows an error toast and keeps the draft when thread creation fails', async () => {
+      const user = userEvent.setup();
+      const existingThread = makeThread();
+      const createdThread = makeThread({ id: 'thread-created', summary: 'Draft created thread' });
+      registerThreadScenario({ thread: existingThread, runs: [] });
+      registerGraphAgents([{ id: 'agent-1', template: 'agent.template.one', title: 'Agent Nimbus' }]);
+
+      const alertMock = vi.spyOn(window, 'alert').mockImplementation(() => {});
+
+      const { createRequests, messageRequests } = registerDraftSendHandlers({
+        existingThread,
+        createdThread,
+        createError: { status: 503, body: { error: 'agent_unready' } },
+      });
+
+      renderAt('/agents/threads');
+
+      await user.click(await screen.findByRole('button', { name: 'New thread' }));
+
+      const searchInput = await screen.findByPlaceholderText('Search agents...');
+      await user.click(await screen.findByRole('button', { name: 'Agent Nimbus' }));
+      await waitFor(() => {
+        expect(searchInput).toHaveValue('Agent Nimbus');
+      });
+
+      const textarea = await screen.findByPlaceholderText('Type a message...');
+      await user.clear(textarea);
+      await user.type(textarea, 'Hello agent draft');
+
+      await user.click(screen.getByTitle('Send message'));
+
+      await waitFor(() => {
+        expect(alertMock).toHaveBeenCalledWith('Agent is starting up. Try again shortly.');
+      });
+
+      expect(createRequests).toHaveLength(1);
+      expect(messageRequests).toHaveLength(0);
+      expect(textarea).toHaveValue('Hello agent draft');
+      expect(screen.getByText(/Start your new conversation with the agent/i)).toBeInTheDocument();
+    });
+
+    it('navigates to the created thread and preserves input when sending fails after creation', async () => {
+      const user = userEvent.setup();
+      const existingThread = makeThread();
+      const createdThread = makeThread({ id: 'thread-created', summary: 'Draft created thread' });
+      registerThreadScenario({ thread: existingThread, runs: [] });
+      registerGraphAgents([{ id: 'agent-1', template: 'agent.template.one', title: 'Agent Nimbus' }]);
+
+      const alertMock = vi.spyOn(window, 'alert').mockImplementation(() => {});
+
+      const { createRequests, messageRequests } = registerDraftSendHandlers({
+        existingThread,
+        createdThread,
+        sendError: { status: 500, body: { error: 'send_failed' } },
+      });
+
+      renderAt('/agents/threads');
+
+      await user.click(await screen.findByRole('button', { name: 'New thread' }));
+
+      const searchInput = await screen.findByPlaceholderText('Search agents...');
+      await user.click(await screen.findByRole('button', { name: 'Agent Nimbus' }));
+      await waitFor(() => {
+        expect(searchInput).toHaveValue('Agent Nimbus');
+      });
+
+      const textarea = await screen.findByPlaceholderText('Type a message...');
+      await user.clear(textarea);
+      await user.type(textarea, 'Hello agent draft');
+
+      await user.click(screen.getByTitle('Send message'));
+
+      await waitFor(() => {
+        expect(alertMock).toHaveBeenCalledWith('Failed to send the message. Please retry.');
+      });
+
+      expect(createRequests).toHaveLength(1);
+      expect(messageRequests).toHaveLength(1);
+      await screen.findByRole('heading', { name: createdThread.summary });
+      const composer = await screen.findByPlaceholderText('Type a message...');
+      expect(composer).toHaveValue('Hello agent draft');
+      const list = screen.getByTestId('threads-list');
+      await waitFor(() => {
+        expect(within(list).queryByText('(new conversation)')).not.toBeInTheDocument();
+      });
     });
   });
 });

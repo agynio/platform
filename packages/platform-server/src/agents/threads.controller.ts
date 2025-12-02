@@ -14,9 +14,21 @@ import {
   Patch,
   Post,
   Query,
+  Res,
   ServiceUnavailableException,
 } from '@nestjs/common';
-import { IsBooleanString, IsIn, IsInt, IsOptional, IsString, IsISO8601, Max, Min, ValidateIf } from 'class-validator';
+import {
+  IsBooleanString,
+  IsIn,
+  IsInt,
+  IsISO8601,
+  IsNotEmpty,
+  IsOptional,
+  IsString,
+  Max,
+  Min,
+  ValidateIf,
+} from 'class-validator';
 import { AgentsPersistenceService } from './agents.persistence.service';
 import { Transform, Expose } from 'class-transformer';
 import type { RunEventStatus, RunEventType, RunMessageType, ThreadStatus } from '@prisma/client';
@@ -28,9 +40,34 @@ import { LiveGraphRuntime } from '../graph-core/liveGraph.manager';
 import { HumanMessage } from '@agyn/llm';
 import { TemplateRegistry } from '../graph-core/templateRegistry';
 import { isAgentLiveNode, isAgentRuntimeInstance } from './agent-node.utils';
+import { randomUUID } from 'node:crypto';
 
 // Avoid runtime import of Prisma in tests; enumerate allowed values
 export const RunMessageTypeValues: ReadonlyArray<RunMessageType> = ['input', 'injected', 'output'];
+
+type LocationHeaderTarget = {
+  header?: (name: string, value: string) => unknown;
+  setHeader?: (name: string, value: string) => unknown;
+  raw?: {
+    setHeader?: (name: string, value: string) => unknown;
+  };
+};
+
+function applyLocationHeader(target: LocationHeaderTarget | undefined, location: string): void {
+  if (!target) return;
+  if (typeof target.header === 'function') {
+    target.header('Location', location);
+    return;
+  }
+  if (typeof target.setHeader === 'function') {
+    target.setHeader('Location', location);
+    return;
+  }
+  const raw = target.raw;
+  if (raw && typeof raw.setHeader === 'function') {
+    raw.setHeader('Location', location);
+  }
+}
 
 export const RunEventTypeValues: ReadonlyArray<RunEventType> = [
   'invocation_message',
@@ -159,6 +196,16 @@ export class PatchThreadBodyDto {
   @IsOptional()
   @IsIn(['open', 'closed'])
   status?: ThreadStatus;
+}
+
+export class CreateThreadBodyDto {
+  @IsString()
+  @IsNotEmpty()
+  agentNodeId!: string;
+
+  @IsOptional()
+  @IsString()
+  summary?: string;
 }
 
 @Controller('api/agents')
@@ -429,6 +476,46 @@ export class AgentsThreadsController {
     }
 
     return { ok: true } as const;
+  }
+
+  @Post('threads')
+  async createThread(
+    @Body() body: CreateThreadBodyDto,
+    @Res({ passthrough: true }) res: LocationHeaderTarget | undefined,
+  ) {
+    const agentNodeId = body.agentNodeId.trim();
+    const summary = body.summary?.trim() ?? '';
+
+    if (agentNodeId.length === 0) {
+      throw new BadRequestException({ error: 'invalid_agent' });
+    }
+
+    const liveNode =
+      (typeof this.runtime.getNode === 'function' ? this.runtime.getNode(agentNodeId) : undefined) ??
+      this.runtime.getNodes().find((node) => node.id === agentNodeId);
+    if (!isAgentLiveNode(liveNode, this.templateRegistry)) {
+      throw new BadRequestException({ error: 'invalid_agent' });
+    }
+
+    const instance = liveNode.instance;
+    if (!isAgentRuntimeInstance(instance)) {
+      throw new ServiceUnavailableException({ error: 'agent_unavailable' });
+    }
+    if (instance.status !== 'ready') {
+      throw new ServiceUnavailableException({ error: 'agent_unready' });
+    }
+
+    const alias = `manual:${agentNodeId}:${randomUUID()}`;
+    try {
+      const threadId = await this.persistence.getOrCreateThreadByAlias('manual', alias, summary);
+      await this.persistence.ensureAssignedAgent(threadId, agentNodeId);
+      applyLocationHeader(res, `/api/agents/threads/${threadId}`);
+      return { id: threadId } as const;
+    } catch (error) {
+      const stack = error instanceof Error ? error.stack : undefined;
+      this.logger.error(`createThread failed agent=${agentNodeId}`, stack, AgentsThreadsController.name);
+      throw new InternalServerErrorException({ error: 'create_failed' });
+    }
   }
 
   @Get('threads/:threadId/metrics')
