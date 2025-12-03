@@ -215,6 +215,21 @@ export function MemoryManager({
   const editorLabelId = useId();
   const editorDescriptionId = useId();
 
+  useEffect(() => {
+    if (!selectedNode) return;
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 's') {
+        event.preventDefault();
+        if (unsaved) {
+          handleSave();
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [handleSave, selectedNode, unsaved]);
+
   return (
     <div className={cn('h-full w-full', className)}>
       <ResizablePanelGroup
