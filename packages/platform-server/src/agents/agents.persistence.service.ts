@@ -1025,16 +1025,21 @@ export class AgentsPersistenceService {
     return msg;
   }
 
-  private normalizeToUserMessage(
-    msg: HumanMessage | DeveloperMessage | SystemMessage | AIMessage,
-  ): HumanMessage {
+  private normalizeToUserMessage(msg: HumanMessage | DeveloperMessage | SystemMessage | AIMessage): HumanMessage {
     const normalized = this.normalizeForPersistence(msg);
     if (normalized instanceof HumanMessage) return normalized;
-    if (normalized instanceof SystemMessage || normalized instanceof AIMessage) {
-      const coerced = coerceRole(normalized.toPlain(), 'user') as ResponseInputItem.Message & { role: 'user' };
-      return new HumanMessage(coerced);
+    if (normalized instanceof SystemMessage) {
+      const plain = normalized.toPlain();
+      return new HumanMessage({ ...plain, role: 'user' });
     }
-    return HumanMessage.fromText(normalized.text ?? '');
+    if (normalized instanceof AIMessage) {
+      return HumanMessage.fromText(normalized.text);
+    }
+    if (normalized instanceof ToolCallMessage || normalized instanceof ToolCallOutputMessage) {
+      throw new Error('Tool call messages cannot be normalized to user input');
+    }
+    const neverType: never = normalized;
+    throw new Error(`Unsupported message for user normalization: ${neverType}`);
   }
 
   /**
