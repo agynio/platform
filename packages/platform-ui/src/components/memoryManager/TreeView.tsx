@@ -169,7 +169,7 @@ export function TreeView({
       );
 
       return (
-        <li key={node.path}>
+        <li key={node.path} role="none">
           <div
             className={cn(
               'flex items-center gap-2 rounded-md px-2 py-1 text-sm transition-colors focus-within:bg-accent focus-within:text-accent-foreground',
