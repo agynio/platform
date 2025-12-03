@@ -5,6 +5,7 @@ import { describe, it, expect, vi } from 'vitest';
 
 import NodePropertiesSidebar from '../index';
 import type { NodeConfig, NodePropertiesSidebarProps, NodeState } from '../types';
+import { TooltipProvider } from '@/components/ui/tooltip';
 
 function WorkspaceSidebarHarness({
   initialConfig,
@@ -50,15 +51,17 @@ function WorkspaceSidebarHarness({
   } as NodeState;
 
   return (
-    <NodePropertiesSidebar
-      config={config}
-      state={state}
-      displayTitle={config.title}
-      onConfigChange={handleConfigChange}
-      tools={[]}
-      enabledTools={[]}
-      {...extraProps}
-    />
+    <TooltipProvider delayDuration={0}>
+      <NodePropertiesSidebar
+        config={config}
+        state={state}
+        displayTitle={config.title}
+        onConfigChange={handleConfigChange}
+        tools={[]}
+        enabledTools={[]}
+        {...extraProps}
+      />
+    </TooltipProvider>
   );
 }
 

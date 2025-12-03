@@ -8,8 +8,13 @@ import GithubCloneRepoToolConfigView from '../GithubCloneRepoToolConfigView';
 import SendSlackMessageToolConfigView from '../SendSlackMessageToolConfigView';
 import RemindMeToolConfigView from '../RemindMeToolConfigView';
 import { TOOL_NAME_HINT } from '@/components/nodeProperties/toolNameHint';
+import { TooltipProvider } from '@/components/ui/tooltip';
 
 const canonicalHelp = 'Name must match ^[a-z0-9_]{1,64}$';
+
+function renderWithTooltipProvider(element: React.ReactElement) {
+  return render(<TooltipProvider delayDuration={0}>{element}</TooltipProvider>);
+}
 
 describe('ShellToolConfigView name field', () => {
   it('surfaces tooltip guidance for naming', async () => {
@@ -17,7 +22,7 @@ describe('ShellToolConfigView name field', () => {
     const onChange = vi.fn();
     const onValidate = vi.fn();
 
-    render(
+    renderWithTooltipProvider(
       <ShellToolConfigView
         templateName="shellTool"
         value={{}}
@@ -41,7 +46,7 @@ describe('ShellToolConfigView name field', () => {
     const onChange = vi.fn();
     const onValidate = vi.fn();
 
-    render(
+    renderWithTooltipProvider(
       <ShellToolConfigView
         templateName="shellTool"
         value={{}}
@@ -68,7 +73,7 @@ describe('ShellToolConfigView name field', () => {
     const onChange = vi.fn();
     const onValidate = vi.fn();
 
-    render(
+    renderWithTooltipProvider(
       <ShellToolConfigView
         templateName="shellTool"
         value={{ name: 'custom_shell' }}
@@ -105,7 +110,7 @@ describe('GithubCloneRepoToolConfigView name field', () => {
     const user = userEvent.setup();
     const onChange = vi.fn();
 
-    render(
+    renderWithTooltipProvider(
       <GithubCloneRepoToolConfigView
         templateName="githubCloneRepoTool"
         value={{}}
@@ -129,7 +134,7 @@ describe('GithubCloneRepoToolConfigView name field', () => {
     const user = userEvent.setup();
     const onChange = vi.fn();
 
-    render(
+    renderWithTooltipProvider(
       <GithubCloneRepoToolConfigView
         templateName="githubCloneRepoTool"
         value={{ name: 'clone_repo' }}
@@ -156,7 +161,7 @@ describe('SendSlackMessageToolConfigView name field', () => {
     const onChange = vi.fn();
     const onValidate = vi.fn();
 
-    render(
+    renderWithTooltipProvider(
       <SendSlackMessageToolConfigView
         templateName="sendSlackMessageTool"
         value={{}}
@@ -188,7 +193,7 @@ describe('SendSlackMessageToolConfigView name field', () => {
     const onChange = vi.fn();
     const onValidate = vi.fn();
 
-    render(
+    renderWithTooltipProvider(
       <SendSlackMessageToolConfigView
         templateName="sendSlackMessageTool"
         value={{ name: 'slack_notify' }}
@@ -216,7 +221,7 @@ describe('RemindMeToolConfigView name field', () => {
     const user = userEvent.setup();
     const onChange = vi.fn();
 
-    render(
+    renderWithTooltipProvider(
       <RemindMeToolConfigView
         templateName="remindMeTool"
         value={{}}
@@ -245,7 +250,7 @@ describe('RemindMeToolConfigView name field', () => {
     const user = userEvent.setup();
     const onChange = vi.fn();
 
-    render(
+    renderWithTooltipProvider(
       <RemindMeToolConfigView
         templateName="remindMeTool"
         value={{ name: 'reminder_tool' }}
