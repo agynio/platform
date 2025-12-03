@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useState, type ChangeEvent } from 'react';
 import type { StaticConfigViewProps } from './types';
 // Use shared UI lib components; do not import from app alias paths.
-import { Button, Label, Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@agyn/ui';
+import { Button } from '@/components/ui/button';
+import { Label } from '@/components/ui/label';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { Maximize2 } from 'lucide-react';
 import { PromptEditorModal } from './shared/PromptEditorModal';
 
@@ -112,7 +114,7 @@ export default function SimpleAgentConfigView({
       <div>
         <div className="flex items-center justify-between gap-3">
           <Label>System prompt</Label>
-          <TooltipProvider delayDuration={200} disableHoverableContent>
+          <TooltipProvider delayDuration={200}>
             <Tooltip>
               <TooltipTrigger asChild>
                 <Button

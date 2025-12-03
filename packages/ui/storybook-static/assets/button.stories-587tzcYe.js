@@ -1,5 +1,0 @@
-import{B as c}from"./button-BndxJFtN.js";import"./jsx-runtime-D_zvdyIk.js";import"./index-CIYbrQaX.js";import"./index-CGj_12n1.js";import"./index-Dp3B9jqt.js";import"./clsx-B-dksMZM.js";import"./cn-CIsb_jhR.js";const b={title:"Components/Button",component:c,args:{children:"Click me",variant:"default",size:"default",disabled:!1},argTypes:{variant:{control:"select",options:["default","secondary","destructive","outline","ghost","link"]},size:{control:"select",options:["sm","default","lg","icon"]}}},e={},r={args:{disabled:!0}};var t,o,s;e.parameters={...e.parameters,docs:{...(t=e.parameters)==null?void 0:t.docs,source:{originalSource:"{}",...(s=(o=e.parameters)==null?void 0:o.docs)==null?void 0:s.source}}};var a,i,n;r.parameters={...r.parameters,docs:{...(a=r.parameters)==null?void 0:a.docs,source:{originalSource:`{
-  args: {
-    disabled: true
-  }
-}`,...(n=(i=r.parameters)==null?void 0:i.docs)==null?void 0:n.source}}};const y=["Primary","Disabled"];export{r as Disabled,e as Primary,y as __namedExportsOrder,b as default};

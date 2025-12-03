@@ -1,4 +1,4 @@
-import { Badge } from '@agyn/ui';
+import { Badge } from '@/components/Badge';
 import type { ProvisionState } from '../../lib/graph/types';
 
 // Map status color to Badge variant locally; do not centralize
