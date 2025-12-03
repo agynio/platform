@@ -1,3 +1,0 @@
-import{j as a}from"./jsx-runtime-D_zvdyIk.js";import{c}from"./cn-CIsb_jhR.js";import"./clsx-B-dksMZM.js";function s({className:n,...m}){return a.jsx("div",{className:c("animate-pulse rounded-md bg-muted",n),...m})}s.__docgenInfo={description:"",methods:[],displayName:"Skeleton"};const l={title:"Components/Skeleton",component:s},e={render:()=>a.jsx(s,{className:"h-8 w-40"})};var o,r,t;e.parameters={...e.parameters,docs:{...(o=e.parameters)==null?void 0:o.docs,source:{originalSource:`{
-  render: () => <Skeleton className="h-8 w-40" />
-}`,...(t=(r=e.parameters)==null?void 0:r.docs)==null?void 0:t.source}}};const u=["Basic"];export{e as Basic,u as __namedExportsOrder,l as default};

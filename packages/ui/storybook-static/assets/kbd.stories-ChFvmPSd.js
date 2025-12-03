@@ -1,3 +1,0 @@
-import{j as n}from"./jsx-runtime-D_zvdyIk.js";import{c as a}from"./cn-CIsb_jhR.js";import"./clsx-B-dksMZM.js";function o({className:d,...m}){return n.jsx("kbd",{className:a("inline-flex items-center gap-1 rounded-md border bg-muted px-1.5 py-0.5 font-mono text-[10px] font-medium text-muted-foreground shadow-xs",d),...m})}o.__docgenInfo={description:"",methods:[],displayName:"Kbd"};const u={title:"Components/Kbd",component:o},e={render:()=>n.jsx(o,{children:"⌘K"})};var r,t,s;e.parameters={...e.parameters,docs:{...(r=e.parameters)==null?void 0:r.docs,source:{originalSource:`{
-  render: () => <Kbd>⌘K</Kbd>
-}`,...(s=(t=e.parameters)==null?void 0:t.docs)==null?void 0:s.source}}};const x=["Basic"];export{e as Basic,x as __namedExportsOrder,u as default};

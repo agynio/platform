@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { Button, cn } from '@agyn/ui';
+import { Button } from '@/components/ui/button';
+import { cn } from '@/lib/utils';
 
 // Re-export types for consumers if needed (placeholder to satisfy TS resolution in strict setups)
 export type { };

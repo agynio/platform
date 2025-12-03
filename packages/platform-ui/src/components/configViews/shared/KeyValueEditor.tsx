@@ -1,4 +1,5 @@
-import { Button, Input } from '@agyn/ui';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import type { ChangeEvent } from 'react';
 
 export interface KeyValueEditorProps {

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Button } from '@agyn/ui';
+import { Button } from '@/components/ui/button';
 import type { CheckpointWriteClient } from '@/hooks/useCheckpointStream';
 import { CheckpointItemUI } from './CheckpointItemUI';
 import { ExpandableText, JsonBlock } from './CheckpointItemUtils.tsx';

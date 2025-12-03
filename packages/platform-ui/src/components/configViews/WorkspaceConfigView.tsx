@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type ChangeEvent } from 'react';
-import { Input } from '@agyn/ui';
+import { Input } from '@/components/ui/input';
 import type { EnvVar } from '@/components/nodeProperties/types';
 import { readEnvList, serializeEnvVars } from '@/components/nodeProperties/utils';
 import type { StaticConfigViewProps } from './types';

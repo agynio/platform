@@ -1,5 +1,4 @@
-
-import { Button } from '@agyn/ui';
+import { Button } from '@/components/ui/button';
 
 export interface NodeActionButtonsProps {
   provisionable: boolean;

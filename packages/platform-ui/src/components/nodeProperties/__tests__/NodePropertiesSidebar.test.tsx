@@ -6,6 +6,7 @@ import { describe, expect, it, vi } from 'vitest';
 import NodePropertiesSidebar from '../index';
 import type { NodeConfig, NodePropertiesSidebarProps, NodeState } from '../types';
 import { TOOL_NAME_HINT } from '../toolNameHint';
+import { TooltipProvider } from '@/components/ui/tooltip';
 
 function setup(overrides?: Partial<NodePropertiesSidebarProps>) {
   const { config: configOverride, state: stateOverride, onConfigChange: overrideOnConfigChange, ...rest } = overrides ?? {};
@@ -22,15 +23,17 @@ function setup(overrides?: Partial<NodePropertiesSidebarProps>) {
   } as NodeState;
 
   render(
-    <NodePropertiesSidebar
-      config={config}
-      state={state}
-      displayTitle={config.title}
-      onConfigChange={onConfigChange}
-      tools={[]}
-      enabledTools={[]}
-      {...rest}
-    />,
+    <TooltipProvider delayDuration={0}>
+      <NodePropertiesSidebar
+        config={config}
+        state={state}
+        displayTitle={config.title}
+        onConfigChange={onConfigChange}
+        tools={[]}
+        enabledTools={[]}
+        {...rest}
+      />
+    </TooltipProvider>,
   );
 
   const input = screen.getByPlaceholderText('shell_command');

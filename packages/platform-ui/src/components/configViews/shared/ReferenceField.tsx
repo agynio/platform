@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState, type ChangeEvent } from 'react';
-import { Input, Label } from '@agyn/ui';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 
 export type ReferenceValue = { value: string; source?: 'static' | 'vault' };
 
