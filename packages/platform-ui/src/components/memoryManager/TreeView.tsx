@@ -169,13 +169,7 @@ export function TreeView({
       );
 
       return (
-        <li
-          key={node.path}
-          role="treeitem"
-          aria-expanded={isExpandable ? isExpanded : undefined}
-          aria-selected={isSelected}
-          aria-level={depth + 1}
-        >
+        <li key={node.path}>
           <div
             className={cn(
               'flex items-center gap-2 rounded-md px-2 py-1 text-sm transition-colors focus-within:bg-accent focus-within:text-accent-foreground',
@@ -204,6 +198,10 @@ export function TreeView({
             <button
               ref={registerRef(node.path)}
               type="button"
+              role="treeitem"
+              aria-level={depth + 1}
+              aria-selected={isSelected}
+              aria-expanded={isExpandable ? isExpanded : undefined}
               className="flex flex-1 items-center gap-2 text-left focus-visible:outline-none"
               onClick={() => onSelect(node.path)}
               onKeyDown={(event) => handleKeyDown(event, node.path)}

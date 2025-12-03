@@ -55,31 +55,37 @@ export function MemoryManager({
   const [treeMessage, setTreeMessage] = useState<string | null>(null);
   const [pendingDeletePath, setPendingDeletePath] = useState<string | null>(null);
   const lastSelectedPathRef = useRef<string>(defaultSelectedPath);
+  const selectedPathRef = useRef<string>(defaultSelectedPath);
+
+  const handleSelectPath = useCallback(
+    (path: string) => {
+      const normalized = normalizePath(path);
+      setSelectedPath(normalized);
+      onSelectPath?.(normalized);
+      setTreeMessage(null);
+    },
+    [onSelectPath],
+  );
+
+  useEffect(() => {
+    selectedPathRef.current = selectedPath;
+  }, [selectedPath]);
 
   useEffect(() => {
     const nextTree = cloneTree(initialTree);
     setTree(nextTree);
-    if (!pathExists(nextTree, selectedPath)) {
-      const fallback = normalizePath(initialSelectedPath ?? initialTree.path);
-      setSelectedPath(fallback);
-      setExpandedPaths(new Set(getAncestorPaths(fallback)));
-      lastSelectedPathRef.current = fallback;
+    const currentPath = selectedPathRef.current;
+    if (!pathExists(nextTree, currentPath)) {
+      const preferred = normalizePath(initialSelectedPath ?? initialTree.path);
+      const fallback = pathExists(nextTree, preferred) ? preferred : normalizePath(initialTree.path);
+      handleSelectPath(fallback);
     }
-  }, [initialSelectedPath, initialTree, selectedPath]);
+  }, [handleSelectPath, initialSelectedPath, initialTree]);
 
   useEffect(() => {
     if (!initialSelectedPath) return;
-    const normalized = normalizePath(initialSelectedPath);
-    setSelectedPath(normalized);
-    setExpandedPaths((previous) => {
-      const next = new Set(previous);
-      for (const ancestor of getAncestorPaths(normalized)) {
-        next.add(ancestor);
-      }
-      return next;
-    });
-    lastSelectedPathRef.current = normalized;
-  }, [initialSelectedPath]);
+    handleSelectPath(initialSelectedPath);
+  }, [handleSelectPath, initialSelectedPath]);
 
   useEffect(() => {
     if (typeof initialPreviewEnabled === 'boolean') {
@@ -114,16 +120,6 @@ export function MemoryManager({
       lastSelectedPathRef.current = selectedPath;
     }
   }, [onEditorChange, onPreviewChange, selectedNode, selectedPath]);
-
-  const handleSelectPath = useCallback(
-    (path: string) => {
-      const normalized = normalizePath(path);
-      setSelectedPath(normalized);
-      onSelectPath?.(normalized);
-      setTreeMessage(null);
-    },
-    [onSelectPath],
-  );
 
   const handleToggleExpand = useCallback((path: string) => {
     setExpandedPaths((previous) => {
