@@ -1,18 +1,9 @@
-import { useArgs } from 'storybook/preview-api';
+import { useEffect, useMemo, useState } from 'react';
 import type { Meta, StoryObj } from '@storybook/react';
 
 import { MemoryManager } from '../src/components/memoryManager/MemoryManager';
 import type { MemoryTree } from '../src/components/memoryManager/utils';
 import { cloneTree } from '../src/components/memoryManager/utils';
-
-const emptyTree: MemoryTree = {
-  id: 'root',
-  path: '/',
-  name: '/',
-  hasDocument: false,
-  content: '',
-  children: [],
-};
 
 const populatedTree: MemoryTree = {
   id: 'root',
@@ -61,10 +52,6 @@ const populatedTree: MemoryTree = {
 type MemoryManagerStoryArgs = {
   initialTree: MemoryTree;
   initialSelectedPath?: string;
-  initialPreviewEnabled?: boolean;
-  selectedPath?: string;
-  previewEnabled?: boolean;
-  editorValue?: string;
   showContentIndicators?: boolean;
 };
 
@@ -81,28 +68,13 @@ const meta: Meta<typeof MemoryManager> = {
     initialSelectedPath: {
       control: 'text',
     },
-    initialPreviewEnabled: {
-      control: 'boolean',
-    },
-    selectedPath: {
-      control: 'text',
-    },
-    previewEnabled: {
-      control: 'boolean',
-    },
-    editorValue: {
-      control: 'text',
-    },
     showContentIndicators: {
       control: 'boolean',
     },
   },
   args: {
-    initialTree: cloneTree(emptyTree),
-    initialSelectedPath: '/',
-    selectedPath: '/',
-    previewEnabled: false,
-    editorValue: '',
+    initialTree: cloneTree(populatedTree),
+    initialSelectedPath: '/guides/getting-started',
     showContentIndicators: true,
   } satisfies MemoryManagerStoryArgs,
   tags: ['!autodocs'],
@@ -112,98 +84,68 @@ export default meta;
 
 type Story = StoryObj<typeof meta>;
 
-const renderWithState = (args: MemoryManagerStoryArgs) => {
-  const [, updateArgs] = useArgs<MemoryManagerStoryArgs>();
+const InteractiveTemplate = (args: MemoryManagerStoryArgs) => {
+  const [tree, setTree] = useState<MemoryTree>(() => cloneTree(args.initialTree));
+  const [selectedPath, setSelectedPath] = useState<string>(() => args.initialSelectedPath ?? args.initialTree.path);
+  const [editorValue, setEditorValue] = useState<string>('');
+
+  useEffect(() => {
+    setTree(cloneTree(args.initialTree));
+    if (!args.initialSelectedPath) {
+      setSelectedPath(args.initialTree.path);
+    }
+  }, [args.initialSelectedPath, args.initialTree]);
+
+  useEffect(() => {
+    if (args.initialSelectedPath) {
+      setSelectedPath(args.initialSelectedPath);
+    }
+  }, [args.initialSelectedPath]);
+
+  const nodeCount = useMemo(() => countNodes(tree), [tree]);
+
   return (
     <div className="h-[640px] w-full bg-muted/10 p-4">
-      <MemoryManager
-        initialTree={args.initialTree}
-        initialSelectedPath={args.initialSelectedPath}
-        initialPreviewEnabled={args.initialPreviewEnabled}
-        showContentIndicators={args.showContentIndicators ?? true}
-        onTreeChange={(nextTree) => updateArgs({ initialTree: cloneTree(nextTree) })}
-        onSelectPath={(path) => updateArgs({ selectedPath: path })}
-        onEditorChange={(value) => updateArgs({ editorValue: value })}
-        onPreviewChange={(preview) => updateArgs({ previewEnabled: preview })}
-      />
+      <div className="flex h-full flex-col gap-4 xl:flex-row">
+        <div className="flex-1">
+          <MemoryManager
+            initialTree={tree}
+            initialSelectedPath={selectedPath}
+            showContentIndicators={args.showContentIndicators ?? true}
+            onTreeChange={(nextTree) => setTree(cloneTree(nextTree))}
+            onSelectPath={(path) => setSelectedPath(path)}
+            onEditorChange={(value) => setEditorValue(value)}
+          />
+        </div>
+        <aside className="rounded-lg border border-border bg-background p-4 text-sm text-muted-foreground xl:w-72 xl:shrink-0">
+          <h3 className="mb-3 text-sm font-semibold text-foreground">Story state</h3>
+          <dl className="space-y-3">
+            <div>
+              <dt className="text-xs uppercase tracking-wide text-muted-foreground/80">Selected path</dt>
+              <dd className="break-words text-foreground">{selectedPath}</dd>
+            </div>
+            <div>
+              <dt className="text-xs uppercase tracking-wide text-muted-foreground/80">Content length</dt>
+              <dd className="text-foreground">{editorValue.length} characters</dd>
+            </div>
+            <div>
+              <dt className="text-xs uppercase tracking-wide text-muted-foreground/80">Tree nodes</dt>
+              <dd className="text-foreground">{nodeCount}</dd>
+            </div>
+          </dl>
+          <p className="mt-4 text-xs leading-relaxed">
+            Use the Memory Manager to add or remove nodes, edit markdown, and press Save to persist your changes in this story.
+          </p>
+        </aside>
+      </div>
     </div>
   );
 };
 
-export const DefaultEmptyTree: Story = {
-  args: {
-    initialTree: cloneTree(emptyTree),
-    initialSelectedPath: '/',
-  },
-  render: renderWithState,
+export const InteractivePlayground: Story = {
+  render: (args) => <InteractiveTemplate {...args} />,
 };
 
-export const PopulatedTree: Story = {
-  args: {
-    initialTree: cloneTree(populatedTree),
-    initialSelectedPath: '/notes/todo',
-  },
-  render: renderWithState,
-};
-
-export const EditingContent: Story = {
-  args: {
-    initialTree: cloneTree(populatedTree),
-    initialSelectedPath: '/notes/todo',
-    initialPreviewEnabled: false,
-  },
-  render: renderWithState,
-  parameters: {
-    docs: {
-      description: {
-        story: 'Focused on editing the `/notes/todo` document with live unsaved state feedback.',
-      },
-    },
-  },
-};
-
-export const CreateChildNode: Story = {
-  args: {
-    initialTree: cloneTree(emptyTree),
-    initialSelectedPath: '/',
-  },
-  render: renderWithState,
-  parameters: {
-    docs: {
-      description: {
-        story: 'Use the “Add child” action or press the A key to create a new node beneath the selected path.',
-      },
-    },
-  },
-};
-
-export const DeleteConfirmation: Story = {
-  args: {
-    initialTree: cloneTree(populatedTree),
-    initialSelectedPath: '/guides/getting-started',
-  },
-  render: renderWithState,
-  parameters: {
-    docs: {
-      description: {
-        story: 'Trigger the delete action to review the confirmation dialog and ensure descendant removal.',
-      },
-    },
-  },
-};
-
-export const KeyboardNavigation: Story = {
-  args: {
-    initialTree: cloneTree(populatedTree),
-    initialSelectedPath: '/notes',
-    showContentIndicators: true,
-  },
-  render: renderWithState,
-  parameters: {
-    docs: {
-      description: {
-        story: 'Demonstrates arrow-key navigation, Enter/Space selection, Delete prompts, and the A shortcut for creating nodes.',
-      },
-    },
-  },
-};
+function countNodes(tree: MemoryTree): number {
+  return tree.children.reduce((total, child) => total + countNodes(child), 1);
+}

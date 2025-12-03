@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ScrollArea } from '@agyn/ui';
+import { ScrollArea } from '../ui/scroll-area';
 
 import { Panel, PanelBody, PanelHeader } from '../Panel';
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from '../ui/resizable';
@@ -28,9 +28,7 @@ type MemoryManagerProps = {
   onTreeChange?: (tree: MemoryTree) => void;
   onSelectPath?: (path: string) => void;
   onEditorChange?: (value: string) => void;
-  onPreviewChange?: (preview: boolean) => void;
   initialSelectedPath?: string;
-  initialPreviewEnabled?: boolean;
   showContentIndicators?: boolean;
 };
 
@@ -40,9 +38,7 @@ export function MemoryManager({
   onTreeChange,
   onSelectPath,
   onEditorChange,
-  onPreviewChange,
   initialSelectedPath,
-  initialPreviewEnabled,
   showContentIndicators = true,
 }: MemoryManagerProps) {
   const defaultSelectedPath = normalizePath(initialSelectedPath ?? initialTree.path);
@@ -50,11 +46,9 @@ export function MemoryManager({
   const [selectedPath, setSelectedPath] = useState<string>(defaultSelectedPath);
   const [expandedPaths, setExpandedPaths] = useState<Set<string>>(() => new Set(getAncestorPaths(defaultSelectedPath)));
   const [editorValue, setEditorValue] = useState<string>(() => findNodeByPath(initialTree, defaultSelectedPath)?.content ?? '');
-  const [previewEnabled, setPreviewEnabled] = useState(initialPreviewEnabled ?? false);
   const [unsaved, setUnsaved] = useState(false);
   const [treeMessage, setTreeMessage] = useState<string | null>(null);
   const [pendingDeletePath, setPendingDeletePath] = useState<string | null>(null);
-  const lastSelectedPathRef = useRef<string>(defaultSelectedPath);
   const selectedPathRef = useRef<string>(defaultSelectedPath);
 
   const handleSelectPath = useCallback(
@@ -87,12 +81,6 @@ export function MemoryManager({
     handleSelectPath(initialSelectedPath);
   }, [handleSelectPath, initialSelectedPath]);
 
-  useEffect(() => {
-    if (typeof initialPreviewEnabled === 'boolean') {
-      setPreviewEnabled(initialPreviewEnabled);
-    }
-  }, [initialPreviewEnabled]);
-
   const selectedNode = useMemo<MemoryNode | null>(() => findNodeByPath(tree, selectedPath), [tree, selectedPath]);
 
   useEffect(() => {
@@ -114,12 +102,7 @@ export function MemoryManager({
     setEditorValue(nextContent);
     setUnsaved(false);
     onEditorChange?.(nextContent);
-    if (lastSelectedPathRef.current !== selectedPath) {
-      setPreviewEnabled(false);
-      onPreviewChange?.(false);
-      lastSelectedPathRef.current = selectedPath;
-    }
-  }, [onEditorChange, onPreviewChange, selectedNode, selectedPath]);
+  }, [onEditorChange, selectedNode, selectedPath]);
 
   const handleToggleExpand = useCallback((path: string) => {
     setExpandedPaths((previous) => {
@@ -216,11 +199,6 @@ export function MemoryManager({
     [onEditorChange, selectedNode],
   );
 
-  const handleTogglePreview = useCallback((next: boolean) => {
-    setPreviewEnabled(next);
-    onPreviewChange?.(next);
-  }, [onPreviewChange]);
-
   const handleSave = useCallback(() => {
     if (!selectedNode) return;
     setTree((previous) => {
@@ -276,9 +254,7 @@ export function MemoryManager({
               {selectedNode ? (
                 <MarkdownEditor
                   value={editorValue}
-                  preview={previewEnabled}
                   onChange={handleEditorChange}
-                  onTogglePreview={handleTogglePreview}
                   onSave={handleSave}
                   unsaved={unsaved}
                   className="h-full"

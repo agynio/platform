@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, type ReactNode } from 'react';
-import { Button, Badge } from '@agyn/ui';
+import Badge from '../Badge';
 import {
   ChevronRight,
   ChevronDown,
@@ -178,11 +178,9 @@ export function TreeView({
             style={{ paddingLeft: indent }}
           >
             {isExpandable ? (
-              <Button
+              <button
                 type="button"
-                variant="ghost"
-                size="icon"
-                className="size-6 shrink-0 text-muted-foreground hover:text-foreground"
+                className="flex size-7 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-muted-foreground/40"
                 aria-label={isExpanded ? 'Collapse node' : 'Expand node'}
                 onClick={(event) => {
                   event.stopPropagation();
@@ -191,9 +189,9 @@ export function TreeView({
                 tabIndex={-1}
               >
                 {isExpanded ? <ChevronDown className="size-4" /> : <ChevronRight className="size-4" />}
-              </Button>
+              </button>
             ) : (
-              <span className="w-6" aria-hidden="true" />
+              <span className="w-7" aria-hidden="true" />
             )}
             <button
               ref={registerRef(node.path)}
@@ -218,10 +216,9 @@ export function TreeView({
                   doc
                 </Badge>
               )}
-              <Button
+              <button
                 type="button"
-                size="icon"
-                variant="ghost"
+                className="flex size-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-muted-foreground/40"
                 aria-label={`Add child to ${node.path}`}
                 onClick={(event) => {
                   event.stopPropagation();
@@ -230,11 +227,10 @@ export function TreeView({
                 tabIndex={-1}
               >
                 <Plus className="size-4" />
-              </Button>
-              <Button
+              </button>
+              <button
                 type="button"
-                size="icon"
-                variant="ghost"
+                className="flex size-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-muted-foreground/40 disabled:opacity-40"
                 aria-label={`Delete ${node.path}`}
                 onClick={(event) => {
                   event.stopPropagation();
@@ -244,7 +240,7 @@ export function TreeView({
                 tabIndex={-1}
               >
                 <Trash2 className="size-4" />
-              </Button>
+              </button>
             </div>
           </div>
           {isExpandable && isExpanded && node.children.length > 0 && (

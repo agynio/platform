@@ -7,7 +7,7 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-} from '@agyn/ui';
+} from '../ui/alert-dialog';
 
 type ConfirmDeleteDialogProps = {
   open: boolean;
@@ -30,7 +30,7 @@ export function ConfirmDeleteDialog({ open, path, onConfirm, onCancel }: Confirm
           <AlertDialogCancel onClick={onCancel}>Cancel</AlertDialogCancel>
           <AlertDialogAction
             onClick={onConfirm}
-            className="bg-destructive text-white hover:bg-destructive/90 focus-visible:ring-destructive/20"
+            className="bg-red-600 text-white hover:bg-red-700 focus-visible:ring-red-200"
           >
             Delete
           </AlertDialogAction>
