@@ -16,7 +16,7 @@ import {
   Query,
   ServiceUnavailableException,
 } from '@nestjs/common';
-import { IsBooleanString, IsIn, IsInt, IsOptional, IsString, IsISO8601, Max, MaxLength, Min, MinLength, ValidateIf } from 'class-validator';
+import { IsBooleanString, IsIn, IsInt, IsOptional, IsString, IsISO8601, Max, Min, ValidateIf } from 'class-validator';
 import { AgentsPersistenceService } from './agents.persistence.service';
 import { Transform, Expose } from 'class-transformer';
 import type { RunEventStatus, RunEventType, RunMessageType, ThreadStatus } from '@prisma/client';
@@ -165,30 +165,12 @@ export class PatchThreadBodyDto {
   status?: ThreadStatus;
 }
 
-export class CreateThreadBodyDto {
-  @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
-  @IsString()
-  @MinLength(1)
-  @MaxLength(THREAD_MESSAGE_MAX_LENGTH)
-  text!: string;
-
-  @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
-  @IsString()
-  @MinLength(1)
-  agentNodeId!: string;
-
-  @IsOptional()
-  @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
-  @IsString()
-  @MinLength(1)
-  parentId?: string;
-
-  @IsOptional()
-  @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
-  @IsString()
-  @MinLength(1)
-  alias?: string;
-}
+type CreateThreadBody = {
+  text?: unknown;
+  agentNodeId?: unknown;
+  parentId?: unknown;
+  alias?: unknown;
+};
 
 @Controller('api/agents')
 export class AgentsThreadsController {
@@ -205,20 +187,22 @@ export class AgentsThreadsController {
 
   @Post('threads')
   @HttpCode(201)
-  async createThread(@Body() body: CreateThreadBodyDto): Promise<{ id: string }> {
-    const text = body.text.trim();
+  async createThread(@Body() body: CreateThreadBody | null | undefined): Promise<{ id: string }> {
+    const textValue = typeof body?.text === 'string' ? body.text : '';
+    const text = textValue.trim();
     if (text.length === 0 || text.length > AgentsThreadsController.MAX_MESSAGE_LENGTH) {
       throw new BadRequestException({ error: 'bad_message_payload' });
     }
 
-    const agentNodeId = body.agentNodeId.trim();
+    const agentNodeValue = typeof body?.agentNodeId === 'string' ? body.agentNodeId : '';
+    const agentNodeId = agentNodeValue.trim();
     if (agentNodeId.length === 0) {
       throw new BadRequestException({ error: 'bad_message_payload' });
     }
 
-    const aliasCandidate = typeof body.alias === 'string' ? body.alias.trim() : '';
+    const aliasCandidate = typeof body?.alias === 'string' ? body.alias.trim() : '';
     const alias = aliasCandidate.length > 0 ? aliasCandidate : `ui:${randomUUID()}`;
-    const parentIdCandidate = typeof body.parentId === 'string' ? body.parentId.trim() : '';
+    const parentIdCandidate = typeof body?.parentId === 'string' ? body.parentId.trim() : '';
     const parentId = parentIdCandidate.length > 0 ? parentIdCandidate : null;
 
     const liveNodes = this.runtime.getNodes();
