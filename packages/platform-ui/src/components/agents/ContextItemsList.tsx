@@ -111,7 +111,7 @@ export function ContextItemsList({
     return collected;
   }, [filteredItems, highlightLastCount]);
 
-  const renderedCallbackRef = useRef<typeof onItemsRendered>();
+  const renderedCallbackRef = useRef<ContextItemsListProps['onItemsRendered']>(undefined);
   renderedCallbackRef.current = onItemsRendered;
 
   useEffect(() => {
