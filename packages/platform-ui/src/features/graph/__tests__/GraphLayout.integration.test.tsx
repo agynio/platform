@@ -199,6 +199,126 @@ describe('GraphLayout', () => {
     expect(props?.nodes?.[0]?.data?.title).toBe('Delta (Navigator)');
   });
 
+  it('respects literal config title even when matching template', async () => {
+    const updateNode = vi.fn();
+    const applyNodeStatus = vi.fn();
+    const applyNodeState = vi.fn();
+    const setEdges = vi.fn();
+
+    mockGraphData({
+      nodes: [
+        {
+          id: 'node-1',
+          template: 'Agent',
+          kind: 'Agent',
+          title: 'Agent',
+          x: 0,
+          y: 0,
+          status: 'ready',
+          config: { title: 'Agent', name: 'Atlas', role: 'Navigator' },
+          ports: { inputs: [], outputs: [] },
+        },
+      ],
+      updateNode,
+      applyNodeStatus,
+      applyNodeState,
+      setEdges,
+    });
+
+    hookMocks.useGraphSocket.mockReturnValue(undefined);
+    hookMocks.useNodeStatus.mockReturnValue({ data: null, refetch: vi.fn() });
+
+    render(<GraphLayout services={services} />);
+
+    await waitFor(() => expect(canvasSpy).toHaveBeenCalled());
+
+    const latest = canvasSpy.mock.calls.at(-1)?.[0] as {
+      nodes?: Array<{ data?: { title?: string } }>;
+    };
+
+    expect(latest?.nodes?.[0]?.data?.title).toBe('Agent');
+  });
+
+  it('derives agent title from name when role missing', async () => {
+    const updateNode = vi.fn();
+    const applyNodeStatus = vi.fn();
+    const applyNodeState = vi.fn();
+    const setEdges = vi.fn();
+
+    mockGraphData({
+      nodes: [
+        {
+          id: 'node-1',
+          template: 'Agent',
+          kind: 'Agent',
+          title: '',
+          x: 0,
+          y: 0,
+          status: 'not_ready',
+          config: { title: '', name: 'Echo', role: '   ' },
+          ports: { inputs: [], outputs: [] },
+        },
+      ],
+      updateNode,
+      applyNodeStatus,
+      applyNodeState,
+      setEdges,
+    });
+
+    hookMocks.useGraphSocket.mockReturnValue(undefined);
+    hookMocks.useNodeStatus.mockReturnValue({ data: null, refetch: vi.fn() });
+
+    render(<GraphLayout services={services} />);
+
+    await waitFor(() => expect(canvasSpy).toHaveBeenCalled());
+
+    const latest = canvasSpy.mock.calls.at(-1)?.[0] as {
+      nodes?: Array<{ data?: { title?: string } }>;
+    };
+
+    expect(latest?.nodes?.[0]?.data?.title).toBe('Echo');
+  });
+
+  it('falls back to template when title and profile are empty', async () => {
+    const updateNode = vi.fn();
+    const applyNodeStatus = vi.fn();
+    const applyNodeState = vi.fn();
+    const setEdges = vi.fn();
+
+    mockGraphData({
+      nodes: [
+        {
+          id: 'node-1',
+          template: 'Support Agent',
+          kind: 'Agent',
+          title: '   ',
+          x: 0,
+          y: 0,
+          status: 'not_ready',
+          config: { title: '', name: '  ', role: '' },
+          ports: { inputs: [], outputs: [] },
+        },
+      ],
+      updateNode,
+      applyNodeStatus,
+      applyNodeState,
+      setEdges,
+    });
+
+    hookMocks.useGraphSocket.mockReturnValue(undefined);
+    hookMocks.useNodeStatus.mockReturnValue({ data: null, refetch: vi.fn() });
+
+    render(<GraphLayout services={services} />);
+
+    await waitFor(() => expect(canvasSpy).toHaveBeenCalled());
+
+    const latest = canvasSpy.mock.calls.at(-1)?.[0] as {
+      nodes?: Array<{ data?: { title?: string } }>;
+    };
+
+    expect(latest?.nodes?.[0]?.data?.title).toBe('Support Agent');
+  });
+
   it('passes sidebar config/state and persists config updates', async () => {
     const updateNode = vi.fn();
     const applyNodeStatus = vi.fn();
@@ -349,17 +469,17 @@ describe('GraphLayout', () => {
     unmount();
   });
 
-  it('keeps agent title placeholder when cleared in sidebar', async () => {
+  it('restores agent profile fallback when title cleared in sidebar', async () => {
     const updateNode = vi.fn();
     const applyNodeStatus = vi.fn();
     const applyNodeState = vi.fn();
     const setEdges = vi.fn();
 
-    mockGraphData({
+    const graph = mockGraphData({
       nodes: [
         {
           id: 'node-1',
-          template: 'agent-template',
+          template: 'Agent',
           kind: 'Agent',
           title: 'Agent',
           x: 0,
@@ -378,7 +498,7 @@ describe('GraphLayout', () => {
     hookMocks.useGraphSocket.mockReturnValue(undefined);
     hookMocks.useNodeStatus.mockReturnValue({ data: null, refetch: vi.fn() });
 
-    render(<GraphLayout services={services} />);
+    const { rerender } = render(<GraphLayout services={services} />);
 
     await waitFor(() => expect(canvasSpy).toHaveBeenCalled());
 
@@ -412,12 +532,65 @@ describe('GraphLayout', () => {
     expect(payload?.config).toEqual({ name: 'Atlas', role: 'Navigator' });
     expect(payload?.title).toBe('');
 
+    graph.nodes = graph.nodes.map((node) =>
+      node.id === 'node-1'
+        ? {
+            ...node,
+            title: '',
+            config: { ...(node.config ?? {}), title: '', name: 'Atlas', role: 'Navigator' },
+          }
+        : node,
+    );
+    hookMocks.useGraphData.mockReturnValue(graph);
+    canvasSpy.mockClear();
+    rerender(<GraphLayout services={services} />);
+
     await waitFor(() => {
       const latest = canvasSpy.mock.calls.at(-1)?.[0] as {
         nodes?: Array<{ data?: { title?: string } }>;
       };
       expect(latest?.nodes?.[0]?.data?.title).toBe('Atlas (Navigator)');
     });
+  });
+
+  it('keeps stored agent title when distinct from template', async () => {
+    const updateNode = vi.fn();
+    const applyNodeStatus = vi.fn();
+    const applyNodeState = vi.fn();
+    const setEdges = vi.fn();
+
+    mockGraphData({
+      nodes: [
+        {
+          id: 'node-1',
+          template: 'Agent',
+          kind: 'Agent',
+          title: 'Custom Dispatch',
+          x: 0,
+          y: 0,
+          status: 'not_ready',
+          config: { title: '', name: '', role: '' },
+          ports: { inputs: [], outputs: [] },
+        },
+      ],
+      updateNode,
+      applyNodeStatus,
+      applyNodeState,
+      setEdges,
+    });
+
+    hookMocks.useGraphSocket.mockReturnValue(undefined);
+    hookMocks.useNodeStatus.mockReturnValue({ data: null, refetch: vi.fn() });
+
+    render(<GraphLayout services={services} />);
+
+    await waitFor(() => expect(canvasSpy).toHaveBeenCalled());
+
+    const latest = canvasSpy.mock.calls.at(-1)?.[0] as {
+      nodes?: Array<{ data?: { title?: string } }>;
+    };
+
+    expect(latest?.nodes?.[0]?.data?.title).toBe('Custom Dispatch');
   });
 
   it('renders backend templates in the empty sidebar', async () => {

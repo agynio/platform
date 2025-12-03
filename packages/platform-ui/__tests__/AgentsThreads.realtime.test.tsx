@@ -1,6 +1,7 @@
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import React from 'react';
-import { render, screen, fireEvent, within, waitFor } from '@testing-library/react';
+import { act, render, screen, within, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { http, HttpResponse } from 'msw';
 import { AgentsThreads } from '../src/pages/AgentsThreads';
@@ -53,6 +54,8 @@ describe('AgentsThreads realtime updates', () => {
   it('appends streamed messages for known runs and deduplicates duplicates', async () => {
     setupBaseMocks(true);
 
+    const user = userEvent.setup();
+
     render(
       <TestProviders>
         <MemoryRouter>
@@ -61,7 +64,7 @@ describe('AgentsThreads realtime updates', () => {
       </TestProviders>,
     );
 
-    fireEvent.click(await screen.findByText('Thread A'));
+    await user.click(await screen.findByText('Thread A'));
     const conversation = await screen.findByTestId('conversation');
     await waitFor(() => expect(within(conversation).queryAllByTestId('conversation-message')).toHaveLength(0));
 
@@ -71,17 +74,27 @@ describe('AgentsThreads realtime updates', () => {
     } as const;
 
     const listeners = (graphSocket as any).messageCreatedListeners as Set<(p: typeof payload) => void>;
-    for (const listener of listeners) listener(payload);
+    await act(async () => {
+      for (const listener of listeners) {
+        listener(payload);
+      }
+    });
 
     await waitFor(() => expect(within(conversation).queryAllByTestId('conversation-message')).toHaveLength(1));
     expect(within(conversation).getByText('Streamed')).toBeInTheDocument();
 
-    for (const listener of listeners) listener(payload);
+    await act(async () => {
+      for (const listener of listeners) {
+        listener(payload);
+      }
+    });
     await waitFor(() => expect(within(conversation).queryAllByTestId('conversation-message')).toHaveLength(1));
   });
 
   it('buffers streamed messages until the corresponding run appears', async () => {
     setupBaseMocks(false);
+
+    const user = userEvent.setup();
 
     render(
       <TestProviders>
@@ -91,7 +104,7 @@ describe('AgentsThreads realtime updates', () => {
       </TestProviders>,
     );
 
-    fireEvent.click(await screen.findByText('Thread A'));
+    await user.click(await screen.findByText('Thread A'));
     const conversation = await screen.findByTestId('conversation');
 
     const bufferedPayload = {
@@ -100,7 +113,11 @@ describe('AgentsThreads realtime updates', () => {
     } as const;
 
     const messageListeners = (graphSocket as any).messageCreatedListeners as Set<(p: typeof bufferedPayload) => void>;
-    for (const listener of messageListeners) listener(bufferedPayload);
+    await act(async () => {
+      for (const listener of messageListeners) {
+        listener(bufferedPayload);
+      }
+    });
 
     expect(within(conversation).queryByText('Buffered message')).toBeNull();
 
@@ -109,7 +126,11 @@ describe('AgentsThreads realtime updates', () => {
       run: { id: 'run-late', status: 'running', createdAt: t(1), updatedAt: t(1) },
     } as const;
     const runListeners = (graphSocket as any).runStatusListeners as Set<(p: typeof runPayload) => void>;
-    for (const listener of runListeners) listener(runPayload);
+    await act(async () => {
+      for (const listener of runListeners) {
+        listener(runPayload);
+      }
+    });
 
     await waitFor(() => expect(within(conversation).getByText('Buffered message')).toBeInTheDocument());
   });

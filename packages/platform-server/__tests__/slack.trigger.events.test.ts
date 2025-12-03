@@ -120,6 +120,7 @@ import { SlackTrigger } from '../src/nodes/slackTrigger/slackTrigger.node';
 import { __getLastSocketClient } from '@slack/socket-mode';
 import type { SlackAdapter } from '../src/messaging/slack/slack.adapter';
 import { ResolveError } from '../src/utils/references';
+import { createReferenceResolverStub } from './helpers/reference-resolver.stub';
 // Avoid importing AgentsPersistenceService to prevent @prisma/client load in unit tests
 // We pass a stub object where needed.
 
@@ -148,7 +149,8 @@ describe('SlackTrigger events', () => {
         return undefined;
       },
     } satisfies Pick<import('../src/graph-core/templateRegistry').TemplateRegistry, 'getMeta'>) as import('../src/graph-core/templateRegistry').TemplateRegistry;
-    const trig = new SlackTrigger(undefined as any, persistence, prismaStub, slackAdapterStub, runtimeStub, templateRegistryStub);
+    const { stub: referenceResolver } = createReferenceResolverStub();
+    const trig = new SlackTrigger(referenceResolver, persistence, prismaStub, slackAdapterStub, runtimeStub, templateRegistryStub);
     const nodeId = 'slack-node';
     trig.init({ nodeId });
     await trig.setConfig({ app_token: 'xapp-abc', bot_token: 'xoxb-bot' });
@@ -368,7 +370,7 @@ describe('SlackTrigger events', () => {
     expect(updateThreadChannelDescriptor).not.toHaveBeenCalled();
   });
 
-  it('setConfig rejects unresolved tokens when resolver unavailable', async () => {
+  it('setConfig rejects tokens the resolver leaves unresolved', async () => {
     const persistence = ({
       getOrCreateThreadByAlias: async () => 't-slack',
       ensureAssignedAgent: async () => undefined,
@@ -380,12 +382,13 @@ describe('SlackTrigger events', () => {
       getNodes: () => [],
     } satisfies Pick<import('../src/graph-core/liveGraph.manager').LiveGraphRuntime, 'getOutboundNodeIds' | 'getNodes'>) as import('../src/graph-core/liveGraph.manager').LiveGraphRuntime;
     const templateRegistryStub = ({ getMeta: () => undefined } satisfies Pick<import('../src/graph-core/templateRegistry').TemplateRegistry, 'getMeta'>) as import('../src/graph-core/templateRegistry').TemplateRegistry;
-    const trig = new SlackTrigger(undefined as any, persistence, prismaStub, slackAdapterStub, runtimeStub, templateRegistryStub);
+    const { stub: referenceResolver } = createReferenceResolverStub();
+    const trig = new SlackTrigger(referenceResolver, persistence, prismaStub, slackAdapterStub, runtimeStub, templateRegistryStub);
     const badConfig = {
       app_token: { kind: 'vault', path: 'secret/slack', key: 'APP' },
       bot_token: 'xoxb-good',
     } as any;
-    await expect(trig.setConfig(badConfig)).rejects.toThrow(/requires resolved tokens|Slack app token must start/);
+    await expect(trig.setConfig(badConfig)).rejects.toThrow(/Slack app_token is required/);
   });
 
   it('fails provisioning when bot token prefix invalid', async () => {
@@ -400,7 +403,8 @@ describe('SlackTrigger events', () => {
       getNodes: () => [],
     } satisfies Pick<import('../src/graph-core/liveGraph.manager').LiveGraphRuntime, 'getOutboundNodeIds' | 'getNodes'>) as import('../src/graph-core/liveGraph.manager').LiveGraphRuntime;
     const templateRegistryStub = ({ getMeta: () => undefined } satisfies Pick<import('../src/graph-core/templateRegistry').TemplateRegistry, 'getMeta'>) as import('../src/graph-core/templateRegistry').TemplateRegistry;
-    const trig = new SlackTrigger(undefined as any, persistence, prismaStub, slackAdapterStub, runtimeStub, templateRegistryStub);
+    const { stub: referenceResolver } = createReferenceResolverStub();
+    const trig = new SlackTrigger(referenceResolver, persistence, prismaStub, slackAdapterStub, runtimeStub, templateRegistryStub);
     await expect(trig.setConfig({ app_token: 'xapp-valid', bot_token: 'bot-invalid' })).rejects.toThrow(
       /Slack bot token must start with xoxb-/,
     );

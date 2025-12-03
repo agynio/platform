@@ -106,6 +106,8 @@ describe('AgentsThreads conversation view', () => {
   it('renders conversation messages and run info, and navigates to run timeline', async () => {
     setupThreadData();
 
+    const user = userEvent.setup();
+
     render(
       <TestProviders>
         <MemoryRouter>
@@ -152,6 +154,8 @@ describe('AgentsThreads conversation view', () => {
       http.get('/api/agents/threads/th1/children', () => childrenHandler()),
       http.get(abs('/api/agents/threads/th1/children'), () => childrenHandler()),
     );
+
+    const user = userEvent.setup();
 
     render(
       <TestProviders>

@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import { LocalMCPServerNode } from '../src/nodes/mcp/localMcpServer.node';
 import { ContainerService } from '../src/infra/container/container.service';
 import type { ContainerRegistry } from '../src/infra/container/container.registry';
+import { createModuleRefStub } from './helpers/module-ref.stub';
 
 describe('LocalMCPServer preload + staleness + persist', () => {
   let server: LocalMCPServerNode;
@@ -21,7 +22,7 @@ describe('LocalMCPServer preload + staleness + persist', () => {
     } as unknown as ContainerRegistry;
     const cs = new ContainerService(registryStub);
     const envStub = { resolveEnvItems: async () => ({}), resolveProviderEnv: async () => ({}) } as any;
-    server = new LocalMCPServerNode(cs as any, envStub, {} as any, undefined as any);
+    server = new LocalMCPServerNode(cs as any, envStub, {} as any, createModuleRefStub());
     await server.setConfig({ namespace: 'x', command: 'echo' } as any);
     (server as any).setContainerProvider({ provide: async () => ({ id: 'cid', stop: async () => {}, remove: async () => {} }) });
     (server as any).on('mcp.tools_updated', (p: { tools: any[]; updatedAt: number }) => { lastUpdate = p; });

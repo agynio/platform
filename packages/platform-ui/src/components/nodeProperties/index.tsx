@@ -22,6 +22,7 @@ import {
   isRecord,
   mergeWithDefined,
   readEnvList,
+  readNixFlakeRepos,
   readNixPackages,
   readNumber,
   readQueueConfig,
@@ -38,6 +39,7 @@ import type {
   NodeConfig,
   NodePropertiesSidebarProps,
   NodeState,
+  WorkspaceFlakeRepo,
   WorkspaceNixPackage,
 } from './types';
 
@@ -184,9 +186,28 @@ function NodePropertiesSidebar({
     typeof configRecord.logToPid1 === 'boolean' ? (configRecord.logToPid1 as boolean) : true;
   const agentNameValue = typeof configRecord.name === 'string' ? (configRecord.name as string) : '';
   const agentRoleValue = typeof configRecord.role === 'string' ? (configRecord.role as string) : '';
+  const [agentNameInput, setAgentNameInput] = useState(agentNameValue);
+  const [agentRoleInput, setAgentRoleInput] = useState(agentRoleValue);
+  const [agentNameDirty, setAgentNameDirty] = useState(false);
+  const [agentRoleDirty, setAgentRoleDirty] = useState(false);
+
+  useEffect(() => {
+    if (agentNameDirty) {
+      return;
+    }
+    setAgentNameInput(agentNameValue);
+  }, [agentNameValue, agentNameDirty]);
+
+  useEffect(() => {
+    if (agentRoleDirty) {
+      return;
+    }
+    setAgentRoleInput(agentRoleValue);
+  }, [agentRoleValue, agentRoleDirty]);
+
   const agentDefaultTitle = useMemo(
-    () => computeAgentDefaultTitle(agentNameValue, agentRoleValue, 'Agent'),
-    [agentNameValue, agentRoleValue],
+    () => computeAgentDefaultTitle(agentNameInput.trim(), agentRoleInput.trim(), 'Agent'),
+    [agentNameInput, agentRoleInput],
   );
   const headerTitle = useMemo(() => {
     const providedDisplay = typeof displayTitle === 'string' ? displayTitle.trim() : '';
@@ -256,12 +277,25 @@ function NodePropertiesSidebar({
   const workspaceInitialScript =
     typeof configRecord.initialScript === 'string' ? (configRecord.initialScript as string) : '';
   const workspaceEnableDinD = configRecord.enableDinD === true;
+  const workspaceCpuLimit =
+    typeof configRecord.cpu_limit === 'string'
+      ? (configRecord.cpu_limit as string)
+      : typeof configRecord.cpu_limit === 'number'
+      ? String(configRecord.cpu_limit)
+      : undefined;
+  const workspaceMemoryLimit =
+    typeof configRecord.memory_limit === 'string'
+      ? (configRecord.memory_limit as string)
+      : typeof configRecord.memory_limit === 'number'
+      ? String(configRecord.memory_limit)
+      : undefined;
   const workspaceTtlSeconds = readNumber(configRecord.ttlSeconds);
   const volumesConfig = isRecord(configRecord.volumes) ? (configRecord.volumes as Record<string, unknown>) : {};
   const volumesEnabled = volumesConfig.enabled === true;
   const volumesMountPath =
     typeof volumesConfig.mountPath === 'string' ? (volumesConfig.mountPath as string) : '/workspace';
   const workspaceNixPackages = useMemo(() => readNixPackages(configRecord.nix), [configRecord.nix]);
+  const workspaceFlakeRepos = useMemo(() => readNixFlakeRepos(configRecord.nix), [configRecord.nix]);
 
   const setVersionLoading = useCallback((name: string, loading: boolean) => {
     setNixVersionLoading((prev) => {
@@ -409,21 +443,59 @@ function NodePropertiesSidebar({
     [envVars, onConfigChange, fetchSecretNow, fetchVariableNow],
   );
 
-  const handleAgentNameChange = useCallback(
-    (value: string) => {
-      const trimmed = value.trim();
-      handleConfigChange({ name: trimmed.length > 0 ? trimmed : undefined });
-    },
-    [handleConfigChange],
-  );
+  const handleAgentNameChange = useCallback((value: string) => {
+    setAgentNameDirty(true);
+    setAgentNameInput(value);
+    const trimmed = value.trim();
+    const normalizedNext = trimmed.length > 0 ? trimmed : undefined;
+    const normalizedCurrent = agentNameValue.length > 0 ? agentNameValue : undefined;
+    if (normalizedNext === normalizedCurrent) {
+      return;
+    }
+    handleConfigChange({ name: normalizedNext });
+  }, [agentNameValue, handleConfigChange]);
 
-  const handleAgentRoleChange = useCallback(
-    (value: string) => {
-      const trimmed = value.trim();
-      handleConfigChange({ role: trimmed.length > 0 ? trimmed : undefined });
-    },
-    [handleConfigChange],
-  );
+  const handleAgentNameBlur = useCallback(() => {
+    const trimmed = agentNameInput.trim();
+    const nextInputValue = trimmed.length > 0 ? trimmed : '';
+    setAgentNameInput(nextInputValue);
+    setAgentNameDirty(false);
+
+    const normalizedNext = trimmed.length > 0 ? trimmed : undefined;
+    const normalizedCurrent = agentNameValue.length > 0 ? agentNameValue : undefined;
+    if (normalizedNext === normalizedCurrent) {
+      return;
+    }
+
+    handleConfigChange({ name: normalizedNext });
+  }, [agentNameInput, agentNameValue, handleConfigChange]);
+
+  const handleAgentRoleChange = useCallback((value: string) => {
+    setAgentRoleDirty(true);
+    setAgentRoleInput(value);
+    const trimmed = value.trim();
+    const normalizedNext = trimmed.length > 0 ? trimmed : undefined;
+    const normalizedCurrent = agentRoleValue.length > 0 ? agentRoleValue : undefined;
+    if (normalizedNext === normalizedCurrent) {
+      return;
+    }
+    handleConfigChange({ role: normalizedNext });
+  }, [agentRoleValue, handleConfigChange]);
+
+  const handleAgentRoleBlur = useCallback(() => {
+    const trimmed = agentRoleInput.trim();
+    const nextInputValue = trimmed.length > 0 ? trimmed : '';
+    setAgentRoleInput(nextInputValue);
+    setAgentRoleDirty(false);
+
+    const normalizedNext = trimmed.length > 0 ? trimmed : undefined;
+    const normalizedCurrent = agentRoleValue.length > 0 ? agentRoleValue : undefined;
+    if (normalizedNext === normalizedCurrent) {
+      return;
+    }
+
+    handleConfigChange({ role: normalizedNext });
+  }, [agentRoleInput, agentRoleValue, handleConfigChange]);
 
   const handleAgentModelChange = useCallback(
     (value: string) => {
@@ -484,14 +556,20 @@ function NodePropertiesSidebar({
       }
       const nextPackages: WorkspaceNixPackage[] = [
         ...workspaceNixPackages,
-        { name: option.value, version: '', commitHash: '', attributePath: '' },
+        {
+          kind: 'nixpkgs',
+          name: option.value,
+          version: '',
+          commitHash: '',
+          attributePath: '',
+        },
       ];
-      onConfigChange?.(applyNixUpdate(config, nextPackages));
+      onConfigChange?.(applyNixUpdate(config, nextPackages, workspaceFlakeRepos));
       setNixErrors((prev) => ({ ...prev, [option.value]: null }));
       setNixPackageQuery('');
       await loadPackageVersions(option.value);
     },
-    [workspaceNixPackages, onConfigChange, config, loadPackageVersions],
+    [workspaceNixPackages, workspaceFlakeRepos, onConfigChange, config, loadPackageVersions],
   );
 
   const handleNixRemove = useCallback(
@@ -499,10 +577,10 @@ function NodePropertiesSidebar({
       const pkg = workspaceNixPackages[index];
       if (!pkg) return;
       const next = workspaceNixPackages.filter((_, idx) => idx !== index);
-      onConfigChange?.(applyNixUpdate(config, next));
+      onConfigChange?.(applyNixUpdate(config, next, workspaceFlakeRepos));
       clearPackageState(pkg.name);
     },
-    [workspaceNixPackages, onConfigChange, config, clearPackageState],
+    [workspaceNixPackages, workspaceFlakeRepos, onConfigChange, config, clearPackageState],
   );
 
   const handleNixVersionChange = useCallback(
@@ -512,7 +590,7 @@ function NodePropertiesSidebar({
       const staged = workspaceNixPackages.map((entry, idx) =>
         idx === index ? { ...entry, version: value, commitHash: '', attributePath: '' } : entry,
       );
-      onConfigChange?.(applyNixUpdate(config, staged));
+      onConfigChange?.(applyNixUpdate(config, staged, workspaceFlakeRepos));
 
       if (!resolveNixPackageSelection) {
         return;
@@ -525,21 +603,28 @@ function NodePropertiesSidebar({
         const nextResolved = staged.map((entry, idx) =>
           idx === index
             ? {
-                name: entry.name,
+                ...entry,
                 version: resolved.version,
                 commitHash: resolved.commitHash,
                 attributePath: resolved.attributePath,
               }
             : entry,
         );
-        onConfigChange?.(applyNixUpdate(config, nextResolved));
+        onConfigChange?.(applyNixUpdate(config, nextResolved, workspaceFlakeRepos));
       } catch {
         setNixErrors((prev) => ({ ...prev, [pkg.name]: 'Failed to resolve package' }));
       } finally {
         setPackageResolving(pkg.name, false);
       }
     },
-    [workspaceNixPackages, onConfigChange, config, resolveNixPackageSelection, setPackageResolving],
+    [workspaceNixPackages, workspaceFlakeRepos, onConfigChange, config, resolveNixPackageSelection, setPackageResolving],
+  );
+
+  const handleRepoPackagesChange = useCallback(
+    (nextRepos: WorkspaceFlakeRepo[]) => {
+      onConfigChange?.(applyNixUpdate(config, workspaceNixPackages, nextRepos));
+    },
+    [config, onConfigChange, workspaceNixPackages],
   );
 
   const handleRestartChange = useCallback(
@@ -548,6 +633,20 @@ function NodePropertiesSidebar({
       onConfigChange?.({ restart: merged });
     },
     [restartConfig, onConfigChange],
+  );
+
+  const handleWorkspaceCpuLimitChange = useCallback(
+    (value: string | undefined) => {
+      onConfigChange?.({ cpu_limit: value });
+    },
+    [onConfigChange],
+  );
+
+  const handleWorkspaceMemoryLimitChange = useCallback(
+    (value: string | undefined) => {
+      onConfigChange?.({ memory_limit: value });
+    },
+    [onConfigChange],
   );
 
   const handleVolumesEnabledChange = useCallback(
@@ -749,8 +848,8 @@ function NodePropertiesSidebar({
 
           {nodeKind === 'Agent' && (
             <AgentSection
-              name={agentNameValue}
-              role={agentRoleValue}
+              name={agentNameInput}
+              role={agentRoleInput}
               model={agentModelValue}
               systemPrompt={agentSystemPromptValue}
               restrictOutput={agentRestrictOutput}
@@ -759,7 +858,9 @@ function NodePropertiesSidebar({
               queueConfig={agentQueueConfig}
               summarization={agentSummarizationConfig}
               onNameChange={handleAgentNameChange}
+              onNameBlur={handleAgentNameBlur}
               onRoleChange={handleAgentRoleChange}
+              onRoleBlur={handleAgentRoleBlur}
               onModelChange={handleAgentModelChange}
               onSystemPromptChange={handleAgentSystemPromptChange}
               onRestrictOutputChange={handleAgentRestrictOutputChange}
@@ -862,6 +963,10 @@ function NodePropertiesSidebar({
               onVolumesEnabledChange={handleVolumesEnabledChange}
               volumesMountPath={volumesMountPath}
               onVolumesMountPathChange={handleVolumesMountPathChange}
+              cpuLimit={workspaceCpuLimit}
+              onCpuLimitChange={handleWorkspaceCpuLimitChange}
+              memoryLimit={workspaceMemoryLimit}
+              onMemoryLimitChange={handleWorkspaceMemoryLimitChange}
               ttlSeconds={workspaceTtlSeconds}
               onTtlChange={(value) => onConfigChange?.({ ttlSeconds: value })}
               nixProps={{
@@ -869,6 +974,7 @@ function NodePropertiesSidebar({
                 onQueryChange: setNixPackageQuery,
                 fetchOptions: fetchNixPackageOptions,
                 packages: workspaceNixPackages,
+                repoEntries: workspaceFlakeRepos,
                 versionOptions: nixVersionOptions,
                 versionLoading: nixVersionLoading,
                 resolutionLoading: nixResolutionLoading,
@@ -876,6 +982,7 @@ function NodePropertiesSidebar({
                 onSelectOption: handleNixSelect,
                 onRemove: handleNixRemove,
                 onVersionChange: handleNixVersionChange,
+                onRepoEntriesChange: handleRepoPackagesChange,
               }}
               nixOpen={nixPackagesOpen}
               onNixOpenChange={setNixPackagesOpen}

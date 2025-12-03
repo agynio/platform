@@ -196,21 +196,25 @@ export class ShellCommandTool extends FunctionTool<typeof bashCommandSchema> {
     return `/tmp/${filename}`;
   }
 
-  private async formatExitCodeErrorMessage(params: {
+  private async buildPlainTextErrorPayload(params: {
     exitCode: number;
+    headline: string;
     combinedOutput: string;
     limit: number;
     container: ContainerHandle;
     savedPath?: string | null;
     truncationMessage?: string | null;
+    defaultTailLimit?: number;
   }): Promise<{ message: string; savedPath: string | null; truncationMessage: string | null }> {
     const {
       exitCode,
+      headline,
       combinedOutput,
       limit,
       container,
       savedPath: existingSavedPath,
       truncationMessage: existingTruncationMessage,
+      defaultTailLimit,
     } = params;
 
     const sanitizedOutput = combinedOutput ?? '';
@@ -222,44 +226,47 @@ export class ShellCommandTool extends FunctionTool<typeof bashCommandSchema> {
       truncationMessage = `Output exceeded ${limit} characters.`;
     }
 
-    const details: string[] = [];
-    if (truncationMessage) {
-      details.push(truncationMessage);
+    if (shouldPersist && !savedPath) {
+      const file = `${randomUUID()}.txt`;
+      savedPath = await this.saveOversizedOutputInContainer(container, file, sanitizedOutput);
     }
 
+    const tailLimit = Math.min(limit, OUTPUT_TAIL_LIMIT);
+    let renderedOutput = sanitizedOutput;
     if (shouldPersist) {
-      if (!savedPath) {
-        const file = `${randomUUID()}.txt`;
-        savedPath = await this.saveOversizedOutputInContainer(container, file, sanitizedOutput);
-      }
-      if (savedPath) {
-        details.push(`Full output saved to: ${savedPath}`);
-      }
-
-      const snippetLength = Math.min(OUTPUT_TAIL_LIMIT, sanitizedOutput.length);
-      if (snippetLength > 0) {
-        const snippet = sanitizedOutput.slice(-snippetLength);
-        if (snippet) {
-          details.push('--- output tail ---');
-          details.push(snippet);
-        }
-      }
-    } else if (sanitizedOutput) {
-      details.push(sanitizedOutput);
-    } else if (!truncationMessage) {
-      details.push('Command produced no output.');
+      const sliceLength = Math.max(0, Math.min(tailLimit, sanitizedOutput.length));
+      renderedOutput = sliceLength > 0 ? sanitizedOutput.slice(-sliceLength) : '';
+    } else if (typeof defaultTailLimit === 'number' && defaultTailLimit > 0 && sanitizedOutput.length > defaultTailLimit) {
+      renderedOutput = sanitizedOutput.slice(-defaultTailLimit);
     }
 
-    const messageSections = [`[exit code ${exitCode}]`];
-    if (details.length > 0) {
-      messageSections.push(details.join('\n'));
-    }
+    const messageLines = [`[exit code ${exitCode}] ${headline}`, '---', renderedOutput];
 
     return {
-      message: messageSections.join('\n'),
+      message: messageLines.join('\n'),
       savedPath,
       truncationMessage,
     };
+  }
+
+  private async formatExitCodeErrorMessage(params: {
+    exitCode: number;
+    combinedOutput: string;
+    limit: number;
+    container: ContainerHandle;
+    savedPath?: string | null;
+    truncationMessage?: string | null;
+  }): Promise<{ message: string; savedPath: string | null; truncationMessage: string | null }> {
+    const { exitCode, combinedOutput, limit, container, savedPath, truncationMessage } = params;
+    return this.buildPlainTextErrorPayload({
+      exitCode,
+      headline: `Process exited with code ${exitCode}`,
+      combinedOutput,
+      limit,
+      container,
+      savedPath,
+      truncationMessage,
+    });
   }
 
   async execute(args: z.infer<typeof bashCommandSchema>, ctx: LLMContext): Promise<string> {
@@ -351,29 +358,65 @@ export class ShellCommandTool extends FunctionTool<typeof bashCommandSchema> {
       });
       flushDecoderRemainder();
     } catch (err: unknown) {
-      if (isExecTimeoutError(err) || isExecIdleTimeoutError(err)) {
-        flushDecoderRemainder();
-        const timeoutErr = err as ExecTimeoutError | ExecIdleTimeoutError;
+      flushDecoderRemainder();
+      const limit = cfg.outputLimitChars;
+
+      if (isExecIdleTimeoutError(err)) {
+        const timeoutErr = err as ExecIdleTimeoutError;
         const combined = getCombinedOutput({ stdout: timeoutErr.stdout ?? '', stderr: timeoutErr.stderr ?? '' });
-        const tail = combined.length > OUTPUT_TAIL_LIMIT ? combined.slice(-OUTPUT_TAIL_LIMIT) : combined;
-        if (isExecIdleTimeoutError(err)) {
-          const idleMs = timeoutErr.timeoutMs ?? idleTimeoutMs;
-          throw new Error(
-            `Error (idle timeout): no output for ${idleMs}ms; command was terminated. See output tail below.\n----------\n${tail}`,
-          );
-        } else {
-          const usedMs = timeoutErr.timeoutMs ?? timeoutMs;
-          throw new Error(
-            `Error (timeout after ${usedMs}ms): command exceeded ${usedMs}ms and was terminated. See output tail below.\n----------\n${tail}`,
-          );
-        }
+        const idleMs = timeoutErr.timeoutMs ?? idleTimeoutMs;
+        const { message } = await this.buildPlainTextErrorPayload({
+          exitCode: 408,
+          headline: `Exec idle timed out after ${idleMs}ms`,
+          combinedOutput: combined,
+          limit,
+          container,
+          defaultTailLimit: OUTPUT_TAIL_LIMIT,
+        });
+        return message;
       }
 
-      if (this.isConnectionInterruption(err)) {
-        const message = await this.buildInterruptionMessage(container.id);
-        throw new Error(message);
+      if (isExecTimeoutError(err)) {
+        const timeoutErr = err as ExecTimeoutError;
+        const combined = getCombinedOutput({ stdout: timeoutErr.stdout ?? '', stderr: timeoutErr.stderr ?? '' });
+        const usedMs = timeoutErr.timeoutMs ?? timeoutMs;
+        const { message } = await this.buildPlainTextErrorPayload({
+          exitCode: 408,
+          headline: `Exec timed out after ${usedMs}ms`,
+          combinedOutput: combined,
+          limit,
+          container,
+          defaultTailLimit: OUTPUT_TAIL_LIMIT,
+        });
+        return message;
       }
-      throw err;
+
+      const combined = getCombinedOutput();
+
+      if (this.isConnectionInterruption(err)) {
+        const interruptionMessage = await this.buildInterruptionMessage(container.id);
+        const { message } = await this.buildPlainTextErrorPayload({
+          exitCode: 500,
+          headline: interruptionMessage,
+          combinedOutput: combined,
+          limit,
+          container,
+          defaultTailLimit: OUTPUT_TAIL_LIMIT,
+        });
+        return message;
+      }
+
+      const fallbackMessage = err instanceof Error ? err.message : String(err);
+      const headline = fallbackMessage && fallbackMessage.length > 0 ? fallbackMessage : 'Shell command failed.';
+      const { message } = await this.buildPlainTextErrorPayload({
+        exitCode: 500,
+        headline,
+        combinedOutput: combined,
+        limit,
+        container,
+        defaultTailLimit: OUTPUT_TAIL_LIMIT,
+      });
+      return message;
     }
 
     const combined = getCombinedOutput({ stdout: response.stdout, stderr: response.stderr });
@@ -587,6 +630,7 @@ export class ShellCommandTool extends FunctionTool<typeof bashCommandSchema> {
     let execError: unknown = null;
     let response: { stdout: string; stderr: string; exitCode: number } | null = null;
     let formattedExitCodeMessage: string | null = null;
+    let formattedExecErrorMessage: string | null = null;
     let finalCombinedOutput = '';
 
     try {
@@ -713,6 +757,51 @@ export class ShellCommandTool extends FunctionTool<typeof bashCommandSchema> {
         }
       }
 
+      if (execError) {
+        let exitCodeForExecError = 500;
+        let headline: string;
+        if (execError instanceof ExecIdleTimeoutError) {
+          exitCodeForExecError = 408;
+          const idleMs = execError.timeoutMs ?? cfg.idleTimeoutMs;
+          headline = `Exec idle timed out after ${idleMs}ms`;
+        } else if (execError instanceof ExecTimeoutError) {
+          exitCodeForExecError = 408;
+          const usedMs = execError.timeoutMs ?? cfg.executionTimeoutMs;
+          headline = `Exec timed out after ${usedMs}ms`;
+        } else if (this.isConnectionInterruption(execError)) {
+          headline = await this.buildInterruptionMessage(container.id);
+        } else {
+          const fallbackMessage = execError instanceof Error ? execError.message : String(execError);
+          headline = fallbackMessage && fallbackMessage.length > 0 ? fallbackMessage : 'Shell command failed.';
+        }
+
+        try {
+          const result = await this.buildPlainTextErrorPayload({
+            exitCode: exitCodeForExecError,
+            headline,
+            combinedOutput: finalCombinedOutput,
+            limit: outputLimit,
+            container,
+            savedPath,
+            truncationMessage: truncationMessage ?? undefined,
+            defaultTailLimit: OUTPUT_TAIL_LIMIT,
+          });
+          formattedExecErrorMessage = result.message;
+          savedPath = result.savedPath;
+          if (!truncationMessage && result.truncationMessage) {
+            truncationMessage = result.truncationMessage;
+          }
+        } catch (formatErr) {
+          const errMessage = formatErr instanceof Error ? formatErr.message : String(formatErr);
+          this.logger.warn(`ShellCommandTool failed to format streaming exec error eventId=${options.eventId} error=${errMessage}`);
+          formattedExecErrorMessage = `[exit code ${exitCodeForExecError}] ${headline}`;
+        }
+
+        if (terminalStatus !== 'timeout' && terminalStatus !== 'idle_timeout') {
+          terminalStatus = 'error';
+        }
+      }
+
       if (typeof exitCode === 'number' && exitCode !== 0) {
         try {
           const result = await this.formatExitCodeErrorMessage({
@@ -764,8 +853,8 @@ export class ShellCommandTool extends FunctionTool<typeof bashCommandSchema> {
       }
     }
 
-    if (execError) {
-      throw execError;
+    if (formattedExecErrorMessage) {
+      return formattedExecErrorMessage;
     }
 
     if (formattedExitCodeMessage) {

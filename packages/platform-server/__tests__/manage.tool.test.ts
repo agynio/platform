@@ -17,6 +17,8 @@ import type { LLMContext } from '../src/llm/types';
 import { AgentNode } from '../src/nodes/agent/agent.node';
 import { ManageFunctionTool } from '../src/nodes/tools/manage/manage.tool';
 import { ManageToolNode } from '../src/nodes/tools/manage/manage.node';
+import { ReferenceResolverService } from '../src/utils/reference-resolver.service';
+import { createReferenceResolverStub } from './helpers/reference-resolver.stub';
 
 class StubLLMProvisioner extends LLMProvisioner {
   async getLLM(): Promise<{ call: (messages: unknown) => Promise<{ text: string; output: unknown[] }> }> {
@@ -68,6 +70,7 @@ async function createHarness(options: { persistence?: AgentsPersistenceService }
       FakeAgent,
       { provide: AgentsPersistenceService, useValue: persistence },
       RunSignalsRegistry,
+      { provide: ReferenceResolverService, useValue: createReferenceResolverStub().stub },
     ],
   }).compile();
 
@@ -366,6 +369,7 @@ describe('ManageTool graph wiring', () => {
             upsertNodeState: async () => {},
           },
         },
+        { provide: ReferenceResolverService, useValue: createReferenceResolverStub().stub },
         { provide: ModuleRef, useValue: moduleRef },
         {
           provide: AgentsPersistenceService,

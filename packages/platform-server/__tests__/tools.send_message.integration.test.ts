@@ -4,6 +4,7 @@ import { SendMessageFunctionTool } from '../src/nodes/tools/send_message/send_me
 import { SlackTrigger } from '../src/nodes/slackTrigger/slackTrigger.node';
 import type { SlackAdapter } from '../src/messaging/slack/slack.adapter';
 import type { LiveGraphRuntime } from '../src/graph-core/liveGraph.manager';
+import { createReferenceResolverStub } from './helpers/reference-resolver.stub';
 
 // Mock slack web api
 import { vi } from 'vitest';
@@ -81,7 +82,8 @@ describe('send_message tool', () => {
       getNodes: () => [],
     } satisfies Pick<import('../src/graph-core/liveGraph.manager').LiveGraphRuntime, 'getOutboundNodeIds' | 'getNodes'>) as import('../src/graph-core/liveGraph.manager').LiveGraphRuntime;
     const templateRegistryStub = ({ getMeta: () => undefined } satisfies Pick<import('../src/graph-core/templateRegistry').TemplateRegistry, 'getMeta'>) as import('../src/graph-core/templateRegistry').TemplateRegistry;
-    const trigger = new SlackTrigger(undefined as any, persistence, prismaService, slackAdapter, runtimeStub, templateRegistryStub);
+    const { stub: referenceResolver } = createReferenceResolverStub();
+    const trigger = new SlackTrigger(referenceResolver, persistence, prismaService, slackAdapter, runtimeStub, templateRegistryStub);
     trigger.init({ nodeId: 'channel-node' });
 
     // Override prisma behavior for descriptor lookup inside sendToChannel
@@ -134,7 +136,8 @@ describe('send_message tool', () => {
       getNodes: () => [],
     } satisfies Pick<import('../src/graph-core/liveGraph.manager').LiveGraphRuntime, 'getOutboundNodeIds' | 'getNodes'>) as import('../src/graph-core/liveGraph.manager').LiveGraphRuntime;
     const templateRegistryStub = ({ getMeta: () => undefined } satisfies Pick<import('../src/graph-core/templateRegistry').TemplateRegistry, 'getMeta'>) as import('../src/graph-core/templateRegistry').TemplateRegistry;
-    const trigger = new SlackTrigger(undefined as any, persistence, prismaService, slackAdapter, runtimeStub, templateRegistryStub);
+    const { stub: referenceResolver } = createReferenceResolverStub();
+    const trigger = new SlackTrigger(referenceResolver, persistence, prismaService, slackAdapter, runtimeStub, templateRegistryStub);
     trigger.init({ nodeId: 'channel-node' });
     const runtime = makeRuntimeStub(trigger);
     const tool = new SendMessageFunctionTool(prismaService, runtime);

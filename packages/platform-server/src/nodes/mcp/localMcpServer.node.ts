@@ -12,7 +12,7 @@ import { LocalMCPServerTool } from './localMcpServer.tool';
 import { DEFAULT_MCP_COMMAND, McpError, type McpTool, McpToolCallResult, PersistedMcpState } from './types';
 import { NodeStateService } from '../../graph/nodeState.service';
 import Node from '../base/Node';
-import { Inject, Injectable, Scope, Optional } from '@nestjs/common';
+import { Inject, Injectable, Scope } from '@nestjs/common';
 import { jsonSchemaToZod } from '@agyn/json-schema-to-zod';
 import { isEqual } from 'lodash-es';
 import { ModuleRef } from '@nestjs/core';
@@ -107,7 +107,7 @@ export class LocalMCPServerNode extends Node<z.infer<typeof LocalMcpServerStatic
     @Inject(ContainerService) protected containerService: ContainerService,
     @Inject(EnvService) protected envService: EnvService,
     @Inject(ConfigService) protected configService: ConfigService,
-    @Inject(ModuleRef) @Optional() private readonly moduleRef?: ModuleRef,
+    @Inject(ModuleRef) private readonly moduleRef: ModuleRef,
   ) {
     super();
   }
@@ -121,7 +121,6 @@ export class LocalMCPServerNode extends Node<z.infer<typeof LocalMcpServerStatic
 
   private getNodeStateService(): NodeStateService | undefined {
     if (!this.nodeStateService) {
-      if (!this.moduleRef) return undefined;
       try {
         this.nodeStateService = this.moduleRef.get(NodeStateService, { strict: false });
       } catch {

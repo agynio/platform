@@ -84,6 +84,38 @@ describe('useGraphData', () => {
     expect(payload?.nodes?.[0]?.config?.title).toBe('Updated Agent');
   });
 
+  it('persists workspace limit updates and schedules a save', async () => {
+    const { result } = renderHook(() => useGraphData());
+
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    vi.useFakeTimers();
+    act(() => {
+      result.current.updateNode('node-1', {
+        config: { title: 'Agent One', cpu_limit: '750m', memory_limit: '1Gi' },
+      });
+    });
+
+    expect(result.current.savingState.status).toBe('saving');
+    expect((result.current.nodes.at(0)?.config as Record<string, unknown>)?.cpu_limit).toBe('750m');
+    expect((result.current.nodes.at(0)?.config as Record<string, unknown>)?.memory_limit).toBe('1Gi');
+
+    await vi.advanceTimersByTimeAsync(800);
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(apiMocks.saveGraph).toHaveBeenCalledTimes(1);
+    const payload = apiMocks.saveGraph.mock.calls[0]?.[0] as {
+      nodes?: Array<{ id: string; config?: Record<string, unknown> }>;
+    } | undefined;
+    const updatedNode = payload?.nodes?.find((node) => node.id === 'node-1');
+    expect(updatedNode?.config?.cpu_limit).toBe('750m');
+    expect(updatedNode?.config?.memory_limit).toBe('1Gi');
+
+    vi.useRealTimers();
+  });
+
   it('surfaces save errors after debounce', async () => {
     apiMocks.saveGraph.mockRejectedValueOnce(new Error('network boom'));
 

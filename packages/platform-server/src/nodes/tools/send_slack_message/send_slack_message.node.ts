@@ -1,7 +1,7 @@
 import z from 'zod';
 import { BaseToolNode } from '../baseToolNode';
 import { SendSlackMessageFunctionTool, SendSlackMessageToolStaticConfigSchema } from './send_slack_message.tool';
-import { Inject, Injectable, Optional, Scope } from '@nestjs/common';
+import { Inject, Injectable, Scope } from '@nestjs/common';
 import { ReferenceResolverService } from '../../../utils/reference-resolver.service';
 import { ResolveError } from '../../../utils/references';
 
@@ -9,9 +9,7 @@ import { ResolveError } from '../../../utils/references';
 export class SendSlackMessageNode extends BaseToolNode<z.infer<typeof SendSlackMessageToolStaticConfigSchema>> {
   private toolInstance?: SendSlackMessageFunctionTool;
   private resolvedBotToken: string | null = null;
-  constructor(
-    @Inject(ReferenceResolverService) @Optional() private readonly referenceResolver?: ReferenceResolverService,
-  ) {
+  constructor(@Inject(ReferenceResolverService) private readonly referenceResolver: ReferenceResolverService) {
     super();
   }
 
@@ -23,9 +21,6 @@ export class SendSlackMessageNode extends BaseToolNode<z.infer<typeof SendSlackM
   }
 
   private async resolveBotToken(value: unknown): Promise<string> {
-    if (!this.referenceResolver) {
-      return this.ensureBotToken(value);
-    }
     try {
       const { output } = await this.referenceResolver.resolve({ bot_token: value }, { basePath: '/slack/tool' });
       return this.ensureBotToken(output.bot_token);

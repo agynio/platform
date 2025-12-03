@@ -1,7 +1,7 @@
-import { type InputHTMLAttributes, type ReactNode } from 'react';
+import { forwardRef, type InputHTMLAttributes, type ReactNode } from 'react';
 
 interface InputProps extends Omit<InputHTMLAttributes<HTMLInputElement>, 'size'> {
-  label?: string;
+  label?: ReactNode;
   error?: string;
   helperText?: string;
   leftIcon?: ReactNode;
@@ -9,16 +9,19 @@ interface InputProps extends Omit<InputHTMLAttributes<HTMLInputElement>, 'size'>
   size?: 'sm' | 'default';
 }
 
-export function Input({ 
-  label, 
-  error, 
-  helperText, 
-  leftIcon, 
-  rightIcon,
-  size = 'default',
-  className = '',
-  ...props 
-}: InputProps) {
+export const Input = forwardRef<HTMLInputElement, InputProps>(function Input(
+  {
+    label,
+    error,
+    helperText,
+    leftIcon,
+    rightIcon,
+    size = 'default',
+    className = '',
+    ...props
+  },
+  ref,
+) {
   const paddingClasses = size === 'sm' ? 'px-3 py-2' : 'px-4 py-3';
   const heightClasses = size === 'sm' ? 'h-10' : 'h-auto';
   const iconLeftPadding = size === 'sm' ? 'pl-9' : 'pl-12';
@@ -42,6 +45,7 @@ export function Input({
         )}
         
         <input
+          ref={ref}
           className={`
             w-full ${paddingClasses} ${heightClasses}
             bg-white 
@@ -75,4 +79,4 @@ export function Input({
       )}
     </div>
   );
-}
+});

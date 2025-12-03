@@ -1,3 +1,5 @@
+import type { FlakeRepoSelection, NixpkgsSelection } from '@/components/nix/types';
+
 export type NodeStatus =
   | 'not_ready'
   | 'provisioning'
@@ -35,12 +37,8 @@ export type EnvVar = {
   meta: EnvVarMeta;
 };
 
-export type WorkspaceNixPackage = {
-  name: string;
-  version: string;
-  commitHash: string;
-  attributePath: string;
-};
+export type WorkspaceNixPackage = NixpkgsSelection;
+export type WorkspaceFlakeRepo = FlakeRepoSelection;
 
 export type AgentQueueConfig = {
   debounceMs?: number;

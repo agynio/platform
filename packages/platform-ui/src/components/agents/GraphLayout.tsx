@@ -64,39 +64,33 @@ export interface GraphLayoutProps {
 
 function resolveAgentDisplayTitle(node: GraphNodeConfig): string {
   const config = (node.config ?? {}) as Record<string, unknown>;
-  const rawConfigTitle = typeof config.title === 'string' ? config.title : '';
-  const trimmedConfigTitle = rawConfigTitle.trim();
-  if (trimmedConfigTitle.length > 0) {
-    return trimmedConfigTitle;
+  const configTitleRaw = typeof config.title === 'string' ? config.title : '';
+  const configTitle = configTitleRaw.trim();
+  if (configTitle.length > 0) {
+    return configTitle;
   }
 
-  const fallbackTemplate =
-    typeof node.template === 'string' && node.template.trim().length > 0 ? node.template.trim() : 'Agent';
-  const basePlaceholder = computeAgentDefaultTitle(undefined, undefined, 'Agent');
+  const rawTemplate = typeof node.template === 'string' ? node.template : '';
+  const templateTitle = rawTemplate.trim().length > 0 ? rawTemplate.trim() : 'Agent';
+  const rawName = typeof config.name === 'string' ? (config.name as string) : '';
+  const normalizedName = rawName.trim();
+  const rawRole = typeof config.role === 'string' ? (config.role as string) : '';
+  const normalizedRole = rawRole.trim();
+  if (normalizedName.length > 0 || normalizedRole.length > 0) {
+    return computeAgentDefaultTitle(
+      normalizedName.length > 0 ? normalizedName : undefined,
+      normalizedRole.length > 0 ? normalizedRole : undefined,
+      templateTitle,
+    );
+  }
+
   const storedTitleRaw = typeof node.title === 'string' ? node.title : '';
   const storedTitle = storedTitleRaw.trim();
-  const profileFallback = computeAgentDefaultTitle(
-    typeof config.name === 'string' ? (config.name as string) : undefined,
-    typeof config.role === 'string' ? (config.role as string) : undefined,
-    fallbackTemplate,
-  );
-  const isPlaceholderTitle =
-    storedTitle.length > 0 &&
-    (storedTitle === basePlaceholder || storedTitle === fallbackTemplate || storedTitle === node.template);
-
-  if (storedTitle.length > 0 && !isPlaceholderTitle) {
+  if (storedTitle.length > 0 && storedTitle !== templateTitle) {
     return storedTitle;
   }
 
-  if (profileFallback.length > 0) {
-    return profileFallback;
-  }
-
-  if (storedTitle.length > 0) {
-    return storedTitle;
-  }
-
-  return basePlaceholder;
+  return templateTitle;
 }
 
 function resolveDisplayTitle(node: GraphNodeConfig): string {
@@ -815,16 +809,18 @@ export function GraphLayout({ services }: GraphLayoutProps) {
       return null;
     }
     const baseConfig = (selectedNode.config ?? {}) as Record<string, unknown>;
-    const rawTitleFromConfig = typeof baseConfig.title === 'string' ? (baseConfig.title as string) : null;
-    const resolvedTitle =
-      rawTitleFromConfig ?? (typeof selectedNode.title === 'string' ? selectedNode.title : '');
+    const { title: _ignoredTitle, ...rest } = baseConfig;
+    const rawConfigTitle = typeof baseConfig.title === 'string' ? (baseConfig.title as string) : undefined;
 
-    const config: SidebarNodeConfig = {
-      ...baseConfig,
+    const config = {
+      ...rest,
       kind: selectedNode.kind,
-      title: resolvedTitle,
       template: selectedNode.template,
-    };
+    } as SidebarNodeConfig;
+
+    if (rawConfigTitle && rawConfigTitle.trim().length > 0) {
+      config.title = rawConfigTitle;
+    }
 
     return {
       config,

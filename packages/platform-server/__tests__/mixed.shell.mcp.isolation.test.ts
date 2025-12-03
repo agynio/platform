@@ -5,6 +5,7 @@ import { EnvService } from '../src/env/env.service';
 import { ShellCommandNode } from '../src/nodes/tools/shell_command/shell_command.node';
 import { LocalMCPServerNode } from '../src/nodes/mcp/localMcpServer.node';
 import { Signal } from '../src/signal';
+import { createModuleRefStub } from './helpers/module-ref.stub';
 
 class FakeContainer {
   last: unknown;
@@ -75,7 +76,7 @@ describe('Mixed Shell + MCP overlay isolation', () => {
       }),
     } as const;
     const cs = { getDocker: () => docker };
-    const mcp = new LocalMCPServerNode(cs as any, envService as any, cfg as any, undefined as any);
+    const mcp = new LocalMCPServerNode(cs as any, envService as any, cfg as any, createModuleRefStub());
     mcp.init({ nodeId: 'mcp' });
     (mcp as any).setContainerProvider(provider);
     await mcp.setConfig({ namespace: 'n', command: 'mcp start --stdio', env: [ { name: 'M_VAR', value: 'm' } ], startupTimeoutMs: 10 });

@@ -20,7 +20,9 @@ interface AgentSectionProps {
   queueConfig: AgentQueueConfig;
   summarization: AgentSummarizationConfig;
   onNameChange: (value: string) => void;
+  onNameBlur: () => void;
   onRoleChange: (value: string) => void;
+  onRoleBlur: () => void;
   onModelChange: (value: string) => void;
   onSystemPromptChange: (value: string) => void;
   onRestrictOutputChange: (checked: boolean) => void;
@@ -41,7 +43,9 @@ export function AgentSection({
   name,
   role,
   onNameChange,
+  onNameBlur,
   onRoleChange,
+  onRoleBlur,
   onModelChange,
   onSystemPromptChange,
   onRestrictOutputChange,
@@ -68,6 +72,7 @@ export function AgentSection({
               placeholder="e.g., Casey Quinn"
               value={name}
               onChange={(event) => onNameChange(event.target.value)}
+              onBlur={onNameBlur}
               size="sm"
               maxLength={64}
             />
@@ -78,6 +83,7 @@ export function AgentSection({
               placeholder="e.g., Incident Commander"
               value={role}
               onChange={(event) => onRoleChange(event.target.value)}
+              onBlur={onRoleBlur}
               size="sm"
               maxLength={64}
             />

@@ -1,7 +1,7 @@
 import { type ButtonHTMLAttributes, type ReactNode } from 'react';
 
 interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
-  variant?: 'primary' | 'secondary' | 'accent' | 'outline' | 'ghost' | 'danger';
+  variant?: 'primary' | 'secondary' | 'accent' | 'outline' | 'ghost' | 'danger' | 'link';
   size?: 'sm' | 'md' | 'lg';
   children: ReactNode;
 }
@@ -15,13 +15,14 @@ export function Button({
 }: ButtonProps) {
   const baseStyles = 'inline-flex items-center justify-center rounded-[10px] transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed';
   
-  const variants = {
+  const variants: Record<NonNullable<ButtonProps['variant']>, string> = {
     primary: 'bg-[var(--agyn-blue)] text-white hover:bg-[var(--agyn-blue-dark)] active:bg-[var(--agyn-blue-dark)]',
     secondary: 'bg-[var(--agyn-purple)] text-white hover:opacity-90 active:opacity-80',
     accent: 'bg-[var(--agyn-cyan)] text-white hover:opacity-90 active:opacity-80',
     outline: 'bg-transparent border-2 border-[var(--agyn-blue)] text-[var(--agyn-blue)] hover:bg-[var(--agyn-blue)] hover:text-white',
     ghost: 'bg-transparent text-[var(--agyn-blue)] hover:bg-[var(--agyn-blue)] hover:text-white',
     danger: 'bg-transparent border-2 border-[var(--agyn-status-failed)] text-[var(--agyn-status-failed)] hover:bg-[var(--agyn-status-failed)] hover:text-white',
+    link: 'bg-transparent text-[var(--agyn-blue)] underline-offset-4 hover:underline focus-visible:underline px-0 py-0',
   };
   
   const sizes = {
@@ -29,10 +30,11 @@ export function Button({
     md: 'px-6 py-3',
     lg: 'px-8 py-4',
   };
-  
+  const sizeClass = variant === 'link' ? 'text-sm font-medium' : sizes[size];
+
   return (
     <button 
-      className={`${baseStyles} ${variants[variant]} ${sizes[size]} ${className}`}
+      className={`${baseStyles} ${variants[variant]} ${sizeClass} ${className}`}
       {...props}
     >
       {children}

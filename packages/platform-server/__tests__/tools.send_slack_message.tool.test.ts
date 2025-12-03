@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { SendSlackMessageNode } from '../src/nodes/tools/send_slack_message/send_slack_message.node';
 import { SendSlackMessageFunctionTool } from '../src/nodes/tools/send_slack_message/send_slack_message.tool';
+import { createReferenceResolverStub } from './helpers/reference-resolver.stub';
 
 vi.mock('@slack/web-api', () => {
   const postEphemeral = vi.fn(async (_opts: { channel: string; user: string; text: string }) => ({ ok: true, message_ts: '999' }));
@@ -16,7 +17,8 @@ vi.mock('@slack/web-api', () => {
 
 describe('SendSlackMessageFunctionTool', () => {
   it('omits thread_ts for ephemeral responses', async () => {
-    const node = new SendSlackMessageNode(undefined as any);
+    const { stub: referenceResolver } = createReferenceResolverStub();
+    const node = new SendSlackMessageNode(referenceResolver);
     await node.setConfig({ bot_token: 'xoxb-bot' });
     const tool = new SendSlackMessageFunctionTool(node);
     const res = await tool.execute({

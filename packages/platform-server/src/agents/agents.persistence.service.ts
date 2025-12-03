@@ -7,7 +7,7 @@ import {
   ToolCallOutputMessage,
 } from '@agyn/llm';
 import { Inject, Injectable, Logger } from '@nestjs/common';
-import type { MessageKind, Prisma, PrismaClient, RunMessageType, RunStatus, ThreadStatus } from '@prisma/client';
+import { Prisma, type MessageKind, type PrismaClient, type RunMessageType, type RunStatus, type ThreadStatus } from '@prisma/client';
 import type { ResponseInputItem } from 'openai/resources/responses/responses.mjs';
 import { PrismaService } from '../core/services/prisma.service';
 import { TemplateRegistry } from '../graph-core/templateRegistry';
@@ -627,7 +627,7 @@ export class AgentsPersistenceService {
   }
 
   async listReminders(
-    filter: 'active' | 'completed' | 'all' = 'active',
+    filter: 'active' | 'completed' | 'cancelled' | 'all' = 'active',
     take: number = 100,
     threadId?: string,
   ): Promise<Array<{ id: string; threadId: string; note: string; at: Date; createdAt: Date; completedAt: Date | null; cancelledAt: Date | null }>> {
@@ -638,6 +638,8 @@ export class AgentsPersistenceService {
       where.cancelledAt = null;
     } else if (filter === 'completed') {
       where.NOT = { completedAt: null };
+    } else if (filter === 'cancelled') {
+      where.NOT = { cancelledAt: null };
     }
     if (threadId) where.threadId = threadId;
 
@@ -659,6 +661,195 @@ export class AgentsPersistenceService {
       );
       throw error;
     }
+  }
+
+  async listRemindersPaginated({
+    filter = 'all',
+    page = 1,
+    pageSize = 20,
+    sort = 'latest',
+    order = 'desc',
+    threadId,
+  }: {
+    filter?: 'all' | 'active' | 'completed' | 'cancelled';
+    page?: number;
+    pageSize?: number;
+    sort?: 'latest' | 'createdAt' | 'at';
+    order?: 'asc' | 'desc';
+    threadId?: string;
+  }): Promise<{
+    items: Array<{ id: string; threadId: string; note: string; at: Date; createdAt: Date; completedAt: Date | null; cancelledAt: Date | null }>;
+    page: number;
+    pageSize: number;
+    totalCount: number;
+    pageCount: number;
+    countsByStatus: { scheduled: number; executed: number; cancelled: number };
+    sortApplied: { key: 'latest' | 'createdAt' | 'at'; order: 'asc' | 'desc' };
+  }> {
+    const parsedPage = Number(page);
+    const normalizedPage = Number.isFinite(parsedPage) ? Math.max(1, Math.trunc(parsedPage)) : 1;
+    const parsedPageSize = Number(pageSize);
+    const normalizedPageSize = Number.isFinite(parsedPageSize)
+      ? Math.max(1, Math.min(200, Math.trunc(parsedPageSize)))
+      : 20;
+    const sortKey: 'latest' | 'createdAt' | 'at' = sort ?? 'latest';
+    const sortOrder: 'asc' | 'desc' = order === 'asc' ? 'asc' : 'desc';
+    const filterKey: 'all' | 'active' | 'completed' | 'cancelled' = filter ?? 'all';
+
+    const skip = (normalizedPage - 1) * normalizedPageSize;
+    const { where, clauses } = this.buildReminderFilter(filterKey, threadId);
+    const whereForQuery = Object.keys(where).length === 0 ? undefined : where;
+    const countsBaseWhere: Prisma.ReminderWhereInput = threadId ? { threadId } : {};
+
+    try {
+      return await this.prisma.$transaction(async (tx) => {
+        const [totalCount, scheduledCount, executedCount, cancelledCount] = await Promise.all([
+          tx.reminder.count({ where: whereForQuery }),
+          tx.reminder.count({
+            where: {
+              ...countsBaseWhere,
+              completedAt: null,
+              cancelledAt: null,
+            },
+          }),
+          tx.reminder.count({
+            where: {
+              ...countsBaseWhere,
+              completedAt: { not: null },
+            },
+          }),
+          tx.reminder.count({
+            where: {
+              ...countsBaseWhere,
+              cancelledAt: { not: null },
+            },
+          }),
+        ]);
+
+        const items =
+          sortKey === 'latest' && filterKey === 'all'
+            ? await this.fetchRemindersLatestAll(tx, clauses, skip, normalizedPageSize, sortOrder)
+            : await tx.reminder.findMany({
+                where: whereForQuery,
+                orderBy: this.buildReminderOrder(sortKey, sortOrder, filterKey),
+                skip,
+                take: normalizedPageSize,
+                select: {
+                  id: true,
+                  threadId: true,
+                  note: true,
+                  at: true,
+                  createdAt: true,
+                  completedAt: true,
+                  cancelledAt: true,
+                },
+              });
+
+        const pageCount = totalCount === 0 ? 0 : Math.ceil(totalCount / normalizedPageSize);
+
+        return {
+          items,
+          page: normalizedPage,
+          pageSize: normalizedPageSize,
+          totalCount,
+          pageCount,
+          countsByStatus: {
+            scheduled: scheduledCount,
+            executed: executedCount,
+            cancelled: cancelledCount,
+          },
+          sortApplied: { key: sortKey, order: sortOrder },
+        };
+      });
+    } catch (error) {
+      this.logger.error(
+        `Failed to list reminders (paginated)${this.format({
+          filter: filterKey,
+          page: normalizedPage,
+          pageSize: normalizedPageSize,
+          sort: sortKey,
+          order: sortOrder,
+          threadId,
+          error: this.errorInfo(error),
+        })}`,
+      );
+      throw error;
+    }
+  }
+
+  private buildReminderFilter(
+    filter: 'all' | 'active' | 'completed' | 'cancelled',
+    threadId?: string,
+  ): { where: Prisma.ReminderWhereInput; clauses: Prisma.Sql[] } {
+    const where: Prisma.ReminderWhereInput = {};
+    const clauses: Prisma.Sql[] = [];
+
+    if (threadId) {
+      where.threadId = threadId;
+      clauses.push(Prisma.sql`"threadId" = ${threadId}`);
+    }
+
+    switch (filter) {
+      case 'active':
+        where.completedAt = null;
+        where.cancelledAt = null;
+        clauses.push(Prisma.sql`"completedAt" IS NULL`);
+        clauses.push(Prisma.sql`"cancelledAt" IS NULL`);
+        break;
+      case 'completed':
+        where.completedAt = { not: null };
+        clauses.push(Prisma.sql`"completedAt" IS NOT NULL`);
+        break;
+      case 'cancelled':
+        where.cancelledAt = { not: null };
+        clauses.push(Prisma.sql`"cancelledAt" IS NOT NULL`);
+        break;
+      default:
+        break;
+    }
+
+    return { where, clauses };
+  }
+
+  private buildReminderOrder(
+    sort: 'latest' | 'createdAt' | 'at',
+    order: 'asc' | 'desc',
+    filter: 'all' | 'active' | 'completed' | 'cancelled',
+  ): Prisma.ReminderOrderByWithRelationInput {
+    if (sort === 'at') {
+      return { at: order };
+    }
+
+    if (sort === 'createdAt') {
+      return { createdAt: order };
+    }
+
+    if (sort === 'latest') {
+      if (filter === 'completed') return { completedAt: order };
+      if (filter === 'cancelled') return { cancelledAt: order };
+    }
+
+    return { createdAt: order };
+  }
+
+  private async fetchRemindersLatestAll(
+    tx: Prisma.TransactionClient,
+    clauses: Prisma.Sql[],
+    skip: number,
+    take: number,
+    order: 'asc' | 'desc',
+  ): Promise<Array<{ id: string; threadId: string; note: string; at: Date; createdAt: Date; completedAt: Date | null; cancelledAt: Date | null }>> {
+    const direction = order === 'asc' ? Prisma.sql`ASC` : Prisma.sql`DESC`;
+    const whereSql = clauses.length > 0 ? Prisma.sql`WHERE ${Prisma.join(clauses, ' AND ')}` : Prisma.empty;
+
+    return tx.$queryRaw<Array<{ id: string; threadId: string; note: string; at: Date; createdAt: Date; completedAt: Date | null; cancelledAt: Date | null }>>`
+      SELECT "id", "threadId", "note", "at", "createdAt", "completedAt", "cancelledAt"
+      FROM "Reminder"
+      ${whereSql}
+      ORDER BY COALESCE("completedAt", "cancelledAt", "createdAt") ${direction}, "createdAt" ${direction}
+      OFFSET ${skip}
+      LIMIT ${take}
+    `;
   }
 
   private async getRunsCount(ids: string[]): Promise<Record<string, number>> {

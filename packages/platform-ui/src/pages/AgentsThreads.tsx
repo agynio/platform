@@ -1501,9 +1501,6 @@ export function AgentsThreads() {
 
   return (
     <div className="absolute inset-0 flex min-h-0 min-w-0 flex-col overflow-hidden">
-      <div className="shrink-0 border-b px-6 py-3">
-        <h1 className="text-xl font-semibold">Agents / Threads</h1>
-      </div>
       <div className="flex min-h-0 flex-1 flex-col">
         <ThreadsScreen
           threads={threadsForList}

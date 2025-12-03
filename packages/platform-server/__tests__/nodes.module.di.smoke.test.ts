@@ -1,11 +1,11 @@
 import { describe, expect, it, vi } from 'vitest';
 import { SlackTrigger } from '../src/nodes/slackTrigger/slackTrigger.node';
 import { RemindMeNode } from '../src/nodes/tools/remind_me/remind_me.node';
-import { VaultService } from '../src/vault/vault.service';
 import { AgentsPersistenceService } from '../src/agents/agents.persistence.service';
 import { PrismaService } from '../src/core/services/prisma.service';
 import { SlackAdapter } from '../src/messaging/slack/slack.adapter';
 import { EventsBusService } from '../src/events/events-bus.service';
+import { createReferenceResolverStub } from './helpers/reference-resolver.stub';
 
 process.env.LLM_PROVIDER = process.env.LLM_PROVIDER || 'openai';
 process.env.AGENTS_DATABASE_URL = process.env.AGENTS_DATABASE_URL || 'postgres://localhost:5432/test';
@@ -24,10 +24,6 @@ const makeStub = <T extends Record<string, unknown>>(overrides: T): T =>
 
 const slackAdapterStub = makeStub({
   sendText: vi.fn(),
-});
-
-const vaultServiceStub = makeStub({
-  getSecret: vi.fn().mockResolvedValue('xoxb-test-token'),
 });
 
 const persistenceStub = makeStub({
@@ -76,7 +72,7 @@ if (!shouldRunDbTests) {
   describe('NodesModule DI smoke test', () => {
     it('constructs SlackTrigger and RemindMeNode with stubs', () => {
       const slackTrigger = new SlackTrigger(
-        vaultServiceStub as unknown as VaultService,
+        createReferenceResolverStub().stub,
         persistenceStub as unknown as AgentsPersistenceService,
         prismaStub as unknown as PrismaService,
         slackAdapterStub as unknown as SlackAdapter,
