@@ -167,21 +167,27 @@ export function TreeView({
       ) : null;
 
       return (
-        <li key={node.path} role="none">
+        <li key={node.path} role="none" className="group/menu-item">
           <div
             className={cn(
-              'group flex items-center gap-2 rounded-md border border-transparent px-2 py-1 text-sm transition-colors focus-within:border-primary/40 focus-within:bg-primary/5 focus-within:text-foreground',
+              'flex min-h-9 items-center gap-2 rounded-md px-2 py-1.5 text-sm text-muted-foreground transition-colors',
+              'focus-within:outline-none focus-within:ring-2 focus-within:ring-sidebar-ring focus-within:bg-sidebar-accent/70',
               isSelected
-                ? 'border-primary/40 bg-primary/10 text-primary shadow-sm'
-                : 'hover:bg-muted/70 hover:text-foreground',
+                ? 'bg-sidebar-accent text-sidebar-accent-foreground shadow-sm'
+                : 'hover:bg-sidebar-accent hover:text-sidebar-accent-foreground',
             )}
             style={{ paddingLeft: indent }}
-            data-selected={isSelected || undefined}
+            data-selected={isSelected ? 'true' : undefined}
           >
             {isExpandable ? (
               <button
                 type="button"
-                className="flex size-7 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted/80 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-muted-foreground/40 group-data-[selected=true]:text-primary group-data-[selected=true]:hover:text-primary"
+                className={cn(
+                  'flex size-8 shrink-0 items-center justify-center rounded-md transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring',
+                  'hover:bg-sidebar-accent hover:text-sidebar-accent-foreground',
+                  isSelected && 'text-sidebar-accent-foreground',
+                  !isSelected && 'text-muted-foreground',
+                )}
                 aria-label={isExpanded ? 'Collapse node' : 'Expand node'}
                 onClick={(event) => {
                   event.stopPropagation();
@@ -192,7 +198,7 @@ export function TreeView({
                 {isExpanded ? <ChevronDown className="size-4" /> : <ChevronRight className="size-4" />}
               </button>
             ) : (
-              <span className="w-7" aria-hidden="true" />
+              <span className="inline-flex size-8 shrink-0" aria-hidden="true" />
             )}
             <button
               ref={registerRef(node.path)}
@@ -201,13 +207,36 @@ export function TreeView({
               aria-level={depth + 1}
               aria-selected={isSelected ? 'true' : 'false'}
               aria-expanded={isExpandable ? isExpanded : undefined}
-              className="flex flex-1 items-center gap-2 text-left focus-visible:outline-none"
+              className={cn(
+                'flex flex-1 items-center gap-2 overflow-hidden rounded-md px-1.5 py-0.5 text-left outline-none ring-sidebar-ring transition-colors',
+                'focus-visible:ring-2 focus-visible:ring-sidebar-ring',
+                isSelected
+                  ? 'text-sidebar-accent-foreground'
+                  : 'text-muted-foreground hover:text-sidebar-accent-foreground',
+              )}
               onClick={() => onSelect(node.path)}
               onKeyDown={(event) => handleKeyDown(event, node.path)}
               tabIndex={isSelected ? 0 : -1}
             >
-              {indicatorIcon}
-              <span className="truncate" title={node.path}>
+              {indicatorIcon ? (
+                <span
+                  className={cn(
+                    'flex size-6 items-center justify-center rounded-md border border-sidebar-border/60 bg-sidebar text-muted-foreground transition-colors',
+                    'group-hover/menu-item:border-sidebar-accent/40 group-hover/menu-item:bg-sidebar-accent/30',
+                    isSelected && 'border-sidebar-accent bg-sidebar-accent/30 text-sidebar-accent-foreground',
+                  )}
+                  aria-hidden="true"
+                >
+                  {indicatorIcon}
+                </span>
+              ) : null}
+              <span
+                className={cn(
+                  'truncate text-sm font-medium transition-colors',
+                  isSelected ? 'text-sidebar-accent-foreground' : 'text-sidebar-foreground',
+                )}
+                title={node.path}
+              >
                 {node.name}
               </span>
             </button>
@@ -216,7 +245,11 @@ export function TreeView({
                 <TooltipTrigger asChild>
                   <button
                     type="button"
-                    className="flex size-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted/80 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-muted-foreground/40 group-data-[selected=true]:text-primary group-data-[selected=true]:hover:text-primary"
+                    className={cn(
+                      'flex size-8 items-center justify-center rounded-md transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring',
+                      'hover:bg-sidebar-accent hover:text-sidebar-accent-foreground',
+                      isSelected ? 'text-sidebar-accent-foreground' : 'text-muted-foreground',
+                    )}
                     aria-label="Add subdocument"
                     onClick={(event) => {
                       event.stopPropagation();
@@ -224,7 +257,7 @@ export function TreeView({
                     }}
                     tabIndex={-1}
                   >
-                    <Plus className="size-3.5" />
+                    <Plus className="size-4" />
                   </button>
                 </TooltipTrigger>
                 <TooltipContent side="top">Add subdocument</TooltipContent>
@@ -233,7 +266,11 @@ export function TreeView({
                 <TooltipTrigger asChild>
                   <button
                     type="button"
-                    className="flex size-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-destructive/40 disabled:opacity-40 group-data-[selected=true]:text-primary"
+                    className={cn(
+                      'flex size-8 items-center justify-center rounded-md transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring disabled:opacity-40',
+                      'hover:bg-sidebar-accent hover:text-sidebar-accent-foreground',
+                      node.path === '/' ? 'text-muted-foreground' : 'text-destructive',
+                    )}
                     aria-label={`Delete ${node.path}`}
                     onClick={(event) => {
                       event.stopPropagation();
@@ -242,7 +279,7 @@ export function TreeView({
                     disabled={node.path === '/'}
                     tabIndex={-1}
                   >
-                    <Trash2 className="size-3.5" />
+                    <Trash2 className="size-4" />
                   </button>
                 </TooltipTrigger>
                 <TooltipContent side="top">Delete document</TooltipContent>

@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 
-import { Button } from '../Button';
 import { ScrollArea } from '../ui/scroll-area';
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from '../ui/resizable';
+import { Button } from '../ui/button';
+import { Textarea } from '../ui/textarea';
 import { ConfirmDeleteDialog } from './ConfirmDeleteDialog';
 import { TreeView } from './TreeView';
 import { cn } from '@/lib/utils';
@@ -289,12 +290,12 @@ export function MemoryManager({
             </div>
             <div className="flex-1">
               {selectedNode ? (
-                <textarea
+                <Textarea
                   value={editorValue}
                   onChange={(event) => handleEditorChange(event.target.value)}
                   aria-labelledby={editorLabelId}
                   aria-describedby={editorDescriptionId}
-                  className="h-full w-full resize-none rounded-md border border-border bg-muted/20 px-4 py-3 text-sm leading-relaxed text-foreground shadow-inner focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+                  className="h-full min-h-[320px] w-full resize-none"
                   placeholder="Write markdown…"
                   spellCheck="false"
                 />

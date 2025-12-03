@@ -97,8 +97,8 @@ const InteractiveTemplate = (args: MemoryManagerStoryArgs) => {
   }, [args.initialSelectedPath]);
 
   return (
-    <div className="h-[640px] w-full bg-muted/10 p-4">
-      <div className="flex h-full flex-col gap-3">
+    <div className="h-[640px] w-full rounded-xl border border-sidebar-border bg-sidebar p-6 text-sidebar-foreground">
+      <div className="flex h-full flex-col gap-4">
         <MemoryManager
           initialTree={tree}
           initialSelectedPath={selectedPath}
@@ -106,9 +106,9 @@ const InteractiveTemplate = (args: MemoryManagerStoryArgs) => {
           onTreeChange={(nextTree) => setTree(cloneTree(nextTree))}
           onSelectPath={(path) => setSelectedPath(path)}
         />
-        <p className="text-xs text-muted-foreground">
-          Tip: Use arrow keys to move between documents and notice the selected row highlight updating in the tree.
-        </p>
+        <div className="rounded-md border border-sidebar-border/60 bg-background/80 p-3 text-xs text-muted-foreground dark:text-muted-foreground/90">
+          Tip: Use arrow keys to move between documents and notice the design-system highlight tracking the selected tree row.
+        </div>
       </div>
     </div>
   );
