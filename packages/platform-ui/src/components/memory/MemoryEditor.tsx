@@ -7,7 +7,8 @@ import {
   type UseQueryResult,
 } from '@tanstack/react-query';
 import { Button, Input, Label, Textarea } from '@agyn/ui';
-import { memoryApi } from '@/api/modules/memory';
+
+import { memoryQueryKeys, useMemoryData } from './MemoryDataProvider';
 import { notifyError, notifySuccess } from '@/lib/notify';
 import { joinMemoryPath, memoryPathParent, normalizeMemoryPath } from './path';
 
@@ -21,6 +22,7 @@ type MemoryEditorProps = {
 
 export function MemoryEditor({ nodeId, scope, threadId, path, onPathChange }: MemoryEditorProps) {
   const qc = useQueryClient();
+  const memoryData = useMemoryData();
   const normalizedPath = normalizeMemoryPath(path);
 
   const [appendText, setAppendText] = useState('');
@@ -40,32 +42,32 @@ export function MemoryEditor({ nodeId, scope, threadId, path, onPathChange }: Me
   }, [normalizedPath, nodeId, scope, threadId]);
 
   const statQuery = useQuery({
-    queryKey: ['memory/stat', nodeId, scope, threadId, normalizedPath],
-    queryFn: () => memoryApi.stat(nodeId, scope, threadId, normalizedPath),
+    queryKey: memoryQueryKeys.stat(nodeId, scope, threadId, normalizedPath),
+    queryFn: () => memoryData.stat(nodeId, scope, threadId, normalizedPath),
     staleTime: 10_000,
   });
 
   const readQuery = useQuery({
-    queryKey: ['memory/read', nodeId, scope, threadId, normalizedPath],
-    queryFn: () => memoryApi.read(nodeId, scope, threadId, normalizedPath),
+    queryKey: memoryQueryKeys.read(nodeId, scope, threadId, normalizedPath),
+    queryFn: () => memoryData.read(nodeId, scope, threadId, normalizedPath),
     retry: false,
   });
 
   const invalidateLists = useCallback(() => {
-    qc.invalidateQueries({ queryKey: ['memory/list', nodeId, scope, threadId] });
+    qc.invalidateQueries({ queryKey: memoryQueryKeys.listScope(nodeId, scope, threadId) });
   }, [qc, nodeId, scope, threadId]);
 
   const invalidatePath = useCallback(
     (targetPath: string) => {
       const normalized = normalizeMemoryPath(targetPath);
-      qc.invalidateQueries({ queryKey: ['memory/stat', nodeId, scope, threadId, normalized] });
-      qc.invalidateQueries({ queryKey: ['memory/read', nodeId, scope, threadId, normalized] });
+      qc.invalidateQueries({ queryKey: memoryQueryKeys.stat(nodeId, scope, threadId, normalized) });
+      qc.invalidateQueries({ queryKey: memoryQueryKeys.read(nodeId, scope, threadId, normalized) });
     },
     [qc, nodeId, scope, threadId],
   );
 
   const appendMutation = useMutation({
-    mutationFn: async (nextPath: string) => memoryApi.append(nodeId, scope, threadId, nextPath, appendText),
+    mutationFn: async (nextPath: string) => memoryData.append(nodeId, scope, threadId, nextPath, appendText),
     onSuccess: (_data, nextPath) => {
       notifySuccess('Content appended');
       invalidateLists();
@@ -76,7 +78,7 @@ export function MemoryEditor({ nodeId, scope, threadId, path, onPathChange }: Me
   });
 
   const updateMutation = useMutation({
-    mutationFn: async () => memoryApi.update(nodeId, scope, threadId, normalizedPath, replaceOld, replaceNew),
+    mutationFn: async () => memoryData.update(nodeId, scope, threadId, normalizedPath, replaceOld, replaceNew),
     onSuccess: () => {
       notifySuccess('Document updated');
       invalidatePath(normalizedPath);
@@ -87,7 +89,7 @@ export function MemoryEditor({ nodeId, scope, threadId, path, onPathChange }: Me
   });
 
   const ensureDirMutation = useMutation({
-    mutationFn: async (target: string) => memoryApi.ensureDir(nodeId, scope, threadId, target),
+    mutationFn: async (target: string) => memoryData.ensureDir(nodeId, scope, threadId, target),
     onSuccess: (_data, target) => {
       notifySuccess('Location ensured');
       invalidateLists();
@@ -102,7 +104,7 @@ export function MemoryEditor({ nodeId, scope, threadId, path, onPathChange }: Me
   });
 
   const deleteMutation = useMutation({
-    mutationFn: async () => memoryApi.delete(nodeId, scope, threadId, normalizedPath),
+    mutationFn: async () => memoryData.delete(nodeId, scope, threadId, normalizedPath),
     onSuccess: () => {
       notifySuccess('Deleted successfully');
       const parent = memoryPathParent(normalizedPath);
@@ -118,7 +120,7 @@ export function MemoryEditor({ nodeId, scope, threadId, path, onPathChange }: Me
 
   const createFileMutation = useMutation({
     mutationFn: async (target: { path: string; content: string }) =>
-      memoryApi.append(nodeId, scope, threadId, target.path, target.content),
+      memoryData.append(nodeId, scope, threadId, target.path, target.content),
     onSuccess: (_data, target) => {
       notifySuccess('Document created');
       invalidateLists();
