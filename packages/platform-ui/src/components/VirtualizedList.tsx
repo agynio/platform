@@ -23,6 +23,8 @@ type ScrollToIndexRest = ScrollToIndexArgs extends [unknown, ...infer R] ? R : n
 
 const isFiniteNumber = (value: unknown): value is number => typeof value === 'number' && Number.isFinite(value);
 
+const TOP_SCROLL_THRESHOLD_PX = 2;
+
 const sanitizeScrollPosition = (
   position: VirtualizedListScrollPosition | null | undefined,
   itemsLength: number,
@@ -154,6 +156,8 @@ function VirtualizedListInner<T>(
   );
   const [virtualizationFailed, setVirtualizationFailed] = useState(false);
   const shouldForceStatic = virtualizationDisabled || virtualizationFailed;
+  const topReachedTriggeredRef = useRef(false);
+  const lastTopTriggerLengthRef = useRef(items.length);
 
   const attachVirtuosoRef = useCallback(
     (instance: VirtuosoHandle | null) => {
@@ -308,6 +312,26 @@ function VirtualizedListInner<T>(
     },
     [shouldForceStatic, scrollElement],
   );
+
+  const maybeTriggerTopLoad = useCallback(() => {
+    if (!shouldForceStatic) return;
+    if (!hasMore || isLoadingMore) return;
+    const scroller = scrollerRef.current;
+    if (!scroller) return;
+    if (scroller.scrollTop > TOP_SCROLL_THRESHOLD_PX) {
+      return;
+    }
+    if (topReachedTriggeredRef.current && lastTopTriggerLengthRef.current === items.length) {
+      return;
+    }
+    topReachedTriggeredRef.current = true;
+    lastTopTriggerLengthRef.current = items.length;
+    debugConversation('virtualized-list.static.top-reached', () => ({
+      items: items.length,
+      scrollTop: scroller.scrollTop,
+    }));
+    onLoadMore();
+  }, [hasMore, isLoadingMore, items.length, onLoadMore, shouldForceStatic]);
 
   const renderVirtualItem = useCallback(
     (index: number, item: T): ReactNode => {
@@ -655,7 +679,10 @@ function VirtualizedListInner<T>(
       atBottomRef.current = isAtBottom;
       onAtBottomChange?.(isAtBottom);
     }
-  }, [items.length, onAtBottomChange, scrollElement, shouldForceStatic]);
+    if (scroller.scrollTop <= TOP_SCROLL_THRESHOLD_PX) {
+      maybeTriggerTopLoad();
+    }
+  }, [items.length, maybeTriggerTopLoad, onAtBottomChange, scrollElement, shouldForceStatic]);
 
   useEffect(() => {
     if (!shouldForceStatic) return;
@@ -663,6 +690,7 @@ function VirtualizedListInner<T>(
     if (!scroller) return;
 
     const handleScroll = () => {
+      maybeTriggerTopLoad();
       const isAtBottom = scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight <= 1;
       if (isAtBottom !== atBottomRef.current) {
         atBottomRef.current = isAtBottom;
@@ -676,7 +704,24 @@ function VirtualizedListInner<T>(
     return () => {
       scroller.removeEventListener('scroll', handleScroll);
     };
-  }, [items.length, onAtBottomChange, shouldForceStatic]);
+  }, [items.length, maybeTriggerTopLoad, onAtBottomChange, shouldForceStatic]);
+
+  useEffect(() => {
+    if (!shouldForceStatic) {
+      topReachedTriggeredRef.current = false;
+      lastTopTriggerLengthRef.current = items.length;
+      return;
+    }
+
+    if (items.length !== lastTopTriggerLengthRef.current) {
+      lastTopTriggerLengthRef.current = items.length;
+      topReachedTriggeredRef.current = false;
+      const scroller = scrollerRef.current;
+      if (scroller && scroller.scrollTop <= TOP_SCROLL_THRESHOLD_PX) {
+        maybeTriggerTopLoad();
+      }
+    }
+  }, [items.length, maybeTriggerTopLoad, shouldForceStatic]);
 
   const Scroller = useMemo(
     () =>
