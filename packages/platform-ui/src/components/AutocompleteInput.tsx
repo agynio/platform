@@ -1,9 +1,23 @@
-import { useState, useRef, useEffect, type InputHTMLAttributes, type ReactNode } from 'react';
+import {
+  forwardRef,
+  useCallback,
+  useEffect,
+  useImperativeHandle,
+  useRef,
+  useState,
+  type InputHTMLAttributes,
+  type ReactNode,
+} from 'react';
 import { Loader2, X } from 'lucide-react';
 
 export interface AutocompleteOption {
   value: string;
   label: string;
+}
+
+export interface AutocompleteInputHandle {
+  focus: () => void;
+  open: () => void;
 }
 
 interface AutocompleteInputProps
@@ -20,26 +34,32 @@ interface AutocompleteInputProps
   minChars?: number;
   clearable?: boolean;
   leftIcon?: ReactNode;
+  autoOpenOnMount?: boolean;
 }
 
-export function AutocompleteInput({
-  label,
-  error,
-  helperText,
-  size = 'default',
-  className = '',
-  value,
-  onChange,
-  onSelect,
-  fetchOptions,
-  debounceMs = 300,
-  minChars = 0,
-  clearable = false,
-  disabled,
-  placeholder,
-  leftIcon,
-  ...props
-}: AutocompleteInputProps) {
+export const AutocompleteInput = forwardRef<AutocompleteInputHandle, AutocompleteInputProps>(
+  function AutocompleteInput(
+    {
+      label,
+      error,
+      helperText,
+      size = 'default',
+      className = '',
+      value,
+      onChange,
+      onSelect,
+      fetchOptions,
+      debounceMs = 300,
+      minChars = 0,
+      clearable = false,
+      disabled,
+      placeholder,
+      leftIcon,
+      autoOpenOnMount = false,
+      ...props
+    },
+    ref,
+  ) {
   const [options, setOptions] = useState<AutocompleteOption[]>([]);
   const [isOpen, setIsOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -48,6 +68,7 @@ export function AutocompleteInput({
   const inputRef = useRef<HTMLInputElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const autoOpenTriggeredRef = useRef(false);
 
   const paddingClasses = size === 'sm' ? 'px-3 py-2' : 'px-4 py-3';
   const heightClasses = size === 'sm' ? 'h-10' : 'h-auto';
@@ -72,6 +93,25 @@ export function AutocompleteInput({
     };
   }, []);
 
+  const fetchOptionsForQuery = useCallback(
+    async (query: string) => {
+      setIsLoading(true);
+      try {
+        const results = await fetchOptions(query);
+        setOptions(results);
+        setIsOpen(true);
+        setHighlightedIndex(0);
+      } catch (err) {
+        console.error('Error fetching autocomplete options:', err);
+        setOptions([]);
+        setIsOpen(false);
+      } finally {
+        setIsLoading(false);
+      }
+    },
+    [fetchOptions],
+  );
+
   useEffect(() => {
     // Only fetch if user has interacted with the input
     if (!hasInteracted) return;
@@ -81,19 +121,9 @@ export function AutocompleteInput({
         clearTimeout(debounceTimerRef.current);
       }
 
-      debounceTimerRef.current = setTimeout(async () => {
-        setIsLoading(true);
-        try {
-          const results = await fetchOptions(value);
-          setOptions(results);
-          setIsOpen(true);
-          setHighlightedIndex(0);
-        } catch (err) {
-          console.error('Error fetching autocomplete options:', err);
-          setOptions([]);
-        } finally {
-          setIsLoading(false);
-        }
+      debounceTimerRef.current = setTimeout(() => {
+        debounceTimerRef.current = null;
+        void fetchOptionsForQuery(value);
       }, debounceMs);
     } else {
       setOptions([]);
@@ -106,7 +136,7 @@ export function AutocompleteInput({
         debounceTimerRef.current = null;
       }
     };
-  }, [value, fetchOptions, debounceMs, minChars, hasInteracted]);
+  }, [value, fetchOptionsForQuery, debounceMs, minChars, hasInteracted]);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     onChange(e.target.value);
@@ -161,6 +191,44 @@ export function AutocompleteInput({
       }
     }
   }, [highlightedIndex, isOpen]);
+
+  useImperativeHandle(
+    ref,
+    () => ({
+      focus: () => {
+        inputRef.current?.focus();
+      },
+      open: () => {
+        setHasInteracted(true);
+        if (debounceTimerRef.current) {
+          clearTimeout(debounceTimerRef.current);
+          debounceTimerRef.current = null;
+        }
+        if (value.length >= minChars) {
+          void fetchOptionsForQuery(value);
+        } else {
+          setIsOpen(true);
+        }
+      },
+    }),
+    [fetchOptionsForQuery, minChars, value],
+  );
+
+  useEffect(() => {
+    if (!autoOpenOnMount || autoOpenTriggeredRef.current) return;
+    autoOpenTriggeredRef.current = true;
+    setHasInteracted(true);
+    inputRef.current?.focus();
+    if (debounceTimerRef.current) {
+      clearTimeout(debounceTimerRef.current);
+      debounceTimerRef.current = null;
+    }
+    if (value.length >= minChars) {
+      void fetchOptionsForQuery(value);
+    } else {
+      setIsOpen(true);
+    }
+  }, [autoOpenOnMount, fetchOptionsForQuery, minChars, value]);
 
   return (
     <div className="w-full relative">
@@ -262,4 +330,6 @@ export function AutocompleteInput({
       )}
     </div>
   );
-}
+});
+
+AutocompleteInput.displayName = 'AutocompleteInput';

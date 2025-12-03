@@ -1,3 +1,4 @@
+import type { DragEvent } from 'react';
 import { Plus } from 'lucide-react';
 import Badge from './Badge';
 
@@ -16,7 +17,7 @@ const nodeKindConfig = {
   Workspace: { color: 'var(--agyn-purple)', bgColor: 'var(--agyn-bg-purple)' },
 };
 
-const defaultNodeItems: DraggableNodeItem[] = [
+const mockNodeItems: DraggableNodeItem[] = [
   {
     id: 'trigger-http',
     kind: 'Trigger',
@@ -75,16 +76,24 @@ const defaultNodeItems: DraggableNodeItem[] = [
 
 interface EmptySelectionSidebarProps {
   nodeItems?: DraggableNodeItem[];
+  defaultNodeItems?: DraggableNodeItem[];
   onNodeDragStart?: (nodeType: string) => void;
   statusMessage?: string;
 }
 
 export default function EmptySelectionSidebar({
-  nodeItems = defaultNodeItems,
+  nodeItems = [],
+  defaultNodeItems = mockNodeItems,
   onNodeDragStart,
   statusMessage,
 }: EmptySelectionSidebarProps) {
-  const handleDragStart = (event: React.DragEvent, item: DraggableNodeItem) => {
+  const runtimeNodeEnv = typeof process !== 'undefined' ? process.env?.NODE_ENV : undefined;
+  const isProductionRuntime = runtimeNodeEnv === 'production';
+  const devFlag = import.meta.env.DEV;
+  const isDevEnvironment = !isProductionRuntime && (devFlag === true || String(devFlag) === 'true');
+  const shouldShowMocks = isDevEnvironment && import.meta.env.VITE_UI_MOCK_SIDEBAR === 'true';
+  const effectiveNodeItems = nodeItems.length > 0 ? nodeItems : shouldShowMocks ? defaultNodeItems : [];
+  const handleDragStart = (event: DragEvent<HTMLDivElement>, item: DraggableNodeItem) => {
     event.dataTransfer.setData('application/reactflow', JSON.stringify(item));
     event.dataTransfer.effectAllowed = 'move';
     if (onNodeDragStart) {
@@ -92,7 +101,7 @@ export default function EmptySelectionSidebar({
     }
   };
 
-  const hasItems = nodeItems.length > 0;
+  const hasItems = effectiveNodeItems.length > 0;
   const emptyMessage = statusMessage && statusMessage.length > 0 ? statusMessage : 'No templates available.';
 
   return (
@@ -120,7 +129,7 @@ export default function EmptySelectionSidebar({
           </div>
           <div className="space-y-2">
             {hasItems ? (
-              nodeItems.map((item) => {
+              effectiveNodeItems.map((item) => {
                 const config = nodeKindConfig[item.kind];
                 return (
                   <div

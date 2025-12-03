@@ -1,4 +1,4 @@
-import { useCallback } from 'react';
+import { useCallback, type ChangeEvent } from 'react';
 import {
   Button,
   Input,
@@ -92,7 +92,7 @@ export default function ReferenceEnvField({ label, value, onChange, readOnly, di
             <Input
               className="text-xs w-1/3"
               value={it.name}
-              onChange={(e) => updateAt(idx, { name: e.target.value })}
+              onChange={(e: ChangeEvent<HTMLInputElement>) => updateAt(idx, { name: e.target.value })}
               disabled={isDisabled}
               placeholder="VARIABLE_NAME"
               data-testid={`env-name-${idx}`}
@@ -100,7 +100,7 @@ export default function ReferenceEnvField({ label, value, onChange, readOnly, di
             <Input
               className="text-xs flex-1"
               value={it.value}
-              onChange={(e) => updateAt(idx, { value: e.target.value })}
+              onChange={(e: ChangeEvent<HTMLInputElement>) => updateAt(idx, { value: e.target.value })}
               disabled={isDisabled}
               placeholder={it.source === 'vault' ? 'mount/path/key' : 'value'}
               data-testid={`env-value-${idx}`}
@@ -126,7 +126,7 @@ export default function ReferenceEnvField({ label, value, onChange, readOnly, di
               <DropdownMenuContent align="end">
                 <DropdownMenuRadioGroup
                   value={it.source || 'static'}
-                  onValueChange={(v) => {
+                  onValueChange={(v: string) => {
                     const s = v === 'vault' || v === 'static' ? v : 'static';
                     updateAt(idx, { source: s });
                   }}

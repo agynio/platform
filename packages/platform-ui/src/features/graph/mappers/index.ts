@@ -164,6 +164,64 @@ interface BuildSavePayloadOptions {
   edges: GraphPersistedEdge[];
 }
 
+export interface BuildGraphNodeFromTemplateOptions {
+  id: string;
+  position: { x: number; y: number };
+  title?: string;
+  status?: GraphNodeStatus;
+  config?: Record<string, unknown>;
+  state?: Record<string, unknown>;
+}
+
+export function buildGraphNodeFromTemplate(
+  template: TemplateSchema,
+  options: BuildGraphNodeFromTemplateOptions,
+): { node: GraphNodeConfig; metadata: GraphNodeMetadata } {
+  const { id, position, status: desiredStatus, config: initialConfig, state: initialState } = options;
+  const rawTitle = typeof options.title === 'string' ? options.title.trim() : '';
+  const fallbackTitle = typeof template.title === 'string' && template.title.trim().length > 0
+    ? template.title.trim()
+    : template.name;
+  const title = rawTitle.length > 0 ? rawTitle : fallbackTitle;
+
+  const status = desiredStatus ?? DEFAULT_STATUS;
+
+  const config = initialConfig ? { ...initialConfig } : undefined;
+  const state = initialState ? { ...initialState } : undefined;
+  const ports: GraphNodeConfig['ports'] = {
+    inputs: toPortList(template?.targetPorts),
+    outputs: toPortList(template?.sourcePorts),
+  };
+
+  const node: GraphNodeConfig = {
+    id,
+    template: template.name,
+    kind: toNodeKind(template.kind),
+    title,
+    x: Number.isFinite(position.x) ? position.x : 0,
+    y: Number.isFinite(position.y) ? position.y : 0,
+    status,
+    config,
+    state,
+    runtime: undefined,
+    capabilities: deriveCapabilities(template),
+    ports,
+    avatarSeed: id,
+  } satisfies GraphNodeConfig;
+
+  const metadata: GraphNodeMetadata = {
+    template: template.name,
+    config: config ? { ...config } : undefined,
+    state: state ? { ...state } : undefined,
+    position: {
+      x: Number.isFinite(position.x) ? position.x : 0,
+      y: Number.isFinite(position.y) ? position.y : 0,
+    },
+  } satisfies GraphNodeMetadata;
+
+  return { node, metadata };
+}
+
 function toPersistedNode(node: GraphNodeConfig, meta: GraphNodeMetadata): GraphPersistedNode {
   const position = {
     x: Number.isFinite(node.x) ? node.x : meta.position?.x ?? 0,

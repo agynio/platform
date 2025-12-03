@@ -6,7 +6,7 @@ import { TestProviders } from './integration/testUtils';
 import { MemoryRouter } from 'react-router-dom';
 
 describe('AgentsThreads layout', () => {
-  it('renders filters, threads list, and conversation panels', async () => {
+  it('renders header, threads list, and conversation panels', async () => {
     render(
       <TestProviders>
         <MemoryRouter>
@@ -20,5 +20,6 @@ describe('AgentsThreads layout', () => {
     expect(screen.getByRole('button', { name: /Open/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Closed/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /All/i })).toBeInTheDocument();
+    expect(screen.getByTitle('New thread')).toBeInTheDocument();
   });
 });

@@ -1,5 +1,6 @@
 import { Clock, MessageSquare, Bot, Wrench, FileText, Terminal, Users, ChevronDown, ChevronRight, Copy, User, Settings, ExternalLink } from 'lucide-react';
 import { useState } from 'react';
+import { useToolOutputStreaming } from '@/hooks/useToolOutputStreaming';
 import { Badge } from './Badge';
 import { IconButton } from './IconButton';
 import { JsonViewer } from './JsonViewer';
@@ -63,6 +64,7 @@ export type OutputViewMode = 'text' | 'terminal' | 'markdown' | 'json' | 'yaml';
 
 export interface RunEventDetailsProps {
   event: RunEvent;
+  runId?: string;
 }
 
 export interface RunEvent {
@@ -74,9 +76,21 @@ export interface RunEvent {
   data: RunEventData;
 }
 
-export function RunEventDetails({ event }: RunEventDetailsProps) {
+export function RunEventDetails({ event, runId }: RunEventDetailsProps) {
   const [outputViewMode, setOutputViewMode] = useState<OutputViewMode>('text');
   const [expandedToolCalls, setExpandedToolCalls] = useState<Set<string>>(new Set());
+
+  const isShellToolEvent =
+    event.type === 'tool' &&
+    (event.data.toolSubtype === 'shell' || event.data.toolName === 'shell_command');
+  const shouldStreamOutput = Boolean(runId) && event.status === 'running' && isShellToolEvent;
+  const { text, hydrated } = useToolOutputStreaming({
+    runId: runId ?? '',
+    eventId: event.id,
+    enabled: shouldStreamOutput,
+  });
+  const streamedText = hydrated ? text : undefined;
+  const displayedOutput = streamedText ?? event.data.output ?? '';
 
   const toggleToolCall = (key: string) => {
     setExpandedToolCalls((prev) => {
@@ -558,6 +572,10 @@ export function RunEventDetails({ event }: RunEventDetailsProps) {
     const input = parseInput();
     const command = input?.command || event.data.command || '';
     const cwd = input?.cwd || event.data.workingDir || '';
+    const outputValue =
+      outputViewMode === 'text' || outputViewMode === 'terminal'
+        ? displayedOutput
+        : event.data.output;
 
     return (
       <>
@@ -606,7 +624,7 @@ export function RunEventDetails({ event }: RunEventDetailsProps) {
               </div>
             </div>
             <div className="flex-1 overflow-y-auto overflow-x-hidden min-h-0 min-w-0 flex flex-col border border-[var(--agyn-border-subtle)] rounded-[10px] p-4">
-              {renderOutputContent(event.data.output)}
+              {renderOutputContent(outputValue)}
             </div>
           </div>
         </div>
@@ -638,7 +656,7 @@ export function RunEventDetails({ event }: RunEventDetailsProps) {
     const message = input?.message;
     const output = parseOutput();
     const subthreadId = output?.subthreadId || output?.threadId;
-    const runId = output?.runId;
+    const outputRunId = output?.runId;
 
     return (
       <>
@@ -700,9 +718,9 @@ export function RunEventDetails({ event }: RunEventDetailsProps) {
                 <div className="flex items-center gap-2 mb-3 h-8 flex-shrink-0">
                   <span className="text-sm text-[var(--agyn-gray)]">Message</span>
                   <IconButton icon={<Copy className="w-3 h-3" />} size="sm" variant="ghost" />
-                  {runId && (
+                  {outputRunId && (
                     <a
-                      href={`#/run/${runId}`}
+                      href={`#/run/${outputRunId}`}
                       className="inline-flex items-center gap-1 text-xs text-[var(--agyn-blue)] hover:text-[var(--agyn-blue)]/80 transition-colors"
                     >
                       <ExternalLink className="w-3 h-3" />

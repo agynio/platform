@@ -1,8 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Button, Input } from '@agyn/ui';
-import type { ContainerNixConfig, NixPackageSelection } from './types';
+import { Button } from '@/components/Button';
+import { Input } from '@/components/Input';
+import type { ContainerNixConfig, FlakeRepoSelection, NixPackageSelection, NixpkgsSelection } from './types';
 import { useQuery } from '@tanstack/react-query';
 import { fetchPackages, fetchVersions, resolvePackage } from '@/api/modules/nix';
+import { NixRepoInstallSection } from './NixRepoInstallSection';
+import { displayRepository } from './utils';
 
 // Debounce helper
 function useDebounced<T>(value: T, delay = 300) {
@@ -15,6 +18,19 @@ function useDebounced<T>(value: T, delay = 300) {
 }
 
 type SelectedPkg = { name: string };
+
+function isFlakeRepoCandidate(value: Partial<NixPackageSelection>): value is Partial<FlakeRepoSelection> {
+  return (
+    (typeof value.kind === 'string' && value.kind === 'flakeRepo') ||
+    'repository' in value ||
+    'commitHash' in value ||
+    'attributePath' in value
+  );
+}
+
+function isNixpkgsCandidate(value: Partial<NixPackageSelection>): value is Partial<NixpkgsSelection> {
+  return (typeof value.kind === 'string' && value.kind === 'nixpkgs') || 'name' in value;
+}
 
 //
 
@@ -29,12 +45,29 @@ export function NixPackagesSection(props: ControlledProps | UncontrolledProps) {
   const [selected, setSelected] = useState<SelectedPkg[]>([]);
   const [versionsByName, setVersionsByName] = useState<Record<string, string | ''>>({});
   const [detailsByName, setDetailsByName] = useState<Record<string, { version: string; commitHash: string; attributePath: string }>>({});
+  const [repoPackages, setRepoPackages] = useState<FlakeRepoSelection[]>([]);
   const handleResolved = useCallback(
     (name: string, detail: { version: string; commitHash: string; attributePath: string }) => {
       setDetailsByName((prev) => ({ ...prev, [name]: detail }));
     },
     [],
   );
+  const handleRepoAdd = useCallback((entry: FlakeRepoSelection) => {
+    setRepoPackages((prev) => {
+      const existingIndex = prev.findIndex(
+        (current) => current.repository === entry.repository && current.attributePath === entry.attributePath,
+      );
+      if (existingIndex >= 0) {
+        const next = [...prev];
+        next[existingIndex] = entry;
+        return next;
+      }
+      return [...prev, entry];
+    });
+  }, []);
+  const handleRepoRemove = useCallback((index: number) => {
+    setRepoPackages((prev) => prev.filter((_, idx) => idx !== index));
+  }, []);
   const lastPushedJson = useRef<string>('');
   const lastPushedPackagesLen = useRef<number>(0);
   // Stable key of the packages array we most recently pushed upstream.
@@ -49,55 +82,93 @@ export function NixPackagesSection(props: ControlledProps | UncontrolledProps) {
   const controlledValueKey = controlled ? toStableKey((props as ControlledProps).value) : '';
   const uncontrolledPkgsKey = controlled ? '' : toStableKey((props as UncontrolledProps).config.nix?.packages);
   useEffect(() => {
-    // Compute incoming packages from props (controlled or uncontrolled)
     const incoming: NixPackageSelection[] = controlled
-      ? ((((props as ControlledProps).value) || []) as NixPackageSelection[])
+      ? ((props as ControlledProps).value ?? [])
       : ((((props as UncontrolledProps).config as ConfigWithNix).nix?.packages) || []) as NixPackageSelection[];
     const incomingKey = toStableKey(incoming);
-    // Guard: if props reflect exactly what we just pushed, skip rehydration
     if (incomingKey === lastPushedPkgsKey.current) return;
 
     isHydrating.current = true;
 
-    const curr = incoming.filter((p) => p && typeof p.name === 'string');
-    const nextSelected: SelectedPkg[] = curr.map((p) => ({ name: p.name }));
+    const nextStandard: Array<{ name: string; version: string; commitHash: string; attributePath: string }> = [];
+    const nextRepos: FlakeRepoSelection[] = [];
+
+    for (const entry of incoming) {
+      if (!entry || typeof entry !== 'object') continue;
+      const candidate = entry as Partial<NixPackageSelection>;
+      const kind = typeof candidate.kind === 'string' ? candidate.kind : undefined;
+      if (kind === 'flakeRepo' || (kind !== 'nixpkgs' && isFlakeRepoCandidate(candidate))) {
+        const repoCandidate = candidate as Partial<FlakeRepoSelection>;
+        const repository = typeof repoCandidate.repository === 'string' ? repoCandidate.repository : '';
+        const commitHash = typeof repoCandidate.commitHash === 'string' ? repoCandidate.commitHash : '';
+        const attributePath = typeof repoCandidate.attributePath === 'string' ? repoCandidate.attributePath : '';
+        if (!repository || !commitHash || !attributePath) continue;
+        const refValue = typeof repoCandidate.ref === 'string' ? repoCandidate.ref.trim() : '';
+        nextRepos.push({
+          kind: 'flakeRepo',
+          repository,
+          commitHash,
+          attributePath,
+          ...(refValue ? { ref: refValue } : {}),
+        });
+        continue;
+      }
+      if (!isNixpkgsCandidate(candidate)) continue;
+      const pkgCandidate = candidate as Partial<NixpkgsSelection>;
+      const name = typeof pkgCandidate.name === 'string' ? pkgCandidate.name : '';
+      if (!name) continue;
+      const version = typeof pkgCandidate.version === 'string' ? pkgCandidate.version : '';
+      const commitHash = typeof pkgCandidate.commitHash === 'string' ? pkgCandidate.commitHash : '';
+      const attributePath = typeof pkgCandidate.attributePath === 'string' ? pkgCandidate.attributePath : '';
+      nextStandard.push({ name, version, commitHash, attributePath });
+    }
+
+    const nextSelected: SelectedPkg[] = nextStandard.map((p) => ({ name: p.name }));
     setSelected((prev) => {
       const prevKey = JSON.stringify(prev);
       const nextKey = JSON.stringify(nextSelected);
       return prevKey === nextKey ? prev : nextSelected;
     });
-    // Hydrate chosen versions for UI from incoming value
+
     const nextVersions: Record<string, string | ''> = {};
-    for (const p of curr) if (p.version) nextVersions[p.name] = String(p.version);
+    nextStandard.forEach((p) => {
+      if (p.version) nextVersions[p.name] = p.version;
+    });
     setVersionsByName((prev) => (JSON.stringify(prev) === JSON.stringify(nextVersions) ? prev : nextVersions));
 
     const nextDetails: Record<string, { version: string; commitHash: string; attributePath: string }> = {};
-    for (const p of curr) {
+    nextStandard.forEach((p) => {
       if (p.version && p.commitHash && p.attributePath) {
         nextDetails[p.name] = {
-          version: String(p.version),
-          commitHash: String(p.commitHash),
-          attributePath: String(p.attributePath),
+          version: p.version,
+          commitHash: p.commitHash,
+          attributePath: p.attributePath,
         };
       }
-    }
+    });
     setDetailsByName((prev) => (JSON.stringify(prev) === JSON.stringify(nextDetails) ? prev : nextDetails));
 
-    const hydratedPackages = curr.flatMap((p) =>
-      p.version && p.commitHash && p.attributePath
-        ? [
-            {
-              name: p.name,
-              version: String(p.version),
-              commitHash: String(p.commitHash),
-              attributePath: String(p.attributePath),
-            },
-          ]
-        : [],
-    );
+    setRepoPackages((prev) => {
+      const prevKey = JSON.stringify(prev);
+      const nextKey = JSON.stringify(nextRepos);
+      return prevKey === nextKey ? prev : nextRepos;
+    });
+
+    const hydratedPackages: NixPackageSelection[] = [
+      ...nextStandard
+        .filter((p) => p.version && p.commitHash && p.attributePath)
+        .map((p) => ({
+          kind: 'nixpkgs' as const,
+          name: p.name,
+          version: p.version,
+          commitHash: p.commitHash,
+          attributePath: p.attributePath,
+        })),
+      ...nextRepos,
+    ];
 
     lastPushedPackagesLen.current = hydratedPackages.length;
-    lastPushedPkgsKey.current = incomingKey;
+    lastPushedPkgsKey.current = toStableKey(hydratedPackages);
 
     if (controlled) {
       lastPushedJson.current = JSON.stringify(hydratedPackages);
@@ -113,54 +184,58 @@ export function NixPackagesSection(props: ControlledProps | UncontrolledProps) {
 
   // Push updates into node config when selections/channels change
   useEffect(() => {
-    // Build packages array only for items with fully resolved details
-    const packages = selected.flatMap((p) => {
+    const standardPackages = selected.flatMap((p) => {
       const d = detailsByName[p.name];
       return d && d.version && d.commitHash && d.attributePath
-        ? [{ name: p.name, version: d.version, commitHash: d.commitHash, attributePath: d.attributePath }]
+        ? [
+            {
+              kind: 'nixpkgs' as const,
+              name: p.name,
+              version: d.version,
+              commitHash: d.commitHash,
+              attributePath: d.attributePath,
+            },
+          ]
         : [];
     });
+    const combined: NixPackageSelection[] = [...standardPackages, ...repoPackages];
 
     if (isHydrating.current) {
-      const packagesKey = toStableKey(packages as NixPackageSelection[]);
+      const packagesKey = toStableKey(combined);
       if (packagesKey === lastPushedPkgsKey.current) {
-        lastPushedPackagesLen.current = packages.length;
+        lastPushedPackagesLen.current = combined.length;
         isHydrating.current = false;
       }
       return;
     }
-    // No debug logs in production
 
-    // Skip no-op early pushes when there are no chosen versions and nothing was previously pushed
-    if (packages.length === 0 && lastPushedPackagesLen.current === 0) {
+    if (combined.length === 0 && lastPushedPackagesLen.current === 0) {
       return;
     }
 
     if (controlled) {
-      const next: NixPackageSelection[] = packages;
-      // Avoid reentrancy loops; compare shallow JSON
-      const json = JSON.stringify(next);
+      const json = JSON.stringify(combined);
       if (json !== lastPushedJson.current) {
         lastPushedJson.current = json;
-        lastPushedPackagesLen.current = packages.length;
-        lastPushedPkgsKey.current = toStableKey(packages);
-        (props as ControlledProps).onChange(next);
+        lastPushedPackagesLen.current = combined.length;
+        lastPushedPkgsKey.current = toStableKey(combined);
+        (props as ControlledProps).onChange(combined);
       }
     } else {
       const conf = (props as UncontrolledProps).config as ConfigWithNix;
       const next: Record<string, unknown> = {
         ...conf,
-        nix: { ...(conf.nix ?? {}), packages },
+        nix: { ...(conf.nix ?? {}), packages: combined },
       };
       const json = JSON.stringify(next);
       if (json !== lastPushedJson.current) {
         lastPushedJson.current = json;
-        lastPushedPackagesLen.current = packages.length;
-        lastPushedPkgsKey.current = toStableKey(packages);
+        lastPushedPackagesLen.current = combined.length;
+        lastPushedPkgsKey.current = toStableKey(combined);
         (props as UncontrolledProps).onUpdateConfig(next);
       }
     }
-  }, [selected, detailsByName, controlled, controlledValueKey, uncontrolledPkgsKey, props]);
+  }, [selected, detailsByName, repoPackages, controlled, controlledValueKey, uncontrolledPkgsKey, props]);
   const listboxRef = useRef<HTMLUListElement | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
 
@@ -241,26 +316,27 @@ export function NixPackagesSection(props: ControlledProps | UncontrolledProps) {
   return (
     <div className="space-y-2">
       <div className="text-[10px] uppercase text-muted-foreground">Nix Packages (beta)</div>
-      <div className="relative">
-        <Input
-          ref={inputRef}
-          type="text"
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          onFocus={() => setIsOpen(suggestions.length > 0 || isSearching)}
-          onBlur={() => setTimeout(() => setIsOpen(false), 150)}
-          onKeyDown={onKeyDown}
-          placeholder="Search Nix packages..."
-          role="combobox"
-          aria-expanded={isOpen}
-          aria-controls="nix-search-listbox"
-          aria-autocomplete="list"
-          aria-haspopup="listbox"
-          aria-activedescendant={isOpen ? `nix-opt-${activeIndex}` : undefined}
-          aria-label="Search Nix packages"
-        />
-        {isOpen && (
-          <ul
+      <div className="space-y-1">
+        <div className="relative">
+          <Input
+            ref={inputRef}
+            type="text"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            onFocus={() => setIsOpen(suggestions.length > 0 || isSearching)}
+            onBlur={() => setTimeout(() => setIsOpen(false), 150)}
+            onKeyDown={onKeyDown}
+            placeholder="Search Nix packages..."
+            role="combobox"
+            aria-expanded={isOpen}
+            aria-controls="nix-search-listbox"
+            aria-autocomplete="list"
+            aria-haspopup="listbox"
+            aria-activedescendant={isOpen ? `nix-opt-${activeIndex}` : undefined}
+            aria-label="Search Nix packages"
+          />
+          {isOpen && (
+            <ul
             id="nix-search-listbox"
             role="listbox"
             ref={listboxRef}
@@ -289,20 +365,22 @@ export function NixPackagesSection(props: ControlledProps | UncontrolledProps) {
                   </li>
                 );
               }))}
-          </ul>
-        )}
+            </ul>
+          )}
+        </div>
+
+        {(() => {
+          const err = qPkgs.error as unknown;
+          const isAbort = (e: unknown): boolean => e instanceof DOMException && (e as DOMException).name === 'AbortError';
+          const showError = !!err && !isAbort(err);
+          return showError ? (
+            <div className="text-xs text-destructive" aria-live="polite">Error searching Nix packages. Please retry.</div>
+          ) : null;
+        })()}
+        <NixRepoInstallSection onAdd={handleRepoAdd} />
       </div>
 
-      {(() => {
-        const err = qPkgs.error as unknown;
-        const isAbort = (e: unknown): boolean => e instanceof DOMException && (e as DOMException).name === 'AbortError';
-        const showError = !!err && !isAbort(err);
-        return showError ? (
-          <div className="text-xs text-destructive" aria-live="polite">Error searching Nix packages. Please retry.</div>
-        ) : null;
-      })()}
-
-      {selected.length > 0 && (
+      {(selected.length > 0 || repoPackages.length > 0) && (
         <ul className="space-y-2" aria-label="Selected Nix packages">
           {selected.map((p) => (
             <SelectedPackageItem
@@ -312,6 +390,13 @@ export function NixPackagesSection(props: ControlledProps | UncontrolledProps) {
               onChoose={(v) => setVersionsByName((prev) => ({ ...prev, [p.name]: v }))}
               onResolved={handleResolved}
               onRemove={() => removeSelected(p.name)}
+            />
+          ))}
+          {repoPackages.map((entry, index) => (
+            <RepoPackageItem
+              key={`${entry.repository}|${entry.attributePath}`}
+              entry={entry}
+              onRemove={() => handleRepoRemove(index)}
             />
           ))}
         </ul>
@@ -400,6 +485,43 @@ function SelectedPackageItem({ pkg, chosen, onChoose, onRemove, onResolved }: { 
         )}
       </select>
       <Button type="button" size="sm" variant="outline" className="text-destructive" aria-label={`Remove ${label}`} onClick={onRemove}>
+        ×
+      </Button>
+    </li>
+  );
+}
+
+function RepoPackageItem({ entry, onRemove }: { entry: FlakeRepoSelection; onRemove: () => void }) {
+  const label = entry.attributePath;
+  const repoLabel = displayRepository(entry.repository);
+  const refSuffix = entry.ref ? `#${entry.ref}` : '';
+  const optionLabel = `${repoLabel}${refSuffix}`;
+  const commitShort = entry.commitHash.slice(0, 12);
+
+  return (
+    <li className="flex items-center gap-2">
+      <span
+        className="flex-1 text-sm"
+        title={`${repoLabel}${refSuffix ? ` ${refSuffix}` : ''} · ${entry.commitHash}`}
+      >
+        {label}
+      </span>
+      <select
+        aria-label={`${label} source`}
+        className="rounded border border-input bg-background px-2 py-1 text-sm"
+        value={optionLabel}
+        disabled
+      >
+        <option value={optionLabel}>{`${optionLabel} · ${commitShort}`}</option>
+      </select>
+      <Button
+        type="button"
+        size="sm"
+        variant="outline"
+        className="text-destructive"
+        aria-label={`Remove ${label}`}
+        onClick={onRemove}
+      >
         ×
       </Button>
     </li>

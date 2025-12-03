@@ -12,6 +12,7 @@ import { AgentsChat } from './pages/AgentsChat';
 import { AgentsThreads } from './pages/AgentsThreads';
 import { AgentsReminders } from './pages/AgentsReminders';
 import { AgentsRunTimeline } from './pages/AgentsRunTimeline';
+import { AgentsRunScreen } from './pages/AgentsRunScreen';
 import { TracingTraces } from './pages/TracingTraces';
 import { TracingErrors } from './pages/TracingErrors';
 import { TracingDisabledPage } from './pages/TracingDisabled';
@@ -26,6 +27,7 @@ import { AgentsGraphContainer } from './features/graph/containers/AgentsGraphCon
 const queryClient = new QueryClient();
 
 function App() {
+  const enableRunScreenV2 = import.meta.env.VITE_ENABLE_RUN_SCREEN_V2 !== 'false';
   return (
     <QueryClientProvider client={queryClient}>
       <RuntimeTemplatesProvider>
@@ -41,7 +43,10 @@ function App() {
             <Route path="/agents/chat" element={<AgentsChat />} />
             <Route path="/agents/threads" element={<AgentsThreads />} />
             <Route path="/agents/threads/:threadId" element={<AgentsThreads />} />
-            <Route path="/agents/threads/:threadId/runs/:runId/timeline" element={<AgentsRunTimeline />} />
+            <Route
+              path="/agents/threads/:threadId/runs/:runId/timeline"
+              element={enableRunScreenV2 ? <AgentsRunScreen /> : <AgentsRunTimeline />}
+            />
             <Route path="/agents/reminders" element={<AgentsReminders />} />
 
             {/* Tracing */}

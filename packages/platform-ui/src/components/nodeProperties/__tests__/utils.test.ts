@@ -3,10 +3,11 @@ import { describe, it, expect } from 'vitest';
 import {
   applyNixUpdate,
   readEnvList,
+  readNixFlakeRepos,
   readNixPackages,
   serializeEnvVars,
 } from '../utils';
-import type { EnvVar, WorkspaceNixPackage } from '../types';
+import type { EnvVar, WorkspaceFlakeRepo, WorkspaceNixPackage } from '../types';
 
 describe('nodeProperties utils', () => {
   describe('readEnvList', () => {
@@ -99,10 +100,18 @@ describe('nodeProperties utils', () => {
 
   describe('Nix helpers', () => {
     const sample: WorkspaceNixPackage[] = [{
+      kind: 'nixpkgs',
       name: 'ripgrep',
       version: '13.0',
       commitHash: 'abc123',
       attributePath: 'pkgs.ripgrep',
+    }];
+    const repoSample: WorkspaceFlakeRepo[] = [{
+      kind: 'flakeRepo',
+      repository: 'github:agyn/example',
+      commitHash: '1111111111111111111111111111111111111111',
+      attributePath: 'packages.default',
+      ref: 'main',
     }];
 
     it('reads only config.nix.packages arrays', () => {
@@ -111,9 +120,33 @@ describe('nodeProperties utils', () => {
       expect(readNixPackages({ packages: { not: 'array' } })).toEqual([]);
     });
 
+    it('reads flake repos from config', () => {
+      expect(readNixFlakeRepos(sample)).toEqual([]);
+      expect(readNixFlakeRepos({ packages: repoSample })).toEqual(repoSample);
+      expect(readNixFlakeRepos({ packages: [{ kind: 'flakeRepo', repository: '', commitHash: '', attributePath: '' }] })).toEqual([]);
+    });
+
     it('writes nix packages while preserving existing nix config', () => {
-      const update = applyNixUpdate({ nix: { pinned: true } } as any, sample);
-      expect(update).toEqual({ nix: { pinned: true, packages: sample } });
+      const update = applyNixUpdate({ nix: { pinned: true, packages: repoSample } } as any, sample);
+      expect(update).toEqual({
+        nix: {
+          pinned: true,
+          packages: [...repoSample, ...sample],
+        },
+      });
+    });
+
+    it('overrides flake repos when provided explicitly', () => {
+      const nextRepos: WorkspaceFlakeRepo[] = [{
+        kind: 'flakeRepo',
+        repository: 'github:agyn/other',
+        commitHash: '2222222222222222222222222222222222222222',
+        attributePath: 'packages.tool',
+      }];
+      const update = applyNixUpdate({ nix: { packages: repoSample } } as any, sample, nextRepos);
+      expect(update.nix).toEqual({
+        packages: [...nextRepos, ...sample],
+      });
     });
   });
 });

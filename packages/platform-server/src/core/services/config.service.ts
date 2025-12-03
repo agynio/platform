@@ -72,6 +72,15 @@ export const configSchema = z.object({
       const n = typeof v === 'number' ? v : Number(v);
       return Number.isFinite(n) ? n : 500;
     }),
+  nixRepoAllowlist: z
+    .string()
+    .default('')
+    .transform((s) =>
+      s
+        .split(',')
+        .map((x) => x.trim())
+        .filter((x) => x.length > 0),
+    ),
   // Global MCP tools cache staleness timeout (ms). 0 => never stale by time.
   mcpToolsStaleTimeoutMs: z
     .union([z.string(), z.number()])
@@ -310,6 +319,9 @@ export class ConfigService implements Config {
   get corsOrigins(): string[] {
     return this.params.corsOrigins ?? [];
   }
+  get nixRepoAllowlist(): string[] {
+    return this.params.nixRepoAllowlist ?? [];
+  }
 
   // No global messaging adapter config in Slack-only v1
 
@@ -345,6 +357,7 @@ export class ConfigService implements Config {
       nixHttpTimeoutMs: process.env.NIX_HTTP_TIMEOUT_MS,
       nixCacheTtlMs: process.env.NIX_CACHE_TTL_MS,
       nixCacheMax: process.env.NIX_CACHE_MAX,
+      nixRepoAllowlist: process.env.NIX_REPO_ALLOWLIST,
       mcpToolsStaleTimeoutMs: process.env.MCP_TOOLS_STALE_TIMEOUT_MS,
       ncpsEnabled: process.env.NCPS_ENABLED,
       // Preserve legacy for backward compatibility; prefer dual URLs above

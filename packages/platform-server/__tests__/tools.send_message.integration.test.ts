@@ -1,48 +1,170 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import { SendMessageFunctionTool } from '../src/nodes/tools/send_message/send_message.tool';
+// Avoid importing PrismaService to prevent prisma client load
+import { SlackTrigger } from '../src/nodes/slackTrigger/slackTrigger.node';
+import type { SlackAdapter } from '../src/messaging/slack/slack.adapter';
+import type { LiveGraphRuntime } from '../src/graph-core/liveGraph.manager';
+import { createReferenceResolverStub } from './helpers/reference-resolver.stub';
+
+// Mock slack web api
+import { vi } from 'vitest';
+vi.mock('@slack/socket-mode', () => {
+  class MockSocket {
+    on() {}
+    async start() {}
+    async disconnect() {}
+  }
+  return { SocketModeClient: MockSocket };
+});
+vi.mock('@slack/web-api', () => {
+  type ChatPostMessageArguments = { channel: string; text: string; thread_ts?: string };
+  type ChatPostMessageResponse = { ok: boolean; channel?: string; ts?: string; message?: { thread_ts?: string } };
+  class WebClient {
+    chat = {
+      postMessage: vi.fn(async (opts: ChatPostMessageArguments): Promise<ChatPostMessageResponse> => ({
+        ok: true,
+        channel: opts.channel,
+        ts: '2001',
+        message: { thread_ts: opts.thread_ts || '2001' },
+      })),
+    };
+  }
+  return { WebClient };
+});
 
 describe('send_message tool', () => {
-  type OutboxArgs = { threadId: string; text: string; source: string; runId: string | null };
-  type OutboxResult = { ok: boolean; error?: string; channelMessageId?: string; threadId?: string };
-
-  const createOutbox = (impl?: (input: OutboxArgs) => Promise<OutboxResult>) => {
-    const send = vi.fn(async (input: OutboxArgs) => {
-      if (impl) return impl(input);
-      return { ok: true, channelMessageId: 'msg-1', threadId: input.threadId };
+  const makePrismaStub = (options: { channelNodeId?: string | null; channel?: unknown | null }) => {
+    const state = {
+      channelNodeId: options.channelNodeId === undefined ? 'channel-node' : options.channelNodeId,
+      channel: options.channel === undefined ? null : options.channel,
+    };
+    const threadFindUnique = vi.fn(async ({ select }: { select: Record<string, boolean> }) => {
+      if (select.channelNodeId) {
+        if (!state.channelNodeId) return null;
+        return { channelNodeId: state.channelNodeId };
+      }
+      if (select.channel) {
+        return { channel: state.channel };
+      }
+      return null;
     });
-    const outbox = ({ send } satisfies Pick<import('../src/messaging/threadOutbox.service').ThreadOutboxService, 'send'>) as import('../src/messaging/threadOutbox.service').ThreadOutboxService;
-    return { outbox, send };
+    const client = { thread: { findUnique: threadFindUnique } };
+    const prismaService = ({ getClient: () => client } satisfies Pick<import('../src/core/services/prisma.service').PrismaService, 'getClient'>) as import('../src/core/services/prisma.service').PrismaService;
+    return { prismaService, threadFindUnique, state };
   };
 
-  it('returns error when thread context is missing', async () => {
-    const { outbox } = createOutbox();
-    const tool = new SendMessageFunctionTool(outbox);
-    const result = await tool.execute({ message: 'hello' }, {} as any);
-    expect(JSON.parse(result)).toEqual({ ok: false, error: 'missing_thread_context' });
-  });
+  const makeRuntimeStub = (instance: unknown) =>
+    ({
+      getNodeInstance: vi.fn(() => instance),
+    } satisfies Partial<LiveGraphRuntime>) as LiveGraphRuntime;
 
-  it('returns error when message is empty after trimming', async () => {
-    const { outbox } = createOutbox();
-    const tool = new SendMessageFunctionTool(outbox);
-    const result = await tool.execute({ message: '   ' }, { threadId: 't1' });
-    expect(JSON.parse(result)).toEqual({ ok: false, error: 'empty_message' });
-  });
+  const makeTrigger = async (
+    prismaService: import('../src/core/services/prisma.service').PrismaService,
+    options: { descriptor?: unknown; sendResult?: import('../src/messaging/types').SendResult },
+  ) => {
+    const descriptor = options.descriptor ?? {
+      type: 'slack',
+      identifiers: { channel: 'C1', thread_ts: '123' },
+      meta: {},
+      version: 1,
+    };
+    const sendResult = options.sendResult ?? { ok: true, channelMessageId: '2001', threadId: '2001' };
 
-  it('delegates to ThreadOutboxService and returns serialized result', async () => {
-    const { outbox, send } = createOutbox();
-    const tool = new SendMessageFunctionTool(outbox);
-    const outcome = await tool.execute({ message: '  hello  ' }, { threadId: 't1', runId: 'r1' });
-    expect(send).toHaveBeenCalledWith({ threadId: 't1', text: 'hello', source: 'send_message', runId: 'r1' });
-    expect(JSON.parse(outcome)).toEqual({ ok: true, channelMessageId: 'msg-1', threadId: 't1' });
-  });
+    const persistence = ({
+      getOrCreateThreadByAlias: async () => 't1',
+      updateThreadChannelDescriptor: async () => undefined,
+      ensureAssignedAgent: async () => undefined,
+    } satisfies Pick<import('../src/agents/agents.persistence.service').AgentsPersistenceService, 'getOrCreateThreadByAlias' | 'updateThreadChannelDescriptor' | 'ensureAssignedAgent'>) as import('../src/agents/agents.persistence.service').AgentsPersistenceService;
+    const slackSend = vi.fn(async () => sendResult);
+    const slackAdapter = ({ sendText: slackSend } satisfies Pick<SlackAdapter, 'sendText'>) as SlackAdapter;
+    const runtimeStub = ({
+      getOutboundNodeIds: () => [],
+      getNodes: () => [],
+    } satisfies Pick<import('../src/graph-core/liveGraph.manager').LiveGraphRuntime, 'getOutboundNodeIds' | 'getNodes'>) as import('../src/graph-core/liveGraph.manager').LiveGraphRuntime;
+    const templateRegistryStub = ({ getMeta: () => undefined } satisfies Pick<import('../src/graph-core/templateRegistry').TemplateRegistry, 'getMeta'>) as import('../src/graph-core/templateRegistry').TemplateRegistry;
+    const { stub: referenceResolver } = createReferenceResolverStub();
+    const trigger = new SlackTrigger(referenceResolver, persistence, prismaService, slackAdapter, runtimeStub, templateRegistryStub);
+    trigger.init({ nodeId: 'channel-node' });
 
-  it('returns serialized error payload when outbox throws', async () => {
-    const error = new Error('channel_missing');
-    const { outbox } = createOutbox(async () => {
-      throw error;
+    // Override prisma behavior for descriptor lookup inside sendToChannel
+    const client = prismaService.getClient();
+    const originalFindUnique = client.thread.findUnique;
+    client.thread.findUnique = vi.fn(async (args: { select: Record<string, boolean> }) => {
+      if (args.select?.channel) return { channel: descriptor };
+      return originalFindUnique(args);
     });
-    const tool = new SendMessageFunctionTool(outbox);
-    const response = await tool.execute({ message: 'hello' }, { threadId: 't1', runId: null });
-    expect(JSON.parse(response)).toEqual({ ok: false, error: 'channel_missing' });
+
+    await trigger.setConfig({ app_token: 'xapp-abc', bot_token: 'xoxb-abc' });
+    await trigger.provision();
+    return { trigger, slackSend };
+  };
+
+  it('returns error when thread channel mapping missing', async () => {
+    const { prismaService } = makePrismaStub({ channelNodeId: null });
+    const runtime = makeRuntimeStub(undefined);
+    const tool = new SendMessageFunctionTool(prismaService, runtime);
+    const res = await tool.execute({ message: 'hello' }, { threadId: 't1' });
+    expect(res).toBe('missing_channel_node');
+  });
+
+  it('returns error when runtime instance missing', async () => {
+    const { prismaService } = makePrismaStub({ channelNodeId: 'node-x' });
+    const runtime = makeRuntimeStub(undefined);
+    const tool = new SendMessageFunctionTool(prismaService, runtime);
+    const res = await tool.execute({ message: 'hello' }, { threadId: 't1' });
+    expect(res).toBe('channel_node_unavailable');
+  });
+
+  it('returns error when runtime node is not SlackTrigger', async () => {
+    const { prismaService } = makePrismaStub({ channelNodeId: 'node-x' });
+    const runtime = makeRuntimeStub({});
+    const tool = new SendMessageFunctionTool(prismaService, runtime);
+    const res = await tool.execute({ message: 'hello' }, { threadId: 't1' });
+    expect(res).toBe('invalid_channel_type');
+  });
+
+  it('returns error when trigger is not ready', async () => {
+    const { prismaService } = makePrismaStub({ channelNodeId: 'channel-node' });
+    const persistence = ({
+      getOrCreateThreadByAlias: async () => 't1',
+      updateThreadChannelDescriptor: async () => undefined,
+      ensureAssignedAgent: async () => undefined,
+    } satisfies Pick<import('../src/agents/agents.persistence.service').AgentsPersistenceService, 'getOrCreateThreadByAlias' | 'updateThreadChannelDescriptor' | 'ensureAssignedAgent'>) as import('../src/agents/agents.persistence.service').AgentsPersistenceService;
+    const slackAdapter = ({ sendText: vi.fn() } satisfies Pick<SlackAdapter, 'sendText'>) as SlackAdapter;
+    const runtimeStub = ({
+      getOutboundNodeIds: () => [],
+      getNodes: () => [],
+    } satisfies Pick<import('../src/graph-core/liveGraph.manager').LiveGraphRuntime, 'getOutboundNodeIds' | 'getNodes'>) as import('../src/graph-core/liveGraph.manager').LiveGraphRuntime;
+    const templateRegistryStub = ({ getMeta: () => undefined } satisfies Pick<import('../src/graph-core/templateRegistry').TemplateRegistry, 'getMeta'>) as import('../src/graph-core/templateRegistry').TemplateRegistry;
+    const { stub: referenceResolver } = createReferenceResolverStub();
+    const trigger = new SlackTrigger(referenceResolver, persistence, prismaService, slackAdapter, runtimeStub, templateRegistryStub);
+    trigger.init({ nodeId: 'channel-node' });
+    const runtime = makeRuntimeStub(trigger);
+    const tool = new SendMessageFunctionTool(prismaService, runtime);
+    const res = await tool.execute({ message: 'hello' }, { threadId: 't1' });
+    expect(res).toBe('slacktrigger_unprovisioned');
+  });
+
+  it('propagates SlackTrigger send errors', async () => {
+    const { prismaService, state } = makePrismaStub({ channelNodeId: 'channel-node' });
+    state.channel = null;
+    const { trigger } = await makeTrigger(prismaService, {
+      descriptor: null,
+      sendResult: { ok: false, error: 'missing_channel_descriptor' },
+    });
+    const runtime = makeRuntimeStub(trigger);
+    const tool = new SendMessageFunctionTool(prismaService, runtime);
+    const res = await tool.execute({ message: 'hello' }, { threadId: 't1' });
+    expect(res).toBe('missing_channel_descriptor');
+  });
+
+  it('sends via SlackTrigger when ready', async () => {
+    const { prismaService } = makePrismaStub({ channelNodeId: 'channel-node' });
+    const { trigger, slackSend } = await makeTrigger(prismaService, {});
+    const runtime = makeRuntimeStub(trigger);
+    const tool = new SendMessageFunctionTool(prismaService, runtime);
+    const res = await tool.execute({ message: 'hello' }, { threadId: 't1' });
+    expect(res).toBe('message sent successfully');
+    expect(slackSend).toHaveBeenCalledWith({ token: 'xoxb-abc', channel: 'C1', text: 'hello', thread_ts: '123' });
   });
 });

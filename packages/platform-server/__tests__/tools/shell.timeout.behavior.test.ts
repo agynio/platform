@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { ShellCommandNode } from '../../src/nodes/tools/shell_command/shell_command.node';
 import { ContainerService } from '../../src/infra/container/container.service';
 import type { ContainerRegistry } from '../../src/infra/container/container.registry';
-import { isExecTimeoutError, ExecIdleTimeoutError } from '../../src/utils/execTimeout';
+import { ExecIdleTimeoutError } from '../../src/utils/execTimeout';
 import { ContainerHandle } from '../../src/infra/container/container.handle';
 import type { Mock } from 'vitest';
 import { RunEventsService } from '../../src/events/run-events.service';
@@ -50,7 +50,7 @@ const createShellNode = () => {
 };
 
 describe('ShellTool timeout error message', () => {
-  it('throws clear timeout error with tail header on exec timeout', async () => {
+  it('returns clear timeout message with tail header on exec timeout', async () => {
     const timeoutErr = new Error('Exec timed out after 3600000ms');
 
     class FakeContainer extends ContainerHandle { override async exec(_cmd: string | string[], _opts?: unknown): Promise<never> { throw timeoutErr; } }
@@ -67,12 +67,12 @@ describe('ShellTool timeout error message', () => {
     const t = node.getTool();
 
     const payload = { command: 'sleep 999999' } as any;
-    await expect(
-      t.execute(payload as any, { threadId: 't', finishSignal: { activate() {}, deactivate() {}, isActive: false } as any, callerAgent: {} as any } as any),
-    ).rejects.toThrowError(/Error \(timeout after 3600000ms\): command exceeded 3600000ms and was terminated\. See output tail below\./);
-    await expect(
-      t.execute(payload as any, { threadId: 't', finishSignal: { activate() {}, deactivate() {}, isActive: false } as any, callerAgent: {} as any } as any),
-    ).rejects.toThrowError(/----------/);
+    const result = await t.execute(payload as any, {
+      threadId: 't',
+      finishSignal: { activate() {}, deactivate() {}, isActive: false } as any,
+      callerAgent: {} as any,
+    } as any);
+    expect(result).toBe('[exit code 408] Exec timed out after 3600000ms\n---\n');
   });
 
   it('distinguishes idle timeout messaging', async () => {
@@ -89,9 +89,12 @@ describe('ShellTool timeout error message', () => {
     await node.setConfig({});
     const t = node.getTool();
     const payload = { command: 'sleep 999999' } as any;
-    await expect(
-      t.execute(payload as any, { threadId: 't', finishSignal: { activate() {}, deactivate() {}, isActive: false } as any, callerAgent: {} as any } as any),
-    ).rejects.toThrowError(/Error \(idle timeout\): no output for 60000ms; command was terminated\./);
+    const result = await t.execute(payload as any, {
+      threadId: 't',
+      finishSignal: { activate() {}, deactivate() {}, isActive: false } as any,
+      callerAgent: {} as any,
+    } as any);
+    expect(result).toBe('[exit code 408] Exec idle timed out after 60000ms\n---\nouterr');
   });
 
   it('reports actual enforced idle timeout from error.timeoutMs when available', async () => {
@@ -108,9 +111,12 @@ describe('ShellTool timeout error message', () => {
     await node.setConfig({ idleTimeoutMs: 60000 });
     const t = node.getTool();
     const payload = { command: 'sleep 999999' } as any;
-    await expect(
-      t.execute(payload as any, { threadId: 't', finishSignal: { activate() {}, deactivate() {}, isActive: false } as any, callerAgent: {} as any } as any),
-    ).rejects.toThrowError(/no output for 12345ms/);
+    const result = await t.execute(payload as any, {
+      threadId: 't',
+      finishSignal: { activate() {}, deactivate() {}, isActive: false } as any,
+      callerAgent: {} as any,
+    } as any);
+    expect(result).toContain('Exec idle timed out after 12345ms');
   });
 });
 
@@ -227,7 +233,7 @@ describe('ContainerService.execContainer killOnTimeout behavior', () => {
 });
 
 describe('ShellTool non-timeout error propagation', () => {
-  it('rethrows non-timeout errors', async () => {
+  it('returns plain-text message for non-timeout errors', async () => {
     class FakeContainer extends ContainerHandle {
       override async exec(): Promise<never> { throw new Error('Permission denied'); }
     }
@@ -244,8 +250,11 @@ describe('ShellTool non-timeout error propagation', () => {
     const t = node.getTool();
 
     const payload = { command: 'ls' } as any;
-    await expect(
-      t.execute(payload as any, { threadId: 't', finishSignal: { activate() {}, deactivate() {}, isActive: false } as any, callerAgent: {} as any } as any),
-    ).rejects.toThrow('Permission denied');
+    const result = await t.execute(payload as any, {
+      threadId: 't',
+      finishSignal: { activate() {}, deactivate() {}, isActive: false } as any,
+      callerAgent: {} as any,
+    } as any);
+    expect(result).toBe('[exit code 500] Permission denied\n---\n');
   });
 });

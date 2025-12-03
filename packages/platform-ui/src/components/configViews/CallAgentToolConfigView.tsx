@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, type ChangeEvent } from 'react';
 import { Input } from '@agyn/ui';
 import { getCanonicalToolName } from '@/components/nodeProperties/toolCanonicalNames';
 import { isValidToolName } from '@/components/nodeProperties/utils';
@@ -55,16 +55,16 @@ export default function CallAgentToolConfigView({ value, onChange, readOnly, dis
     <div className="space-y-3 text-sm">
       <div>
         <label className="block text-xs mb-1">Description (optional)</label>
-        <Input value={description} onChange={(e) => setDescription(e.target.value)} disabled={isDisabled} placeholder="Tool description" />
+        <Input value={description} onChange={(e: ChangeEvent<HTMLInputElement>) => setDescription(e.target.value)} disabled={isDisabled} placeholder="Tool description" />
       </div>
       <div>
         <ToolNameLabel />
-        <Input value={name} onChange={(e) => setName(e.target.value)} disabled={isDisabled} placeholder={namePlaceholder} />
+        <Input value={name} onChange={(e: ChangeEvent<HTMLInputElement>) => setName(e.target.value)} disabled={isDisabled} placeholder={namePlaceholder} />
         {nameError && <div className="text-[10px] text-red-600 mt-1">{nameError}</div>}
       </div>
       <div>
         <label className="block text-xs mb-1">Response mode</label>
-        <select className="w-full border rounded px-2 py-1 text-xs bg-background" value={response} onChange={(e) => setResponse(e.target.value)} disabled={isDisabled}>
+        <select className="w-full border rounded px-2 py-1 text-xs bg-background" value={response} onChange={(e: ChangeEvent<HTMLSelectElement>) => setResponse(e.target.value)} disabled={isDisabled}>
           <option value="sync">sync</option>
           <option value="async">async</option>
           <option value="ignore">ignore</option>

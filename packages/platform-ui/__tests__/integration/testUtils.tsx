@@ -178,6 +178,23 @@ const relativeHandlers = [
     if (!name || !version) return new _HttpResponse(null, { status: 400 });
     return _HttpResponse.json({ name, version, commitHash: 'abcd1234', attributePath: `${name}` });
   }),
+  _http.get('/api/nix/resolve-repo', ({ request }) => {
+    const url = new URL(request.url);
+    const repository = url.searchParams.get('repository');
+    const attr = url.searchParams.get('attr');
+    if (!repository || !attr) return new _HttpResponse(null, { status: 400 });
+    const ref = url.searchParams.get('ref') || 'main';
+    const canonicalRepo = repository.startsWith('github:') ? repository : `github:${repository}`;
+    const commitHash = '1234567890abcdef1234567890abcdef12345678';
+    return _HttpResponse.json({
+      repository: canonicalRepo,
+      ref,
+      commitHash,
+      attributePath: attr,
+      flakeUri: `${canonicalRepo}/${commitHash}#${attr}`,
+      attrCheck: 'ok',
+    });
+  }),
   // Threads endpoints used by AgentsThreads page
   _http.get('/api/agents/threads', () => _HttpResponse.json({ items: [] })),
   _http.patch('/api/agents/threads/:threadId', async () => new _HttpResponse(null, { status: 204 })),
@@ -278,6 +295,23 @@ const absoluteHandlers = [
     const version = url.searchParams.get('version');
     if (!name || !version) return new _HttpResponse(null, { status: 400 });
     return _HttpResponse.json({ name, version, commitHash: 'abcd1234', attributePath: `${name}` });
+  }),
+  _http.get(abs('/api/nix/resolve-repo'), ({ request }) => {
+    const url = new URL(request.url);
+    const repository = url.searchParams.get('repository');
+    const attr = url.searchParams.get('attr');
+    if (!repository || !attr) return new _HttpResponse(null, { status: 400 });
+    const ref = url.searchParams.get('ref') || 'main';
+    const canonicalRepo = repository.startsWith('github:') ? repository : `github:${repository}`;
+    const commitHash = '1234567890abcdef1234567890abcdef12345678';
+    return _HttpResponse.json({
+      repository: canonicalRepo,
+      ref,
+      commitHash,
+      attributePath: attr,
+      flakeUri: `${canonicalRepo}/${commitHash}#${attr}`,
+      attrCheck: 'ok',
+    });
   }),
   // Threads endpoints (absolute)
   _http.get(abs('/api/agents/threads'), () => _HttpResponse.json({ items: [] })),

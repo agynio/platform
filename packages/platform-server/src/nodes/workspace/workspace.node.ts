@@ -184,6 +184,13 @@ export class WorkspaceNode extends Node<ContainerProviderStaticConfig> {
         const base: Record<string, string> = !Array.isArray(cfgEnv) && cfgEnv ? { ...cfgEnv } : {};
         return this.envService.resolveProviderEnv(cfgEnv, undefined, base);
       })();
+      const githubToken = this.configService.githubToken;
+      if (githubToken && this.hasFlakeRepoConfig()) {
+        const hasToken = !!envMerged && typeof envMerged === 'object' && 'GITHUB_TOKEN' in envMerged;
+        if (!hasToken) {
+          envMerged = { ...(envMerged ?? {}), GITHUB_TOKEN: githubToken } as Record<string, string>;
+        }
+      }
       // Inject NIX_CONFIG only when not present and ncps is explicitly enabled and fully configured
 
       const hasNixConfig =
@@ -626,48 +633,126 @@ export class WorkspaceNode extends Node<ContainerProviderStaticConfig> {
   // Nix install helpers (class-private)
   // ---------------------
 
-  // Coerce any accepted nix.packages array items to resolved install specs; ignore others
-  // Note: this method intentionally avoids throwing; unknown shapes are skipped.
+  private hasFlakeRepoConfig(): boolean {
+    const nixUnknown = this.config?.nix as unknown;
+    if (!nixUnknown || typeof nixUnknown !== 'object') return false;
+    const pkgs = (nixUnknown as Record<string, unknown>)['packages'];
+    if (!Array.isArray(pkgs)) return false;
+    return pkgs.some((entry) => entry && typeof entry === 'object' && (entry as Record<string, unknown>).kind === 'flakeRepo');
+  }
+
   private normalizeToInstallSpecs(items: unknown[]): NixInstallSpec[] {
     const specs: NixInstallSpec[] = [];
-    for (const it of items || []) {
-      if (!it || typeof it !== 'object') continue;
-      const o = it as Record<string, unknown>;
-      const ch = o['commitHash'];
-      const ap = o['attributePath'];
-      if (
-        typeof ch === 'string' &&
-        /^[0-9a-f]{40}$/.test(ch) &&
-        typeof ap === 'string' &&
-        /^[A-Za-z0-9_.+-]+$/.test(ap) &&
-        ap.length > 0
-      ) {
-        specs.push({ commitHash: ch, attributePath: ap });
+    for (const raw of items || []) {
+      if (!raw || typeof raw !== 'object') continue;
+      const source = raw as Record<string, unknown>;
+      const commit = typeof source.commitHash === 'string' ? source.commitHash.trim().toLowerCase() : '';
+      const attributePath = typeof source.attributePath === 'string' ? source.attributePath.trim() : '';
+      if (!HEX_40_REGEX.test(commit) || !ATTRIBUTE_PATH_REGEX.test(attributePath)) continue;
+      const kind = typeof source.kind === 'string' ? source.kind : 'nixpkgs';
+      if (kind === 'flakeRepo') {
+        const repositoryRaw = typeof source.repository === 'string' ? source.repository.trim() : '';
+        if (!GITHUB_REPOSITORY_REGEX.test(repositoryRaw)) continue;
+        const refRaw = typeof source.ref === 'string' ? source.ref.trim() : '';
+        const ref = refRaw.length > 0 ? refRaw : undefined;
+        specs.push({ kind: 'flakeRepo', repository: repositoryRaw, commitHash: commit, attributePath, ref });
+      } else {
+        specs.push({ kind: 'nixpkgs', commitHash: commit, attributePath });
       }
     }
     return specs;
   }
 
-  // Install Nix packages in the container profile using combined install with per-package fallback
+  private buildFlakeUri(spec: NixInstallSpec): string {
+    if (spec.kind === 'nixpkgs') {
+      return `github:NixOS/nixpkgs/${spec.commitHash}#${spec.attributePath}`;
+    }
+    const repository = spec.repository.startsWith('github:') ? spec.repository : `github:${spec.repository}`;
+    return `${repository}/${spec.commitHash}#${spec.attributePath}`;
+  }
+
+  private parseProfileList(output: string): Array<{ index: number; uri: string; normalized: string }> {
+    const entries: Array<{ index: number; uri: string; normalized: string }> = [];
+    const lines = (output || '').split(/\r?\n/);
+    const entryRegex = /^\s*(\d+)\s+((?:flake:)?github:[^\s]+)\b/;
+    for (const line of lines) {
+      const match = entryRegex.exec(line);
+      if (!match) continue;
+      const idx = Number.parseInt(match[1], 10);
+      if (!Number.isFinite(idx)) continue;
+      const uri = match[2];
+      const normalized = uri.startsWith('flake:') ? uri.slice('flake:'.length) : uri;
+      entries.push({ index: idx, uri, normalized });
+    }
+    return entries;
+  }
+
+  private isManagedFlakeUri(normalized: string): boolean {
+    return normalized.startsWith('github:');
+  }
+
+  private async removeProfileEntries(
+    container: ContainerHandle,
+    entries: Array<{ index: number; normalized: string }>,
+    pathPrefix: string,
+  ): Promise<void> {
+    if (!entries.length) return;
+    const timeoutOpts = { timeoutMs: 2 * 60_000, idleTimeoutMs: 60_000 } as const;
+    const sorted = [...entries].sort((a, b) => b.index - a.index);
+    for (const entry of sorted) {
+      const cmd = `${pathPrefix} && nix profile remove ${entry.index}`;
+      const res = await container.exec(cmd, timeoutOpts);
+      if (res.exitCode === 0) {
+        this.logger.log(`Nix remove succeeded for ${entry.normalized} (index=${entry.index})`);
+      } else {
+        this.logger.warn(`Nix remove failed for ${entry.normalized} index=${entry.index} exitCode=${res.exitCode}`);
+      }
+    }
+  }
+
+  private async installFlakeRefs(
+    container: ContainerHandle,
+    pathPrefix: string,
+    baseInstall: string,
+    refs: string[],
+  ): Promise<boolean> {
+    if (refs.length === 0) return true;
+    const combined = `${pathPrefix} && ${baseInstall} ${refs.join(' ')}`;
+    this.logger.log(`Nix install: ${refs.length} package(s) (combined)`);
+    const combinedRes = await container.exec(combined, { timeoutMs: 10 * 60_000, idleTimeoutMs: 60_000 });
+    if (combinedRes.exitCode === 0) return true;
+
+    this.logger.error(`Nix install (combined) failed exitCode=${combinedRes.exitCode}`);
+    const timeoutOpts = { timeoutMs: 3 * 60_000, idleTimeoutMs: 60_000 } as const;
+    let allSucceeded = true;
+    for (const ref of refs) {
+      const cmd = `${pathPrefix} && ${baseInstall} ${ref}`;
+      const res = await container.exec(cmd, timeoutOpts);
+      if (res.exitCode === 0) {
+        this.logger.log(`Nix install succeeded for ${ref}`);
+      } else {
+        this.logger.error(`Nix install failed for ${ref} exitCode=${res.exitCode}`);
+        allSucceeded = false;
+      }
+    }
+    return allSucceeded;
+  }
+
   private async ensureNixPackages(
     container: ContainerHandle,
     specs: NixInstallSpec[],
     originalCount: number,
   ): Promise<void> {
     try {
-      if (!Array.isArray(specs) || specs.length === 0) {
-        // If original config had entries but none were resolved, log once
-        if ((originalCount || 0) > 0) {
-          this.logger.log('nix.packages present but unresolved; skipping install');
-        }
-        return;
-      }
-      // Log when some items are ignored due to missing fields
       if ((originalCount || 0) > specs.length) {
         const ignored = (originalCount || 0) - specs.length;
         this.logger.log(`${ignored} nix.packages item(s) missing commitHash/attributePath; ignored`);
       }
-      // Detect Nix presence quickly
+      if (specs.length === 0 && (originalCount || 0) > 0) {
+        this.logger.log('nix.packages present but unresolved; skipping install');
+        return;
+      }
+
       const detect = await container.exec('command -v nix >/dev/null 2>&1 && nix --version', {
         timeoutMs: 5000,
         idleTimeoutMs: 0,
@@ -676,29 +761,55 @@ export class WorkspaceNode extends Node<ContainerProviderStaticConfig> {
         this.logger.log('Nix not present; skipping install');
         return;
       }
-      const refs = specs.map((s) => `github:NixOS/nixpkgs/${s.commitHash}#${s.attributePath}`);
+
       const PATH_PREFIX = 'export PATH="$HOME/.nix-profile/bin:/nix/var/nix/profiles/default/bin:$PATH"';
-      const BASE =
+      const BASE_INSTALL =
         "nix profile install --accept-flake-config --extra-experimental-features 'nix-command flakes' --no-write-lock-file";
-      const combined = `${PATH_PREFIX} && ${BASE} ${refs.join(' ')}`;
-      this.logger.log(`Nix install: ${refs.length} packages (combined)`);
-      const combinedRes = await container.exec(combined, { timeoutMs: 10 * 60_000, idleTimeoutMs: 60_000 });
-      if (combinedRes.exitCode === 0) return;
-      // Fallback per package
-      this.logger.error(`Nix install (combined) failed exitCode=${combinedRes.exitCode}`);
-      const cmdFor = (ref: string) => `${PATH_PREFIX} && ${BASE} ${ref}`;
-      const timeoutOpts = { timeoutMs: 3 * 60_000, idleTimeoutMs: 60_000 } as const;
-      await refs.reduce<Promise<void>>(
-        (p, ref) =>
-          p.then(async () => {
-            const r = await container.exec(cmdFor(ref), timeoutOpts);
-            if (r.exitCode === 0) this.logger.log(`Nix install succeeded for ${ref}`);
-            else this.logger.error(`Nix install failed for ${ref} exitCode=${r.exitCode}`);
-          }),
-        Promise.resolve(),
+
+      const profileList = await container.exec(`${PATH_PREFIX} && nix profile list`, {
+        timeoutMs: 60_000,
+        idleTimeoutMs: 30_000,
+      });
+      const existing = profileList.exitCode === 0 ? this.parseProfileList(profileList.stdout) : [];
+      const existingSet = new Set(existing.map((entry) => entry.normalized));
+
+      const desiredMap = new Map<string, { spec: NixInstallSpec; flakeUri: string }>();
+      for (const spec of specs) {
+        const flakeUri = this.buildFlakeUri(spec);
+        if (!desiredMap.has(flakeUri)) desiredMap.set(flakeUri, { spec, flakeUri });
+      }
+      const desiredEntries = [...desiredMap.values()];
+      const installs = desiredEntries.filter((entry) => !existingSet.has(entry.flakeUri));
+      const removals = existing
+        .filter((entry) => this.isManagedFlakeUri(entry.normalized))
+        .filter((entry) => !desiredMap.has(entry.normalized));
+
+      if (installs.length === 0 && removals.length === 0) {
+        return;
+      }
+
+      const installSucceeded = await this.installFlakeRefs(
+        container,
+        PATH_PREFIX,
+        BASE_INSTALL,
+        installs.map((entry) => entry.flakeUri),
       );
+
+      if (!installSucceeded) {
+        if (installs.length > 0) {
+          this.logger.warn('Nix install failed; skipping profile removals to preserve existing entries');
+        }
+        return;
+      }
+
+      if (removals.length > 0) {
+        await this.removeProfileEntries(
+          container,
+          removals.map(({ index, normalized }) => ({ index, normalized })),
+          PATH_PREFIX,
+        );
+      }
     } catch (e) {
-      // Surface via logger; caller swallows to avoid failing startup
       const errMessage = e instanceof Error ? e.message : String(e);
       this.logger.error(`Nix install threw: ${errMessage}`);
     }
@@ -718,4 +829,10 @@ function getStatusCode(e: unknown): number | undefined {
 // Returns VaultRef and throws on invalid inputs.
 // parseVaultRef now imported from ../utils/refs
 
-export type NixInstallSpec = { commitHash: string; attributePath: string };
+const HEX_40_REGEX = /^[0-9a-f]{40}$/;
+const ATTRIBUTE_PATH_REGEX = /^[A-Za-z0-9_.+-]+(?:\.[A-Za-z0-9_.+-]+)*$/;
+const GITHUB_REPOSITORY_REGEX = /^github:[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/i;
+
+export type NixInstallSpec =
+  | { kind: 'nixpkgs'; commitHash: string; attributePath: string }
+  | { kind: 'flakeRepo'; repository: string; commitHash: string; attributePath: string; ref?: string };

@@ -1,16 +1,20 @@
 import z from 'zod';
 import { FunctionTool } from '@agyn/llm';
 import { Logger } from '@nestjs/common';
-import type { ThreadOutboxSource } from '../../../messaging/types';
-import { ThreadOutboxService } from '../../../messaging/threadOutbox.service';
+import type { SendResult } from '../../../messaging/types';
 import type { LLMContext } from '../../../llm/types';
+import { PrismaService } from '../../../core/services/prisma.service';
+import { LiveGraphRuntime } from '../../../graph-core/liveGraph.manager';
+import { SlackTrigger } from '../../slackTrigger/slackTrigger.node';
 
 export const sendMessageInvocationSchema = z.object({ message: z.string().min(1).describe('Message text.') }).strict();
 
 export class SendMessageFunctionTool extends FunctionTool<typeof sendMessageInvocationSchema> {
   private readonly logger = new Logger(SendMessageFunctionTool.name);
-
-  constructor(private readonly outbox: ThreadOutboxService) {
+  constructor(
+    private prisma: PrismaService,
+    private runtime: LiveGraphRuntime,
+  ) {
     super();
   }
 
@@ -30,34 +34,38 @@ export class SendMessageFunctionTool extends FunctionTool<typeof sendMessageInvo
 
   async execute(args: z.infer<typeof sendMessageInvocationSchema>, ctx: LLMContext): Promise<string> {
     const threadId = ctx?.threadId;
-    const runId = ctx?.runId ?? null;
-    if (!threadId) {
-      return JSON.stringify({ ok: false, error: 'missing_thread_context' });
-    }
-
-    const message = args.message?.trim() ?? '';
-    if (!message) {
-      return JSON.stringify({ ok: false, error: 'empty_message' });
-    }
-
+    if (!threadId) return 'missing_thread_context';
     try {
-      const res = await this.outbox.send({
-        threadId,
-        text: message,
-        source: 'send_message' satisfies ThreadOutboxSource,
-        runId,
+      const prisma = this.prisma.getClient();
+      const thread = await prisma.thread.findUnique({
+        where: { id: threadId },
+        select: { channelNodeId: true },
       });
-      return JSON.stringify(res);
-    } catch (error) {
-      this.logger.error(
-        `SendMessageFunctionTool: outbox send failed${this.format({
-          threadId,
-          runId,
-          error: error instanceof Error ? { name: error.name, message: error.message, stack: error.stack } : { error },
-        })}`,
-      );
-      const msg = error instanceof Error && error.message ? error.message : 'unknown_error';
-      return JSON.stringify({ ok: false, error: msg });
+      const channelNodeId = thread?.channelNodeId ?? null;
+      if (!channelNodeId) {
+        return 'missing_channel_node';
+      }
+      const node = this.runtime.getNodeInstance(channelNodeId);
+      if (!node) {
+        return 'channel_node_unavailable';
+      }
+      if (!(node instanceof SlackTrigger)) {
+        this.logger.error(
+          `SendMessageFunctionTool: channel node is not SlackTrigger${this.format({ threadId, channelNodeId })}`,
+        );
+        return 'invalid_channel_type';
+      }
+      if (node.status !== 'ready') {
+        return 'slacktrigger_unprovisioned';
+      }
+      const res: SendResult = await node.sendToChannel(threadId, args.message);
+      if (res.ok) {
+        return 'message sent successfully';
+      }
+      return res.error ?? 'unknown_error';
+    } catch (e) {
+      const msg = e instanceof Error && e.message ? e.message : 'unknown_error';
+      return msg;
     }
   }
 }

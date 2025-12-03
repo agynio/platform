@@ -9,6 +9,7 @@ Quickstart
 
 Env configuration (required)
 - VITE_API_BASE_URL: base URL for the Agents API used by the UI. Set to your server origin (e.g., https://agents.example.com). **Do not include `/api`;** REST requests add it automatically and websockets connect to `/socket.io` on the same origin.
+- VITE_UI_MOCK_SIDEBAR (optional, default `false`): enable mock sidebar templates only for local prototyping. Requires a dev build (`import.meta.env.DEV`). Never enable in production builds.
 
 API base URL
 - The UI requires `VITE_API_BASE_URL` for all API interactions. No fallback is provided.

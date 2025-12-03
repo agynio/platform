@@ -76,14 +76,13 @@ describe('ShellTool output limit - non-zero exit oversized', () => {
       { command: 'fail' },
       { threadId: 't', finishSignal: { activate() {}, deactivate() {}, isActive: false }, callerAgent: {} } as any,
     );
-    expect(message.split('\n')[0]).toBe('[exit code 123]');
-    expect(message).toContain('Output exceeded 1000 characters.');
-    expect(message).toMatch(/Full output saved to: \/tmp\/.+\.txt/);
-    expect(message.toLowerCase()).toContain('output tail');
-    const tailMatch = message.match(/--- output tail ---\n([\s\S]+)$/);
-    expect(tailMatch).not.toBeNull();
-    expect(tailMatch?.[1].length).toBe(10_000);
-    expect(tailMatch?.[1]).toBe(STDERR_TAIL);
+    const expectedPrefix = '[exit code 123] Process exited with code 123';
+    expect(message.startsWith(expectedPrefix)).toBe(true);
+    expect(message).toContain('\n---\n');
+    const [, , outputSection = ''] = message.split('\n');
+    expect(outputSection.length).toBe(1000);
+    expect(outputSection).toBe(STDERR_TAIL.slice(-1000));
+    expect(message).not.toContain('Full output saved to');
     expect((provider.c as FakeContainer).lastPut?.options.path).toBe('/tmp');
     expect((provider.c as FakeContainer).lastPut?.data instanceof Buffer).toBe(true);
   });

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, type ChangeEvent } from 'react';
 import { Input } from '@agyn/ui';
 import { getCanonicalToolName } from '@/components/nodeProperties/toolCanonicalNames';
 import { isValidToolName } from '@/components/nodeProperties/utils';
@@ -60,7 +60,7 @@ export default function GithubCloneRepoToolConfigView({ value, onChange, readOnl
         <ToolNameLabel />
         <Input
           value={name}
-          onChange={(e) => setName(e.target.value)}
+          onChange={(e: ChangeEvent<HTMLInputElement>) => setName(e.target.value)}
           disabled={readOnly || disabled}
           placeholder={namePlaceholder}
         />
@@ -69,7 +69,7 @@ export default function GithubCloneRepoToolConfigView({ value, onChange, readOnl
       <ReferenceField
         label="GitHub token (optional)"
         value={token}
-        onChange={(v) => setToken(v)}
+        onChange={(v: ReferenceValue | string) => setToken(v)}
         readOnly={readOnly}
         disabled={disabled}
         placeholder="token or mount/path/key"

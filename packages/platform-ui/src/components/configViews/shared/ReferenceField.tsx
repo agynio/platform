@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, type ChangeEvent } from 'react';
 import { Input, Label } from '@agyn/ui';
 
 export type ReferenceValue = { value: string; source?: 'static' | 'vault' };
@@ -42,7 +42,7 @@ export default function ReferenceField({ label, value, onChange, readOnly, disab
         <select
           className="border rounded px-2 py-1 text-xs bg-background"
           value={source}
-          onChange={(e) => setSource((e.target.value as 'static' | 'vault') || 'static')}
+          onChange={(e: ChangeEvent<HTMLSelectElement>) => setSource((e.target.value as 'static' | 'vault') || 'static')}
           disabled={isDisabled}
           data-testid="ref-source"
         >
@@ -52,7 +52,7 @@ export default function ReferenceField({ label, value, onChange, readOnly, disab
         <Input
           className="text-xs flex-1"
           value={val}
-          onChange={(e) => setVal(e.target.value)}
+          onChange={(e: ChangeEvent<HTMLInputElement>) => setVal(e.target.value)}
           disabled={isDisabled}
           placeholder={placeholder || (source === 'vault' ? 'mount/path/key' : '')}
           data-testid="ref-value"

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, type ChangeEvent } from 'react';
 import { Input } from '@agyn/ui';
 import { getCanonicalToolName } from '@/components/nodeProperties/toolCanonicalNames';
 import { isValidToolName } from '@/components/nodeProperties/utils';
@@ -42,7 +42,7 @@ export default function RemindMeToolConfigView({ value, onChange, readOnly, disa
         <ToolNameLabel />
         <Input
           value={name}
-          onChange={(e) => setName(e.target.value)}
+          onChange={(e: ChangeEvent<HTMLInputElement>) => setName(e.target.value)}
           disabled={isDisabled}
           placeholder={namePlaceholder}
         />
@@ -50,7 +50,7 @@ export default function RemindMeToolConfigView({ value, onChange, readOnly, disa
       </div>
       <div>
         <label className="block text-xs mb-1">Max active reminders</label>
-        <Input type="number" min={1} value={maxActive} onChange={(e) => setMaxActive(parseInt(e.target.value || '1', 10))} disabled={isDisabled} />
+        <Input type="number" min={1} value={maxActive} onChange={(e: ChangeEvent<HTMLInputElement>) => setMaxActive(parseInt(e.target.value || '1', 10))} disabled={isDisabled} />
       </div>
     </div>
   );

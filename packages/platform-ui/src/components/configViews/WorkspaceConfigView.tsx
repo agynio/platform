@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, type ChangeEvent } from 'react';
 import { Input } from '@agyn/ui';
 import type { EnvVar } from '@/components/nodeProperties/types';
 import { readEnvList, serializeEnvVars } from '@/components/nodeProperties/utils';
@@ -93,19 +93,19 @@ export default function WorkspaceConfigView({ value, onChange, readOnly, disable
     <div className="space-y-3 text-sm">
       <div>
         <label htmlFor="image" className="block text-xs mb-1">Image</label>
-        <Input id="image" value={image} onChange={(e) => setImage(e.target.value)} disabled={isDisabled} placeholder="e.g., alpine:3" />
+        <Input id="image" value={image} onChange={(e: ChangeEvent<HTMLInputElement>) => setImage(e.target.value)} disabled={isDisabled} placeholder="e.g., alpine:3" />
       </div>
       <div>
         <div className="text-xs mb-1">Environment</div>
-        <ReferenceEnvField value={env} onChange={setEnv} readOnly={readOnly} disabled={disabled} addLabel="Add env" onValidate={onValidate} />
+        <ReferenceEnvField value={env} onChange={(next) => setEnv(next)} readOnly={readOnly} disabled={disabled} addLabel="Add env" onValidate={onValidate} />
       </div>
       <div>
         <label htmlFor="initialScript" className="block text-xs mb-1">Initial script (optional)</label>
-        <textarea id="initialScript" className="w-full border rounded px-2 py-1 text-xs bg-background" rows={4} value={initialScript} onChange={(e) => setInitialScript(e.target.value)} disabled={isDisabled} />
+        <textarea id="initialScript" className="w-full border rounded px-2 py-1 text-xs bg-background" rows={4} value={initialScript} onChange={(e: ChangeEvent<HTMLTextAreaElement>) => setInitialScript(e.target.value)} disabled={isDisabled} />
       </div>
       <div>
         <label htmlFor="platform" className="block text-xs mb-1">Platform</label>
-        <select id="platform" className="w-full border rounded px-2 py-1 text-xs bg-background" value={platform} onChange={(e) => setPlatform(e.target.value)} disabled={isDisabled}>
+        <select id="platform" className="w-full border rounded px-2 py-1 text-xs bg-background" value={platform} onChange={(e: ChangeEvent<HTMLSelectElement>) => setPlatform(e.target.value)} disabled={isDisabled}>
           <option value=""></option>
           <option value="linux/amd64">linux/amd64</option>
           <option value="linux/arm64">linux/arm64</option>
@@ -113,14 +113,14 @@ export default function WorkspaceConfigView({ value, onChange, readOnly, disable
       </div>
       <div>
         <label htmlFor="cpuLimit" className="block text-xs mb-1">CPU limit</label>
-        <Input id="cpuLimit" value={cpuLimit} onChange={(e) => setCpuLimit(e.target.value)} disabled={isDisabled} placeholder="0.5 or 500m" />
+        <Input id="cpuLimit" value={cpuLimit} onChange={(e: ChangeEvent<HTMLInputElement>) => setCpuLimit(e.target.value)} disabled={isDisabled} placeholder="0.5 or 500m" />
       </div>
       <div>
         <label htmlFor="memoryLimit" className="block text-xs mb-1">Memory limit</label>
-        <Input id="memoryLimit" value={memoryLimit} onChange={(e) => setMemoryLimit(e.target.value)} disabled={isDisabled} placeholder="512Mi or 1Gi" />
+        <Input id="memoryLimit" value={memoryLimit} onChange={(e: ChangeEvent<HTMLInputElement>) => setMemoryLimit(e.target.value)} disabled={isDisabled} placeholder="512Mi or 1Gi" />
       </div>
       <div className="flex items-center gap-2">
-        <input id="enableDinD" type="checkbox" className="h-4 w-4" checked={enableDinD} onChange={(e) => setEnableDinD(e.target.checked)} disabled={isDisabled} />
+        <input id="enableDinD" type="checkbox" className="h-4 w-4" checked={enableDinD} onChange={(e: ChangeEvent<HTMLInputElement>) => setEnableDinD(e.target.checked)} disabled={isDisabled} />
         <label htmlFor="enableDinD" className="text-xs">Enable Docker-in-Docker sidecar</label>
       </div>
       <div className="space-y-2 rounded border px-3 py-2">
@@ -130,7 +130,7 @@ export default function WorkspaceConfigView({ value, onChange, readOnly, disable
             type="checkbox"
             className="h-4 w-4"
             checked={volumesEnabled}
-            onChange={(e) => setVolumesEnabled(e.target.checked)}
+            onChange={(e: ChangeEvent<HTMLInputElement>) => setVolumesEnabled(e.target.checked)}
             disabled={isDisabled}
           />
           <label htmlFor="enableVolumes" className="text-xs">Enable persistent workspace volume</label>
@@ -140,7 +140,7 @@ export default function WorkspaceConfigView({ value, onChange, readOnly, disable
           <Input
             id="mountPath"
             value={mountPath}
-            onChange={(e) => setMountPath(e.target.value)}
+            onChange={(e: ChangeEvent<HTMLInputElement>) => setMountPath(e.target.value)}
             disabled={isDisabled || !volumesEnabled}
             aria-invalid={volumesEnabled && !!mountPathError}
             placeholder="/workspace"
@@ -152,7 +152,7 @@ export default function WorkspaceConfigView({ value, onChange, readOnly, disable
       </div>
       <div>
         <label htmlFor="ttlSeconds" className="block text-xs mb-1">Workspace TTL (seconds)</label>
-        <Input id="ttlSeconds" type="number" min={-1} value={ttlSeconds} onChange={(e) => setTtlSeconds(parseInt(e.target.value || '86400', 10))} disabled={isDisabled} />
+        <Input id="ttlSeconds" type="number" min={-1} value={ttlSeconds} onChange={(e: ChangeEvent<HTMLInputElement>) => setTtlSeconds(parseInt(e.target.value || '86400', 10))} disabled={isDisabled} />
       </div>
     </div>
   );

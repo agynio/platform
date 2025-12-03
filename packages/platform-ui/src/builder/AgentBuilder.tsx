@@ -26,6 +26,7 @@ import { useBuilderState } from './hooks/useBuilderState';
 import type { TemplateNodeSchema } from '@agyn/shared';
 import { getDisplayTitle } from './lib/display';
 import { Button, Popover, PopoverTrigger, PopoverContent, ScrollArea, Card, Drawer, DrawerTrigger, DrawerContent } from '@agyn/ui';
+import type { PopoverContentProps } from '@radix-ui/react-popover';
 import { Plus, Bot, Wrench, Zap } from 'lucide-react';
 import { kindBadgeClasses, kindLabel } from './lib/display';
 import { SaveStatusIndicator } from './SaveStatusIndicator';
@@ -141,7 +142,7 @@ function CanvasArea({
       <div className="pointer-events-none absolute bottom-4 left-1/2 z-10 -translate-x-1/2">
         <Popover
           open={open}
-          onOpenChange={(v) => {
+          onOpenChange={(v: boolean) => {
             setOpen(v);
             if (!v) setTimeout(() => triggerRef.current?.focus(), 0);
           }}
@@ -171,7 +172,7 @@ function CanvasArea({
               side="top"
               align="center"
               sideOffset={8}
-              onInteractOutside={(e) => {
+              onInteractOutside={(e: Parameters<NonNullable<PopoverContentProps['onInteractOutside']>>[0]) => {
                 // Keep popover open during active drags from its content
                 if (isAnyDragging) e.preventDefault();
               }}

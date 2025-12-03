@@ -3,8 +3,10 @@ import { act, render, screen, waitFor } from '@testing-library/react';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 
 import { GraphLayout, type GraphLayoutServices } from '@/components/agents/GraphLayout';
+import type { GraphNodeConfig, GraphPersistedEdge, GraphSaveState } from '@/features/graph/types';
 
 const sidebarProps: any[] = [];
+const emptySidebarProps: any[] = [];
 const canvasSpy = vi.hoisted(() => vi.fn());
 
 type GraphLayoutServiceMocks = {
@@ -23,6 +25,7 @@ const hookMocks = vi.hoisted(() => ({
   useNodeStatus: vi.fn(),
   useMcpNodeState: vi.fn(),
   useNodeAction: vi.fn(),
+  useTemplates: vi.fn(),
 }));
 
 vi.mock('@/components/GraphCanvas', () => ({
@@ -40,6 +43,14 @@ vi.mock('@/components/NodePropertiesSidebar', () => ({
   },
 }));
 
+vi.mock('@/components/EmptySelectionSidebar', () => ({
+  __esModule: true,
+  default: (props: unknown) => {
+    emptySidebarProps.push(props);
+    return <div data-testid="empty-sidebar-mock" />;
+  },
+}));
+
 vi.mock('@/features/graph/hooks/useGraphData', () => ({
   useGraphData: hookMocks.useGraphData,
 }));
@@ -54,6 +65,7 @@ vi.mock('@/features/graph/hooks/useNodeStatus', () => ({
 
 vi.mock('@/lib/graph/hooks', () => ({
   useMcpNodeState: hookMocks.useMcpNodeState,
+  useTemplates: hookMocks.useTemplates,
 }));
 
 vi.mock('@/features/graph/hooks/useNodeAction', () => ({
@@ -94,9 +106,47 @@ const createServiceMocks = vi.hoisted((): (() => GraphLayoutServiceMocks) => () 
   } satisfies GraphLayoutServiceMocks;
 });
 
+type GraphDataMock = {
+  nodes: GraphNodeConfig[];
+  edges: GraphPersistedEdge[];
+  loading: boolean;
+  savingState: GraphSaveState;
+  savingErrorMessage: string | null;
+  updateNode: vi.Mock;
+  applyNodeStatus: vi.Mock;
+  applyNodeState: vi.Mock;
+  setEdges: vi.Mock;
+  removeNodes: vi.Mock;
+  addNode: vi.Mock;
+  scheduleSave: vi.Mock;
+  refresh: vi.Mock;
+};
+
+function mockGraphData(overrides: Partial<GraphDataMock> = {}): GraphDataMock {
+  const base: GraphDataMock = {
+    nodes: [],
+    edges: [],
+    loading: false,
+    savingState: { status: 'saved', error: null },
+    savingErrorMessage: null,
+    updateNode: vi.fn(),
+    applyNodeStatus: vi.fn(),
+    applyNodeState: vi.fn(),
+    setEdges: vi.fn(),
+    removeNodes: vi.fn(),
+    addNode: vi.fn(),
+    scheduleSave: vi.fn(),
+    refresh: vi.fn(),
+  } satisfies GraphDataMock;
+  const value: GraphDataMock = { ...base, ...overrides };
+  hookMocks.useGraphData.mockReturnValue(value);
+  return value;
+}
+
 describe('GraphLayout', () => {
   beforeEach(() => {
     sidebarProps.length = 0;
+    emptySidebarProps.length = 0;
     Object.values(hookMocks).forEach((mock) => mock.mockReset());
     hookMocks.useMcpNodeState.mockReturnValue({
       tools: [],
@@ -104,6 +154,7 @@ describe('GraphLayout', () => {
       setEnabledTools: vi.fn(),
       isLoading: false,
     });
+    hookMocks.useTemplates.mockReturnValue({ data: [], isLoading: false, isError: false });
     nodeActionMutate = vi.fn().mockResolvedValue(undefined);
     hookMocks.useNodeAction.mockReturnValue({ mutateAsync: nodeActionMutate, isPending: false });
     canvasSpy.mockReset();
@@ -116,7 +167,7 @@ describe('GraphLayout', () => {
     const applyNodeState = vi.fn();
     const setEdges = vi.fn();
 
-    hookMocks.useGraphData.mockReturnValue({
+    mockGraphData({
       nodes: [
         {
           id: 'agent-1',
@@ -130,10 +181,6 @@ describe('GraphLayout', () => {
           ports: { inputs: [], outputs: [] },
         },
       ],
-      edges: [],
-      loading: false,
-      savingState: { status: 'saved', error: null },
-      savingErrorMessage: null,
       updateNode,
       applyNodeStatus,
       applyNodeState,
@@ -152,13 +199,134 @@ describe('GraphLayout', () => {
     expect(props?.nodes?.[0]?.data?.title).toBe('Delta (Navigator)');
   });
 
-  it('passes sidebar config/state and persists config updates', async () => {
+  it('respects literal config title even when matching template', async () => {
     const updateNode = vi.fn();
     const applyNodeStatus = vi.fn();
     const applyNodeState = vi.fn();
     const setEdges = vi.fn();
 
-    hookMocks.useGraphData.mockReturnValue({
+    mockGraphData({
+      nodes: [
+        {
+          id: 'node-1',
+          template: 'Agent',
+          kind: 'Agent',
+          title: 'Agent',
+          x: 0,
+          y: 0,
+          status: 'ready',
+          config: { title: 'Agent', name: 'Atlas', role: 'Navigator' },
+          ports: { inputs: [], outputs: [] },
+        },
+      ],
+      updateNode,
+      applyNodeStatus,
+      applyNodeState,
+      setEdges,
+    });
+
+    hookMocks.useGraphSocket.mockReturnValue(undefined);
+    hookMocks.useNodeStatus.mockReturnValue({ data: null, refetch: vi.fn() });
+
+    render(<GraphLayout services={services} />);
+
+    await waitFor(() => expect(canvasSpy).toHaveBeenCalled());
+
+    const latest = canvasSpy.mock.calls.at(-1)?.[0] as {
+      nodes?: Array<{ data?: { title?: string } }>;
+    };
+
+    expect(latest?.nodes?.[0]?.data?.title).toBe('Agent');
+  });
+
+  it('derives agent title from name when role missing', async () => {
+    const updateNode = vi.fn();
+    const applyNodeStatus = vi.fn();
+    const applyNodeState = vi.fn();
+    const setEdges = vi.fn();
+
+    mockGraphData({
+      nodes: [
+        {
+          id: 'node-1',
+          template: 'Agent',
+          kind: 'Agent',
+          title: '',
+          x: 0,
+          y: 0,
+          status: 'not_ready',
+          config: { title: '', name: 'Echo', role: '   ' },
+          ports: { inputs: [], outputs: [] },
+        },
+      ],
+      updateNode,
+      applyNodeStatus,
+      applyNodeState,
+      setEdges,
+    });
+
+    hookMocks.useGraphSocket.mockReturnValue(undefined);
+    hookMocks.useNodeStatus.mockReturnValue({ data: null, refetch: vi.fn() });
+
+    render(<GraphLayout services={services} />);
+
+    await waitFor(() => expect(canvasSpy).toHaveBeenCalled());
+
+    const latest = canvasSpy.mock.calls.at(-1)?.[0] as {
+      nodes?: Array<{ data?: { title?: string } }>;
+    };
+
+    expect(latest?.nodes?.[0]?.data?.title).toBe('Echo');
+  });
+
+  it('falls back to template when title and profile are empty', async () => {
+    const updateNode = vi.fn();
+    const applyNodeStatus = vi.fn();
+    const applyNodeState = vi.fn();
+    const setEdges = vi.fn();
+
+    mockGraphData({
+      nodes: [
+        {
+          id: 'node-1',
+          template: 'Support Agent',
+          kind: 'Agent',
+          title: '   ',
+          x: 0,
+          y: 0,
+          status: 'not_ready',
+          config: { title: '', name: '  ', role: '' },
+          ports: { inputs: [], outputs: [] },
+        },
+      ],
+      updateNode,
+      applyNodeStatus,
+      applyNodeState,
+      setEdges,
+    });
+
+    hookMocks.useGraphSocket.mockReturnValue(undefined);
+    hookMocks.useNodeStatus.mockReturnValue({ data: null, refetch: vi.fn() });
+
+    render(<GraphLayout services={services} />);
+
+    await waitFor(() => expect(canvasSpy).toHaveBeenCalled());
+
+    const latest = canvasSpy.mock.calls.at(-1)?.[0] as {
+      nodes?: Array<{ data?: { title?: string } }>;
+    };
+
+    expect(latest?.nodes?.[0]?.data?.title).toBe('Support Agent');
+  });
+
+  it('passes sidebar config/state and persists config updates', async () => {
+    const updateNode = vi.fn();
+    const applyNodeStatus = vi.fn();
+    const applyNodeState = vi.fn();
+    const setEdges = vi.fn();
+    const removeNodes = vi.fn();
+
+    mockGraphData({
       nodes: [
         {
           id: 'node-1',
@@ -172,14 +340,11 @@ describe('GraphLayout', () => {
           ports: { inputs: [], outputs: [] },
         },
       ],
-      edges: [],
-      loading: false,
-      savingState: { status: 'saved', error: null },
-      savingErrorMessage: null,
       updateNode,
       applyNodeStatus,
       applyNodeState,
       setEdges,
+      removeNodes,
     });
 
     hookMocks.useGraphSocket.mockImplementation(({ onStatus, onState }) => {
@@ -304,17 +469,17 @@ describe('GraphLayout', () => {
     unmount();
   });
 
-  it('keeps agent title placeholder when cleared in sidebar', async () => {
+  it('restores agent profile fallback when title cleared in sidebar', async () => {
     const updateNode = vi.fn();
     const applyNodeStatus = vi.fn();
     const applyNodeState = vi.fn();
     const setEdges = vi.fn();
 
-    hookMocks.useGraphData.mockReturnValue({
+    const graph = mockGraphData({
       nodes: [
         {
           id: 'node-1',
-          template: 'agent-template',
+          template: 'Agent',
           kind: 'Agent',
           title: 'Agent',
           x: 0,
@@ -324,10 +489,6 @@ describe('GraphLayout', () => {
           ports: { inputs: [], outputs: [] },
         },
       ],
-      edges: [],
-      loading: false,
-      savingState: { status: 'saved', error: null },
-      savingErrorMessage: null,
       updateNode,
       applyNodeStatus,
       applyNodeState,
@@ -337,7 +498,7 @@ describe('GraphLayout', () => {
     hookMocks.useGraphSocket.mockReturnValue(undefined);
     hookMocks.useNodeStatus.mockReturnValue({ data: null, refetch: vi.fn() });
 
-    render(<GraphLayout services={services} />);
+    const { rerender } = render(<GraphLayout services={services} />);
 
     await waitFor(() => expect(canvasSpy).toHaveBeenCalled());
 
@@ -371,6 +532,19 @@ describe('GraphLayout', () => {
     expect(payload?.config).toEqual({ name: 'Atlas', role: 'Navigator' });
     expect(payload?.title).toBe('');
 
+    graph.nodes = graph.nodes.map((node) =>
+      node.id === 'node-1'
+        ? {
+            ...node,
+            title: '',
+            config: { ...(node.config ?? {}), title: '', name: 'Atlas', role: 'Navigator' },
+          }
+        : node,
+    );
+    hookMocks.useGraphData.mockReturnValue(graph);
+    canvasSpy.mockClear();
+    rerender(<GraphLayout services={services} />);
+
     await waitFor(() => {
       const latest = canvasSpy.mock.calls.at(-1)?.[0] as {
         nodes?: Array<{ data?: { title?: string } }>;
@@ -379,11 +553,225 @@ describe('GraphLayout', () => {
     });
   });
 
+  it('keeps stored agent title when distinct from template', async () => {
+    const updateNode = vi.fn();
+    const applyNodeStatus = vi.fn();
+    const applyNodeState = vi.fn();
+    const setEdges = vi.fn();
+
+    mockGraphData({
+      nodes: [
+        {
+          id: 'node-1',
+          template: 'Agent',
+          kind: 'Agent',
+          title: 'Custom Dispatch',
+          x: 0,
+          y: 0,
+          status: 'not_ready',
+          config: { title: '', name: '', role: '' },
+          ports: { inputs: [], outputs: [] },
+        },
+      ],
+      updateNode,
+      applyNodeStatus,
+      applyNodeState,
+      setEdges,
+    });
+
+    hookMocks.useGraphSocket.mockReturnValue(undefined);
+    hookMocks.useNodeStatus.mockReturnValue({ data: null, refetch: vi.fn() });
+
+    render(<GraphLayout services={services} />);
+
+    await waitFor(() => expect(canvasSpy).toHaveBeenCalled());
+
+    const latest = canvasSpy.mock.calls.at(-1)?.[0] as {
+      nodes?: Array<{ data?: { title?: string } }>;
+    };
+
+    expect(latest?.nodes?.[0]?.data?.title).toBe('Custom Dispatch');
+  });
+
+  it('renders backend templates in the empty sidebar', async () => {
+    const updateNode = vi.fn();
+    const applyNodeStatus = vi.fn();
+    const applyNodeState = vi.fn();
+    const setEdges = vi.fn();
+    const removeNodes = vi.fn();
+
+    mockGraphData({
+      nodes: [],
+      edges: [],
+      updateNode,
+      applyNodeStatus,
+      applyNodeState,
+      setEdges,
+      removeNodes,
+    });
+
+    hookMocks.useGraphSocket.mockReturnValue(undefined);
+    hookMocks.useNodeStatus.mockReturnValue({ data: null, refetch: vi.fn() });
+    hookMocks.useTemplates.mockReturnValue({
+      data: [
+        { name: 'trigger-http', kind: 'trigger', title: 'HTTP Trigger', description: 'Start flows' },
+        { name: 'agent-ops', kind: 'agent', title: 'Ops Agent', description: 'Handle ops tasks' },
+      ],
+      isLoading: false,
+      isError: false,
+    });
+
+    render(<GraphLayout services={services} />);
+
+    await waitFor(() => expect(emptySidebarProps.length).toBeGreaterThan(0));
+    const emptySidebar = emptySidebarProps.at(-1) as {
+      nodeItems?: Array<Record<string, unknown>>;
+      statusMessage?: string;
+    };
+
+    expect(emptySidebar.nodeItems).toEqual([
+      expect.objectContaining({ id: 'trigger-http', kind: 'Trigger', title: 'HTTP Trigger' }),
+      expect.objectContaining({ id: 'agent-ops', kind: 'Agent', title: 'Ops Agent' }),
+    ]);
+    expect(emptySidebar.statusMessage).toBeUndefined();
+  });
+
+  it('provides a sidebar status message when templates fail to load', async () => {
+    const updateNode = vi.fn();
+    const applyNodeStatus = vi.fn();
+    const applyNodeState = vi.fn();
+    const setEdges = vi.fn();
+    const removeNodes = vi.fn();
+
+    mockGraphData({
+      nodes: [],
+      edges: [],
+      updateNode,
+      applyNodeStatus,
+      applyNodeState,
+      setEdges,
+      removeNodes,
+    });
+
+    hookMocks.useGraphSocket.mockReturnValue(undefined);
+    hookMocks.useNodeStatus.mockReturnValue({ data: null, refetch: vi.fn() });
+    hookMocks.useTemplates.mockReturnValue({ data: undefined, isLoading: false, isError: true });
+
+    render(<GraphLayout services={services} />);
+
+    await waitFor(() => expect(emptySidebarProps.length).toBeGreaterThan(0));
+    const emptySidebar = emptySidebarProps.at(-1) as { statusMessage?: string };
+
+    expect(emptySidebar.statusMessage).toBe('Failed to load templates.');
+  });
+
+  it('shows a loading status message while templates are fetching', async () => {
+    const updateNode = vi.fn();
+    const applyNodeStatus = vi.fn();
+    const applyNodeState = vi.fn();
+    const setEdges = vi.fn();
+    const removeNodes = vi.fn();
+
+    mockGraphData({
+      nodes: [],
+      edges: [],
+      updateNode,
+      applyNodeStatus,
+      applyNodeState,
+      setEdges,
+      removeNodes,
+    });
+
+    hookMocks.useGraphSocket.mockReturnValue(undefined);
+    hookMocks.useNodeStatus.mockReturnValue({ data: null, refetch: vi.fn() });
+    hookMocks.useTemplates.mockReturnValue({ data: [], isLoading: true, isError: false });
+
+    render(<GraphLayout services={services} />);
+
+    await waitFor(() => expect(emptySidebarProps.length).toBeGreaterThan(0));
+    const emptySidebar = emptySidebarProps.at(-1) as { statusMessage?: string };
+
+    expect(emptySidebar.statusMessage).toBe('Loading templates...');
+  });
+
+  it('adds a graph node when dropping a template onto the canvas', async () => {
+    const addNode = vi.fn();
+    const scheduleSave = vi.fn();
+
+    mockGraphData({
+      nodes: [],
+      edges: [],
+      addNode,
+      scheduleSave,
+    });
+
+    hookMocks.useGraphSocket.mockReturnValue(undefined);
+    hookMocks.useNodeStatus.mockReturnValue({ data: null, refetch: vi.fn() });
+    hookMocks.useTemplates.mockReturnValue({
+      data: [
+        {
+          name: 'agent-template',
+          title: 'Agent Template',
+          kind: 'agent',
+          sourcePorts: { out: { title: 'Main Out' } },
+          targetPorts: { in: { title: 'Main In' } },
+        },
+      ],
+      isLoading: false,
+      isError: false,
+    });
+
+    render(<GraphLayout services={services} />);
+
+    await waitFor(() => expect(canvasSpy).toHaveBeenCalled());
+    const canvasProps = canvasSpy.mock.calls.at(-1)?.[0] as {
+      onDrop?: (
+        event: React.DragEvent<HTMLDivElement>,
+        context: { data: Record<string, string>; position: { x: number; y: number } },
+      ) => void;
+    };
+
+    expect(typeof canvasProps.onDrop).toBe('function');
+
+    act(() => {
+      canvasProps.onDrop?.(
+        { preventDefault() {} } as React.DragEvent<HTMLDivElement>,
+        {
+          data: { id: 'agent-template', kind: 'Agent', title: '  New Agent  ' },
+          position: { x: 300, y: 420 },
+        },
+      );
+    });
+
+    expect(addNode).toHaveBeenCalledTimes(1);
+    const [node, metadata] = addNode.mock.calls[0] as [
+      GraphNodeConfig,
+      { template: string; config?: Record<string, unknown>; position?: { x: number; y: number } },
+    ];
+
+    expect(typeof node.id).toBe('string');
+    expect(node.id.length).toBeGreaterThan(0);
+    expect(node.template).toBe('agent-template');
+    expect(node.kind).toBe('Agent');
+    expect(node.title).toBe('New Agent');
+    expect(node.x).toBe(300);
+    expect(node.y).toBe(420);
+    expect(node.config).toEqual({ title: 'New Agent' });
+    expect(node.ports.inputs).toEqual([{ id: 'in', title: 'Main In' }]);
+    expect(node.ports.outputs).toEqual([{ id: 'out', title: 'Main Out' }]);
+    expect(metadata.template).toBe('agent-template');
+    expect(metadata.config).toEqual({ title: 'New Agent' });
+    expect(metadata.position).toEqual({ x: 300, y: 420 });
+
+    expect(scheduleSave).toHaveBeenCalledTimes(1);
+  });
+
   it('persists node position updates when drag ends', async () => {
     const updateNode = vi.fn();
     const setEdges = vi.fn();
+    const removeNodes = vi.fn();
 
-    hookMocks.useGraphData.mockReturnValue({
+    mockGraphData({
       nodes: [
         {
           id: 'node-1',
@@ -397,14 +785,11 @@ describe('GraphLayout', () => {
           ports: { inputs: [], outputs: [] },
         },
       ],
-      edges: [],
-      loading: false,
-      savingState: { status: 'saved', error: null },
-      savingErrorMessage: null,
       updateNode,
       applyNodeStatus: vi.fn(),
       applyNodeState: vi.fn(),
       setEdges,
+      removeNodes,
     });
 
     hookMocks.useGraphSocket.mockReturnValue(undefined);
@@ -448,11 +833,121 @@ describe('GraphLayout', () => {
     );
   });
 
+  it('persists node deletions through useGraphData.removeNodes', async () => {
+    const updateNode = vi.fn();
+    const setEdges = vi.fn();
+    const removeNodes = vi.fn();
+
+    mockGraphData({
+      nodes: [
+        {
+          id: 'node-1',
+          template: 'agent-template',
+          kind: 'Agent',
+          title: 'Agent Node',
+          x: 0,
+          y: 0,
+          status: 'not_ready',
+          config: { title: 'Agent Node' },
+          ports: { inputs: [], outputs: [] },
+        },
+      ],
+      updateNode,
+      applyNodeStatus: vi.fn(),
+      applyNodeState: vi.fn(),
+      setEdges,
+      removeNodes,
+    });
+
+    hookMocks.useGraphSocket.mockReturnValue(undefined);
+    hookMocks.useNodeStatus.mockReturnValue({ data: null, refetch: vi.fn() });
+
+    render(<GraphLayout services={services} />);
+
+    await waitFor(() => expect(canvasSpy).toHaveBeenCalled());
+    const props = canvasSpy.mock.calls.at(-1)?.[0] as {
+      onNodesChange?: (changes: any[]) => void;
+    };
+
+    act(() => {
+      props.onNodesChange?.([
+        {
+          id: 'node-1',
+          type: 'remove',
+        },
+      ]);
+    });
+
+    await waitFor(() => expect(removeNodes).toHaveBeenCalledWith(['node-1']));
+  });
+
+  it('uses onNodesDelete to persist removals once when both callbacks fire', async () => {
+    const updateNode = vi.fn();
+    const setEdges = vi.fn();
+    const removeNodes = vi.fn();
+
+    hookMocks.useGraphData.mockReturnValue({
+      nodes: [
+        {
+          id: 'node-1',
+          template: 'agent-template',
+          kind: 'Agent',
+          title: 'Agent Node',
+          x: 0,
+          y: 0,
+          status: 'not_ready',
+          config: { title: 'Agent Node' },
+          ports: { inputs: [], outputs: [] },
+        },
+      ],
+      edges: [],
+      loading: false,
+      savingState: { status: 'saved', error: null },
+      savingErrorMessage: null,
+      updateNode,
+      applyNodeStatus: vi.fn(),
+      applyNodeState: vi.fn(),
+      setEdges,
+      removeNodes,
+    });
+
+    hookMocks.useGraphSocket.mockReturnValue(undefined);
+    hookMocks.useNodeStatus.mockReturnValue({ data: null, refetch: vi.fn() });
+
+    render(<GraphLayout services={services} />);
+
+    await waitFor(() => expect(canvasSpy).toHaveBeenCalled());
+    const props = canvasSpy.mock.calls.at(-1)?.[0] as {
+      onNodesChange?: (changes: Array<{ id: string; type: string }>) => void;
+      onNodesDelete?: (nodes: Array<{ id: string }>) => void;
+    };
+
+    expect(typeof props.onNodesDelete).toBe('function');
+
+    act(() => {
+      props.onNodesChange?.([
+        {
+          id: 'node-1',
+          type: 'remove',
+        },
+      ]);
+      props.onNodesDelete?.([
+        {
+          id: 'node-1',
+        },
+      ]);
+    });
+
+    await waitFor(() => expect(removeNodes).toHaveBeenCalledWith(['node-1']));
+    expect(removeNodes).toHaveBeenCalledTimes(1);
+  });
+
   it('persists edges when connecting and removing', async () => {
     const updateNode = vi.fn();
     const setEdges = vi.fn();
+    const removeNodes = vi.fn();
 
-    hookMocks.useGraphData.mockReturnValue({
+    mockGraphData({
       nodes: [
         {
           id: 'node-1',
@@ -477,14 +972,11 @@ describe('GraphLayout', () => {
           ports: { inputs: [], outputs: [] },
         },
       ],
-      edges: [],
-      loading: false,
-      savingState: { status: 'saved', error: null },
-      savingErrorMessage: null,
       updateNode,
       applyNodeStatus: vi.fn(),
       applyNodeState: vi.fn(),
       setEdges,
+      removeNodes,
     });
 
     hookMocks.useGraphSocket.mockReturnValue(undefined);
@@ -534,9 +1026,10 @@ describe('GraphLayout', () => {
   it('wires MCP tools state into the sidebar and toggles enabled tools', async () => {
     const updateNode = vi.fn();
     const setEdges = vi.fn();
+    const removeNodes = vi.fn();
     const setEnabledTools = vi.fn();
 
-    hookMocks.useGraphData.mockReturnValue({
+    mockGraphData({
       nodes: [
         {
           id: 'mcp-1',
@@ -550,14 +1043,11 @@ describe('GraphLayout', () => {
           ports: { inputs: [], outputs: [] },
         },
       ],
-      edges: [],
-      loading: false,
-      savingState: { status: 'saved', error: null },
-      savingErrorMessage: null,
       updateNode,
       applyNodeStatus: vi.fn(),
       applyNodeState: vi.fn(),
       setEdges,
+      removeNodes,
     });
 
     hookMocks.useGraphSocket.mockReturnValue(undefined);
@@ -617,8 +1107,9 @@ describe('GraphLayout', () => {
     const applyNodeStatus = vi.fn();
     const applyNodeState = vi.fn();
     const setEdges = vi.fn();
+    const removeNodes = vi.fn();
 
-    hookMocks.useGraphData.mockReturnValue({
+    mockGraphData({
       nodes: [
         {
           id: 'agent-1',
@@ -643,14 +1134,11 @@ describe('GraphLayout', () => {
           ports: { inputs: [], outputs: [] },
         },
       ],
-      edges: [],
-      loading: false,
-      savingState: { status: 'saved', error: null },
-      savingErrorMessage: null,
       updateNode,
       applyNodeStatus,
       applyNodeState,
       setEdges,
+      removeNodes,
     });
 
     hookMocks.useGraphSocket.mockReturnValue(undefined);
@@ -707,8 +1195,9 @@ describe('GraphLayout', () => {
     const applyNodeStatus = vi.fn();
     const applyNodeState = vi.fn();
     const setEdges = vi.fn();
+    const removeNodes = vi.fn();
 
-    hookMocks.useGraphData.mockReturnValue({
+    mockGraphData({
       nodes: [
         {
           id: 'node-1',
@@ -722,14 +1211,11 @@ describe('GraphLayout', () => {
           ports: { inputs: [], outputs: [] },
         },
       ],
-      edges: [],
-      loading: false,
-      savingState: { status: 'saved', error: null },
-      savingErrorMessage: null,
       updateNode,
       applyNodeStatus,
       applyNodeState,
       setEdges,
+      removeNodes,
     });
 
     hookMocks.useGraphSocket.mockReturnValue(undefined);
@@ -877,7 +1363,7 @@ describe('GraphLayout', () => {
       rerender(<GraphLayout services={services} />);
     });
 
-    await waitFor(() => expect(screen.getByText('Build Your AI Team')).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByTestId('empty-sidebar-mock')).toBeInTheDocument());
     expect(screen.queryByTestId('node-sidebar-mock')).not.toBeInTheDocument();
   });
 
@@ -887,7 +1373,7 @@ describe('GraphLayout', () => {
     const applyNodeState = vi.fn();
     const setEdges = vi.fn();
 
-    hookMocks.useGraphData.mockReturnValue({
+    mockGraphData({
       nodes: [
         {
           id: 'agent-2',
@@ -906,10 +1392,6 @@ describe('GraphLayout', () => {
           ports: { inputs: [], outputs: [] },
         },
       ],
-      edges: [],
-      loading: false,
-      savingState: { status: 'saved', error: null },
-      savingErrorMessage: null,
       updateNode,
       applyNodeStatus,
       applyNodeState,

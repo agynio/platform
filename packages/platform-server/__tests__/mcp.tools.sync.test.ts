@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { LocalMCPServerNode } from '../src/nodes/mcp/localMcpServer.node';
+import { createModuleRefStub } from './helpers/module-ref.stub';
 
 class MockLogger {
   info = vi.fn();
@@ -17,7 +18,7 @@ describe('LocalMCPServerNode listTools filtering by enabledTools', () => {
 
   beforeEach(async () => {
     const nodeStateService = { getSnapshot: vi.fn((_id: string) => ({ mcp: { enabledTools: [] } })) } as any;
-    const moduleRef = { get: vi.fn(() => nodeStateService) } as any;
+    const moduleRef = createModuleRefStub({ get: vi.fn(() => nodeStateService) });
     const envStub = { resolveEnvItems: vi.fn(), resolveProviderEnv: vi.fn() } as any;
     const logger = new MockLogger();
     server = new LocalMCPServerNode(new MockContainerService() as any, envStub, {} as any, moduleRef as any);
@@ -60,7 +61,7 @@ describe('LocalMCPServerNode setState enabledTools emits mcp.tools_updated', () 
   it('emits on hook invocation', async () => {
     const logger = new MockLogger();
     const envStub = { resolveEnvItems: vi.fn(), resolveProviderEnv: vi.fn() } as any;
-    const server = new LocalMCPServerNode(new MockContainerService() as any, envStub, {} as any, undefined as any);
+    const server = new LocalMCPServerNode(new MockContainerService() as any, envStub, {} as any, createModuleRefStub());
     (server as any).logger = logger;
     // Preload one tool for payload consistency
     (server as any).preloadCachedTools([{ name: 'x', description: 'X', inputSchema: { type: 'object' } }], Date.now());

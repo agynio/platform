@@ -19,7 +19,8 @@ import { ManageFunctionTool } from '../src/nodes/tools/manage/manage.tool';
 import { ManageToolNode } from '../src/nodes/tools/manage/manage.node';
 import { EventsBusService } from '../src/events/events-bus.service';
 import { RunEventsService } from '../src/events/run-events.service';
-import { createNodeTestingModule } from './nodes/node-di.helper';
+import { ReferenceResolverService } from '../src/utils/reference-resolver.service';
+import { createReferenceResolverStub } from './helpers/reference-resolver.stub';
 
 class StubLLMProvisioner extends LLMProvisioner {
   async getLLM(): Promise<{ call: (messages: unknown) => Promise<{ text: string; output: unknown[] }> }> {
@@ -76,6 +77,7 @@ async function createHarness(options: { persistence?: AgentsPersistenceService; 
       { provide: RunEventsService, useValue: { publishEvent: vi.fn() } as unknown as RunEventsService },
       EventsBusService,
       RunSignalsRegistry,
+      { provide: ReferenceResolverService, useValue: createReferenceResolverStub().stub },
     ],
   }).compile();
 
@@ -571,6 +573,7 @@ describe('ManageTool graph wiring', () => {
             upsertNodeState: async () => {},
           },
         },
+        { provide: ReferenceResolverService, useValue: createReferenceResolverStub().stub },
         { provide: ModuleRef, useValue: moduleRef },
       ],
     }).compile();

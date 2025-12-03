@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, type ChangeEvent } from 'react';
 import { Input } from '@agyn/ui';
 import type { StaticConfigViewProps } from './types';
 
@@ -26,11 +26,11 @@ export default function DebugToolTriggerConfigView({ value, onChange, readOnly, 
     <div className="space-y-3 text-sm">
       <div>
         <label className="block text-xs mb-1">Path</label>
-        <Input value={path} onChange={(e) => setPath(e.target.value)} disabled={isDisabled} />
+        <Input value={path} onChange={(e: ChangeEvent<HTMLInputElement>) => setPath(e.target.value)} disabled={isDisabled} />
       </div>
       <div>
         <label className="block text-xs mb-1">Auth token (optional)</label>
-        <Input value={authToken} onChange={(e) => setAuthToken(e.target.value)} disabled={isDisabled} placeholder="Provide to require X-Debug-Token header" />
+        <Input value={authToken} onChange={(e: ChangeEvent<HTMLInputElement>) => setAuthToken(e.target.value)} disabled={isDisabled} placeholder="Provide to require X-Debug-Token header" />
       </div>
     </div>
   );

@@ -25,6 +25,7 @@ import { ManageFunctionTool } from '../../src/nodes/tools/manage/manage.tool';
 import { VaultService } from '../../src/vault/vault.service';
 import { ReferenceResolverService } from '../../src/utils/reference-resolver.service';
 import { ThreadsQueryService } from '../../src/threads/threads.query.service';
+import { createReferenceResolverStub } from '../helpers/reference-resolver.stub';
 
 type InjectionToken = Type<unknown> | string | symbol;
 
@@ -108,7 +109,13 @@ const DEFAULT_TOKEN_FACTORIES = new Map<InjectionToken, () => unknown>([
   [CallAgentLinkingService, () => createDefaultStub('CallAgentLinkingService')],
   [LiveGraphRuntime, () => createDefaultStub('LiveGraphRuntime')],
   [TemplateRegistry, () => createDefaultStub('TemplateRegistry', { getMeta: vi.fn(() => undefined) })],
-  [ReferenceResolverService, () => createDefaultStub('ReferenceResolverService', { resolve: vi.fn(async () => ({ output: {} })) })],
+  [
+    ReferenceResolverService,
+    () => {
+      const { stub } = createReferenceResolverStub();
+      return stub;
+    },
+  ],
   [
     ManageFunctionTool,
     () => {

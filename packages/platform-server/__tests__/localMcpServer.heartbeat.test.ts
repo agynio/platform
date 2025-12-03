@@ -3,6 +3,7 @@ import { LocalMCPServerNode } from '../src/nodes/mcp/localMcpServer.node';
 import { ContainerService } from '../src/infra/container/container.service';
 import type { ContainerRegistry } from '../src/infra/container/container.registry';
 import { PassThrough } from 'node:stream';
+import { createModuleRefStub } from './helpers/module-ref.stub';
 
 function createBlockingMcpMock() {
   const tools = [
@@ -98,7 +99,7 @@ describe('LocalMCPServer heartbeat behavior', () => {
       }),
     });
     const envStub = { resolveEnvItems: async () => ({}), resolveProviderEnv: async () => ({}) } as any;
-    const server = new LocalMCPServerNode(containerService as any, envStub, {} as any, undefined as any);
+    const server = new LocalMCPServerNode(containerService as any, envStub, {} as any, createModuleRefStub());
     server.setContainerProvider({ provide: async (t: string) => ({ id: `cid-${t}` }) } as any);
     await server.setConfig({ namespace: 'mock', command: 'ignored', heartbeatIntervalMs: 100 } as any);
 
