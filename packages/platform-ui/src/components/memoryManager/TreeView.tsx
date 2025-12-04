@@ -1,15 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, type ReactNode } from 'react';
 import { ChevronRight, FileText, Plus, Trash2 } from 'lucide-react';
 
-import { Tooltip, TooltipContent, TooltipTrigger } from '../ui/tooltip';
-import { Button } from '../ui/button';
-import {
-  SidebarMenu,
-  SidebarMenuItem,
-  SidebarMenuSub,
-} from '../ui/sidebar';
-
 import { cn } from '@/lib/utils';
+import { IconButton } from '../IconButton';
+import { Tooltip, TooltipContent, TooltipTrigger } from '../ui/tooltip';
 import {
   type MemoryTree,
   type MemoryNode,
@@ -33,6 +27,8 @@ type VisibleNode = {
   depth: number;
   isExpanded: boolean;
 };
+
+const INDENT_STEP = 20;
 
 export function TreeView({
   tree,
@@ -162,42 +158,40 @@ export function TreeView({
       const isExpandable = node.children.length > 0;
       const isExpanded = expandedPaths.has(node.path);
       const indicatorIcon = showContentIndicators ? (
-        <FileText className="size-4 text-sidebar-foreground/70" aria-hidden="true" />
+        <FileText className="h-4 w-4" aria-hidden="true" />
       ) : null;
+      const indent = depth * INDENT_STEP;
 
       return (
-        <SidebarMenuItem key={node.path} role="none" className="group/menu-item">
+        <li key={node.path} role="none" className="space-y-1">
           <div
             className={cn(
-              'flex min-h-9 items-center gap-2 rounded-md px-2 py-1.5 text-sm text-sidebar-foreground transition-colors',
-              'focus-within:outline-none focus-within:ring-2 focus-within:ring-sidebar-ring focus-within:bg-sidebar-accent/70',
+              'group flex min-h-10 items-center gap-2 rounded-[10px] border border-transparent bg-white/0 py-2 transition-colors',
               isSelected
-                ? 'bg-sidebar-accent text-sidebar-accent-foreground shadow-sm'
-                : 'hover:bg-sidebar-accent hover:text-sidebar-accent-foreground',
+                ? 'border-[var(--agyn-blue)] bg-[var(--agyn-blue)]/5 shadow-[0_0_0_1px_rgba(28,72,154,0.08)]'
+                : 'hover:border-[var(--agyn-border-subtle)] hover:bg-[var(--agyn-bg-light)]',
             )}
+            style={{ marginLeft: indent }}
             data-selected={isSelected ? 'true' : undefined}
           >
             {isExpandable ? (
-              <Button
-                type="button"
+              <IconButton
                 variant="ghost"
-                size="icon"
-                className={cn(
-                  'flex h-8 w-8 shrink-0 items-center justify-center rounded-md transition-colors',
-                  'hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2 focus-visible:ring-sidebar-ring',
-                  isSelected ? 'text-sidebar-accent-foreground' : 'text-muted-foreground',
-                )}
+                size="sm"
+                tabIndex={-1}
                 aria-label={isExpanded ? 'Collapse node' : 'Expand node'}
                 onClick={(event) => {
                   event.stopPropagation();
                   onToggle(node.path);
                 }}
-                tabIndex={-1}
-              >
-                <ChevronRight className={cn('size-4 transition-transform duration-200', isExpanded && 'rotate-90')} />
-              </Button>
+                className={cn(
+                  'shrink-0 text-[var(--agyn-gray)] hover:text-[var(--agyn-blue)]',
+                  isSelected && 'text-[var(--agyn-blue)]',
+                )}
+                icon={<ChevronRight className={cn('h-4 w-4 transition-transform', isExpanded && 'rotate-90')} />}
+              />
             ) : (
-              <span className="inline-flex size-8 shrink-0" aria-hidden="true" />
+              <span className="h-8 w-8 shrink-0" aria-hidden="true" />
             )}
             <button
               ref={registerRef(node.path)}
@@ -207,11 +201,11 @@ export function TreeView({
               aria-selected={isSelected ? 'true' : 'false'}
               aria-expanded={isExpandable ? isExpanded : undefined}
               className={cn(
-                'flex flex-1 items-center gap-2 overflow-hidden rounded-md px-1.5 py-0.5 text-left outline-none ring-sidebar-ring transition-colors',
-                'focus-visible:ring-2 focus-visible:ring-sidebar-ring',
+                'flex min-w-0 flex-1 items-center gap-2 rounded-[8px] px-2 py-1 text-left text-sm font-medium text-[var(--agyn-dark)] transition-colors',
+                'focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--agyn-blue)] focus-visible:outline-offset-1',
                 isSelected
-                  ? 'text-sidebar-accent-foreground'
-                  : 'text-muted-foreground hover:text-sidebar-accent-foreground',
+                  ? 'text-[var(--agyn-blue)]'
+                  : 'group-hover:text-[var(--agyn-blue)]',
               )}
               onClick={() => onSelect(node.path)}
               onKeyDown={(event) => handleKeyDown(event, node.path)}
@@ -220,89 +214,77 @@ export function TreeView({
               {indicatorIcon ? (
                 <span
                   className={cn(
-                    'flex size-6 items-center justify-center rounded-md border border-sidebar-border/60 bg-sidebar text-muted-foreground transition-colors',
-                    'group-hover/menu-item:border-sidebar-accent/40 group-hover/menu-item:bg-sidebar-accent/30',
-                    isSelected && 'border-sidebar-accent bg-sidebar-accent/30 text-sidebar-accent-foreground',
+                    'flex h-7 w-7 items-center justify-center rounded-[8px] border border-[var(--agyn-border-subtle)] bg-[var(--agyn-bg-light)] text-[var(--agyn-gray)] transition-colors',
+                    isSelected && 'border-[var(--agyn-blue)] bg-[var(--agyn-blue)]/10 text-[var(--agyn-blue)]',
                   )}
                   aria-hidden="true"
                 >
                   {indicatorIcon}
                 </span>
               ) : null}
-              <span
-                className={cn(
-                  'truncate text-sm font-medium transition-colors',
-                  isSelected ? 'text-sidebar-accent-foreground' : 'text-sidebar-foreground',
-                )}
-                title={node.path}
-              >
+              <span className="truncate" title={node.path}>
                 {node.name}
               </span>
             </button>
             <div className="flex items-center gap-1">
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <Button
-                    type="button"
+                  <IconButton
                     variant="ghost"
-                    size="icon"
-                    className={cn(
-                      'flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition-colors',
-                      'hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2 focus-visible:ring-sidebar-ring',
-                      isSelected && 'text-sidebar-accent-foreground',
-                    )}
+                    size="sm"
+                    tabIndex={-1}
                     aria-label="Add subdocument"
                     onClick={(event) => {
                       event.stopPropagation();
                       onAddChild(node.path);
                     }}
-                    tabIndex={-1}
-                  >
-                    <Plus className="size-4" />
-                  </Button>
+                    className={cn(
+                      'text-[var(--agyn-gray)] hover:text-[var(--agyn-blue)]',
+                      isSelected && 'text-[var(--agyn-blue)]',
+                    )}
+                    icon={<Plus className="h-4 w-4" />}
+                  />
                 </TooltipTrigger>
                 <TooltipContent side="top">Add subdocument</TooltipContent>
               </Tooltip>
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    className={cn(
-                      'flex h-8 w-8 items-center justify-center rounded-md transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring disabled:opacity-40',
-                      'hover:bg-sidebar-accent hover:text-sidebar-accent-foreground',
-                      node.path === '/' ? 'text-muted-foreground' : 'text-destructive',
-                    )}
+                  <IconButton
+                    variant={node.path === '/' ? 'ghost' : 'danger'}
+                    size="sm"
+                    tabIndex={-1}
                     aria-label={`Delete ${node.path}`}
                     onClick={(event) => {
                       event.stopPropagation();
                       onDelete(node.path);
                     }}
                     disabled={node.path === '/'}
-                    tabIndex={-1}
-                  >
-                    <Trash2 className="size-4" />
-                  </Button>
+                    className={cn(
+                      node.path === '/'
+                        ? 'text-[var(--agyn-gray)]'
+                        : 'text-[var(--agyn-status-failed)] hover:text-[var(--agyn-status-failed)]',
+                    )}
+                    icon={<Trash2 className="h-4 w-4" />}
+                  />
                 </TooltipTrigger>
                 <TooltipContent side="top">Delete document</TooltipContent>
               </Tooltip>
             </div>
           </div>
-          {isExpandable && isExpanded && node.children.length > 0 && (
-            <SidebarMenuSub role="group" className="gap-1">
+          {isExpandable && isExpanded && node.children.length > 0 ? (
+            <ul role="group" className="space-y-1">
               {node.children.map((child) => renderNode(child, depth + 1))}
-            </SidebarMenuSub>
-          )}
-        </SidebarMenuItem>
+            </ul>
+          ) : null}
+        </li>
       );
     },
     [expandedPaths, handleKeyDown, onAddChild, onDelete, onSelect, onToggle, registerRef, selectedPath, showContentIndicators],
   );
 
   return (
-    <SidebarMenu role="tree" className={className}>
+    <ul role="tree" className={cn('flex flex-col gap-1', className)}>
       {renderNode(tree, 0)}
-    </SidebarMenu>
+    </ul>
   );
 }

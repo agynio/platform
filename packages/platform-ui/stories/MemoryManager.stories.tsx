@@ -4,6 +4,7 @@ import type { Meta, StoryObj } from '@storybook/react';
 import { MemoryManager } from '../src/components/memoryManager/MemoryManager';
 import type { MemoryTree } from '../src/components/memoryManager/utils';
 import { cloneTree } from '../src/components/memoryManager/utils';
+import { withMainLayout } from './decorators/withMainLayout';
 
 const populatedTree: MemoryTree = {
   id: 'root',
@@ -51,10 +52,12 @@ type MemoryManagerStoryArgs = {
 };
 
 const meta: Meta<typeof MemoryManager> = {
-  title: 'Memory/MemoryManager',
+  title: 'Screens/MemoryManager',
   component: MemoryManager,
+  decorators: [withMainLayout],
   parameters: {
     layout: 'fullscreen',
+    selectedMenuItem: 'graph',
   },
   argTypes: {
     initialTree: {
@@ -97,18 +100,19 @@ const InteractiveTemplate = (args: MemoryManagerStoryArgs) => {
   }, [args.initialSelectedPath]);
 
   return (
-    <div className="h-[640px] w-full rounded-xl border border-sidebar-border bg-sidebar p-6 text-sidebar-foreground">
-      <div className="flex h-full flex-col gap-4">
+    <div className="flex h-full min-h-[640px] w-full flex-col gap-4 bg-[var(--agyn-bg-light)] p-6">
+      <div className="flex-1 rounded-[16px] border border-[var(--agyn-border-subtle)] bg-white p-4">
         <MemoryManager
+          className="h-full"
           initialTree={tree}
           initialSelectedPath={selectedPath}
           showContentIndicators={args.showContentIndicators ?? true}
           onTreeChange={(nextTree) => setTree(cloneTree(nextTree))}
           onSelectPath={(path) => setSelectedPath(path)}
         />
-        <div className="rounded-md border border-sidebar-border/60 bg-background/80 p-3 text-xs text-muted-foreground dark:text-muted-foreground/90">
-          Tip: The tree now reuses Sidebar tokens—try the arrow keys to move between documents and watch the animated chevron and ring highlight follow the selection.
-        </div>
+      </div>
+      <div className="rounded-[10px] border border-[var(--agyn-border-subtle)] bg-white px-4 py-3 text-xs text-[var(--agyn-gray)]">
+        Tip: Navigate with ↑/↓ to move between documents and press ⌘/Ctrl + S to save changes instantly.
       </div>
     </div>
   );

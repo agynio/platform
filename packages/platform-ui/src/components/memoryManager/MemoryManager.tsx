@@ -1,9 +1,8 @@
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 
+import { Button } from '../Button';
 import { ScrollArea } from '../ui/scroll-area';
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from '../ui/resizable';
-import { Button } from '../ui/button';
-import { Textarea } from '../ui/textarea';
 import { ConfirmDeleteDialog } from './ConfirmDeleteDialog';
 import { TreeView } from './TreeView';
 import { cn } from '@/lib/utils';
@@ -235,16 +234,20 @@ export function MemoryManager({
     <div className={cn('h-full w-full', className)}>
       <ResizablePanelGroup
         direction="horizontal"
-        className="h-full min-h-[480px] overflow-hidden rounded-lg border border-sidebar-border bg-background"
+        className="h-full min-h-[480px] overflow-hidden rounded-[12px] border border-[var(--agyn-border-subtle)] bg-white"
       >
-        <ResizablePanel defaultSize={32} minSize={20} className="min-w-[260px] border-r border-sidebar-border bg-sidebar text-sidebar-foreground">
-          <div className="flex h-full flex-col gap-3 p-4">
+        <ResizablePanel
+          defaultSize={32}
+          minSize={20}
+          className="min-w-[260px] border-r border-[var(--agyn-border-subtle)] bg-white text-[var(--agyn-dark)]"
+        >
+          <div className="flex h-full flex-col gap-4 px-4 py-5">
             <div>
-              <h2 className="text-sm font-semibold text-sidebar-foreground">Documents</h2>
-              <p className="text-xs text-sidebar-foreground/70">Select a document to edit</p>
+              <h2 className="text-sm font-semibold text-[var(--agyn-dark)]">Documents</h2>
+              <p className="mt-1 text-xs text-[var(--agyn-gray)]">Select a document to edit</p>
             </div>
             <div className="flex-1 overflow-hidden">
-              <ScrollArea className="h-full pr-2">
+              <ScrollArea className="h-full">
                 <TreeView
                   tree={tree}
                   selectedPath={selectedPath}
@@ -258,50 +261,63 @@ export function MemoryManager({
               </ScrollArea>
             </div>
             {treeMessage && (
-              <div className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs text-destructive" role="alert">
+              <div
+                className="rounded-[8px] border border-[var(--agyn-status-failed)]/40 bg-[var(--agyn-status-failed)]/10 px-3 py-2 text-xs text-[var(--agyn-status-failed)]"
+                role="alert"
+              >
                 {treeMessage}
               </div>
             )}
           </div>
         </ResizablePanel>
-        <ResizableHandle withHandle className="bg-sidebar-border/40" />
-        <ResizablePanel defaultSize={68} minSize={40} className="bg-background">
-          <div className="flex h-full flex-col gap-4 p-4">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div className="min-w-0">
-                <h2 id={editorLabelId} className="text-sm font-semibold text-foreground">Document content</h2>
-                <p id={editorDescriptionId} className="truncate text-xs text-muted-foreground">{selectedPath}</p>
-              </div>
-              <div className="flex items-center gap-3">
-                {selectedNode && (
-                  <span
-                    className={cn(
-                      'text-xs font-medium',
-                      unsaved ? 'text-amber-600' : 'text-muted-foreground',
-                    )}
-                  >
-                    {unsaved ? 'Unsaved changes' : 'Saved'}
-                  </span>
-                )}
-                <Button type="button" size="sm" onClick={handleSave} disabled={!unsaved || !selectedNode}>
-                  Save changes
-                </Button>
+        <ResizableHandle withHandle className="bg-[var(--agyn-border-subtle)]" />
+        <ResizablePanel defaultSize={68} minSize={40} className="bg-white">
+          <div className="flex h-full flex-col">
+            <div className="border-b border-[var(--agyn-border-subtle)] px-6 py-5">
+              <div className="flex flex-wrap items-center justify-between gap-4">
+                <div className="min-w-0">
+                  <h2 id={editorLabelId} className="text-sm font-semibold text-[var(--agyn-dark)]">
+                    Document content
+                  </h2>
+                  <p id={editorDescriptionId} className="truncate text-xs text-[var(--agyn-gray)]">
+                    {selectedPath}
+                  </p>
+                </div>
+                <div className="flex items-center gap-3">
+                  {selectedNode ? (
+                    <span
+                      className={cn(
+                        'text-xs font-medium',
+                        unsaved
+                          ? 'text-[var(--agyn-status-pending)]'
+                          : 'text-[var(--agyn-gray)]',
+                      )}
+                    >
+                      {unsaved ? 'Unsaved changes' : 'Saved'}
+                    </span>
+                  ) : null}
+                  <Button type="button" size="sm" onClick={handleSave} disabled={!unsaved || !selectedNode}>
+                    Save changes
+                  </Button>
+                </div>
               </div>
             </div>
             <div className="flex-1">
               {selectedNode ? (
-                <Textarea
-                  value={editorValue}
-                  onChange={(event) => handleEditorChange(event.target.value)}
-                  aria-labelledby={editorLabelId}
-                  aria-describedby={editorDescriptionId}
-                  className="h-full min-h-[320px] w-full resize-none"
-                  placeholder="Write markdown…"
-                  spellCheck="false"
-                />
+                <div className="h-full overflow-auto px-6 py-5">
+                  <textarea
+                    value={editorValue}
+                    onChange={(event) => handleEditorChange(event.target.value)}
+                    aria-labelledby={editorLabelId}
+                    aria-describedby={editorDescriptionId}
+                    className="h-full min-h-[320px] w-full resize-none bg-transparent text-sm leading-relaxed text-[var(--agyn-dark)] focus:outline-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--agyn-blue)]"
+                    placeholder="Write markdown…"
+                    spellCheck="false"
+                  />
+                </div>
               ) : (
-                <div className="flex h-full items-center justify-center rounded-md border border-dashed border-border/70 bg-muted/20 text-sm text-muted-foreground">
-                  Select a document to edit its content.
+                <div className="flex h-full flex-col items-center justify-center gap-2 px-6 text-center text-sm text-[var(--agyn-gray)]">
+                  <p>Select a document to edit its content.</p>
                 </div>
               )}
             </div>
