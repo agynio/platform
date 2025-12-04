@@ -60,6 +60,15 @@ export class ManageFunctionTool extends FunctionTool<typeof ManageInvocationSche
     return context ? ` ${JSON.stringify(context)}` : '';
   }
 
+  private extractMessage(err: unknown): string {
+    if (err instanceof Error) return err.message;
+    if (err && typeof err === 'object' && 'message' in err) {
+      const value = (err as Record<string, unknown>).message;
+      if (typeof value === 'string') return value;
+    }
+    return String(err);
+  }
+
   private sanitizeAlias(raw: string | undefined): string {
     const normalized = (raw ?? '').toLowerCase();
     const withHyphen = normalized.replace(/\s+/g, '-');
@@ -124,14 +133,14 @@ export class ManageFunctionTool extends FunctionTool<typeof ManageInvocationSche
           return this.node.renderWorkerResponse(targetTitle, responseText);
         }
         invocationPromise!.catch((err) => {
-          const msg = err instanceof Error ? err.message : String(err);
+          const msg = this.extractMessage(err);
           this.logger.error(
             `Manage: async send_message failed${this.format({ worker: targetTitle, childThreadId, error: msg })}`,
           );
         });
         return this.node.renderAsyncAcknowledgement(targetTitle);
       } catch (err: unknown) {
-        const msg = err instanceof Error ? err.message : String(err);
+        const msg = this.extractMessage(err);
         this.logger.error(
           `Manage: send_message failed${this.format({ worker: targetTitle, childThreadId, error: msg })}`,
         );
