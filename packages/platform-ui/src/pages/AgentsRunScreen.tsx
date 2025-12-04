@@ -476,13 +476,24 @@ function extractTextFromRawResponse(raw: unknown): string | null {
 }
 
 function extractLlmResponse(event: RunTimelineEvent): string {
+  if (isNonEmptyString(event.errorMessage)) {
+    return event.errorMessage;
+  }
+
   const llmCall = event.llmCall;
   if (!llmCall) return '';
 
   const responseText = llmCall.responseText;
   if (isNonEmptyString(responseText)) return responseText;
 
-  const rawText = extractTextFromRawResponse(llmCall.rawResponse);
+  const rawResponse = llmCall.rawResponse;
+  if (rawResponse && typeof rawResponse === 'object') {
+    const messageCandidate = (rawResponse as { message?: unknown }).message;
+    const messageText = extractTextFromRawResponse(messageCandidate);
+    if (isNonEmptyString(messageText)) return messageText;
+  }
+
+  const rawText = extractTextFromRawResponse(rawResponse);
   if (isNonEmptyString(rawText)) return rawText;
 
   if (Array.isArray(event.attachments)) {

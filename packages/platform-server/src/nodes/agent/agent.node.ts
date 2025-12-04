@@ -567,6 +567,15 @@ export class AgentNode extends Node<AgentStaticConfig> implements OnModuleInit {
         result = last;
       }
     } catch (err) {
+      if (runId) {
+        try {
+          const persistence = this.getPersistenceOrThrow();
+          await persistence.completeRun(runId, 'terminated', []);
+        } catch (completeErr) {
+          this.logger.error(`Failed to mark run ${runId} as terminated after error:`, completeErr);
+        }
+      }
+
       this.logger.error(`Agent invocation error in thread ${thread}:`, err);
       throw err;
     } finally {
