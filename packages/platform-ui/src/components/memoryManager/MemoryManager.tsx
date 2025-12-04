@@ -235,13 +235,13 @@ export function MemoryManager({
     <div className={cn('h-full w-full', className)}>
       <ResizablePanelGroup
         direction="horizontal"
-        className="h-full min-h-[480px] overflow-hidden rounded-lg border border-border bg-background"
+        className="h-full min-h-[480px] overflow-hidden rounded-lg border border-sidebar-border bg-background"
       >
-        <ResizablePanel defaultSize={32} minSize={20} className="min-w-[260px] border-r border-border bg-muted/20">
+        <ResizablePanel defaultSize={32} minSize={20} className="min-w-[260px] border-r border-sidebar-border bg-sidebar text-sidebar-foreground">
           <div className="flex h-full flex-col gap-3 p-4">
             <div>
-              <h2 className="text-sm font-semibold text-foreground">Documents</h2>
-              <p className="text-xs text-muted-foreground">Select a document to edit</p>
+              <h2 className="text-sm font-semibold text-sidebar-foreground">Documents</h2>
+              <p className="text-xs text-sidebar-foreground/70">Select a document to edit</p>
             </div>
             <div className="flex-1 overflow-hidden">
               <ScrollArea className="h-full pr-2">
@@ -264,7 +264,7 @@ export function MemoryManager({
             )}
           </div>
         </ResizablePanel>
-        <ResizableHandle withHandle className="bg-muted" />
+        <ResizableHandle withHandle className="bg-sidebar-border/40" />
         <ResizablePanel defaultSize={68} minSize={40} className="bg-background">
           <div className="flex h-full flex-col gap-4 p-4">
             <div className="flex flex-wrap items-center justify-between gap-3">

@@ -107,7 +107,7 @@ const InteractiveTemplate = (args: MemoryManagerStoryArgs) => {
           onSelectPath={(path) => setSelectedPath(path)}
         />
         <div className="rounded-md border border-sidebar-border/60 bg-background/80 p-3 text-xs text-muted-foreground dark:text-muted-foreground/90">
-          Tip: Use arrow keys to move between documents and notice the design-system highlight tracking the selected tree row.
+          Tip: The tree now reuses Sidebar tokens—try the arrow keys to move between documents and watch the animated chevron and ring highlight follow the selection.
         </div>
       </div>
     </div>
