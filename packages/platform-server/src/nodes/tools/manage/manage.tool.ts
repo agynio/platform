@@ -56,6 +56,10 @@ export class ManageFunctionTool extends FunctionTool<typeof ManageInvocationSche
     return this.persistence ?? this.injectedPersistence;
   }
 
+  private format(context?: Record<string, unknown>): string {
+    return context ? ` ${JSON.stringify(context)}` : '';
+  }
+
   private sanitizeAlias(raw: string | undefined): string {
     const normalized = (raw ?? '').toLowerCase();
     const withHyphen = normalized.replace(/\s+/g, '-');
@@ -120,19 +124,17 @@ export class ManageFunctionTool extends FunctionTool<typeof ManageInvocationSche
           return this.node.renderWorkerResponse(targetTitle, responseText);
         }
         invocationPromise!.catch((err) => {
-          this.logger.error('Manage: async send_message failed', {
-            worker: targetTitle,
-            childThreadId,
-            error: (err as { message?: string })?.message || String(err),
-          });
+          const msg = err instanceof Error ? err.message : String(err);
+          this.logger.error(
+            `Manage: async send_message failed${this.format({ worker: targetTitle, childThreadId, error: msg })}`,
+          );
         });
         return this.node.renderAsyncAcknowledgement(targetTitle);
       } catch (err: unknown) {
-        this.logger.error('Manage: send_message failed', {
-          worker: targetTitle,
-          childThreadId,
-          error: (err as { message?: string })?.message || String(err),
-        });
+        const msg = err instanceof Error ? err.message : String(err);
+        this.logger.error(
+          `Manage: send_message failed${this.format({ worker: targetTitle, childThreadId, error: msg })}`,
+        );
         if (mode !== 'sync' && invocationPromise) {
           invocationPromise.catch(() => {});
         }
