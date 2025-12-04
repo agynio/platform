@@ -128,5 +128,11 @@ export const InteractivePlayground: Story = {
     const canvas = within(canvasElement);
     const addButton = await canvas.findByRole('button', { name: /Add subdocument/i });
     await userEvent.click(addButton);
+    const nameField = await canvas.findByLabelText(/name/i);
+    await userEvent.clear(nameField);
+    await userEvent.type(nameField, 'new-subdocument');
+    const createButton = await canvas.findByRole('button', { name: /^create$/i });
+    await userEvent.click(createButton);
+    await canvas.findByText('new-subdocument');
   },
 };
