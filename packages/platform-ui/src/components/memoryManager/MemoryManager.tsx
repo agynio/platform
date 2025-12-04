@@ -3,8 +3,10 @@ import { Trash2 } from 'lucide-react';
 
 import { Button } from '../Button';
 import { IconButton } from '../IconButton';
-import { ScrollArea } from '../ui/scroll-area';
+import { Label } from '../ui/label';
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from '../ui/resizable';
+import { ScrollArea } from '../ui/scroll-area';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { Textarea } from '../ui/textarea';
 import { Tooltip, TooltipContent, TooltipTrigger } from '../ui/tooltip';
 import { ConfirmDeleteDialog } from './ConfirmDeleteDialog';
@@ -36,6 +38,14 @@ type MemoryManagerProps = {
   showContentIndicators?: boolean;
 };
 
+type MemoryNodeOption = {
+  path: string;
+  name: string;
+};
+
+const formatMemoryNodeLabel = (option: MemoryNodeOption): string =>
+  option.path === '/' ? 'Root (/)' : `${option.name} (${option.path})`;
+
 export function MemoryManager({
   initialTree,
   className,
@@ -54,6 +64,10 @@ export function MemoryManager({
   const [pendingCreateParent, setPendingCreateParent] = useState<string | null>(null);
   const [pendingDeletePath, setPendingDeletePath] = useState<string | null>(null);
   const selectedPathRef = useRef<string>(defaultSelectedPath);
+  const [rootPath, setRootPath] = useState<string>(() => normalizePath(initialTree.path));
+  const rootPathRef = useRef<string>(normalizePath(initialTree.path));
+  const rootSelectorLabelId = useId();
+  const rootSelectorTriggerId = useId();
 
   const handleSelectPath = useCallback(
     (path: string) => {
@@ -69,6 +83,10 @@ export function MemoryManager({
   }, [selectedPath]);
 
   useEffect(() => {
+    rootPathRef.current = rootPath;
+  }, [rootPath]);
+
+  useEffect(() => {
     const nextTree = cloneTree(initialTree);
     setTree(nextTree);
     const currentPath = selectedPathRef.current;
@@ -76,6 +94,11 @@ export function MemoryManager({
       const preferred = normalizePath(initialSelectedPath ?? initialTree.path);
       const fallback = pathExists(nextTree, preferred) ? preferred : normalizePath(initialTree.path);
       handleSelectPath(fallback);
+    }
+    const currentRoot = rootPathRef.current;
+    if (!pathExists(nextTree, currentRoot)) {
+      const fallbackSource = pathExists(nextTree, initialTree.path) ? initialTree.path : nextTree.path;
+      setRootPath(normalizePath(fallbackSource));
     }
   }, [handleSelectPath, initialSelectedPath, initialTree]);
 
@@ -85,6 +108,30 @@ export function MemoryManager({
   }, [handleSelectPath, initialSelectedPath]);
 
   const selectedNode = useMemo<MemoryNode | null>(() => findNodeByPath(tree, selectedPath), [tree, selectedPath]);
+
+  const memoryNodeOptions = useMemo<MemoryNodeOption[]>(() => {
+    const nodes: MemoryNodeOption[] = [];
+    const traverse = (node: MemoryNode) => {
+      const normalized = normalizePath(node.path);
+      nodes.push({ path: normalized, name: normalized === '/' ? 'Root' : node.name });
+      for (const child of node.children) {
+        traverse(child);
+      }
+    };
+    traverse(tree);
+    return nodes;
+  }, [tree]);
+
+  const normalizedRootPath = normalizePath(rootPath);
+
+  const currentRootOption =
+    memoryNodeOptions.find((option) => option.path === normalizedRootPath) ??
+    memoryNodeOptions[0] ?? {
+      path: normalizePath(tree.path),
+      name: 'Root',
+    };
+
+  const displayedTree = useMemo<MemoryTree>(() => findNodeByPath(tree, normalizedRootPath) ?? tree, [normalizedRootPath, tree]);
 
   useEffect(() => {
     setExpandedPaths((previous) => {
@@ -99,6 +146,41 @@ export function MemoryManager({
       return changed ? next : previous;
     });
   }, [selectedPath]);
+
+  useEffect(() => {
+    if (!pathExists(tree, normalizedRootPath)) {
+      setRootPath(normalizePath(tree.path));
+      return;
+    }
+
+    setExpandedPaths((previous) => {
+      if (previous.has(normalizedRootPath)) {
+        return previous;
+      }
+      const next = new Set(previous);
+      next.add(normalizedRootPath);
+      return next;
+    });
+
+    const isWithinRoot = (path: string | null) => {
+      if (!path) return true;
+      const normalizedTarget = normalizePath(path);
+      if (normalizedRootPath === '/') return true;
+      return normalizedTarget === normalizedRootPath || normalizedTarget.startsWith(`${normalizedRootPath}/`);
+    };
+
+    if (!isWithinRoot(selectedPathRef.current)) {
+      handleSelectPath(normalizedRootPath);
+    }
+
+    if (!isWithinRoot(pendingCreateParent)) {
+      setPendingCreateParent(null);
+    }
+
+    if (!isWithinRoot(pendingDeletePath)) {
+      setPendingDeletePath(null);
+    }
+  }, [handleSelectPath, normalizedRootPath, pendingCreateParent, pendingDeletePath, tree]);
 
   useEffect(() => {
     const nextContent = selectedNode?.content ?? '';
@@ -254,14 +336,48 @@ export function MemoryManager({
       <ResizablePanelGroup direction="horizontal" className="h-full min-h-[480px] overflow-hidden">
         <ResizablePanel defaultSize={32} minSize={20} className="min-w-[260px] bg-white">
           <div className="flex h-full flex-col bg-white">
+            <div className="border-b border-[var(--agyn-border-subtle)] px-6 py-4">
+              <Label
+                id={rootSelectorLabelId}
+                htmlFor={rootSelectorTriggerId}
+                className="text-xs font-semibold uppercase tracking-[0.08em] text-[var(--agyn-text-subtle)]"
+              >
+                Memory node
+              </Label>
+              <Select value={normalizedRootPath} onValueChange={(value) => setRootPath(normalizePath(value))}>
+                <SelectTrigger
+                  id={rootSelectorTriggerId}
+                  aria-labelledby={rootSelectorLabelId}
+                  size="default"
+                  className="mt-2 border-[var(--agyn-border-subtle)] bg-white text-left"
+                >
+                  <SelectValue placeholder="Select memory node">
+                    {currentRootOption ? (
+                      <span className="text-sm font-medium text-[var(--agyn-dark)]">
+                        {formatMemoryNodeLabel(currentRootOption)}
+                      </span>
+                    ) : null}
+                  </SelectValue>
+                </SelectTrigger>
+                <SelectContent className="min-w-[240px]">
+                  {memoryNodeOptions.map((option) => (
+                    <SelectItem key={option.path} value={option.path}>
+                      {formatMemoryNodeLabel(option)}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
             <div className="flex h-[66px] flex-col justify-center gap-1 border-b border-[var(--agyn-border-subtle)] px-6">
               <h2 className="text-sm font-semibold text-[var(--agyn-dark)]">Documents</h2>
-              <p className="text-xs text-[var(--agyn-text-subtle)]">Select a document to edit</p>
+              <p className="text-xs text-[var(--agyn-text-subtle)]">
+                {normalizedRootPath === '/' ? 'Viewing all documents' : `Viewing ${normalizedRootPath}`}
+              </p>
             </div>
             <ScrollArea className="flex-1">
               <div className="px-2 py-3">
                 <TreeView
-                  tree={tree}
+                  tree={displayedTree}
                   selectedPath={selectedPath}
                   expandedPaths={expandedPaths}
                   onSelect={handleSelectPath}

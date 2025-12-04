@@ -120,12 +120,18 @@ export const InteractivePlayground: Story = {
     docs: {
       description: {
         story:
-          'Use the add icon on any tree node to open the subdocument dialog and the document header delete action to preview the destructive confirmation.',
+          'Use the Memory node selector above the tree to scope the view, then use the add icon on any tree node to open the subdocument dialog and the document header delete action to preview the destructive confirmation.',
       },
     },
   },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
+    const nodeSelector = await canvas.findByLabelText(/memory node/i);
+    await userEvent.click(nodeSelector);
+    const portal = within(canvasElement.ownerDocument.body);
+    const notesOption = await portal.findByRole('option', { name: /^notes \(\/notes\)$/i });
+    await userEvent.click(notesOption);
+    await canvas.findByText('Viewing /notes');
     const addButton = await canvas.findByRole('button', { name: /Add subdocument/i });
     await userEvent.click(addButton);
     const nameField = await canvas.findByLabelText(/name/i);
