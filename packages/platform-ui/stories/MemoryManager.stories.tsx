@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { userEvent, within } from '@storybook/testing-library';
+import { userEvent, waitForElementToBeRemoved, within } from '@storybook/testing-library';
 import type { Meta, StoryObj } from '@storybook/react';
 
 import { MemoryManager } from '../src/components/memoryManager/MemoryManager';
@@ -149,7 +149,7 @@ export const InteractivePlayground: Story = {
     docs: {
       description: {
         story:
-          'Use the Memory cell selector under the Documents header to scope the tree, then use the add icon on any tree node to open the subdocument dialog and the document header delete action to preview the destructive confirmation.',
+          'Use the Memory cell selector under the Documents header to scope the tree, then use the add icon on any tree node to open the subdocument dialog and the document header delete action to preview the destructive confirmation and design-system buttons.',
       },
     },
   },
@@ -169,5 +169,15 @@ export const InteractivePlayground: Story = {
     const createButton = await canvas.findByRole('button', { name: /^create$/i });
     await userEvent.click(createButton);
     await canvas.findByText('new-subdocument');
+
+    const newNode = await canvas.findByRole('treeitem', { name: /new-subdocument/i });
+    await userEvent.click(newNode);
+    const deleteButton = await canvas.findByRole('button', { name: /delete document/i });
+    await userEvent.click(deleteButton);
+    const dialog = await within(canvasElement.ownerDocument.body).findByRole('dialog', { name: /delete memory node/i });
+    await within(dialog).findByRole('button', { name: /^cancel$/i });
+    await within(dialog).findByRole('button', { name: /^delete$/i });
+    await userEvent.click(within(dialog).getByRole('button', { name: /^cancel$/i }));
+    await waitForElementToBeRemoved(() => within(canvasElement.ownerDocument.body).queryByRole('dialog', { name: /delete memory node/i }));
   },
 };
