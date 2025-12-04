@@ -11,7 +11,7 @@ import {
 import { Inject, Injectable, Logger, Scope } from '@nestjs/common';
 import { LLMContext, LLMContextState, LLMMessage, LLMState } from '../types';
 import type { LLMCallUsageMetrics, ToolCallRecord } from '../../events/run-events.service';
-import { RunEventsService } from '../../events/run-events.service';
+import { RunEventsService, DEFAULT_CONTEXT_PAGE_SIZE } from '../../events/run-events.service';
 import { EventsBusService } from '../../events/events-bus.service';
 import { RunEventStatus, Prisma } from '@prisma/client';
 import { toPrismaJsonValue } from '../services/messages.serialization';
@@ -22,6 +22,7 @@ import {
   contextItemInputFromSystem,
 } from '../services/context-items.utils';
 import type { ContextItemInput } from '../services/context-items.utils';
+
 
 type SequenceEntry =
   | { kind: 'system'; message: SystemMessage }
@@ -98,7 +99,12 @@ export class CallModelLLMReducer extends Reducer<LLMState, LLMContext> {
     }
 
     const sequence = this.buildSequence(system, summaryMsg, memoryResult, state.messages);
-    const { contextItemIds, context: nextContext, newContextCount } = await this.resolveContextIds(
+    const {
+      contextItemIds,
+      context: nextContext,
+      newContextCount,
+      newConversationIds,
+    } = await this.resolveContextIds(
       context,
       sequence,
       summaryText,
@@ -106,6 +112,18 @@ export class CallModelLLMReducer extends Reducer<LLMState, LLMContext> {
     const input = sequence.map((entry) => entry.message);
 
     const nodeId = ctx.callerAgent.getAgentNodeId?.() ?? null;
+    const contextWindow = this.buildContextWindow(contextItemIds, newConversationIds, DEFAULT_CONTEXT_PAGE_SIZE);
+    const baseMetadata = {
+      summaryIncluded: Boolean(summaryMsg),
+      memoryPlacement: memoryResult?.msg ? memoryResult.place : null,
+    } as const;
+    const startMetadata = {
+      ...baseMetadata,
+      contextWindow,
+    };
+
+    let newContextItemIds = [...contextWindow.newIds];
+
     const llmEvent = await this.runEvents.startLLMCall({
       runId: ctx.runId,
       threadId: ctx.threadId,
@@ -114,8 +132,7 @@ export class CallModelLLMReducer extends Reducer<LLMState, LLMContext> {
       contextItemIds,
       newContextItemCount: newContextCount,
       metadata: {
-        summaryIncluded: Boolean(summaryMsg),
-        memoryPlacement: memoryResult?.msg ? memoryResult.place : null,
+        ...startMetadata,
       },
     });
     await this.eventsBus.publishEvent(llmEvent.id, 'append');
@@ -166,6 +183,12 @@ export class CallModelLLMReducer extends Reducer<LLMState, LLMContext> {
         messageIds: [...nextContext.messageIds, assistantContextId],
       };
 
+      newContextItemIds = [...newContextItemIds, assistantContextId];
+      const finalMetadata = {
+        ...baseMetadata,
+        contextWindow: this.buildContextWindow(contextItemIds, newContextItemIds, DEFAULT_CONTEXT_PAGE_SIZE),
+      };
+
       await this.runEvents.completeLLMCall({
         eventId: llmEvent.id,
         status: RunEventStatus.success,
@@ -174,6 +197,7 @@ export class CallModelLLMReducer extends Reducer<LLMState, LLMContext> {
         rawResponse,
         toolCalls,
         usage: usageMetrics,
+        metadataPatch: finalMetadata,
       });
       await this.eventsBus.publishEvent(llmEvent.id, 'update');
 
@@ -260,10 +284,16 @@ export class CallModelLLMReducer extends Reducer<LLMState, LLMContext> {
     context: LLMContextState,
     sequence: SequenceEntry[],
     summaryText: string | null,
-  ): Promise<{ contextItemIds: string[]; context: LLMContextState; newContextCount: number }> {
+  ): Promise<{
+    contextItemIds: string[];
+    context: LLMContextState;
+    newContextCount: number;
+    newConversationIds: string[];
+  }> {
     const pending: Array<{ input: ContextItemInput; assign: (id: string) => void; isConversation?: boolean }> = [];
     let conversationIndex = 0;
     const initialConversationCount = context.messageIds.length;
+    const newConversationIds: string[] = [];
 
     if (!summaryText) {
       context.summary = undefined;
@@ -350,6 +380,7 @@ export class CallModelLLMReducer extends Reducer<LLMState, LLMContext> {
         pending[index].assign(id);
         if (pending[index].isConversation && typeof id === 'string' && id.length > 0) {
           newContextCount += 1;
+          newConversationIds.push(id);
         }
       });
     }
@@ -380,7 +411,7 @@ export class CallModelLLMReducer extends Reducer<LLMState, LLMContext> {
       }
     }
 
-    return { contextItemIds, context, newContextCount };
+    return { contextItemIds, context, newContextCount, newConversationIds };
   }
 
   private collectContextId(params: {
@@ -484,5 +515,44 @@ export class CallModelLLMReducer extends Reducer<LLMState, LLMContext> {
     }
 
     return null;
+  }
+
+  private buildContextWindow(
+    contextItemIds: string[],
+    newIds: string[],
+    pageSize: number,
+  ): { newIds: string[]; totalCount: number; prevCursorId: string | null; pageSize: number } {
+    const normalizedNewIds = Array.isArray(newIds)
+      ? newIds.filter((id): id is string => typeof id === 'string' && id.length > 0)
+      : [];
+
+    const uniqueIds = new Set<string>();
+    for (const id of contextItemIds) {
+      if (typeof id === 'string' && id.length > 0) uniqueIds.add(id);
+    }
+    for (const id of normalizedNewIds) {
+      uniqueIds.add(id);
+    }
+
+    let prevCursorId: string | null = null;
+    const contextIndices = normalizedNewIds
+      .map((id) => contextItemIds.indexOf(id))
+      .filter((index) => index >= 0);
+
+    if (contextIndices.length > 0) {
+      const firstIndex = Math.min(...contextIndices);
+      if (firstIndex > 0) {
+        prevCursorId = contextItemIds[firstIndex - 1] ?? null;
+      }
+    } else if (contextItemIds.length > 0) {
+      prevCursorId = contextItemIds[contextItemIds.length - 1] ?? null;
+    }
+
+    return {
+      newIds: normalizedNewIds,
+      totalCount: uniqueIds.size,
+      prevCursorId,
+      pageSize: Math.max(1, Number.isFinite(pageSize) ? Math.floor(pageSize) : DEFAULT_CONTEXT_PAGE_SIZE),
+    };
   }
 }

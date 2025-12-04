@@ -16,7 +16,7 @@ import {
   Query,
   ServiceUnavailableException,
 } from '@nestjs/common';
-import { IsBooleanString, IsIn, IsInt, IsOptional, IsString, IsISO8601, Max, Min, ValidateIf } from 'class-validator';
+import { IsBooleanString, IsIn, IsInt, IsOptional, IsString, IsISO8601, IsUUID, Max, Min, ValidateIf } from 'class-validator';
 import { AgentsPersistenceService } from './agents.persistence.service';
 import { Transform, Expose } from 'class-transformer';
 import type { RunEventStatus, RunEventType, RunMessageType, ThreadStatus } from '@prisma/client';
@@ -102,6 +102,19 @@ export class RunEventOutputQueryDto {
   @IsOptional()
   @IsIn(['asc', 'desc'])
   order?: 'asc' | 'desc';
+}
+
+export class RunEventContextQueryDto {
+  @IsOptional()
+  @IsUUID('4')
+  beforeId?: string;
+
+  @IsOptional()
+  @Transform(({ value }) => (value !== undefined ? parseInt(value, 10) : undefined))
+  @IsInt()
+  @Min(1)
+  @Max(100)
+  limit?: number;
 }
 
 export class ListThreadsQueryDto {
@@ -509,6 +522,20 @@ export class AgentsThreadsController {
       limit: query.limit,
       order: query.order,
       cursor,
+    });
+  }
+
+  @Get('runs/:runId/events/:eventId/context')
+  async listRunEventContext(
+    @Param('runId') runId: string,
+    @Param('eventId') eventId: string,
+    @Query() query: RunEventContextQueryDto,
+  ) {
+    return this.runEvents.listEventContextPage({
+      runId,
+      eventId,
+      beforeId: query.beforeId,
+      limit: query.limit,
     });
   }
 

@@ -103,6 +103,22 @@ describe('CallModelLLMReducer usage metrics', () => {
         contextItemIds: expect.arrayContaining(['ctx-system-1', 'ctx-user-new']),
       }),
     );
+
+    const startArgs = runEvents.startLLMCall.mock.calls[0]?.[0];
+    expect(startArgs?.metadata?.contextWindow).toEqual({
+      newIds: ['ctx-user-new'],
+      totalCount: 2,
+      prevCursorId: 'ctx-system-1',
+      pageSize: 10,
+    });
+
+    const completeArgs = runEvents.completeLLMCall.mock.calls[0]?.[0];
+    expect(completeArgs?.metadataPatch?.contextWindow).toEqual({
+      newIds: ['ctx-user-new', 'ctx-assistant'],
+      totalCount: 3,
+      prevCursorId: 'ctx-system-1',
+      pageSize: 10,
+    });
   });
 
   it('ignores summary and memory additions when counting new context items', async () => {
@@ -160,5 +176,21 @@ describe('CallModelLLMReducer usage metrics', () => {
         contextItemIds: expect.arrayContaining(['ctx-summary-new', 'ctx-memory-new', 'ctx-user-tail']),
       }),
     );
+
+    const startArgs = runEvents.startLLMCall.mock.calls[0]?.[0];
+    expect(startArgs?.metadata?.contextWindow).toEqual({
+      newIds: ['ctx-user-tail'],
+      totalCount: 5,
+      prevCursorId: 'ctx-convo-existing',
+      pageSize: 10,
+    });
+
+    const completeArgs = runEvents.completeLLMCall.mock.calls[0]?.[0];
+    expect(completeArgs?.metadataPatch?.contextWindow).toEqual({
+      newIds: ['ctx-user-tail', 'ctx-assistant-latest'],
+      totalCount: 6,
+      prevCursorId: 'ctx-convo-existing',
+      pageSize: 10,
+    });
   });
 });

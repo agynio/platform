@@ -1,5 +1,6 @@
 import { http, asData } from '@/api/http';
 import type {
+  ContextItem,
   RunMessageItem,
   RunMeta,
   RunTimelineEventsResponse,
@@ -60,6 +61,22 @@ export const runs = {
   terminate: (runId: string) =>
     asData<{ ok: boolean }>(
       http.post<{ ok: boolean }>(`/api/agents/runs/${encodeURIComponent(runId)}/terminate`, {}),
+    ),
+  eventContext: (
+    runId: string,
+    eventId: string,
+    params?: { beforeId?: string | null; limit?: number },
+  ) =>
+    asData<{ items: ContextItem[]; nextBeforeId: string | null; totalCount: number }>(
+      http.get<{ items: ContextItem[]; nextBeforeId: string | null; totalCount: number }>(
+        `/api/agents/runs/${encodeURIComponent(runId)}/events/${encodeURIComponent(eventId)}/context`,
+        {
+          params: {
+            ...(params?.beforeId ? { beforeId: params.beforeId } : {}),
+            ...(params?.limit ? { limit: params.limit } : {}),
+          },
+        },
+      ),
     ),
 };
 

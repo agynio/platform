@@ -7,6 +7,8 @@ import { MemoryRouter } from 'react-router-dom';
 import { RunTimelineEventDetails } from '../RunTimelineEventDetails';
 import * as contextItemsModule from '@/api/hooks/contextItems';
 import type { UseContextItemsResult } from '@/api/hooks/contextItems';
+import * as contextItemsApi from '@/api/modules/contextItems';
+import * as runsModule from '@/api/modules/runs';
 import type { ContextItem, RunTimelineEvent } from '@/api/types/agents';
 const useToolOutputStreamingMock = vi.fn();
 
@@ -859,6 +861,126 @@ describe('RunTimelineEventDetails', () => {
       expect(within(contextRegion).queryByText('Metadata')).toBeNull();
     } finally {
       useContextItemsSpy.mockRestore();
+    }
+  });
+
+  it('renders paginated context window metadata and loads older items on demand', async () => {
+    const user = userEvent.setup();
+    const useContextItemsSpy = vi.spyOn(contextItemsModule, 'useContextItems').mockReturnValue({
+      items: [],
+      total: 0,
+      loadedCount: 0,
+      targetCount: 0,
+      hasMore: false,
+      isInitialLoading: false,
+      isFetching: false,
+      error: null,
+      loadMore: vi.fn(),
+    });
+
+    const newContextItems: ContextItem[] = [
+      {
+        id: 'ctx-3',
+        role: 'user',
+        contentText: 'Recent user prompt',
+        contentJson: null,
+        metadata: null,
+        sizeBytes: 120,
+        createdAt: '2024-01-01T00:03:00.000Z',
+      },
+      {
+        id: 'ctx-4',
+        role: 'assistant',
+        contentText: 'Assistant follow-up',
+        contentJson: null,
+        metadata: null,
+        sizeBytes: 160,
+        createdAt: '2024-01-01T00:04:00.000Z',
+      },
+    ];
+
+    const olderItems: ContextItem[] = [
+      {
+        id: 'ctx-1',
+        role: 'system',
+        contentText: 'Global system prompt',
+        contentJson: null,
+        metadata: null,
+        sizeBytes: 80,
+        createdAt: '2024-01-01T00:00:00.000Z',
+      },
+      {
+        id: 'ctx-2',
+        role: 'user',
+        contentText: 'Earlier user question',
+        contentJson: null,
+        metadata: null,
+        sizeBytes: 110,
+        createdAt: '2024-01-01T00:01:00.000Z',
+      },
+    ];
+
+    const getManySpy = vi.spyOn(contextItemsApi.contextItems, 'getMany').mockResolvedValue(newContextItems);
+    const eventContextSpy = vi
+      .spyOn(runsModule.runs, 'eventContext')
+      .mockResolvedValue({ items: olderItems, nextBeforeId: null, totalCount: 4 });
+
+    try {
+      const event = buildEvent({
+        type: 'llm_call',
+        metadata: {
+          contextWindow: {
+            newIds: ['ctx-3', 'ctx-4'],
+            totalCount: 4,
+            prevCursorId: 'ctx-2',
+            pageSize: 2,
+          },
+        },
+        llmCall: {
+          provider: 'openai',
+          model: 'gpt-window',
+          temperature: null,
+          topP: null,
+          stopReason: null,
+          contextItemIds: ['ctx-1', 'ctx-2', 'ctx-3'],
+          newContextItemCount: 1,
+          responseText: null,
+          rawResponse: null,
+          toolCalls: [],
+        },
+        toolExecution: undefined,
+      });
+
+      renderDetails(event);
+
+      await waitFor(() => {
+        expect(getManySpy).toHaveBeenCalledWith(['ctx-3', 'ctx-4']);
+      });
+
+      const contextRegion = await screen.findByTestId('llm-context-scroll');
+      expect(within(contextRegion).getByText('Recent user prompt')).toBeInTheDocument();
+      expect(within(contextRegion).getByText('Assistant follow-up')).toBeInTheDocument();
+
+      const newBadges = within(contextRegion).getAllByText('New');
+      expect(newBadges).toHaveLength(2);
+
+      const loadButton = within(contextRegion).getByRole('button', { name: /Load older context/ });
+      expect(loadButton).toHaveTextContent('Load older context (2 of 4)');
+
+      await user.click(loadButton);
+
+      await waitFor(() => {
+        expect(eventContextSpy).toHaveBeenCalledWith('run-1', 'evt-1', { beforeId: 'ctx-2', limit: 2 });
+      });
+
+      expect(within(contextRegion).getByText('Global system prompt')).toBeInTheDocument();
+      expect(within(contextRegion).getByText('Earlier user question')).toBeInTheDocument();
+      expect(within(contextRegion).getAllByText('New')).toHaveLength(2);
+      expect(within(contextRegion).queryByRole('button', { name: /Load older context/ })).toBeNull();
+    } finally {
+      useContextItemsSpy.mockRestore();
+      getManySpy.mockRestore();
+      eventContextSpy.mockRestore();
     }
   });
 

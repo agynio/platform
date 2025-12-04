@@ -1,4 +1,4 @@
-import { Inject, Injectable, Logger } from '@nestjs/common';
+import { Inject, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import {
   AttachmentKind,
   ContextItemRole,
@@ -20,6 +20,8 @@ import { ContextItemInput, NormalizedContextItem, normalizeContextItems, upsertN
 type Tx = PrismaClient | Prisma.TransactionClient;
 
 const MAX_INLINE_TEXT = 32_768;
+
+export const DEFAULT_CONTEXT_PAGE_SIZE = 10;
 
 const RUN_EVENT_INCLUDE = {
   eventMessage: {
@@ -984,6 +986,85 @@ export class RunEventsService {
       if (found) ordered.push(found);
     }
     return ordered;
+  }
+
+  async listEventContextPage(args: {
+    runId: string;
+    eventId: string;
+    beforeId?: string | null;
+    limit?: number | null;
+  }): Promise<{ items: SerializedContextItem[]; nextBeforeId: string | null; totalCount: number }> {
+    const { runId, eventId } = args;
+    const event = await this.prisma.runEvent.findFirst({
+      where: { id: eventId, runId },
+      select: {
+        metadata: true,
+        llmCall: {
+          select: {
+            contextItemIds: true,
+          },
+        },
+      },
+    });
+
+    if (!event || !event.llmCall) {
+      throw new NotFoundException('event_not_found');
+    }
+
+    const contextItemIds = Array.isArray(event.llmCall.contextItemIds) ? [...event.llmCall.contextItemIds] : [];
+
+    const plainMetadata = this.toPlainJson(event.metadata ?? null);
+    let metadataNewIds: string[] = [];
+    let metadataTotalCount: number | null = null;
+    if (plainMetadata && typeof plainMetadata === 'object' && !Array.isArray(plainMetadata)) {
+      const contextWindow = (plainMetadata as Record<string, unknown>).contextWindow;
+      if (contextWindow && typeof contextWindow === 'object' && 'newIds' in contextWindow) {
+        const candidate = (contextWindow as Record<string, unknown>).newIds;
+        if (Array.isArray(candidate)) {
+          metadataNewIds = candidate.filter((id): id is string => typeof id === 'string' && id.length > 0);
+        }
+        const candidateTotal = (contextWindow as Record<string, unknown>).totalCount;
+        if (typeof candidateTotal === 'number' && Number.isFinite(candidateTotal) && candidateTotal >= 0) {
+          metadataTotalCount = Math.floor(candidateTotal);
+        }
+      }
+    }
+
+    const totalCount = (() => {
+      const unique = new Set<string>();
+      for (const id of contextItemIds) {
+        if (typeof id === 'string' && id.length > 0) unique.add(id);
+      }
+      for (const id of metadataNewIds) unique.add(id);
+      return Math.max(metadataTotalCount ?? 0, unique.size);
+    })();
+
+    if (contextItemIds.length === 0) {
+      return { items: [], nextBeforeId: null, totalCount };
+    }
+
+    const rawLimit = typeof args.limit === 'number' && Number.isFinite(args.limit) ? Math.floor(args.limit) : DEFAULT_CONTEXT_PAGE_SIZE;
+    const limit = Math.max(1, Math.min(100, rawLimit));
+    const beforeId = args.beforeId ?? null;
+
+    let endExclusive = contextItemIds.length;
+    if (beforeId) {
+      const index = contextItemIds.indexOf(beforeId);
+      if (index >= 0) {
+        endExclusive = index + 1;
+      }
+    }
+
+    const startIndex = Math.max(0, endExclusive - limit);
+    const windowIds = contextItemIds.slice(startIndex, endExclusive);
+    const items = windowIds.length > 0 ? await this.getContextItems(windowIds) : [];
+    const nextBeforeId = startIndex > 0 ? contextItemIds[startIndex - 1] ?? null : null;
+
+    return {
+      items,
+      nextBeforeId,
+      totalCount,
+    };
   }
 
   private async createEvent(

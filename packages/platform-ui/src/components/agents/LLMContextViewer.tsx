@@ -1,14 +1,31 @@
-import { useEffect, useMemo, useRef } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Badge } from '@/components/Badge';
 import { useContextItems } from '@/api/hooks/contextItems';
+import { contextItems } from '@/api/modules/contextItems';
 import type { ContextItem } from '@/api/types/agents';
 
-type LLMContextViewerProps = {
-  ids: readonly string[];
-  highlightLastCount?: number;
+type ViewerBaseProps = {
   onItemsRendered?: (items: ContextItem[]) => void;
   onBeforeLoadMore?: () => void;
 };
+
+type LegacyViewerProps = ViewerBaseProps & {
+  mode?: 'legacy';
+  ids: readonly string[];
+  highlightLastCount?: number;
+};
+
+type WindowedViewerProps = ViewerBaseProps & {
+  mode: 'windowed';
+  initialIds: readonly string[];
+  highlightIds: readonly string[];
+  totalCount: number;
+  prevCursorId: string | null;
+  pageSize: number;
+  fetchOlder: (beforeId: string | null, limit: number) => Promise<{ items: ContextItem[]; nextBeforeId: string | null }>;
+};
+
+type LLMContextViewerProps = LegacyViewerProps | WindowedViewerProps;
 
 function formatBytes(value: number): string {
   if (!Number.isFinite(value) || value <= 0) return '0 B';
@@ -44,7 +61,14 @@ const ROLE_COLORS: Record<ContextItem['role'], string> = {
 
 const HIGHLIGHT_ROLES: ReadonlySet<ContextItem['role']> = new Set(['user', 'assistant', 'tool']);
 
-export function LLMContextViewer({ ids, highlightLastCount, onItemsRendered, onBeforeLoadMore }: LLMContextViewerProps) {
+export function LLMContextViewer(props: LLMContextViewerProps) {
+  if (props.mode === 'windowed') {
+    return <WindowedContextViewer {...props} />;
+  }
+  return <LegacyContextViewer {...props} />;
+}
+
+function LegacyContextViewer({ ids, highlightLastCount, onItemsRendered, onBeforeLoadMore }: LegacyViewerProps) {
   const { items, hasMore, isInitialLoading, isFetching, error, loadMore, total, targetCount } = useContextItems(ids, {
     initialCount: 10,
   });
@@ -132,6 +156,166 @@ export function LLMContextViewer({ ids, highlightLastCount, onItemsRendered, onB
       {!!error && !isInitialLoading && <div className="text-[11px] text-red-600">Failed to load context items</div>}
       {isFetching && !isInitialLoading && <div className="text-[11px] text-gray-500">Loading…</div>}
       {!error && !isFetching && !isInitialLoading && items.length === 0 && displayedCount > 0 && (
+        <div className="text-[11px] text-gray-500">No context items available.</div>
+      )}
+    </div>
+  );
+}
+
+function WindowedContextViewer({
+  initialIds,
+  highlightIds,
+  totalCount,
+  prevCursorId,
+  pageSize,
+  fetchOlder,
+  onItemsRendered,
+  onBeforeLoadMore,
+}: WindowedViewerProps) {
+  const [items, setItems] = useState<ContextItem[]>([]);
+  const [cursor, setCursor] = useState<string | null>(prevCursorId);
+  const [isInitialLoading, setIsInitialLoading] = useState<boolean>(false);
+  const [isFetching, setIsFetching] = useState<boolean>(false);
+  const [error, setError] = useState<unknown>(null);
+  const initializedRef = useRef(false);
+  const renderedCallbackRef = useRef<((items: ContextItem[]) => void) | undefined>(undefined);
+
+  const highlightSet = useMemo(() => {
+    if (!Array.isArray(highlightIds) || highlightIds.length === 0) return new Set<string>();
+    return new Set(highlightIds.filter((id): id is string => typeof id === 'string' && id.length > 0));
+  }, [highlightIds]);
+
+  useEffect(() => {
+    setCursor(prevCursorId ?? null);
+  }, [prevCursorId]);
+
+  useEffect(() => {
+    let cancelled = false;
+    setItems([]);
+    setError(null);
+    initializedRef.current = false;
+    setIsInitialLoading(initialIds.length > 0);
+
+    if (initialIds.length === 0) {
+      initializedRef.current = true;
+      setIsInitialLoading(false);
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    (async () => {
+      try {
+        const fetched = await contextItems.getMany(
+          initialIds.filter((id): id is string => typeof id === 'string' && id.length > 0),
+        );
+        if (cancelled) return;
+        setItems(fetched);
+      } catch (err) {
+        if (cancelled) return;
+        setError(err);
+        setItems([]);
+      } finally {
+        if (!cancelled) {
+          setIsInitialLoading(false);
+          initializedRef.current = true;
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [initialIds]);
+
+  const handleLoadMore = useCallback(async () => {
+    if (!cursor) return;
+    onBeforeLoadMore?.();
+    setIsFetching(true);
+    setError(null);
+    try {
+      const result = await fetchOlder(cursor, pageSize);
+      const fetchedItems = Array.isArray(result.items) ? result.items : [];
+      setItems((prev) => {
+        if (fetchedItems.length === 0) return prev;
+        const existingIds = new Set(prev.map((item) => item.id));
+        const deduped = fetchedItems.filter((item) => item && !existingIds.has(item.id));
+        if (deduped.length === 0) return prev;
+        return [...deduped, ...prev];
+      });
+      setCursor(result.nextBeforeId ?? null);
+    } catch (err) {
+      setError(err);
+    } finally {
+      setIsFetching(false);
+    }
+  }, [cursor, fetchOlder, pageSize, onBeforeLoadMore]);
+
+  const total = useMemo(() => {
+    const baseline = Number.isFinite(totalCount) ? Math.max(0, Math.floor(totalCount)) : 0;
+    return Math.max(baseline, items.length, highlightSet.size);
+  }, [totalCount, items.length, highlightSet]);
+
+  const displayedCount = items.length;
+  const hasMore = cursor !== null;
+
+  renderedCallbackRef.current = onItemsRendered;
+
+  useEffect(() => {
+    if (!initializedRef.current) return;
+    renderedCallbackRef.current?.(items);
+  }, [items]);
+
+  return (
+    <div className="flex h-full min-h-0 flex-col gap-4">
+      {hasMore && (
+        <button
+          type="button"
+          className="self-start rounded border border-gray-300 bg-white px-3 py-1 text-[11px] font-medium text-gray-700 shadow-sm hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-60"
+          onClick={handleLoadMore}
+          disabled={isFetching}
+        >
+          Load older context ({displayedCount} of {total})
+        </button>
+      )}
+
+      {items.map((item) => {
+        const textContent = toPlainText(item.contentText, item.contentJson);
+        const roleColor = ROLE_COLORS[item.role] ?? 'bg-gray-900 text-white';
+        const isHighlighted = highlightSet.has(item.id);
+        const wrapperClasses = ['space-y-2 text-[11px] text-gray-800'];
+        if (isHighlighted) {
+          wrapperClasses.push('rounded-md border border-sky-200 bg-sky-50/80 px-3 py-2');
+        }
+        return (
+          <div
+            key={item.id}
+            data-context-item-id={item.id}
+            data-context-item-role={item.role}
+            className={wrapperClasses.join(' ')}
+          >
+            <header className="flex flex-wrap items-center gap-2 text-[10px] font-medium uppercase tracking-wide text-gray-500">
+              <Badge className={`px-2 py-0.5 text-[10px] font-semibold capitalize leading-tight ${roleColor}`}>{item.role}</Badge>
+              <span className="normal-case text-gray-600">{new Date(item.createdAt).toLocaleString()}</span>
+              <span className="normal-case text-gray-500">{formatBytes(item.sizeBytes)}</span>
+              {isHighlighted && (
+                <Badge variant="outline" className="border-sky-300 bg-transparent text-[10px] font-semibold uppercase text-sky-700">
+                  New
+                </Badge>
+              )}
+            </header>
+            {textContent ? <div className="content-wrap text-gray-800">{textContent}</div> : null}
+          </div>
+        );
+      })}
+
+      {isInitialLoading && <div className="text-[11px] text-gray-500">Loading context…</div>}
+      {!!error && !isInitialLoading && <div className="text-[11px] text-red-600">Failed to load context items</div>}
+      {isFetching && !isInitialLoading && <div className="text-[11px] text-gray-500">Loading…</div>}
+      {!error && !isFetching && !isInitialLoading && items.length === 0 && total === 0 && (
+        <div className="text-[11px] text-gray-500">No context items</div>
+      )}
+      {!error && !isFetching && !isInitialLoading && items.length === 0 && total > 0 && (
         <div className="text-[11px] text-gray-500">No context items available.</div>
       )}
     </div>
