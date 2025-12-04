@@ -4,6 +4,7 @@ import { ChevronRight, Plus } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '../ui/button';
 import { Tooltip, TooltipContent, TooltipTrigger } from '../ui/tooltip';
+import { SidebarMenu, SidebarMenuAction, SidebarMenuButton, SidebarMenuItem } from '../ui/sidebar';
 import {
   type MemoryTree,
   type MemoryNode,
@@ -157,89 +158,91 @@ export function TreeView({
       const isSelected = selectedPath === node.path;
       const isExpandable = node.children.length > 0;
       const isExpanded = expandedPaths.has(node.path);
-      const indent = depth * INDENT_STEP;
+      const paddingStart = depth * INDENT_STEP + 12;
 
       return (
-        <li key={node.path} role="none" className="space-y-1">
-          <div
-            ref={registerRef(node.path)}
-            role="treeitem"
-            aria-level={depth + 1}
-            aria-selected={isSelected ? 'true' : 'false'}
-            aria-expanded={isExpandable ? isExpanded : undefined}
-            tabIndex={isSelected ? 0 : -1}
-            className={cn(
-              'group relative flex min-h-10 w-full items-center gap-2 rounded-md px-2 text-sm font-medium text-muted-foreground transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background',
-              isSelected ? 'bg-primary/10 text-foreground' : 'hover:bg-muted',
-            )}
-            style={{ paddingLeft: indent }}
-            data-selected={isSelected ? 'true' : undefined}
-            onClick={() => onSelect(node.path)}
-            onKeyDown={(event) => handleKeyDown(event, node.path)}
+        <SidebarMenuItem key={node.path} role="none">
+          <SidebarMenuButton
+            asChild
+            isActive={isSelected}
+            size="lg"
+            className="group/menu-button relative w-full pr-10"
           >
-            {isExpandable ? (
-              <Button
+            <div
+              ref={registerRef(node.path)}
+              role="treeitem"
+              aria-level={depth + 1}
+              aria-selected={isSelected ? 'true' : 'false'}
+              aria-expanded={isExpandable ? isExpanded : undefined}
+              tabIndex={isSelected ? 0 : -1}
+              className={cn(
+                'flex min-h-10 w-full items-center gap-2 py-2 text-sm outline-none transition-colors focus-visible:ring-2 focus-visible:ring-sidebar-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background',
+                isSelected ? 'font-semibold text-sidebar-accent-foreground' : 'font-medium text-sidebar-foreground/80',
+              )}
+              style={{ paddingInlineStart: `${paddingStart}px` }}
+              data-selected={isSelected ? 'true' : undefined}
+              onClick={() => onSelect(node.path)}
+              onKeyDown={(event) => handleKeyDown(event, node.path)}
+            >
+              {isExpandable ? (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  tabIndex={-1}
+                  aria-label={isExpanded ? 'Collapse node' : 'Expand node'}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    onToggle(node.path);
+                  }}
+                  className={cn(
+                    'shrink-0 text-sidebar-foreground/60 hover:text-sidebar-foreground',
+                    isSelected && 'text-sidebar-accent-foreground',
+                  )}
+                >
+                  <ChevronRight className={cn('size-4 transition-transform', isExpanded && 'rotate-90')} />
+                </Button>
+              ) : (
+                <span className="size-8 shrink-0" aria-hidden="true" />
+              )}
+              <span className="truncate" title={node.path}>
+                {node.name}
+              </span>
+            </div>
+          </SidebarMenuButton>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <SidebarMenuAction
                 type="button"
-                variant="ghost"
-                size="icon"
-                tabIndex={-1}
-                aria-label={isExpanded ? 'Collapse node' : 'Expand node'}
+                aria-label="Add subdocument"
                 onClick={(event) => {
                   event.stopPropagation();
-                  onToggle(node.path);
+                  onAddChild(node.path);
                 }}
                 className={cn(
-                  'shrink-0 text-muted-foreground hover:text-foreground',
-                  isSelected && 'text-primary',
+                  'text-sidebar-foreground/60 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground',
+                  isSelected && 'text-sidebar-accent-foreground',
                 )}
               >
-                <ChevronRight className={cn('size-4 transition-transform', isExpanded && 'rotate-90')} />
-              </Button>
-            ) : (
-              <span className="size-8 shrink-0" aria-hidden="true" />
-            )}
-            <span className="truncate" title={node.path}>
-              {node.name}
-            </span>
-            <div className="ml-auto flex items-center gap-1">
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    tabIndex={-1}
-                    aria-label="Add subdocument"
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      onAddChild(node.path);
-                    }}
-                    className={cn(
-                      'text-muted-foreground hover:text-foreground',
-                      isSelected && 'text-primary',
-                    )}
-                  >
-                    <Plus className="size-4" />
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent side="top">Add subdocument</TooltipContent>
-              </Tooltip>
-            </div>
-          </div>
+                <Plus className="size-4" />
+              </SidebarMenuAction>
+            </TooltipTrigger>
+            <TooltipContent side="top">Add subdocument</TooltipContent>
+          </Tooltip>
           {isExpandable && isExpanded && node.children.length > 0 ? (
-            <ul role="group" className="space-y-1">
+            <SidebarMenu role="group" className="gap-1 pl-0">
               {node.children.map((child) => renderNode(child, depth + 1))}
-            </ul>
+            </SidebarMenu>
           ) : null}
-        </li>
+        </SidebarMenuItem>
       );
     },
     [expandedPaths, handleKeyDown, onAddChild, onSelect, onToggle, registerRef, selectedPath],
   );
 
   return (
-    <ul role="tree" className={cn('flex flex-col gap-1', className)}>
+    <SidebarMenu role="tree" className={cn('gap-1', className)}>
       {renderNode(tree, 0)}
-    </ul>
+    </SidebarMenu>
   );
 }

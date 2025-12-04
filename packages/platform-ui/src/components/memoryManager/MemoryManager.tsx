@@ -3,6 +3,7 @@ import { Trash2 } from 'lucide-react';
 
 import { Button } from '../ui/button';
 import { ScrollArea } from '../ui/scroll-area';
+import { Separator } from '../ui/separator';
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from '../ui/resizable';
 import { Textarea } from '../ui/textarea';
 import { ConfirmDeleteDialog } from './ConfirmDeleteDialog';
@@ -248,14 +249,14 @@ export function MemoryManager({
   const canDeleteSelected = selectedNode != null && selectedPath !== '/';
 
   return (
-    <div className={cn('h-full w-full', className)}>
+    <div className={cn('h-full w-full bg-white', className)}>
       <ResizablePanelGroup direction="horizontal" className="h-full min-h-[480px] overflow-hidden">
-        <ResizablePanel defaultSize={32} minSize={20} className="min-w-[260px] bg-background">
-          <div className="flex h-full flex-col">
-            <div className="border-border border-b">
-              <div className="flex min-h-[56px] flex-col justify-center gap-1 px-4">
-                <h2 className="text-sm font-semibold text-foreground">Documents</h2>
-                <p className="text-xs text-muted-foreground">Select a document to edit</p>
+        <ResizablePanel defaultSize={32} minSize={20} className="min-w-[260px] bg-white">
+          <div className="flex h-full flex-col bg-white">
+            <div className="border-b border-border">
+              <div className="flex min-h-12 flex-col justify-center gap-1 px-4">
+                <h2 className="text-sm font-semibold text-sidebar-foreground">Documents</h2>
+                <p className="text-xs text-sidebar-foreground/70">Select a document to edit</p>
               </div>
             </div>
             <ScrollArea className="flex-1">
@@ -274,11 +275,13 @@ export function MemoryManager({
             </ScrollArea>
           </div>
         </ResizablePanel>
-        <ResizableHandle className="bg-border" />
-        <ResizablePanel defaultSize={68} minSize={40} className="bg-background">
-          <div className="flex h-full flex-col">
-            <div className="border-border border-b">
-              <div className="flex min-h-[56px] flex-col gap-3 px-6 py-3 md:flex-row md:items-center md:justify-between md:gap-4">
+        <ResizableHandle withHandle={false} className="after:hidden w-3 bg-transparent px-0">
+          <Separator orientation="vertical" className="h-full w-px bg-border" />
+        </ResizableHandle>
+        <ResizablePanel defaultSize={68} minSize={40} className="bg-white">
+          <div className="flex h-full flex-col bg-white">
+            <div className="border-b border-border">
+              <div className="flex min-h-12 flex-col gap-3 px-6 py-3 md:flex-row md:items-center md:justify-between md:gap-4">
                 <div className="min-w-0">
                   <h2 id={editorLabelId} className="text-sm font-semibold text-foreground">
                     Document content
@@ -298,21 +301,26 @@ export function MemoryManager({
                       {unsaved ? 'Unsaved changes' : 'Saved'}
                     </span>
                   ) : null}
-                  {selectedNode ? (
-                    <Button
-                      type="button"
-                      variant="destructive"
-                      size="sm"
-                      onClick={() => handleRequestDelete(selectedPath)}
-                      disabled={!canDeleteSelected}
-                    >
-                      <Trash2 className="size-4" />
-                      Delete
-                    </Button>
-                  ) : null}
                   <Button type="button" size="sm" onClick={handleSave} disabled={!unsaved || !selectedNode}>
                     Save changes
                   </Button>
+                  {selectedNode ? (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => handleRequestDelete(selectedPath)}
+                      disabled={!canDeleteSelected}
+                      aria-label="Delete document"
+                      title="Delete document"
+                      className={cn(
+                        'text-destructive hover:bg-destructive/10 hover:text-destructive focus-visible:ring-destructive',
+                        'disabled:text-muted-foreground disabled:hover:bg-transparent',
+                      )}
+                    >
+                      <Trash2 className="size-4" />
+                    </Button>
+                  ) : null}
                 </div>
               </div>
             </div>
