@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import { Trash2 } from 'lucide-react';
 
-import { Button } from '../ui/button';
+import { Button } from '../Button';
+import { IconButton } from '../IconButton';
 import { ScrollArea } from '../ui/scroll-area';
-import { Separator } from '../ui/separator';
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from '../ui/resizable';
 import { Textarea } from '../ui/textarea';
+import { Tooltip, TooltipContent, TooltipTrigger } from '../ui/tooltip';
 import { ConfirmDeleteDialog } from './ConfirmDeleteDialog';
 import { CreateDocumentDialog } from './CreateDocumentDialog';
 import { TreeView } from './TreeView';
@@ -253,11 +254,9 @@ export function MemoryManager({
       <ResizablePanelGroup direction="horizontal" className="h-full min-h-[480px] overflow-hidden">
         <ResizablePanel defaultSize={32} minSize={20} className="min-w-[260px] bg-white">
           <div className="flex h-full flex-col bg-white">
-            <div className="border-b border-border">
-              <div className="flex min-h-12 flex-col justify-center gap-1 px-4">
-                <h2 className="text-sm font-semibold text-sidebar-foreground">Documents</h2>
-                <p className="text-xs text-sidebar-foreground/70">Select a document to edit</p>
-              </div>
+            <div className="flex h-[66px] flex-col justify-center gap-1 border-b border-[var(--agyn-border-subtle)] px-6">
+              <h2 className="text-sm font-semibold text-[var(--agyn-dark)]">Documents</h2>
+              <p className="text-xs text-[var(--agyn-text-subtle)]">Select a document to edit</p>
             </div>
             <ScrollArea className="flex-1">
               <div className="px-2 py-3">
@@ -275,53 +274,52 @@ export function MemoryManager({
             </ScrollArea>
           </div>
         </ResizablePanel>
-        <ResizableHandle withHandle={false} className="after:hidden w-3 bg-transparent px-0">
-          <Separator orientation="vertical" className="h-full w-px bg-border" />
-        </ResizableHandle>
+        <ResizableHandle
+          withHandle={false}
+          className="relative w-px bg-[var(--agyn-border-subtle)] after:w-6 after:-translate-x-1/2 after:bg-transparent data-[panel-group-direction=horizontal]:cursor-col-resize"
+        />
         <ResizablePanel defaultSize={68} minSize={40} className="bg-white">
           <div className="flex h-full flex-col bg-white">
-            <div className="border-b border-border">
-              <div className="flex min-h-12 flex-col gap-3 px-6 py-3 md:flex-row md:items-center md:justify-between md:gap-4">
-                <div className="min-w-0">
-                  <h2 id={editorLabelId} className="text-sm font-semibold text-foreground">
-                    Document content
-                  </h2>
-                  <p id={editorDescriptionId} className="truncate text-xs text-muted-foreground">
-                    {selectedPath}
-                  </p>
-                </div>
-                <div className="flex flex-wrap items-center gap-2">
-                  {selectedNode ? (
-                    <span
-                      className={cn(
-                        'text-xs font-medium',
-                        unsaved ? 'text-[var(--agyn-status-pending)]' : 'text-muted-foreground',
-                      )}
-                    >
-                      {unsaved ? 'Unsaved changes' : 'Saved'}
-                    </span>
-                  ) : null}
-                  <Button type="button" size="sm" onClick={handleSave} disabled={!unsaved || !selectedNode}>
-                    Save changes
-                  </Button>
-                  {selectedNode ? (
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => handleRequestDelete(selectedPath)}
-                      disabled={!canDeleteSelected}
-                      aria-label="Delete document"
-                      title="Delete document"
-                      className={cn(
-                        'text-destructive hover:bg-destructive/10 hover:text-destructive focus-visible:ring-destructive',
-                        'disabled:text-muted-foreground disabled:hover:bg-transparent',
-                      )}
-                    >
-                      <Trash2 className="size-4" />
-                    </Button>
-                  ) : null}
-                </div>
+            <div className="flex h-[66px] items-center justify-between border-b border-[var(--agyn-border-subtle)] bg-white px-6">
+              <div className="min-w-0">
+                <h2 id={editorLabelId} className="text-sm font-semibold text-[var(--agyn-dark)]">
+                  Document content
+                </h2>
+                <p id={editorDescriptionId} className="truncate text-xs text-[var(--agyn-text-subtle)]">
+                  {selectedPath}
+                </p>
+              </div>
+              <div className="flex flex-wrap items-center justify-end gap-3">
+                {selectedNode ? (
+                  <span
+                    className={cn(
+                      'text-xs font-medium',
+                      unsaved ? 'text-[var(--agyn-status-pending)]' : 'text-[var(--agyn-text-subtle)]',
+                    )}
+                  >
+                    {unsaved ? 'Unsaved changes' : 'Saved'}
+                  </span>
+                ) : null}
+                <Button type="button" size="sm" onClick={handleSave} disabled={!unsaved || !selectedNode}>
+                  Save changes
+                </Button>
+                {selectedNode ? (
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <IconButton
+                        icon={<Trash2 className="size-4" />}
+                        variant="danger"
+                        size="sm"
+                        onClick={() => handleRequestDelete(selectedPath)}
+                        disabled={!canDeleteSelected}
+                        aria-label="Delete document"
+                      />
+                    </TooltipTrigger>
+                    <TooltipContent side="bottom" align="end">
+                      Delete document
+                    </TooltipContent>
+                  </Tooltip>
+                ) : null}
               </div>
             </div>
             <div className="flex-1">

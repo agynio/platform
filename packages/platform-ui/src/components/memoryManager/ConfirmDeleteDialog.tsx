@@ -29,14 +29,14 @@ export function ConfirmDeleteDialog({ open, path, onConfirm, onCancel }: Confirm
         }
       }}
     >
-      <AlertDialogContent>
-        <AlertDialogHeader>
-          <AlertDialogTitle>Delete memory node</AlertDialogTitle>
-          <AlertDialogDescription>
+      <AlertDialogContent className="max-w-[420px] rounded-[18px] border border-[var(--agyn-border-subtle)] bg-white p-6 shadow-[0px_32px_72px_-24px_rgba(15,23,42,0.45)]">
+        <AlertDialogHeader className="space-y-2">
+          <AlertDialogTitle className="text-lg font-semibold text-[var(--agyn-dark)]">Delete memory node</AlertDialogTitle>
+          <AlertDialogDescription className="text-sm leading-relaxed text-[var(--agyn-text-subtle)]">
             {`Are you sure you want to delete “${targetLabel}”? This will remove the document and all of its descendants.`}
           </AlertDialogDescription>
         </AlertDialogHeader>
-        <AlertDialogFooter>
+        <AlertDialogFooter className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end sm:gap-3">
           <AlertDialogCancel onClick={onCancel}>Cancel</AlertDialogCancel>
           <AlertDialogAction onClick={onConfirm} className={buttonVariants({ variant: 'destructive' })}>
             Delete

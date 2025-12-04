@@ -1,7 +1,14 @@
 import { type FormEvent, useEffect, useId, useMemo, useState } from 'react';
 
 import { Button } from '../Button';
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../ui/dialog';
+import {
+  ScreenDialog,
+  ScreenDialogContent,
+  ScreenDialogDescription,
+  ScreenDialogFooter,
+  ScreenDialogHeader,
+  ScreenDialogTitle,
+} from '../screens/Dialog';
 import { Input } from '../ui/input';
 import { Label } from '../ui/label';
 
@@ -43,7 +50,7 @@ export function CreateDocumentDialog({ open, parentPath, onCancel, onCreate, val
   const disableCreate = Boolean(validateName(name));
 
   return (
-    <Dialog
+    <ScreenDialog
       open={open}
       onOpenChange={(nextOpen) => {
         if (!nextOpen) {
@@ -51,12 +58,14 @@ export function CreateDocumentDialog({ open, parentPath, onCancel, onCreate, val
         }
       }}
     >
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>Create subdocument</DialogTitle>
-          <DialogDescription>Documents created here will appear under {parentLabel}.</DialogDescription>
-        </DialogHeader>
-        <form className="space-y-4" onSubmit={handleSubmit}>
+      <ScreenDialogContent>
+        <ScreenDialogHeader className="space-y-1.5">
+          <ScreenDialogTitle>Create subdocument</ScreenDialogTitle>
+          <ScreenDialogDescription>
+            Documents created here will appear under {parentLabel}.
+          </ScreenDialogDescription>
+        </ScreenDialogHeader>
+        <form className="mt-4 space-y-4" onSubmit={handleSubmit}>
           <div className="space-y-2">
             <Label htmlFor={inputId}>Name</Label>
             <Input
@@ -80,16 +89,16 @@ export function CreateDocumentDialog({ open, parentPath, onCancel, onCreate, val
               </p>
             ) : null}
           </div>
-          <DialogFooter>
+          <ScreenDialogFooter>
             <Button type="button" variant="ghost" onClick={onCancel}>
               Cancel
             </Button>
             <Button type="submit" disabled={disableCreate}>
               Create
             </Button>
-          </DialogFooter>
+          </ScreenDialogFooter>
         </form>
-      </DialogContent>
-    </Dialog>
+      </ScreenDialogContent>
+    </ScreenDialog>
   );
 }
