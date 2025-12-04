@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useRef, type ReactNode, type KeyboardEvent as ReactKeyboardEvent } from 'react';
 import { ChevronRight, Plus } from 'lucide-react';
 
 import { cn } from '@/lib/utils';
@@ -75,7 +75,7 @@ export function TreeView({
   );
 
   const handleKeyDown = useCallback(
-    (event: React.KeyboardEvent<HTMLButtonElement>, currentPath: string) => {
+    (event: ReactKeyboardEvent<HTMLElement>, currentPath: string) => {
       const index = visibleNodes.findIndex((entry) => entry.node.path === currentPath);
       if (index === -1) return;
       const { node, depth, isExpanded } = visibleNodes[index];
