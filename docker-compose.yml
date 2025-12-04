@@ -213,7 +213,7 @@ services:
 
   # LiteLLM server and UI
   litellm:
-    image: ghcr.io/berriai/litellm:v1.80.0-stable.1
+    image: ghcr.io/berriai/litellm:v1.80.5-stable
     oom_score_adj: -900
     restart: unless-stopped
     environment:
