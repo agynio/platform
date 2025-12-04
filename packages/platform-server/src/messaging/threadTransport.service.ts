@@ -3,6 +3,12 @@ import { Inject, Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../core/services/prisma.service';
 import { LiveGraphRuntime } from '../graph-core/liveGraph.manager';
 import type { SendResult } from './types';
+import { AgentsPersistenceService } from '../agents/agents.persistence.service';
+
+export type TransportSendOptions = {
+  runId?: string | null;
+  source?: string | null;
+};
 
 export interface ThreadChannelNode {
   sendToChannel(threadId: string, text: string): Promise<SendResult>;
@@ -19,9 +25,10 @@ export class ThreadTransportService {
   constructor(
     @Inject(PrismaService) private readonly prismaService: PrismaService,
     @Inject(LiveGraphRuntime) private readonly runtime: LiveGraphRuntime,
+    @Inject(AgentsPersistenceService) private readonly persistence: AgentsPersistenceService,
   ) {}
 
-  async sendTextToThread(threadId: string, text: string): Promise<SendResult> {
+  async sendTextToThread(threadId: string, text: string, options?: TransportSendOptions): Promise<SendResult> {
     const normalizedThreadId = threadId?.trim();
     if (!normalizedThreadId) {
       return { ok: false, error: 'missing_thread_id' };
@@ -53,7 +60,27 @@ export class ThreadTransportService {
     }
 
     try {
-      return await node.sendToChannel(normalizedThreadId, text);
+      const result = await node.sendToChannel(normalizedThreadId, text);
+      if (!result.ok) {
+        return result;
+      }
+
+      try {
+        await this.persistence.recordTransportAssistantMessage({
+          threadId: normalizedThreadId,
+          text,
+          runId: options?.runId ?? null,
+          source: options?.source ?? null,
+        });
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        this.logger.error(
+          `ThreadTransportService: failed to persist assistant message${this.format({ threadId: normalizedThreadId, channelNodeId, error: message })}`,
+        );
+        return { ok: false, error: 'persist_failed', threadId: normalizedThreadId };
+      }
+
+      return result;
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       this.logger.error(

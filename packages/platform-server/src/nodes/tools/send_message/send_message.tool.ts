@@ -24,7 +24,10 @@ export class SendMessageFunctionTool extends FunctionTool<typeof sendMessageInvo
     const threadId = ctx?.threadId;
     if (!threadId) return 'missing_thread_context';
     try {
-      const result = await this.transport.sendTextToThread(threadId, args.message);
+      const result = await this.transport.sendTextToThread(threadId, args.message, {
+        runId: ctx?.runId,
+        source: 'send_message',
+      });
       if (result.ok) {
         return 'message sent successfully';
       }

@@ -128,7 +128,10 @@ describe('AgentNode auto-send final response', () => {
 
     const result = await agent.invoke('thread-1', [HumanMessage.fromText('hello')]);
     expect(result).toBeInstanceOf(ResponseMessage);
-    expect(transport.sendTextToThread).toHaveBeenCalledWith('thread-1', 'final reply');
+    expect(transport.sendTextToThread).toHaveBeenCalledWith('thread-1', 'final reply', {
+      runId: 'run-1',
+      source: 'auto_response',
+    });
 
     await moduleRef.close();
   });

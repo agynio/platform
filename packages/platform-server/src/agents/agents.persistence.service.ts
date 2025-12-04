@@ -406,6 +406,81 @@ export class AgentsPersistenceService {
     return { messageIds: createdMessages.map((m) => m.id) };
   }
 
+  async recordTransportAssistantMessage(params: {
+    threadId: string;
+    text: string;
+    runId?: string | null;
+    source?: string | null;
+  }): Promise<{ messageId: string }> {
+    const normalizedThreadId = params.threadId?.trim();
+    if (!normalizedThreadId) throw new Error('thread_id_required');
+
+    const assistant = AIMessage.fromText(params.text ?? '');
+    const sourcePayload = toPrismaJsonValue(assistant.toPlain());
+    const eventIds: string[] = [];
+    const patchedEventIds: string[] = [];
+
+    const { message, runId } = await this.prisma.$transaction(async (tx: Prisma.TransactionClient) => {
+      const created = await tx.message.create({
+        data: {
+          kind: 'assistant' as MessageKind,
+          text: assistant.text,
+          source: sourcePayload,
+        },
+      });
+
+      let linkedRunId: string | null = null;
+      if (params.runId) {
+        const run = await tx.run.findUnique({ where: { id: params.runId }, select: { threadId: true } });
+        if (!run) throw new Error(`run_not_found:${params.runId}`);
+        if (run.threadId !== normalizedThreadId) {
+          throw new Error(`run_thread_mismatch:${params.runId}`);
+        }
+        linkedRunId = params.runId;
+        await tx.runMessage.create({ data: { runId: linkedRunId, messageId: created.id, type: 'output' as RunMessageType } });
+        const event = await this.runEvents.recordInvocationMessage({
+          tx,
+          runId: linkedRunId,
+          threadId: normalizedThreadId,
+          messageId: created.id,
+          role: 'assistant',
+          ts: created.createdAt,
+          metadata: { messageType: 'transport', source: params.source ?? 'thread_transport' },
+        });
+        eventIds.push(event.id);
+        const linkedEventId = await this.callAgentLinking.onChildRunMessage({
+          tx,
+          runId: linkedRunId,
+          latestMessageId: created.id,
+        });
+        if (linkedEventId) patchedEventIds.push(linkedEventId);
+      }
+
+      return { message: created, runId: linkedRunId };
+    });
+
+    this.eventsBus.emitMessageCreated({
+      threadId: normalizedThreadId,
+      message: {
+        id: message.id,
+        kind: 'assistant' as MessageKind,
+        text: message.text,
+        source: message.source as Prisma.JsonValue,
+        createdAt: message.createdAt,
+        runId: runId ?? undefined,
+      },
+    });
+
+    if (eventIds.length > 0) {
+      await Promise.all(eventIds.map((id) => this.eventsBus.publishEvent(id, 'append')));
+    }
+    if (patchedEventIds.length > 0) {
+      await Promise.all(patchedEventIds.map((id) => this.eventsBus.publishEvent(id, 'update')));
+    }
+
+    return { messageId: message.id };
+  }
+
   /**
    * Complete a run and persist output messages. Accepts strictly typed output message instances.
    */
@@ -421,26 +496,25 @@ export class AgentsPersistenceService {
       const current = await tx.run.findUnique({ where: { id: runId }, select: { id: true, threadId: true, createdAt: true, updatedAt: true } });
       if (!current) throw new Error(`run_not_found:${runId}`);
       const threadId = current.threadId;
-      await Promise.all(
-        outputMessages.map(async (msg) => {
-          const normalized = this.normalizeForPersistence(msg);
-          const { kind, text } = this.deriveKindTextTyped(normalized);
-          const source = toPrismaJsonValue(normalized.toPlain());
-          const created = await tx.message.create({ data: { kind, text, source } });
-          await tx.runMessage.create({ data: { runId, messageId: created.id, type: 'output' as RunMessageType } });
-          const event = await this.runEvents.recordInvocationMessage({
-            tx,
-            runId,
-            threadId,
-            messageId: created.id,
-            role: kind,
-            ts: created.createdAt,
-            metadata: { messageType: 'output' },
-          });
-          eventIds.push(event.id);
-          createdMessages.push({ id: created.id, kind, text, source: created.source as Prisma.JsonValue, createdAt: created.createdAt });
-        }),
-      );
+      for (const msg of outputMessages) {
+        const normalized = this.normalizeForPersistence(msg);
+        const { kind, text } = this.deriveKindTextTyped(normalized);
+        if (kind === ('tool' as MessageKind)) continue;
+        const source = toPrismaJsonValue(normalized.toPlain());
+        const created = await tx.message.create({ data: { kind, text, source } });
+        await tx.runMessage.create({ data: { runId, messageId: created.id, type: 'output' as RunMessageType } });
+        const event = await this.runEvents.recordInvocationMessage({
+          tx,
+          runId,
+          threadId,
+          messageId: created.id,
+          role: kind,
+          ts: created.createdAt,
+          metadata: { messageType: 'output' },
+        });
+        eventIds.push(event.id);
+        createdMessages.push({ id: created.id, kind, text, source: created.source as Prisma.JsonValue, createdAt: created.createdAt });
+      }
       const updated = await tx.run.update({ where: { id: runId }, data: { status } });
       const linkedEventId = await this.callAgentLinking.onChildRunCompleted({ tx, runId, status });
       if (linkedEventId) patchedEventIds.push(linkedEventId);

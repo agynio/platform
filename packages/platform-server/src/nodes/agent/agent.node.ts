@@ -233,6 +233,7 @@ export class AgentNode extends Node<AgentStaticConfig> implements OnModuleInit {
     threadId: string,
     response: ResponseMessage,
     outputs: Array<AIMessage | ToolCallMessage>,
+    runId: string,
   ): Promise<void> {
     const hasPendingToolCall = outputs.some((o) => o instanceof ToolCallMessage);
     const finalText = response.text ?? '';
@@ -249,7 +250,10 @@ export class AgentNode extends Node<AgentStaticConfig> implements OnModuleInit {
     }
 
     try {
-      const sendResult = await transport.sendTextToThread(threadId, finalText);
+      const sendResult = await transport.sendTextToThread(threadId, finalText, {
+        runId,
+        source: 'auto_response',
+      });
       if (!sendResult.ok) {
         this.logger.warn?.(
           `Agent auto-send failed for thread ${threadId}: ${sendResult.error ?? 'unknown_error'}`,
@@ -619,7 +623,7 @@ export class AgentNode extends Node<AgentStaticConfig> implements OnModuleInit {
         }
 
         if (responseMessage && effective.behavior.autoSendFinalResponseToThread) {
-          await this.autoSendFinalResponse(thread, responseMessage, outputMessages ?? []);
+          await this.autoSendFinalResponse(thread, responseMessage, outputMessages ?? [], ensuredRunId);
         }
 
         result = last;

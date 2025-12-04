@@ -5,8 +5,9 @@ import { SendMessageFunctionTool } from '../../src/nodes/tools/send_message/send
 import type { ThreadTransportService } from '../../src/messaging/threadTransport.service';
 import type { LLMContext } from '../../src/llm/types';
 
-const createCtx = (threadId?: string): LLMContext => ({
+const createCtx = (threadId?: string, runId: string = 'run-1'): LLMContext => ({
   threadId,
+  runId,
 } as unknown as LLMContext);
 
 describe('SendMessageFunctionTool', () => {
@@ -16,7 +17,10 @@ describe('SendMessageFunctionTool', () => {
 
     const output = await tool.execute({ message: 'hello' }, createCtx('thread-1'));
 
-    expect(transport.sendTextToThread).toHaveBeenCalledWith('thread-1', 'hello');
+    expect(transport.sendTextToThread).toHaveBeenCalledWith('thread-1', 'hello', {
+      runId: 'run-1',
+      source: 'send_message',
+    });
     expect(output).toBe('message sent successfully');
   });
 
