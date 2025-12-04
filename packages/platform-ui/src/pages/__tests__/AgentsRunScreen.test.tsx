@@ -632,6 +632,20 @@ describe('extractLlmResponse', () => {
       ...overrides,
     } satisfies RunTimelineEvent);
 
+  it('returns errorMessage when provided on the event', () => {
+    const event = baseEvent({ status: 'error', errorMessage: 'LLM unhappy' });
+    const extract = getExtract();
+    expect(extract(event)).toBe('LLM unhappy');
+  });
+
+  it('uses rawResponse.message when errorMessage is absent', () => {
+    const event = baseEvent({ status: 'error' });
+    if (!event.llmCall) throw new Error('llmCall missing');
+    event.llmCall.rawResponse = { message: 'LLM crashed', name: 'ModelError' };
+    const extract = getExtract();
+    expect(extract(event)).toBe('LLM crashed');
+  });
+
   it('prefers responseText when present', () => {
     const event = baseEvent({});
     if (!event.llmCall) throw new Error('llmCall missing');

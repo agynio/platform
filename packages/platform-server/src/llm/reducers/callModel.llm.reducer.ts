@@ -191,10 +191,13 @@ export class CallModelLLMReducer extends Reducer<LLMState, LLMContext> {
           errorMessage: error instanceof Error ? error.message : String(error),
         });
       }
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      const errorCode = error instanceof Error && error.name ? error.name : 'LLM_ERROR';
       await this.runEvents.completeLLMCall({
         eventId: llmEvent.id,
         status: RunEventStatus.error,
-        errorMessage: error instanceof Error ? error.message : String(error),
+        errorMessage,
+        errorCode,
         rawResponse: this.trySerialize(error),
       });
       await this.eventsBus.publishEvent(llmEvent.id, 'update');
@@ -418,6 +421,13 @@ export class CallModelLLMReducer extends Reducer<LLMState, LLMContext> {
 
   private trySerialize(value: unknown): Prisma.InputJsonValue | null {
     if (value === null || value === undefined) return null;
+    if (value instanceof Error) {
+      return toPrismaJsonValue({
+        name: value.name,
+        message: value.message,
+        stack: value.stack ?? null,
+      });
+    }
     try {
       return toPrismaJsonValue(value);
     } catch (err) {
