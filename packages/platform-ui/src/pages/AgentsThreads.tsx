@@ -445,6 +445,8 @@ export function AgentsThreads() {
   const latestScrollStateRef = useRef<ScrollState | null>(null);
   const pendingScrollRestoreRef = useRef<ScrollState | null>(null);
   const scrollPersistTimerRef = useRef<number | null>(null);
+  const scrollRestoreTokenRef = useRef(0);
+  const pendingRestoreFrameRef = useRef<number | null>(null);
 
   const updateCacheEntry = useCallback(
     (threadId: string, updates: Partial<Omit<ThreadViewCacheEntry, 'threadId'>>) => {
@@ -656,6 +658,11 @@ export function AgentsThreads() {
   }, [runsQuery.data]);
 
   useEffect(() => {
+    scrollRestoreTokenRef.current += 1;
+    if (pendingRestoreFrameRef.current !== null) {
+      window.cancelAnimationFrame(pendingRestoreFrameRef.current);
+      pendingRestoreFrameRef.current = null;
+    }
     if (scrollPersistTimerRef.current !== null) {
       window.clearTimeout(scrollPersistTimerRef.current);
       scrollPersistTimerRef.current = null;
@@ -900,12 +907,25 @@ export function AgentsThreads() {
   }, [selectedThreadId]);
 
   useEffect(() => {
-    if (!detailPreloaderVisible) return;
+    if (!detailPreloaderVisible) {
+      if (pendingRestoreFrameRef.current !== null) {
+        window.cancelAnimationFrame(pendingRestoreFrameRef.current);
+        pendingRestoreFrameRef.current = null;
+      }
+      return;
+    }
+
     if (!selectedThreadId || isDraftSelected) {
+      if (pendingRestoreFrameRef.current !== null) {
+        window.cancelAnimationFrame(pendingRestoreFrameRef.current);
+        pendingRestoreFrameRef.current = null;
+      }
       setDetailPreloaderVisible(false);
       return;
     }
+
     if (!initialMessagesLoaded) return;
+
     const desiredState = pendingScrollRestoreRef.current ?? {
       atBottom: true,
       dFromBottom: 0,
@@ -913,21 +933,53 @@ export function AgentsThreads() {
       lastMeasured: Date.now(),
     } satisfies ScrollState;
 
-    const apply = (remaining: number) => {
-      const container = scrollContainerRef.current;
-      if (!container) return;
-      restoreScrollPosition(container, desiredState);
-      latestScrollStateRef.current = computeScrollStateFromNode(container);
-      if (remaining > 0) {
-        window.requestAnimationFrame(() => apply(remaining - 1));
+    const token = scrollRestoreTokenRef.current;
+    const activeThreadId = selectedThreadId;
+
+    const scheduleFrame = (remaining: number) => {
+      if (pendingRestoreFrameRef.current !== null) {
+        window.cancelAnimationFrame(pendingRestoreFrameRef.current);
+      }
+      pendingRestoreFrameRef.current = window.requestAnimationFrame(() => applyFrame(remaining));
+    };
+
+    const applyFrame = (remaining: number) => {
+      if (scrollRestoreTokenRef.current !== token || activeThreadId !== selectedThreadId) {
+        pendingRestoreFrameRef.current = null;
         return;
       }
+      const container = scrollContainerRef.current;
+      if (!container) {
+        pendingRestoreFrameRef.current = null;
+        return;
+      }
+      restoreScrollPosition(container, desiredState);
+      latestScrollStateRef.current = computeScrollStateFromNode(container);
+
+      if (scrollRestoreTokenRef.current !== token || activeThreadId !== selectedThreadId) {
+        pendingRestoreFrameRef.current = null;
+        return;
+      }
+
+      if (remaining > 0) {
+        scheduleFrame(remaining - 1);
+        return;
+      }
+
       pendingScrollRestoreRef.current = null;
-      updateCacheEntry(selectedThreadId, { scroll: latestScrollStateRef.current });
+      updateCacheEntry(activeThreadId, { scroll: latestScrollStateRef.current });
+      pendingRestoreFrameRef.current = null;
       setDetailPreloaderVisible(false);
     };
 
-    window.requestAnimationFrame(() => apply(SCROLL_RESTORE_ATTEMPTS - 1));
+    scheduleFrame(SCROLL_RESTORE_ATTEMPTS - 1);
+
+    return () => {
+      if (pendingRestoreFrameRef.current !== null) {
+        window.cancelAnimationFrame(pendingRestoreFrameRef.current);
+        pendingRestoreFrameRef.current = null;
+      }
+    };
   }, [detailPreloaderVisible, initialMessagesLoaded, selectedThreadId, isDraftSelected, updateCacheEntry]);
 
   const updateThreadSummaryFromEvent = useCallback(

@@ -44,20 +44,36 @@ function setupScrollMetrics(element: HTMLElement, metrics: { scrollHeight: numbe
 }
 
 function stubRaf() {
-  const queue: FrameRequestCallback[] = [];
-  const spy = vi.spyOn(window, 'requestAnimationFrame').mockImplementation((cb: FrameRequestCallback) => {
-    queue.push(cb);
-    return queue.length;
+  let handle = 0;
+  const queue: Array<{ id: number; cb: FrameRequestCallback }> = [];
+  const requestSpy = vi.spyOn(window, 'requestAnimationFrame').mockImplementation((cb: FrameRequestCallback) => {
+    const id = ++handle;
+    queue.push({ id, cb });
+    return id;
   });
+  const cancelSpy = vi.spyOn(window, 'cancelAnimationFrame').mockImplementation((id: number) => {
+    const idx = queue.findIndex((entry) => entry.id === id);
+    if (idx !== -1) queue.splice(idx, 1);
+  });
+  const now = () => (typeof performance !== 'undefined' ? performance.now() : Date.now());
   return {
     flush() {
       while (queue.length > 0) {
-        const cb = queue.shift()!;
-        cb(performance.now());
+        const { cb } = queue.shift()!;
+        cb(now());
       }
     },
+    flushNext() {
+      if (queue.length === 0) return;
+      const { cb } = queue.shift()!;
+      cb(now());
+    },
+    cancelAll() {
+      queue.splice(0, queue.length);
+    },
     restore() {
-      spy.mockRestore();
+      requestSpy.mockRestore();
+      cancelSpy.mockRestore();
     },
   };
 }
@@ -75,6 +91,12 @@ async function waitInAct(ms: number) {
 function flushRaf(controller: { flush(): void }) {
   act(() => {
     controller.flush();
+  });
+}
+
+function flushNextRaf(controller: { flushNext(): void }) {
+  act(() => {
+    controller.flushNext();
   });
 }
 
@@ -343,6 +365,49 @@ describe('AgentsThreads caching and scroll restoration', () => {
       setMetrics();
       flushRaf(raf);
       await waitFor(() => expect(screen.queryByText('Loading thread…')).not.toBeInTheDocument());
+    } finally {
+      raf.restore();
+    }
+  });
+
+  it('ignores stale restoration frames when switching threads mid-restore', async () => {
+    const raf = stubRaf();
+    try {
+      const threads: ThreadDescriptor[] = [
+        { id: 'th1', summary: 'Thread 1', runId: 'run1', createdAt: new Date(1700000000000).toISOString() },
+        { id: 'th2', summary: 'Thread 2', runId: 'run2', createdAt: new Date(1700000005000).toISOString() },
+      ];
+      const { listRequestLog } = registerThreadHandlers(threads);
+
+      const user = userEvent.setup();
+      renderThreads();
+
+      await waitFor(() => {
+        expect(listRequestLog.length).toBeGreaterThan(0);
+      });
+
+      const threadOneRow = await screen.findByText('Thread 1');
+      await user.click(threadOneRow);
+      await screen.findByText('Loading thread…');
+      const scrollContainer = await screen.findByTestId('conversation-scroll');
+      setupScrollMetrics(scrollContainer, { scrollHeight: 1200, clientHeight: 300, scrollTop: 0 });
+
+      flushNextRaf(raf);
+
+      const threadTwoRow = await screen.findByText('Thread 2');
+      await user.click(threadTwoRow);
+      await screen.findByText('Loading thread…');
+      const scrollContainerTwo = await screen.findByTestId('conversation-scroll');
+      setupScrollMetrics(scrollContainerTwo, { scrollHeight: 900, clientHeight: 300, scrollTop: 0 });
+
+      flushNextRaf(raf);
+
+      expect(screen.getByText('Loading thread…')).toBeInTheDocument();
+
+      flushRaf(raf);
+      await waitFor(() => expect(screen.queryByText('Loading thread…')).not.toBeInTheDocument());
+
+      expect(scrollContainerTwo.scrollTop).toBe(900);
     } finally {
       raf.restore();
     }
