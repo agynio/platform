@@ -4,7 +4,7 @@ import { http as _http, HttpResponse as _HttpResponse } from 'msw';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { TemplatesProvider } from '../../src/lib/graph/templates.provider';
 import type { NodeStatusEvent, TemplateSchema } from '../../src/lib/graph/types';
-import { TooltipProvider } from '@agyn/ui';
+import { TooltipProvider } from '@/components/ui/tooltip';
 import { createServer, type Server as HttpServer } from 'node:http';
 import { Server as SocketIOServer } from 'socket.io';
 import { graphSocket } from '../../src/lib/graph/socket';

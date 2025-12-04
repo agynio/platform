@@ -4,7 +4,7 @@ import { render, screen, waitFor, fireEvent } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { server, TestProviders, abs } from '../../integration/testUtils';
-import { TooltipProvider } from '@agyn/ui';
+import { TooltipProvider } from '@/components/ui/tooltip';
 import { AgentBuilder } from '../../../src/builder/AgentBuilder';
 
 describe('Builder toolbar + popover + DnD', () => {
@@ -60,7 +60,7 @@ describe('Builder toolbar + popover + DnD', () => {
     const addBtn = screen.getByTestId('add-node-button');
     fireEvent.click(addBtn);
 
-    // Content appears with data-state attributes driving classes (from @agyn/ui wrapper)
+    // Content appears with data-state attributes driving classes (from @/components/ui/popover)
     const dialog = await screen.findByRole('dialog');
     expect(dialog).toBeInTheDocument();
   });

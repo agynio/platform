@@ -1,5 +1,5 @@
 import type { CheckpointWriteClient } from '@/hooks/useCheckpointStream';
-import { Button } from '@agyn/ui';
+import { Button } from '@/components/ui/button';
 import { useMemo, useState } from 'react';
 import { HumanCheckpointItem } from './HumanCheckpointItem';
 import { AICheckpointItem } from './AICheckpointItem';

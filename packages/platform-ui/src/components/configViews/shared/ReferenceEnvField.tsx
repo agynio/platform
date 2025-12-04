@@ -1,17 +1,9 @@
 import { useCallback, type ChangeEvent } from 'react';
-import {
-  Button,
-  Input,
-  Label,
-  Tooltip,
-  TooltipTrigger,
-  TooltipContent,
-  DropdownMenu,
-  DropdownMenuTrigger,
-  DropdownMenuContent,
-  DropdownMenuRadioGroup,
-  DropdownMenuRadioItem,
-} from '@agyn/ui';
+import { Button } from '@/components/ui/button';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuRadioGroup, DropdownMenuRadioItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { Brackets, Lock, X } from 'lucide-react';
 
 import type { EnvVar } from '@/components/nodeProperties/types';

@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import NodePropertiesSidebar from '../index';
 import type { NodeConfig, NodeState } from '../types';
+import { TooltipProvider } from '@/components/ui/tooltip';
 
 const latestReferenceProps: { current: any } = { current: null };
 
@@ -48,16 +49,18 @@ describe('NodePropertiesSidebar - shell tool', () => {
     const state: NodeState = { status: 'ready' };
 
     render(
-      <NodePropertiesSidebar
-        config={config}
-        state={state}
-        onConfigChange={onConfigChange}
-        onProvision={vi.fn()}
-        onDeprovision={vi.fn()}
-        canProvision={false}
-        canDeprovision={true}
-        isActionPending={false}
-      />,
+      <TooltipProvider delayDuration={0}>
+        <NodePropertiesSidebar
+          config={config}
+          state={state}
+          onConfigChange={onConfigChange}
+          onProvision={vi.fn()}
+          onDeprovision={vi.fn()}
+          canProvision={false}
+          canDeprovision={true}
+          isActionPending={false}
+        />
+      </TooltipProvider>,
     );
 
     const workdirInput = screen.getByPlaceholderText('/workspace') as HTMLInputElement;

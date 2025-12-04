@@ -17,7 +17,6 @@
   },
   "dependencies": {
     "@agyn/shared": "workspace:*",
-    "@agyn/ui": "workspace:*",
     "@dicebear/collection": "^9.2.4",
     "@dicebear/core": "^9.2.4",
     "@monaco-editor/react": "^4.7.0",

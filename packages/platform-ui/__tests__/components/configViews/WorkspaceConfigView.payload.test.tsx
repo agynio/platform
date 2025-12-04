@@ -1,6 +1,6 @@
 import React from 'react';
 import { render, screen, fireEvent } from '@testing-library/react';
-import { TooltipProvider } from '@agyn/ui';
+import { TooltipProvider } from '@/components/ui/tooltip';
 import WorkspaceConfigView from '@/components/configViews/WorkspaceConfigView';
 
 describe('WorkspaceConfigView payload', () => {

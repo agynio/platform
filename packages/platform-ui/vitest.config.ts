@@ -30,19 +30,16 @@ export default defineConfig({
   },
   server: {
     fs: {
-      // Allow importing workspace packages' source (packages/ui)
+      // Allow importing workspace packages' source
       allow: [
         // repo root
         path.resolve(__dirname, '../..'),
-        // packages/ui
-        path.resolve(__dirname, '../../packages/ui'),
       ],
     },
   },
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),
-      '@agyn/ui': path.resolve(__dirname, '../../packages/ui/src'),
       // Explicit aliases for Radix UI deps when importing workspace UI sources
       '@radix-ui/react-accordion': path.resolve(__dirname, './node_modules/@radix-ui/react-accordion'),
       '@radix-ui/react-alert-dialog': path.resolve(__dirname, './node_modules/@radix-ui/react-alert-dialog'),

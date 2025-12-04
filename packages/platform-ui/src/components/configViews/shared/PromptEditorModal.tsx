@@ -11,14 +11,16 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-  Button,
+} from '@/components/ui/alert-dialog';
+import { Button } from '@/components/ui/button';
+import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
-  DialogDescription,
-} from '@agyn/ui';
+} from '@/components/ui/dialog';
 
 const MonacoEditor = lazy(() => import('@monaco-editor/react'));
 

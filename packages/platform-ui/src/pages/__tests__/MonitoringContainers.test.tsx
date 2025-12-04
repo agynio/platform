@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import React from 'react';
 import { render, screen, act, fireEvent } from '@testing-library/react';
 import { MonitoringContainers } from '../MonitoringContainers';
-import { TooltipProvider } from '@agyn/ui';
+import { TooltipProvider } from '@/components/ui/tooltip';
 import type { UseQueryResult } from '@tanstack/react-query';
 import type { ContainerItem } from '@/api/modules/containers';
 import type ContainersScreenComponent from '@/components/screens/ContainersScreen';

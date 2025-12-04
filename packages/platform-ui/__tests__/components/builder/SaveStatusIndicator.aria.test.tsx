@@ -2,7 +2,7 @@ import React from 'react';
 import { describe, it, expect } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import { SaveStatusIndicator, type SaveState } from '../../../src/builder/SaveStatusIndicator';
-import { TooltipProvider } from '@agyn/ui';
+import { TooltipProvider } from '@/components/ui/tooltip';
 
 describe('SaveStatusIndicator aria-label and colors', () => {
   const cases: Array<{ state: SaveState; label: string; color: string }> = [

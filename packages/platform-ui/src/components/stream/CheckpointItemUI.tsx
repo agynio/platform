@@ -1,4 +1,4 @@
-import { cn } from '@agyn/ui';
+import { cn } from '@/lib/utils';
 
 export type ParsedMessageType = 'human' | 'ai' | 'tool' | 'unknown';
 

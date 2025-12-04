@@ -1,9 +1,9 @@
 import React, { useState } from 'react';
 import { vi } from 'vitest';
-import type * as AgynUI from '@agyn/ui';
+import type * as TooltipModule from '@/components/ui/tooltip';
 
-vi.mock('@agyn/ui', async (importOriginal) => {
-  const actual = (await importOriginal()) as AgynUI;
+vi.mock('@/components/ui/tooltip', async (importOriginal) => {
+  const actual = (await importOriginal()) as TooltipModule;
   const PassThrough = ({ children }: { children: React.ReactNode }) => <>{children}</>;
   return {
     ...actual,
@@ -15,7 +15,7 @@ vi.mock('@agyn/ui', async (importOriginal) => {
 });
 
 import { render, screen, fireEvent } from '@testing-library/react';
-import { TooltipProvider } from '@agyn/ui';
+import { TooltipProvider } from '@/components/ui/tooltip';
 import ReferenceEnvField from '../ReferenceEnvField';
 import { readEnvList } from '@/components/nodeProperties/utils';
 

@@ -4,6 +4,7 @@ import { describe, it, expect, vi } from 'vitest';
 
 import NodePropertiesSidebar from '../index';
 import type { NodeConfig, NodeState } from '../types';
+import { TooltipProvider } from '@/components/ui/tooltip';
 
 describe('NodePropertiesSidebar - agent', () => {
   it('renders profile inputs and applies default title fallback', () => {
@@ -26,16 +27,18 @@ describe('NodePropertiesSidebar - agent', () => {
     const state: NodeState = { status: 'ready' };
 
     render(
-      <NodePropertiesSidebar
-        config={config}
-        state={state}
-        onConfigChange={onConfigChange}
-        onProvision={vi.fn()}
-        onDeprovision={vi.fn()}
-        canProvision={false}
-        canDeprovision={true}
-        isActionPending={false}
-      />,
+      <TooltipProvider delayDuration={0}>
+        <NodePropertiesSidebar
+          config={config}
+          state={state}
+          onConfigChange={onConfigChange}
+          onProvision={vi.fn()}
+          onDeprovision={vi.fn()}
+          canProvision={false}
+          canDeprovision={true}
+          isActionPending={false}
+        />
+      </TooltipProvider>,
     );
 
     const expectedPlaceholder = 'Casey Quinn (Lead Planner)';

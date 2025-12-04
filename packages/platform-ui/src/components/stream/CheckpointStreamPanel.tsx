@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { useCheckpointStream } from '@/hooks/useCheckpointStream';
-import { Button, Input } from '@agyn/ui';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { CheckpointItem } from './CheckpointItem';
 import { StatusChip } from './StatusChip';
 

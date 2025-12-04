@@ -4,7 +4,7 @@ import { render, screen, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { server, TestProviders, abs } from '../../integration/testUtils';
 import { AgentBuilder } from '../../../src/builder/AgentBuilder';
-import { TooltipProvider } from '@agyn/ui';
+import { TooltipProvider } from '@/components/ui/tooltip';
 
 describe('AgentBuilder smoke render', () => {
   beforeAll(() => server.listen());

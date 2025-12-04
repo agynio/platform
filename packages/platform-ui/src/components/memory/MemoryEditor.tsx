@@ -6,7 +6,10 @@ import {
   type UseMutationResult,
   type UseQueryResult,
 } from '@tanstack/react-query';
-import { Button, Input, Label, Textarea } from '@agyn/ui';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
 import { memoryApi } from '@/api/modules/memory';
 import { notifyError, notifySuccess } from '@/lib/notify';
 import { joinMemoryPath, memoryPathParent, normalizeMemoryPath } from './path';

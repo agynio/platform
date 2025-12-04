@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type ChangeEvent } from 'react';
-import { Input } from '@agyn/ui';
+import { Input } from '@/components/ui/input';
 import type { StaticConfigViewProps } from './types';
 
 export default function MemoryServiceConfigView({ value, onChange, readOnly, disabled }: StaticConfigViewProps) {

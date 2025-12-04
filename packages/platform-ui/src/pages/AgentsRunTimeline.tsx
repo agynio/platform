@@ -8,7 +8,7 @@ import { graphSocket } from '@/lib/graph/socket';
 import type { RunEventStatus, RunEventType, RunTimelineEvent, RunTimelineEventsCursor, RunTimelineEventsResponse } from '@/api/types/agents';
 import { getEventTypeLabel } from '@/components/agents/runTimelineFormatting';
 import { notifyError, notifySuccess } from '@/lib/notify';
-import { Toggle } from '@agyn/ui';
+import { Toggle } from '@/components/ui/toggle';
 
 const EVENT_TYPES: RunEventType[] = ['invocation_message', 'injection', 'llm_call', 'tool_execution', 'summarization'];
 const STATUS_TYPES: RunEventStatus[] = ['pending', 'running', 'success', 'error', 'cancelled'];
