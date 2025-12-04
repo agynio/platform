@@ -1,4 +1,5 @@
 import type { Preview } from '@storybook/react-vite';
+import { TooltipProvider } from '../src/components/ui/tooltip';
 import '../src/styles/tailwind.css';
 import '../src/styles/globals.css';
 import '../src/styles/shadcn-compat.css';
@@ -25,6 +26,13 @@ const preview: Preview = {
       test: 'todo',
     },
   },
+  decorators: [
+    (Story) => (
+      <TooltipProvider>
+        <Story />
+      </TooltipProvider>
+    ),
+  ],
 };
 
 export default preview;
