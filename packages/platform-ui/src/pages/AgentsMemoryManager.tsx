@@ -155,6 +155,8 @@ export function AgentsMemoryManager() {
     enabled: Boolean(selectedNode),
     staleTime: 5_000,
     refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
+    keepPreviousData: true,
   });
 
   const tree = useMemo<MemoryTree | null>(() => {
@@ -180,8 +182,12 @@ export function AgentsMemoryManager() {
   const [mutationStatus, setMutationStatus] = useState<'idle' | 'pending'>('idle');
   const [mutationError, setMutationError] = useState<string | null>(null);
   const lastLoadedRef = useRef<{ nodeKey: string; path: string } | null>(null);
+  const dirtyRef = useRef(false);
+  const isDirty = editorValue !== baselineValue;
 
-  const unsaved = editorValue !== baselineValue;
+  useEffect(() => {
+    dirtyRef.current = isDirty;
+  }, [isDirty]);
 
   useEffect(() => {
     if (!selectedNode) {
@@ -197,8 +203,12 @@ export function AgentsMemoryManager() {
     const last = lastLoadedRef.current;
     const pathChanged = !last || last.nodeKey !== key || last.path !== normalizedPath;
 
+    if (!pathChanged && dirtyRef.current) {
+      return;
+    }
+
     if (normalizedPath === ROOT_PATH) {
-      if (pathChanged || !unsaved) {
+      if (pathChanged || !dirtyRef.current) {
         setEditorValue('');
         setBaselineValue('');
       }
@@ -207,7 +217,7 @@ export function AgentsMemoryManager() {
       return;
     }
 
-    if (pathChanged || !unsaved) {
+    if (pathChanged || !dirtyRef.current) {
       const seeded = dumpQuery.data?.data?.[normalizedPath];
       if (seeded != null) {
         setEditorValue(seeded);
@@ -232,6 +242,11 @@ export function AgentsMemoryManager() {
         }
         const content = await memoryApi.read(selectedNode.nodeId, selectedNode.scope, selectedNode.threadId, normalizedPath);
         if (cancelled) return;
+        if (dirtyRef.current && !pathChanged) {
+          setDocState({ loading: false, exists: true, error: null });
+          lastLoadedRef.current = { nodeKey: key, path: normalizedPath };
+          return;
+        }
         setEditorValue(content);
         setBaselineValue(content);
         setDocState({ loading: false, exists: true, error: null });
@@ -246,7 +261,7 @@ export function AgentsMemoryManager() {
     return () => {
       cancelled = true;
     };
-  }, [dumpQuery.data, selectedNode, selectedPath, unsaved]);
+  }, [dumpQuery.data, selectedNode, selectedPath]);
 
   const handleSelectNode = useCallback((key: string) => {
     setSelectedNodeKey(key);
@@ -390,7 +405,7 @@ export function AgentsMemoryManager() {
             onDeletePath={handleDeletePath}
             editorValue={editorValue}
             onEditorChange={setEditorValue}
-            canSave={Boolean(selectedNode) && selectedPath !== ROOT_PATH && editorValue !== baselineValue && !docState.loading}
+            canSave={Boolean(selectedNode) && selectedPath !== ROOT_PATH && isDirty && !docState.loading}
             onSave={handleSave}
             isSaving={mutationStatus === 'pending'}
             mutationError={mutationError}
