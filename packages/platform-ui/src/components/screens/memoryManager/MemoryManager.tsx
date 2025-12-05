@@ -336,7 +336,13 @@ export function MemoryManager({
                 </p>
               </div>
               <div className="flex flex-wrap items-center justify-end gap-3">
-                <Button type="button" size="sm" onClick={handleSave} disabled={!canSave || interactionsDisabled || selectedPath === ROOT_PATH || docState.loading}>
+                <Button
+                  type="button"
+                  variant="primary"
+                  size="md"
+                  onClick={handleSave}
+                  disabled={!canSave || interactionsDisabled || selectedPath === ROOT_PATH || docState.loading}
+                >
                   Save changes
                 </Button>
                 <Tooltip>

@@ -67,7 +67,14 @@ export function MarkdownEditor({
               Saved
             </Badge>
           )}
-          <Button type="button" onClick={handleSave} disabled={!unsaved} className="flex items-center gap-2">
+          <Button
+            type="button"
+            variant="primary"
+            size="md"
+            onClick={handleSave}
+            disabled={!unsaved}
+            className="flex items-center gap-2"
+          >
             <Save className="size-4" />
             Save
           </Button>
