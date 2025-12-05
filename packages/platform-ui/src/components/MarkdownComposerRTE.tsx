@@ -37,10 +37,13 @@ import {
   $getSelection,
   $isRangeSelection,
   $isElementNode,
+  $isParagraphNode,
+  $isTextNode,
   COMMAND_PRIORITY_LOW,
   COMMAND_PRIORITY_NORMAL,
   FORMAT_TEXT_COMMAND,
   KEY_DOWN_COMMAND,
+  LineBreakNode,
   type LexicalEditor,
   SELECTION_CHANGE_COMMAND,
   createCommand,
@@ -778,7 +781,114 @@ function MarkdownComposerKeymapPlugin({
           return false;
         }
 
-        if (!isModKey(event) || event.altKey) {
+        if (!isModKey(event)) {
+          if (event.altKey) {
+            return false;
+          }
+
+          if (event.key === 'Enter' && !event.shiftKey) {
+            let handled = false;
+            editor.update(() => {
+              const selection = $getSelection();
+              if (!$isRangeSelection(selection) || !selection.isCollapsed()) {
+                return;
+              }
+
+              const anchorNode = selection.anchor.getNode();
+              const topLevel = anchorNode.getTopLevelElementOrThrow();
+
+              if (!$isParagraphNode(topLevel)) {
+                return;
+              }
+
+              if (topLevel.getTextContent() !== '```') {
+                return;
+              }
+
+              handled = true;
+              topLevel.clear();
+              topLevel.selectStart();
+              editor.dispatchCommand(TOGGLE_CODE_BLOCK_COMMAND, undefined);
+
+              const updatedSelection = $getSelection();
+              if ($isRangeSelection(updatedSelection)) {
+                const codeNode = updatedSelection
+                  .anchor.getNode()
+                  .getTopLevelElementOrThrow();
+                if ($isCodeNode(codeNode)) {
+                  const firstChild = codeNode.getFirstChild();
+                  if (firstChild instanceof LineBreakNode) {
+                    firstChild.remove();
+                  }
+                }
+              }
+            });
+
+            if (handled) {
+              event.preventDefault();
+              return true;
+            }
+          }
+
+          if (event.key === 'ArrowDown' && !event.shiftKey) {
+            let handled = false;
+            editor.update(() => {
+              const selection = $getSelection();
+              if (!$isRangeSelection(selection) || !selection.isCollapsed()) {
+                return;
+              }
+
+              const anchorNode = selection.anchor.getNode();
+              const topLevel = anchorNode.getTopLevelElementOrThrow();
+
+              if (!$isCodeNode(topLevel)) {
+                return;
+              }
+
+              const lastDescendant = topLevel.getLastDescendant();
+              if (lastDescendant === null) {
+                handled = true;
+              } else if (selection.anchor.getNode() === lastDescendant) {
+                if ($isTextNode(lastDescendant)) {
+                  handled = selection.anchor.offset === lastDescendant.getTextContentSize();
+                } else {
+                  handled = selection.anchor.offset === lastDescendant.getChildrenSize();
+                }
+              } else if ($isElementNode(lastDescendant) && lastDescendant.isParentOf(selection.anchor.getNode())) {
+                if ($isTextNode(selection.anchor.getNode())) {
+                  handled = selection.anchor.offset === selection.anchor.getNode().getTextContentSize();
+                }
+              }
+
+              if (!handled) {
+                return;
+              }
+
+              const nextSibling = topLevel.getNextSibling();
+
+              if (nextSibling) {
+                if ($isElementNode(nextSibling)) {
+                  nextSibling.selectStart();
+                } else {
+                  const paragraph = $createParagraphNode();
+                  topLevel.insertAfter(paragraph);
+                  paragraph.selectStart();
+                }
+                return;
+              }
+
+              const paragraph = $createParagraphNode();
+              paragraph.append($createTextNode(''));
+              topLevel.insertAfter(paragraph);
+              paragraph.selectStart();
+            });
+
+            if (handled) {
+              event.preventDefault();
+              return true;
+            }
+          }
+
           return false;
         }
 

@@ -6,10 +6,11 @@ import {
   beforeAll,
   afterAll,
 } from 'vitest';
-import { render, fireEvent, screen, waitFor, within } from '@testing-library/react';
+import { render, fireEvent, screen, waitFor, within, act } from '@testing-library/react';
 import React, { useState } from 'react';
 import { MarkdownComposer, type MarkdownComposerProps } from '../MarkdownComposer';
 import { MarkdownContent } from '../MarkdownContent';
+import { $getRoot, $getSelection, $isRangeSelection, type LexicalEditor } from 'lexical';
 
 interface ComposerHarnessProps {
   initialValue?: string;
@@ -72,6 +73,38 @@ const switchToSourceView = () => {
 
 const switchToRenderedView = () => {
   fireEvent.click(screen.getByTestId('markdown-composer-view-rendered'));
+};
+
+const getLexicalEditor = (element: HTMLElement): LexicalEditor => {
+  const editor = (element as unknown as { __lexicalEditor?: unknown }).__lexicalEditor;
+  if (!editor) {
+    throw new Error('Lexical editor instance not found');
+  }
+  return editor as LexicalEditor;
+};
+
+const insertText = async (element: HTMLElement, text: string) => {
+  const editor = getLexicalEditor(element);
+  await act(async () => {
+    editor.focus();
+    editor.update(() => {
+      const selection = $getSelection();
+      if (!$isRangeSelection(selection)) {
+        $getRoot().selectEnd();
+      }
+      let activeSelection = $getSelection();
+      if (!$isRangeSelection(activeSelection)) {
+        throw new Error('Range selection not available for insertText');
+      }
+      for (const char of text) {
+        activeSelection.insertText(char);
+        activeSelection = $getSelection();
+        if (!$isRangeSelection(activeSelection)) {
+          throw new Error('Range selection not available for insertText');
+        }
+      }
+    });
+  });
 };
 
 const focusAndSelectAll = (editor: HTMLElement) => {
@@ -477,6 +510,67 @@ describe('MarkdownComposer mac shortcuts parity', () => {
     fireEvent.keyDown(sourceEditor, { key: 'Enter', shiftKey: true });
 
     expect(handleSend).not.toHaveBeenCalled();
+  });
+});
+
+describe('MarkdownComposer code fences', () => {
+  it('creates a code block when typing triple backticks in rendered mode', async () => {
+    render(<ComposerHarness renderPreview />);
+
+    const editor = getComposerEditor();
+    await waitFor(() => expect(getValue()).toBe(''));
+
+    editor.focus();
+    fireEvent.focus(editor);
+
+    await insertText(editor, '```');
+    fireEvent.keyDown(editor, { key: 'Enter', code: 'Enter' });
+    fireEvent.keyUp(editor, { key: 'Enter', code: 'Enter' });
+
+    await insertText(editor, "console.log('hi')");
+
+    await waitFor(() => expect(getValue()).toBe(["```", "console.log('hi')", '```'].join('\n')));
+
+    await waitFor(() => {
+      expect(getComposerEditor().querySelector('code')).not.toBeNull();
+    });
+
+    switchToSourceView();
+
+    await waitFor(() =>
+      expect(getSourceEditor().value).toBe(["```", "console.log('hi')", '```'].join('\n')),
+    );
+  });
+
+  it('moves the caret out of a trailing code block when pressing ArrowDown', async () => {
+    render(<ComposerHarness initialValue={['```', 'line one', 'line two', '```'].join('\n')} />);
+
+    const editor = getComposerEditor();
+    await waitFor(() => expect(getValue()).toBe(['```', 'line one', 'line two', '```'].join('\n')));
+
+    editor.focus();
+    fireEvent.focus(editor);
+
+    await act(async () => {
+      await new Promise((resolve) => {
+        getLexicalEditor(editor).update(() => {
+          $getRoot().selectEnd();
+          resolve(null);
+        });
+      });
+    });
+
+    await act(async () => {
+      fireEvent.keyDown(editor, { key: 'ArrowDown', code: 'ArrowDown' });
+      fireEvent.keyUp(editor, { key: 'ArrowDown', code: 'ArrowDown' });
+    });
+    await act(async () => {
+      await insertText(editor, 'After block');
+    });
+
+    await waitFor(() =>
+      expect(getValue()).toBe(['```', 'line one', 'line two', '```', '', 'After block'].join('\n')),
+    );
   });
 });
 

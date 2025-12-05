@@ -5,6 +5,7 @@ import type {
 } from '@lexical/markdown';
 import { CODE, TRANSFORMERS } from '@lexical/markdown';
 import { $isCodeNode } from '@lexical/code';
+import { LineBreakNode } from 'lexical';
 
 export const UNDERLINE_MARKER = '__LEXICAL_UNDERLINE__';
 
@@ -63,7 +64,16 @@ const CUSTOM_CODE_TRANSFORMER: MultilineElementTransformer = {
       return null;
     }
 
-    const textContent = node.getTextContent();
+    const children = node.getChildren();
+    const rawTextContent = node.getTextContent();
+    const leadingShouldBeTrimmed =
+      rawTextContent.startsWith('\n') &&
+      children.length >= 2 &&
+      children[0] instanceof LineBreakNode &&
+      !(children[1] instanceof LineBreakNode);
+    const textContent = leadingShouldBeTrimmed
+      ? rawTextContent.slice(1)
+      : rawTextContent;
     const language = node.getLanguage();
     const languageSuffix = language && !CODE_LANGUAGES_WITHOUT_MARKER.has(language) ? language : '';
 
