@@ -24,9 +24,9 @@ export const ManageToolStaticConfigSchema = z
     timeoutMs: z
       .number()
       .int()
-      .min(1000)
-      .default(30000)
-      .describe('Timeout in milliseconds when waiting for child responses in sync mode.'),
+      .min(0)
+      .default(0)
+      .describe('Timeout in milliseconds when waiting for child responses in sync mode. 0 disables timeout.'),
   })
   .strict();
 
@@ -125,8 +125,10 @@ export class ManageToolNode extends BaseToolNode<z.infer<typeof ManageToolStatic
   }
 
   getTimeoutMs(): number {
-    const raw = this.config.timeoutMs ?? 30000;
-    return Number.isFinite(raw) && raw > 0 ? Math.trunc(raw) : 30000;
+    const raw = this.config.timeoutMs;
+    if (!Number.isFinite(raw)) return 0;
+    const normalized = Math.trunc(raw as number);
+    return normalized >= 0 ? normalized : 0;
   }
 
   async registerInvocation(context: { childThreadId: string; parentThreadId: string; workerTitle: string; callerAgent: CallerAgent }): Promise<void> {
@@ -161,23 +163,33 @@ export class ManageToolNode extends BaseToolNode<z.infer<typeof ManageToolStatic
     }
 
     return await new Promise<string>((resolve, reject) => {
-      const safeTimeout = Number.isFinite(timeoutMs) && timeoutMs > 0 ? Math.trunc(timeoutMs) : this.getTimeoutMs();
-      const timer = setTimeout(() => {
-        this.pendingWaiters.delete(trimmed);
+      const candidate = Number.isFinite(timeoutMs) ? Math.trunc(timeoutMs) : this.getTimeoutMs();
+      const safeTimeout = Math.max(0, candidate);
+      let timer: NodeJS.Timeout | null = null;
+      if (safeTimeout > 0) {
+        timer = setTimeout(() => {
+          this.pendingWaiters.delete(trimmed);
+          this.timeoutHandles.delete(trimmed);
+          reject(new Error('manage_timeout'));
+        }, safeTimeout);
+        this.timeoutHandles.set(trimmed, timer);
+      } else {
         this.timeoutHandles.delete(trimmed);
-        reject(new Error('manage_timeout'));
-      }, safeTimeout);
-      this.timeoutHandles.set(trimmed, timer);
+      }
       this.pendingWaiters.set(trimmed, {
         resolve: (text) => {
-          clearTimeout(timer);
-          this.timeoutHandles.delete(trimmed);
+          if (timer) {
+            clearTimeout(timer);
+            this.timeoutHandles.delete(trimmed);
+          }
           this.pendingWaiters.delete(trimmed);
           resolve(text);
         },
         reject: (err) => {
-          clearTimeout(timer);
-          this.timeoutHandles.delete(trimmed);
+          if (timer) {
+            clearTimeout(timer);
+            this.timeoutHandles.delete(trimmed);
+          }
           this.pendingWaiters.delete(trimmed);
           reject(err);
         },

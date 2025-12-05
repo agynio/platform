@@ -27,6 +27,19 @@ describe('ManageToolNode sendToChannel', () => {
     expect(resolved).toBe('ready to go');
   });
 
+  it('waits indefinitely when timeout is disabled', async () => {
+    await node.setConfig({ mode: 'sync', timeoutMs: 0 } as unknown as ManageToolNode['config']);
+    const waiter = node.awaitChildResponse('child-thread-zero', 0);
+
+    await new Promise((resolve) => setTimeout(resolve, 75));
+
+    const sendResult = await node.sendToChannel('child-thread-zero', 'delayed response');
+    const resolved = await waiter;
+
+    expect(sendResult.ok).toBe(true);
+    expect(resolved).toBe('delayed response');
+  });
+
   it('forwards messages to parent thread in async mode', async () => {
     await node.setConfig({ mode: 'async', timeoutMs: 1000 } as unknown as ManageToolNode['config']);
     const parentInvoke = vi.fn().mockResolvedValue(undefined);

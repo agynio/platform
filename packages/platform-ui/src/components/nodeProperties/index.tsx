@@ -1,6 +1,7 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { Input } from '../Input';
+import { Dropdown } from '../Dropdown';
 import type { AutocompleteOption } from '../AutocompleteInput';
 
 import { Header } from './Header';
@@ -30,6 +31,7 @@ import {
   readSummarizationConfig,
   serializeEnvVars,
   writeReferenceValue,
+  toNumberOrUndefined,
 } from './utils';
 import { getCanonicalToolName } from './toolCanonicalNames';
 import { TOOL_NAME_HINT } from './toolNameHint';
@@ -143,6 +145,7 @@ function NodePropertiesSidebar({
     typeof configRecord.template === 'string' ? (configRecord.template as string) : undefined;
   const nodeTemplate = configTemplate ?? recordTemplate;
   const isShellTool = nodeKind === 'Tool' && nodeTemplate === 'shellTool';
+  const isManageTool = nodeKind === 'Tool' && nodeTemplate === 'manageTool';
 
   const [toolEnvOpen, setToolEnvOpen] = useState(true);
   const [workspaceEnvOpen, setWorkspaceEnvOpen] = useState(true);
@@ -184,6 +187,8 @@ function NodePropertiesSidebar({
   const toolClientBufferLimit = readNumber(configRecord.clientBufferLimitBytes);
   const logToPid1Enabled =
     typeof configRecord.logToPid1 === 'boolean' ? (configRecord.logToPid1 as boolean) : true;
+  const manageModeValue = configRecord.mode === 'async' ? 'async' : 'sync';
+  const manageTimeoutMs = readNumber(configRecord.timeoutMs);
   const agentNameValue = typeof configRecord.name === 'string' ? (configRecord.name as string) : '';
   const agentRoleValue = typeof configRecord.role === 'string' ? (configRecord.role as string) : '';
   const [agentNameInput, setAgentNameInput] = useState(agentNameValue);
@@ -843,6 +848,32 @@ function NodePropertiesSidebar({
                 aria-invalid={toolNameError ? 'true' : 'false'}
               />
               {toolNameError && <p className="mt-1 text-xs text-[var(--agyn-status-failed)]">{toolNameError}</p>}
+            </section>
+          )}
+
+          {isManageTool && (
+            <section className="space-y-4">
+              <div>
+                <FieldLabel label="Mode" hint="sync waits for child responses; async sends without waiting" />
+                <Dropdown
+                  size="sm"
+                  value={manageModeValue}
+                  onValueChange={(value) => onConfigChange?.({ mode: value })}
+                  options={[
+                    { value: 'sync', label: 'Sync' },
+                    { value: 'async', label: 'Async' },
+                  ]}
+                />
+              </div>
+              <div>
+                <FieldLabel label="Timeout (ms)" hint="0 disables timeout (sync mode only)" />
+                <Input
+                  size="sm"
+                  placeholder="0"
+                  value={manageTimeoutMs !== undefined ? String(manageTimeoutMs) : ''}
+                  onChange={(event) => onConfigChange?.({ timeoutMs: toNumberOrUndefined(event.target.value) })}
+                />
+              </div>
             </section>
           )}
 
