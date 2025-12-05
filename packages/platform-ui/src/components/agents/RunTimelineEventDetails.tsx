@@ -8,7 +8,6 @@ import type {
   ToolOutputTerminal,
   ToolOutputSource,
 } from '@/api/types/agents';
-import { runs } from '@/api/modules/runs';
 import { STATUS_COLORS, formatDuration, getEventTypeLabel } from './runTimelineFormatting';
 import { LLMContextViewer } from './LLMContextViewer';
 import { waitForStableScrollHeight } from './waitForStableScrollHeight';
@@ -193,44 +192,6 @@ function determineDefaultMode(output: unknown): OutputMode {
     }
   }
   return 'text';
-}
-
-type ContextWindowMeta = {
-  newIds: string[];
-  totalCount: number;
-  prevCursorId: string | null;
-  pageSize: number;
-};
-
-function parseContextWindow(metadata: unknown): ContextWindowMeta | null {
-  if (!metadata || typeof metadata !== 'object' || Array.isArray(metadata)) {
-    return null;
-  }
-  const contextWindow = (metadata as Record<string, unknown>).contextWindow;
-  if (!contextWindow || typeof contextWindow !== 'object' || Array.isArray(contextWindow)) {
-    return null;
-  }
-  const contextWindowRecord = contextWindow as Record<string, unknown>;
-  const rawNewIds = Array.isArray(contextWindowRecord.newIds) ? (contextWindowRecord.newIds as unknown[]) : [];
-  const newIds = rawNewIds.filter((id): id is string => typeof id === 'string' && id.length > 0);
-  const totalCountRaw = (contextWindow as Record<string, unknown>).totalCount;
-  const prevCursorRaw = (contextWindow as Record<string, unknown>).prevCursorId;
-  const pageSizeRaw = (contextWindow as Record<string, unknown>).pageSize;
-
-  const totalCount =
-    typeof totalCountRaw === 'number' && Number.isFinite(totalCountRaw)
-      ? Math.max(0, Math.floor(totalCountRaw))
-      : null;
-  const prevCursorId = typeof prevCursorRaw === 'string' && prevCursorRaw.length > 0 ? prevCursorRaw : null;
-  const pageSize =
-    typeof pageSizeRaw === 'number' && Number.isFinite(pageSizeRaw) && pageSizeRaw > 0 ? Math.floor(pageSizeRaw) : 10;
-
-  return {
-    newIds,
-    totalCount: totalCount ?? newIds.length,
-    prevCursorId,
-    pageSize: Math.max(1, pageSize),
-  };
 }
 
 function toText(value: unknown): string {
@@ -763,37 +724,7 @@ export function RunTimelineEventDetails({ event }: { event: RunTimelineEvent }) 
   const contextPrevItemIdsRef = useRef<string[]>([]);
   const contextAdjustTokenRef = useRef(0);
   const hasLlmCall = Boolean(llmCall);
-  const contextWindow = useMemo(() => parseContextWindow(event.metadata), [event.metadata]);
-  const windowHighlightIds = useMemo(() => (contextWindow ? contextWindow.newIds : []), [contextWindow]);
-  const highlightIdsKey = useMemo(() => windowHighlightIds.join('|'), [windowHighlightIds]);
-  const fallbackTotalCount = useMemo(() => {
-    if (!llmCall) return windowHighlightIds.length;
-    const unique = new Set<string>(llmCall.contextItemIds);
-    for (const id of windowHighlightIds) unique.add(id);
-    return unique.size;
-  }, [llmCall, windowHighlightIds]);
-  const contextTotalCount = contextWindow ? Math.max(contextWindow.totalCount, fallbackTotalCount) : fallbackTotalCount;
-  const prevCursorId = contextWindow?.prevCursorId ?? null;
-  const contextPageSize = contextWindow?.pageSize ?? 10;
-  const legacyInitialCount = useMemo(() => {
-    if (!llmCall) return undefined;
-    const raw = llmCall.newContextItemCount;
-    if (typeof raw !== 'number' || !Number.isFinite(raw)) return undefined;
-    const bounded = Math.max(0, Math.min(Math.floor(raw), llmCall.contextItemIds.length));
-    return bounded;
-  }, [llmCall]);
-  const fetchOlderContext = useCallback(
-    (beforeId: string | null, limit: number) =>
-      runs.eventContext(event.runId, event.id, {
-        ...(beforeId ? { beforeId } : {}),
-        ...(limit ? { limit } : {}),
-      }),
-    [event.runId, event.id],
-  );
-  const contextItemsKey = useMemo(() => {
-    if (!llmCall) return '';
-    return `${event.id}:${llmCall.contextItemIds.join('|')}:${highlightIdsKey}`;
-  }, [event.id, highlightIdsKey, llmCall]);
+  const contextItemsKey = llmCall ? `${event.id}:${llmCall.contextItemIds.join('|')}` : '';
 
   const isShellTool = toolExecution?.toolName === 'shell_command';
   const {
@@ -955,27 +886,12 @@ export function RunTimelineEventDetails({ event }: { event: RunTimelineEvent }) 
               <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded border border-gray-200 bg-white">
                 <header className="border-b border-gray-200 px-3 py-2 text-xs font-semibold uppercase tracking-wide text-gray-500">Context</header>
                 <div ref={contextScrollRef} data-testid="llm-context-scroll" className="flex-1 min-h-0 overflow-y-auto px-3 py-2">
-                  {contextWindow ? (
-                    <LLMContextViewer
-                      mode="windowed"
-                      initialIds={windowHighlightIds}
-                      highlightIds={windowHighlightIds}
-                      totalCount={contextTotalCount}
-                      prevCursorId={prevCursorId}
-                      pageSize={contextPageSize}
-                      fetchOlder={fetchOlderContext}
-                      onItemsRendered={handleContextItemsRendered}
-                      onBeforeLoadMore={handleBeforeLoadMore}
-                    />
-                  ) : (
-                    <LLMContextViewer
-                      ids={llmCall.contextItemIds}
-                      highlightLastCount={llmCall.newContextItemCount}
-                      initialVisibleCount={legacyInitialCount}
-                      onItemsRendered={handleContextItemsRendered}
-                      onBeforeLoadMore={handleBeforeLoadMore}
-                    />
-                  )}
+                  <LLMContextViewer
+                    ids={llmCall.contextItemIds}
+                    highlightLastCount={llmCall.newContextItemCount}
+                    onItemsRendered={handleContextItemsRendered}
+                    onBeforeLoadMore={handleBeforeLoadMore}
+                  />
                 </div>
               </div>
               {(hasLlmResponse || hasLlmToolCalls) && (

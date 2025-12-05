@@ -1,21 +1,6 @@
-import {
-  Clock,
-  MessageSquare,
-  Bot,
-  Wrench,
-  FileText,
-  Terminal,
-  Users,
-  Copy,
-  User,
-  Settings,
-  ExternalLink,
-  Loader2,
-} from 'lucide-react';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Clock, MessageSquare, Bot, Wrench, FileText, Terminal, Users, ChevronDown, ChevronRight, Copy, User, Settings, ExternalLink } from 'lucide-react';
+import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { runs } from '@/api/modules/runs';
-import type { ContextItem, ContextItemRole } from '@/api/types/agents';
 import { useToolOutputStreaming } from '@/hooks/useToolOutputStreaming';
 import { Badge } from './Badge';
 import { IconButton } from './IconButton';
@@ -44,68 +29,6 @@ const safeJsonParse = (value: string): unknown => {
   }
 };
 
-const EMPTY_CONTEXT_HIGHLIGHTS: ReadonlySet<string> = new Set();
-
-const parseContextRole = (value: unknown): ContextItemRole => {
-  if (typeof value !== 'string') {
-    return 'other';
-  }
-  const normalized = value.toLowerCase();
-  switch (normalized) {
-    case 'system':
-    case 'user':
-    case 'assistant':
-    case 'tool':
-    case 'memory':
-    case 'summary':
-      return normalized;
-    default:
-      return 'other';
-  }
-};
-
-const normalizeContextRecord = (record: Record<string, unknown>, fallbackId: string, fallbackTimestamp: string): ContextItem => {
-  const role = parseContextRole(record.role);
-  const id = typeof record.id === 'string' && record.id.length > 0 ? record.id : fallbackId;
-  const createdAtCandidate =
-    typeof record.created_at === 'string'
-      ? record.created_at
-      : typeof record.createdAt === 'string'
-      ? record.createdAt
-      : typeof record.timestamp === 'string'
-      ? record.timestamp
-      : fallbackTimestamp;
-  const sizeRaw = record.size_bytes ?? record.sizeBytes;
-  const sizeBytes = typeof sizeRaw === 'number' && Number.isFinite(sizeRaw) ? sizeRaw : 0;
-  const textContent = typeof record.content === 'string'
-    ? record.content
-    : typeof record.text === 'string'
-    ? record.text
-    : typeof record.message === 'string'
-    ? record.message
-    : null;
-  const contentJsonCandidate =
-    record.content_json ??
-    record.contentJson ??
-    (typeof record.content !== 'string' ? record.content : null) ??
-    record.data ??
-    null;
-  const metadata = record.metadata ?? null;
-
-  return {
-    id,
-    role,
-    contentText: typeof textContent === 'string' ? textContent : null,
-    contentJson: contentJsonCandidate,
-    metadata,
-    sizeBytes,
-    createdAt: typeof createdAtCandidate === 'string' ? createdAtCandidate : fallbackTimestamp,
-  };
-};
-
-const toContextItems = (value: unknown, prefix: string, fallbackTimestamp: string): ContextItem[] =>
-  asRecordArray(value).map((record, index) => normalizeContextRecord(record, `${prefix}-${index}`, fallbackTimestamp));
-
 export interface RunEventData extends Record<string, unknown> {
   messageSubtype?: MessageSubtype;
   content?: unknown;
@@ -113,6 +36,10 @@ export interface RunEventData extends Record<string, unknown> {
   toolName?: string;
   response?: string;
   context?: unknown;
+  contextWindow?: {
+    totalCount?: number;
+    newCount?: number;
+  };
   tokens?: {
     total?: number;
     [key: string]: unknown;
@@ -156,13 +83,12 @@ export interface RunEvent {
 
 export function RunEventDetails({ event, runId }: RunEventDetailsProps) {
   const [outputViewMode, setOutputViewMode] = useState<OutputViewMode>('text');
-  const [contextItems, setContextItems] = useState<ContextItem[]>([]);
-  const [contextPrevCursorId, setContextPrevCursorId] = useState<string | null>(null);
-  const [contextTotalCount, setContextTotalCount] = useState<number | null>(null);
-  const [contextHighlightIds, setContextHighlightIds] = useState<string[]>([]);
-  const [contextLoading, setContextLoading] = useState(false);
-  const [contextFetchingOlder, setContextFetchingOlder] = useState(false);
-  const [contextError, setContextError] = useState<string | null>(null);
+  const [expandedToolCalls, setExpandedToolCalls] = useState<Set<string>>(new Set());
+  const [showAllContext, setShowAllContext] = useState(false);
+
+  useEffect(() => {
+    setShowAllContext(false);
+  }, [event.id]);
 
   const isShellToolEvent =
     event.type === 'tool' &&
@@ -175,6 +101,18 @@ export function RunEventDetails({ event, runId }: RunEventDetailsProps) {
   });
   const streamedText = hydrated ? text : undefined;
   const displayedOutput = streamedText ?? event.data.output ?? '';
+
+  const toggleToolCall = (key: string) => {
+    setExpandedToolCalls((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) {
+        next.delete(key);
+      } else {
+        next.add(key);
+      }
+      return next;
+    });
+  };
 
   const renderOutputContent = (output: unknown) => {
     const outputString = typeof output === 'string'
@@ -236,87 +174,6 @@ export function RunEventDetails({ event, runId }: RunEventDetailsProps) {
     { value: 'yaml', label: 'YAML' },
   ];
 
-  const isLlmEvent = event.type === 'llm';
-  const highlightSet = useMemo(() => new Set(contextHighlightIds), [contextHighlightIds]);
-  const oldestContextId = useMemo(() => (contextItems.length > 0 ? contextItems[0].id : null), [contextItems]);
-  const loadMoreCursor = contextPrevCursorId ?? oldestContextId;
-  const totalContextCount = contextTotalCount ?? contextItems.length;
-  const canLoadOlderContext =
-    !contextLoading &&
-    loadMoreCursor !== null &&
-    (contextPrevCursorId !== null || totalContextCount > contextItems.length || contextItems.length === 0);
-
-  useEffect(() => {
-    if (!runId || !isLlmEvent) {
-      setContextItems([]);
-      setContextPrevCursorId(null);
-      setContextTotalCount(null);
-      setContextHighlightIds([]);
-      setContextError(null);
-      setContextLoading(false);
-      setContextFetchingOlder(false);
-      return;
-    }
-
-    let cancelled = false;
-    setContextItems([]);
-    setContextPrevCursorId(null);
-    setContextTotalCount(null);
-    setContextHighlightIds([]);
-    setContextError(null);
-    setContextLoading(true);
-
-    runs
-      .eventContext(runId, event.id)
-      .then(({ items, nextBeforeId, totalCount }) => {
-        if (cancelled) return;
-        setContextItems(items);
-        setContextPrevCursorId(nextBeforeId);
-        setContextTotalCount(totalCount);
-        setContextHighlightIds(items.map((item) => item.id));
-      })
-      .catch(() => {
-        if (cancelled) return;
-        setContextError('Failed to load context items');
-      })
-      .finally(() => {
-        if (cancelled) return;
-        setContextLoading(false);
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [event.id, isLlmEvent, runId]);
-
-  const handleLoadOlderContext = useCallback(() => {
-    if (!runId || !isLlmEvent) return;
-    if (!loadMoreCursor) return;
-
-    setContextFetchingOlder(true);
-    setContextError(null);
-
-    runs
-      .eventContext(runId, event.id, { beforeId: loadMoreCursor })
-      .then(({ items, nextBeforeId, totalCount }) => {
-        setContextItems((prev) => {
-          if (items.length === 0) return prev;
-          const existing = new Set(prev.map((item) => item.id));
-          const deduped = items.filter((item) => !existing.has(item.id));
-          if (deduped.length === 0) return prev;
-          return [...deduped, ...prev];
-        });
-        setContextPrevCursorId(nextBeforeId);
-        setContextTotalCount(totalCount);
-      })
-      .catch(() => {
-        setContextError('Failed to load older context');
-      })
-      .finally(() => {
-        setContextFetchingOlder(false);
-      });
-  }, [event.id, isLlmEvent, loadMoreCursor, runId]);
-
   const renderMessageEvent = () => {
     const subtypeCandidate = event.data.messageSubtype;
     const messageSubtype: MessageSubtype =
@@ -367,11 +224,21 @@ export function RunEventDetails({ event, runId }: RunEventDetailsProps) {
   };
 
   const renderLLMEvent = () => {
+    const context = asRecordArray(event.data.context);
     const response = asString(event.data.response);
     const totalTokens = asNumber(event.data.tokens?.total);
     const cost = typeof event.data.cost === 'string' ? event.data.cost : '';
     const model = asString(event.data.model);
-    const showingCount = contextItems.length;
+    const contextWindowRecord = isRecord(event.data.contextWindow) ? event.data.contextWindow : undefined;
+    const totalContextCount = context.length;
+    const rawNewContextCount = asNumber(contextWindowRecord?.newCount);
+    const sanitizedNewContextCount =
+      rawNewContextCount !== undefined ? Math.max(0, Math.min(totalContextCount, Math.floor(rawNewContextCount))) : 0;
+    const shouldLimitContext = sanitizedNewContextCount > 0 && sanitizedNewContextCount < totalContextCount;
+    const visibleContext = shouldLimitContext && !showAllContext
+      ? context.slice(totalContextCount - sanitizedNewContextCount)
+      : context;
+    const hasHiddenContext = shouldLimitContext && !showAllContext;
 
     return (
       <div className="space-y-6 h-full flex flex-col">
@@ -420,68 +287,33 @@ export function RunEventDetails({ event, runId }: RunEventDetailsProps) {
                   <span className="text-sm text-[var(--agyn-gray)]">Model</span>
                   <IconButton icon={<Copy className="w-3 h-3" />} size="sm" variant="ghost" />
                 </div>
-                <div className="text-[var(--agyn-dark)] text-sm font-mono">{model}</div>
+                <div className="text-[var(--agyn-dark)] text-sm font-mono">
+                  {model}
+                </div>
               </div>
             )}
-
+            
             {/* Context */}
             <div className="flex-1 flex flex-col min-h-0">
               <div className="flex items-center gap-2 mb-3 h-8 flex-shrink-0">
                 <span className="text-sm text-[var(--agyn-gray)]">Context</span>
               </div>
-              <div className="flex-1 overflow-y-auto min-h-0 border border-[var(--agyn-border-subtle)] rounded-[10px] p-4 space-y-4">
-                {contextLoading ? (
-                  <div className="flex items-center gap-2 text-sm text-[var(--agyn-gray)]">
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                    Loading context…
-                  </div>
-                ) : showingCount === 0 ? (
-                  <div className="space-y-4">
-                    {contextError ? (
-                      <div className="text-sm text-[var(--agyn-red)]">{contextError}</div>
-                    ) : (
-                      <div className="text-sm text-[var(--agyn-gray)]">No context messages</div>
-                    )}
-                    {canLoadOlderContext && (
+              <div className="flex-1 overflow-y-auto min-h-0 border border-[var(--agyn-border-subtle)] rounded-[10px] p-4">
+                {visibleContext.length > 0 ? (
+                  <div>
+                    {hasHiddenContext && (
                       <button
+                        className="w-full text-sm text-[var(--agyn-blue)] hover:text-[var(--agyn-blue)]/80 py-2 mb-4 border border-[var(--agyn-border-subtle)] rounded-[6px] transition-colors"
                         type="button"
-                        onClick={handleLoadOlderContext}
-                        disabled={contextFetchingOlder}
-                        className="w-full rounded-[6px] border border-[var(--agyn-border-subtle)] px-3 py-2 text-left text-sm font-medium text-[var(--agyn-blue)] transition-colors hover:text-[var(--agyn-blue)]/80 disabled:cursor-not-allowed disabled:opacity-60"
+                        onClick={() => setShowAllContext(true)}
                       >
-                        Load older context ({showingCount} of {totalContextCount})
+                        Load older context
                       </button>
                     )}
-                    {contextFetchingOlder && (
-                      <div className="flex items-center gap-2 text-sm text-[var(--agyn-gray)]">
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                        Loading older context…
-                      </div>
-                    )}
+                    {renderContextMessages(visibleContext)}
                   </div>
                 ) : (
-                  <div className="space-y-4">
-                    {contextError && (
-                      <div className="text-sm text-[var(--agyn-red)]">{contextError}</div>
-                    )}
-                    {canLoadOlderContext && (
-                      <button
-                        type="button"
-                        onClick={handleLoadOlderContext}
-                        disabled={contextFetchingOlder}
-                        className="w-full rounded-[6px] border border-[var(--agyn-border-subtle)] px-3 py-2 text-left text-sm font-medium text-[var(--agyn-blue)] transition-colors hover:text-[var(--agyn-blue)]/80 disabled:cursor-not-allowed disabled:opacity-60"
-                      >
-                        Load older context ({showingCount} of {totalContextCount})
-                      </button>
-                    )}
-                    {renderContextMessages(contextItems, highlightSet)}
-                    {contextFetchingOlder && (
-                      <div className="flex items-center gap-2 text-sm text-[var(--agyn-gray)]">
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                        Loading older context…
-                      </div>
-                    )}
-                  </div>
+                  <div className="text-sm text-[var(--agyn-gray)]">No context messages</div>
                 )}
               </div>
             </div>
@@ -489,125 +321,216 @@ export function RunEventDetails({ event, runId }: RunEventDetailsProps) {
 
           {/* Output */}
           <div className="flex flex-col min-h-0 min-w-0">
-                <div className="flex items-center gap-2 mb-3 h-8 flex-shrink-0">
-                  <span className="text-sm text-[var(--agyn-gray)]">Output</span>
-                  <IconButton icon={<Copy className="w-3 h-3" />} size="sm" variant="ghost" />
+            <div className="flex items-center gap-2 mb-3 h-8 flex-shrink-0">
+              <span className="text-sm text-[var(--agyn-gray)]">Output</span>
+              <IconButton icon={<Copy className="w-3 h-3" />} size="sm" variant="ghost" />
+            </div>
+            <div className="flex-1 overflow-y-auto min-h-0 border border-[var(--agyn-border-subtle)] rounded-[10px] p-4">
+              {response ? (
+                <div className="prose prose-sm max-w-none">
+                  <MarkdownContent content={response} />
                 </div>
-                <div className="flex-1 overflow-y-auto min-h-0 border border-[var(--agyn-border-subtle)] rounded-[10px] p-4">
-                  {response ? (
-                    <div className="prose prose-sm max-w-none">
-                      <MarkdownContent content={response} />
-                    </div>
-                  ) : (
-                    <div className="text-sm text-[var(--agyn-gray)]">No response available</div>
-                  )}
-                </div>
-              </div>
+              ) : (
+                <div className="text-sm text-[var(--agyn-gray)]">No response available</div>
+              )}
+            </div>
+          </div>
         </div>
       </div>
     );
   };
 
-  const renderContextMessages = (contextArray: ContextItem[], highlightIds: ReadonlySet<string>) =>
-    contextArray.map((message) => {
-      const role = message.role;
+  const renderContextMessages = (contextArray: Record<string, unknown>[]) =>
+    contextArray.map((message, index) => {
+      const roleValue = asString(message.role).toLowerCase();
+      const role = roleValue || 'user';
 
       const getRoleConfig = () => {
         switch (role) {
           case 'system':
-            return { color: 'text-[var(--agyn-gray)]', icon: <Settings className="w-3.5 h-3.5" /> };
+            return {
+              color: 'text-[var(--agyn-gray)]',
+              icon: <Settings className="w-3.5 h-3.5" />,
+            };
           case 'user':
-            return { color: 'text-[var(--agyn-blue)]', icon: <User className="w-3.5 h-3.5" /> };
+            return {
+              color: 'text-[var(--agyn-blue)]',
+              icon: <User className="w-3.5 h-3.5" />,
+            };
           case 'assistant':
-            return { color: 'text-[var(--agyn-purple)]', icon: <Bot className="w-3.5 h-3.5" /> };
+            return {
+              color: 'text-[var(--agyn-purple)]',
+              icon: <Bot className="w-3.5 h-3.5" />,
+            };
           case 'tool':
-            return { color: 'text-[var(--agyn-cyan)]', icon: <Wrench className="w-3.5 h-3.5" /> };
+            return {
+              color: 'text-[var(--agyn-cyan)]',
+              icon: <Wrench className="w-3.5 h-3.5" />,
+            };
           default:
-            return { color: 'text-[var(--agyn-gray)]', icon: <MessageSquare className="w-3.5 h-3.5" /> };
+            return {
+              color: 'text-[var(--agyn-gray)]',
+              icon: <MessageSquare className="w-3.5 h-3.5" />,
+            };
         }
       };
 
       const roleConfig = getRoleConfig();
-      const timestamp = new Date(message.createdAt);
-      const formattedTimestamp = Number.isNaN(timestamp.getTime())
-        ? null
-        : timestamp.toLocaleString('en-US', {
-            month: 'short',
-            day: 'numeric',
-            hour: '2-digit',
-            minute: '2-digit',
-            second: '2-digit',
-            hour12: false,
-          });
 
-      const metadata = isRecord(message.metadata) ? (message.metadata as Record<string, unknown>) : null;
-      const textContent = typeof message.contentText === 'string' ? message.contentText : null;
-      const contentJson = message.contentJson;
-      const isHighlighted = highlightIds.has(message.id);
-
-      const renderJsonContent = () => {
-        if (contentJson === null || contentJson === undefined) return null;
-        if (Array.isArray(contentJson) || isRecord(contentJson)) {
-          return <JsonViewer data={contentJson} />;
+      const formatTimestamp = (timestamp: unknown) => {
+        if (typeof timestamp !== 'string' && typeof timestamp !== 'number') {
+          return null;
         }
-        return (
-          <pre className="text-sm whitespace-pre-wrap text-[var(--agyn-dark)]">
-            {typeof contentJson === 'string' ? contentJson : JSON.stringify(contentJson, null, 2)}
-          </pre>
-        );
+        const date = new Date(timestamp);
+        if (Number.isNaN(date.getTime())) {
+          return null;
+        }
+        return date.toLocaleString('en-US', {
+          month: 'short',
+          day: 'numeric',
+          hour: '2-digit',
+          minute: '2-digit',
+          second: '2-digit',
+          hour12: false,
+        });
       };
 
-      const renderMarkdownOrFallback = () => {
-        if (textContent && textContent.trim().length > 0) {
-          return (
-            <div className="prose prose-sm max-w-none">
-              <MarkdownContent content={textContent} />
-            </div>
-          );
+      const timestamp = formatTimestamp(message.timestamp);
+      const reasoning = isRecord(message.reasoning) ? message.reasoning : undefined;
+      const reasoningTokens = asNumber(reasoning?.tokens);
+      const reasoningScore = asNumber(reasoning?.score);
+
+      const getReasoningVariant = () => {
+        if (reasoningTokens !== undefined) {
+          if (reasoningTokens < 50) return 'secondary';
+          if (reasoningTokens < 150) return 'default';
+          return 'error';
         }
-        return renderJsonContent();
+        return 'neutral';
       };
 
-      const wrapperClasses = ['mb-4', 'last:mb-0'];
-      if (isHighlighted) {
-        wrapperClasses.push('rounded-[8px]', 'border', 'border-[var(--agyn-blue)]/40', 'bg-[var(--agyn-blue)]/5', 'px-3', 'py-2');
-      }
+      const additionalKwargs = isRecord(message.additional_kwargs) ? message.additional_kwargs : undefined;
+      const toolCallsRaw = message.tool_calls || message.toolCalls || additionalKwargs?.tool_calls;
+      const toolCalls = Array.isArray(toolCallsRaw) ? toolCallsRaw.filter(isRecord) : [];
+      const hasToolCalls = toolCalls.length > 0;
+
+      const toolResultValue = message.tool_result ?? message.tool_result_if_exists;
+      const hasToolResult = toolResultValue !== undefined;
+
+      const renderAssistantContent = () => {
+        const content = message.content ?? message.response;
+        if (typeof content === 'string') {
+          return <MarkdownContent content={content} />;
+        }
+        if (Array.isArray(content) || isRecord(content)) {
+          return <JsonViewer data={content} />;
+        }
+        return null;
+      };
 
       return (
-        <div key={message.id} className={wrapperClasses.join(' ')}>
+        <div key={index} className="mb-4 last:mb-0">
           <div className={`flex items-center gap-1.5 ${roleConfig.color} mb-2`}>
             {roleConfig.icon}
-            <span className="text-xs font-medium capitalize">{role}</span>
-            {formattedTimestamp && (
-              <span className="text-xs text-[var(--agyn-gray)] ml-1">{formattedTimestamp}</span>
+            <span className={`text-xs font-medium ${role === 'tool' ? '' : 'capitalize'}`}>
+              {role === 'tool' ? asString(message.name, 'Tool') : role}
+            </span>
+            {timestamp && (
+              <span className="text-xs text-[var(--agyn-gray)] ml-1">{timestamp}</span>
             )}
-            <Badge variant="outline" className="ml-auto text-xs capitalize">
-              {Math.max(0, message.sizeBytes).toLocaleString()} bytes
-            </Badge>
-            {isHighlighted && <Badge variant="default" className="text-xs">New</Badge>}
             {role === 'tool' && (
-              <Dropdown
-                value={outputViewMode}
-                onValueChange={(value) => setOutputViewMode(value as OutputViewMode)}
-                options={outputViewModeOptions}
-                variant="flat"
-                className="ml-2 text-xs"
-              />
+              <div className="ml-auto">
+                <Dropdown
+                  value={outputViewMode}
+                  onValueChange={(value) => setOutputViewMode(value as OutputViewMode)}
+                  options={outputViewModeOptions}
+                  variant="flat"
+                  className="text-xs"
+                />
+              </div>
+            )}
+            {(reasoningTokens !== undefined || reasoningScore !== undefined) && (
+              <Badge variant={getReasoningVariant()} className="ml-auto">
+                <span className="text-xs">
+                  {reasoningTokens !== undefined ? (
+                    <span>{reasoningTokens.toLocaleString()} tokens</span>
+                  ) : (
+                    <span>Score: {reasoningScore}</span>
+                  )}
+                </span>
+              </Badge>
             )}
           </div>
           <div className="ml-5 space-y-3">
-            {(role === 'system' || role === 'user') && renderMarkdownOrFallback()}
+            {(role === 'system' || role === 'user') && (
+              <div className="prose prose-sm max-w-none">
+                <MarkdownContent content={asString(message.content)} />
+              </div>
+            )}
 
-            {role === 'assistant' && <div className="space-y-3">{renderMarkdownOrFallback()}</div>}
+            {role === 'tool' && (
+              <div className="text-sm">
+                {renderOutputContent(message.content || toolResultValue || '')}
+              </div>
+            )}
 
-            {role === 'tool' && <div className="text-sm">{renderOutputContent(textContent ?? contentJson ?? '')}</div>}
+            {role === 'assistant' && (
+              <div className="space-y-3">
+                {renderAssistantContent()}
+                {hasToolCalls && (
+                  <div className="space-y-1">
+                    {toolCalls.map((toolCall, tcIndex) => {
+                      const toolCallRecord = toolCall;
+                      const toolFunction = isRecord(toolCallRecord.function) ? toolCallRecord.function : undefined;
+                      const toggleKey = `${index}-${tcIndex}`;
+                      const isExpanded = expandedToolCalls.has(toggleKey);
+                      const toolLabel =
+                        asString(toolCallRecord.name) ||
+                        asString(toolFunction?.name) ||
+                        'Tool Call';
 
-            {(role === 'summary' || role === 'memory' || role === 'other') && renderMarkdownOrFallback()}
+                      return (
+                        <div key={toggleKey} className="space-y-1">
+                          <button
+                            onClick={() => toggleToolCall(toggleKey)}
+                            className="flex items-center gap-1.5 text-sm text-[var(--agyn-dark)] hover:text-[var(--agyn-blue)] transition-colors"
+                            type="button"
+                          >
+                            {isExpanded ? (
+                              <ChevronDown className="w-3.5 h-3.5" />
+                            ) : (
+                              <ChevronRight className="w-3.5 h-3.5" />
+                            )}
+                            <Wrench className="w-3.5 h-3.5" />
+                            <span className="font-medium">{toolLabel}</span>
+                          </button>
+                          {isExpanded && (
+                            <div className="ml-5 mt-2">
+                              <JsonViewer
+                                data={
+                                  toolCallRecord.arguments ??
+                                  toolFunction?.arguments ??
+                                  toolCallRecord
+                                }
+                              />
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            )}
 
-            {metadata && (
-              <div className="rounded-[6px] border border-[var(--agyn-border-subtle)] bg-[var(--agyn-bg-light)] p-3">
-                <div className="text-xs text-[var(--agyn-gray)] mb-1">Metadata</div>
-                <JsonViewer data={metadata} />
+            {hasToolResult && role !== 'tool' && (
+              <div className="bg-[var(--agyn-bg-light)] border border-[var(--agyn-border-subtle)] rounded-[6px] p-3">
+                <div className="text-xs text-[var(--agyn-gray)] mb-1">Tool Result</div>
+                <pre className="text-xs whitespace-pre-wrap overflow-auto">
+                  {typeof toolResultValue === 'string'
+                    ? toolResultValue
+                    : JSON.stringify(toolResultValue, null, 2)}
+                </pre>
               </div>
             )}
           </div>
@@ -856,7 +779,7 @@ export function RunEventDetails({ event, runId }: RunEventDetailsProps) {
                 </div>
               </div>
             )}
-            
+
             {/* Message */}
             {message && (
               <div className="flex-1 flex flex-col min-h-0">
@@ -959,9 +882,8 @@ export function RunEventDetails({ event, runId }: RunEventDetailsProps) {
   };
 
   const renderSummarizationEvent = () => {
-    const oldContextItems = toContextItems(event.data.oldContext, 'old', event.timestamp);
-    const newContextItems = toContextItems(event.data.newContext, 'new', event.timestamp);
-    const newContextHighlights = new Set(newContextItems.map((item) => item.id));
+    const oldContext = Array.isArray(event.data.oldContext) ? event.data.oldContext : [];
+    const newContext = Array.isArray(event.data.newContext) ? event.data.newContext : [];
 
     return (
       <div className="space-y-6 h-full flex flex-col">
@@ -995,8 +917,8 @@ export function RunEventDetails({ event, runId }: RunEventDetailsProps) {
               <span className="text-sm text-[var(--agyn-gray)]">Old Context</span>
             </div>
             <div className="flex-1 overflow-y-auto min-h-0 border border-[var(--agyn-border-subtle)] rounded-[10px] p-4">
-              {oldContextItems.length > 0 ? (
-                renderContextMessages(oldContextItems, EMPTY_CONTEXT_HIGHLIGHTS)
+              {oldContext.length > 0 ? (
+                renderContextMessages(oldContext)
               ) : (
                 <div className="text-sm text-[var(--agyn-gray)]">No old context</div>
               )}
@@ -1024,8 +946,8 @@ export function RunEventDetails({ event, runId }: RunEventDetailsProps) {
                 <span className="text-sm text-[var(--agyn-gray)]">New Context</span>
               </div>
               <div className="flex-1 overflow-y-auto min-h-0 border border-[var(--agyn-border-subtle)] rounded-[10px] p-4">
-                {newContextItems.length > 0 ? (
-                  renderContextMessages(newContextItems, newContextHighlights)
+                {newContext.length > 0 ? (
+                  renderContextMessages(newContext)
                 ) : (
                   <div className="text-sm text-[var(--agyn-gray)]">No new context</div>
                 )}

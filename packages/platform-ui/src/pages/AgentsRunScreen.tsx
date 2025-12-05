@@ -4,8 +4,10 @@ import RunScreen, { type EventFilter, type StatusFilter } from '@/components/scr
 import type { RunEvent as UiRunEvent } from '@/components/RunEventsList';
 import type { Status } from '@/components/StatusIndicator';
 import { useRunTimelineEvents, useRunTimelineSummary } from '@/api/hooks/runs';
+import { contextItems } from '@/api/modules/contextItems';
 import { runs } from '@/api/modules/runs';
 import type {
+  ContextItem,
   RunEventStatus,
   RunEventType,
   RunTimelineEvent,
@@ -256,6 +258,8 @@ type ToolLinkData = {
   childRunId?: string;
 };
 
+type LlmToolCall = NonNullable<RunTimelineEvent['llmCall']>['toolCalls'][number];
+
 function readStringPath(record: Record<string, unknown>, path: readonly string[]): string | undefined {
   let current: unknown = record;
   for (const segment of path) {
@@ -356,6 +360,100 @@ function normalizeRecordWithTargets(record: Record<string, unknown> | null, targ
   }
 
   return changed ? next : record;
+}
+
+function parseContextItemContent(item: ContextItem): {
+  parsed: unknown;
+  record: Record<string, unknown> | null;
+  text: string | null;
+} {
+  const parsedContent = item.contentJson ?? (isNonEmptyString(item.contentText) ? parseMaybeJson(item.contentText) : undefined);
+  const record = coerceRecord(parsedContent);
+
+  const stringCandidates: Array<string | null> = [];
+  if (record && typeof record.content === 'string' && record.content.length > 0) stringCandidates.push(record.content);
+  if (record && typeof record.response === 'string' && record.response.length > 0) stringCandidates.push(record.response);
+  if (typeof parsedContent === 'string' && parsedContent.length > 0) stringCandidates.push(parsedContent);
+  if (isNonEmptyString(item.contentText)) stringCandidates.push(item.contentText);
+
+  const text = stringCandidates.find((candidate): candidate is string => typeof candidate === 'string' && candidate.trim().length > 0) ?? null;
+
+  return { parsed: parsedContent, record, text };
+}
+
+function normalizeMetadata(value: unknown): Record<string, unknown> | null {
+  const parsed = parseMaybeJson(value);
+  return coerceRecord(parsed);
+}
+
+function collectToolCalls(
+  primary: Record<string, unknown> | null,
+  primaryAdditionalKwargs: Record<string, unknown> | null,
+  metadata: Record<string, unknown> | null,
+  metadataAdditionalKwargs: Record<string, unknown> | null,
+): Record<string, unknown>[] {
+  const seen = new Set<string>();
+  const result: Record<string, unknown>[] = [];
+
+  const addRecords = (value: unknown) => {
+    if (value === undefined || value === null) return;
+    const normalized = typeof value === 'string' ? parseMaybeJson(value) : value;
+    for (const record of toRecordArray(normalized)) {
+      const key = (() => {
+        try {
+          return JSON.stringify(record);
+        } catch (_err) {
+          return undefined;
+        }
+      })();
+      if (key && seen.has(key)) continue;
+      if (key) seen.add(key);
+      result.push(record);
+    }
+  };
+
+  if (primary) {
+    addRecords(primary.tool_calls);
+    addRecords(primary.toolCalls);
+  }
+  if (primaryAdditionalKwargs) {
+    addRecords(primaryAdditionalKwargs.tool_calls);
+    addRecords(primaryAdditionalKwargs.toolCalls);
+  }
+  if (metadata) {
+    addRecords(metadata.tool_calls);
+    addRecords(metadata.toolCalls);
+  }
+  if (metadataAdditionalKwargs) {
+    addRecords(metadataAdditionalKwargs.tool_calls);
+    addRecords(metadataAdditionalKwargs.toolCalls);
+  }
+
+  return result;
+}
+
+function extractReasoning(
+  primary: Record<string, unknown> | null,
+  primaryAdditionalKwargs: Record<string, unknown> | null,
+  metadata: Record<string, unknown> | null,
+  metadataAdditionalKwargs: Record<string, unknown> | null,
+): unknown {
+  const candidates: unknown[] = [];
+  if (primary) candidates.push(primary.reasoning);
+  if (primaryAdditionalKwargs) candidates.push(primaryAdditionalKwargs.reasoning);
+  if (metadata) candidates.push(metadata.reasoning);
+  if (metadataAdditionalKwargs) candidates.push(metadataAdditionalKwargs.reasoning);
+
+  for (const candidate of candidates) {
+    if (candidate === undefined) continue;
+    if (candidate === null) return null;
+    if (typeof candidate === 'string') {
+      const parsed = parseMaybeJson(candidate);
+      return parsed;
+    }
+    return candidate;
+  }
+  return undefined;
 }
 
 function extractTextFromRawResponse(raw: unknown): string | null {
@@ -478,6 +576,78 @@ function extractLlmResponse(event: RunTimelineEvent): string {
   return '';
 }
 
+function toContextRecord(item: ContextItem, fallbackToolCalls?: readonly LlmToolCall[]): Record<string, unknown> {
+  const metadataRecord = normalizeMetadata(item.metadata);
+  const metadataAdditionalKwargs = metadataRecord ? coerceRecord(metadataRecord.additional_kwargs) : null;
+  const { parsed: parsedContent, record: parsedRecord, text: textContent } = parseContextItemContent(item);
+  const contentAdditionalKwargs = parsedRecord ? coerceRecord(parsedRecord.additional_kwargs) : null;
+
+  const result: Record<string, unknown> = parsedRecord ? { ...parsedRecord } : {};
+
+  if (!isNonEmptyString(result.id)) {
+    result.id = item.id;
+  }
+  result.role = typeof result.role === 'string' && result.role.length > 0 ? result.role : item.role;
+  result.timestamp = result.timestamp ?? item.createdAt;
+  result.sizeBytes = item.sizeBytes;
+  result.contentJson = parsedContent;
+  result.metadata = metadataRecord ?? item.metadata;
+
+  const normalizedText = typeof textContent === 'string' && textContent.length > 0
+    ? textContent
+    : isNonEmptyString(item.contentText)
+      ? item.contentText
+      : null;
+
+  if (normalizedText !== null) {
+    result.contentText = normalizedText;
+  } else if ('contentText' in result && typeof result.contentText !== 'string') {
+    delete result.contentText;
+  }
+
+  const hasStringContent = typeof normalizedText === 'string' && normalizedText.length > 0;
+
+  if (result.role === 'assistant') {
+    if (hasStringContent) {
+      result.content = normalizedText;
+      if (typeof result.response !== 'string' || result.response.length === 0) {
+        result.response = normalizedText;
+      }
+    } else {
+      if (typeof result.content !== 'string') delete result.content;
+      if (typeof result.response !== 'string') delete result.response;
+    }
+  } else if (hasStringContent) {
+    if (typeof result.content !== 'string' || result.content.length === 0) {
+      result.content = normalizedText;
+    }
+  }
+
+  const mergedAdditionalKwargs = contentAdditionalKwargs ?? metadataAdditionalKwargs;
+  if (mergedAdditionalKwargs) {
+    result.additional_kwargs = mergedAdditionalKwargs;
+  }
+
+  const collectedToolCalls = collectToolCalls(parsedRecord, contentAdditionalKwargs, metadataRecord, metadataAdditionalKwargs);
+  let toolCalls: Record<string, unknown>[] = collectedToolCalls;
+
+  if (toolCalls.length === 0 && result.role === 'assistant' && Array.isArray(fallbackToolCalls) && fallbackToolCalls.length > 0) {
+    toolCalls = toRecordArray(fallbackToolCalls as unknown);
+  }
+
+  if (toolCalls.length > 0) {
+    result.tool_calls = toolCalls;
+    result.toolCalls = toolCalls;
+  }
+
+  const reasoning = extractReasoning(parsedRecord, contentAdditionalKwargs, metadataRecord, metadataAdditionalKwargs);
+  if (reasoning !== undefined) {
+    result.reasoning = reasoning;
+  }
+
+  return result;
+}
+
 function toRecordArray(value: unknown): Record<string, unknown>[] {
   if (!Array.isArray(value)) return [];
   const result: Record<string, unknown>[] = [];
@@ -529,7 +699,23 @@ function buildToolLinkData(event: RunTimelineEvent): ToolLinkData | undefined {
   };
 }
 
+function resolveContextRecords(
+  ids: readonly string[],
+  lookup: Map<string, ContextItem>,
+  fallbackToolCalls?: readonly LlmToolCall[],
+): Record<string, unknown>[] {
+  if (!Array.isArray(ids) || ids.length === 0) return [];
+  const records: Record<string, unknown>[] = [];
+  for (const id of ids) {
+    if (!isNonEmptyString(id)) continue;
+    const item = lookup.get(id);
+    if (item) records.push(toContextRecord(item, fallbackToolCalls));
+  }
+  return records;
+}
+
 type CreateUiEventOptions = {
+  context?: Record<string, unknown>[];
   tool?: ToolLinkData;
 };
 
@@ -573,7 +759,8 @@ function createUiEvent(event: RunTimelineEvent, options?: CreateUiEventOptions):
 
   if (event.type === 'llm_call') {
     const usage = event.llmCall?.usage;
-    const context = toRecordArray(event.metadata);
+    const fallbackContext = toRecordArray(event.metadata);
+    const context = options?.context && options.context.length > 0 ? options.context : fallbackContext;
     const response = extractLlmResponse(event);
     return {
       id: event.id,
@@ -735,6 +922,9 @@ export function AgentsRunScreen() {
   const [nextCursor, setNextCursor] = useState<RunTimelineEventsCursor | null>(null);
   const [loadingOlder, setLoadingOlder] = useState(false);
   const [loadOlderError, setLoadOlderError] = useState<string | null>(null);
+  const contextItemsRef = useRef<Map<string, ContextItem>>(new Map());
+  const pendingContextIdsRef = useRef<Set<string>>(new Set());
+  const [contextItemsVersion, setContextItemsVersion] = useState(0);
 
   const followDefault = useMemo(() => {
     const paramValue = parseFollowValue(searchParams.get('follow'));
@@ -902,6 +1092,64 @@ export function AgentsRunScreen() {
     },
     [],
   );
+
+  const fetchContextItems = useCallback(async (ids: readonly string[]) => {
+    if (!Array.isArray(ids) || ids.length === 0) return;
+    const lookup = contextItemsRef.current;
+    const pending = pendingContextIdsRef.current;
+    const candidates: string[] = [];
+
+    for (const id of ids) {
+      if (!isNonEmptyString(id)) continue;
+      if (lookup.has(id) || pending.has(id)) continue;
+      pending.add(id);
+      candidates.push(id);
+    }
+
+    if (candidates.length === 0) return;
+
+    let fetched: ContextItem[] | null = null;
+    try {
+      fetched = await contextItems.getMany(candidates);
+    } catch (error) {
+      console.error('Failed to load context items', error);
+    } finally {
+      for (const id of candidates) {
+        pending.delete(id);
+      }
+    }
+
+    if (!fetched || fetched.length === 0) return;
+
+    let updated = false;
+    for (const item of fetched) {
+      if (isNonEmptyString(item.id) && !lookup.has(item.id)) {
+        lookup.set(item.id, item);
+        updated = true;
+      }
+    }
+
+    if (updated) {
+      setContextItemsVersion((version) => version + 1);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (allEvents.length === 0) return;
+    const lookup = contextItemsRef.current;
+    const ids = new Set<string>();
+    for (const event of allEvents) {
+      if (event.type !== 'llm_call') continue;
+      const contextIds = event.llmCall?.contextItemIds ?? [];
+      for (const id of contextIds) {
+        if (!isNonEmptyString(id)) continue;
+        if (lookup.has(id)) continue;
+        ids.add(id);
+      }
+    }
+    if (ids.size === 0) return;
+    void fetchContextItems(Array.from(ids));
+  }, [allEvents, fetchContextItems]);
 
   useEffect(() => {
     setEvents((prev) => {
@@ -1338,14 +1586,18 @@ export function AgentsRunScreen() {
 
   const tokenTotals = useMemo(() => aggregateTokens(allEvents), [allEvents]);
 
-  const uiEvents = useMemo<UiRunEvent[]>(
-    () =>
-      events.map((event) => {
-        const toolLinks = event.type === 'tool_execution' ? buildToolLinkData(event) : undefined;
-        return createUiEvent(event, { tool: toolLinks });
-      }),
-    [events],
-  );
+  const uiEvents = useMemo<UiRunEvent[]>(() => {
+    const lookup = contextItemsRef.current;
+    void contextItemsVersion;
+    return events.map((event) => {
+      const contextRecords =
+        event.type === 'llm_call'
+          ? resolveContextRecords(event.llmCall?.contextItemIds ?? [], lookup, event.llmCall?.toolCalls ?? [])
+          : [];
+      const toolLinks = event.type === 'tool_execution' ? buildToolLinkData(event) : undefined;
+      return createUiEvent(event, { context: contextRecords, tool: toolLinks });
+    });
+  }, [events, contextItemsVersion]);
 
   const isLoading = eventsQuery.isLoading || summaryQuery.isLoading;
   const hasMoreEvents = Boolean(nextCursor);
