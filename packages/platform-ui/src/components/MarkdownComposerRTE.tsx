@@ -39,12 +39,14 @@ import {
   $isElementNode,
   $isParagraphNode,
   $isTextNode,
+  $isRootNode,
   COMMAND_PRIORITY_LOW,
   COMMAND_PRIORITY_NORMAL,
   FORMAT_TEXT_COMMAND,
   KEY_DOWN_COMMAND,
   LineBreakNode,
   type LexicalEditor,
+  type ElementNode,
   SELECTION_CHANGE_COMMAND,
   createCommand,
 } from 'lexical';
@@ -410,6 +412,20 @@ function applySourceAction(
   }
 }
 
+const convertParagraphToCodeBlock = (editor: LexicalEditor, paragraph: ElementNode) => {
+  paragraph.clear();
+  paragraph.selectStart();
+  editor.dispatchCommand(TOGGLE_CODE_BLOCK_COMMAND, undefined);
+
+  const updatedSelection = $getSelection();
+  if ($isRangeSelection(updatedSelection)) {
+    const codeNode = updatedSelection.anchor.getNode().getTopLevelElementOrThrow();
+    if ($isCodeNode(codeNode)) {
+      codeNode.selectStart();
+    }
+  }
+};
+
 export interface MarkdownComposerRTEProps {
   value: string;
   onChange: (nextValue: string) => void;
@@ -611,6 +627,10 @@ function MarkdownComposerMarkdownPlugin({
       });
 
       serialized = decodeUnderlinePlaceholders(serialized);
+      serialized = serialized.replace(/^```([^\n]*)\n```$/gm, (_match, language) => {
+        const suffix = language ?? '';
+        return `\`\`\`${suffix}\n\n\`\`\``;
+      });
       if (serialized === lastValueRef.current) {
         return;
       }
@@ -765,6 +785,64 @@ function MarkdownComposerKeymapPlugin({
   const [editor] = useLexicalComposerContext();
 
   useEffect(() => {
+    return editor.registerUpdateListener(({ editorState }) => {
+      if (disabled) {
+        return;
+      }
+
+      let shouldConvert = false;
+
+      editorState.read(() => {
+        const selection = $getSelection();
+        if (!$isRangeSelection(selection) || !selection.isCollapsed()) {
+          return;
+        }
+
+        const anchorNode = selection.anchor.getNode();
+        if ($isRootNode(anchorNode)) {
+          return;
+        }
+
+        const topLevel = anchorNode.getTopLevelElementOrThrow();
+        if (!$isParagraphNode(topLevel)) {
+          return;
+        }
+
+        if (topLevel.getTextContent() === '```') {
+          shouldConvert = true;
+        }
+      });
+
+      if (!shouldConvert) {
+        return;
+      }
+
+      editor.update(() => {
+        const selection = $getSelection();
+        if (!$isRangeSelection(selection) || !selection.isCollapsed()) {
+          return;
+        }
+
+        const anchorNode = selection.anchor.getNode();
+        if ($isRootNode(anchorNode)) {
+          return;
+        }
+
+        const topLevel = anchorNode.getTopLevelElementOrThrow();
+        if (!$isParagraphNode(topLevel)) {
+          return;
+        }
+
+        if (topLevel.getTextContent() !== '```') {
+          return;
+        }
+
+        convertParagraphToCodeBlock(editor, topLevel);
+      });
+    });
+  }, [disabled, editor]);
+
+  useEffect(() => {
     return editor.registerCommand(
       KEY_DOWN_COMMAND,
       (event) => {
@@ -795,6 +873,9 @@ function MarkdownComposerKeymapPlugin({
               }
 
               const anchorNode = selection.anchor.getNode();
+              if ($isRootNode(anchorNode)) {
+                return;
+              }
               const topLevel = anchorNode.getTopLevelElementOrThrow();
 
               if (!$isParagraphNode(topLevel)) {
@@ -806,22 +887,7 @@ function MarkdownComposerKeymapPlugin({
               }
 
               handled = true;
-              topLevel.clear();
-              topLevel.selectStart();
-              editor.dispatchCommand(TOGGLE_CODE_BLOCK_COMMAND, undefined);
-
-              const updatedSelection = $getSelection();
-              if ($isRangeSelection(updatedSelection)) {
-                const codeNode = updatedSelection
-                  .anchor.getNode()
-                  .getTopLevelElementOrThrow();
-                if ($isCodeNode(codeNode)) {
-                  const firstChild = codeNode.getFirstChild();
-                  if (firstChild instanceof LineBreakNode) {
-                    firstChild.remove();
-                  }
-                }
-              }
+              convertParagraphToCodeBlock(editor, topLevel);
             });
 
             if (handled) {

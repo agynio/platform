@@ -7,6 +7,7 @@ import {
   afterAll,
 } from 'vitest';
 import { render, fireEvent, screen, waitFor, within, act } from '@testing-library/react';
+import { $getSelection, $isRangeSelection } from 'lexical';
 import React, { useState } from 'react';
 import { MarkdownComposer, type MarkdownComposerProps } from '../MarkdownComposer';
 import { MarkdownContent } from '../MarkdownContent';
@@ -514,6 +515,49 @@ describe('MarkdownComposer mac shortcuts parity', () => {
 });
 
 describe('MarkdownComposer code fences', () => {
+  it('creates a code block when typing triple backticks directly in rendered mode', async () => {
+    render(<ComposerHarness />);
+
+    const editor = getComposerEditor();
+    await waitFor(() => expect(getValue()).toBe(''));
+
+    await act(async () => {
+      editor.focus();
+      fireEvent.focus(editor);
+    });
+
+    const lexicalEditor = getLexicalEditor(editor);
+
+    const insertBacktick = async () => {
+      await act(async () => {
+        lexicalEditor.update(() => {
+          const selection = $getSelection();
+          if ($isRangeSelection(selection)) {
+            selection.insertText('`');
+          }
+        });
+      });
+    };
+
+    await insertBacktick();
+    await insertBacktick();
+    await insertBacktick();
+
+    await waitFor(() =>
+      expect(getValue()).toBe(['```', '', '```'].join('\n')),
+    );
+
+    await waitFor(() => {
+      expect(editor.querySelector('code')).not.toBeNull();
+    });
+
+    switchToSourceView();
+
+    await waitFor(() =>
+      expect(getSourceEditor().value).toBe(['```', '', '```'].join('\n')),
+    );
+  });
+
   it('creates a code block when typing triple backticks in rendered mode', async () => {
     render(<ComposerHarness renderPreview />);
 
