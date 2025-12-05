@@ -36,7 +36,7 @@ export const markdownSanitizeSchema: Schema = {
   tagNames: allowedTagNames,
   attributes: {
     a: [
-      ['href', ...allowedProtocols],
+      'href',
       ['target', '_blank', '_self'],
       ['rel', 'noopener', 'noreferrer', 'nofollow'],
     ],

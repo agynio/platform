@@ -25,6 +25,13 @@ const richMarkdown = [
 
 const unsafeMarkdown = '<u>Safe</u> <script>alert("x")</script> [Link](javascript:alert("x")) <img src="#" onerror="alert(\'x\')" />';
 
+const linkProtocolsMarkdown = [
+  '[Safe Link](https://example.com)',
+  '[Mail Link](mailto:support@example.com)',
+  '[Blocked Js](javascript:alert("x"))',
+  '[Blocked Data](data:text/plain;base64,SGVsbG8=)',
+].join('\n\n');
+
 describe('MarkdownContent rendering', () => {
   it('renders expected markdown primitives including underline and lists', () => {
     render(<MarkdownContent content={richMarkdown} className="prose" />);
@@ -61,5 +68,23 @@ describe('MarkdownContent rendering', () => {
     const link = screen.getByText('Link');
     expect(link).not.toHaveAttribute('href');
     expect(screen.queryByRole('img')).toBeNull();
+  });
+
+  it('retains safe link protocols and strips unsafe ones', () => {
+    render(<MarkdownContent content={linkProtocolsMarkdown} />);
+
+    const safeLink = screen.getByRole('link', { name: 'Safe Link' });
+    expect(safeLink).toHaveAttribute('href', 'https://example.com');
+    expect(safeLink).toHaveAttribute('target', '_blank');
+    expect(safeLink).toHaveAttribute('rel', 'noopener noreferrer');
+
+    const mailLink = screen.getByRole('link', { name: 'Mail Link' });
+    expect(mailLink).toHaveAttribute('href', 'mailto:support@example.com');
+
+    const blockedJs = screen.getByText('Blocked Js');
+    expect(blockedJs.closest('a')).not.toHaveAttribute('href');
+
+    const blockedData = screen.getByText('Blocked Data');
+    expect(blockedData.closest('a')).not.toHaveAttribute('href');
   });
 });
