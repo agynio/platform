@@ -29,27 +29,49 @@ export function ThreadsList({
   const [hasLoadedMore, setHasLoadedMore] = useState(false);
   const loadMoreRef = useRef<HTMLDivElement>(null);
   const loadPendingRef = useRef(false);
+  const isLoadingRef = useRef(isLoading);
+  const threadsSignatureRef = useRef<string | null>(null);
+  const loadTriggeredRef = useRef(false);
 
   useEffect(() => {
+    isLoadingRef.current = isLoading;
     if (!isLoading) {
       loadPendingRef.current = false;
     }
   }, [isLoading]);
 
+  useEffect(() => {
+    const signature = threads.map((thread) => thread.id).join('|');
+    if (threadsSignatureRef.current === signature) {
+      loadTriggeredRef.current = false;
+      return;
+    }
+
+    if (!loadTriggeredRef.current && threadsSignatureRef.current !== null) {
+      setHasLoadedMore(false);
+    }
+
+    threadsSignatureRef.current = signature;
+    loadTriggeredRef.current = false;
+  }, [threads]);
+
   // Infinite scroll observer
   useEffect(() => {
-    if (!onLoadMore || !hasMore || isLoading) return;
+    if (!onLoadMore || !hasMore) return;
 
     const observer = new IntersectionObserver(
       (entries) => {
-        if (entries[0].isIntersecting) {
-          if (loadPendingRef.current) return;
-          loadPendingRef.current = true;
-          onLoadMore();
-          setHasLoadedMore(true);
-        }
+        const [entry] = entries;
+        if (!entry?.isIntersecting) return;
+        if (isLoadingRef.current) return;
+        if (loadPendingRef.current) return;
+
+        loadPendingRef.current = true;
+        loadTriggeredRef.current = true;
+        onLoadMore();
+        setHasLoadedMore(true);
       },
-      { threshold: 0.1 }
+      { threshold: 0.1, rootMargin: '200px' }
     );
 
     const target = loadMoreRef.current;
@@ -62,7 +84,7 @@ export function ThreadsList({
         observer.unobserve(target);
       }
     };
-  }, [onLoadMore, hasMore, isLoading]);
+  }, [onLoadMore, hasMore]);
 
   const handleToggleExpand = (threadId: string) => {
     setExpandedThreads((prev) => {

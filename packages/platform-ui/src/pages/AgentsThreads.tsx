@@ -1435,7 +1435,7 @@ export function AgentsThreads() {
     return buildThreadTree(selectedThreadNode, childrenState, statusOverrides);
   }, [activeDraft, selectedThreadNode, childrenState, statusOverrides]);
 
-  const threadsHasMore = (threadsQuery.data?.items?.length ?? 0) >= threadLimit && threadLimit < MAX_THREAD_LIMIT;
+  const threadsHasMore = (threadsQuery.data?.items?.length ?? 0) === threadLimit && threadLimit < MAX_THREAD_LIMIT;
   const threadsIsLoading = threadsQuery.isFetching;
   const isThreadsEmpty = !threadsQuery.isLoading && threadsForList.length === 0;
 

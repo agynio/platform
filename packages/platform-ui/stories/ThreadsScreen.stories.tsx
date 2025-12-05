@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { action } from 'storybook/actions';
 import type { Meta, StoryObj } from '@storybook/react';
 import { useArgs } from 'storybook/preview-api';
@@ -79,6 +79,28 @@ const manyThreads: Thread[] = Array.from({ length: 24 }, (_, index) => {
     isOpen: status !== 'finished' && status !== 'failed',
   };
 });
+
+const createPaginatedThread = (page: number, index: number): Thread => {
+  const ordinal = page * 12 + index + 1;
+  const statusCycle: Thread['status'][] = ['running', 'pending', 'finished', 'failed'];
+  const status = statusCycle[ordinal % statusCycle.length];
+  const isOpen = status === 'finished' || status === 'failed' ? false : true;
+
+  return {
+    id: `paginated-${page + 1}-${index + 1}`,
+    summary: `Paginated thread ${ordinal}`,
+    agentName: `Agent ${String.fromCharCode(65 + ((ordinal - 1) % 26))}`,
+    createdAt: isoHoursAgo(ordinal * 2 + page),
+    status,
+    isOpen,
+  };
+};
+
+const paginatedThreadsPages: Thread[][] = [
+  Array.from({ length: 12 }, (_, index) => createPaginatedThread(0, index)),
+  Array.from({ length: 12 }, (_, index) => createPaginatedThread(1, index)),
+  Array.from({ length: 6 }, (_, index) => createPaginatedThread(2, index)),
+];
 
 const updateThreadOpenState = (nodes: Thread[], targetId: string, isOpen: boolean): Thread[] => {
   let mutated = false;
@@ -547,6 +569,122 @@ export const SwitchWithCache: Story = {
           isEmpty={false}
           onSelectThread={handleSelectThread}
         />
+      </div>
+    );
+  },
+  parameters: {
+    selectedMenuItem: 'threads',
+  },
+};
+
+export const InfiniteScrollPagination: Story = {
+  render: () => {
+    const [filterMode, setFilterMode] = useState<ThreadsScreenProps['filterMode']>('open');
+    const [pageIndex, setPageIndex] = useState(0);
+    const [threadsState, setThreadsState] = useState<Thread[]>(() => [...paginatedThreadsPages[0]]);
+    const [hasMore, setHasMore] = useState(paginatedThreadsPages.length > 1);
+    const [threadsLoading, setThreadsLoading] = useState(false);
+    const [selectedThreadId, setSelectedThreadId] = useState<string | null>(
+      paginatedThreadsPages[0][0]?.id ?? null,
+    );
+    const [inputValue, setInputValue] = useState('');
+    const loadTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+    const logThreadsLoadMore = action('onThreadsLoadMore');
+    const logFilterChange = action('onFilterModeChange');
+    const logSelectThread = action('onSelectThread');
+    const logInputChange = action('onInputValueChange');
+    const logSendMessage = action('onSendMessage');
+
+    useEffect(() => {
+      return () => {
+        if (loadTimerRef.current) {
+          clearTimeout(loadTimerRef.current);
+        }
+      };
+    }, []);
+
+    const resetPagination = () => {
+      if (loadTimerRef.current) {
+        clearTimeout(loadTimerRef.current);
+        loadTimerRef.current = null;
+      }
+      setThreadsLoading(false);
+      setPageIndex(0);
+      const firstPage = paginatedThreadsPages[0] ?? [];
+      setThreadsState([...firstPage]);
+      setHasMore(paginatedThreadsPages.length > 1);
+      setSelectedThreadId(firstPage[0]?.id ?? null);
+    };
+
+    const handleFilterModeChange = (mode: ThreadsScreenProps['filterMode']) => {
+      logFilterChange(mode);
+      setFilterMode(mode);
+      resetPagination();
+    };
+
+    const handleThreadsLoadMore = () => {
+      if (threadsLoading || !hasMore) {
+        return;
+      }
+
+      logThreadsLoadMore();
+      setThreadsLoading(true);
+      loadTimerRef.current = setTimeout(() => {
+        setPageIndex((currentPage) => {
+          const nextPage = currentPage + 1;
+          const nextThreads = paginatedThreadsPages[nextPage] ?? [];
+          if (nextThreads.length > 0) {
+            setThreadsState((prev) => [...prev, ...nextThreads]);
+          }
+          setHasMore(nextPage < paginatedThreadsPages.length - 1);
+          setThreadsLoading(false);
+          setSelectedThreadId((currentId) => currentId ?? nextThreads[0]?.id ?? null);
+          return nextPage;
+        });
+        loadTimerRef.current = null;
+      }, 600);
+    };
+
+    const handleSelectThread = (threadId: string) => {
+      logSelectThread(threadId);
+      setSelectedThreadId(threadId);
+    };
+
+    const resolvedSelectedThread = selectedThreadId
+      ? threadsState.find((thread) => thread.id === selectedThreadId)
+      : undefined;
+
+    return (
+      <div className="absolute inset-0 flex min-h-0 min-w-0">
+        <div className="mx-auto flex w-full max-w-6xl flex-1" style={{ height: '720px' }}>
+          <ThreadsScreen
+            threads={threadsState}
+            runs={runs}
+            containers={containers}
+            reminders={reminders}
+            filterMode={filterMode}
+            selectedThreadId={selectedThreadId}
+            selectedThread={resolvedSelectedThread}
+            inputValue={inputValue}
+            isRunsInfoCollapsed={false}
+            threadsHasMore={hasMore}
+            threadsIsLoading={threadsLoading}
+            isLoading={false}
+            isEmpty={threadsState.length === 0}
+            onFilterModeChange={handleFilterModeChange}
+            onSelectThread={handleSelectThread}
+            onInputValueChange={(value) => {
+              logInputChange(value);
+              setInputValue(value);
+            }}
+            onSendMessage={(value, context) => {
+              logSendMessage(value, context);
+              setInputValue('');
+            }}
+            onThreadsLoadMore={hasMore ? handleThreadsLoadMore : undefined}
+          />
+        </div>
       </div>
     );
   },
