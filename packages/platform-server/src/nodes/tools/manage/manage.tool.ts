@@ -81,6 +81,16 @@ export class ManageFunctionTool extends FunctionTool<typeof ManageInvocationSche
     return truncated;
   }
 
+  private isPromiseWithCatch(
+    value: unknown,
+  ): value is Promise<ResponseMessage | ToolCallOutputMessage> {
+    if (!value || (typeof value !== 'object' && typeof value !== 'function')) {
+      return false;
+    }
+    const candidate = value as { catch?: unknown };
+    return typeof candidate.catch === 'function';
+  }
+
   async execute(args: z.infer<typeof ManageInvocationSchema>, ctx: LLMContext): Promise<string> {
     const { command, worker, message, threadAlias } = args;
     const parentThreadId = ctx.threadId;
@@ -100,14 +110,9 @@ export class ManageFunctionTool extends FunctionTool<typeof ManageInvocationSche
       if (!callerAgent || typeof callerAgent.invoke !== 'function') {
         throw new Error('Manage: caller agent unavailable');
       }
-      const alias =
-        typeof threadAlias === 'string'
-          ? (() => {
-              const trimmed = threadAlias.trim();
-              if (!trimmed) throw new Error('Manage: invalid or empty threadAlias');
-              return trimmed;
-            })()
-          : this.sanitizeAlias(targetTitle);
+      const alias = this.sanitizeAlias(
+        (typeof threadAlias === 'string' ? threadAlias : targetTitle).trim(),
+      );
       const childThreadId = await persistence.getOrCreateSubthreadByAlias('manage', alias, parentThreadId, '');
       await persistence.setThreadChannelNode(childThreadId, this.node.nodeId);
       const mode = this.node.getMode();
@@ -124,27 +129,40 @@ export class ManageFunctionTool extends FunctionTool<typeof ManageInvocationSche
         if (mode === 'sync') {
           waitPromise = this.node.awaitChildResponse(childThreadId, timeoutMs);
         }
-        invocationPromise = targetAgent.invoke(childThreadId, [HumanMessage.fromText(messageText)]);
+        const invocationResult = targetAgent.invoke(childThreadId, [HumanMessage.fromText(messageText)]);
         if (mode === 'sync') {
+          invocationPromise = Promise.resolve(invocationResult as ResponseMessage | ToolCallOutputMessage);
           const [responseText] = await Promise.all([
             waitPromise!,
             invocationPromise!,
           ]);
           return this.node.renderWorkerResponse(targetTitle, responseText);
         }
-        invocationPromise!.catch((err) => {
-          const msg = this.extractMessage(err);
+        if (this.isPromiseWithCatch(invocationResult)) {
+          invocationPromise = invocationResult;
+          invocationPromise.catch((err) => {
+            const msg = this.extractMessage(err);
+            this.logger.error(
+              `Manage: async send_message failed${this.format({ worker: targetTitle, childThreadId, error: msg })}`,
+            );
+          });
+        } else {
+          const resultType = invocationResult === null ? 'null' : typeof invocationResult;
           this.logger.error(
-            `Manage: async send_message failed${this.format({ worker: targetTitle, childThreadId, error: msg })}`,
+            `Manage: async send_message invoke returned non-promise${this.format({
+              worker: targetTitle,
+              childThreadId,
+              resultType,
+            })}`,
           );
-        });
+        }
         return this.node.renderAsyncAcknowledgement(targetTitle);
       } catch (err: unknown) {
         const msg = this.extractMessage(err);
         this.logger.error(
           `Manage: send_message failed${this.format({ worker: targetTitle, childThreadId, error: msg })}`,
         );
-        if (mode !== 'sync' && invocationPromise) {
+        if (mode !== 'sync' && this.isPromiseWithCatch(invocationPromise)) {
           invocationPromise.catch(() => {});
         }
         throw err;

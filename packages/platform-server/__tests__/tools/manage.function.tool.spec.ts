@@ -17,6 +17,7 @@ const createCtx = (overrides: Partial<LLMContext> = {}): LLMContext => ({
 
 afterEach(() => {
   vi.restoreAllMocks();
+  vi.useRealTimers();
 });
 
 describe('ManageFunctionTool.execute', () => {
@@ -64,6 +65,82 @@ ${text}`),
     expect(result).toBe('Response from: Worker Alpha\nchild response text');
   });
 
+  it('sanitizes provided threadAlias before persistence', async () => {
+    const persistence = {
+      getOrCreateSubthreadByAlias: vi.fn().mockResolvedValue('child-thread-alias'),
+      setThreadChannelNode: vi.fn().mockResolvedValue(undefined),
+    } as unknown as AgentsPersistenceService;
+
+    const workerInvoke = vi.fn().mockResolvedValue({ text: 'invoke result' });
+    const manageNode = {
+      nodeId: 'manage-node-alias',
+      listWorkers: vi.fn().mockReturnValue(['Worker Alpha']),
+      getWorkerByTitle: vi.fn().mockReturnValue({ invoke: workerInvoke }),
+      registerInvocation: vi.fn().mockResolvedValue(undefined),
+      awaitChildResponse: vi.fn(),
+      getMode: vi.fn().mockReturnValue('async'),
+      getTimeoutMs: vi.fn(),
+      renderWorkerResponse: vi.fn(),
+      renderAsyncAcknowledgement: vi.fn().mockReturnValue('async acknowledgement'),
+    } as unknown as ManageToolNode;
+
+    const tool = new ManageFunctionTool(persistence);
+    tool.init(manageNode, { persistence });
+
+    const ctx = createCtx();
+    const rawAlias = 'Casey Brooks (Engineer)-hautechai-agents-send-message';
+    const expectedAlias = rawAlias
+      .toLowerCase()
+      .replace(/\s+/g, '-')
+      .replace(/[^a-z0-9._-]/g, '')
+      .replace(/-+/g, '-')
+      .slice(0, 64);
+
+    await tool.execute({ command: 'send_message', worker: 'Worker Alpha', message: 'hi', threadAlias: rawAlias }, ctx);
+
+    expect(persistence.getOrCreateSubthreadByAlias).toHaveBeenCalledWith(
+      'manage',
+      expectedAlias,
+      'parent-thread',
+      '',
+    );
+    expect(expectedAlias.length).toBeLessThanOrEqual(64);
+    expect(manageNode.renderAsyncAcknowledgement).toHaveBeenCalledWith('Worker Alpha');
+  });
+
+  it('enforces 64 character limit on sanitized aliases', async () => {
+    const persistence = {
+      getOrCreateSubthreadByAlias: vi.fn().mockResolvedValue('child-thread-long'),
+      setThreadChannelNode: vi.fn().mockResolvedValue(undefined),
+    } as unknown as AgentsPersistenceService;
+
+    const workerInvoke = vi.fn().mockResolvedValue({ text: 'invoke result' });
+    const manageNode = {
+      nodeId: 'manage-node-long',
+      listWorkers: vi.fn().mockReturnValue(['Worker Alpha']),
+      getWorkerByTitle: vi.fn().mockReturnValue({ invoke: workerInvoke }),
+      registerInvocation: vi.fn().mockResolvedValue(undefined),
+      awaitChildResponse: vi.fn(),
+      getMode: vi.fn().mockReturnValue('async'),
+      getTimeoutMs: vi.fn(),
+      renderWorkerResponse: vi.fn(),
+      renderAsyncAcknowledgement: vi.fn().mockReturnValue('async acknowledgement'),
+    } as unknown as ManageToolNode;
+
+    const tool = new ManageFunctionTool(persistence);
+    tool.init(manageNode, { persistence });
+
+    const ctx = createCtx();
+    const rawAlias = 'A'.repeat(100);
+
+    await tool.execute({ command: 'send_message', worker: 'Worker Alpha', message: 'hi', threadAlias: rawAlias }, ctx);
+
+    const aliasMock = vi.mocked(persistence.getOrCreateSubthreadByAlias);
+    const aliasArg = aliasMock.mock.calls[0][1] as string;
+    expect(aliasArg.length).toBeLessThanOrEqual(64);
+    expect(aliasArg).toBe('a'.repeat(64));
+  });
+
   it('returns acknowledgement in async mode without awaiting child response', async () => {
     const persistence = {
       getOrCreateSubthreadByAlias: vi.fn().mockResolvedValue('child-thread-2'),
@@ -95,6 +172,82 @@ ${text}`),
     expect(manageNode.renderAsyncAcknowledgement).toHaveBeenCalledWith('Async Worker');
     expect(workerInvoke).toHaveBeenCalledTimes(1);
     expect(result).toBe('async acknowledgement');
+  });
+
+  it('logs and continues when async invoke returns non-promise', async () => {
+    const persistence = {
+      getOrCreateSubthreadByAlias: vi.fn().mockResolvedValue('child-thread-non-promise'),
+      setThreadChannelNode: vi.fn().mockResolvedValue(undefined),
+    } as unknown as AgentsPersistenceService;
+
+    const workerInvoke = vi.fn().mockReturnValue({ text: 'sync result' });
+    const manageNode = {
+      nodeId: 'manage-node-non-promise',
+      listWorkers: vi.fn().mockReturnValue(['Async Worker']),
+      getWorkerByTitle: vi.fn().mockReturnValue({ invoke: workerInvoke }),
+      registerInvocation: vi.fn().mockResolvedValue(undefined),
+      awaitChildResponse: vi.fn(),
+      getMode: vi.fn().mockReturnValue('async'),
+      getTimeoutMs: vi.fn(),
+      renderWorkerResponse: vi.fn(),
+      renderAsyncAcknowledgement: vi.fn().mockReturnValue('async acknowledgement'),
+    } as unknown as ManageToolNode;
+
+    const tool = new ManageFunctionTool(persistence);
+    tool.init(manageNode, { persistence });
+
+    const loggerErrorSpy = vi.spyOn((tool as any).logger, 'error');
+
+    const ctx = createCtx();
+    const result = await tool.execute({ command: 'send_message', worker: 'Async Worker', message: 'hello async', threadAlias: undefined }, ctx);
+
+    expect(result).toBe('async acknowledgement');
+    expect(loggerErrorSpy).toHaveBeenCalledWith(
+      'Manage: async send_message invoke returned non-promise {"worker":"Async Worker","childThreadId":"child-thread-non-promise","resultType":"object"}',
+    );
+  });
+
+  it('returns acknowledgement immediately for delayed async invocation and logs no errors', async () => {
+    vi.useFakeTimers();
+
+    const persistence = {
+      getOrCreateSubthreadByAlias: vi.fn().mockResolvedValue('child-thread-delayed'),
+      setThreadChannelNode: vi.fn().mockResolvedValue(undefined),
+    } as unknown as AgentsPersistenceService;
+
+    const workerInvoke = vi.fn().mockReturnValue(
+      new Promise((resolve) => {
+        setTimeout(() => resolve({ text: 'late reply' }), 2000);
+      }),
+    );
+    const manageNode = {
+      nodeId: 'manage-node-delayed',
+      listWorkers: vi.fn().mockReturnValue(['Async Worker']),
+      getWorkerByTitle: vi.fn().mockReturnValue({ invoke: workerInvoke }),
+      registerInvocation: vi.fn().mockResolvedValue(undefined),
+      awaitChildResponse: vi.fn(),
+      getMode: vi.fn().mockReturnValue('async'),
+      getTimeoutMs: vi.fn(),
+      renderWorkerResponse: vi.fn(),
+      renderAsyncAcknowledgement: vi.fn().mockReturnValue('async acknowledgement'),
+    } as unknown as ManageToolNode;
+
+    const tool = new ManageFunctionTool(persistence);
+    tool.init(manageNode, { persistence });
+
+    const loggerErrorSpy = vi.spyOn((tool as any).logger, 'error');
+
+    const ctx = createCtx();
+    await expect(
+      tool.execute({ command: 'send_message', worker: 'Async Worker', message: 'hello async', threadAlias: undefined }, ctx),
+    ).resolves.toBe('async acknowledgement');
+
+    expect(loggerErrorSpy).not.toHaveBeenCalled();
+
+    await vi.runAllTimersAsync();
+    await Promise.resolve();
+
+    expect(loggerErrorSpy).not.toHaveBeenCalled();
   });
 
   it('logs async non-error rejections without crashing', async () => {
@@ -131,6 +284,44 @@ ${text}`),
     await vi.waitFor(() => {
       expect(loggerErrorSpy).toHaveBeenCalledWith(
         'Manage: async send_message failed {"worker":"Async Worker","childThreadId":"child-thread-async","error":"boom"}',
+      );
+    });
+  });
+
+  it('logs async undefined rejections without crashing', async () => {
+    const persistence = {
+      getOrCreateSubthreadByAlias: vi.fn().mockResolvedValue('child-thread-undefined'),
+      setThreadChannelNode: vi.fn().mockResolvedValue(undefined),
+    } as unknown as AgentsPersistenceService;
+
+    const workerInvoke = vi.fn().mockRejectedValue(undefined);
+    const manageNode = {
+      nodeId: 'manage-node-undefined',
+      listWorkers: vi.fn().mockReturnValue(['Async Worker']),
+      getWorkerByTitle: vi.fn().mockReturnValue({ invoke: workerInvoke }),
+      registerInvocation: vi.fn().mockResolvedValue(undefined),
+      awaitChildResponse: vi.fn(),
+      getMode: vi.fn().mockReturnValue('async'),
+      getTimeoutMs: vi.fn(),
+      renderWorkerResponse: vi.fn(),
+      renderAsyncAcknowledgement: vi.fn().mockReturnValue('async acknowledgement'),
+    } as unknown as ManageToolNode;
+
+    const tool = new ManageFunctionTool(persistence);
+    tool.init(manageNode, { persistence });
+
+    const loggerErrorSpy = vi.spyOn((tool as any).logger, 'error');
+
+    const ctx = createCtx();
+    const result = await tool.execute(
+      { command: 'send_message', worker: 'Async Worker', message: 'hello async', threadAlias: undefined },
+      ctx,
+    );
+
+    expect(result).toBe('async acknowledgement');
+    await vi.waitFor(() => {
+      expect(loggerErrorSpy).toHaveBeenCalledWith(
+        'Manage: async send_message failed {"worker":"Async Worker","childThreadId":"child-thread-undefined","error":"undefined"}',
       );
     });
   });

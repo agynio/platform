@@ -28,10 +28,15 @@ export class SendMessageFunctionTool extends FunctionTool<typeof sendMessageInvo
         runId: ctx?.runId,
         source: 'send_message',
       });
-      if (result.ok) {
-        return 'message sent successfully';
+      if (result && typeof result === 'object') {
+        if ('ok' in result && (result as { ok: unknown }).ok) {
+          return 'message sent successfully';
+        }
+        if ('error' in result && typeof (result as { error?: unknown }).error === 'string') {
+          return (result as { error?: string }).error ?? 'unknown_error';
+        }
       }
-      return result.error ?? 'unknown_error';
+      return 'unknown_error';
     } catch (e) {
       const msg = e instanceof Error && e.message ? e.message : 'unknown_error';
       return msg;

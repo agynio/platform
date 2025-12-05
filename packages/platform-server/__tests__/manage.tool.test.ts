@@ -115,7 +115,7 @@ async function addWorker(module: Awaited<ReturnType<typeof createHarness>>['modu
 }
 
 describe('ManageTool unit', () => {
-  it('send_message: uses explicit threadAlias verbatim after trim', async () => {
+  it('send_message: sanitizes explicit threadAlias before persistence', async () => {
     const getOrCreateSubthreadByAlias = vi.fn().mockResolvedValue('child-explicit');
     const setThreadChannelNode = vi.fn();
     const persistence = {
@@ -137,7 +137,12 @@ describe('ManageTool unit', () => {
     );
 
     expect(res).toBe('Response from: child-1\nok-child-explicit');
-    expect(getOrCreateSubthreadByAlias).toHaveBeenCalledWith('manage', 'Mixed.Alias-Case_123', 'parent', '');
+    expect(getOrCreateSubthreadByAlias).toHaveBeenCalledWith(
+      'manage',
+      'mixed.alias-case_123',
+      'parent',
+      '',
+    );
     expect(setThreadChannelNode).toHaveBeenCalledWith('child-explicit', 'manage');
   });
 
