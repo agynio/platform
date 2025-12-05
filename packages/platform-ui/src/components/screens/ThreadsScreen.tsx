@@ -388,7 +388,7 @@ export default function ThreadsScreen({
                       value="open"
                       disabled={statusSelectionDisabled}
                       hideIndicator
-                      className="flex items-center gap-2 rounded-[6px] px-3 py-2 text-sm text-[var(--agyn-dark)] transition-colors hover:bg-[var(--agyn-bg-light)] focus:bg-[var(--agyn-bg-light)] data-[state=checked]:bg-[var(--agyn-bg-light)] data-[state=checked]:font-medium"
+                      className="data-[state=checked]:font-medium"
                     >
                       <Circle className="h-4 w-4 text-[var(--agyn-gray)] group-data-[state=checked]:text-[var(--agyn-blue)]" />
                       <span>Open</span>
@@ -397,7 +397,7 @@ export default function ThreadsScreen({
                       value="closed"
                       disabled={statusSelectionDisabled}
                       hideIndicator
-                      className="flex items-center gap-2 rounded-[6px] px-3 py-2 text-sm text-[var(--agyn-dark)] transition-colors hover:bg-[var(--agyn-bg-light)] focus:bg-[var(--agyn-bg-light)] data-[state=checked]:bg-[var(--agyn-bg-light)] data-[state=checked]:font-medium"
+                      className="data-[state=checked]:font-medium"
                     >
                       <CheckCircle className="h-4 w-4 text-[var(--agyn-gray)] group-data-[state=checked]:text-[var(--agyn-blue)]" />
                       <span>Resolved</span>
