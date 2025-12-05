@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { action } from 'storybook/actions';
 import type { Meta, StoryObj } from '@storybook/react';
 import { useArgs } from 'storybook/preview-api';
@@ -64,6 +64,8 @@ const threads: Thread[] = [
     isOpen: false,
   },
 ];
+
+const MANY_THREADS_PAGE_SIZE = 8;
 
 const manyThreads: Thread[] = Array.from({ length: 24 }, (_, index) => {
   const idx = index + 1;
@@ -282,6 +284,15 @@ const ControlledRender: Story['render'] = () => {
   const logThreadsLoadMore = action('onThreadsLoadMore');
   const logToggleThreadStatus = action('onToggleThreadStatus');
   const logCreateDraft = action('onCreateDraft');
+  const paginationTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (paginationTimeoutRef.current) {
+        clearTimeout(paginationTimeoutRef.current);
+      }
+    };
+  }, []);
 
   return (
     <div className="absolute inset-0 flex min-h-0 min-w-0">
@@ -331,6 +342,37 @@ const ControlledRender: Story['render'] = () => {
         }}
         onThreadsLoadMore={() => {
           logThreadsLoadMore();
+          if (currentArgs.threadsIsLoading) {
+            return;
+          }
+
+          const currentThreads = currentArgs.threads ?? [];
+          const canPaginate = currentThreads.length > 0 && currentThreads.every((thread) => thread.id.startsWith('thread-'));
+          if (!canPaginate) {
+            return;
+          }
+
+          const nextCount = Math.min(currentThreads.length + MANY_THREADS_PAGE_SIZE, manyThreads.length);
+          const nextThreads = manyThreads.slice(0, nextCount);
+
+          if (nextThreads.length === currentThreads.length) {
+            updateArgs({ threadsHasMore: false });
+            return;
+          }
+
+          updateArgs({ threadsIsLoading: true });
+
+          if (paginationTimeoutRef.current) {
+            clearTimeout(paginationTimeoutRef.current);
+          }
+
+          paginationTimeoutRef.current = setTimeout(() => {
+            updateArgs({
+              threads: nextThreads,
+              threadsIsLoading: false,
+              threadsHasMore: nextThreads.length < manyThreads.length,
+            });
+          }, 400);
         }}
         onToggleThreadStatus={(threadId, next) => {
           logToggleThreadStatus(threadId, next);
@@ -352,15 +394,15 @@ const ControlledRender: Story['render'] = () => {
 
 export const Populated: Story = {
   args: {
-    threads,
+    threads: manyThreads.slice(0, MANY_THREADS_PAGE_SIZE),
     runs,
     containers,
     reminders,
     filterMode: 'all',
-    selectedThreadId: threads[0].id,
+    selectedThreadId: manyThreads[0].id,
     inputValue: '',
     isRunsInfoCollapsed: false,
-    threadsHasMore: true,
+    threadsHasMore: manyThreads.length > MANY_THREADS_PAGE_SIZE,
     threadsIsLoading: false,
     isLoading: false,
     isEmpty: false,

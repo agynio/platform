@@ -27,42 +27,50 @@ export function ThreadsList({
 }: ThreadsListProps) {
   const [expandedThreads, setExpandedThreads] = useState<Set<string>>(new Set());
   const [hasLoadedMore, setHasLoadedMore] = useState(false);
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
   const loadMoreRef = useRef<HTMLDivElement>(null);
-  const loadPendingRef = useRef(false);
+  const loadLockRef = useRef(false);
+  const previousIsLoadingRef = useRef(isLoading);
 
   useEffect(() => {
-    if (!isLoading) {
-      loadPendingRef.current = false;
+    const wasLoading = previousIsLoadingRef.current;
+    if (wasLoading && !isLoading) {
+      loadLockRef.current = false;
     }
+    previousIsLoadingRef.current = isLoading;
   }, [isLoading]);
 
   // Infinite scroll observer
   useEffect(() => {
     if (!onLoadMore || !hasMore || isLoading) return;
 
+    const root = scrollContainerRef.current;
+    const target = loadMoreRef.current;
+
+    if (!root || !target) return;
+
     const observer = new IntersectionObserver(
       (entries) => {
-        if (entries[0].isIntersecting) {
-          if (loadPendingRef.current) return;
-          loadPendingRef.current = true;
-          onLoadMore();
-          setHasLoadedMore(true);
-        }
+        const entry = entries[0];
+        if (!entry?.isIntersecting) return;
+        if (loadLockRef.current || isLoading) return;
+        loadLockRef.current = true;
+        onLoadMore();
+        setHasLoadedMore(true);
       },
-      { threshold: 0.1 }
+      {
+        root,
+        rootMargin: '100px',
+        threshold: 0,
+      }
     );
 
-    const target = loadMoreRef.current;
-    if (target) {
-      observer.observe(target);
-    }
+    observer.observe(target);
 
     return () => {
-      if (target) {
-        observer.unobserve(target);
-      }
+      observer.disconnect();
     };
-  }, [onLoadMore, hasMore, isLoading]);
+  }, [onLoadMore, hasMore, isLoading, threads.length]);
 
   const handleToggleExpand = (threadId: string) => {
     setExpandedThreads((prev) => {
@@ -147,8 +155,9 @@ export function ThreadsList({
       data-testid="threads-list"
     >
       {/* Threads List */}
-      <div className="flex-1 overflow-y-auto">
+      <div ref={scrollContainerRef} className="flex-1 overflow-y-auto">
         {threads.map((thread) => renderThread(thread, 0))}
+        {hasMore && !isLoading && <div ref={loadMoreRef} className="h-4" />}
       </div>
 
       {/* Loading Indicator */}
@@ -158,9 +167,6 @@ export function ThreadsList({
           <span className="ml-2 text-sm text-[var(--agyn-gray)]">Loading more threads...</span>
         </div>
       )}
-
-      {/* Load More Trigger */}
-      {hasMore && !isLoading && <div ref={loadMoreRef} className="h-4" />}
 
       {/* End of List */}
       {!hasMore && hasLoadedMore && threads.length > 0 && (
