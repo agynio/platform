@@ -1,11 +1,10 @@
 import z from 'zod';
 
 import { FunctionTool, HumanMessage, ResponseMessage, ToolCallOutputMessage } from '@agyn/llm';
-import { ManageToolNode, type ManageWorkerMetadata } from './manage.node';
+import { ManageToolNode } from './manage.node';
 import { Inject, Injectable, Logger, Scope } from '@nestjs/common';
 import { LLMContext } from '../../../llm/types';
 import { AgentsPersistenceService } from '../../../agents/agents.persistence.service';
-import type { AgentNode } from '../../agent/agent.node';
 import type { ErrorResponse } from '../../../utils/error-response';
 import { normalizeError } from '../../../utils/error-response';
 
@@ -26,15 +25,11 @@ type ManageInvocationArgs = z.infer<typeof ManageInvocationSchema>;
 type ManageInvocationSuccess = string;
 type InvocationOutcome = ResponseMessage | ToolCallOutputMessage;
 type InvocationResult = PromiseLike<InvocationOutcome> | InvocationOutcome;
-type WorkerMatchType = 'name' | 'name+role' | 'legacy';
-type WorkerTarget = { agent: AgentNode; metadata: ManageWorkerMetadata; matchType: WorkerMatchType };
-
 @Injectable({ scope: Scope.TRANSIENT })
 export class ManageFunctionTool extends FunctionTool<typeof ManageInvocationSchema> {
   private _node?: ManageToolNode;
   private persistence?: AgentsPersistenceService;
   private readonly logger = new Logger(ManageFunctionTool.name);
-  private static legacyLookupWarningEmitted = false;
 
   constructor(
     @Inject(AgentsPersistenceService) private readonly injectedPersistence: AgentsPersistenceService,
@@ -105,103 +100,20 @@ export class ManageFunctionTool extends FunctionTool<typeof ManageInvocationSche
     this.logger.error(`${prefix}${this.format({ ...context, error: normalized })}`);
   }
 
-  private normalizeLookup(value: string): string {
-    return value.trim().normalize('NFKC').toLowerCase();
-  }
-
-  private parseWorkerHandle(handle: string): { name: string; role?: string } {
-    const trimmed = handle.trim();
-    if (!trimmed) return { name: '' };
-    const match = trimmed.match(/^(.*)\(([^()]+)\)$/);
-    if (!match) return { name: trimmed };
-    const name = match[1].trim();
-    const role = match[2].trim();
-    if (!name || !role) return { name: trimmed };
-    return { name, role };
-  }
-
-  private emitLegacyLookupWarning(provided: string, metadata: ManageWorkerMetadata): void {
-    if (ManageFunctionTool.legacyLookupWarningEmitted) return;
-    ManageFunctionTool.legacyLookupWarningEmitted = true;
-    this.logger.warn(
-      `Manage: worker lookup matched legacy label${this.format({
-        provided,
-        workerName: metadata.name,
-        workerLabel: metadata.displayLabel,
-      })}`,
-    );
-  }
-
-  private getWorkerTarget(handle: string): WorkerTarget {
-    const parsed = this.parseWorkerHandle(handle);
-    if (!parsed.name) throw new Error(`Unknown worker: ${handle}`);
-
-    const matchesByName = this.node.getWorkersByName(parsed.name);
-    if (matchesByName.length > 1) {
-      if (!parsed.role) {
-        const roles = matchesByName
-          .map((candidate) => this.node.getWorkerMetadata(candidate).role ?? '(unspecified)')
-          .filter((value, index, self) => self.indexOf(value) === index);
-        throw new Error(
-          `Multiple workers share the name "${parsed.name}". Include the role to disambiguate. Available roles: ${roles.join(
-            ', ',
-          )}`,
-        );
-      }
-      const resolved = this.node.findWorkerByNameAndRole(parsed.name, parsed.role);
-      if (!resolved) throw new Error(`Unknown worker: ${handle}`);
-      const metadata = this.node.getWorkerMetadata(resolved);
-      return { agent: resolved, metadata, matchType: 'name+role' };
-    }
-
-    if (matchesByName.length === 1) {
-      const agent = matchesByName[0];
-      const metadata = this.node.getWorkerMetadata(agent);
-      if (parsed.role) {
-        const providedRole = this.normalizeLookup(parsed.role);
-        const workerRole = metadata.role ? this.normalizeLookup(metadata.role) : '';
-        if (workerRole && workerRole !== providedRole) {
-          // Provided role does not match. Fall back to lookups below.
-        } else {
-          return { agent, metadata, matchType: workerRole ? 'name+role' : 'name' };
-        }
-      } else {
-        return { agent, metadata, matchType: 'name' };
-      }
-    }
-
-    if (parsed.role) {
-      const resolved = this.node.findWorkerByNameAndRole(parsed.name, parsed.role);
-      if (resolved) {
-        const metadata = this.node.getWorkerMetadata(resolved);
-        return { agent: resolved, metadata, matchType: 'name+role' };
-      }
-    }
-
-    const legacy = this.node.findWorkerByLegacyLabel(handle);
-    if (legacy) {
-      const metadata = this.node.getWorkerMetadata(legacy);
-      return { agent: legacy, metadata, matchType: 'legacy' };
-    }
-
-    throw new Error(`Unknown worker: ${handle}`);
-  }
-
   async execute(args: ManageInvocationArgs, ctx: LLMContext): Promise<ManageInvocationSuccess> {
     const { command, worker, message, threadAlias } = args;
     const parentThreadId = ctx.threadId;
     if (!parentThreadId) throw new Error('Manage: missing threadId in LLM context');
-    const workerLabels = this.node.listWorkers();
+    const workerNames = this.node.listWorkers();
     if (command === 'send_message') {
-      if (!workerLabels.length) throw new Error('No agents connected');
+      if (!workerNames.length) throw new Error('No agents connected');
       const workerHandle = worker?.trim();
       if (!workerHandle) throw new Error('worker is required for send_message');
       const messageText = message?.trim() ?? '';
       if (!messageText) throw new Error('message is required for send_message');
-      const { agent: targetAgent, metadata, matchType } = this.getWorkerTarget(workerHandle);
-      if (matchType === 'legacy') {
-        this.emitLegacyLookupWarning(workerHandle, metadata);
-      }
+      const targetAgent = this.node.getWorkerByName(workerHandle);
+      if (!targetAgent) throw new Error(`Unknown worker: ${workerHandle}`);
+      const resolvedName = this.node.getWorkerName(targetAgent);
       const persistence = this.getPersistence();
       if (!persistence) throw new Error('Manage: persistence unavailable');
       const callerAgent = ctx.callerAgent;
@@ -212,7 +124,7 @@ export class ManageFunctionTool extends FunctionTool<typeof ManageInvocationSche
       if (typeof threadAlias === 'string' && !providedAlias) {
         throw new Error('Manage: invalid or empty threadAlias');
       }
-      let aliasUsed = providedAlias ?? this.sanitizeAlias(metadata.name);
+      let aliasUsed = providedAlias ?? this.sanitizeAlias(resolvedName);
       const fallbackAlias =
         providedAlias !== undefined
           ? (() => {
@@ -232,8 +144,7 @@ export class ManageFunctionTool extends FunctionTool<typeof ManageInvocationSche
           childThreadId = await persistence.getOrCreateSubthreadByAlias('manage', aliasUsed, parentThreadId, '');
           this.logger.warn(
             `Manage: provided threadAlias invalid, using sanitized fallback${this.format({
-              workerName: metadata.name,
-              workerLabel: metadata.displayLabel,
+              workerName: resolvedName,
               parentThreadId,
               providedAlias,
               fallbackAlias: aliasUsed,
@@ -254,7 +165,7 @@ export class ManageFunctionTool extends FunctionTool<typeof ManageInvocationSche
         await this.node.registerInvocation({
           childThreadId,
           parentThreadId,
-          workerTitle: metadata.displayLabel,
+          workerName: resolvedName,
           callerAgent,
         });
         if (mode === 'sync') {
@@ -265,15 +176,14 @@ export class ManageFunctionTool extends FunctionTool<typeof ManageInvocationSche
 
         if (mode === 'sync') {
           const [responseText] = await Promise.all([waitPromise!, invocationPromise]);
-          return this.node.renderWorkerResponse(metadata.displayLabel, responseText);
+          return this.node.renderWorkerResponse(resolvedName, responseText);
         }
 
         if (!isPromise) {
           const resultType = invocationResult === null ? 'null' : typeof invocationResult;
           this.logger.error(
             `Manage: async send_message invoke returned non-promise${this.format({
-              workerName: metadata.name,
-              workerLabel: metadata.displayLabel,
+              workerName: resolvedName,
               childThreadId,
               resultType,
               promiseLike: isPromise,
@@ -282,12 +192,12 @@ export class ManageFunctionTool extends FunctionTool<typeof ManageInvocationSche
         }
 
         invocationPromise.catch((err) => {
-          this.logError('Manage: async send_message failed', { workerName: metadata.name, workerLabel: metadata.displayLabel, childThreadId, matchType }, err);
+          this.logError('Manage: async send_message failed', { workerName: resolvedName, childThreadId }, err);
         });
 
-        return this.node.renderAsyncAcknowledgement(metadata.displayLabel);
+        return this.node.renderAsyncAcknowledgement(resolvedName);
       } catch (err: unknown) {
-        this.logError('Manage: send_message failed', { workerName: metadata.name, workerLabel: metadata.displayLabel, childThreadId, matchType }, err);
+        this.logError('Manage: send_message failed', { workerName: resolvedName, childThreadId }, err);
         throw err;
       }
     }

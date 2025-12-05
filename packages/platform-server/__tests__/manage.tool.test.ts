@@ -285,7 +285,7 @@ describe('ManageTool unit', () => {
     expect(status.childThreadIds.length).toBe(0);
   });
 
-  it('ManageToolNode derives worker labels and enforces name-based uniqueness', async () => {
+  it('ManageToolNode normalizes names and enforces uniqueness', async () => {
     const harness = await createHarness();
 
     const explicit = await addWorker(harness.module, harness.node, 'Alpha');
@@ -295,7 +295,7 @@ describe('ManageTool unit', () => {
     const profile = await harness.module.resolve(FakeAgent);
     await profile.setConfig({ name: ' Bravo ', role: ' Strategist ' });
     harness.node.addWorker(profile);
-    expect(harness.node.listWorkers()).toEqual(['Alpha', 'Bravo (Strategist)']);
+    expect(harness.node.listWorkers()).toEqual(['Alpha', 'Bravo']);
 
     const noProfile = await harness.module.resolve(FakeAgent);
     await noProfile.setConfig({});
@@ -306,7 +306,7 @@ describe('ManageTool unit', () => {
     const nameOnly = await harness.module.resolve(FakeAgent);
     await nameOnly.setConfig({ name: 'Gamma' });
     harness.node.addWorker(nameOnly);
-    expect(harness.node.listWorkers()).toEqual(['Alpha', 'Bravo (Strategist)', 'Gamma']);
+    expect(harness.node.listWorkers()).toEqual(['Alpha', 'Bravo', 'Gamma']);
 
     const roleOnly = await harness.module.resolve(FakeAgent);
     await roleOnly.setConfig({ role: 'Dispatcher' });
@@ -317,12 +317,12 @@ describe('ManageTool unit', () => {
     expect(() => harness.node.addWorker(dup)).toThrow('ManageToolNode: worker with name "Bravo" already exists');
 
     harness.node.removeWorker(explicit);
-    expect(harness.node.listWorkers()).toEqual(['Bravo (Strategist)', 'Gamma']);
+    expect(harness.node.listWorkers()).toEqual(['Bravo', 'Gamma']);
   });
 
-  it('ManageToolNode permits duplicate names by role when configured', async () => {
+  it('ManageToolNode rejects duplicate names even when roles differ', async () => {
     const harness = await createHarness();
-    await harness.node.setConfig({ description: 'desc', enforceUniqueByRole: true });
+    await harness.node.setConfig({ description: 'desc' });
 
     const builder = await harness.module.resolve(FakeAgent);
     await builder.setConfig({ name: 'Worker X', role: 'Builder' });
@@ -330,33 +330,19 @@ describe('ManageTool unit', () => {
 
     const reviewer = await harness.module.resolve(FakeAgent);
     await reviewer.setConfig({ name: 'Worker X', role: 'Reviewer' });
-    expect(() => harness.node.addWorker(reviewer)).not.toThrow();
-    expect(harness.node.listWorkers().sort()).toEqual(['Worker X (Builder)', 'Worker X (Reviewer)']);
-
-    const duplicateRole = await harness.module.resolve(FakeAgent);
-    await duplicateRole.setConfig({ name: 'Worker X', role: 'Builder' });
-    expect(() => harness.node.addWorker(duplicateRole)).toThrow(
-      'ManageToolNode: worker with name "Worker X" and role "Builder" already exists',
-    );
-
-    const noRole = await harness.module.resolve(FakeAgent);
-    await noRole.setConfig({ name: 'Worker X' });
-    expect(() => harness.node.addWorker(noRole)).toThrow(
-      'ManageToolNode: worker with name "Worker X" and role "Builder" already exists',
-    );
+    expect(() => harness.node.addWorker(reviewer)).toThrow('ManageToolNode: worker with name "Worker X" already exists');
   });
 
-  it('ManageToolNode refreshes metadata when worker config changes', async () => {
+  it('ManageToolNode refreshes cached names when worker config changes', async () => {
     const harness = await createHarness();
 
     const worker = await addWorker(harness.module, harness.node, { name: 'Worker One', role: 'Reviewer', title: 'Initial Title' });
-    expect(harness.node.listWorkers()).toEqual(['Worker One (Reviewer)']);
+    expect(harness.node.listWorkers()).toEqual(['Worker One']);
 
     await worker.setConfig({ name: 'Worker Prime', role: 'Reviewer', title: 'Prime Title' });
 
-    expect(harness.node.listWorkers()).toEqual(['Worker Prime (Reviewer)']);
-    expect(harness.node.getWorkersByName('Worker Prime')).toEqual([worker]);
-    expect(harness.node.findWorkerByLegacyLabel('prime title')).toBe(worker);
+    expect(harness.node.listWorkers()).toEqual(['Worker Prime']);
+    expect(harness.node.getWorkerByName('Worker Prime')).toBe(worker);
   });
 
   it('send_message: surfaces child agent failure', async () => {

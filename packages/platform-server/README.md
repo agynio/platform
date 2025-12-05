@@ -35,14 +35,6 @@ Enabling Memory
 - Scope: `global` per node by default; use `perThread` to isolate by thread id.
 - Backing store uses Postgres via Prisma; no MongoDB dependency.
 
-## Maintenance scripts
-
-### Backfill agent names
-
-- Dry run the updater (default) to inspect changes: `pnpm --filter @agyn/platform-server backfill:agent-names`
-- Apply updates after review: `pnpm --filter @agyn/platform-server backfill:agent-names -- --write`
-- Reads `GRAPH_REPO_PATH` or defaults to `./data/graph`; pass `--repo <path>` to target a different graph checkout.
-
 Examples
 - Set connector defaults programmatically: `mem.createConnector({ placement: 'after_system', content: 'tree', maxChars: 4000 })`.
 - The CallModel injects a SystemMessage either after the system prompt or as the last message depending on placement.

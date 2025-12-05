@@ -47,7 +47,7 @@ describe('ManageToolNode sendToChannel', () => {
     await node.registerInvocation({
       childThreadId: 'child-thread-async',
       parentThreadId: 'parent-thread',
-      workerTitle: 'Async Worker',
+      workerName: 'Async Worker',
       callerAgent: { invoke: parentInvoke },
     });
 
@@ -68,7 +68,7 @@ describe('ManageToolNode sendToChannel', () => {
     await node.registerInvocation({
       childThreadId: 'child-thread-1',
       parentThreadId: 'parent-1',
-      workerTitle: 'Worker One',
+      workerName: 'Worker One',
       callerAgent: priorCaller,
     });
 
@@ -78,7 +78,7 @@ describe('ManageToolNode sendToChannel', () => {
     await node.registerInvocation({
       childThreadId: 'child-thread-1',
       parentThreadId: 'parent-2',
-      workerTitle: 'Worker Two',
+      workerName: 'Worker Two',
       callerAgent: nextCaller,
     });
 
@@ -104,7 +104,7 @@ describe('ManageToolNode sendToChannel', () => {
     await node.registerInvocation({
       childThreadId: 'child-thread-fail',
       parentThreadId: 'parent-thread',
-      workerTitle: 'Async Worker',
+      workerName: 'Async Worker',
       callerAgent: { invoke: parentInvoke },
     });
 
