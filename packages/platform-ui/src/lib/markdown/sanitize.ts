@@ -30,24 +30,23 @@ const allowedTagNames: Schema['tagNames'] = [
   'td',
 ];
 
-const allowedProtocols = ['http', 'https', 'mailto'] as const;
+const allowedProtocols: string[] = ['http', 'https', 'mailto'];
 
 export const markdownSanitizeSchema: Schema = {
   tagNames: allowedTagNames,
   attributes: {
     a: [
-      ['href', allowedProtocols],
-      ['target', ['_blank', '_self']],
-      ['rel', ['noopener', 'noreferrer', 'nofollow']],
+      ['href', ...allowedProtocols],
+      ['target', '_blank', '_self'],
+      ['rel', 'noopener', 'noreferrer', 'nofollow'],
     ],
-    code: [[
-      'className',
-      [/^language-[\w-]+$/],
-    ]],
+    code: [
+      ['className', /^language-[\w-]+$/],
+    ],
     th: ['align'],
     td: ['align'],
   },
   protocols: {
-    href: allowedProtocols,
+    href: [...allowedProtocols],
   },
 };

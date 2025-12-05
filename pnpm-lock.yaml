@@ -411,6 +411,9 @@ importers:
       embla-carousel-react:
         specifier: ^8.3.0
         version: 8.6.0(react@19.1.1)
+      hast-util-sanitize:
+        specifier: ^5.0.2
+        version: 5.0.2
       input-otp:
         specifier: ^1.2.5
         version: 1.4.2(react-dom@19.1.1(react@19.1.1))(react@19.1.1)
@@ -483,6 +486,9 @@ importers:
       tailwindcss:
         specifier: ^4.1.13
         version: 4.1.13
+      unified:
+        specifier: ^11.0.5
+        version: 11.0.5
       uuid:
         specifier: ^13.0.0
         version: 13.0.0

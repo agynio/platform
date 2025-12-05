@@ -44,7 +44,10 @@ describe('MarkdownContent rendering', () => {
     const inlineCode = screen.getByText('code');
     expect(inlineCode.tagName).toBe('CODE');
 
-    expect(screen.getByText('const example = 42;')).toBeInTheDocument();
+    const codeElements = screen.getAllByText((_, element) => element?.tagName === 'CODE');
+    const blockCode = codeElements.find((element) => element.textContent?.includes('const'));
+    expect(blockCode).toBeDefined();
+    expect(blockCode?.textContent?.replace(/\s+/g, ' ').trim()).toBe('const example = 42;');
   });
 
   it('sanitizes disallowed content while keeping allowed tags', () => {
