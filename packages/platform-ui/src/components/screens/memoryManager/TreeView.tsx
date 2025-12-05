@@ -2,8 +2,8 @@ import { useCallback, useEffect, useMemo, useRef, type ReactNode, type KeyboardE
 import { ChevronRight, Plus } from 'lucide-react';
 
 import { cn } from '@/lib/utils';
-import { Button } from '../../ui/button';
-import { Tooltip, TooltipContent, TooltipTrigger } from '../../ui/tooltip';
+import { Button } from '@/components/ui/button';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import {
   type MemoryTree,
   type MemoryNode,
@@ -170,7 +170,7 @@ export function TreeView({
               aria-expanded={isExpandable ? isExpanded : undefined}
               tabIndex={isSelected ? 0 : -1}
               className={cn(
-                'group/tree-item flex min-h-10 w-full items-center gap-2 rounded-md pr-10 py-2 text-sm font-medium outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background',
+                'group/tree-item flex min-h-10 min-w-0 w-full items-center gap-2 rounded-md pr-10 py-2 text-sm font-medium outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background',
                 isSelected
                   ? 'bg-[var(--sidebar-accent)] text-[var(--sidebar-accent-foreground)]'
                   : 'text-[var(--sidebar-foreground)]/80 hover:bg-[var(--sidebar-accent)]/70 hover:text-[var(--sidebar-accent-foreground)]',
@@ -192,18 +192,25 @@ export function TreeView({
                     onToggle(node.path);
                   }}
                   className={cn(
-                    'size-8 shrink-0 text-[var(--sidebar-foreground)]/60 hover:text-[var(--sidebar-foreground)]',
+                    'shrink-0 text-[var(--sidebar-foreground)]/60 hover:text-[var(--sidebar-foreground)]',
                     isSelected && 'text-[var(--sidebar-accent-foreground)]',
                   )}
                 >
                   <ChevronRight className={cn('size-4 transition-transform', isExpanded && 'rotate-90')} />
                 </Button>
               ) : (
-                <span className="size-8 shrink-0" aria-hidden="true" />
+                <span className="h-9 w-9 shrink-0" aria-hidden="true" />
               )}
-              <span className="truncate" title={node.path}>
-                {node.name}
-              </span>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span className="truncate" aria-label={node.name}>
+                    {node.name}
+                  </span>
+                </TooltipTrigger>
+                <TooltipContent side="top" align="start">
+                  {node.name}
+                </TooltipContent>
+              </Tooltip>
             </div>
             <Tooltip>
               <TooltipTrigger asChild>

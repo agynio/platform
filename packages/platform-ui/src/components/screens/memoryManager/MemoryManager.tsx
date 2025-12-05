@@ -236,7 +236,7 @@ export function MemoryManager({
   const renderTreeSection = () => {
     if (!nodes.length) {
       return (
-        <div className="flex h-full items-center justify-center px-6 text-center text-sm text-muted-foreground">
+        <div className="flex flex-1 min-h-0 items-center justify-center px-6 text-center text-sm text-muted-foreground">
           <p>{noNodesMessage ?? 'No memory nodes found.'}</p>
         </div>
       );
@@ -244,20 +244,20 @@ export function MemoryManager({
 
     if (treeLoading) {
       return (
-        <div className="flex h-full items-center justify-center px-6 text-sm text-muted-foreground">Loading documents…</div>
+        <div className="flex flex-1 min-h-0 items-center justify-center px-6 text-sm text-muted-foreground">Loading documents…</div>
       );
     }
 
     if (!treeSnapshot || treeIsEmpty) {
       return (
-        <div className="flex h-full items-center justify-center px-6 text-center text-sm text-muted-foreground">
+        <div className="flex flex-1 min-h-0 items-center justify-center px-6 text-center text-sm text-muted-foreground">
           <p>{emptyTreeMessage ?? 'No documents yet. Create one to get started.'}</p>
         </div>
       );
     }
 
     return (
-      <ScrollArea className="flex-1">
+      <ScrollArea className="flex-1 min-h-0">
         <div className="px-2 py-3">
           <TreeView
             tree={treeSnapshot}
@@ -305,7 +305,7 @@ export function MemoryManager({
     <div className={cn('h-full w-full bg-white', className)}>
       <ResizablePanelGroup direction="horizontal" className="h-full min-h-[480px] overflow-hidden">
         <ResizablePanel defaultSize={32} minSize={20} className="min-w-[260px] bg-white">
-          <div className="flex h-full flex-col bg-white">
+          <div className="flex h-full min-h-0 flex-col bg-white">
             <div className="flex h-[66px] items-center border-b border-[var(--agyn-border-subtle)] px-6">
               <Dropdown
                 placeholder="Select memory node"
