@@ -362,7 +362,7 @@ export class CallAgentLinkingService {
         type: 'tool_execution',
         toolExecution: {
           is: {
-            toolName: { in: toolNames },
+            toolName: { in: [...toolNames] },
           },
         },
       },
