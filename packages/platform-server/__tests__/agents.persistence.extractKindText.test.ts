@@ -236,4 +236,58 @@ describe('AgentsPersistenceService beginRun/completeRun populates Message.text',
       message: expect.objectContaining({ id: 'm1', kind: 'assistant', text: 'final reply', runId: 'run-1' }),
     });
   });
+
+  it('recordTransportAssistantMessage skips invocation event for send_message source', async () => {
+    const createdMessages: any[] = [];
+    const createdRunMessages: any[] = [];
+    const runs: any[] = [{ id: 'run-1', threadId: 'thread-1', status: 'running' }];
+    const prismaMock = {
+      run: {
+        findUnique: async ({ where }: any) => runs.find((x) => x.id === where.id) ?? null,
+      },
+      message: {
+        create: async ({ data }: any) => {
+          const m = { id: `m${createdMessages.length + 1}`, ...data };
+          createdMessages.push(m);
+          return m;
+        },
+      },
+      runMessage: {
+        create: async ({ data }: any) => {
+          createdRunMessages.push(data);
+          return data;
+        },
+      },
+      $transaction: async (cb: any) => cb(prismaMock),
+    } as any;
+
+    const metrics = { getThreadsMetrics: async () => ({}) } as any;
+    const linking = createLinkingStub();
+    const eventsBusStub = createEventsBusStub();
+    const runEventsStub = createRunEventsStub();
+    const svc = new AgentsPersistenceService(
+      { getClient: () => prismaMock } as any,
+      metrics,
+      templateRegistryStub,
+      graphRepoStub,
+      runEventsStub as any,
+      linking,
+      eventsBusStub,
+    );
+
+    const result = await svc.recordTransportAssistantMessage({
+      threadId: 'thread-1',
+      text: 'fallback reply',
+      runId: 'run-1',
+      source: 'send_message',
+    });
+
+    expect(result).toEqual({ messageId: 'm1' });
+    expect(createdRunMessages).toEqual([{ runId: 'run-1', messageId: 'm1', type: 'output' }]);
+    expect(runEventsStub.recordInvocationMessage).not.toHaveBeenCalled();
+    expect(eventsBusStub.emitMessageCreated).toHaveBeenCalledWith({
+      threadId: 'thread-1',
+      message: expect.objectContaining({ id: 'm1', text: 'fallback reply', runId: 'run-1' }),
+    });
+  });
 });

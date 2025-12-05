@@ -40,8 +40,26 @@ export class ThreadTransportService {
     const prisma = this.prismaService.getClient();
     const thread = await prisma.thread.findUnique({ where: { id: normalizedThreadId }, select: { channelNodeId: true } });
     const channelNodeId = thread?.channelNodeId ?? null;
+    const runId = options?.runId ?? null;
+    const source = options?.source ?? null;
+
     if (!channelNodeId) {
-      return { ok: false, error: 'missing_channel_node' };
+      try {
+        await this.persistence.recordTransportAssistantMessage({
+          threadId: normalizedThreadId,
+          text,
+          runId,
+          source,
+        });
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        this.logger.error(
+          `ThreadTransportService: failed to persist assistant message${this.format({ threadId: normalizedThreadId, channelNodeId: null, error: message })}`,
+        );
+        return { ok: false, error: 'persist_failed', threadId: normalizedThreadId };
+      }
+
+      return { ok: true, threadId: normalizedThreadId };
     }
 
     const node = this.runtime.getNodeInstance(channelNodeId);
@@ -69,8 +87,8 @@ export class ThreadTransportService {
         await this.persistence.recordTransportAssistantMessage({
           threadId: normalizedThreadId,
           text,
-          runId: options?.runId ?? null,
-          source: options?.source ?? null,
+          runId,
+          source,
         });
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);

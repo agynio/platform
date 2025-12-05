@@ -106,6 +106,7 @@ Persistent conversation state (Prisma)
 
 Messaging (Slack-only v1)
 
-- `send_message` routes replies to Slack using `Thread.channel` (descriptor written by `SlackTrigger`).
+- `send_message` routes replies to Slack using `Thread.channel` (descriptor written by `SlackTrigger`) when a channel node is registered, and falls back to persisting the reply when no channel node exists (e.g., web-created threads).
+- Runs triggered via `send_message` emit only `tool_execution` run events; no additional `invocation_message` entry is created for the persisted transport message.
 - SlackTrigger requires bot_token in node config; token is resolved during provision; no global Slack config or tokens.
 - No other adapters are supported in v1; attachments/ephemeral not supported.

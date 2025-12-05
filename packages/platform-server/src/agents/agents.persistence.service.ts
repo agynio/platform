@@ -497,6 +497,8 @@ export class AgentsPersistenceService {
     const eventIds: string[] = [];
     const patchedEventIds: string[] = [];
 
+    const suppressInvocationEvent = params.source === 'send_message';
+
     const { message, runId } = await this.prisma.$transaction(async (tx: Prisma.TransactionClient) => {
       const created = await tx.message.create({
         data: {
@@ -515,16 +517,18 @@ export class AgentsPersistenceService {
         }
         linkedRunId = params.runId;
         await tx.runMessage.create({ data: { runId: linkedRunId, messageId: created.id, type: 'output' as RunMessageType } });
-        const event = await this.runEvents.recordInvocationMessage({
-          tx,
-          runId: linkedRunId,
-          threadId: normalizedThreadId,
-          messageId: created.id,
-          role: 'assistant',
-          ts: created.createdAt,
-          metadata: { messageType: 'transport', source: params.source ?? 'thread_transport' },
-        });
-        eventIds.push(event.id);
+        if (!suppressInvocationEvent) {
+          const event = await this.runEvents.recordInvocationMessage({
+            tx,
+            runId: linkedRunId,
+            threadId: normalizedThreadId,
+            messageId: created.id,
+            role: 'assistant',
+            ts: created.createdAt,
+            metadata: { messageType: 'transport', source: params.source ?? 'thread_transport' },
+          });
+          eventIds.push(event.id);
+        }
         const linkedEventId = await this.callAgentLinking.onChildRunMessage({
           tx,
           runId: linkedRunId,

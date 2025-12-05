@@ -85,4 +85,19 @@ describe('ThreadTransportService', () => {
       source: null,
     });
   });
+
+  it('persists locally when channel node missing', async () => {
+    threadFindUnique.mockResolvedValue(null);
+
+    const result = await service.sendTextToThread('thread-5', 'offline');
+
+    expect(result).toEqual({ ok: true, threadId: 'thread-5' });
+    expect(recordTransportAssistantMessage).toHaveBeenCalledWith({
+      threadId: 'thread-5',
+      text: 'offline',
+      runId: null,
+      source: null,
+    });
+    expect(getNodeInstance).not.toHaveBeenCalled();
+  });
 });

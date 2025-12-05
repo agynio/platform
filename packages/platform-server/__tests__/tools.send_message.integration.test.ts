@@ -101,14 +101,19 @@ describe('send_message tool', () => {
     return { trigger, slackSend };
   };
 
-  it('returns error when thread channel mapping missing', async () => {
+  it('persists message when thread has no channel node', async () => {
     const { prismaService } = makePrismaStub({ channelNodeId: null });
     const runtime = makeRuntimeStub();
     const { transport, persistence: transportPersistence } = makeTransport(prismaService, runtime);
     const tool = new SendMessageFunctionTool(transport);
     const res = await tool.execute({ message: 'hello' }, { threadId: 't1' } as any);
-    expect(res).toBe('missing_channel_node');
-    expect(transportPersistence.recordTransportAssistantMessage).not.toHaveBeenCalled();
+    expect(res).toBe('message sent successfully');
+    expect(transportPersistence.recordTransportAssistantMessage).toHaveBeenCalledWith({
+      threadId: 't1',
+      text: 'hello',
+      runId: null,
+      source: 'send_message',
+    });
   });
 
   it('returns error when runtime instance missing', async () => {
