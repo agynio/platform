@@ -1,24 +1,35 @@
 import { FieldLabel } from './FieldLabel';
 import { ReferenceInput } from '../ReferenceInput';
+import type { ReferenceSourceType } from './utils';
 
 interface TriggerSectionProps {
   appToken: string;
+  appTokenSourceType: ReferenceSourceType;
   botToken: string;
+  botTokenSourceType: ReferenceSourceType;
   onAppTokenChange: (value: string) => void;
+  onAppTokenSourceTypeChange: (type: ReferenceSourceType) => void;
   onAppTokenFocus: () => void;
   onBotTokenChange: (value: string) => void;
+  onBotTokenSourceTypeChange: (type: ReferenceSourceType) => void;
   onBotTokenFocus: () => void;
   secretSuggestions: string[];
+  variableSuggestions: string[];
 }
 
 export function TriggerSection({
   appToken,
+  appTokenSourceType,
   botToken,
+  botTokenSourceType,
   onAppTokenChange,
+  onAppTokenSourceTypeChange,
   onAppTokenFocus,
   onBotTokenChange,
+  onBotTokenSourceTypeChange,
   onBotTokenFocus,
   secretSuggestions,
+  variableSuggestions,
 }: TriggerSectionProps) {
   return (
     <section>
@@ -30,8 +41,10 @@ export function TriggerSection({
             value={appToken}
             onChange={(event) => onAppTokenChange(event.target.value)}
             onFocus={onAppTokenFocus}
-            sourceType="secret"
+            sourceType={appTokenSourceType}
+            onSourceTypeChange={onAppTokenSourceTypeChange}
             secretKeys={secretSuggestions}
+            variableKeys={variableSuggestions}
             placeholder="Select or enter app token..."
             size="sm"
           />
@@ -42,8 +55,10 @@ export function TriggerSection({
             value={botToken}
             onChange={(event) => onBotTokenChange(event.target.value)}
             onFocus={onBotTokenFocus}
-            sourceType="secret"
+            sourceType={botTokenSourceType}
+            onSourceTypeChange={onBotTokenSourceTypeChange}
             secretKeys={secretSuggestions}
+            variableKeys={variableSuggestions}
             placeholder="Select or enter bot token..."
             size="sm"
           />

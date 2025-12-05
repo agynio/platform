@@ -18,7 +18,9 @@ import {
   applySummarizationUpdate,
   applyVolumesUpdate,
   createEnvVar,
+  encodeReferenceValue,
   fromReferenceSourceType,
+  inferReferenceSource,
   isValidToolName,
   isRecord,
   mergeWithDefined,
@@ -33,6 +35,7 @@ import {
   writeReferenceValue,
   toNumberOrUndefined,
 } from './utils';
+import type { ReferenceSourceType } from './utils';
 import { getCanonicalToolName } from './toolCanonicalNames';
 import { TOOL_NAME_HINT } from './toolNameHint';
 import type {
@@ -265,7 +268,73 @@ function NodePropertiesSidebar({
   );
 
   const slackAppReference = useMemo(() => readReferenceValue(configRecord.app_token), [configRecord.app_token]);
+  const slackAppSourceType = useMemo<ReferenceSourceType>(
+    () => inferReferenceSource(slackAppReference.raw),
+    [slackAppReference.raw],
+  );
   const slackBotReference = useMemo(() => readReferenceValue(configRecord.bot_token), [configRecord.bot_token]);
+  const slackBotSourceType = useMemo<ReferenceSourceType>(
+    () => inferReferenceSource(slackBotReference.raw),
+    [slackBotReference.raw],
+  );
+
+  const handleSlackAppValueChange = useCallback(
+    (value: string) => {
+      onConfigChange?.({ app_token: writeReferenceValue(slackAppReference.raw, value, slackAppSourceType) });
+      if (slackAppSourceType === 'secret') {
+        scheduleSecretFetch(value);
+      } else if (slackAppSourceType === 'variable') {
+        scheduleVariableFetch(value);
+      }
+    },
+    [onConfigChange, slackAppReference.raw, slackAppSourceType, scheduleSecretFetch, scheduleVariableFetch],
+  );
+
+  const handleSlackBotValueChange = useCallback(
+    (value: string) => {
+      onConfigChange?.({ bot_token: writeReferenceValue(slackBotReference.raw, value, slackBotSourceType) });
+      if (slackBotSourceType === 'secret') {
+        scheduleSecretFetch(value);
+      } else if (slackBotSourceType === 'variable') {
+        scheduleVariableFetch(value);
+      }
+    },
+    [onConfigChange, slackBotReference.raw, slackBotSourceType, scheduleSecretFetch, scheduleVariableFetch],
+  );
+
+  const handleSlackAppSourceChange = useCallback(
+    (type: ReferenceSourceType) => {
+      onConfigChange?.({ app_token: encodeReferenceValue(type, '', slackAppReference.raw) });
+    },
+    [onConfigChange, slackAppReference.raw],
+  );
+
+  const handleSlackBotSourceChange = useCallback(
+    (type: ReferenceSourceType) => {
+      onConfigChange?.({ bot_token: encodeReferenceValue(type, '', slackBotReference.raw) });
+    },
+    [onConfigChange, slackBotReference.raw],
+  );
+
+  const handleSlackAppFocus = useCallback(() => {
+    const trimmed = slackAppReference.value.trim();
+    if (trimmed.length === 0) return;
+    if (slackAppSourceType === 'secret') {
+      fetchSecretNow(trimmed);
+    } else if (slackAppSourceType === 'variable') {
+      fetchVariableNow(trimmed);
+    }
+  }, [fetchSecretNow, fetchVariableNow, slackAppReference.value, slackAppSourceType]);
+
+  const handleSlackBotFocus = useCallback(() => {
+    const trimmed = slackBotReference.value.trim();
+    if (trimmed.length === 0) return;
+    if (slackBotSourceType === 'secret') {
+      fetchSecretNow(trimmed);
+    } else if (slackBotSourceType === 'variable') {
+      fetchVariableNow(trimmed);
+    }
+  }, [fetchSecretNow, fetchVariableNow, slackBotReference.value, slackBotSourceType]);
 
   const mcpRequestTimeout = readNumber(configRecord.requestTimeoutMs);
   const mcpStartupTimeout = readNumber(configRecord.startupTimeoutMs);
@@ -906,18 +975,17 @@ function NodePropertiesSidebar({
           {nodeKind === 'Trigger' && (
             <TriggerSection
               appToken={slackAppReference.value}
+              appTokenSourceType={slackAppSourceType}
               botToken={slackBotReference.value}
-              onAppTokenChange={(value) => {
-                onConfigChange?.({ app_token: writeReferenceValue(slackAppReference.raw, value) });
-                scheduleSecretFetch(value);
-              }}
-              onAppTokenFocus={() => fetchSecretNow(slackAppReference.value)}
-              onBotTokenChange={(value) => {
-                onConfigChange?.({ bot_token: writeReferenceValue(slackBotReference.raw, value) });
-                scheduleSecretFetch(value);
-              }}
-              onBotTokenFocus={() => fetchSecretNow(slackBotReference.value)}
+              botTokenSourceType={slackBotSourceType}
+              onAppTokenChange={handleSlackAppValueChange}
+              onAppTokenSourceTypeChange={handleSlackAppSourceChange}
+              onAppTokenFocus={handleSlackAppFocus}
+              onBotTokenChange={handleSlackBotValueChange}
+              onBotTokenSourceTypeChange={handleSlackBotSourceChange}
+              onBotTokenFocus={handleSlackBotFocus}
               secretSuggestions={secretSuggestions}
+              variableSuggestions={variableSuggestions}
             />
           )}
 

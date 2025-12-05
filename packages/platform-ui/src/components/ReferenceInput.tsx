@@ -52,11 +52,11 @@ export function ReferenceInput({
 
   // Filter keys based on input value
   const inputValue = (props.value as string) || '';
-  const filteredKeys = sourceType === 'secret' && inputValue
-    ? secretKeys.filter(key => key.toLowerCase().includes(inputValue.toLowerCase()))
-    : sourceType === 'variable' && inputValue
-    ? variableKeys.filter(key => key.toLowerCase().includes(inputValue.toLowerCase()))
-    : [];
+  const baseKeys = sourceType === 'secret' ? secretKeys : sourceType === 'variable' ? variableKeys : [];
+  const normalizedInput = inputValue.trim().toLowerCase();
+  const filteredKeys = normalizedInput.length === 0
+    ? baseKeys
+    : baseKeys.filter((key) => key.toLowerCase().includes(normalizedInput));
 
   // Handle click outside to close autocomplete
   useEffect(() => {

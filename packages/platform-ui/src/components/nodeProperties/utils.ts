@@ -9,14 +9,18 @@ import type {
   WorkspaceNixPackage,
 } from './types';
 
+export type ReferenceSourceType = 'text' | 'secret' | 'variable';
+
 function formatVaultSegments(value: Record<string, unknown>): string {
   const segments: string[] = [];
   const mount = typeof value.mount === 'string' ? value.mount.trim() : undefined;
   const path = typeof value.path === 'string' ? value.path.trim() : undefined;
   const key = typeof value.key === 'string' ? value.key.trim() : undefined;
-  if (mount) segments.push(mount);
-  if (path) segments.push(path);
-  if (key) segments.push(key);
+  const hasPath = Boolean(path && path.length > 0);
+  const hasKey = Boolean(key && key.length > 0);
+  if (mount && (hasPath || hasKey)) segments.push(mount);
+  if (hasPath) segments.push(path as string);
+  if (hasKey) segments.push(key as string);
   if (segments.length === 0 && typeof value.value === 'string') return value.value;
   return segments.join('/');
 }
@@ -52,6 +56,20 @@ function parseVaultString(
 
 function parseVariable(input: string): { kind: 'var'; name: string } {
   return { kind: 'var', name: input.trim() };
+}
+
+function isVaultReferenceValue(value: unknown): value is Record<string, unknown> {
+  if (!isRecord(value)) return false;
+  if (value.kind === 'vault') return true;
+  if (typeof value.source === 'string' && value.source === 'vault') return true;
+  return typeof value.path === 'string' && typeof value.key === 'string';
+}
+
+function isVariableReferenceValue(value: unknown): value is Record<string, unknown> {
+  if (!isRecord(value)) return false;
+  if (value.kind === 'var') return true;
+  if (typeof value.source === 'string' && value.source === 'variable') return true;
+  return typeof value.name === 'string';
 }
 
 const hasStructuredClone = typeof structuredClone === 'function';
@@ -93,6 +111,7 @@ function cloneValueShape(value: unknown): ReferenceConfigValue | undefined {
 
 function buildVaultValue(input: string, previous?: ReferenceConfigValue): Record<string, unknown> {
   const prevMount = isRecord(previous) && typeof previous.mount === 'string' ? previous.mount : undefined;
+  const isEmptyInput = input.trim().length === 0;
   const parsed = parseVaultString(input, prevMount);
   const next = isRecord(previous) ? deepClone(previous) : {};
   const record = next as Record<string, unknown>;
@@ -101,10 +120,14 @@ function buildVaultValue(input: string, previous?: ReferenceConfigValue): Record
   record.key = parsed.key;
   if (parsed.mount) {
     record.mount = parsed.mount;
+  } else if (isEmptyInput && prevMount) {
+    record.mount = prevMount;
   } else {
     delete record.mount;
   }
   delete record.value;
+  delete (record as Record<string, unknown>).name;
+  delete (record as Record<string, unknown>).default;
   return record;
 }
 
@@ -190,6 +213,13 @@ export function mergeWithDefined(base: Record<string, unknown>, updates: Record<
 
 export function readReferenceValue(raw: unknown): { value: string; raw: ReferenceConfigValue } {
   if (typeof raw === 'string') return { value: raw, raw };
+  if (isVaultReferenceValue(raw)) {
+    return { value: formatVaultSegments(raw), raw: raw as Record<string, unknown> };
+  }
+  if (isVariableReferenceValue(raw)) {
+    const name = typeof raw.name === 'string' ? raw.name : typeof raw.value === 'string' ? raw.value : '';
+    return { value: name, raw: raw as Record<string, unknown> };
+  }
   if (isRecord(raw)) {
     const value = typeof raw.value === 'string' ? raw.value : '';
     return { value, raw: raw as Record<string, unknown> };
@@ -197,14 +227,42 @@ export function readReferenceValue(raw: unknown): { value: string; raw: Referenc
   return { value: '', raw: '' };
 }
 
-export function writeReferenceValue(prev: ReferenceConfigValue, nextValue: string): ReferenceConfigValue {
-  if (typeof prev === 'string') {
-    return nextValue;
+export function inferReferenceSource(raw: ReferenceConfigValue | undefined): ReferenceSourceType {
+  if (typeof raw === 'string') return 'text';
+  if (isVaultReferenceValue(raw)) return 'secret';
+  if (isVariableReferenceValue(raw)) return 'variable';
+  if (isRecord(raw) && typeof raw.source === 'string') {
+    if (raw.source === 'vault') return 'secret';
+    if (raw.source === 'variable') return 'variable';
   }
-  if (isRecord(prev)) {
-    return { ...prev, value: nextValue };
+  return 'text';
+}
+
+export function encodeReferenceValue(
+  sourceType: ReferenceSourceType,
+  value: string,
+  previous?: ReferenceConfigValue,
+): ReferenceConfigValue {
+  if (sourceType === 'secret') {
+    const record = buildVaultValue(value, previous);
+    delete record.source;
+    return record;
   }
-  return nextValue;
+  if (sourceType === 'variable') {
+    const record = buildVariableValue(value, previous);
+    delete record.source;
+    return record;
+  }
+  return value;
+}
+
+export function writeReferenceValue(
+  prev: ReferenceConfigValue | undefined,
+  nextValue: string,
+  sourceType?: ReferenceSourceType,
+): ReferenceConfigValue {
+  const inferred = sourceType ?? inferReferenceSource(prev);
+  return encodeReferenceValue(inferred, nextValue, prev);
 }
 
 export function readEnvList(raw: unknown): EnvVar[] {

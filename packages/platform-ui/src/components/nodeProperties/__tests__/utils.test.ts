@@ -2,14 +2,75 @@ import { describe, it, expect } from 'vitest';
 
 import {
   applyNixUpdate,
+  encodeReferenceValue,
+  inferReferenceSource,
   readEnvList,
   readNixFlakeRepos,
   readNixPackages,
+  readReferenceValue,
   serializeEnvVars,
+  writeReferenceValue,
 } from '../utils';
 import type { EnvVar, WorkspaceFlakeRepo, WorkspaceNixPackage } from '../types';
 
 describe('nodeProperties utils', () => {
+  describe('reference helpers', () => {
+    it('reads canonical vault references with formatted display value', () => {
+      const raw = { kind: 'vault', mount: 'secret', path: 'app/db', key: 'PASSWORD' };
+      const result = readReferenceValue(raw);
+      expect(result.value).toBe('secret/app/db/PASSWORD');
+      expect(result.raw).toEqual(raw);
+    });
+
+    it('reads canonical variable references using the name field', () => {
+      const raw = { kind: 'var', name: 'SLACK_BOT_TOKEN' };
+      const result = readReferenceValue(raw);
+      expect(result.value).toBe('SLACK_BOT_TOKEN');
+      expect(result.raw).toEqual(raw);
+    });
+
+    it('infers the reference source for canonical and legacy shapes', () => {
+      expect(inferReferenceSource('plaintext')).toBe('text');
+      expect(inferReferenceSource({ kind: 'vault', path: 'app', key: 'SECRET' })).toBe('secret');
+      expect(inferReferenceSource({ kind: 'var', name: 'TOKEN' })).toBe('variable');
+      expect(inferReferenceSource({ source: 'variable', value: 'TOKEN' } as any)).toBe('variable');
+      expect(inferReferenceSource({ source: 'vault', value: 'secret/app/SECRET' } as any)).toBe('secret');
+    });
+
+    it('encodes secret and variable references into canonical structures', () => {
+      const secret = encodeReferenceValue('secret', 'secret/app/NEW', {
+        kind: 'vault',
+        mount: 'secret',
+        path: 'app',
+        key: 'OLD',
+        source: 'vault',
+      } as any);
+      expect(secret).toEqual({ kind: 'vault', mount: 'secret', path: 'app', key: 'NEW' });
+
+      const variable = encodeReferenceValue('variable', 'BOT_TOKEN', {
+        kind: 'var',
+        name: 'OLD',
+        default: 'fallback',
+        source: 'variable',
+      } as any);
+      expect(variable).toEqual({ kind: 'var', name: 'BOT_TOKEN', default: 'fallback' });
+    });
+
+    it('writes reference values using inferred source when not provided', () => {
+      const prev = {
+        kind: 'vault',
+        mount: 'secret',
+        path: 'app',
+        key: 'OLD',
+        source: 'vault',
+      } as any;
+      const next = writeReferenceValue(prev, 'secret/app/UPDATED');
+      expect(next).toEqual({ kind: 'vault', mount: 'secret', path: 'app', key: 'UPDATED' });
+
+      expect(writeReferenceValue('plain', 'updated')).toBe('updated');
+    });
+  });
+
   describe('readEnvList', () => {
     it('returns env vars with metadata and display values', () => {
       const result = readEnvList([
