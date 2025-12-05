@@ -567,6 +567,10 @@ export function AgentsThreads() {
 
   const selectedThreadId = params.threadId ?? selectedThreadIdState;
   const isDraftSelected = isDraftThreadId(selectedThreadId);
+  const activeQueuedMessagesQueryKey = useMemo(
+    () => (selectedThreadId && !isDraftSelected ? (['agents', 'threads', selectedThreadId, 'queued'] as const) : null),
+    [selectedThreadId, isDraftSelected],
+  );
 
   useEffect(() => {
     if (params.threadId) {
@@ -767,6 +771,17 @@ export function AgentsThreads() {
     return sorted;
   }, [runsQuery.data]);
 
+  const hasRunningRun = useMemo(() => runList.some((run) => run.status === 'running'), [runList]);
+  const queuedMessagesQuery = useQuery({
+    queryKey: ['agents', 'threads', selectedThreadId ?? 'draft', 'queued'] as const,
+    queryFn: async () => {
+      return threads.queuedMessages(selectedThreadId!);
+    },
+    enabled: Boolean(selectedThreadId) && !isDraftSelected,
+    refetchInterval: hasRunningRun ? 7000 : false,
+    refetchOnWindowFocus: false,
+  });
+
   useEffect(() => {
     scrollRestoreTokenRef.current += 1;
     if (pendingRestoreFrameRef.current !== null) {
@@ -947,6 +962,33 @@ export function AgentsThreads() {
   }, [selectedThreadId, isDraftSelected, runMessages, updateCacheEntry]);
 
   useEffect(() => {
+    if (!selectedThreadId || isDraftSelected) {
+      return;
+    }
+    if (queuedMessagesQuery.status === 'success') {
+      const items = queuedMessagesQuery.data?.items ?? [];
+      const mapped = items.map((item) => ({ id: item.id, content: item.text ?? '' }));
+      setQueuedMessages((prev) => {
+        if (prev.length === mapped.length) {
+          let unchanged = true;
+          for (let i = 0; i < prev.length; i += 1) {
+            if (prev[i].id !== mapped[i].id || prev[i].content !== mapped[i].content) {
+              unchanged = false;
+              break;
+            }
+          }
+          if (unchanged) return prev;
+        }
+        return mapped;
+      });
+      return;
+    }
+    if (queuedMessagesQuery.status === 'error') {
+      setQueuedMessages([]);
+    }
+  }, [selectedThreadId, isDraftSelected, queuedMessagesQuery.status, queuedMessagesQuery.data]);
+
+  useEffect(() => {
     const knownIds = new Set<string>();
     for (const messages of Object.values(runMessages)) {
       for (const message of messages) {
@@ -966,13 +1008,9 @@ export function AgentsThreads() {
     const offMsg = graphSocket.onMessageCreated(({ threadId, message }) => {
       if (threadId !== selectedThreadId) return;
       if (!message.runId) {
-        const content = sanitizeSummary(message.text);
-        setQueuedMessages((prev) => {
-          if (prev.some((queued) => queued.id === message.id)) {
-            return prev;
-          }
-          return [...prev, { id: message.id, content }];
-        });
+        if (activeQueuedMessagesQueryKey) {
+          void queryClient.invalidateQueries({ queryKey: activeQueuedMessagesQueryKey });
+        }
         return;
       }
       const runId = message.runId;
@@ -996,9 +1034,12 @@ export function AgentsThreads() {
         if (areMessageListsEqual(existing, merged)) return prev;
         return { ...prev, [runId]: merged };
       });
+      if (activeQueuedMessagesQueryKey) {
+        void queryClient.invalidateQueries({ queryKey: activeQueuedMessagesQueryKey });
+      }
     });
     return () => offMsg();
-  }, [selectedThreadId]);
+  }, [selectedThreadId, activeQueuedMessagesQueryKey, queryClient]);
 
   useEffect(() => {
     if (!selectedThreadId) return;
@@ -1025,15 +1066,21 @@ export function AgentsThreads() {
       runIdsRef.current.add(next.id);
       if (!seenMessageIdsRef.current.has(next.id)) seenMessageIdsRef.current.set(next.id, new Set());
       flushPendingForRun(next.id);
+      if (activeQueuedMessagesQueryKey) {
+        void queryClient.invalidateQueries({ queryKey: activeQueuedMessagesQueryKey });
+      }
     });
     const offReconnect = graphSocket.onReconnected(() => {
       queryClient.invalidateQueries({ queryKey });
+      if (activeQueuedMessagesQueryKey) {
+        void queryClient.invalidateQueries({ queryKey: activeQueuedMessagesQueryKey });
+      }
     });
     return () => {
       offRun();
       offReconnect();
     };
-  }, [selectedThreadId, queryClient, flushPendingForRun]);
+  }, [selectedThreadId, queryClient, flushPendingForRun, activeQueuedMessagesQueryKey]);
 
   useEffect(() => {
     if (!selectedThreadId) return;
@@ -1365,8 +1412,9 @@ export function AgentsThreads() {
       await threads.sendMessage(threadId, text);
       return { threadId };
     },
-    onSuccess: () => {
+    onSuccess: ({ threadId }) => {
       setInputValue('');
+      void queryClient.invalidateQueries({ queryKey: ['agents', 'threads', threadId, 'queued'] });
     },
     onError: (error: unknown) => {
       notifyError(resolveSendMessageError(error));

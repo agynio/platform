@@ -653,6 +653,10 @@ export class AgentNode extends Node<AgentStaticConfig> implements OnModuleInit {
     return result;
   }
 
+  public listQueuedPreview(threadId: string): Array<{ id: string; text: string; ts: number }> {
+    return this.buffer.snapshot(threadId);
+  }
+
   addTool(toolNode: BaseToolNode<unknown>): void {
     const tool: FunctionTool = toolNode.getTool();
     const added = this.registerTool(tool, this.buildNodeToolSource(toolNode));

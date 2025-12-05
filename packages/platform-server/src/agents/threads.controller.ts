@@ -406,6 +406,47 @@ export class AgentsThreadsController {
     return { items: runs };
   }
 
+  @Get('threads/:threadId/queued-messages')
+  async listQueuedMessages(@Param('threadId') threadId: string) {
+    const thread = await this.persistence.getThreadById(threadId);
+    if (!thread) throw new NotFoundException({ error: 'thread_not_found' });
+
+    const assignedAgentNodeId = typeof thread.assignedAgentNodeId === 'string' ? thread.assignedAgentNodeId.trim() : '';
+    if (!assignedAgentNodeId) {
+      return { items: [] } as const;
+    }
+
+    const liveNodes = this.runtime.getNodes();
+    const agentNodes = liveNodes.filter((node) => isAgentLiveNode(node, this.templateRegistry));
+    if (agentNodes.length === 0) {
+      return { items: [] } as const;
+    }
+
+    const liveAgentNode = agentNodes.find((node) => node.id === assignedAgentNodeId);
+    if (!liveAgentNode) {
+      return { items: [] } as const;
+    }
+
+    const instance = liveAgentNode.instance;
+    if (!isAgentRuntimeInstance(instance)) {
+      return { items: [] } as const;
+    }
+
+    const snapshot = instance.listQueuedPreview(threadId) ?? [];
+    const items = snapshot.map((item) => {
+      const text = typeof item.text === 'string' ? item.text : '';
+      let enqueuedAt: string | undefined;
+      if (Number.isFinite(item.ts)) {
+        const ts = new Date(item.ts);
+        if (!Number.isNaN(ts.getTime())) {
+          enqueuedAt = ts.toISOString();
+        }
+      }
+      return { id: item.id, text, enqueuedAt };
+    });
+    return { items };
+  }
+
   @Get('runs/:runId/messages')
   async listRunMessages(@Param('runId') runId: string, @Query() query: ListRunMessagesQueryDto) {
     const items = await this.persistence.listRunMessages(runId, query.type);

@@ -101,6 +101,8 @@ describe('AgentsThreads conversation view', () => {
       http.get(abs('/api/agents/reminders'), () => HttpResponse.json({ items: reminders })),
       http.get('/api/containers', () => HttpResponse.json({ items: containers })),
       http.get(abs('/api/containers'), () => HttpResponse.json({ items: containers })),
+      http.get('/api/agents/threads/th1/queued-messages', () => HttpResponse.json({ items: [] })),
+      http.get(abs('/api/agents/threads/th1/queued-messages'), () => HttpResponse.json({ items: [] })),
       http.get('/api/agents/runs/run1/messages', messagesHandler),
       http.get(abs('/api/agents/runs/run1/messages'), messagesHandler),
     );

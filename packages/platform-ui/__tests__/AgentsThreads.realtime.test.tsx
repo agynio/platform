@@ -49,6 +49,8 @@ describe('AgentsThreads realtime updates', () => {
       http.get(abs('/api/agents/threads/th1/runs'), runsHandler),
       http.get('/api/agents/threads/th1/children', () => HttpResponse.json({ items: [] })),
       http.get(abs('/api/agents/threads/th1/children'), () => HttpResponse.json({ items: [] })),
+      http.get('/api/agents/threads/th1/queued-messages', () => HttpResponse.json({ items: [] })),
+      http.get(abs('/api/agents/threads/th1/queued-messages'), () => HttpResponse.json({ items: [] })),
       http.get('/api/agents/runs/run-1/messages', messagesHandler),
       http.get(abs('/api/agents/runs/run-1/messages'), messagesHandler),
       http.get('/api/agents/reminders', () => HttpResponse.json({ items: [] })),

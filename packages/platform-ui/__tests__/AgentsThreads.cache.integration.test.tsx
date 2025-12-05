@@ -160,6 +160,8 @@ function registerThreadHandlers(threads: ThreadDescriptor[], options?: { message
     }),
     http.get('/api/agents/threads/:threadId/children', () => HttpResponse.json({ items: [] })),
     http.get(abs('/api/agents/threads/:threadId/children'), () => HttpResponse.json({ items: [] })),
+    http.get('/api/agents/threads/:threadId/queued-messages', () => HttpResponse.json({ items: [] })),
+    http.get(abs('/api/agents/threads/:threadId/queued-messages'), () => HttpResponse.json({ items: [] })),
     http.get('/api/agents/reminders', () => HttpResponse.json({ items: [] })),
     http.get(abs('/api/agents/reminders'), () => HttpResponse.json({ items: [] })),
     http.get('/api/containers', () => HttpResponse.json({ items: [] })),

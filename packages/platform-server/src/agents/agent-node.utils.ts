@@ -2,13 +2,17 @@ import { AgentNode } from '../nodes/agent/agent.node';
 import type { LiveNode } from '../graph/liveGraph.types';
 import { TemplateRegistry } from '../graph-core/templateRegistry';
 
-export type AgentRuntimeInstance = Pick<AgentNode, 'invoke' | 'status'>;
+export type AgentRuntimeInstance = Pick<AgentNode, 'invoke' | 'status' | 'listQueuedPreview'>;
 
 export function isAgentRuntimeInstance(value: unknown): value is AgentRuntimeInstance {
   if (value instanceof AgentNode) return true;
   if (!value || typeof value !== 'object') return false;
   const candidate = value as Partial<AgentNode>;
-  return typeof candidate.invoke === 'function' && typeof candidate.status === 'string';
+  return (
+    typeof candidate.invoke === 'function' &&
+    typeof candidate.status === 'string' &&
+    typeof candidate.listQueuedPreview === 'function'
+  );
 }
 
 export function isAgentTemplate(template: string, registry: TemplateRegistry): boolean {

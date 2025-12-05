@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { AIMessage, HumanMessage, SystemMessage } from '@agyn/llm';
 
 export type BufferMessage = AIMessage | HumanMessage | SystemMessage;
@@ -11,7 +12,7 @@ export interface MessagesBufferOptions {
   debounceMs?: number;
 }
 
-type QueuedItem = { msg: BufferMessage; tokenId?: string };
+type QueuedItem = { id: string; msg: BufferMessage; tokenId?: string; ts: number };
 
 type ThreadState = {
   queue: QueuedItem[];
@@ -39,7 +40,7 @@ export class MessagesBuffer {
     const batch = Array.isArray(msgs) ? msgs : [msgs];
     if (!batch.length) return;
     const s = this.ensure(thread);
-    s.queue.push(...batch.map((m) => ({ msg: m })));
+    s.queue.push(...batch.map((m) => this.toQueuedItem(m, now)));
     s.lastEnqueueAt = now;
   }
 
@@ -47,7 +48,7 @@ export class MessagesBuffer {
     const batch = Array.isArray(msgs) ? msgs : [msgs];
     if (!batch.length) return;
     const s = this.ensure(thread);
-    s.queue.push(...batch.map((m) => ({ msg: m, tokenId })));
+    s.queue.push(...batch.map((m) => this.toQueuedItem(m, now, tokenId)));
     s.lastEnqueueAt = now;
   }
 
@@ -114,6 +115,28 @@ export class MessagesBuffer {
     if (!s || s.queue.length === 0) return;
     const drop = new Set(tokenIds);
     s.queue = s.queue.filter((q) => !q.tokenId || !drop.has(q.tokenId));
+  }
+
+  snapshot(thread: string): Array<{ id: string; text: string; ts: number }> {
+    const s = this.threads.get(thread);
+    if (!s || s.queue.length === 0) return [];
+    return s.queue.map((item) => ({ id: item.id, text: this.describeMessage(item.msg), ts: item.ts }));
+  }
+
+  private toQueuedItem(msg: BufferMessage, now: number, tokenId?: string): QueuedItem {
+    return {
+      id: randomUUID(),
+      msg,
+      tokenId,
+      ts: now,
+    };
+  }
+
+  private describeMessage(message: BufferMessage): string {
+    if (message instanceof HumanMessage) {
+      return typeof message.text === 'string' ? message.text : '';
+    }
+    return '';
   }
 
   private ensure(thread: string): ThreadState {

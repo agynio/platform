@@ -205,6 +205,7 @@ const relativeHandlers = [
     _HttpResponse.json({ remindersCount: 0, containersCount: 0, activity: 'idle', runsCount: 0 }),
   ),
   _http.get('/api/agents/threads/:threadId/containers', () => _HttpResponse.json({ items: [] })),
+  _http.get('/api/agents/threads/:threadId/queued-messages', () => _HttpResponse.json({ items: [] })),
   _http.get('/api/agents/reminders', () => _HttpResponse.json({ items: [] })),
   _http.get('/api/containers', () => _HttpResponse.json({ items: [] })),
   _http.get('/api/agents/runs/:runId/messages', () => _HttpResponse.json({ items: [] })),
@@ -321,6 +322,9 @@ const absoluteHandlers = [
     _HttpResponse.json({ remindersCount: 0, containersCount: 0, activity: 'idle', runsCount: 0 }),
   ),
   _http.get(abs('/api/agents/threads/:threadId/containers'), () =>
+    _HttpResponse.json({ items: [] }),
+  ),
+  _http.get(abs('/api/agents/threads/:threadId/queued-messages'), () =>
     _HttpResponse.json({ items: [] }),
   ),
   _http.get(abs('/api/agents/runs/:runId/messages'), () => _HttpResponse.json({ items: [] })),

@@ -70,4 +70,8 @@ export const threads = {
     items.sort((a, b) => new Date(a.at).getTime() - new Date(b.at).getTime());
     return { items };
   },
+  queuedMessages: (id: string) =>
+    asData<{ items: { id: string; text: string; enqueuedAt?: string }[] }>(
+      http.get(`/api/agents/threads/${encodeURIComponent(id)}/queued-messages`),
+    ),
 };
