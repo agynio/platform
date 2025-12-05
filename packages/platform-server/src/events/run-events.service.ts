@@ -1002,6 +1002,7 @@ export class RunEventsService {
         llmCall: {
           select: {
             contextItemIds: true,
+            newContextItemCount: true,
           },
         },
       },
@@ -1014,10 +1015,17 @@ export class RunEventsService {
     const contextItemIds = Array.isArray(event.llmCall.contextItemIds)
       ? event.llmCall.contextItemIds.filter((id): id is string => typeof id === 'string' && id.length > 0)
       : [];
+    const llmNewContextCountRaw = event.llmCall.newContextItemCount;
+    const llmNewContextCount =
+      typeof llmNewContextCountRaw === 'number' && Number.isFinite(llmNewContextCountRaw) && llmNewContextCountRaw >= 0
+        ? Math.floor(llmNewContextCountRaw)
+        : 0;
 
     const plainMetadata = this.toPlainJson(event.metadata ?? null);
     let metadataNewIds: string[] = [];
     let metadataTotalCount: number | null = null;
+    let metadataPrevCursorId: string | null = null;
+    let metadataPageSize: number | null = null;
     if (plainMetadata && typeof plainMetadata === 'object' && !Array.isArray(plainMetadata)) {
       const contextWindow = (plainMetadata as Record<string, unknown>).contextWindow;
       if (contextWindow && typeof contextWindow === 'object' && 'newIds' in contextWindow) {
@@ -1028,6 +1036,16 @@ export class RunEventsService {
         const candidateTotal = (contextWindow as Record<string, unknown>).totalCount;
         if (typeof candidateTotal === 'number' && Number.isFinite(candidateTotal) && candidateTotal >= 0) {
           metadataTotalCount = Math.floor(candidateTotal);
+        }
+        const candidatePrev = (contextWindow as Record<string, unknown>).prevCursorId;
+        if (typeof candidatePrev === 'string' && candidatePrev.length > 0) {
+          metadataPrevCursorId = candidatePrev;
+        } else if (candidatePrev === null) {
+          metadataPrevCursorId = null;
+        }
+        const candidatePageSize = (contextWindow as Record<string, unknown>).pageSize;
+        if (typeof candidatePageSize === 'number' && Number.isFinite(candidatePageSize) && candidatePageSize > 0) {
+          metadataPageSize = Math.floor(candidatePageSize);
         }
       }
     }
@@ -1041,13 +1059,44 @@ export class RunEventsService {
       return Math.max(metadataTotalCount ?? 0, unique.size);
     })();
 
-    if (contextItemIds.length === 0) {
+    if (contextItemIds.length === 0 && metadataNewIds.length === 0) {
       return { items: [], nextBeforeId: null, totalCount };
     }
 
-    const rawLimit = typeof args.limit === 'number' && Number.isFinite(args.limit) ? Math.floor(args.limit) : DEFAULT_CONTEXT_PAGE_SIZE;
+    const fallbackPageSize = metadataPageSize ?? DEFAULT_CONTEXT_PAGE_SIZE;
+    const rawLimit =
+      typeof args.limit === 'number' && Number.isFinite(args.limit)
+        ? Math.floor(args.limit)
+        : fallbackPageSize;
     const limit = Math.max(1, Math.min(100, rawLimit));
     const beforeId = args.beforeId ?? null;
+
+    const uniqueMetadataNewIds = metadataNewIds.filter((id, index, all) => all.indexOf(id) === index);
+
+    if (!beforeId && uniqueMetadataNewIds.length > 0) {
+      const items = await this.getContextItems(uniqueMetadataNewIds);
+      return {
+        items,
+        nextBeforeId: metadataPrevCursorId ?? null,
+        totalCount,
+      };
+    }
+
+    if (!beforeId) {
+      if (contextItemIds.length === 0) {
+        return { items: [], nextBeforeId: null, totalCount };
+      }
+      const windowCount = Math.min(contextItemIds.length, Math.max(0, llmNewContextCount));
+      const start = Math.max(0, contextItemIds.length - windowCount);
+      const windowIds = windowCount > 0 ? contextItemIds.slice(start) : [];
+      const items = windowIds.length > 0 ? await this.getContextItems(windowIds) : [];
+      const prevIndex = windowCount > 0 ? start - 1 : contextItemIds.length - 1;
+      return {
+        items,
+        nextBeforeId: prevIndex >= 0 ? contextItemIds[prevIndex] ?? null : null,
+        totalCount,
+      };
+    }
 
     let endExclusive = contextItemIds.length;
     if (beforeId) {

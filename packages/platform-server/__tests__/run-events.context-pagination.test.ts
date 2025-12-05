@@ -16,11 +16,13 @@ function createService(overrides?: {
   metadata?: unknown;
   contextItemIds?: string[];
   items?: ReturnType<typeof baseItem>[];
+  newContextItemCount?: number;
 }) {
   const runEventRecord = {
     metadata: overrides?.metadata ?? null,
     llmCall: {
       contextItemIds: overrides?.contextItemIds ?? [],
+      newContextItemCount: overrides?.newContextItemCount ?? 0,
     },
   };
 
@@ -63,7 +65,7 @@ describe('RunEventsService.listEventContextPage', () => {
 
     expect(prismaMock.runEvent.findFirst).toHaveBeenCalledWith({
       where: { id: 'evt-1', runId: 'run-1' },
-      select: { metadata: true, llmCall: { select: { contextItemIds: true } } },
+      select: { metadata: true, llmCall: { select: { contextItemIds: true, newContextItemCount: true } } },
     });
     expect(prismaMock.contextItem.findMany).toHaveBeenCalled();
     expect(result.items.map((item) => item.id)).toEqual(['ctx-0', 'ctx-1']);
@@ -83,13 +85,58 @@ describe('RunEventsService.listEventContextPage', () => {
     };
     const items = contextItemIds.map((id) => baseItem(id));
 
-    const { service } = createService({ metadata, contextItemIds, items });
+    const { service } = createService({ metadata, contextItemIds, items, newContextItemCount: 2 });
 
     const result = await service.listEventContextPage({ runId: 'run-2', eventId: 'evt-2', limit: 2 });
 
     expect(result.items.map((item) => item.id)).toEqual(['ctx-2', 'ctx-3']);
     expect(result.nextBeforeId).toBe('ctx-1');
     expect(result.totalCount).toBe(4);
+  });
+
+  it('returns metadata new items even when the stored context list is empty', async () => {
+    const metadata = {
+      contextWindow: {
+        newIds: ['ctx-new-1', 'ctx-new-2'],
+        totalCount: 2,
+        prevCursorId: 'ctx-prev',
+        pageSize: 5,
+      },
+    };
+
+    const { service } = createService({ metadata, contextItemIds: [], items: [baseItem('ctx-new-1'), baseItem('ctx-new-2')], newContextItemCount: 2 });
+
+    const result = await service.listEventContextPage({ runId: 'run-3', eventId: 'evt-3' });
+
+    expect(result.items.map((item) => item.id)).toEqual(['ctx-new-1', 'ctx-new-2']);
+    expect(result.nextBeforeId).toBe('ctx-prev');
+    expect(result.totalCount).toBe(2);
+  });
+
+  it('falls back to llmCall.newContextItemCount when metadata is missing', async () => {
+    const contextItemIds = ['ctx-0', 'ctx-1', 'ctx-2', 'ctx-3', 'ctx-4'];
+    const items = contextItemIds.map((id) => baseItem(id));
+
+    const { service } = createService({ contextItemIds, items, newContextItemCount: 2 });
+
+    const result = await service.listEventContextPage({ runId: 'run-4', eventId: 'evt-4', limit: 4 });
+
+    expect(result.items.map((item) => item.id)).toEqual(['ctx-3', 'ctx-4']);
+    expect(result.nextBeforeId).toBe('ctx-2');
+    expect(result.totalCount).toBe(5);
+  });
+
+  it('returns no items but exposes next cursor when newContextItemCount is zero', async () => {
+    const contextItemIds = ['ctx-0', 'ctx-1', 'ctx-2'];
+    const items = contextItemIds.map((id) => baseItem(id));
+
+    const { service } = createService({ contextItemIds, items, newContextItemCount: 0 });
+
+    const result = await service.listEventContextPage({ runId: 'run-5', eventId: 'evt-5' });
+
+    expect(result.items).toEqual([]);
+    expect(result.nextBeforeId).toBe('ctx-2');
+    expect(result.totalCount).toBe(3);
   });
 
   it('throws NotFoundException when the event does not exist', async () => {

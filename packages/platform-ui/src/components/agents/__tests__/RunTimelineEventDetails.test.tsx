@@ -984,7 +984,7 @@ describe('RunTimelineEventDetails', () => {
     }
   });
 
-  it('shows only new legacy context items initially and paginates older history on demand', async () => {
+  it('shows only new context items initially and paginates older history on demand', async () => {
     const user = userEvent.setup();
     const itemsById: Record<string, ContextItem> = {
       'ctx-1': {
@@ -1045,7 +1045,7 @@ describe('RunTimelineEventDetails', () => {
         toolExecution: undefined,
         llmCall: {
           provider: 'openai',
-          model: 'gpt-legacy',
+          model: 'gpt-window',
           temperature: null,
           topP: null,
           stopReason: null,
@@ -1066,8 +1066,8 @@ describe('RunTimelineEventDetails', () => {
       });
 
       const contextRegion = await screen.findByTestId('llm-context-scroll');
-      expect(within(contextRegion).getByText('New user prompt')).toBeInTheDocument();
-      expect(within(contextRegion).getByText('Assistant follow-up')).toBeInTheDocument();
+      expect(await within(contextRegion).findByText('New user prompt')).toBeInTheDocument();
+      expect(await within(contextRegion).findByText('Assistant follow-up')).toBeInTheDocument();
       expect(within(contextRegion).queryByText('System primer')).toBeNull();
       expect(within(contextRegion).queryByText('Earlier thread summary')).toBeNull();
 
