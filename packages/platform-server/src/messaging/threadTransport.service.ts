@@ -38,8 +38,12 @@ export class ThreadTransportService {
     }
 
     const prisma = this.prismaService.getClient();
-    const thread = await prisma.thread.findUnique({ where: { id: normalizedThreadId }, select: { channelNodeId: true } });
-    const channelNodeId = thread?.channelNodeId ?? null;
+    const thread = await prisma.thread.findUnique({ where: { id: normalizedThreadId }, select: { id: true, channelNodeId: true } });
+    if (!thread) {
+      return { ok: false, error: 'missing_thread' };
+    }
+
+    const channelNodeId = thread.channelNodeId ?? null;
     const runId = options?.runId ?? null;
     const source = options?.source ?? null;
 

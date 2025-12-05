@@ -35,15 +35,16 @@ vi.mock('@slack/web-api', () => {
 });
 
 describe('send_message tool', () => {
-  const makePrismaStub = (options: { channelNodeId?: string | null; channel?: unknown | null }) => {
+  const makePrismaStub = (options: { channelNodeId?: string | null; channel?: unknown | null; exists?: boolean }) => {
     const state = {
+      exists: options.exists === undefined ? true : options.exists,
       channelNodeId: options.channelNodeId === undefined ? 'channel-node' : options.channelNodeId,
       channel: options.channel === undefined ? null : options.channel,
     };
     const threadFindUnique = vi.fn(async ({ select }: { select: Record<string, boolean> }) => {
+      if (!state.exists) return null;
       if (select.channelNodeId) {
-        if (!state.channelNodeId) return null;
-        return { channelNodeId: state.channelNodeId };
+        return { channelNodeId: state.channelNodeId ?? null };
       }
       if (select.channel) {
         return { channel: state.channel };
@@ -114,6 +115,16 @@ describe('send_message tool', () => {
       runId: null,
       source: 'send_message',
     });
+  });
+
+  it('returns missing_thread when thread cannot be looked up', async () => {
+    const { prismaService } = makePrismaStub({ exists: false });
+    const runtime = makeRuntimeStub();
+    const { transport, persistence: transportPersistence } = makeTransport(prismaService, runtime);
+    const tool = new SendMessageFunctionTool(transport);
+    const res = await tool.execute({ message: 'hello' }, { threadId: 'missing-thread' } as any);
+    expect(res).toBe('missing_thread');
+    expect(transportPersistence.recordTransportAssistantMessage).not.toHaveBeenCalled();
   });
 
   it('returns error when runtime instance missing', async () => {
