@@ -147,6 +147,26 @@ const sampleReminders: ReminderData[] = [
   },
 ];
 
+export const Empty: Story = {
+  render: () => (
+    <div className="p-6 bg-[var(--agyn-bg-light)] min-h-screen flex items-center justify-center">
+      <div className="w-full max-w-4xl h-[520px]">
+        <Conversation
+          runs={[]}
+          header={
+            <div className="flex items-center justify-between">
+              <div>
+                <h3>Conversation</h3>
+                <p className="text-[var(--agyn-gray)]">No messages yet – select a thread to begin.</p>
+              </div>
+            </div>
+          }
+        />
+      </div>
+    </div>
+  ),
+};
+
 export const FullExample: Story = {
   render: (args) => {
     const [inputValue, setInputValue] = useState('');

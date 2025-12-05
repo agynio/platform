@@ -163,7 +163,7 @@ export default function ThreadsScreen({
         onSelectThread={(threadId) => onSelectThread?.(threadId)}
         className="h-full rounded-none border-none"
         hasMore={threadsHasMore}
-        isLoading={threadsIsLoading || isLoading}
+        isLoading={threadsIsLoading}
         onLoadMore={onThreadsLoadMore}
         onToggleExpand={onThreadExpand}
         emptyState={

@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { action } from 'storybook/actions';
 import type { Meta, StoryObj } from '@storybook/react';
 import { useArgs } from 'storybook/preview-api';
@@ -153,6 +154,75 @@ const runs: Run[] = [
     ],
   },
 ];
+
+const runsThread2: Run[] = [
+  {
+    id: 'run-3',
+    status: 'finished',
+    duration: '1m 48s',
+    tokens: 864,
+    cost: '$0.03',
+    messages: [
+      {
+        id: 'msg-7',
+        role: 'user',
+        content: 'Please audit slow queries on the billing tables.',
+        timestamp: '09:12 AM',
+      },
+      {
+        id: 'msg-8',
+        role: 'assistant',
+        content: 'Running EXPLAIN ANALYZE to identify bottlenecks in the billing queries.',
+        timestamp: '09:13 AM',
+      },
+    ],
+  },
+  {
+    id: 'run-4',
+    status: 'running',
+    duration: '—',
+    tokens: 412,
+    cost: '$0.01',
+    messages: [
+      {
+        id: 'msg-9',
+        role: 'assistant',
+        content: 'Applying composite indexes to the invoices table.',
+        timestamp: '09:15 AM',
+      },
+    ],
+  },
+];
+
+const runsThread3: Run[] = [
+  {
+    id: 'run-5',
+    status: 'finished',
+    duration: '3m 02s',
+    tokens: 1098,
+    cost: '$0.04',
+    messages: [
+      {
+        id: 'msg-10',
+        role: 'assistant',
+        content: 'Drafted new hero section copy and updated component props.',
+        timestamp: '11:05 AM',
+      },
+      {
+        id: 'msg-11',
+        role: 'user',
+        content: 'Can you apply the gradient background from the design system?',
+        timestamp: '11:06 AM',
+      },
+    ],
+  },
+];
+
+const cachedRunsByThread: Record<string, Run[]> = {
+  [threads[0].id]: runs,
+  [threads[1].id]: runsThread2,
+  [threads[2].id]: runsThread3,
+};
 
 const containers = [
   { id: 'c-1', name: 'auth-service', status: 'running' as const },
@@ -361,17 +431,59 @@ export const Empty: Story = {
   },
 };
 
-export const Loading: Story = {
+export const ListLoadingOnly: Story = {
   args: {
-    threads: [],
-    runs: [],
-    containers: [],
-    reminders: [],
+    threads,
+    runs,
+    containers,
+    reminders,
     filterMode: 'all',
-    selectedThreadId: null,
+    selectedThreadId: threads[0].id,
+    inputValue: '',
+    isRunsInfoCollapsed: false,
+    threadsHasMore: true,
+    threadsIsLoading: true,
+    isLoading: false,
+    isEmpty: false,
+  },
+  render: ControlledRender,
+  parameters: {
+    selectedMenuItem: 'threads',
+  },
+};
+
+export const ConversationLoadingOnly: Story = {
+  args: {
+    threads,
+    runs,
+    containers,
+    reminders,
+    filterMode: 'all',
+    selectedThreadId: threads[0].id,
     inputValue: '',
     isRunsInfoCollapsed: false,
     threadsHasMore: false,
+    threadsIsLoading: false,
+    isLoading: true,
+    isEmpty: false,
+  },
+  render: ControlledRender,
+  parameters: {
+    selectedMenuItem: 'threads',
+  },
+};
+
+export const ListAndDetailLoading: Story = {
+  args: {
+    threads,
+    runs,
+    containers,
+    reminders,
+    filterMode: 'all',
+    selectedThreadId: threads[0].id,
+    inputValue: '',
+    isRunsInfoCollapsed: false,
+    threadsHasMore: true,
     threadsIsLoading: true,
     isLoading: true,
     isEmpty: false,
@@ -396,9 +508,48 @@ export const Error: Story = {
     threadsIsLoading: false,
     isLoading: false,
     isEmpty: false,
-    error: 'Failed to load threads. Please try again.',
+    listError: <span>Failed to load threads. Please try again.</span>,
+    detailError: <span>Unable to load the selected conversation.</span>,
   },
   render: ControlledRender,
+  parameters: {
+    selectedMenuItem: 'threads',
+  },
+};
+
+export const SwitchWithCache: Story = {
+  render: () => {
+    const [selectedThreadId, setSelectedThreadId] = useState<string>(threads[0].id);
+    const [activeRuns, setActiveRuns] = useState<Run[]>(cachedRunsByThread[threads[0].id]);
+
+    const handleSelectThread = (threadId: string) => {
+      setSelectedThreadId(threadId);
+      setActiveRuns(cachedRunsByThread[threadId] ?? []);
+    };
+
+    const resolvedThread = threads.find((thread) => thread.id === selectedThreadId);
+
+    return (
+      <div className="absolute inset-0 flex min-h-0 min-w-0">
+        <ThreadsScreen
+          threads={threads}
+          runs={activeRuns}
+          containers={containers}
+          reminders={reminders}
+          filterMode="all"
+          selectedThreadId={selectedThreadId}
+          selectedThread={resolvedThread}
+          inputValue=""
+          isRunsInfoCollapsed={false}
+          threadsHasMore={false}
+          threadsIsLoading={false}
+          isLoading={false}
+          isEmpty={false}
+          onSelectThread={handleSelectThread}
+        />
+      </div>
+    );
+  },
   parameters: {
     selectedMenuItem: 'threads',
   },

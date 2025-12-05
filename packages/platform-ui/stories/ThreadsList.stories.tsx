@@ -52,3 +52,21 @@ export const Basic: Story = {
     className: 'w-[480px] max-h-[480px]',
   },
 };
+
+export const Loading: Story = {
+  args: {
+    threads: sampleThreads,
+    hasMore: true,
+    isLoading: true,
+    className: 'w-[480px] max-h-[480px]',
+  },
+};
+
+export const Empty: Story = {
+  args: {
+    threads: [],
+    hasMore: false,
+    isLoading: false,
+    className: 'w-[480px] max-h-[480px]',
+  },
+};

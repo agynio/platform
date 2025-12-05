@@ -614,6 +614,8 @@ export function AgentsThreads() {
     queryKey: threadsQueryKey,
     queryFn: () => threads.roots(filterMode, threadLimit),
     placeholderData: (previousData) => previousData,
+    staleTime: 60000,
+    refetchOnWindowFocus: false,
   });
 
   const rootNodes = useMemo<ThreadNode[]>(() => {
@@ -695,12 +697,12 @@ export function AgentsThreads() {
       return;
     }
 
-    setDetailPreloaderVisible(true);
-
     const cache = threadCacheRef.current;
     const cachedEntry = cache.has(selectedThreadId) ? cache.get(selectedThreadId)! : undefined;
+    let overlayNeeded = true;
 
     if (cachedEntry) {
+      overlayNeeded = false;
       setPrefetchedRuns([...cachedEntry.runs]);
       setRunMessages(cloneRunMessagesMap(cachedEntry.runMessagesByRunId));
       const seen = new Map<string, Set<string>>();
@@ -712,7 +714,7 @@ export function AgentsThreads() {
       seenMessageIdsRef.current = seen;
       latestScrollStateRef.current = cachedEntry.scroll;
       pendingScrollRestoreRef.current = cachedEntry.scroll;
-      setInitialMessagesLoaded(cachedEntry.messagesLoaded);
+      setInitialMessagesLoaded(true);
     } else {
       setPrefetchedRuns([]);
       setRunMessages({});
@@ -721,6 +723,8 @@ export function AgentsThreads() {
       pendingScrollRestoreRef.current = null;
       setInitialMessagesLoaded(false);
     }
+
+    setDetailPreloaderVisible(overlayNeeded);
   }, [selectedThreadId, isDraftSelected]);
 
   useEffect(() => {
@@ -919,24 +923,24 @@ export function AgentsThreads() {
   }, [selectedThreadId]);
 
   useEffect(() => {
-    if (!detailPreloaderVisible) {
-      if (pendingRestoreFrameRef.current !== null) {
-        window.cancelAnimationFrame(pendingRestoreFrameRef.current);
-        pendingRestoreFrameRef.current = null;
-      }
-      return;
+    if (pendingRestoreFrameRef.current !== null) {
+      window.cancelAnimationFrame(pendingRestoreFrameRef.current);
+      pendingRestoreFrameRef.current = null;
     }
 
     if (!selectedThreadId || isDraftSelected) {
-      if (pendingRestoreFrameRef.current !== null) {
-        window.cancelAnimationFrame(pendingRestoreFrameRef.current);
-        pendingRestoreFrameRef.current = null;
+      if (detailPreloaderVisible) {
+        setDetailPreloaderVisible(false);
       }
-      setDetailPreloaderVisible(false);
       return;
     }
 
     if (!initialMessagesLoaded) return;
+
+    const hasPendingRestore = pendingScrollRestoreRef.current !== null;
+    if (!detailPreloaderVisible && !hasPendingRestore) {
+      return;
+    }
 
     const desiredState = pendingScrollRestoreRef.current ?? {
       atBottom: true,
@@ -947,44 +951,37 @@ export function AgentsThreads() {
 
     const token = scrollRestoreTokenRef.current;
     const activeThreadId = selectedThreadId;
+    const totalFrames = detailPreloaderVisible ? SCROLL_RESTORE_ATTEMPTS : 1;
+    let remaining = Math.max(totalFrames, 1);
 
-    const scheduleFrame = (remaining: number) => {
-      if (pendingRestoreFrameRef.current !== null) {
-        window.cancelAnimationFrame(pendingRestoreFrameRef.current);
-      }
-      pendingRestoreFrameRef.current = window.requestAnimationFrame(() => applyFrame(remaining));
-    };
-
-    const applyFrame = (remaining: number) => {
+    const applyFrame = () => {
       if (scrollRestoreTokenRef.current !== token || activeThreadId !== selectedThreadId) {
         pendingRestoreFrameRef.current = null;
         return;
       }
+
       const container = scrollContainerRef.current;
-      if (!container) {
-        pendingRestoreFrameRef.current = null;
-        return;
-      }
-      restoreScrollPosition(container, desiredState);
-      latestScrollStateRef.current = computeScrollStateFromNode(container);
-
-      if (scrollRestoreTokenRef.current !== token || activeThreadId !== selectedThreadId) {
-        pendingRestoreFrameRef.current = null;
-        return;
+      if (container) {
+        restoreScrollPosition(container, desiredState);
+        latestScrollStateRef.current = computeScrollStateFromNode(container);
       }
 
+      remaining -= 1;
       if (remaining > 0) {
-        scheduleFrame(remaining - 1);
+        pendingRestoreFrameRef.current = window.requestAnimationFrame(applyFrame);
         return;
       }
 
       pendingScrollRestoreRef.current = null;
       updateCacheEntry(activeThreadId, { scroll: latestScrollStateRef.current });
       pendingRestoreFrameRef.current = null;
-      setDetailPreloaderVisible(false);
+
+      if (detailPreloaderVisible) {
+        setDetailPreloaderVisible(false);
+      }
     };
 
-    scheduleFrame(SCROLL_RESTORE_ATTEMPTS - 1);
+    pendingRestoreFrameRef.current = window.requestAnimationFrame(applyFrame);
 
     return () => {
       if (pendingRestoreFrameRef.current !== null) {

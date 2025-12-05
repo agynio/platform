@@ -7,6 +7,8 @@ export function useThreadRuns(threadId: string | undefined) {
     enabled: !!threadId,
     queryKey: ['agents', 'threads', threadId, 'runs'],
     queryFn: () => runs.listByThread(threadId as string),
+    staleTime: 20000,
+    refetchOnWindowFocus: false,
   });
 }
 
