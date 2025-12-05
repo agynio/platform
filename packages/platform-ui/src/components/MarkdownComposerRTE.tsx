@@ -851,8 +851,10 @@ function MarkdownComposerKeymapPlugin({
               } else if (selection.anchor.getNode() === lastDescendant) {
                 if ($isTextNode(lastDescendant)) {
                   handled = selection.anchor.offset === lastDescendant.getTextContentSize();
-                } else {
+                } else if ($isElementNode(lastDescendant)) {
                   handled = selection.anchor.offset === lastDescendant.getChildrenSize();
+                } else if (lastDescendant instanceof LineBreakNode) {
+                  handled = true;
                 }
               } else if ($isElementNode(lastDescendant) && lastDescendant.isParentOf(selection.anchor.getNode())) {
                 if ($isTextNode(selection.anchor.getNode())) {
