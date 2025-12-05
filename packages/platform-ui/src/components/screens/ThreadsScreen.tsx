@@ -376,22 +376,31 @@ export default function ThreadsScreen({
                     <ChevronDown className="h-4 w-4 text-[var(--agyn-gray)]" />
                   </button>
                 </DropdownMenuTrigger>
-                <DropdownMenuContent className="w-[160px]" align="start">
+                <DropdownMenuContent
+                  className="w-[160px] rounded-[10px] border border-[var(--agyn-border-subtle)] bg-white p-1 shadow-lg"
+                  align="start"
+                >
                   <DropdownMenuRadioGroup
                     value={currentStatusValue}
                     onValueChange={(value) => handleStatusChange(value as 'open' | 'closed')}
                   >
-                    <DropdownMenuRadioItem value="open" disabled={statusSelectionDisabled}>
-                      <div className="flex items-center gap-2">
-                        <Circle className="h-4 w-4 text-[var(--agyn-gray)]" />
-                        <span className="text-sm text-[var(--agyn-dark)]">Open</span>
-                      </div>
+                    <DropdownMenuRadioItem
+                      value="open"
+                      disabled={statusSelectionDisabled}
+                      hideIndicator
+                      className="flex items-center gap-2 rounded-[6px] px-3 py-2 text-sm text-[var(--agyn-dark)] transition-colors hover:bg-[var(--agyn-bg-light)] focus:bg-[var(--agyn-bg-light)] data-[state=checked]:bg-[var(--agyn-bg-light)] data-[state=checked]:font-medium"
+                    >
+                      <Circle className="h-4 w-4 text-[var(--agyn-gray)] group-data-[state=checked]:text-[var(--agyn-blue)]" />
+                      <span>Open</span>
                     </DropdownMenuRadioItem>
-                    <DropdownMenuRadioItem value="closed" disabled={statusSelectionDisabled}>
-                      <div className="flex items-center gap-2">
-                        <CheckCircle className="h-4 w-4 text-[var(--agyn-gray)]" />
-                        <span className="text-sm text-[var(--agyn-dark)]">Resolved</span>
-                      </div>
+                    <DropdownMenuRadioItem
+                      value="closed"
+                      disabled={statusSelectionDisabled}
+                      hideIndicator
+                      className="flex items-center gap-2 rounded-[6px] px-3 py-2 text-sm text-[var(--agyn-dark)] transition-colors hover:bg-[var(--agyn-bg-light)] focus:bg-[var(--agyn-bg-light)] data-[state=checked]:bg-[var(--agyn-bg-light)] data-[state=checked]:font-medium"
+                    >
+                      <CheckCircle className="h-4 w-4 text-[var(--agyn-gray)] group-data-[state=checked]:text-[var(--agyn-blue)]" />
+                      <span>Resolved</span>
                     </DropdownMenuRadioItem>
                   </DropdownMenuRadioGroup>
                 </DropdownMenuContent>
