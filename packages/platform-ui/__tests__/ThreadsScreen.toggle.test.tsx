@@ -51,7 +51,7 @@ describe('ThreadsScreen thread status toggle', () => {
       />,
     );
 
-    const statusTrigger = screen.getByRole('button', { name: 'Thread status' });
+    const statusTrigger = screen.getByRole('button', { name: /Thread status/i });
     expect(statusTrigger).not.toBeDisabled();
 
     await user.click(statusTrigger);
@@ -87,7 +87,7 @@ describe('ThreadsScreen thread status toggle', () => {
       />,
     );
 
-    const statusTrigger = screen.getByRole('button', { name: 'Thread status' });
+    const statusTrigger = screen.getByRole('button', { name: /Thread status/i });
     expect(statusTrigger).toBeDisabled();
     expect(statusTrigger).toHaveAttribute('aria-busy', 'true');
   });
@@ -229,7 +229,7 @@ describe('AgentsThreads status toggle integration', () => {
     const threadRow = await screen.findByText('Investigate production error logs');
     await user.click(threadRow);
 
-    let statusTrigger = await screen.findByRole('button', { name: 'Thread status' });
+    let statusTrigger = await screen.findByRole('button', { name: /Thread status/i });
     expect(within(statusTrigger).getByText('Open')).toBeInTheDocument();
 
     const initialRoots = rootsRequestCount;
@@ -240,7 +240,7 @@ describe('AgentsThreads status toggle integration', () => {
 
     await waitFor(() => expect(patchCalls).toBeGreaterThan(0));
     await waitFor(() => expect(rootsRequestCount).toBeGreaterThan(initialRoots));
-    statusTrigger = await screen.findByRole('button', { name: 'Thread status' });
+    statusTrigger = await screen.findByRole('button', { name: /Thread status/i });
     expect(within(statusTrigger).getByText('Resolved')).toBeInTheDocument();
 
     const beforeSecondToggleRoots = rootsRequestCount;
@@ -251,7 +251,7 @@ describe('AgentsThreads status toggle integration', () => {
 
     await waitFor(() => expect(patchCalls).toBeGreaterThan(1));
     await waitFor(() => expect(rootsRequestCount).toBeGreaterThan(beforeSecondToggleRoots));
-    statusTrigger = await screen.findByRole('button', { name: 'Thread status' });
+    statusTrigger = await screen.findByRole('button', { name: /Thread status/i });
     expect(within(statusTrigger).getByText('Open')).toBeInTheDocument();
   });
 });

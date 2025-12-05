@@ -365,7 +365,7 @@ export default function ThreadsScreen({
                   <button
                     type="button"
                     className="flex items-center gap-2 rounded-[6px] px-2 py-1 transition-colors hover:bg-[var(--agyn-bg-light)]"
-                    aria-label="Thread status"
+                    aria-label={`Thread status: ${currentStatusLabel}`}
                     aria-busy={isToggleThreadStatusPending || undefined}
                     aria-haspopup="menu"
                     aria-expanded={isStatusMenuOpen}
