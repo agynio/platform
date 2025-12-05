@@ -1,5 +1,4 @@
-import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
-import { VisuallyHidden } from '@radix-ui/react-visually-hidden';
+import { useCallback, useEffect, useId, useMemo, useState } from 'react';
 import { Trash2 } from 'lucide-react';
 
 import { Button } from '../../Button';
@@ -15,208 +14,118 @@ import { TreeView } from './TreeView';
 import { cn } from '@/lib/utils';
 import {
   type MemoryTree,
-  type MemoryNode,
-  addChild,
   cloneTree,
-  deleteNode,
-  findNodeByPath,
   getAncestorPaths,
   getParentPath,
   joinPath,
   normalizePath,
   pathExists,
-  updateNodeContent,
 } from './utils';
 
-type MemoryManagerProps = {
-  initialTree: MemoryTree;
-  className?: string;
-  onTreeChange?: (tree: MemoryTree) => void;
-  onSelectPath?: (path: string) => void;
-  onEditorChange?: (value: string) => void;
-  initialSelectedPath?: string;
-  showContentIndicators?: boolean;
-};
+const ROOT_PATH = '/' as const;
 
-type MemoryCellOption = {
-  path: string;
+type MemoryNodeOption = {
+  key: string;
   label: string;
 };
 
-const formatSegment = (value: string): string =>
-  value
-    .split(/[-_]/)
-    .filter(Boolean)
-    .map((segment) => segment.charAt(0).toUpperCase() + segment.slice(1))
-    .join(' ');
-
-const getMemoryCellLabel = (node: MemoryNode, isRoot: boolean): string => {
-  const normalizedPath = normalizePath(node.path);
-  if (isRoot) {
-    if (node.name && node.name.trim().length > 0 && node.name !== '/') {
-      return node.name;
-    }
-    return 'All memory cells';
-  }
-
-  if (node.name && node.name.trim().length > 0) {
-    return node.name;
-  }
-
-  const segments = normalizedPath.split('/').filter(Boolean);
-  const lastSegment = segments[segments.length - 1] ?? normalizedPath;
-  return formatSegment(lastSegment);
+type DocumentState = {
+  loading: boolean;
+  exists: boolean;
+  error: string | null;
 };
 
+type MemoryManagerProps = {
+  nodes: MemoryNodeOption[];
+  selectedNodeKey: string | null;
+  onSelectNode: (key: string) => void;
+  nodeSelectDisabled?: boolean;
+  tree: MemoryTree | null;
+  treeLoading?: boolean;
+  disableInteractions?: boolean;
+  selectedPath: string;
+  onSelectPath: (path: string) => void;
+  onCreateDirectory: (parentPath: string, name: string) => void;
+  onDeletePath: (path: string) => void;
+  editorValue: string;
+  onEditorChange: (value: string) => void;
+  canSave: boolean;
+  onSave: () => void;
+  isSaving?: boolean;
+  mutationError?: string | null;
+  docState: DocumentState;
+  showContentIndicators?: boolean;
+  emptyTreeMessage?: string;
+  noNodesMessage?: string;
+  className?: string;
+};
+
+function pathSetWithAncestors(source: Set<string>, path: string): Set<string> {
+  const next = new Set(source);
+  for (const ancestor of getAncestorPaths(path)) {
+    next.add(ancestor);
+  }
+  return next;
+}
+
 export function MemoryManager({
-  initialTree,
-  className,
-  onTreeChange,
+  nodes,
+  selectedNodeKey,
+  onSelectNode,
+  nodeSelectDisabled = false,
+  tree,
+  treeLoading = false,
+  disableInteractions = false,
+  selectedPath,
   onSelectPath,
+  onCreateDirectory,
+  onDeletePath,
+  editorValue,
   onEditorChange,
-  initialSelectedPath,
+  canSave,
+  onSave,
+  isSaving = false,
+  mutationError,
+  docState,
   showContentIndicators = true,
+  emptyTreeMessage,
+  noNodesMessage,
+  className,
 }: MemoryManagerProps) {
-  const defaultSelectedPath = normalizePath(initialSelectedPath ?? initialTree.path);
-  const [tree, setTree] = useState<MemoryTree>(() => cloneTree(initialTree));
-  const [selectedPath, setSelectedPath] = useState<string>(defaultSelectedPath);
-  const [expandedPaths, setExpandedPaths] = useState<Set<string>>(() => new Set(getAncestorPaths(defaultSelectedPath)));
-  const [editorValue, setEditorValue] = useState<string>(() => findNodeByPath(initialTree, defaultSelectedPath)?.content ?? '');
-  const [unsaved, setUnsaved] = useState(false);
+  const [expandedPaths, setExpandedPaths] = useState<Set<string>>(() => new Set([ROOT_PATH]));
   const [pendingCreateParent, setPendingCreateParent] = useState<string | null>(null);
   const [pendingDeletePath, setPendingDeletePath] = useState<string | null>(null);
-  const selectedPathRef = useRef<string>(defaultSelectedPath);
-  const [rootPath, setRootPath] = useState<string>(() => normalizePath(initialTree.path));
-  const rootPathRef = useRef<string>(normalizePath(initialTree.path));
-  const memoryCellLabelId = useId();
 
-  const handleSelectPath = useCallback(
-    (path: string) => {
-      const normalized = normalizePath(path);
-      setSelectedPath(normalized);
-      onSelectPath?.(normalized);
-    },
-    [onSelectPath],
-  );
+  const treeSnapshot = useMemo(() => (tree ? cloneTree(tree) : null), [tree]);
 
   useEffect(() => {
-    selectedPathRef.current = selectedPath;
+    setExpandedPaths((previous) => pathSetWithAncestors(previous, selectedPath));
   }, [selectedPath]);
 
   useEffect(() => {
-    rootPathRef.current = rootPath;
-  }, [rootPath]);
-
-  useEffect(() => {
-    const nextTree = cloneTree(initialTree);
-    setTree(nextTree);
-    const currentPath = selectedPathRef.current;
-    if (!pathExists(nextTree, currentPath)) {
-      const preferred = normalizePath(initialSelectedPath ?? initialTree.path);
-      const fallback = pathExists(nextTree, preferred) ? preferred : normalizePath(initialTree.path);
-      handleSelectPath(fallback);
-    }
-    const currentRoot = rootPathRef.current;
-    if (!pathExists(nextTree, currentRoot)) {
-      const fallbackSource = pathExists(nextTree, initialTree.path) ? initialTree.path : nextTree.path;
-      setRootPath(normalizePath(fallbackSource));
-    }
-  }, [handleSelectPath, initialSelectedPath, initialTree]);
-
-  useEffect(() => {
-    if (!initialSelectedPath) return;
-    handleSelectPath(initialSelectedPath);
-  }, [handleSelectPath, initialSelectedPath]);
-
-  const selectedNode = useMemo<MemoryNode | null>(() => findNodeByPath(tree, selectedPath), [tree, selectedPath]);
-  const memoryCellOptions = useMemo<MemoryCellOption[]>(() => {
-    const rootOption: MemoryCellOption = {
-      path: normalizePath(tree.path),
-      label: getMemoryCellLabel(tree, true),
-    };
-
-    const childOptions = tree.children.map<MemoryCellOption>((child) => ({
-      path: normalizePath(child.path),
-      label: getMemoryCellLabel(child, false),
-    }));
-
-    return [rootOption, ...childOptions];
-  }, [tree]);
-
-  const normalizedRootPath = normalizePath(rootPath);
-
-  useEffect(() => {
-    if (memoryCellOptions.length === 0) {
+    if (!treeSnapshot) {
+      setExpandedPaths(new Set([ROOT_PATH]));
       return;
     }
-    if (!memoryCellOptions.some((option) => option.path === normalizedRootPath)) {
-      setRootPath(memoryCellOptions[0].path);
-    }
-  }, [memoryCellOptions, normalizedRootPath]);
-
-  const currentMemoryCell =
-    memoryCellOptions.find((option) => option.path === normalizedRootPath) ?? memoryCellOptions[0] ?? {
-      path: normalizePath(tree.path),
-      label: getMemoryCellLabel(tree, true),
-    };
-
-  const displayedTree = useMemo<MemoryTree>(() => findNodeByPath(tree, normalizedRootPath) ?? tree, [normalizedRootPath, tree]);
-
-  useEffect(() => {
     setExpandedPaths((previous) => {
-      const next = new Set(previous);
-      let changed = false;
-      for (const ancestor of getAncestorPaths(selectedPath)) {
-        if (!next.has(ancestor)) {
-          next.add(ancestor);
-          changed = true;
+      const next = new Set<string>();
+      for (const value of previous) {
+        if (value === ROOT_PATH || pathExists(treeSnapshot, value)) {
+          next.add(value);
         }
       }
-      return changed ? next : previous;
-    });
-  }, [selectedPath]);
-
-  useEffect(() => {
-    if (!pathExists(tree, normalizedRootPath)) {
-      setRootPath(normalizePath(tree.path));
-      return;
-    }
-
-    setExpandedPaths((previous) => {
-      if (previous.has(normalizedRootPath)) {
-        return previous;
-      }
-      const next = new Set(previous);
-      next.add(normalizedRootPath);
+      if (!next.has(ROOT_PATH)) next.add(ROOT_PATH);
       return next;
     });
+  }, [treeSnapshot]);
 
-    const isWithinRoot = (path: string | null) => {
-      if (!path) return true;
-      const normalizedTarget = normalizePath(path);
-      if (normalizedRootPath === '/') return true;
-      return normalizedTarget === normalizedRootPath || normalizedTarget.startsWith(`${normalizedRootPath}/`);
-    };
+  const currentNodeLabel = useMemo(() => nodes.find((node) => node.key === selectedNodeKey)?.label ?? 'No node selected', [nodes, selectedNodeKey]);
 
-    if (!isWithinRoot(selectedPathRef.current)) {
-      handleSelectPath(normalizedRootPath);
-    }
+  const treeIsEmpty = !treeSnapshot || treeSnapshot.children.length === 0;
+  const interactionsDisabled = disableInteractions || !selectedNodeKey || !treeSnapshot;
 
-    if (!isWithinRoot(pendingCreateParent)) {
-      setPendingCreateParent(null);
-    }
-
-    if (!isWithinRoot(pendingDeletePath)) {
-      setPendingDeletePath(null);
-    }
-  }, [handleSelectPath, normalizedRootPath, pendingCreateParent, pendingDeletePath, tree]);
-
-  useEffect(() => {
-    const nextContent = selectedNode?.content ?? '';
-    setEditorValue(nextContent);
-    setUnsaved(false);
-    onEditorChange?.(nextContent);
-  }, [onEditorChange, selectedNode, selectedPath]);
+  const editorLabelId = useId();
+  const editorDescriptionId = useId();
 
   const handleToggleExpand = useCallback((path: string) => {
     setExpandedPaths((previous) => {
@@ -230,135 +139,169 @@ export function MemoryManager({
     });
   }, []);
 
-  const validateCreateName = useCallback(
-    (rawName: string) => {
-      if (!pendingCreateParent) {
-        return 'Select a parent to create a document.';
-      }
-      const trimmed = rawName.trim();
-      if (trimmed.length === 0) {
-        return 'Name is required.';
-      }
-      if (trimmed.includes('/')) {
-        return 'Name cannot include “/”.';
-      }
-      const candidatePath = joinPath(pendingCreateParent, trimmed);
-      if (pathExists(tree, candidatePath)) {
-        return 'A document with this name already exists.';
-      }
-      return null;
+  const handleSelectNode = useCallback(
+    (value: string) => {
+      if (nodeSelectDisabled) return;
+      onSelectNode(value);
     },
-    [pendingCreateParent, tree],
+    [nodeSelectDisabled, onSelectNode],
   );
 
-  const handleAddChild = useCallback((parentPath: string) => {
-    setPendingCreateParent(normalizePath(parentPath));
-  }, []);
+  const handleSelectTreePath = useCallback(
+    (path: string) => {
+      if (interactionsDisabled) return;
+      onSelectPath(normalizePath(path));
+    },
+    [interactionsDisabled, onSelectPath],
+  );
+
+  const handleAddChild = useCallback(
+    (parentPath: string) => {
+      if (interactionsDisabled) return;
+      setPendingCreateParent(normalizePath(parentPath));
+    },
+    [interactionsDisabled],
+  );
 
   const handleCancelCreate = useCallback(() => {
     setPendingCreateParent(null);
   }, []);
 
-  const handleConfirmCreate = useCallback(
-    (name: string) => {
-      if (!pendingCreateParent) return;
-      const trimmedName = name.trim();
-      if (validateCreateName(trimmedName)) return;
-
-      const parentPath = normalizePath(pendingCreateParent);
-      const childPath = joinPath(parentPath, trimmedName);
-      const childNode: MemoryNode = {
-        id: typeof crypto !== 'undefined' && 'randomUUID' in crypto ? crypto.randomUUID() : `${Date.now()}`,
-        path: childPath,
-        name: trimmedName,
-        content: '',
-        children: [],
-      };
-
-      setTree((previous) => {
-        const next = addChild(previous, parentPath, childNode);
-        onTreeChange?.(next);
-        return next;
-      });
-      setExpandedPaths((previous) => {
-        const next = new Set(previous);
-        for (const ancestor of getAncestorPaths(childPath)) {
-          next.add(ancestor);
-        }
-        return next;
-      });
-      setPendingCreateParent(null);
-      handleSelectPath(childPath);
+  const validateCreateName = useCallback(
+    (rawName: string) => {
+      if (!pendingCreateParent) return 'Select a parent to create a document.';
+      const trimmed = rawName.trim();
+      if (trimmed.length === 0) return 'Name is required.';
+      if (trimmed.includes('/')) return 'Name cannot include “/”.';
+      if (!treeSnapshot) return null;
+      const candidatePath = joinPath(pendingCreateParent, trimmed);
+      if (pathExists(treeSnapshot, candidatePath)) return 'A document with this name already exists.';
+      return null;
     },
-    [handleSelectPath, onTreeChange, pendingCreateParent, validateCreateName],
+    [pendingCreateParent, treeSnapshot],
   );
 
-  const handleRequestDelete = useCallback((path: string) => {
-    if (path === '/') return;
-    setPendingDeletePath(path);
-  }, []);
+  const handleConfirmCreate = useCallback(
+    (name: string) => {
+      if (!pendingCreateParent || interactionsDisabled) return;
+      const trimmed = name.trim();
+      if (validateCreateName(trimmed)) return;
+      const parentPath = normalizePath(pendingCreateParent);
+      const childPath = joinPath(parentPath, trimmed);
+      onCreateDirectory(parentPath, trimmed);
+      setPendingCreateParent(null);
+      setExpandedPaths((previous) => pathSetWithAncestors(previous, childPath));
+      onSelectPath(childPath);
+    },
+    [interactionsDisabled, onCreateDirectory, onSelectPath, pendingCreateParent, validateCreateName],
+  );
+
+  const handleRequestDelete = useCallback(
+    (path: string) => {
+      if (interactionsDisabled) return;
+      const normalized = normalizePath(path);
+      if (normalized === ROOT_PATH) return;
+      setPendingDeletePath(normalized);
+    },
+    [interactionsDisabled],
+  );
 
   const handleConfirmDelete = useCallback(() => {
-    if (!pendingDeletePath) return;
+    if (!pendingDeletePath || interactionsDisabled) return;
     const target = pendingDeletePath;
     setPendingDeletePath(null);
-    setTree((previous) => {
-      const next = deleteNode(previous, target);
-      onTreeChange?.(next);
-      return next;
-    });
+    onDeletePath(target);
+    const parent = getParentPath(target) ?? ROOT_PATH;
+    onSelectPath(parent);
     setExpandedPaths((previous) => {
       const next = new Set(previous);
-      for (const value of Array.from(next)) {
-        if (value === target || value.startsWith(`${target}/`)) {
-          next.delete(value);
-        }
-      }
+      next.delete(target);
       return next;
     });
-    const parent = getParentPath(target) ?? '/';
-    handleSelectPath(parent);
-  }, [handleSelectPath, onTreeChange, pendingDeletePath]);
+  }, [interactionsDisabled, onDeletePath, onSelectPath, pendingDeletePath]);
 
-  const handleEditorChange = useCallback(
+  const handleEditorInput = useCallback(
     (value: string) => {
-      setEditorValue(value);
-      const baseline = selectedNode?.content ?? '';
-      setUnsaved(value !== baseline);
-      onEditorChange?.(value);
+      if (interactionsDisabled) return;
+      onEditorChange(value);
     },
-    [onEditorChange, selectedNode],
+    [interactionsDisabled, onEditorChange],
   );
 
   const handleSave = useCallback(() => {
-    if (!selectedNode) return;
-    setTree((previous) => {
-      const next = updateNodeContent(previous, selectedPath, editorValue);
-      onTreeChange?.(next);
-      return next;
-    });
-    setUnsaved(false);
-  }, [editorValue, onTreeChange, selectedNode, selectedPath]);
+    if (interactionsDisabled || !canSave) return;
+    onSave();
+  }, [canSave, interactionsDisabled, onSave]);
 
-  const editorLabelId = useId();
-  const editorDescriptionId = useId();
+  const canDeleteSelected = !interactionsDisabled && selectedPath !== ROOT_PATH && !docState.loading;
 
-  useEffect(() => {
-    if (!selectedNode) return;
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 's') {
-        event.preventDefault();
-        if (unsaved) {
-          handleSave();
-        }
-      }
-    };
+  const renderTreeSection = () => {
+    if (!nodes.length) {
+      return (
+        <div className="flex h-full items-center justify-center px-6 text-center text-sm text-muted-foreground">
+          <p>{noNodesMessage ?? 'No memory nodes found.'}</p>
+        </div>
+      );
+    }
 
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [handleSave, selectedNode, unsaved]);
+    if (treeLoading) {
+      return (
+        <div className="flex h-full items-center justify-center px-6 text-sm text-muted-foreground">Loading documents…</div>
+      );
+    }
 
-  const canDeleteSelected = selectedNode != null && selectedPath !== '/';
+    if (!treeSnapshot || treeIsEmpty) {
+      return (
+        <div className="flex h-full items-center justify-center px-6 text-center text-sm text-muted-foreground">
+          <p>{emptyTreeMessage ?? 'No documents yet. Create one to get started.'}</p>
+        </div>
+      );
+    }
+
+    return (
+      <ScrollArea className="flex-1">
+        <div className="px-2 py-3">
+          <TreeView
+            tree={treeSnapshot}
+            selectedPath={selectedPath}
+            expandedPaths={expandedPaths}
+            onSelect={handleSelectTreePath}
+            onToggle={handleToggleExpand}
+            onAddChild={handleAddChild}
+            onDelete={handleRequestDelete}
+            showContentIndicators={showContentIndicators}
+          />
+        </div>
+      </ScrollArea>
+    );
+  };
+
+  const renderEditorBody = () => {
+    if (!selectedNodeKey) {
+      return <p>Select a memory node to continue.</p>;
+    }
+
+    if (docState.error) {
+      return (
+        <p role="alert" className="text-sm text-destructive">
+          {docState.error}
+        </p>
+      );
+    }
+
+    if (selectedPath === ROOT_PATH) {
+      return <p>{treeIsEmpty ? 'Select or create a document.' : 'Select a document from the tree to view its contents.'}</p>;
+    }
+
+    if (docState.loading) {
+      return <p>Loading document…</p>;
+    }
+
+    return null;
+  };
+
+  const editorMessage = renderEditorBody();
+  const showTextarea = !editorMessage && !docState.loading && selectedNodeKey && !interactionsDisabled && selectedPath !== ROOT_PATH;
 
   return (
     <div className={cn('h-full w-full bg-white', className)}>
@@ -367,44 +310,27 @@ export function MemoryManager({
           <div className="flex h-full flex-col bg-white">
             <div className="flex h-[66px] flex-col justify-center gap-1 border-b border-[var(--agyn-border-subtle)] px-6">
               <h2 className="text-sm font-semibold text-[var(--agyn-dark)]">Documents</h2>
-              <p className="text-xs text-[var(--agyn-text-subtle)]">
-                Viewing {currentMemoryCell.label}
-              </p>
+              <p className="text-xs text-[var(--agyn-text-subtle)]">{currentNodeLabel}</p>
             </div>
             <div className="border-b border-[var(--agyn-border-subtle)] px-6 py-4">
-              <VisuallyHidden id={memoryCellLabelId}>Memory cell</VisuallyHidden>
-              <Select value={normalizedRootPath} onValueChange={(value) => setRootPath(normalizePath(value))}>
-                <SelectTrigger
-                  aria-labelledby={memoryCellLabelId}
-                  aria-label="Memory cell"
-                  size="default"
-                  className="border-[var(--agyn-border-subtle)] bg-white text-left font-medium text-[var(--agyn-dark)]"
-                >
-                  <SelectValue placeholder="Select memory cell" />
+              <Select
+                value={selectedNodeKey ?? ''}
+                onValueChange={handleSelectNode}
+                disabled={nodeSelectDisabled || !nodes.length}
+              >
+                <SelectTrigger size="default" className="border-[var(--agyn-border-subtle)] bg-white text-left font-medium text-[var(--agyn-dark)]">
+                  <SelectValue placeholder="Select memory node" />
                 </SelectTrigger>
                 <SelectContent className="min-w-[240px]">
-                  {memoryCellOptions.map((option) => (
-                    <SelectItem key={option.path} value={option.path}>
+                  {nodes.map((option) => (
+                    <SelectItem key={option.key} value={option.key}>
                       {option.label}
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
             </div>
-            <ScrollArea className="flex-1">
-              <div className="px-2 py-3">
-                <TreeView
-                  tree={displayedTree}
-                  selectedPath={selectedPath}
-                  expandedPaths={expandedPaths}
-                  onSelect={handleSelectPath}
-                  onToggle={handleToggleExpand}
-                  onAddChild={handleAddChild}
-                  onDelete={handleRequestDelete}
-                  showContentIndicators={showContentIndicators}
-                />
-              </div>
-            </ScrollArea>
+            {renderTreeSection()}
           </div>
         </ResizablePanel>
         <ResizableHandle
@@ -423,56 +349,62 @@ export function MemoryManager({
                 </p>
               </div>
               <div className="flex flex-wrap items-center justify-end gap-3">
-                {selectedNode ? (
-                  <span
-                    className={cn(
-                      'text-xs font-medium',
-                      unsaved ? 'text-[var(--agyn-status-pending)]' : 'text-[var(--agyn-text-subtle)]',
-                    )}
-                  >
-                    {unsaved ? 'Unsaved changes' : 'Saved'}
-                  </span>
-                ) : null}
-                <Button type="button" size="sm" onClick={handleSave} disabled={!unsaved || !selectedNode}>
+                <Button type="button" size="sm" onClick={handleSave} disabled={!canSave || interactionsDisabled || selectedPath === ROOT_PATH || docState.loading}>
                   Save changes
                 </Button>
-                {selectedNode ? (
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <IconButton
-                        icon={<Trash2 className="size-4" />}
-                        variant="danger"
-                        size="sm"
-                        onClick={() => handleRequestDelete(selectedPath)}
-                        disabled={!canDeleteSelected}
-                        aria-label="Delete document"
-                      />
-                    </TooltipTrigger>
-                    <TooltipContent side="bottom" align="end">
-                      Delete document
-                    </TooltipContent>
-                  </Tooltip>
-                ) : null}
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <IconButton
+                      icon={<Trash2 className="size-4" />}
+                      variant="danger"
+                      size="sm"
+                      onClick={() => handleRequestDelete(selectedPath)}
+                      disabled={!canDeleteSelected}
+                      aria-label="Delete document"
+                    />
+                  </TooltipTrigger>
+                  <TooltipContent side="bottom" align="end">
+                    Delete document
+                  </TooltipContent>
+                </Tooltip>
               </div>
             </div>
-            <div className="flex-1">
-              {selectedNode ? (
-                <div className="h-full overflow-auto px-6 py-5">
-                  <Textarea
-                    value={editorValue}
-                    onChange={(event) => handleEditorChange(event.target.value)}
-                    aria-labelledby={editorLabelId}
-                    aria-describedby={editorDescriptionId}
-                    className="h-full min-h-[320px] resize-none border-0 bg-transparent px-0 py-0 text-sm leading-relaxed text-foreground focus-visible:ring-0"
-                    placeholder="Write markdown…"
-                    spellCheck="false"
-                  />
+            <div className="relative flex-1">
+              <div className="h-full overflow-auto px-6 py-5">
+                {editorMessage ? (
+                  <div className="flex h-full flex-col items-center justify-center gap-2 text-center text-sm text-muted-foreground">
+                    {editorMessage}
+                  </div>
+                ) : (
+                  <>
+                    {!docState.exists ? (
+                      <div className="mb-3 rounded-md border border-dashed border-border bg-muted/40 px-4 py-2 text-xs text-muted-foreground">
+                        Document not found. Create a directory from the tree or enter content and save to initialize it.
+                      </div>
+                    ) : null}
+                    <Textarea
+                      value={editorValue}
+                      onChange={(event) => handleEditorInput(event.target.value)}
+                      aria-labelledby={editorLabelId}
+                      aria-describedby={editorDescriptionId}
+                      className="h-full min-h-[320px] resize-none border-0 bg-transparent px-0 py-0 text-sm leading-relaxed text-foreground focus-visible:ring-0"
+                      placeholder="Write markdown…"
+                      spellCheck="false"
+                      disabled={!showTextarea}
+                    />
+                  </>
+                )}
+              </div>
+              {mutationError ? (
+                <div className="pointer-events-auto absolute left-1/2 top-4 z-20 w-[min(480px,90%)] -translate-x-1/2 rounded-md border border-destructive/40 bg-destructive/10 px-4 py-2 text-sm text-destructive shadow-sm">
+                  {mutationError}
                 </div>
-              ) : (
-                <div className="flex h-full flex-col items-center justify-center gap-2 px-6 text-center text-sm text-muted-foreground">
-                  <p>Select a document to edit its content.</p>
+              ) : null}
+              {isSaving ? (
+                <div className="pointer-events-none absolute left-1/2 top-16 z-10 -translate-x-1/2 rounded-full bg-muted/80 px-4 py-1 text-xs text-muted-foreground">
+                  Saving changes…
                 </div>
-              )}
+              ) : null}
             </div>
           </div>
         </ResizablePanel>

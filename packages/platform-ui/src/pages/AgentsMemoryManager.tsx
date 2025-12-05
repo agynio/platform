@@ -3,10 +3,12 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { memoryApi, type MemoryDocItem } from '@/api/modules/memory';
 import { MemoryManager } from '@/components/screens/memoryManager/MemoryManager';
-import type { MemoryNode, MemoryTree } from '@/components/screens/memoryManager/utils';
-import { normalizePath } from '@/components/screens/memoryManager/utils';
+import type { MemoryTree, MemoryNode } from '@/components/screens/memoryManager/utils';
+import { getParentPath, joinPath, normalizePath } from '@/components/screens/memoryManager/utils';
 
-type MemoryCell = {
+const ROOT_PATH = '/' as const;
+
+type MemoryNodeOption = {
   key: string;
   nodeId: string;
   scope: 'global' | 'perThread';
@@ -22,331 +24,335 @@ type DumpResponse = {
   dirs: Record<string, true>;
 };
 
-type TreeDiff =
-  | { type: 'create'; cellKey: string; docPath: string }
-  | { type: 'delete'; cellKey: string; docPath: string }
-  | { type: 'update'; cellKey: string; docPath: string; oldContent: string; newContent: string };
+type DocumentState = {
+  loading: boolean;
+  exists: boolean;
+  error: string | null;
+};
 
-const ROOT_PATH = '/';
-
-function buildCellKey(item: MemoryDocItem): string {
+function buildNodeKey(item: MemoryDocItem): string {
   if (item.scope === 'perThread') {
-    return item.threadId ? `${item.nodeId}__thread__${item.threadId}` : `${item.nodeId}__perThread`;
+    return item.threadId ? `${item.nodeId}::thread::${item.threadId}` : `${item.nodeId}::per-thread`;
   }
-  return `${item.nodeId}__global`;
+  return `${item.nodeId}::global`;
 }
 
-function buildCellLabel(item: MemoryDocItem): string {
+function buildNodeLabel(item: MemoryDocItem): string {
   if (item.scope === 'perThread') {
-    return item.threadId ? `${item.nodeId} • ${item.threadId}` : `${item.nodeId} • per-thread`;
+    const thread = item.threadId ?? 'unknown';
+    return `${item.nodeId} (thread: ${thread})`;
   }
-  return `${item.nodeId}`;
+  return `${item.nodeId} (global)`;
 }
 
-function getParentMemoryPath(path: string): string | null {
+function ensureNode(map: Map<string, MemoryNode>, root: MemoryTree, path: string): MemoryNode {
   const normalized = normalizePath(path);
-  if (normalized === ROOT_PATH) return null;
-  const segments = normalized.split('/').filter(Boolean);
-  if (segments.length <= 1) return ROOT_PATH;
-  segments.pop();
-  return `/${segments.join('/')}`;
+  if (normalized === ROOT_PATH) return root;
+  if (map.has(normalized)) return map.get(normalized)!;
+
+  const parentPath = getParentPath(normalized) ?? ROOT_PATH;
+  const parent = ensureNode(map, root, parentPath);
+  const name = normalized.split('/').filter(Boolean).pop() ?? normalized;
+  const node: MemoryNode = {
+    id: normalized,
+    path: normalized,
+    name,
+    content: '',
+    children: [],
+  };
+  parent.children.push(node);
+  map.set(normalized, node);
+  return node;
 }
 
-function splitTreePath(path: string): { cellKey: string; docPath: string } | null {
-  const normalized = normalizePath(path);
-  if (normalized === ROOT_PATH) return null;
-  const segments = normalized.split('/').filter(Boolean);
-  if (segments.length === 0) return null;
-  const [cellKey, ...rest] = segments;
-  const docPath = rest.length === 0 ? ROOT_PATH : `/${rest.join('/')}`;
-  return { cellKey, docPath };
-}
-
-function flattenTree(node: MemoryNode, map: Map<string, MemoryNode> = new Map()): Map<string, MemoryNode> {
-  map.set(node.path, node);
-  for (const child of node.children) flattenTree(child, map);
-  return map;
-}
-
-function collectAllPaths(dump?: DumpResponse): Set<string> {
-  const paths = new Set<string>();
-  if (!dump) return paths;
-  for (const key of Object.keys(dump.data ?? {})) {
-    paths.add(normalizePath(key));
+function sortTree(node: MemoryNode): void {
+  node.children.sort((a, b) => a.name.localeCompare(b.name));
+  for (const child of node.children) {
+    sortTree(child);
   }
-  for (const key of Object.keys(dump.dirs ?? {})) {
-    paths.add(normalizePath(key));
-  }
-  const queue = Array.from(paths);
-  for (const current of queue) {
-    let parent = getParentMemoryPath(current);
-    while (parent && parent !== ROOT_PATH && !paths.has(parent)) {
-      paths.add(parent);
-      queue.push(parent);
-      parent = getParentMemoryPath(parent);
-    }
-  }
-  return paths;
 }
 
-function buildCellTree(cell: MemoryCell, dump?: DumpResponse): MemoryTree {
-  const basePath = `/${cell.key}`;
-  const rootNode: MemoryTree = {
-    id: basePath,
-    path: basePath,
-    name: cell.label,
+function buildTreeFromDump(label: string, dump?: DumpResponse): MemoryTree {
+  const root: MemoryTree = {
+    id: 'root',
+    path: ROOT_PATH,
+    name: label,
     content: dump?.data?.[ROOT_PATH] ?? '',
     children: [],
   };
 
-  const allPaths = collectAllPaths(dump);
-  if (allPaths.size === 0) {
-    return rootNode;
+  if (!dump) {
+    return root;
   }
 
-  const nodeByPath = new Map<string, MemoryNode>();
-  for (const memoryPath of allPaths) {
-    if (memoryPath === ROOT_PATH) continue;
-    const segment = memoryPath.split('/').filter(Boolean).pop() ?? ROOT_PATH;
-    nodeByPath.set(memoryPath, {
-      id: `${cell.key}:${memoryPath}`,
-      path: `${basePath}${memoryPath}`,
-      name: segment,
-      content: dump?.data?.[memoryPath] ?? '',
-      children: [],
-    });
+  const nodeMap = new Map<string, MemoryNode>();
+
+  for (const dirPath of Object.keys(dump.dirs ?? {})) {
+    ensureNode(nodeMap, root, dirPath);
   }
 
-  const childrenMap = new Map<string, MemoryNode[]>();
-  for (const [memoryPath, node] of nodeByPath.entries()) {
-    const parentPath = getParentMemoryPath(memoryPath) ?? ROOT_PATH;
-    const list = childrenMap.get(parentPath) ?? [];
-    list.push(node);
-    childrenMap.set(parentPath, list);
+  for (const [dataPath, content] of Object.entries(dump.data ?? {})) {
+    if (dataPath === ROOT_PATH) {
+      root.content = content;
+      continue;
+    }
+    const node = ensureNode(nodeMap, root, dataPath);
+    node.content = content;
   }
 
-  for (const [, list] of childrenMap.entries()) {
-    list.sort((a, b) => a.name.localeCompare(b.name));
-  }
-
-  for (const [memoryPath, node] of nodeByPath.entries()) {
-    node.children = childrenMap.get(memoryPath) ?? [];
-  }
-
-  rootNode.children = childrenMap.get(ROOT_PATH) ?? [];
-  return rootNode;
-}
-
-function diffTrees(previous: MemoryTree | null, next: MemoryTree): TreeDiff | null {
-  if (!previous) return null;
-  const prevMap = flattenTree(previous, new Map());
-  const nextMap = flattenTree(next, new Map());
-
-  const filterDocPaths = (paths: string[], opts?: { allowRoot?: boolean }) =>
-    paths.filter((path) => {
-      const meta = splitTreePath(path);
-      if (!meta) return false;
-      if (meta.docPath === ROOT_PATH && !opts?.allowRoot) return false;
-      return true;
-    });
-
-  const addedPaths = filterDocPaths(
-    Array.from(nextMap.keys()).filter((path) => !prevMap.has(path)),
-  );
-  const removedPaths = filterDocPaths(
-    Array.from(prevMap.keys()).filter((path) => !nextMap.has(path)),
-  );
-  const changedPaths = filterDocPaths(
-    Array.from(nextMap.keys()).filter((path) => {
-      if (!prevMap.has(path)) return false;
-      const prevNode = prevMap.get(path)!;
-      const nextNode = nextMap.get(path)!;
-      return prevNode.content !== nextNode.content;
-    }),
-    { allowRoot: true },
-  );
-
-  if (addedPaths.length === 1 && removedPaths.length === 0 && changedPaths.length === 0) {
-    const target = splitTreePath(addedPaths[0]);
-    if (!target) return null;
-    return { type: 'create', cellKey: target.cellKey, docPath: target.docPath };
-  }
-
-  if (removedPaths.length === 1 && addedPaths.length === 0 && changedPaths.length === 0) {
-    const target = splitTreePath(removedPaths[0]);
-    if (!target) return null;
-    return { type: 'delete', cellKey: target.cellKey, docPath: target.docPath };
-  }
-
-  if (changedPaths.length === 1 && addedPaths.length === 0 && removedPaths.length === 0) {
-    const targetPath = changedPaths[0];
-    const target = splitTreePath(targetPath);
-    if (!target) return null;
-    const prevNode = prevMap.get(targetPath)!;
-    const nextNode = nextMap.get(targetPath)!;
-    return {
-      type: 'update',
-      cellKey: target.cellKey,
-      docPath: target.docPath,
-      oldContent: prevNode.content ?? '',
-      newContent: nextNode.content ?? '',
-    };
-  }
-
-  return null;
+  sortTree(root);
+  return root;
 }
 
 export function AgentsMemoryManager() {
   const queryClient = useQueryClient();
+
   const docsQuery = useQuery({
     queryKey: ['memory/docs'],
     queryFn: () => memoryApi.listDocs(),
     staleTime: 30_000,
   });
 
-  const cells = useMemo<MemoryCell[]>(() => {
+  const nodes = useMemo<MemoryNodeOption[]>(() => {
     const items = docsQuery.data?.items ?? [];
-    const filtered = items.filter((item) => item.scope === 'global' || Boolean(item.threadId));
-    filtered.sort((a, b) => {
-      const labelA = buildCellLabel(a);
-      const labelB = buildCellLabel(b);
-      return labelA.localeCompare(labelB);
-    });
-    return filtered.map((item) => ({
-      key: buildCellKey(item),
-      nodeId: item.nodeId,
-      scope: item.scope,
-      threadId: item.threadId,
-      label: buildCellLabel(item),
-    }));
+    return items
+      .filter((item) => item.scope === 'global' || Boolean(item.threadId))
+      .map((item) => ({
+        key: buildNodeKey(item),
+        nodeId: item.nodeId,
+        scope: item.scope,
+        threadId: item.threadId,
+        label: buildNodeLabel(item),
+      }))
+      .sort((a, b) => a.label.localeCompare(b.label));
   }, [docsQuery.data]);
 
-  const cellByKey = useMemo(() => new Map(cells.map((cell) => [cell.key, cell] as const)), [cells]);
+  const nodeByKey = useMemo(() => new Map(nodes.map((node) => [node.key, node] as const)), [nodes]);
 
-  const [selectedCellKey, setSelectedCellKey] = useState<string | null>(null);
+  const [selectedNodeKey, setSelectedNodeKey] = useState<string | null>(null);
 
   useEffect(() => {
-    if (cells.length === 0) {
-      setSelectedCellKey(null);
+    if (nodes.length === 0) {
+      setSelectedNodeKey(null);
       return;
     }
-    if (!selectedCellKey || !cellByKey.has(selectedCellKey)) {
-      setSelectedCellKey(cells[0]?.key ?? null);
-    }
-  }, [cells, cellByKey, selectedCellKey]);
+    setSelectedNodeKey((previous) => (previous && nodeByKey.has(previous) ? previous : nodes[0].key));
+  }, [nodeByKey, nodes]);
 
-  const selectedCell = selectedCellKey ? cellByKey.get(selectedCellKey) ?? null : null;
+  const selectedNode = selectedNodeKey ? nodeByKey.get(selectedNodeKey) ?? null : null;
 
-  const storedPathsRef = useRef<Map<string, string>>(new Map());
-  const [activePath, setActivePath] = useState<string>(ROOT_PATH);
-
-  useEffect(() => {
-    if (!selectedCellKey) return;
-    const stored = storedPathsRef.current.get(selectedCellKey) ?? `/${selectedCellKey}`;
-    setActivePath(stored);
-  }, [selectedCellKey]);
+  const dumpKey = useMemo(
+    () =>
+      selectedNode
+        ? (['memory/dump', selectedNode.nodeId, selectedNode.scope, selectedNode.threadId ?? null] as const)
+        : null,
+    [selectedNode],
+  );
 
   const dumpQuery = useQuery<DumpResponse>({
-    queryKey: selectedCell
-      ? ['memory/dump', selectedCell.nodeId, selectedCell.scope, selectedCell.threadId ?? null]
-      : ['memory/dump', 'none'],
-    queryFn: async () => memoryApi.dump(selectedCell!.nodeId, selectedCell!.scope, selectedCell!.threadId) as Promise<DumpResponse>,
-    enabled: Boolean(selectedCell),
+    queryKey: dumpKey ?? ['memory/dump', 'none'],
+    queryFn: async () => memoryApi.dump(selectedNode!.nodeId, selectedNode!.scope, selectedNode!.threadId) as Promise<DumpResponse>,
+    enabled: Boolean(selectedNode),
     staleTime: 5_000,
     refetchOnWindowFocus: false,
   });
 
-  const dumpsCacheRef = useRef<Map<string, DumpResponse>>(new Map());
+  const tree = useMemo<MemoryTree | null>(() => {
+    if (!selectedNode) return null;
+    return buildTreeFromDump(selectedNode.label, dumpQuery.data);
+  }, [dumpQuery.data, selectedNode]);
+
+  const storedPathsRef = useRef<Map<string, string>>(new Map());
+  const [selectedPath, setSelectedPath] = useState<string>(ROOT_PATH);
 
   useEffect(() => {
-    if (selectedCellKey && dumpQuery.data) {
-      dumpsCacheRef.current.set(selectedCellKey, dumpQuery.data);
+    if (!selectedNode) {
+      setSelectedPath(ROOT_PATH);
+      return;
     }
-  }, [selectedCellKey, dumpQuery.data]);
+    const stored = storedPathsRef.current.get(selectedNode.key) ?? ROOT_PATH;
+    setSelectedPath(stored);
+  }, [selectedNode]);
 
-  const rootTree = useMemo<MemoryTree>(() => {
-    const children = cells.map((cell) => {
-      const dump = cell.key === selectedCellKey
-        ? dumpQuery.data ?? dumpsCacheRef.current.get(cell.key)
-        : dumpsCacheRef.current.get(cell.key);
-      return buildCellTree(cell, dump);
-    });
-    children.sort((a, b) => a.name.localeCompare(b.name));
-    return {
-      id: 'root',
-      path: ROOT_PATH,
-      name: ROOT_PATH,
-      content: '',
-      children,
-    };
-  }, [cells, selectedCellKey, dumpQuery.data]);
-
-  const previousTreeRef = useRef<MemoryTree | null>(null);
-
-  useEffect(() => {
-    previousTreeRef.current = rootTree;
-  }, [rootTree]);
-
+  const [editorValue, setEditorValue] = useState('');
+  const [baselineValue, setBaselineValue] = useState('');
+  const [docState, setDocState] = useState<DocumentState>({ loading: false, exists: false, error: null });
   const [mutationStatus, setMutationStatus] = useState<'idle' | 'pending'>('idle');
   const [mutationError, setMutationError] = useState<string | null>(null);
+  const lastLoadedRef = useRef<{ nodeKey: string; path: string } | null>(null);
 
-  const handleSelectPath = useCallback((path: string) => {
-    setActivePath(path);
-    const meta = splitTreePath(path);
-    if (meta) {
-      storedPathsRef.current.set(meta.cellKey, path);
-    } else if (selectedCellKey) {
-      storedPathsRef.current.set(selectedCellKey, `/${selectedCellKey}`);
+  const unsaved = editorValue !== baselineValue;
+
+  useEffect(() => {
+    if (!selectedNode) {
+      setEditorValue('');
+      setBaselineValue('');
+      setDocState({ loading: false, exists: false, error: null });
+      lastLoadedRef.current = null;
+      return;
     }
-  }, [selectedCellKey]);
 
-  const handleTreeChange = useCallback(
-    async (nextTree: MemoryTree) => {
-      const previous = previousTreeRef.current;
-      const diff = diffTrees(previous, nextTree);
-      previousTreeRef.current = nextTree;
-      if (!diff) return;
+    const key = selectedNode.key;
+    const normalizedPath = normalizePath(selectedPath);
+    const last = lastLoadedRef.current;
+    const pathChanged = !last || last.nodeKey !== key || last.path !== normalizedPath;
 
-      const cell = cellByKey.get(diff.cellKey);
-      if (!cell) return;
+    if (normalizedPath === ROOT_PATH) {
+      if (pathChanged || !unsaved) {
+        setEditorValue('');
+        setBaselineValue('');
+      }
+      setDocState({ loading: false, exists: false, error: null });
+      lastLoadedRef.current = { nodeKey: key, path: normalizedPath };
+      return;
+    }
 
-      setMutationError(null);
+    if (pathChanged || !unsaved) {
+      const seeded = dumpQuery.data?.data?.[normalizedPath];
+      if (seeded != null) {
+        setEditorValue(seeded);
+        setBaselineValue(seeded);
+      } else if (pathChanged) {
+        setEditorValue('');
+        setBaselineValue('');
+      }
+    }
 
-      const queryKey = ['memory/dump', cell.nodeId, cell.scope, cell.threadId ?? null] as const;
+    let cancelled = false;
+    setDocState({ loading: true, exists: false, error: null });
 
+    (async () => {
       try {
-        if (diff.type === 'update' && diff.oldContent === diff.newContent) {
+        const stat = await memoryApi.stat(selectedNode.nodeId, selectedNode.scope, selectedNode.threadId, normalizedPath);
+        if (cancelled) return;
+        if (!stat.exists) {
+          setDocState({ loading: false, exists: false, error: null });
+          lastLoadedRef.current = { nodeKey: key, path: normalizedPath };
           return;
         }
-        setMutationStatus('pending');
-        if (diff.type === 'create') {
-          await memoryApi.ensureDir(cell.nodeId, cell.scope, cell.threadId, diff.docPath);
-        } else if (diff.type === 'delete') {
-          await memoryApi.delete(cell.nodeId, cell.scope, cell.threadId, diff.docPath);
-        } else if (diff.type === 'update') {
-          if (!diff.oldContent) {
-            await memoryApi.append(cell.nodeId, cell.scope, cell.threadId, diff.docPath, diff.newContent);
-          } else {
-            await memoryApi.update(cell.nodeId, cell.scope, cell.threadId, diff.docPath, diff.oldContent, diff.newContent);
-          }
-        }
-        await queryClient.invalidateQueries({ queryKey });
+        const content = await memoryApi.read(selectedNode.nodeId, selectedNode.scope, selectedNode.threadId, normalizedPath);
+        if (cancelled) return;
+        setEditorValue(content);
+        setBaselineValue(content);
+        setDocState({ loading: false, exists: true, error: null });
+        lastLoadedRef.current = { nodeKey: key, path: normalizedPath };
       } catch (error) {
-        const message = error instanceof Error ? error.message : 'Failed to persist memory change.';
+        if (cancelled) return;
+        const message = error instanceof Error ? error.message : 'Failed to load document.';
+        setDocState({ loading: false, exists: false, error: message });
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [dumpQuery.data, selectedNode, selectedPath, unsaved]);
+
+  const handleSelectNode = useCallback((key: string) => {
+    setSelectedNodeKey(key);
+  }, []);
+
+  const handleSelectPath = useCallback(
+    (path: string) => {
+      if (!selectedNodeKey) return;
+      const normalized = normalizePath(path);
+      storedPathsRef.current.set(selectedNodeKey, normalized);
+      setSelectedPath(normalized);
+    },
+    [selectedNodeKey],
+  );
+
+  const invalidateDump = useCallback(async () => {
+    if (!dumpKey) return;
+    await queryClient.invalidateQueries({ queryKey: dumpKey });
+    await queryClient.refetchQueries({ queryKey: dumpKey });
+  }, [dumpKey, queryClient]);
+
+  const resetDocumentCache = useCallback(() => {
+    lastLoadedRef.current = null;
+  }, []);
+
+  const handleCreateDirectory = useCallback(
+    async (parentPath: string, name: string) => {
+      if (!selectedNode) return;
+      const targetPath = joinPath(parentPath, name);
+      setMutationError(null);
+      setMutationStatus('pending');
+      try {
+        await memoryApi.ensureDir(selectedNode.nodeId, selectedNode.scope, selectedNode.threadId, targetPath);
+        storedPathsRef.current.set(selectedNode.key, targetPath);
+        setSelectedPath(targetPath);
+        setEditorValue('');
+        setBaselineValue('');
+        setDocState({ loading: false, exists: false, error: null });
+        resetDocumentCache();
+        await invalidateDump();
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Failed to create directory.';
         setMutationError(message);
-        await queryClient.invalidateQueries({ queryKey });
       } finally {
         setMutationStatus('idle');
       }
     },
-    [cellByKey, queryClient],
+    [invalidateDump, resetDocumentCache, selectedNode],
   );
 
-  const isLoadingDocs = docsQuery.isLoading;
+  const handleDeletePath = useCallback(
+    async (path: string) => {
+      if (!selectedNode) return;
+      const normalized = normalizePath(path);
+      const parent = getParentPath(normalized) ?? ROOT_PATH;
+      setMutationError(null);
+      setMutationStatus('pending');
+      try {
+        await memoryApi.delete(selectedNode.nodeId, selectedNode.scope, selectedNode.threadId, normalized);
+        storedPathsRef.current.set(selectedNode.key, parent);
+        setSelectedPath(parent);
+        setEditorValue('');
+        setBaselineValue('');
+        setDocState({ loading: false, exists: false, error: null });
+        resetDocumentCache();
+        await invalidateDump();
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Failed to delete path.';
+        setMutationError(message);
+      } finally {
+        setMutationStatus('idle');
+      }
+    },
+    [invalidateDump, resetDocumentCache, selectedNode],
+  );
+
+  const handleSave = useCallback(async () => {
+    if (!selectedNode) return;
+    const normalized = normalizePath(selectedPath);
+    if (normalized === ROOT_PATH) return;
+    if (editorValue === baselineValue) return;
+
+    setMutationError(null);
+    setMutationStatus('pending');
+    try {
+      if (!baselineValue && editorValue) {
+        await memoryApi.append(selectedNode.nodeId, selectedNode.scope, selectedNode.threadId, normalized, editorValue);
+      } else {
+        await memoryApi.update(selectedNode.nodeId, selectedNode.scope, selectedNode.threadId, normalized, baselineValue, editorValue);
+      }
+      setBaselineValue(editorValue);
+      setDocState({ loading: false, exists: true, error: null });
+      resetDocumentCache();
+      await invalidateDump();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to save document.';
+      setMutationError(message);
+    } finally {
+      setMutationStatus('idle');
+    }
+  }, [baselineValue, editorValue, invalidateDump, resetDocumentCache, selectedNode, selectedPath]);
+
+  const docsLoading = docsQuery.isLoading;
   const docsError = docsQuery.error as Error | null;
-  const cellsEmpty = !isLoadingDocs && cells.length === 0;
-  const isTreeLoading = Boolean(selectedCell) && dumpQuery.isLoading;
   const treeError = dumpQuery.error as Error | null;
+  const treeLoading = dumpQuery.isLoading && !dumpQuery.data;
 
   return (
     <div className="absolute inset-0 flex min-h-0 flex-col overflow-hidden bg-white">
@@ -357,42 +363,41 @@ export function AgentsMemoryManager() {
         </div>
       </div>
       <div className="flex-1 min-h-0">
-        {isLoadingDocs ? (
-          <div className="p-6 text-sm text-muted-foreground">Loading memory cells…</div>
+        {docsLoading ? (
+          <div className="p-6 text-sm text-muted-foreground">Loading memory nodes…</div>
         ) : docsError ? (
           <div className="p-6 text-sm text-destructive" role="alert">
-            {docsError.message || 'Failed to load memory cells.'}
+            {docsError.message ?? 'Failed to load memory nodes.'}
           </div>
-        ) : cellsEmpty ? (
-          <div className="p-6 text-sm text-muted-foreground">No memory cells available.</div>
-        ) : isTreeLoading ? (
-          <div className="p-6 text-sm text-muted-foreground">Loading memory tree…</div>
+        ) : nodes.length === 0 ? (
+          <div className="p-6 text-sm text-muted-foreground">No memory nodes found.</div>
         ) : treeError ? (
           <div className="p-6 text-sm text-destructive" role="alert">
-            {treeError.message || 'Failed to load memory tree.'}
+            {treeError.message ?? 'Failed to load memory tree.'}
           </div>
-        ) : !selectedCell ? (
-          <div className="p-6 text-sm text-muted-foreground">Select a memory cell to continue.</div>
         ) : (
-          <div className="relative h-full">
-            {mutationError ? (
-              <div className="absolute left-1/2 top-4 z-20 w-[min(480px,90%)] -translate-x-1/2 rounded-md border border-destructive/40 bg-destructive/10 px-4 py-2 text-sm text-destructive shadow-sm">
-                {mutationError}
-              </div>
-            ) : null}
-            {mutationStatus === 'pending' || dumpQuery.isRefetching ? (
-              <div className="pointer-events-none absolute left-1/2 top-16 z-10 -translate-x-1/2 rounded-full bg-muted/80 px-4 py-1 text-xs text-muted-foreground">
-                Saving changes…
-              </div>
-            ) : null}
-            <MemoryManager
-              className="h-full"
-              initialTree={rootTree}
-              initialSelectedPath={activePath}
-              onSelectPath={handleSelectPath}
-              onTreeChange={handleTreeChange}
-            />
-          </div>
+          <MemoryManager
+            nodes={nodes}
+            selectedNodeKey={selectedNodeKey}
+            onSelectNode={handleSelectNode}
+            nodeSelectDisabled={docsLoading || nodes.length === 0}
+            tree={tree}
+            treeLoading={Boolean(selectedNode) && treeLoading}
+            disableInteractions={!selectedNode}
+            selectedPath={selectedPath}
+            onSelectPath={handleSelectPath}
+            onCreateDirectory={handleCreateDirectory}
+            onDeletePath={handleDeletePath}
+            editorValue={editorValue}
+            onEditorChange={setEditorValue}
+            canSave={Boolean(selectedNode) && selectedPath !== ROOT_PATH && editorValue !== baselineValue && !docState.loading}
+            onSave={handleSave}
+            isSaving={mutationStatus === 'pending'}
+            mutationError={mutationError}
+            docState={docState}
+            emptyTreeMessage="No documents for this node yet. Create one to get started."
+            noNodesMessage="No memory nodes found."
+          />
         )}
       </div>
     </div>
