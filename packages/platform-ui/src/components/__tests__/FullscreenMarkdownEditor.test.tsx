@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, beforeAll, afterAll, vi } from 'vitest';
-import { render, fireEvent, screen, act } from '@testing-library/react';
+import { render, fireEvent, screen, act, within } from '@testing-library/react';
 import React from 'react';
 import { FullscreenMarkdownEditor } from '../FullscreenMarkdownEditor';
 
@@ -312,5 +312,25 @@ describe('FullscreenMarkdownEditor scroll sync', () => {
     expect(editorControl.scrollTop).toBe(initialEditorScroll);
     expect(editorControl.setCalls).toBe(0);
     expect(previewControl.setCalls).toBe(1);
+  });
+
+  it('sanitizes preview content using markdown renderer', () => {
+    const unsafe = String.raw`<u>Allowed</u> [blocked](javascript:alert('x')) <img src="#" onerror="alert(1)" />`;
+
+    render(
+      <FullscreenMarkdownEditor
+        value={unsafe}
+        onChange={vi.fn()}
+        onClose={vi.fn()}
+      />,
+    );
+
+    const previewScroll = getPreviewScrollContainer();
+    const underline = within(previewScroll).getByText('Allowed');
+    expect(underline.tagName).toBe('U');
+
+    const link = within(previewScroll).getByText('blocked');
+    expect(link).not.toHaveAttribute('href');
+    expect(within(previewScroll).queryByRole('img')).toBeNull();
   });
 });
