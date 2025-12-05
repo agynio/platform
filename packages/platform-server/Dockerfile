@@ -34,7 +34,7 @@ FROM node:20-slim AS runtime
 ENV NODE_ENV=production \
     PORT=3010
 
-WORKDIR /opt/app
+WORKDIR /opt/app/packages/platform-server
 
 RUN apt-get update \
  && apt-get install -y --no-install-recommends openssl \
