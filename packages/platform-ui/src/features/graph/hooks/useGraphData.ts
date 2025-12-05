@@ -198,21 +198,38 @@ export function useGraphData(): UseGraphDataResult {
           if (node.id !== nodeId) return node;
           const meta = metadataRef.current.get(nodeId);
           const next: GraphNodeConfig = { ...node };
-          let nextConfig = node.config
-            ? { ...(node.config as Record<string, unknown>) }
-            : undefined;
-          let metaConfig = meta?.config
-            ? { ...(meta.config as Record<string, unknown>) }
-            : undefined;
+          const previousConfig = node.config ? (node.config as Record<string, unknown>) : undefined;
+          const previousConfigHasTitle = Boolean(
+            previousConfig && Object.prototype.hasOwnProperty.call(previousConfig, 'title'),
+          );
+          const previousTitleValue = previousConfigHasTitle ? previousConfig!.title : undefined;
+          let nextConfig = previousConfig ? { ...previousConfig } : undefined;
+          let metaConfig = meta?.config ? { ...(meta.config as Record<string, unknown>) } : undefined;
 
           if (typeof updates.config !== 'undefined' && updates.config !== node.config) {
-            nextConfig = updates.config
+            const patch = updates.config
               ? { ...(updates.config as Record<string, unknown>) }
               : undefined;
-            if (meta) {
-              metaConfig = updates.config
-                ? { ...(updates.config as Record<string, unknown>) }
-                : undefined;
+            const patchIncludesTitle = Boolean(
+              patch && Object.prototype.hasOwnProperty.call(patch, 'title'),
+            );
+
+            if (patch) {
+              nextConfig = { ...patch };
+              if (!patchIncludesTitle && previousConfigHasTitle) {
+                nextConfig.title = previousTitleValue;
+              }
+              if (meta) {
+                metaConfig = { ...patch };
+                if (!patchIncludesTitle && previousConfigHasTitle) {
+                  metaConfig.title = previousTitleValue;
+                }
+              }
+            } else {
+              nextConfig = undefined;
+              if (meta) {
+                metaConfig = undefined;
+              }
             }
             shouldSave = true;
           }
