@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { action } from 'storybook/actions';
 import type { Meta, StoryObj } from '@storybook/react';
 import { useArgs } from 'storybook/preview-api';
@@ -97,7 +97,7 @@ const createPaginatedThread = (page: number, index: number): Thread => {
 };
 
 const paginatedThreadsPages: Thread[][] = [
-  Array.from({ length: 12 }, (_, index) => createPaginatedThread(0, index)),
+  Array.from({ length: 18 }, (_, index) => createPaginatedThread(0, index)),
   Array.from({ length: 12 }, (_, index) => createPaginatedThread(1, index)),
   Array.from({ length: 6 }, (_, index) => createPaginatedThread(2, index)),
 ];
@@ -589,12 +589,14 @@ export const InfiniteScrollPagination: Story = {
     );
     const [inputValue, setInputValue] = useState('');
     const loadTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const loadStateRef = useRef({ threadsLoading: false, hasMore: paginatedThreadsPages.length > 1 });
 
     const logThreadsLoadMore = action('onThreadsLoadMore');
     const logFilterChange = action('onFilterModeChange');
     const logSelectThread = action('onSelectThread');
     const logInputChange = action('onInputValueChange');
     const logSendMessage = action('onSendMessage');
+    const logThreadsLoadMoreRef = useRef(logThreadsLoadMore);
 
     useEffect(() => {
       return () => {
@@ -604,16 +606,30 @@ export const InfiniteScrollPagination: Story = {
       };
     }, []);
 
+    useEffect(() => {
+      loadStateRef.current.threadsLoading = threadsLoading;
+    }, [threadsLoading]);
+
+    useEffect(() => {
+      loadStateRef.current.hasMore = hasMore;
+    }, [hasMore]);
+
+    useEffect(() => {
+      logThreadsLoadMoreRef.current = logThreadsLoadMore;
+    }, [logThreadsLoadMore]);
+
     const resetPagination = () => {
       if (loadTimerRef.current) {
         clearTimeout(loadTimerRef.current);
         loadTimerRef.current = null;
       }
       setThreadsLoading(false);
+      loadStateRef.current.threadsLoading = false;
       setPageIndex(0);
       const firstPage = paginatedThreadsPages[0] ?? [];
       setThreadsState([...firstPage]);
       setHasMore(paginatedThreadsPages.length > 1);
+      loadStateRef.current.hasMore = paginatedThreadsPages.length > 1;
       setSelectedThreadId(firstPage[0]?.id ?? null);
     };
 
@@ -623,28 +639,41 @@ export const InfiniteScrollPagination: Story = {
       resetPagination();
     };
 
-    const handleThreadsLoadMore = () => {
-      if (threadsLoading || !hasMore) {
+    const handleThreadsLoadMore = useCallback(() => {
+      const state = loadStateRef.current;
+      if (state.threadsLoading || !state.hasMore || loadTimerRef.current) {
         return;
       }
 
-      logThreadsLoadMore();
+      logThreadsLoadMoreRef.current?.();
+      state.threadsLoading = true;
       setThreadsLoading(true);
+
       loadTimerRef.current = setTimeout(() => {
         setPageIndex((currentPage) => {
           const nextPage = currentPage + 1;
           const nextThreads = paginatedThreadsPages[nextPage] ?? [];
+
           if (nextThreads.length > 0) {
             setThreadsState((prev) => [...prev, ...nextThreads]);
           }
-          setHasMore(nextPage < paginatedThreadsPages.length - 1);
-          setThreadsLoading(false);
-          setSelectedThreadId((currentId) => currentId ?? nextThreads[0]?.id ?? null);
-          return nextPage;
+
+          const more = nextPage < paginatedThreadsPages.length - 1 && nextThreads.length > 0;
+          setHasMore(more);
+          state.hasMore = more;
+
+          if (nextThreads.length > 0) {
+            setSelectedThreadId((currentId) => currentId ?? nextThreads[0]?.id ?? null);
+          }
+
+          return nextThreads.length > 0 ? nextPage : currentPage;
         });
+
+        state.threadsLoading = false;
+        setThreadsLoading(false);
         loadTimerRef.current = null;
       }, 600);
-    };
+    }, []);
 
     const handleSelectThread = (threadId: string) => {
       logSelectThread(threadId);
@@ -657,7 +686,7 @@ export const InfiniteScrollPagination: Story = {
 
     return (
       <div className="absolute inset-0 flex min-h-0 min-w-0">
-        <div className="mx-auto flex w-full max-w-6xl flex-1" style={{ height: '720px' }}>
+        <div className="mx-auto flex w-full max-w-6xl flex-1" style={{ height: '680px' }}>
           <ThreadsScreen
             threads={threadsState}
             runs={runs}

@@ -23,11 +23,13 @@ describe('ThreadsList pagination', () => {
   let observerCallback: IntersectionObserverCallback | null;
   let observerInstance: IntersectionObserver | null;
   let observedElement: Element | null;
+  let observerOptions: IntersectionObserverInit | undefined;
 
   const installObserverMock = () => {
     window.IntersectionObserver = vi
       .fn((callback: IntersectionObserverCallback, options?: IntersectionObserverInit) => {
         observerCallback = callback;
+        observerOptions = options;
         const threshold = options?.threshold;
         const thresholds = threshold === undefined ? [] : Array.isArray(threshold) ? threshold : [threshold];
 
@@ -38,7 +40,9 @@ describe('ThreadsList pagination', () => {
           observe: vi.fn((element: Element) => {
             observedElement = element;
           }),
-          unobserve: vi.fn(),
+          unobserve: vi.fn(() => {
+            observedElement = null;
+          }),
           disconnect: vi.fn(),
           takeRecords: () => [],
         };
@@ -73,6 +77,7 @@ describe('ThreadsList pagination', () => {
     observerCallback = null;
     observerInstance = null;
     observedElement = null;
+    observerOptions = undefined;
     installObserverMock();
   });
 
@@ -94,15 +99,27 @@ describe('ThreadsList pagination', () => {
     );
 
     await waitFor(() => expect(observedElement).not.toBeNull());
+    expect(window.IntersectionObserver).toHaveBeenCalledTimes(1);
+    expect(observerOptions).toMatchObject({ rootMargin: '0px', threshold: 1 });
 
     await triggerIntersection(true);
     expect(onLoadMore).toHaveBeenCalledTimes(1);
 
+    await triggerIntersection(true);
+    expect(onLoadMore).toHaveBeenCalledTimes(1);
+
+    await triggerIntersection(false);
     await triggerIntersection(true);
     expect(onLoadMore).toHaveBeenCalledTimes(1);
 
     rerender(<ThreadsList threads={threads} hasMore onLoadMore={onLoadMore} isLoading />);
 
+    await waitFor(() => expect(observedElement).toBeNull());
+
+    rerender(<ThreadsList threads={threads} hasMore onLoadMore={onLoadMore} isLoading={false} />);
+
+    await waitFor(() => expect(observedElement).not.toBeNull());
+    await triggerIntersection(false);
     await triggerIntersection(true);
     expect(onLoadMore).toHaveBeenCalledTimes(1);
 
@@ -111,8 +128,34 @@ describe('ThreadsList pagination', () => {
       <ThreadsList threads={extendedThreads} hasMore onLoadMore={onLoadMore} isLoading={false} />
     );
 
+    await waitFor(() => expect(observedElement).not.toBeNull());
+    await triggerIntersection(false);
     await triggerIntersection(true);
     expect(onLoadMore).toHaveBeenCalledTimes(2);
+  });
+
+  it('reuses a single observer instance when onLoadMore changes', async () => {
+    const firstHandler = vi.fn();
+    const secondHandler = vi.fn();
+    const threads = [createThread('t-1'), createThread('t-2')];
+
+    const { rerender } = render(
+      <ThreadsList threads={threads} hasMore onLoadMore={firstHandler} isLoading={false} />
+    );
+
+    await waitFor(() => expect(observedElement).not.toBeNull());
+    expect(window.IntersectionObserver).toHaveBeenCalledTimes(1);
+
+    rerender(
+      <ThreadsList threads={threads} hasMore onLoadMore={secondHandler} isLoading={false} />
+    );
+
+    await waitFor(() => expect(observedElement).not.toBeNull());
+    expect(window.IntersectionObserver).toHaveBeenCalledTimes(1);
+
+    await triggerIntersection(true);
+    expect(firstHandler).not.toHaveBeenCalled();
+    expect(secondHandler).toHaveBeenCalledTimes(1);
   });
 
   it('shows last-page message once and clears it when threads reset', async () => {

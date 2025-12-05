@@ -97,6 +97,42 @@ const applyBrowserMocks = () => {
     });
   }
 
+  if (!('IntersectionObserver' in g) || g.IntersectionObserver === undefined) {
+    class IntersectionObserverPolyfill implements IntersectionObserver {
+      readonly root: Element | Document | null;
+      readonly rootMargin: string;
+      readonly thresholds: ReadonlyArray<number>;
+      private readonly callback: IntersectionObserverCallback;
+
+      constructor(callback: IntersectionObserverCallback, options?: IntersectionObserverInit) {
+        this.callback = callback;
+        this.root = options?.root ?? null;
+        this.rootMargin = options?.rootMargin ?? '0px';
+        const threshold = options?.threshold;
+        if (Array.isArray(threshold)) {
+          this.thresholds = threshold.length > 0 ? threshold : [0];
+        } else if (typeof threshold === 'number') {
+          this.thresholds = [threshold];
+        } else {
+          this.thresholds = [0];
+        }
+      }
+
+      observe() {}
+      unobserve() {}
+      disconnect() {}
+      takeRecords(): IntersectionObserverEntry[] {
+        return [];
+      }
+    }
+
+    Object.defineProperty(g, 'IntersectionObserver', {
+      value: IntersectionObserverPolyfill,
+      configurable: true,
+      writable: true,
+    });
+  }
+
   if (typeof window !== 'undefined' && !window.matchMedia) {
     const createMatchMediaMock = () => ({
       matches: false,

@@ -25,6 +25,7 @@ export function ThreadsList({
   emptyState,
   onToggleExpand,
 }: ThreadsListProps) {
+  const canLoadMore = Boolean(onLoadMore);
   const [expandedThreads, setExpandedThreads] = useState<Set<string>>(new Set());
   const [hasLoadedMore, setHasLoadedMore] = useState(false);
   const loadMoreRef = useRef<HTMLDivElement>(null);
@@ -32,59 +33,96 @@ export function ThreadsList({
   const isLoadingRef = useRef(isLoading);
   const threadsSignatureRef = useRef<string | null>(null);
   const loadTriggeredRef = useRef(false);
+  const onLoadMoreRef = useRef(onLoadMore);
+  const observerRef = useRef<IntersectionObserver | null>(null);
+  const lastIntersectingRef = useRef(false);
+  const hasMoreRef = useRef(hasMore);
 
   useEffect(() => {
     isLoadingRef.current = isLoading;
-    if (!isLoading) {
-      loadPendingRef.current = false;
-    }
   }, [isLoading]);
 
   useEffect(() => {
-    const signature = threads.map((thread) => thread.id).join('|');
-    if (threadsSignatureRef.current === signature) {
-      loadTriggeredRef.current = false;
-      return;
-    }
+    onLoadMoreRef.current = onLoadMore;
+  }, [onLoadMore]);
 
-    if (!loadTriggeredRef.current && threadsSignatureRef.current !== null) {
-      setHasLoadedMore(false);
+  useEffect(() => {
+    hasMoreRef.current = hasMore;
+  }, [hasMore]);
+
+  useEffect(() => {
+    const signature = threads.map((thread) => thread.id).join('|');
+    const previousSignature = threadsSignatureRef.current;
+
+    if (previousSignature !== null && signature !== previousSignature) {
+      if (!loadTriggeredRef.current) {
+        setHasLoadedMore(false);
+      }
+
+      if (loadPendingRef.current) {
+        loadPendingRef.current = false;
+      }
     }
 
     threadsSignatureRef.current = signature;
     loadTriggeredRef.current = false;
   }, [threads]);
 
-  // Infinite scroll observer
   useEffect(() => {
-    if (!onLoadMore || !hasMore) return;
+    if (observerRef.current) return;
 
-    const observer = new IntersectionObserver(
+    observerRef.current = new IntersectionObserver(
       (entries) => {
         const [entry] = entries;
-        if (!entry?.isIntersecting) return;
+        if (!entry) return;
+
+        const isIntersecting = Boolean(entry.isIntersecting);
+        const wasIntersecting = lastIntersectingRef.current;
+        lastIntersectingRef.current = isIntersecting;
+
+        if (!isIntersecting || wasIntersecting) return;
+        if (!hasMoreRef.current) return;
         if (isLoadingRef.current) return;
         if (loadPendingRef.current) return;
 
         loadPendingRef.current = true;
         loadTriggeredRef.current = true;
-        onLoadMore();
+        onLoadMoreRef.current?.();
         setHasLoadedMore(true);
       },
-      { threshold: 0.1, rootMargin: '200px' }
+      { rootMargin: '0px', threshold: 1 }
     );
 
+    return () => {
+      observerRef.current?.disconnect();
+      observerRef.current = null;
+    };
+  }, []);
+
+  useEffect(() => {
+    const observer = observerRef.current;
     const target = loadMoreRef.current;
-    if (target) {
-      observer.observe(target);
+    const hasLoadHandler = Boolean(onLoadMoreRef.current);
+
+    if (!observer || !target) {
+      lastIntersectingRef.current = false;
+      return;
     }
 
+    if (!hasLoadHandler || !hasMore || isLoading) {
+      observer.unobserve(target);
+      lastIntersectingRef.current = false;
+      return;
+    }
+
+    observer.observe(target);
+    lastIntersectingRef.current = false;
+
     return () => {
-      if (target) {
-        observer.unobserve(target);
-      }
+      observer.unobserve(target);
+      lastIntersectingRef.current = false;
     };
-  }, [onLoadMore, hasMore]);
+  }, [hasMore, isLoading, canLoadMore]);
 
   const handleToggleExpand = (threadId: string) => {
     setExpandedThreads((prev) => {
