@@ -239,7 +239,7 @@ export function RunEventDetails({ event, runId }: RunEventDetailsProps) {
   const isLlmEvent = event.type === 'llm';
   const highlightSet = useMemo(() => new Set(contextHighlightIds), [contextHighlightIds]);
   const oldestContextId = useMemo(() => (contextItems.length > 0 ? contextItems[0].id : null), [contextItems]);
-  const loadMoreCursor = oldestContextId ?? contextPrevCursorId;
+  const loadMoreCursor = contextPrevCursorId ?? oldestContextId;
   const totalContextCount = contextTotalCount ?? contextItems.length;
   const canLoadOlderContext =
     !contextLoading &&
