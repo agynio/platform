@@ -141,6 +141,12 @@ export class CallToolsLLMReducer extends Reducer<LLMState, LLMContext> {
       const inputs = results.map((msg) => contextItemInputFromMessage(msg));
       const created = await this.runEvents.createContextItems(inputs);
       context.messageIds = [...context.messageIds, ...created];
+      if (llmEventId) {
+        const normalizedIds = created.filter((id): id is string => typeof id === 'string' && id.length > 0);
+        if (normalizedIds.length > 0) {
+          await this.runEvents.appendLLMCallContextWindowNewIds(llmEventId, normalizedIds);
+        }
+      }
     }
 
     return { ...state, messages: [...state.messages, ...results], meta, context };

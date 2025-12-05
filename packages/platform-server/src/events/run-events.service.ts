@@ -988,6 +988,32 @@ export class RunEventsService {
     return ordered;
   }
 
+  private sortContextItemsChronologically(items: SerializedContextItem[]): SerializedContextItem[] {
+    return [...items].sort((a, b) => {
+      const aTime = Date.parse(a.createdAt);
+      const bTime = Date.parse(b.createdAt);
+      const aValid = !Number.isNaN(aTime);
+      const bValid = !Number.isNaN(bTime);
+      if (aValid && bValid && aTime !== bTime) return aTime - bTime;
+      if (aValid && !bValid) return -1;
+      if (!aValid && bValid) return 1;
+      return a.createdAt.localeCompare(b.createdAt);
+    });
+  }
+
+  private computePrevCursorId(contextItemIds: readonly string[], windowIds: readonly string[]): string | null {
+    if (!Array.isArray(windowIds) || windowIds.length === 0) return contextItemIds.length > 0 ? contextItemIds[contextItemIds.length - 1] ?? null : null;
+    const indices = windowIds
+      .map((id) => contextItemIds.indexOf(id))
+      .filter((index) => index >= 0);
+    if (indices.length > 0) {
+      const firstIndex = Math.min(...indices);
+      if (firstIndex > 0) return contextItemIds[firstIndex - 1] ?? null;
+      return null;
+    }
+    return contextItemIds.length > 0 ? contextItemIds[contextItemIds.length - 1] ?? null : null;
+  }
+
   async listEventContextPage(args: {
     runId: string;
     eventId: string;
@@ -1025,6 +1051,7 @@ export class RunEventsService {
     let metadataNewIds: string[] = [];
     let metadataTotalCount: number | null = null;
     let metadataPrevCursorId: string | null = null;
+    let metadataHasPrevCursorId = false;
     let metadataPageSize: number | null = null;
     if (plainMetadata && typeof plainMetadata === 'object' && !Array.isArray(plainMetadata)) {
       const contextWindow = (plainMetadata as Record<string, unknown>).contextWindow;
@@ -1040,8 +1067,10 @@ export class RunEventsService {
         const candidatePrev = (contextWindow as Record<string, unknown>).prevCursorId;
         if (typeof candidatePrev === 'string' && candidatePrev.length > 0) {
           metadataPrevCursorId = candidatePrev;
+          metadataHasPrevCursorId = true;
         } else if (candidatePrev === null) {
           metadataPrevCursorId = null;
+          metadataHasPrevCursorId = true;
         }
         const candidatePageSize = (contextWindow as Record<string, unknown>).pageSize;
         if (typeof candidatePageSize === 'number' && Number.isFinite(candidatePageSize) && candidatePageSize > 0) {
@@ -1075,9 +1104,11 @@ export class RunEventsService {
 
     if (!beforeId && uniqueMetadataNewIds.length > 0) {
       const items = await this.getContextItems(uniqueMetadataNewIds);
+      const sortedItems = this.sortContextItemsChronologically(items);
+      const fallbackPrevCursor = this.computePrevCursorId(contextItemIds, uniqueMetadataNewIds);
       return {
-        items,
-        nextBeforeId: metadataPrevCursorId ?? null,
+        items: sortedItems,
+        nextBeforeId: metadataHasPrevCursorId ? metadataPrevCursorId : fallbackPrevCursor,
         totalCount,
       };
     }
@@ -1117,6 +1148,116 @@ export class RunEventsService {
       nextBeforeId,
       totalCount,
     };
+  }
+
+  async appendLLMCallContextWindowNewIds(eventId: string, ids: string[]): Promise<void> {
+    const normalizedIds = Array.isArray(ids)
+      ? ids.filter((id): id is string => typeof id === 'string' && id.length > 0)
+      : [];
+    if (normalizedIds.length === 0) return;
+
+    await this.prisma.$transaction(async (tx) => {
+      const event = await tx.runEvent.findUnique({
+        where: { id: eventId },
+        select: {
+          metadata: true,
+          llmCall: {
+            select: {
+              contextItemIds: true,
+            },
+          },
+        },
+      });
+
+      if (!event || !event.llmCall) return;
+
+      const baseContextItemIds = Array.isArray(event.llmCall.contextItemIds)
+        ? event.llmCall.contextItemIds.filter((id): id is string => typeof id === 'string' && id.length > 0)
+        : [];
+
+      const plainMetadata = this.toPlainJson(event.metadata ?? null);
+      const nextMetadata =
+        plainMetadata && typeof plainMetadata === 'object' && !Array.isArray(plainMetadata)
+          ? { ...(plainMetadata as Record<string, unknown>) }
+          : {};
+
+      const rawContextWindow = (nextMetadata as Record<string, unknown>).contextWindow;
+      const existingWindow =
+        rawContextWindow && typeof rawContextWindow === 'object' && !Array.isArray(rawContextWindow)
+          ? { ...(rawContextWindow as Record<string, unknown>) }
+          : {};
+
+      const existingNewIds = Array.isArray(existingWindow.newIds)
+        ? existingWindow.newIds.filter((id): id is string => typeof id === 'string' && id.length > 0)
+        : [];
+
+      const seen = new Set<string>();
+      const mergedNewIds: string[] = [];
+      for (const id of existingNewIds) {
+        if (!seen.has(id)) {
+          seen.add(id);
+          mergedNewIds.push(id);
+        }
+      }
+
+      let appended = false;
+      for (const id of normalizedIds) {
+        if (seen.has(id)) continue;
+        seen.add(id);
+        mergedNewIds.push(id);
+        appended = true;
+      }
+
+      if (!appended && mergedNewIds.length === existingNewIds.length) {
+        return;
+      }
+
+      const totalCount = (() => {
+        const union = new Set<string>();
+        for (const id of baseContextItemIds) union.add(id);
+        for (const id of mergedNewIds) union.add(id);
+        const previous =
+          typeof existingWindow.totalCount === 'number' && Number.isFinite(existingWindow.totalCount)
+            ? Math.max(0, Math.floor(existingWindow.totalCount))
+            : 0;
+        return Math.max(previous, union.size);
+      })();
+
+      const pageSize =
+        typeof existingWindow.pageSize === 'number' && Number.isFinite(existingWindow.pageSize) && existingWindow.pageSize > 0
+          ? Math.floor(existingWindow.pageSize)
+          : DEFAULT_CONTEXT_PAGE_SIZE;
+
+      const computedPrevCursor = this.computePrevCursorId(baseContextItemIds, mergedNewIds);
+      const hasPrevCursor = Object.prototype.hasOwnProperty.call(existingWindow, 'prevCursorId');
+      let prevCursorId: string | null = computedPrevCursor;
+      if (hasPrevCursor) {
+        const candidate = (existingWindow as Record<string, unknown>).prevCursorId;
+        if (typeof candidate === 'string' && candidate.length > 0) {
+          prevCursorId = candidate;
+        } else if (candidate === null) {
+          prevCursorId = null;
+        }
+      }
+
+      const nextContextWindow: Record<string, unknown> = {
+        ...existingWindow,
+        newIds: mergedNewIds,
+        totalCount,
+        pageSize,
+        prevCursorId,
+      };
+
+      nextMetadata.contextWindow = nextContextWindow;
+
+      const serialized = this.ensureJson(nextMetadata);
+      if (serialized === undefined) return;
+
+      await tx.runEvent.update({
+        where: { id: eventId },
+        data: { metadata: serialized },
+      });
+    });
   }
 
   private async createEvent(

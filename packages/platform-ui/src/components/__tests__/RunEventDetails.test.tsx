@@ -95,7 +95,7 @@ describe('RunEventDetails - context pagination', () => {
       expect(mockEventContext).toHaveBeenCalledTimes(2);
     });
 
-    expect(mockEventContext).toHaveBeenLastCalledWith('run-123', 'evt-1', { beforeId: 'ctx-2' });
+    expect(mockEventContext).toHaveBeenLastCalledWith('run-123', 'evt-1', { beforeId: 'ctx-1' });
 
     expect(await screen.findByText('System directive')).toBeInTheDocument();
     expect(screen.getByText('Earlier user message')).toBeInTheDocument();

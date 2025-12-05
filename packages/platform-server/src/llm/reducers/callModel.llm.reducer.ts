@@ -112,7 +112,8 @@ export class CallModelLLMReducer extends Reducer<LLMState, LLMContext> {
     const input = sequence.map((entry) => entry.message);
 
     const nodeId = ctx.callerAgent.getAgentNodeId?.() ?? null;
-    const contextWindow = this.buildContextWindow(contextItemIds, newConversationIds, DEFAULT_CONTEXT_PAGE_SIZE);
+    const initialNewIds = newConversationIds.filter((id): id is string => typeof id === 'string' && id.length > 0);
+    const contextWindow = this.buildContextWindow(contextItemIds, initialNewIds, DEFAULT_CONTEXT_PAGE_SIZE);
     const baseMetadata = {
       summaryIncluded: Boolean(summaryMsg),
       memoryPlacement: memoryResult?.msg ? memoryResult.place : null,
@@ -122,7 +123,7 @@ export class CallModelLLMReducer extends Reducer<LLMState, LLMContext> {
       contextWindow,
     };
 
-    let newContextItemIds = [...contextWindow.newIds];
+    const newContextItemIds = [...initialNewIds];
 
     const llmEvent = await this.runEvents.startLLMCall({
       runId: ctx.runId,
@@ -183,10 +184,16 @@ export class CallModelLLMReducer extends Reducer<LLMState, LLMContext> {
         messageIds: [...nextContext.messageIds, assistantContextId],
       };
 
-      newContextItemIds = [...newContextItemIds, assistantContextId];
+      if (typeof assistantContextId === 'string' && assistantContextId.length > 0) {
+        newContextItemIds.push(assistantContextId);
+      }
+      const completeContextItemIds =
+        typeof assistantContextId === 'string' && assistantContextId.length > 0
+          ? [...contextItemIds, assistantContextId]
+          : contextItemIds;
       const finalMetadata = {
         ...baseMetadata,
-        contextWindow: this.buildContextWindow(contextItemIds, newContextItemIds, DEFAULT_CONTEXT_PAGE_SIZE),
+        contextWindow: this.buildContextWindow(completeContextItemIds, newContextItemIds, DEFAULT_CONTEXT_PAGE_SIZE),
       };
 
       await this.runEvents.completeLLMCall({
