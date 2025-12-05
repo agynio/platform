@@ -11,7 +11,7 @@ describe('NodePropertiesSidebar - agent', () => {
     const onConfigChange = vi.fn();
     const config: NodeConfig = {
       kind: 'Agent',
-      title: '',
+      title: 'Custom Dispatch',
       template: 'agent',
       name: 'Casey Quinn',
       role: 'Lead Planner',
@@ -42,9 +42,12 @@ describe('NodePropertiesSidebar - agent', () => {
     );
 
     const expectedPlaceholder = 'Casey Quinn (Lead Planner)';
-    const titleInput = screen.getByPlaceholderText(expectedPlaceholder) as HTMLInputElement;
-    expect(titleInput.value).toBe('');
     expect(screen.getByText(expectedPlaceholder)).toBeInTheDocument();
+
+    const titleInput = screen.getByDisplayValue('Custom Dispatch') as HTMLInputElement;
+    expect(titleInput.placeholder).toBe(expectedPlaceholder);
+    expect(titleInput.value).toBe('Custom Dispatch');
+    expect(screen.queryByText('Custom Dispatch')).not.toBeInTheDocument();
 
     const nameInput = screen.getByPlaceholderText('e.g., Casey Quinn') as HTMLInputElement;
     expect(nameInput.value).toBe('Casey Quinn');
@@ -58,5 +61,125 @@ describe('NodePropertiesSidebar - agent', () => {
 
     fireEvent.change(titleInput, { target: { value: '   ' } });
     expect(onConfigChange).toHaveBeenCalledWith(expect.objectContaining({ title: '' }));
+  });
+
+  it('uses combined name and role placeholder when title empty', () => {
+    const config: NodeConfig = {
+      kind: 'Agent',
+      title: '',
+      template: 'agent',
+      name: 'Casey Quinn',
+      role: 'Lead Planner',
+    } as NodeConfig;
+
+    const state: NodeState = { status: 'not_ready' };
+
+    render(
+      <TooltipProvider delayDuration={0}>
+        <NodePropertiesSidebar
+          config={config}
+          state={state}
+          onConfigChange={vi.fn()}
+          onProvision={vi.fn()}
+          onDeprovision={vi.fn()}
+          canProvision={false}
+          canDeprovision={false}
+          isActionPending={false}
+        />
+      </TooltipProvider>,
+    );
+
+    const titleInput = screen.getByPlaceholderText('Casey Quinn (Lead Planner)') as HTMLInputElement;
+    expect(titleInput.value).toBe('');
+  });
+
+  it('uses name-only placeholder when role missing', () => {
+    const config: NodeConfig = {
+      kind: 'Agent',
+      title: '',
+      template: 'agent',
+      name: 'Nova',
+      role: undefined,
+    } as NodeConfig;
+
+    const state: NodeState = { status: 'not_ready' };
+
+    render(
+      <TooltipProvider delayDuration={0}>
+        <NodePropertiesSidebar
+          config={config}
+          state={state}
+          onConfigChange={vi.fn()}
+          onProvision={vi.fn()}
+          onDeprovision={vi.fn()}
+          canProvision={false}
+          canDeprovision={false}
+          isActionPending={false}
+        />
+      </TooltipProvider>,
+    );
+
+    const titleInput = screen.getByPlaceholderText('Nova') as HTMLInputElement;
+    expect(titleInput.value).toBe('');
+  });
+
+  it('uses role-only placeholder when name missing', () => {
+    const config: NodeConfig = {
+      kind: 'Agent',
+      title: '',
+      template: 'agent',
+      name: undefined,
+      role: 'Navigator',
+    } as NodeConfig;
+
+    const state: NodeState = { status: 'not_ready' };
+
+    render(
+      <TooltipProvider delayDuration={0}>
+        <NodePropertiesSidebar
+          config={config}
+          state={state}
+          onConfigChange={vi.fn()}
+          onProvision={vi.fn()}
+          onDeprovision={vi.fn()}
+          canProvision={false}
+          canDeprovision={false}
+          isActionPending={false}
+        />
+      </TooltipProvider>,
+    );
+
+    const titleInput = screen.getByPlaceholderText('Navigator') as HTMLInputElement;
+    expect(titleInput.value).toBe('');
+  });
+
+  it('falls back to Agent placeholder when profile empty', () => {
+    const config: NodeConfig = {
+      kind: 'Agent',
+      title: '',
+      template: 'agent',
+      name: undefined,
+      role: undefined,
+    } as NodeConfig;
+
+    const state: NodeState = { status: 'not_ready' };
+
+    render(
+      <TooltipProvider delayDuration={0}>
+        <NodePropertiesSidebar
+          config={config}
+          state={state}
+          onConfigChange={vi.fn()}
+          onProvision={vi.fn()}
+          onDeprovision={vi.fn()}
+          canProvision={false}
+          canDeprovision={false}
+          isActionPending={false}
+        />
+      </TooltipProvider>,
+    );
+
+    const titleInput = screen.getByPlaceholderText('Agent') as HTMLInputElement;
+    expect(titleInput.value).toBe('');
   });
 });

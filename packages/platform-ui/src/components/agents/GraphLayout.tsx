@@ -13,7 +13,7 @@ import { GraphCanvas, type GraphCanvasDropHandler, type GraphNodeData } from '..
 import { GradientEdge } from './edges/GradientEdge';
 import EmptySelectionSidebar from '../EmptySelectionSidebar';
 import NodePropertiesSidebar, { type NodeConfig as SidebarNodeConfig } from '../NodePropertiesSidebar';
-import { computeAgentDefaultTitle } from '../../utils/agentDisplay';
+import { resolveAgentDisplayTitle } from '../../utils/agentDisplay';
 
 import { useGraphData } from '@/features/graph/hooks/useGraphData';
 import { useGraphSocket } from '@/features/graph/hooks/useGraphSocket';
@@ -62,40 +62,32 @@ export interface GraphLayoutProps {
   services: GraphLayoutServices;
 }
 
-function resolveAgentDisplayTitle(node: GraphNodeConfig): string {
+function resolveAgentGraphTitle(node: GraphNodeConfig): string {
   const config = (node.config ?? {}) as Record<string, unknown>;
-  const configTitleRaw = typeof config.title === 'string' ? config.title : '';
-  const configTitle = configTitleRaw.trim();
-  if (configTitle.length > 0) {
-    return configTitle;
+  const rawConfigTitle = typeof config.title === 'string' ? (config.title as string) : '';
+  const trimmedConfigTitle = rawConfigTitle.trim();
+  if (trimmedConfigTitle.length > 0) {
+    return trimmedConfigTitle;
   }
 
-  const rawTemplate = typeof node.template === 'string' ? node.template : '';
-  const templateTitle = rawTemplate.trim().length > 0 ? rawTemplate.trim() : 'Agent';
-  const rawName = typeof config.name === 'string' ? (config.name as string) : '';
-  const normalizedName = rawName.trim();
-  const rawRole = typeof config.role === 'string' ? (config.role as string) : '';
-  const normalizedRole = rawRole.trim();
-  if (normalizedName.length > 0 || normalizedRole.length > 0) {
-    return computeAgentDefaultTitle(
-      normalizedName.length > 0 ? normalizedName : undefined,
-      normalizedRole.length > 0 ? normalizedRole : undefined,
-      templateTitle,
-    );
+  const fallback = resolveAgentDisplayTitle({
+    title: undefined,
+    name: typeof config.name === 'string' ? (config.name as string) : undefined,
+    role: typeof config.role === 'string' ? (config.role as string) : undefined,
+  });
+
+  if (fallback !== 'Agent') {
+    return fallback;
   }
 
   const storedTitleRaw = typeof node.title === 'string' ? node.title : '';
   const storedTitle = storedTitleRaw.trim();
-  if (storedTitle.length > 0 && storedTitle !== templateTitle) {
-    return storedTitle;
-  }
-
-  return templateTitle;
+  return storedTitle.length > 0 ? storedTitle : fallback;
 }
 
 function resolveDisplayTitle(node: GraphNodeConfig): string {
   if (node.kind === 'Agent') {
-    return resolveAgentDisplayTitle(node);
+    return resolveAgentGraphTitle(node);
   }
   const rawTitle = typeof node.title === 'string' ? node.title : '';
   const trimmed = rawTitle.trim();
@@ -804,34 +796,23 @@ export function GraphLayout({ services }: GraphLayoutProps) {
 
   const canDeprovision = sidebarStatus === 'ready' || sidebarStatus === 'provisioning';
 
-  const sidebarEntry = useMemo(() => {
+  const sidebarConfig = useMemo(() => {
     if (!selectedNode) {
       return null;
     }
     const baseConfig = (selectedNode.config ?? {}) as Record<string, unknown>;
-    const { title: _ignoredTitle, ...rest } = baseConfig;
-    const rawConfigTitle = typeof baseConfig.title === 'string' ? (baseConfig.title as string) : undefined;
-
-    const config = {
-      ...rest,
-      kind: selectedNode.kind,
-      template: selectedNode.template,
-    } as SidebarNodeConfig;
-
-    if (rawConfigTitle && rawConfigTitle.trim().length > 0) {
-      config.title = rawConfigTitle;
-    }
-
-    config.title = config.title ?? selectedNode.title;
+    const configTitle =
+      typeof baseConfig.title === 'string' ? (baseConfig.title as string) : '';
 
     return {
-      config,
-      displayTitle: resolveDisplayTitle(selectedNode),
-    };
+      ...baseConfig,
+      kind: selectedNode.kind,
+      template: selectedNode.template,
+      title: configTitle,
+    } as SidebarNodeConfig;
   }, [selectedNode]);
 
-  const sidebarConfig = sidebarEntry?.config ?? null;
-  const sidebarDisplayTitle = sidebarEntry?.displayTitle ?? '';
+  const sidebarDisplayTitle = typeof selectedNode?.title === 'string' ? selectedNode.title : '';
 
   const sidebarState = useMemo(() => ({ status: sidebarStatus }), [sidebarStatus]);
 

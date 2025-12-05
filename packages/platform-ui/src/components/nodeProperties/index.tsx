@@ -215,16 +215,17 @@ function NodePropertiesSidebar({
     [agentNameInput, agentRoleInput],
   );
   const headerTitle = useMemo(() => {
-    const providedDisplay = typeof displayTitle === 'string' ? displayTitle.trim() : '';
-    if (providedDisplay.length > 0) return providedDisplay;
-
     if (nodeKind === 'Agent') {
-      const trimmedConfigTitle = nodeTitleValue.trim();
-      return trimmedConfigTitle.length > 0 ? trimmedConfigTitle : agentDefaultTitle;
+      return agentDefaultTitle;
+    }
+
+    const providedDisplay = typeof displayTitle === 'string' ? displayTitle.trim() : '';
+    if (providedDisplay.length > 0) {
+      return providedDisplay;
     }
 
     return nodeTitleValue.trim();
-  }, [displayTitle, nodeKind, nodeTitleValue, agentDefaultTitle]);
+  }, [agentDefaultTitle, displayTitle, nodeKind, nodeTitleValue]);
   const agentModelValue = typeof configRecord.model === 'string' ? (configRecord.model as string) : '';
   const agentSystemPromptValue =
     typeof configRecord.systemPrompt === 'string' ? (configRecord.systemPrompt as string) : '';

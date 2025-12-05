@@ -198,22 +198,40 @@ export function useGraphData(): UseGraphDataResult {
           if (node.id !== nodeId) return node;
           const meta = metadataRef.current.get(nodeId);
           const next: GraphNodeConfig = { ...node };
-          if (typeof updates.title === 'string' && updates.title !== node.title) {
-            next.title = updates.title;
+          let nextConfig = node.config
+            ? { ...(node.config as Record<string, unknown>) }
+            : undefined;
+          let metaConfig = meta?.config
+            ? { ...(meta.config as Record<string, unknown>) }
+            : undefined;
+
+          if (typeof updates.config !== 'undefined' && updates.config !== node.config) {
+            nextConfig = updates.config
+              ? { ...(updates.config as Record<string, unknown>) }
+              : undefined;
             if (meta) {
-              meta.config = { ...(meta.config ?? {}), title: updates.title };
+              metaConfig = updates.config
+                ? { ...(updates.config as Record<string, unknown>) }
+                : undefined;
             }
             shouldSave = true;
+          }
+
+          if (typeof updates.title === 'string') {
+            next.title = updates.title;
+            nextConfig = { ...(nextConfig ?? {}), title: updates.title };
+            if (meta) {
+              metaConfig = { ...(metaConfig ?? {}), title: updates.title };
+            }
+            shouldSave = true;
+          }
+
+          next.config = nextConfig;
+          if (meta) {
+            meta.config = metaConfig;
           }
           if (typeof updates.status === 'string' && updates.status !== node.status) {
             next.status = updates.status as GraphNodeStatus;
-          }
-          if (updates.config && updates.config !== node.config) {
-            next.config = { ...updates.config };
-            if (meta) {
-              meta.config = { ...updates.config };
-            }
-            shouldSave = true;
           }
           if (updates.state && updates.state !== node.state) {
             next.state = { ...updates.state };
