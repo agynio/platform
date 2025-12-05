@@ -1,5 +1,6 @@
 import 'reflect-metadata';
 import { describe, expect, it, vi, afterEach } from 'vitest';
+import { Logger } from '@nestjs/common';
 
 import { ManageFunctionTool } from '../../src/nodes/tools/manage/manage.tool';
 import type { ManageToolNode } from '../../src/nodes/tools/manage/manage.node';
@@ -113,7 +114,7 @@ ${text}`),
 
     const { tool } = createToolInstance(persistence, manageNode, linking);
 
-    const loggerWarnSpy = vi.spyOn((tool as any).logger, 'warn');
+    const loggerWarnSpy = vi.spyOn(Logger, 'warn').mockImplementation(() => undefined);
 
     const ctx = createCtx({ runId: 'run-link-fail' });
     await tool.execute({ command: 'send_message', worker: 'Worker Alpha', message: 'hello', threadAlias: undefined }, ctx);
@@ -126,6 +127,7 @@ ${text}`),
     });
     expect(loggerWarnSpy).toHaveBeenCalledWith(
       'Manage: failed to register parent tool execution {"parentThreadId":"parent-thread","childThreadId":"child-thread-link-fail","runId":"run-link-fail","error":{"name":"Error","message":"link service down"}}',
+      ManageFunctionTool.name,
     );
   });
 
@@ -194,7 +196,7 @@ ${text}`),
 
     const { tool, linking } = createToolInstance(persistence, manageNode);
 
-    const loggerWarnSpy = vi.spyOn((tool as any).logger, 'warn');
+    const loggerWarnSpy = vi.spyOn(Logger, 'warn').mockImplementation(() => undefined);
 
     const ctx = createCtx();
     const rawAlias = 'Invalid Alias!';
@@ -206,6 +208,7 @@ ${text}`),
     expect(aliasMock).toHaveBeenNthCalledWith(2, 'manage', 'invalid-alias', 'parent-thread', '');
     expect(loggerWarnSpy).toHaveBeenCalledWith(
       'Manage: provided threadAlias invalid, using sanitized fallback {"worker":"Worker Alpha","parentThreadId":"parent-thread","providedAlias":"Invalid Alias!","fallbackAlias":"invalid-alias"}',
+      ManageFunctionTool.name,
     );
     expect(manageNode.renderAsyncAcknowledgement).toHaveBeenCalledWith('Worker Alpha');
     expect(linking.registerParentToolExecution).toHaveBeenCalledWith({
@@ -317,7 +320,7 @@ ${text}`),
 
     const { tool, linking } = createToolInstance(persistence, manageNode);
 
-    const loggerErrorSpy = vi.spyOn((tool as any).logger, 'error');
+    const loggerErrorSpy = vi.spyOn(Logger, 'error').mockImplementation(() => undefined);
 
     const ctx = createCtx();
     const result = await tool.execute({ command: 'send_message', worker: 'Async Worker', message: 'hello async', threadAlias: undefined }, ctx);
@@ -325,6 +328,7 @@ ${text}`),
     expect(result).toBe('async acknowledgement');
     expect(loggerErrorSpy).toHaveBeenCalledWith(
       'Manage: async send_message invoke returned non-promise {"worker":"Async Worker","childThreadId":"child-thread-non-promise","resultType":"object","promiseLike":false}',
+      ManageFunctionTool.name,
     );
     expect(linking.registerParentToolExecution).toHaveBeenCalledWith({
       runId: ctx.runId,
@@ -361,7 +365,7 @@ ${text}`),
 
     const { tool, linking } = createToolInstance(persistence, manageNode);
 
-    const loggerErrorSpy = vi.spyOn((tool as any).logger, 'error');
+    const loggerErrorSpy = vi.spyOn(Logger, 'error').mockImplementation(() => undefined);
 
     const ctx = createCtx();
     await expect(
@@ -403,7 +407,7 @@ ${text}`),
 
     const { tool, linking } = createToolInstance(persistence, manageNode);
 
-    const loggerErrorSpy = vi.spyOn((tool as any).logger, 'error');
+    const loggerErrorSpy = vi.spyOn(Logger, 'error').mockImplementation(() => undefined);
 
     const ctx = createCtx();
     const result = await tool.execute(
@@ -415,6 +419,7 @@ ${text}`),
     await vi.waitFor(() => {
       expect(loggerErrorSpy).toHaveBeenCalledWith(
         'Manage: async send_message failed {"worker":"Async Worker","childThreadId":"child-thread-async","error":{"code":"unknown_error","message":"boom","retriable":false}}',
+        ManageFunctionTool.name,
       );
     });
     expect(linking.registerParentToolExecution).toHaveBeenCalledWith({
@@ -446,7 +451,7 @@ ${text}`),
 
     const { tool, linking } = createToolInstance(persistence, manageNode);
 
-    const loggerErrorSpy = vi.spyOn((tool as any).logger, 'error');
+    const loggerErrorSpy = vi.spyOn(Logger, 'error').mockImplementation(() => undefined);
 
     const ctx = createCtx();
     const result = await tool.execute(
@@ -458,6 +463,7 @@ ${text}`),
     await vi.waitFor(() => {
       expect(loggerErrorSpy).toHaveBeenCalledWith(
         'Manage: async send_message failed {"worker":"Async Worker","childThreadId":"child-thread-undefined","error":{"code":"unknown_error","message":"undefined","retriable":false}}',
+        ManageFunctionTool.name,
       );
     });
     expect(linking.registerParentToolExecution).toHaveBeenCalledWith({
@@ -490,7 +496,7 @@ ${text}`),
 
     const { tool, linking } = createToolInstance(persistence, manageNode);
 
-    const loggerErrorSpy = vi.spyOn((tool as any).logger, 'error');
+    const loggerErrorSpy = vi.spyOn(Logger, 'error').mockImplementation(() => undefined);
 
     const ctx = createCtx();
     const result = await tool.execute(
@@ -502,6 +508,7 @@ ${text}`),
     await vi.waitFor(() => {
       expect(loggerErrorSpy).toHaveBeenCalledWith(
         'Manage: async send_message failed {"worker":"Async Worker","childThreadId":"child-thread-object","error":{"code":"X","message":"custom diagnostic","retriable":false}}',
+        ManageFunctionTool.name,
       );
     });
     expect(linking.registerParentToolExecution).toHaveBeenCalledWith({
@@ -533,7 +540,7 @@ ${text}`),
 
     const { tool, linking } = createToolInstance(persistence, manageNode);
 
-    const loggerErrorSpy = vi.spyOn((tool as any).logger, 'error');
+    const loggerErrorSpy = vi.spyOn(Logger, 'error').mockImplementation(() => undefined);
 
     const ctx = createCtx();
     await expect(
@@ -542,6 +549,7 @@ ${text}`),
 
     expect(loggerErrorSpy).toHaveBeenCalledWith(
       'Manage: send_message failed {"worker":"Fail Worker","childThreadId":"child-thread-sync","error":{"code":"unknown_error","message":"boom","retriable":false}}',
+      ManageFunctionTool.name,
     );
     expect(linking.registerParentToolExecution).toHaveBeenCalledWith({
       runId: ctx.runId,
@@ -573,7 +581,7 @@ ${text}`),
 
     const { tool, linking } = createToolInstance(persistence, manageNode);
 
-    const loggerErrorSpy = vi.spyOn((tool as any).logger, 'error');
+    const loggerErrorSpy = vi.spyOn(Logger, 'error').mockImplementation(() => undefined);
 
     const ctx = createCtx();
     await expect(
@@ -582,6 +590,7 @@ ${text}`),
 
     expect(loggerErrorSpy).toHaveBeenCalledWith(
       'Manage: send_message failed {"worker":"Fail Worker","childThreadId":"child-thread-sync-object","error":{"code":"Y","message":"sync diagnostic","retriable":false}}',
+      ManageFunctionTool.name,
     );
     expect(linking.registerParentToolExecution).toHaveBeenCalledWith({
       runId: ctx.runId,

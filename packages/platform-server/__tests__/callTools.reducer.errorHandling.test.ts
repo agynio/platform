@@ -8,6 +8,9 @@ import type { AgentsPersistenceService } from '../src/agents/agents.persistence.
 import { Signal } from '../src/signal';
 import { CallAgentLinkingService } from '../src/agents/call-agent-linking.service';
 import { ShellCommandTool } from '../src/nodes/tools/shell_command/shell_command.tool';
+import { ManageFunctionTool } from '../src/nodes/tools/manage/manage.tool';
+import type { ManageToolNode } from '../src/nodes/tools/manage/manage.node';
+import { Logger } from '@nestjs/common';
 
 const buildState = (name: string, callId: string, args: string) => {
   const response = new ResponseMessage({
@@ -165,6 +168,82 @@ describe('CallToolsLLMReducer error isolation', () => {
     const [payload] = runEvents.completeToolExecution.mock.calls[0];
     expect(payload.status).toBe('error');
     expect(payload.errorMessage).toBe('[exit code 42] compiler error: missing semicolon');
+  });
+
+  it('invokes manage tool via reducer without relying on instance logger field', async () => {
+    const persistence = {
+      getOrCreateSubthreadByAlias: vi.fn().mockResolvedValue('child-thread'),
+      setThreadChannelNode: vi.fn().mockResolvedValue(undefined),
+    } as Partial<AgentsPersistenceService>;
+
+    const workerInvoke = vi.fn().mockResolvedValue(undefined);
+    const manageNode = {
+      nodeId: 'manage-node-logger',
+      config: {},
+      listWorkers: vi.fn().mockReturnValue(['Worker One']),
+      getWorkerByTitle: vi.fn().mockReturnValue({ invoke: workerInvoke }),
+      registerInvocation: vi.fn().mockResolvedValue(undefined),
+      awaitChildResponse: vi.fn(),
+      getMode: vi.fn().mockReturnValue('async'),
+      getTimeoutMs: vi.fn().mockReturnValue(15000),
+      renderWorkerResponse: vi.fn(),
+      renderAsyncAcknowledgement: vi.fn().mockReturnValue('async acknowledgement'),
+    } as unknown as ManageToolNode;
+
+    const linking = {
+      registerParentToolExecution: vi.fn().mockRejectedValue(new Error('linking offline')),
+    };
+
+    const manageTool = new ManageFunctionTool(
+      persistence as AgentsPersistenceService,
+      linking as unknown as CallAgentLinkingService,
+    );
+    manageTool.init(manageNode, { persistence: persistence as AgentsPersistenceService });
+
+    (manageTool as any).logger = undefined;
+
+    const runEvents = createRunEventsStub();
+    const eventsBus = createEventsBusStub();
+    const reducer = new CallToolsLLMReducer(runEvents as any, eventsBus as any).init({ tools: [manageTool as any] });
+
+    const warnSpy = vi.spyOn(Logger, 'warn').mockImplementation(() => undefined);
+
+    const ctx = {
+      threadId: 'thread-manage',
+      runId: 'run-manage',
+      finishSignal: new Signal(),
+      terminateSignal: new Signal(),
+      callerAgent: {
+        getAgentNodeId: () => 'agent-node',
+        invoke: vi.fn().mockResolvedValue(undefined),
+      },
+    } as any;
+
+    const state = buildState(
+      manageTool.name,
+      'call-manage',
+      JSON.stringify({ command: 'send_message', worker: 'Worker One', message: 'hello' }),
+    );
+
+    const result = await reducer.invoke(state, ctx);
+
+    const payload = result.messages.at(-1) as ToolCallOutputMessage;
+    expect(payload).toBeInstanceOf(ToolCallOutputMessage);
+    expect(payload.text).toBe('async acknowledgement');
+    expect(persistence.getOrCreateSubthreadByAlias).toHaveBeenCalledWith(
+      'manage',
+      'worker-one',
+      'thread-manage',
+      '',
+    );
+    expect(workerInvoke).toHaveBeenCalledWith('child-thread', expect.any(Array));
+    expect(linking.registerParentToolExecution).toHaveBeenCalled();
+    expect(warnSpy).toHaveBeenCalledWith(
+      expect.stringContaining('failed to register parent tool execution'),
+      ManageFunctionTool.name,
+    );
+
+    warnSpy.mockRestore();
   });
 });
 
