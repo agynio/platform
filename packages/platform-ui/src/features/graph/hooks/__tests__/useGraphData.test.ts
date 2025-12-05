@@ -116,6 +116,37 @@ describe('useGraphData', () => {
     vi.useRealTimers();
   });
 
+  it('preserves config title when profile fields change', async () => {
+    const { result } = renderHook(() => useGraphData());
+
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    vi.useFakeTimers();
+    act(() => {
+      result.current.updateNode('node-1', { config: { name: 'Voyager', role: 'Pathfinder' } });
+    });
+
+    const nodeConfig = result.current.nodes.at(0)?.config as Record<string, unknown> | undefined;
+    expect(nodeConfig?.title).toBe('Agent One');
+    expect(nodeConfig?.name).toBe('Voyager');
+    expect(nodeConfig?.role).toBe('Pathfinder');
+
+    await vi.advanceTimersByTimeAsync(800);
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    const payload = apiMocks.saveGraph.mock.calls.at(-1)?.[0] as {
+      nodes?: Array<{ id: string; config?: Record<string, unknown> }>;
+    } | undefined;
+    const persistedNode = payload?.nodes?.find((node) => node.id === 'node-1');
+    expect(persistedNode?.config?.title).toBe('Agent One');
+    expect(persistedNode?.config?.name).toBe('Voyager');
+    expect(persistedNode?.config?.role).toBe('Pathfinder');
+
+    vi.useRealTimers();
+  });
+
   it('surfaces save errors after debounce', async () => {
     apiMocks.saveGraph.mockRejectedValueOnce(new Error('network boom'));
 

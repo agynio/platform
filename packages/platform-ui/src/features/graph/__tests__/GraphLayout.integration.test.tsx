@@ -316,7 +316,7 @@ describe('GraphLayout', () => {
       nodes?: Array<{ data?: { title?: string } }>;
     };
 
-    expect(latest?.nodes?.[0]?.data?.title).toBe('Support Agent');
+    expect(latest?.nodes?.[0]?.data?.title).toBe('Agent');
   });
 
   it('passes sidebar config/state and persists config updates', async () => {
@@ -531,7 +531,7 @@ describe('GraphLayout', () => {
     expect(payload).toBeDefined();
     expect(payload?.config).toEqual({ name: 'Atlas', role: 'Navigator' });
     expect(payload?.title).toBe('');
-
+    const sidebarCountBeforeRefresh = sidebarProps.length;
     graph.nodes = graph.nodes.map((node) =>
       node.id === 'node-1'
         ? {
@@ -551,6 +551,306 @@ describe('GraphLayout', () => {
       };
       expect(latest?.nodes?.[0]?.data?.title).toBe('Atlas (Navigator)');
     });
+
+    await waitFor(() => expect(sidebarProps.length).toBeGreaterThan(sidebarCountBeforeRefresh));
+    const refreshedSidebar = sidebarProps.at(-1) as {
+      config: Record<string, unknown>;
+      displayTitle?: string;
+    };
+    expect(refreshedSidebar.config).toEqual(expect.objectContaining({ title: '' }));
+    expect(refreshedSidebar.displayTitle).toBe('');
+  });
+
+  it('persists agent title edits and restores the saved value after refresh', async () => {
+    const updateNode = vi.fn();
+    const applyNodeStatus = vi.fn();
+    const applyNodeState = vi.fn();
+    const setEdges = vi.fn();
+
+    const graph = mockGraphData({
+      nodes: [
+        {
+          id: 'node-1',
+          template: 'Agent',
+          kind: 'Agent',
+          title: '',
+          x: 0,
+          y: 0,
+          status: 'not_ready',
+          config: { title: '', name: 'Atlas', role: 'Navigator' },
+          ports: { inputs: [], outputs: [] },
+        },
+      ],
+      updateNode,
+      applyNodeStatus,
+      applyNodeState,
+      setEdges,
+    });
+
+    hookMocks.useGraphSocket.mockReturnValue(undefined);
+    hookMocks.useNodeStatus.mockReturnValue({ data: null, refetch: vi.fn() });
+
+    const { rerender } = render(<GraphLayout services={services} />);
+
+    await waitFor(() => expect(canvasSpy).toHaveBeenCalled());
+    const canvasProps = canvasSpy.mock.calls.at(-1)?.[0] as {
+      onNodesChange?: (changes: any[]) => void;
+    };
+
+    act(() => {
+      canvasProps.onNodesChange?.([
+        {
+          id: 'node-1',
+          type: 'select',
+          selected: true,
+        },
+      ]);
+    });
+
+    await waitFor(() => expect(sidebarProps.length).toBeGreaterThan(0));
+    const sidebar = sidebarProps.at(-1) as {
+      onConfigChange?: (next: Record<string, unknown>) => void;
+    };
+
+    act(() => {
+      sidebar.onConfigChange?.({ title: 'Mission Control' });
+    });
+
+    await waitFor(() => expect(updateNode).toHaveBeenCalled());
+    const payload = updateNode.mock.calls.at(-1)?.[1] as {
+      config: Record<string, unknown>;
+      title?: string;
+    };
+    expect(payload).toEqual({ config: { name: 'Atlas', role: 'Navigator' }, title: 'Mission Control' });
+
+    graph.nodes = graph.nodes.map((node) =>
+      node.id === 'node-1'
+        ? {
+            ...node,
+            title: 'Mission Control',
+            config: { ...(node.config ?? {}), title: 'Mission Control' },
+          }
+        : node,
+    );
+
+    hookMocks.useGraphData.mockReturnValue(graph);
+    const sidebarCountBeforeRefresh = sidebarProps.length;
+    canvasSpy.mockClear();
+    rerender(<GraphLayout services={services} />);
+
+    await waitFor(() => expect(canvasSpy).toHaveBeenCalled());
+    const latest = canvasSpy.mock.calls.at(-1)?.[0] as {
+      nodes?: Array<{ data?: { title?: string } }>;
+    };
+    expect(latest?.nodes?.[0]?.data?.title).toBe('Mission Control');
+
+    await waitFor(() => expect(sidebarProps.length).toBeGreaterThan(sidebarCountBeforeRefresh));
+    const refreshedSidebar = sidebarProps.at(-1) as {
+      config: Record<string, unknown>;
+      displayTitle?: string;
+    };
+    expect(refreshedSidebar.config).toEqual(
+      expect.objectContaining({ title: 'Mission Control', name: 'Atlas', role: 'Navigator' }),
+    );
+    expect(refreshedSidebar.displayTitle).toBe('Mission Control');
+  });
+
+  it('retains agent title when only profile fields change', async () => {
+    const updateNode = vi.fn();
+    const applyNodeStatus = vi.fn();
+    const applyNodeState = vi.fn();
+    const setEdges = vi.fn();
+
+    const graph = mockGraphData({
+      nodes: [
+        {
+          id: 'node-1',
+          template: 'Agent',
+          kind: 'Agent',
+          title: 'Mission Control',
+          x: 0,
+          y: 0,
+          status: 'ready',
+          config: { title: 'Mission Control', name: 'Atlas', role: 'Navigator' },
+          ports: { inputs: [], outputs: [] },
+        },
+      ],
+      updateNode,
+      applyNodeStatus,
+      applyNodeState,
+      setEdges,
+    });
+
+    hookMocks.useGraphSocket.mockReturnValue(undefined);
+    hookMocks.useNodeStatus.mockReturnValue({ data: null, refetch: vi.fn() });
+
+    const { rerender } = render(<GraphLayout services={services} />);
+
+    await waitFor(() => expect(canvasSpy).toHaveBeenCalled());
+    const canvasProps = canvasSpy.mock.calls.at(-1)?.[0] as {
+      onNodesChange?: (changes: any[]) => void;
+    };
+
+    act(() => {
+      canvasProps.onNodesChange?.([
+        {
+          id: 'node-1',
+          type: 'select',
+          selected: true,
+        },
+      ]);
+    });
+
+    await waitFor(() => expect(sidebarProps.length).toBeGreaterThan(0));
+    const sidebar = sidebarProps.at(-1) as {
+      onConfigChange?: (next: Record<string, unknown>) => void;
+    };
+
+    act(() => {
+      sidebar.onConfigChange?.({ name: 'Voyager', role: 'Pathfinder' });
+    });
+
+    await waitFor(() => expect(updateNode).toHaveBeenCalled());
+    const payload = updateNode.mock.calls.at(-1)?.[1] as {
+      config: Record<string, unknown>;
+      title?: string;
+    };
+    expect(payload).toEqual({ config: { name: 'Voyager', role: 'Pathfinder' } });
+
+    const sidebarCountBeforeRefresh = sidebarProps.length;
+    graph.nodes = graph.nodes.map((node) =>
+      node.id === 'node-1'
+        ? {
+            ...node,
+            config: {
+              ...(node.config ?? {}),
+              name: 'Voyager',
+              role: 'Pathfinder',
+              title: 'Mission Control',
+            },
+            title: 'Mission Control',
+          }
+        : node,
+    );
+
+    hookMocks.useGraphData.mockReturnValue(graph);
+    canvasSpy.mockClear();
+    rerender(<GraphLayout services={services} />);
+
+    await waitFor(() => expect(canvasSpy).toHaveBeenCalled());
+    const latest = canvasSpy.mock.calls.at(-1)?.[0] as {
+      nodes?: Array<{ data?: { title?: string } }>;
+    };
+    expect(latest?.nodes?.[0]?.data?.title).toBe('Mission Control');
+
+    await waitFor(() => expect(sidebarProps.length).toBeGreaterThan(sidebarCountBeforeRefresh));
+    const refreshedSidebar = sidebarProps.at(-1) as {
+      config: Record<string, unknown>;
+      displayTitle?: string;
+    };
+    expect(refreshedSidebar.config).toEqual(
+      expect.objectContaining({ title: 'Mission Control', name: 'Voyager', role: 'Pathfinder' }),
+    );
+    expect(refreshedSidebar.displayTitle).toBe('Mission Control');
+  });
+
+  it('keeps agent title empty and updates placeholder fallback when profile fields change', async () => {
+    const updateNode = vi.fn();
+    const applyNodeStatus = vi.fn();
+    const applyNodeState = vi.fn();
+    const setEdges = vi.fn();
+
+    const graph = mockGraphData({
+      nodes: [
+        {
+          id: 'node-1',
+          template: 'Agent',
+          kind: 'Agent',
+          title: '',
+          x: 0,
+          y: 0,
+          status: 'not_ready',
+          config: { title: '', name: 'Atlas', role: 'Navigator' },
+          ports: { inputs: [], outputs: [] },
+        },
+      ],
+      updateNode,
+      applyNodeStatus,
+      applyNodeState,
+      setEdges,
+    });
+
+    hookMocks.useGraphSocket.mockReturnValue(undefined);
+    hookMocks.useNodeStatus.mockReturnValue({ data: null, refetch: vi.fn() });
+
+    const { rerender } = render(<GraphLayout services={services} />);
+
+    await waitFor(() => expect(canvasSpy).toHaveBeenCalled());
+    const canvasProps = canvasSpy.mock.calls.at(-1)?.[0] as {
+      onNodesChange?: (changes: any[]) => void;
+    };
+
+    act(() => {
+      canvasProps.onNodesChange?.([
+        {
+          id: 'node-1',
+          type: 'select',
+          selected: true,
+        },
+      ]);
+    });
+
+    await waitFor(() => expect(sidebarProps.length).toBeGreaterThan(0));
+    const sidebar = sidebarProps.at(-1) as {
+      onConfigChange?: (next: Record<string, unknown>) => void;
+    };
+
+    act(() => {
+      sidebar.onConfigChange?.({ name: 'Orion', role: 'Pathfinder' });
+    });
+
+    await waitFor(() => expect(updateNode).toHaveBeenCalled());
+    const payload = updateNode.mock.calls.at(-1)?.[1] as {
+      config: Record<string, unknown>;
+      title?: string;
+    };
+    expect(payload).toEqual({ config: { name: 'Orion', role: 'Pathfinder' } });
+
+    const sidebarCountBeforeRefresh = sidebarProps.length;
+    graph.nodes = graph.nodes.map((node) =>
+      node.id === 'node-1'
+        ? {
+            ...node,
+            config: {
+              ...(node.config ?? {}),
+              name: 'Orion',
+              role: 'Pathfinder',
+              title: '',
+            },
+            title: '',
+          }
+        : node,
+    );
+
+    hookMocks.useGraphData.mockReturnValue(graph);
+    canvasSpy.mockClear();
+    rerender(<GraphLayout services={services} />);
+
+    await waitFor(() => expect(canvasSpy).toHaveBeenCalled());
+    const latest = canvasSpy.mock.calls.at(-1)?.[0] as {
+      nodes?: Array<{ data?: { title?: string } }>;
+    };
+    expect(latest?.nodes?.[0]?.data?.title).toBe('Orion (Pathfinder)');
+
+    await waitFor(() => expect(sidebarProps.length).toBeGreaterThan(sidebarCountBeforeRefresh));
+    const refreshedSidebar = sidebarProps.at(-1) as {
+      config: Record<string, unknown>;
+      displayTitle?: string;
+    };
+    expect(refreshedSidebar.config).toEqual(
+      expect.objectContaining({ title: '', name: 'Orion', role: 'Pathfinder' }),
+    );
+    expect(refreshedSidebar.displayTitle).toBe('');
   });
 
   it('keeps stored agent title when distinct from template', async () => {

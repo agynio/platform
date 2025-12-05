@@ -23,4 +23,19 @@ export const computeAgentDefaultTitle = (
   return fallback;
 };
 
+type AgentProfileConfig = {
+  title?: string | null;
+  name?: string | null;
+  role?: string | null;
+} | undefined;
+
+export const resolveAgentDisplayTitle = (config: AgentProfileConfig): string => {
+  const rawTitle = typeof config?.title === 'string' ? config.title.trim() : '';
+  if (rawTitle.length > 0) {
+    return rawTitle;
+  }
+
+  return computeAgentDefaultTitle(config?.name, config?.role, 'Agent');
+};
+
 export const AGENT_TITLE_FALLBACK = FALLBACK_AGENT_DISPLAY;

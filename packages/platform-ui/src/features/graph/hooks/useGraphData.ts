@@ -198,22 +198,57 @@ export function useGraphData(): UseGraphDataResult {
           if (node.id !== nodeId) return node;
           const meta = metadataRef.current.get(nodeId);
           const next: GraphNodeConfig = { ...node };
-          if (typeof updates.title === 'string' && updates.title !== node.title) {
-            next.title = updates.title;
-            if (meta) {
-              meta.config = { ...(meta.config ?? {}), title: updates.title };
+          const previousConfig = node.config ? (node.config as Record<string, unknown>) : undefined;
+          const previousConfigHasTitle = Boolean(
+            previousConfig && Object.prototype.hasOwnProperty.call(previousConfig, 'title'),
+          );
+          const previousTitleValue = previousConfigHasTitle ? previousConfig!.title : undefined;
+          let nextConfig = previousConfig ? { ...previousConfig } : undefined;
+          let metaConfig = meta?.config ? { ...(meta.config as Record<string, unknown>) } : undefined;
+
+          if (typeof updates.config !== 'undefined' && updates.config !== node.config) {
+            const patch = updates.config
+              ? { ...(updates.config as Record<string, unknown>) }
+              : undefined;
+            const patchIncludesTitle = Boolean(
+              patch && Object.prototype.hasOwnProperty.call(patch, 'title'),
+            );
+
+            if (patch) {
+              nextConfig = { ...patch };
+              if (!patchIncludesTitle && previousConfigHasTitle) {
+                nextConfig.title = previousTitleValue;
+              }
+              if (meta) {
+                metaConfig = { ...patch };
+                if (!patchIncludesTitle && previousConfigHasTitle) {
+                  metaConfig.title = previousTitleValue;
+                }
+              }
+            } else {
+              nextConfig = undefined;
+              if (meta) {
+                metaConfig = undefined;
+              }
             }
             shouldSave = true;
+          }
+
+          if (typeof updates.title === 'string') {
+            next.title = updates.title;
+            nextConfig = { ...(nextConfig ?? {}), title: updates.title };
+            if (meta) {
+              metaConfig = { ...(metaConfig ?? {}), title: updates.title };
+            }
+            shouldSave = true;
+          }
+
+          next.config = nextConfig;
+          if (meta) {
+            meta.config = metaConfig;
           }
           if (typeof updates.status === 'string' && updates.status !== node.status) {
             next.status = updates.status as GraphNodeStatus;
-          }
-          if (updates.config && updates.config !== node.config) {
-            next.config = { ...updates.config };
-            if (meta) {
-              meta.config = { ...updates.config };
-            }
-            shouldSave = true;
           }
           if (updates.state && updates.state !== node.state) {
             next.state = { ...updates.state };
