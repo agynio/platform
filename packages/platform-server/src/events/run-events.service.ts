@@ -1176,15 +1176,16 @@ export class RunEventsService {
         : [];
 
       const plainMetadata = this.toPlainJson(event.metadata ?? null);
-      const nextMetadata =
-        plainMetadata && typeof plainMetadata === 'object' && !Array.isArray(plainMetadata)
-          ? { ...(plainMetadata as Record<string, unknown>) }
+      const normalizedMetadata = this.ensureJson(plainMetadata as RunEventMetadata);
+      const baseMetadata: Prisma.InputJsonObject =
+        normalizedMetadata && normalizedMetadata !== Prisma.JsonNull && typeof normalizedMetadata === 'object' && !Array.isArray(normalizedMetadata)
+          ? { ...(normalizedMetadata as Prisma.InputJsonObject) }
           : {};
 
-      const rawContextWindow = (nextMetadata as Record<string, unknown>).contextWindow;
-      const existingWindow =
-        rawContextWindow && typeof rawContextWindow === 'object' && !Array.isArray(rawContextWindow)
-          ? { ...(rawContextWindow as Record<string, unknown>) }
+      const existingWindowValue = baseMetadata.contextWindow;
+      const existingWindow: Prisma.InputJsonObject =
+        existingWindowValue && typeof existingWindowValue === 'object' && !Array.isArray(existingWindowValue)
+          ? { ...(existingWindowValue as Prisma.InputJsonObject) }
           : {};
 
       const existingNewIds = Array.isArray(existingWindow.newIds)
@@ -1232,7 +1233,7 @@ export class RunEventsService {
       const hasPrevCursor = Object.prototype.hasOwnProperty.call(existingWindow, 'prevCursorId');
       let prevCursorId: string | null = computedPrevCursor;
       if (hasPrevCursor) {
-        const candidate = (existingWindow as Record<string, unknown>).prevCursorId;
+        const candidate = existingWindow.prevCursorId as unknown;
         if (typeof candidate === 'string' && candidate.length > 0) {
           prevCursorId = candidate;
         } else if (candidate === null) {
@@ -1240,7 +1241,7 @@ export class RunEventsService {
         }
       }
 
-      const nextContextWindow: Record<string, unknown> = {
+      const nextContextWindow: Prisma.InputJsonObject = {
         ...existingWindow,
         newIds: mergedNewIds,
         totalCount,
@@ -1248,7 +1249,10 @@ export class RunEventsService {
         prevCursorId,
       };
 
-      nextMetadata.contextWindow = nextContextWindow;
+      const nextMetadata: Prisma.InputJsonObject = {
+        ...baseMetadata,
+        contextWindow: nextContextWindow,
+      };
 
       const serialized = this.ensureJson(nextMetadata);
       if (serialized === undefined) return;
