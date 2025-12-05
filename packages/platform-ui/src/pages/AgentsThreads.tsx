@@ -4,7 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { QueryKey } from '@tanstack/react-query';
 import ThreadsScreen from '@/components/screens/ThreadsScreen';
 import type { Thread } from '@/components/ThreadItem';
-import type { ConversationMessage, Run as ConversationRun } from '@/components/Conversation';
+import type { ConversationMessage, Run as ConversationRun, ReminderData as ConversationReminderData } from '@/components/Conversation';
 import type { AutocompleteOption } from '@/components/AutocompleteInput';
 import { formatDuration } from '@/components/agents/runTimelineFormatting';
 import { notifyError } from '@/lib/notify';
@@ -122,6 +122,20 @@ function formatDate(value: string | null | undefined): string {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return value;
   return date.toLocaleString();
+}
+
+function formatReminderScheduledTime(value: string | null | undefined): string {
+  if (!value) return '00:00';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '00:00';
+  return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
+}
+
+function formatReminderDate(value: string | null | undefined): string | undefined {
+  if (!value) return undefined;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return undefined;
+  return date.toLocaleDateString();
 }
 
 function sanitizeSummary(summary: string | null | undefined): string {
@@ -1256,6 +1270,18 @@ export function AgentsThreads() {
     () => (isDraftSelected ? [] : mapReminders(remindersQuery.data?.items ?? [])),
     [isDraftSelected, remindersQuery.data],
   );
+  const conversationReminders = useMemo<ConversationReminderData[]>(
+    () =>
+      isDraftSelected
+        ? []
+        : (remindersQuery.data?.items ?? []).map((reminder) => ({
+            id: reminder.id,
+            content: sanitizeSummary(reminder.note),
+            scheduledTime: formatReminderScheduledTime(reminder.at),
+            date: formatReminderDate(reminder.at),
+          })),
+    [isDraftSelected, remindersQuery.data],
+  );
   const containersForScreen = useMemo(
     () => (isDraftSelected ? [] : mapContainers(containerItems)),
     [isDraftSelected, containerItems],
@@ -1765,6 +1791,8 @@ export function AgentsThreads() {
           runs={conversationRuns}
           containers={containersForScreen}
           reminders={remindersForScreen}
+          conversationQueuedMessages={[]}
+          conversationReminders={conversationReminders}
           filterMode={filterMode}
           selectedThreadId={selectedThreadId ?? null}
           inputValue={inputValue}
