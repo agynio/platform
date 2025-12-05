@@ -71,20 +71,24 @@ export class ManageFunctionTool extends FunctionTool<typeof ManageInvocationSche
     return context ? ` ${JSON.stringify(context)}` : '';
   }
 
-  private safeWarn(msg: string) {
-    if ((this as any)?.logger?.warn) {
-      (this as any).logger.warn(msg);
-    } else {
-      console.warn(msg);
+  private getLogger(): Pick<Logger, 'warn' | 'error'> {
+    const candidate = (this as Partial<{ logger: Pick<Logger, 'warn' | 'error'> }>).logger;
+    if (candidate && typeof candidate.warn === 'function' && typeof candidate.error === 'function') {
+      return candidate;
     }
+
+    return {
+      warn: (msg: string) => Logger.warn(msg, ManageFunctionTool.name),
+      error: (msg: string) => Logger.error(msg, ManageFunctionTool.name),
+    };
+  }
+
+  private safeWarn(msg: string) {
+    this.getLogger().warn(msg);
   }
 
   private safeError(msg: string) {
-    if ((this as any)?.logger?.error) {
-      (this as any).logger.error(msg);
-    } else {
-      console.error(msg);
-    }
+    this.getLogger().error(msg);
   }
 
   private sanitizeAlias(raw: string | undefined): string {
