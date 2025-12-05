@@ -17,8 +17,7 @@ RUN pnpm fetch
 
 FROM base AS build
 
-ARG VITE_API_BASE_URL=http://localhost:3010
-ENV VITE_API_BASE_URL=${VITE_API_BASE_URL}
+ENV VITE_API_BASE_URL=/
 
 COPY . .
 
@@ -28,10 +27,16 @@ RUN pnpm --filter @agyn/platform-ui build
 
 FROM nginx:1.27-alpine AS runtime
 
-COPY packages/platform-ui/docker/nginx.conf /etc/nginx/conf.d/default.conf
+RUN apk add --no-cache gettext
+
+COPY packages/platform-ui/docker/nginx.conf.template /etc/nginx/templates/default.conf.template
+
+COPY packages/platform-ui/docker/entrypoint.sh /docker-entrypoint.sh
+
+RUN chmod +x /docker-entrypoint.sh
 
 COPY --from=build /workspace/packages/platform-ui/dist /usr/share/nginx/html
 
 EXPOSE 80
 
-CMD ["nginx", "-g", "daemon off;"]
+ENTRYPOINT ["/docker-entrypoint.sh"]
