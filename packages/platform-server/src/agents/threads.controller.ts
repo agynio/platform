@@ -27,7 +27,7 @@ import { RunSignalsRegistry } from './run-signals.service';
 import { LiveGraphRuntime } from '../graph-core/liveGraph.manager';
 import { HumanMessage } from '@agyn/llm';
 import { TemplateRegistry } from '../graph-core/templateRegistry';
-import { isAgentLiveNode, isAgentRuntimeInstance } from './agent-node.utils';
+import { hasQueuedPreviewCapability, isAgentLiveNode, isAgentRuntimeInstance } from './agent-node.utils';
 import { randomUUID } from 'node:crypto';
 import { ThreadParentNotFoundError } from './agents.persistence.service';
 
@@ -432,7 +432,7 @@ export class AgentsThreadsController {
       return { items: [] } as const;
     }
 
-    const snapshot = instance.listQueuedPreview(threadId) ?? [];
+    const snapshot = hasQueuedPreviewCapability(instance) ? instance.listQueuedPreview(threadId) ?? [] : [];
     const items = snapshot.map((item) => {
       const text = typeof item.text === 'string' ? item.text : '';
       let enqueuedAt: string | undefined;
