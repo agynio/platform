@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, type ReactNode, type KeyboardEvent as ReactKeyboardEvent } from 'react';
-import { ChevronRight, Plus } from 'lucide-react';
+import { ChevronRight, Plus, Trash2 } from 'lucide-react';
 
 import { cn } from '@/lib/utils';
-import { Button } from '@/components/ui/button';
+import { IconButton } from '@/components/IconButton';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import {
   type MemoryTree,
@@ -181,25 +181,23 @@ export function TreeView({
               onKeyDown={(event) => handleKeyDown(event, node.path)}
             >
               {isExpandable ? (
-                <Button
-                  type="button"
+                <IconButton
                   variant="ghost"
-                  size="icon"
+                  size="sm"
                   tabIndex={-1}
                   aria-label={isExpanded ? 'Collapse node' : 'Expand node'}
                   onClick={(event) => {
                     event.stopPropagation();
                     onToggle(node.path);
                   }}
+                  icon={<ChevronRight className={cn('size-4 transition-transform', isExpanded && 'rotate-90')} />}
                   className={cn(
-                    'shrink-0 text-[var(--sidebar-foreground)]/60 hover:text-[var(--sidebar-foreground)]',
+                    'shrink-0 rounded-md text-[var(--sidebar-foreground)]/60 hover:bg-[var(--sidebar-accent)]/40 hover:text-[var(--sidebar-foreground)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--sidebar-accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-background',
                     isSelected && 'text-[var(--sidebar-accent-foreground)]',
                   )}
-                >
-                  <ChevronRight className={cn('size-4 transition-transform', isExpanded && 'rotate-90')} />
-                </Button>
+                />
               ) : (
-                <span className="h-9 w-9 shrink-0" aria-hidden="true" />
+                <span className="h-8 w-8 shrink-0" aria-hidden="true" />
               )}
               <Tooltip>
                 <TooltipTrigger asChild>
@@ -212,29 +210,56 @@ export function TreeView({
                 </TooltipContent>
               </Tooltip>
             </div>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  tabIndex={-1}
-                  aria-label="Add subdocument"
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    onAddChild(node.path);
-                  }}
-                  className={cn(
-                    'absolute right-1 top-1/2 flex -translate-y-1/2 rounded-md text-[var(--sidebar-foreground)]/60 transition-opacity hover:bg-[var(--sidebar-accent)] hover:text-[var(--sidebar-accent-foreground)]',
-                    'opacity-0 pointer-events-none group-hover/tree-item:opacity-100 group-hover/tree-item:pointer-events-auto group-focus-visible/tree-item:opacity-100 group-focus-visible/tree-item:pointer-events-auto',
-                    isSelected && 'opacity-100 pointer-events-auto text-[var(--sidebar-accent-foreground)]',
-                  )}
-                >
-                  <Plus className="size-4" />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent side="top">Add subdocument</TooltipContent>
-            </Tooltip>
+            <div
+              className={cn(
+                'absolute right-1 top-1/2 flex -translate-y-1/2 items-center gap-1 transition-opacity',
+                'pointer-events-none opacity-0 group-hover/tree-item:opacity-100 group-hover/tree-item:pointer-events-auto group-focus-visible/tree-item:opacity-100 group-focus-visible/tree-item:pointer-events-auto',
+                isSelected && 'opacity-100 pointer-events-auto',
+              )}
+            >
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <IconButton
+                    variant="ghost"
+                    size="sm"
+                    tabIndex={-1}
+                    aria-label="Add subdocument"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      onAddChild(node.path);
+                    }}
+                    icon={<Plus className="size-4" />}
+                    className={cn(
+                      'rounded-md text-[var(--sidebar-foreground)]/60 hover:bg-[var(--sidebar-accent)] hover:text-[var(--sidebar-accent-foreground)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--sidebar-accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-background',
+                      isSelected && 'text-[var(--sidebar-accent-foreground)]',
+                    )}
+                  />
+                </TooltipTrigger>
+                <TooltipContent side="top">Add subdocument</TooltipContent>
+              </Tooltip>
+              {node.path !== '/' ? (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <IconButton
+                      variant="ghost"
+                      size="sm"
+                      tabIndex={-1}
+                      aria-label="Delete document"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        onDelete(node.path);
+                      }}
+                      icon={<Trash2 className="size-4" />}
+                      className={cn(
+                        'rounded-md text-[var(--sidebar-foreground)]/60 hover:bg-[var(--sidebar-accent)] hover:text-[var(--sidebar-accent-foreground)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--sidebar-accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-background',
+                        isSelected && 'text-[var(--sidebar-accent-foreground)]',
+                      )}
+                    />
+                  </TooltipTrigger>
+                  <TooltipContent side="top">Delete document</TooltipContent>
+                </Tooltip>
+              ) : null}
+            </div>
           </div>
           {isExpandable && isExpanded && node.children.length > 0 ? (
             <ul role="group" className="ml-0 flex flex-col gap-1 pl-0">
@@ -244,7 +269,7 @@ export function TreeView({
         </li>
       );
     },
-    [expandedPaths, handleKeyDown, onAddChild, onSelect, onToggle, registerRef, selectedPath],
+    [expandedPaths, handleKeyDown, onAddChild, onDelete, onSelect, onToggle, registerRef, selectedPath],
   );
 
   return (
