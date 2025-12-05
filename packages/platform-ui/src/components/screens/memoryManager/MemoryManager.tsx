@@ -308,7 +308,7 @@ export function MemoryManager({
       <ResizablePanelGroup direction="horizontal" className="h-full min-h-[480px] overflow-hidden">
         <ResizablePanel defaultSize={32} minSize={20} className="min-w-[260px] bg-white">
           <div className="flex h-full flex-col bg-white">
-            <div className="flex h-[66px] flex-col justify-center gap-1 border-b border-[var(--agyn-border-subtle)] px-6">
+            <div className="flex h-[66px] px-6 border-b border-[var(--agyn-border-subtle)] flex-col justify-center gap-1">
               <h2 className="text-sm font-semibold text-[var(--agyn-dark)]">Documents</h2>
               <p className="text-xs text-[var(--agyn-text-subtle)]">{currentNodeLabel}</p>
             </div>
