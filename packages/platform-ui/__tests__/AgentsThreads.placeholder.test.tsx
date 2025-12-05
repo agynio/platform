@@ -16,12 +16,20 @@ describe('AgentsThreads placeholder for missing summary', () => {
   afterAll(() => server.close());
 
   it('renders (no summary yet) when summary is null', async () => {
+    const thread = { id: 'th1', alias: 'ignored-alias', summary: null, createdAt: t(0), metrics: { runsCount: 0 } };
     server.use(
-      http.get('/api/agents/threads', () =>
-        HttpResponse.json({ items: [{ id: 'th1', alias: 'ignored-alias', summary: null, createdAt: t(0) }] }),
-      ),
-      http.get(abs('/api/agents/threads'), () =>
-        HttpResponse.json({ items: [{ id: 'th1', alias: 'ignored-alias', summary: null, createdAt: t(0) }] }),
+      http.get('/api/agents/threads', () => HttpResponse.json({ items: [thread] })),
+      http.get(abs('/api/agents/threads'), () => HttpResponse.json({ items: [thread] })),
+      http.get('*/api/agents/threads/tree', () =>
+        HttpResponse.json({
+          items: [
+            {
+              ...thread,
+              hasChildren: false,
+              children: [],
+            },
+          ],
+        }),
       ),
     );
     render(

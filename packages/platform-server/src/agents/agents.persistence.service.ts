@@ -30,6 +30,20 @@ type DeveloperMessagePlain = {
   toPlain(): ResponseInputItem.Message;
 };
 type AgentDescriptor = { title: string; role?: string; name?: string };
+type ThreadTreeNode = {
+  id: string;
+  alias: string;
+  summary: string | null;
+  status: ThreadStatus;
+  createdAt: Date;
+  parentId: string | null;
+  metrics?: ThreadMetrics;
+  agentTitle?: string;
+  agentRole?: string;
+  agentName?: string;
+  hasChildren: boolean;
+  children?: ThreadTreeNode[];
+};
 
 export class ThreadParentNotFoundError extends Error {
   constructor() {
@@ -608,6 +622,171 @@ export class AgentsPersistenceService {
     this.eventsBus.emitThreadMetrics({ threadId });
     await Promise.all(eventIds.map((id) => this.eventsBus.publishEvent(id, 'append')));
     await Promise.all(patchedEventIds.map((id) => this.eventsBus.publishEvent(id, 'update')));
+  }
+
+  async listThreadsTree(opts: {
+    status: 'open' | 'closed' | 'all';
+    limit: number;
+    depth: 0 | 1 | 2;
+    includeMetrics: boolean;
+    includeAgentTitles: boolean;
+    childrenStatus: 'open' | 'closed' | 'all';
+    perParentChildrenLimit: number;
+  }): Promise<ThreadTreeNode[]> {
+    const limit = Math.min(Math.max(opts.limit, 1), 1000);
+    const depth = Math.min(Math.max(opts.depth, 0), 2) as 0 | 1 | 2;
+    const perParentLimit = Math.min(Math.max(opts.perParentChildrenLimit, 1), 1000);
+    const status = opts.status;
+    const childrenStatus = opts.childrenStatus;
+
+    const rootWhere: Prisma.ThreadWhereInput = { parentId: null };
+    if (status !== 'all') rootWhere.status = status as ThreadStatus;
+
+    const rootRows = await this.prisma.thread.findMany({
+      where: rootWhere,
+      orderBy: { createdAt: 'desc' },
+      select: { id: true, alias: true, summary: true, status: true, createdAt: true, parentId: true },
+      take: limit,
+    });
+
+    if (rootRows.length === 0) {
+      return [];
+    }
+
+    type Row = { id: string; alias: string; summary: string | null; status: ThreadStatus; createdAt: Date; parentId: string | null };
+
+    const nodeById = new Map<string, ThreadTreeNode>();
+    const createNode = (row: Row): ThreadTreeNode => {
+      const node: ThreadTreeNode = {
+        id: row.id,
+        alias: row.alias,
+        summary: row.summary ?? null,
+        status: row.status,
+        createdAt: row.createdAt,
+        parentId: row.parentId,
+        hasChildren: false,
+      };
+      nodeById.set(node.id, node);
+      return node;
+    };
+
+    const rootNodes = rootRows.map(createNode);
+    const rootIds = rootNodes.map((node) => node.id);
+
+    const attachChildren = (rows: Row[]): string[] => {
+      if (rows.length === 0) return [];
+      const grouped = new Map<string, Row[]>();
+      for (const row of rows) {
+        if (!row.parentId) continue;
+        const list = grouped.get(row.parentId) ?? [];
+        list.push(row);
+        if (!grouped.has(row.parentId)) grouped.set(row.parentId, list);
+      }
+      const attachedIds: string[] = [];
+      for (const [parentId, group] of grouped.entries()) {
+        const parent = nodeById.get(parentId);
+        if (!parent) continue;
+        group.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+        const limited = group.slice(0, perParentLimit);
+        if (limited.length === 0) continue;
+        const children = limited.map(createNode);
+        parent.children = children;
+        for (const child of children) attachedIds.push(child.id);
+      }
+      return attachedIds;
+    };
+
+    let childIds: string[] = [];
+    if (depth >= 1) {
+      const childWhere: Prisma.ThreadWhereInput = { parentId: { in: rootIds } };
+      if (childrenStatus !== 'all') childWhere.status = childrenStatus as ThreadStatus;
+      const childRows = await this.prisma.thread.findMany({
+        where: childWhere,
+        select: { id: true, alias: true, summary: true, status: true, createdAt: true, parentId: true },
+      });
+      childIds = attachChildren(childRows);
+    }
+
+    if (depth >= 2 && childIds.length > 0) {
+      const grandchildWhere: Prisma.ThreadWhereInput = { parentId: { in: childIds } };
+      if (childrenStatus !== 'all') grandchildWhere.status = childrenStatus as ThreadStatus;
+      const grandchildRows = await this.prisma.thread.findMany({
+        where: grandchildWhere,
+        select: { id: true, alias: true, summary: true, status: true, createdAt: true, parentId: true },
+      });
+      attachChildren(grandchildRows);
+    }
+
+    const allIds = Array.from(nodeById.keys());
+
+    const [metricsById, descriptorsById] = await Promise.all([
+      opts.includeMetrics && allIds.length > 0
+        ? this.getThreadsMetrics(allIds)
+        : Promise.resolve<Record<string, ThreadMetrics>>({}),
+      allIds.length > 0 ? this.getThreadsAgentDescriptors(allIds) : Promise.resolve<Record<string, AgentDescriptor>>({}),
+    ]);
+
+    const defaultMetrics: ThreadMetrics = { remindersCount: 0, containersCount: 0, activity: 'idle', runsCount: 0 };
+    const fallbackTitle = '(unknown agent)';
+
+    for (const node of nodeById.values()) {
+      const descriptor = descriptorsById[node.id];
+      node.agentRole = descriptor?.role ?? undefined;
+      node.agentName = descriptor?.name ?? undefined;
+      if (opts.includeAgentTitles) {
+        node.agentTitle = descriptor?.title ?? fallbackTitle;
+      }
+      if (opts.includeMetrics) {
+        node.metrics = { ...defaultMetrics, ...(metricsById[node.id] ?? {}) };
+      }
+    }
+
+    const countsMap = new Map<string, number>();
+    if (allIds.length > 0) {
+      const countWhere: Prisma.ThreadWhereInput = { parentId: { in: allIds } };
+      if (childrenStatus !== 'all') countWhere.status = childrenStatus as ThreadStatus;
+      const grouped = await this.prisma.thread.groupBy({
+        by: ['parentId'],
+        where: countWhere,
+        _count: { _all: true },
+      });
+      for (const row of grouped) {
+        if (!row.parentId) continue;
+        countsMap.set(row.parentId, row._count._all);
+      }
+    }
+
+    for (const node of nodeById.values()) {
+      const total = countsMap.get(node.id) ?? 0;
+      node.hasChildren = total > 0;
+      if (!node.children || node.children.length === 0) {
+        if (node.children && node.children.length === 0) {
+          delete node.children;
+        }
+      }
+    }
+
+    const clone = (node: ThreadTreeNode): ThreadTreeNode => {
+      const base: ThreadTreeNode = {
+        id: node.id,
+        alias: node.alias,
+        summary: node.summary,
+        status: node.status,
+        createdAt: node.createdAt,
+        parentId: node.parentId,
+        hasChildren: node.hasChildren,
+      };
+      if (node.metrics) base.metrics = node.metrics;
+      if (node.agentTitle) base.agentTitle = node.agentTitle;
+      if (node.agentRole) base.agentRole = node.agentRole;
+      if (node.agentName) base.agentName = node.agentName;
+      if (node.children && node.children.length > 0) {
+        base.children = node.children.map(clone);
+      }
+      return base;
+    };
+
+    return rootNodes.map(clone);
   }
 
   async listThreads(opts?: { rootsOnly?: boolean; status?: 'open' | 'closed' | 'all'; limit?: number }): Promise<Array<{ id: string; alias: string; summary: string | null; status: ThreadStatus; createdAt: Date; parentId?: string | null }>> {

@@ -10,7 +10,7 @@ import { formatDuration } from '@/components/agents/runTimelineFormatting';
 import { notifyError } from '@/lib/notify';
 import { LruCache } from '@/lib/lru/LruCache.ts';
 import { graphSocket } from '@/lib/graph/socket';
-import { threads } from '@/api/modules/threads';
+import { threads, type ThreadTreeItem } from '@/api/modules/threads';
 import { runs as runsApi } from '@/api/modules/runs';
 import { useThreadById, useThreadReminders, useThreadContainers } from '@/api/hooks/threads';
 import { useThreadRuns } from '@/api/hooks/runs';
@@ -28,7 +28,6 @@ const THREAD_LIMIT_STEP = 50;
 const MAX_THREAD_LIMIT = 500;
 
 const defaultMetrics: ThreadMetrics = { remindersCount: 0, containersCount: 0, activity: 'idle', runsCount: 0 };
-const THREAD_PRELOAD_CONCURRENCY = 4;
 const THREAD_CACHE_CAPACITY = 10;
 const SCROLL_BOTTOM_THRESHOLD = 4;
 const SCROLL_RESTORE_ATTEMPTS = 5;
@@ -251,6 +250,66 @@ function computeThreadStatus(node: ThreadNode, children: Thread[], overrides: St
 function matchesFilter(status: 'open' | 'closed', filter: FilterMode): boolean {
   if (filter === 'all') return true;
   return filter === status;
+}
+
+function cloneThreadNode(item: ThreadTreeItem): ThreadNode {
+  return {
+    id: item.id,
+    alias: item.alias,
+    summary: item.summary ?? null,
+    status: item.status,
+    parentId: item.parentId ?? null,
+    createdAt: item.createdAt,
+    metrics: item.metrics ? { ...item.metrics } : undefined,
+    agentTitle: item.agentTitle,
+    agentRole: item.agentRole,
+    agentName: item.agentName,
+  } satisfies ThreadNode;
+}
+
+function areThreadNodesEqual(a: ThreadNode, b: ThreadNode): boolean {
+  if (a.id !== b.id) return false;
+  if ((a.alias ?? null) !== (b.alias ?? null)) return false;
+  if ((a.summary ?? null) !== (b.summary ?? null)) return false;
+  if ((a.status ?? null) !== (b.status ?? null)) return false;
+  if ((a.parentId ?? null) !== (b.parentId ?? null)) return false;
+  if (a.createdAt !== b.createdAt) return false;
+  if ((a.agentTitle ?? null) !== (b.agentTitle ?? null)) return false;
+  if ((a.agentRole ?? null) !== (b.agentRole ?? null)) return false;
+  if ((a.agentName ?? null) !== (b.agentName ?? null)) return false;
+  const metricsA = a.metrics;
+  const metricsB = b.metrics;
+  if (!metricsA && !metricsB) return true;
+  if (!metricsA || !metricsB) return false;
+  return (
+    metricsA.remindersCount === metricsB.remindersCount &&
+    metricsA.containersCount === metricsB.containersCount &&
+    metricsA.runsCount === metricsB.runsCount &&
+    metricsA.activity === metricsB.activity
+  );
+}
+
+function mergeChildrenEntry(prev: ThreadChildrenEntry | undefined, nodes: ThreadNode[], hasChildren: boolean): ThreadChildrenEntry {
+  const dedup = new Map<string, ThreadNode>();
+  if (prev && prev.status === 'success') {
+    for (const node of prev.nodes) dedup.set(node.id, node);
+  }
+  for (const node of nodes) dedup.set(node.id, node);
+  const merged = Array.from(dedup.values());
+  merged.sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
+  if (prev && prev.status === 'success' && prev.hasChildren === hasChildren && prev.nodes.length === merged.length) {
+    const prevMap = new Map(prev.nodes.map((node) => [node.id, node] as const));
+    let identical = true;
+    for (const node of merged) {
+      const existing = prevMap.get(node.id);
+      if (!existing || !areThreadNodesEqual(existing, node)) {
+        identical = false;
+        break;
+      }
+    }
+    if (identical) return prev;
+  }
+  return { nodes: merged, status: 'success', error: null, hasChildren };
 }
 
 function buildThreadTree(node: ThreadNode, children: ThreadChildrenState, overrides: StatusOverrides): Thread {
@@ -513,10 +572,24 @@ export function AgentsThreads() {
 
   const loadThreadChildren = useCallback(
     async (threadId: string) => {
+      let shouldFetch = true;
       setChildrenState((prev) => {
         const entry = prev[threadId];
-        if (entry?.status === 'loading') return prev;
-        if (entry?.hasChildren === false && entry.nodes.length === 0) return prev;
+        if (entry?.status === 'loading') {
+          shouldFetch = false;
+          return prev;
+        }
+        if (entry?.status === 'success') {
+          const canSkip = entry.hasChildren === false || entry.nodes.length > 0;
+          if (canSkip) {
+            shouldFetch = false;
+            return prev;
+          }
+        }
+        if (entry && entry.hasChildren === false && entry.nodes.length === 0) {
+          shouldFetch = false;
+          return prev;
+        }
         return {
           ...prev,
           [threadId]: {
@@ -527,6 +600,7 @@ export function AgentsThreads() {
           },
         };
       });
+      if (!shouldFetch) return;
       try {
         const res = await threads.children(threadId, filterMode);
         const nodes = res.items ?? [];
@@ -610,9 +684,9 @@ export function AgentsThreads() {
   const limitKey = useMemo(() => ({ limit: threadLimit }), [threadLimit]);
   const threadsQueryKey = useMemo(() => ['agents', 'threads', 'roots', filterMode, limitKey] as const, [filterMode, limitKey]);
 
-  const threadsQuery = useQuery<{ items: ThreadNode[] }, Error>({
+  const threadsQuery = useQuery<{ items: ThreadTreeItem[] }, Error>({
     queryKey: threadsQueryKey,
-    queryFn: () => threads.roots(filterMode, threadLimit),
+    queryFn: () => threads.treeRoots(filterMode, threadLimit, 2),
     placeholderData: (previousData) => previousData,
     staleTime: 60000,
     refetchOnWindowFocus: false,
@@ -621,43 +695,39 @@ export function AgentsThreads() {
   const rootNodes = useMemo<ThreadNode[]>(() => {
     const data = threadsQuery.data?.items ?? [];
     const dedup = new Map<string, ThreadNode>();
-    for (const item of data) dedup.set(item.id, item);
+    for (const item of data) dedup.set(item.id, cloneThreadNode(item));
     const nodes = Array.from(dedup.values());
     nodes.sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
     return nodes;
   }, [threadsQuery.data]);
 
   useEffect(() => {
-    if (rootNodes.length === 0) return;
-
-    const inFlight = rootNodes.reduce((count, node) => {
-      return childrenState[node.id]?.status === 'loading' ? count + 1 : count;
-    }, 0);
-
-    if (inFlight >= THREAD_PRELOAD_CONCURRENCY) return;
-
-    const queue = rootNodes
-      .map((node) => node.id)
-      .filter((threadId) => {
-        const entry = childrenState[threadId];
-        if (!entry) return true;
-        if (entry.status === 'idle') {
-          if (entry.hasChildren === false) return false;
-          return entry.nodes.length === 0;
+    const items = threadsQuery.data?.items ?? [];
+    if (items.length === 0) return;
+    setChildrenState((prev) => {
+      let changed = false;
+      const next: ThreadChildrenState = { ...prev };
+      for (const item of items) {
+        const childItems = item.children ?? [];
+        const childNodes = childItems.map(cloneThreadNode);
+        const rootEntry = mergeChildrenEntry(next[item.id], childNodes, item.hasChildren ?? childNodes.length > 0);
+        if (rootEntry !== next[item.id]) {
+          next[item.id] = rootEntry;
+          changed = true;
         }
-        return false;
-      });
-
-    if (queue.length === 0) return;
-
-    const availableSlots = Math.max(THREAD_PRELOAD_CONCURRENCY - inFlight, 0);
-    if (availableSlots === 0) return;
-
-    const toLoad = queue.slice(0, availableSlots);
-    toLoad.forEach((threadId) => {
-      loadThreadChildren(threadId).catch(() => {});
+        for (const child of childItems) {
+          const grandchildItems = child.children ?? [];
+          const grandchildNodes = grandchildItems.map(cloneThreadNode);
+          const childEntry = mergeChildrenEntry(next[child.id], grandchildNodes, child.hasChildren ?? grandchildNodes.length > 0);
+          if (childEntry !== next[child.id]) {
+            next[child.id] = childEntry;
+            changed = true;
+          }
+        }
+      }
+      return changed ? next : prev;
     });
-  }, [rootNodes, childrenState, loadThreadChildren]);
+  }, [threadsQuery.data]);
 
   const effectiveSelectedThreadId = isDraftSelected ? undefined : selectedThreadId ?? undefined;
 
@@ -1410,7 +1480,18 @@ export function AgentsThreads() {
   useEffect(() => {
     if (!selectedThreadId || isDraftThreadId(selectedThreadId)) return;
     const entry = childrenState[selectedThreadId];
-    if (entry?.status === 'loading' || entry?.status === 'success' || entry?.status === 'error') return;
+    if (!entry) {
+      loadThreadChildren(selectedThreadId).catch(() => {});
+      return;
+    }
+    if (entry.status === 'loading') return;
+    if (entry.status === 'success') {
+      if (entry.hasChildren !== false && entry.nodes.length === 0) {
+        loadThreadChildren(selectedThreadId).catch(() => {});
+      }
+      return;
+    }
+    if (entry.status === 'error') return;
     loadThreadChildren(selectedThreadId).catch(() => {});
   }, [selectedThreadId, childrenState, loadThreadChildren]);
 
@@ -1418,8 +1499,14 @@ export function AgentsThreads() {
     const parentId = threadDetailQuery.data?.parentId;
     if (!parentId) return;
     const entry = childrenState[parentId];
-    if (entry && entry.status !== 'idle') return;
-    loadThreadChildren(parentId).catch(() => {});
+    if (!entry || entry.status === 'idle') {
+      loadThreadChildren(parentId).catch(() => {});
+      return;
+    }
+    if (entry.status === 'loading' || entry.status === 'error') return;
+    if (entry.status === 'success' && entry.hasChildren !== false && entry.nodes.length === 0) {
+      loadThreadChildren(parentId).catch(() => {});
+    }
   }, [threadDetailQuery.data?.parentId, childrenState, loadThreadChildren]);
 
   const activeDraft = useMemo(() => {
@@ -1500,7 +1587,15 @@ export function AgentsThreads() {
       if (!isExpanded) return;
       const entry = childrenState[threadId];
       if (entry?.status === 'loading') return;
-      if (entry?.status === 'success' && entry.nodes.length > 0) return;
+      if (entry?.status === 'success') {
+        if (entry.hasChildren !== false && entry.nodes.length === 0) {
+          loadThreadChildren(threadId).catch(() => {});
+        }
+        return;
+      }
+      if (entry && entry.hasChildren === false && entry.nodes.length === 0) {
+        return;
+      }
       loadThreadChildren(threadId).catch(() => {});
     },
     [childrenState, loadThreadChildren],

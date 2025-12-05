@@ -129,6 +129,45 @@ export class ListThreadsQueryDto {
   includeAgentTitles?: string; // parse to boolean
 }
 
+export class ListThreadsTreeQueryDto {
+  @IsOptional()
+  @IsIn(['open', 'closed', 'all'])
+  status?: 'open' | 'closed' | 'all';
+
+  @IsOptional()
+  @Transform(({ value }) => (value !== undefined ? parseInt(value, 10) : undefined))
+  @IsInt()
+  @Min(1)
+  @Max(1000)
+  limit?: number;
+
+  @IsOptional()
+  @Transform(({ value }) => (value !== undefined ? parseInt(value, 10) : undefined))
+  @IsInt()
+  @Min(0)
+  @Max(2)
+  depth?: number;
+
+  @IsOptional()
+  @IsBooleanString()
+  includeMetrics?: string;
+
+  @IsOptional()
+  @IsBooleanString()
+  includeAgentTitles?: string;
+
+  @IsOptional()
+  @IsIn(['open', 'closed', 'all'])
+  childrenStatus?: 'open' | 'closed' | 'all';
+
+  @IsOptional()
+  @Transform(({ value }) => (value !== undefined ? parseInt(value, 10) : undefined))
+  @IsInt()
+  @Min(1)
+  @Max(1000)
+  perParentChildrenLimit?: number;
+}
+
 export class ListChildrenQueryDto {
   @IsOptional()
   @IsIn(['open', 'closed', 'all'])
@@ -288,6 +327,27 @@ export class AgentsThreadsController {
         ...(includeMetrics ? { metrics: { ...defaultMetrics, ...(metrics[t.id] ?? {}) } } : {}),
         ...(includeAgentTitles ? { agentTitle: descriptor?.title ?? fallbackTitle } : {}),
       };
+    });
+    return { items };
+  }
+
+  @Get('threads/tree')
+  async listThreadsTree(@Query() query: ListThreadsTreeQueryDto) {
+    const status = query.status ?? 'all';
+    const limit = query.limit ?? 50;
+    const depth = (query.depth ?? 2) as 0 | 1 | 2;
+    const includeMetrics = (query.includeMetrics ?? 'true') === 'true';
+    const includeAgentTitles = (query.includeAgentTitles ?? 'true') === 'true';
+    const childrenStatus = query.childrenStatus ?? status;
+    const perParentChildrenLimit = query.perParentChildrenLimit ?? 1000;
+    const items = await this.persistence.listThreadsTree({
+      status,
+      limit,
+      depth,
+      includeMetrics,
+      includeAgentTitles,
+      childrenStatus,
+      perParentChildrenLimit,
     });
     return { items };
   }

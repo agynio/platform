@@ -147,6 +147,9 @@ describe('AgentsThreads status toggle integration', () => {
     let serverStatus: 'open' | 'closed' = 'open';
     let patchCalls = 0;
     let rootsRequestCount = 0;
+    const recordRootFetch = () => {
+      rootsRequestCount += 1;
+    };
 
     const threadNode = () => ({
       id: 'th1',
@@ -160,7 +163,7 @@ describe('AgentsThreads status toggle integration', () => {
     });
 
     const respondWithThreads = () => {
-      rootsRequestCount += 1;
+      recordRootFetch();
       return HttpResponse.json({ items: [threadNode()] });
     };
 
@@ -177,9 +180,24 @@ describe('AgentsThreads status toggle integration', () => {
       return new HttpResponse(null, { status: 204 });
     };
 
+    const treeHandler = () => {
+      recordRootFetch();
+      return HttpResponse.json({
+        items: [
+          {
+            ...threadNode(),
+            hasChildren: false,
+            children: [],
+          },
+        ],
+      });
+    };
+
     server.use(
       http.get('/api/agents/threads', respondWithThreads),
       http.get(abs('/api/agents/threads'), respondWithThreads),
+      http.get('/api/agents/threads/tree', treeHandler),
+      http.get(abs('/api/agents/threads/tree'), treeHandler),
       http.get('/api/agents/threads/th1', () => HttpResponse.json(threadNode())),
       http.get(abs('/api/agents/threads/th1'), () => HttpResponse.json(threadNode())),
       http.get('/api/agents/threads/th1/children', () => HttpResponse.json({ items: [] })),

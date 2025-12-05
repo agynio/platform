@@ -26,10 +26,23 @@ describe('AgentsThreads realtime updates', () => {
     const threadsHandler = () => HttpResponse.json({ items: [thread] });
     const runsHandler = () => HttpResponse.json({ items: runs });
     const messagesHandler = () => HttpResponse.json({ items: [] });
+    const treeHandler = () =>
+      HttpResponse.json({
+        items: [
+          {
+            ...thread,
+            metrics: { remindersCount: 0, containersCount: 0, activity: 'idle', runsCount: runs.length },
+            hasChildren: false,
+            children: [],
+          },
+        ],
+      });
 
     server.use(
       http.get('/api/agents/threads', threadsHandler),
       http.get(abs('/api/agents/threads'), threadsHandler),
+      http.get('/api/agents/threads/tree', treeHandler),
+      http.get(abs('/api/agents/threads/tree'), treeHandler),
       http.get('/api/agents/threads/th1', () => HttpResponse.json({ ...thread, parentId: null, metrics: { remindersCount: 0, containersCount: 0, activity: 'idle', runsCount: runs.length } })),
       http.get(abs('/api/agents/threads/th1'), () => HttpResponse.json({ ...thread, parentId: null, metrics: { remindersCount: 0, containersCount: 0, activity: 'idle', runsCount: runs.length } })),
       http.get('/api/agents/threads/th1/runs', runsHandler),

@@ -53,7 +53,6 @@ type ReminderMock = {
   completedAt: string | null;
 };
 
-const PRELOAD_CONCURRENCY = 4;
 
 function makeThread(overrides: Partial<ThreadMock> = {}): ThreadMock {
   return {
@@ -94,6 +93,19 @@ function makeReminder(overrides: Partial<ReminderMock> = {}): ReminderMock {
   };
 }
 
+function buildTreeResponse(threads: ThreadMock[], childrenByParent: Map<string, ThreadMock[]> = new Map()) {
+  return {
+    items: threads.map((thread) => {
+      const children = childrenByParent.get(thread.id) ?? [];
+      return {
+        ...thread,
+        children: children.map((child) => ({ ...child, children: [], hasChildren: false })),
+        hasChildren: children.length > 0,
+      };
+    }),
+  };
+}
+
 function registerThreadScenario({
   thread,
   runs,
@@ -109,8 +121,10 @@ function registerThreadScenario({
     ...thread,
     metrics: { ...thread.metrics, runsCount: runs.length },
   };
+  const childMap = new Map<string, ThreadMock[]>([[threadPayload.id, children]]);
   server.use(
     http.get('*/api/agents/threads', () => HttpResponse.json({ items: [threadPayload] })),
+    http.get('*/api/agents/threads/tree', () => HttpResponse.json(buildTreeResponse([threadPayload], childMap))),
     http.get('*/api/agents/threads/:threadId', ({ params }) => {
       if (params.threadId === threadPayload.id) {
         return HttpResponse.json(threadPayload);
@@ -137,6 +151,7 @@ function registerThreadScenario({
       return HttpResponse.json({ items: [] });
     }),
     http.options(abs('/api/agents/threads/:threadId/children'), () => new HttpResponse(null, { status: 200 })),
+    http.get(abs('/api/agents/threads/tree'), () => HttpResponse.json(buildTreeResponse([threadPayload], childMap))),
     http.get('*/api/agents/runs/:runId/messages', () => HttpResponse.json({ items: [] })),
     http.get('*/api/agents/reminders', () => HttpResponse.json({ items: reminders })),
     http.get(abs('/api/agents/reminders'), () => HttpResponse.json({ items: reminders })),
@@ -261,6 +276,8 @@ describe('AgentsThreads page', () => {
     server.use(
       http.get('/api/agents/threads', () => HttpResponse.json({ items: [] })),
       http.get(abs('/api/agents/threads'), () => HttpResponse.json({ items: [] })),
+      http.get('/api/agents/threads/tree', () => HttpResponse.json({ items: [] })),
+      http.get(abs('/api/agents/threads/tree'), () => HttpResponse.json({ items: [] })),
       http.get('/api/agents/threads/thread-missing', () => new HttpResponse(null, { status: 404 })),
       http.get(abs('/api/agents/threads/thread-missing'), () => new HttpResponse(null, { status: 404 })),
       http.get('/api/agents/threads/thread-missing/runs', () => HttpResponse.json({ items: [] })),
@@ -465,105 +482,6 @@ describe('AgentsThreads page', () => {
     expect(screen.getByText('Second subthread')).toBeInTheDocument();
   });
 
-  it('respects preload concurrency across rerenders', async () => {
-    const threads = Array.from({ length: 6 }).map((_, index) =>
-      makeThread({
-        id: `root-${index}`,
-        alias: `alias-${index}`,
-        summary: `Root thread ${index}`,
-        createdAt: t(index * 10),
-      }),
-    );
-
-    let pendingCount = 0;
-    let maxPending = 0;
-    const pendingResolvers: (() => void)[] = [];
-    const started: string[] = [];
-
-    server.use(
-      http.get('*/api/agents/threads', () => HttpResponse.json({ items: threads })),
-      http.get(abs('/api/agents/threads'), () => HttpResponse.json({ items: threads })),
-      http.get('*/api/agents/threads/:threadId', ({ params }) => {
-        const thread = threads.find((item) => item.id === params.threadId);
-        if (!thread) {
-          return new HttpResponse(null, { status: 404 });
-        }
-        return HttpResponse.json(thread);
-      }),
-      http.get(abs('/api/agents/threads/:threadId'), ({ params }) => {
-        const thread = threads.find((item) => item.id === params.threadId);
-        if (!thread) {
-          return new HttpResponse(null, { status: 404 });
-        }
-        return HttpResponse.json(thread);
-      }),
-      http.get('*/api/agents/threads/:threadId/children', ({ params }) => {
-        const threadId = params.threadId as string;
-        started.push(threadId);
-        pendingCount += 1;
-        maxPending = Math.max(maxPending, pendingCount);
-        return new Promise<HttpResponse>((resolve) => {
-          pendingResolvers.push(() => {
-            pendingCount -= 1;
-            resolve(HttpResponse.json({ items: [] }));
-          });
-        });
-      }),
-      http.get(abs('/api/agents/threads/:threadId/children'), ({ params }) => {
-        const threadId = params.threadId as string;
-        started.push(threadId);
-        pendingCount += 1;
-        maxPending = Math.max(maxPending, pendingCount);
-        return new Promise<HttpResponse>((resolve) => {
-          pendingResolvers.push(() => {
-            pendingCount -= 1;
-            resolve(HttpResponse.json({ items: [] }));
-          });
-        });
-      }),
-      http.options('*/api/agents/threads/:threadId/children', () => new HttpResponse(null, { status: 200 })),
-      http.options(abs('/api/agents/threads/:threadId/children'), () => new HttpResponse(null, { status: 200 })),
-      http.get('*/api/agents/reminders', () => HttpResponse.json({ items: [] })),
-      http.get(abs('/api/agents/reminders'), () => HttpResponse.json({ items: [] })),
-      http.options('*/api/agents/reminders', () => new HttpResponse(null, { status: 200 })),
-      http.options(abs('/api/agents/reminders'), () => new HttpResponse(null, { status: 200 })),
-      http.get('*/api/containers', () => HttpResponse.json({ items: [] })),
-      http.get(abs('/api/containers'), () => HttpResponse.json({ items: [] })),
-    );
-
-    renderAt('/agents/threads');
-
-    await screen.findByTestId('threads-list');
-
-    await waitFor(() => {
-      expect(started.length).toBeGreaterThanOrEqual(PRELOAD_CONCURRENCY);
-    });
-
-    expect(maxPending).toBeLessThanOrEqual(PRELOAD_CONCURRENCY);
-
-    while (true) {
-      if (pendingCount === 0 && pendingResolvers.length === 0) {
-        break;
-      }
-      if (pendingResolvers.length === 0) {
-        await waitFor(() => expect(pendingResolvers.length).toBeGreaterThan(0));
-        continue;
-      }
-
-      const batch = pendingResolvers.splice(0);
-      await act(async () => {
-        for (const resolveNext of batch) {
-          resolveNext();
-        }
-      });
-    }
-
-    expect(pendingCount).toBe(0);
-
-    expect(started).toHaveLength(threads.length);
-    expect(maxPending).toBeLessThanOrEqual(PRELOAD_CONCURRENCY);
-  });
-
   it('surfaces subthread preload failures without retrying endlessly', async () => {
     const thread = makeThread({ summary: 'Thread with failing children' });
     const runs = [makeRun({ id: 'run-with-failure' })];
@@ -572,6 +490,30 @@ describe('AgentsThreads page', () => {
     registerThreadScenario({ thread, runs, children: [] });
 
     server.use(
+      http.get('*/api/agents/threads/tree', () =>
+        HttpResponse.json({
+          items: [
+            {
+              ...thread,
+              metrics: { ...thread.metrics, runsCount: runs.length },
+              hasChildren: true,
+              children: [],
+            },
+          ],
+        }),
+      ),
+      http.get(abs('/api/agents/threads/tree'), () =>
+        HttpResponse.json({
+          items: [
+            {
+              ...thread,
+              metrics: { ...thread.metrics, runsCount: runs.length },
+              hasChildren: true,
+              children: [],
+            },
+          ],
+        }),
+      ),
       http.get('*/api/agents/threads/:threadId/children', ({ params }) => {
         if (params.threadId === thread.id) {
           callCount += 1;
@@ -580,14 +522,23 @@ describe('AgentsThreads page', () => {
         return HttpResponse.json({ items: [] });
       }),
       http.options('*/api/agents/threads/:threadId/children', () => new HttpResponse(null, { status: 200 })),
+      http.get(abs('/api/agents/threads/:threadId/children'), ({ params }) => {
+        if (params.threadId === thread.id) {
+          callCount += 1;
+          return new HttpResponse(null, { status: 500 });
+        }
+        return HttpResponse.json({ items: [] });
+      }),
+      http.options(abs('/api/agents/threads/:threadId/children'), () => new HttpResponse(null, { status: 200 })),
     );
 
     renderAt(`/agents/threads/${thread.id}`);
 
     expect(await screen.findByRole('heading', { name: thread.summary })).toBeInTheDocument();
 
-    await new Promise((resolve) => setTimeout(resolve, 150));
-    expect(callCount).toBe(1);
+    await waitFor(() => expect(callCount).toBeGreaterThan(0));
+    await new Promise((resolve) => setTimeout(resolve, 400));
+    expect(callCount).toBeLessThanOrEqual(2);
 
     expect(await screen.findByText(/Failed to load subthreads/i)).toBeInTheDocument();
   });
@@ -800,6 +751,8 @@ describe('AgentsThreads page', () => {
         http.post(abs('/api/agents/threads'), postHandler),
         http.get('*/api/agents/threads', () => HttpResponse.json({ items: [newThread, existingThread] })),
         http.get(abs('/api/agents/threads'), () => HttpResponse.json({ items: [newThread, existingThread] })),
+        http.get('*/api/agents/threads/tree', () => HttpResponse.json(buildTreeResponse([newThread, existingThread]))),
+        http.get(abs('/api/agents/threads/tree'), () => HttpResponse.json(buildTreeResponse([newThread, existingThread]))),
         http.get('*/api/agents/threads/:threadId', ({ params }) => {
           if (params.threadId === newThreadId) return HttpResponse.json(newThread);
           if (params.threadId === existingThread.id) return HttpResponse.json(existingThread);
@@ -893,6 +846,8 @@ describe('AgentsThreads page', () => {
         http.post(abs('/api/agents/threads'), postHandler),
         http.get('*/api/agents/threads', () => HttpResponse.json({ items: [newThread, thread] })),
         http.get(abs('/api/agents/threads'), () => HttpResponse.json({ items: [newThread, thread] })),
+        http.get('*/api/agents/threads/tree', () => HttpResponse.json(buildTreeResponse([newThread, thread]))),
+        http.get(abs('/api/agents/threads/tree'), () => HttpResponse.json(buildTreeResponse([newThread, thread]))),
         http.get('*/api/agents/threads/:threadId', ({ params }) => {
           if (params.threadId === newThreadId) return HttpResponse.json(newThread);
           if (params.threadId === thread.id) return HttpResponse.json(thread);

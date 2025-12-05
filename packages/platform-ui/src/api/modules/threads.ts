@@ -9,11 +9,29 @@ const clampTake = (value: number | undefined, fallback = 200) => {
   return Math.min(1000, Math.max(1, coerced));
 };
 
+export type ThreadTreeItem = ThreadNode & {
+  children?: ThreadTreeItem[];
+  hasChildren?: boolean;
+};
+
 export const threads = {
   roots: (status: 'open' | 'closed' | 'all' = 'open', limit = 100) =>
     asData<{ items: ThreadNode[] }>(
       http.get<{ items: ThreadNode[] }>(`/api/agents/threads`, {
         params: { rootsOnly: true, status, limit, includeMetrics: true, includeAgentTitles: true },
+      }),
+    ),
+  treeRoots: (status: 'open' | 'closed' | 'all' = 'open', limit = 100, depth = 2) =>
+    asData<{ items: ThreadTreeItem[] }>(
+      http.get<{ items: ThreadTreeItem[] }>(`/api/agents/threads/tree`, {
+        params: {
+          status,
+          limit,
+          depth,
+          includeMetrics: true,
+          includeAgentTitles: true,
+          childrenStatus: status,
+        },
       }),
     ),
   children: (id: string, status: 'open' | 'closed' | 'all' = 'open') =>

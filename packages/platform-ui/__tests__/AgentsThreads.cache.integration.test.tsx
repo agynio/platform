@@ -112,6 +112,7 @@ function registerThreadHandlers(threads: ThreadDescriptor[], options?: { message
   }));
 
   const threadById = new Map(threadList.map((item) => [item.id, item]));
+  const treeItems = threadList.map((item) => ({ ...item, children: [], hasChildren: false }));
   const runMetaByThread = new Map(
     threads.map((thread) => [thread.id, { id: thread.runId, threadId: thread.id, status: 'finished', createdAt: thread.createdAt, updatedAt: thread.createdAt }]),
   );
@@ -138,6 +139,14 @@ function registerThreadHandlers(threads: ThreadDescriptor[], options?: { message
     http.get(abs('/api/agents/threads'), ({ request }) => {
       listRequestLog.push(request.url);
       return HttpResponse.json({ items: threadList });
+    }),
+    http.get('/api/agents/threads/tree', ({ request }) => {
+      listRequestLog.push(request.url);
+      return HttpResponse.json({ items: treeItems });
+    }),
+    http.get(abs('/api/agents/threads/tree'), ({ request }) => {
+      listRequestLog.push(request.url);
+      return HttpResponse.json({ items: treeItems });
     }),
     http.get('/api/agents/threads/:threadId', ({ params }) => HttpResponse.json(threadById.get(params.threadId as string) ?? threadList[0])),
     http.get(abs('/api/agents/threads/:threadId'), ({ params }) => HttpResponse.json(threadById.get(params.threadId as string) ?? threadList[0])),

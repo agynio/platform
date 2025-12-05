@@ -85,6 +85,10 @@ export function createPrismaStub() {
         const where = args?.where || {};
         if (where.parentId === null) rows = rows.filter((t) => t.parentId === null);
         if (where.parentId && typeof where.parentId === 'string') rows = rows.filter((t) => t.parentId === where.parentId);
+        if (where.parentId && typeof where.parentId === 'object' && Array.isArray(where.parentId.in)) {
+          const ids = new Set<string | null>(where.parentId.in as Array<string | null>);
+          rows = rows.filter((t) => ids.has(t.parentId));
+        }
         if (where.status) rows = rows.filter((t) => t.status === where.status);
         if (args?.orderBy?.createdAt === 'desc') rows.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
         const take = args?.take;
@@ -97,6 +101,25 @@ export function createPrismaStub() {
           });
         }
         return selected;
+      },
+      groupBy: async ({ where, _count }: any) => {
+        if (!_count || !_count._all) return [];
+        let rows = [...threads];
+        if (where?.parentId === null) {
+          rows = rows.filter((t) => t.parentId === null);
+        } else if (where?.parentId && typeof where.parentId === 'string') {
+          rows = rows.filter((t) => t.parentId === where.parentId);
+        } else if (where?.parentId && typeof where.parentId === 'object' && Array.isArray(where.parentId.in)) {
+          const ids = new Set<string | null>(where.parentId.in as Array<string | null>);
+          rows = rows.filter((t) => ids.has(t.parentId));
+        }
+        if (where?.status) rows = rows.filter((t) => t.status === where.status);
+        const grouped = new Map<string | null, number>();
+        for (const row of rows) {
+          const key = row.parentId ?? null;
+          grouped.set(key, (grouped.get(key) ?? 0) + 1);
+        }
+        return Array.from(grouped.entries()).map(([parentId, count]) => ({ parentId, _count: { _all: count } }));
       },
     },
     run: {

@@ -59,6 +59,16 @@ describe('AgentsThreads conversation view', () => {
 
     const runsHandler = () => HttpResponse.json({ items: [runMeta] });
     const threadsHandler = () => HttpResponse.json({ items: [thread] });
+    const treeHandler = () =>
+      HttpResponse.json({
+        items: [
+          {
+            ...thread,
+            children: [],
+            hasChildren: false,
+          },
+        ],
+      });
     const threadHandler = () => HttpResponse.json(thread);
 
     const messagesHandler = ({ request }: { request: Request }) => {
@@ -79,6 +89,8 @@ describe('AgentsThreads conversation view', () => {
     server.use(
       http.get('/api/agents/threads', threadsHandler),
       http.get(abs('/api/agents/threads'), threadsHandler),
+      http.get('/api/agents/threads/tree', treeHandler),
+      http.get(abs('/api/agents/threads/tree'), treeHandler),
       http.get('/api/agents/threads/th1', threadHandler),
       http.get(abs('/api/agents/threads/th1'), threadHandler),
       http.get('/api/agents/threads/th1/children', () => HttpResponse.json({ items: [] })),
@@ -92,6 +104,7 @@ describe('AgentsThreads conversation view', () => {
       http.get('/api/agents/runs/run1/messages', messagesHandler),
       http.get(abs('/api/agents/runs/run1/messages'), messagesHandler),
     );
+    return thread;
   }
 
   it('renders conversation messages and run info, and navigates to run timeline', async () => {
@@ -126,7 +139,7 @@ describe('AgentsThreads conversation view', () => {
   });
 
   it('loads subthreads when expanding a thread', async () => {
-    setupThreadData();
+    const thread = setupThreadData();
 
     const childThread = {
       id: 'th-child',
@@ -141,7 +154,22 @@ describe('AgentsThreads conversation view', () => {
 
     const childrenHandler = vi.fn(() => HttpResponse.json({ items: [childThread] }));
 
+    const threadWithChildren = { ...thread, hasChildren: true };
+    const treeWithChildren = () =>
+      HttpResponse.json({
+        items: [
+          {
+            ...threadWithChildren,
+            children: [],
+          },
+        ],
+      });
+
     server.use(
+      http.get('/api/agents/threads', () => HttpResponse.json({ items: [threadWithChildren] })),
+      http.get(abs('/api/agents/threads'), () => HttpResponse.json({ items: [threadWithChildren] })),
+      http.get('/api/agents/threads/tree', treeWithChildren),
+      http.get(abs('/api/agents/threads/tree'), treeWithChildren),
       http.get('/api/agents/threads/th1/children', () => childrenHandler()),
       http.get(abs('/api/agents/threads/th1/children'), () => childrenHandler()),
     );
