@@ -8,6 +8,7 @@ import { AgentsThreads } from '../AgentsThreads';
 import { TestProviders, server, abs } from '../../../__tests__/integration/testUtils';
 import type { PersistedGraph } from '@agyn/shared';
 import type { TemplateSchema } from '@/api/types/graph';
+import type { MarkdownComposerProps } from '../../components/MarkdownComposer';
 
 const notifyMocks = vi.hoisted(() => ({
   success: vi.fn(),
@@ -18,6 +19,51 @@ vi.mock('@/lib/notify', () => ({
   notifySuccess: (...args: unknown[]) => notifyMocks.success(...args),
   notifyError: (...args: unknown[]) => notifyMocks.error(...args),
 }));
+
+vi.mock('../../components/MarkdownComposer', () => {
+  const MockMarkdownComposer = ({
+    value,
+    onChange,
+    placeholder,
+    sendDisabled,
+    onSend,
+    isSending,
+    textareaProps,
+  }: MarkdownComposerProps) => (
+    <div>
+      <textarea
+        data-testid="markdown-composer-editor"
+        placeholder={placeholder}
+        value={value}
+        onChange={(event) => {
+          const target = event.target as HTMLTextAreaElement;
+          const maxLength = typeof textareaProps?.maxLength === 'number' ? textareaProps.maxLength : null;
+          const nextValue = target.value;
+          if (maxLength !== null && nextValue.length > maxLength) {
+            target.value = value;
+            return;
+          }
+          onChange(nextValue);
+        }}
+        aria-label={placeholder}
+        maxLength={textareaProps?.maxLength}
+      />
+      {onSend ? (
+        <button
+          type="button"
+          title="Send message"
+          aria-label="Send message"
+          onClick={onSend}
+          disabled={Boolean(sendDisabled) || Boolean(isSending)}
+        >
+          {isSending ? 'Sending...' : 'Send'}
+        </button>
+      ) : null}
+    </div>
+  );
+
+  return { MarkdownComposer: MockMarkdownComposer };
+});
 
 function t(offsetMs: number) {
   return new Date(1700000000000 + offsetMs).toISOString();
@@ -193,6 +239,34 @@ function registerGraphAgents(agents: Array<{ id: string; template: string; title
   );
 }
 
+async function findComposerEditor() {
+  const editors = await screen.findAllByTestId('markdown-composer-editor');
+  return editors[0] as HTMLElement;
+}
+
+function overwriteComposer(editor: HTMLElement, text: string) {
+  if (editor instanceof HTMLTextAreaElement) {
+    fireEvent.change(editor, { target: { value: text } });
+    return;
+  }
+  editor.focus();
+  editor.textContent = text;
+  const eventInit = {
+    bubbles: true,
+    data: text,
+    inputType: text ? 'insertFromPaste' : 'deleteContentBackward',
+  } as InputEventInit;
+  fireEvent.beforeInput(editor, eventInit);
+  fireEvent.input(editor, eventInit);
+}
+
+function getComposerText(editor: HTMLElement) {
+  if (editor instanceof HTMLTextAreaElement) {
+    return editor.value;
+  }
+  return editor.textContent ?? '';
+}
+
 describe('AgentsThreads page', () => {
   beforeAll(() => server.listen({ onUnhandledRequest: 'error' }));
   afterEach(() => {
@@ -322,17 +396,18 @@ describe('AgentsThreads page', () => {
       }),
     );
 
+    const user = userEvent.setup();
+
     renderAt(`/agents/threads/${thread.id}`);
 
-    const input = await screen.findByPlaceholderText('Type a message...');
-    await userEvent.clear(input);
-    await userEvent.type(input, '  hello agent  ');
+    const editor = await findComposerEditor();
+    await user.type(editor, '  hello agent  ');
 
-    const sendButton = screen.getByRole('button', { name: 'Send message' });
-    await userEvent.click(sendButton);
+    const getSendButton = () => screen.getByRole('button', { name: 'Send message' });
+    await user.click(getSendButton());
 
     await waitFor(() => {
-      expect(sendButton).toBeDisabled();
+      expect(getSendButton()).toBeDisabled();
     });
 
     await waitFor(() => {
@@ -349,8 +424,8 @@ describe('AgentsThreads page', () => {
     expect(first.body).toEqual({ text: 'hello agent' });
 
     await waitFor(() => {
-      expect(input).toHaveValue('');
-      expect(sendButton).not.toBeDisabled();
+      expect(getComposerText(editor)).toBe('');
+      expect(getSendButton()).not.toBeDisabled();
     });
   });
 
@@ -644,7 +719,7 @@ describe('AgentsThreads page', () => {
       expect(screen.getByText(/Start your new conversation with the agent/i)).toBeInTheDocument();
 
       const searchInput = await screen.findByPlaceholderText('Search agents...');
-      const textarea = await screen.findByPlaceholderText('Type a message...');
+      const editor = await findComposerEditor();
       const sendButton = screen.getByTitle('Send message');
 
       expect(sendButton).toBeDisabled();
@@ -659,17 +734,21 @@ describe('AgentsThreads page', () => {
 
       expect(sendButton).toBeDisabled();
 
-      await user.type(textarea, 'Hello draft');
+      await user.type(editor, 'Hello draft');
       await waitFor(() => {
         expect(sendButton).toBeEnabled();
       });
 
-      fireEvent.change(textarea, { target: { value: 'a'.repeat(8001) } });
+      overwriteComposer(editor, '');
+      overwriteComposer(editor, 'a'.repeat(8001));
+      await waitFor(() => {
+        expect(getComposerText(editor).length).toBeLessThanOrEqual(8000);
+      });
       await waitFor(() => {
         expect(sendButton).toBeDisabled();
       });
 
-      fireEvent.change(textarea, { target: { value: 'Ready to send' } });
+      overwriteComposer(editor, 'Ready to send');
       await waitFor(() => {
         expect(sendButton).toBeEnabled();
       });
@@ -778,8 +857,8 @@ describe('AgentsThreads page', () => {
       await user.click(await screen.findByRole('button', { name: 'Agent Nimbus' }));
       await waitFor(() => expect(searchInput).toHaveValue('Agent Nimbus'));
 
-      const textarea = await screen.findByPlaceholderText('Type a message...');
-      await user.type(textarea, 'Hello new thread');
+      const editor = await findComposerEditor();
+      await user.type(editor, 'Hello new thread');
       await user.click(screen.getByTitle('Send message'));
 
       await waitFor(() => expect(requestPayload).not.toBeNull());
@@ -814,8 +893,8 @@ describe('AgentsThreads page', () => {
 
       await user.click(await screen.findByRole('button', { name: 'New thread' }));
       await user.click(await screen.findByRole('button', { name: 'Agent Nimbus' }));
-      const textarea = await screen.findByPlaceholderText('Type a message...');
-      await user.type(textarea, 'Hello new thread');
+      const editor = await findComposerEditor();
+      await user.type(editor, 'Hello new thread');
       const sendButton = screen.getByTitle('Send message');
       await user.click(sendButton);
 
@@ -870,8 +949,8 @@ describe('AgentsThreads page', () => {
 
       await user.click(await screen.findByRole('button', { name: 'New thread' }));
       await user.click(await screen.findByRole('button', { name: 'Agent Nimbus' }));
-      const textarea = await screen.findByPlaceholderText('Type a message...');
-      await user.type(textarea, 'Waiting thread');
+      const editor = await findComposerEditor();
+      await user.type(editor, 'Waiting thread');
       const sendButton = screen.getByTitle('Send message');
       await user.click(sendButton);
 

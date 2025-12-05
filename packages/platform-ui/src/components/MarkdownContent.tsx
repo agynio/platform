@@ -1,9 +1,9 @@
 import ReactMarkdown from 'react-markdown';
 import type { Components } from 'react-markdown';
 import type { ComponentPropsWithoutRef } from 'react';
-import remarkGfm from 'remark-gfm';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism';
+import { MARKDOWN_REMARK_PLUGINS, MARKDOWN_REHYPE_PLUGINS } from '@/lib/markdown/config';
 
 interface MarkdownContentProps {
   content: string;
@@ -203,7 +203,8 @@ export function MarkdownContent({ content, className = '' }: MarkdownContentProp
   return (
     <div className={`markdown-content w-full min-w-0 ${className}`} style={{ overflowWrap: 'anywhere' }}>
       <ReactMarkdown
-        remarkPlugins={[remarkGfm]}
+        remarkPlugins={MARKDOWN_REMARK_PLUGINS}
+        rehypePlugins={MARKDOWN_REHYPE_PLUGINS}
         components={markdownComponents}
       >
         {content}

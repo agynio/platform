@@ -1,6 +1,13 @@
-import { type ChangeEvent, type TextareaHTMLAttributes, useCallback, useEffect, useRef } from 'react';
+import {
+  forwardRef,
+  type ChangeEvent,
+  type TextareaHTMLAttributes,
+  useCallback,
+  useEffect,
+  useRef,
+} from 'react';
 
-interface AutosizeTextareaProps extends Omit<TextareaHTMLAttributes<HTMLTextAreaElement>, 'rows'> {
+export interface AutosizeTextareaProps extends Omit<TextareaHTMLAttributes<HTMLTextAreaElement>, 'rows'> {
   label?: string;
   error?: string;
   helperText?: string;
@@ -9,23 +16,38 @@ interface AutosizeTextareaProps extends Omit<TextareaHTMLAttributes<HTMLTextArea
   maxLines?: number;
 }
 
-export function AutosizeTextarea({ 
-  label, 
-  error, 
-  helperText, 
-  size = 'default',
-  minLines = 1,
-  maxLines,
-  className = '',
-  value,
-  onChange,
-  ...props 
-}: AutosizeTextareaProps) {
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
+export const AutosizeTextarea = forwardRef<HTMLTextAreaElement, AutosizeTextareaProps>(function AutosizeTextarea(
+  {
+    label,
+    error,
+    helperText,
+    size = 'default',
+    minLines = 1,
+    maxLines,
+    className = '',
+    value,
+    onChange,
+    ...props
+  },
+  forwardedRef,
+) {
+  const internalRef = useRef<HTMLTextAreaElement | null>(null);
+
+  const setRef = useCallback(
+    (node: HTMLTextAreaElement | null) => {
+      internalRef.current = node;
+      if (typeof forwardedRef === 'function') {
+        forwardedRef(node);
+      } else if (forwardedRef) {
+        forwardedRef.current = node;
+      }
+    },
+    [forwardedRef],
+  );
   const paddingClasses = size === 'sm' ? 'px-3 py-2' : 'px-4 py-3';
 
   const adjustHeight = useCallback(() => {
-    const textarea = textareaRef.current;
+    const textarea = internalRef.current;
     if (!textarea) return;
 
     // Reset height to auto to get the correct scrollHeight
@@ -88,7 +110,7 @@ export function AutosizeTextarea({
       )}
       
       <textarea
-        ref={textareaRef}
+        ref={setRef}
         rows={1}
         className={`
           w-full ${paddingClasses}
@@ -117,4 +139,4 @@ export function AutosizeTextarea({
       )}
     </div>
   );
-}
+});

@@ -3,6 +3,7 @@ import type { MutableRefObject } from 'react';
 import { Eye, Code, SplitSquareVertical } from 'lucide-react';
 import { Button } from './Button';
 import { SegmentedControl } from './SegmentedControl';
+import { MarkdownContent } from './MarkdownContent';
 
 interface FullscreenMarkdownEditorProps {
   value: string;
@@ -305,40 +306,6 @@ export function FullscreenMarkdownEditor({
     onClose();
   };
 
-  // Simple markdown to HTML converter (basic implementation)
-  const renderMarkdown = (text: string) => {
-    let html = text;
-    
-    // Headers
-    html = html.replace(/^### (.*$)/gim, '<h3>$1</h3>');
-    html = html.replace(/^## (.*$)/gim, '<h2>$1</h2>');
-    html = html.replace(/^# (.*$)/gim, '<h1>$1</h1>');
-    
-    // Bold
-    html = html.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
-    
-    // Italic
-    html = html.replace(/\*(.*?)\*/g, '<em>$1</em>');
-    
-    // Code blocks
-    html = html.replace(/```([\s\S]*?)```/g, '<pre><code>$1</code></pre>');
-    
-    // Inline code
-    html = html.replace(/`(.*?)`/g, '<code>$1</code>');
-    
-    // Links
-    html = html.replace(/\[(.*?)\]\((.*?)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>');
-    
-    // Line breaks
-    html = html.replace(/\n/g, '<br />');
-    
-    // Lists
-    html = html.replace(/^\* (.*$)/gim, '<li>$1</li>');
-    html = html.replace(/(<li>.*<\/li>)/s, '<ul>$1</ul>');
-    
-    return html;
-  };
-
   return (
     <div className="fixed inset-0 bg-black/50 z-[100] flex items-center justify-center p-4">
       <div className="bg-white rounded-[10px] w-full h-full max-w-[1400px] max-h-[900px] flex flex-col shadow-2xl">
@@ -402,12 +369,13 @@ export function FullscreenMarkdownEditor({
               <div className="px-6 py-3 border-b border-[var(--agyn-border-subtle)] bg-[var(--agyn-bg-light)]">
                 <h4 className="text-sm text-[var(--agyn-dark)]">Preview</h4>
               </div>
-              <div ref={previewScrollRef} className="flex-1 p-6 overflow-auto bg-white">
-                <div 
-                  ref={previewContentRef}
-                  className="prose prose-sm max-w-none markdown-preview"
-                  dangerouslySetInnerHTML={{ __html: renderMarkdown(localValue) }}
-                />
+              <div ref={previewScrollRef} className="flex-1 overflow-auto bg-white p-6">
+                <div ref={previewContentRef}>
+                  <MarkdownContent
+                    content={localValue}
+                    className="prose prose-sm max-w-none markdown-preview"
+                  />
+                </div>
               </div>
             </div>
           )}

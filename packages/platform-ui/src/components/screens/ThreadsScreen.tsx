@@ -4,7 +4,6 @@ import {
   Play,
   Container,
   Bell,
-  Send,
   PanelRightClose,
   PanelRight,
   Loader2,
@@ -23,7 +22,7 @@ import { SegmentedControl } from '../SegmentedControl';
 import { Conversation, type Run } from '../Conversation';
 import { Popover, PopoverTrigger, PopoverContent } from '../ui/popover';
 import { StatusIndicator } from '../StatusIndicator';
-import { AutosizeTextarea } from '../AutosizeTextarea';
+import { MarkdownComposer } from '../MarkdownComposer';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -208,29 +207,22 @@ export default function ThreadsScreen({
 
   const renderComposer = (sendDisabled: boolean) => (
     <div className="border-t border-[var(--agyn-border-subtle)] bg-[var(--agyn-bg-light)] p-4">
-      <div className="relative">
-        <AutosizeTextarea
-          placeholder="Type a message..."
-          value={inputValue}
-          onChange={(event) => onInputValueChange?.(event.target.value)}
-          size="sm"
-          minLines={1}
-          maxLines={8}
-          className="pr-12"
-        />
-        <div className="absolute bottom-[11px] right-[5px]">
-          <IconButton
-            icon={<Send className="h-4 w-4" />}
-            variant="primary"
-            size="sm"
-            onClick={() => onSendMessage?.(inputValue, { threadId: selectedThreadId })}
-            disabled={sendDisabled}
-            title="Send message"
-            aria-label="Send message"
-            aria-busy={isSendMessagePending || undefined}
-          />
-        </div>
-      </div>
+      <MarkdownComposer
+        value={inputValue}
+        onChange={(next) => onInputValueChange?.(next)}
+        placeholder="Type a message..."
+        minLines={1}
+        maxLines={8}
+        onSend={() => {
+          if (!onSendMessage) return;
+          onSendMessage(inputValue, { threadId: selectedThreadId ?? null });
+        }}
+        sendDisabled={sendDisabled}
+        isSending={isSendMessagePending}
+        textareaProps={{
+          maxLength: THREAD_MESSAGE_MAX_LENGTH,
+        }}
+      />
     </div>
   );
 
