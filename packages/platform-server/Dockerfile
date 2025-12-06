@@ -37,10 +37,11 @@ ENV NODE_ENV=production \
 WORKDIR /opt/app/packages/platform-server
 
 RUN apt-get update \
- && apt-get install -y --no-install-recommends openssl \
- && npm install --global tsx@4.20.5 \
- && npm cache clean --force \
- && rm -rf /var/lib/apt/lists/*
+    && apt-get install -y --no-install-recommends openssl \
+    && npm install --global tsx@4.20.5 \
+    && npm install --global prisma@^6.18.0 \
+    && npm cache clean --force \
+    && rm -rf /var/lib/apt/lists/*
 
 COPY --from=build --chown=node:node /opt/app /opt/app
 
