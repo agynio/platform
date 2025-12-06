@@ -124,17 +124,15 @@ describe('ManageFunctionTool.execute', () => {
     } as unknown as AgentsPersistenceService;
 
     const workerInvoke = vi.fn().mockResolvedValue({ text: 'invoke result' });
-    const manageNode = {
+    const workerAgent = { invoke: workerInvoke } as unknown as WorkerAgent;
+    const manageNode = createManageNodeStub('Worker Alpha', workerAgent, {
       nodeId: 'manage-node-link-fail',
-      listWorkers: vi.fn().mockReturnValue(['Worker Alpha']),
-      getWorkerByTitle: vi.fn().mockReturnValue({ invoke: workerInvoke }),
-      registerInvocation: vi.fn().mockResolvedValue(undefined),
       awaitChildResponse: vi.fn().mockResolvedValue('child response text'),
       getMode: vi.fn().mockReturnValue('sync'),
       getTimeoutMs: vi.fn().mockReturnValue(64000),
       renderWorkerResponse: vi.fn().mockReturnValue('formatted'),
       renderAsyncAcknowledgement: vi.fn(),
-    } as unknown as ManageToolNode;
+    });
 
     const linking = {
       registerParentToolExecution: vi.fn().mockRejectedValue(new Error('link service down')),
